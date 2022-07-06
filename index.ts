@@ -32,12 +32,12 @@ type PreRequestHandler<Store = Record<string, any>> = (
 
 interface Hook<Store = Record<string, any>> {
     preHandler: Handler<Store>[]
-    onRequest: PreRequestHandler[]
+    onRequest: PreRequestHandler<Store>[]
 }
 
 interface RegisterHook<Store = Record<string, any>> {
-    preHandler?: Handler<Store> | Handler<Store>[]
-    onRequest?: PreRequestHandler | PreRequestHandler[]
+    preHandler?: Handler<Store>
+    onRequest?: PreRequestHandler<Store>
 }
 
 const runPreHandler = async <Store = Record<string, any>>(
@@ -161,7 +161,7 @@ const mergeHook = <T>(
 export default class KingWorld<Store extends Record<string, any> = {}> {
     router: Router
     store: Store
-    #reference: [string, any][]
+    #reference: [keyof Store, any][]
     hook: Hook<Store>
 
     constructor() {
@@ -191,16 +191,28 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
         )
     }
 
-    when<Event extends HookEvent>(
+    preHandler(handler: Handler<Store>) {
+        this.hook.preHandler.push(handler)
+
+        return this
+    }
+
+    onRequest(handler: PreRequestHandler<Store>) {
+        this.hook.onRequest.push(handler)
+
+        return this
+    }
+
+    when<Event extends HookEvent = HookEvent>(
         type: Event,
         handler: RegisterHook<Store>[Event]
     ) {
         switch (type) {
             case 'preHandler':
-                this.hook.preHandler.push(handler as any)
+                this.hook.preHandler.push(handler as Handler<Store>)
 
             case 'onRequest':
-                this.hook.onRequest.push(handler as PreRequestHandler)
+                this.hook.onRequest.push(handler as PreRequestHandler<Store>)
         }
 
         return this
@@ -220,7 +232,11 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
         return this
     }
 
-    register<RefStore extends Record<string, any> = Store, Config = Object, PluginStore extends Record<string, any> = {}>(
+    register<
+        RefStore extends Record<string, any> = Store,
+        Config = Object,
+        PluginStore extends Record<string, any> = {}
+    >(
         plugin: Plugin<Config, PluginStore, RefStore>,
         config?: Config
     ): KingWorld<PluginStore & Store> {
@@ -272,14 +288,14 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
         return this
     }
 
-    purge(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
-        this.#addHandler('PURGE', path, handler)
+    trace(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
+        this.#addHandler('TRACE', path, handler)
 
         return this
     }
 
-    move(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
-        this.#addHandler('MOVE', path, handler)
+    connect(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
+        this.#addHandler('CONNECT', path, handler)
 
         return this
     }
@@ -325,7 +341,7 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
             Bun.serve({
                 port,
                 fetch: (request: Request) => {
-                    const reference = {}
+                    const reference: Partial<Store> = {}
 
                     if (this.#reference[0])
                         this.#reference.forEach(
@@ -336,7 +352,7 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
                     if (this.hook.onRequest[0])
                         for (const onRequest of this.hook.onRequest)
-                            onRequest(request, reference)
+                            onRequest(request, reference as Store)
 
                     return this.router.lookup(request, reference)
                 }

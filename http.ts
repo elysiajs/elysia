@@ -1,11 +1,9 @@
 import KingWorld, { type Plugin } from './index'
 
-interface Store {
+const app = new KingWorld<{
     a: string
     id: number
-}
-
-const app = new KingWorld<Store>()
+}>()
 
 interface PluginStore {
     asdf: 'a'
@@ -17,12 +15,13 @@ const plugin: Plugin<{ prefix?: string }, PluginStore> = (
 ) =>
     app
         .state('asdf', 'a')
-        .when('onRequest', (store) => {})
+        .onRequest((request, store) => {})
         .group(prefix, (app) => {
             app.get('/plugin', () => 'From Plugin')
         })
 
 app.register(plugin)
+    .ref('id', () => Math.random())
     .get('/', () => 'KINGWORLD')
     .register((app) =>
         app.group('/nested', (app) => app.get('/awawa', (_, store) => 'Hi'))
@@ -44,7 +43,7 @@ app.register(plugin)
         hi: 'world'
     }))
     .group('/group', (app) => {
-        app.when('preHandler', ({ query }) => {
+        app.preHandler(({ query }) => {
             if (query?.name === 'aom') return 'Hi saltyaom'
         })
             .get('/hi', () => 'HI GROUP')
@@ -52,9 +51,7 @@ app.register(plugin)
             .get('/fbk', () => 'FuBuKing')
     })
     .get('/identity', (_, store) => {
-        console.log(store.a)
-
-        return 'hi'
+        return store.id
     })
     .default(
         () =>
