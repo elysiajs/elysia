@@ -1,9 +1,20 @@
-import KingWorld from './index'
+import KingWorld, { type Plugin } from './index'
 
 const app = new KingWorld()
 
-app.get('/', () => 'KINGWORLD')
-    .get('/kw', () => 'KINGWORLD')
+const plugin: Plugin<{ prefix?: string }> = (app, { prefix = '/fbk' } = {}) => {
+    app.group(prefix, (app) => {
+        app.get('/plugin', () => 'From Plugin')
+    })
+}
+
+app.register(plugin)
+    .get('/', () => 'KINGWORLD')
+    .get('/kw', () => 'KINGWORLD', {
+        preHandlers: ({ query }) => {
+            if (query?.name === 'aom') return 'Hi saltyaom'
+        }
+    })
     .get('/id/:id', ({ params, query }) => {
         console.log({
             params,
@@ -15,6 +26,14 @@ app.get('/', () => 'KINGWORLD')
     .get('/json', () => ({
         hi: 'world'
     }))
+    .group('/group', (app) => {
+        app.when('preHandler', ({ query }) => {
+            if (query?.name === 'aom') return 'Hi saltyaom'
+        })
+            .get('/hi', () => 'HI GROUP')
+            .get('/kingworld', () => 'Welcome to KINGWORLD')
+            .get('/fbk', () => 'FuBuKing')
+    })
     .default(
         () =>
             new Response('Not Found :(', {

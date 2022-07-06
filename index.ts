@@ -20,8 +20,57 @@ const jsonHeader = {
     }
 }
 
+type HookEvent = 'preHandler'
+
+interface Hook {
+    preHandlers: Handler[]
+}
+
+interface RegisterHook {
+    preHandlers: Handler | Handler[]
+}
+
 const createHandler =
-    (handler: Handler) => async (request: Request, params, query, store) => {
+    (handler: Handler, hook: Hook) =>
+    async (request: Request, params, query, store): Promise<Response> => {
+        for (const preHandler of hook.preHandlers) {
+            const handled = await preHandler(
+                {
+                    request,
+                    params,
+                    query,
+                    headers: () => parseHeader(request.headers)
+                },
+                store
+            )
+
+            if (handled)
+                switch (typeof handled) {
+                    case 'string':
+                        return new Response(handled)
+
+                    case 'object':
+                        try {
+                            return new Response(
+                                JSON.stringify(handled),
+                                jsonHeader
+                            )
+                        } catch (error) {
+                            throw new error()
+                        }
+
+                    case 'function':
+                        return handled
+
+                    case 'number':
+                    case 'boolean':
+                        return new Response(handled.toString())
+
+                    default:
+                        break
+                }
+        }
+
         const response = await handler(
             {
                 request,
@@ -66,69 +115,131 @@ const parseHeader = (headers: Headers) => {
     return parsed
 }
 
+export type Plugin<T extends Object> = (app: KingWorld, config?: T) => void
+
+const mergeHook = (a: Hook, b: Hook | RegisterHook | undefined): Hook => ({
+    preHandlers: b?.preHandlers
+        ? a.preHandlers.concat(b.preHandlers)
+        : a.preHandlers
+})
+
 export default class KingWorld {
     router: Router
+    store: Object
+    hook: Hook
 
     constructor() {
         this.router = new Router()
+        this.store = {}
+        this.hook = {
+            preHandlers: []
+        }
     }
 
-    get(path: string, handler: Handler) {
-        this.router.on('GET', path, createHandler(handler))
+    #addHandler(
+        method: HTTPMethod,
+        path: string,
+        handler: Handler,
+        hook?: RegisterHook
+    ) {
+        this.router.on(
+            method,
+            path,
+            createHandler(handler, mergeHook(this.hook, hook)),
+            this.store
+        )
+    }
+
+    when(type: HookEvent, handler: Handler) {
+        switch (type) {
+            case 'preHandler':
+                this.hook.preHandlers.push(handler)
+        }
 
         return this
     }
 
-    post(path: string, handler: Handler) {
-        this.router.on('POST', path, createHandler(handler))
+    group(prefix: string, run: (group: KingWorld) => void) {
+        const instance = new KingWorld()
+        run(instance)
+
+        this.store = Object.assign(this.store, instance.store)
+
+        instance.router.routes.forEach(({ method, path, handler }) => {
+            // @ts-ignore
+            this.#addHandler(method, `${prefix}${path}`, handler, instance.hook)
+        })
 
         return this
     }
 
-    put(path: string, handler: Handler) {
-        this.router.on('PUT', path, createHandler(handler))
+    register<T extends Object>(plugin: Plugin<T>, config?: T) {
+        plugin(this, config)
 
         return this
     }
 
-    patch(path: string, handler: Handler) {
-        this.router.on('PATCH', path, createHandler(handler))
+    get(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('GET', path, handler, hook)
 
         return this
     }
 
-    delete(path: string, handler: Handler) {
-        this.router.on('DELETE', path, createHandler(handler))
+    post(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('POST', path, handler, hook)
 
         return this
     }
 
-    options(path: string, handler: Handler) {
-        this.router.on('DELETE', path, createHandler(handler))
+    put(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('PUT', path, handler)
 
         return this
     }
 
-    head(path: string, handler: Handler) {
-        this.router.on('DELETE', path, createHandler(handler))
+    patch(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('PATCH', path, handler)
 
         return this
     }
 
-    purge(path: string, handler: Handler) {
-        this.router.on('PURGE', path, createHandler(handler))
+    delete(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('DELETE', path, handler)
 
         return this
     }
 
-    move(path: string, handler: Handler) {
-        this.router.on('MOVE', path, createHandler(handler))
+    options(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('OPTIONS', path, handler)
 
         return this
     }
 
-    on(on: HTTPMethod, path: string, handler: Handler) {
-        this.router.on(on, path, createHandler(handler))
+    head(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('HEAD', path, handler)
+
+        return this
+    }
+
+    purge(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('PURGE', path, handler)
+
+        return this
+    }
+
+    move(path: string, handler: Handler, hook?: RegisterHook) {
+        this.#addHandler('MOVE', path, handler)
+
+        return this
+    }
+
+    on(
+        method: HTTPMethod,
+        path: string,
+        handler: Handler,
+        hook?: RegisterHook
+    ) {
+        this.#addHandler(method, path, handler, hook)
 
         return this
     }

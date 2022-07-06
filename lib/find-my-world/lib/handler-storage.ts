@@ -1,13 +1,4 @@
-import { Handler } from './types'
-
-interface HandlerObject {
-    handler: Handler
-    params: string[]
-    store: any
-    _createParamsObject: (
-        params: string[]
-    ) => Record<string, string | undefined>
-}
+import type { Handler, HandlerObject } from './types'
 
 export default class HandlerStorage {
     handlers: HandlerObject[]

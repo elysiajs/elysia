@@ -20,7 +20,7 @@ import {
     getClosingParenthensePosition
 } from './lib/utils'
 
-import type { HTTPMethod, FindResult, Handler } from './lib/types'
+import type { HTTPMethod, FindResult, Handler, Route } from './lib/types'
 
 const FULL_PATH_REGEXP = /^https?:\/\/.*?\//
 const OPTIONAL_PARAM_REGEXP = /(\/:[^/()]*?)\?(\/?)/
@@ -44,7 +44,7 @@ export default class Router {
     caseSensitive: boolean
     maxParamLength: number
 
-    routes: any[]
+    routes: Route[]
     trees: Record<
         string,
         StaticNode | ParentNode | ParametricNode | WildcardNode
@@ -88,7 +88,7 @@ export default class Router {
         if (this.ignoreDuplicateSlashes) path = removeDuplicateSlashes(path)
         if (this.ignoreTrailingSlash) path = trimLastSlash(path)
 
-        const methods = Array.isArray(method) ? method : [method]
+        const methods: HTTPMethod[] = Array.isArray(method) ? method : [method]
 
         for (const method of methods) {
             this._on(method, path, handler, store)

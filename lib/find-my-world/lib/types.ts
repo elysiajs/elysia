@@ -43,6 +43,13 @@ export type Handler = (
     searchParams?: ParsedUrlQuery
 ) => any
 
+export interface Route {
+    method: HTTPMethod
+    path: string
+    handler: Handler
+    store: Object
+}
+
 export type ShortHandRoute = (
     path: string,
     handler: Handler,
