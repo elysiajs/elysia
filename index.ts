@@ -30,48 +30,61 @@ interface RegisterHook {
     preHandlers: Handler | Handler[]
 }
 
+const preRequestHook = async (
+    handlers: Handler[],
+    request: Request,
+    params,
+    query,
+    store
+) => {
+    for (const preHandler of handlers) {
+        const handled = await preHandler(
+            {
+                request,
+                params,
+                query,
+                headers: () => parseHeader(request.headers)
+            },
+            store
+        )
+
+        if (handled)
+            switch (typeof handled) {
+                case 'string':
+                    return new Response(handled)
+
+                case 'object':
+                    try {
+                        return new Response(JSON.stringify(handled), jsonHeader)
+                    } catch (error) {
+                        throw new error()
+                    }
+
+                case 'function':
+                    return handled
+
+                case 'number':
+                case 'boolean':
+                    return new Response(handled.toString())
+
+                default:
+                    break
+            }
+    }
+}
+
 const createHandler =
     (handler: Handler, hook: Hook) =>
     async (request: Request, params, query, store): Promise<Response> => {
-        for (const preHandler of hook.preHandlers) {
-            const handled = await preHandler(
-                {
-                    request,
-                    params,
-                    query,
-                    headers: () => parseHeader(request.headers)
-                },
-                store
-            )
+        const createPrehandler = (handlers: Handler[]) =>
+            preRequestHook(handlers, request, params, query, store)
 
-            if (handled)
-                switch (typeof handled) {
-                    case 'string':
-                        return new Response(handled)
-
-                    case 'object':
-                        try {
-                            return new Response(
-                                JSON.stringify(handled),
-                                jsonHeader
-                            )
-                        } catch (error) {
-                            throw new error()
-                        }
-
-                    case 'function':
-                        return handled
-
-                    case 'number':
-                    case 'boolean':
-                        return new Response(handled.toString())
-
-                    default:
-                        break
-                }
+        if (hook.preHandlers[0]) {
+            const preHandled = await createPrehandler(hook.preHandlers)
+            if (preHandled) return preHandled
         }
 
-        const response = await handler(
+        const response = handler(
             {
                 request,
                 params,
@@ -254,12 +267,10 @@ export default class KingWorld {
         // @ts-ignore
         if (!Bun) throw new Error('KINGWORLD is not run in Bun environment')
 
-        const fetch = (request: Request) => this.router.lookup(request)
-
         // @ts-ignore
         Bun.serve({
             port,
-            fetch
+            fetch: (request: Request) => this.router.lookup(request)
         })
     }
 }
