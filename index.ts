@@ -12,7 +12,10 @@ interface KWRequest {
 }
 
 type EmptyHandler = (request: Request) => Response
-type Handler = (request: KWRequest, store: any) => any
+type Handler<Store = Record<string, any>> = (
+    request: KWRequest,
+    store: Store
+) => any
 
 const jsonHeader = {
     headers: {
@@ -20,18 +23,25 @@ const jsonHeader = {
     }
 }
 
-type HookEvent = 'preHandler'
+type HookEvent = 'preHandler' | 'onRequest'
 
-interface Hook {
-    preHandlers: Handler[]
+type PreRequestHandler<Store = Record<string, any>> = (
+    request: Request,
+    store: Store
+) => void
+
+interface Hook<Store = Record<string, any>> {
+    preHandler: Handler<Store>[]
+    onRequest: PreRequestHandler[]
 }
 
-interface RegisterHook {
-    preHandlers: Handler | Handler[]
+interface RegisterHook<Store = Record<string, any>> {
+    preHandler?: Handler<Store> | Handler<Store>[]
+    onRequest?: PreRequestHandler | PreRequestHandler[]
 }
 
-const preRequestHook = async (
-    handlers: Handler[],
+const runPreHandler = async <Store = Record<string, any>>(
+    handlers: Handler<Store>[],
     request: Request,
     params,
     query,
@@ -74,13 +84,13 @@ const preRequestHook = async (
 }
 
 const createHandler =
-    (handler: Handler, hook: Hook) =>
+    <Store extends Record<string, any>>(handler: Handler<Store>, hook: Hook) =>
     async (request: Request, params, query, store): Promise<Response> => {
         const createPrehandler = (handlers: Handler[]) =>
-            preRequestHook(handlers, request, params, query, store)
+            runPreHandler(handlers, request, params, query, store)
 
-        if (hook.preHandlers[0]) {
-            const preHandled = await createPrehandler(hook.preHandlers)
+        if (hook.preHandler[0]) {
+            const preHandled = await createPrehandler(hook.preHandler)
             if (preHandled) return preHandled
         }
 
@@ -128,52 +138,76 @@ const parseHeader = (headers: Headers) => {
     return parsed
 }
 
-export type Plugin<T extends Object> = (app: KingWorld, config?: T) => void
+export type Plugin<
+    T = Object,
+    PluginStore = Record<string, any>,
+    InstanceStore extends Record<string, any> = {}
+> = (
+    app: KingWorld<PluginStore & InstanceStore>,
+    config?: T
+) => KingWorld<PluginStore & InstanceStore>
 
-const mergeHook = (a: Hook, b: Hook | RegisterHook | undefined): Hook => ({
-    preHandlers: b?.preHandlers
-        ? a.preHandlers.concat(b.preHandlers)
-        : a.preHandlers
+const concatArrayObject = <T>(a: T[], b: T | T[] | undefined): T[] =>
+    b ? a.concat(b) : a
+
+const mergeHook = <T>(
+    a: Hook<T>,
+    b: Hook<T> | RegisterHook<T> | undefined
+): Hook<T> => ({
+    preHandler: concatArrayObject(a?.preHandler, b?.preHandler),
+    onRequest: concatArrayObject(a?.onRequest, b?.onRequest)
 })
 
-export default class KingWorld {
+export default class KingWorld<Store extends Record<string, any> = {}> {
     router: Router
-    store: Object
-    hook: Hook
+    store: Store
+    #reference: [string, any][]
+    hook: Hook<Store>
 
     constructor() {
         this.router = new Router()
-        this.store = {}
+        this.store = {} as Store
+        this.#reference = []
         this.hook = {
-            preHandlers: []
+            preHandler: [],
+            onRequest: []
         }
     }
 
     #addHandler(
         method: HTTPMethod,
         path: string,
-        handler: Handler,
-        hook?: RegisterHook
+        handler: Handler<Store>,
+        hook?: RegisterHook<Store>
     ) {
-        this.router.on(
+        this.router.on<Store>(
             method,
             path,
-            createHandler(handler, mergeHook(this.hook, hook)),
+            createHandler<Store>(
+                handler,
+                mergeHook(this.hook as any, hook as any)
+            ),
             this.store
         )
     }
 
-    when(type: HookEvent, handler: Handler) {
+    when<Event extends HookEvent>(
+        type: Event,
+        handler: RegisterHook<Store>[Event]
+    ) {
         switch (type) {
             case 'preHandler':
-                this.hook.preHandlers.push(handler)
+                this.hook.preHandler.push(handler as any)
+
+            case 'onRequest':
+                this.hook.onRequest.push(handler as PreRequestHandler)
         }
 
         return this
     }
 
-    group(prefix: string, run: (group: KingWorld) => void) {
-        const instance = new KingWorld()
+    group(prefix: string, run: (group: KingWorld<Store>) => void) {
+        const instance = new KingWorld<Store>()
         run(instance)
 
         this.store = Object.assign(this.store, instance.store)
@@ -186,61 +220,65 @@ export default class KingWorld {
         return this
     }
 
-    register<T extends Object>(plugin: Plugin<T>, config?: T) {
-        plugin(this, config)
-
-        return this
+    register<RefStore extends Record<string, any> = Store, Config = Object, PluginStore extends Record<string, any> = {}>(
+        plugin: Plugin<Config, PluginStore, RefStore>,
+        config?: Config
+    ): KingWorld<PluginStore & Store> {
+        return plugin(
+            this as unknown as KingWorld<PluginStore & RefStore>,
+            config
+        ) as KingWorld<PluginStore & Store>
     }
 
-    get(path: string, handler: Handler, hook?: RegisterHook) {
+    get(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('GET', path, handler, hook)
 
         return this
     }
 
-    post(path: string, handler: Handler, hook?: RegisterHook) {
+    post(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('POST', path, handler, hook)
 
         return this
     }
 
-    put(path: string, handler: Handler, hook?: RegisterHook) {
+    put(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('PUT', path, handler)
 
         return this
     }
 
-    patch(path: string, handler: Handler, hook?: RegisterHook) {
+    patch(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('PATCH', path, handler)
 
         return this
     }
 
-    delete(path: string, handler: Handler, hook?: RegisterHook) {
+    delete(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('DELETE', path, handler)
 
         return this
     }
 
-    options(path: string, handler: Handler, hook?: RegisterHook) {
+    options(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('OPTIONS', path, handler)
 
         return this
     }
 
-    head(path: string, handler: Handler, hook?: RegisterHook) {
+    head(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('HEAD', path, handler)
 
         return this
     }
 
-    purge(path: string, handler: Handler, hook?: RegisterHook) {
+    purge(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('PURGE', path, handler)
 
         return this
     }
 
-    move(path: string, handler: Handler, hook?: RegisterHook) {
+    move(path: string, handler: Handler<Store>, hook?: RegisterHook<Store>) {
         this.#addHandler('MOVE', path, handler)
 
         return this
@@ -249,7 +287,7 @@ export default class KingWorld {
     on(
         method: HTTPMethod,
         path: string,
-        handler: Handler,
+        handler: Handler<Store>,
         hook?: RegisterHook
     ) {
         this.#addHandler(method, path, handler, hook)
@@ -263,14 +301,48 @@ export default class KingWorld {
         return this
     }
 
+    state(name: keyof Store, value: Store[keyof Store]) {
+        this.store[name] = value
+
+        return this
+    }
+
+    ref(
+        name: keyof Store,
+        value: Store[keyof Store] | (() => Store[keyof Store])
+    ) {
+        this.#reference.push([name as string, value])
+
+        return this
+    }
+
     listen(port: number) {
         // @ts-ignore
-        if (!Bun) throw new Error('KINGWORLD is not run in Bun environment')
+        if (!Bun) throw new Error('KINGWORLD required Bun to run')
 
-        // @ts-ignore
-        Bun.serve({
-            port,
-            fetch: (request: Request) => this.router.lookup(request)
-        })
+        try {
+            // @ts-ignore
+            Bun.serve({
+                port,
+                fetch: (request: Request) => {
+                    const reference = {}
+
+                    if (this.#reference[0])
+                        this.#reference.forEach(
+                            ([key, value]) =>
+                                (reference[key] =
+                                    'call' in value ? value() : value)
+                        )
+
+                    if (this.hook.onRequest[0])
+                        for (const onRequest of this.hook.onRequest)
+                            onRequest(request, reference)
+
+                    return this.router.lookup(request, reference)
+                }
+            })
+        } catch (error) {
+            throw new Error(error)
+        }
     }
 }

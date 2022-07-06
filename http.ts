@@ -1,17 +1,34 @@
 import KingWorld, { type Plugin } from './index'
 
-const app = new KingWorld()
-
-const plugin: Plugin<{ prefix?: string }> = (app, { prefix = '/fbk' } = {}) => {
-    app.group(prefix, (app) => {
-        app.get('/plugin', () => 'From Plugin')
-    })
+interface Store {
+    a: string
+    id: number
 }
+
+const app = new KingWorld<Store>()
+
+interface PluginStore {
+    asdf: 'a'
+}
+
+const plugin: Plugin<{ prefix?: string }, PluginStore> = (
+    app,
+    { prefix = '/fbk' } = {}
+) =>
+    app
+        .state('asdf', 'a')
+        .when('onRequest', (store) => {})
+        .group(prefix, (app) => {
+            app.get('/plugin', () => 'From Plugin')
+        })
 
 app.register(plugin)
     .get('/', () => 'KINGWORLD')
+    .register((app) =>
+        app.group('/nested', (app) => app.get('/awawa', (_, store) => 'Hi'))
+    )
     .get('/kw', () => 'KINGWORLD', {
-        preHandlers: ({ query }) => {
+        preHandler: ({ query }, store) => {
             if (query?.name === 'aom') return 'Hi saltyaom'
         }
     })
@@ -33,6 +50,11 @@ app.register(plugin)
             .get('/hi', () => 'HI GROUP')
             .get('/kingworld', () => 'Welcome to KINGWORLD')
             .get('/fbk', () => 'FuBuKing')
+    })
+    .get('/identity', (_, store) => {
+        console.log(store.a)
+
+        return 'hi'
     })
     .default(
         () =>

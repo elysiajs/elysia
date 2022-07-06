@@ -1,4 +1,13 @@
-import type { Handler, HandlerObject } from './types'
+import type { Handler } from './types'
+
+interface HandlerObject<Store = Record<string, any>> {
+    handler: Handler
+    params: Record<string, any>
+    store: Store
+    _createParamsObject: (
+        params: string[]
+    ) => Record<string, string | undefined>
+}
 
 export default class HandlerStorage {
     handlers: HandlerObject[]
@@ -27,17 +36,13 @@ export default class HandlerStorage {
         this.handlers.push(handlerObject)
     }
 
-    _compileCreateParamsObject(params: string[]) {
-        const lines: string[] = []
+    _compileCreateParamsObject(keys: string[]) {
+        return (value: string[]) => {
+            const params = {}
 
-        for (let i = 0; i < params.length; i++)
-            lines.push(`'${params[i]}': paramsArray[${i}]`)
+            keys.forEach((key, index) => (params[key] = value[index]))
 
-        const fn = new Function(
-            'paramsArray',
-            `return {${lines.join(',')}}`
-        ) as (params: string[]) => Record<string, string | undefined>
-
-        return fn
+            return params
+        }
     }
 }
