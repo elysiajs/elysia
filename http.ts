@@ -1,29 +1,26 @@
 import KingWorld, { type Plugin } from './index'
 
+import S from 'fluent-json-schema'
+
+const plugin: Plugin<
+    { prefix?: string },
+    {
+        fromPlugin: 'a'
+    }
+> = (app, { prefix = '/fbk' } = {}) =>
+    app.state('fromPlugin', 'a').group(prefix, (app) => {
+        app.get('/plugin', () => 'From Plugin')
+    })
+
 const app = new KingWorld<{
     a: string
     id: number
 }>()
 
-interface PluginStore {
-    asdf: 'a'
-}
-
-const plugin: Plugin<{ prefix?: string }, PluginStore> = (
-    app,
-    { prefix = '/fbk' } = {}
-) =>
-    app
-        .state('asdf', 'a')
-        .onRequest((request, store) => {})
-        .group(prefix, (app) => {
-            app.get('/plugin', () => 'From Plugin')
-        })
-
-app.register(plugin)
-    .ref('id', () => Math.random())
+app.use(plugin)
+    .state('id', Math.random())
     .get('/', () => 'KINGWORLD')
-    .register((app) =>
+    .use((app) =>
         app.group('/nested', (app) => app.get('/awawa', (_, store) => 'Hi'))
     )
     .get('/kw', () => 'KINGWORLD', {
@@ -31,17 +28,42 @@ app.register(plugin)
             if (query?.name === 'aom') return 'Hi saltyaom'
         }
     })
-    .get('/id/:id', ({ params, query }) => {
-        console.log({
-            params,
-            query
-        })
+    .get(
+        '/id/:id',
+        ({ params, query }, store) => {
+            console.log({
+                params,
+                query
+            })
 
-        return params.id
-    })
+            return params.id
+        },
+        {
+            preValidate(request, store) {
+                request.params.id = +request.params.id
+            },
+            schema: {
+                
+            }
+        }
+    )
     .get('/json', () => ({
         hi: 'world'
     }))
+    .post(
+        '/body/a',
+        async ({ request }) => {
+            return 'Hi'
+        },
+        {
+            schema: {
+                body: S.object().prop(
+                    'username',
+                    S.string().required().minLength(5)
+                )
+            }
+        }
+    )
     .group('/group', (app) => {
         app.preHandler(({ query }) => {
             if (query?.name === 'aom') return 'Hi saltyaom'

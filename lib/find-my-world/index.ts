@@ -73,7 +73,7 @@ export default class Router {
         this._routesPatterns = []
     }
 
-    on<T>(method: HTTPMethod, path: string, handler: Handler<T>, store?: any) {
+    on(method: HTTPMethod, path: string, handler: Handler, store?: any) {
         const optionalParamMatch = path.match(OPTIONAL_PARAM_REGEXP)
         if (optionalParamMatch) {
             const pathFull = path.replace(OPTIONAL_PARAM_REGEXP, '$1$2')
@@ -95,7 +95,7 @@ export default class Router {
         }
     }
 
-    _on<T>(method: HTTPMethod, path: string, handler: Handler<T>, store: any) {
+    _on(method: HTTPMethod, path: string, handler: Handler, store: any) {
         if (this.trees[method] === undefined)
             this.trees[method] = new StaticNode('/')
 
@@ -265,7 +265,7 @@ export default class Router {
         )
     }
 
-    find<T>(method: HTTPMethod, path: string): FindResult<T> | null {
+    find(method: HTTPMethod, path: string): FindResult | null {
         let currentNode = this.trees[method]
 
         if (!currentNode) return null
@@ -398,7 +398,7 @@ export default class Router {
         return this.defaultRoute(request)
     }
 
-    _onBadUrl<T>(path: string): FindResult<T> | null {
+    _onBadUrl(path: string): FindResult | null {
         if (!this.onBadUrl) return null
 
         const onBadUrl = this.onBadUrl

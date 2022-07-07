@@ -36,28 +36,28 @@ export type HTTPMethod =
     | 'UNLOCK'
     | 'UNSUBSCRIBE'
 
-export type Handler<T = Record<string, any>> = (
+export type Handler = (
     request: Request,
     params: { [k: string]: string | undefined },
-    store: T,
-    searchParams?: ParsedUrlQuery
+    searchParams: ParsedUrlQuery | undefined,
+    store: Object,
 ) => any
 
-export interface Route<T = Record<string, any>> {
+export interface Route {
     method: HTTPMethod
     path: string
-    handler: Handler<T>
+    handler: Handler
     store: Object
 }
 
-export type ShortHandRoute = <T = Record<string, any>>(
+export type ShortHandRoute = (
     path: string,
-    handler: Handler<T>,
+    handler: Handler,
     store?: any
 ) => void
 
-export interface FindResult<T = Record<string, any>> {
-    handler: Handler<T>
+export interface FindResult {
+    handler: Handler
     params: { [k: string]: string | undefined }
     searchParams?: ParsedUrlQuery
     store: any
