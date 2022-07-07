@@ -69,6 +69,7 @@ const safeDecodeURI = (path: string) => {
             break
         }
     }
+
     const decodedPath = shouldDecode ? decodeURI(path) : path
     return { path: decodedPath, querystring, shouldDecodeParam }
 }

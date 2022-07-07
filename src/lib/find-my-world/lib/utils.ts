@@ -1,8 +1,31 @@
+export const removeHostnamePath = (path: string) => {
+    if (path.charCodeAt(0) === 47) return path
+
+    const total = path.length
+
+    let i = 1
+    let point = 0
+
+    for (; i < total; i++) {
+        if (path.charCodeAt(i) === 47)
+            if (point < 2) point++
+            else break
+    }
+
+    return path.slice(i)
+}
+
 export const escapeRegExp = (value: string) =>
     value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-export const removeDuplicateSlashes = (path: string) =>
-    path.replace(/\/\/+/g, '/')
+export const removeDuplicateSlashes = (path: string) => {
+    let newPath = ''
+
+    for (let i = 0; i < path.length; i++)
+        if (path.charCodeAt(i) !== 47) newPath += path[i]
+
+    return newPath
+}
 
 export const trimLastSlash = (path: string) => {
     if (path.length && path.charCodeAt(path.length - 1) === 47)

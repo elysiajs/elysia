@@ -301,7 +301,10 @@ export default class KingWorld<
     }
 
     serverless = (request: Request) => {
-        const reference: Partial<Instance['Store']> = {}
+        const reference: Partial<Instance['Store']> = Object.assign(
+            {},
+            this.store
+        )
 
         if (this.#ref[0])
             for (const [key, value] of this.#ref)

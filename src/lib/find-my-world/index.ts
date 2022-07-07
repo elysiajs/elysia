@@ -17,7 +17,8 @@ import {
     removeDuplicateSlashes,
     trimLastSlash,
     trimRegExpStartAndEnd,
-    getClosingParenthensePosition
+    getClosingParenthensePosition,
+    removeHostnamePath
 } from './lib/utils'
 
 import type { HTTPMethod, FindResult, Handler } from './lib/types'
@@ -52,6 +53,7 @@ export default class Router {
         StaticNode | ParentNode | ParametricNode | WildcardNode
     >
     _routesPatterns: any[]
+    _cachedRoutes: Record<string, Handler>
 
     constructor({
         defaultRoute,
@@ -73,6 +75,7 @@ export default class Router {
         this.routes = []
         this.trees = {}
         this._routesPatterns = []
+        this._cachedRoutes = {}
     }
 
     on(method: HTTPMethod, path: string, handler: Handler, store?: any) {
@@ -254,17 +257,12 @@ export default class Router {
         currentNode.handlerStorage.addHandler(handler, params, store)
     }
 
-    lookup(req: Request, store?: Object): Response {
+    lookup(req: Request, store: Object = {}): Response {
         var handle = this.find(req.method as HTTPMethod, req.url)
 
         if (!handle) return this._defaultRoute(req)
 
-        return handle.handler(
-            req,
-            handle.params,
-            handle.searchParams,
-            Object.assign(handle.store, store)
-        )
+        return handle.handler(req, handle.params, handle.searchParams, store)
     }
 
     find(method: HTTPMethod, path: string): FindResult | null {
@@ -273,8 +271,7 @@ export default class Router {
         if (!currentNode) return null
 
         // 47 is '/'
-        if (path.charCodeAt(0) !== 47)
-            path = path.replace(FULL_PATH_REGEXP, '/')
+        path = removeHostnamePath(path)
 
         // This must be run before sanitizeUrl as the resulting function
         // .sliceParameter must be constructed with same URL string used
