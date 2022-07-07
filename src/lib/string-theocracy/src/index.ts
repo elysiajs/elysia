@@ -13,10 +13,16 @@ export default class StringTheocracy<T = Function> {
     #routes: Route
     #static: Record<string, T>
 
+    #fallback?: Function
+
     constructor() {
         this.routes = []
         this.#routes = {}
         this.#static = {}
+    }
+
+    default(handle: Function) {
+        this.#fallback = handle
     }
 
     on(method: HTTPMethod, path: string, handler: T) {
@@ -63,7 +69,7 @@ export default class StringTheocracy<T = Function> {
             found,
             method,
             path: restPath,
-            handler: found ? handler : undefined,
+            handler: found ? handler : this.#fallback,
             params,
             query: query ? parseQueryString(query) : {}
         }
@@ -80,15 +86,12 @@ export default class StringTheocracy<T = Function> {
 
         const wildcard = route[WILDCARD] as string | undefined
         if (wildcard) {
-            if (!rest[0]) return [route[wildcard], carry]
+            let newCarry = Object.assign(carry, {
+                [wildcard]: path
+            })
 
-            return this.#find(
-                route[wildcard] as Route,
-                rest,
-                Object.assign(carry, {
-                    [wildcard]: path
-                })
-            )
+            if (!rest[0]) return [route[wildcard], newCarry]
+            return this.#find(route[wildcard] as Route, rest, newCarry)
         }
 
         if (!rest[0]) return [current, carry]
@@ -108,16 +111,17 @@ export default class StringTheocracy<T = Function> {
 
 const router = new StringTheocracy()
 
-// router.on('GET', '/', () => console.log('Hi'))
+router.on('GET', '/id/:id', () => console.log('Hi'))
 // router.on('GET', '/my/path', () => console.log('Hi'))
 // router.on('GET', '/a/b/c', () => console.log('Hi'))
 // router.on('GET', '/a/b//d', () => console.log('Hi'))
 // router.on('GET', '/a/b/id/:id', () => console.log('Hi'))
 // router.on('GET', '/a/b/id/:id/a', () => console.log('Hi'))
 
-// console.log(router.dev)
+// console.log(router.routes)
 
-// console.log(router.find('GET', '/'))
+// console.log('\n\n', router.find('GET', '/id/asdf'))
+// console.log(router.find('GET', '/id/:id'))
 // console.log(router.find('GET', '/my/path'))
 // console.log(router.find('GET', 'http://localhost:8080/a/b/c'))
 // console.log(router.find('GET', '/a/b///d?awd=d&a=c'))

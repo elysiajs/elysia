@@ -17,14 +17,14 @@ import type {
     Plugin,
     ParsedRequest,
     KingWorldInstance,
-    KingWorldHandler
+    TransformHandler
 } from './types'
-import { removeDuplicateSlashes } from './lib/find-my-world/lib/utils'
+import { removeDuplicateSlashes } from './lib/string-theocracy/src/utils'
 
 export default class KingWorld<
     Instance extends KingWorldInstance = KingWorldInstance
 > {
-    router: StringTheocracy<KingWorldHandler>
+    router: StringTheocracy<TransformHandler>
     store: Instance['Store']
     #ref: [keyof Instance['Store'], any][]
     hook: Hook<Instance>
@@ -57,7 +57,7 @@ export default class KingWorld<
             path,
             createHandler<Route, Instance>(
                 handler,
-                mergeHook(this.hook as any, hook as any)
+                hook as RegisterHook
             )
         )
     }
@@ -122,7 +122,7 @@ export default class KingWorld<
         const instance = new KingWorld<Instance>()
         run(instance)
 
-        this.store = Object.assign(this.store, instance.store)
+        // this.store = Object.assign(this.store, instance.store)
 
         Object.values(instance.router.routes).forEach(
             ({ method, path, handler }) => {
@@ -143,7 +143,6 @@ export default class KingWorld<
         run: (group: KingWorld<Instance>) => void
     ) {
         const instance = new KingWorld<Instance>()
-        instance.hook = mergeHook(instance.hook)
         run(instance)
 
         this.store = Object.assign(this.store, instance.store)
@@ -270,7 +269,7 @@ export default class KingWorld<
     }
 
     default(handler: EmptyHandler) {
-        // this.router.defaultRoute = handler
+        this.router.default(handler)
 
         return this
     }
@@ -318,7 +317,21 @@ export default class KingWorld<
             request.url
         )
 
-        return handler(request, params, query, this.store)
+        // console.log({
+        //     request,
+        //     params,
+        //     query,
+        //     store: this.store,
+        //     hook: this.hook
+        // })
+
+        return handler({
+            request,
+            params,
+            query,
+            store: this.store,
+            hook: this.hook
+        })
     }
 
     listen(port: number) {
@@ -340,7 +353,6 @@ export default class KingWorld<
 export { validate }
 
 export type {
-    CreateHandler,
     Handler,
     EmptyHandler,
     Hook,

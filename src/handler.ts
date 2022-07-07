@@ -1,15 +1,18 @@
 import { validate } from './index'
-
 import { concatArrayObject, mergeHook, parseHeader } from './utils'
 
 import type { JSONSchema } from 'fluent-json-schema'
+import type { ParsedUrlQuery } from 'querystring'
+
 import type {
     Hook,
     Handler,
     TypedRoute,
     ParsedRequest,
     KingWorldInstance,
-    CreateHandler
+    TransformHandlerParams,
+    TransformHandler,
+    RegisterHook
 } from './types'
 
 const jsonHeader = {
@@ -31,9 +34,9 @@ export const runPreHandler = async <
         if (response)
             switch (typeof response) {
                 case 'string':
-                        return new Response(response, {
-                            headers: request.responseHeader,
-                        })
+                    return new Response(response, {
+                        headers: request.responseHeader
+                    })
 
                 case 'object':
                     try {
@@ -69,15 +72,22 @@ export const runPreHandler = async <
     }
 }
 
-export const createHandler: CreateHandler =
+export const createHandler =
     <
         Route extends TypedRoute = TypedRoute,
         Instance extends KingWorldInstance = KingWorldInstance
     >(
         handler: Handler<Route, Instance>,
-        hook: Hook
-    ) =>
-    async (request: Request, params, query, store): Promise<Response> => {
+        localHook?: RegisterHook | undefined
+    ): TransformHandler =>
+    // Transform Handler
+    async ({
+        request,
+        params,
+        query,
+        store,
+        hook: appHook
+    }: TransformHandlerParams) => {
         let body: string | Object
         const getBody = async () => {
             if (body) return body
@@ -87,11 +97,6 @@ export const createHandler: CreateHandler =
                 _body.startsWith('{') || _body.startsWith('[')
                     ? JSON.parse(_body)
                     : _body
-
-            // @ts-ignore
-            request.body = body
-            // @ts-ignore
-            request.bodyUsed = true
 
             return body
         }
@@ -108,6 +113,8 @@ export const createHandler: CreateHandler =
 
         const createPrehandler = (h: Handler[]) =>
             runPreHandler<Instance>(h, parsedRequest, store)
+
+        const hook = mergeHook(appHook, localHook) as Hook
 
         if (hook.transform[0]) {
             const transformed = await createPrehandler(hook.transform)
@@ -208,7 +215,7 @@ export const createHandler: CreateHandler =
                 for (const [
                     key,
                     value
-                ] of parsedRequest.responseHeader.entries())
+                ] of Object.entries(parsedRequest.responseHeader))
                     res.headers.append(key, value)
 
                 return res

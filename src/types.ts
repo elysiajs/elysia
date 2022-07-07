@@ -97,10 +97,12 @@ export type KingWorldHandler = (
     store: any
 ) => Promise<Response>
 
-export type CreateHandler = <
-    Route extends TypedRoute = TypedRoute,
-    Instance extends KingWorldInstance<{}, {}> = KingWorldInstance<{}, {}>
->(
-    handler: Handler<Route, Instance>,
-    hook: Hook
-) => KingWorldHandler
+export type TransformHandler = (o: TransformHandlerParams) => Promise<Response> 
+
+export interface TransformHandlerParams {
+    request: Request
+    params: Record<string, string>
+    query: ParsedUrlQuery
+    store: any
+    hook: Hook<any>
+}
