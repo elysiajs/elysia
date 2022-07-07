@@ -8,7 +8,8 @@ import type {
     Handler,
     TypedRoute,
     ParsedRequest,
-    KingWorldInstance
+    KingWorldInstance,
+    CreateHandler
 } from './types'
 
 const jsonHeader = {
@@ -68,7 +69,7 @@ export const runPreHandler = async <
     }
 }
 
-export const createHandler =
+export const createHandler: CreateHandler =
     <
         Route extends TypedRoute = TypedRoute,
         Instance extends KingWorldInstance = KingWorldInstance

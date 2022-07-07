@@ -3,7 +3,7 @@ import validate from 'fluent-schema-validator'
 import { createHandler } from './handler'
 import { concatArrayObject, mergeHook, parseHeader } from './utils'
 
-import Router, { type HTTPMethod } from './lib/find-my-world'
+import StringTheocracy, { type HTTPMethod } from './lib/string-theocracy/src'
 
 import type {
     Handler,
@@ -16,20 +16,21 @@ import type {
     Schemas,
     Plugin,
     ParsedRequest,
-    KingWorldInstance
+    KingWorldInstance,
+    KingWorldHandler
 } from './types'
 import { removeDuplicateSlashes } from './lib/find-my-world/lib/utils'
 
 export default class KingWorld<
     Instance extends KingWorldInstance = KingWorldInstance
 > {
-    router: Router
+    router: StringTheocracy<KingWorldHandler>
     store: Instance['Store']
     #ref: [keyof Instance['Store'], any][]
     hook: Hook<Instance>
 
     constructor() {
-        this.router = new Router()
+        this.router = new StringTheocracy()
         this.store = {} as Instance['Store']
         this.#ref = []
         this.hook = {
@@ -57,8 +58,7 @@ export default class KingWorld<
             createHandler<Route, Instance>(
                 handler,
                 mergeHook(this.hook as any, hook as any)
-            ),
-            this.store
+            )
         )
     }
 
@@ -124,14 +124,16 @@ export default class KingWorld<
 
         this.store = Object.assign(this.store, instance.store)
 
-        instance.router.routes.forEach(({ method, path, handler }) => {
-            this.#addHandler(
-                method,
-                removeDuplicateSlashes(`${prefix}/${path}`),
-                handler,
-                instance.hook
-            )
-        })
+        Object.values(instance.router.routes).forEach(
+            ({ method, path, handler }) => {
+                this.#addHandler(
+                    method,
+                    removeDuplicateSlashes(`${prefix}/${path}`),
+                    handler as any,
+                    instance.hook
+                )
+            }
+        )
 
         return this
     }
@@ -147,7 +149,7 @@ export default class KingWorld<
         this.store = Object.assign(this.store, instance.store)
 
         instance.router.routes.forEach(({ method, path, handler }) => {
-            this.#addHandler(method, path, handler, instance.hook)
+            this.#addHandler(method, path, handler as any, instance.hook)
         })
 
         return this
@@ -267,14 +269,8 @@ export default class KingWorld<
         return this
     }
 
-    off(method: HTTPMethod, path: string) {
-        this.router.off(method, path)
-
-        return this
-    }
-
     default(handler: EmptyHandler) {
-        this.router.defaultRoute = handler
+        // this.router.defaultRoute = handler
 
         return this
     }
@@ -317,7 +313,12 @@ export default class KingWorld<
             for (const onRequest of this.hook.onRequest)
                 Promise.resolve(onRequest(request, reference))
 
-        return this.router.lookup(request, reference)
+        const { found, handler, params, query } = this.router.find(
+            request.method as HTTPMethod,
+            request.url
+        )
+
+        return handler(request, params, query, this.store)
     }
 
     listen(port: number) {
@@ -339,6 +340,7 @@ export default class KingWorld<
 export { validate }
 
 export type {
+    CreateHandler,
     Handler,
     EmptyHandler,
     Hook,

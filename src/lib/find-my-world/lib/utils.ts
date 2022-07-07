@@ -20,9 +20,19 @@ export const escapeRegExp = (value: string) =>
 
 export const removeDuplicateSlashes = (path: string) => {
     let newPath = ''
+    let flip = false
 
-    for (let i = 0; i < path.length; i++)
-        if (path.charCodeAt(i) !== 47) newPath += path[i]
+    for (let i = 0; i < path.length; i++) {
+        if (path.charCodeAt(i) === 47) {
+            if (!flip) {
+                flip = true
+                newPath += path[i]
+            }
+        } else {
+            flip = false
+            if (!flip) newPath += path[i]
+        }
+    }
 
     return newPath
 }

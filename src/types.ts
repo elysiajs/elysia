@@ -89,3 +89,18 @@ export type Plugin<
     app: KingWorld<BaseInstance & PluginInstance>,
     config?: T
 ) => KingWorld<BaseInstance & PluginInstance>
+
+export type KingWorldHandler = (
+    request: Request,
+    params: any,
+    query: any,
+    store: any
+) => Promise<Response>
+
+export type CreateHandler = <
+    Route extends TypedRoute = TypedRoute,
+    Instance extends KingWorldInstance<{}, {}> = KingWorldInstance<{}, {}>
+>(
+    handler: Handler<Route, Instance>,
+    hook: Hook
+) => KingWorldHandler
