@@ -267,6 +267,12 @@ export default class KingWorld<
         return this
     }
 
+    off(method: HTTPMethod, path: string) {
+        this.router.off(method, path)
+
+        return this
+    }
+
     default(handler: EmptyHandler) {
         this.router.defaultRoute = handler
 

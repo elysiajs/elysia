@@ -23,6 +23,7 @@ export type ParsedRequest<Route extends TypedRoute = TypedRoute> = {
     params: Route['params']
     readonly headers: () => Route['header']
     readonly body: () => Promise<Route['body']>
+    responseHeader: Record<string, any>
 } & Omit<Route, 'body' | 'query' | 'header' | 'body'>
 
 export type EmptyHandler = (request: Request) => Response

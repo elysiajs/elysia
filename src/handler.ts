@@ -3,7 +3,13 @@ import { validate } from './index'
 import { concatArrayObject, mergeHook, parseHeader } from './utils'
 
 import type { JSONSchema } from 'fluent-json-schema'
-import type { Hook, Handler, TypedRoute, ParsedRequest, KingWorldInstance } from './types'
+import type {
+    Hook,
+    Handler,
+    TypedRoute,
+    ParsedRequest,
+    KingWorldInstance
+} from './types'
 
 const jsonHeader = {
     headers: {
@@ -11,32 +17,50 @@ const jsonHeader = {
     }
 }
 
-export const runPreHandler = async <Store = Record<string, any>>(
-    handlers: Handler<any, Store>[],
-    req: ParsedRequest,
-    store: Store
+export const runPreHandler = async <
+    Instance extends KingWorldInstance = KingWorldInstance
+>(
+    handlers: Handler<any, Instance>[],
+    request: ParsedRequest & Instance['Request'],
+    store: Instance['Store']
 ) => {
     for (const preHandler of handlers) {
-        const handled = await preHandler(req, store)
+        const response = await preHandler(request, store)
 
-        if (handled)
-            switch (typeof handled) {
+        if (response)
+            switch (typeof response) {
                 case 'string':
-                    return new Response(handled)
+                        return new Response(response, {
+                            headers: request.responseHeader,
+                        })
 
                 case 'object':
                     try {
-                        return new Response(JSON.stringify(handled), jsonHeader)
+                        return new Response(
+                            JSON.stringify(response),
+                            Object.assign(jsonHeader, {
+                                headers: request.responseHeader
+                            })
+                        )
                     } catch (error) {
                         throw new error()
                     }
 
                 case 'function':
-                    return handled
+                    const res = response as Response
+
+                    for (const [key, value] of Object.entries(
+                        request.responseHeader
+                    ))
+                        res.headers.append(key, value)
+
+                    return res
 
                 case 'number':
                 case 'boolean':
-                    return new Response(handled.toString())
+                    return new Response(response.toString(), {
+                        headers: request.responseHeader
+                    })
 
                 default:
                     break
@@ -77,11 +101,12 @@ export const createHandler =
             params,
             query,
             headers: () => parseHeader(request.headers),
-            body: getBody
+            body: getBody,
+            responseHeader: {}
         } as ParsedRequest<Route>
 
         const createPrehandler = (h: Handler[]) =>
-            runPreHandler(h, parsedRequest, store)
+            runPreHandler<Instance>(h, parsedRequest, store)
 
         if (hook.transform[0]) {
             const transformed = await createPrehandler(hook.transform)
@@ -160,26 +185,47 @@ export const createHandler =
 
         switch (typeof response) {
             case 'string':
-                return new Response(response)
+                return new Response(response, {
+                    headers: parsedRequest.responseHeader
+                })
 
             case 'object':
                 try {
-                    return new Response(JSON.stringify(response), jsonHeader)
+                    return new Response(
+                        JSON.stringify(response),
+                        Object.assign(jsonHeader, {
+                            headers: parsedRequest.responseHeader
+                        })
+                    )
                 } catch (error) {
                     throw new error()
                 }
 
             case 'function':
-                return response
+                const res = response as Response
+
+                for (const [
+                    key,
+                    value
+                ] of parsedRequest.responseHeader.entries())
+                    res.headers.append(key, value)
+
+                return res
 
             case 'number':
             case 'boolean':
-                return new Response(response.toString())
+                return new Response(response.toString(), {
+                    headers: parsedRequest.responseHeader
+                })
 
             case 'undefined':
-                return new Response('')
+                return new Response('', {
+                    headers: parsedRequest.responseHeader
+                })
 
             default:
-                return new Response(response)
+                return new Response(response, {
+                    headers: parsedRequest.responseHeader
+                })
         }
     }
