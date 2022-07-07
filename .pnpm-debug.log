@@ -1,0 +1,15 @@
+{
+  "0 debug pnpm:scope": {
+    "selected": 1
+  },
+  "1 error pnpm": {
+    "code": "ERR_PNPM_INIT_ARG",
+    "hint": "Maybe you wanted to run \"pnpm create package.json\"",
+    "err": {
+      "name": "pnpm",
+      "message": "init command does not accept any arguments",
+      "code": "ERR_PNPM_INIT_ARG",
+      "stack": "pnpm: init command does not accept any arguments\n    at Object.handler [as init] (/Users/saltyaom/Library/pnpm/global/5/.pnpm/pnpm@7.5.0/node_modules/pnpm/dist/pnpm.cjs:190071:15)\n    at /Users/saltyaom/Library/pnpm/global/5/.pnpm/pnpm@7.5.0/node_modules/pnpm/dist/pnpm.cjs:192591:51\n    at async run (/Users/saltyaom/Library/pnpm/global/5/.pnpm/pnpm@7.5.0/node_modules/pnpm/dist/pnpm.cjs:192567:34)\n    at async runPnpm (/Users/saltyaom/Library/pnpm/global/5/.pnpm/pnpm@7.5.0/node_modules/pnpm/dist/pnpm.cjs:192785:5)\n    at async /Users/saltyaom/Library/pnpm/global/5/.pnpm/pnpm@7.5.0/node_modules/pnpm/dist/pnpm.cjs:192777:7"
+    }
+  }
+}
