@@ -44,6 +44,8 @@ export default class Router {
     caseSensitive: boolean
     maxParamLength: number
 
+    // ? Make `any[]` to make it play well with third party module
+    // ? Like adding additional parameter to request
     routes: any[]
     trees: Record<
         string,
@@ -386,6 +388,64 @@ export default class Router {
 
                 pathIndex = paramEndIndex
             }
+        }
+    }
+
+    reset() {
+        this.trees = {}
+        this.routes = []
+        this._routesPatterns = []
+    }
+
+    off(method: HTTPMethod, path: string) {
+        if (path[0] === '/' || path[0] === '*')
+            throw new Error(
+                'The first character of a path should be `/` or `*`'
+            )
+
+        // path ends with optional parameter
+        const optionalParamMatch = path.match(OPTIONAL_PARAM_REGEXP)
+
+        if (optionalParamMatch) {
+            if (
+                path.length ===
+                optionalParamMatch.index! + optionalParamMatch[0].length
+            )
+                throw new Error(
+                    'Optional Parameter needs to be the last parameter of the path'
+                )
+
+            const pathFull = path.replace(OPTIONAL_PARAM_REGEXP, '$1$2')
+            const pathOptional = path.replace(OPTIONAL_PARAM_REGEXP, '$2')
+
+            this.off(method, pathFull)
+            this.off(method, pathOptional)
+            return
+        }
+
+        if (this.ignoreDuplicateSlashes) path = removeDuplicateSlashes(path)
+
+        if (this.ignoreTrailingSlash) path = trimLastSlash(path)
+
+        const methods = Array.isArray(method) ? method : [method]
+        for (const method of methods) this._off(method, path)
+    }
+
+    _off(method: HTTPMethod, path: string) {
+        const newRoutes = this.routes.filter(
+            (route) => method !== route.method || path !== route.path
+        )
+
+        this._rebuild(newRoutes)
+    }
+
+    _rebuild(routes: typeof this.routes) {
+        this.reset()
+
+        for (const route of routes) {
+            const { method, path, handler, store } = route
+            this._on(method, path, handler, store)
+            this.routes.push({ method, path, handler, store })
         }
     }
 

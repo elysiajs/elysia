@@ -18,6 +18,7 @@ import type {
     ParsedRequest,
     KingWorldInstance
 } from './types'
+import { removeDuplicateSlashes } from './lib/find-my-world/lib/utils'
 
 export default class KingWorld<
     Instance extends KingWorldInstance = KingWorldInstance
@@ -124,7 +125,12 @@ export default class KingWorld<
         this.store = Object.assign(this.store, instance.store)
 
         instance.router.routes.forEach(({ method, path, handler }) => {
-            this.#addHandler(method, `${prefix}${path}`, handler, instance.hook)
+            this.#addHandler(
+                method,
+                removeDuplicateSlashes(`${prefix}/${path}`),
+                handler,
+                instance.hook
+            )
         })
 
         return this
@@ -300,9 +306,7 @@ export default class KingWorld<
 
         if (this.hook.onRequest[0])
             for (const onRequest of this.hook.onRequest)
-                Promise.resolve(
-                    onRequest(request, reference)
-                )
+                Promise.resolve(onRequest(request, reference))
 
         return this.router.lookup(request, reference)
     }
