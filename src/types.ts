@@ -3,37 +3,48 @@ import { type ParsedUrlQuery } from './lib/find-my-world'
 import type KingWorld from './index'
 import { type JSONSchema } from 'fluent-json-schema'
 
-// @ts-ignore
-export interface KingWorldRequest<Body extends unknown = unknown> extends Request {
-    json(): Promise<Body>;
+export interface KingWorldInstance<
+    Store extends Record<string, any> = {},
+    Request extends Record<string, any> = {}
+> {
+    Request?: Request
+    Store: Store
 }
 
-export type ParsedRequest<Route extends TypedRoute = TypedRoute, Additional extends Record<string, unknown> = {}> = {
+// @ts-ignore
+export interface KingWorldRequest<Body extends unknown = unknown>
+    extends Request {
+    json(): Promise<Body>
+}
+
+export type ParsedRequest<Route extends TypedRoute = TypedRoute> = {
     request: KingWorldRequest<Route['body']>
     query: ParsedUrlQuery & Route['query']
     params: Route['params']
     readonly headers: () => Route['header']
     readonly body: () => Promise<Route['body']>
-} & Omit<Route, 'body' | 'query' | 'header' | 'body'> & Additional
+} & Omit<Route, 'body' | 'query' | 'header' | 'body'>
 
 export type EmptyHandler = (request: Request) => Response
 export type Handler<
     Route extends TypedRoute = TypedRoute,
-    Store extends Record<string, any> = Record<string, any>,
-    Additional extends Record<string, any> = Record<string, any>
-> = (request: ParsedRequest<Route& Additional>, store: Store) => any
+    Instance extends KingWorldInstance = KingWorldInstance
+> = (
+    request: ParsedRequest<Route & Instance['Request']>,
+    store: Instance['Store']
+) => any
 
 export type HookEvent = 'onRequest' | 'transform' | 'transform'
 
-export type PreRequestHandler<Store = Record<string, any>> = (
+export type PreRequestHandler<Store extends Record<string, any> = {}> = (
     request: Request,
     store: Store
 ) => void
 
-export interface Hook<Store = Record<string, any>> {
-    onRequest: PreRequestHandler<Store>[]
-    transform: Handler<Store>[]
-    preHandler: Handler<Store>[]
+export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
+    onRequest: PreRequestHandler<KingWorldInstance['Store']>[]
+    transform: Handler<{}, Instance>[]
+    preHandler: Handler<{}, Instance>[]
     schema: {
         body: JSONSchema[]
         header: JSONSchema[]
@@ -51,26 +62,29 @@ export interface Schemas {
 
 export interface RegisterHook<
     Route extends TypedRoute = TypedRoute,
-    Store = Record<string, any>
+    Instance extends KingWorldInstance = KingWorldInstance
 > {
-    transform?: Handler<Route, Store> | Handler<Route, Store>[]
-    onRequest?: PreRequestHandler<Store> | PreRequestHandler<Store>[]
-    preHandler?: Handler<Route, Store> | Handler<Route, Store>[]
+    transform?: Handler<Route, Instance> | Handler<Route, Instance>[]
+    onRequest?: PreRequestHandler<Instance> | PreRequestHandler<Instance>[]
+    preHandler?: Handler<Route, Instance> | Handler<Route, Instance>[]
     schema?: Schemas
 }
 
 export interface TypedRoute {
     body?: unknown
     header?: Record<string, unknown>
-    query?: ParsedRequest & Record<string, unknown>
+    query?: Record<string, unknown>
     params?: Record<string, unknown>
 }
 
 export type Plugin<
-    T = Object,
-    PluginStore = Record<string, any>,
-    InstanceStore extends Record<string, any> = {}
+    T = Record<string, unknown>,
+    PluginInstance extends KingWorldInstance = KingWorldInstance,
+    BaseInstance extends KingWorldInstance = KingWorldInstance<{
+        Request: {}
+        Store: {}
+    }>
 > = (
-    app: KingWorld<PluginStore & InstanceStore>,
+    app: KingWorld<BaseInstance & PluginInstance>,
     config?: T
-) => KingWorld<PluginStore & InstanceStore>
+) => KingWorld<BaseInstance & PluginInstance>

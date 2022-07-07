@@ -14,18 +14,22 @@ import type {
     PreRequestHandler,
     TypedRoute,
     Schemas,
-    Plugin
+    Plugin,
+    ParsedRequest,
+    KingWorldInstance
 } from './types'
 
-export default class KingWorld<Store extends Record<string, any> = {}> {
+export default class KingWorld<
+    Instance extends KingWorldInstance = KingWorldInstance
+> {
     router: Router
-    store: Store
-    #ref: [keyof Store, any][]
-    hook: Hook<Store>
+    store: Instance['Store']
+    #ref: [keyof Instance['Store'], any][]
+    hook: Hook<Instance>
 
     constructor() {
         this.router = new Router()
-        this.store = {} as Store
+        this.store = {} as Instance['Store']
         this.#ref = []
         this.hook = {
             onRequest: [],
@@ -43,13 +47,13 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
     #addHandler<Route extends TypedRoute = TypedRoute>(
         method: HTTPMethod,
         path: string,
-        handler: Handler<Route, Store>,
-        hook?: RegisterHook<Route, Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.router.on(
             method,
             path,
-            createHandler<Route, Store>(
+            createHandler<Route, Instance>(
                 handler,
                 mergeHook(this.hook as any, hook as any)
             ),
@@ -57,13 +61,13 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
         )
     }
 
-    onRequest(handler: PreRequestHandler<Store>) {
+    onRequest(handler: PreRequestHandler<Instance['Store']>) {
         this.hook.onRequest.push(handler)
 
         return this
     }
 
-    transform(handler: Handler<Store>) {
+    transform(handler: Handler<{}, Instance>) {
         this.hook.transform.push(handler)
 
         return this
@@ -87,7 +91,7 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
         return this
     }
 
-    preHandler(handler: Handler<Store>) {
+    preHandler(handler: Handler<{}, Instance>) {
         this.hook.preHandler.push(handler)
 
         return this
@@ -95,24 +99,26 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
     when<Event extends HookEvent = HookEvent>(
         type: Event,
-        handler: RegisterHook<Store>[Event]
+        handler: RegisterHook<Instance['Store']>[Event]
     ) {
         switch (type) {
             case 'onRequest':
-                this.hook.onRequest.push(handler as PreRequestHandler<Store>)
+                this.hook.onRequest.push(
+                    handler as PreRequestHandler<Instance['Store']>
+                )
 
             case 'transform':
-                this.hook.transform.push(handler as Handler<Store>)
+                this.hook.transform.push(handler as Handler<{}, Instance>)
 
             case 'preHandler':
-                this.hook.preHandler.push(handler as Handler<Store>)
+                this.hook.preHandler.push(handler as Handler<{}, Instance>)
         }
 
         return this
     }
 
-    group(prefix: string, run: (group: KingWorld<Store>) => void) {
-        const instance = new KingWorld<Store>()
+    group(prefix: string, run: (group: KingWorld<Instance>) => void) {
+        const instance = new KingWorld<Instance>()
         run(instance)
 
         this.store = Object.assign(this.store, instance.store)
@@ -125,10 +131,10 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
     }
 
     guard(
-        hook: RegisterHook<any, Store>,
-        run: (group: KingWorld<Store>) => void
+        hook: RegisterHook<any, Instance>,
+        run: (group: KingWorld<Instance>) => void
     ) {
-        const instance = new KingWorld<Store>()
+        const instance = new KingWorld<Instance>()
         instance.hook = mergeHook(instance.hook)
         run(instance)
 
@@ -142,45 +148,42 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
     }
 
     use<
-        RefStore extends Record<string, any> = Store,
+        CurrentInstance extends KingWorldInstance = Instance,
         Config = Object,
-        PluginStore extends Record<string, any> = {}
+        PluginInstance extends KingWorldInstance = KingWorldInstance
     >(
-        plugin: Plugin<Config, PluginStore, RefStore>,
+        plugin: Plugin<Config, PluginInstance, CurrentInstance>,
         config?: Config
-    ): KingWorld<PluginStore & Store> {
-        return plugin(
-            // ? Need hack, because instance need to have both type
-            // ? but before transform type won't we available
-            this as unknown as KingWorld<PluginStore & RefStore>,
-            config
-        ) as KingWorld<PluginStore & Store>
+    ): KingWorld<Instance & PluginInstance> {
+        // ? Need hack, because instance need to have both type
+        // ? but before transform type won't we available
+        return plugin(this as any, config) as any
     }
 
     get<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Route, Store>,
-        hook?: RegisterHook<Route, Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
-        this.#addHandler<Route>('GET', path, handler, hook)
+        this.#addHandler('GET', path, handler, hook)
 
         return this
     }
 
     post<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Route, Store>,
-        hook?: RegisterHook<Route, Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
-        this.#addHandler<Route>('POST', path, handler, hook)
+        this.#addHandler('POST', path, handler, hook)
 
         return this
     }
 
     put<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Store>,
-        hook?: RegisterHook<Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.#addHandler('PUT', path, handler)
 
@@ -189,8 +192,8 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
     patch<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Store>,
-        hook?: RegisterHook<Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.#addHandler('PATCH', path, handler)
 
@@ -199,8 +202,8 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
     delete<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Store>,
-        hook?: RegisterHook<Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.#addHandler('DELETE', path, handler)
 
@@ -209,8 +212,8 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
     options<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Store>,
-        hook?: RegisterHook<Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.#addHandler('OPTIONS', path, handler)
 
@@ -219,8 +222,8 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
     head<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Store>,
-        hook?: RegisterHook<Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.#addHandler('HEAD', path, handler)
 
@@ -229,8 +232,8 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
     trace<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Store>,
-        hook?: RegisterHook<Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.#addHandler('TRACE', path, handler)
 
@@ -239,8 +242,8 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
     connect<Route extends TypedRoute = TypedRoute>(
         path: string,
-        handler: Handler<Store>,
-        hook?: RegisterHook<Store>
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.#addHandler('CONNECT', path, handler)
 
@@ -250,8 +253,8 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
     on<Route extends TypedRoute = TypedRoute>(
         method: HTTPMethod,
         path: string,
-        handler: Handler<Store>,
-        hook?: RegisterHook
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route, Instance>
     ) {
         this.#addHandler(method, path, handler, hook)
 
@@ -264,26 +267,29 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
         return this
     }
 
-    state(name: keyof Store, value: Store[keyof Store]) {
+    state(
+        name: keyof Instance['Store'],
+        value: Instance['Store'][keyof Instance['Store']]
+    ) {
         this.store[name] = value
 
         return this
     }
 
     ref(
-        name: keyof Store,
+        name: keyof Instance['Store'],
         value:
-            | Store[keyof Store]
-            | (() => Store[keyof Store])
-            | (() => Promise<Store[keyof Store]>)
+            | Instance['Store'][keyof Instance['Store']]
+            | (() => Instance['Store'][keyof Instance['Store']])
+            | (() => Promise<Instance['Store'][keyof Instance['Store']]>)
     ) {
-        this.#ref.push([name as string, value])
+        this.#ref.push([name, value])
 
         return this
     }
 
     serverless = (request: Request) => {
-        const reference: Partial<Store> = {}
+        const reference: Partial<Instance['Store']> = {}
 
         if (this.#ref[0])
             for (const [key, value] of this.#ref)
@@ -294,7 +300,9 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
 
         if (this.hook.onRequest[0])
             for (const onRequest of this.hook.onRequest)
-                Promise.resolve(onRequest(request, reference as Store))
+                Promise.resolve(
+                    onRequest(request, reference)
+                )
 
         return this.router.lookup(request, reference)
     }

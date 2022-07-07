@@ -3,7 +3,7 @@ import { validate } from './index'
 import { concatArrayObject, mergeHook, parseHeader } from './utils'
 
 import type { JSONSchema } from 'fluent-json-schema'
-import type { Hook, Handler, TypedRoute, ParsedRequest } from './types'
+import type { Hook, Handler, TypedRoute, ParsedRequest, KingWorldInstance } from './types'
 
 const jsonHeader = {
     headers: {
@@ -47,9 +47,9 @@ export const runPreHandler = async <Store = Record<string, any>>(
 export const createHandler =
     <
         Route extends TypedRoute = TypedRoute,
-        Store extends Record<string, any> = Record<string, any>
+        Instance extends KingWorldInstance = KingWorldInstance
     >(
-        handler: Handler<Route, Store>,
+        handler: Handler<Route, Instance>,
         hook: Hook
     ) =>
     async (request: Request, params, query, store): Promise<Response> => {
