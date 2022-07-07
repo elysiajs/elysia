@@ -13,23 +13,11 @@ const jsonHeader = {
 
 export const runPreHandler = async <Store = Record<string, any>>(
     handlers: Handler<any, Store>[],
-    request: Request,
-    params,
-    query,
-    store,
-    getBody: ParsedRequest['body']
+    req: ParsedRequest,
+    store: Store
 ) => {
     for (const preHandler of handlers) {
-        const handled = await preHandler(
-            {
-                request,
-                params,
-                query,
-                headers: () => parseHeader(request.headers),
-                body: getBody
-            },
-            store
-        )
+        const handled = await preHandler(req, store)
 
         if (handled)
             switch (typeof handled) {
@@ -83,12 +71,21 @@ export const createHandler =
             return body
         }
 
+        // ? Might have additional field attach from plugin, so forced type cast here
+        const parsedRequest: ParsedRequest<Route> = {
+            request,
+            params,
+            query,
+            headers: () => parseHeader(request.headers),
+            body: getBody
+        } as ParsedRequest<Route>
+
         const createPrehandler = (h: Handler[]) =>
-            runPreHandler(h, request, params, query, store, getBody)
+            runPreHandler(h, parsedRequest, store)
 
         if (hook.transform[0]) {
-            const preHandled = await createPrehandler(hook.transform)
-            if (preHandled) return preHandled
+            const transformed = await createPrehandler(hook.transform)
+            if (transformed) return transformed
         }
 
         if (
@@ -159,16 +156,7 @@ export const createHandler =
             if (preHandled) return preHandled
         }
 
-        const response = await handler(
-            {
-                request,
-                params,
-                query,
-                headers: () => parseHeader(request.headers),
-                body: getBody
-            },
-            store
-        )
+        const response = await handler(parsedRequest, store)
 
         switch (typeof response) {
             case 'string':

@@ -64,7 +64,7 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
     }
 
     transform(handler: Handler<Store>) {
-        this.hook.preHandler.push(handler)
+        this.hook.transform.push(handler)
 
         return this
     }
@@ -282,6 +282,23 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
         return this
     }
 
+    serverless = (request: Request) => {
+        const reference: Partial<Store> = {}
+
+        if (this.#ref[0])
+            for (const [key, value] of this.#ref)
+                reference[key] =
+                    typeof value === 'function'
+                        ? Promise.resolve(value())
+                        : value
+
+        if (this.hook.onRequest[0])
+            for (const onRequest of this.hook.onRequest)
+                Promise.resolve(onRequest(request, reference as Store))
+
+        return this.router.lookup(request, reference)
+    }
+
     listen(port: number) {
         // @ts-ignore
         if (!Bun) throw new Error('KINGWORLD required Bun to run')
@@ -290,24 +307,7 @@ export default class KingWorld<Store extends Record<string, any> = {}> {
             // @ts-ignore
             Bun.serve({
                 port,
-                fetch: async (request: Request) => {
-                    const reference: Partial<Store> = {}
-
-                    if (this.#ref[0])
-                        for (const [key, value] of this.#ref)
-                            reference[key] =
-                                typeof value === 'function'
-                                    ? Promise.resolve(value())
-                                    : value
-
-                    if (this.hook.onRequest[0])
-                        for (const onRequest of this.hook.onRequest)
-                            Promise.resolve(
-                                onRequest(request, reference as Store)
-                            )
-
-                    return await this.router.lookup(request, reference)
-                }
+                fetch: this.serverless
             })
         } catch (error) {
             throw new Error(error)

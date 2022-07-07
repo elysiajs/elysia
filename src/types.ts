@@ -8,24 +8,25 @@ export interface KingWorldRequest<Body extends unknown = unknown> extends Reques
     json(): Promise<Body>;
 }
 
-export interface ParsedRequest<Route extends TypedRoute = TypedRoute> {
-    readonly request: KingWorldRequest<Route['body']>
+export type ParsedRequest<Route extends TypedRoute = TypedRoute, Additional extends Record<string, unknown> = {}> = {
+    request: KingWorldRequest<Route['body']>
     query: ParsedUrlQuery & Route['query']
     params: Route['params']
     readonly headers: () => Route['header']
     readonly body: () => Promise<Route['body']>
-}
+} & Omit<Route, 'body' | 'query' | 'header' | 'body'> & Additional
 
 export type EmptyHandler = (request: Request) => Response
 export type Handler<
     Route extends TypedRoute = TypedRoute,
-    Store extends Record<string, any> = Record<string, any>
-> = (request: Readonly<ParsedRequest<Route>>, store: Store) => any
+    Store extends Record<string, any> = Record<string, any>,
+    Additional extends Record<string, any> = Record<string, any>
+> = (request: ParsedRequest<Route& Additional>, store: Store) => any
 
 export type HookEvent = 'onRequest' | 'transform' | 'transform'
 
 export type PreRequestHandler<Store = Record<string, any>> = (
-    request: Readonly<Request>,
+    request: Request,
     store: Store
 ) => void
 
