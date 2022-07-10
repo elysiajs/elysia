@@ -1,0 +1,24 @@
+{
+    "module": {
+        "type": "commonjs"
+    },
+    "exclude": ["(.*).(spec|test).(j|t)s$"],
+    "jsc": {
+        "target": "es2020",
+        "parser": {
+            "syntax": "typescript"
+        },
+        "minify": {
+            "mangle": true,
+            "compress": true
+        }
+    },
+    "minify": true,
+    "sourceMaps": true,
+    "inlineSourcesContent": true,
+    "env": {
+        "targets": {
+            "node": 16
+        }
+    }
+}

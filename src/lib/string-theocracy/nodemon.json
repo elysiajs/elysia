@@ -1,6 +1,0 @@
-{
-    "restartable": "rs",
-    "ignore": [".git", "node_modules/", "build/"],
-    "exec": "ts-node src/index.ts",
-    "ext": "js, json, ts"
-}

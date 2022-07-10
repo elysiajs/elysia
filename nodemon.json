@@ -1,0 +1,6 @@
+{
+    "restartable": "rs",
+    "ignore": [".git", "node_modules/", "build/"],
+    "exec": "bun example/http.ts",
+    "ext": "js, json, ts"
+}

@@ -1,4 +1,4 @@
-import StringTheocracy, { type HTTPMethod } from './lib/string-theocracy/src'
+import StringTheocracy, { type HTTPMethod } from 'string-theocracy'
 
 import validate from 'fluent-schema-validator'
 
@@ -78,7 +78,7 @@ export default class KingWorld<
             path,
             composeHandler(
                 handler,
-                mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
+                clone(mergeHook(this.hook as Hook, hook as RegisterHook))
             )
         )
     }
@@ -147,11 +147,7 @@ export default class KingWorld<
 
         Object.values(instance.router.routes).forEach(
             ({ method, path, handler }) => {
-                this.router.on(
-                    method,
-                    `${prefix}/${path}`,
-                    handler
-                )
+                this.router.on(method, `${prefix}/${path}`, handler)
             }
         )
 
@@ -357,7 +353,7 @@ export default class KingWorld<
             body = await Promise.resolve(
                 request
                     .text()
-                    .then((body) =>
+                    .then((body: string) =>
                         body.startsWith('{') || body.startsWith('[')
                             ? JSON.parse(body)
                             : body
@@ -397,7 +393,7 @@ export default class KingWorld<
         ) {
             const createParser = (
                 type: string,
-                value,
+                value: any,
                 schemas: JSONSchema[]
             ) => {
                 for (const schema of schemas)
@@ -515,7 +511,7 @@ export default class KingWorld<
                 fetch: this.handle
             })
         } catch (error) {
-            throw new Error(error)
+            throw error
         }
 
         return this
