@@ -1,5 +1,4 @@
 import StringTheocracy, { type HTTPMethod } from './lib/string-theocracy/src'
-import { removeDuplicateSlashes } from './lib/string-theocracy/src/utils'
 
 import validate from 'fluent-schema-validator'
 
@@ -45,6 +44,7 @@ export default class KingWorld<
 
     constructor() {
         this.router = new StringTheocracy()
+
         this.store = {} as Instance['Store']
         this.#ref = []
         this.hook = {
@@ -58,6 +58,13 @@ export default class KingWorld<
                 params: []
             }
         }
+
+        this.default(
+            () =>
+                new Response('Not Found', {
+                    status: 404
+                })
+        )
     }
 
     #addHandler<Route extends TypedRoute = TypedRoute>(
@@ -142,7 +149,7 @@ export default class KingWorld<
             ({ method, path, handler }) => {
                 this.router.on(
                     method,
-                    removeDuplicateSlashes(`${prefix}/${path}`),
+                    `${prefix}/${path}`,
                     handler
                 )
             }
@@ -281,8 +288,20 @@ export default class KingWorld<
         return this
     }
 
-    default(handler: EmptyHandler) {
-        this.router.default(handler)
+    off(method: HTTPMethod, path: string) {
+        this.router.off(method, path)
+    }
+
+    default<Route extends TypedRoute = TypedRoute>(
+        handler: Handler<Route, Instance>,
+        hook?: RegisterHook<Route>
+    ) {
+        this.router.default(
+            composeHandler(
+                handler,
+                mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
+            )
+        )
 
         return this
     }
@@ -308,33 +327,28 @@ export default class KingWorld<
         return this
     }
 
-    serverless = async (request: Request) => {
-        const reference: Partial<Instance['Store']> = Object.assign(
-            {},
-            this.store
-        )
+    handle = async (request: Request) => {
+        const store: Partial<Instance['Store']> = Object.assign({}, this.store)
 
         if (this.#ref[0])
             for (const [key, value] of this.#ref)
-                reference[key] =
+                store[key] =
                     typeof value === 'function'
                         ? Promise.resolve(value())
                         : value
 
         if (this.hook.onRequest[0])
             for (const onRequest of this.hook.onRequest)
-                Promise.resolve(onRequest(request, reference))
+                Promise.resolve(onRequest(request, store))
 
         const {
             found,
             method,
             path,
-            handler: [handler, hook],
+            handler: handle,
             params,
             query
         } = this.router.find(request.method as HTTPMethod, request.url)
-
-        const store = Object.assign(this.store, reference)
 
         let body: string | Object
         const getBody = async () => {
@@ -353,8 +367,6 @@ export default class KingWorld<
             return body
         }
 
-        if (!found) return (handler as unknown as EmptyHandler)(request)
-
         // ? Might have additional field attach from plugin, so forced type cast here
         const parsedRequest: ParsedRequest = {
             request,
@@ -364,6 +376,10 @@ export default class KingWorld<
             body: getBody,
             responseHeader: {}
         } as ParsedRequest
+
+        const [handler, hook] = handle
+
+        if (!found) return handler(parsedRequest, store)
 
         const runPreHandler = (h: Handler[]) =>
             composePreHandler<Instance>(h, parsedRequest, store)
@@ -441,7 +457,7 @@ export default class KingWorld<
             if (preHandled) return preHandled
         }
 
-        let response = handler(parsedRequest, this.store)
+        let response = handler(parsedRequest, store)
         if (isPromise(response)) response = await response
 
         switch (typeof response) {
@@ -452,12 +468,12 @@ export default class KingWorld<
                 try {
                     return new Response(
                         JSON.stringify(response),
-                        Object.assign(jsonHeader, {
+                        Object.assign({}, jsonHeader, {
                             headers: parsedRequest.responseHeader
                         })
                     )
                 } catch (error) {
-                    throw new error()
+                    throw error
                 }
 
             case 'function':
@@ -496,11 +512,13 @@ export default class KingWorld<
             // @ts-ignore
             Bun.serve({
                 port,
-                fetch: this.serverless
+                fetch: this.handle
             })
         } catch (error) {
             throw new Error(error)
         }
+
+        return this
     }
 }
 

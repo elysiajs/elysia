@@ -4,16 +4,19 @@ import { removeDuplicateSlashes, removeHostnamePath, splitOnce } from './utils'
 
 import type { Route, HTTPMethod, RouteResult, PlainRoute } from './types'
 
-const WILDCARD = Symbol('w')
-
 export type { Route, RouteResult, HTTPMethod } from './types'
 
-export default class StringTheocracy<T = Function> {
+const WILDCARD = Symbol('w')
+
+const getNestedObject = (object: Object, props: string[]) =>
+    props.reduce((a: any, c) => a[c], object)
+
+export default class StringTheocracy<T = any> {
     routes: PlainRoute<T>[]
     #routes: Route
     #static: Record<string, T>
 
-    #fallback?: Function
+    #fallback?: any
 
     constructor() {
         this.routes = []
@@ -21,8 +24,10 @@ export default class StringTheocracy<T = Function> {
         this.#static = {}
     }
 
-    default(handle: Function) {
+    default<Typed = T>(handle: T) {
         this.#fallback = handle
+
+        return this
     }
 
     on(method: HTTPMethod, path: string, handler: T) {
@@ -39,6 +44,8 @@ export default class StringTheocracy<T = Function> {
         if (!parsedPath.includes(':')) this.#static[parsedPath] = handler
 
         this.#on(this.#routes[method] as Route, parsedPath.split('/'), handler)
+
+        return this
     }
 
     #on(route: Route, [path, ...routes]: string[], handler: T) {
@@ -63,7 +70,8 @@ export default class StringTheocracy<T = Function> {
             ? [staticHandler, {}]
             : this.#find(this.#routes[method] as Route, parsedPath.split('/'))
 
-        const found = staticHandler ? true : typeof handler === 'function'
+        const found = staticHandler ? true : !!handler
+        // console.log("Static", !!staticHandler)
 
         return {
             found,
@@ -99,28 +107,68 @@ export default class StringTheocracy<T = Function> {
         return [current, carry]
     }
 
-    get dev() {
-        return this.#static
+    off(method: HTTPMethod, path: string) {
+        const parsedPath = removeDuplicateSlashes(removeHostnamePath(path))
+
+        const index = this.routes.findIndex(
+            (v) => v.path === path && v.method === method
+        )
+        if (index === -1) return
+
+        this.routes.slice(index, 1)
+        if (this.#static[parsedPath]) delete this.#static[parsedPath]
+
+        const paths = [method, ...parsedPath.split('/')]
+        paths.pop()
+
+        while (paths.length) {
+            let props: string[] = []
+            paths.forEach((path) => props.push(path))
+
+            if (Object.keys(getNestedObject(this.#routes, props)).length > 1)
+                break
+
+            this.#removeByKeys(this.#routes, props)
+            paths.pop()
+        }
+
+        return this
+    }
+
+    #removeByKeys(obj: Object, keys: string[]) {
+        const latest = keys.pop()
+
+        if (!latest) return
+
+        const target = getNestedObject(this.#routes, keys)
+
+        if (Array.isArray(target)) target.splice(latest as any, 1)
+        else delete target[latest]
     }
 
     reset() {
-        this.#routes = {}
         this.routes = []
+        this.#routes = {}
+        this.#static = {}
     }
 }
 
-const router = new StringTheocracy()
+// const router = new StringTheocracy()
 
-router.on('GET', '/id/:id', () => console.log('Hi'))
-// router.on('GET', '/my/path', () => console.log('Hi'))
-// router.on('GET', '/a/b/c', () => console.log('Hi'))
-// router.on('GET', '/a/b//d', () => console.log('Hi'))
-// router.on('GET', '/a/b/id/:id', () => console.log('Hi'))
-// router.on('GET', '/a/b/id/:id/a', () => console.log('Hi'))
+// router
+//     .on('GET', '/id/:id', () => console.log('Hi'))
+//     .on('GET', '/my/path', () => console.log('Hi'))
+//     .on('GET', '/a/b/c', () => console.log('Hi'))
+//     .on('GET', '/a/b//d', () => console.log('Hi'))
+//     .on('GET', '/a/b/id/:id', () => console.log('Hi'))
+//     .on('GET', '/a/b/id/:id/a', () => console.log('Hi'))
 
 // console.log(router.routes)
 
-// console.log('\n\n', router.find('GET', '/id/asdf'))
+// router.off('GET', '/a/b/c')
+// router.off('GET', '/a/b/c')
+
+// console.log('\n\n', router.find('GET', 'http://localhost:8080/id/1'))
 // console.log(router.find('GET', '/id/:id'))
 // console.log(router.find('GET', '/my/path'))
 // console.log(router.find('GET', 'http://localhost:8080/a/b/c'))
