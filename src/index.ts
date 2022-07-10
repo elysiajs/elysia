@@ -1,9 +1,18 @@
+import StringTheocracy, { type HTTPMethod } from './lib/string-theocracy/src'
+import { removeDuplicateSlashes } from './lib/string-theocracy/src/utils'
+
 import validate from 'fluent-schema-validator'
 
-import { createHandler } from './handler'
-import { concatArrayObject, mergeHook, parseHeader } from './utils'
+import { composePreHandler, composeHandler } from './handler'
+import {
+    concatArrayObject,
+    mergeHook,
+    parseHeader,
+    isPromise,
+    clone
+} from './utils'
 
-import StringTheocracy, { type HTTPMethod } from './lib/string-theocracy/src'
+import type { JSONSchema } from 'fluent-json-schema'
 
 import type {
     Handler,
@@ -17,14 +26,19 @@ import type {
     Plugin,
     ParsedRequest,
     KingWorldInstance,
-    TransformHandler
+    ComposedHandler
 } from './types'
-import { removeDuplicateSlashes } from './lib/string-theocracy/src/utils'
+
+const jsonHeader = Object.freeze({
+    headers: {
+        'Content-Type': 'application/json'
+    }
+})
 
 export default class KingWorld<
     Instance extends KingWorldInstance = KingWorldInstance
 > {
-    router: StringTheocracy<TransformHandler>
+    router: StringTheocracy<ComposedHandler>
     store: Instance['Store']
     #ref: [keyof Instance['Store'], any][]
     hook: Hook<Instance>
@@ -55,9 +69,9 @@ export default class KingWorld<
         this.router.on(
             method,
             path,
-            createHandler<Route, Instance>(
+            composeHandler(
                 handler,
-                hook as RegisterHook
+                mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
             )
         )
     }
@@ -122,15 +136,14 @@ export default class KingWorld<
         const instance = new KingWorld<Instance>()
         run(instance)
 
-        // this.store = Object.assign(this.store, instance.store)
+        this.store = Object.assign(this.store, instance.store)
 
         Object.values(instance.router.routes).forEach(
             ({ method, path, handler }) => {
-                this.#addHandler(
+                this.router.on(
                     method,
                     removeDuplicateSlashes(`${prefix}/${path}`),
-                    handler as any,
-                    instance.hook
+                    handler
                 )
             }
         )
@@ -148,7 +161,7 @@ export default class KingWorld<
         this.store = Object.assign(this.store, instance.store)
 
         instance.router.routes.forEach(({ method, path, handler }) => {
-            this.#addHandler(method, path, handler as any, instance.hook)
+            this.router.on(method, path, handler)
         })
 
         return this
@@ -295,7 +308,7 @@ export default class KingWorld<
         return this
     }
 
-    serverless = (request: Request) => {
+    serverless = async (request: Request) => {
         const reference: Partial<Instance['Store']> = Object.assign(
             {},
             this.store
@@ -312,26 +325,167 @@ export default class KingWorld<
             for (const onRequest of this.hook.onRequest)
                 Promise.resolve(onRequest(request, reference))
 
-        const { found, handler, params, query } = this.router.find(
-            request.method as HTTPMethod,
-            request.url
-        )
+        const {
+            found,
+            method,
+            path,
+            handler: [handler, hook],
+            params,
+            query
+        } = this.router.find(request.method as HTTPMethod, request.url)
 
-        // console.log({
-        //     request,
-        //     params,
-        //     query,
-        //     store: this.store,
-        //     hook: this.hook
-        // })
+        const store = Object.assign(this.store, reference)
 
-        return handler({
+        let body: string | Object
+        const getBody = async () => {
+            if (body) return body
+
+            body = await Promise.resolve(
+                request
+                    .text()
+                    .then((body) =>
+                        body.startsWith('{') || body.startsWith('[')
+                            ? JSON.parse(body)
+                            : body
+                    )
+            )
+
+            return body
+        }
+
+        if (!found) return (handler as unknown as EmptyHandler)(request)
+
+        // ? Might have additional field attach from plugin, so forced type cast here
+        const parsedRequest: ParsedRequest = {
             request,
             params,
             query,
-            store: this.store,
-            hook: this.hook
-        })
+            headers: () => parseHeader(request.headers),
+            body: getBody,
+            responseHeader: {}
+        } as ParsedRequest
+
+        const runPreHandler = (h: Handler[]) =>
+            composePreHandler<Instance>(h, parsedRequest, store)
+
+        if (hook.transform[0]) {
+            const transformed = await runPreHandler(hook.transform)
+            if (transformed) return transformed
+        }
+
+        if (
+            hook.schema.body[0] ||
+            hook.schema.header[0] ||
+            hook.schema.params[0] ||
+            hook.schema.query[0]
+        ) {
+            const createParser = (
+                type: string,
+                value,
+                schemas: JSONSchema[]
+            ) => {
+                for (const schema of schemas)
+                    try {
+                        const validated = validate(value, schema)
+
+                        if (!validated)
+                            return new Response(`Invalid ${type}`, {
+                                status: 400
+                            })
+                    } catch (error) {
+                        return new Response(`Unable to parse ${type}`, {
+                            status: 422
+                        })
+                    }
+            }
+
+            if (hook.schema.body[0]) {
+                const invalidBody = createParser(
+                    'body',
+                    await getBody(),
+                    hook.schema.body
+                )
+                if (invalidBody) return invalidBody
+            }
+
+            if (hook.schema.params[0]) {
+                const invalidParams = createParser(
+                    'params',
+                    params,
+                    hook.schema.params
+                )
+                if (invalidParams) return invalidParams
+            }
+
+            if (hook.schema.query[0]) {
+                const invalidQuery = createParser(
+                    'query',
+                    query,
+                    hook.schema.query
+                )
+                if (invalidQuery) return invalidQuery
+            }
+
+            if (hook.schema.header[0]) {
+                const invalidHeader = createParser(
+                    'headers',
+                    parseHeader(request.headers),
+                    hook.schema.header
+                )
+                if (invalidHeader) return invalidHeader
+            }
+        }
+
+        if (hook.preHandler[0]) {
+            const preHandled = await runPreHandler(hook.preHandler)
+            if (preHandled) return preHandled
+        }
+
+        let response = handler(parsedRequest, this.store)
+        if (isPromise(response)) response = await response
+
+        switch (typeof response) {
+            case 'string':
+                return new Response(response)
+
+            case 'object':
+                try {
+                    return new Response(
+                        JSON.stringify(response),
+                        Object.assign(jsonHeader, {
+                            headers: parsedRequest.responseHeader
+                        })
+                    )
+                } catch (error) {
+                    throw new error()
+                }
+
+            case 'function':
+                const res = response as Response
+
+                for (const [key, value] of Object.entries(
+                    parsedRequest.responseHeader
+                ))
+                    res.headers.append(key, value)
+
+                return res
+
+            case 'number':
+            case 'boolean':
+                return new Response(response.toString(), {
+                    headers: parsedRequest.responseHeader
+                })
+
+            case 'undefined':
+                return new Response('', {
+                    headers: parsedRequest.responseHeader
+                })
+
+            default:
+                return new Response(response, {
+                    headers: parsedRequest.responseHeader
+                })
+        }
     }
 
     listen(port: number) {

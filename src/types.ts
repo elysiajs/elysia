@@ -33,7 +33,7 @@ export type Handler<
 > = (
     request: ParsedRequest<Route & Instance['Request']>,
     store: Instance['Store']
-) => any
+) => any | Promise<any>
 
 export type HookEvent = 'onRequest' | 'transform' | 'transform'
 
@@ -43,7 +43,7 @@ export type PreRequestHandler<Store extends Record<string, any> = {}> = (
 ) => void
 
 export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
-    onRequest: PreRequestHandler<KingWorldInstance['Store']>[]
+    onRequest: PreRequestHandler<Instance['Store']>[]
     transform: Handler<{}, Instance>[]
     preHandler: Handler<{}, Instance>[]
     schema: {
@@ -90,19 +90,4 @@ export type Plugin<
     config?: T
 ) => KingWorld<BaseInstance & PluginInstance>
 
-export type KingWorldHandler = (
-    request: Request,
-    params: any,
-    query: any,
-    store: any
-) => Promise<Response>
-
-export type TransformHandler = (o: TransformHandlerParams) => Promise<Response> 
-
-export interface TransformHandlerParams {
-    request: Request
-    params: Record<string, string>
-    query: ParsedUrlQuery
-    store: any
-    hook: Hook<any>
-}
+export type ComposedHandler = [Handler<any, any>, Hook<any>]

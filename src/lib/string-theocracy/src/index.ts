@@ -68,7 +68,7 @@ export default class StringTheocracy<T = Function> {
         return {
             found,
             method,
-            path: restPath,
+            path: parsedPath,
             handler: found ? handler : this.#fallback,
             params,
             query: query ? parseQueryString(query) : {}
