@@ -6,6 +6,8 @@ specifiers:
   '@swc/jest': ^0.2.21
   '@types/jest': ^28.1.4
   '@types/node': ^18.0.3
+  fluent-json-schema: ^3.1.0
+  fluent-schema-validator: ^0.0.5
   jest: ^28.1.2
   nodemon: ^2.0.19
   string-theocracy: 0.0.1
@@ -13,6 +15,8 @@ specifiers:
   typescript: ^4.7.4
 
 dependencies:
+  fluent-json-schema: 3.1.0
+  fluent-schema-validator: 0.0.5
   string-theocracy: 0.0.1
 
 devDependencies:
@@ -1296,7 +1300,6 @@ packages:
   /deepmerge/4.2.2:
     resolution: {integrity: sha512-FJ3UgI4gIl+PHZm53knsuSFpE+nESMr7M4v9QcgB7S63Kj/6WqMiFQJpBBYz1Pt+66bZpP3Q7Lye0Oo9MPKEdg==}
     engines: {node: '>=0.10.0'}
-    dev: true
 
   /detect-newline/3.1.0:
     resolution: {integrity: sha512-TLz+x/vEXm/Y7P7wn1EJFNLxYpUD4TgMosxY6fAVJUnJMbupHBOncxyWUG9OpTaH9EBD7uFI5LfEgmMOc54DsA==}
@@ -1425,6 +1428,17 @@ packages:
       locate-path: 5.0.0
       path-exists: 4.0.0
     dev: true
+
+  /fluent-json-schema/3.1.0:
+    resolution: {integrity: sha512-Ft7WGihiwpcZkZsJuXVCcEHLDOJ1vGS4wFK8V08xWffFthadgjwpSExfBWz/72VxHZ0xe7/N3T38hOxskwxd3A==}
+    engines: {node: '>=12'}
+    dependencies:
+      deepmerge: 4.2.2
+    dev: false
+
+  /fluent-schema-validator/0.0.5:
+    resolution: {integrity: sha512-sD+4tgjbVfmpVOVmDW1aCnupI484h7en9G2gaqcw4FtOJ+5oe3bBxlTXFd9pv/3GBwRMXJUu2KYRwZ0a3mIZ2w==}
+    dev: false
 
   /fs.realpath/1.0.0:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}

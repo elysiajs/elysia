@@ -1,5 +1,6 @@
 import StringTheocracy, { type HTTPMethod } from 'string-theocracy'
 
+import type { JSONSchema } from 'fluent-json-schema'
 import validate from 'fluent-schema-validator'
 
 import { composePreHandler, composeHandler } from './handler'
@@ -11,7 +12,6 @@ import {
     clone
 } from './utils'
 
-import type { JSONSchema } from 'fluent-json-schema'
 
 import type {
     Handler,
