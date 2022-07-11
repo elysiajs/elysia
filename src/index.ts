@@ -41,15 +41,16 @@ export default class KingWorld<
 > {
 	router: Router<ComposedHandler>
 	store: Instance['Store']
-	#ref: [keyof Instance['Store'], any][]
 	hook: Hook<Instance>
+
+	_ref: [keyof Instance['Store'], any][]
 	_default: EmptyHandler
 
 	constructor() {
 		this.router = new Router()
 
 		this.store = {} as Instance['Store']
-		this.#ref = []
+		this._ref = []
 		this.hook = {
 			onRequest: [],
 			transform: [],
@@ -311,7 +312,7 @@ export default class KingWorld<
 			| (() => Instance['Store'][keyof Instance['Store']])
 			| (() => Promise<Instance['Store'][keyof Instance['Store']]>)
 	) {
-		this.#ref.push([name, value])
+		this._ref.push([name, value])
 
 		return this
 	}
