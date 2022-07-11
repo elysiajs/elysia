@@ -53,7 +53,7 @@ const app = new KingWorld<{
         preHandler: ({ query, log }, { fromPlugin }) => {
             log()
 
-            console.log('Name:', query.name)
+            console.log('Name:', query?.name)
 
             if (query?.name === 'aom') return 'Hi saltyaom'
         }

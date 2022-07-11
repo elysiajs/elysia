@@ -1,15 +1,15 @@
 {
   "name": "kingworld",
   "description": "Fast, and Low overhead Bun web server",
-  "version": "0.0.0-experimental.4",
+  "version": "0.0.0-experimental.5",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
     "email": "saltyaom@gmail.com"
   },
   "main": "build/index.js",
-  "module": "build/esm/index.js",
-  "esnext": "build/esm/index.js",
+  "module": "build/es/index.js",
+  "esnext": "build/es/index.js",
   "types": "src/index.ts",
   "typings": "src/index.ts",
   "keywords": [
@@ -28,10 +28,9 @@
   "scripts": {
     "test": "jest",
     "dev": "nodemon --config nodemon.json",
-    "build": "npm run build:main && npm run build:cjs && npm run build:es",
-    "build:cjs": "swc src --config-file .cjs.swcrc -d build/cjs",
-    "build:es": "swc src --config-file .es.swcrc -d build/es",
+    "build": "npm run build:main && npm run build:es",
     "build:main": "swc src --config-file .cjs.swcrc -d build",
+    "build:es": "swc src --config-file .es.swcrc -d build/es",
     "release": "npm run build && npm publish"
   },
   "dependencies": {
