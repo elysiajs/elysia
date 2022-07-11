@@ -1,6 +1,5 @@
 .DS_Store
 
-example
 node_modules
 .pnpm-debug.log
 build
