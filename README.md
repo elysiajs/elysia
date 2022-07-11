@@ -73,6 +73,14 @@ app.get<{
 }>("/id/:id", ({ params: { id } }) => id)
 ```
 
+For custom 404 page, you can simply use `default`:
+```typescript
+app.get("/get", () => "Hi")
+    .default(() => new Response("Not Found", {
+        status: 404
+    }))
+```
+
 Alas, you can group multiple route with a prefix with `group`:
 ```typescript
 app
