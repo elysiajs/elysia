@@ -34,14 +34,12 @@ Then simply open `http://localhost:3000` in your browser.
 Congrats! You have just create a new web server in KingWorld 🎉🎉
 
 ## Routing
-KingWorld use a modified version of [trek-router](https://github.com/SaltyAom/trek-router), one of the fastest router available.
-
 Common HTTP Method has a built-in method for a convenient usage:
 ```typescript
 app.get("/hi", () => "Hi")
     .post("/hi", () => "From Post")
     .put("/hi", () => "From Put")
-    .on("CUSTOM-METHOD", async () => "Custom Method")
+    .on("M-SEARCH", async () => "Custom Method")
     .listen(3000)
 ```
 
