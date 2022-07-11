@@ -316,7 +316,7 @@ export default class KingWorld<
 		return this
 	}
 
-	handle = async (request: Request) => {
+	async handle(request: Request) {
 		const store: Partial<Instance['Store']> = Object.assign({}, this.store)
 
 		if (this.#ref[0])

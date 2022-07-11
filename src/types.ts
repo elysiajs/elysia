@@ -35,7 +35,7 @@ export type Handler<
 	store: Instance['Store']
 ) => any | Promise<any>
 
-export type HookEvent = 'onRequest' | 'transform' | 'transform'
+export type HookEvent = 'onRequest' | 'transform' | 'preHandler'
 
 export type PreRequestHandler<Store extends Record<string, any> = {}> = (
 	request: Request,

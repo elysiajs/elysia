@@ -45,6 +45,7 @@ const app = new KingWorld<{
     .get('/json', () => ({
         hi: 'world'
     }))
+    .get('/wildcard/*', () => "Hi Wildcard")
     .get<{
         query: {
             name: string
