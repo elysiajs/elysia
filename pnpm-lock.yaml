@@ -1,7 +1,7 @@
 lockfileVersion: 5.4
 
 specifiers:
-  '@saltyaom/trek-router': ^0.0.0
+  '@saltyaom/trek-router': 0.0.1
   '@swc/cli': ^0.1.57
   '@swc/core': ^1.2.211
   '@swc/jest': ^0.2.21
@@ -16,7 +16,7 @@ specifiers:
   typescript: ^4.7.4
 
 dependencies:
-  '@saltyaom/trek-router': 0.0.0
+  '@saltyaom/trek-router': 0.0.1
   fluent-json-schema: 3.1.0
   fluent-schema-validator: 0.0.5
   string-theocracy: 0.0.1
@@ -678,8 +678,8 @@ packages:
       fastq: 1.13.0
     dev: true
 
-  /@saltyaom/trek-router/0.0.0:
-    resolution: {integrity: sha512-9ZhS1hLgmwTg5yMNfYU1UJ/gzCrAuXknmcpy9DADUpcd35WCBwkIPpqj0KUgeEedI4YUB38Lt/eoEB9+gF3kiA==}
+  /@saltyaom/trek-router/0.0.1:
+    resolution: {integrity: sha512-rBLrE4jnU6OEHDt1p3vLTtuSB3eJ+/r9IpTT1wkS69qkdvWwlTOpl/TlUlOY3d+vnB52F3vgiOsOkcPShDiKjw==}
     dev: false
 
   /@sinclair/typebox/0.23.5:

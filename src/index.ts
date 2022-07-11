@@ -43,7 +43,7 @@ export default class KingWorld<
 	store: Instance['Store']
 	#ref: [keyof Instance['Store'], any][]
 	hook: Hook<Instance>
-	#default: EmptyHandler
+	_default: EmptyHandler
 
 	constructor() {
 		this.router = new Router()
@@ -62,7 +62,7 @@ export default class KingWorld<
 			}
 		}
 
-		this.#default = () =>
+		this._default = () =>
 			new Response('Not Found', {
 				status: 404
 			})
@@ -290,7 +290,7 @@ export default class KingWorld<
 	// }
 
 	default<Route extends TypedRoute = TypedRoute>(handler: EmptyHandler) {
-		this.#default = handler
+		this._default = handler
 
 		return this
 	}
@@ -337,7 +337,7 @@ export default class KingWorld<
 
         const params = mapArrayObject(_params)
         
-		if (!handle) return this.#default(request)
+		if (!handle) return this._default(request)
 
 		let body: string | Object
 		const getBody = async () => {

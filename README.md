@@ -73,7 +73,7 @@ app.get<{
 }>("/id/:id", ({ params: { id } }) => id)
 ```
 
-For custom 404 page, you can simply use `default`:
+For custom 404 page, simply use `default`:
 ```typescript
 app.get("/get", () => "Hi")
     .default(() => new Response("Not Found", {
