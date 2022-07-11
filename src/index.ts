@@ -80,7 +80,7 @@ export default class KingWorld<
 			path,
 			composeHandler(
 				handler,
-				clone(mergeHook(this.hook as Hook, hook as RegisterHook))
+				mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
 			)
 		)
 	}
@@ -317,42 +317,39 @@ export default class KingWorld<
 		return this
 	}
 
-	async handle(request: Request) {
+	// ? Need to be arrow function otherwise, `this` won't work for some reason
+	handle = async (request: Request) => {
 		const store: Partial<Instance['Store']> = Object.assign({}, this.store)
 
-		if (this.#ref[0])
-			for (const [key, value] of this.#ref)
-				store[key] =
-					typeof value === 'function'
-						? Promise.resolve(value())
-						: value
+		if (this._ref?.[0])
+			for (let [key, value] of this._ref) {
+				store[key] = typeof value === 'function' ? await value() : value
+			}
 
-		if (this.hook.onRequest[0])
+		if (this.hook.onRequest?.[0])
 			for (const onRequest of this.hook.onRequest)
-				Promise.resolve(onRequest(request, store))
+				await onRequest(request, store)
 
 		const [handle, _params, query] = this.router.find(
 			request.method as HTTPMethod,
 			request.url
 		)
 
-        const params = mapArrayObject(_params)
-        
+		const params = mapArrayObject(_params)
+
 		if (!handle) return this._default(request)
 
 		let body: string | Object
 		const getBody = async () => {
 			if (body) return body
 
-			body = await Promise.resolve(
-				request
-					.text()
-					.then((body: string) =>
-						body.startsWith('{') || body.startsWith('[')
-							? JSON.parse(body)
-							: body
-					)
-			)
+			body = await request
+				.text()
+				.then((body: string) =>
+					body.startsWith('{') || body.startsWith('[')
+						? JSON.parse(body)
+						: body
+				)
 
 			return body
 		}
@@ -372,16 +369,16 @@ export default class KingWorld<
 		const runPreHandler = (h: Handler[]) =>
 			composePreHandler<Instance>(h, parsedRequest, store)
 
-		if (hook.transform[0]) {
+		if (hook.transform?.[0]) {
 			const transformed = await runPreHandler(hook.transform)
 			if (transformed) return transformed
 		}
 
 		if (
-			hook.schema.body[0] ||
-			hook.schema.header[0] ||
-			hook.schema.params[0] ||
-			hook.schema.query[0]
+			hook.schema.body?.[0] ||
+			hook.schema.header?.[0] ||
+			hook.schema.params?.[0] ||
+			hook.schema.query?.[0]
 		) {
 			const createParser = (
 				type: string,
@@ -403,7 +400,7 @@ export default class KingWorld<
 					}
 			}
 
-			if (hook.schema.body[0]) {
+			if (hook.schema.body?.[0]) {
 				const invalidBody = createParser(
 					'body',
 					await getBody(),
@@ -412,7 +409,7 @@ export default class KingWorld<
 				if (invalidBody) return invalidBody
 			}
 
-			if (hook.schema.params[0]) {
+			if (hook.schema.params?.[0]) {
 				const invalidParams = createParser(
 					'params',
 					params,
@@ -421,7 +418,7 @@ export default class KingWorld<
 				if (invalidParams) return invalidParams
 			}
 
-			if (hook.schema.query[0]) {
+			if (hook.schema.query?.[0]) {
 				const invalidQuery = createParser(
 					'query',
 					query,
@@ -430,7 +427,7 @@ export default class KingWorld<
 				if (invalidQuery) return invalidQuery
 			}
 
-			if (hook.schema.header[0]) {
+			if (hook.schema.header?.[0]) {
 				const invalidHeader = createParser(
 					'headers',
 					parseHeader(request.headers),
@@ -440,7 +437,7 @@ export default class KingWorld<
 			}
 		}
 
-		if (hook.preHandler[0]) {
+		if (hook.preHandler?.[0]) {
 			const preHandled = await runPreHandler(hook.preHandler)
 			if (preHandled) return preHandled
 		}

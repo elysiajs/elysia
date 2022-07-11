@@ -13,7 +13,7 @@
             "compress": true
         }
     },
-    "minify": true,
+    "minify": false,
     "sourceMaps": true,
     "inlineSourcesContent": true,
     "env": {
