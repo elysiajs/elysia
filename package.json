@@ -1,7 +1,7 @@
 {
   "name": "kingworld",
   "description": "Fast, and Low overhead Bun web server",
-  "version": "0.0.0-experimental.3",
+  "version": "0.0.0-experimental.4",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -35,6 +35,7 @@
     "release": "npm run build && npm publish"
   },
   "dependencies": {
+    "@saltyaom/trek-router": "^0.0.0",
     "fluent-json-schema": "^3.1.0",
     "fluent-schema-validator": "^0.0.5",
     "string-theocracy": "0.0.1"

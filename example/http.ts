@@ -64,7 +64,7 @@ const app = new KingWorld<{
         }
     }>('/id/:id', (request, store) => request.params.id, {
         transform(request, store) {
-            request.params.id = 1
+            request.params.id = +request.params.id
         },
         schema: {
             params: S.object().prop('id', S.number().minimum(1).maximum(100))
