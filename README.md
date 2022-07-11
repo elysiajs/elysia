@@ -718,6 +718,8 @@ KingWorld is an experimental web framework based on bun.
 
 A bleeding edge web framework focused on developer friendliness, and performance, but is not recommended for production.
 
+As KingWorld is in 0.0.0-experimental.x, API is very unstable and will change in any point of time, at-least until 0.1.0 is release.
+
 As bun is currently in early stage of development, some API might changed in the future which might also results KingWorld API to be changed to match the better speed and developer experience.
 
 ## License
