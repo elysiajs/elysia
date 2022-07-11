@@ -1,7 +1,7 @@
 {
   "name": "kingworld",
   "description": "Fast, and Low overhead Bun web server",
-  "version": "0.0.0-experimental.1",
+  "version": "0.0.0-experimental.3",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -32,7 +32,7 @@
     "build:cjs": "swc src --config-file .cjs.swcrc -d build/cjs",
     "build:es": "swc src --config-file .es.swcrc -d build/es",
     "build:main": "swc src --config-file .cjs.swcrc -d build",
-    "release": "npm run build && npm publish --tag experimental"
+    "release": "npm run build && npm publish"
   },
   "dependencies": {
     "fluent-json-schema": "^3.1.0",
