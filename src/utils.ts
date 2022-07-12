@@ -3,8 +3,7 @@ import type { Hook, RegisterHook } from './types'
 export const parseHeader = (headers: Headers) => {
 	const parsed: Record<string, any> = {}
 
-	// @ts-ignore
-	for (let [key, value] of headers.entries()) parsed[key] = value
+	for (const [key, value] of headers.entries()) parsed[key] = value
 
 	return parsed
 }
@@ -27,7 +26,7 @@ export const mergeHook = (a: Hook, b?: Hook | RegisterHook): Hook<any> => ({
 export const isPromise = (response: any) => typeof response?.then === 'function'
 
 export const clone = <T extends Object = Object>(aObject: T): T => {
-	let bObject: Record<string, any> = Array.isArray(aObject) ? [] : {}
+	const bObject: Record<string, any> = Array.isArray(aObject) ? [] : {}
 
 	let value: Partial<T>
 	for (const key in aObject) {

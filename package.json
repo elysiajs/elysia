@@ -1,7 +1,7 @@
 {
   "name": "kingworld",
   "description": "Fast, and Low overhead Bun web server",
-  "version": "0.0.0-experimental.9",
+  "version": "0.0.0-experimental.10",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -26,7 +26,7 @@
   "bugs": "https://github.com/SaltyAom/kingworld/issues",
   "license": "MIT",
   "scripts": {
-    "test": "jest",
+    "test": "bun wiptest",
     "dev": "nodemon --config nodemon.json",
     "build": "npm run build:main && npm run build:es",
     "build:main": "swc src --config-file .cjs.swcrc -d build",
@@ -36,16 +36,17 @@
   "dependencies": {
     "@saltyaom/trek-router": "^0.0.1",
     "fluent-json-schema": "^3.1.0",
-    "fluent-schema-validator": "^0.0.6",
-    "string-theocracy": "0.0.1"
+    "fluent-schema-validator": "^0.0.6"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.57",
     "@swc/core": "^1.2.211",
     "@swc/jest": "^0.2.21",
-    "@types/jest": "^28.1.4",
     "@types/node": "^18.0.3",
-    "jest": "^28.1.2",
+    "@typescript-eslint/eslint-plugin": "^5.30.6",
+    "@typescript-eslint/parser": "^5.30.6",
+    "bun-types": "^0.1.3",
+    "eslint": "^8.19.0",
     "nodemon": "^2.0.19",
     "ts-node": "^10.8.2",
     "typescript": "^4.7.4"

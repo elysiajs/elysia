@@ -12,4 +12,4 @@ jest.config.js
 nodemon.json
 
 example
-test
+tests

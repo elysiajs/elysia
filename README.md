@@ -155,7 +155,7 @@ new KingWorld()
         // This is handler
         () => "KingWorld"
     )
-    .listen(8080)
+    .listen(3000)
 ```
 
 By default, handler will accepts two parameters, `request`, and `store`.
@@ -167,8 +167,8 @@ const handler: Handler = (request: {
     request: Request
 	query: ParsedUrlQuery
 	params: Record<string, string>
-	readonly headers: () => Record<string, string>
-	readonly body: () => Promise<string | Object>
+	readonly headers: Record<string, string>
+	readonly body: Promise<string | Object>
 	responseHeader: Record<string, any>
 }, store: Record<any, unknown>)
 ```
@@ -190,9 +190,9 @@ Handler's request consists of
         - Code: `app.get("/id/:name/:game")`
         - path: `/id/kurokami/KingWorld`
         - params: `{ "name": "kurokami", "game": "KingWorld" }`
-- headers [`readonly () => Record<string, string>`]
+- headers [`Record<string, string>`]
     - Function which returns request's headers
-- body [`readonly () => Promise<string | Object>`]
+- body [`Promise<string | Object>`]
     - Function which returns request's body
     - By default will return either `string` or `Object`
         - Will return Object if request's header contains `Content-Type: application/json`, and is deserializable
@@ -216,7 +216,7 @@ new KingWorld()
     .ref('random', () => Math.random())
     .get("/build", ({}, { build }) => build)
     .get("/random", ({}, { random }) => random)
-    .listen(8080)
+    .listen(3000)
 
 // [GET] /build => 0.5
 // [GET] /build => 0.5 // Will have the same value as first request
@@ -258,7 +258,7 @@ new KingWorld<{
     .ref('random', () => Math.random())
     .get("/build", ({}, { build }) => build)
     .get("/random", ({}, { random }) => random)
-    .listen(8080)
+    .listen(3000)
 ```
 
 ## Lifecycle
@@ -404,6 +404,34 @@ app
 // [GET] /gamer/Botan => "Botan"
 ```
 
+As body is lazily execute as promise, simply use `.then` to modify body.
+```typescript
+new KingWorld()
+	.post<{
+		body: {
+			id: number
+			username: string
+		}
+	}>(
+		'/gamer',
+		async ({ body }) => {
+			const { username } = await body
+
+			return `Hi ${username}`
+		},
+		{
+			transform: (request) => {
+				request.body = request.body.then((user) => {
+					user.id = +user.id
+
+					return user
+				})
+			}
+		}
+	)
+	.listen(8080)
+```
+
 ## Schema Validation
 KingWorld have built-in typed-strict validation of incoming request.
 
@@ -417,6 +445,8 @@ KingWorld use [fluent-json-schema](https://github.com/fastify/fluent-json-schema
 
 #### Example
 ```typescript
+import KingWorld, { S } from 'kingworld'
+
 new KingWorld()
     .get<{
         params: {
@@ -446,13 +476,15 @@ Schema validation is useful, but as it only validate the type sometime app requi
 For example: Checking value if value existed in database before executing the request.
 
 ```typescript
+import KingWorld, { S } from 'kingworld'
+
 new KingWorld()
     .post<{
         body: {
             username: string
         }
     }>('/id/:id', ({ request: { body }) => {
-            const { username } = await body()
+            const { username } = await body
 
             return `Hi ${username}`
         }, {
@@ -460,7 +492,7 @@ new KingWorld()
             params: S.object().prop('username', S.string().required())
         },
         preHandler: async ({ body }) => {
-            const { username } = await body()
+            const { username } = await body
 
             if(!(await database.find(username))) 
                 return Response("User doesn't exists", {
@@ -683,14 +715,19 @@ KingWorld is designed to be serverless, only one simple `handle` is need to be a
 This also be used to create simple test environment, by simply call `handle` function.
 
 ```typescript
-describe("KingWorld", () => {
-    it("[GET] /", () => {
-        const app = new KingWorld()
-            .get("/", () => "KingWorld")
-        
-        expect(app.handle(new Request("/"))).toBe("KingWorld")
-    })
+import { describe, expect, it } from "bun:test"
+
+const req = (path: string) => new Request(path)
+
+describe('Correctness', () => {
+	it('[GET] /', async () => {
+		const app = new KingWorld().get('/', () => 'Hi')
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('Hi')
+	})
 })
+
 ```
 
 ## Caveat
@@ -704,12 +741,12 @@ Notable reference:
 However, if you're sure that the bug is related to KingWorld, filing [an issue](https://github.com/saltyaom/kingworld) is always welcome.
 
 ## Optimization
-As the state of Bun 0.1.1, KingWorld will be slowed down when using `await` which might occurs from the following:
-- Using `await` in handler
-- Using `transform` / `preHandler` / `schema.body`
-- Using `parsedRequest.body`
-
 For the current state of Bun, if you wants full speed of Bun, avoid using `await` in critical path.
+
+As the state of Bun 0.1.3, KingWorld will be slowed down when using `await` which might occurs from the following:
+- Using `await` in handler
+- Using `schema.body`
+- Using `request.body`
 
 The performance will be slowed down by around 1.75x - 3x vary on how powerful the machine is.
 

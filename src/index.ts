@@ -1,13 +1,10 @@
-import StringTheocracy, { type HTTPMethod } from 'string-theocracy'
-
-import Router from '@saltyaom/trek-router'
+import Router, { type HTTPMethod } from '@saltyaom/trek-router'
 
 import type { JSONSchema } from 'fluent-json-schema'
 import validate from 'fluent-schema-validator'
 
-import { composePreHandler, composeHandler } from './handler'
+import { composeHandler, mapResponse } from './handler'
 import {
-	concatArrayObject,
 	mergeHook,
 	parseHeader,
 	isPromise,
@@ -130,12 +127,15 @@ export default class KingWorld<
 				this.hook.onRequest.push(
 					handler as PreRequestHandler<Instance['Store']>
 				)
+				break
 
 			case 'transform':
 				this.hook.transform.push(handler as Handler<{}, Instance>)
+				break
 
 			case 'preHandler':
 				this.hook.preHandler.push(handler as Handler<{}, Instance>)
+				break
 		}
 
 		return this
@@ -157,7 +157,7 @@ export default class KingWorld<
 	}
 
 	guard(
-		hook: RegisterHook<any, Instance>,
+		hook: RegisterHook<{}, Instance>,
 		run: (group: KingWorld<Instance>) => void
 	) {
 		const instance = new KingWorld<Instance>()
@@ -174,7 +174,7 @@ export default class KingWorld<
 
 	use<
 		CurrentInstance extends KingWorldInstance = Instance,
-		Config = Object,
+		Config = Record<string, unknown>,
 		PluginInstance extends KingWorldInstance = KingWorldInstance
 	>(
 		plugin: Plugin<Config, PluginInstance, CurrentInstance>,
@@ -182,7 +182,10 @@ export default class KingWorld<
 	): KingWorld<Instance & PluginInstance> {
 		// ? Need hack, because instance need to have both type
 		// ? but before transform type won't we available
-		return plugin(this as any, config) as any
+		return plugin(
+			this as unknown as KingWorld<CurrentInstance & PluginInstance>,
+			config
+		) as unknown as KingWorld<Instance & PluginInstance>
 	}
 
 	get<Route extends TypedRoute = TypedRoute>(
@@ -210,7 +213,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('PUT', path, handler)
+		this.#addHandler('PUT', path, handler, hook)
 
 		return this
 	}
@@ -220,7 +223,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('PATCH', path, handler)
+		this.#addHandler('PATCH', path, handler, hook)
 
 		return this
 	}
@@ -230,7 +233,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('DELETE', path, handler)
+		this.#addHandler('DELETE', path, handler, hook)
 
 		return this
 	}
@@ -240,7 +243,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('OPTIONS', path, handler)
+		this.#addHandler('OPTIONS', path, handler, hook)
 
 		return this
 	}
@@ -250,7 +253,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('HEAD', path, handler)
+		this.#addHandler('HEAD', path, handler, hook)
 
 		return this
 	}
@@ -260,7 +263,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('TRACE', path, handler)
+		this.#addHandler('TRACE', path, handler, hook)
 
 		return this
 	}
@@ -270,7 +273,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('CONNECT', path, handler)
+		this.#addHandler('CONNECT', path, handler, hook)
 
 		return this
 	}
@@ -290,7 +293,7 @@ export default class KingWorld<
 	//     this.router.off(method, path)
 	// }
 
-	default<Route extends TypedRoute = TypedRoute>(handler: EmptyHandler) {
+	default(handler: EmptyHandler) {
 		this._default = handler
 
 		return this
@@ -321,37 +324,46 @@ export default class KingWorld<
 	handle = async (request: Request) => {
 		const store: Partial<Instance['Store']> = Object.assign({}, this.store)
 
-		if (this._ref?.[0])
-			for (let [key, value] of this._ref) {
-				store[key] = typeof value === 'function' ? await value() : value
+		if (this._ref[0])
+			for (const [key, value] of this._ref) {
+				if (typeof value !== 'function') store[key] = value
+				else {
+					const _value = value()
+					if (isPromise(_value)) store[key] = await value
+					else store[key] = _value
+				}
 			}
 
-		if (this.hook.onRequest?.[0])
+		if (this.hook.onRequest[0])
 			for (const onRequest of this.hook.onRequest)
-				await onRequest(request, store)
+				onRequest(request, store)
 
 		const [handle, _params, query] = this.router.find(
 			request.method as HTTPMethod,
 			request.url
 		)
 
-		const params = mapArrayObject(_params)
+		const params = _params[0] ? mapArrayObject(_params) : _params
 
 		if (!handle) return this._default(request)
 
-		let body: string | Object
+		let _headers: Record<string, unknown>
+		const getHeaders = () => {
+			if (_headers) return _headers
+			_headers = parseHeader(request.headers)
+			return _headers
+		}
+
+		let _body: string | JSON | Promise<string | JSON>
 		const getBody = async () => {
-			if (body) return body
+			if (_body) return _body
 
-			body = await request
-				.text()
-				.then((body: string) =>
-					body.startsWith('{') || body.startsWith('[')
-						? JSON.parse(body)
-						: body
-				)
+			_body =
+				getHeaders()['content-type'] === 'application/json'
+					? request.json()
+					: request.text()
 
-			return body
+			return _body
 		}
 
 		// ? Might have additional field attach from plugin, so forced type cast here
@@ -359,26 +371,37 @@ export default class KingWorld<
 			request,
 			params,
 			query,
-			headers: () => parseHeader(request.headers),
-			body: getBody,
+			get headers() {
+				return getHeaders()
+			},
+			set headers(headers) {
+				_headers = headers
+			},
+			get body() {
+				return getBody()
+			},
+			set body(body) {
+				_body = body
+			},
 			responseHeader: {}
 		} as ParsedRequest
 
 		const [handler, hook] = handle
 
-		const runPreHandler = (h: Handler[]) =>
-			composePreHandler<Instance>(h, parsedRequest, store)
+		if (hook.transform[0])
+			for (const transform of hook.transform) {
+				let response = transform(parsedRequest, store)
+				response = isPromise(response) ? await response : response
 
-		if (hook.transform?.[0]) {
-			const transformed = await runPreHandler(hook.transform)
-			if (transformed) return transformed
-		}
+				const result = mapResponse(response, parsedRequest)
+				if (result) return result
+			}
 
 		if (
-			hook.schema.body?.[0] ||
-			hook.schema.header?.[0] ||
-			hook.schema.params?.[0] ||
-			hook.schema.query?.[0]
+			hook.schema.body[0] ||
+			hook.schema.header[0] ||
+			hook.schema.params[0] ||
+			hook.schema.query[0]
 		) {
 			const createParser = (
 				type: string,
@@ -400,7 +423,7 @@ export default class KingWorld<
 					}
 			}
 
-			if (hook.schema.body?.[0]) {
+			if (hook.schema.body[0]) {
 				const invalidBody = createParser(
 					'body',
 					await getBody(),
@@ -409,7 +432,7 @@ export default class KingWorld<
 				if (invalidBody) return invalidBody
 			}
 
-			if (hook.schema.params?.[0]) {
+			if (hook.schema.params[0]) {
 				const invalidParams = createParser(
 					'params',
 					params,
@@ -418,7 +441,7 @@ export default class KingWorld<
 				if (invalidParams) return invalidParams
 			}
 
-			if (hook.schema.query?.[0]) {
+			if (hook.schema.query[0]) {
 				const invalidQuery = createParser(
 					'query',
 					query,
@@ -427,20 +450,24 @@ export default class KingWorld<
 				if (invalidQuery) return invalidQuery
 			}
 
-			if (hook.schema.header?.[0]) {
+			if (hook.schema.header[0]) {
 				const invalidHeader = createParser(
 					'headers',
-					parseHeader(request.headers),
+					getHeaders(),
 					hook.schema.header
 				)
 				if (invalidHeader) return invalidHeader
 			}
 		}
 
-		if (hook.preHandler?.[0]) {
-			const preHandled = await runPreHandler(hook.preHandler)
-			if (preHandled) return preHandled
-		}
+		if (hook.preHandler[0])
+			for (const preHandler of hook.preHandler) {
+				let response = preHandler(parsedRequest, store)
+				response = isPromise(response) ? await response : response
+
+				const result = mapResponse(response, parsedRequest)
+				if (result) return result
+			}
 
 		let response = handler(parsedRequest, store)
 		if (isPromise(response)) response = await response
@@ -450,26 +477,12 @@ export default class KingWorld<
 				return new Response(response)
 
 			case 'object':
-				try {
-					return new Response(
-						JSON.stringify(response),
-						Object.assign({}, jsonHeader, {
-							headers: parsedRequest.responseHeader
-						})
-					)
-				} catch (error) {
-					throw error
-				}
-
-			case 'function':
-				const res = response as Response
-
-				for (const [key, value] of Object.entries(
-					parsedRequest.responseHeader
-				))
-					res.headers.append(key, value)
-
-				return res
+				return new Response(
+					JSON.stringify(response),
+					Object.assign({}, jsonHeader, {
+						headers: parsedRequest.responseHeader
+					})
+				)
 
 			case 'number':
 			case 'boolean':
@@ -490,24 +503,19 @@ export default class KingWorld<
 	}
 
 	listen(port: number) {
-		// @ts-ignore
 		if (!Bun) throw new Error('KINGWORLD required Bun to run')
 
-		try {
-			// @ts-ignore
-			Bun.serve({
-				port,
-				fetch: this.handle
-			})
-		} catch (error) {
-			throw error
-		}
+		Bun.serve({
+			port,
+			fetch: this.handle
+		})
 
 		return this
 	}
 }
 
 export { validate }
+export { default as S } from 'fluent-json-schema'
 
 export type {
 	Handler,

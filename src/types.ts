@@ -1,7 +1,6 @@
-import { type ParsedUrlQuery } from 'querystring'
-
 import type KingWorld from './index'
 import { type JSONSchema } from 'fluent-json-schema'
+import { type ParsedUrlQuery } from 'querystring'
 
 export interface KingWorldInstance<
 	Store extends Record<string, any> = {},
@@ -11,18 +10,12 @@ export interface KingWorldInstance<
 	Store: Store
 }
 
-// @ts-ignore
-export interface KingWorldRequest<Body extends unknown = unknown>
-	extends Request {
-	json(): Promise<Body>
-}
-
 export type ParsedRequest<Route extends TypedRoute = TypedRoute> = {
-	request: KingWorldRequest<Route['body']>
-	query: ParsedUrlQuery & Route['query']
+	request: Request
+	query: Route['query']
 	params: Route['params']
-	readonly headers: () => Route['header']
-	readonly body: () => Promise<Route['body']>
+	headers: Route['header']
+	body: Promise<Route['body']>
 	responseHeader: Record<string, any>
 } & Omit<Route, 'body' | 'query' | 'header' | 'body'>
 
@@ -74,7 +67,7 @@ export interface RegisterHook<
 export interface TypedRoute {
 	body?: unknown
 	header?: Record<string, unknown>
-	query?: Record<string, unknown>
+	query?: ParsedUrlQuery
 	params?: Record<string, unknown>
 }
 
