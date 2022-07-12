@@ -6,13 +6,13 @@ export interface KingWorldInstance<
 	Store extends Record<string, any> = {},
 	Request extends Record<string, any> = {}
 > {
-	Request?: Request
-	Store: Store
+	request?: Request
+	store: Store
 }
 
 export type ParsedRequest<Route extends TypedRoute = TypedRoute> = {
 	request: Request
-	query: Route['query']
+	query: Route['query'] extends Record<string, any> ? Route['query'] : ParsedUrlQuery
 	params: Route['params']
 	headers: Route['header']
 	body: Promise<Route['body']>
@@ -24,8 +24,8 @@ export type Handler<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > = (
-	request: ParsedRequest<Route & Instance['Request']>,
-	store: Instance['Store']
+	request: ParsedRequest<Route & Instance['request']>,
+	store: Instance['store']
 ) => any | Promise<any>
 
 export type HookEvent = 'onRequest' | 'transform' | 'preHandler'
@@ -36,9 +36,9 @@ export type PreRequestHandler<Store extends Record<string, any> = {}> = (
 ) => void
 
 export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
-	onRequest: PreRequestHandler<Instance['Store']>[]
-	transform: Handler<{}, Instance>[]
-	preHandler: Handler<{}, Instance>[]
+	onRequest: PreRequestHandler<Instance['store']>[]
+	transform: Handler<any, Instance>[]
+	preHandler: Handler<any, Instance>[]
 	schema: {
 		body: JSONSchema[]
 		header: JSONSchema[]
@@ -73,10 +73,13 @@ export interface TypedRoute {
 
 export type Plugin<
 	T = Record<string, unknown>,
-	PluginInstance extends KingWorldInstance = KingWorldInstance,
+	PluginInstance extends KingWorldInstance = KingWorldInstance<{
+		request: {},
+		store: {}
+	}>,
 	BaseInstance extends KingWorldInstance = KingWorldInstance<{
-		Request: {}
-		Store: {}
+		request: {}
+		store: {}
 	}>
 > = (
 	app: KingWorld<BaseInstance & PluginInstance>,

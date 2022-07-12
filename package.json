@@ -1,7 +1,7 @@
 {
   "name": "kingworld",
   "description": "Fast, and Low overhead Bun web server",
-  "version": "0.0.0-experimental.11",
+  "version": "0.0.0-experimental.12",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",

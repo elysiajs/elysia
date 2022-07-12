@@ -1,5 +1,7 @@
 import Router, { type HTTPMethod } from '@saltyaom/trek-router'
 
+import { parse } from 'querystring'
+
 import type { JSONSchema } from 'fluent-json-schema'
 import validate from 'fluent-schema-validator'
 
@@ -37,16 +39,16 @@ export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
 	router: Router<ComposedHandler>
-	store: Instance['Store']
+	store: Instance['store']
 	hook: Hook<Instance>
 
-	_ref: [keyof Instance['Store'], any][]
+	_ref: [keyof Instance['store'], any][]
 	_default: EmptyHandler
 
 	constructor() {
 		this.router = new Router()
 
-		this.store = {} as Instance['Store']
+		this.store = {} as Instance['store']
 		this._ref = []
 		this.hook = {
 			onRequest: [],
@@ -82,13 +84,15 @@ export default class KingWorld<
 		)
 	}
 
-	onRequest(handler: PreRequestHandler<Instance['Store']>) {
+	onRequest(handler: PreRequestHandler<Instance['store']>) {
 		this.hook.onRequest.push(handler)
 
 		return this
 	}
 
-	transform(handler: Handler<{}, Instance>) {
+	transform<Route extends TypedRoute = TypedRoute>(
+		handler: Handler<Route, Instance>
+	) {
 		this.hook.transform.push(handler)
 
 		return this
@@ -112,7 +116,9 @@ export default class KingWorld<
 		return this
 	}
 
-	preHandler(handler: Handler<{}, Instance>) {
+	preHandler<Route extends TypedRoute = TypedRoute>(
+		handler: Handler<Route, Instance>
+	) {
 		this.hook.preHandler.push(handler)
 
 		return this
@@ -120,12 +126,12 @@ export default class KingWorld<
 
 	when<Event extends HookEvent = HookEvent>(
 		type: Event,
-		handler: RegisterHook<Instance['Store']>[Event]
+		handler: RegisterHook<Instance['store']>[Event]
 	) {
 		switch (type) {
 			case 'onRequest':
 				this.hook.onRequest.push(
-					handler as PreRequestHandler<Instance['Store']>
+					handler as PreRequestHandler<Instance['store']>
 				)
 				break
 
@@ -300,8 +306,8 @@ export default class KingWorld<
 	}
 
 	state(
-		name: keyof Instance['Store'],
-		value: Instance['Store'][keyof Instance['Store']]
+		name: keyof Instance['store'],
+		value: Instance['store'][keyof Instance['store']]
 	) {
 		this.store[name] = value
 
@@ -309,11 +315,11 @@ export default class KingWorld<
 	}
 
 	ref(
-		name: keyof Instance['Store'],
+		name: keyof Instance['store'],
 		value:
-			| Instance['Store'][keyof Instance['Store']]
-			| (() => Instance['Store'][keyof Instance['Store']])
-			| (() => Promise<Instance['Store'][keyof Instance['Store']]>)
+			| Instance['store'][keyof Instance['store']]
+			| (() => Instance['store'][keyof Instance['store']])
+			| (() => Promise<Instance['store'][keyof Instance['store']]>)
 	) {
 		this._ref.push([name, value])
 
@@ -322,7 +328,7 @@ export default class KingWorld<
 
 	// ? Need to be arrow function otherwise, `this` won't work for some reason
 	handle = async (request: Request) => {
-		const store: Partial<Instance['Store']> = Object.assign({}, this.store)
+		const store: Partial<Instance['store']> = Object.assign({}, this.store)
 
 		if (this._ref[0])
 			for (const [key, value] of this._ref) {
@@ -347,7 +353,7 @@ export default class KingWorld<
 
 		if (!handle) return this._default(request)
 
-		let _headers: Record<string, unknown>
+		let _headers: Record<string, string>
 		const getHeaders = () => {
 			if (_headers) return _headers
 			_headers = parseHeader(request.headers)
@@ -365,7 +371,6 @@ export default class KingWorld<
 
 			return _body
 		}
-
 		// ? Might have additional field attach from plugin, so forced type cast here
 		const parsedRequest: ParsedRequest = {
 			request,

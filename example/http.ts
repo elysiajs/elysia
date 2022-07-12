@@ -7,10 +7,10 @@ const loggerPlugin: Plugin<
 		prefix?: string
 	},
 	{
-		Store: {
+		store: {
 			fromPlugin: 'From Logger'
 		}
-		Request: {
+		request: {
 			log: () => void
 		}
 	}
@@ -30,7 +30,7 @@ const loggerPlugin: Plugin<
 		})
 
 const app = new KingWorld<{
-	Store: {
+	store: {
 		build: number
 		date: number
 	}
@@ -98,7 +98,11 @@ const app = new KingWorld<{
 		}
 	)
 	.group('/group', (app) => {
-		app.preHandler(({ query }) => {
+		app.preHandler<{
+			query: {
+				name: string
+			}
+		}>(({ query }) => {
 			if (query?.name === 'aom') return 'Hi saltyaom'
 		})
 			.get('/hi', () => 'HI GROUP')
