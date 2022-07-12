@@ -250,7 +250,7 @@ KingWorld accepts generic to type a store globally.
 ```typescript
 new KingWorld<{
     store: {
-        random: number
+        build: number
         random: number
     }
 }>()
