@@ -1,5 +1,5 @@
 # 🦊 KingWorld
-Fast, and developer friendly [Bun](https://bun.sh) web framework.
+Fast, and friendly [Bun](https://bun.sh) web framework.
 
 ⚡️ **Faster** than Express.js **by 8.5x** [on M1 Max](https://twitter.com/saltyAom/status/1544666247832698881)
 
