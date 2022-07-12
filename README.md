@@ -167,8 +167,8 @@ const handler: Handler = (request: {
     request: Request
 	query: ParsedUrlQuery
 	params: Record<string, string>
-	readonly headers: Record<string, string>
-	readonly body: Promise<string | Object>
+    headers: Record<string, string>
+    body: Promise<string | Object>
 	responseHeader: Record<string, any>
 }, store: Record<any, unknown>)
 ```
