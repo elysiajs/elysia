@@ -161,7 +161,7 @@ new KingWorld()
 By default, handler will accepts two parameters, `request`, and `store`.
 ```typescript
 // Simplified Handler
-type Handler = (request: ParsedRequest, store: Instance['Store']) => Response
+type Handler = (request: ParsedRequest, store: Instance['store']) => Response
 
 const handler: Handler = (request: {
     request: Request
@@ -556,10 +556,10 @@ const plugin: Plugin<
     },
     // ? Same as KingWorld<{}>(), will extends current instance
     {
-        Store: {
+        store: {
             fromPlugin: 'From Logger'
         }
-        Request: {
+        request: {
             log: () => void
         }
     }

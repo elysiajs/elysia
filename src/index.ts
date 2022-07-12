@@ -1,7 +1,5 @@
 import Router, { type HTTPMethod } from '@saltyaom/trek-router'
 
-import { parse } from 'querystring'
-
 import type { JSONSchema } from 'fluent-json-schema'
 import validate from 'fluent-schema-validator'
 

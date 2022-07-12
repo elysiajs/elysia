@@ -24,21 +24,21 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Ok')
 	})
 
-	it('return boolean', async () => {
+	it('Return boolean', async () => {
 		const app = new KingWorld().get('/', () => true)
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('true')
 	})
 
-	it('return number', async () => {
+	it('Return number', async () => {
 		const app = new KingWorld().get('/', () => 617)
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('617')
 	})
 
-	it('return json', async () => {
+	it('Return json', async () => {
 		const app = new KingWorld().get('/', () => ({
 			name: 'takodachi'
 		}))
@@ -51,7 +51,7 @@ describe('Path', () => {
 		)
 	})
 
-	it('return response', async () => {
+	it('Return response', async () => {
 		const app = new KingWorld().get(
 			'/',
 			() =>
