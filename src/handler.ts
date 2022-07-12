@@ -21,15 +21,11 @@ export const mapResponse = (response: unknown, request: ParsedRequest) => {
 				})
 			)
 
-		// case 'function':
-		// 	const res = response as Response
+		case 'function':
+			for (const [key, value] of Object.entries(request.responseHeader))
+				(response as unknown as Response).headers.append(key, value)
 
-		// 	for (const [key, value] of Object.entries(
-		// 		request.responseHeader
-		// 	))
-		// 		res.headers.append(key, value)
-
-		// 	return res
+			return response
 
 		case 'number':
 		case 'boolean':

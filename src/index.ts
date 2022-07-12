@@ -484,6 +484,14 @@ export default class KingWorld<
 					})
 				)
 
+			case 'function':
+				for (const [key, value] of Object.entries(
+					parsedRequest.responseHeader
+				))
+					response.headers.append(key, value)
+
+				return response
+
 			case 'number':
 			case 'boolean':
 				return new Response(response.toString(), {

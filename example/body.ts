@@ -1,6 +1,7 @@
 import KingWorld from '../src'
 
 new KingWorld()
+	.get("/", () => new Response("a"))
 	.post<{
 		body: {
 			id: number

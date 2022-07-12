@@ -1,4 +1,5 @@
 import KingWorld, { Plugin } from '../src'
+import { parseHeader } from '../src/utils'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -23,6 +24,51 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Ok')
 	})
 
+	it('return boolean', async () => {
+		const app = new KingWorld().get('/', () => true)
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('true')
+	})
+
+	it('return number', async () => {
+		const app = new KingWorld().get('/', () => 617)
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('617')
+	})
+
+	it('return json', async () => {
+		const app = new KingWorld().get('/', () => ({
+			name: 'takodachi'
+		}))
+		const res = await app.handle(req('/'))
+
+		expect(JSON.stringify(await res.json())).toBe(
+			JSON.stringify({
+				name: 'takodachi'
+			})
+		)
+	})
+
+	it('return response', async () => {
+		const app = new KingWorld().get(
+			'/',
+			() =>
+				new Response('Shuba Shuba', {
+					headers: {
+						duck: 'shuba duck'
+					},
+					status: 418
+				})
+		)
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('Shuba Shuba')
+		expect(res.status).toBe(418)
+		expect(parseHeader(res.headers).duck).toBe('shuba duck')
+	})
+
 	it('Parse single param', async () => {
 		const app = new KingWorld().get<{
 			params: {
@@ -44,6 +90,28 @@ describe('Path', () => {
 		const res = await app.handle(req('/id/fubuki/kingworld'))
 
 		expect(await res.text()).toBe('fubuki/kingworld')
+	})
+
+	it('Accept wildcard', async () => {
+		const app = new KingWorld().get('/wildcard/*', () => 'Wildcard')
+
+		const res = await app.handle(req('/wildcard/okayu'))
+
+		expect(await res.text()).toBe('Wildcard')
+	})
+
+	it('Default route', async () => {
+		const app = new KingWorld().default(
+			() =>
+				new Response('Not Stonk :(', {
+					status: 404
+				})
+		)
+
+		const res = await app.handle(req('/wildcard/okayu'))
+
+		expect(await res.text()).toBe('Not Stonk :(')
+		expect(res.status).toBe(404)
 	})
 
 	it('Parse a querystring', async () => {
