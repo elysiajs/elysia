@@ -1,4 +1,4 @@
-import KingWorld, { S, type Plugin } from '../src'
+import KingWorld, { S } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 

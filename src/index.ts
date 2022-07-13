@@ -477,7 +477,9 @@ export default class KingWorld<
 
 		switch (typeof response) {
 			case 'string':
-				return new Response(response)
+				return new Response(response, {
+					headers: parsedRequest.responseHeader
+				})
 
 			case 'object':
 				return new Response(
