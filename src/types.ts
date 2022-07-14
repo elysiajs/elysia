@@ -3,11 +3,16 @@ import { type JSONSchema } from 'fluent-json-schema'
 import { type ParsedUrlQuery } from 'querystring'
 
 export interface KingWorldInstance<
-	Store extends Record<string, any> = {},
-	Request extends Record<string, any> = {}
+	Instance extends {
+		store: Record<string, any>
+		request: Record<string, any>
+	} = {
+		store: Record<string, any>
+		request: Record<string, any>
+	}
 > {
-	request?: Request
-	store: Store
+	request?: Instance['request']
+	store: Instance['store']
 }
 
 export type ParsedRequest<Route extends TypedRoute = TypedRoute> = {
@@ -75,14 +80,8 @@ export interface TypedRoute {
 
 export type Plugin<
 	T = Record<string, unknown>,
-	PluginInstance extends KingWorldInstance = KingWorldInstance<{
-		request: {}
-		store: {}
-	}>,
-	BaseInstance extends KingWorldInstance = KingWorldInstance<{
-		request: {}
-		store: {}
-	}>
+	PluginInstance extends KingWorldInstance = KingWorldInstance,
+	BaseInstance extends KingWorldInstance = KingWorldInstance
 > = (
 	app: KingWorld<BaseInstance & PluginInstance>,
 	config?: T

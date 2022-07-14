@@ -8,10 +8,7 @@ export const mapResponse = (response: unknown, request: ParsedRequest) => {
 			})
 
 		case 'object':
-			request.responseHeaders.append(
-				'Content-Type',
-				'application/json'
-			)
+			request.responseHeaders.append('Content-Type', 'application/json')
 
 			return new Response(JSON.stringify(response), {
 				headers: request.responseHeaders
@@ -21,7 +18,7 @@ export const mapResponse = (response: unknown, request: ParsedRequest) => {
 		case 'function':
 			if (response instanceof Blob) return new Response(response)
 
-			for (const [key, value] of Object.entries(request.responseHeaders))
+			for (const [key, value] of request.responseHeaders.entries())
 				(response as unknown as Response).headers.append(key, value)
 
 			return response as unknown as Response

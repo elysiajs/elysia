@@ -1,7 +1,7 @@
 {
   "name": "kingworld",
   "description": "Fast, and Low overhead Bun web server",
-  "version": "0.0.0-experimental.14",
+  "version": "0.0.0-experimental.15",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -47,6 +47,7 @@
     "@typescript-eslint/parser": "^5.30.6",
     "bun-types": "^0.1.3",
     "eslint": "^8.19.0",
+    "kingworld": "0.0.0-experimental.14",
     "nodemon": "^2.0.19",
     "ts-node": "^10.8.2",
     "typescript": "^4.7.4"

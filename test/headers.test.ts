@@ -38,4 +38,15 @@ describe('Resposne Headers', () => {
 
 		expect(res.headers.get('x-powered-by')).toBe('KingWorld')
 	})
+
+	it('add responseHeaders to Response', async () => {
+		const app = new KingWorld()
+			.transform((request) => {
+				request.responseHeaders.append('x-powered-by', 'KingWorld')
+			})
+			.get('/', () => new Response('Hi'))
+		const res = await app.handle(req('/'))
+
+		expect(res.headers.get('x-powered-by')).toBe('KingWorld')
+	})
 })

@@ -489,9 +489,10 @@ export default class KingWorld<
 			case 'function':
 				if (response instanceof Blob) return new Response(response)
 
-				for (const [key, value] of Object.entries(
-					parsedRequest.responseHeaders
-				))
+				for (const [
+					key,
+					value
+				] of parsedRequest.responseHeaders.entries())
 					response.headers.append(key, value)
 
 				return response
