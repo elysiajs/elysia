@@ -12,11 +12,13 @@ export interface KingWorldInstance<
 
 export type ParsedRequest<Route extends TypedRoute = TypedRoute> = {
 	request: Request
-	query: Route['query'] extends Record<string, any> ? Route['query'] : ParsedUrlQuery
+	query: Route['query'] extends Record<string, any>
+		? Route['query']
+		: ParsedUrlQuery
 	params: Route['params']
 	headers: Route['header']
 	body: Promise<Route['body']>
-	responseHeader: Record<string, any>
+	responseHeaders: Headers
 } & Omit<Route, 'body' | 'query' | 'header' | 'body'>
 
 export type EmptyHandler = (request: Request) => Response | Promise<Response>
@@ -74,7 +76,7 @@ export interface TypedRoute {
 export type Plugin<
 	T = Record<string, unknown>,
 	PluginInstance extends KingWorldInstance = KingWorldInstance<{
-		request: {},
+		request: {}
 		store: {}
 	}>,
 	BaseInstance extends KingWorldInstance = KingWorldInstance<{

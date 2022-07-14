@@ -76,6 +76,11 @@ app
 // [GET] /response => "Hi"
 ```
 
+File is also transformed to response as well, simply return `Bun.file` to serve static file.
+```typescript
+app.get("/tako", () => Bun.file('./example/takodachi.png'))
+```
+
 To get path paramameters, simply prefix path with a colon:
 ```typescript
 app.get("/id/:id", ({ params: { id } }) => id)
@@ -169,7 +174,7 @@ const handler: Handler = (request: {
 	params: Record<string, string>
     headers: Record<string, string>
     body: Promise<string | Object>
-	responseHeader: Record<string, any>
+	responseHeaders: Headers
 }, store: Record<any, unknown>)
 ```
 
@@ -197,7 +202,7 @@ Handler's request consists of
     - By default will return either `string` or `Object`
         - Will return Object if request's header contains `Content-Type: application/json`, and is deserializable
         - Otherwise, will return string
-- responseHeader [Record<string, any>]
+- responseHeaders [`Header`]
     - Mutable object reference, will attached to response's header
     - For example, adding `CORS` to response as a plugin
 
@@ -571,7 +576,7 @@ const plugin: Plugin<
                 console.log('From Logger')
             }
 
-            request.responseHeader['X-POWERED-BY'] = 'KINGWORLD'
+            request.responseHeaders.append('X-POWERED-BY', 'KINGWORLD')
         })
         .group(prefix, (app) => {
             app.get('/plugin', () => 'From Plugin')

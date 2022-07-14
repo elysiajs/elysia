@@ -1,36 +1,35 @@
 import type { Hook, Handler, ParsedRequest, ComposedHandler } from './types'
 
-const jsonHeader = Object.freeze({
-	headers: {
-		'Content-Type': 'application/json'
-	}
-})
-
 export const mapResponse = (response: unknown, request: ParsedRequest) => {
 	switch (typeof response) {
 		case 'string':
 			return new Response(response, {
-				headers: request.responseHeader
+				headers: request.responseHeaders
 			})
 
 		case 'object':
-			return new Response(
-				JSON.stringify(response),
-				Object.assign(jsonHeader, {
-					headers: request.responseHeader
-				})
+			request.responseHeaders.append(
+				'Content-Type',
+				'application/json'
 			)
 
+			return new Response(JSON.stringify(response), {
+				headers: request.responseHeaders
+			})
+
+		// ? Maybe response or Blob
 		case 'function':
-			for (const [key, value] of Object.entries(request.responseHeader))
+			if (response instanceof Blob) return new Response(response)
+
+			for (const [key, value] of Object.entries(request.responseHeaders))
 				(response as unknown as Response).headers.append(key, value)
 
-			return response
+			return response as unknown as Response
 
 		case 'number':
 		case 'boolean':
 			return new Response(response.toString(), {
-				headers: request.responseHeader
+				headers: request.responseHeaders
 			})
 
 		default:

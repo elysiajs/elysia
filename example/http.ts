@@ -23,7 +23,7 @@ const loggerPlugin: Plugin<
 				console.log('From Logger')
 			}
 
-			request.responseHeader['X-POWERED-BY'] = 'KINGWORLD'
+			request.responseHeaders.append('X-POWERED-BY', 'KINGWORLD')
 		})
 		.group(prefix, (app) => {
 			app.get('/plugin', () => 'From Plugin')
@@ -37,9 +37,7 @@ const app = new KingWorld<{
 }>()
 	.get('/', () => 'KINGWORLD')
 	.use(loggerPlugin)
-	.transform(({ responseHeader }) => {
-		responseHeader['ACCESS-CONTROL-ALLOW-ORIGIN'] = '*'
-	})
+    .get("/tako", () => Bun.file('./example/takodachi.png'))
 	.state('build', Date.now())
 	.ref('date', () => Date.now())
 	.get('/json', () => ({
@@ -93,7 +91,7 @@ const app = new KingWorld<{
 				)
 			},
 			preHandler: async () => {
-				return "Hi"
+				return 'Hi'
 			}
 		}
 	)

@@ -27,12 +27,6 @@ import type {
 	ComposedHandler
 } from './types'
 
-const jsonHeader = Object.freeze({
-	headers: {
-		'Content-Type': 'application/json'
-	}
-})
-
 export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
@@ -325,7 +319,7 @@ export default class KingWorld<
 	}
 
 	// ? Need to be arrow function otherwise, `this` won't work for some reason
-	handle = async (request: Request) => {
+	handle = async (request: Request): Promise<Response> => {
 		const store: Partial<Instance['store']> = Object.assign({}, this.store)
 
 		if (this._ref[0])
@@ -386,7 +380,7 @@ export default class KingWorld<
 			set body(body) {
 				_body = body
 			},
-			responseHeader: {}
+			responseHeaders: new Headers()
 		} as ParsedRequest
 
 		const [handler, hook] = handle
@@ -478,20 +472,25 @@ export default class KingWorld<
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {
-					headers: parsedRequest.responseHeader
+					headers: parsedRequest.responseHeaders
 				})
 
 			case 'object':
-				return new Response(
-					JSON.stringify(response),
-					Object.assign({}, jsonHeader, {
-						headers: parsedRequest.responseHeader
-					})
+				parsedRequest.responseHeaders.append(
+					'Content-Type',
+					'application/json'
 				)
 
+				return new Response(JSON.stringify(response), {
+					headers: parsedRequest.responseHeaders
+				})
+
+			// ? Maybe response or Blob
 			case 'function':
+				if (response instanceof Blob) return new Response(response)
+
 				for (const [key, value] of Object.entries(
-					parsedRequest.responseHeader
+					parsedRequest.responseHeaders
 				))
 					response.headers.append(key, value)
 
@@ -500,17 +499,17 @@ export default class KingWorld<
 			case 'number':
 			case 'boolean':
 				return new Response(response.toString(), {
-					headers: parsedRequest.responseHeader
+					headers: parsedRequest.responseHeaders
 				})
 
 			case 'undefined':
 				return new Response('', {
-					headers: parsedRequest.responseHeader
+					headers: parsedRequest.responseHeaders
 				})
 
 			default:
 				return new Response(response, {
-					headers: parsedRequest.responseHeader
+					headers: parsedRequest.responseHeaders
 				})
 		}
 	}
