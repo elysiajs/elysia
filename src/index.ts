@@ -22,7 +22,7 @@ import type {
 	TypedRoute,
 	Schemas,
 	Plugin,
-	ParsedRequest,
+	Context,
 	KingWorldInstance,
 	ComposedHandler
 } from './types'
@@ -364,7 +364,7 @@ export default class KingWorld<
 			return _body
 		}
 		// ? Might have additional field attach from plugin, so forced type cast here
-		const parsedRequest: ParsedRequest = {
+		const context: Context = {
 			request,
 			params,
 			query,
@@ -381,16 +381,16 @@ export default class KingWorld<
 				_body = body
 			},
 			responseHeaders: new Headers()
-		} as ParsedRequest
+		} as Context
 
 		const [handler, hook] = handle
 
 		if (hook.transform[0])
 			for (const transform of hook.transform) {
-				let response = transform(parsedRequest, store)
+				let response = transform(context, store)
 				response = isPromise(response) ? await response : response
 
-				const result = mapResponse(response, parsedRequest)
+				const result = mapResponse(response, context)
 				if (result) return result
 			}
 
@@ -459,40 +459,37 @@ export default class KingWorld<
 
 		if (hook.preHandler[0])
 			for (const preHandler of hook.preHandler) {
-				let response = preHandler(parsedRequest, store)
+				let response = preHandler(context, store)
 				response = isPromise(response) ? await response : response
 
-				const result = mapResponse(response, parsedRequest)
+				const result = mapResponse(response, context)
 				if (result) return result
 			}
 
-		let response = handler(parsedRequest, store)
+		let response = handler(context, store)
 		if (isPromise(response)) response = await response
 
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {
-					headers: parsedRequest.responseHeaders
+					headers: context.responseHeaders
 				})
 
 			case 'object':
-				parsedRequest.responseHeaders.append(
+				context.responseHeaders.append(
 					'Content-Type',
 					'application/json'
 				)
 
 				return new Response(JSON.stringify(response), {
-					headers: parsedRequest.responseHeaders
+					headers: context.responseHeaders
 				})
 
 			// ? Maybe response or Blob
 			case 'function':
 				if (response instanceof Blob) return new Response(response)
 
-				for (const [
-					key,
-					value
-				] of parsedRequest.responseHeaders.entries())
+				for (const [key, value] of context.responseHeaders.entries())
 					response.headers.append(key, value)
 
 				return response
@@ -500,17 +497,17 @@ export default class KingWorld<
 			case 'number':
 			case 'boolean':
 				return new Response(response.toString(), {
-					headers: parsedRequest.responseHeaders
+					headers: context.responseHeaders
 				})
 
 			case 'undefined':
 				return new Response('', {
-					headers: parsedRequest.responseHeaders
+					headers: context.responseHeaders
 				})
 
 			default:
 				return new Response(response, {
-					headers: parsedRequest.responseHeaders
+					headers: context.responseHeaders
 				})
 		}
 	}
@@ -536,7 +533,7 @@ export type {
 	Hook,
 	HookEvent,
 	RegisterHook,
-	ParsedRequest,
+	Context,
 	PreRequestHandler,
 	TypedRoute,
 	Schemas,

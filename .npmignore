@@ -10,6 +10,7 @@ tsconfig.json
 pnpm-lock.yaml
 jest.config.js
 nodemon.json
+CHANGELOG.md
 
 example
 tests

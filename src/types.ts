@@ -15,7 +15,7 @@ export interface KingWorldInstance<
 	store: Instance['store']
 }
 
-export type ParsedRequest<Route extends TypedRoute = TypedRoute> = {
+export type Context<Route extends TypedRoute = TypedRoute> = {
 	request: Request
 	query: Route['query'] extends Record<string, any>
 		? Route['query']
@@ -31,7 +31,7 @@ export type Handler<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > = (
-	request: ParsedRequest<Route & Instance['request']>,
+	context: Context<Route & Instance['request']>,
 	store: Instance['store']
 ) => any | Promise<any>
 
