@@ -170,11 +170,11 @@ type Handler = (request: ParsedRequest, store: Instance['store']) => Response
 
 const handler: Handler = (request: {
     request: Request
-	query: ParsedUrlQuery
-	params: Record<string, string>
+    query: ParsedUrlQuery
+    params: Record<string, string>
     headers: Record<string, string>
     body: Promise<string | Object>
-	responseHeaders: Headers
+    responseHeaders: Headers
 }, store: Record<any, unknown>)
 ```
 
@@ -571,12 +571,12 @@ const plugin: Plugin<
 > = (app, { prefix = '/fbk' } = {})  => 
     app
         .state('fromPlugin', 'From Logger')
-        .transform((request) => {
+        .transform(({ responseHeaders }) => {
             request.log = () => {
                 console.log('From Logger')
             }
 
-            request.responseHeaders.append('X-POWERED-BY', 'KINGWORLD')
+            responseHeaders.append('X-POWERED-BY', 'KINGWORLD')
         })
         .group(prefix, (app) => {
             app.get('/plugin', () => 'From Plugin')
