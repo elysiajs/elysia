@@ -436,7 +436,7 @@ new KingWorld()
 ```
 
 ## Schema Validation
-Use [@kingworldjs/schema](https://github.com/saltyaom/kingworld-schema) handle typed-strict validation of incoming request.
+Please use [@kingworldjs/schema](https://github.com/saltyaom/kingworld-schema) to handle typed-strict validation of incoming request.
 
 #### Example
 ```typescript
