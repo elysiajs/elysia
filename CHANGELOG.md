@@ -1,6 +1,7 @@
 # 0.0.0-experimental.16 - 15 Jul 2022
 Change:
 - Remove dependencies: `fluent-json-schema`, `fluent-schema-validator`
+- Update `@saltyaom/trek-router` to `0.0.2`
 
 # 0.0.0-experimental.16 - 15 Jul 2022
 Breaking Change:
