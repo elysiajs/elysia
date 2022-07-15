@@ -37,7 +37,7 @@ const app = new KingWorld<{
 }>()
 	.get('/', () => 'KINGWORLD')
 	.use(loggerPlugin)
-    .get("/tako", () => Bun.file('./example/takodachi.png'))
+	.get('/tako', () => Bun.file('./example/takodachi.png'))
 	.state('build', Date.now())
 	.ref('date', () => Date.now())
 	.get('/json', () => ({
@@ -64,9 +64,6 @@ const app = new KingWorld<{
 	}>('/id/:id', (request, store) => request.params.id, {
 		transform(request, store) {
 			request.params.id = +request.params.id
-		},
-		schema: {
-			params: S.object().prop('id', S.number().minimum(1).maximum(100))
 		}
 	})
 	.post<{
@@ -76,25 +73,11 @@ const app = new KingWorld<{
 		params: {
 			id: number
 		}
-	}>(
-		'/new/:id',
-		async ({ request, body, headers }) => {
-			console.log('B', await body)
+	}>('/new/:id', async ({ request, body, headers }) => {
+		console.log('B', await body)
 
-			return body
-		},
-		{
-			schema: {
-				body: S.object().prop(
-					'username',
-					S.string().required().minLength(5)
-				)
-			},
-			preHandler: async () => {
-				return 'Hi'
-			}
-		}
-	)
+		return body
+	})
 	.group('/group', (app) => {
 		app.preHandler<{
 			query: {

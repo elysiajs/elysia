@@ -270,7 +270,7 @@ new KingWorld<{
 KingWorld request's lifecycle can be illustrate as the following:
 
 ```
-Request -> onRequest -> route -> transform -> schemaValidation -> preHandler -> Response
+Request -> onRequest -> route -> transform -> preHandler -> Response
 ```
 
 The callback that assigned to lifecycle is called **hook**.
@@ -287,8 +287,6 @@ The callback that assigned to lifecycle is called **hook**.
 - transform [`Handler`]
     - Called before validating request
     - Use to transform request's body, params, query before validation
-- Schema validation [`Schema`]
-    - Validate request, abort request if failed
 - preHandler [`Handler`]
     - Handle request before executing path handler
     - If value returned, will skip to Response process
@@ -438,15 +436,7 @@ new KingWorld()
 ```
 
 ## Schema Validation
-KingWorld have built-in typed-strict validation of incoming request.
-
-Schema validation is capable of validation of:
-- body
-- header
-- query
-- params
-
-KingWorld use [fluent-json-schema](https://github.com/fastify/fluent-json-schema) for schema declaration, and [fluent-schema-validator](https://github.com/saltyaom/fluent-schema-validator) for schema validation.
+Use [@kingworldjs/schema](https://github.com/saltyaom/kingworld-schema) handle typed-strict validation of incoming request.
 
 #### Example
 ```typescript
@@ -471,6 +461,8 @@ new KingWorld()
 // [GET] /id/500 => Invalid params
 // [GET] /id/-3 => Invalid params
 ```
+
+See [@kingworldjs/schema](https://github.com/saltyaom/kingworld-schema) for more detail about schema validation.
 
 ## PreHandler
 Handle request before executing path handler.

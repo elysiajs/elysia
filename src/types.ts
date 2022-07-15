@@ -1,5 +1,4 @@
 import type KingWorld from './index'
-import { type JSONSchema } from 'fluent-json-schema'
 import { type ParsedUrlQuery } from 'querystring'
 
 export interface KingWorldInstance<
@@ -46,19 +45,6 @@ export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
 	onRequest: PreRequestHandler<Instance['store']>[]
 	transform: Handler<any, Instance>[]
 	preHandler: Handler<any, Instance>[]
-	schema: {
-		body: JSONSchema[]
-		header: JSONSchema[]
-		query: JSONSchema[]
-		params: JSONSchema[]
-	}
-}
-
-export interface Schemas {
-	body?: JSONSchema | JSONSchema[]
-	header?: JSONSchema | JSONSchema[]
-	query?: JSONSchema | JSONSchema[]
-	params?: JSONSchema | JSONSchema[]
 }
 
 export interface RegisterHook<
@@ -68,7 +54,6 @@ export interface RegisterHook<
 	transform?: Handler<Route, Instance> | Handler<Route, Instance>[]
 	onRequest?: PreRequestHandler<Instance> | PreRequestHandler<Instance>[]
 	preHandler?: Handler<Route, Instance> | Handler<Route, Instance>[]
-	schema?: Schemas
 }
 
 export interface TypedRoute {

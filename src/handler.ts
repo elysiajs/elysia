@@ -1,6 +1,6 @@
-import type { Hook, Handler, ParsedRequest, ComposedHandler } from './types'
+import type { Hook, Handler, Context, ComposedHandler } from './types'
 
-export const mapResponse = (response: unknown, request: ParsedRequest) => {
+export const mapResponse = (response: unknown, request: Context) => {
 	switch (typeof response) {
 		case 'string':
 			return new Response(response, {

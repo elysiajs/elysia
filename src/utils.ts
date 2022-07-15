@@ -14,13 +14,7 @@ export const concatArrayObject = <T>(a: T[], b: T | T[] | undefined): T[] =>
 export const mergeHook = (a: Hook, b?: Hook | RegisterHook): Hook<any> => ({
 	onRequest: concatArrayObject(a?.onRequest, b?.onRequest) ?? [],
 	transform: concatArrayObject(a?.transform, b?.transform) ?? [],
-	preHandler: concatArrayObject(a?.preHandler, b?.preHandler) ?? [],
-	schema: {
-		body: concatArrayObject(a?.schema.body, b?.schema?.body) ?? [],
-		header: concatArrayObject(a?.schema.header, b?.schema?.header) ?? [],
-		query: concatArrayObject(a?.schema.query, b?.schema?.query) ?? [],
-		params: concatArrayObject(a?.schema.params, b?.schema?.params) ?? []
-	}
+	preHandler: concatArrayObject(a?.preHandler, b?.preHandler) ?? []
 })
 
 export const isPromise = (response: any) => typeof response?.then === 'function'

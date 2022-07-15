@@ -1,8 +1,5 @@
 import Router, { type HTTPMethod } from '@saltyaom/trek-router'
 
-import type { JSONSchema } from 'fluent-json-schema'
-import validate from 'fluent-schema-validator'
-
 import { composeHandler, mapResponse } from './handler'
 import {
 	mergeHook,
@@ -20,7 +17,6 @@ import type {
 	RegisterHook,
 	PreRequestHandler,
 	TypedRoute,
-	Schemas,
 	Plugin,
 	Context,
 	KingWorldInstance,
@@ -45,13 +41,7 @@ export default class KingWorld<
 		this.hook = {
 			onRequest: [],
 			transform: [],
-			preHandler: [],
-			schema: {
-				body: [],
-				header: [],
-				query: [],
-				params: []
-			}
+			preHandler: []
 		}
 
 		this._default = () =>
@@ -60,7 +50,7 @@ export default class KingWorld<
 			})
 	}
 
-	#addHandler<Route extends TypedRoute = TypedRoute>(
+	_addHandler<Route extends TypedRoute = TypedRoute>(
 		method: HTTPMethod,
 		path: string,
 		handler: Handler<Route, Instance>,
@@ -86,24 +76,6 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>
 	) {
 		this.hook.transform.push(handler)
-
-		return this
-	}
-
-	schema(schema: Schemas) {
-		if (schema.body)
-			this.hook.schema.body = this.hook.schema.body.concat(schema.body)
-
-		if (schema.header)
-			this.hook.schema.body = this.hook.schema.body.concat(schema.header)
-
-		if (schema.params)
-			this.hook.schema.params = this.hook.schema.body.concat(
-				schema.params
-			)
-
-		if (schema.query)
-			this.hook.schema.query = this.hook.schema.body.concat(schema.query)
 
 		return this
 	}
@@ -191,7 +163,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('GET', path, handler, hook)
+		this._addHandler('GET', path, handler, hook)
 
 		return this
 	}
@@ -201,7 +173,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('POST', path, handler, hook)
+		this._addHandler('POST', path, handler, hook)
 
 		return this
 	}
@@ -211,7 +183,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('PUT', path, handler, hook)
+		this._addHandler('PUT', path, handler, hook)
 
 		return this
 	}
@@ -221,7 +193,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('PATCH', path, handler, hook)
+		this._addHandler('PATCH', path, handler, hook)
 
 		return this
 	}
@@ -231,7 +203,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('DELETE', path, handler, hook)
+		this._addHandler('DELETE', path, handler, hook)
 
 		return this
 	}
@@ -241,7 +213,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('OPTIONS', path, handler, hook)
+		this._addHandler('OPTIONS', path, handler, hook)
 
 		return this
 	}
@@ -251,7 +223,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('HEAD', path, handler, hook)
+		this._addHandler('HEAD', path, handler, hook)
 
 		return this
 	}
@@ -261,7 +233,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('TRACE', path, handler, hook)
+		this._addHandler('TRACE', path, handler, hook)
 
 		return this
 	}
@@ -271,7 +243,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler('CONNECT', path, handler, hook)
+		this._addHandler('CONNECT', path, handler, hook)
 
 		return this
 	}
@@ -282,7 +254,7 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.#addHandler(method, path, handler, hook)
+		this._addHandler(method, path, handler, hook)
 
 		return this
 	}
@@ -394,69 +366,6 @@ export default class KingWorld<
 				if (result) return result
 			}
 
-		if (
-			hook.schema.body[0] ||
-			hook.schema.header[0] ||
-			hook.schema.params[0] ||
-			hook.schema.query[0]
-		) {
-			const createParser = (
-				type: string,
-				value: any,
-				schemas: JSONSchema[]
-			) => {
-				for (const schema of schemas)
-					try {
-						const validated = validate(value, schema)
-
-						if (!validated)
-							return new Response(`Invalid ${type}`, {
-								status: 400
-							})
-					} catch (error) {
-						return new Response(`Unable to parse ${type}`, {
-							status: 422
-						})
-					}
-			}
-
-			if (hook.schema.body[0]) {
-				const invalidBody = createParser(
-					'body',
-					await getBody(),
-					hook.schema.body
-				)
-				if (invalidBody) return invalidBody
-			}
-
-			if (hook.schema.params[0]) {
-				const invalidParams = createParser(
-					'params',
-					params,
-					hook.schema.params
-				)
-				if (invalidParams) return invalidParams
-			}
-
-			if (hook.schema.query[0]) {
-				const invalidQuery = createParser(
-					'query',
-					query,
-					hook.schema.query
-				)
-				if (invalidQuery) return invalidQuery
-			}
-
-			if (hook.schema.header[0]) {
-				const invalidHeader = createParser(
-					'headers',
-					getHeaders(),
-					hook.schema.header
-				)
-				if (invalidHeader) return invalidHeader
-			}
-		}
-
 		if (hook.preHandler[0])
 			for (const preHandler of hook.preHandler) {
 				let response = preHandler(context, store)
@@ -524,9 +433,6 @@ export default class KingWorld<
 	}
 }
 
-export { validate }
-export { default as S } from 'fluent-json-schema'
-
 export type {
 	Handler,
 	EmptyHandler,
@@ -536,6 +442,5 @@ export type {
 	Context,
 	PreRequestHandler,
 	TypedRoute,
-	Schemas,
 	Plugin
 } from './types'
