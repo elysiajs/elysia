@@ -9,6 +9,15 @@ KingWorld is web framework build for Bun focused on **speed**, and **Developer F
 
 Borrowing many concepts from many popular Node web frameworks, KingWorld have a very familiar API designed and easy to get start while hiding complex abstraction, and embrace simplicity by design.
 
+## Ecosystem
+KingWorld is a customizable web framework, with plugin you can customize how KingWorld work.
+
+Currently, you can take a look at these:
+- [Static](https://github.com/saltyaom/kingworld-static) for serving static file/folders
+- [Cookie](https://github.com/saltyaom/kingworld-cookie) for reading/setting cookie
+- [Schema](https://github.com/saltyaom/kingworld-schema) for validating request declaratively
+- [CORS](https://github.com/saltyaom/kingworld-cors) for handling CORs request
+
 ## Quick Start
 KingWorld is a web framework based on [Bun](https://bun.sh).
 
