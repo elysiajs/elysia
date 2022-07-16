@@ -147,7 +147,7 @@ const app = new KingWorld()
     .listen(3000)
 
 // [GET] / => "KINGWORLD"
-// [GET] / => "Hi"
+// [GET] /hi => "Hi"
 ```
 
 ## Handler
