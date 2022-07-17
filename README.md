@@ -449,20 +449,17 @@ Please use [@kingworldjs/schema](https://github.com/saltyaom/kingworld-schema) t
 
 #### Example
 ```typescript
-import KingWorld, { S } from 'kingworld'
+import KingWorld from 'kingworld'
+import schema, { S } from '@kingworldjs/schema'
 
 new KingWorld()
-    .get<{
-        params: {
-            id: number
-        }
-    }>('/id/:id', ({ request: { params: { id } } }) => id, {
+    .get('/id/:id', ({ request: { params: { id } } }) => id, {
         transform: (request, store) {
             request.params.id = +request.params.id
         },
-        schema: {
+        preHandler: schema({
             params: S.object().prop('id', S.number().minimum(1).maximum(100))
-        }
+        })
     })
     .listen(3000)
 
@@ -494,13 +491,13 @@ new KingWorld()
 
             return `Hi ${username}`
         }, {
-        schema: {
-            params: S.object().prop('username', S.string().required())
-        },
         preHandler: async ({ body }) => {
             const { username } = await body
+            const user = await database.find(username)
 
-            if(!(await database.find(username))) 
+            if(user)
+                return user.profile
+            else
                 return Response("User doesn't exists", {
                     status: 400
                 })
