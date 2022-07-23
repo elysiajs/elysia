@@ -5,12 +5,12 @@ Fast, and friendly [Bun](https://bun.sh) web framework.
 
 ###### Named after my favorite VTuber (Shirakami Fubuki) and composer (Sasakure.UK) song [KINGWORLD/白上フブキ(Original)](https://youtu.be/yVaQpUUAzik)
 
-KingWorld is web framework build for Bun focused on **speed**, and **Developer Friendliness**.
+KingWorld is web framework built for Bun. It focuses on **speed**, and **developer friendliness**.
 
-Borrowing many concepts from many popular Node web frameworks, KingWorld have a very familiar API designed and easy to get start while hiding complex abstraction, and embrace simplicity by design.
+Borrowing concepts from many popular Node.js web frameworks, KingWorld has a very familiar API designed to easily get started while hiding complex abstractions, and embracing simplicity.
 
 ## Ecosystem
-KingWorld is a customizable web framework, with plugin you can customize how KingWorld work.
+KingWorld can be heavily customized with the use of plugins.
 
 Currently, you can take a look at these:
 - [Static](https://github.com/saltyaom/kingworld-static) for serving static file/folders
@@ -67,7 +67,7 @@ app.get("/json", () => ({
 // [GET] /json => {"hi": "KingWorld"}
 ```
 
-All value return from handler will be transformed into `Response`.
+All values returned from handler will be transformed into `Response`.
 
 You can return `Response` if you want to declaratively control the response.
 ```typescript
@@ -85,12 +85,12 @@ app
 // [GET] /response => "Hi"
 ```
 
-File is also transformed to response as well, simply return `Bun.file` to serve static file.
+Files are also transformed to response as well. Simply return `Bun.file` to serve static file.
 ```typescript
 app.get("/tako", () => Bun.file('./example/takodachi.png'))
 ```
 
-To get path paramameters, simply prefix path with a colon:
+To get path paramameters, prefix the path with a colon:
 ```typescript
 app.get("/id/:id", ({ params: { id } }) => id)
 
@@ -108,7 +108,7 @@ app.get<{
 // [GET] /id/123 => 123
 ```
 
-Wildcard is also acceptable:
+Wildcards are also acceptable:
 ```typescript
 app.get("/wildcard/*", () => "Hi")
 
@@ -116,7 +116,7 @@ app.get("/wildcard/*", () => "Hi")
 // [GET] /wildcard/abc/def/ghi => "Hi"
 ```
 
-For custom 404 page, simply use `default`:
+For custom 404 page, use `default`:
 ```typescript
 app.get("/", () => "Hi")
     .default(() => new Response("Not stonk :(", {
@@ -126,7 +126,7 @@ app.get("/", () => "Hi")
 // [GET] / => "Not stonk :("
 ```
 
-Alas, you can group multiple route with a prefix with `group`:
+You can group multiple route with a prefix with `group`:
 ```typescript
 app
     .get("/", () => "Hi")
