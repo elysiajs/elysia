@@ -44,7 +44,7 @@ Then simply open `http://localhost:3000` in your browser.
 Congrats! You have just create a new web server in KingWorld 🎉🎉
 
 ## Routing
-Common HTTP Method has a built-in method for a convenient usage:
+Common HTTP methods have a built-in methods for convenient usage:
 ```typescript
 app.get("/hi", () => "Hi")
     .post("/hi", () => "From Post")
@@ -160,7 +160,7 @@ const app = new KingWorld()
 ```
 
 ## Handler
-Handler is a callback function that return `Response` used in HTTP method handler.
+Handler is a callback function that returns `Response`. Used in HTTP method handler.
 
 ```typescript
 new KingWorld()
@@ -172,7 +172,7 @@ new KingWorld()
     .listen(3000)
 ```
 
-By default, handler will accepts two parameters, `request`, and `store`.
+By default, handler will accepts two parameters: `request` and `store`.
 ```typescript
 // Simplified Handler
 type Handler = (request: ParsedRequest, store: Instance['store']) => Response
@@ -218,9 +218,9 @@ Handler's request consists of
 ## Store
 Store is a singleton store of the application.
 
-Is recommended for local state, reference of database connection, and other thing that need to be available to be used with handler.
+Is recommended for local state, reference of database connection, and other things that need to be available to be used with handler.
 
-Store value has 2 types:
+Store value if of 2 types:
 - State: Assigned once at creation
 - Ref: Assign at every request
 
