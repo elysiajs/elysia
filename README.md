@@ -85,7 +85,7 @@ app
 // [GET] /response => "Hi"
 ```
 
-Files are also transformed to response as well. Simply return `Bun.file` to serve static file.
+Files are also transformed to response. Simply return `Bun.file` to serve static file.
 ```typescript
 app.get("/tako", () => Bun.file('./example/takodachi.png'))
 ```
