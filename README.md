@@ -678,11 +678,28 @@ const plugin: Plugin<
             db.find(id)
         )
 
-const app = new KingWorld<{
-    store: {
-        database: Database
-    }
-}>()
+const app = new KingWorld()
+    .state('db', database)
+    .use(plugin)
+```
+
+## Async Plugin
+To create an async plugin, simply create an async function the return plugin.
+
+```typescript
+const plugin = async (): Plugin => {
+    const db = await setupDatabase()
+
+    return (app) => 
+        app
+            .state('db', database)
+            .get("/user/:id", ({ db, params: { id } }) => 
+                // ✅ db is now typed
+                db.find(id)
+            )
+}
+
+const app = new KingWorld()
     .state('db', database)
     .use(plugin)
 ```
