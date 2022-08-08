@@ -34,6 +34,34 @@ export const mapResponse = (response: unknown, request: Context) => {
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const mapResponseWithoutHeaders = (response: unknown, request?: Context) => {
+	switch (typeof response) {
+		case 'string':
+			return new Response(response)
+
+		case 'object':
+			return new Response(JSON.stringify(response), {
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			})
+
+		// ? Maybe response or Blob
+		case 'function':
+			if (response instanceof Blob) return new Response(response)
+
+			return response as unknown as Response
+
+		case 'number':
+		case 'boolean':
+			return new Response(response.toString())
+
+		default:
+			break
+	}
+}
+
 // Currying to merge hook
 export const composeHandler = (
 	handler: Handler<any, any>,

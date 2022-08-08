@@ -1,6 +1,10 @@
 import Router, { type HTTPMethod } from '@saltyaom/trek-router'
 
-import { composeHandler, mapResponse } from './handler'
+import {
+	composeHandler,
+	mapResponse,
+	mapResponseWithoutHeaders
+} from './handler'
 import {
 	mergeHook,
 	parseHeader,
@@ -313,56 +317,59 @@ export default class KingWorld<
 			request.url
 		)
 
-		const params = _params[0] ? mapArrayObject(_params) : _params
-
 		if (!handle) return this._default(request)
 
 		let _headers: Record<string, string>
-		const getHeaders = () => {
-			if (_headers) return _headers
-			_headers = parseHeader(request.headers)
-			return _headers
-		}
-
 		let _body: string | JSON | Promise<string | JSON>
-		const getBody = async () => {
-			if (_body) return _body
+		let _responseHeaders: Headers
+		let _headerAvailable = false
 
-			_body =
-				getHeaders()['content-type'] === 'application/json'
-					? request.json()
-					: request.text()
-
-			return _body
-		}
 		// ? Might have additional field attach from plugin, so forced type cast here
 		const context: Context = {
 			request,
-			params,
+			params: _params[0] ? mapArrayObject(_params) : _params,
 			query,
 			get headers() {
-				return getHeaders()
-			},
-			set headers(headers) {
-				_headers = headers
+				if (_headers) return _headers
+				_headers = parseHeader(request.headers)
+				return _headers
 			},
 			get body() {
-				return getBody()
+				if (_body) return _body
+
+				_body =
+					// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+					this.headers!['content-type'] === 'application/json'
+						? request.json()
+						: request.text()
+
+				return _body
 			},
 			set body(body) {
 				_body = body
 			},
-			responseHeaders: new Headers()
+			get responseHeaders() {
+				if (!_responseHeaders) {
+					_responseHeaders = new Headers()
+					_headerAvailable = true
+				}
+
+				return _responseHeaders
+			}
 		} as Context
 
 		const [handler, hook] = handle
+
+		const _mapResponse = _headerAvailable
+			? mapResponse
+			: mapResponseWithoutHeaders
 
 		if (hook.transform[0])
 			for (const transform of hook.transform) {
 				let response = transform(context, store)
 				response = isPromise(response) ? await response : response
 
-				const result = mapResponse(response, context)
+				const result = _mapResponse(response, context)
 				if (result) return result
 			}
 
@@ -371,54 +378,86 @@ export default class KingWorld<
 				let response = preHandler(context, store)
 				response = isPromise(response) ? await response : response
 
-				const result = mapResponse(response, context)
+				const result = _mapResponse(response, context)
 				if (result) return result
 			}
 
 		let response = handler(context, store)
 		if (isPromise(response)) response = await response
 
-		switch (typeof response) {
-			case 'string':
-				return new Response(response, {
-					headers: context.responseHeaders
-				})
+		if (_headerAvailable)
+			switch (typeof response) {
+				case 'string':
+					return new Response(response, {
+						headers: context.responseHeaders
+					})
 
-			case 'object':
-				context.responseHeaders.append(
-					'Content-Type',
-					'application/json'
-				)
+				case 'object':
+					context.responseHeaders.append(
+						'Content-Type',
+						'application/json'
+					)
 
-				return new Response(JSON.stringify(response), {
-					headers: context.responseHeaders
-				})
+					return new Response(JSON.stringify(response), {
+						headers: context.responseHeaders
+					})
 
-			// ? Maybe response or Blob
-			case 'function':
-				if (response instanceof Blob) return new Response(response)
+				// ? Maybe response or Blob
+				case 'function':
+					if (response instanceof Blob) return new Response(response)
 
-				for (const [key, value] of context.responseHeaders.entries())
-					response.headers.append(key, value)
+					for (const [
+						key,
+						value
+					] of context.responseHeaders.entries())
+						response.headers.append(key, value)
 
-				return response
+					return response
 
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString(), {
-					headers: context.responseHeaders
-				})
+				case 'number':
+				case 'boolean':
+					return new Response(response.toString(), {
+						headers: context.responseHeaders
+					})
 
-			case 'undefined':
-				return new Response('', {
-					headers: context.responseHeaders
-				})
+				case 'undefined':
+					return new Response('', {
+						headers: context.responseHeaders
+					})
 
-			default:
-				return new Response(response, {
-					headers: context.responseHeaders
-				})
-		}
+				default:
+					return new Response(response, {
+						headers: context.responseHeaders
+					})
+			}
+		else
+			switch (typeof response) {
+				case 'string':
+					return new Response(response)
+
+				case 'object':
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'Content-Type': 'application/json'
+						}
+					})
+
+				// ? Maybe response or Blob
+				case 'function':
+					if (response instanceof Blob) return new Response(response)
+
+					return response
+
+				case 'number':
+				case 'boolean':
+					return new Response(response.toString())
+
+				case 'undefined':
+					return new Response('')
+
+				default:
+					return new Response(response)
+			}
 	}
 
 	listen(port: number) {
