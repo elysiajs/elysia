@@ -1,3 +1,9 @@
+# 0.0.0-experimental.18 - 15 Jul 2022
+Change:
+- With lazy initialization, KingWorld is faster by 15% (tested on 14' M1 Max)
+- Micro optimization
+- Remove `set` from headers
+
 # 0.0.0-experimental.17 - 15 Jul 2022
 Change:
 - Remove dependencies: `fluent-json-schema`, `fluent-schema-validator`

@@ -299,14 +299,13 @@ export default class KingWorld<
 		const store: Partial<Instance['store']> = Object.assign({}, this.store)
 
 		if (this._ref[0])
-			for (const [key, value] of this._ref) {
+			for (const [key, value] of this._ref)
 				if (typeof value !== 'function') store[key] = value
 				else {
 					const _value = value()
 					if (isPromise(_value)) store[key] = await value
 					else store[key] = _value
 				}
-			}
 
 		if (this.hook.onRequest[0])
 			for (const onRequest of this.hook.onRequest)
@@ -327,7 +326,7 @@ export default class KingWorld<
 		// ? Might have additional field attach from plugin, so forced type cast here
 		const context: Context = {
 			request,
-			params: _params[0] ? mapArrayObject(_params) : _params,
+			params: _params[0] ? mapArrayObject(_params) : {},
 			query,
 			get headers() {
 				if (_headers) return _headers
