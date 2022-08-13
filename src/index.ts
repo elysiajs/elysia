@@ -1,12 +1,17 @@
-import Router, { type HTTPMethod } from './hono-regexp-router'
-import { removeHostnamePath } from '@saltyaom/trek-router'
+import Router, { type HTTPMethod } from '@saltyaom/trek-router'
 
 import {
 	composeHandler,
 	mapResponse,
 	mapResponseWithoutHeaders
 } from './handler'
-import { mergeHook, parseHeader, isPromise, clone } from './utils'
+import {
+	mergeHook,
+	parseHeader,
+	isPromise,
+	clone,
+	mapArrayObject
+} from './utils'
 
 import type {
 	Handler,
@@ -116,12 +121,11 @@ export default class KingWorld<
 
 		this.store = Object.assign(this.store, instance.store)
 
-		const routes = instance.router.routeData?.routes
-
-		if (routes)
-			Object.values(routes).forEach(({ method, path, handlers }) => {
-				this.router.add(method, `${prefix}${path}`, handlers[0].handler)
-			})
+		Object.values(instance.router.routes).forEach(
+			([method, path, handler]) => {
+				this.router.add(method, `${prefix}${path}`, handler)
+			}
+		)
 
 		return this
 	}
@@ -135,12 +139,9 @@ export default class KingWorld<
 
 		this.store = Object.assign(this.store, instance.store)
 
-		const routes = instance.router.routeData?.routes
-
-		if (routes)
-			Object.values(routes).forEach(({ method, path, handlers }) => {
-				this.router.add(method, path, handlers[0].handler)
-			})
+		instance.router.routes.forEach(({ method, path, handler }) => {
+			this.router.add(method, path, handler)
+		})
 
 		return this
 	}
@@ -310,14 +311,12 @@ export default class KingWorld<
 			for (const onRequest of this.hook.onRequest)
 				onRequest(request, store)
 
-		const _handle = this.router.match(
+		const [handle, _params, query] = this.router.find(
 			request.method as HTTPMethod,
-			removeHostnamePath(request.url)
+			request.url
 		)
 
-		if (!_handle) return this._default(request)
-
-		const [handle, params, query] = _handle
+		if (!handle) return this._default(request)
 
 		let _headers: Record<string, string>
 		let _body: string | JSON | Promise<string | JSON>
@@ -327,7 +326,7 @@ export default class KingWorld<
 		// ? Might have additional field attach from plugin, so forced type cast here
 		const context: Context = {
 			request,
-			params,
+			params: _params[0] ? mapArrayObject(_params) : {},
 			query,
 			get headers() {
 				if (_headers) return _headers
