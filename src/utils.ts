@@ -8,13 +8,15 @@ export const parseHeader = (headers: Headers) => {
 	return parsed
 }
 
-export const concatArrayObject = <T>(a: T[], b: T | T[] | undefined): T[] =>
-	b ? a.concat(b) : a
+export const concatArrayObject = <T>(a: T[], b: T | T[]): T[] => [
+	...a,
+	...(Array.isArray(b) ? b : [b])
+]
 
 export const mergeHook = (a: Hook, b?: Hook | RegisterHook): Hook<any> => ({
-	onRequest: concatArrayObject(a?.onRequest, b?.onRequest) ?? [],
-	transform: concatArrayObject(a?.transform, b?.transform) ?? [],
-	preHandler: concatArrayObject(a?.preHandler, b?.preHandler) ?? []
+	onRequest: concatArrayObject(a?.onRequest, b?.onRequest ?? []) ?? [],
+	transform: concatArrayObject(a?.transform, b?.transform ?? []) ?? [],
+	preHandler: concatArrayObject(a?.preHandler, b?.preHandler ?? []) ?? []
 })
 
 export const isPromise = (response: any) => typeof response?.then === 'function'

@@ -4,6 +4,7 @@
 .cjs.swcrc
 .es.swcrc
 bun.lockb
+.github
 
 node_modules
 tsconfig.json

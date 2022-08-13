@@ -1,3 +1,9 @@
+# 0.0.0-experimental.19 - 13 Aug 2022
+Change:
+- Use Array Spread instead of concat as it's faster by 475%
+- Update to @saltyaom/trek-router 0.0.7 as it's faster by 10%
+- Use array.length instead of array[0] as it's faster by 4%
+
 # 0.0.0-experimental.18 - 8 Aug 2022
 Change:
 - With lazy initialization, KingWorld is faster by 15% (tested on 14' M1 Max)

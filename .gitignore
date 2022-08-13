@@ -3,3 +3,4 @@
 node_modules
 .pnpm-debug.log
 build
+dump.rdb

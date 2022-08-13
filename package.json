@@ -1,7 +1,7 @@
 {
   "name": "kingworld",
   "description": "Fast, and Low overhead Bun web server",
-  "version": "0.0.0-experimental.18",
+  "version": "0.0.0-experimental.19",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -46,5 +46,8 @@
     "nodemon": "^2.0.19",
     "ts-node": "^10.8.2",
     "typescript": "^4.7.4"
+  },
+  "dependencies": {
+    "@saltyaom/trek-router": "0.0.7"
   }
 }

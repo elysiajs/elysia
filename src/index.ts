@@ -1,12 +1,17 @@
-import Router, { type HTTPMethod } from './hono-regexp-router'
-import { removeHostnamePath } from '@saltyaom/trek-router'
+import Router, { type HTTPMethod } from '@saltyaom/trek-router'
 
 import {
 	composeHandler,
 	mapResponse,
 	mapResponseWithoutHeaders
 } from './handler'
-import { mergeHook, parseHeader, isPromise, clone } from './utils'
+import {
+	mergeHook,
+	parseHeader,
+	isPromise,
+	clone,
+	mapArrayObject
+} from './utils'
 
 import type {
 	Handler,
@@ -116,12 +121,11 @@ export default class KingWorld<
 
 		this.store = Object.assign(this.store, instance.store)
 
-		const routes = instance.router.routeData?.routes
-
-		if (routes)
-			Object.values(routes).forEach(({ method, path, handlers }) => {
-				this.router.add(method, `${prefix}${path}`, handlers[0].handler)
-			})
+		Object.values(instance.router.routes).forEach(
+			([method, path, handler]) => {
+				this.router.add(method, `${prefix}${path}`, handler)
+			}
+		)
 
 		return this
 	}
@@ -135,12 +139,11 @@ export default class KingWorld<
 
 		this.store = Object.assign(this.store, instance.store)
 
-		const routes = instance.router.routeData?.routes
-
-		if (routes)
-			Object.values(routes).forEach(({ method, path, handlers }) => {
-				this.router.add(method, path, handlers[0].handler)
-			})
+		Object.values(instance.router.routes).forEach(
+			([method, path, handler]) => {
+				this.router.add(method, path, handler)
+			}
+		)
 
 		return this
 	}
@@ -297,7 +300,7 @@ export default class KingWorld<
 	handle = async (request: Request): Promise<Response> => {
 		const store: Partial<Instance['store']> = Object.assign({}, this.store)
 
-		if (this._ref[0])
+		if (this._ref.length)
 			for (const [key, value] of this._ref)
 				if (typeof value !== 'function') store[key] = value
 				else {
@@ -306,18 +309,16 @@ export default class KingWorld<
 					else store[key] = _value
 				}
 
-		if (this.hook.onRequest[0])
+		if (this.hook.onRequest.length)
 			for (const onRequest of this.hook.onRequest)
 				onRequest(request, store)
 
-		const _handle = this.router.match(
+		const [handle, _params, query] = this.router.find(
 			request.method as HTTPMethod,
-			removeHostnamePath(request.url)
+			request.url
 		)
 
-		if (!_handle) return this._default(request)
-
-		const [handle, params, query] = _handle
+		if (!handle) return this._default(request)
 
 		let _headers: Record<string, string>
 		let _body: string | JSON | Promise<string | JSON>
@@ -327,7 +328,7 @@ export default class KingWorld<
 		// ? Might have additional field attach from plugin, so forced type cast here
 		const context: Context = {
 			request,
-			params,
+			params: _params[0] ? mapArrayObject(_params) : {},
 			query,
 			get headers() {
 				if (_headers) return _headers
@@ -364,7 +365,7 @@ export default class KingWorld<
 			? mapResponse
 			: mapResponseWithoutHeaders
 
-		if (hook.transform[0])
+		if (hook.transform.length)
 			for (const transform of hook.transform) {
 				let response = transform(context, store)
 				response = isPromise(response) ? await response : response
@@ -373,7 +374,7 @@ export default class KingWorld<
 				if (result) return result
 			}
 
-		if (hook.preHandler[0])
+		if (hook.preHandler.length)
 			for (const preHandler of hook.preHandler) {
 				let response = preHandler(context, store)
 				response = isPromise(response) ? await response : response
