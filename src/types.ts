@@ -1,5 +1,4 @@
 import type KingWorld from './index'
-import { type ParsedUrlQuery } from 'querystring'
 
 export interface KingWorldInstance<
 	Instance extends {
@@ -18,10 +17,11 @@ export type Context<Route extends TypedRoute = TypedRoute> = {
 	request: Request
 	query: Route['query'] extends Record<string, any>
 		? Route['query']
-		: ParsedUrlQuery
+		: Record<string, string>
 	params: Route['params']
 	headers: Route['header']
 	body: Promise<Route['body']>
+	status(statusCode: number): undefined
 	responseHeaders: Headers
 } & Omit<Route, 'body' | 'query' | 'header' | 'body'>
 
@@ -59,7 +59,7 @@ export interface RegisterHook<
 export interface TypedRoute {
 	body?: unknown
 	header?: Record<string, unknown>
-	query?: ParsedUrlQuery
+	query?: Record<string, string>
 	params?: Record<string, unknown>
 }
 

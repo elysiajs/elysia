@@ -76,13 +76,26 @@ app
     .get("/boolean", () => true)
     .get("/promise", () => new Promise((resovle) => resolve("Ok")))
     .get("/response", () => new Response("Hi", {
-        status: 200
+        status: 200,
+        headers: {
+            "x-powered-by": "KingWorld"
+        }
     }))
 
 // [GET] /number => "1"
 // [GET] /boolean => "true"
 // [GET] /promise => "Ok"
 // [GET] /response => "Hi"
+```
+
+You can use `ctx.status` to explictly set status code without creating `Response`
+```typescript
+app
+    .get("/401", ({ status }) => {
+        status(401)
+
+        return "This should be 401"
+    })
 ```
 
 Files are also transformed to response. Simply return `Bun.file` to serve static file.
@@ -108,7 +121,7 @@ app.get<{
 // [GET] /id/123 => 123
 ```
 
-Wildcards are also acceptable:
+Wildcard works as expected:
 ```typescript
 app.get("/wildcard/*", () => "Hi")
 
@@ -116,7 +129,7 @@ app.get("/wildcard/*", () => "Hi")
 // [GET] /wildcard/abc/def/ghi => "Hi"
 ```
 
-For custom 404 page, use `default`:
+For a fallback page, use `default`:
 ```typescript
 app.get("/", () => "Hi")
     .default(() => new Response("Not stonk :(", {
@@ -143,7 +156,7 @@ app
 // [PUT] /auth/sign-up => <body>
 ```
 
-Finally, you can decouple the route logic to a separate plugin.
+And you can decouple the route logic to a separate plugin.
 ```typescript
 import KingWorld, { type Plugin } from 'kingworld'
 
@@ -157,6 +170,20 @@ const app = new KingWorld()
 
 // [GET] / => "KINGWORLD"
 // [GET] /hi => "Hi"
+```
+
+Lastly, you can specified `hostname` to `listen` if need:
+```typescript
+import KingWorld, { type Plugin } from 'kingworld'
+
+const app = new KingWorld()
+    .get('/', () => 'KINGWORLD')
+    .listen({
+        port: 3000,
+        hostname: '0.0.0.0'
+    })
+
+// [GET] / => "KINGWORLD"
 ```
 
 ## Handler
@@ -214,6 +241,8 @@ Handler's request consists of
 - responseHeaders [`Header`]
     - Mutable object reference, will attached to response's header
     - For example, adding `CORS` to response as a plugin
+- status [`(statusCode: number) => void`]
+    - Function to set response status code explictly
 
 ## Store
 Store is a singleton store of the application.

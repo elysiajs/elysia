@@ -94,6 +94,7 @@ const app = new KingWorld<{
 	.get('/ref', (_, { date }) => date)
 	.get('/response', () => new Response('Hi'))
 	.get('/error', () => new Error('Something went wrong'))
+	.get('/401', ({ status }) => status(401) || 'Status should be 401')
 	.default(
 		() =>
 			new Response('Not Found :(', {

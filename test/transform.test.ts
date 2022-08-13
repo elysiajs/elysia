@@ -1,4 +1,4 @@
-import KingWorld, { Plugin } from '../src'
+import KingWorld, { type Handler, type Plugin } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -164,5 +164,32 @@ describe('Transform', () => {
 		const res = await app.handle(req('/id/1'))
 
 		expect(await res.text()).toBe('2')
+	})
+
+	it('Transform async', async () => {
+		const transform: Handler<{
+			params: {
+				id?: number
+			}
+		}> = async (request) => {
+			await new Promise<void>((resolve) =>
+				setTimeout(() => {
+					resolve()
+				}, 1)
+			)
+
+			if (request.params?.id) request.params.id = +request.params.id
+		}
+
+		const app = new KingWorld().get<{
+			params: {
+				id: number
+			}
+		}>('/id/:id', ({ params: { id } }) => typeof id, {
+			transform
+		})
+		const res = await app.handle(req('/id/1'))
+
+		expect(await res.text()).toBe('number')
 	})
 })

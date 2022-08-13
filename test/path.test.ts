@@ -228,4 +228,19 @@ describe('Path', () => {
 
 		expect(message).toBe(error)
 	})
+
+	it('Handle async', async () => {
+		const app = new KingWorld().get('/async', async () => {
+			await new Promise<void>((resolve) =>
+				setTimeout(() => {
+					resolve()
+				}, 1)
+			)
+
+			return 'Hi'
+		})
+
+		const res = await app.handle(req('/async'))
+		expect(await res.text()).toBe('Hi')
+	})
 })

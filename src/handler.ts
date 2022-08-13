@@ -1,9 +1,15 @@
 import type { Hook, Handler, Context, ComposedHandler } from './types'
 
-export const mapResponse = (response: unknown, request: Context) => {
+// We don't want to assign new variable to be used only once here
+export const mapResponse = (
+	response: unknown,
+	request: Context,
+	status: number
+) => {
 	switch (typeof response) {
 		case 'string':
 			return new Response(response, {
+				status,
 				headers: request.responseHeaders
 			})
 
@@ -13,12 +19,17 @@ export const mapResponse = (response: unknown, request: Context) => {
 			if (response instanceof Error) return errorToResponse(response)
 
 			return new Response(JSON.stringify(response), {
+				status,
 				headers: request.responseHeaders
 			})
 
 		// ? Maybe response or Blob
 		case 'function':
-			if (response instanceof Blob) return new Response(response)
+			if (response instanceof Blob)
+				return new Response(response, {
+					status,
+					headers: request.responseHeaders
+				})
 
 			for (const [key, value] of request.responseHeaders.entries())
 				(response as unknown as Response).headers.append(key, value)
@@ -28,6 +39,7 @@ export const mapResponse = (response: unknown, request: Context) => {
 		case 'number':
 		case 'boolean':
 			return new Response(response.toString(), {
+				status,
 				headers: request.responseHeaders
 			})
 
@@ -39,7 +51,8 @@ export const mapResponse = (response: unknown, request: Context) => {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const mapResponseWithoutHeaders = (
 	response: unknown,
-	request?: Context
+	request?: Context,
+	status?: number
 ) => {
 	switch (typeof response) {
 		case 'string':

@@ -1,4 +1,4 @@
-import Router, { type HTTPMethod } from '@saltyaom/trek-router'
+import { default as Router, type HTTPMethod } from '@saltyaom/trek-router'
 
 import {
 	composeHandler,
@@ -27,6 +27,7 @@ import type {
 	KingWorldInstance,
 	ComposedHandler
 } from './types'
+import type { Serve } from 'bun'
 
 export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance
@@ -35,8 +36,8 @@ export default class KingWorld<
 	store: Instance['store']
 	hook: Hook<Instance>
 
-	_ref: [keyof Instance['store'], any][]
-	_default: EmptyHandler
+	private _ref: [keyof Instance['store'], any][]
+	private _default: EmptyHandler
 
 	constructor() {
 		this.router = new Router()
@@ -55,7 +56,7 @@ export default class KingWorld<
 			})
 	}
 
-	_addHandler<Route extends TypedRoute = TypedRoute>(
+	private _addHandler<Route extends TypedRoute = TypedRoute>(
 		method: HTTPMethod,
 		path: string,
 		handler: Handler<Route, Instance>,
@@ -120,7 +121,7 @@ export default class KingWorld<
 		const instance = new KingWorld<Instance>()
 		run(instance)
 
-		this.store = Object.assign(this.store, instance.store)
+		this.store = { ...this.store, ...instance.store }
 
 		Object.values(instance.router.routes).forEach(
 			([method, path, handler]) => {
@@ -138,7 +139,7 @@ export default class KingWorld<
 		const instance = new KingWorld<Instance>()
 		run(instance)
 
-		this.store = Object.assign(this.store, instance.store)
+		this.store = { ...this.store, ...instance.store }
 
 		Object.values(instance.router.routes).forEach(
 			([method, path, handler]) => {
@@ -299,98 +300,102 @@ export default class KingWorld<
 
 	// ? Need to be arrow function otherwise, `this` won't work for some reason
 	handle = async (request: Request): Promise<Response> => {
-		const store: Partial<Instance['store']> = Object.assign({}, this.store)
+		const store: Partial<Instance['store']> = { ...this.store }
+		const [handler, _params, query] = this.router.find(
+			request.method as HTTPMethod,
+			request.url
+		)
 
 		if (this._ref.length)
 			for (const [key, value] of this._ref)
-				if (typeof value !== 'function') store[key] = value
+				if (typeof value === 'function') store[key] = value
 				else {
 					const _value = value()
-					if (isPromise(_value)) store[key] = await value
-					else store[key] = _value
+					store[key] = isPromise(_value) ? await _value : _value
 				}
 
 		if (this.hook.onRequest.length)
 			for (const onRequest of this.hook.onRequest)
 				onRequest(request, store)
 
-		const [handle, _params, query] = this.router.find(
-			request.method as HTTPMethod,
-			request.url
-		)
+		if (!handler) return this._default(request)
 
-		if (!handle) return this._default(request)
-
-		let _headers: Record<string, string>
-		let _body: string | JSON | Promise<string | JSON>
-		let _responseHeaders: Headers
-		let _headerAvailable = false
+		let headers: Record<string, string>
+		let body: string | JSON | Promise<string | JSON>
+		let headerAvailable = false
+		let responseHeaders: Headers | undefined
+		let status = 200
 
 		// ? Might have additional field attach from plugin, so forced type cast here
 		const context: Context = {
 			request,
 			params: _params[0] ? mapArrayObject(_params) : {},
 			query,
+			status(value: number) {
+				status = value
+				headerAvailable = true
+			},
 			get headers() {
-				if (_headers) return _headers
-				_headers = parseHeader(request.headers)
-				return _headers
+				if (headers) return headers
+				headers = parseHeader(request.headers)
+				return headers
 			},
 			get body() {
-				if (_body) return _body
+				if (body) return body
 
-				_body =
+				body =
 					// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 					this.headers!['content-type'] === 'application/json'
 						? request.json()
 						: request.text()
 
-				return _body
+				return body
 			},
-			set body(body) {
-				_body = body
+			set body(newBody) {
+				body = newBody
 			},
 			get responseHeaders() {
-				if (!_responseHeaders) {
-					_responseHeaders = new Headers()
-					_headerAvailable = true
+				if (!responseHeaders) {
+					responseHeaders = new Headers()
+					headerAvailable = true
 				}
 
-				return _responseHeaders
+				return responseHeaders
 			}
 		} as Context
 
-		const [handler, hook] = handle
+		const [handle, hook] = handler
 
-		const _mapResponse = _headerAvailable
+		const _mapResponse = headerAvailable
 			? mapResponse
 			: mapResponseWithoutHeaders
 
 		if (hook.transform.length)
 			for (const transform of hook.transform) {
 				let response = transform(context, store)
-				response = isPromise(response) ? await response : response
+				if (isPromise(response)) response = await response
 
-				const result = _mapResponse(response, context)
+				const result = _mapResponse(response, context, status)
 				if (result) return result
 			}
 
 		if (hook.preHandler.length)
 			for (const preHandler of hook.preHandler) {
 				let response = preHandler(context, store)
-				response = isPromise(response) ? await response : response
+				if (isPromise(response)) response = await response
 
-				const result = _mapResponse(response, context)
+				const result = _mapResponse(response, context, status)
 				if (result) return result
 			}
 
-		let response = handler(context, store)
+		let response = handle(context, store)
 		if (isPromise(response)) response = await response
 
-		if (_headerAvailable)
+		if (headerAvailable)
 			switch (typeof response) {
 				case 'string':
 					return new Response(response, {
+						status,
 						headers: context.responseHeaders
 					})
 
@@ -404,12 +409,17 @@ export default class KingWorld<
 						return errorToResponse(response)
 
 					return new Response(JSON.stringify(response), {
+						status,
 						headers: context.responseHeaders
 					})
 
-				// ? Maybe response or Blob
+				// ? Maybe response function or Blob
 				case 'function':
-					if (response instanceof Blob) return new Response(response)
+					if (response instanceof Blob)
+						return new Response(response, {
+							status,
+							headers: context.responseHeaders
+						})
 
 					for (const [
 						key,
@@ -422,16 +432,19 @@ export default class KingWorld<
 				case 'number':
 				case 'boolean':
 					return new Response(response.toString(), {
+						status,
 						headers: context.responseHeaders
 					})
 
 				case 'undefined':
 					return new Response('', {
+						status,
 						headers: context.responseHeaders
 					})
 
 				default:
 					return new Response(response, {
+						status,
 						headers: context.responseHeaders
 					})
 			}
@@ -468,15 +481,20 @@ export default class KingWorld<
 			}
 	}
 
-	listen(port: number) {
-		if (!Bun) throw new Error('KINGWORLD required Bun to run')
+	listen(options: number | Omit<Serve, 'fetch'>) {
+		if (!Bun) throw new Error('Bun to run')
 
-		Bun.serve({
-			port,
-			fetch: this.handle
-		})
-
-		return this
+		Bun.serve(
+			typeof options === 'number'
+				? {
+						port: options,
+						fetch: this.handle
+				  }
+				: {
+						...options,
+						fetch: this.handle
+				  }
+		)
 	}
 }
 

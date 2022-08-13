@@ -49,4 +49,16 @@ describe('Resposne Headers', () => {
 
 		expect(res.headers.get('x-powered-by')).toBe('KingWorld')
 	})
+
+	it('add status to Response', async () => {
+		const app = new KingWorld().get(
+			'/',
+			({ status }) => status(401) || 'Hi'
+		)
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('Hi')
+		expect(res.status).toBe(401)
+	})
 })

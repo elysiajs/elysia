@@ -1,3 +1,9 @@
+# 0.0.0-experimental.21 - 13 Aug 2022
+Feature:
+- Add status function to `Context`
+- `handle` now accept `number | Serve`
+- Remove `querystring` to support native Cloudflare Worker
+
 # 0.0.0-experimental.20 - 13 Aug 2022
 Feature:
 - Handle error as response

@@ -166,4 +166,26 @@ describe('preHandler', () => {
 		expect(await fubuki.text()).toBe('Cat')
 		expect(await korone.text()).toBe('Dog')
 	})
+
+	it('Handle async', async () => {
+		const app = new KingWorld().get<{
+			params: {
+				name: string
+			}
+		}>('/name/:name', ({ params: { name } }) => name, {
+			preHandler: async ({ params: { name } }) => {
+				await new Promise<void>((resolve) =>
+					setTimeout(() => {
+						resolve()
+					}, 1)
+				)
+
+				if (name === 'Watame') return 'Warukunai yo ne'
+			}
+		})
+
+		const res = await app.handle(req('/name/Watame'))
+
+		expect(await res.text()).toBe('Warukunai yo ne')
+	})
 })
