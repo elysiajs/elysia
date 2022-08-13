@@ -2,6 +2,7 @@ import Router, { type HTTPMethod } from '@saltyaom/trek-router'
 
 import {
 	composeHandler,
+	errorToResponse,
 	mapResponse,
 	mapResponseWithoutHeaders
 } from './handler'
@@ -399,6 +400,9 @@ export default class KingWorld<
 						'application/json'
 					)
 
+					if (response instanceof Error)
+						return errorToResponse(response)
+
 					return new Response(JSON.stringify(response), {
 						headers: context.responseHeaders
 					})
@@ -437,6 +441,9 @@ export default class KingWorld<
 					return new Response(response)
 
 				case 'object':
+					if (response instanceof Error)
+						return errorToResponse(response)
+
 					return new Response(JSON.stringify(response), {
 						headers: {
 							'Content-Type': 'application/json'

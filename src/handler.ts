@@ -10,6 +10,8 @@ export const mapResponse = (response: unknown, request: Context) => {
 		case 'object':
 			request.responseHeaders.append('Content-Type', 'application/json')
 
+			if (response instanceof Error) return errorToResponse(response)
+
 			return new Response(JSON.stringify(response), {
 				headers: request.responseHeaders
 			})
@@ -35,12 +37,17 @@ export const mapResponse = (response: unknown, request: Context) => {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const mapResponseWithoutHeaders = (response: unknown, request?: Context) => {
+export const mapResponseWithoutHeaders = (
+	response: unknown,
+	request?: Context
+) => {
 	switch (typeof response) {
 		case 'string':
 			return new Response(response)
 
 		case 'object':
+			if (response instanceof Error) return errorToResponse(response)
+
 			return new Response(JSON.stringify(response), {
 				headers: {
 					'Content-Type': 'application/json'
@@ -67,3 +74,16 @@ export const composeHandler = (
 	handler: Handler<any, any>,
 	hook: Hook<any>
 ): ComposedHandler => [handler, hook]
+
+export const errorToResponse = (error: Error, headers?: HeadersInit) =>
+	new Response(
+		JSON.stringify({
+			name: error?.name,
+			message: error?.message,
+			cause: error?.cause
+		}),
+		{
+			status: 500,
+			headers
+		}
+	)

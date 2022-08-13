@@ -1,3 +1,7 @@
+# 0.0.0-experimental.20 - 13 Aug 2022
+Feature:
+- Handle error as response
+
 # 0.0.0-experimental.19 - 13 Aug 2022
 Change:
 - Use Array Spread instead of concat as it's faster by 475%

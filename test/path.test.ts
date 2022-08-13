@@ -49,7 +49,7 @@ describe('Path', () => {
 				name: 'takodachi'
 			})
 		)
-		expect(res.headers.get("content-type")).toBe("application/json")
+		expect(res.headers.get('content-type')).toBe('application/json')
 	})
 
 	it('Return response', async () => {
@@ -212,5 +212,20 @@ describe('Path', () => {
 		const res = await app.handle(req('/korone'))
 
 		expect(await res.text()).toBe('Yubi Yubi!')
+	})
+
+	it('Handle error', async () => {
+		const error = 'Pardun?'
+
+		const plugin: Plugin = (app) =>
+			app.get('/error', () => new Error(error))
+		const app = new KingWorld().use(plugin)
+
+		const res = await app.handle(req('/error'))
+		const { message } = await res.json<{
+			message: string
+		}>()
+
+		expect(message).toBe(error)
 	})
 })

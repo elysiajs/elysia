@@ -93,6 +93,7 @@ const app = new KingWorld<{
 	.get('/build', (_, { build }) => build)
 	.get('/ref', (_, { date }) => date)
 	.get('/response', () => new Response('Hi'))
+	.get('/error', () => new Error('Something went wrong'))
 	.default(
 		() =>
 			new Response('Not Found :(', {
