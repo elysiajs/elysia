@@ -33,6 +33,9 @@
     "build:es": "swc src --config-file .es.swcrc -d build/es",
     "release": "npm run build && npm run test && npm publish"
   },
+  "dependencies": {
+    "@saltyaom/trek-router": "^0.0.2"
+  },
   "devDependencies": {
     "@swc/cli": "^0.1.57",
     "@swc/core": "^1.2.211",
