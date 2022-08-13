@@ -1,10 +1,12 @@
 const hostRegex = /^\w+:\/\/.*?\//g
 const paramsRegex = /([^?=&]+)(=([^&]*))?/g
 
-export const parseUrl = (url: string) => {
-    const [pathname, search] = url.replace(hostRegex, '/').split('?')
+const SLASH = 47
 
-    return [pathname, search]
+export const parseUrl = (url: string) => {
+    if (url.charCodeAt(0) !== SLASH) url = url.replace(hostRegex, '/')
+
+    return url.replace(hostRegex, '/').split('?')
 }
 
 export const parseQuery = (search: string) =>
