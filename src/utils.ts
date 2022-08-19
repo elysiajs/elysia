@@ -1,13 +1,5 @@
 import type { Hook, RegisterHook } from './types'
 
-export const parseHeader = (headers: Headers) => {
-	const parsed: Record<string, any> = {}
-
-	for (const [key, value] of headers.entries()) parsed[key] = value
-
-	return parsed
-}
-
 export const concatArrayObject = <T>(a: T[], b: T | T[]): T[] => [
 	...a,
 	...(Array.isArray(b) ? b : [b])

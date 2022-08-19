@@ -1,5 +1,11 @@
 import type { Hook, Handler, Context, ComposedHandler } from './types'
 
+const json = new Headers()
+json.append('Content-Type', 'application/json')
+export const jsonHeader = {
+	headers: json
+}
+
 // We don't want to assign new variable to be used only once here
 export const mapResponse = (
 	response: unknown,
@@ -14,9 +20,15 @@ export const mapResponse = (
 			})
 
 		case 'object':
-			request.responseHeaders.append('Content-Type', 'application/json')
-
 			if (response instanceof Error) return errorToResponse(response)
+			if (response instanceof Response) {
+				for (const [key, value] of request.responseHeaders.entries())
+					response.headers.append(key, value)
+
+				return response
+			}
+
+			request.responseHeaders.append('Content-Type', 'application/json')
 
 			return new Response(JSON.stringify(response), {
 				status,
@@ -59,13 +71,10 @@ export const mapResponseWithoutHeaders = (
 			return new Response(response)
 
 		case 'object':
+			if (response instanceof Response) return response
 			if (response instanceof Error) return errorToResponse(response)
 
-			return new Response(JSON.stringify(response), {
-				headers: {
-					'Content-Type': 'application/json'
-				}
-			})
+			return new Response(JSON.stringify(response), jsonHeader)
 
 		// ? Maybe response or Blob
 		case 'function':

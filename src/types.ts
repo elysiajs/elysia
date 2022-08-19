@@ -19,7 +19,7 @@ export type Context<Route extends TypedRoute = TypedRoute> = {
 		? Route['query']
 		: Record<string, string>
 	params: Route['params']
-	headers: Route['header']
+	headers: Headers & Route['header']
 	body: Promise<Route['body']>
 	status(statusCode: number): undefined
 	responseHeaders: Headers
@@ -58,7 +58,7 @@ export interface RegisterHook<
 
 export interface TypedRoute {
 	body?: unknown
-	header?: Record<string, unknown>
+	header?: Map<string, unknown>
 	query?: Record<string, string>
 	params?: Record<string, unknown>
 }

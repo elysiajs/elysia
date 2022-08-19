@@ -1,18 +1,13 @@
 import { default as Router, type HTTPMethod } from '@saltyaom/trek-router'
 
 import {
+	jsonHeader,
 	composeHandler,
 	errorToResponse,
 	mapResponse,
 	mapResponseWithoutHeaders
 } from './handler'
-import {
-	mergeHook,
-	parseHeader,
-	isPromise,
-	clone,
-	mapArrayObject
-} from './utils'
+import { mergeHook, isPromise, clone, mapArrayObject } from './utils'
 
 import type {
 	Handler,
@@ -320,8 +315,6 @@ export default class KingWorld<
 
 		if (!handler) return this._default(request)
 
-		let headers: Record<string, string>
-		let body: string | JSON | Promise<string | JSON>
 		let headerAvailable = false
 		let responseHeaders: Headers | undefined
 		let status = 200
@@ -329,31 +322,13 @@ export default class KingWorld<
 		// ? Might have additional field attach from plugin, so forced type cast here
 		const context: Context = {
 			request,
-			params: _params[0] ? mapArrayObject(_params) : {},
+			params: _params.length ? mapArrayObject(_params) : {},
 			query,
 			status(value: number) {
 				status = value
 				headerAvailable = true
 			},
-			get headers() {
-				if (headers) return headers
-				headers = parseHeader(request.headers)
-				return headers
-			},
-			get body() {
-				if (body) return body
-
-				body =
-					// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-					this.headers!['content-type'] === 'application/json'
-						? request.json()
-						: request.text()
-
-				return body
-			},
-			set body(newBody) {
-				body = newBody
-			},
+			headers: request.headers,
 			get responseHeaders() {
 				if (!responseHeaders) {
 					responseHeaders = new Headers()
@@ -365,7 +340,6 @@ export default class KingWorld<
 		} as Context
 
 		const [handle, hook] = handler
-
 		const _mapResponse = headerAvailable
 			? mapResponse
 			: mapResponseWithoutHeaders
@@ -400,13 +374,19 @@ export default class KingWorld<
 					})
 
 				case 'object':
+					if (response instanceof Error)
+						return errorToResponse(response)
+					if (response instanceof Response) {
+						for (const [key, value] of responseHeaders!.entries())
+							response.headers.append(key, value)
+
+						return response
+					}
+
 					context.responseHeaders.append(
 						'Content-Type',
 						'application/json'
 					)
-
-					if (response instanceof Error)
-						return errorToResponse(response)
 
 					return new Response(JSON.stringify(response), {
 						status,
@@ -454,14 +434,11 @@ export default class KingWorld<
 					return new Response(response)
 
 				case 'object':
+					if (response instanceof Response) return response
 					if (response instanceof Error)
 						return errorToResponse(response)
 
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					})
+					return new Response(JSON.stringify(response), jsonHeader)
 
 				// ? Maybe response or Blob
 				case 'function':

@@ -13,7 +13,8 @@ module.exports = {
 	rules: {
 		'@typescript-eslint/ban-types': 'off',
 		'@typescript-eslint/no-explicit-any': 'off',
-		'no-mixed-spaces-and-tabs': 'off'
+		'no-mixed-spaces-and-tabs': 'off',
+		'@typescript-eslint/no-non-null-assertion': 'off'
 	},
 	ignorePatterns: ['example/*', 'tests/**/*']
 }

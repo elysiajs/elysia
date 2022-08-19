@@ -4,7 +4,7 @@ import cookie from '../src/index'
 
 const app = new KingWorld()
 	.get('/', ({ responseHeaders }) => {
-		responseHeaders.append('a', 'b')
+		// responseHeaders.append('a', 'b')
 
 		return new Response('Ok')
 	})

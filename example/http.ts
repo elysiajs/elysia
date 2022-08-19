@@ -50,8 +50,6 @@ const app = new KingWorld<{
 		}
 	}>('/kw', (req, store) => 'KINGWORLD', {
 		preHandler: ({ query, log }, { fromPlugin }) => {
-			log()
-
 			console.log('Name:', query?.name)
 
 			if (query?.name === 'aom') return 'Hi saltyaom'
@@ -73,7 +71,7 @@ const app = new KingWorld<{
 		params: {
 			id: number
 		}
-	}>('/new/:id', async ({ request, body, headers }) => {
+	}>('/new/:id', async ({ request, body }) => {
 		console.log('B', await body)
 
 		return body

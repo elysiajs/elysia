@@ -1,8 +1,23 @@
-# 0.0.0-experimental.21 - 13 Aug 2022
+# 0.0.0-experimental.22 - 19 Aug 2022
+Breaking Change:
+- context.body is now deprecated, use request.text() or request.json() instead
+
+Improvement:
+- Using reference header to increase json response speed
+- Remove `body` getter, setter
+
+Change:
+- Using `instanceof` to early return `Response`
+
+# 0.0.0-experimental.21 - 14 Aug 2022
+Breaking Change:
+- `context.headers` now return `Header` instead of `Record<string, string>`
+
 Feature:
 - Add status function to `Context`
 - `handle` now accept `number | Serve`
 - Remove `querystring` to support native Cloudflare Worker
+- Using raw headers check to parse `body` type
 
 # 0.0.0-experimental.20 - 13 Aug 2022
 Feature:

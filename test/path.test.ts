@@ -1,5 +1,4 @@
 import KingWorld, { Plugin } from '../src'
-import { parseHeader } from '../src/utils'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -67,7 +66,7 @@ describe('Path', () => {
 
 		expect(await res.text()).toBe('Shuba Shuba')
 		expect(res.status).toBe(418)
-		expect(parseHeader(res.headers).duck).toBe('shuba duck')
+		expect(res.headers.get('duck')).toBe('shuba duck')
 	})
 
 	it('Parse single param', async () => {
@@ -141,7 +140,7 @@ describe('Path', () => {
 	it('Handle body', async () => {
 		const app = new KingWorld().post<{
 			body: string
-		}>('/', ({ body }) => body)
+		}>('/', ({ request }) => request.text())
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',
@@ -161,7 +160,7 @@ describe('Path', () => {
 			body: {
 				name: string
 			}
-		}>('/', ({ body }) => body)
+		}>('/', ({ request }) => request.json())
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',
@@ -183,7 +182,7 @@ describe('Path', () => {
 			headers: {
 				'x-powered-by': string
 			}
-		}>('/', ({ headers }) => headers['x-powered-by'])
+		}>('/', ({ headers }) => headers.get('x-powered-by'))
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',
