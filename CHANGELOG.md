@@ -1,3 +1,7 @@
+# 0.0.0-experimental.24 - 21 Aug 2022
+Change:
+- optimized for `await`
+
 # 0.0.0-experimental.23 - 21 Aug 2022
 New Feature:
 - Initialial config is now available, starting with `bodyLimit` config for limiting body size

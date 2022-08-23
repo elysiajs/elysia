@@ -394,7 +394,7 @@ export default class KingWorld<
 				if (result) return result
 			}
 
-		let response = await handle(context, store)
+		let response = handle(context, store)
 		if (isPromise(response)) response = await response
 
 		return mapResponse(headerAvailable, response, context, status)
