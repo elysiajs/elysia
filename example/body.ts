@@ -1,14 +1,22 @@
 import KingWorld from '../src'
 
 new KingWorld()
-	.get("/", () => new Response("a"))
+	.get('/', () => new Response('a'))
+	.post<{
+		body: {
+			id: number
+			username: string
+		}
+	}>('/', async ({ body: { username } }) => {
+		return `Hi ${username}`
+	})
 	.post<{
 		body: {
 			id: number
 			username: string
 		}
 	}>(
-		'/',
+		'/transform',
 		async ({ body }) => {
 			const { username } = await body
 
@@ -16,11 +24,7 @@ new KingWorld()
 		},
 		{
 			transform: (request) => {
-				request.body = request.body.then((user) => {
-					user.id = +user.id
-
-					return user
-				})
+				request.body.id = +request.body.id
 			}
 		}
 	)

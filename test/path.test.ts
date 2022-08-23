@@ -182,7 +182,7 @@ describe('Path', () => {
 			headers: {
 				'x-powered-by': string
 			}
-		}>('/', ({ headers }) => headers.get('x-powered-by'))
+		}>('/', ({ request }) => request.headers.get('x-powered-by'))
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',

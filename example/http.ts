@@ -48,11 +48,30 @@ const app = new KingWorld<{
 		query: {
 			name: string
 		}
-	}>('/kw', (req, store) => 'KINGWORLD', {
+	}>('/kw', (ctx, store) => 'KINGWORLD', {
 		preHandler: ({ query, log }, { fromPlugin }) => {
 			console.log('Name:', query?.name)
 
 			if (query?.name === 'aom') return 'Hi saltyaom'
+		}
+	})
+	.post<{
+		body: {
+			name: string
+			additional: String
+		}
+	}>('/json', async ({ body }) => body)
+	.post<{
+		body: {
+			name: string
+			additional: String
+		}
+	}>('/transform-body', async ({ body }) => body, {
+		preHandler: (ctx) => {
+			ctx.body = {
+				...ctx.body,
+				additional: 'KingWorld'
+			}
 		}
 	})
 	.get<{
@@ -71,11 +90,7 @@ const app = new KingWorld<{
 		params: {
 			id: number
 		}
-	}>('/new/:id', async ({ request, body }) => {
-		console.log('B', await body)
-
-		return body
-	})
+	}>('/new/:id', async ({ request }) => request.json())
 	.group('/group', (app) => {
 		app.preHandler<{
 			query: {
@@ -88,11 +103,20 @@ const app = new KingWorld<{
 			.get('/kingworld', () => 'Welcome to KINGWORLD')
 			.get('/fbk', () => 'FuBuKing')
 	})
+	.get('/response-header', (ctx) => {
+		ctx.responseHeaders.append("a", "b")
+
+		return "A"
+	})
 	.get('/build', (_, { build }) => build)
 	.get('/ref', (_, { date }) => date)
 	.get('/response', () => new Response('Hi'))
 	.get('/error', () => new Error('Something went wrong'))
-	.get('/401', ({ status }) => status(401) || 'Status should be 401')
+	.get('/401', ({ status }) => {
+		status(401)
+
+		return 'Status should be 401'
+	})
 	.default(
 		() =>
 			new Response('Not Found :(', {

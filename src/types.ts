@@ -19,13 +19,11 @@ export type Context<Route extends TypedRoute = TypedRoute> = {
 		? Route['query']
 		: Record<string, string>
 	params: Route['params']
-	headers: Headers & Route['header']
-	body: Promise<Route['body']>
-	status(statusCode: number): undefined
+	body: Route['body']
+	status(statusCode: number): void
 	responseHeaders: Headers
 } & Omit<Route, 'body' | 'query' | 'header' | 'body'>
 
-export type EmptyHandler = (request: Request) => Response | Promise<Response>
 export type Handler<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
@@ -57,7 +55,7 @@ export interface RegisterHook<
 }
 
 export interface TypedRoute {
-	body?: unknown
+	body?: string | Record<string, any>
 	header?: Map<string, unknown>
 	query?: Record<string, string>
 	params?: Record<string, unknown>
@@ -72,4 +70,11 @@ export type Plugin<
 	config?: T
 ) => KingWorld<BaseInstance & PluginInstance>
 
-export type ComposedHandler = [Handler<any, any>, Hook<any>]
+export type ComposedHandler = [
+	handle: Handler<any, any>,
+	hooks: Hook<any>
+]
+
+export interface KingWorldConfig {
+	bodyLimit: number
+}

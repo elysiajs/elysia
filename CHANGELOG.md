@@ -1,3 +1,18 @@
+# 0.0.0-experimental.23 - 21 Aug 2022
+New Feature:
+- Initialial config is now available, starting with `bodyLimit` config for limiting body size
+
+Breaking Change:
+- `ctx.body` is now a literal value instead of `Promise`
+    - To migrate, simply remove `await`
+
+Change: 
+- `default` now accept `Handler` instead of `EmptyHandler`
+
+Bug fix:
+- Default Error response now return `responseHeaders`
+- Possibly fixed parsing body error benchmark
+
 # 0.0.0-experimental.22 - 19 Aug 2022
 Breaking Change:
 - context.body is now deprecated, use request.text() or request.json() instead

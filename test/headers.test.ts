@@ -51,10 +51,11 @@ describe('Resposne Headers', () => {
 	})
 
 	it('add status to Response', async () => {
-		const app = new KingWorld().get(
-			'/',
-			({ status }) => status(401) || 'Hi'
-		)
+		const app = new KingWorld().get('/', ({ status }) => {
+			status(401)
+
+			return 'Hi'
+		})
 
 		const res = await app.handle(req('/'))
 

@@ -1,17 +1,10 @@
 import { default as Router, type HTTPMethod } from '@saltyaom/trek-router'
 
-import {
-	jsonHeader,
-	composeHandler,
-	errorToResponse,
-	mapResponse,
-	mapResponseWithoutHeaders
-} from './handler'
+import { mapResponse, mapEarlyResponse } from './handler'
 import { mergeHook, isPromise, clone, mapArrayObject } from './utils'
 
 import type {
 	Handler,
-	EmptyHandler,
 	Hook,
 	HookEvent,
 	RegisterHook,
@@ -20,7 +13,8 @@ import type {
 	Plugin,
 	Context,
 	KingWorldInstance,
-	ComposedHandler
+	ComposedHandler,
+	KingWorldConfig
 } from './types'
 import type { Serve } from 'bun'
 
@@ -31,10 +25,23 @@ export default class KingWorld<
 	store: Instance['store']
 	hook: Hook<Instance>
 
-	private _ref: [keyof Instance['store'], any][]
-	private _default: EmptyHandler
+	config: KingWorldConfig = {
+		bodyLimit: 1048576
+	}
 
-	constructor() {
+	private _ref: [keyof Instance['store'], any][]
+	private _default: Handler
+
+	constructor(
+		config: KingWorldConfig = {
+			/**
+			 * Defines the maximum payload, in bytes, the server is allowed to accept.
+			 *
+			 * @default 1048576 (1MB)
+			 */
+			bodyLimit: 1048576
+		}
+	) {
 		this.router = new Router()
 
 		this.store = {} as Instance['store']
@@ -44,6 +51,8 @@ export default class KingWorld<
 			transform: [],
 			preHandler: []
 		}
+
+		this.config = config
 
 		this._default = () =>
 			new Response('Not Found', {
@@ -60,10 +69,10 @@ export default class KingWorld<
 		this.router.add(
 			method,
 			path,
-			composeHandler(
+			[
 				handler,
 				mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
-			)
+			]
 		)
 	}
 
@@ -266,8 +275,8 @@ export default class KingWorld<
 	//     this.router.off(method, path)
 	// }
 
-	default(handler: EmptyHandler) {
-		this._default = handler
+	default<Route extends TypedRoute = TypedRoute>(handler: Handler<Route>) {
+		this._default = handler as Handler
 
 		return this
 	}
@@ -294,7 +303,7 @@ export default class KingWorld<
 	}
 
 	// ? Need to be arrow function otherwise, `this` won't work for some reason
-	handle = async (request: Request): Promise<Response> => {
+	async handle(request: Request): Promise<Response> {
 		const store: Partial<Instance['store']> = { ...this.store }
 		const [handler, _params, query] = this.router.find(
 			request.method as HTTPMethod,
@@ -313,11 +322,20 @@ export default class KingWorld<
 			for (const onRequest of this.hook.onRequest)
 				onRequest(request, store)
 
-		if (!handler) return this._default(request)
+		const bodySize = request.headers.get('content-length')
+		if (bodySize && +bodySize > this.config.bodyLimit)
+			return new Response('Exceed body limit')
 
 		let headerAvailable = false
 		let responseHeaders: Headers | undefined
 		let status = 200
+
+		// ? For some reason, this prevent segmentation fault (Bun 0.1.10)
+		const body = !bodySize
+			? undefined
+			: request.headers.get('content-type') === 'application/json'
+			? await request.json()
+			: await request.text()
 
 		// ? Might have additional field attach from plugin, so forced type cast here
 		const context: Context = {
@@ -328,7 +346,7 @@ export default class KingWorld<
 				status = value
 				headerAvailable = true
 			},
-			headers: request.headers,
+			body,
 			get responseHeaders() {
 				if (!responseHeaders) {
 					responseHeaders = new Headers()
@@ -339,145 +357,69 @@ export default class KingWorld<
 			}
 		} as Context
 
-		const [handle, hook] = handler
-		const _mapResponse = headerAvailable
-			? mapResponse
-			: mapResponseWithoutHeaders
+		if (!handler) {
+			let response = this._default(context, store)
+			if (isPromise(response)) response = await response
 
-		if (hook.transform.length)
-			for (const transform of hook.transform) {
+			return mapResponse(headerAvailable, response, context, status)
+		}
+
+		const [handle, hooks] = handler
+
+		if (hooks.transform.length)
+			for (const transform of hooks.transform) {
 				let response = transform(context, store)
 				if (isPromise(response)) response = await response
 
-				const result = _mapResponse(response, context, status)
+				const result = mapEarlyResponse(
+					headerAvailable,
+					response,
+					context,
+					status
+				)
 				if (result) return result
 			}
 
-		if (hook.preHandler.length)
-			for (const preHandler of hook.preHandler) {
+		if (hooks.preHandler.length)
+			for (const preHandler of hooks.preHandler) {
 				let response = preHandler(context, store)
 				if (isPromise(response)) response = await response
 
-				const result = _mapResponse(response, context, status)
+				const result = mapEarlyResponse(
+					headerAvailable,
+					response,
+					context,
+					status
+				)
 				if (result) return result
 			}
 
-		let response = handle(context, store)
+		let response = await handle(context, store)
 		if (isPromise(response)) response = await response
 
-		if (headerAvailable)
-			switch (typeof response) {
-				case 'string':
-					return new Response(response, {
-						status,
-						headers: context.responseHeaders
-					})
-
-				case 'object':
-					if (response instanceof Error)
-						return errorToResponse(response)
-					if (response instanceof Response) {
-						for (const [key, value] of responseHeaders!.entries())
-							response.headers.append(key, value)
-
-						return response
-					}
-
-					context.responseHeaders.append(
-						'Content-Type',
-						'application/json'
-					)
-
-					return new Response(JSON.stringify(response), {
-						status,
-						headers: context.responseHeaders
-					})
-
-				// ? Maybe response function or Blob
-				case 'function':
-					if (response instanceof Blob)
-						return new Response(response, {
-							status,
-							headers: context.responseHeaders
-						})
-
-					for (const [
-						key,
-						value
-					] of context.responseHeaders.entries())
-						response.headers.append(key, value)
-
-					return response
-
-				case 'number':
-				case 'boolean':
-					return new Response(response.toString(), {
-						status,
-						headers: context.responseHeaders
-					})
-
-				case 'undefined':
-					return new Response('', {
-						status,
-						headers: context.responseHeaders
-					})
-
-				default:
-					return new Response(response, {
-						status,
-						headers: context.responseHeaders
-					})
-			}
-		else
-			switch (typeof response) {
-				case 'string':
-					return new Response(response)
-
-				case 'object':
-					if (response instanceof Response) return response
-					if (response instanceof Error)
-						return errorToResponse(response)
-
-					return new Response(JSON.stringify(response), jsonHeader)
-
-				// ? Maybe response or Blob
-				case 'function':
-					if (response instanceof Blob) return new Response(response)
-
-					return response
-
-				case 'number':
-				case 'boolean':
-					return new Response(response.toString())
-
-				case 'undefined':
-					return new Response('')
-
-				default:
-					return new Response(response)
-			}
+		return mapResponse(headerAvailable, response, context, status)
 	}
 
 	listen(options: number | Omit<Serve, 'fetch'>) {
 		if (!Bun) throw new Error('Bun to run')
 
-		Bun.serve(
-			typeof options === 'number'
-				? {
-						port: options,
-						fetch: this.handle
-				  }
-				: {
-						...options,
-						fetch: this.handle
-				  }
-		)
+		const fetch = this.handle.bind(this)
+
+		if (typeof options === 'number')
+			Bun.serve({
+				port: options,
+				fetch
+			})
+		else
+			Bun.serve({
+				...options,
+				fetch
+			})
 	}
 }
 
 export type {
 	Handler,
-	EmptyHandler,
 	Hook,
 	HookEvent,
 	RegisterHook,

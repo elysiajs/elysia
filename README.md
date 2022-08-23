@@ -445,7 +445,7 @@ app
 // [GET] /gamer/Botan => "Botan"
 ```
 
-As body is lazily execute as promise, simply use `.then` to modify body.
+You can easily modify body in transform to decouple logic into separate plugin.
 ```typescript
 new KingWorld()
 	.post<{
@@ -462,11 +462,7 @@ new KingWorld()
 		},
 		{
 			transform: (request) => {
-				request.body = request.body.then((user) => {
-					user.id = +user.id
-
-					return user
-				})
+				request.body.id = +request.body.id
 			}
 		}
 	)

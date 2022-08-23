@@ -11,7 +11,9 @@ export const mergeHook = (a: Hook, b?: Hook | RegisterHook): Hook<any> => ({
 	preHandler: concatArrayObject(a?.preHandler, b?.preHandler ?? []) ?? []
 })
 
-export const isPromise = (response: any) => typeof response?.then === 'function'
+export const isPromise = <T>(
+	response: T | Promise<T>
+): response is Promise<T> => response instanceof Promise
 
 export const clone = <T extends Object = Object>(aObject: T): T => {
 	const bObject: Record<string, any> = Array.isArray(aObject) ? [] : {}
