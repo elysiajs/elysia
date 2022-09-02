@@ -1,12 +1,14 @@
 import type KingWorld from './index'
 
+export type KWKey = string | number | symbol
+
 export interface KingWorldInstance<
 	Instance extends {
-		store: Record<string, any>
-		request: Record<string, any>
+		store: Record<KWKey, any>
+		request: Record<KWKey, any>
 	} = {
-		store: Record<string, any>
-		request: Record<string, any>
+		store: Record<KWKey, any>
+		request: Record<KWKey, any>
 	}
 > {
 	request?: Instance['request']
@@ -37,7 +39,7 @@ export type HookEvent = 'onRequest' | 'transform' | 'preHandler'
 export type PreRequestHandler<Store extends Record<string, any> = {}> = (
 	request: Request,
 	store: Store
-) => void
+) => void | Promise<void>
 
 export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
 	onRequest: PreRequestHandler<Instance['store']>[]
@@ -58,7 +60,7 @@ export interface TypedRoute {
 	body?: string | Record<string, any>
 	header?: Map<string, unknown>
 	query?: Record<string, string>
-	params?: Record<string, unknown>
+	params?: {}
 }
 
 export type Plugin<
@@ -70,11 +72,13 @@ export type Plugin<
 	config?: T
 ) => KingWorld<BaseInstance & PluginInstance>
 
-export type ComposedHandler = [
-	handle: Handler<any, any>,
-	hooks: Hook<any>
-]
+export type ComposedHandler = [handle: Handler<any, any>, hooks: Hook<any>]
 
 export interface KingWorldConfig {
 	bodyLimit: number
 }
+
+export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}` ? Parameter : never;
+export type ExtractKWPath<Path> = Path extends `${infer A}/${infer B}`
+  ? IsKWPathParameter<A> | ExtractKWPath<B>
+  : IsKWPathParameter<Path>;

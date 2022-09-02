@@ -1,3 +1,14 @@
+# 0.0.0-experimental.25 - 28 Aug 2022
+New Feature:
+- `onRequest` now accept async function
+- Auto infer typed for `params`, `state`, `ref`
+
+Improvement:
+- Using `clone` instead of flatten object
+
+Bug fix:
+- `.ref()` throw error when accept function
+
 # 0.0.0-experimental.24 - 21 Aug 2022
 Change:
 - optimized for `await`

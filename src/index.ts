@@ -14,7 +14,9 @@ import type {
 	Context,
 	KingWorldInstance,
 	ComposedHandler,
-	KingWorldConfig
+	KingWorldConfig,
+	KWKey,
+	ExtractKWPath
 } from './types'
 import type { Serve } from 'bun'
 
@@ -66,14 +68,10 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.router.add(
-			method,
-			path,
-			[
-				handler,
-				mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
-			]
-		)
+		this.router.add(method, path, [
+			handler,
+			mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
+		])
 	}
 
 	onRequest(handler: PreRequestHandler<Instance['store']>) {
@@ -170,9 +168,14 @@ export default class KingWorld<
 		) as unknown as KingWorld<Instance & PluginInstance>
 	}
 
-	get<Route extends TypedRoute = TypedRoute>(
-		path: string,
-		handler: Handler<Route, Instance>,
+	get<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+		path: Path,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('GET', path, handler, hook)
@@ -180,9 +183,14 @@ export default class KingWorld<
 		return this
 	}
 
-	post<Route extends TypedRoute = TypedRoute>(
+	post<Route extends TypedRoute = TypedRoute, Path extends string = string>(
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('POST', path, handler, hook)
@@ -190,9 +198,14 @@ export default class KingWorld<
 		return this
 	}
 
-	put<Route extends TypedRoute = TypedRoute>(
+	put<Route extends TypedRoute = TypedRoute, Path extends string = string>(
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('PUT', path, handler, hook)
@@ -200,9 +213,14 @@ export default class KingWorld<
 		return this
 	}
 
-	patch<Route extends TypedRoute = TypedRoute>(
+	patch<Route extends TypedRoute = TypedRoute, Path extends string = string>(
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('PATCH', path, handler, hook)
@@ -210,9 +228,14 @@ export default class KingWorld<
 		return this
 	}
 
-	delete<Route extends TypedRoute = TypedRoute>(
+	delete<Route extends TypedRoute = TypedRoute, Path extends string = string>(
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('DELETE', path, handler, hook)
@@ -220,9 +243,17 @@ export default class KingWorld<
 		return this
 	}
 
-	options<Route extends TypedRoute = TypedRoute>(
+	options<
+		Route extends TypedRoute = TypedRoute,
+		Path extends string = string
+	>(
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('OPTIONS', path, handler, hook)
@@ -230,9 +261,14 @@ export default class KingWorld<
 		return this
 	}
 
-	head<Route extends TypedRoute = TypedRoute>(
+	head<Route extends TypedRoute = TypedRoute, Path extends string = string>(
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('HEAD', path, handler, hook)
@@ -240,9 +276,14 @@ export default class KingWorld<
 		return this
 	}
 
-	trace<Route extends TypedRoute = TypedRoute>(
+	trace<Route extends TypedRoute = TypedRoute, Path extends string = string>(
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('TRACE', path, handler, hook)
@@ -250,9 +291,17 @@ export default class KingWorld<
 		return this
 	}
 
-	connect<Route extends TypedRoute = TypedRoute>(
+	connect<
+		Route extends TypedRoute = TypedRoute,
+		Path extends string = string
+	>(
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler('CONNECT', path, handler, hook)
@@ -260,10 +309,15 @@ export default class KingWorld<
 		return this
 	}
 
-	on<Route extends TypedRoute = TypedRoute>(
+	on<Route extends TypedRoute = TypedRoute, Path extends string = string>(
 		method: HTTPMethod,
 		path: string,
-		handler: Handler<Route, Instance>,
+		handler: Handler<
+			Route & {
+				params: Record<ExtractKWPath<Path>, string>
+			},
+			Instance
+		>,
 		hook?: RegisterHook<Route, Instance>
 	) {
 		this._addHandler(method, path, handler, hook)
@@ -271,40 +325,59 @@ export default class KingWorld<
 		return this
 	}
 
-	// off(method: HTTPMethod, path: string) {
-	//     this.router.off(method, path)
-	// }
-
 	default<Route extends TypedRoute = TypedRoute>(handler: Handler<Route>) {
 		this._default = handler as Handler
 
 		return this
 	}
 
-	state(
-		name: keyof Instance['store'],
-		value: Instance['store'][keyof Instance['store']]
-	) {
-		this.store[name] = value
+	state<
+		Key extends KWKey = keyof Instance['store'],
+		Value = Instance['store'][keyof Instance['store']],
+		ReturnValue = Value extends () => infer Returned
+			? Returned extends Promise<infer AsyncReturned>
+				? AsyncReturned
+				: Returned
+			: Value,
+		NewInstance extends KingWorldInstance = KingWorld<
+			KingWorldInstance<{
+				store: Instance['store'] & { [key in Key]: ReturnValue }
+				request: Instance['request'] extends Record<string, any>
+					? Instance['request']
+					: Record<string, any>
+			}>
+		>
+	>(name: Key, value: Value): NewInstance {
+		;(this.store as Record<Key, Value>)[name] = value
 
-		return this
+		return this as unknown as NewInstance
 	}
 
-	ref(
-		name: keyof Instance['store'],
-		value:
-			| Instance['store'][keyof Instance['store']]
-			| (() => Instance['store'][keyof Instance['store']])
-			| (() => Promise<Instance['store'][keyof Instance['store']]>)
-	) {
+	ref<
+		Key extends KWKey = keyof Instance['store'],
+		Value = Instance['store'][keyof Instance['store']],
+		ReturnValue = Value extends () => infer Returned
+			? Returned extends Promise<infer AsyncReturned>
+				? AsyncReturned
+				: Returned
+			: Value,
+		NewInstance extends KingWorldInstance = KingWorld<
+			KingWorldInstance<{
+				store: Instance['store'] & { [key in Key]: ReturnValue }
+				request: Instance['request'] extends Record<string, any>
+					? Instance['request']
+					: Record<string, any>
+			}>
+		>
+	>(name: Key, value: Value): NewInstance {
 		this._ref.push([name, value])
 
-		return this
+		return this as unknown as NewInstance
 	}
 
 	// ? Need to be arrow function otherwise, `this` won't work for some reason
 	async handle(request: Request): Promise<Response> {
-		const store: Partial<Instance['store']> = { ...this.store }
+		const store: Partial<Instance['store']> = clone(this.store)
 		const [handler, _params, query] = this.router.find(
 			request.method as HTTPMethod,
 			request.url
@@ -312,15 +385,17 @@ export default class KingWorld<
 
 		if (this._ref.length)
 			for (const [key, value] of this._ref)
-				if (typeof value === 'function') store[key] = value
-				else {
+				if (typeof value === 'function') {
 					const _value = value()
 					store[key] = isPromise(_value) ? await _value : _value
-				}
+				} else store[key] = value
 
 		if (this.hook.onRequest.length)
-			for (const onRequest of this.hook.onRequest)
-				onRequest(request, store)
+			for (const onRequest of this.hook.onRequest) {
+				const response = onRequest(request, store)
+
+				if (isPromise(response)) await response
+			}
 
 		const bodySize = request.headers.get('content-length')
 		if (bodySize && +bodySize > this.config.bodyLimit)
@@ -330,7 +405,6 @@ export default class KingWorld<
 		let responseHeaders: Headers | undefined
 		let status = 200
 
-		// ? For some reason, this prevent segmentation fault (Bun 0.1.10)
 		const body = !bodySize
 			? undefined
 			: request.headers.get('content-type') === 'application/json'
@@ -405,16 +479,17 @@ export default class KingWorld<
 
 		const fetch = this.handle.bind(this)
 
-		if (typeof options === 'number')
-			Bun.serve({
-				port: options,
-				fetch
-			})
-		else
-			Bun.serve({
-				...options,
-				fetch
-			})
+		Bun.serve(
+			typeof options === 'number'
+				? {
+						port: options,
+						fetch
+				  }
+				: {
+						...options,
+						fetch
+				  }
+		)
 	}
 }
 

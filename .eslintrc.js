@@ -14,7 +14,8 @@ module.exports = {
 		'@typescript-eslint/ban-types': 'off',
 		'@typescript-eslint/no-explicit-any': 'off',
 		'no-mixed-spaces-and-tabs': 'off',
-		'@typescript-eslint/no-non-null-assertion': 'off'
+		'@typescript-eslint/no-non-null-assertion': 'off',
+		'@typescript-eslint/no-extra-semi': 'off'
 	},
 	ignorePatterns: ['example/*', 'tests/**/*']
 }

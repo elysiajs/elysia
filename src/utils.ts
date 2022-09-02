@@ -15,7 +15,9 @@ export const isPromise = <T>(
 	response: T | Promise<T>
 ): response is Promise<T> => response instanceof Promise
 
-export const clone = <T extends Object = Object>(aObject: T): T => {
+export const clone = <T extends Object | any[] = Object | any[]>(
+	aObject: T
+): T => {
 	const bObject: Record<string, any> = Array.isArray(aObject) ? [] : {}
 
 	let value: Partial<T>
