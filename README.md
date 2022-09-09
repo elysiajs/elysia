@@ -1,5 +1,6 @@
 # 🦊 KingWorld
 Fast, and friendly [Bun](https://bun.sh) web framework.
+
 Focusing on **speed**, and **simplicity**.
 
 ###### Named after my favorite VTuber (Shirakami Fubuki) and composer (Sasakure.UK) song [KINGWORLD/白上フブキ(Original)](https://youtu.be/yVaQpUUAzik)
