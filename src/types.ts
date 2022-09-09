@@ -65,7 +65,7 @@ export type Plugin<
 	config?: T
 ) => ReturnedInstance
 
-export type ComposedHandler = [handle: Handler<any, any>, hooks: Hook<any>]
+export type ComposedHandler = { handle: Handler<any, any>; hooks: Hook<any> }
 
 export interface KingWorldConfig {
 	bodyLimit: number

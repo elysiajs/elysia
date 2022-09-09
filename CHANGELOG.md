@@ -1,4 +1,4 @@
-# 0.0.0-experimental.25 - 28 Aug 2022
+# 0.0.0-experimental.25 - 9 Sep 2022
 New Feature:
 - Auto infer typed for `params`, `state`, `ref`
 - `onRequest` now accept async function

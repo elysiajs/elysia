@@ -1,17 +1,9 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import MedleyRouter from '@medley/router'
 
 import Context from './context'
 import { mapResponse, mapEarlyResponse } from './handler'
-import {
-	mergeHook,
-	isPromise,
-	clone,
-	parseQuery,
-	getQuery,
-	getPath
-} from './utils'
+import { mergeHook, isPromise, clone, mapQuery, getPath } from './utils'
 
 import type {
 	Handler,
@@ -25,7 +17,8 @@ import type {
 	KingWorldConfig,
 	KWKey,
 	ExtractKWPath,
-	HTTPMethod
+	HTTPMethod,
+	ComposedHandler
 } from './types'
 import type { Serve } from 'bun'
 
@@ -411,14 +404,14 @@ export default class KingWorld<
 
 	// ? Need to be arrow function otherwise `this` won't work for some reason
 	handle = async (request: Request): Promise<Response> => {
-		const store: Partial<Instance['store']> = clone(this.store)
+		const [store] = [this.store]
 
 		if (this._ref.length)
-			for (const [key, value] of this._ref)
-				if (typeof value === 'function') {
-					const _value = value()
-					store[key] = isPromise(_value) ? await _value : _value
-				} else store[key] = value
+			for (const ref of this._ref)
+				if (typeof ref[1] === 'function') {
+					const v = ref[1]()
+					store[ref[0]] = isPromise(v) ? await v : v
+				} else store[ref[0]] = ref[1]
 
 		if (this.hook.onRequest.length)
 			for (const onRequest of this.hook.onRequest) {
@@ -431,30 +424,26 @@ export default class KingWorld<
 		if (bodySize && +bodySize > this.config.bodyLimit)
 			return new Response('Exceed body limit')
 
-		const body: string | Object | undefined = !bodySize
-			? undefined
-			: request.headers.get('content-type') === 'application/json'
-			? await request.json()
-			: await request.text()
-
 		const route = this.router.find(getPath(request.url))
-		const handler = route?.store[request.method]
-
 		const context: Context = new Context({
 			request,
 			params: route?.params ?? {},
-			query: parseQuery(getQuery(request.url)),
-			body
+			query: mapQuery(request.url),
+			body: !bodySize
+				? undefined
+				: request.headers.get('content-type') === 'application/json'
+				? await request.json()
+				: await request.text()
 		})
 
-		if (!handler) {
+		if (!route) {
 			let response = this._default(context, store)
 			if (isPromise(response)) response = await response
 
 			return mapResponse(response, context)
 		}
 
-		const { handle, hooks } = handler
+		const { handle, hooks } = route.store[request.method] as ComposedHandler
 
 		if (hooks.transform.length)
 			for (const transform of hooks.transform) {

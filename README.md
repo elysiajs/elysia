@@ -1,18 +1,24 @@
 # 🦊 KingWorld
 Fast, and friendly [Bun](https://bun.sh) web framework.
 
-⚡️ **Faster** than Express.js **by 8.5x** [on M1 Max](https://twitter.com/saltyAom/status/1544666247832698881)
-
 ###### Named after my favorite VTuber (Shirakami Fubuki) and composer (Sasakure.UK) song [KINGWORLD/白上フブキ(Original)](https://youtu.be/yVaQpUUAzik)
 
 KingWorld is web framework built for Bun. It focuses on **speed**, and **developer friendliness**.
 
 Borrowing concepts from many popular Node.js web frameworks, KingWorld has a very familiar API designed to easily get started while hiding complex abstractions, and embracing simplicity.
 
+## Feature
+- Speed - Build for speed and optimized for Bun in mind.
+- Scalable - Designed for micro-service, decoupled logic and treat everything as building block
+- Simplicity - Composed patterns into plugin, removing redundant logic into one simple plugin
+- Friendliness - Familiar pattern with enhance TypeScript supports eg. auto infers type paramters
+
+⚡️ **Faster** than Express.js [**by 8x**](https://github.com/SaltyAom/bun-http-framework-benchmark)
+
 ## Ecosystem
 KingWorld can be heavily customized with the use of plugins.
 
-Currently, you can take a look at these:
+Official plugins:
 - [Static](https://github.com/saltyaom/kingworld-static) for serving static file/folders
 - [Cookie](https://github.com/saltyaom/kingworld-cookie) for reading/setting cookie
 - [Schema](https://github.com/saltyaom/kingworld-schema) for validating request declaratively
@@ -456,7 +462,7 @@ new KingWorld()
 	}>(
 		'/gamer',
 		async ({ body }) => {
-			const { username } = await body
+			const { username } = body
 
 			return `Hi ${username}`
 		},
@@ -775,34 +781,12 @@ describe('Correctness', () => {
 
 ```
 
-## Caveat
-Sometime KingWorld doesn't perform well in some situation or has some bug, which can be related to Bun.
-
-Notable reference:
-- [Bun slow down when use `await`](https://github.com/oven-sh/bun/issues/567)
-- [`body` is empty](https://github.com/oven-sh/bun/issues/530)
-- [Listener start after 4 seconds on Ubuntu](https://github.com/oven-sh/bun/issues/530#issuecomment-1179686347)
-
-However, if you're sure that the bug is related to KingWorld, filing [an issue](https://github.com/saltyaom/kingworld) is always welcome.
-
-## Optimization
-For the current state of Bun, if you wants full speed of Bun, avoid using `await` in critical path.
-
-As the state of Bun 0.1.3, KingWorld will be slowed down when using `await` which might occurs from the following:
-- Using `await` in handler
-- Using `schema.body`
-- Using `request.body`
-
-The performance will be slowed down by around 1.75x - 3x vary on how powerful the machine is.
-
 ## State of KingWorld
 KingWorld is an experimental web framework based on bun.
 
 A bleeding edge web framework focused on developer friendliness, and performance, but is not recommended for production.
 
 As KingWorld is in 0.0.0-experimental.x, API is very unstable and will change in any point of time, at-least until 0.1.0 is release.
-
-As bun is currently in early stage of development, some API might changed in the future which might also results KingWorld API to be changed to match the better speed and developer experience.
 
 ## License
 KingWorld is MIT License
