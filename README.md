@@ -1,11 +1,11 @@
 # 🦊 KingWorld
 Fast, and friendly [Bun](https://bun.sh) web framework.
 
-###### Named after my favorite VTuber (Shirakami Fubuki) and composer (Sasakure.UK) song [KINGWORLD/白上フブキ(Original)](https://youtu.be/yVaQpUUAzik)
-
 KingWorld is web framework built for Bun. It focuses on **speed**, and **developer friendliness**.
 
 Borrowing concepts from many popular Node.js web frameworks, KingWorld has a very familiar API designed to easily get started while hiding complex abstractions, and embracing simplicity.
+
+###### Named after my favorite VTuber (Shirakami Fubuki) and composer (Sasakure.UK) song [KINGWORLD/白上フブキ(Original)](https://youtu.be/yVaQpUUAzik)
 
 ## Feature
 - Speed - Build for speed and optimized for Bun in mind.
@@ -13,7 +13,7 @@ Borrowing concepts from many popular Node.js web frameworks, KingWorld has a ver
 - Simplicity - Composed patterns into plugin, removing redundant logic into one simple plugin
 - Friendliness - Familiar pattern with enhance TypeScript supports eg. auto infers type paramters
 
-⚡️ **Faster** than Express.js [**by 8x**](https://github.com/SaltyAom/bun-http-framework-benchmark)
+⚡️ KingWorld is [one of the fastest Bun web framework](https://github.com/SaltyAom/bun-http-framework-benchmark)
 
 ## Ecosystem
 KingWorld can be heavily customized with the use of plugins.
