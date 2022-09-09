@@ -1,4 +1,4 @@
-import type { Context } from './types'
+import type Context from './context'
 
 const json = new Headers()
 json.append('Content-Type', 'application/json')
@@ -7,28 +7,21 @@ export const jsonHeader = {
 }
 
 // We don't want to assign new variable to be used only once here
-export const mapEarlyResponse = (
-	headerAvailable: boolean,
-	response: unknown,
-	context: Context,
-	status: number
-) => {
-	if (headerAvailable)
+export const mapEarlyResponse = (response: unknown, context: Context) => {
+	if (context._headers || context._status !== 200)
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {
-					status,
-					headers: context.responseHeaders
+					status: context._status,
+					headers: context._headers
 				})
 
 			case 'object':
 				if (response instanceof Error)
-					return errorToResponse(response, context.responseHeaders)
+					return errorToResponse(response, context._headers)
 				if (response instanceof Response) {
-					for (const [
-						key,
-						value
-					] of context.responseHeaders.entries())
+					for (const [key, value] of context._headers?.entries() ??
+						[])
 						response.headers.append(key, value)
 
 					return response
@@ -40,19 +33,19 @@ export const mapEarlyResponse = (
 				)
 
 				return new Response(JSON.stringify(response), {
-					status,
-					headers: context.responseHeaders
+					status: context._status,
+					headers: context._headers
 				})
 
 			// ? Maybe response or Blob
 			case 'function':
 				if (response instanceof Blob)
 					return new Response(response, {
-						status,
-						headers: context.responseHeaders
+						status: context._status,
+						headers: context._headers
 					})
 
-				for (const [key, value] of context.responseHeaders.entries())
+				for (const [key, value] of context._headers?.entries() ?? [])
 					(response as unknown as Response).headers.append(key, value)
 
 				return response as unknown as Response
@@ -60,8 +53,8 @@ export const mapEarlyResponse = (
 			case 'number':
 			case 'boolean':
 				return new Response(response.toString(), {
-					status,
-					headers: context.responseHeaders
+					status: context._status,
+					headers: context._headers
 				})
 
 			default:
@@ -75,7 +68,7 @@ export const mapEarlyResponse = (
 			case 'object':
 				if (response instanceof Response) return response
 				if (response instanceof Error)
-					return errorToResponse(response, context.responseHeaders)
+					return errorToResponse(response, context._headers)
 
 				return new Response(JSON.stringify(response), jsonHeader)
 
@@ -94,25 +87,21 @@ export const mapEarlyResponse = (
 		}
 }
 
-export const mapResponse = (
-	headerAvailable: boolean,
-	response: unknown,
-	context: Context,
-	status: number
-) => {
-	if (headerAvailable)
+export const mapResponse = (response: unknown, context: Context) => {
+	if (context._headers || context._status !== 200)
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {
-					status,
-					headers: context.responseHeaders
+					status: context._status,
+					headers: context._headers
 				})
 
 			case 'object':
 				if (response instanceof Error)
-					return errorToResponse(response, context.responseHeaders)
+					return errorToResponse(response, context._headers)
 				if (response instanceof Response) {
-					for (const [key, value] of context.responseHeaders!.entries())
+					for (const [key, value] of context._headers?.entries() ??
+						[])
 						response.headers.append(key, value)
 
 					return response
@@ -124,16 +113,16 @@ export const mapResponse = (
 				)
 
 				return new Response(JSON.stringify(response), {
-					status,
-					headers: context.responseHeaders
+					status: context._status,
+					headers: context._headers
 				})
 
 			// ? Maybe response function or Blob
 			case 'function':
 				if (response instanceof Blob)
 					return new Response(response, {
-						status,
-						headers: context.responseHeaders
+						status: context._status,
+						headers: context._headers
 					})
 
 				return response()
@@ -141,20 +130,20 @@ export const mapResponse = (
 			case 'number':
 			case 'boolean':
 				return new Response(response.toString(), {
-					status,
-					headers: context.responseHeaders
+					status: context._status,
+					headers: context._headers
 				})
 
 			case 'undefined':
 				return new Response('', {
-					status,
-					headers: context.responseHeaders
+					status: context._status,
+					headers: context._headers
 				})
 
 			default:
 				return new Response(response as any, {
-					status,
-					headers: context.responseHeaders
+					status: context._status,
+					headers: context._headers
 				})
 		}
 	else
@@ -165,7 +154,7 @@ export const mapResponse = (
 			case 'object':
 				if (response instanceof Response) return response
 				if (response instanceof Error)
-					return errorToResponse(response, context.responseHeaders)
+					return errorToResponse(response, context._headers)
 
 				return new Response(JSON.stringify(response), jsonHeader)
 

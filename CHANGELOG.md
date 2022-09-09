@@ -1,10 +1,14 @@
 # 0.0.0-experimental.25 - 28 Aug 2022
 New Feature:
-- `onRequest` now accept async function
 - Auto infer typed for `params`, `state`, `ref`
+- `onRequest` now accept async function
+- `refFn` syntax sugar for adding fn as reference instead of `() => () => value`
 
 Improvement:
+- Switch from `@saltyaom/trek-router` to `@medley/router`
 - Using `clone` instead of flatten object
+- Refactor path fn for inline cache
+- Refactor `Context` to class 
 
 Bug fix:
 - `.ref()` throw error when accept function

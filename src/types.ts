@@ -1,4 +1,5 @@
 import type KingWorld from './index'
+import type Context from './context'
 
 export type KWKey = string | number | symbol
 
@@ -14,17 +15,6 @@ export interface KingWorldInstance<
 	request?: Instance['request']
 	store: Instance['store']
 }
-
-export type Context<Route extends TypedRoute = TypedRoute> = {
-	request: Request
-	query: Route['query'] extends Record<string, any>
-		? Route['query']
-		: Record<string, string>
-	params: Route['params']
-	body: Route['body']
-	status(statusCode: number): void
-	responseHeaders: Headers
-} & Omit<Route, 'body' | 'query' | 'header' | 'body'>
 
 export type Handler<
 	Route extends TypedRoute = TypedRoute,
@@ -66,11 +56,14 @@ export interface TypedRoute {
 export type Plugin<
 	T = Record<string, unknown>,
 	PluginInstance extends KingWorldInstance = KingWorldInstance,
-	BaseInstance extends KingWorldInstance = KingWorldInstance
+	BaseInstance extends KingWorldInstance = KingWorldInstance,
+	ReturnedInstance extends KingWorld<
+		BaseInstance & PluginInstance
+	> = KingWorld<BaseInstance & PluginInstance>
 > = (
 	app: KingWorld<BaseInstance & PluginInstance>,
 	config?: T
-) => KingWorld<BaseInstance & PluginInstance>
+) => ReturnedInstance
 
 export type ComposedHandler = [handle: Handler<any, any>, hooks: Hook<any>]
 
@@ -78,7 +71,45 @@ export interface KingWorldConfig {
 	bodyLimit: number
 }
 
-export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}` ? Parameter : never;
+export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}`
+	? Parameter
+	: never
 export type ExtractKWPath<Path> = Path extends `${infer A}/${infer B}`
-  ? IsKWPathParameter<A> | ExtractKWPath<B>
-  : IsKWPathParameter<Path>;
+	? IsKWPathParameter<A> | ExtractKWPath<B>
+	: IsKWPathParameter<Path>
+
+export type HTTPMethod =
+	| 'ACL'
+	| 'BIND'
+	| 'CHECKOUT'
+	| 'CONNECT'
+	| 'COPY'
+	| 'DELETE'
+	| 'GET'
+	| 'HEAD'
+	| 'LINK'
+	| 'LOCK'
+	| 'M-SEARCH'
+	| 'MERGE'
+	| 'MKACTIVITY'
+	| 'MKCALENDAR'
+	| 'MKCOL'
+	| 'MOVE'
+	| 'NOTIFY'
+	| 'OPTIONS'
+	| 'PATCH'
+	| 'POST'
+	| 'PROPFIND'
+	| 'PROPPATCH'
+	| 'PURGE'
+	| 'PUT'
+	| 'REBIND'
+	| 'REPORT'
+	| 'SEARCH'
+	| 'SOURCE'
+	| 'SUBSCRIBE'
+	| 'TRACE'
+	| 'UNBIND'
+	| 'UNLINK'
+	| 'UNLOCK'
+	| 'UNSUBSCRIBE'

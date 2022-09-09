@@ -1,7 +1,17 @@
-import { default as Router, type HTTPMethod } from '@saltyaom/trek-router'
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import MedleyRouter from '@medley/router'
 
+import Context from './context'
 import { mapResponse, mapEarlyResponse } from './handler'
-import { mergeHook, isPromise, clone, mapArrayObject } from './utils'
+import {
+	mergeHook,
+	isPromise,
+	clone,
+	parseQuery,
+	getQuery,
+	getPath
+} from './utils'
 
 import type {
 	Handler,
@@ -11,28 +21,40 @@ import type {
 	PreRequestHandler,
 	TypedRoute,
 	Plugin,
-	Context,
 	KingWorldInstance,
-	ComposedHandler,
 	KingWorldConfig,
 	KWKey,
-	ExtractKWPath
+	ExtractKWPath,
+	HTTPMethod
 } from './types'
 import type { Serve } from 'bun'
 
 export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
-	router: Router<ComposedHandler>
-	store: Instance['store']
-	hook: Hook<Instance>
+	store: Instance['store'] = {}
+	hook: Hook<Instance> = {
+		onRequest: [],
+		transform: [],
+		preHandler: []
+	}
 
 	config: KingWorldConfig = {
 		bodyLimit: 1048576
 	}
 
-	private _ref: [keyof Instance['store'], any][]
-	private _default: Handler
+	private router = new MedleyRouter()
+	protected routes: [
+		HTTPMethod,
+		string,
+		Handler<any, Instance>,
+		RegisterHook<any, Instance>
+	][] = []
+	private _ref: [keyof Instance['store'], any][] = []
+	private _default: Handler = () =>
+		new Response('Not Found', {
+			status: 404
+		})
 
 	constructor(
 		config: KingWorldConfig = {
@@ -44,22 +66,7 @@ export default class KingWorld<
 			bodyLimit: 1048576
 		}
 	) {
-		this.router = new Router()
-
-		this.store = {} as Instance['store']
-		this._ref = []
-		this.hook = {
-			onRequest: [],
-			transform: [],
-			preHandler: []
-		}
-
 		this.config = config
-
-		this._default = () =>
-			new Response('Not Found', {
-				status: 404
-			})
 	}
 
 	private _addHandler<Route extends TypedRoute = TypedRoute>(
@@ -68,10 +75,17 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.router.add(method, path, [
+		this.routes.push([
+			method,
+			path,
 			handler,
 			mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
 		])
+
+		this.router.register(path)[method] = {
+			handle: handler,
+			hooks: mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
+		}
 	}
 
 	onRequest(handler: PreRequestHandler<Instance['store']>) {
@@ -125,9 +139,9 @@ export default class KingWorld<
 
 		this.store = { ...this.store, ...instance.store }
 
-		Object.values(instance.router.routes).forEach(
-			([method, path, handler]) => {
-				this.router.add(method, `${prefix}${path}`, handler)
+		Object.values(instance.routes).forEach(
+			([method, path, handler, hook]) => {
+				this._addHandler(method, `${prefix}${path}`, handler, hook)
 			}
 		)
 
@@ -143,11 +157,9 @@ export default class KingWorld<
 
 		this.store = { ...this.store, ...instance.store }
 
-		Object.values(instance.router.routes).forEach(
-			([method, path, handler]) => {
-				this.router.add(method, path, handler)
-			}
-		)
+		Object.values(instance.routes).forEach(([method, path, handler]) => {
+			this._addHandler(method, path, handler)
+		})
 
 		return this
 	}
@@ -375,13 +387,31 @@ export default class KingWorld<
 		return this as unknown as NewInstance
 	}
 
-	// ? Need to be arrow function otherwise, `this` won't work for some reason
-	async handle(request: Request): Promise<Response> {
+	refFn<
+		Key extends KWKey = keyof Instance['store'],
+		Value = Instance['store'][keyof Instance['store']],
+		ReturnValue = Value extends () => infer Returned
+			? Returned extends Promise<infer AsyncReturned>
+				? AsyncReturned
+				: Returned
+			: Value,
+		NewInstance extends KingWorldInstance = KingWorld<
+			KingWorldInstance<{
+				store: Instance['store'] & { [key in Key]: ReturnValue }
+				request: Instance['request'] extends Record<string, any>
+					? Instance['request']
+					: Record<string, any>
+			}>
+		>
+	>(name: Key, value: Value): NewInstance {
+		this._ref.push([name, () => value])
+
+		return this as unknown as NewInstance
+	}
+
+	// ? Need to be arrow function otherwise `this` won't work for some reason
+	handle = async (request: Request): Promise<Response> => {
 		const store: Partial<Instance['store']> = clone(this.store)
-		const [handler, _params, query] = this.router.find(
-			request.method as HTTPMethod,
-			request.url
-		)
 
 		if (this._ref.length)
 			for (const [key, value] of this._ref)
@@ -401,56 +431,37 @@ export default class KingWorld<
 		if (bodySize && +bodySize > this.config.bodyLimit)
 			return new Response('Exceed body limit')
 
-		let headerAvailable = false
-		let responseHeaders: Headers | undefined
-		let status = 200
-
-		const body = !bodySize
+		const body: string | Object | undefined = !bodySize
 			? undefined
 			: request.headers.get('content-type') === 'application/json'
 			? await request.json()
 			: await request.text()
 
-		// ? Might have additional field attach from plugin, so forced type cast here
-		const context: Context = {
-			request,
-			params: _params.length ? mapArrayObject(_params) : {},
-			query,
-			status(value: number) {
-				status = value
-				headerAvailable = true
-			},
-			body,
-			get responseHeaders() {
-				if (!responseHeaders) {
-					responseHeaders = new Headers()
-					headerAvailable = true
-				}
+		const route = this.router.find(getPath(request.url))
+		const handler = route?.store[request.method]
 
-				return responseHeaders
-			}
-		} as Context
+		const context: Context = new Context({
+			request,
+			params: route?.params ?? {},
+			query: parseQuery(getQuery(request.url)),
+			body
+		})
 
 		if (!handler) {
 			let response = this._default(context, store)
 			if (isPromise(response)) response = await response
 
-			return mapResponse(headerAvailable, response, context, status)
+			return mapResponse(response, context)
 		}
 
-		const [handle, hooks] = handler
+		const { handle, hooks } = handler
 
 		if (hooks.transform.length)
 			for (const transform of hooks.transform) {
 				let response = transform(context, store)
 				if (isPromise(response)) response = await response
 
-				const result = mapEarlyResponse(
-					headerAvailable,
-					response,
-					context,
-					status
-				)
+				const result = mapEarlyResponse(response, context)
 				if (result) return result
 			}
 
@@ -459,35 +470,28 @@ export default class KingWorld<
 				let response = preHandler(context, store)
 				if (isPromise(response)) response = await response
 
-				const result = mapEarlyResponse(
-					headerAvailable,
-					response,
-					context,
-					status
-				)
+				const result = mapEarlyResponse(response, context)
 				if (result) return result
 			}
 
 		let response = handle(context, store)
 		if (isPromise(response)) response = await response
 
-		return mapResponse(headerAvailable, response, context, status)
+		return mapResponse(response, context)
 	}
 
 	listen(options: number | Omit<Serve, 'fetch'>) {
 		if (!Bun) throw new Error('Bun to run')
 
-		const fetch = this.handle.bind(this)
-
 		Bun.serve(
 			typeof options === 'number'
 				? {
 						port: options,
-						fetch
+						fetch: this.handle
 				  }
 				: {
 						...options,
-						fetch
+						fetch: this.handle
 				  }
 		)
 	}
@@ -498,7 +502,6 @@ export type {
 	Hook,
 	HookEvent,
 	RegisterHook,
-	Context,
 	PreRequestHandler,
 	TypedRoute,
 	Plugin

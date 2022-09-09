@@ -13,11 +13,10 @@ describe('Path', () => {
 	})
 
 	it('Handle multiple level', async () => {
-		const app = new KingWorld().get<{
-			params: {
-				id: string
-			}
-		}>('/this/is/my/deep/nested/root', () => 'Ok')
+		const app = new KingWorld().get(
+			'/this/is/my/deep/nested/root',
+			() => 'Ok'
+		)
 		const res = await app.handle(req('/this/is/my/deep/nested/root'))
 
 		expect(await res.text()).toBe('Ok')
@@ -140,11 +139,18 @@ describe('Path', () => {
 	it('Handle body', async () => {
 		const app = new KingWorld().post<{
 			body: string
-		}>('/', ({ request }) => request.text())
+		}>('/', ({ body }) => body)
+
+		const body = 'Botan'
+
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',
-				body: 'Botan'
+				body,
+				headers: {
+					'content-type': 'text/plain',
+					'content-length': body.length.toString()
+				}
 			})
 		)
 
@@ -160,13 +166,14 @@ describe('Path', () => {
 			body: {
 				name: string
 			}
-		}>('/', ({ request }) => request.json())
+		}>('/', ({ body }) => body)
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',
 				body,
 				headers: {
-					'content-type': 'application/json'
+					'content-type': 'application/json',
+					'content-length': body.length.toString()
 				}
 			})
 		)

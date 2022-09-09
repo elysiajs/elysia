@@ -9,8 +9,6 @@ const loggerPlugin: Plugin<
 	{
 		store: {
 			fromPlugin: 'From Logger'
-		}
-		request: {
 			log: () => void
 		}
 	}
@@ -18,12 +16,12 @@ const loggerPlugin: Plugin<
 	app
 		.get('/hi', () => 'Hi')
 		.state('fromPlugin', 'From Logger')
-		.transform((request) => {
-			request.log = () => {
+		.transform(({ responseHeaders }, store) => {
+			store.log = () => {
 				console.log('From Logger')
 			}
 
-			request.responseHeaders.append('X-POWERED-BY', 'KINGWORLD')
+			responseHeaders.append('X-POWERED-BY', 'KINGWORLD')
 		})
 		.group(prefix, (app) => {
 			app.get('/plugin', () => 'From Plugin')
@@ -35,21 +33,27 @@ const app = new KingWorld<{
 		date: number
 	}
 }>()
-	.get('/', () => 'KINGWORLD')
 	.use(loggerPlugin)
-	.get('/tako', () => Bun.file('./example/takodachi.png'))
 	.state('build', Date.now())
 	.ref('date', () => Date.now())
+	.refFn('a', (a: string) => a)
+	.get('/', () => 'KINGWORLD')
+	.get('/tako', () => Bun.file('./example/takodachi.png'))
 	.get('/json', () => ({
 		hi: 'world'
 	}))
+	.get('/root/plugin/log', (_, { log, a }) => {
+		log()
+
+		return a('B')
+	})
 	.get('/wildcard/*', () => 'Hi Wildcard')
 	.get<{
 		query: {
 			name: string
 		}
 	}>('/kw', (ctx, store) => 'KINGWORLD', {
-		preHandler: ({ query, log }, { fromPlugin }) => {
+		preHandler: ({ query }, { fromPlugin, log }) => {
 			console.log('Name:', query?.name)
 
 			if (query?.name === 'aom') return 'Hi saltyaom'
@@ -79,8 +83,8 @@ const app = new KingWorld<{
 			id: number
 		}
 	}>('/id/:id', (request, store) => request.params.id, {
-		transform(request, store) {
-			request.params.id = +request.params.id
+		transform({ params }, store) {
+			params.id = +params.id
 		}
 	})
 	.post<{
@@ -90,7 +94,7 @@ const app = new KingWorld<{
 		params: {
 			id: number
 		}
-	}>('/new/:id', async ({ request }) => request.json())
+	}>('/new/:id', async ({ body }) => body)
 	.group('/group', (app) => {
 		app.preHandler<{
 			query: {
@@ -103,11 +107,15 @@ const app = new KingWorld<{
 			.get('/kingworld', () => 'Welcome to KINGWORLD')
 			.get('/fbk', () => 'FuBuKing')
 	})
-	.get('/response-header', (ctx) => {
-		ctx.responseHeaders.append("a", "b")
+	.get('/response-header', ({ status, responseHeaders }) => {
+		status(404)
+		responseHeaders.append('a', 'b')
 
-		return "A"
+		// console.log(r.status)
+
+		return 'A'
 	})
+	.get('/this/is/my/deep/nested/root', () => 'Hi')
 	.get('/build', (_, { build }) => build)
 	.get('/ref', (_, { date }) => date)
 	.get('/response', () => new Response('Hi'))
