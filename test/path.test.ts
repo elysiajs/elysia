@@ -249,4 +249,11 @@ describe('Path', () => {
 		const res = await app.handle(req('/async'))
 		expect(await res.text()).toBe('Hi')
 	})
+
+	it('Handle absolute path', async () => {
+		const app = new KingWorld().get('/', () => 'Hi')
+		const res = await app.handle(req('https://saltyaom.com/'))
+
+		expect(await res.text()).toBe('Hi')
+	})
 })
