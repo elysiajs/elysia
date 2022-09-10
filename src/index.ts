@@ -18,7 +18,8 @@ import type {
 	KWKey,
 	ExtractKWPath,
 	HTTPMethod,
-	ComposedHandler
+	ComposedHandler,
+	InternalRoute
 } from './types'
 import type { Serve } from 'bun'
 
@@ -37,12 +38,7 @@ export default class KingWorld<
 	}
 
 	private router = new MedleyRouter()
-	protected routes: [
-		HTTPMethod,
-		string,
-		Handler<any, Instance>,
-		RegisterHook<any, Instance>
-	][] = []
+	protected routes: InternalRoute<Instance>[] = []
 	private _ref: [keyof Instance['store'], any][] = []
 	private _default: Handler = () =>
 		new Response('Not Found', {
@@ -68,12 +64,12 @@ export default class KingWorld<
 		handler: Handler<Route, Instance>,
 		hook?: RegisterHook<Route, Instance>
 	) {
-		this.routes.push([
+		this.routes.push({
 			method,
 			path,
 			handler,
-			mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
-		])
+			hooks: mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
+		})
 
 		this.router.register(path)[method] = {
 			handle: handler,
@@ -133,8 +129,8 @@ export default class KingWorld<
 		this.store = { ...this.store, ...instance.store }
 
 		Object.values(instance.routes).forEach(
-			([method, path, handler, hook]) => {
-				this._addHandler(method, `${prefix}${path}`, handler, hook)
+			({ method, path, handler, hooks }) => {
+				this._addHandler(method, `${prefix}${path}`, handler, hooks)
 			}
 		)
 
@@ -148,11 +144,16 @@ export default class KingWorld<
 		const instance = new KingWorld<Instance>()
 		run(instance)
 
-		this.store = { ...this.store, ...instance.store }
-
-		Object.values(instance.routes).forEach(([method, path, handler]) => {
-			this._addHandler(method, path, handler)
-		})
+		Object.values(instance.routes).forEach(
+			({ method, path, handler, hooks: localHooks }) => {
+				this._addHandler(
+					method,
+					path,
+					handler,
+					mergeHook(localHooks, hook)
+				)
+			}
+		)
 
 		return this
 	}

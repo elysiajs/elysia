@@ -78,6 +78,13 @@ export type ExtractKWPath<Path> = Path extends `${infer A}/${infer B}`
 	? IsKWPathParameter<A> | ExtractKWPath<B>
 	: IsKWPathParameter<Path>
 
+export interface InternalRoute<Instance extends KingWorldInstance> {
+	method: HTTPMethod
+	path: string
+	handler: Handler<any, Instance>
+	hooks: RegisterHook<any, Instance>
+}
+
 export type HTTPMethod =
 	| 'ACL'
 	| 'BIND'

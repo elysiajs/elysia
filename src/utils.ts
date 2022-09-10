@@ -1,14 +1,17 @@
 import type { Hook, RegisterHook } from './types'
 
-export const concatArrayObject = <T>(a: T[], b: T | T[]): T[] => [
-	...a,
+export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
+	...(Array.isArray(a) ? a : [a]),
 	...(Array.isArray(b) ? b : [b])
 ]
 
-export const mergeHook = (a: Hook, b?: Hook | RegisterHook): Hook<any> => ({
-	onRequest: concatArrayObject(a.onRequest, b?.onRequest ?? []) ?? [],
-	transform: concatArrayObject(a.transform, b?.transform ?? []) ?? [],
-	preHandler: concatArrayObject(a.preHandler, b?.preHandler ?? []) ?? []
+export const mergeHook = (
+	a: Hook | RegisterHook<any, any>,
+	b: Hook | RegisterHook<any, any>
+): Hook<any> => ({
+	onRequest: mergeObjectArray(a?.onRequest ?? [], b?.onRequest ?? []) ?? [],
+	transform: mergeObjectArray(a?.transform ?? [], b?.transform ?? []) ?? [],
+	preHandler: mergeObjectArray(a?.preHandler ?? [], b?.preHandler ?? []) ?? []
 })
 
 export const isPromise = <T>(
@@ -33,7 +36,7 @@ export const getPath = (url: string): string => {
 	const queryIndex = url.indexOf('?')
 
 	return url.substring(
-		url.indexOf('/'),
+		url.charCodeAt(0) === 47 ? 0 : url.indexOf('/', 11),
 		queryIndex === -1 ? url.length : queryIndex
 	)
 }

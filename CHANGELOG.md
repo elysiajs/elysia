@@ -1,3 +1,12 @@
+# 0.0.0-experimental.26 - 10 Sep 2022
+Improvement:
+- Improve `clone` performance
+- Inline `ref` value
+- Using object to store internal route
+
+Bug fix:
+- 404 on absolute path
+
 # 0.0.0-experimental.25 - 9 Sep 2022
 New Feature:
 - Auto infer typed for `params`, `state`, `ref`
