@@ -9,22 +9,17 @@ export const mergeHook = (
 	a: Hook | RegisterHook<any, any>,
 	b: Hook | RegisterHook<any, any>
 ): Hook<any> => ({
-	onRequest: mergeObjectArray(a?.onRequest ?? [], b?.onRequest ?? []) ?? [],
-	transform: mergeObjectArray(a?.transform ?? [], b?.transform ?? []) ?? [],
-	preHandler: mergeObjectArray(a?.preHandler ?? [], b?.preHandler ?? []) ?? []
+	onRequest: mergeObjectArray(a?.onRequest ?? [], b?.onRequest ?? []),
+	transform: mergeObjectArray(a?.transform ?? [], b?.transform ?? []),
+	preHandler: mergeObjectArray(a?.preHandler ?? [], b?.preHandler ?? [])
 })
 
 export const isPromise = <T>(
 	response: T | Promise<T>
 ): response is Promise<T> => response instanceof Promise
 
-export const clone = <T extends Object | any[] = Object | any[]>(
-	value: T
-): T => {
-	const [cloned] = [value] as [T]
-
-	return cloned
-}
+export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
+	[value][0]
 
 // export const splitOnce = (char: string, s: string) => {
 // 	const i = s.indexOf(char)
@@ -32,19 +27,17 @@ export const clone = <T extends Object | any[] = Object | any[]>(
 // 	return i === -1 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)]
 // }
 
-export const getPath = (url: string): string => {
-	const queryIndex = url.indexOf('?')
-
-	return url.substring(
+export const getPath = (url: string, queryIndex: number): string =>
+	url.substring(
 		url.charCodeAt(0) === 47 ? 0 : url.indexOf('/', 11),
 		queryIndex === -1 ? url.length : queryIndex
 	)
-}
 
-export const mapQuery = (url: string): Record<string, string> => {
-	const queryIndex = url.indexOf('?') + 1
-
-	return queryIndex
+export const mapQuery = (
+	url: string,
+	queryIndex: number
+): Record<string, string> =>
+	queryIndex
 		? url
 				.substring(queryIndex)
 				.split('&')
@@ -55,4 +48,3 @@ export const mapQuery = (url: string): Record<string, string> => {
 					return result
 				}, {} as Record<string, string>)
 		: {}
-}

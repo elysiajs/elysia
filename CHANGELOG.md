@@ -1,3 +1,7 @@
+# 0.0.0-experimental.27 - 23 Sep 2022
+New Feature:
+- Add `config.strictPath` for handling strict path
+
 # 0.0.0-experimental.26 - 10 Sep 2022
 Improvement:
 - Improve `clone` performance

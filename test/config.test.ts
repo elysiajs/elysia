@@ -1,0 +1,41 @@
+import KingWorld from '../src'
+
+import { describe, expect, it } from 'bun:test'
+
+const req = (path: string) => new Request(path)
+
+describe('Config', () => {
+	it('handle non strict path by default', async () => {
+		const app = new KingWorld().get('/a', () => 'a')
+
+		const withTrailing = await app.handle(req('/a/'))
+		expect(await withTrailing.text()).toBe('a')
+
+		const noTrailing = await app.handle(req('/a'))
+		expect(await noTrailing.text()).toBe('a')
+	})
+
+	it('skip traling slash on strict path', async () => {
+		const app = new KingWorld({
+			strictPath: true
+		}).get('/a', () => 'a')
+
+		const withTrailing = await app.handle(req('/a/'))
+		expect(await withTrailing.text()).toBe('Not Found')
+
+		const noTrailing = await app.handle(req('/a'))
+		expect(await noTrailing.text()).toBe('a')
+	})
+
+	it('skip non trailing on strict path', async () => {
+		const app = new KingWorld({
+			strictPath: true
+		}).get('/a/', () => 'a')
+
+		const withTrailing = await app.handle(req('/a/'))
+		expect(await withTrailing.text()).toBe('a')
+
+		const noTrailing = await app.handle(req('/a'))
+		expect(await noTrailing.text()).toBe('Not Found')
+	})
+})

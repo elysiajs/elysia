@@ -1,7 +1,7 @@
 import Kingworld from 'kingworld'
 
 new Kingworld()
-    .get("/", () => ({
-        "王 僕らの": "KingWorld"
-    }))
-    .listen(8080)
+	.get('/', () => ({
+		hello: 'world'
+	}))
+	.listen(8080)

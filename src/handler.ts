@@ -20,9 +20,8 @@ export const mapEarlyResponse = (response: unknown, context: Context) => {
 				if (response instanceof Error)
 					return errorToResponse(response, context._headers)
 				if (response instanceof Response) {
-					for (const [key, value] of context._headers?.entries() ??
-						[])
-						response.headers.append(key, value)
+					for (const x of context._headers?.entries() ?? [])
+						response.headers.append(x[0], x[1])
 
 					return response
 				}
@@ -45,8 +44,8 @@ export const mapEarlyResponse = (response: unknown, context: Context) => {
 						headers: context._headers
 					})
 
-				for (const [key, value] of context._headers?.entries() ?? [])
-					(response as unknown as Response).headers.append(key, value)
+				for (const x of context._headers?.entries() ?? [])
+					(response as unknown as Response).headers.append(x[0], x[1])
 
 				return response as unknown as Response
 
@@ -100,9 +99,8 @@ export const mapResponse = (response: unknown, context: Context) => {
 				if (response instanceof Error)
 					return errorToResponse(response, context._headers)
 				if (response instanceof Response) {
-					for (const [key, value] of context._headers?.entries() ??
-						[])
-						response.headers.append(key, value)
+					for (const x of context._headers?.entries() ?? [])
+						response.headers.append(x[0], x[1])
 
 					return response
 				}

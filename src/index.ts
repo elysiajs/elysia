@@ -33,9 +33,7 @@ export default class KingWorld<
 		preHandler: []
 	}
 
-	config: KingWorldConfig = {
-		bodyLimit: 1048576
-	}
+	config: KingWorldConfig
 
 	private router = new MedleyRouter()
 	protected routes: InternalRoute<Instance>[] = []
@@ -45,17 +43,12 @@ export default class KingWorld<
 			status: 404
 		})
 
-	constructor(
-		config: KingWorldConfig = {
-			/**
-			 * Defines the maximum payload, in bytes, the server is allowed to accept.
-			 *
-			 * @default 1048576 (1MB)
-			 */
-			bodyLimit: 1048576
+	constructor(config: Partial<KingWorldConfig> = {}) {
+		this.config = {
+			bodyLimit: 1048576,
+			strictPath: false,
+			...config
 		}
-	) {
-		this.config = config
 	}
 
 	private _addHandler<Route extends TypedRoute = TypedRoute>(
@@ -75,6 +68,15 @@ export default class KingWorld<
 			handle: handler,
 			hooks: mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
 		}
+
+		if (!this.config.strictPath && path !== '/')
+			if (path.endsWith('/'))
+				this.router.register(path.substring(0, path.length - 1))[
+					method
+				] = this.router.register(path)[method]
+			else
+				this.router.register(`${path}/`)[method] =
+					this.router.register(path)[method]
 	}
 
 	onRequest(handler: PreRequestHandler<Instance['store']>) {
@@ -405,14 +407,15 @@ export default class KingWorld<
 
 	// ? Need to be arrow function otherwise `this` won't work for some reason
 	handle = async (request: Request): Promise<Response> => {
-		const [store] = [this.store]
+		const store = [this.store][0]
 
 		if (this._ref.length)
-			for (const ref of this._ref)
-				if (typeof ref[1] === 'function') {
-					const v = ref[1]()
-					store[ref[0]] = isPromise(v) ? await v : v
-				} else store[ref[0]] = ref[1]
+			for (const x of this._ref)
+				if (typeof x[1] === 'function') {
+					const v = x[1]()
+
+					store[x[0]] = isPromise(v) ? await v : v
+				} else store[x[0]] = x[1]
 
 		if (this.hook.onRequest.length)
 			for (const onRequest of this.hook.onRequest) {
@@ -425,11 +428,13 @@ export default class KingWorld<
 		if (bodySize && +bodySize > this.config.bodyLimit)
 			return new Response('Exceed body limit')
 
-		const route = this.router.find(getPath(request.url))
+		const queryIndex = request.url.indexOf('?')
+
+		const route = this.router.find(getPath(request.url, queryIndex))
 		const context: Context = new Context({
 			request,
 			params: route?.params ?? {},
-			query: mapQuery(request.url),
+			query: mapQuery(request.url, queryIndex + 1),
 			body: !bodySize
 				? undefined
 				: request.headers.get('content-type') === 'application/json'
@@ -473,7 +478,7 @@ export default class KingWorld<
 	listen(options: number | Omit<Serve, 'fetch'>) {
 		if (!Bun) throw new Error('Bun to run')
 
-		Bun.serve(
+		return Bun.serve(
 			typeof options === 'number'
 				? {
 						port: options,

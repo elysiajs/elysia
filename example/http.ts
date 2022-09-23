@@ -95,6 +95,7 @@ const app = new KingWorld<{
 			id: number
 		}
 	}>('/new/:id', async ({ body }) => body)
+	.get("/trailing-slash", () => "A")
 	.group('/group', (app) => {
 		app.preHandler<{
 			query: {
@@ -103,6 +104,7 @@ const app = new KingWorld<{
 		}>(({ query }) => {
 			if (query?.name === 'aom') return 'Hi saltyaom'
 		})
+			.get('/', () => 'From Group')
 			.get('/hi', () => 'HI GROUP')
 			.get('/kingworld', () => 'Welcome to KINGWORLD')
 			.get('/fbk', () => 'FuBuKing')
@@ -124,6 +126,11 @@ const app = new KingWorld<{
 		status(401)
 
 		return 'Status should be 401'
+	})
+	.use((app) => {
+		console.log('Store', app.store)
+
+		return app
 	})
 	.default(
 		() =>

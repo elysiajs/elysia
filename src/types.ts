@@ -68,7 +68,20 @@ export type Plugin<
 export type ComposedHandler = { handle: Handler<any, any>; hooks: Hook<any> }
 
 export interface KingWorldConfig {
+	/**
+	 * Defines the maximum payload, in bytes, the server is allowed to accept.
+	 *
+	 * @default 1048576 (1MB)
+	 */
 	bodyLimit: number
+	/**
+	 * If set to `true`, path will **NOT** try to map trailing slash with none.
+	 * 
+	 * For example: `/group/` will not be map to `/group` or vice versa.
+	 * 
+	 * @default false
+	 */
+	strictPath: boolean
 }
 
 export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}`
