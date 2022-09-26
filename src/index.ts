@@ -12,7 +12,6 @@ import type {
 	RegisterHook,
 	PreRequestHandler,
 	TypedRoute,
-	Plugin,
 	KingWorldInstance,
 	KingWorldConfig,
 	KWKey,
@@ -161,19 +160,12 @@ export default class KingWorld<
 	}
 
 	use<
-		CurrentInstance extends KingWorldInstance = Instance,
-		Config = Record<string, unknown>,
-		PluginInstance extends KingWorldInstance = KingWorldInstance
-	>(
-		plugin: Plugin<Config, PluginInstance, CurrentInstance>,
-		config?: Config
-	): KingWorld<Instance & PluginInstance> {
+		Config extends Record<string, unknown> = Record<string, unknown>,
+		T extends KingWorld<any> = KingWorld<any>
+	>(plugin: (app: KingWorld<Instance>, config?: Config) => T, config?: Config): T {
 		// ? Need hack, because instance need to have both type
 		// ? but before transform type won't we available
-		return plugin(
-			this as unknown as KingWorld<CurrentInstance & PluginInstance>,
-			config
-		) as unknown as KingWorld<Instance & PluginInstance>
+		return plugin(this as unknown as any, config) as unknown as any
 	}
 
 	get<Route extends TypedRoute = TypedRoute, Path extends string = string>(
@@ -347,14 +339,10 @@ export default class KingWorld<
 				? AsyncReturned
 				: Returned
 			: Value,
-		NewInstance extends KingWorldInstance = KingWorld<
-			KingWorldInstance<{
-				store: Instance['store'] & { [key in Key]: ReturnValue }
-				request: Instance['request'] extends Record<string, any>
-					? Instance['request']
-					: Record<string, any>
-			}>
-		>
+		NewInstance = KingWorld<{
+			store: Instance['store'] & { [key in Key]: ReturnValue }
+			request: Instance['request']
+		}>
 	>(name: Key, value: Value): NewInstance {
 		;(this.store as Record<Key, Value>)[name] = value
 
@@ -369,14 +357,10 @@ export default class KingWorld<
 				? AsyncReturned
 				: Returned
 			: Value,
-		NewInstance extends KingWorldInstance = KingWorld<
-			KingWorldInstance<{
-				store: Instance['store'] & { [key in Key]: ReturnValue }
-				request: Instance['request'] extends Record<string, any>
-					? Instance['request']
-					: Record<string, any>
-			}>
-		>
+		NewInstance = KingWorld<{
+			store: Instance['store'] & { [key in Key]: ReturnValue }
+			request: Instance['request']
+		}>
 	>(name: Key, value: Value): NewInstance {
 		this._ref.push([name, value])
 
@@ -391,38 +375,45 @@ export default class KingWorld<
 				? AsyncReturned
 				: Returned
 			: Value,
-		NewInstance extends KingWorldInstance = KingWorld<
-			KingWorldInstance<{
-				store: Instance['store'] & { [key in Key]: ReturnValue }
-				request: Instance['request'] extends Record<string, any>
-					? Instance['request']
-					: Record<string, any>
-			}>
-		>
+		NewInstance = KingWorld<{
+			store: Instance['store'] & { [key in Key]: ReturnValue }
+			request: Instance['request']
+		}>
 	>(name: Key, value: Value): NewInstance {
 		this._ref.push([name, () => value])
 
 		return this as unknown as NewInstance
 	}
 
+	decorate<
+		Name extends string,
+		Callback extends Function = () => unknown,
+		NewInstance = KingWorld<{
+			store: Instance['store']
+			request: Instance['request'] & { [key in Name]: Callback }
+		}>
+	>(name: Name, value: Callback): NewInstance {
+		return this.transform(
+			(app: any) => (app[name] = value)
+		) as unknown as NewInstance
+	}
+
 	// ? Need to be arrow function otherwise `this` won't work for some reason
 	handle = async (request: Request): Promise<Response> => {
 		const store = [this.store][0]
 
-		if (this._ref.length)
-			for (const x of this._ref)
-				if (typeof x[1] === 'function') {
-					const v = x[1]()
+		for (const x of this._ref)
+			if (typeof x[1] === 'function') {
+				const v = x[1]()
 
-					store[x[0]] = isPromise(v) ? await v : v
-				} else store[x[0]] = x[1]
+				store[x[0]] = isPromise(v) ? await v : v
+			} else store[x[0]] = x[1]
 
-		if (this.hook.onRequest.length)
-			for (const onRequest of this.hook.onRequest) {
-				const response = onRequest(request, store)
+		for (const onRequest of this.hook.onRequest) {
+			const response = onRequest(request, store)
 
-				if (isPromise(response)) await response
-			}
+			if (isPromise(response)) await response
+		}
 
 		const bodySize = request.headers.get('content-length')
 		if (bodySize && +bodySize > this.config.bodyLimit)
@@ -451,23 +442,21 @@ export default class KingWorld<
 
 		const { handle, hooks } = route.store[request.method] as ComposedHandler
 
-		if (hooks.transform.length)
-			for (const transform of hooks.transform) {
-				let response = transform(context, store)
-				if (isPromise(response)) response = await response
+		for (const transform of hooks.transform) {
+			let response = transform(context, store)
+			if (isPromise(response)) response = await response
 
-				const result = mapEarlyResponse(response, context)
-				if (result) return result
-			}
+			const result = mapEarlyResponse(response, context)
+			if (result) return result
+		}
 
-		if (hooks.preHandler.length)
-			for (const preHandler of hooks.preHandler) {
-				let response = preHandler(context, store)
-				if (isPromise(response)) response = await response
+		for (const preHandler of hooks.preHandler) {
+			let response = preHandler(context, store)
+			if (isPromise(response)) response = await response
 
-				const result = mapEarlyResponse(response, context)
-				if (result) return result
-			}
+			const result = mapEarlyResponse(response, context)
+			if (result) return result
+		}
 
 		let response = handle(context, store)
 		if (isPromise(response)) response = await response
@@ -498,6 +487,5 @@ export type {
 	HookEvent,
 	RegisterHook,
 	PreRequestHandler,
-	TypedRoute,
-	Plugin
+	TypedRoute
 } from './types'

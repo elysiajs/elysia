@@ -7,7 +7,7 @@ const req = (path: string) => new Request(path)
 describe('Resposne Headers', () => {
 	it('add response headers', async () => {
 		const app = new KingWorld().get('/', ({ responseHeaders }) => {
-			responseHeaders.append('x-powered-by', 'KingWorld')
+			responseHeaders['x-powered-by'] = 'KingWorld'
 
 			return 'Hi'
 		})
@@ -19,7 +19,7 @@ describe('Resposne Headers', () => {
 	it('add headers from hook', async () => {
 		const app = new KingWorld()
 			.transform((request) => {
-				request.responseHeaders.append('x-powered-by', 'KingWorld')
+				request.responseHeaders['x-powered-by'] = 'KingWorld'
 			})
 			.get('/', () => 'Hi')
 		const res = await app.handle(req('/'))
@@ -30,7 +30,7 @@ describe('Resposne Headers', () => {
 	it('add headers from plugin', async () => {
 		const plugin: Plugin = (app) =>
 			app.transform((request) => {
-				request.responseHeaders.append('x-powered-by', 'KingWorld')
+				request.responseHeaders['x-powered-by'] = 'KingWorld'
 			})
 
 		const app = new KingWorld().use(plugin).get('/', () => 'Hi')
@@ -42,7 +42,7 @@ describe('Resposne Headers', () => {
 	it('add responseHeaders to Response', async () => {
 		const app = new KingWorld()
 			.transform((request) => {
-				request.responseHeaders.append('x-powered-by', 'KingWorld')
+				request.responseHeaders['x-powered-by'] = 'KingWorld'
 			})
 			.get('/', () => new Response('Hi'))
 		const res = await app.handle(req('/'))

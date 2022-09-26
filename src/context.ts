@@ -1,8 +1,8 @@
 import { TypedRoute } from './types'
 
 export default class Context<Route extends TypedRoute = TypedRoute> {
-    _status = 200
-	_headers: Headers | undefined
+	_status = 200
+	responseHeaders: Record<string, string> = {}
 
 	request: Request
 	query: Route['query'] extends Record<string, any>
@@ -11,7 +11,9 @@ export default class Context<Route extends TypedRoute = TypedRoute> {
 	params: Route['params']
 	body: Route['body']
 
-	constructor(a: {
+	_redirect?: string
+
+	constructor(x: {
 		request: Request
 		query: Route['query'] extends Record<string, any>
 			? Route['query']
@@ -19,19 +21,18 @@ export default class Context<Route extends TypedRoute = TypedRoute> {
 		params: Route['params']
 		body: Route['body']
 	}) {
-		this.request = a.request
-		this.params = a.params
-		this.query = a.query
-		this.body = a.body
+		this.request = x.request
+		this.params = x.params
+		this.query = x.query
+		this.body = x.body
 	}
 
 	status = (code: number) => {
 		this._status = code
 	}
 
-	get responseHeaders(): Headers {
-		if (!this._headers) this._headers = new Headers()
-
-		return this._headers
+	redirect = (path: string, status = 301) => {
+		this._redirect = path
+		this._status = status
 	}
 }

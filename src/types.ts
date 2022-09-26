@@ -1,4 +1,3 @@
-import type KingWorld from './index'
 import type Context from './context'
 
 export type KWKey = string | number | symbol
@@ -12,7 +11,7 @@ export interface KingWorldInstance<
 		request: Record<KWKey, any>
 	}
 > {
-	request?: Instance['request']
+	request: Instance['request']
 	store: Instance['store']
 }
 
@@ -20,7 +19,7 @@ export type Handler<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > = (
-	context: Context<Route & Instance['request']>,
+	context: Context<Route> & Instance['request'],
 	store: Instance['store']
 ) => any | Promise<any>
 
@@ -53,18 +52,6 @@ export interface TypedRoute {
 	params?: {}
 }
 
-export type Plugin<
-	T = Record<string, unknown>,
-	PluginInstance extends KingWorldInstance = KingWorldInstance,
-	BaseInstance extends KingWorldInstance = KingWorldInstance,
-	ReturnedInstance extends KingWorld<
-		BaseInstance & PluginInstance
-	> = KingWorld<BaseInstance & PluginInstance>
-> = (
-	app: KingWorld<BaseInstance & PluginInstance>,
-	config?: T
-) => ReturnedInstance
-
 export type ComposedHandler = { handle: Handler<any, any>; hooks: Hook<any> }
 
 export interface KingWorldConfig {
@@ -76,9 +63,9 @@ export interface KingWorldConfig {
 	bodyLimit: number
 	/**
 	 * If set to `true`, path will **NOT** try to map trailing slash with none.
-	 * 
+	 *
 	 * For example: `/group/` will not be map to `/group` or vice versa.
-	 * 
+	 *
 	 * @default false
 	 */
 	strictPath: boolean

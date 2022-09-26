@@ -8,170 +8,112 @@ export const jsonHeader = {
 
 // We don't want to assign new variable to be used only once here
 export const mapEarlyResponse = (response: unknown, context: Context) => {
-	if (context._headers || context._status !== 200)
-		switch (typeof response) {
-			case 'string':
+	if (context._redirect)
+		return Response.redirect(context._redirect, context._status)
+
+	switch (typeof response) {
+		case 'string':
+			return new Response(response, {
+				status: context._status,
+				headers: context.responseHeaders
+			})
+
+		case 'object':
+			if (response instanceof Error)
+				return errorToResponse(response, context.responseHeaders)
+			if (response instanceof Response) {
+				for (const x of Object.entries(context.responseHeaders))
+					response.headers.append(x[0], x[1])
+
+				return response
+			}
+
+			context.responseHeaders['Content-Type'] = 'application/json'
+
+			return new Response(JSON.stringify(response), {
+				status: context._status,
+				headers: context.responseHeaders
+			})
+
+		// ? Maybe response or Blob
+		case 'function':
+			if (response instanceof Blob)
 				return new Response(response, {
 					status: context._status,
-					headers: context._headers
+					headers: context.responseHeaders
 				})
 
-			case 'object':
-				if (response instanceof Error)
-					return errorToResponse(response, context._headers)
-				if (response instanceof Response) {
-					for (const x of context._headers?.entries() ?? [])
-						response.headers.append(x[0], x[1])
+			for (const x of Object.entries(context.responseHeaders))
+				(response as unknown as Response).headers.append(x[0], x[1])
 
-					return response
-				}
+			return response as unknown as Response
 
-				context.responseHeaders.append(
-					'Content-Type',
-					'application/json'
-				)
+		case 'number':
+		case 'boolean':
+			return new Response(response.toString(), {
+				status: context._status,
+				headers: context.responseHeaders
+			})
 
-				return new Response(JSON.stringify(response), {
-					status: context._status,
-					headers: context._headers
-				})
-
-			// ? Maybe response or Blob
-			case 'function':
-				if (response instanceof Blob)
-					return new Response(response, {
-						status: context._status,
-						headers: context._headers
-					})
-
-				for (const x of context._headers?.entries() ?? [])
-					(response as unknown as Response).headers.append(x[0], x[1])
-
-				return response as unknown as Response
-
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString(), {
-					status: context._status,
-					headers: context._headers
-				})
-
-			default:
-				break
-		}
-	else
-		switch (typeof response) {
-			case 'string':
-				return new Response(response)
-
-			case 'object':
-				if (response instanceof Response) return response
-				if (response instanceof Error)
-					return errorToResponse(response, context._headers)
-
-				return new Response(JSON.stringify(response), jsonHeader)
-
-			// ? Maybe response or Blob
-			case 'function':
-				if (response instanceof Blob) return new Response(response)
-
-				return response as unknown as Response
-
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString())
-
-			default:
-				break
-		}
+		default:
+			break
+	}
 }
 
 export const mapResponse = (response: unknown, context: Context) => {
-	if (context._headers || context._status !== 200)
-		switch (typeof response) {
-			case 'string':
+	switch (typeof response) {
+		case 'string':
+			return new Response(response, {
+				status: context._status,
+				headers: context.responseHeaders
+			})
+
+		case 'object':
+			if (response instanceof Error)
+				return errorToResponse(response, context.responseHeaders)
+			if (response instanceof Response) {
+				for (const x of Object.entries(context.responseHeaders))
+					response.headers.append(x[0], x[1])
+
+				return response
+			}
+
+			context.responseHeaders['Content-Type'] = 'application/json'
+
+			return new Response(JSON.stringify(response), {
+				status: context._status,
+				headers: context.responseHeaders
+			})
+
+		// ? Maybe response function or Blob
+		case 'function':
+			if (response instanceof Blob)
 				return new Response(response, {
 					status: context._status,
-					headers: context._headers
+					headers: context.responseHeaders
 				})
 
-			case 'object':
-				if (response instanceof Error)
-					return errorToResponse(response, context._headers)
-				if (response instanceof Response) {
-					for (const x of context._headers?.entries() ?? [])
-						response.headers.append(x[0], x[1])
+			return response()
 
-					return response
-				}
+		case 'number':
+		case 'boolean':
+			return new Response(response.toString(), {
+				status: context._status,
+				headers: context.responseHeaders
+			})
 
-				context.responseHeaders.append(
-					'Content-Type',
-					'application/json'
-				)
+		case 'undefined':
+			return new Response('', {
+				status: context._status,
+				headers: context.responseHeaders
+			})
 
-				return new Response(JSON.stringify(response), {
-					status: context._status,
-					headers: context._headers
-				})
-
-			// ? Maybe response function or Blob
-			case 'function':
-				if (response instanceof Blob)
-					return new Response(response, {
-						status: context._status,
-						headers: context._headers
-					})
-
-				return response()
-
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString(), {
-					status: context._status,
-					headers: context._headers
-				})
-
-			case 'undefined':
-				return new Response('', {
-					status: context._status,
-					headers: context._headers
-				})
-
-			default:
-				return new Response(response as any, {
-					status: context._status,
-					headers: context._headers
-				})
-		}
-	else
-		switch (typeof response) {
-			case 'string':
-				return new Response(response)
-
-			case 'object':
-				if (response instanceof Response) return response
-				if (response instanceof Error)
-					return errorToResponse(response, context._headers)
-
-				return new Response(JSON.stringify(response), jsonHeader)
-
-			// ? Maybe response or Blob
-			case 'function':
-				if (response instanceof Blob) return new Response(response)
-
-				return response()
-
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString())
-
-			case 'undefined':
-				return new Response('')
-
-			default:
-				return new Response(response as any)
-		}
+		default:
+			return new Response(response as any, {
+				status: context._status,
+				headers: context.responseHeaders
+			})
+	}
 }
 
 export const errorToResponse = (error: Error, headers?: HeadersInit) =>

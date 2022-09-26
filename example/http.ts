@@ -1,59 +1,35 @@
-import KingWorld, { type TypedRoute, type Plugin } from '../src'
+import KingWorld from '../src'
+import { KingWorldInstance } from '../src/types'
 
-import S from 'fluent-json-schema'
-
-const loggerPlugin: Plugin<
-	{
-		prefix?: string
-	},
-	{
-		store: {
-			fromPlugin: 'From Logger'
-			log: () => void
-		}
-	}
-> = (app, { prefix = '/fbk' } = {}) =>
+const loggerPlugin = (app: KingWorld, { prefix = '/fbk' } = {}) =>
 	app
 		.get('/hi', () => 'Hi')
+		.decorate('ab', () => 'A')
 		.state('fromPlugin', 'From Logger')
-		.transform(({ responseHeaders }, store) => {
-			store.log = () => {
-				console.log('From Logger')
-			}
+		.use((app) => app.state('abc', 'abc'))
 
-			responseHeaders.append('X-POWERED-BY', 'KINGWORLD')
-		})
-		.group(prefix, (app) => {
-			app.get('/plugin', () => 'From Plugin')
-		})
-
-const app = new KingWorld<{
-	store: {
-		build: number
-		date: number
-	}
-}>()
+new KingWorld()
 	.use(loggerPlugin)
 	.state('build', Date.now())
 	.ref('date', () => Date.now())
 	.refFn('a', (a: string) => a)
-	.get('/', () => 'KINGWORLD')
+	.get('/', (req, store) => 'KINGWORLD')
 	.get('/tako', () => Bun.file('./example/takodachi.png'))
 	.get('/json', () => ({
 		hi: 'world'
 	}))
-	.get('/root/plugin/log', (_, { log, a }) => {
+	.get('/root/plugin/log', ({ log }, { a }) => {
 		log()
 
 		return a('B')
 	})
-	.get('/wildcard/*', () => 'Hi Wildcard')
+	.get('/wildcard/*', (req, store) => 'Hi Wildcard')
 	.get<{
 		query: {
 			name: string
 		}
 	}>('/kw', (ctx, store) => 'KINGWORLD', {
-		preHandler: ({ query }, { fromPlugin, log }) => {
+		preHandler: ({ query, log }) => {
 			console.log('Name:', query?.name)
 
 			if (query?.name === 'aom') return 'Hi saltyaom'
@@ -95,7 +71,7 @@ const app = new KingWorld<{
 			id: number
 		}
 	}>('/new/:id', async ({ body }) => body)
-	.get("/trailing-slash", () => "A")
+	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) => {
 		app.preHandler<{
 			query: {
@@ -111,9 +87,7 @@ const app = new KingWorld<{
 	})
 	.get('/response-header', ({ status, responseHeaders }) => {
 		status(404)
-		responseHeaders.append('a', 'b')
-
-		// console.log(r.status)
+		responseHeaders['a'] = 'b'
 
 		return 'A'
 	})
@@ -132,6 +106,7 @@ const app = new KingWorld<{
 
 		return app
 	})
+	.get('/before-end', (req, store) => 'A')
 	.default(
 		() =>
 			new Response('Not Found :(', {
