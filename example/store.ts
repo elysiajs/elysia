@@ -6,15 +6,12 @@ new KingWorld<{
 	}
 	request: {}
 }>()
-	.get('/', (a, store) => {})
+	.get('/', () => {})
 	.state('a', 'a')
 	.state('b', 'b')
-	.ref('c', async () => 'c')
 	.get<{
-        params: {
-            a: number
-            c: number
-        }
-    }>('/awd/:c/:a', ({ params }, store) => {
-		store.c
-	})
+		params: {
+			a: number
+			c: number
+		}
+	}>('/awd/:c/:a', ({ params, store: { b } }) => b)

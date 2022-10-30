@@ -11,24 +11,22 @@ const loggerPlugin = (app: KingWorld, { prefix = '/fbk' } = {}) =>
 new KingWorld()
 	.use(loggerPlugin)
 	.state('build', Date.now())
-	.ref('date', () => Date.now())
-	.refFn('a', (a: string) => a)
-	.get('/', (req, store) => 'KINGWORLD')
+	.get('/', () => 'KINGWORLD')
 	.get('/tako', () => Bun.file('./example/takodachi.png'))
 	.get('/json', () => ({
 		hi: 'world'
 	}))
-	.get('/root/plugin/log', ({ log }, { a }) => {
+	.get('/root/plugin/log', ({ log, store: { a } }) => {
 		log()
 
 		return a('B')
 	})
-	.get('/wildcard/*', (req, store) => 'Hi Wildcard')
+	.get('/wildcard/*', () => 'Hi Wildcard')
 	.get<{
 		query: {
 			name: string
 		}
-	}>('/kw', (ctx, store) => 'KINGWORLD', {
+	}>('/kw', () => 'KINGWORLD', {
 		preHandler: ({ query, log }) => {
 			console.log('Name:', query?.name)
 
@@ -58,8 +56,8 @@ new KingWorld()
 		params: {
 			id: number
 		}
-	}>('/id/:id', (request, store) => request.params.id, {
-		transform({ params }, store) {
+	}>('/id/:id', ({ params: { id } }) => id, {
+		transform({ params }) {
 			params.id = +params.id
 		}
 	})
@@ -70,7 +68,7 @@ new KingWorld()
 		params: {
 			id: number
 		}
-	}>('/new/:id', async ({ body }) => body)
+	}>('/new/:id', async ({ body, params }) => body)
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) => {
 		app.preHandler<{
@@ -92,8 +90,8 @@ new KingWorld()
 		return 'A'
 	})
 	.get('/this/is/my/deep/nested/root', () => 'Hi')
-	.get('/build', (_, { build }) => build)
-	.get('/ref', (_, { date }) => date)
+	.get('/build', ({ store: { build } }) => build)
+	.get('/ref', ({ store: { date } }) => date)
 	.get('/response', () => new Response('Hi'))
 	.get('/error', () => new Error('Something went wrong'))
 	.get('/401', ({ status }) => {
@@ -106,7 +104,6 @@ new KingWorld()
 
 		return app
 	})
-	.get('/before-end', (req, store) => 'A')
 	.default(
 		() =>
 			new Response('Not Found :(', {

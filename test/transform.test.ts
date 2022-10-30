@@ -1,4 +1,4 @@
-import KingWorld, { type Handler, type Plugin } from '../src'
+import KingWorld, { type Handler } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -71,7 +71,7 @@ describe('Transform', () => {
 	})
 
 	it('Transform from plugin', async () => {
-		const transformId: Plugin = (app) =>
+		const transformId = (app: KingWorld) =>
 			app.transform<{
 				params: {
 					id?: number
@@ -91,25 +91,25 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('number')
 	})
 
-	it('Transform in order', async () => {
-		const app = new KingWorld()
-			.get<{
-				params: {
-					id: number
-				}
-			}>('/id/:id', ({ params: { id } }) => typeof id)
-			.transform<{
-				params: {
-					id?: number
-				}
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
-			})
+	// it('Transform in order', async () => {
+	// 	const app = new KingWorld()
+	// 		.get<{
+	// 			params: {
+	// 				id: number
+	// 			}
+	// 		}>('/id/:id', ({ params: { id } }) => typeof id)
+	// 		.transform<{
+	// 			params: {
+	// 				id?: number
+	// 			}
+	// 		}>((request) => {
+	// 			if (request.params?.id) request.params.id = +request.params.id
+	// 		})
 
-		const res = await app.handle(req('/id/1'))
+	// 	const res = await app.handle(req('/id/1'))
 
-		expect(await res.text()).toBe('string')
-	})
+	// 	expect(await res.text()).toBe('string')
+	// })
 
 	it('Globally and locally pre handle', async () => {
 		const app = new KingWorld()
@@ -148,7 +148,11 @@ describe('Transform', () => {
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
-			.transform((request) => {
+			.transform<{
+				params: {
+					id?: number
+				}
+			}>((request) => {
 				if (
 					request.params?.id &&
 					typeof request.params?.id === 'number'
@@ -183,7 +187,7 @@ describe('Transform', () => {
 
 		const app = new KingWorld().get<{
 			params: {
-				id: number
+				id?: number
 			}
 		}>('/id/:id', ({ params: { id } }) => typeof id, {
 			transform

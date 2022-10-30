@@ -9,8 +9,8 @@
             "syntax": "typescript"
         },
         "minify": {
-            "mangle": true,
-            "compress": true
+            "mangle": false,
+            "compress": false
         }
     },
     "minify": false,
