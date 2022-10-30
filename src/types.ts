@@ -120,3 +120,29 @@ export type HTTPMethod =
 	| 'UNLINK'
 	| 'UNLOCK'
 	| 'UNSUBSCRIBE'
+
+export interface RouterOptions {
+	storeFactory?: () => any;
+}
+
+export interface FindResult {
+	store: any;
+	params: Record<string, any>;
+}
+
+export interface ParametricNode {
+	paramName: string;
+	store: any;
+	staticChild: any;
+}
+
+export interface Node {
+	pathPart: string;
+	store: any;
+	staticChildren: Map<any, any> | null;
+	parametricChild: ParametricNode | null;
+	wildcardStore: any;
+}
+
+
+export type Params = Record<string, any>

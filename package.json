@@ -35,7 +35,8 @@
   },
   "dependencies": {
     "@medley/router": "^0.2.1",
-    "@saltyaom/trek-router": "0.0.7"
+    "@saltyaom/trek-router": "0.0.7",
+    "object-treeify": "^3.3.1"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.57",
