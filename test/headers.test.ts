@@ -1,4 +1,4 @@
-import KingWorld, { Plugin } from '../src'
+import KingWorld from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -28,7 +28,7 @@ describe('Resposne Headers', () => {
 	})
 
 	it('add headers from plugin', async () => {
-		const plugin: Plugin = (app) =>
+		const plugin = (app: KingWorld) =>
 			app.transform((request) => {
 				request.responseHeaders['x-powered-by'] = 'KingWorld'
 			})

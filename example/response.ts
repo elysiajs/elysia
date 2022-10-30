@@ -2,7 +2,7 @@ import KingWorld from '../src'
 
 const app = new KingWorld()
 	.get('/', ({ responseHeaders }) => {
-		responseHeaders.append('X-POWERED-BY', 'KingWorld')
+		responseHeaders['X-POWERED-BY'] = 'KingWorld'
 
 		return new Response('Shuba Shuba', {
 			headers: {

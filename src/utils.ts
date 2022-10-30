@@ -14,9 +14,9 @@ export const mergeHook = (
 	preHandler: mergeObjectArray(a?.preHandler ?? [], b?.preHandler ?? [])
 })
 
-export const isPromise = <T>(
-	response: T | Promise<T>
-): response is Promise<T> => response instanceof Promise
+// export const isPromise = <T>(
+// 	response: T | Promise<T>
+// ): response is Promise<T> => response instanceof Promise
 
 export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 	[value][0]
@@ -27,24 +27,27 @@ export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 // 	return i === -1 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)]
 // }
 
-export const getPath = (url: string, queryIndex: number): string =>
-	url.substring(
+export const getPath = (url: string): string => {
+	const queryIndex = url.indexOf('?')
+	const result = url.substring(
 		url.charCodeAt(0) === 47 ? 0 : url.indexOf('/', 11),
 		queryIndex === -1 ? url.length : queryIndex
 	)
 
-export const mapQuery = (
-	url: string,
-	queryIndex: number
-): Record<string, string> =>
-	queryIndex
-		? url
-				.substring(queryIndex)
-				.split('&')
-				.reduce((result, each) => {
-					const i = each.indexOf('=')
-					result[each.slice(0, i)] = each.slice(i + 1)
+	return result
+}
 
-					return result
-				}, {} as Record<string, string>)
-		: {}
+export const mapQuery = (url: string): Record<string, string> => {
+	const queryIndex = url.indexOf('?')
+	if (queryIndex === -1) return {}
+
+	return url
+		.substring(queryIndex + 1)
+		.split('&')
+		.reduce((result, each) => {
+			const i = each.indexOf('=')
+			result[each.slice(0, i)] = each.slice(i + 1)
+
+			return result
+		}, {} as Record<string, string>)
+}

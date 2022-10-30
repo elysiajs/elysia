@@ -1,4 +1,4 @@
-import KingWorld, { Plugin } from '../src'
+import KingWorld from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -17,7 +17,9 @@ describe('Path', () => {
 			'/this/is/my/deep/nested/root',
 			() => 'Ok'
 		)
-		const res = await app.handle(req('/this/is/my/deep/nested/root'))
+		const res = await app.handle(
+			req('http://localhost:8080/this/is/my/deep/nested/root')
+		)
 
 		expect(await res.text()).toBe('Ok')
 	})
@@ -212,7 +214,8 @@ describe('Path', () => {
 	})
 
 	it('Handle plugin', async () => {
-		const plugin: Plugin = (app) => app.get('/korone', () => 'Yubi Yubi!')
+		const plugin = (app: KingWorld) =>
+			app.get('/korone', () => 'Yubi Yubi!')
 		const app = new KingWorld().use(plugin)
 
 		const res = await app.handle(req('/korone'))
@@ -223,14 +226,14 @@ describe('Path', () => {
 	it('Handle error', async () => {
 		const error = 'Pardun?'
 
-		const plugin: Plugin = (app) =>
+		const plugin = (app: KingWorld) =>
 			app.get('/error', () => new Error(error))
 		const app = new KingWorld().use(plugin)
 
 		const res = await app.handle(req('/error'))
-		const { message } = await res.json<{
+		const { message } = (await res.json()) as unknown as {
 			message: string
-		}>()
+		}
 
 		expect(message).toBe(error)
 	})

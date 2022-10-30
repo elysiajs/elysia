@@ -19,16 +19,15 @@ export type Handler<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > = (
-	context: Context<Route> & Instance['request'],
-	store: Instance['store']
-) => any | Promise<any>
+	context: Context<Route, Instance['store']> & Instance['request']
+) => Route['response'] | Promise<Route['response']> | Response
 
 export type HookEvent = 'onRequest' | 'transform' | 'preHandler'
 
 export type PreRequestHandler<Store extends Record<string, any> = {}> = (
 	request: Request,
 	store: Store
-) => void | Promise<void>
+) => Response | Promise<Response>
 
 export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
 	onRequest: PreRequestHandler<Instance['store']>[]
@@ -40,19 +39,23 @@ export interface RegisterHook<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
-	transform?: Handler<Route, Instance> | Handler<Route, Instance>[]
 	onRequest?: PreRequestHandler<Instance> | PreRequestHandler<Instance>[]
+	transform?: Handler<Route, Instance> | Handler<Route, Instance>[]
 	preHandler?: Handler<Route, Instance> | Handler<Route, Instance>[]
 }
 
 export interface TypedRoute {
-	body?: string | Record<string, any>
-	header?: Map<string, unknown>
+	body?: string | Record<string, any> | undefined
+	header?: Record<string, unknown>
 	query?: Record<string, string>
 	params?: {}
+	response?: unknown
 }
 
-export type ComposedHandler = { handle: Handler<any, any>; hooks: Hook<any> }
+export type ComposedHandler = {
+	handle: Handler<any, any>
+	hooks: Hook<any>
+}
 
 export interface KingWorldConfig {
 	/**
@@ -82,7 +85,7 @@ export interface InternalRoute<Instance extends KingWorldInstance> {
 	method: HTTPMethod
 	path: string
 	handler: Handler<any, Instance>
-	hooks: RegisterHook<any, Instance>
+	hooks: Hook<Instance>
 }
 
 export type HTTPMethod =
@@ -120,3 +123,5 @@ export type HTTPMethod =
 	| 'UNLINK'
 	| 'UNLOCK'
 	| 'UNSUBSCRIBE'
+
+export type BodyParser = (request: Request) => any | Promise<any>

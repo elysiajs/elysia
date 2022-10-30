@@ -1,3 +1,61 @@
+# 0.0.0-experimental.28 - 30 Oct 2022
+Happy halloween.
+
+This version named [GHOST FOOD] is one of the big improvement for KingWorld, I have been working on lately.
+It has a lot of feature change for better performance, and introduce lots of deprecation.
+
+Be sure to follow the migration section in `Breaking Change`.
+
+New Feature:
+- Auto infer type from `plugin` after merging with `use`
+- `decorate` to extends `Context` method
+- add `addParser`, for custom handler for parsing body
+
+Breaking Change:
+- Moved `store` into `context.store`
+    - To migrate:
+    ```typescript
+    // From
+    app.get(({}, store) => store.a)
+
+    // To
+    app.get(({ store }) => store.a)
+    ```
+
+- `ref`, and `refFn` is now removed
+- Remove `Plugin` type, simplified Plugin type declaration
+    - To migrate:
+    ```typescript
+    // From
+    import type { Plugin } from 'kingworld'
+    const a: Plugin = (app) => app
+
+    // To
+    import type { KingWorld } from 'kingworld'
+    const a = (app: KingWorld) => app
+    ```
+
+- Migrate `Header` to `Record<string, unknown>`
+    - To migrate:
+    ```typescript
+    app.get("/", ({ responseHeader }) => {
+        // From
+        responseHeader.append('X-Powered-By', 'KingWorld')
+
+        // To
+        responseHeader['X-Powered-By', 'KingWorld']
+
+        return "KingWorld"
+    })
+    ```
+
+Change:
+- Store is now globally mutable
+
+Improvement:
+- Faster header initialization
+- Faster hook initialization
+
 # 0.0.0-experimental.27 - 23 Sep 2022
 New Feature:
 - Add `config.strictPath` for handling strict path
