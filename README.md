@@ -214,7 +214,7 @@ const handler: Handler = (request: {
     params: Record<string, string>
     headers: Record<string, string>
     body: Promise<string | Object>
-    responseHeaders: Headers
+    responseHeaders: Record<string, unknown>
 }, store: Record<any, unknown>)
 ```
 
@@ -242,7 +242,7 @@ Handler's request consists of
     - By default will return either `string` or `Object`
         - Will return Object if request's header contains `Content-Type: application/json`, and is deserializable
         - Otherwise, will return string
-- responseHeaders [`Header`]
+- responseHeaders [`Record<string, unknown>`]
     - Mutable object reference, will attached to response's header
     - For example, adding `CORS` to response as a plugin
 - status [`(statusCode: number) => void`]
@@ -253,60 +253,17 @@ Store is a singleton store of the application.
 
 Is recommended for local state, reference of database connection, and other things that need to be available to be used with handler.
 
-Store value if of 2 types:
-- State: Assigned once at creation
-- Ref: Assign at every request
-
 ```typescript
 new KingWorld()
-    .state('build', Math.random())
-    .ref('random', () => Math.random())
+    .state('build', 0.5)
     .get("/build", ({}, { build }) => build)
     .get("/random", ({}, { random }) => random)
     .listen(3000)
 
 // [GET] /build => 0.5
-// [GET] /build => 0.5 // Will have the same value as first request
-// [GET] /date => 0.374
-// [GET] /date => 0.785
-// [GET] /date => 0.651
 ```
 
-State will have any value assigned, eg. Function will be a function reference.
-However for ref, if a value is a function, it will be called once.
-
-This is for convenient usage of complex logic assigning at the beginning of every request.
-
-You can assign a function to ref by assigning another callback, however if you want to assign function, please use `state` instead because function should be static.
-
-```typescript
-// ❌ Function is assigned on every request
-new KingWorld()
-    .ref('getRandom', () => () => Math.random())
-    .get("/random", ({}, { getRandom }) => getRandom())
-
-// ✅ Function is assigned once
-new KingWorld()
-    .state('getRandom', () => Math.random())
-    .get("/random", ({}, { getRandom }) => getRandom())
-```
-
-### Typed Store
-KingWorld accepts generic to type a store globally.
-
-```typescript
-new KingWorld<{
-    store: {
-        build: number
-        random: number
-    }
-}>()
-    .state('build', Math.random())
-    .ref('random', () => Math.random())
-    .get("/build", ({}, { build }) => build)
-    .get("/random", ({}, { random }) => random)
-    .listen(3000)
-```
+State will be assigned once start, and it's a mutable global store for server.
 
 ## Lifecycle
 KingWorld request's lifecycle can be illustrate as the following:
@@ -581,21 +538,7 @@ new KingWorld()
 To develop plugin with type support, `Plugin` can accepts generic.
 
 ```typescript
-const plugin: Plugin<
-    // ? Typed Config
-    {
-        prefix?: string
-    },
-    // ? Same as KingWorld<{}>(), will extends current instance
-    {
-        store: {
-            fromPlugin: 'From Logger'
-        }
-        request: {
-            log: () => void
-        }
-    }
-> = (app, { prefix = '/fbk' } = {})  => 
+const plugin = (app, { prefix = '/fbk' } = {})  => 
     app
         .state('fromPlugin', 'From Logger')
         .transform(({ responseHeaders }) => {
@@ -603,7 +546,7 @@ const plugin: Plugin<
                 console.log('From Logger')
             }
 
-            responseHeaders.append('X-POWERED-BY', 'KINGWORLD')
+            responseHeaders['X-POWERED-BY'] = 'KINGWORLD'
         })
         .group(prefix, (app) => {
             app.get('/plugin', () => 'From Plugin')
@@ -691,16 +634,9 @@ const app = new KingWorld<{
 
 That's why plugin can accept the third generic for adding temporary local type but do not extend the main instance.
 ```typescript
-const plugin: Plugin<
-    {},
-    {},
-    // Same as KingWorld<Instance>
-    {
-        store: {
-            db: Database
-        }
-    }
-> = (app)  => 
+import type KingWorld from 'kingworld'
+
+const plugin = (app: KingWorld)  => 
     app
         .get("/user/:id", ({ db, params: { id } }) => 
             // ✅ db is now typed
@@ -716,7 +652,7 @@ const app = new KingWorld()
 To create an async plugin, simply create an async function the return plugin.
 
 ```typescript
-const plugin = async (): Plugin => {
+const plugin = async (app: KingWorld) => {
     const db = await setupDatabase()
 
     return (app) => 
@@ -776,7 +712,6 @@ describe('Correctness', () => {
 		expect(await res.text()).toBe('Hi')
 	})
 })
-
 ```
 
 ## State of KingWorld
