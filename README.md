@@ -164,7 +164,7 @@ And you can decouple the route logic to a separate plugin.
 ```typescript
 import KingWorld, { type Plugin } from 'kingworld'
 
-const hi: Plugin = (app) => app
+const hi = (app: KingWorld) => app
     .get('/hi', () => 'Hi')
 
 const app = new KingWorld()
@@ -215,7 +215,8 @@ const handler: Handler = (request: {
     headers: Record<string, string>
     body: Promise<string | Object>
     responseHeaders: Record<string, unknown>
-}, store: Record<any, unknown>)
+    store: Record<any, unknown>
+})
 ```
 
 ## Handler Request
@@ -256,8 +257,8 @@ Is recommended for local state, reference of database connection, and other thin
 ```typescript
 new KingWorld()
     .state('build', 0.5)
-    .get("/build", ({}, { build }) => build)
-    .get("/random", ({}, { random }) => random)
+    .get("/build", ({ store: { build } }) => build)
+    .get("/random", ({ store: { random }}) => random)
     .listen(3000)
 
 // [GET] /build => 0.5
@@ -496,9 +497,9 @@ new KingWorld()
 Plugin is used to decouple logic into smaller function.
 
 ```typescript
-import KingWorld, { type Plugin } from 'kingworld'
+import type KingWorld from 'kingworld'
 
-const hi: Plugin = (app) => app
+const hi = (app: KingWorld) => app
     .get('/hi', () => 'Hi')
 
 const app = new KingWorld()
@@ -520,8 +521,8 @@ To register a plugin, simply add plugin into `use`.
 
 
 ```typescript
-const plugin: Plugin = (
-    app, 
+const plugin = (
+    app: KingWorld, 
     // Config (2nd paramters of `use`)
     { prefix = '/fbk' } = {}
 ) => app
@@ -616,7 +617,7 @@ const app = new KingWorld<{
 Sometime, when you develop local plugin, type reference from main instance is need, but not available after separation.
 
 ```typescript
-const plugin: Plugin = (app)  => 
+const plugin = (app: KingWorld)  => 
     app
         .get("/user/:id", ({ db, params: { id } }) => 
             // ❌ Type Error: db is not defined or smth like that
