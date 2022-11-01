@@ -1,3 +1,9 @@
+# 0.0.0-experimental.29 - 31 Oct 2022
+New Feature:
+- add `parseBody` for custom body parsing
+- add `onError` for handling custom error
+- local hook now accept `RegisterHook | RegisterHook[]`
+
 # 0.0.0-experimental.28 - 30 Oct 2022
 Happy halloween.
 

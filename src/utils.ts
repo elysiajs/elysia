@@ -1,5 +1,7 @@
 import type { Hook, RegisterHook } from './types'
 
+export const schema = Symbol("schema")
+
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 	...(Array.isArray(a) ? a : [a]),
 	...(Array.isArray(b) ? b : [b])
@@ -7,12 +9,47 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 
 export const mergeHook = (
 	a: Hook | RegisterHook<any, any>,
-	b: Hook | RegisterHook<any, any>
-): Hook<any> => ({
-	onRequest: mergeObjectArray(a?.onRequest ?? [], b?.onRequest ?? []),
-	transform: mergeObjectArray(a?.transform ?? [], b?.transform ?? []),
-	preHandler: mergeObjectArray(a?.preHandler ?? [], b?.preHandler ?? [])
-})
+	b: Hook | RegisterHook<any, any> | Array<Hook | RegisterHook<any, any>>
+): Hook<any> => {
+	if (!Array.isArray(b))
+		return {
+			onRequest: mergeObjectArray(a?.onRequest ?? [], b?.onRequest ?? []),
+			transform: mergeObjectArray(a?.transform ?? [], b?.transform ?? []),
+			preHandler: mergeObjectArray(
+				a?.preHandler ?? [],
+				b?.preHandler ?? []
+			)
+		}
+
+	const hook: Hook<any> = {
+		onRequest: !a.onRequest
+			? []
+			: Array.isArray(a.onRequest)
+			? a.onRequest
+			: [a.onRequest],
+		transform: !a.transform
+			? []
+			: Array.isArray(a.transform)
+			? a.transform
+			: [a.transform],
+		preHandler: !a.preHandler
+			? []
+			: Array.isArray(a.preHandler)
+			? a.preHandler
+			: [a.preHandler]
+	}
+
+	for (let i = 0; i < b.length; i++) {
+		hook.onRequest = mergeObjectArray(hook.onRequest, b[i].onRequest ?? [])
+		hook.transform = mergeObjectArray(hook.transform, b[i].transform ?? [])
+		hook.preHandler = mergeObjectArray(
+			hook.preHandler,
+			b[i].preHandler ?? []
+		)
+	}
+
+	return hook
+}
 
 // export const isPromise = <T>(
 // 	response: T | Promise<T>

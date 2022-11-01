@@ -99,17 +99,24 @@ new KingWorld()
 
 		return 'Status should be 401'
 	})
+	.get('/timeout', async () => {
+		await new Promise((resolve) => setTimeout(resolve, 2000))
+
+		return 'A'
+	})
 	.use((app) => {
 		console.log('Store', app.store)
 
 		return app
 	})
-	.default(
-		() =>
-			new Response('Not Found :(', {
+	.onError((error) => {
+		console.log("HANDLE ER")
+
+		if (error.code === 'NOT_FOUND')
+			return new Response('Not Found :(', {
 				status: 404
 			})
-	)
+	})
 	.listen(8080)
 
 console.log('🦊 KINGWORLD is running at :8080')

@@ -1,4 +1,5 @@
 import type Context from './context'
+import type KingWorldError from './error'
 
 export type KWKey = string | number | symbol
 
@@ -125,3 +126,15 @@ export type HTTPMethod =
 	| 'UNSUBSCRIBE'
 
 export type BodyParser = (request: Request) => any | Promise<any>
+
+export type ErrorCode =
+	// ? Default 404
+	| 'NOT_FOUND'
+	// ? Default 502
+	| 'INTERNAL_SERVER_ERROR'
+	// ? Request exceed body limit (config.bodyLimit)
+	| 'BODY_LIMIT'
+	// ? Error that's not in defined list
+	| 'UNKNOWN'
+
+export type ErrorHandler = (errorCode: KingWorldError) => void | Response

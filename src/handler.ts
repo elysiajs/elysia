@@ -59,7 +59,7 @@ export const mapEarlyResponse = (response: unknown, context: Context) => {
 			default:
 				break
 		}
-	else {
+	else
 		switch (typeof response) {
 			case 'string':
 				return new Response(response)
@@ -88,7 +88,6 @@ export const mapEarlyResponse = (response: unknown, context: Context) => {
 			default:
 				break
 		}
-	}
 }
 
 export const mapResponse = (response: unknown, context: Context) => {
