@@ -33,9 +33,7 @@
     "build:es": "swc src --config-file .es.swcrc -d build/es",
     "release": "npm run build && npm run test && npm publish"
   },
-  "dependencies": {
-    "@medley/router": "^0.2.1"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@swc/cli": "^0.1.57",
     "@swc/core": "^1.2.211",
