@@ -101,19 +101,20 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Wildcard')
 	})
 
-	it('Default route', async () => {
-		const app = new KingWorld().default(
-			() =>
-				new Response('Not Stonk :(', {
-					status: 404
-				})
-		)
+	// ? Blocking on https://github.com/oven-sh/bun/issues/1435
+	// it('Custom error', async () => {
+	// 	const app = new KingWorld().onError((error) => {
+	// 		if (error.code === 'NOT_FOUND')
+	// 			return new Response('Not Stonk :(', {
+	// 				status: 404
+	// 			})
+	// 	})
 
-		const res = await app.handle(req('/wildcard/okayu'))
+	// 	const res = await app.handle(req('/wildcard/okayu'))
 
-		expect(await res.text()).toBe('Not Stonk :(')
-		expect(res.status).toBe(404)
-	})
+	// 	expect(await res.text()).toBe('Not Stonk :(')
+	// 	expect(res.status).toBe(404)
+	// })
 
 	it('Parse a querystring', async () => {
 		const app = new KingWorld().get<{

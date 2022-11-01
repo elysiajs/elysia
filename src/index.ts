@@ -1,5 +1,4 @@
-// @ts-ignore
-import MedleyRouter from '@medley/router'
+import { Router } from './router'
 
 import Context from './context'
 import { mapResponse, mapEarlyResponse } from './handler'
@@ -53,7 +52,7 @@ export default class KingWorld<
 	]
 
 	private config: KingWorldConfig
-	private router = new MedleyRouter()
+	private router = new Router()
 	protected routes: InternalRoute<Instance>[] = []
 
 	constructor(config: Partial<KingWorldConfig> = {}) {
