@@ -6,6 +6,7 @@ import type Context from './context'
 import type KingWorldError from './error'
 
 export type KWKey = string | number | symbol
+export type WithArray<T> = T | T[]
 
 export interface KingWorldInstance<
 	Instance extends {
@@ -33,6 +34,7 @@ export type LifeCycleEvent =
 	| 'parse'
 	| 'transform'
 	| 'beforeHandle'
+	| 'afterHandle'
 	| 'error'
 	| 'stop'
 
@@ -48,9 +50,18 @@ export interface LifeCycle<
 	parse: BodyParser
 	transform: Handler<any, Instance>
 	beforeHandle: Handler<any, Instance>
+	afterHandle: AfterRequestHandler<any, Instance>
 	error: ErrorHandler
 	stop: VoidLifeCycle
 }
+
+export type AfterRequestHandler<
+	Route extends TypedRoute = TypedRoute,
+	Instance extends KingWorldInstance = KingWorldInstance
+> = (
+	response: Route['response'],
+	context: Context<Route, Instance['store']> & Instance['request']
+) => Route['response'] | Promise<Route['response']> | Response
 
 export interface LifeCycleStore<
 	Instance extends KingWorldInstance = KingWorldInstance
@@ -60,6 +71,7 @@ export interface LifeCycleStore<
 	parse: BodyParser[]
 	transform: Handler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
+	afterHandle: AfterRequestHandler<any, Instance>[]
 	error: ErrorHandler[]
 	stop: VoidLifeCycle[]
 }
@@ -72,6 +84,7 @@ export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
 export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
 	transform: Handler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
+	afterHandle: AfterRequestHandler<any, Instance>[]
 	error: ErrorHandler[]
 }
 
@@ -79,8 +92,9 @@ export interface RegisterHook<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
-	transform?: Handler<Route, Instance> | Handler<Route, Instance>[]
-	beforeHandle?: Handler<Route, Instance> | Handler<Route, Instance>[]
+	transform?: WithArray<Handler<Route, Instance>>
+	beforeHandle?: WithArray<Handler<Route, Instance>>
+	afterHandle: WithArray<AfterRequestHandler<Route, Instance>>
 	error?: ErrorHandler
 }
 
@@ -142,8 +156,9 @@ export interface LocalHook<
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
 	schema?: Schema
-	transform?: HookHandler<Schema, Instance> | HookHandler<Schema, Instance>[]
-	beforeHandle?: HookHandler<Schema, Instance> | HookHandler<Schema, Instance>
+	transform?: WithArray<HookHandler<Schema, Instance>>
+	beforeHandle?: WithArray<HookHandler<Schema, Instance>>
+	afterHandle?: WithArray<HookHandler<Schema, Instance>>
 }
 
 export type LocalHandler<
@@ -288,7 +303,8 @@ type MergeTwoObjects<
 	T,
 	U,
 	// non shared keys are optional
-	T0 = Partial<GetObjDifferentKeys<T, U>> & { // shared keys are recursively resolved by `DeepMergeTwoTypes<...>`
+	T0 = Partial<GetObjDifferentKeys<T, U>> & {
+		// shared keys are recursively resolved by `DeepMergeTwoTypes<...>`
 		[K in keyof GetObjSameKeys<T, U>]: DeepMergeTwoTypes<T[K], U[K]>
 	},
 	T1 = { [K in keyof T0]: T0[K] }

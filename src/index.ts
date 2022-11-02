@@ -31,7 +31,8 @@ import {
 	LifeCycle,
 	LifeCycleEvent,
 	LifeCycleStore,
-	VoidLifeCycle
+	VoidLifeCycle,
+	AfterRequestHandler
 } from './types'
 
 export default class KingWorld<
@@ -58,6 +59,7 @@ export default class KingWorld<
 		],
 		transform: [],
 		beforeHandle: [],
+		afterHandle: [],
 		error: [],
 		stop: []
 	}
@@ -177,6 +179,14 @@ export default class KingWorld<
 		return this
 	}
 
+	afterHandle<Route extends TypedRoute = TypedRoute>(
+		handler: AfterRequestHandler<Route, Instance>
+	) {
+		this.event.afterHandle.push(handler)
+
+		return this
+	}
+
 	onError(errorHandler: ErrorHandler) {
 		this.event.error.push(errorHandler)
 
@@ -214,6 +224,10 @@ export default class KingWorld<
 				this.event.beforeHandle.push(
 					handler as LifeCycle['beforeHandle']
 				)
+				break
+
+			case 'afterHandle':
+				this.event.afterHandle.push(handler as LifeCycle['afterHandle'])
 				break
 
 			case 'error':
@@ -518,8 +532,15 @@ export default class KingWorld<
 			let response = handler.hooks.beforeHandle[i](context)
 			if (response instanceof Promise) response = await response
 
-			const result = mapEarlyResponse(response, context)
-			if (result) return result
+			if (response !== null && response !== undefined) {
+				for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
+					response = handler.hooks.afterHandle[i](response, context)
+					if (response instanceof Promise) response = await response
+				}
+
+				const result = mapEarlyResponse(response, context)
+				if (result) return result
+			}
 		}
 
 		let response = handler.handle(context)
@@ -530,6 +551,14 @@ export default class KingWorld<
 
 			if (handler.validator.response.errors)
 				throw handler.validator.response.errors[0]
+		}
+
+		for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
+			response = handler.hooks.afterHandle[i](response, context)
+			if (response instanceof Promise) response = await response
+
+			const result = mapEarlyResponse(response, context)
+			if (result) return result
 		}
 
 		return mapResponse(response, context)

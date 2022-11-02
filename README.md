@@ -261,7 +261,8 @@ Start -> (Loop
     (Try
         request -> parse ->
         | routing |
-        transform -> beforeHandle -> Response
+        transform -> beforeHandle -> <handle> -> afterHandle -> Response
+                  -> beforeHandle -> afterHandle -> Response
     Catch -> error)
 ) -> Stop
 ```
@@ -286,6 +287,9 @@ The callback that assigned to lifecycle is called **hook**.
 - beforeHandle [`Handler`]
     - Handle request before executing path handler
     - If value returned, will skip to Response process
+- afterHandle [`AfterRequestHandler`]
+    - Handle request after executing path handler
+    - Use to transform response of `beforeHandle` and `handle`, eg. compression
 
 #### Stop
 - stop [`VoidLifeCycle`]

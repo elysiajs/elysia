@@ -17,12 +17,16 @@ export const mergeHook = (
 	b: Hook | RegisterHook<any, any>
 ): Hook<any> => {
 	return {
-		transform: mergeObjectArray(a?.transform ?? [], b?.transform ?? []),
+		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []),
 		beforeHandle: mergeObjectArray(
-			a?.beforeHandle ?? [],
+			a.beforeHandle ?? [],
 			b?.beforeHandle ?? []
 		),
-		error: mergeObjectArray(a?.error ?? [], b?.error ?? [])
+		afterHandle: mergeObjectArray(
+			a.afterHandle ?? [],
+			b?.afterHandle ?? []
+		),
+		error: mergeObjectArray(a.error ?? [], b?.error ?? [])
 	}
 }
 

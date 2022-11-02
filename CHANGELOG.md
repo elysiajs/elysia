@@ -1,3 +1,13 @@
+# 0.0.0-experimental.31 - 2 Nov 2022 
+Feature:
+- add `afterHandle` hook
+
+Improvement:
+- Using `WithArray<T>` to reduce redundant type
+
+Bug fix:
+- `beforeHandle` hook doesn't accept array
+
 # 0.0.0-experimental.31 - 2 Nov 2022
 Bug fix:
 - Add `zod` by default
