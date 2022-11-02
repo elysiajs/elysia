@@ -34,6 +34,7 @@
 		"release": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {
+		"zod": "3.19.1",
 		"zod-to-json-schema": "^3.18.1"
 	},
 	"devDependencies": {

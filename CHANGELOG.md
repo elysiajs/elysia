@@ -1,3 +1,7 @@
+# 0.0.0-experimental.31 - 2 Nov 2022
+Bug fix:
+- Add `zod` by default
+
 # 0.0.0-experimental.30 - 2 Nov 2022
 Bug fix:
 - Add `zod-to-json-schema` by default
