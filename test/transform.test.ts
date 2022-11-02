@@ -1,39 +1,42 @@
 import KingWorld, { type Handler } from '../src'
 
 import { describe, expect, it } from 'bun:test'
+import { z } from 'zod'
 
 const req = (path: string) => new Request(path)
 
 describe('Transform', () => {
 	it('Globally Transform', async () => {
 		const app = new KingWorld()
-			.transform<{
+			.onTransform<{
 				params: {
 					id?: number
 				}
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
-			.get<{
-				params: {
-					id: number
-				}
-			}>('/id/:id', ({ params: { id } }) => typeof id)
+			.get('/id/:id', ({ params: { id } }) => typeof id)
 		const res = await app.handle(req('/id/1'))
 
 		expect(await res.text()).toBe('number')
 	})
 
 	it('Locally transform', async () => {
-		const app = new KingWorld().get<{
-			params: {
-				id: number
+		const app = new KingWorld().get(
+			'/id/:id',
+			({ params: { id } }) => typeof id,
+			{
+				transform: (request) => {
+					if (request.params?.id)
+						request.params.id = +request.params.id
+				},
+				schema: {
+					params: z.object({
+						id: z.number()
+					})
+				}
 			}
-		}>('/id/:id', ({ params: { id } }) => typeof id, {
-			transform: (request) => {
-				if (request.params?.id) request.params.id = +request.params.id
-			}
-		})
+		)
 		const res = await app.handle(req('/id/1'))
 
 		expect(await res.text()).toBe('number')
@@ -43,7 +46,7 @@ describe('Transform', () => {
 		const app = new KingWorld()
 			.group('/scoped', (app) =>
 				app
-					.transform<{
+					.onTransform<{
 						params: {
 							id?: number
 						}
@@ -51,17 +54,9 @@ describe('Transform', () => {
 						if (request.params?.id)
 							request.params.id = +request.params.id
 					})
-					.get<{
-						params: {
-							id: number
-						}
-					}>('/id/:id', ({ params: { id } }) => typeof id)
+					.get('/id/:id', ({ params: { id } }) => typeof id)
 			)
-			.get<{
-				params: {
-					id: number
-				}
-			}>('/id/:id', ({ params: { id } }) => typeof id)
+			.get('/id/:id', ({ params: { id } }) => typeof id)
 
 		const base = await app.handle(req('/id/1'))
 		const scoped = await app.handle(req('/scoped/id/1'))
@@ -72,7 +67,7 @@ describe('Transform', () => {
 
 	it('Transform from plugin', async () => {
 		const transformId = (app: KingWorld) =>
-			app.transform<{
+			app.onTransform<{
 				params: {
 					id?: number
 				}
@@ -80,51 +75,53 @@ describe('Transform', () => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 
-		const app = new KingWorld().use(transformId).get<{
-			params: {
-				id: number
-			}
-		}>('/id/:id', ({ params: { id } }) => typeof id)
+		const app = new KingWorld()
+			.use(transformId)
+			.get('/id/:id', ({ params: { id } }) => typeof id)
 
 		const res = await app.handle(req('/id/1'))
 
 		expect(await res.text()).toBe('number')
 	})
 
-	// it('Transform in order', async () => {
-	// 	const app = new KingWorld()
-	// 		.get<{
-	// 			params: {
-	// 				id: number
-	// 			}
-	// 		}>('/id/:id', ({ params: { id } }) => typeof id)
-	// 		.transform<{
-	// 			params: {
-	// 				id?: number
-	// 			}
-	// 		}>((request) => {
-	// 			if (request.params?.id) request.params.id = +request.params.id
-	// 		})
-
-	// 	const res = await app.handle(req('/id/1'))
-
-	// 	expect(await res.text()).toBe('string')
-	// })
-
-	it('Globally and locally pre handle', async () => {
+	it('Transform from on', async () => {
 		const app = new KingWorld()
-			.transform<{
+			.on('transform', (request) => {
+				if (request.params?.id) request.params.id = +request.params.id
+			})
+			.get('/id/:id', ({ params: { id } }) => typeof id)
+
+		const res = await app.handle(req('/id/1'))
+
+		expect(await res.text()).toBe('number')
+	})
+
+	it('Transform in order', async () => {
+		const app = new KingWorld()
+			.get('/id/:id', ({ params: { id } }) => typeof id)
+			.onTransform<{
 				params: {
 					id?: number
 				}
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
-			.get<{
+
+		const res = await app.handle(req('/id/1'))
+
+		expect(await res.text()).toBe('string')
+	})
+
+	it('Globally and locally pre handle', async () => {
+		const app = new KingWorld()
+			.onTransform<{
 				params: {
-					id: number
+					id?: number
 				}
-			}>('/id/:id', ({ params: { id } }) => id, {
+			}>((request) => {
+				if (request.params?.id) request.params.id = +request.params.id
+			})
+			.get('/id/:id', ({ params: { id } }) => id, {
 				transform: (request) => {
 					if (
 						request.params?.id &&
@@ -141,14 +138,14 @@ describe('Transform', () => {
 
 	it('Accept multiple transform', async () => {
 		const app = new KingWorld()
-			.transform<{
+			.onTransform<{
 				params: {
 					id?: number
 				}
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
-			.transform<{
+			.onTransform<{
 				params: {
 					id?: number
 				}
@@ -159,11 +156,7 @@ describe('Transform', () => {
 				)
 					request.params.id = request.params.id + 1
 			})
-			.get<{
-				params: {
-					id: number
-				}
-			}>('/id/:id', ({ params: { id } }) => id)
+			.get('/id/:id', ({ params: { id } }) => id)
 
 		const res = await app.handle(req('/id/1'))
 
@@ -185,13 +178,14 @@ describe('Transform', () => {
 			if (request.params?.id) request.params.id = +request.params.id
 		}
 
-		const app = new KingWorld().get<{
-			params: {
-				id?: number
+		const app = new KingWorld().get(
+			'/id/:id',
+			({ params: { id } }) => typeof id,
+			{
+				transform
 			}
-		}>('/id/:id', ({ params: { id } }) => typeof id, {
-			transform
-		})
+		)
+
 		const res = await app.handle(req('/id/1'))
 
 		expect(await res.text()).toBe('number')

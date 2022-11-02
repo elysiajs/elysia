@@ -18,7 +18,7 @@ describe('Resposne Headers', () => {
 
 	it('add headers from hook', async () => {
 		const app = new KingWorld()
-			.transform((request) => {
+			.onTransform((request) => {
 				request.responseHeaders['x-powered-by'] = 'KingWorld'
 			})
 			.get('/', () => 'Hi')
@@ -29,7 +29,7 @@ describe('Resposne Headers', () => {
 
 	it('add headers from plugin', async () => {
 		const plugin = (app: KingWorld) =>
-			app.transform((request) => {
+			app.onTransform((request) => {
 				request.responseHeaders['x-powered-by'] = 'KingWorld'
 			})
 
@@ -41,7 +41,7 @@ describe('Resposne Headers', () => {
 
 	it('add responseHeaders to Response', async () => {
 		const app = new KingWorld()
-			.transform((request) => {
+			.onTransform((request) => {
 				request.responseHeaders['x-powered-by'] = 'KingWorld'
 			})
 			.get('/', () => new Response('Hi'))

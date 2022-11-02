@@ -19,7 +19,6 @@ KingWorld can be heavily customized with the use of plugins.
 Official plugins:
 - [Static](https://github.com/saltyaom/kingworld-static) for serving static file/folders
 - [Cookie](https://github.com/saltyaom/kingworld-cookie) for reading/setting cookie
-- [Schema](https://github.com/saltyaom/kingworld-schema) for validating request declaratively
 - [CORS](https://github.com/saltyaom/kingworld-cors) for handling CORs request
 
 ## Quick Start
@@ -110,17 +109,6 @@ app.get("/tako", () => Bun.file('./example/takodachi.png'))
 To get path paramameters, prefix the path with a colon:
 ```typescript
 app.get("/id/:id", ({ params: { id } }) => id)
-
-// [GET] /id/123 => 123
-```
-
-To ensure the type, simply pass a generic:
-```typescript
-app.get<{
-    params: {
-        id: string
-    }
-}>("/id/:id", ({ params: { id } }) => id)
 
 // [GET] /id/123 => 123
 ```
@@ -268,36 +256,48 @@ State will be assigned once start, and it's a mutable global store for server.
 
 ## Lifecycle
 KingWorld request's lifecycle can be illustrate as the following:
-
 ```
-Request -> onRequest -> route -> transform -> preHandler -> Response
+Start -> (Loop
+    (Try
+        request -> parse ->
+        | routing |
+        transform -> beforeHandle -> Response
+    Catch -> error)
+) -> Stop
 ```
 
 The callback that assigned to lifecycle is called **hook**.
 
-#### Pre Handler
-- onRequest 
-    - Call on new request
+#### Start
+- start [`VoidLifeCycle`]
+    - Call right before server start
 
-#### Internal
-- router.find (route)
-    - Find handler assigned to route
+#### Before Route
+- request [`BeforeRequestHandler`]
+    - Call on new request
+- parse [`BodyParser`]
+    - Call while parsing body
+    - If truthy value return, value will be assigned to `body`
 
 #### Post Handler
 - transform [`Handler`]
     - Called before validating request
     - Use to transform request's body, params, query before validation
-- preHandler [`Handler`]
+- beforeHandle [`Handler`]
     - Handle request before executing path handler
     - If value returned, will skip to Response process
 
-Lifecycle can be assigned with `app.<lifecycle name>()`:
+#### Stop
+- stop [`VoidLifeCycle`]
+    - Call after server stop, use for cleaning up
+
+Lifecycle can be assigned with `app.on<lifecycle name>()` or `app.on(lifeCycleName, callback)`:
 
 For example, assigning `transform` to a request:
 ```typescript
 app
     // ? Transform params 'id' to number if available
-    .transform(({ params }) => {
+    .onTransform(({ params }) => {
         if(params.id)
             params.id = +params.id
     })
@@ -314,7 +314,7 @@ There's 2 type of hook
 ```typescript
 app
     // ? Global Hook
-    .transform(({ params }) => {
+    .onTransform(({ params }) => {
         if(params.id)
             params.id = +params.id + 1
     })
@@ -382,7 +382,7 @@ Accept same value as [path handler, @see Handler](#handler-request)
 
 Lifecycle that assigned with `Handler`:
 - transform
-- preHandler
+- beforeHandle
 
 ## Transform
 Use to modify request's body, params, query before validation.
@@ -409,13 +409,10 @@ app
 
 You can easily modify body in transform to decouple logic into separate plugin.
 ```typescript
+import { z } from 'zod'
+
 new KingWorld()
-	.post<{
-		body: {
-			id: number
-			username: string
-		}
-	}>(
+	.post(
 		'/gamer',
 		async ({ body }) => {
 			const { username } = body
@@ -423,6 +420,12 @@ new KingWorld()
 			return `Hi ${username}`
 		},
 		{
+            schema: {
+                body: z.object({
+                    id: z.number(),
+                    username: z.string()
+                })
+            }
 			transform: (request) => {
 				request.body.id = +request.body.id
 			}
@@ -432,21 +435,30 @@ new KingWorld()
 ```
 
 ## Schema Validation
-Please use [@kingworldjs/schema](https://github.com/saltyaom/kingworld-schema) to handle typed-strict validation of incoming request.
+KingWorld use Zod for defining schema, and Ajv for validation.
+
+To get start, simply install zod:
+```bash
+bun i zod
+```
+
+Then define `schema` in local hook to handle validation.
 
 #### Example
 ```typescript
 import KingWorld from 'kingworld'
-import schema, { S } from '@kingworldjs/schema'
+import { z } from 'zod'
 
 new KingWorld()
     .get('/id/:id', ({ request: { params: { id } } }) => id, {
         transform: (request, store) {
             request.params.id = +request.params.id
         },
-        preHandler: schema({
-            params: S.object().prop('id', S.number().minimum(1).maximum(100))
-        })
+        schema: {
+            params: z.object({
+                id: z.number()
+            })
+        }
     })
     .listen(3000)
 
@@ -455,9 +467,7 @@ new KingWorld()
 // [GET] /id/-3 => Invalid params
 ```
 
-See [@kingworldjs/schema](https://github.com/saltyaom/kingworld-schema) for more detail about schema validation.
-
-## PreHandler
+## beforeHandle
 Handle request before executing path handler.
 If value is returned, the value will be the response instead and skip the path handler.
 
@@ -466,29 +476,32 @@ Schema validation is useful, but as it only validate the type sometime app requi
 For example: Checking value if value existed in database before executing the request.
 
 ```typescript
-import KingWorld, { S } from 'kingworld'
+import KingWorld from 'kingworld'
+import { z } from 'zod'
 
 new KingWorld()
-    .post<{
-        body: {
-            username: string
-        }
-    }>('/id/:id', ({ request: { body }) => {
+    .post('/id/:id', ({ request: { body }) => {
             const { username } = await body
 
             return `Hi ${username}`
         }, {
-        preHandler: async ({ body }) => {
-            const { username } = await body
-            const user = await database.find(username)
-
-            if(user)
-                return user.profile
-            else
-                return Response("User doesn't exists", {
-                    status: 400
+            schema: {
+                body: z.object({
+                    username: z.string()
                 })
-        }
+            },
+            beforeHandle: async ({ body }) => {
+                const { username } = await body
+                const user = await database.find(username)
+
+                if(user)
+                    return user.profile
+                else
+                    return Response("User doesn't exists", {
+                        status: 400
+                    }),
+
+        },
     })
     .listen(3000)
 ```
@@ -542,7 +555,7 @@ To develop plugin with type support, `Plugin` can accepts generic.
 const plugin = (app, { prefix = '/fbk' } = {})  => 
     app
         .state('fromPlugin', 'From Logger')
-        .transform(({ responseHeaders }) => {
+        .onTransform(({ responseHeaders }) => {
             request.log = () => {
                 console.log('From Logger')
             }
@@ -650,13 +663,13 @@ const app = new KingWorld()
 ```
 
 ## Async Plugin
-To create an async plugin, simply create an async function the return plugin.
+To create an async plugin, simply create an async function return callback for plugin.
 
 ```typescript
-const plugin = async (app: KingWorld) => {
+const plugin = async () => {
     const db = await setupDatabase()
 
-    return (app) => 
+    return (app: KingWorld) => 
         app
             .state('db', database)
             .get("/user/:id", ({ db, params: { id } }) => 
@@ -667,7 +680,7 @@ const plugin = async (app: KingWorld) => {
 
 const app = new KingWorld()
     .state('db', database)
-    .use(plugin)
+    .use(await plugin())
 ```
 
 ## KingWorld Instance
@@ -718,7 +731,7 @@ describe('Correctness', () => {
 ## State of KingWorld
 KingWorld is an experimental web framework based on bun.
 
-A bleeding edge web framework focused on developer friendliness, and performance, but is not recommended for production.
+A bleeding edge web framework focused on developer friendliness, and performance, but is not recommended for production yet.
 
 As KingWorld is in 0.0.0-experimental.x, API is very unstable and will change in any point of time, at-least until 0.1.0 is release.
 

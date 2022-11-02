@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import KingWorld from '../src'
 
 new KingWorld()
@@ -5,15 +6,17 @@ new KingWorld()
 	.get('/', () => 'Hi')
 	.guard(
 		{
-			preHandler: ({ query }) => {
+			beforeHandle: ({ query }) => {
 				if (!query.name) return 'Query name is required'
 			}
 		},
 		(app) =>
-			app.get<{
-				query: {
-					name: string
+			app.get('/profile', ({ query: { name } }) => `Hi ${name}`, {
+				schema: {
+					query: z.object({
+						name: z.string()
+					})
 				}
-			}>('/profile', ({ query: { name } }) => `Hi ${name}`)
+			})
 	)
 	.listen(3000)

@@ -1,33 +1,38 @@
+import { z } from 'zod'
 import KingWorld from '../src'
 
 new KingWorld()
 	.get('/', () => new Response('a'))
-	.post<{
-		body: {
-			id: number
-			username: string
-		}
-	}>('/', async ({ body: { username } }) => {
-		return `Hi ${username}`
-	})
-	.post<{
-		body: {
-			id: number
-			username: string
-		}
-	}>(
-		'/transform',
-		async ({ body }) => {
-			const { username } = await body
+	// Add custom parser
+	.onParse(async (request) => {
+		const contentType = request.headers.get('content-type') ?? ''
 
-			return `Hi ${username}`
-		},
-		{
-			transform: (request) => {
-				request.body.id = +request.body.id
-			}
+		switch (contentType) {
+			case 'application/kingworld':
+				return request.text()
 		}
-	)
+	})
+	.post('/', ({ body: { username } }) => `Hi ${username}`, {
+		schema: {
+			body: z.object({
+				id: z.number(),
+				username: z.string()
+			})
+		}
+	})
+	// Increase id by 1
+	.post('/transform', ({ body }) => body, {
+		transform: ({ body }) => {
+			body.id = body.id + 1
+		},
+		schema: {
+			body: z.object({
+				id: z.number(),
+				username: z.string()
+			})
+		}
+	})
+	.post('/mirror', ({ body }) => body)
 	.listen(8080)
 
 console.log('🦊 KINGWORLD is running at :8080')

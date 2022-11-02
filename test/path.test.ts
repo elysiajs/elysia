@@ -1,6 +1,7 @@
 import KingWorld from '../src'
 
 import { describe, expect, it } from 'bun:test'
+import { z } from 'zod'
 
 const req = (path: string) => new Request(path)
 
@@ -71,23 +72,25 @@ describe('Path', () => {
 	})
 
 	it('Parse single param', async () => {
-		const app = new KingWorld().get<{
-			params: {
-				id: string
-			}
-		}>('/id/:id', ({ params: { id } }) => id)
+		const app = new KingWorld().get('/id/:id', ({ params: { id } }) => id)
 		const res = await app.handle(req('/id/123'))
 
 		expect(await res.text()).toBe('123')
 	})
 
 	it('Parse multiple params', async () => {
-		const app = new KingWorld().get<{
-			params: {
-				id: string
-				name: string
+		const app = new KingWorld().get(
+			'/id/:id/:name',
+			({ params: { id, name } }) => `${id}/${name}`,
+			{
+				schema: {
+					params: z.object({
+						id: z.string(),
+						name: z.string()
+					})
+				}
 			}
-		}>('/id/:id/:name', ({ params: { id, name } }) => `${id}/${name}`)
+		)
 		const res = await app.handle(req('/id/fubuki/kingworld'))
 
 		expect(await res.text()).toBe('fubuki/kingworld')
@@ -117,32 +120,36 @@ describe('Path', () => {
 	// })
 
 	it('Parse a querystring', async () => {
-		const app = new KingWorld().get<{
-			query: {
-				id: string
-			}
-		}>('/', ({ query: { id } }) => id)
+		const app = new KingWorld().get('/', ({ query: { id } }) => id)
 		const res = await app.handle(req('/?id=123'))
 
 		expect(await res.text()).toBe('123')
 	})
 
 	it('Parse multiple querystrings', async () => {
-		const app = new KingWorld().get<{
-			query: {
-				first: string
-				last: string
+		const app = new KingWorld().get(
+			'/',
+			({ query: { first, last } }) => `${last} ${first}`,
+			{
+				schema: {
+					query: z.object({
+						first: z.string(),
+						last: z.string()
+					})
+				}
 			}
-		}>('/', ({ query: { first, last } }) => `${last} ${first}`)
+		)
 		const res = await app.handle(req('/?first=Fubuki&last=Shirakami'))
 
 		expect(await res.text()).toBe('Shirakami Fubuki')
 	})
 
 	it('Handle body', async () => {
-		const app = new KingWorld().post<{
-			body: string
-		}>('/', ({ body }) => body)
+		const app = new KingWorld().post('/', ({ body }) => body, {
+			schema: {
+				body: z.string()
+			}
+		})
 
 		const body = 'Botan'
 
@@ -165,11 +172,13 @@ describe('Path', () => {
 			name: 'Okayu'
 		})
 
-		const app = new KingWorld().post<{
-			body: {
-				name: string
+		const app = new KingWorld().post('/', ({ body }) => body, {
+			schema: {
+				body: z.object({
+					name: z.string()
+				})
 			}
-		}>('/', ({ body }) => body)
+		})
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',
@@ -185,14 +194,9 @@ describe('Path', () => {
 	})
 
 	it('Parse headers', async () => {
-		const app = new KingWorld().post<{
-			body: {
-				name: string
-			}
-			headers: {
-				'x-powered-by': string
-			}
-		}>('/', ({ request }) => request.headers.get('x-powered-by'))
+		const app = new KingWorld().post('/', ({ request }) =>
+			request.headers.get('x-powered-by')
+		)
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',

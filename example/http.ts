@@ -1,6 +1,8 @@
 import KingWorld from '../src'
 import { KingWorldInstance } from '../src/types'
 
+import { z } from 'zod'
+
 const loggerPlugin = (app: KingWorld, { prefix = '/fbk' } = {}) =>
 	app
 		.get('/hi', () => 'Hi')
@@ -8,7 +10,7 @@ const loggerPlugin = (app: KingWorld, { prefix = '/fbk' } = {}) =>
 		.state('fromPlugin', 'From Logger')
 		.use((app) => app.state('abc', 'abc'))
 
-new KingWorld()
+const app = new KingWorld()
 	.use(loggerPlugin)
 	.state('build', Date.now())
 	.get('/', () => 'KINGWORLD')
@@ -22,56 +24,63 @@ new KingWorld()
 		return a('B')
 	})
 	.get('/wildcard/*', () => 'Hi Wildcard')
-	.get<{
-		query: {
-			name: string
-		}
-	}>('/kw', () => 'KINGWORLD', {
-		preHandler: ({ query, log }) => {
+	.get('/kw', () => 'KINGWORLD', {
+		beforeHandle: ({ query, log }) => {
 			console.log('Name:', query?.name)
 
 			if (query?.name === 'aom') return 'Hi saltyaom'
+		},
+		schema: {
+			query: z.object({
+				name: z.string().nullable()
+			})
 		}
 	})
-	.post<{
-		body: {
-			name: string
-			additional: String
+	.post('/json', async ({ body }) => body, {
+		schema: {
+			body: z.object({
+				name: z.string(),
+				additional: z.string()
+			})
 		}
-	}>('/json', async ({ body }) => body)
-	.post<{
-		body: {
-			name: string
-			additional: String
-		}
-	}>('/transform-body', async ({ body }) => body, {
-		preHandler: (ctx) => {
+	})
+	.post('/transform-body', async ({ body }) => body, {
+		beforeHandle: (ctx) => {
 			ctx.body = {
 				...ctx.body,
 				additional: 'KingWorld'
 			}
+		},
+		schema: {
+			body: z.object({
+				name: z.string(),
+				additional: z.string()
+			})
 		}
 	})
-	.get<{
-		params: {
-			id: number
-		}
-	}>('/id/:id', ({ params: { id } }) => id, {
+	.get('/id/:id', ({ params: { id } }) => id, {
 		transform({ params }) {
 			params.id = +params.id
+		},
+		schema: {
+			params: z.object({
+				id: z.number()
+			})
 		}
 	})
-	.post<{
-		body: {
-			username: string
+	.post('/new/:id', async ({ body, params }) => body, {
+		schema: {
+			params: z.object({
+				id: z.number()
+			}),
+			body: z.object({
+				username: z.string()
+			})
 		}
-		params: {
-			id: number
-		}
-	}>('/new/:id', async ({ body, params }) => body)
+	})
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) => {
-		app.preHandler<{
+		app.onBeforeHandle<{
 			query: {
 				name: string
 			}
@@ -110,7 +119,7 @@ new KingWorld()
 		return app
 	})
 	.onError((error) => {
-		console.log("HANDLE ER")
+		console.log('HANDLE ER')
 
 		if (error.code === 'NOT_FOUND')
 			return new Response('Not Found :(', {

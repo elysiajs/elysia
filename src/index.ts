@@ -1,55 +1,68 @@
-import { Router } from './router'
+import type { Serve, Server } from 'bun'
 
+import Ajv from 'ajv'
+import type { ZodSchema } from 'zod'
+import { zodToJsonSchema } from 'zod-to-json-schema'
+
+import { Router } from './router'
 import Context from './context'
 import { mapResponse, mapEarlyResponse } from './handler'
-import { mapQuery, getPath, clone, mergeHook } from './utils'
+import { mapQuery, getPath, clone, mergeHook, mergeDeep, SCHEMA } from './utils'
+import { registerSchemaPath } from './schema'
+import KingWorldError from './error'
 
 import {
 	Handler,
-	HookEvent,
 	RegisterHook,
-	PreRequestHandler,
+	BeforeRequestHandler,
 	TypedRoute,
 	KingWorldInstance,
 	KingWorldConfig,
 	KWKey,
-	ExtractKWPath,
 	HTTPMethod,
 	ComposedHandler,
 	InternalRoute,
-	Hook,
 	BodyParser,
 	ErrorHandler,
-	ErrorCode
+	ErrorCode,
+	TypedSchema,
+	LocalHook,
+	LocalHandler,
+	LifeCycle,
+	LifeCycleEvent,
+	LifeCycleStore,
+	VoidLifeCycle
 } from './types'
-import type { Serve, Server } from 'bun'
-import KingWorldError from './error'
 
 export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
-	store: Instance['store'] = {}
-	hook: Hook<Instance> = {
-		onRequest: [],
+	store: Instance['store'] = {
+		[SCHEMA]: {}
+	}
+	event: LifeCycleStore<Instance> = {
+		start: [],
+		request: [],
+		parse: [
+			async (request) => {
+				const contentType = request.headers.get('content-type') ?? ''
+
+				switch (contentType) {
+					case 'application/json':
+						return request.json()
+
+					case 'text/plain':
+						return request.text()
+				}
+			}
+		],
 		transform: [],
-		preHandler: []
+		beforeHandle: [],
+		error: [],
+		stop: []
 	}
 
 	server: Server | null = null
-	private errorHandlers: ErrorHandler[] = []
-	private bodyParsers: BodyParser[] = [
-		async (request) => {
-			const contentType = request.headers.get('content-type') ?? ''
-
-			switch (contentType) {
-				case 'application/json':
-					return request.json().then(JSON.stringify)
-
-				case 'text/plain':
-					return request.text()
-			}
-		}
-	]
 
 	private config: KingWorldConfig
 	private router = new Router()
@@ -59,26 +72,65 @@ export default class KingWorld<
 		this.config = {
 			bodyLimit: 1048576,
 			strictPath: false,
-			...config
+			...config,
+			ajv: config.ajv ?? new Ajv()
 		}
 	}
 
-	private _addHandler<Route extends TypedRoute = TypedRoute>(
+	private getSchema(schema: ZodSchema | undefined) {
+		if (!schema) return
+
+		return zodToJsonSchema(schema)
+	}
+
+	private getSchemaValidator(schema: ZodSchema | undefined) {
+		if (!schema) return
+
+		return this.config.ajv.compile(zodToJsonSchema(schema))
+	}
+
+	private _addHandler<
+		Schema extends TypedSchema = TypedSchema,
+		Path extends string = string
+	>(
 		method: HTTPMethod,
-		path: string,
-		handler: Handler<Route, Instance>,
-		hook?: RegisterHook<any, any> | RegisterHook<any, any>[]
+		path: Path,
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<any>
 	) {
 		this.routes.push({
 			method,
 			path,
 			handler,
-			hooks: mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
+			hooks: mergeHook(clone(this.event), hook as RegisterHook)
+		})
+
+		const body = this.getSchemaValidator(hook?.schema?.body)
+		const header = this.getSchemaValidator(hook?.schema?.header)
+		const params = this.getSchemaValidator(hook?.schema?.params)
+		const query = this.getSchemaValidator(hook?.schema?.query)
+		const response = this.getSchemaValidator(hook?.schema?.response)
+
+		registerSchemaPath({
+			schema: this.store[SCHEMA],
+			hook,
+			method,
+			path
 		})
 
 		this.router.register(path)[method] = {
 			handle: handler,
-			hooks: mergeHook(clone(this.hook) as Hook, hook as RegisterHook)
+			hooks: mergeHook(clone(this.event), hook as RegisterHook),
+			validator:
+				body || header || params || query || response
+					? {
+							body,
+							header,
+							params,
+							query,
+							response
+					  }
+					: undefined
 		}
 
 		if (!this.config.strictPath && path !== '/')
@@ -91,45 +143,85 @@ export default class KingWorld<
 					this.router.register(path)[method]
 	}
 
-	onRequest(handler: PreRequestHandler<Instance['store']>) {
-		this.hook.onRequest.push(handler)
+	onStart(handler: VoidLifeCycle) {
+		this.event.start.push(handler)
 
 		return this
 	}
 
-	transform<Route extends TypedRoute = TypedRoute>(
+	onRequest(handler: BeforeRequestHandler<Instance['store']>) {
+		this.event.request.push(handler)
+
+		return this
+	}
+
+	onParse(parser: BodyParser) {
+		this.event.parse.push(parser)
+
+		return this
+	}
+
+	onTransform<Route extends TypedRoute = TypedRoute>(
 		handler: Handler<Route, Instance>
 	) {
-		this.hook.transform.push(handler)
+		this.event.transform.push(handler)
 
 		return this
 	}
 
-	preHandler<Route extends TypedRoute = TypedRoute>(
+	onBeforeHandle<Route extends TypedRoute = TypedRoute>(
 		handler: Handler<Route, Instance>
 	) {
-		this.hook.preHandler.push(handler)
+		this.event.beforeHandle.push(handler)
 
 		return this
 	}
 
-	when<Event extends HookEvent = HookEvent>(
+	onError(errorHandler: ErrorHandler) {
+		this.event.error.push(errorHandler)
+
+		return this
+	}
+
+	onStop(handler: VoidLifeCycle) {
+		this.event.stop.push(handler)
+
+		return this
+	}
+
+	on<Event extends LifeCycleEvent = LifeCycleEvent>(
 		type: Event,
-		handler: RegisterHook<Instance['store']>[Event]
+		handler: LifeCycle<Instance>[Event]
 	) {
 		switch (type) {
-			case 'onRequest':
-				this.hook.onRequest.push(
-					handler as PreRequestHandler<Instance['store']>
-				)
+			case 'start':
+				this.event.start.push(handler as LifeCycle['start'])
+				break
+
+			case 'request':
+				this.event.request.push(handler as LifeCycle['request'])
+				break
+
+			case 'parse':
+				this.event.parse.push(handler as LifeCycle['parse'])
 				break
 
 			case 'transform':
-				this.hook.transform.push(handler as Handler<{}, Instance>)
+				this.event.transform.push(handler as LifeCycle['transform'])
 				break
 
-			case 'preHandler':
-				this.hook.preHandler.push(handler as Handler<{}, Instance>)
+			case 'beforeHandle':
+				this.event.beforeHandle.push(
+					handler as LifeCycle['beforeHandle']
+				)
+				break
+
+			case 'error':
+				this.event.error.push(handler as LifeCycle['error'])
+				break
+
+			case 'stop':
+				this.event.stop.push(handler as LifeCycle['stop'])
 				break
 		}
 
@@ -140,11 +232,16 @@ export default class KingWorld<
 		const instance = new KingWorld<Instance>()
 		run(instance)
 
-		this.store = { ...this.store, ...instance.store }
+		this.store = mergeDeep(this.store, instance.store)
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
-				this._addHandler(method, `${prefix}${path}`, handler, hooks)
+				this._addHandler(
+					method,
+					`${prefix}${path}`,
+					handler,
+					hooks as any
+				)
 			}
 		)
 
@@ -160,7 +257,7 @@ export default class KingWorld<
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks: localHooks }) => {
-				this._addHandler(method, path, handler, localHooks)
+				this._addHandler(method, path, handler, localHooks as any)
 			}
 		)
 
@@ -179,279 +276,127 @@ export default class KingWorld<
 		return plugin(this as unknown as any, config) as unknown as any
 	}
 
-	get<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+	get<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('GET', path, handler, hook as any)
+		this._addHandler('GET', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
-	post<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+	post<
+		Schema extends TypedSchema = TypedSchema,
+		Path extends string = string
+	>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('POST', path, handler, hook as any)
+		this._addHandler('POST', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
-	put<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+	put<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('PUT', path, handler, hook as any)
+		this._addHandler('PUT', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
-	patch<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+	patch<
+		Schema extends TypedSchema = TypedSchema,
+		Path extends string = string
+	>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('PATCH', path, handler, hook as any)
+		this._addHandler('PATCH', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
-	delete<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+	delete<
+		Schema extends TypedSchema = TypedSchema,
+		Path extends string = string
+	>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('DELETE', path, handler, hook as any)
+		this._addHandler('DELETE', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
 	options<
-		Route extends TypedRoute = TypedRoute,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('OPTIONS', path, handler, hook as any)
+		this._addHandler('OPTIONS', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
-	head<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+	head<
+		Schema extends TypedSchema = TypedSchema,
+		Path extends string = string
+	>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('HEAD', path, handler, hook as any)
+		this._addHandler('HEAD', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
-	trace<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+	trace<
+		Schema extends TypedSchema = TypedSchema,
+		Path extends string = string
+	>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('TRACE', path, handler, hook as any)
+		this._addHandler('TRACE', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
 	connect<
-		Route extends TypedRoute = TypedRoute,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler('CONNECT', path, handler, hook as any)
+		this._addHandler('CONNECT', path, handler, hook as LocalHook<any>)
 
 		return this
 	}
 
-	on<Route extends TypedRoute = TypedRoute, Path extends string = string>(
+	method<
+		Schema extends TypedSchema = TypedSchema,
+		Path extends string = string
+	>(
 		method: HTTPMethod,
 		path: Path,
-		handler: Handler<
-			Route & {
-				params: Record<ExtractKWPath<Path>, string>
-			},
-			Instance
-		>,
-		hook?:
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >
-			| RegisterHook<
-					Route & {
-						params: Record<ExtractKWPath<Path>, string>
-					},
-					Instance
-			  >[]
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
-		this._addHandler(method, path, handler, hook as any)
+		this._addHandler(method, path, handler, hook as LocalHook<any>)
 
 		return this
 	}
@@ -484,15 +429,9 @@ export default class KingWorld<
 			request: Instance['request'] & { [key in Name]: Callback }
 		}>
 	>(name: Name, value: Callback): NewInstance {
-		return this.transform(
+		return this.onTransform(
 			(app: any) => (app[name] = value)
 		) as unknown as NewInstance
-	}
-
-	parseBody(parser: BodyParser) {
-		this.bodyParsers.push(parser)
-
-		return this
 	}
 
 	// ? Using arrow to bind `this`
@@ -505,10 +444,16 @@ export default class KingWorld<
 		if (bodySize > this.config.bodyLimit)
 			throw new KingWorldError('BODY_LIMIT')
 
+		for (let i = 0; i < this.event.request.length; i++) {
+			let response = this.event.request[i](request, this.store)
+			if (response instanceof Promise) response = await response
+			if (response) return response
+		}
+
 		let body: string | Record<string, any> | undefined
 		if (bodySize)
-			for (let i = 0; i <= this.bodyParsers.length; i++) {
-				let temp = this.bodyParsers[i](request)
+			for (let i = 0; i <= this.event.parse.length; i++) {
+				let temp = this.event.parse[i](request)
 				if (temp instanceof Promise) temp = await temp
 
 				if (temp) {
@@ -516,12 +461,6 @@ export default class KingWorld<
 					break
 				}
 			}
-
-		for (let i = 0; i < this.hook.onRequest.length; i++) {
-			let response = this.hook.onRequest[i](request, this.store)
-			if (response instanceof Promise) response = await response
-			if (response) return response
-		}
 
 		const route = this.router.find(getPath(request.url))
 		const context = new Context({
@@ -537,13 +476,46 @@ export default class KingWorld<
 		const handler = route.store?.[request.method] as ComposedHandler
 		if (!handler) throw new KingWorldError('NOT_FOUND')
 
-		for (const transform of handler.hooks.transform) {
-			let response = transform(context)
+		for (let i = 0; i < handler.hooks.transform.length; i++) {
+			let response = handler.hooks.transform[i](context)
 			if (response instanceof Promise) response = await response
 		}
 
-		for (const preHandler of handler.hooks.preHandler) {
-			let response = preHandler(context)
+		if (handler.validator) {
+			const validate = handler.validator
+
+			if (validate.header) {
+				const _header: Record<string, string> = {}
+
+				for (const [key, value] of request.headers.values())
+					_header[key] = value
+
+				validate.header(_header)
+
+				if (validate.header.errors) throw validate.header.errors[0]
+			}
+
+			if (validate.params) {
+				validate.params(context.params)
+
+				if (validate.params.errors) throw validate.params.errors[0]
+			}
+
+			if (validate.query) {
+				validate.query(context.query)
+
+				if (validate.query.errors) throw validate.query.errors[0]
+			}
+
+			if (validate.body) {
+				validate.body(body)
+
+				if (validate.body.errors) throw validate.body.errors[0]
+			}
+		}
+
+		for (let i = 0; i < handler.hooks.beforeHandle.length; i++) {
+			let response = handler.hooks.beforeHandle[i](context)
 			if (response instanceof Promise) response = await response
 
 			const result = mapEarlyResponse(response, context)
@@ -553,13 +525,14 @@ export default class KingWorld<
 		let response = handler.handle(context)
 		if (response instanceof Promise) response = await response
 
+		if (handler.validator?.response) {
+			handler.validator.response(response)
+
+			if (handler.validator.response.errors)
+				throw handler.validator.response.errors[0]
+		}
+
 		return mapResponse(response, context)
-	}
-
-	onError(errorHandler: ErrorHandler) {
-		this.errorHandlers.push(errorHandler)
-
-		return this
 	}
 
 	private handleError = (err: Error) => {
@@ -567,8 +540,8 @@ export default class KingWorld<
 			cause: err.cause
 		})
 
-		for (let i = 0; i < this.errorHandlers.length; i++) {
-			const response = this.errorHandlers[i](error)
+		for (let i = 0; i < this.event.error.length; i++) {
+			const response = this.event.error[i](error)
 			if (response instanceof Response) return response
 		}
 
@@ -598,6 +571,8 @@ export default class KingWorld<
 	listen(options: number | Omit<Serve, 'fetch'>) {
 		if (!Bun) throw new Error('Bun to run')
 
+		for (let i = 0; i < this.event.start.length; i++) this.event.start[i]()
+
 		this.server = Bun.serve(
 			typeof options === 'number'
 				? {
@@ -614,16 +589,42 @@ export default class KingWorld<
 
 		return this
 	}
+
+	stop = async () => {
+		if (!this.server)
+			throw new Error(
+				"KingWorld isn't running. Call `app.listen` to start the server."
+			)
+
+		this.server.stop()
+
+		for (let i = 0; i < this.event.stop.length; i++) {
+			const process = this.event.stop[i]()
+			if (process instanceof Promise) await process
+		}
+	}
 }
 
-export { schema } from './utils'
+export { SCHEMA } from './utils'
 export type { default as Context } from './context'
 export type {
 	Handler,
-	HookEvent,
 	RegisterHook,
-	PreRequestHandler,
+	BeforeRequestHandler,
 	TypedRoute,
+	KingWorldInstance,
+	KingWorldConfig,
+	KWKey,
+	HTTPMethod,
+	ComposedHandler,
+	InternalRoute,
+	Hook,
+	BodyParser,
+	ErrorHandler,
 	ErrorCode,
-	ErrorHandler
+	TypedSchema,
+	LocalHook,
+	LocalHandler,
+	LifeCycle,
+	LifeCycleEvent
 } from './types'

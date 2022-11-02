@@ -4,21 +4,17 @@ import { describe, expect, it } from 'bun:test'
 
 const req = (path: string) => new Request(path)
 
-describe('preHandler', () => {
+describe('Before Handle', () => {
 	it('Globally skip main handler', async () => {
 		const app = new KingWorld()
-			.preHandler<{
+			.onBeforeHandle<{
 				params: {
 					name?: string
 				}
 			}>(({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			})
-			.get<{
-				params: {
-					name: string
-				}
-			}>('/name/:name', ({ params: { name } }) => name)
+			.get('/name/:name', ({ params: { name } }) => name)
 
 		const res = await app.handle(req('/name/Fubuki'))
 
@@ -26,43 +22,35 @@ describe('preHandler', () => {
 	})
 
 	it('Locally skip main handler', async () => {
-		const app = new KingWorld().get<{
-			params: {
-				name: string
+		const app = new KingWorld().get(
+			'/name/:name',
+			({ params: { name } }) => name,
+			{
+				beforeHandle: ({ params: { name } }) => {
+					if (name === 'Fubuki') return 'Cat'
+				}
 			}
-		}>('/name/:name', ({ params: { name } }) => name, {
-			preHandler: ({ params: { name } }) => {
-				if (name === 'Fubuki') return 'Cat'
-			}
-		})
+		)
 
 		const res = await app.handle(req('/name/Fubuki'))
 
 		expect(await res.text()).toBe('Cat')
 	})
 
-	it('Group pre handler', async () => {
+	it('Group before handler', async () => {
 		const app = new KingWorld()
 			.group('/type', (app) =>
 				app
-					.preHandler<{
+					.onBeforeHandle<{
 						params: {
 							name?: string
 						}
 					}>(({ params: { name } }) => {
 						if (name === 'fubuki') return 'cat'
 					})
-					.get<{
-						params: {
-							name: string
-						}
-					}>('/name/:name', ({ params: { name } }) => name)
+					.get('/name/:name', ({ params: { name } }) => name)
 			)
-			.get<{
-				params: {
-					name: string
-				}
-			}>('/name/:name', ({ params: { name } }) => name)
+			.get('/name/:name', ({ params: { name } }) => name)
 
 		const base = await app.handle(req('/name/fubuki'))
 		const scoped = await app.handle(req('/type/name/fubuki'))
@@ -71,9 +59,9 @@ describe('preHandler', () => {
 		expect(await scoped.text()).toBe('cat')
 	})
 
-	it('Pre handle from plugin', async () => {
+	it('before handle from plugin', async () => {
 		const transformId = (app: KingWorld) =>
-			app.preHandler<{
+			app.onBeforeHandle<{
 				params: {
 					name?: string
 				}
@@ -81,52 +69,42 @@ describe('preHandler', () => {
 				if (name === 'Fubuki') return 'Cat'
 			})
 
-		const app = new KingWorld().use(transformId).get<{
-			params: {
-				name: string
-			}
-		}>('/name/:name', ({ params: { name } }) => name)
+		const app = new KingWorld()
+			.use(transformId)
+			.get('/name/:name', ({ params: { name } }) => name)
 
 		const res = await app.handle(req('/name/Fubuki'))
 
 		expect(await res.text()).toBe('Cat')
 	})
 
-	// it('Pre handle in order', async () => {
-	// 	const app = new KingWorld()
-	// 		.get<{
-	// 			params: {
-	// 				name: string
-	// 			}
-	// 		}>('/name/:name', ({ params: { name } }) => name)
-	// 		.preHandler<{
-	// 			params: {
-	// 				name?: string
-	// 			}
-	// 		}>(({ params: { name } }) => {
-	// 			if (name === 'fubuki') return 'cat'
-	// 		})
-
-	// 	const res = await app.handle(req('/name/fubuki'))
-
-	// 	expect(await res.text()).toBe('fubuki')
-	// })
-
-	it('Globally and locally pre handle', async () => {
+	it('Before handle in order', async () => {
 		const app = new KingWorld()
-			.preHandler<{
+			.get('/name/:name', ({ params: { name } }) => name)
+			.onBeforeHandle<{
 				params: {
 					name?: string
 				}
 			}>(({ params: { name } }) => {
 				if (name === 'fubuki') return 'cat'
 			})
-			.get<{
+
+		const res = await app.handle(req('/name/fubuki'))
+
+		expect(await res.text()).toBe('fubuki')
+	})
+
+	it('Globally and locally before handle', async () => {
+		const app = new KingWorld()
+			.onBeforeHandle<{
 				params: {
-					name: string
+					name?: string
 				}
-			}>('/name/:name', ({ params: { name } }) => name, {
-				preHandler: ({ params: { name } }) => {
+			}>(({ params: { name } }) => {
+				if (name === 'fubuki') return 'cat'
+			})
+			.get('/name/:name', ({ params: { name } }) => name, {
+				beforeHandle: ({ params: { name } }) => {
 					if (name === 'korone') return 'dog'
 				}
 			})
@@ -138,27 +116,23 @@ describe('preHandler', () => {
 		expect(await korone.text()).toBe('dog')
 	})
 
-	it('Accept multiple pre handler', async () => {
+	it('Accept multiple before handler', async () => {
 		const app = new KingWorld()
-			.preHandler<{
+			.onBeforeHandle<{
 				params: {
 					name?: string
 				}
 			}>(({ params: { name } }) => {
 				if (name === 'fubuki') return 'cat'
 			})
-			.preHandler<{
+			.onBeforeHandle<{
 				params: {
 					name?: string
 				}
 			}>(({ params: { name } }) => {
 				if (name === 'korone') return 'dog'
 			})
-			.get<{
-				params: {
-					name: string
-				}
-			}>('/name/:name', ({ params: { name } }) => name)
+			.get('/name/:name', ({ params: { name } }) => name)
 
 		const fubuki = await app.handle(req('/name/fubuki'))
 		const korone = await app.handle(req('/name/korone'))
@@ -168,12 +142,30 @@ describe('preHandler', () => {
 	})
 
 	it('Handle async', async () => {
-		const app = new KingWorld().get<{
-			params: {
-				name: string
+		const app = new KingWorld().get(
+			'/name/:name',
+			({ params: { name } }) => name,
+			{
+				beforeHandle: async ({ params: { name } }) => {
+					await new Promise<void>((resolve) =>
+						setTimeout(() => {
+							resolve()
+						}, 1)
+					)
+
+					if (name === 'Watame') return 'Warukunai yo ne'
+				}
 			}
-		}>('/name/:name', ({ params: { name } }) => name, {
-			preHandler: async ({ params: { name } }) => {
+		)
+
+		const res = await app.handle(req('/name/Watame'))
+
+		expect(await res.text()).toBe('Warukunai yo ne')
+	})
+
+	it("Handle on('beforeHandle')", async () => {
+		const app = new KingWorld()
+			.on('beforeHandle', async ({ params: { name } }) => {
 				await new Promise<void>((resolve) =>
 					setTimeout(() => {
 						resolve()
@@ -181,8 +173,8 @@ describe('preHandler', () => {
 				)
 
 				if (name === 'Watame') return 'Warukunai yo ne'
-			}
-		})
+			})
+			.get('/name/:name', ({ params: { name } }) => name)
 
 		const res = await app.handle(req('/name/Watame'))
 

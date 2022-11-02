@@ -1,8 +1,85 @@
-# 0.0.0-experimental.29 - 31 Oct 2022
+# 0.0.0-experimental.29 - 2 Nov 2022
+[Regulus]
+
+This version introduce rework for internal architecture. Refine, and unite structure for how KingWorld works internally.
+
+Although many refactor might required, but I can assure that this is for the greater good, as the API refinement lay down a solid structure for future of KingWorld.
+
+Thanks to API refinement, this version also introduce a lot of new interesting feature, and many API simplified.
+
+Notable improvement and new feature:
+- Define Schema, auto infer type and validation
+- Simplying Handler generic
+- Unifying Life Cycle into one property
+- Custom Error handler, and body parser
+- Before start/stop and clean up effect
+
 New Feature:
-- add `parseBody` for custom body parsing
+- add `schema` to local hook for strict-type validation and type inference.
+    - Example:
+    ```typescript
+    import { z } from 'zod'
+
+    app.post("/id/:id", ({ body }) => body, {
+        schema: {
+            body: z.object({
+                username: z.string(),
+                password: z.string()
+            }),
+            params: {
+                id: z.string()
+            }
+        }
+    })
+    ```
+
 - add `onError` for handling custom error
-- local hook now accept `RegisterHook | RegisterHook[]`
+- add `onStart`, `onStop` for handling server state
+- add `stop` for stopping the server
+
+Breaking Change:
+- Remove `TypedRoute` generic on httpMethod, replaced with `schema`.
+    - To migrate:
+    ```typescript
+    // From
+    app.post<{
+        body: {
+            username: string
+            password: string
+        },
+        params: {
+            id: string
+        }
+    }>('/id/:id', ({ body }) => body)
+
+    // To
+    import { z } from 'zod'
+
+    app.post("/id/:id", ({ body }) => body, {
+        schema: {
+            body: z.object({
+                username: z.string(),
+                password: z.string()
+            }),
+            params: {
+                id: z.string()
+            }
+        }
+    })
+    ```
+
+- Method Hook is now replaced with `LocalHook`
+- Rename `preHandler` to `beforeHandle`
+- Rename `bodyParser` to `onParse`, `on('parse')`
+- Rename `.when(event)` to `on(event)`
+- Rename `.on(HttpMethod)` to `.method(HttpMethod)`
+- Replace `HookEvent` for `LifeCycle`
+- Move `bodyParser`, `errorHandler` to `event: LifeCycleStore`
+- Remove ability for local hook to accept `RegisterHook[]`
+- Remove `onRequest` on local hook, as it doesn't execute
+
+Bug fix:
+- JSON body parsed as string
 
 # 0.0.0-experimental.28 - 30 Oct 2022
 Happy halloween.
