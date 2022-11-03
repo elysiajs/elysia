@@ -1,3 +1,0 @@
----
-pageLayout: PageLayout1
----
