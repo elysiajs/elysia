@@ -273,7 +273,7 @@ export default class KingWorld<
 		return this
 	}
 
-	guard<Schema extends TypedSchema = InheritedSchema>(
+	guard<Schema extends TypedSchema = TypedSchema>(
 		hook: LocalHook<Schema, Instance>,
 		run: (group: KingWorld<Instance, Schema>) => void
 	) {
@@ -311,10 +311,10 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('GET', path, handler, hook as LocalHook<any>)
+		this._addHandler('GET', path, handler, hook as LocalHook<any, any, any>)
 
 		return this
 	}
@@ -324,10 +324,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('POST', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'POST',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -337,10 +342,10 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('PUT', path, handler, hook as LocalHook<any>)
+		this._addHandler('PUT', path, handler, hook as LocalHook<any, any, any>)
 
 		return this
 	}
@@ -350,10 +355,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('PATCH', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'PATCH',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -363,10 +373,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('DELETE', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'DELETE',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -376,10 +391,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('OPTIONS', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'OPTIONS',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -389,10 +409,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('HEAD', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'HEAD',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -402,10 +427,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('TRACE', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'TRACE',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -415,10 +445,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('CONNECT', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'CONNECT',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -429,10 +464,15 @@ export default class KingWorld<
 	>(
 		method: HTTPMethod,
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler(method, path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			method,
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -654,7 +694,7 @@ export default class KingWorld<
 		if (!Bun) throw new Error('Bun to run')
 
 		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i](this)
+			this.event.start[i](this as any)
 
 		this.server = Bun.serve(
 			typeof options === 'number'
@@ -680,7 +720,7 @@ export default class KingWorld<
 			)
 
 		for (let i = 0; i < this.event.stop.length; i++) {
-			const process = this.event.stop[i](this)
+			const process = this.event.stop[i](this as any)
 			if (process instanceof Promise) await process
 		}
 

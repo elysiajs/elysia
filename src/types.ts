@@ -160,11 +160,12 @@ export type HookHandler<
 
 export interface LocalHook<
 	Schema extends TypedSchema,
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends KingWorldInstance = KingWorldInstance,
+	InheritedSchema extends TypedSchema = TypedSchema
 > {
 	schema?: Schema
 	transform?: WithArray<HookHandler<Schema, Instance>>
-	beforeHandle?: WithArray<HookHandler<Schema, Instance>>
+	beforeHandle?: WithArray<HookHandler<Schema & InheritedSchema, Instance> >
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
 	error?: WithArray<ErrorHandler>
 }
@@ -172,11 +173,12 @@ export interface LocalHook<
 export type LocalHandler<
 	Schema extends TypedSchema = TypedSchema,
 	Instance extends KingWorldInstance = KingWorldInstance,
-	Path extends string = string
+	Path extends string = string,
+	InheritedSchema extends TypedSchema = TypedSchema
 > = Handler<
 	Schema['params'] extends NonNullable<Schema['params']>
-		? TypedSchemaToRoute<Schema>
-		: Omit<TypedSchemaToRoute<Schema>, 'params'> & {
+		? TypedSchemaToRoute<Schema & InheritedSchema>
+		: Omit<TypedSchemaToRoute<Schema & InheritedSchema>, 'params'> & {
 				params: Record<ExtractKWPath<Path>, string>
 		  },
 	Instance
