@@ -33,7 +33,7 @@ jobs:
       - name: Build Docs
         env:
           NODE_OPTIONS: --max_old_space_size=8192
-        run: yarn build
+        run: ls && yarn build
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v1
