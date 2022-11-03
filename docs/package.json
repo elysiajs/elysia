@@ -3,8 +3,8 @@
   "name": "kingworld",
   "version": "0.6.0",
   "scripts": {
-    "dev": "vuepress dev docs --temp .temp",
-    "build": "vuepress build docs --temp .temp"
+    "dev": "vuepress dev docs",
+    "build": "vuepress build docs"
   },
   "devDependencies": {
     "typedoc": "^0.23.20",

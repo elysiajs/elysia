@@ -1,4 +1,0 @@
-export default ({ siteData, options }) => {
-          siteData.themeConfig.sidebarDepth = 0;
-          siteData.themeConfig.sidebar = Object.assign({},siteData.themeConfig.sidebar,{"/api/":[{"title":"API","children":[["/api/","Readme"],["/api/modules","Exports"],{"title":"Classes","children":[["classes/Context","Context"],["classes/default","default"]]},{"title":"Interfaces","children":[["interfaces/Hook","Hook"],["interfaces/InternalRoute","InternalRoute"],["interfaces/KingWorldConfig","KingWorldConfig"],["interfaces/KingWorldInstance","KingWorldInstance"],["interfaces/LifeCycle","LifeCycle"],["interfaces/LocalHook","LocalHook"],["interfaces/RegisterHook","RegisterHook"],["interfaces/TypedRoute","TypedRoute"],["interfaces/TypedSchema","TypedSchema"]]}],"initialOpenGroupIndex":-1,"collapsable":false}]});
-        }
