@@ -32,7 +32,6 @@ import {
 	InternalRoute,
 	BodyParser,
 	ErrorHandler,
-	ErrorCode,
 	TypedSchema,
 	LocalHook,
 	LocalHandler,
@@ -157,7 +156,7 @@ export default class KingWorld<
 					this.router.register(path)[method]
 	}
 
-	onStart(handler: VoidLifeCycle) {
+	onStart(handler: VoidLifeCycle<Instance>) {
 		this.event.start.push(handler)
 
 		return this
@@ -205,7 +204,7 @@ export default class KingWorld<
 		return this
 	}
 
-	onStop(handler: VoidLifeCycle) {
+	onStop(handler: VoidLifeCycle<Instance>) {
 		this.event.stop.push(handler)
 
 		return this
@@ -217,7 +216,7 @@ export default class KingWorld<
 	) {
 		switch (type) {
 			case 'start':
-				this.event.start.push(handler as LifeCycle['start'])
+				this.event.start.push(handler as LifeCycle<Instance>['start'])
 				break
 
 			case 'request':
@@ -247,7 +246,7 @@ export default class KingWorld<
 				break
 
 			case 'stop':
-				this.event.stop.push(handler as LifeCycle['stop'])
+				this.event.stop.push(handler as LifeCycle<Instance>['stop'])
 				break
 		}
 
@@ -570,6 +569,8 @@ export default class KingWorld<
 			if (validate.body) {
 				validate.body(body)
 
+				console.log(validate.body.errors)
+
 				if (validate.body.errors)
 					throw formatAjvError('body', validate.body.errors[0])
 			}
@@ -710,5 +711,12 @@ export type {
 	LocalHook,
 	LocalHandler,
 	LifeCycle,
-	LifeCycleEvent
+	LifeCycleEvent,
+	AfterRequestHandler,
+	HookHandler,
+	TypedSchemaToRoute,
+	UnwrapSchema,
+	LifeCycleStore,
+	VoidLifeCycle,
+	SchemaValidator
 } from './types'

@@ -116,5 +116,7 @@ export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
 export const formatAjvError = (type: string, error: ErrorObject) =>
 	new KingWorldError(
 		'VALIDATION',
-		`Invalid ${type}, ${error.dataPath || 'root'} ${error.message}`
+		`Invalid ${type}, ${error?.instancePath?.slice(1) || 'root'} ${
+			error.message
+		}`
 	)
