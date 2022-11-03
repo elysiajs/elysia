@@ -26,14 +26,14 @@ jobs:
         run: yarn install --frozen-lockfile
       - name: Setup Pages
         uses: actions/configure-pages@v2
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
-        with:
-          path: "docs/.vuepress/dist"
       - name: Build Docs
         env:
           NODE_OPTIONS: --max_old_space_size=8192
         run: ls && yarn build
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: "docs/.vuepress/dist"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v1
