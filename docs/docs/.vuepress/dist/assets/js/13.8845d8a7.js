@@ -1,0 +1,1 @@
+(window.webpackJsonp=window.webpackJsonp||[]).push([[13],{352:function(n,t,u){"use strict";u.r(t);var s=u(15),e=Object(s.a)({},(function(){return(0,this._self._c)("h1",[this._v("Custom Page layout")])}),[],!1,null,null,null);t.default=e.exports}}]);
