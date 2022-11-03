@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "name": "kingworld",
+  "version": "0.6.0",
+  "scripts": {
+    "dev": "vuepress dev docs --temp .temp",
+    "build": "vuepress build docs --temp .temp"
+  },
+  "devDependencies": {
+    "typedoc": "^0.23.20",
+    "typedoc-plugin-markdown": "^3.13.6",
+    "vuepress": "1.9.7",
+    "vuepress-plugin-typedoc": "^0.11.1",
+    "vuepress-theme-vt": "0.6.0"
+  }
+}
