@@ -1,8 +1,12 @@
+import { ErrorObject } from 'ajv'
+import KingWorldError from './error'
 import type {
 	DeepMergeTwoTypes,
 	Hook,
 	LifeCycleStore,
-	RegisterHook
+	LocalHook,
+	RegisterHook,
+	TypedSchema
 } from './types'
 
 export const SCHEMA: unique symbol = Symbol('schema')
@@ -13,10 +17,23 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 ]
 
 export const mergeHook = (
-	a: Hook | RegisterHook<any, any> | LifeCycleStore<any>,
-	b: Hook | RegisterHook<any, any>
-): Hook<any> => {
+	a: Hook | RegisterHook<any, any> | LocalHook<any> | LifeCycleStore<any>,
+	b: Hook | RegisterHook<any, any> | LocalHook<any>
+): LocalHook<any, any> => {
+	const aSchema = 'schema' in a ? (a.schema as TypedSchema) : null
+	const bSchema = b && 'schema' in b ? b.schema : null
+
 	return {
+		schema:
+			aSchema || bSchema
+				? ({
+						body: aSchema?.body ?? bSchema?.body,
+						header: aSchema?.header ?? bSchema?.header,
+						params: aSchema?.params ?? bSchema?.params,
+						query: aSchema?.query ?? bSchema?.query,
+						response: aSchema?.response ?? bSchema?.response
+				  } as TypedSchema)
+				: null,
 		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []),
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle ?? [],
@@ -95,3 +112,9 @@ export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
 
 	return output as DeepMergeTwoTypes<A, B>
 }
+
+export const formatAjvError = (type: string, error: ErrorObject) =>
+	new KingWorldError(
+		'VALIDATION',
+		`Invalid ${type}, ${error.dataPath || 'root'} ${error.message}`
+	)

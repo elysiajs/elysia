@@ -3,7 +3,11 @@ import type { ErrorCode } from './types'
 export default class KingWorldError extends Error {
 	code: ErrorCode = 'UNKNOWN'
 
-	constructor(message: ErrorCode & string, options?: ErrorOptions) {
+	constructor(
+		code: ErrorCode & string,
+		message: string = code,
+		options?: ErrorOptions
+	) {
 		super(message, options)
 
 		switch (message as ErrorCode) {
@@ -19,8 +23,21 @@ export default class KingWorldError extends Error {
 				this.code = 'NOT_FOUND'
 				break
 
+			case 'VALIDATION':
+				this.code = 'VALIDATION'
+				break
+
 			default:
 				break
 		}
+
+		if (
+			message.startsWith('Invalid query') ||
+			message.startsWith('Invalid body') ||
+			message.startsWith('Invalid params') ||
+			message.startsWith('Invalid headers') ||
+			message.startsWith('Invalid body')
+		)
+			this.code = 'VALIDATION'
 	}
 }

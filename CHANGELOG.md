@@ -1,3 +1,18 @@
+# 0.0.0-experimental.33 - 3 Nov 2022 
+Feature:
+- `.schema` for global schema validation
+- `.start`, `.stop` and accept `KingWorld<Instance>` as first parameter
+
+Improvement:
+- `.guard` now auto infer type from schema to `Handler`
+- scoped `.guard` now inherits hook
+- `NewInstance` now inherits `InheritSchema`
+
+Bug fix:
+- Rename `afterHandle` to `onAfterHandle` to match naming convention
+- Make `afterHandle` in `RegisterHook` optional
+- Internal type conversion between `Hook`, `LocalHook`
+
 # 0.0.0-experimental.32 - 2 Nov 2022 
 Feature:
 - add `afterHandle` hook

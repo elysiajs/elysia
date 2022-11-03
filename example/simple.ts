@@ -1,5 +1,6 @@
 import KingWorld from '../src'
 
+// Simple Hello World
 new KingWorld()
 	.get('/', () => 'Hi')
 	.onStart(() => {

@@ -4,9 +4,10 @@ import cookie from '../src/index'
 
 const app = new KingWorld()
 	.get('/', ({ status, responseHeaders }) => {
-		responseHeaders['a'] = 'b'
-		status(400)
+		// Set response status
+		responseHeaders['x-powered-by'] = 'KingWorld'
 
-		return new Response('Ok')
+		// Set response status
+		status(400)
 	})
 	.listen(8080)

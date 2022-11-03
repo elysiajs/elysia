@@ -1,57 +1,58 @@
 {
-	"name": "kingworld",
-	"description": "Fast, and Low overhead Bun web server",
-	"version": "0.0.0-experimental.32",
-	"author": {
-		"name": "saltyAom",
-		"url": "https://github.com/SaltyAom",
-		"email": "saltyaom@gmail.com"
-	},
-	"main": "build/index.js",
-	"module": "build/es/index.js",
-	"esnext": "build/es/index.js",
-	"types": "src/index.ts",
-	"typings": "src/index.ts",
-	"keywords": [
-		"bun",
-		"web",
-		"server",
-		"http"
-	],
-	"homepage": "https://github.com/saltyaom/kingworld",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/saltyaom/kingworld"
-	},
-	"bugs": "https://github.com/SaltyAom/kingworld/issues",
-	"license": "MIT",
-	"scripts": {
-		"test": "bun wiptest",
-		"dev": "nodemon --config nodemon.json",
-		"build": "npm run build:main && npm run build:es",
-		"build:main": "swc src --config-file .cjs.swcrc -d build",
-		"build:es": "swc src --config-file .es.swcrc -d build/es",
-		"release": "npm run build && npm run test && npm publish"
-	},
-	"dependencies": {
-		"zod": "3.19.1",
-		"zod-to-json-schema": "^3.18.1"
-	},
-	"devDependencies": {
-		"@swc/cli": "^0.1.57",
-		"@swc/core": "^1.2.211",
-		"@swc/jest": "^0.2.21",
-		"@types/node": "^18.0.3",
-		"@typescript-eslint/eslint-plugin": "^5.30.6",
-		"@typescript-eslint/parser": "^5.30.6",
-		"bun-types": "^0.2.2",
-		"eslint": "^8.19.0",
-		"nodemon": "^2.0.19",
-		"ts-node": "^10.8.2",
-		"typescript": "^4.7.4"
-	},
-	"peerDependencies": {
-		"ajv": ">=8.0.0",
-		"zod": ">=3.0.0"
-	}
+  "name": "kingworld",
+  "description": "Fast, and friendly Bun web framework",
+  "version": "0.0.0-experimental.33",
+  "author": {
+    "name": "saltyAom",
+    "url": "https://github.com/SaltyAom",
+    "email": "saltyaom@gmail.com"
+  },
+  "main": "build/index.js",
+  "module": "build/es/index.js",
+  "esnext": "build/es/index.js",
+  "types": "src/index.ts",
+  "typings": "src/index.ts",
+  "keywords": [
+    "bun",
+    "http",
+    "web",
+    "server"
+  ],
+  "homepage": "https://github.com/saltyaom/kingworld",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saltyaom/kingworld"
+  },
+  "bugs": "https://github.com/SaltyAom/kingworld/issues",
+  "license": "MIT",
+  "scripts": {
+    "test": "bun wiptest",
+    "dev": "nodemon --config nodemon.json",
+    "build": "npm run build:main && npm run build:es",
+    "build:main": "swc src --config-file .cjs.swcrc -d build",
+    "build:es": "swc src --config-file .es.swcrc -d build/es",
+    "release": "npm run build && npm run test && npm publish"
+  },
+  "dependencies": {
+    "ajv": "^8.11.0",
+    "zod": "^3.19.1",
+    "zod-to-json-schema": "^3.18.1"
+  },
+  "devDependencies": {
+    "@swc/cli": "^0.1.57",
+    "@swc/core": "^1.2.211",
+    "@swc/jest": "^0.2.21",
+    "@types/node": "^18.0.3",
+    "@typescript-eslint/eslint-plugin": "^5.30.6",
+    "@typescript-eslint/parser": "^5.30.6",
+    "bun-types": "^0.2.2",
+    "eslint": "^8.19.0",
+    "nodemon": "^2.0.19",
+    "ts-node": "^10.8.2",
+    "typescript": "^4.7.4"
+  },
+  "peerDependencies": {
+    "ajv": ">=8.0.0",
+    "zod": ">=3.0.0"
+  }
 }
