@@ -158,27 +158,38 @@ export type HookHandler<
 	Instance
 >
 
+export type MergeIfNotNull<A, B> = B extends null ? A : A & B
+
 export interface LocalHook<
-	Schema extends TypedSchema,
+	Schema extends TypedSchema<any> = TypedSchema,
 	Instance extends KingWorldInstance = KingWorldInstance,
-	InheritedSchema extends TypedSchema = TypedSchema
+	InheritedSchema extends TypedSchema<any> | null = null
 > {
 	schema?: Schema
-	transform?: WithArray<HookHandler<Schema, Instance>>
-	beforeHandle?: WithArray<HookHandler<Schema & InheritedSchema, Instance> >
+	transform?: WithArray<
+		HookHandler<MergeIfNotNull<Schema, InheritedSchema>, Instance>
+	>
+	beforeHandle?: WithArray<
+		HookHandler<MergeIfNotNull<Schema, InheritedSchema>, Instance>
+	>
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
 	error?: WithArray<ErrorHandler>
 }
 
 export type LocalHandler<
-	Schema extends TypedSchema = TypedSchema,
+	Schema extends TypedSchema<any> = TypedSchema,
 	Instance extends KingWorldInstance = KingWorldInstance,
 	Path extends string = string,
-	InheritedSchema extends TypedSchema = TypedSchema
+	InheritedSchema extends TypedSchema<any> | null = null
 > = Handler<
-	Schema['params'] extends NonNullable<Schema['params']>
-		? TypedSchemaToRoute<Schema & InheritedSchema>
-		: Omit<TypedSchemaToRoute<Schema & InheritedSchema>, 'params'> & {
+	MergeIfNotNull<Schema, InheritedSchema>['params'] extends NonNullable<
+		Schema['params']
+	>
+		? TypedSchemaToRoute<MergeIfNotNull<Schema, InheritedSchema>>
+		: Omit<
+				TypedSchemaToRoute<MergeIfNotNull<Schema, InheritedSchema>>,
+				'params'
+		  > & {
 				params: Record<ExtractKWPath<Path>, string>
 		  },
 	Instance

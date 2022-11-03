@@ -11,7 +11,7 @@ export default class Context<
 	request: Request
 	query: Route['query'] extends Record<string, any>
 		? Route['query']
-		: Record<string, string>
+		: Record<string, any>
 	params: Route['params']
 	body: Route['body']
 	store: Store

@@ -1,6 +1,6 @@
 # 0.0.0-experimental.36 - 3 Nov 2022 
 Improvement:
-- `.guard` now combine global and local
+- `.guard` now combine global and local recursively
 
 # 0.0.0-experimental.35 - 3 Nov 2022 
 Bug fix:

@@ -40,12 +40,13 @@ import {
 	LifeCycleStore,
 	VoidLifeCycle,
 	AfterRequestHandler,
-	SchemaValidator
+	SchemaValidator,
+	MergeIfNotNull
 } from './types'
 
 export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance,
-	InheritedSchema extends TypedSchema = TypedSchema
+	InheritedSchema extends TypedSchema = {}
 > {
 	private config: KingWorldConfig
 
@@ -273,11 +274,16 @@ export default class KingWorld<
 		return this
 	}
 
-	guard<Schema extends TypedSchema = TypedSchema>(
+	guard<Schema extends TypedSchema = {}>(
 		hook: LocalHook<Schema, Instance>,
-		run: (group: KingWorld<Instance, Schema>) => void
+		run: (
+			group: KingWorld<Instance, MergeIfNotNull<Schema, InheritedSchema>>
+		) => void
 	) {
-		const instance = new KingWorld<Instance, Schema>()
+		const instance = new KingWorld<
+			Instance,
+			MergeIfNotNull<Schema, InheritedSchema>
+		>()
 		run(instance)
 
 		Object.values(instance.routes).forEach(
@@ -306,10 +312,7 @@ export default class KingWorld<
 		return plugin(this as unknown as any, config) as unknown as any
 	}
 
-	get<
-		Schema extends TypedSchema = InheritedSchema,
-		Path extends string = string
-	>(
+	get<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
 		hook?: LocalHook<Schema, Instance, InheritedSchema>
@@ -337,10 +340,7 @@ export default class KingWorld<
 		return this
 	}
 
-	put<
-		Schema extends TypedSchema = InheritedSchema,
-		Path extends string = string
-	>(
+	put<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
 		hook?: LocalHook<Schema, Instance, InheritedSchema>
@@ -351,7 +351,7 @@ export default class KingWorld<
 	}
 
 	patch<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
@@ -369,7 +369,7 @@ export default class KingWorld<
 	}
 
 	delete<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
@@ -387,7 +387,7 @@ export default class KingWorld<
 	}
 
 	options<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
@@ -405,7 +405,7 @@ export default class KingWorld<
 	}
 
 	head<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
@@ -423,7 +423,7 @@ export default class KingWorld<
 	}
 
 	trace<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
@@ -441,7 +441,7 @@ export default class KingWorld<
 	}
 
 	connect<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
@@ -459,7 +459,7 @@ export default class KingWorld<
 	}
 
 	method<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		method: HTTPMethod,
@@ -517,7 +517,7 @@ export default class KingWorld<
 	}
 
 	schema<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		NewInstance = KingWorld<Instance, Schema>
 	>(schema: Schema): NewInstance {
 		this.$schema = {
