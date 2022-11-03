@@ -320,7 +320,7 @@ export default class KingWorld<
 	}
 
 	post<
-		Schema extends TypedSchema = InheritedSchema,
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
 	>(
 		path: Path,
@@ -568,8 +568,6 @@ export default class KingWorld<
 
 			if (validate.body) {
 				validate.body(body)
-
-				console.log(validate.body.errors)
 
 				if (validate.body.errors)
 					throw formatAjvError('body', validate.body.errors[0])

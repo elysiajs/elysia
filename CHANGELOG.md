@@ -1,7 +1,12 @@
+# 0.0.0-experimental.35 - 3 Nov 2022 
+Bug fix:
+- Remove `console.log` on failed validation
+
 # 0.0.0-experimental.34 - 3 Nov 2022 
 Improvement:
 - Add Ajv 8.11.0
 - Error log for validation is updated to `instancePath`
+
 # 0.0.0-experimental.33 - 3 Nov 2022 
 Feature:
 - `.schema` for global schema validation

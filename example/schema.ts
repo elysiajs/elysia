@@ -2,9 +2,6 @@ import KingWorld from '../src'
 import { z } from 'zod'
 
 const app = new KingWorld()
-	.onError((error) => {
-		console.log(error.code)
-	})
 	// Strictly validate response
 	.get('/', () => 'hi', {
 		schema: {
