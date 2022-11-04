@@ -64,8 +64,8 @@ export type AfterRequestHandler<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > = (
-	response: Route['response'],
-	context: Context<Route, Instance['store']> & Instance['request']
+	context: Context<Route, Instance['store']> & Instance['request'],
+	response: Route['response']
 ) => Route['response'] | Promise<Route['response']> | Response
 
 export interface LifeCycleStore<

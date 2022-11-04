@@ -1,6 +1,10 @@
-# 0.0.0-experimental.36 - 3 Nov 2022 
+# 0.0.0-experimental.36 - 4 Nov 2022 
+Breaking Change:
+- `AfterRequestHandle` now accept (`Context`, `Response`) instead of `(Response, Context)`
+
 Improvement:
 - `.guard` now combine global and local recursively
+- `.use` now inherits schema
 
 # 0.0.0-experimental.35 - 3 Nov 2022 
 Bug fix:

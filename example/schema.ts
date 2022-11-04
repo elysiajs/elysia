@@ -33,4 +33,38 @@ const app = new KingWorld()
 			body: z.string()
 		}
 	})
+	.guard(
+		{
+			schema: {
+				query: z.object({
+					name: z.string()
+				})
+			}
+		},
+		(app) =>
+			app.guard(
+				{
+					schema: {
+						body: z.object({
+							username: z.string()
+						})
+					}
+				},
+				(app) =>
+					app.post(
+						'/id/:id',
+						({ query, body, params }) => body,
+						{
+							schema: {
+								params: z.object({
+									id: z.number()
+								}),
+							},
+							transform: ({ params }) => {
+								params.id = +params.id
+							}
+						}
+					)
+			)
+	)
 	.listen(3000)

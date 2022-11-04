@@ -302,9 +302,12 @@ export default class KingWorld<
 
 	use<
 		Config extends Record<string, unknown> = Record<string, unknown>,
-		T extends KingWorld<any> = KingWorld<any>
+		T extends KingWorld<any, any> = KingWorld<any, any>
 	>(
-		plugin: (app: KingWorld<Instance>, config?: Config) => T,
+		plugin: (
+			app: KingWorld<Instance, InheritedSchema>,
+			config?: Config
+		) => T,
 		config?: Config
 	): T {
 		// ? Need hack, because instance need to have both type
