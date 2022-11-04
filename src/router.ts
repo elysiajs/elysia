@@ -61,8 +61,8 @@ function defaultStoreFactory() {
 }
 
 export class Router {
-    public _root: Node
-    public _storeFactory: any
+    private _root: Node
+    private _storeFactory: any
 
     constructor({ storeFactory }: RouterOptions = {}) {
         if (!storeFactory) {
