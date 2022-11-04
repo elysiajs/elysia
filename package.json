@@ -1,7 +1,7 @@
 {
   "name": "kingworld",
-  "description": "Fast, and Low overhead Bun web server",
-  "version": "0.0.0-experimental.32",
+  "description": "Fast, and friendly Bun web framework",
+  "version": "0.0.0-experimental.36",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -14,9 +14,9 @@
   "typings": "src/index.ts",
   "keywords": [
     "bun",
+    "http",
     "web",
-    "server",
-    "http"
+    "server"
   ],
   "homepage": "https://github.com/saltyaom/kingworld",
   "repository": {
@@ -34,7 +34,8 @@
     "release": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "zod": "3.19.1",
+    "ajv": "^8.11.0",
+    "zod": "^3.19.1",
     "zod-to-json-schema": "^3.18.1"
   },
   "devDependencies": {

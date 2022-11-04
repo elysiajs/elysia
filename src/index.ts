@@ -7,7 +7,15 @@ import { zodToJsonSchema } from 'zod-to-json-schema'
 import { Router } from './router'
 import Context from './context'
 import { mapResponse, mapEarlyResponse } from './handler'
-import { mapQuery, getPath, clone, mergeHook, mergeDeep, SCHEMA } from './utils'
+import {
+	mapQuery,
+	getPath,
+	clone,
+	mergeHook,
+	mergeDeep,
+	SCHEMA,
+	formatAjvError
+} from './utils'
 import { registerSchemaPath } from './schema'
 import KingWorldError from './error'
 
@@ -24,7 +32,6 @@ import {
 	InternalRoute,
 	BodyParser,
 	ErrorHandler,
-	ErrorCode,
 	TypedSchema,
 	LocalHook,
 	LocalHandler,
@@ -32,12 +39,17 @@ import {
 	LifeCycleEvent,
 	LifeCycleStore,
 	VoidLifeCycle,
-	AfterRequestHandler
+	AfterRequestHandler,
+	SchemaValidator,
+	MergeIfNotNull
 } from './types'
 
 export default class KingWorld<
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends KingWorldInstance = KingWorldInstance,
+	InheritedSchema extends TypedSchema = {}
 > {
+	private config: KingWorldConfig
+
 	store: Instance['store'] = {
 		[SCHEMA]: {}
 	}
@@ -65,8 +77,8 @@ export default class KingWorld<
 	}
 
 	server: Server | null = null
+	private $schema: SchemaValidator | null = null
 
-	private config: KingWorldConfig
 	private router = new Router()
 	protected routes: InternalRoute<Instance>[] = []
 
@@ -145,7 +157,7 @@ export default class KingWorld<
 					this.router.register(path)[method]
 	}
 
-	onStart(handler: VoidLifeCycle) {
+	onStart(handler: VoidLifeCycle<Instance>) {
 		this.event.start.push(handler)
 
 		return this
@@ -179,7 +191,7 @@ export default class KingWorld<
 		return this
 	}
 
-	afterHandle<Route extends TypedRoute = TypedRoute>(
+	onAfterHandle<Route extends TypedRoute = TypedRoute>(
 		handler: AfterRequestHandler<Route, Instance>
 	) {
 		this.event.afterHandle.push(handler)
@@ -193,7 +205,7 @@ export default class KingWorld<
 		return this
 	}
 
-	onStop(handler: VoidLifeCycle) {
+	onStop(handler: VoidLifeCycle<Instance>) {
 		this.event.stop.push(handler)
 
 		return this
@@ -205,7 +217,7 @@ export default class KingWorld<
 	) {
 		switch (type) {
 			case 'start':
-				this.event.start.push(handler as LifeCycle['start'])
+				this.event.start.push(handler as LifeCycle<Instance>['start'])
 				break
 
 			case 'request':
@@ -235,7 +247,7 @@ export default class KingWorld<
 				break
 
 			case 'stop':
-				this.event.stop.push(handler as LifeCycle['stop'])
+				this.event.stop.push(handler as LifeCycle<Instance>['stop'])
 				break
 		}
 
@@ -262,16 +274,26 @@ export default class KingWorld<
 		return this
 	}
 
-	guard(
-		hook: RegisterHook<{}, Instance>,
-		run: (group: KingWorld<Instance>) => void
+	guard<Schema extends TypedSchema = {}>(
+		hook: LocalHook<Schema, Instance>,
+		run: (
+			group: KingWorld<Instance, MergeIfNotNull<Schema, InheritedSchema>>
+		) => void
 	) {
-		const instance = new KingWorld<Instance>()
+		const instance = new KingWorld<
+			Instance,
+			MergeIfNotNull<Schema, InheritedSchema>
+		>()
 		run(instance)
 
 		Object.values(instance.routes).forEach(
-			({ method, path, handler, hooks: localHooks }) => {
-				this._addHandler(method, path, handler, localHooks as any)
+			({ method, path, handler, hooks: localHook }) => {
+				this._addHandler(
+					method,
+					path,
+					handler,
+					mergeHook(hook as LocalHook<any>, localHook)
+				)
 			}
 		)
 
@@ -280,9 +302,12 @@ export default class KingWorld<
 
 	use<
 		Config extends Record<string, unknown> = Record<string, unknown>,
-		T extends KingWorld<any> = KingWorld<any>
+		T extends KingWorld<any, any> = KingWorld<any, any>
 	>(
-		plugin: (app: KingWorld<Instance>, config?: Config) => T,
+		plugin: (
+			app: KingWorld<Instance, InheritedSchema>,
+			config?: Config
+		) => T,
 		config?: Config
 	): T {
 		// ? Need hack, because instance need to have both type
@@ -292,10 +317,10 @@ export default class KingWorld<
 
 	get<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('GET', path, handler, hook as LocalHook<any>)
+		this._addHandler('GET', path, handler, hook as LocalHook<any, any, any>)
 
 		return this
 	}
@@ -305,20 +330,25 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('POST', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'POST',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
 
 	put<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('PUT', path, handler, hook as LocalHook<any>)
+		this._addHandler('PUT', path, handler, hook as LocalHook<any, any, any>)
 
 		return this
 	}
@@ -328,10 +358,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('PATCH', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'PATCH',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -341,10 +376,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('DELETE', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'DELETE',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -354,10 +394,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('OPTIONS', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'OPTIONS',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -367,10 +412,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('HEAD', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'HEAD',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -380,10 +430,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('TRACE', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'TRACE',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -393,10 +448,15 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler('CONNECT', path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			'CONNECT',
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -407,10 +467,15 @@ export default class KingWorld<
 	>(
 		method: HTTPMethod,
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
+		hook?: LocalHook<Schema, Instance, InheritedSchema>
 	) {
-		this._addHandler(method, path, handler, hook as LocalHook<any>)
+		this._addHandler(
+			method,
+			path,
+			handler,
+			hook as LocalHook<any, any, any>
+		)
 
 		return this
 	}
@@ -423,12 +488,15 @@ export default class KingWorld<
 				? AsyncReturned
 				: Returned
 			: Value,
-		NewInstance = KingWorld<{
-			store: Instance['store'] & {
-				[key in Key]: ReturnValue
-			}
-			request: Instance['request']
-		}>
+		NewInstance = KingWorld<
+			{
+				store: Instance['store'] & {
+					[key in Key]: ReturnValue
+				}
+				request: Instance['request']
+			},
+			InheritedSchema
+		>
 	>(name: Key, value: Value): NewInstance {
 		;(this.store as Record<Key, Value>)[name] = value
 
@@ -438,14 +506,32 @@ export default class KingWorld<
 	decorate<
 		Name extends string,
 		Callback extends Function = () => unknown,
-		NewInstance = KingWorld<{
-			store: Instance['store']
-			request: Instance['request'] & { [key in Name]: Callback }
-		}>
+		NewInstance = KingWorld<
+			{
+				store: Instance['store']
+				request: Instance['request'] & { [key in Name]: Callback }
+			},
+			InheritedSchema
+		>
 	>(name: Name, value: Callback): NewInstance {
 		return this.onTransform(
 			(app: any) => (app[name] = value)
 		) as unknown as NewInstance
+	}
+
+	schema<
+		Schema extends TypedSchema = TypedSchema,
+		NewInstance = KingWorld<Instance, Schema>
+	>(schema: Schema): NewInstance {
+		this.$schema = {
+			body: this.getSchemaValidator(schema?.body),
+			header: this.getSchemaValidator(schema?.header),
+			params: this.getSchemaValidator(schema?.params),
+			query: this.getSchemaValidator(schema?.query),
+			response: this.getSchemaValidator(schema?.response)
+		}
+
+		return this as unknown as NewInstance
 	}
 
 	// ? Using arrow to bind `this`
@@ -495,9 +581,8 @@ export default class KingWorld<
 			if (response instanceof Promise) response = await response
 		}
 
-		if (handler.validator) {
-			const validate = handler.validator
-
+		const validate = handler.validator ?? this.$schema
+		if (validate) {
 			if (validate.header) {
 				const _header: Record<string, string> = {}
 
@@ -506,25 +591,29 @@ export default class KingWorld<
 
 				validate.header(_header)
 
-				if (validate.header.errors) throw validate.header.errors[0]
+				if (validate.header.errors)
+					throw formatAjvError('header', validate.header.errors[0])
 			}
 
 			if (validate.params) {
 				validate.params(context.params)
 
-				if (validate.params.errors) throw validate.params.errors[0]
+				if (validate.params.errors)
+					throw formatAjvError('params', validate.params.errors[0])
 			}
 
 			if (validate.query) {
 				validate.query(context.query)
 
-				if (validate.query.errors) throw validate.query.errors[0]
+				if (validate.query.errors)
+					throw formatAjvError('query', validate.query.errors[0])
 			}
 
 			if (validate.body) {
 				validate.body(body)
 
-				if (validate.body.errors) throw validate.body.errors[0]
+				if (validate.body.errors)
+					throw formatAjvError('body', validate.body.errors[0])
 			}
 		}
 
@@ -546,11 +635,10 @@ export default class KingWorld<
 		let response = handler.handle(context)
 		if (response instanceof Promise) response = await response
 
-		if (handler.validator?.response) {
-			handler.validator.response(response)
+		if (validate?.response) {
+			validate.response(response)
 
-			if (handler.validator.response.errors)
-				throw handler.validator.response.errors[0]
+			if (validate.response.errors) throw validate.response.errors[0]
 		}
 
 		for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
@@ -565,9 +653,12 @@ export default class KingWorld<
 	}
 
 	private handleError = (err: Error) => {
-		const error = new KingWorldError(err.message as unknown as ErrorCode, {
-			cause: err.cause
-		})
+		const error =
+			err instanceof KingWorldError
+				? err
+				: new KingWorldError(err.name as any, err.message, {
+						cause: err.cause
+				  })
 
 		for (let i = 0; i < this.event.error.length; i++) {
 			const response = this.event.error[i](error)
@@ -590,6 +681,11 @@ export default class KingWorld<
 					status: 404
 				})
 
+			case 'VALIDATION':
+				return new Response(error.message, {
+					status: 400
+				})
+
 			default:
 				return new Response(error.message, {
 					status: 500
@@ -597,10 +693,11 @@ export default class KingWorld<
 		}
 	}
 
-	listen(options: number | Omit<Serve, 'fetch'>) {
+	listen = (options: number | Omit<Serve, 'fetch'>) => {
 		if (!Bun) throw new Error('Bun to run')
 
-		for (let i = 0; i < this.event.start.length; i++) this.event.start[i]()
+		for (let i = 0; i < this.event.start.length; i++)
+			this.event.start[i](this as any)
 
 		this.server = Bun.serve(
 			typeof options === 'number'
@@ -625,12 +722,12 @@ export default class KingWorld<
 				"KingWorld isn't running. Call `app.listen` to start the server."
 			)
 
-		this.server.stop()
-
 		for (let i = 0; i < this.event.stop.length; i++) {
-			const process = this.event.stop[i]()
+			const process = this.event.stop[i](this as any)
 			if (process instanceof Promise) await process
 		}
+
+		this.server.stop()
 	}
 }
 
@@ -655,5 +752,12 @@ export type {
 	LocalHook,
 	LocalHandler,
 	LifeCycle,
-	LifeCycleEvent
+	LifeCycleEvent,
+	AfterRequestHandler,
+	HookHandler,
+	TypedSchemaToRoute,
+	UnwrapSchema,
+	LifeCycleStore,
+	VoidLifeCycle,
+	SchemaValidator
 } from './types'

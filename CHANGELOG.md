@@ -1,3 +1,35 @@
+# 0.0.0-experimental.36 - 4 Nov 2022 
+Breaking Change:
+- `AfterRequestHandle` now accept (`Context`, `Response`) instead of `(Response, Context)`
+
+Improvement:
+- `.guard` now combine global and local recursively
+- `.use` now inherits schema
+
+# 0.0.0-experimental.35 - 3 Nov 2022 
+Bug fix:
+- Remove `console.log` on failed validation
+
+# 0.0.0-experimental.34 - 3 Nov 2022 
+Improvement:
+- Add Ajv 8.11.0
+- Error log for validation is updated to `instancePath`
+
+# 0.0.0-experimental.33 - 3 Nov 2022 
+Feature:
+- `.schema` for global schema validation
+- `.start`, `.stop` and accept `KingWorld<Instance>` as first parameter
+
+Improvement:
+- `.guard` now auto infer type from schema to `Handler`
+- scoped `.guard` now inherits hook
+- `NewInstance` now inherits `InheritSchema`
+
+Bug fix:
+- Rename `afterHandle` to `onAfterHandle` to match naming convention
+- Make `afterHandle` in `RegisterHook` optional
+- Internal type conversion between `Hook`, `LocalHook`
+
 # 0.0.0-experimental.32 - 2 Nov 2022 
 Feature:
 - add `afterHandle` hook

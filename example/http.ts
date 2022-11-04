@@ -126,6 +126,9 @@ const app = new KingWorld()
 				status: 404
 			})
 	})
-	.listen(8080)
+	.onStart((app) => {
+		console.log(app)
 
-console.log('🦊 KINGWORLD is running at :8080')
+		console.log('🦊 KINGWORLD is running at :8080')
+	})
+	.listen(8080)

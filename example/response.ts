@@ -4,6 +4,7 @@ const app = new KingWorld()
 	.get('/', ({ responseHeaders }) => {
 		responseHeaders['X-POWERED-BY'] = 'KingWorld'
 
+		// Return custom response
 		return new Response('Shuba Shuba', {
 			headers: {
 				duck: 'shuba duck'

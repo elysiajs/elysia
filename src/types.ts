@@ -4,6 +4,7 @@ import type { default as Ajv, ValidateFunction } from 'ajv'
 
 import type Context from './context'
 import type KingWorldError from './error'
+import KingWorld from '.'
 
 export type KWKey = string | number | symbol
 export type WithArray<T> = T | T[]
@@ -38,42 +39,46 @@ export type LifeCycleEvent =
 	| 'error'
 	| 'stop'
 
-export type VoidLifeCycle = (() => void) | (() => Promise<void>)
+export type VoidLifeCycle<
+	Instance extends KingWorldInstance = KingWorldInstance
+> =
+	| ((app: KingWorld<Instance>) => void)
+	| ((app: KingWorld<Instance>) => Promise<void>)
 
 export type BodyParser = (request: Request) => any | Promise<any>
 
 export interface LifeCycle<
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
-	start: VoidLifeCycle
+	start: VoidLifeCycle<Instance>
 	request: BeforeRequestHandler
 	parse: BodyParser
 	transform: Handler<any, Instance>
 	beforeHandle: Handler<any, Instance>
 	afterHandle: AfterRequestHandler<any, Instance>
 	error: ErrorHandler
-	stop: VoidLifeCycle
+	stop: VoidLifeCycle<Instance>
 }
 
 export type AfterRequestHandler<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > = (
-	response: Route['response'],
-	context: Context<Route, Instance['store']> & Instance['request']
+	context: Context<Route, Instance['store']> & Instance['request'],
+	response: Route['response']
 ) => Route['response'] | Promise<Route['response']> | Response
 
 export interface LifeCycleStore<
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
-	start: VoidLifeCycle[]
+	start: VoidLifeCycle<Instance>[]
 	request: BeforeRequestHandler[]
 	parse: BodyParser[]
 	transform: Handler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
 	error: ErrorHandler[]
-	stop: VoidLifeCycle[]
+	stop: VoidLifeCycle<Instance>[]
 }
 
 export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
@@ -82,6 +87,7 @@ export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
 ) => Response | Promise<Response>
 
 export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
+	schema?: TypedSchema
 	transform: Handler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
@@ -92,9 +98,10 @@ export interface RegisterHook<
 	Route extends TypedRoute = TypedRoute,
 	Instance extends KingWorldInstance = KingWorldInstance
 > {
+	schema?: TypedSchema
 	transform?: WithArray<Handler<Route, Instance>>
 	beforeHandle?: WithArray<Handler<Route, Instance>>
-	afterHandle: WithArray<AfterRequestHandler<Route, Instance>>
+	afterHandle?: WithArray<AfterRequestHandler<Route, Instance>>
 	error?: ErrorHandler
 }
 
@@ -151,24 +158,38 @@ export type HookHandler<
 	Instance
 >
 
+export type MergeIfNotNull<A, B> = B extends null ? A : A & B
+
 export interface LocalHook<
-	Schema extends TypedSchema,
-	Instance extends KingWorldInstance = KingWorldInstance
+	Schema extends TypedSchema<any> = TypedSchema,
+	Instance extends KingWorldInstance = KingWorldInstance,
+	InheritedSchema extends TypedSchema<any> | null = null
 > {
 	schema?: Schema
-	transform?: WithArray<HookHandler<Schema, Instance>>
-	beforeHandle?: WithArray<HookHandler<Schema, Instance>>
-	afterHandle?: WithArray<HookHandler<Schema, Instance>>
+	transform?: WithArray<
+		HookHandler<MergeIfNotNull<Schema, InheritedSchema>, Instance>
+	>
+	beforeHandle?: WithArray<
+		HookHandler<MergeIfNotNull<Schema, InheritedSchema>, Instance>
+	>
+	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
+	error?: WithArray<ErrorHandler>
 }
 
 export type LocalHandler<
-	Schema extends TypedSchema = TypedSchema,
+	Schema extends TypedSchema<any> = TypedSchema,
 	Instance extends KingWorldInstance = KingWorldInstance,
-	Path extends string = string
+	Path extends string = string,
+	InheritedSchema extends TypedSchema<any> | null = null
 > = Handler<
-	Schema['params'] extends NonNullable<Schema['params']>
-		? TypedSchemaToRoute<Schema>
-		: Omit<TypedSchemaToRoute<Schema>, 'params'> & {
+	MergeIfNotNull<Schema, InheritedSchema>['params'] extends NonNullable<
+		Schema['params']
+	>
+		? TypedSchemaToRoute<MergeIfNotNull<Schema, InheritedSchema>>
+		: Omit<
+				TypedSchemaToRoute<MergeIfNotNull<Schema, InheritedSchema>>,
+				'params'
+		  > & {
 				params: Record<ExtractKWPath<Path>, string>
 		  },
 	Instance
@@ -184,7 +205,7 @@ export interface TypedRoute {
 export type ComposedHandler = {
 	handle: Handler<any, any>
 	hooks: Hook<any>
-	validator: SchemaValidator
+	validator?: SchemaValidator
 }
 
 export interface KingWorldConfig {
@@ -205,7 +226,7 @@ export interface KingWorldConfig {
 	/**
 	 * Custom ajv instance
 	 */
-	ajv: Ajv.Ajv
+	ajv: Ajv
 }
 
 export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}`
@@ -219,7 +240,7 @@ export interface InternalRoute<Instance extends KingWorldInstance> {
 	method: HTTPMethod
 	path: string
 	handler: Handler<any, Instance>
-	hooks: Hook<Instance>
+	hooks: LocalHook<any>
 }
 
 export type HTTPMethod =
@@ -265,6 +286,8 @@ export type ErrorCode =
 	| 'INTERNAL_SERVER_ERROR'
 	// ? Request exceed body limit (config.bodyLimit)
 	| 'BODY_LIMIT'
+	// ? Validation error
+	| 'VALIDATION'
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 

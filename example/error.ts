@@ -2,6 +2,7 @@ import { brotliCompress, gzip } from 'zlib'
 import KingWorld from '../src'
 
 new KingWorld()
+	// Custom error handler
 	.onError((error) => {
 		if (error.code === 'NOT_FOUND')
 			return new Response('Not Found :(', {

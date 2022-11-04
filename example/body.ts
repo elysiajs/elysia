@@ -2,8 +2,7 @@ import { z } from 'zod'
 import KingWorld from '../src'
 
 new KingWorld()
-	.get('/', () => new Response('a'))
-	// Add custom parser
+	// Add custom body parser
 	.onParse(async (request) => {
 		const contentType = request.headers.get('content-type') ?? ''
 
@@ -13,6 +12,8 @@ new KingWorld()
 		}
 	})
 	.post('/', ({ body: { username } }) => `Hi ${username}`, {
+		// Define type strict schema, and validation
+		// This type will be infer to TypeScript
 		schema: {
 			body: z.object({
 				id: z.number(),
@@ -20,7 +21,7 @@ new KingWorld()
 			})
 		}
 	})
-	// Increase id by 1
+	// Increase id by 1 from body before main handler
 	.post('/transform', ({ body }) => body, {
 		transform: ({ body }) => {
 			body.id = body.id + 1
