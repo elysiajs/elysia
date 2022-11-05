@@ -4,6 +4,9 @@ Improvement:
 - `use` now combine typed between current instance and plugin
 - `use` now auto infer type if function is inline
 
+Change:
+- `TypedSchema` is now replaced with `Instance['schema']`
+
 # 0.0.0-experimental.36 - 4 Nov 2022 
 Breaking Change:
 - `AfterRequestHandle` now accept (`Context`, `Response`) instead of `(Response, Context)`

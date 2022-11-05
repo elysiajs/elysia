@@ -1,4 +1,4 @@
-import type { z, ZodSchema } from 'zod'
+import { z, ZodObject, ZodSchema } from 'zod'
 
 import type { default as Ajv, ValidateFunction } from 'ajv'
 
@@ -11,15 +11,18 @@ export type WithArray<T> = T | T[]
 
 export interface KingWorldInstance<
 	Instance extends {
-		store: Record<KWKey, any>
-		request: Record<KWKey, any>
+		store?: Record<KWKey, any>
+		request?: Record<KWKey, any>
+		schema?: TypedSchema
 	} = {
 		store: Record<KWKey, any>
 		request: Record<KWKey, any>
+		schema: TypedSchema
 	}
 > {
 	request: Instance['request']
 	store: Instance['store']
+	schema: Instance['schema']
 }
 
 export type Handler<
@@ -158,6 +161,10 @@ export type HookHandler<
 	Instance
 >
 
+interface B {
+	username: string
+}
+
 export type MergeIfNotNull<A, B> = B extends null ? A : A & B
 
 export interface LocalHook<
@@ -179,15 +186,14 @@ export interface LocalHook<
 export type LocalHandler<
 	Schema extends TypedSchema<any> = TypedSchema,
 	Instance extends KingWorldInstance = KingWorldInstance,
-	Path extends string = string,
-	InheritedSchema extends TypedSchema<any> | null = null
+	Path extends string = string
 > = Handler<
-	MergeIfNotNull<Schema, InheritedSchema>['params'] extends NonNullable<
+	MergeIfNotNull<Schema, Instance['schema']>['params'] extends NonNullable<
 		Schema['params']
 	>
-		? TypedSchemaToRoute<MergeIfNotNull<Schema, InheritedSchema>>
+		? TypedSchemaToRoute<MergeIfNotNull<Schema, Instance['schema']>>
 		: Omit<
-				TypedSchemaToRoute<MergeIfNotNull<Schema, InheritedSchema>>,
+				TypedSchemaToRoute<MergeIfNotNull<Schema, Instance['schema']>>,
 				'params'
 		  > & {
 				params: Record<ExtractKWPath<Path>, string>
@@ -294,7 +300,9 @@ export type ErrorCode =
 export type ErrorHandler = (errorCode: KingWorldError) => void | Response
 
 // ? From https://dev.to/svehla/typescript-how-to-deep-merge-170c
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type Head<T> = T extends [infer I, ...infer _Rest] ? I : never
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type Tail<T> = T extends [infer _I, ...infer Rest] ? Rest : never
 
 type Zip_DeepMergeTwoTypes<T, U> = T extends []

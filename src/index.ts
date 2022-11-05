@@ -49,8 +49,8 @@ export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance<{
 		store: {}
 		request: {}
-	}>,
-	InheritedSchema extends TypedSchema = {}
+		schema: {}
+	}>
 > {
 	private config: KingWorldConfig
 
@@ -281,13 +281,18 @@ export default class KingWorld<
 	guard<Schema extends TypedSchema = {}>(
 		hook: LocalHook<Schema, Instance>,
 		run: (
-			group: KingWorld<Instance, MergeIfNotNull<Schema, InheritedSchema>>
+			group: KingWorld<{
+				request: Instance['request']
+				store: Instance['store']
+				schema: MergeIfNotNull<Schema, Instance['schema']>
+			}>
 		) => void
 	) {
-		const instance = new KingWorld<
-			Instance,
-			MergeIfNotNull<Schema, InheritedSchema>
-		>()
+		const instance = new KingWorld<{
+			request: Instance['request']
+			store: Instance['store']
+			schema: MergeIfNotNull<Schema, Instance['schema']>
+		}>()
 		run(instance)
 
 		Object.values(instance.routes).forEach(
@@ -306,25 +311,20 @@ export default class KingWorld<
 
 	use<
 		Config extends Record<string, unknown> = Record<string, unknown>,
-		NewKingWorld extends KingWorld<any, any> = KingWorld<any, any>,
-		Params extends KingWorld = KingWorld<any, any>
+		NewKingWorld extends KingWorld<any> = KingWorld<any>,
+		Params extends KingWorld = KingWorld<any>
 	>(
 		plugin: (
-			app: Params extends KingWorld<
-				infer ParamsInstance,
-				infer ParamsSchema
-			>
+			app: Params extends KingWorld<infer ParamsInstance>
 				? IsAny<ParamsInstance> extends true
-					? IsAny<ParamsSchema> extends true
-						? this
-						: Params
+					? this
 					: Params
 				: Params,
 			config?: Config
 		) => NewKingWorld,
 		config?: Config
-	): NewKingWorld extends KingWorld<infer NewInstance, infer NewSchema>
-		? KingWorld<NewInstance & Instance, NewSchema & TypedSchema>
+	): NewKingWorld extends KingWorld<infer NewInstance>
+		? KingWorld<NewInstance & Instance>
 		: this {
 		// ? Type is enforce on function already
 		return plugin(this as unknown as any, config) as unknown as any
@@ -332,8 +332,8 @@ export default class KingWorld<
 
 	get<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler('GET', path, handler, hook as LocalHook<any, any, any>)
 
@@ -345,8 +345,8 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler(
 			'POST',
@@ -360,8 +360,8 @@ export default class KingWorld<
 
 	put<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler('PUT', path, handler, hook as LocalHook<any, any, any>)
 
@@ -373,8 +373,8 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler(
 			'PATCH',
@@ -391,8 +391,8 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler(
 			'DELETE',
@@ -409,8 +409,8 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler(
 			'OPTIONS',
@@ -427,8 +427,8 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler(
 			'HEAD',
@@ -445,8 +445,8 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler(
 			'TRACE',
@@ -463,8 +463,8 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler(
 			'CONNECT',
@@ -482,8 +482,8 @@ export default class KingWorld<
 	>(
 		method: HTTPMethod,
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, InheritedSchema>,
-		hook?: LocalHook<Schema, Instance, InheritedSchema>
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance>
 	) {
 		this._addHandler(
 			method,
@@ -503,15 +503,13 @@ export default class KingWorld<
 				? AsyncReturned
 				: Returned
 			: Value,
-		NewInstance = KingWorld<
-			{
-				store: Instance['store'] & {
-					[key in Key]: ReturnValue
-				}
-				request: Instance['request']
-			},
-			InheritedSchema
-		>
+		NewInstance = KingWorld<{
+			store: Instance['store'] & {
+				[key in Key]: ReturnValue
+			}
+			request: Instance['request']
+			schema: Instance['schema']
+		}>
 	>(name: Key, value: Value): NewInstance {
 		;(this.store as Record<Key, Value>)[name] = value
 
@@ -521,13 +519,11 @@ export default class KingWorld<
 	decorate<
 		Name extends string,
 		Callback extends Function = () => unknown,
-		NewInstance = KingWorld<
-			{
-				store: Instance['store']
-				request: Instance['request'] & { [key in Name]: Callback }
-			},
-			InheritedSchema
-		>
+		NewInstance = KingWorld<{
+			store: Instance['store']
+			request: Instance['request'] & { [key in Name]: Callback }
+			schema: Instance['schema']
+		}>
 	>(name: Name, value: Callback): NewInstance {
 		return this.onTransform(
 			(app: any) => (app[name] = value)
@@ -536,7 +532,7 @@ export default class KingWorld<
 
 	schema<
 		Schema extends TypedSchema = TypedSchema,
-		NewInstance = KingWorld<Instance, Schema>
+		NewInstance = KingWorld<Instance>
 	>(schema: Schema): NewInstance {
 		this.$schema = {
 			body: this.getSchemaValidator(schema?.body),
