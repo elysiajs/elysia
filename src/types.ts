@@ -342,3 +342,9 @@ export type DeepMergeTwoTypes<T, U> =
 		[T, U] extends [{ [key: string]: unknown }, { [key: string]: unknown }]
 		? MergeTwoObjects<T, U>
 		: T | U
+
+export type IsAny<T> = unknown extends T
+	? [keyof T] extends [never]
+		? false
+		: true
+	: false

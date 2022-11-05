@@ -41,11 +41,15 @@ import {
 	VoidLifeCycle,
 	AfterRequestHandler,
 	SchemaValidator,
-	MergeIfNotNull
+	MergeIfNotNull,
+	IsAny
 } from './types'
 
 export default class KingWorld<
-	Instance extends KingWorldInstance = KingWorldInstance,
+	Instance extends KingWorldInstance = KingWorldInstance<{
+		store: {}
+		request: {}
+	}>,
 	InheritedSchema extends TypedSchema = {}
 > {
 	private config: KingWorldConfig
@@ -302,16 +306,27 @@ export default class KingWorld<
 
 	use<
 		Config extends Record<string, unknown> = Record<string, unknown>,
-		T extends KingWorld<any, any> = KingWorld<any, any>
+		NewKingWorld extends KingWorld<any, any> = KingWorld<any, any>,
+		Params extends KingWorld = KingWorld<any, any>
 	>(
 		plugin: (
-			app: KingWorld<Instance, InheritedSchema>,
+			app: Params extends KingWorld<
+				infer ParamsInstance,
+				infer ParamsSchema
+			>
+				? IsAny<ParamsInstance> extends true
+					? IsAny<ParamsSchema> extends true
+						? this
+						: Params
+					: Params
+				: Params,
 			config?: Config
-		) => T,
+		) => NewKingWorld,
 		config?: Config
-	): T {
-		// ? Need hack, because instance need to have both type
-		// ? but before transform type won't we available
+	): NewKingWorld extends KingWorld<infer NewInstance, infer NewSchema>
+		? KingWorld<NewInstance & Instance, NewSchema & TypedSchema>
+		: this {
+		// ? Type is enforce on function already
 		return plugin(this as unknown as any, config) as unknown as any
 	}
 

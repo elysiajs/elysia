@@ -1,3 +1,9 @@
+# 0.0.0-experimental.37 - 5 Nov 2022 
+Improvement:
+- `use` now accept any non `KingWorld<{}, any>`
+- `use` now combine typed between current instance and plugin
+- `use` now auto infer type if function is inline
+
 # 0.0.0-experimental.36 - 4 Nov 2022 
 Breaking Change:
 - `AfterRequestHandle` now accept (`Context`, `Response`) instead of `(Response, Context)`
