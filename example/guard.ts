@@ -1,16 +1,11 @@
-import KingWorld, { KingWorldInstance, TypedSchema } from '../src'
-import { z, ZodObject } from 'zod'
-
-const a = z.object({
-	name: z.string()
-})
+import { KingWorld, t, type KingWorldInstance, type TypedSchema } from '../src'
 
 new KingWorld()
 	.state('name', 'salt')
 	.get('/', ({ store: { name } }) => `Hi ${name}`, {
 		schema: {
-			query: z.object({
-				name: z.string()
+			query: t.Object({
+				name: t.String()
 			})
 		}
 	})
@@ -18,23 +13,23 @@ new KingWorld()
 	.guard(
 		{
 			schema: {
-				query: z.object({
-					name: z.string()
+				query: t.Object({
+					name: t.String()
 				})
 			}
 		},
 		(app) =>
 			app
 				// Query type is inherited from guard
-				.get('/profile', ({ query: { name } }) => `Hi ${name}`)
+				.get('/profile', ({ query }) => `Hi`)
 				// Store is inherited
-				.post('/name', ({ store: { name } }) => name, {
+				.post('/name', ({ store: { name }, body, query }) => name, {
 					schema: {
-						body: z.object({
-							id: z.number().min(5),
-							username: z.string(),
-							profile: z.object({
-								name: z.string()
+						body: t.Object({
+							id: t.Number().min(5),
+							username: t.String(),
+							profile: t.Object({
+								name: t.String()
 							})
 						})
 					}

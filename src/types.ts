@@ -1,10 +1,9 @@
-import { z, ZodObject, ZodSchema } from 'zod'
-
-import type { default as Ajv, ValidateFunction } from 'ajv'
+import KingWorld from '.'
 
 import type Context from './context'
 import type KingWorldError from './error'
-import KingWorld from '.'
+import type { Static, TObject, TSchema } from '@sinclair/typebox'
+import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 export type KWKey = string | number | symbol
 export type WithArray<T> = T | T[]
@@ -17,7 +16,7 @@ export interface KingWorldInstance<
 	} = {
 		store: Record<KWKey, any>
 		request: Record<KWKey, any>
-		schema: TypedSchema
+		schema: {}
 	}
 > {
 	request: Instance['request']
@@ -110,17 +109,17 @@ export interface RegisterHook<
 
 export interface TypedSchema<
 	Schema extends {
-		body: ZodSchema
-		header: ZodSchema
-		query: ZodSchema
-		params: ZodSchema
-		response: ZodSchema
+		body: TSchema
+		header: TSchema | TObject
+		query: TSchema | TObject
+		params: TSchema | TObject
+		response: TSchema
 	} = {
-		body: ZodSchema
-		header: ZodSchema
-		query: ZodSchema
-		params: ZodSchema
-		response: ZodSchema
+		body: TSchema
+		header: TSchema | TObject
+		query: TSchema | TObject
+		params: TSchema | TObject
+		response: TSchema
 	}
 > {
 	body?: Schema['body']
@@ -131,53 +130,65 @@ export interface TypedSchema<
 }
 
 export type UnwrapSchema<
-	Schema extends ZodSchema | undefined,
+	Schema extends TSchema | undefined,
 	Fallback = unknown
-> = Schema extends undefined ? Fallback : z.infer<NonNullable<Schema>>
+> = Schema extends undefined ? Fallback : Static<NonNullable<Schema>>
 
 export type TypedSchemaToRoute<Schema extends TypedSchema> = {
 	body: UnwrapSchema<Schema['body']>
-	header: UnwrapSchema<Schema['header']>
-	query: UnwrapSchema<Schema['query']>
-	params: UnwrapSchema<Schema['params']>
+	header: UnwrapSchema<Schema['header']> extends Record<string, any>
+		? UnwrapSchema<Schema['header']>
+		: undefined
+	query: UnwrapSchema<Schema['query']> extends Record<string, any>
+		? UnwrapSchema<Schema['query']>
+		: undefined
+	params: UnwrapSchema<Schema['params']> extends Record<string, any>
+		? UnwrapSchema<Schema['params']>
+		: undefined
 	response: UnwrapSchema<Schema['response']>
 }
 
 export type SchemaValidator = {
-	body?: ValidateFunction
-	header?: ValidateFunction
-	query?: ValidateFunction
-	params?: ValidateFunction
-	response?: ValidateFunction
+	body?: TypeCheck<any>
+	header?: TypeCheck<any>
+	query?: TypeCheck<any>
+	params?: TypeCheck<any>
+	response?: TypeCheck<any>
 }
 
 export type HookHandler<
 	Schema extends TypedSchema = TypedSchema,
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends KingWorldInstance = KingWorldInstance,
+	Path extends string = string
 > = Handler<
-	Omit<TypedSchemaToRoute<Schema>, 'response'> & {
-		response: void | TypedSchemaToRoute<Schema>['response']
-	},
+	TypedSchemaToRoute<Schema>['params'] extends {}
+		? Omit<TypedSchemaToRoute<Schema>, 'response'> & {
+				response: void | TypedSchemaToRoute<Schema>['response']
+		  }
+		: Omit<
+				Omit<TypedSchemaToRoute<Schema>, 'response'> & {
+					response: void | TypedSchemaToRoute<Schema>['response']
+				},
+				'params'
+		  > & {
+				params: Record<ExtractKWPath<Path>, string>
+		  },
 	Instance
 >
-
-interface B {
-	username: string
-}
 
 export type MergeIfNotNull<A, B> = B extends null ? A : A & B
 
 export interface LocalHook<
 	Schema extends TypedSchema<any> = TypedSchema,
 	Instance extends KingWorldInstance = KingWorldInstance,
-	InheritedSchema extends TypedSchema<any> | null = null
+	Path extends string = string
 > {
 	schema?: Schema
 	transform?: WithArray<
-		HookHandler<MergeIfNotNull<Schema, InheritedSchema>, Instance>
+		HookHandler<MergeIfNotNull<Schema, Instance['schema']>, Instance, Path>
 	>
 	beforeHandle?: WithArray<
-		HookHandler<MergeIfNotNull<Schema, InheritedSchema>, Instance>
+		HookHandler<MergeIfNotNull<Schema, Instance['schema']>, Instance, Path>
 	>
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
 	error?: WithArray<ErrorHandler>
@@ -201,10 +212,18 @@ export type LocalHandler<
 	Instance
 >
 export interface TypedRoute {
-	body?: string | Record<string, any> | undefined
-	header?: Record<string, unknown>
+	body?: unknown
+	header?: Record<string, any>
 	query?: Record<string, string>
-	params?: {}
+	params?: Record<string, string>
+	response?: unknown
+}
+
+export type OverwritableTypeRoute = {
+	body?: unknown
+	header?: Record<string, any>
+	query?: Record<string, any>
+	params?: Record<string, any>
 	response?: unknown
 }
 
@@ -229,10 +248,6 @@ export interface KingWorldConfig {
 	 * @default false
 	 */
 	strictPath: boolean
-	/**
-	 * Custom ajv instance
-	 */
-	ajv: Ajv
 }
 
 export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}`

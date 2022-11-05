@@ -1,5 +1,4 @@
-import { brotliCompress, gzip } from 'zlib'
-import KingWorld from '../src'
+import { KingWorld } from '../src'
 
 new KingWorld()
 	// Custom error handler

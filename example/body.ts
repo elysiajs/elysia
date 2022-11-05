@@ -1,5 +1,4 @@
-import { z } from 'zod'
-import KingWorld from '../src'
+import { KingWorld, t } from '../src'
 
 new KingWorld()
 	// Add custom body parser
@@ -15,9 +14,9 @@ new KingWorld()
 		// Define type strict schema, and validation
 		// This type will be infer to TypeScript
 		schema: {
-			body: z.object({
-				id: z.number(),
-				username: z.string()
+			body: t.Object({
+				id: t.Number(),
+				username: t.String()
 			})
 		}
 	})
@@ -27,9 +26,9 @@ new KingWorld()
 			body.id = body.id + 1
 		},
 		schema: {
-			body: z.object({
-				id: z.number(),
-				username: z.string()
+			body: t.Object({
+				id: t.Number(),
+				username: t.String()
 			})
 		}
 	})

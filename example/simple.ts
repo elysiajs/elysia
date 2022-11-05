@@ -1,4 +1,4 @@
-import KingWorld from '../src'
+import { KingWorld } from '../src'
 
 // Simple Hello World
 new KingWorld()

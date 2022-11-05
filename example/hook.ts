@@ -1,6 +1,6 @@
-import KingWorld from '../src'
+import { KingWorld } from '../src'
 
-const a = new KingWorld()
+new KingWorld()
 	// Create global mutable state
 	.state('counter', 0)
 	// Increase counter by 1 on every request on any handler

@@ -1,4 +1,4 @@
-import KingWorld from '../src'
+import { KingWorld } from '../src'
 
 new KingWorld()
 	// Create globally mutable store

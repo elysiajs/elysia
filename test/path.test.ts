@@ -1,7 +1,6 @@
-import KingWorld from '../src'
+import { KingWorld, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-import { z } from 'zod'
 
 const req = (path: string) => new Request(path)
 
@@ -84,9 +83,9 @@ describe('Path', () => {
 			({ params: { id, name } }) => `${id}/${name}`,
 			{
 				schema: {
-					params: z.object({
-						id: z.string(),
-						name: z.string()
+					params: t.Object({
+						id: t.String(),
+						name: t.String()
 					})
 				}
 			}
@@ -132,9 +131,9 @@ describe('Path', () => {
 			({ query: { first, last } }) => `${last} ${first}`,
 			{
 				schema: {
-					query: z.object({
-						first: z.string(),
-						last: z.string()
+					query: t.Object({
+						first: t.String(),
+						last: t.String()
 					})
 				}
 			}
@@ -147,7 +146,7 @@ describe('Path', () => {
 	it('Handle body', async () => {
 		const app = new KingWorld().post('/', ({ body }) => body, {
 			schema: {
-				body: z.string()
+				body: t.String()
 			}
 		})
 
@@ -174,8 +173,8 @@ describe('Path', () => {
 
 		const app = new KingWorld().post('/', ({ body }) => body, {
 			schema: {
-				body: z.object({
-					name: z.string()
+				body: t.Object({
+					name: t.String()
 				})
 			}
 		})

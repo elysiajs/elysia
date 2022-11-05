@@ -1,42 +1,19 @@
 {
   "name": "kingworld",
-  "description": "Fast, and friendly Bun web framework",
   "version": "0.0.0-experimental.37",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
     "email": "saltyaom@gmail.com"
   },
-  "main": "build/index.js",
-  "module": "build/es/index.js",
-  "esnext": "build/es/index.js",
-  "types": "src/index.ts",
-  "typings": "src/index.ts",
-  "keywords": [
-    "bun",
-    "http",
-    "web",
-    "server"
-  ],
-  "homepage": "https://github.com/saltyaom/kingworld",
   "repository": {
     "type": "git",
     "url": "https://github.com/saltyaom/kingworld"
   },
-  "bugs": "https://github.com/SaltyAom/kingworld/issues",
-  "license": "MIT",
-  "scripts": {
-    "test": "bun wiptest",
-    "dev": "nodemon --config nodemon.json",
-    "build": "npm run build:main && npm run build:es",
-    "build:main": "swc src --config-file .cjs.swcrc -d build",
-    "build:es": "swc src --config-file .es.swcrc -d build/es",
-    "release": "npm run build && npm run test && npm publish"
-  },
+  "main": "build/index.js",
+  "module": "build/es/index.js",
   "dependencies": {
-    "ajv": "^8.11.0",
-    "zod": "^3.19.1",
-    "zod-to-json-schema": "^3.18.1"
+    "@sinclair/typebox": "^0.25.2"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.57",
@@ -52,7 +29,27 @@
     "typescript": "^4.7.4"
   },
   "peerDependencies": {
-    "ajv": ">=8.0.0",
-    "zod": ">=3.0.0"
-  }
+    "@sinclair/typebox": ">=0.25.0"
+  },
+  "bugs": "https://github.com/SaltyAom/kingworld/issues",
+  "description": "Fast, and friendly Bun web framework",
+  "esnext": "build/es/index.js",
+  "homepage": "https://github.com/saltyaom/kingworld",
+  "keywords": [
+    "bun",
+    "http",
+    "web",
+    "server"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "bun wiptest",
+    "dev": "nodemon --config nodemon.json",
+    "build": "npm run build:main && npm run build:es",
+    "build:main": "swc src --config-file .cjs.swcrc -d build",
+    "build:es": "swc src --config-file .es.swcrc -d build/es",
+    "release": "npm run build && npm run test && npm publish"
+  },
+  "types": "src/index.ts",
+  "typings": "src/index.ts"
 }

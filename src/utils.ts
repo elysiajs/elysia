@@ -1,4 +1,4 @@
-import { ErrorObject } from 'ajv'
+import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 import KingWorldError from './error'
 import type {
 	DeepMergeTwoTypes,
@@ -113,10 +113,15 @@ export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
 	return output as DeepMergeTwoTypes<A, B>
 }
 
-export const formatAjvError = (type: string, error: ErrorObject) =>
-	new KingWorldError(
+export const createValidationError = (
+	type: string,
+	validator: TypeCheck<any>,
+	value: any
+) => {
+	const error = validator.Errors(value).next().value as ValueError
+
+	return new KingWorldError(
 		'VALIDATION',
-		`Invalid ${type}, ${error?.instancePath?.slice(1) || 'root'} ${
-			error.message
-		}`
+		`Invalid ${type}, ${error?.path?.slice(1) || 'root'}: ${error.message}`
 	)
+}

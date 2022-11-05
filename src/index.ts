@@ -1,8 +1,6 @@
 import type { Serve, Server } from 'bun'
 
-import Ajv from 'ajv'
-import type { ZodSchema } from 'zod'
-import { zodToJsonSchema } from 'zod-to-json-schema'
+import { TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { Router } from './router'
 import Context from './context'
@@ -13,8 +11,8 @@ import {
 	clone,
 	mergeHook,
 	mergeDeep,
-	SCHEMA,
-	formatAjvError
+	createValidationError,
+	SCHEMA
 } from './utils'
 import { registerSchemaPath } from './schema'
 import KingWorldError from './error'
@@ -42,8 +40,10 @@ import {
 	AfterRequestHandler,
 	SchemaValidator,
 	MergeIfNotNull,
-	IsAny
+	IsAny,
+	OverwritableTypeRoute
 } from './types'
+import { TSchema } from '@sinclair/typebox'
 
 export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance<{
@@ -90,21 +90,20 @@ export default class KingWorld<
 		this.config = {
 			bodyLimit: 1048576,
 			strictPath: false,
-			...config,
-			ajv: config.ajv ?? new Ajv()
+			...config
 		}
 	}
 
-	private getSchema(schema: ZodSchema | undefined) {
+	private getSchemaValidator(
+		schema: TSchema | undefined,
+		additionalProperties = false
+	) {
 		if (!schema) return
 
-		return zodToJsonSchema(schema)
-	}
+		if (schema.type === 'object' && !('additionalProperties' in schema))
+			schema.additionalProperties = additionalProperties
 
-	private getSchemaValidator(schema: ZodSchema | undefined) {
-		if (!schema) return
-
-		return this.config.ajv.compile(zodToJsonSchema(schema))
+		return TypeCompiler.Compile(schema)
 	}
 
 	private _addHandler<
@@ -124,7 +123,7 @@ export default class KingWorld<
 		})
 
 		const body = this.getSchemaValidator(hook?.schema?.body)
-		const header = this.getSchemaValidator(hook?.schema?.header)
+		const header = this.getSchemaValidator(hook?.schema?.header, true)
 		const params = this.getSchemaValidator(hook?.schema?.params)
 		const query = this.getSchemaValidator(hook?.schema?.query)
 		const response = this.getSchemaValidator(hook?.schema?.response)
@@ -179,7 +178,7 @@ export default class KingWorld<
 		return this
 	}
 
-	onTransform<Route extends TypedRoute = TypedRoute>(
+	onTransform<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: Handler<Route, Instance>
 	) {
 		this.event.transform.push(handler)
@@ -187,7 +186,7 @@ export default class KingWorld<
 		return this
 	}
 
-	onBeforeHandle<Route extends TypedRoute = TypedRoute>(
+	onBeforeHandle<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: Handler<Route, Instance>
 	) {
 		this.event.beforeHandle.push(handler)
@@ -195,7 +194,7 @@ export default class KingWorld<
 		return this
 	}
 
-	onAfterHandle<Route extends TypedRoute = TypedRoute>(
+	onAfterHandle<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: AfterRequestHandler<Route, Instance>
 	) {
 		this.event.afterHandle.push(handler)
@@ -330,23 +329,20 @@ export default class KingWorld<
 		return plugin(this as unknown as any, config) as unknown as any
 	}
 
-	get<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
+	get<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler('GET', path, handler, hook as LocalHook<any, any, any>)
 
 		return this
 	}
 
-	post<
-		Schema extends TypedSchema = TypedSchema,
-		Path extends string = string
-	>(
+	post<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler(
 			'POST',
@@ -358,23 +354,20 @@ export default class KingWorld<
 		return this
 	}
 
-	put<Schema extends TypedSchema = TypedSchema, Path extends string = string>(
+	put<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler('PUT', path, handler, hook as LocalHook<any, any, any>)
 
 		return this
 	}
 
-	patch<
-		Schema extends TypedSchema = TypedSchema,
-		Path extends string = string
-	>(
+	patch<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler(
 			'PATCH',
@@ -386,13 +379,10 @@ export default class KingWorld<
 		return this
 	}
 
-	delete<
-		Schema extends TypedSchema = TypedSchema,
-		Path extends string = string
-	>(
+	delete<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler(
 			'DELETE',
@@ -404,13 +394,10 @@ export default class KingWorld<
 		return this
 	}
 
-	options<
-		Schema extends TypedSchema = TypedSchema,
-		Path extends string = string
-	>(
+	options<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler(
 			'OPTIONS',
@@ -422,13 +409,10 @@ export default class KingWorld<
 		return this
 	}
 
-	head<
-		Schema extends TypedSchema = TypedSchema,
-		Path extends string = string
-	>(
+	head<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler(
 			'HEAD',
@@ -440,13 +424,10 @@ export default class KingWorld<
 		return this
 	}
 
-	trace<
-		Schema extends TypedSchema = TypedSchema,
-		Path extends string = string
-	>(
+	trace<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler(
 			'TRACE',
@@ -458,13 +439,10 @@ export default class KingWorld<
 		return this
 	}
 
-	connect<
-		Schema extends TypedSchema = TypedSchema,
-		Path extends string = string
-	>(
+	connect<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler(
 			'CONNECT',
@@ -476,14 +454,11 @@ export default class KingWorld<
 		return this
 	}
 
-	method<
-		Schema extends TypedSchema = TypedSchema,
-		Path extends string = string
-	>(
+	method<Schema extends TypedSchema = {}, Path extends string = string>(
 		method: HTTPMethod,
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance>
+		hook?: LocalHook<Schema, Instance, Path>
 	) {
 		this._addHandler(
 			method,
@@ -600,32 +575,32 @@ export default class KingWorld<
 				for (const [key, value] of request.headers.values())
 					_header[key] = value
 
-				validate.header(_header)
-
-				if (validate.header.errors)
-					throw formatAjvError('header', validate.header.errors[0])
+				if (!validate.header.Check(_header))
+					throw createValidationError(
+						'header',
+						validate.header,
+						_header
+					)
+				// if (validate.header.Errors)
+				// 	throw formatAjvError('header', validate.header.errors[0])
 			}
 
-			if (validate.params) {
-				validate.params(context.params)
+			if (validate.params && !validate.params.Check(context.params))
+				throw createValidationError(
+					'params',
+					validate.params,
+					context.params
+				)
 
-				if (validate.params.errors)
-					throw formatAjvError('params', validate.params.errors[0])
-			}
+			if (validate.query && !validate.query.Check(context.query))
+				throw createValidationError(
+					'query',
+					validate.query,
+					context.query
+				)
 
-			if (validate.query) {
-				validate.query(context.query)
-
-				if (validate.query.errors)
-					throw formatAjvError('query', validate.query.errors[0])
-			}
-
-			if (validate.body) {
-				validate.body(body)
-
-				if (validate.body.errors)
-					throw formatAjvError('body', validate.body.errors[0])
-			}
+			if (validate.body && !validate.body.Check(body))
+				throw createValidationError('body', validate.body, body)
 		}
 
 		for (let i = 0; i < handler.hooks.beforeHandle.length; i++) {
@@ -646,11 +621,8 @@ export default class KingWorld<
 		let response = handler.handle(context)
 		if (response instanceof Promise) response = await response
 
-		if (validate?.response) {
-			validate.response(response)
-
-			if (validate.response.errors) throw validate.response.errors[0]
-		}
+		if (validate?.response && !validate.response.Check(response))
+			throw createValidationError('response', validate.response, response)
 
 		for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
 			response = handler.hooks.afterHandle[i](response, context)
@@ -742,6 +714,8 @@ export default class KingWorld<
 	}
 }
 
+export { KingWorld }
+export { Type as t } from '@sinclair/typebox'
 export { SCHEMA } from './utils'
 export type { default as Context } from './context'
 export type {
@@ -749,6 +723,7 @@ export type {
 	RegisterHook,
 	BeforeRequestHandler,
 	TypedRoute,
+	OverwritableTypeRoute,
 	KingWorldInstance,
 	KingWorldConfig,
 	KWKey,

@@ -1,16 +1,6 @@
-import type { ZodSchema } from 'zod'
-import zodToJsonSchema from 'zod-to-json-schema'
-import type { JsonSchema7ObjectType } from 'zod-to-json-schema/src/parsers/object'
+import type { TSchema } from '@sinclair/typebox'
 
 import type { HTTPMethod, LocalHook } from './types'
-
-const getSchema = (
-	schema: ZodSchema | undefined
-): JsonSchema7ObjectType | undefined => {
-	if (!schema) return
-
-	return zodToJsonSchema(schema) as unknown as JsonSchema7ObjectType
-}
 
 const replace = (word: string, find: string, replacer: string, startAt = 0) => {
 	const index = word.indexOf(find, startAt)
@@ -31,15 +21,12 @@ const toOpenAPIPath = (path: string) => {
 	return path
 }
 
-const mapProperties = (
-	name: string,
-	schema: JsonSchema7ObjectType | undefined
-) =>
+const mapProperties = (name: string, schema: TSchema | undefined) =>
 	Object.entries(schema?.properties ?? []).map(([key, value]) => ({
 		in: name,
 		name: key,
 		// @ts-ignore
-		type: value.type,
+		type: value?.type,
 		required: schema!.required?.includes(key) ?? false
 	}))
 
@@ -56,11 +43,11 @@ export const registerSchemaPath = ({
 }) => {
 	path = toOpenAPIPath(path)
 
-	const bodySchema = getSchema(hook?.schema?.body)
-	const paramsSchema = getSchema(hook?.schema?.params)
-	const headerSchema = getSchema(hook?.schema?.header)
-	const querySchema = getSchema(hook?.schema?.query)
-	const responseSchema = getSchema(hook?.schema?.response)
+	const bodySchema = hook?.schema?.body
+	const paramsSchema = hook?.schema?.params
+	const headerSchema = hook?.schema?.header
+	const querySchema = hook?.schema?.query
+	const responseSchema = hook?.schema?.response
 
 	const parameters = [
 		...mapProperties('header', headerSchema),

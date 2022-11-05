@@ -1,12 +1,10 @@
-import KingWorld from '../src'
-import { KingWorldInstance } from '../src/types'
-
-import { z } from 'zod'
+import { KingWorld, t, type KingWorldInstance } from '../src'
 
 const loggerPlugin = (app: KingWorld, { prefix = '/fbk' } = {}) =>
 	app
 		.get('/hi', () => 'Hi')
-		.decorate('ab', () => 'A')
+		.decorate('log', () => 'A')
+		.decorate('date', () => new Date())
 		.state('fromPlugin', 'From Logger')
 		.use((app) => app.state('abc', 'abc'))
 
@@ -18,10 +16,10 @@ const app = new KingWorld()
 	.get('/json', () => ({
 		hi: 'world'
 	}))
-	.get('/root/plugin/log', ({ log, store: { a } }) => {
+	.get('/root/plugin/log', ({ log, store: { build } }) => {
 		log()
 
-		return a('B')
+		return build
 	})
 	.get('/wildcard/*', () => 'Hi Wildcard')
 	.get('/kw', () => 'KINGWORLD', {
@@ -31,16 +29,16 @@ const app = new KingWorld()
 			if (query?.name === 'aom') return 'Hi saltyaom'
 		},
 		schema: {
-			query: z.object({
-				name: z.string().nullable()
+			query: t.Object({
+				name: t.Optional(t.String())
 			})
 		}
 	})
 	.post('/json', async ({ body }) => body, {
 		schema: {
-			body: z.object({
-				name: z.string(),
-				additional: z.string()
+			body: t.Object({
+				name: t.String(),
+				additional: t.String()
 			})
 		}
 	})
@@ -52,9 +50,9 @@ const app = new KingWorld()
 			}
 		},
 		schema: {
-			body: z.object({
-				name: z.string(),
-				additional: z.string()
+			body: t.Object({
+				name: t.String(),
+				additional: t.String()
 			})
 		}
 	})
@@ -63,18 +61,18 @@ const app = new KingWorld()
 			params.id = +params.id
 		},
 		schema: {
-			params: z.object({
-				id: z.number()
+			params: t.Object({
+				id: t.Number()
 			})
 		}
 	})
 	.post('/new/:id', async ({ body, params }) => body, {
 		schema: {
-			params: z.object({
-				id: z.number()
+			params: t.Object({
+				id: t.Number()
 			}),
-			body: z.object({
-				username: z.string()
+			body: t.Object({
+				username: t.String()
 			})
 		}
 	})
@@ -100,7 +98,7 @@ const app = new KingWorld()
 	})
 	.get('/this/is/my/deep/nested/root', () => 'Hi')
 	.get('/build', ({ store: { build } }) => build)
-	.get('/ref', ({ store: { date } }) => date)
+	.get('/ref', ({ date }) => date())
 	.get('/response', () => new Response('Hi'))
 	.get('/error', () => new Error('Something went wrong'))
 	.get('/401', ({ status }) => {
@@ -113,13 +111,8 @@ const app = new KingWorld()
 
 		return 'A'
 	})
-	.use((app) => {
-		console.log('Store', app.store)
-
-		return app
-	})
 	.onError((error) => {
-		console.log('HANDLE ER')
+		console.log(error.code, error)
 
 		if (error.code === 'NOT_FOUND')
 			return new Response('Not Found :(', {
@@ -127,7 +120,7 @@ const app = new KingWorld()
 			})
 	})
 	.onStart((app) => {
-		console.log(app)
+		// console.log(app)
 
 		console.log('🦊 KINGWORLD is running at :8080')
 	})

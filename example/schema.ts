@@ -1,43 +1,42 @@
-import KingWorld from '../src'
-import { z } from 'zod'
+import { KingWorld, t } from '../src'
+// import { Type as t } from '@sinclair/typebox'
 
 const app = new KingWorld()
 	// Strictly validate response
 	.get('/', () => 'hi', {
 		schema: {
-			response: z.string()
+			response: t.String()
 		}
 	})
 	// Strictly validate body and response
 	.post('/', ({ body }) => body.id, {
 		schema: {
-			body: z.object({
-				id: z.number().min(5),
-				username: z.string(),
-				profile: z.object({
-					name: z.string()
+			body: t.Object({
+				id: t.Number(),
+				username: t.String(),
+				profile: t.Object({
+					name: t.String()
 				})
 			}),
-			response: z.number()
+			response: t.Number()
 		}
 	})
 	// Strictly validate query, params, and body
 	.get('/query/:id', ({ query: { name } }) => name, {
 		schema: {
-			query: z.object({
-				name: z.string()
+			query: t.Object({
+				name: t.String()
 			}),
-			params: z.object({
-				id: z.string()
-			}),
-			body: z.string()
+			params: t.Object({
+				id: t.String()
+			})
 		}
 	})
 	.guard(
 		{
 			schema: {
-				query: z.object({
-					name: z.string()
+				query: t.Object({
+					name: t.String()
 				})
 			}
 		},
@@ -45,26 +44,22 @@ const app = new KingWorld()
 			app.guard(
 				{
 					schema: {
-						body: z.object({
-							username: z.string()
+						body: t.Object({
+							username: t.String()
 						})
 					}
 				},
 				(app) =>
-					app.post(
-						'/id/:id',
-						({ query, body, params }) => body,
-						{
-							schema: {
-								params: z.object({
-									id: z.number()
-								}),
-							},
-							transform: ({ params }) => {
-								params.id = +params.id
-							}
+					app.post('/id/:id', ({ query, body, params }) => body, {
+						schema: {
+							params: t.Object({
+								id: t.Number()
+							})
+						},
+						transform: ({ params }) => {
+							params.id = +params.id
 						}
-					)
+					})
 			)
 	)
 	.listen(3000)

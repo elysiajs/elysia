@@ -1,4 +1,4 @@
-import KingWorld from '../src'
+import { KingWorld } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 

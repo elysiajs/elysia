@@ -1,4 +1,4 @@
-import KingWorld from '../src'
+import { KingWorld } from '../src'
 
 /**
  * Example of handle single static file

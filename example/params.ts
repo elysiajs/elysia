@@ -1,4 +1,4 @@
-import KingWorld from '../src'
+import { KingWorld } from '../src'
 
 const app = new KingWorld()
 	.get('/', () => 'KINGWORLD')

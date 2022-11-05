@@ -1,8 +1,6 @@
-import KingWorld, { type Handler } from '../src'
+import { KingWorld, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-import { z } from 'zod'
-
 const req = (path: string) => new Request(path)
 
 describe('Transform', () => {
@@ -31,8 +29,8 @@ describe('Transform', () => {
 						request.params.id = +request.params.id
 				},
 				schema: {
-					params: z.object({
-						id: z.number()
+					params: t.Object({
+						id: t.Number()
 					})
 				}
 			}
@@ -122,6 +120,11 @@ describe('Transform', () => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 			.get('/id/:id', ({ params: { id } }) => id, {
+				schema: {
+					params: t.Object({
+						id: t.Number()
+					})
+				},
 				transform: (request) => {
 					if (
 						request.params?.id &&
@@ -164,25 +167,25 @@ describe('Transform', () => {
 	})
 
 	it('Transform async', async () => {
-		const transform: Handler<{
-			params: {
-				id?: number
-			}
-		}> = async (request) => {
-			await new Promise<void>((resolve) =>
-				setTimeout(() => {
-					resolve()
-				}, 1)
-			)
-
-			if (request.params?.id) request.params.id = +request.params.id
-		}
-
 		const app = new KingWorld().get(
 			'/id/:id',
 			({ params: { id } }) => typeof id,
 			{
-				transform
+				schema: {
+					params: t.Object({
+						id: t.Number()
+					})
+				},
+				transform: async (request) => {
+					await new Promise<void>((resolve) =>
+						setTimeout(() => {
+							resolve()
+						}, 1)
+					)
+
+					if (request.params?.id)
+						request.params.id = +request.params.id
+				}
 			}
 		)
 

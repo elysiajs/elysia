@@ -1,4 +1,4 @@
-import KingWorld from '../src'
+import { KingWorld } from '../src'
 
 // This plugin will format JSON before return response
 const prettyJson = (app: KingWorld) =>

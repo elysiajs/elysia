@@ -1,8 +1,41 @@
-# 0.0.0-experimental.37 - 5 Nov 2022 
+# 0.0.0-experimental.37 - 6 Nov 2022 
+[Sage](https://youtu.be/rgM5VGYToQQ) is one of a major experimental release, and breaking change of KingWorld.
+
+The major improvement of Sage is that, it provide almost (if not) full support for TypeScript, and type inference.
+
+## Type Inference
+KingWorld have a complex type system. It's build with DRY principle in mind, to reduce the workload of developer.
+
+That's why KingWorld try to type everything at its best, infering type from your code into TypeScript's type.
+
+For example, writing schema with nested `guard` is instructed with type, and validation.
+This ensure that your type will always valid no matter what, and infering type to your IDE automatically.
+![FgqOZUYVUAAVv6a](https://user-images.githubusercontent.com/35027979/200132497-63d68331-cf96-4e12-9f4d-b6a8d142eb69.jpg)
+
+You can even type `response` to make your that you didn't leak any important data for forgot to update response when you're doing migration.
+
+## Validator
+KingWorld's validator now replaced `zod`, and `ajv` with `@sinclair/typebox`.
+
+With the new validator, validation is now faster than previous version by 188x if you're using zod, and 4.1x if you're using ajv adapter.
+
+With Edge Computing in mind, refactoring to new validate drop unused pacage and reduced size by 181.2KB. 
+To give you an idea, KingWorld without a validator is around 10KB (non-gzipped).
+
+The memory usage is also reduced by almost half from changing validator.
+###### According to M1 Max running `example/simple.ts`, running exp.36 use 24MB of memory while exp.37 use 12MB of memory
+
+This greatly improve performance of KingWorld in a long run.
+
+## Changelog
+Breaking Change:
+- Replace `zod`, `zod-to-json-schema`, `ajv`, with `@sinclair/typebox`
+
 Improvement:
 - `use` now accept any non `KingWorld<{}, any>`
 - `use` now combine typed between current instance and plugin
 - `use` now auto infer type if function is inline
+- `LocalHook` can now infer `params` type from path string
 
 Change:
 - `TypedSchema` is now replaced with `Instance['schema']`
