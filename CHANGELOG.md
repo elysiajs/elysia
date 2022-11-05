@@ -1,31 +1,31 @@
 # 0.0.0-experimental.37 - 6 Nov 2022 
-[Sage](https://youtu.be/rgM5VGYToQQ) is one of a major experimental release, and breaking change of KingWorld.
+[[Sage]](https://youtu.be/rgM5VGYToQQ) is one of the major experimental releases and breaking changes of KingWorld.
 
-The major improvement of Sage is that, it provide almost (if not) full support for TypeScript, and type inference.
+The major improvement of Sage is that it provides almost (if not) full support for TypeScript and type inference.
 
 ## Type Inference
-KingWorld have a complex type system. It's build with DRY principle in mind, to reduce the workload of developer.
+KingWorld has a complex type of system. It's built with the DRY principle in mind, to reduce the developer's workload.
 
-That's why KingWorld try to type everything at its best, infering type from your code into TypeScript's type.
+That's why KingWorld tries to type everything at its best, inferring type from your code into TypeScript's type.
 
-For example, writing schema with nested `guard` is instructed with type, and validation.
-This ensure that your type will always valid no matter what, and infering type to your IDE automatically.
+For example, writing schema with nested `guard` is instructed with type and validation.
+This ensures that your type will always be valid no matter what, and inferring type to your IDE automatically.
 ![FgqOZUYVUAAVv6a](https://user-images.githubusercontent.com/35027979/200132497-63d68331-cf96-4e12-9f4d-b6a8d142eb69.jpg)
 
-You can even type `response` to make your that you didn't leak any important data for forgot to update response when you're doing migration.
+You can even type `response` to make your that you didn't leak any important data by forgetting to update the response when you're doing a migration.
 
 ## Validator
 KingWorld's validator now replaced `zod`, and `ajv` with `@sinclair/typebox`.
 
-With the new validator, validation is now faster than previous version by 188x if you're using zod, and 4.1x if you're using ajv adapter.
+With the new validator, validation is now faster than the previous version by 188x if you're using zod, and 4.1x if you're using ajv adapter.
 
-With Edge Computing in mind, refactoring to new validate drop unused pacage and reduced size by 181.2KB. 
+With Edge Computing in mind, refactoring to new validate dropped the unused packages and reduced size by 181.2KB. 
 To give you an idea, KingWorld without a validator is around 10KB (non-gzipped).
 
-The memory usage is also reduced by almost half from changing validator.
-###### According to M1 Max running `example/simple.ts`, running exp.36 use 24MB of memory while exp.37 use 12MB of memory
+Memory usage is also reduced by almost half by changing the validator.
+###### According to M1 Max running `example/simple.ts`, running exp.36 uses 24MB of memory while exp.37 use 12MB of memory
 
-This greatly improve performance of KingWorld in a long run.
+This greatly improves the performance of KingWorld in a long run.
 
 ## Changelog
 Breaking Change:
