@@ -392,20 +392,18 @@ Lifecycle that assigned with `Handler`:
 Use to modify request's body, params, query before validation.
 
 ```typescript
-app
-    .get(
-        "/gamer/:name", 
-        ({ params: { name }, hi }) => hi(name),
-        // ? Local hook
-        {
-            transform: ({ params }) => {
-                if(params.name === "白上フブキ")
-                    params.name = "Shirakami Fubuki"
-                    
-                params.hi = (name: string) => `Hi ${name}`
-            }
+app.get(
+    '/gamer/:name',
+    ({ params: { name }, hi }) => hi(name),
+    // ? Local hook
+    {
+        transform: ({ params }) => {
+            if (params.name === '白上フブキ') params.name = 'Shirakami Fubuki'
+
+            params.hi = (name: string) => `Hi ${name}`
         }
-    )
+    }
+)
 
 // [GET] /gamer/白上フブキ => "Shirakami Fubuki"
 // [GET] /gamer/Botan => "Botan"
