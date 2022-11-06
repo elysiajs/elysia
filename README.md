@@ -418,18 +418,14 @@ import { KingWorld, t } from 'kingworld'
 new KingWorld()
 	.post(
 		'/gamer',
-		async ({ body }) => {
-			const { username } = body
-
-			return `Hi ${username}`
-		},
+		async ({ body: { username } }) => `Hi ${username}`,
 		{
             schema: {
                 body: t.Object({
                     id: t.Number(),
                     username: t.String()
                 })
-            }
+            },
 			transform: ({ body }) => {
 				body.id = +body.id
 			}
@@ -557,23 +553,17 @@ To develop plugin with type support, `Plugin` can accepts generic.
 const plugin = (app, { prefix = '/fbk' } = {})  => 
     app
         .state('fromPlugin', 'From Logger')
+        .decorate('log', () => 'From Logger')
         .onTransform(({ responseHeaders }) => {
-            request.log = () => {
-                console.log('From Logger')
-            }
-
             responseHeaders['X-POWERED-BY'] = 'KINGWORLD'
         })
         .group(prefix, (app) => {
             app.get('/plugin', () => 'From Plugin')
         })
 
-const app = new KingWorld<{
-    store: {
-        build: number
-        date: number
-    }
-}>()
+const app = new KingWorld()
+    .state('date', Date.now())
+    .state('build', 1)
     .use(plugin)
     .get('/', ({ log }) => {
         log()
@@ -613,12 +603,9 @@ new KingWorld<{
 This will enforce type safety across codebase.
 
 ```typescript
-const app = new KingWorld<{
-    store: {
-        build: number
-        date: number
-    }
-}>()
+const app = new KingWorld()
+    .state('date', Date.now())
+    .state('build', 1)
     .use(plugin)
     .get('/', ({ log }) => {
         // `log` get type declaration reference from `plugin`
@@ -639,11 +626,7 @@ const plugin = (app: KingWorld)  =>
             db.find(id)
         )
 
-const app = new KingWorld<{
-    store: {
-        database: Database
-    }
-}>()
+const app = new KingWorld()
     .state('db', database)
     .use(plugin)
 ```
