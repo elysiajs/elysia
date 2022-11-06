@@ -42,4 +42,8 @@ export default class Context<
 		this._redirect = path
 		this._status = status
 	}
+
+	setHeader = (key: string, value: string) => {
+		this.responseHeaders[key] = value
+	}
 }

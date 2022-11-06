@@ -1,3 +1,7 @@
+# 0.0.0-experimental.38 - 7 Nov 2022 
+Bug fix:
+- Correct type for `afterHandle`
+
 # 0.0.0-experimental.37 - 6 Nov 2022 
 [[Sage]](https://youtu.be/rgM5VGYToQQ) is one of the major experimental releases and breaking changes of KingWorld.
 

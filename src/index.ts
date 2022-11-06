@@ -609,8 +609,13 @@ export default class KingWorld<
 
 			if (response !== null && response !== undefined) {
 				for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
-					response = handler.hooks.afterHandle[i](response, context)
-					if (response instanceof Promise) response = await response
+					let newResponse = handler.hooks.afterHandle[i](
+						context,
+						response
+					)
+					if (newResponse instanceof Promise)
+						newResponse = await newResponse
+					if (newResponse) response = newResponse
 				}
 
 				const result = mapEarlyResponse(response, context)
@@ -625,8 +630,9 @@ export default class KingWorld<
 			throw createValidationError('response', validate.response, response)
 
 		for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
-			response = handler.hooks.afterHandle[i](response, context)
-			if (response instanceof Promise) response = await response
+			let newResponse = handler.hooks.afterHandle[i](context, response)
+			if (newResponse instanceof Promise) newResponse = await newResponse
+			if (newResponse) response = newResponse
 
 			const result = mapEarlyResponse(response, context)
 			if (result) return result
