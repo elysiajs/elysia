@@ -1,5 +1,4 @@
 import KingWorld from '../src'
-import { z } from 'zod'
 
 const counter = (app: KingWorld) => app.state('counter', 0)
 

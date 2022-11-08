@@ -1,3 +1,15 @@
+# 0.0.0-experimental.38 - 8 Nov 2022 
+Breaking Change:
+- `method` is changed to `route`
+
+Improvement:
+- `LocalHook` now prefers nearest type instead of merge
+- Merge nearest schema first
+
+Bug fix:
+- Correct type for `afterHandle`
+- Fix inifinite cycling infer type for `Handler`
+
 # 0.0.0-experimental.38 - 7 Nov 2022 
 Bug fix:
 - Correct type for `afterHandle`

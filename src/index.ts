@@ -19,7 +19,7 @@ import KingWorldError from './error'
 
 import {
 	Handler,
-	RegisterHook,
+	RegisteredHook,
 	BeforeRequestHandler,
 	TypedRoute,
 	KingWorldInstance,
@@ -61,9 +61,7 @@ export default class KingWorld<
 		start: [],
 		request: [],
 		parse: [
-			async (request) => {
-				const contentType = request.headers.get('content-type') ?? ''
-
+			(request, contentType) => {
 				switch (contentType) {
 					case 'application/json':
 						return request.json()
@@ -111,15 +109,17 @@ export default class KingWorld<
 		Path extends string = string
 	>(
 		method: HTTPMethod,
-		path: Path,
+		_path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<any>
 	) {
+		const path = _path === '*' ? '/*' : _path
+
 		this.routes.push({
 			method,
 			path,
 			handler,
-			hooks: mergeHook(clone(this.event), hook as RegisterHook)
+			hooks: mergeHook(clone(this.event), hook as RegisteredHook)
 		})
 
 		const body = this.getSchemaValidator(hook?.schema?.body)
@@ -137,7 +137,7 @@ export default class KingWorld<
 
 		this.router.register(path)[method] = {
 			handle: handler,
-			hooks: mergeHook(clone(this.event), hook as RegisterHook),
+			hooks: mergeHook(clone(this.event), hook as RegisteredHook),
 			validator:
 				body || header || params || query || response
 					? {
@@ -173,7 +173,7 @@ export default class KingWorld<
 	}
 
 	onParse(parser: BodyParser) {
-		this.event.parse.push(parser)
+		this.event.parse.splice(this.event.parse.length - 1, 0, parser)
 
 		return this
 	}
@@ -309,7 +309,7 @@ export default class KingWorld<
 	}
 
 	use<
-		Config extends Record<string, unknown> = Record<string, unknown>,
+		Config = any,
 		NewKingWorld extends KingWorld<any> = KingWorld<any>,
 		Params extends KingWorld = KingWorld<any>
 	>(
@@ -319,14 +319,14 @@ export default class KingWorld<
 					? this
 					: Params
 				: Params,
-			config?: Config
+			config: Config
 		) => NewKingWorld,
 		config?: Config
 	): NewKingWorld extends KingWorld<infer NewInstance>
 		? KingWorld<NewInstance & Instance>
 		: this {
 		// ? Type is enforce on function already
-		return plugin(this as unknown as any, config) as unknown as any
+		return plugin(this as unknown as any, config as any) as unknown as any
 	}
 
 	get<Schema extends TypedSchema = {}, Path extends string = string>(
@@ -454,7 +454,21 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * @deprecated
+	 *
+	 * Use `route` instead
+	 */
 	method<Schema extends TypedSchema = {}, Path extends string = string>(
+		method: HTTPMethod,
+		path: Path,
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance, Path>
+	) {
+		this.route(method, path, handler, hook)
+	}
+
+	route<Schema extends TypedSchema = {}, Path extends string = string>(
 		method: HTTPMethod,
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -537,9 +551,11 @@ export default class KingWorld<
 		}
 
 		let body: string | Record<string, any> | undefined
-		if (bodySize)
+		if (bodySize) {
+			const contentType = request.headers.get('content-type') ?? ''
+
 			for (let i = 0; i <= this.event.parse.length; i++) {
-				let temp = this.event.parse[i](request)
+				let temp = this.event.parse[i](request, contentType)
 				if (temp instanceof Promise) temp = await temp
 
 				if (temp) {
@@ -547,6 +563,7 @@ export default class KingWorld<
 					break
 				}
 			}
+		}
 
 		const route = this.router.find(getPath(request.url))
 		const context = new Context({
@@ -722,11 +739,11 @@ export default class KingWorld<
 
 export { KingWorld }
 export { Type as t } from '@sinclair/typebox'
-export { SCHEMA } from './utils'
+export { SCHEMA, getPath } from './utils'
 export type { default as Context } from './context'
 export type {
 	Handler,
-	RegisterHook,
+	RegisteredHook,
 	BeforeRequestHandler,
 	TypedRoute,
 	OverwritableTypeRoute,
@@ -736,7 +753,6 @@ export type {
 	HTTPMethod,
 	ComposedHandler,
 	InternalRoute,
-	Hook,
 	BodyParser,
 	ErrorHandler,
 	ErrorCode,

@@ -9,9 +9,9 @@ export default class Context<
 	responseHeaders: Record<string, string> = {}
 
 	request: Request
-	query: Route['query'] extends Record<string, any>
-		? Route['query']
-		: Record<string, any>
+	query: Route['query'] extends undefined
+		? Record<string, unknown>
+		: Route['query']
 	params: Route['params']
 	body: Route['body']
 	store: Store

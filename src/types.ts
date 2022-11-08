@@ -2,7 +2,7 @@ import KingWorld from '.'
 
 import type Context from './context'
 import type KingWorldError from './error'
-import type { Static, TObject, TSchema } from '@sinclair/typebox'
+import type { Static, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 export type KWKey = string | number | symbol
@@ -47,7 +47,10 @@ export type VoidLifeCycle<
 	| ((app: KingWorld<Instance>) => void)
 	| ((app: KingWorld<Instance>) => Promise<void>)
 
-export type BodyParser = (request: Request) => any | Promise<any>
+export type BodyParser = (
+	request: Request,
+	contentType: string
+) => any | Promise<any>
 
 export interface LifeCycle<
 	Instance extends KingWorldInstance = KingWorldInstance
@@ -88,7 +91,7 @@ export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
 	store: Store
 ) => Response | Promise<Response>
 
-export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
+export interface RegisteredHook<Instance extends KingWorldInstance = KingWorldInstance> {
 	schema?: TypedSchema
 	transform: Handler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
@@ -96,29 +99,18 @@ export interface Hook<Instance extends KingWorldInstance = KingWorldInstance> {
 	error: ErrorHandler[]
 }
 
-export interface RegisterHook<
-	Route extends TypedRoute = TypedRoute,
-	Instance extends KingWorldInstance = KingWorldInstance
-> {
-	schema?: TypedSchema
-	transform?: WithArray<Handler<Route, Instance>>
-	beforeHandle?: WithArray<Handler<Route, Instance>>
-	afterHandle?: WithArray<AfterRequestHandler<Route, Instance>>
-	error?: ErrorHandler
-}
-
 export interface TypedSchema<
 	Schema extends {
 		body: TSchema
-		header: TSchema | TObject
-		query: TSchema | TObject
-		params: TSchema | TObject
+		header: TSchema
+		query: TSchema
+		params: TSchema
 		response: TSchema
 	} = {
 		body: TSchema
-		header: TSchema | TObject
-		query: TSchema | TObject
-		params: TSchema | TObject
+		header: TSchema
+		query: TSchema
+		params: TSchema
 		response: TSchema
 	}
 > {
@@ -177,6 +169,15 @@ export type HookHandler<
 >
 
 export type MergeIfNotNull<A, B> = B extends null ? A : A & B
+export type UnknownFallback<A, B> = unknown extends A ? B : A
+export type PickInOrder<A, B> = A extends NonNullable<A> ? A : B
+export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
+	body: PickInOrder<PickInOrder<A['body'], B['body']>, undefined>
+	header: PickInOrder<PickInOrder<A['header'], B['header']>, undefined>
+	query: PickInOrder<PickInOrder<A['query'], B['query']>, undefined>
+	params: PickInOrder<PickInOrder<A['params'], B['params']>, undefined>
+	response: PickInOrder<PickInOrder<A['response'], B['response']>, undefined>
+}
 
 export interface LocalHook<
 	Schema extends TypedSchema<any> = TypedSchema,
@@ -185,10 +186,10 @@ export interface LocalHook<
 > {
 	schema?: Schema
 	transform?: WithArray<
-		HookHandler<MergeIfNotNull<Schema, Instance['schema']>, Instance, Path>
+		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
 	>
 	beforeHandle?: WithArray<
-		HookHandler<MergeIfNotNull<Schema, Instance['schema']>, Instance, Path>
+		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
 	>
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
 	error?: WithArray<ErrorHandler>
@@ -199,18 +200,19 @@ export type LocalHandler<
 	Instance extends KingWorldInstance = KingWorldInstance,
 	Path extends string = string
 > = Handler<
-	MergeIfNotNull<Schema, Instance['schema']>['params'] extends NonNullable<
+	MergeSchema<Schema, Instance['schema']>['params'] extends NonNullable<
 		Schema['params']
 	>
-		? TypedSchemaToRoute<MergeIfNotNull<Schema, Instance['schema']>>
+		? TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>
 		: Omit<
-				TypedSchemaToRoute<MergeIfNotNull<Schema, Instance['schema']>>,
+				TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>,
 				'params'
 		  > & {
 				params: Record<ExtractKWPath<Path>, string>
 		  },
 	Instance
 >
+
 export interface TypedRoute {
 	body?: unknown
 	header?: Record<string, any>
@@ -229,7 +231,7 @@ export type OverwritableTypeRoute = {
 
 export type ComposedHandler = {
 	handle: Handler<any, any>
-	hooks: Hook<any>
+	hooks: RegisteredHook<any>
 	validator?: SchemaValidator
 }
 

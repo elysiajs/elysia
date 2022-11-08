@@ -2,10 +2,8 @@ import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 import KingWorldError from './error'
 import type {
 	DeepMergeTwoTypes,
-	Hook,
 	LifeCycleStore,
 	LocalHook,
-	RegisterHook,
 	TypedSchema
 } from './types'
 
@@ -17,8 +15,8 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 ]
 
 export const mergeHook = (
-	a: Hook | RegisterHook<any, any> | LocalHook<any> | LifeCycleStore<any>,
-	b: Hook | RegisterHook<any, any> | LocalHook<any>
+	a: LocalHook<any> | LifeCycleStore<any>,
+	b: LocalHook<any>
 ): LocalHook<any, any> => {
 	const aSchema = 'schema' in a ? (a.schema as TypedSchema) : null
 	const bSchema = b && 'schema' in b ? b.schema : null
@@ -27,11 +25,12 @@ export const mergeHook = (
 		schema:
 			aSchema || bSchema
 				? ({
-						body: aSchema?.body ?? bSchema?.body,
-						header: aSchema?.header ?? bSchema?.header,
-						params: aSchema?.params ?? bSchema?.params,
-						query: aSchema?.query ?? bSchema?.query,
-						response: aSchema?.response ?? bSchema?.response
+						// Merge local hook first
+						body: bSchema?.body ?? aSchema?.body,
+						header: bSchema?.header ?? aSchema?.header,
+						params: bSchema?.params ?? aSchema?.params,
+						query: bSchema?.query ?? aSchema?.query,
+						response: bSchema?.response ?? aSchema?.response
 				  } as TypedSchema)
 				: null,
 		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []),

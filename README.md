@@ -17,9 +17,14 @@ Focusing on **speed**, and **simplicity**.
 KingWorld can be heavily customized with the use of plugins.
 
 Official plugins:
-- [Static](https://github.com/saltyaom/kingworld-static) for serving static file/folders
-- [Cookie](https://github.com/saltyaom/kingworld-cookie) for reading/setting cookie
-- [CORS](https://github.com/saltyaom/kingworld-cors) for handling CORs request
+- [Static](https://github.com/saltyaom/kingworld-static) - serve static file/folders
+- [Cookie](https://github.com/saltyaom/kingworld-cookie) - get/set cookie
+- [CORS](https://github.com/saltyaom/kingworld-cors) - handle CORS request
+- [html](https://github.com/saltyaom/kingworld-html) - shorthand returning HTML
+
+Community plugins:
+- [Controllers](https://github.com/gaurishhs/kingworld-controllers) - decorator and controller-based routing
+- [OAuth2](https://github.com/bogeychan/kingworld-oauth2) - handle OAuth 2.0 authorization code flow
 
 ## Quick Start
 KingWorld is a web framework based on [Bun](https://bun.sh).
