@@ -21,6 +21,7 @@ Official plugins:
 - [Cookie](https://github.com/saltyaom/kingworld-cookie) - get/set cookie
 - [CORS](https://github.com/saltyaom/kingworld-cors) - handle CORS request
 - [html](https://github.com/saltyaom/kingworld-html) - shorthand returning HTML
+- [GraphQL Yoga](https://github.com/saltyaom/kingworld-graphql-yoga) - shorthand returning HTML
 
 Community plugins:
 - [Controllers](https://github.com/gaurishhs/kingworld-controllers) - decorator and controller-based routing
