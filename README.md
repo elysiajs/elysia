@@ -31,21 +31,23 @@ Community plugins:
 KingWorld is a web framework based on [Bun](https://bun.sh).
 
 ```bash
-bun add kingworld
+bun create kingworld hello-kingworld
 ```
 
-Now create `index.ts`, and place the following:
+In `src/index.ts`, you should see the code like this:
 ```typescript
 import { KingWorld } from 'kingworld'
 
 new KingWorld()
-    .get("/", () => "🦊 Now foxing")
+    .get("/", () => "Hello KingWorld")
     .listen(3000)
+
+console.log('🦊 KINGWORLD is running at :3000')
 ```
 
-And run the server:
+Run the server:
 ```bash
-bun index.ts
+bun src/index.ts
 ```
 
 Then simply open `http://localhost:3000` in your browser.
@@ -58,7 +60,7 @@ Common HTTP methods have a built-in methods for convenient usage:
 app.get("/hi", () => "Hi")
     .post("/hi", () => "From Post")
     .put("/hi", () => "From Put")
-    .on("M-SEARCH", async () => "Custom Method")
+    .route("M-SEARCH", async () => "Custom Method")
     .listen(3000)
 
 // [GET] /hi => "Hi"
@@ -301,7 +303,7 @@ The callback that assigned to lifecycle is called **hook**.
 - stop [`VoidLifeCycle`]
     - Call after server stop, use for cleaning up
 
-Lifecycle can be assigned with `app.on<lifecycle name>()` or `app.on(lifeCycleName, callback)`:
+Lifecycle can be assigned with `app.on[lifecycle name]()` or `app.on(lifeCycleName, callback)`:
 
 For example, assigning `transform` to a request:
 ```typescript
