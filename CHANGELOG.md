@@ -1,14 +1,15 @@
-# 0.0.0-experimental.38 - 8 Nov 2022 
+# 0.0.0-experimental.39 - 8 Nov 2022 
 Breaking Change:
 - `method` is changed to `route`
 
 Improvement:
-- `LocalHook` now prefers nearest type instead of merge
-- Merge nearest schema first
+- `LocalHook` now prefers the nearest type instead of the merge
+- Merge the nearest schema first
+- add `contentType` as a second parameter for `BodyParser`
 
 Bug fix:
-- Correct type for `afterHandle`
-- Fix inifinite cycling infer type for `Handler`
+- Correct type for `after handle`
+- Fix infinite cycling infer type for `Handler`
 
 # 0.0.0-experimental.38 - 7 Nov 2022 
 Bug fix:
