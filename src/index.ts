@@ -41,10 +41,25 @@ import {
 	SchemaValidator,
 	MergeIfNotNull,
 	IsAny,
-	OverwritableTypeRoute
+	OverwritableTypeRoute,
+	MergeSchema
 } from './types'
 import { TSchema } from '@sinclair/typebox'
 
+/**
+ * ### KingWorld Server
+ * Main instance to create web server using KingWorld
+ *
+ * ---
+ * @example
+ * ```typescript
+ * import { KingWorld } from 'kingworld'
+ *
+ * new KingWorld()
+ *     .get("/", () => "Hello")
+ *     .listen(3000)
+ * ```
+ */
 export default class KingWorld<
 	Instance extends KingWorldInstance = KingWorldInstance<{
 		store: {}
@@ -90,6 +105,10 @@ export default class KingWorld<
 			strictPath: false,
 			...config
 		}
+
+		this.handle.bind(this)
+		this.listen.bind(this)
+		this.handleError.bind(this)
 	}
 
 	private getSchemaValidator(
@@ -160,24 +179,84 @@ export default class KingWorld<
 					this.router.register(path)[method]
 	}
 
+	/**
+	 * ### start | Life cycle event
+	 * Called after server is ready for serving
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .onStart(({ url, port }) => {
+	 *         console.log("Running at ${url}:${port}")
+	 *     })
+	 *     .listen(3000)
+	 * ```
+	 */
 	onStart(handler: VoidLifeCycle<Instance>) {
 		this.event.start.push(handler)
 
 		return this
 	}
 
+	/**
+	 * ### request | Life cycle event
+	 * Called on every new request is accepted
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .onRequest(({ method, url }) => {
+	 *         saveToAnalytic({ method, url })
+	 *     })
+	 * ```
+	 */
 	onRequest(handler: BeforeRequestHandler<Instance['store']>) {
 		this.event.request.push(handler)
 
 		return this
 	}
 
+	/**
+	 * ### parse | Life cycle event
+	 * Callback function to handle body parsing
+	 *
+	 * If truthy value is returned, will be assigned to `context.body`
+	 * Otherwise will skip the callback and look for the next one.
+	 *
+	 * Equivalent to Express's body parser
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .onParse((request, contentType) => {
+	 *         if(contentType === "application/json")
+	 *             return request.json()
+	 *     })
+	 * ```
+	 */
 	onParse(parser: BodyParser) {
 		this.event.parse.splice(this.event.parse.length - 1, 0, parser)
 
 		return this
 	}
 
+	/**
+	 * ### transform | Life cycle event
+	 * Assign or transform anything related to context before validation.
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .onTransform(({ params }) => {
+	 *         if(params.id)
+	 *             params.id = +params.id
+	 *     })
+	 * ```
+	 */
 	onTransform<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: Handler<Route, Instance>
 	) {
@@ -186,6 +265,25 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### Before Handle | Life cycle event
+	 * Intercept request **before(()) main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response` and skip the main handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .onBeforeHandle(({ params: { id }, status }) => {
+	 *         if(id && !isExisted(id)) {
+	 * 	           status(401)
+	 *
+	 *             return "Unauthorized"
+	 * 	       }
+	 *     })
+	 * ```
+	 */
 	onBeforeHandle<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: Handler<Route, Instance>
 	) {
@@ -194,6 +292,22 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### After Handle | Life cycle event
+	 * Intercept request **after** main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .onAfterHandle((context, response) => {
+	 *         if(typeof response === "object")
+	 *             return JSON.stringify(response)
+	 *     })
+	 * ```
+	 */
 	onAfterHandle<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: AfterRequestHandler<Route, Instance>
 	) {
@@ -202,18 +316,61 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### Error | Life cycle event
+	 * Called when error is thrown during processing request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .onError(({ code }) => {
+	 *         if(code === "NOT_FOUND")
+	 *             return "Path not found :("
+	 *     })
+	 * ```
+	 */
 	onError(errorHandler: ErrorHandler) {
 		this.event.error.push(errorHandler)
 
 		return this
 	}
 
+	/**
+	 * ### stop | Life cycle event
+	 * Called after server stop serving request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .onStop((app) => {
+	 *         cleanup()
+	 *     })
+	 * ```
+	 */
 	onStop(handler: VoidLifeCycle<Instance>) {
 		this.event.stop.push(handler)
 
 		return this
 	}
 
+	/**
+	 * ### on
+	 * Syntax sugar for attaching life cycle event by name
+	 *
+	 * Does the exact same thing as `.on[Event]()`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .on('error', ({ code }) => {
+	 *         if(code === "NOT_FOUND")
+	 *             return "Path not found :("
+	 *     })
+	 * ```
+	 */
 	on<Event extends LifeCycleEvent = LifeCycleEvent>(
 		type: Event,
 		handler: LifeCycle<Instance>[Event]
@@ -257,6 +414,20 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### group
+	 * Encapsulate and group path with prefix
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .group('/v1', app => app
+	 *         .get('/', () => 'Hi')
+	 *         .get('/name', () => 'KingWorld')
+	 *     })
+	 * ```
+	 */
 	group(prefix: string, run: (group: KingWorld<Instance>) => void) {
 		const instance = new KingWorld<Instance>()
 		run(instance)
@@ -277,6 +448,29 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### guard
+	 * Encapsulate and pass hook into all child handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .guard({
+	 *          schema: {
+	 *              body: t.Object({
+	 *                  username: t.String(),
+	 *                  password: t.String()
+	 *              })
+	 *          }
+	 *     }, app => app
+	 *         .get("/", () => 'Hi')
+	 *         .get("/name", () => 'KingWorld')
+	 *     })
+	 * ```
+	 */
 	guard<Schema extends TypedSchema = {}>(
 		hook: LocalHook<Schema, Instance>,
 		run: (
@@ -308,6 +502,20 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### use
+	 * Merge separate logic of KingWorld with current
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * const plugin = (app: KingWorld) => app
+	 *     .get('/plugin', () => 'hi')
+	 *
+	 * new KingWorld()
+	 *     .use(plugin)
+	 * ```
+	 */
 	use<
 		Config = any,
 		NewKingWorld extends KingWorld<any> = KingWorld<any>,
@@ -329,6 +537,24 @@ export default class KingWorld<
 		return plugin(this as unknown as any, config as any) as unknown as any
 	}
 
+	/**
+	 * ### get
+	 * Register handler for path with method [GET]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .get('/', () => 'hi')
+	 *     .get('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	get<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -339,6 +565,24 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### post
+	 * Register handler for path with method [POST]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .post('/', () => 'hi')
+	 *     .post('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	post<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -354,6 +598,24 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### put
+	 * Register handler for path with method [PUT]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .put('/', () => 'hi')
+	 *     .put('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	put<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -364,6 +626,24 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### patch
+	 * Register handler for path with method [PATCH]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .patch('/', () => 'hi')
+	 *     .patch('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	patch<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -379,6 +659,24 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### delete
+	 * Register handler for path with method [DELETE]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .delete('/', () => 'hi')
+	 *     .delete('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	delete<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -394,6 +692,24 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### options
+	 * Register handler for path with method [OPTIONS]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .options('/', () => 'hi')
+	 *     .options('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	options<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -409,6 +725,24 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### head
+	 * Register handler for path with method [HEAD]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .head('/', () => 'hi')
+	 *     .head('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	head<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -424,6 +758,24 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### trace
+	 * Register handler for path with method [TRACE]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .trace('/', () => 'hi')
+	 *     .trace('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	trace<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -439,6 +791,24 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### connect
+	 * Register handler for path with method [CONNECT]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .connect('/', () => 'hi')
+	 *     .connect('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	connect<Schema extends TypedSchema = {}, Path extends string = string>(
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
@@ -468,6 +838,24 @@ export default class KingWorld<
 		this.route(method, path, handler, hook)
 	}
 
+	/**
+	 * ### route
+	 * Register handler for path with custom method
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .route('CUSTOM', '/', () => 'hi')
+	 *     .route('CUSTOM', '/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	route<Schema extends TypedSchema = {}, Path extends string = string>(
 		method: HTTPMethod,
 		path: Path,
@@ -484,6 +872,18 @@ export default class KingWorld<
 		return this
 	}
 
+	/**
+	 * ### state
+	 * Assign global mutatable state accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .state('counter', 0)
+	 *     .get('/', (({ counter }) => ++counter)
+	 * ```
+	 */
 	state<
 		Key extends KWKey = keyof Instance['store'],
 		Value = Instance['store'][keyof Instance['store']],
@@ -505,6 +905,18 @@ export default class KingWorld<
 		return this as unknown as NewInstance
 	}
 
+	/**
+	 * ### decorate
+	 * Define custom method to `Context` accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .decorate('getDate', () => Date.now())
+	 *     .get('/', (({ getDate }) => getDate())
+	 * ```
+	 */
 	decorate<
 		Name extends string,
 		Callback extends Function = () => unknown,
@@ -519,9 +931,29 @@ export default class KingWorld<
 		) as unknown as NewInstance
 	}
 
+	/**
+	 * ### schema
+	 * Define type strict validation for request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .schema({
+	 *         response: t.String()
+	 *     })
+	 *     .get('/', () => 'hi')
+	 * ```
+	 */
 	schema<
 		Schema extends TypedSchema = TypedSchema,
-		NewInstance = KingWorld<Instance>
+		NewInstance = KingWorld<{
+			request: Instance['request']
+			store: Instance['store']
+			schema: MergeSchema<Schema, Instance['schema']>
+		}>
 	>(schema: Schema): NewInstance {
 		this.$schema = {
 			body: this.getSchemaValidator(schema?.body),
@@ -534,8 +966,13 @@ export default class KingWorld<
 		return this as unknown as NewInstance
 	}
 
-	// ? Using arrow to bind `this`
-	handle = async (request: Request): Promise<Response> => {
+	async handle(request: Request): Promise<Response> {
+		for (let i = 0; i < this.event.request.length; i++) {
+			let response = this.event.request[i](request, this.store)
+			if (response instanceof Promise) response = await response
+			if (response) return response
+		}
+
 		const bodySize =
 			request.method === 'GET'
 				? 0
@@ -543,12 +980,6 @@ export default class KingWorld<
 
 		if (bodySize > this.config.bodyLimit)
 			throw new KingWorldError('BODY_LIMIT')
-
-		for (let i = 0; i < this.event.request.length; i++) {
-			let response = this.event.request[i](request, this.store)
-			if (response instanceof Promise) response = await response
-			if (response) return response
-		}
 
 		let body: string | Record<string, any> | undefined
 		if (bodySize) {
@@ -658,7 +1089,7 @@ export default class KingWorld<
 		return mapResponse(response, context)
 	}
 
-	private handleError = (err: Error) => {
+	private handleError(err: Error) {
 		const error =
 			err instanceof KingWorldError
 				? err
@@ -699,11 +1130,20 @@ export default class KingWorld<
 		}
 	}
 
-	listen = (options: number | Omit<Serve, 'fetch'>) => {
+	/**
+	 * ### listen
+	 * Assign current instance to port and start serving
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new KingWorld()
+	 *     .get("/", () => 'hi')
+	 *     .listen(8080)
+	 * ```
+	 */
+	listen(options: number | Omit<Serve, 'fetch'>) {
 		if (!Bun) throw new Error('Bun to run')
-
-		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i](this as any)
 
 		this.server = Bun.serve(
 			typeof options === 'number'
@@ -719,21 +1159,39 @@ export default class KingWorld<
 				  }
 		)
 
+		for (let i = 0; i < this.event.start.length; i++)
+			this.event.start[i](this as any)
+
 		return this
 	}
 
+	/**
+	 * ### stop
+	 * Stop server from serving
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * const app = new KingWorld()
+	 *     .get("/", () => 'hi')
+	 *     .listen(8080)
+	 *
+	 * // Sometime later
+	 * app.stop()
+	 * ```
+	 */
 	stop = async () => {
 		if (!this.server)
 			throw new Error(
 				"KingWorld isn't running. Call `app.listen` to start the server."
 			)
 
+		this.server.stop()
+
 		for (let i = 0; i < this.event.stop.length; i++) {
 			const process = this.event.stop[i](this as any)
 			if (process instanceof Promise) await process
 		}
-
-		this.server.stop()
 	}
 }
 

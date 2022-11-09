@@ -34,15 +34,50 @@ export default class Context<
 		this.store = x.store
 	}
 
+	/**
+	 * Set response status
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * app.get('/', ({ status }) => {
+	 *     status(401)
+	 * })
+	 * ```
+	 */
 	status = (code: number) => {
 		this._status = code
 	}
 
+	/**
+	 * Redirect request to another location
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * app.get('/', ({ redirect }) => {
+	 *     redirect('/new-path')
+	 * })
+	 * ```
+	 */
 	redirect = (path: string, status = 301) => {
 		this._redirect = path
 		this._status = status
 	}
 
+	/**
+	 * Add value to response header
+	 * 
+	 * Syntax sugar for `responseHeader[key] = value`
+	 * 
+	 * ---
+	 * @example
+	 * ```typescript
+	 * app.get('/', ({ setHeader }) => {
+	 *     setHeader('x-powered-by', 'KingWorld')
+	 * })
+	 * ```
+	 */
 	setHeader = (key: string, value: string) => {
 		this.responseHeaders[key] = value
 	}

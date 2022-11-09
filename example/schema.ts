@@ -1,5 +1,4 @@
 import { KingWorld, t } from '../src'
-// import { Type as t } from '@sinclair/typebox'
 
 const app = new KingWorld()
 	// Strictly validate response
@@ -54,7 +53,7 @@ const app = new KingWorld()
 						schema: {
 							params: t.Object({
 								id: t.Number()
-							})
+							}),
 						},
 						transform: ({ params }) => {
 							params.id = +params.id

@@ -1,7 +1,6 @@
-import KingWorld from '../src'
+import { KingWorld, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-import { z } from 'zod'
 
 const req = (path: string) => new Request(path)
 
@@ -9,8 +8,8 @@ describe('Schema', () => {
 	it('validate query', async () => {
 		const app = new KingWorld().get('/', ({ query: { name } }) => name, {
 			schema: {
-				query: z.object({
-					name: z.string()
+				query: t.Object({
+					name: t.String()
 				})
 			}
 		})
@@ -24,8 +23,8 @@ describe('Schema', () => {
 		const app = new KingWorld().guard(
 			{
 				schema: {
-					query: z.object({
-						name: z.string()
+					query: t.Object({
+						name: t.String()
 					})
 				}
 			},
@@ -34,11 +33,11 @@ describe('Schema', () => {
 					// Store is inherited
 					.post('/user', ({ query: { name } }) => name, {
 						schema: {
-							body: z.object({
-								id: z.number().min(5),
-								username: z.string(),
-								profile: z.object({
-									name: z.string()
+							body: t.Object({
+								id: t.Number(),
+								username: t.String(),
+								profile: t.Object({
+									name: t.String()
 								})
 							})
 						}

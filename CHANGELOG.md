@@ -1,3 +1,8 @@
+# 0.0.0-experimental.40 - 9 Nov 2022 
+Improvement:
+- Global `.schema` now infer type for handler
+- Add JSDocs for main method with example
+
 # 0.0.0-experimental.39 - 8 Nov 2022 
 Breaking Change:
 - `method` is changed to `route`
