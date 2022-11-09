@@ -186,6 +186,26 @@ const app = new KingWorld()
 // [GET] / => "KINGWORLD"
 ```
 
+## SSL 
+To enable SSL, while creating the `KingWorld` instance, pass ssl options to the `KingWorldConfig` ssl object.
+An example for the same can be found in the example folder.
+
+```ts
+new KingWorld({
+    ssl: {
+        keyFile: 'path/to/key',
+        certFile: 'path/to/cert',
+        /**
+        * Optional SSL options
+        */
+        // passphrase?: string;
+        // caFile?: string;
+        // dhParamsFile?: string;
+        // lowMemoryMode?: boolean;
+    }
+})
+```
+
 ## Handler
 Handler is a callback function that returns `Response`. Used in HTTP method handler.
 
