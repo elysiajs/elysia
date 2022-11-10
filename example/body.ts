@@ -11,8 +11,6 @@ new KingWorld()
 		}
 	})
 	.post('/', ({ body: { username } }) => `Hi ${username}`, {
-		// Define type strict schema, and validation
-		// This type will be infer to TypeScript
 		schema: {
 			body: t.Object({
 				id: t.Number(),

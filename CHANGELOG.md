@@ -1,7 +1,29 @@
 # 0.0.0-experimental.40 - 9 Nov 2022 
+Breaking Change:
+- `Context` is now `interface` (non-constructable)
+- `responseHeaders`, `status`, `redirect` is now replaced with `set`
+    - To migrate:
+    ```typescript
+    // From
+    app.get('/', ({ responseHeaders, status, redirect }) => {
+        responseHeaders['server'] = 'KingWorld'
+        status(401)
+        redirect('/')
+    })
+
+    // To
+    app.get('/', ({ set }) => {
+        set.headers['server'] = 'KingWorld'
+        set.status = 401
+        set.redirect = '/'
+    })
+    ```
+
 Improvement:
 - Global `.schema` now infer type for handler
 - Add JSDocs for main method with example
+- `.listen` now accept `Bun.Server` as a callback function
+- Response support for `FileBlob`
 
 # 0.0.0-experimental.39 - 8 Nov 2022 
 Breaking Change:

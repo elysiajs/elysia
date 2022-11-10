@@ -1,5 +1,6 @@
-import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 import KingWorldError from './error'
+
+import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,

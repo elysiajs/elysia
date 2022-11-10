@@ -12,7 +12,7 @@ describe('Body Parser', () => {
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(3000)
+			.listen(8080)
 
 		const res = await app.handle(
 			new Request('/', {
@@ -37,7 +37,7 @@ describe('Body Parser', () => {
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(3000)
+			.listen(8080)
 
 		const res = await app.handle(
 			new Request('/', {
@@ -62,7 +62,7 @@ describe('Body Parser', () => {
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(3000)
+			.listen(8080)
 
 		const res = await app.handle(
 			new Request('/', {

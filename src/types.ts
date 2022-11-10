@@ -1,9 +1,10 @@
-import KingWorld from '.'
+import { KingWorld } from '.'
 
 import type Context from './context'
 import type KingWorldError from './error'
 import type { Static, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
+import type { Server } from 'bun'
 
 export type KWKey = string | number | symbol
 export type WithArray<T> = T | T[]
@@ -40,6 +41,12 @@ export type LifeCycleEvent =
 	| 'afterHandle'
 	| 'error'
 	| 'stop'
+
+export type ListenCallback<
+	Instance extends KingWorldInstance = KingWorldInstance
+> =
+	| ((server: Server) => void)
+	| ((server: Server) => Promise<void>)
 
 export type VoidLifeCycle<
 	Instance extends KingWorldInstance = KingWorldInstance
@@ -91,7 +98,9 @@ export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
 	store: Store
 ) => Response | Promise<Response>
 
-export interface RegisteredHook<Instance extends KingWorldInstance = KingWorldInstance> {
+export interface RegisteredHook<
+	Instance extends KingWorldInstance = KingWorldInstance
+> {
 	schema?: TypedSchema
 	transform: Handler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
@@ -236,12 +245,6 @@ export type ComposedHandler = {
 }
 
 export interface KingWorldConfig {
-	/**
-	 * Defines the maximum payload, in bytes, the server is allowed to accept.
-	 *
-	 * @default 1048576 (1MB)
-	 */
-	bodyLimit: number
 	/**
 	 * If set to `true`, path will **NOT** try to map trailing slash with none.
 	 *

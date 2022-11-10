@@ -3,7 +3,7 @@ import type { Serve, Server } from 'bun'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { Router } from './router'
-import Context from './context'
+import type Context from './context'
 import { mapResponse, mapEarlyResponse } from './handler'
 import {
 	mapQuery,
@@ -42,7 +42,8 @@ import {
 	MergeIfNotNull,
 	IsAny,
 	OverwritableTypeRoute,
-	MergeSchema
+	MergeSchema,
+	ListenCallback
 } from './types'
 import { TSchema } from '@sinclair/typebox'
 
@@ -57,7 +58,7 @@ import { TSchema } from '@sinclair/typebox'
  *
  * new KingWorld()
  *     .get("/", () => "Hello")
- *     .listen(3000)
+ *     .listen(8080)
  * ```
  */
 export default class KingWorld<
@@ -101,14 +102,9 @@ export default class KingWorld<
 
 	constructor(config: Partial<KingWorldConfig> = {}) {
 		this.config = {
-			bodyLimit: 1048576,
 			strictPath: false,
 			...config
 		}
-
-		this.handle.bind(this)
-		this.listen.bind(this)
-		this.handleError.bind(this)
 	}
 
 	private getSchemaValidator(
@@ -132,7 +128,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<any>
 	) {
-		const path = _path === '*' ? '/*' : _path
+		const path = !_path.startsWith('/') ? `/${_path}` : _path
 
 		this.routes.push({
 			method,
@@ -141,11 +137,22 @@ export default class KingWorld<
 			hooks: mergeHook(clone(this.event), hook as RegisteredHook)
 		})
 
-		const body = this.getSchemaValidator(hook?.schema?.body)
-		const header = this.getSchemaValidator(hook?.schema?.header, true)
-		const params = this.getSchemaValidator(hook?.schema?.params)
-		const query = this.getSchemaValidator(hook?.schema?.query)
-		const response = this.getSchemaValidator(hook?.schema?.response)
+		const body = this.getSchemaValidator(
+			hook?.schema?.body ?? this.$schema?.body
+		)
+		const header = this.getSchemaValidator(
+			hook?.schema?.header ?? this.$schema?.header,
+			true
+		)
+		const params = this.getSchemaValidator(
+			hook?.schema?.params ?? this.$schema?.params
+		)
+		const query = this.getSchemaValidator(
+			hook?.schema?.query ?? this.$schema?.query
+		)
+		const response = this.getSchemaValidator(
+			hook?.schema?.response ?? this.$schema?.response
+		)
 
 		registerSchemaPath({
 			schema: this.store[SCHEMA],
@@ -190,7 +197,7 @@ export default class KingWorld<
 	 *     .onStart(({ url, port }) => {
 	 *         console.log("Running at ${url}:${port}")
 	 *     })
-	 *     .listen(3000)
+	 *     .listen(8080)
 	 * ```
 	 */
 	onStart(handler: VoidLifeCycle<Instance>) {
@@ -973,37 +980,33 @@ export default class KingWorld<
 			if (response) return response
 		}
 
-		const bodySize =
-			request.method === 'GET'
-				? 0
-				: +(request.headers.get('content-length') ?? 0)
-
-		if (bodySize > this.config.bodyLimit)
-			throw new KingWorldError('BODY_LIMIT')
-
 		let body: string | Record<string, any> | undefined
-		if (bodySize) {
+		if (request.method !== 'GET') {
 			const contentType = request.headers.get('content-type') ?? ''
 
-			for (let i = 0; i <= this.event.parse.length; i++) {
-				let temp = this.event.parse[i](request, contentType)
-				if (temp instanceof Promise) temp = await temp
+			if (contentType)
+				for (let i = 0; i < this.event.parse.length; i++) {
+					let temp = this.event.parse[i](request, contentType)
+					if (temp instanceof Promise) temp = await temp
 
-				if (temp) {
-					body = temp
-					break
+					if (temp) {
+						body = temp
+						break
+					}
 				}
-			}
 		}
 
 		const route = this.router.find(getPath(request.url))
-		const context = new Context({
+		const context: Context = {
 			request,
 			params: route?.params ?? {},
 			query: mapQuery(request.url),
 			body,
-			store: this.store
-		})
+			store: this.store,
+			set: {
+				headers: {}
+			}
+		}
 
 		if (route === null) throw new KingWorldError('NOT_FOUND')
 
@@ -1015,40 +1018,47 @@ export default class KingWorld<
 			if (response instanceof Promise) response = await response
 		}
 
-		const validate = handler.validator ?? this.$schema
-		if (validate) {
-			if (validate.header) {
+		if (handler.validator) {
+			if (handler.validator.header) {
 				const _header: Record<string, string> = {}
 
 				for (const [key, value] of request.headers.values())
 					_header[key] = value
 
-				if (!validate.header.Check(_header))
+				if (!handler.validator.header.Check(_header))
 					throw createValidationError(
 						'header',
-						validate.header,
+						handler.validator.header,
 						_header
 					)
-				// if (validate.header.Errors)
-				// 	throw formatAjvError('header', validate.header.errors[0])
 			}
 
-			if (validate.params && !validate.params.Check(context.params))
+			if (
+				handler.validator.params &&
+				!handler.validator.params.Check(context.params)
+			)
 				throw createValidationError(
 					'params',
-					validate.params,
+					handler.validator.params,
 					context.params
 				)
 
-			if (validate.query && !validate.query.Check(context.query))
+			if (
+				handler.validator.query &&
+				!handler.validator.query.Check(context.query)
+			)
 				throw createValidationError(
 					'query',
-					validate.query,
+					handler.validator.query,
 					context.query
 				)
 
-			if (validate.body && !validate.body.Check(body))
-				throw createValidationError('body', validate.body, body)
+			if (handler.validator.body && !handler.validator.body.Check(body))
+				throw createValidationError(
+					'body',
+					handler.validator.body,
+					body
+				)
 		}
 
 		for (let i = 0; i < handler.hooks.beforeHandle.length; i++) {
@@ -1074,8 +1084,15 @@ export default class KingWorld<
 		let response = handler.handle(context)
 		if (response instanceof Promise) response = await response
 
-		if (validate?.response && !validate.response.Check(response))
-			throw createValidationError('response', validate.response, response)
+		if (
+			handler.validator?.response &&
+			!handler.validator.response.Check(response)
+		)
+			throw createValidationError(
+				'response',
+				handler.validator.response,
+				response
+			)
 
 		for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
 			let newResponse = handler.hooks.afterHandle[i](context, response)
@@ -1142,25 +1159,30 @@ export default class KingWorld<
 	 *     .listen(8080)
 	 * ```
 	 */
-	listen(options: number | Omit<Serve, 'fetch'>) {
+	listen(options: number | Omit<Serve, 'fetch'>, callback?: ListenCallback) {
 		if (!Bun) throw new Error('Bun to run')
+
+		const fetch = this.handle.bind(this)
+		const error = this.handleError.bind(this)
 
 		this.server = Bun.serve(
 			typeof options === 'number'
 				? {
 						port: options,
-						fetch: this.handle,
-						error: this.handleError
+						fetch,
+						error
 				  }
 				: {
 						...options,
-						fetch: this.handle,
-						error: this.handleError
+						fetch,
+						error
 				  }
 		)
 
 		for (let i = 0; i < this.event.start.length; i++)
 			this.event.start[i](this as any)
+
+		if (callback) callback(this.server!)
 
 		return this
 	}

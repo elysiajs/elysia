@@ -90,9 +90,9 @@ const app = new KingWorld()
 			.get('/kingworld', () => 'Welcome to KINGWORLD')
 			.get('/fbk', () => 'FuBuKing')
 	})
-	.get('/response-header', ({ status, responseHeaders }) => {
-		status(404)
-		responseHeaders['a'] = 'b'
+	.get('/response-header', ({ set }) => {
+		set.status = 404
+		set.headers['a'] = 'b'
 
 		return 'A'
 	})
@@ -101,8 +101,8 @@ const app = new KingWorld()
 	.get('/ref', ({ date }) => date())
 	.get('/response', () => new Response('Hi'))
 	.get('/error', () => new Error('Something went wrong'))
-	.get('/401', ({ status }) => {
-		status(401)
+	.get('/401', ({ set }) => {
+		set.status = 401
 
 		return 'Status should be 401'
 	})
@@ -119,9 +119,6 @@ const app = new KingWorld()
 				status: 404
 			})
 	})
-	.onStart((app) => {
-		// console.log(app)
-
-		console.log('🦊 KINGWORLD is running at :8080')
+	.listen(8080, ({ hostname, port }) => {
+		console.log(`🦊 KingWorld is running at http://${hostname}:${port}`)
 	})
-	.listen(8080)
