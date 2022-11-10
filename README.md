@@ -14,4 +14,4 @@ Designed with TypeScript in mind, you don't need to understand TypeScript to tak
 ⚡️ KingWorld is [one of the fastest Bun web frameworks](https://github.com/SaltyAom/bun-http-framework-benchmark)
 
 ## Documentation
-The documentation is available on [kingworld.pages.dev](https://kingworld.pages.dev).
+The documentation is available on [kingworldjs.com](https://kingworldjs.com).
