@@ -1,3 +1,7 @@
+# 0.0.0-experimental.41 - 9 Nov 2022 
+Change:
+- Internal schema now use correct OpenAPI type (KingWorld need CORRECTION 💢💢)
+
 # 0.0.0-experimental.40 - 9 Nov 2022 
 Breaking Change:
 - `Context` is now `interface` (non-constructable)

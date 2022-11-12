@@ -9,19 +9,13 @@ const replace = (word: string, find: string, replacer: string, startAt = 0) => {
 	return word.substring(0, index) + replacer + word.substring(index + 1)
 }
 
-const toOpenAPIPath = (path: string) => {
-	while (path.includes(':')) {
-		path = replace(path, ':', '{')
-		const index = path.indexOf('{')
+export const toOpenAPIPath = (path: string) =>
+	path
+		.split('/')
+		.map((x) => (x.startsWith(':') ? `{${x.slice(1, x.length)}}` : x))
+		.join('/')
 
-		path = replace(path, '/', '}/', index)
-		if (path.indexOf('/', index)) path += '}'
-	}
-
-	return path
-}
-
-const mapProperties = (name: string, schema: TSchema | undefined) =>
+export const mapProperties = (name: string, schema: TSchema | undefined) =>
 	Object.entries(schema?.properties ?? []).map(([key, value]) => ({
 		in: name,
 		name: key,
@@ -66,14 +60,17 @@ export const registerSchemaPath = ({
 
 	schema[path] = {
 		...(schema[path] ? schema[path] : {}),
-		[method]: {
+		[method.toLowerCase()]: {
 			...(headerSchema || paramsSchema || querySchema || bodySchema
 				? { parameters }
 				: {}),
 			...(responseSchema
 				? {
-						response: {
-							'200': responseSchema
+						responses: {
+							'200': {
+								description: 'Default response',
+								schema: responseSchema
+							}
 						}
 				  }
 				: {})

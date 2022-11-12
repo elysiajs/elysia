@@ -1159,7 +1159,7 @@ export default class KingWorld<
 	 *     .listen(8080)
 	 * ```
 	 */
-	listen(options: number | Omit<Serve, 'fetch'>, callback?: ListenCallback) {
+	listen(options: number | Serve, callback?: ListenCallback) {
 		if (!Bun) throw new Error('Bun to run')
 
 		const fetch = this.handle.bind(this)
