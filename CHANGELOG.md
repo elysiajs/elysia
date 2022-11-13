@@ -1,3 +1,7 @@
+# 0.0.0-experimental.42 - 13 Nov 2022 
+Bug fix:
+- Router doesn't handle part which start with the same letter
+
 # 0.0.0-experimental.41 - 9 Nov 2022 
 Change:
 - Internal schema now use correct OpenAPI type (KingWorld need CORRECTION 💢💢)
