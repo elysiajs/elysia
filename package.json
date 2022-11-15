@@ -1,6 +1,6 @@
 {
   "name": "kingworld",
-  "version": "0.0.0-experimental.39",
+  "version": "0.0.0-experimental.42",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -10,6 +10,7 @@
     "type": "git",
     "url": "https://github.com/saltyaom/kingworld"
   },
+  "type": "module",
   "main": "build/index.js",
   "module": "build/es/index.js",
   "dependencies": {

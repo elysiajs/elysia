@@ -11,7 +11,7 @@ describe('Life Cycle', () => {
 			.onStart(() => {
 				started = true
 			})
-			.listen(3000)
+			.listen(8080)
 
 		app.stop()
 
@@ -26,7 +26,7 @@ describe('Life Cycle', () => {
 			.on('start', () => {
 				started = true
 			})
-			.listen(3000)
+			.listen(8080)
 
 		app.stop()
 
@@ -41,7 +41,7 @@ describe('Life Cycle', () => {
 			.onStop(() => {
 				stopped = true
 			})
-			.listen(3000)
+			.listen(8080)
 
 		app.stop()
 
@@ -56,7 +56,7 @@ describe('Life Cycle', () => {
 			.on('stop', () => {
 				started = true
 			})
-			.listen(3000)
+			.listen(8080)
 
 		app.stop()
 

@@ -6,8 +6,8 @@ const req = (path: string) => new Request(path)
 
 describe('Resposne Headers', () => {
 	it('add response headers', async () => {
-		const app = new KingWorld().get('/', ({ responseHeaders }) => {
-			responseHeaders['x-powered-by'] = 'KingWorld'
+		const app = new KingWorld().get('/', ({ set }) => {
+			set.headers['x-powered-by'] = 'KingWorld'
 
 			return 'Hi'
 		})
@@ -18,8 +18,8 @@ describe('Resposne Headers', () => {
 
 	it('add headers from hook', async () => {
 		const app = new KingWorld()
-			.onTransform((request) => {
-				request.responseHeaders['x-powered-by'] = 'KingWorld'
+			.onTransform(({ set }) => {
+				set.headers['x-powered-by'] = 'KingWorld'
 			})
 			.get('/', () => 'Hi')
 		const res = await app.handle(req('/'))
@@ -29,8 +29,8 @@ describe('Resposne Headers', () => {
 
 	it('add headers from plugin', async () => {
 		const plugin = (app: KingWorld) =>
-			app.onTransform((request) => {
-				request.responseHeaders['x-powered-by'] = 'KingWorld'
+			app.onTransform(({ set }) => {
+				set.headers['x-powered-by'] = 'KingWorld'
 			})
 
 		const app = new KingWorld().use(plugin).get('/', () => 'Hi')
@@ -41,8 +41,8 @@ describe('Resposne Headers', () => {
 
 	it('add responseHeaders to Response', async () => {
 		const app = new KingWorld()
-			.onTransform((request) => {
-				request.responseHeaders['x-powered-by'] = 'KingWorld'
+			.onTransform(({ set }) => {
+				set.headers['x-powered-by'] = 'KingWorld'
 			})
 			.get('/', () => new Response('Hi'))
 		const res = await app.handle(req('/'))
@@ -51,8 +51,8 @@ describe('Resposne Headers', () => {
 	})
 
 	it('add status to Response', async () => {
-		const app = new KingWorld().get('/', ({ status }) => {
-			status(401)
+		const app = new KingWorld().get('/', ({ set }) => {
+			set.status = 401
 
 			return 'Hi'
 		})
