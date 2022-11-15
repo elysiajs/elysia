@@ -1,3 +1,7 @@
+# 0.0.0-experimental.42 - 14 Nov 2022 
+Improvement:
+- Faster object iteration for setting headers
+
 # 0.0.0-experimental.42 - 13 Nov 2022 
 Bug fix:
 - Router doesn't handle part which start with the same letter

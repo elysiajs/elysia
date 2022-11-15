@@ -17,7 +17,7 @@ import {
 import { registerSchemaPath } from './schema'
 import KingWorldError from './error'
 
-import {
+import type {
 	Handler,
 	RegisteredHook,
 	BeforeRequestHandler,
@@ -45,7 +45,7 @@ import {
 	MergeSchema,
 	ListenCallback
 } from './types'
-import { TSchema } from '@sinclair/typebox'
+import type { TSchema } from '@sinclair/typebox'
 
 /**
  * ### KingWorld Server

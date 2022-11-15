@@ -25,14 +25,15 @@ export const mapEarlyResponse = (response: unknown, context: Context) => {
 				if (response instanceof Error)
 					return errorToResponse(response, context.set.headers)
 				if (response instanceof Response) {
-					for (const x of Object.entries(context.set.headers))
-						response.headers.append(x[0], x[1])
+					for (const key in context.set.headers)
+						response.headers.append(key, context.set.headers[key])
 
 					return response
 				}
 				if (response instanceof Blob) return new Response(response)
 
-				context.set.headers['Content-Type'] = 'application/json'
+				if (!context.set.headers['Content-Type'])
+					context.set.headers['Content-Type'] = 'application/json'
 
 				return new Response(JSON.stringify(response), {
 					status: context.set.status,
@@ -47,8 +48,11 @@ export const mapEarlyResponse = (response: unknown, context: Context) => {
 						headers: context.set.headers
 					})
 
-				for (const x of Object.entries(context.set.headers))
-					(response as unknown as Response).headers.append(x[0], x[1])
+				for (const key in context.set.headers)
+					(response as unknown as Response).headers.append(
+						key,
+						context.set.headers[key]
+					)
 
 				return response as unknown as Response
 
@@ -112,14 +116,15 @@ export const mapResponse = (response: unknown, context: Context) => {
 				if (response instanceof Error)
 					return errorToResponse(response, context.set.headers)
 				if (response instanceof Response) {
-					for (const x of Object.entries(context.set.headers))
-						response.headers.append(x[0], x[1])
+					for (const key in context.set.headers)
+						response.headers.append(key, context.set.headers[key])
 
 					return response
 				}
 				if (response instanceof Blob) return new Response(response)
 
-				context.set.headers['Content-Type'] = 'application/json'
+				if (!context.set.headers['Content-Type'])
+					context.set.headers['Content-Type'] = 'application/json'
 
 				return new Response(JSON.stringify(response), {
 					status: context.set.status,
