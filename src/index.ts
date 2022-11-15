@@ -1167,13 +1167,15 @@ export default class KingWorld<
 
 		this.server = Bun.serve(
 			typeof options === 'number'
-				? {
+				? {	
+						...this.config.ssl,
 						port: options,
 						fetch,
 						error
 				  }
 				: {
 						...options,
+						...this.config.ssl,
 						fetch,
 						error
 				  }

@@ -138,14 +138,14 @@ export type UnwrapSchema<
 export type TypedSchemaToRoute<Schema extends TypedSchema> = {
 	body: UnwrapSchema<Schema['body']>
 	header: UnwrapSchema<Schema['header']> extends Record<string, any>
-		? UnwrapSchema<Schema['header']>
-		: undefined
+	? UnwrapSchema<Schema['header']>
+	: undefined
 	query: UnwrapSchema<Schema['query']> extends Record<string, any>
-		? UnwrapSchema<Schema['query']>
-		: undefined
+	? UnwrapSchema<Schema['query']>
+	: undefined
 	params: UnwrapSchema<Schema['params']> extends Record<string, any>
-		? UnwrapSchema<Schema['params']>
-		: undefined
+	? UnwrapSchema<Schema['params']>
+	: undefined
 	response: UnwrapSchema<Schema['response']>
 }
 
@@ -163,17 +163,17 @@ export type HookHandler<
 	Path extends string = string
 > = Handler<
 	TypedSchemaToRoute<Schema>['params'] extends {}
-		? Omit<TypedSchemaToRoute<Schema>, 'response'> & {
-				response: void | TypedSchemaToRoute<Schema>['response']
-		  }
-		: Omit<
-				Omit<TypedSchemaToRoute<Schema>, 'response'> & {
-					response: void | TypedSchemaToRoute<Schema>['response']
-				},
-				'params'
-		  > & {
-				params: Record<ExtractKWPath<Path>, string>
-		  },
+	? Omit<TypedSchemaToRoute<Schema>, 'response'> & {
+		response: void | TypedSchemaToRoute<Schema>['response']
+	}
+	: Omit<
+		Omit<TypedSchemaToRoute<Schema>, 'response'> & {
+			response: void | TypedSchemaToRoute<Schema>['response']
+		},
+		'params'
+	> & {
+		params: Record<ExtractKWPath<Path>, string>
+	},
 	Instance
 >
 
@@ -212,13 +212,13 @@ export type LocalHandler<
 	MergeSchema<Schema, Instance['schema']>['params'] extends NonNullable<
 		Schema['params']
 	>
-		? TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>
-		: Omit<
-				TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>,
-				'params'
-		  > & {
-				params: Record<ExtractKWPath<Path>, string>
-		  },
+	? TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>
+	: Omit<
+		TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>,
+		'params'
+	> & {
+		params: Record<ExtractKWPath<Path>, string>
+	},
 	Instance
 >
 
@@ -253,6 +253,20 @@ export interface KingWorldConfig {
 	 * @default false
 	 */
 	strictPath: boolean
+	/**
+	 * SSL Configuration
+	 */
+	ssl?: {
+		keyFile: string
+		certFile: string
+		/**
+		 * Optional SSL options
+		*/
+		passphrase?: string
+		caFile?: string
+		dhParamsFile?: string
+		lowMemoryMode?: boolean
+	}
 }
 
 export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}`
@@ -330,9 +344,9 @@ type Zip_DeepMergeTwoTypes<T, U> = T extends []
 	: U extends []
 	? T
 	: [
-			DeepMergeTwoTypes<Head<T>, Head<U>>,
-			...Zip_DeepMergeTwoTypes<Tail<T>, Tail<U>>
-	  ]
+		DeepMergeTwoTypes<Head<T>, Head<U>>,
+		...Zip_DeepMergeTwoTypes<Tail<T>, Tail<U>>
+	]
 
 /**
  * Take two objects T and U and create the new one with uniq keys for T a U objectI
@@ -365,14 +379,14 @@ type MergeTwoObjects<
 export type DeepMergeTwoTypes<T, U> =
 	// ----- 2 added lines ------
 	[T, U] extends [any[], any[]]
-		? Zip_DeepMergeTwoTypes<T, U>
-		: // check if generic types are objects
-		[T, U] extends [{ [key: string]: unknown }, { [key: string]: unknown }]
-		? MergeTwoObjects<T, U>
-		: T | U
+	? Zip_DeepMergeTwoTypes<T, U>
+	: // check if generic types are objects
+	[T, U] extends [{ [key: string]: unknown }, { [key: string]: unknown }]
+	? MergeTwoObjects<T, U>
+	: T | U
 
 export type IsAny<T> = unknown extends T
 	? [keyof T] extends [never]
-		? false
-		: true
+	? false
+	: true
 	: false
