@@ -24,7 +24,6 @@ import type {
 	TypedRoute,
 	KingWorldInstance,
 	KingWorldConfig,
-	KWKey,
 	HTTPMethod,
 	ComposedHandler,
 	InternalRoute,
@@ -155,6 +154,7 @@ export default class KingWorld<
 		)
 
 		registerSchemaPath({
+			// @ts-ignore
 			schema: this.store[SCHEMA],
 			hook,
 			method,
@@ -892,7 +892,7 @@ export default class KingWorld<
 	 * ```
 	 */
 	state<
-		Key extends KWKey = keyof Instance['store'],
+		Key extends string | number | symbol = keyof Instance['store'],
 		Value = Instance['store'][keyof Instance['store']],
 		ReturnValue = Value extends () => infer Returned
 			? Returned extends Promise<infer AsyncReturned>
@@ -1010,8 +1010,8 @@ export default class KingWorld<
 
 		if (route === null) throw new KingWorldError('NOT_FOUND')
 
-		const handler = route.store?.[request.method] as ComposedHandler
-		if (!handler) throw new KingWorldError('NOT_FOUND')
+		const handler = route.store?.[request.method] as ComposedHandler | null
+		if (handler === null) throw new KingWorldError('NOT_FOUND')
 
 		for (let i = 0; i < handler.hooks.transform.length; i++) {
 			let response = handler.hooks.transform[i](context)
@@ -1019,46 +1019,43 @@ export default class KingWorld<
 		}
 
 		if (handler.validator) {
-			if (handler.validator.header) {
+			const validator = handler.validator
+			if (validator.header) {
 				const _header: Record<string, string> = {}
 
-				for (const [key, value] of request.headers.values())
-					_header[key] = value
+				for (const key of request.headers.values())
+					_header[key] = request.headers.get(key)!
 
-				if (!handler.validator.header.Check(_header))
+				if (validator.header.Check(_header) === false)
 					throw createValidationError(
 						'header',
-						handler.validator.header,
+						validator.header,
 						_header
 					)
 			}
 
 			if (
-				handler.validator.params &&
-				!handler.validator.params.Check(context.params)
+				validator.params &&
+				validator.params.Check(context.params) === false
 			)
 				throw createValidationError(
 					'params',
-					handler.validator.params,
+					validator.params,
 					context.params
 				)
 
 			if (
-				handler.validator.query &&
-				!handler.validator.query.Check(context.query)
+				validator.query &&
+				validator.query.Check(context.query) === false
 			)
 				throw createValidationError(
 					'query',
-					handler.validator.query,
+					validator.query,
 					context.query
 				)
 
-			if (handler.validator.body && !handler.validator.body.Check(body))
-				throw createValidationError(
-					'body',
-					handler.validator.body,
-					body
-				)
+			if (validator.body && validator.body.Check(body) === false)
+				throw createValidationError('body', validator.body, body)
 		}
 
 		for (let i = 0; i < handler.hooks.beforeHandle.length; i++) {
@@ -1086,7 +1083,7 @@ export default class KingWorld<
 
 		if (
 			handler.validator?.response &&
-			!handler.validator.response.Check(response)
+			handler.validator.response.Check(response) !== false
 		)
 			throw createValidationError(
 				'response',
@@ -1168,11 +1165,13 @@ export default class KingWorld<
 		this.server = Bun.serve(
 			typeof options === 'number'
 				? {
+						...this.config.serve,
 						port: options,
 						fetch,
 						error
 				  }
 				: {
+						...this.config.serve,
 						...options,
 						fetch,
 						error
@@ -1229,7 +1228,6 @@ export type {
 	OverwritableTypeRoute,
 	KingWorldInstance,
 	KingWorldConfig,
-	KWKey,
 	HTTPMethod,
 	ComposedHandler,
 	InternalRoute,

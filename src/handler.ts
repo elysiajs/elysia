@@ -32,7 +32,7 @@ export const mapEarlyResponse = (response: unknown, context: Context) => {
 				}
 				if (response instanceof Blob) return new Response(response)
 
-				if (!context.set.headers['Content-Type'])
+				if (context.set.headers['Content-Type'] !== null)
 					context.set.headers['Content-Type'] = 'application/json'
 
 				return new Response(JSON.stringify(response), {
@@ -123,7 +123,7 @@ export const mapResponse = (response: unknown, context: Context) => {
 				}
 				if (response instanceof Blob) return new Response(response)
 
-				if (!context.set.headers['Content-Type'])
+				if (context.set.headers['Content-Type'] !== null)
 					context.set.headers['Content-Type'] = 'application/json'
 
 				return new Response(JSON.stringify(response), {

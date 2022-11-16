@@ -4,19 +4,18 @@ import type Context from './context'
 import type KingWorldError from './error'
 import type { Static, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import type { Server } from 'bun'
+import type { Serve, Server } from 'bun'
 
-export type KWKey = string | number | symbol
 export type WithArray<T> = T | T[]
 
 export interface KingWorldInstance<
 	Instance extends {
-		store?: Record<KWKey, any>
-		request?: Record<KWKey, any>
+		store?: Record<any, any>
+		request?: Record<any, any>
 		schema?: TypedSchema
 	} = {
-		store: Record<KWKey, any>
-		request: Record<KWKey, any>
+		store: {}
+		request: {}
 		schema: {}
 	}
 > {
@@ -44,9 +43,7 @@ export type LifeCycleEvent =
 
 export type ListenCallback<
 	Instance extends KingWorldInstance = KingWorldInstance
-> =
-	| ((server: Server) => void)
-	| ((server: Server) => Promise<void>)
+> = ((server: Server) => void) | ((server: Server) => Promise<void>)
 
 export type VoidLifeCycle<
 	Instance extends KingWorldInstance = KingWorldInstance
@@ -96,7 +93,7 @@ export interface LifeCycleStore<
 export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
 	request: Request,
 	store: Store
-) => Response | Promise<Response>
+) => void | Promise<void> | Response | Promise<Response>
 
 export interface RegisteredHook<
 	Instance extends KingWorldInstance = KingWorldInstance
@@ -253,6 +250,7 @@ export interface KingWorldConfig {
 	 * @default false
 	 */
 	strictPath: boolean
+	serve?: Partial<Serve>
 }
 
 export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}`
