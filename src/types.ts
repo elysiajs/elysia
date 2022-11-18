@@ -130,7 +130,7 @@ export interface TypedSchema<
 export type UnwrapSchema<
 	Schema extends TSchema | undefined,
 	Fallback = unknown
-> = Schema extends undefined ? Fallback : Static<NonNullable<Schema>>
+> = Schema extends NonNullable<Schema> ? Static<NonNullable<Schema>> : Fallback
 
 export type TypedSchemaToRoute<Schema extends TypedSchema> = {
 	body: UnwrapSchema<Schema['body']>

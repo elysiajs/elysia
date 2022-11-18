@@ -11,8 +11,8 @@ new KingWorld()
 		},
 		(app) =>
 			app
-				.get('/', ({ query, body }) => 'A', {
-					beforeHandle: ({ query, body }) => {},
+				.get('/', ({ query }) => 'A', {
+					beforeHandle: ({ query }) => {},
 					schema: {
 						query: t.Object({
 							a: t.String()

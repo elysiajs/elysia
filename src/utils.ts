@@ -1,6 +1,7 @@
 import KingWorldError from './error'
 
-import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
+import { TypeCheck, TypeCompiler, type ValueError } from '@sinclair/typebox/compiler'
+import type { TSchema } from '@sinclair/typebox'
 import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,
@@ -124,4 +125,16 @@ export const createValidationError = (
 		'VALIDATION',
 		`Invalid ${type}, ${error?.path?.slice(1) || 'root'}: ${error.message}`
 	)
+}
+
+export const getSchemaValidator = (
+	schema: TSchema | undefined,
+	additionalProperties = false
+) => {
+	if (!schema) return
+
+	if (schema.type === 'object' && !('additionalProperties' in schema))
+		schema.additionalProperties = additionalProperties
+
+	return TypeCompiler.Compile(schema)
 }

@@ -12,7 +12,8 @@ import {
 	mergeHook,
 	mergeDeep,
 	createValidationError,
-	SCHEMA
+	SCHEMA,
+	getSchemaValidator
 } from './utils'
 import { registerSchemaPath } from './schema'
 import KingWorldError from './error'
@@ -67,7 +68,7 @@ export default class KingWorld<
 		schema: {}
 	}>
 > {
-	private config: KingWorldConfig
+	config: KingWorldConfig
 
 	store: Instance['store'] = {
 		[SCHEMA]: {}
@@ -106,18 +107,6 @@ export default class KingWorld<
 		}
 	}
 
-	private getSchemaValidator(
-		schema: TSchema | undefined,
-		additionalProperties = false
-	) {
-		if (!schema) return
-
-		if (schema.type === 'object' && !('additionalProperties' in schema))
-			schema.additionalProperties = additionalProperties
-
-		return TypeCompiler.Compile(schema)
-	}
-
 	private _addHandler<
 		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string
@@ -136,20 +125,20 @@ export default class KingWorld<
 			hooks: mergeHook(clone(this.event), hook as RegisteredHook)
 		})
 
-		const body = this.getSchemaValidator(
+		const body = getSchemaValidator(
 			hook?.schema?.body ?? this.$schema?.body
 		)
-		const header = this.getSchemaValidator(
+		const header = getSchemaValidator(
 			hook?.schema?.header ?? this.$schema?.header,
 			true
 		)
-		const params = this.getSchemaValidator(
+		const params = getSchemaValidator(
 			hook?.schema?.params ?? this.$schema?.params
 		)
-		const query = this.getSchemaValidator(
+		const query = getSchemaValidator(
 			hook?.schema?.query ?? this.$schema?.query
 		)
-		const response = this.getSchemaValidator(
+		const response = getSchemaValidator(
 			hook?.schema?.response ?? this.$schema?.response
 		)
 
@@ -963,11 +952,11 @@ export default class KingWorld<
 		}>
 	>(schema: Schema): NewInstance {
 		this.$schema = {
-			body: this.getSchemaValidator(schema?.body),
-			header: this.getSchemaValidator(schema?.header),
-			params: this.getSchemaValidator(schema?.params),
-			query: this.getSchemaValidator(schema?.query),
-			response: this.getSchemaValidator(schema?.response)
+			body: getSchemaValidator(schema?.body),
+			header: getSchemaValidator(schema?.header),
+			params: getSchemaValidator(schema?.params),
+			query: getSchemaValidator(schema?.query),
+			response: getSchemaValidator(schema?.response)
 		}
 
 		return this as unknown as NewInstance
@@ -1023,8 +1012,7 @@ export default class KingWorld<
 			if (validator.header) {
 				const _header: Record<string, string> = {}
 
-				for (const key of request.headers.values())
-					_header[key] = request.headers.get(key)!
+				for (const v of request.headers.entries()) _header[v[0]] = v[1]
 
 				if (validator.header.Check(_header) === false)
 					throw createValidationError(
@@ -1047,12 +1035,13 @@ export default class KingWorld<
 			if (
 				validator.query &&
 				validator.query.Check(context.query) === false
-			)
+			) {
 				throw createValidationError(
 					'query',
 					validator.query,
 					context.query
 				)
+			}
 
 			if (validator.body && validator.body.Check(body) === false)
 				throw createValidationError('body', validator.body, body)
@@ -1062,6 +1051,7 @@ export default class KingWorld<
 			let response = handler.hooks.beforeHandle[i](context)
 			if (response instanceof Promise) response = await response
 
+			// `false` is a falsey value, check for null and undefined instead
 			if (response !== null && response !== undefined) {
 				for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
 					let newResponse = handler.hooks.afterHandle[i](
@@ -1083,7 +1073,7 @@ export default class KingWorld<
 
 		if (
 			handler.validator?.response &&
-			handler.validator.response.Check(response) !== false
+			handler.validator.response.Check(response) === false
 		)
 			throw createValidationError(
 				'response',
