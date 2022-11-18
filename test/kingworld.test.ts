@@ -5,7 +5,7 @@ import { describe, expect, it } from 'bun:test'
 const req = (path: string) => new Request(path)
 
 describe('KingWorld', () => {
-	it('state', async () => {
+	it('handle state', async () => {
 		const app = new KingWorld()
 			.state('a', 'a')
 			.get('/', ({ store: { a } }) => a)

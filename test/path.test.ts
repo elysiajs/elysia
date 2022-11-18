@@ -273,4 +273,28 @@ describe('Path', () => {
 		const text = await response.text()
 		expect(text).toBe('route 2')
 	})
+
+	it('Handle route which start with same letter', async () => {
+		const app = new KingWorld()
+			.get('/aa', () => 'route 1')
+			.get('/ab', () => 'route 2')
+
+		const response = await app.handle(new Request('/ab'))
+		const text = await response.text()
+		expect(text).toBe('route 2')
+	})
+
+	it('Return file', async () => {
+		const app = new KingWorld().get('/', ({ set }) => {
+			set.headers.server = 'KingWorld'
+
+			return Bun.file('./example/takodachi.png')
+		})
+		const res = await app.handle(req('/'))
+
+		expect((await res.text()).length).toBe(
+			(await Bun.file('./example/takodachi.png').text()).length
+		)
+		expect(res.headers.get('Server')).toBe('KingWorld')
+	})
 })

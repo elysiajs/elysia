@@ -7,5 +7,9 @@ import { KingWorld } from '../src'
  * @see https://github.com/saltyaom/kingworld-static
  */
 new KingWorld()
-	.get('/tako', () => Bun.file('./example/takodachi.png'))
+	.get('/tako', ({ set }) => {
+		set.headers.server = 'KingWorld'
+
+		return Bun.file('./example/takodachi.png')
+	})
 	.listen(8080)
