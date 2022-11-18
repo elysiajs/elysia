@@ -1,4 +1,4 @@
-# 0.0.0-experimental.43 - 18 Nov 2022 
+# 0.0.0-experimental.44 - 18 Nov 2022 
 Improvement:
 - Faster object iteration for setting headers
 - `KingWorld` config now accept `Serve` including `SSL`
