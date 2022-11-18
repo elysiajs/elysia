@@ -1,6 +1,6 @@
 import { KingWorld } from '.'
 
-import type Context from './context'
+import type { Context } from './context'
 import type KingWorldError from './error'
 import type { Static, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'

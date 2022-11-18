@@ -3,7 +3,6 @@ import type { Serve, Server } from 'bun'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { Router } from './router'
-import type Context from './context'
 import { mapResponse, mapEarlyResponse } from './handler'
 import {
 	mapQuery,
@@ -17,6 +16,7 @@ import {
 } from './utils'
 import { registerSchemaPath } from './schema'
 import KingWorldError from './error'
+import type { Context } from './context'
 
 import type {
 	Handler,
@@ -1210,7 +1210,7 @@ export default class KingWorld<
 export { KingWorld }
 export { Type as t } from '@sinclair/typebox'
 export { SCHEMA, getPath } from './utils'
-export type { default as Context } from './context'
+export type { Context } from './context'
 export type {
 	Handler,
 	RegisteredHook,

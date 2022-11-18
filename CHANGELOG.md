@@ -1,3 +1,13 @@
+# 0.0.0-experimental.48 - 18 Nov 2022 
+Bug fix:
+- Import Context as non-default
+- TypeScript's type not infering Context
+
+# 0.0.0-experimental.47 - 18 Nov 2022 
+Bug fix:
+- Remove `export default Context` as it's a type
+- Import Context as non-default
+
 # 0.0.0-experimental.46 - 18 Nov 2022 
 Bug fix:
 - Add custom response to `Blob`
