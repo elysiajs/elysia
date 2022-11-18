@@ -1,3 +1,7 @@
+# 0.0.0-experimental.45 - 18 Nov 2022 
+Bug fix:
+- Set default HTTP status to 200 (https://github.com/oven-sh/bun/issues/1523)
+
 # 0.0.0-experimental.44 - 18 Nov 2022 
 Improvement:
 - Faster object iteration for setting headers

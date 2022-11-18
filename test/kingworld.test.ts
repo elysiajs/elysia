@@ -13,4 +13,16 @@ describe('KingWorld', () => {
 
 		expect(await res.text()).toBe('a')
 	})
+
+	// https://github.com/oven-sh/bun/issues/1523
+	it("don't return HTTP 10", async () => {
+		const app = new KingWorld().get('/', ({ set }) => {
+			set.headers.Server = 'KingWorld'
+
+			return 'hi'
+		})
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+	})
 })

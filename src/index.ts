@@ -993,7 +993,8 @@ export default class KingWorld<
 			body,
 			store: this.store,
 			set: {
-				headers: {}
+				headers: {},
+				status: 200
 			}
 		}
 
