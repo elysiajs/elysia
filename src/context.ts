@@ -20,8 +20,6 @@ export interface Context<
 	}
 }
 
-export default Context
-
 // export default class Context<
 // 	Route extends TypedRoute = TypedRoute,
 // 	Store extends KingWorld['store'] = KingWorld['store']

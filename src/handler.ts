@@ -1,4 +1,4 @@
-import type Context from './context'
+import type { Context } from './context'
 
 const isNotEmpty = (obj: Object) => {
 	for (const x in obj) return true
