@@ -13,7 +13,7 @@ export const mapEarlyResponse = (response: unknown, context: Context) => {
 			headers: context.set.headers
 		})
 
-	if (isNotEmpty(context.set.headers) || context.set.status)
+	if (isNotEmpty(context.set.headers) || context.set.status !== 200)
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {
@@ -108,7 +108,7 @@ export const mapResponse = (response: unknown, context: Context) => {
 			headers: context.set.headers
 		})
 
-	if (isNotEmpty(context.set.headers) || context.set.status)
+	if (isNotEmpty(context.set.headers) || context.set.status !== 200)
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {

@@ -1,3 +1,7 @@
+# 0.0.0-experimental.49 - 19 Nov 2022 
+Bug fix:
+- Conditionally return header in response
+
 # 0.0.0-experimental.48 - 18 Nov 2022 
 Bug fix:
 - Import Context as non-default
