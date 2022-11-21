@@ -1,6 +1,10 @@
 import KingWorldError from './error'
 
-import { TypeCheck, TypeCompiler, type ValueError } from '@sinclair/typebox/compiler'
+import {
+	TypeCheck,
+	TypeCompiler,
+	type ValueError
+} from '@sinclair/typebox/compiler'
 import type { TSchema } from '@sinclair/typebox'
 import type {
 	DeepMergeTwoTypes,
@@ -55,35 +59,40 @@ export const mergeHook = (
 export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 	[value][0]
 
-// export const splitOnce = (char: string, s: string) => {
-// 	const i = s.indexOf(char)
-
-// 	return i === -1 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)]
-// }
-
 export const getPath = (url: string): string => {
 	const queryIndex = url.indexOf('?')
-	const result = url.substring(
+
+	return url.substring(
 		url.charCodeAt(0) === 47 ? 0 : url.indexOf('/', 11),
 		queryIndex === -1 ? url.length : queryIndex
 	)
-
-	return result
 }
 
 export const mapQuery = (url: string): Record<string, string> => {
-	const queryIndex = url.indexOf('?')
-	if (queryIndex === -1) return {}
+    const queryIndex = url.indexOf('?')
+    if (queryIndex === -1) return {}
 
-	return url
-		.substring(queryIndex + 1)
-		.split('&')
-		.reduce((result, each) => {
-			const i = each.indexOf('=')
-			result[each.slice(0, i)] = each.slice(i + 1)
+    const query: Record<string, string> = {}
+    let paths = url.slice(queryIndex)
 
-			return result
-		}, {} as Record<string, string>)
+    while(true) {
+        // Skip ?/&, and min length of query is 3, so start looking at 1 + 3
+        const sep = paths.indexOf('&', 4)
+        if (sep === -1) {
+            const equal = paths.indexOf('=', 1)
+            query[paths.slice(1, equal)] = paths.slice(equal + 1)
+
+            break
+        }
+
+        const path = paths.slice(0, sep)
+        const equal = path.indexOf('=')
+        query[path.slice(1, equal)] = path.slice(equal + 1)
+
+		paths = paths.slice(sep)
+	}
+
+    return query
 }
 
 const isObject = (item: any): item is Object =>

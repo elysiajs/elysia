@@ -1,3 +1,13 @@
+# 0.0.0-experimental.50 - 21 Nov 2022 
+Improvement:
+- Faster router.find performance
+- Faster query map performance
+- Early return on not found
+- Better type for `router`
+
+Change:
+- Remove `storeFactory` from router
+
 # 0.0.0-experimental.49 - 19 Nov 2022 
 Bug fix:
 - Conditionally return header in response

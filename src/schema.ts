@@ -2,13 +2,6 @@ import type { TSchema } from '@sinclair/typebox'
 
 import type { HTTPMethod, LocalHook } from './types'
 
-const replace = (word: string, find: string, replacer: string, startAt = 0) => {
-	const index = word.indexOf(find, startAt)
-
-	if (index > word.length - 1 || index === -1) return word
-	return word.substring(0, index) + replacer + word.substring(index + 1)
-}
-
 export const toOpenAPIPath = (path: string) =>
 	path
 		.split('/')

@@ -116,7 +116,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<any>
 	) {
-		const path = !_path.startsWith('/') ? `/${_path}` : _path
+		const path = _path.startsWith('/') ? _path : `/${_path}`
 
 		this.routes.push({
 			method,
@@ -969,6 +969,12 @@ export default class KingWorld<
 			if (response) return response
 		}
 
+		const route = this.router.find(getPath(request.url))
+		if (route === null) throw new KingWorldError('NOT_FOUND')
+
+		const handler = route.store[request.method] as ComposedHandler | null
+		if (handler === null) throw new KingWorldError('NOT_FOUND')
+
 		let body: string | Record<string, any> | undefined
 		if (request.method !== 'GET') {
 			const contentType = request.headers.get('content-type') ?? ''
@@ -985,7 +991,6 @@ export default class KingWorld<
 				}
 		}
 
-		const route = this.router.find(getPath(request.url))
 		const context: Context = {
 			request,
 			params: route?.params ?? {},
@@ -993,15 +998,10 @@ export default class KingWorld<
 			body,
 			store: this.store,
 			set: {
+				status: 200,
 				headers: {},
-				status: 200
 			}
 		}
-
-		if (route === null) throw new KingWorldError('NOT_FOUND')
-
-		const handler = route.store?.[request.method] as ComposedHandler | null
-		if (handler === null) throw new KingWorldError('NOT_FOUND')
 
 		for (let i = 0; i < handler.hooks.transform.length; i++) {
 			let response = handler.hooks.transform[i](context)
