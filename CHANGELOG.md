@@ -1,3 +1,57 @@
+# 0.0.0-experimental.51 - 22 Nov 2022 
+[[Just Right Slow]](https://youtu.be/z7nN7ryqU28) is introduce breaking major changes of KingWorld, specific on a plugin system.
+
+Previously, we define plugin by accepting 2 parameters, `KingWorld` and `Config` like this:
+```typescript
+const plugin = (app: KingWorld, config) => app
+
+new KingWorld().use(plugin, {
+    // Provide some config here
+})
+```
+
+However, this has flaw by the design because:
+- No support for async plugin
+- No generic for type inference
+- Not possible to accept 3...n parameters (if need)
+- Hard/heavy work to get type inference
+
+To fix all of the problem above, KingWorld now accept only one parameter.
+
+A callback which return KingWorld Instance, but accept anything before that.
+```typescript
+const plugin = (config) => (app: KingWorld) => app
+
+new KingWorld().use(plugin({
+    // provide some config here
+}))
+```
+
+This is a workaround just like the way to register async plugin before exp.51, we accept any parameters in a function which return callback of a KingWorld instance.
+
+This open a new possibility, plugin can now be async, generic type is now possible.
+
+More over that, decorate can now accept any parameters as it doesn't really affect any performance or any real restriction.
+
+Which means that something like this is now possible.
+```typescript
+const a = <Name extends string = string>(name: Name) => (app: KingWorld) => app.decorate(name, {
+    hi: () => 'hi'
+})
+
+new KingWorld()
+    .use(a('customName'))
+    // Retrieve generic from plugin, not possible before exp.51
+    .get({ customName } => customName.hi())
+```
+
+This lead to even more safe with type safety, as you can now use any generic as you would like.
+
+The first plugin to leverage this feature is [jwt](https://github.com/saltyaom/kingworld-jwt) which can introduce jwt function with custom namespace which is type safe.
+
+Change:
+- new `decorators` property for assigning fast `Context`
+
 # 0.0.0-experimental.50 - 21 Nov 2022 
 Improvement:
 - Faster router.find performance

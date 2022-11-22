@@ -73,6 +73,7 @@ export default class KingWorld<
 	store: Instance['store'] = {
 		[SCHEMA]: {}
 	}
+	decorators: Record<string, unknown> = {}
 	event: LifeCycleStore<Instance> = {
 		start: [],
 		request: [],
@@ -436,7 +437,7 @@ export default class KingWorld<
 					method,
 					`${prefix}${path}`,
 					handler,
-					hooks as any
+					hooks
 				)
 			}
 		)
@@ -513,7 +514,6 @@ export default class KingWorld<
 	 * ```
 	 */
 	use<
-		Config = any,
 		NewKingWorld extends KingWorld<any> = KingWorld<any>,
 		Params extends KingWorld = KingWorld<any>
 	>(
@@ -522,15 +522,13 @@ export default class KingWorld<
 				? IsAny<ParamsInstance> extends true
 					? this
 					: Params
-				: Params,
-			config: Config
-		) => NewKingWorld,
-		config?: Config
+				: Params
+		) => NewKingWorld
 	): NewKingWorld extends KingWorld<infer NewInstance>
 		? KingWorld<NewInstance & Instance>
 		: this {
-		// ? Type is enforce on function already
-		return plugin(this as unknown as any, config as any) as unknown as any
+		// ? Type enforce on function already
+		return plugin(this as unknown as any) as unknown as any
 	}
 
 	/**
@@ -915,16 +913,16 @@ export default class KingWorld<
 	 */
 	decorate<
 		Name extends string,
-		Callback extends Function = () => unknown,
+		Value = any,
 		NewInstance = KingWorld<{
 			store: Instance['store']
-			request: Instance['request'] & { [key in Name]: Callback }
+			request: Instance['request'] & { [key in Name]: Value }
 			schema: Instance['schema']
 		}>
-	>(name: Name, value: Callback): NewInstance {
-		return this.onTransform(
-			(app: any) => (app[name] = value)
-		) as unknown as NewInstance
+	>(name: Name, value: Value): NewInstance {
+		this.decorators[name] = value
+
+		return this as unknown as NewInstance
 	}
 
 	/**
@@ -992,6 +990,7 @@ export default class KingWorld<
 		}
 
 		const context: Context = {
+			...this.decorators,
 			request,
 			params: route?.params ?? {},
 			query: mapQuery(request.url),
@@ -1170,7 +1169,7 @@ export default class KingWorld<
 		)
 
 		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i](this as any)
+			this.event.start[i](this)
 
 		if (callback) callback(this.server!)
 
@@ -1201,7 +1200,7 @@ export default class KingWorld<
 		this.server.stop()
 
 		for (let i = 0; i < this.event.stop.length; i++) {
-			const process = this.event.stop[i](this as any)
+			const process = this.event.stop[i](this)
 			if (process instanceof Promise) await process
 		}
 	}
