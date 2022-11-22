@@ -1,5 +1,10 @@
+# 0.0.0-experimental.52 - x Nov 2022
+Improvement:
+- Decorators is now lazily allocate
+- `.serve` now accept numberic string as port for convenient with `process.env`
+
 # 0.0.0-experimental.51 - 22 Nov 2022 
-[[Just Right Slow]](https://youtu.be/z7nN7ryqU28) is introduce breaking major changes of KingWorld, specific on a plugin system.
+[[Just Right Slow]](https://youtu.be/z7nN7ryqU28) introduce breaking major changes of KingWorld, specific on a plugin system.
 
 Previously, we define plugin by accepting 2 parameters, `KingWorld` and `Config` like this:
 ```typescript

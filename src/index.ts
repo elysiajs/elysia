@@ -73,7 +73,7 @@ export default class KingWorld<
 	store: Instance['store'] = {
 		[SCHEMA]: {}
 	}
-	decorators: Record<string, unknown> = {}
+	decorators: Record<string, unknown> | undefined
 	event: LifeCycleStore<Instance> = {
 		start: [],
 		request: [],
@@ -433,12 +433,7 @@ export default class KingWorld<
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
-				this._addHandler(
-					method,
-					`${prefix}${path}`,
-					handler,
-					hooks
-				)
+				this._addHandler(method, `${prefix}${path}`, handler, hooks)
 			}
 		)
 
@@ -920,6 +915,7 @@ export default class KingWorld<
 			schema: Instance['schema']
 		}>
 	>(name: Name, value: Value): NewInstance {
+		if (this.decorators === undefined) this.decorators = {}
 		this.decorators[name] = value
 
 		return this as unknown as NewInstance
@@ -998,7 +994,7 @@ export default class KingWorld<
 			store: this.store,
 			set: {
 				status: 200,
-				headers: {},
+				headers: {}
 			}
 		}
 
@@ -1146,23 +1142,30 @@ export default class KingWorld<
 	 *     .listen(8080)
 	 * ```
 	 */
-	listen(options: number | Serve, callback?: ListenCallback) {
+	listen(options: string | number | Serve, callback?: ListenCallback) {
 		if (!Bun) throw new Error('Bun to run')
 
 		const fetch = this.handle.bind(this)
 		const error = this.handleError.bind(this)
 
+		if (typeof options === 'string') {
+			options = +options
+
+			if (Number.isNaN(options))
+				throw new Error('Port must be a numeric value')
+		}
+
 		this.server = Bun.serve(
-			typeof options === 'number'
+			typeof options === 'object'
 				? {
 						...this.config.serve,
-						port: options,
+						...options,
 						fetch,
 						error
 				  }
 				: {
 						...this.config.serve,
-						...options,
+						port: options,
 						fetch,
 						error
 				  }
