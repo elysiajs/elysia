@@ -15,3 +15,6 @@ Designed with TypeScript in mind, you don't need to understand TypeScript to tak
 
 ## Documentation
 The documentation is available on [kingworldjs.com](https://kingworldjs.com).
+
+## Discord
+Come join the [Discord channel~](https://discord.gg/eaFJ2KDJck)
