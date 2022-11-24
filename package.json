@@ -1,6 +1,7 @@
 {
   "name": "kingworld",
-  "version": "0.0.0-experimental.52",
+  "description": "Fast, and friendly Bun web framework",
+  "version": "0.0.0-experimental.53",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -30,7 +31,6 @@
     "typescript": "^4.7.4"
   },
   "bugs": "https://github.com/SaltyAom/kingworld/issues",
-  "description": "Fast, and friendly Bun web framework",
   "esnext": "build/es/index.js",
   "homepage": "https://github.com/saltyaom/kingworld",
   "keywords": [

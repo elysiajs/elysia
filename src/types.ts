@@ -302,6 +302,7 @@ export type HTTPMethod =
 	| 'UNLINK'
 	| 'UNLOCK'
 	| 'UNSUBSCRIBE'
+	| 'ALL'
 
 export type ErrorCode =
 	// ? Default 404

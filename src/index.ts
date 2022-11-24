@@ -715,6 +715,29 @@ export default class KingWorld<
 	}
 
 	/**
+	 * ### post
+	 * Register handler for path with any method
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { KingWorld, t } from 'kingworld'
+	 *
+	 * new KingWorld()
+	 *     .all('/', () => 'hi')
+	 * ```
+	 */
+	all<Schema extends TypedSchema = {}, Path extends string = string>(
+		path: Path,
+		handler: LocalHandler<Schema, Instance, Path>,
+		hook?: LocalHook<Schema, Instance, Path>
+	) {
+		this._addHandler('ALL', path, handler, hook as LocalHook<any, any, any>)
+
+		return this
+	}
+
+	/**
 	 * ### head
 	 * Register handler for path with method [HEAD]
 	 *
@@ -966,14 +989,15 @@ export default class KingWorld<
 		const route = this.router.find(getPath(request.url))
 		if (route === null) throw new KingWorldError('NOT_FOUND')
 
-		const handler = route.store[request.method] as ComposedHandler | null
-		if (handler === null) throw new KingWorldError('NOT_FOUND')
+		const handler: ComposedHandler | undefined =
+			route.store[request.method] ?? route.store.ALL
+		if (handler === undefined) throw new KingWorldError('NOT_FOUND')
 
 		let body: string | Record<string, any> | undefined
 		if (request.method !== 'GET') {
 			const contentType = request.headers.get('content-type') ?? ''
 
-			if (contentType)
+			if (contentType !== '')
 				for (let i = 0; i < this.event.parse.length; i++) {
 					let temp = this.event.parse[i](request, contentType)
 					if (temp instanceof Promise) temp = await temp

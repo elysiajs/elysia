@@ -111,6 +111,7 @@ const app = new KingWorld()
 
 		return 'A'
 	})
+	.all('/all', () => 'hi')
 	.onError((error) => {
 		console.log(error.code, error)
 

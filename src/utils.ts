@@ -136,8 +136,8 @@ export const createValidationError = (
 	)
 }
 
-export const getSchemaValidator = (
-	schema: TSchema | undefined,
+export const getSchemaValidator = <Schema extends TSchema | undefined = undefined>(
+	schema: Schema,
 	additionalProperties = false
 ) => {
 	if (!schema) return

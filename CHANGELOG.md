@@ -1,4 +1,14 @@
-# 0.0.0-experimental.52 - x Nov 2022
+# 0.0.0-experimental.53 - 24 Nov 2022
+Feature:
+- `.all` for registering path with any method
+
+Improvement:
+- `getSchemaValidator` now infer output type to be reusable with `@kingworldjs/tpc`
+
+Bug fix:
+- `handler.hooks` is undefined on 404
+
+# 0.0.0-experimental.52 - 23 Nov 2022
 Improvement:
 - Decorators is now lazily allocate
 - `.serve` now accept numberic string as port for convenient with `process.env`

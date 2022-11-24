@@ -25,4 +25,27 @@ describe('KingWorld', () => {
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
 	})
+
+	// If this break, many plugins will break too. DO NOT SKIP
+	it('context should be mutable', async () => {
+		const app = new KingWorld()
+			.use(
+				(app) =>
+					app.onTransform((ctx) => {
+						Object.assign(ctx, {
+							a: 'a'
+						})
+					}) as unknown as KingWorld<{
+						store: {}
+						request: {
+							a: 'a'
+						}
+						schema: {}
+					}>
+			)
+			.get('/', ({ a }) => a)
+
+		const res = await app.handle(req('/')).then((r) => r.text())
+		expect(res).toBe('a')
+	})
 })
