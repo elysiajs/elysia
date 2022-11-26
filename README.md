@@ -1,7 +1,17 @@
-# 🦊 KingWorld
-Fast and friendly [Bun](https://bun.sh) web framework.
+<p align=center>
+  <img width=661 src=https://user-images.githubusercontent.com/35027979/204073761-e7019531-def1-4f11-a9ee-b07df5334144.png alt='KingWorld label' />
+</p>
 
+<p align=center>Fast and friendly <a href=https://bun.sh>Bun</a> web framework.</p>
+
+<p align=center>
+    <a href=https://kingworldjs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a>
+</p>
+
+
+## Philosophies
 Building on top of 3 philosophies:
+
 - Performance
     - You shall not worry about the underlying performance
 - Simplicity
