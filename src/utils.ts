@@ -69,30 +69,30 @@ export const getPath = (url: string): string => {
 }
 
 export const mapQuery = (url: string): Record<string, string> => {
-    const queryIndex = url.indexOf('?')
-    if (queryIndex === -1) return {}
+	const queryIndex = url.indexOf('?')
+	if (queryIndex === -1) return {}
 
-    const query: Record<string, string> = {}
-    let paths = url.slice(queryIndex)
+	const query: Record<string, string> = {}
+	let paths = url.slice(queryIndex)
 
-    while(true) {
-        // Skip ?/&, and min length of query is 3, so start looking at 1 + 3
-        const sep = paths.indexOf('&', 4)
-        if (sep === -1) {
-            const equal = paths.indexOf('=', 1)
-            query[paths.slice(1, equal)] = paths.slice(equal + 1)
+	while (true) {
+		// Skip ?/&, and min length of query is 3, so start looking at 1 + 3
+		const sep = paths.indexOf('&', 4)
+		if (sep === -1) {
+			const equal = paths.indexOf('=', 1)
+			query[paths.slice(1, equal)] = paths.slice(equal + 1)
 
-            break
-        }
+			break
+		}
 
-        const path = paths.slice(0, sep)
-        const equal = path.indexOf('=')
-        query[path.slice(1, equal)] = path.slice(equal + 1)
+		const path = paths.slice(0, sep)
+		const equal = path.indexOf('=')
+		query[path.slice(1, equal)] = path.slice(equal + 1)
 
 		paths = paths.slice(sep)
 	}
 
-    return query
+	return query
 }
 
 const isObject = (item: any): item is Object =>
@@ -136,13 +136,16 @@ export const createValidationError = (
 	)
 }
 
-export const getSchemaValidator = <Schema extends TSchema | undefined = undefined>(
+export const getSchemaValidator = <
+	Schema extends TSchema | undefined = undefined
+>(
 	schema: Schema,
 	additionalProperties = false
 ) => {
 	if (!schema) return
 
-	if (schema.type === 'object' && !('additionalProperties' in schema))
+	// @ts-ignore
+	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
 	return TypeCompiler.Compile(schema)

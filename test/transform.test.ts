@@ -176,15 +176,14 @@ describe('Transform', () => {
 						id: t.Number()
 					})
 				},
-				transform: async (request) => {
+				transform: async ({ params }) => {
 					await new Promise<void>((resolve) =>
 						setTimeout(() => {
 							resolve()
 						}, 1)
 					)
 
-					if (request.params?.id)
-						request.params.id = +request.params.id
+					if (params?.id) params.id = +params.id
 				}
 			}
 		)

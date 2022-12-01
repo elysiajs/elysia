@@ -1,3 +1,11 @@
+# 0.0.0-experimental.54 - 1 Dev 2022
+Feature:
+- `derive` to creating derive state
+- `inject` to decorate method based on context
+
+Improvement:
+- `getSchemaValidator` now infer output type to be reusable with `@kingworldjs/tpc`
+
 # 0.0.0-experimental.53 - 24 Nov 2022
 Feature:
 - `.all` for registering path with any method

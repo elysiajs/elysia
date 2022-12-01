@@ -1,8 +1,8 @@
 import { KingWorld } from '../src'
 
 const app = new KingWorld()
-	.get('/', ({ responseHeaders }) => {
-		responseHeaders['X-POWERED-BY'] = 'KingWorld'
+	.get('/', ({ set }) => {
+		set.headers['X-POWERED-BY'] = 'KingWorld'
 
 		// Return custom response
 		return new Response('Shuba Shuba', {

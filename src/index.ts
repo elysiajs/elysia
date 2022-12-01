@@ -549,7 +549,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler('GET', path, handler, hook as LocalHook<any, any, any>)
+		this._addHandler('GET', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -577,12 +577,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler(
-			'POST',
-			path,
-			handler,
-			hook as LocalHook<any, any, any>
-		)
+		this._addHandler('POST', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -610,7 +605,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler('PUT', path, handler, hook as LocalHook<any, any, any>)
+		this._addHandler('PUT', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -638,12 +633,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler(
-			'PATCH',
-			path,
-			handler,
-			hook as LocalHook<any, any, any>
-		)
+		this._addHandler('PATCH', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -671,12 +661,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler(
-			'DELETE',
-			path,
-			handler,
-			hook as LocalHook<any, any, any>
-		)
+		this._addHandler('DELETE', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -704,12 +689,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler(
-			'OPTIONS',
-			path,
-			handler,
-			hook as LocalHook<any, any, any>
-		)
+		this._addHandler('OPTIONS', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -732,7 +712,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler('ALL', path, handler, hook as LocalHook<any, any, any>)
+		this._addHandler('ALL', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -760,12 +740,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler(
-			'HEAD',
-			path,
-			handler,
-			hook as LocalHook<any, any, any>
-		)
+		this._addHandler('HEAD', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -793,12 +768,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler(
-			'TRACE',
-			path,
-			handler,
-			hook as LocalHook<any, any, any>
-		)
+		this._addHandler('TRACE', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -826,12 +796,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler(
-			'CONNECT',
-			path,
-			handler,
-			hook as LocalHook<any, any, any>
-		)
+		this._addHandler('CONNECT', path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -874,12 +839,7 @@ export default class KingWorld<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<Schema, Instance, Path>
 	) {
-		this._addHandler(
-			method,
-			path,
-			handler,
-			hook as LocalHook<any, any, any>
-		)
+		this._addHandler(method, path, handler, hook as LocalHook)
 
 		return this
 	}
@@ -942,6 +902,66 @@ export default class KingWorld<
 		this.decorators[name] = value
 
 		return this as unknown as NewInstance
+	}
+
+	/**
+	 * Create derived property from Context
+	 *
+	 * ---
+	 * @example
+	 * new KingWorld()
+	 *     .state('counter', 1)
+	 *     .derive((store) => ({
+	 *         multiplied: () => store().counter * 2
+	 *     }))
+	 */
+	derive<
+		Returned extends Record<string | number | symbol, () => any> = Record<
+			string | number | symbol,
+			() => any
+		>
+	>(
+		transform: (store: () => Readonly<Instance['store']>) => Returned
+	): KingWorld<{
+		store: Instance['store'] & Returned
+		request: Instance['request']
+		schema: Instance['schema']
+	}> {
+		this.store = mergeDeep(
+			this.store,
+			transform(() => this.store)
+		)
+
+		return this as any
+	}
+
+	/**
+	 * Assign property which required access to Context
+	 *
+	 * ---
+	 * @example
+	 * new KingWorld()
+	 *     .state('counter', 1)
+	 *     .inject(({ store }) => ({
+	 *         increase() {
+	 *             store.counter++
+	 *         }
+	 *     }))
+	 */
+	inject<Returned extends Object = Object>(
+		transform: (
+			context: Instance['request'] & {
+				store: Instance['store']
+			}
+		) => Returned extends { store: any } ? never : Returned
+	): KingWorld<{
+		store: Instance['store']
+		request: Instance['request'] & Returned
+		schema: Instance['schema']
+	}> {
+		return this.onTransform((context) => {
+			Object.assign(context, transform(context))
+		}) as unknown as any
 	}
 
 	/**
@@ -1009,7 +1029,7 @@ export default class KingWorld<
 				}
 		}
 
-		const context: Context = {
+		let context: Context = {
 			...this.decorators,
 			request,
 			params: route?.params ?? {},
@@ -1023,8 +1043,9 @@ export default class KingWorld<
 		}
 
 		for (let i = 0; i < handler.hooks.transform.length; i++) {
-			let response = handler.hooks.transform[i](context)
-			if (response instanceof Promise) response = await response
+			let _context = handler.hooks.transform[i](context)
+			if (_context instanceof Promise) _context = await _context
+			if (_context) context = _context
 		}
 
 		if (handler.validator) {

@@ -1,10 +1,8 @@
 import { KingWorld, t } from '../src'
 
-new KingWorld()
+const app = new KingWorld()
 	// Add custom body parser
-	.onParse(async (request) => {
-		const contentType = request.headers.get('content-type') ?? ''
-
+	.onParse(async (request, contentType) => {
 		switch (contentType) {
 			case 'application/kingworld':
 				return request.text()
