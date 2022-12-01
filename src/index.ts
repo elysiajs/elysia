@@ -950,9 +950,7 @@ export default class KingWorld<
 	 */
 	inject<Returned extends Object = Object>(
 		transform: (
-			context: Instance['request'] & {
-				store: Instance['store']
-			}
+			context: Context<{}, Instance['store']> & Instance['request']
 		) => Returned extends { store: any } ? never : Returned
 	): KingWorld<{
 		store: Instance['store']
