@@ -15,7 +15,7 @@ import {
 	getSchemaValidator
 } from './utils'
 import { registerSchemaPath } from './schema'
-import KingWorldError from './error'
+import ElysiaError from './error'
 import type { Context } from './context'
 
 import type {
@@ -23,8 +23,8 @@ import type {
 	RegisteredHook,
 	BeforeRequestHandler,
 	TypedRoute,
-	KingWorldInstance,
-	KingWorldConfig,
+	ElysiaInstance,
+	ElysiaConfig,
 	HTTPMethod,
 	ComposedHandler,
 	InternalRoute,
@@ -48,27 +48,27 @@ import type {
 import type { TSchema } from '@sinclair/typebox'
 
 /**
- * ### KingWorld Server
- * Main instance to create web server using KingWorld
+ * ### Elysia Server
+ * Main instance to create web server using Elysia
  *
  * ---
  * @example
  * ```typescript
- * import { KingWorld } from 'kingworld'
+ * import { Elysia } from 'Elysia'
  *
- * new KingWorld()
+ * new Elysia()
  *     .get("/", () => "Hello")
  *     .listen(8080)
  * ```
  */
-export default class KingWorld<
-	Instance extends KingWorldInstance = KingWorldInstance<{
+export default class Elysia<
+	Instance extends ElysiaInstance = ElysiaInstance<{
 		store: {}
 		request: {}
 		schema: {}
 	}>
 > {
-	config: KingWorldConfig
+	config: ElysiaConfig
 
 	store: Instance['store'] = {
 		[SCHEMA]: {}
@@ -101,7 +101,7 @@ export default class KingWorld<
 	private router = new Router()
 	protected routes: InternalRoute<Instance>[] = []
 
-	constructor(config: Partial<KingWorldConfig> = {}) {
+	constructor(config: Partial<ElysiaConfig> = {}) {
 		this.config = {
 			strictPath: false,
 			...config
@@ -183,7 +183,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .onStart(({ url, port }) => {
 	 *         console.log("Running at ${url}:${port}")
 	 *     })
@@ -203,7 +203,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .onRequest(({ method, url }) => {
 	 *         saveToAnalytic({ method, url })
 	 *     })
@@ -227,7 +227,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .onParse((request, contentType) => {
 	 *         if(contentType === "application/json")
 	 *             return request.json()
@@ -247,7 +247,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .onTransform(({ params }) => {
 	 *         if(params.id)
 	 *             params.id = +params.id
@@ -271,7 +271,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .onBeforeHandle(({ params: { id }, status }) => {
 	 *         if(id && !isExisted(id)) {
 	 * 	           status(401)
@@ -298,7 +298,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .onAfterHandle((context, response) => {
 	 *         if(typeof response === "object")
 	 *             return JSON.stringify(response)
@@ -320,7 +320,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .onError(({ code }) => {
 	 *         if(code === "NOT_FOUND")
 	 *             return "Path not found :("
@@ -340,7 +340,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .onStop((app) => {
 	 *         cleanup()
 	 *     })
@@ -361,7 +361,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .on('error', ({ code }) => {
 	 *         if(code === "NOT_FOUND")
 	 *             return "Path not found :("
@@ -418,15 +418,15 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .group('/v1', app => app
 	 *         .get('/', () => 'Hi')
-	 *         .get('/name', () => 'KingWorld')
+	 *         .get('/name', () => 'Elysia')
 	 *     })
 	 * ```
 	 */
-	group(prefix: string, run: (group: KingWorld<Instance>) => void) {
-		const instance = new KingWorld<Instance>()
+	group(prefix: string, run: (group: Elysia<Instance>) => void) {
+		const instance = new Elysia<Instance>()
 		run(instance)
 
 		this.store = mergeDeep(this.store, instance.store)
@@ -447,9 +447,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { t } from 'kingworld'
+	 * import { t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .guard({
 	 *          schema: {
 	 *              body: t.Object({
@@ -459,21 +459,21 @@ export default class KingWorld<
 	 *          }
 	 *     }, app => app
 	 *         .get("/", () => 'Hi')
-	 *         .get("/name", () => 'KingWorld')
+	 *         .get("/name", () => 'Elysia')
 	 *     })
 	 * ```
 	 */
 	guard<Schema extends TypedSchema = {}>(
 		hook: LocalHook<Schema, Instance>,
 		run: (
-			group: KingWorld<{
+			group: Elysia<{
 				request: Instance['request']
 				store: Instance['store']
 				schema: MergeIfNotNull<Schema, Instance['schema']>
 			}>
 		) => void
 	) {
-		const instance = new KingWorld<{
+		const instance = new Elysia<{
 			request: Instance['request']
 			store: Instance['store']
 			schema: MergeIfNotNull<Schema, Instance['schema']>
@@ -496,31 +496,31 @@ export default class KingWorld<
 
 	/**
 	 * ### use
-	 * Merge separate logic of KingWorld with current
+	 * Merge separate logic of Elysia with current
 	 *
 	 * ---
 	 * @example
 	 * ```typescript
-	 * const plugin = (app: KingWorld) => app
+	 * const plugin = (app: Elysia) => app
 	 *     .get('/plugin', () => 'hi')
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .use(plugin)
 	 * ```
 	 */
 	use<
-		NewKingWorld extends KingWorld<any> = KingWorld<any>,
-		Params extends KingWorld = KingWorld<any>
+		NewElysia extends Elysia<any> = Elysia<any>,
+		Params extends Elysia = Elysia<any>
 	>(
 		plugin: (
-			app: Params extends KingWorld<infer ParamsInstance>
+			app: Params extends Elysia<infer ParamsInstance>
 				? IsAny<ParamsInstance> extends true
 					? this
 					: Params
 				: Params
-		) => NewKingWorld
-	): NewKingWorld extends KingWorld<infer NewInstance>
-		? KingWorld<NewInstance & Instance>
+		) => NewElysia
+	): NewElysia extends Elysia<infer NewInstance>
+		? Elysia<NewInstance & Instance>
 		: this {
 		// ? Type enforce on function already
 		return plugin(this as unknown as any) as unknown as any
@@ -533,9 +533,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .get('/', () => 'hi')
 	 *     .get('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -561,9 +561,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .post('/', () => 'hi')
 	 *     .post('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -589,9 +589,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .put('/', () => 'hi')
 	 *     .put('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -617,9 +617,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .patch('/', () => 'hi')
 	 *     .patch('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -645,9 +645,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .delete('/', () => 'hi')
 	 *     .delete('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -673,9 +673,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .options('/', () => 'hi')
 	 *     .options('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -701,9 +701,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .all('/', () => 'hi')
 	 * ```
 	 */
@@ -724,9 +724,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .head('/', () => 'hi')
 	 *     .head('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -752,9 +752,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .trace('/', () => 'hi')
 	 *     .trace('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -780,9 +780,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .connect('/', () => 'hi')
 	 *     .connect('/with-hook', () => 'hi', {
 	 *         schema: {
@@ -822,9 +822,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .route('CUSTOM', '/', () => 'hi')
 	 *     .route('CUSTOM', '/with-hook', () => 'hi', {
 	 *         schema: {
@@ -851,7 +851,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .state('counter', 0)
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
@@ -864,7 +864,7 @@ export default class KingWorld<
 				? AsyncReturned
 				: Returned
 			: Value,
-		NewInstance = KingWorld<{
+		NewInstance = Elysia<{
 			store: Instance['store'] & {
 				[key in Key]: ReturnValue
 			}
@@ -884,7 +884,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .decorate('getDate', () => Date.now())
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
@@ -892,7 +892,7 @@ export default class KingWorld<
 	decorate<
 		Name extends string,
 		Value = any,
-		NewInstance = KingWorld<{
+		NewInstance = Elysia<{
 			store: Instance['store']
 			request: Instance['request'] & { [key in Name]: Value }
 			schema: Instance['schema']
@@ -909,7 +909,7 @@ export default class KingWorld<
 	 *
 	 * ---
 	 * @example
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .state('counter', 1)
 	 *     .derive((store) => ({
 	 *         multiplied: () => store().counter * 2
@@ -922,7 +922,7 @@ export default class KingWorld<
 		>
 	>(
 		transform: (store: () => Readonly<Instance['store']>) => Returned
-	): KingWorld<{
+	): Elysia<{
 		store: Instance['store'] & Returned
 		request: Instance['request']
 		schema: Instance['schema']
@@ -940,7 +940,7 @@ export default class KingWorld<
 	 *
 	 * ---
 	 * @example
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .state('counter', 1)
 	 *     .inject(({ store }) => ({
 	 *         increase() {
@@ -952,7 +952,7 @@ export default class KingWorld<
 		transform: (
 			context: Context<{}, Instance['store']> & Instance['request']
 		) => Returned extends { store: any } ? never : Returned
-	): KingWorld<{
+	): Elysia<{
 		store: Instance['store']
 		request: Instance['request'] & Returned
 		schema: Instance['schema']
@@ -969,9 +969,9 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { KingWorld, t } from 'kingworld'
+	 * import { Elysia, t } from 'Elysia'
 	 *
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .schema({
 	 *         response: t.String()
 	 *     })
@@ -980,7 +980,7 @@ export default class KingWorld<
 	 */
 	schema<
 		Schema extends TypedSchema = TypedSchema,
-		NewInstance = KingWorld<{
+		NewInstance = Elysia<{
 			request: Instance['request']
 			store: Instance['store']
 			schema: MergeSchema<Schema, Instance['schema']>
@@ -1005,11 +1005,11 @@ export default class KingWorld<
 		}
 
 		const route = this.router.find(getPath(request.url))
-		if (route === null) throw new KingWorldError('NOT_FOUND')
+		if (route === null) throw new Error('NOT_FOUND')
 
 		const handler: ComposedHandler | undefined =
 			route.store[request.method] ?? route.store.ALL
-		if (handler === undefined) throw new KingWorldError('NOT_FOUND')
+		if (handler === undefined) throw new Error('NOT_FOUND')
 
 		let body: string | Record<string, any> | undefined
 		if (request.method !== 'GET') {
@@ -1134,9 +1134,9 @@ export default class KingWorld<
 
 	private handleError(err: Error) {
 		const error =
-			err instanceof KingWorldError
+			err instanceof ElysiaError
 				? err
-				: new KingWorldError(err.name as any, err.message, {
+				: new ElysiaError(err.name as any, err.message, {
 						cause: err.cause
 				  })
 
@@ -1180,7 +1180,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * new KingWorld()
+	 * new Elysia()
 	 *     .get("/", () => 'hi')
 	 *     .listen(8080)
 	 * ```
@@ -1229,7 +1229,7 @@ export default class KingWorld<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * const app = new KingWorld()
+	 * const app = new Elysia()
 	 *     .get("/", () => 'hi')
 	 *     .listen(8080)
 	 *
@@ -1240,7 +1240,7 @@ export default class KingWorld<
 	stop = async () => {
 		if (!this.server)
 			throw new Error(
-				"KingWorld isn't running. Call `app.listen` to start the server."
+				"Elysia isn't running. Call `app.listen` to start the server."
 			)
 
 		this.server.stop()
@@ -1252,7 +1252,7 @@ export default class KingWorld<
 	}
 }
 
-export { KingWorld }
+export { Elysia }
 export { Type as t } from '@sinclair/typebox'
 export { SCHEMA, getPath } from './utils'
 export type { Context } from './context'
@@ -1262,8 +1262,8 @@ export type {
 	BeforeRequestHandler,
 	TypedRoute,
 	OverwritableTypeRoute,
-	KingWorldInstance,
-	KingWorldConfig,
+	ElysiaInstance,
+	ElysiaConfig,
 	HTTPMethod,
 	ComposedHandler,
 	InternalRoute,

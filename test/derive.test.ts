@@ -1,4 +1,4 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -6,7 +6,7 @@ const req = (path: string) => new Request(path)
 
 describe('Derive', () => {
 	it('derive', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.state('counter', 1)
 			.derive((getStore) => ({
 				doubled: () => getStore().counter * 2,

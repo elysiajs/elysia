@@ -1,4 +1,4 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
 /**
  * Example of handle single static file
@@ -6,7 +6,7 @@ import { KingWorld } from '../src'
  * For more advavnce use-case, eg. folder
  * @see https://github.com/saltyaom/kingworld-static
  */
-new KingWorld()
+new Elysia()
 	.get('/tako', ({ set }) => {
 		set.headers.server = 'KingWorld'
 

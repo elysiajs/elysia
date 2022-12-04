@@ -1,6 +1,6 @@
-import { KingWorld, t } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new KingWorld()
+const app = new Elysia()
 	// Add custom body parser
 	.onParse(async (request, contentType) => {
 		switch (contentType) {

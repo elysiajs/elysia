@@ -6,7 +6,7 @@
 <p align=center>Fast and friendly <a href=https://bun.sh>Bun</a> web framework.</p>
 
 <p align=center>
-    <a href=https://kingworldjs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a>
+    <a href=https://elysiajs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a>
 </p>
 
 
@@ -22,10 +22,10 @@ Building on top of 3 philosophies:
 
 Designed with TypeScript in mind, you don't need to understand TypeScript to take advantage of KingWorld. The library understands what you want and automatically infers the type from your code.
 
-⚡️ KingWorld is [one of the fastest Bun web frameworks](https://github.com/SaltyAom/bun-http-framework-benchmark)
+⚡️ Elysia is [one of the fastest Bun web frameworks](https://github.com/SaltyAom/bun-http-framework-benchmark)
 
 ## Documentation
-The documentation is available on [kingworldjs.com](https://kingworldjs.com).
+The documentation is available on [elysiajs.com](https://kingworldjs.com).
 
 ## Discord
 Come join the [Discord channel~](https://discord.gg/eaFJ2KDJck)

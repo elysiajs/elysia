@@ -1,6 +1,6 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
-new KingWorld()
+new Elysia()
 	// Custom error handler
 	.onError((error) => {
 		if (error.code === 'NOT_FOUND')

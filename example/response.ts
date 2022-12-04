@@ -1,6 +1,6 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
-const app = new KingWorld()
+new Elysia()
 	.get('/', ({ set }) => {
 		set.headers['X-POWERED-BY'] = 'KingWorld'
 

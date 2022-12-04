@@ -1,4 +1,4 @@
-import { KingWorld, t } from '../src'
+import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -6,14 +6,14 @@ const req = (path: string) => new Request(path)
 
 describe('Path', () => {
 	it('Handle root', async () => {
-		const app = new KingWorld().get('/', () => 'Hi')
+		const app = new Elysia().get('/', () => 'Hi')
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('Hi')
 	})
 
 	it('Handle multiple level', async () => {
-		const app = new KingWorld().get(
+		const app = new Elysia().get(
 			'/this/is/my/deep/nested/root',
 			() => 'Ok'
 		)
@@ -25,21 +25,21 @@ describe('Path', () => {
 	})
 
 	it('Return boolean', async () => {
-		const app = new KingWorld().get('/', () => true)
+		const app = new Elysia().get('/', () => true)
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('true')
 	})
 
 	it('Return number', async () => {
-		const app = new KingWorld().get('/', () => 617)
+		const app = new Elysia().get('/', () => 617)
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('617')
 	})
 
 	it('Return json', async () => {
-		const app = new KingWorld().get('/', () => ({
+		const app = new Elysia().get('/', () => ({
 			name: 'takodachi'
 		}))
 		const res = await app.handle(req('/'))
@@ -53,7 +53,7 @@ describe('Path', () => {
 	})
 
 	it('Return response', async () => {
-		const app = new KingWorld().get(
+		const app = new Elysia().get(
 			'/',
 			() =>
 				new Response('Shuba Shuba', {
@@ -71,14 +71,14 @@ describe('Path', () => {
 	})
 
 	it('Parse single param', async () => {
-		const app = new KingWorld().get('/id/:id', ({ params: { id } }) => id)
+		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id)
 		const res = await app.handle(req('/id/123'))
 
 		expect(await res.text()).toBe('123')
 	})
 
 	it('Parse multiple params', async () => {
-		const app = new KingWorld().get(
+		const app = new Elysia().get(
 			'/id/:id/:name',
 			({ params: { id, name } }) => `${id}/${name}`,
 			{
@@ -90,13 +90,13 @@ describe('Path', () => {
 				}
 			}
 		)
-		const res = await app.handle(req('/id/fubuki/kingworld'))
+		const res = await app.handle(req('/id/fubuki/Elysia'))
 
-		expect(await res.text()).toBe('fubuki/kingworld')
+		expect(await res.text()).toBe('fubuki/Elysia')
 	})
 
 	it('Accept wildcard', async () => {
-		const app = new KingWorld().get('/wildcard/*', () => 'Wildcard')
+		const app = new Elysia().get('/wildcard/*', () => 'Wildcard')
 
 		const res = await app.handle(req('/wildcard/okayu'))
 
@@ -105,7 +105,7 @@ describe('Path', () => {
 
 	// ? Blocking on https://github.com/oven-sh/bun/issues/1435
 	// it('Custom error', async () => {
-	// 	const app = new KingWorld().onError((error) => {
+	// 	const app = new Elysia().onError((error) => {
 	// 		if (error.code === 'NOT_FOUND')
 	// 			return new Response('Not Stonk :(', {
 	// 				status: 404
@@ -119,14 +119,14 @@ describe('Path', () => {
 	// })
 
 	it('Parse a querystring', async () => {
-		const app = new KingWorld().get('/', ({ query: { id } }) => id)
+		const app = new Elysia().get('/', ({ query: { id } }) => id)
 		const res = await app.handle(req('/?id=123'))
 
 		expect(await res.text()).toBe('123')
 	})
 
 	it('Parse multiple querystrings', async () => {
-		const app = new KingWorld().get(
+		const app = new Elysia().get(
 			'/',
 			({ query: { first, last } }) => `${last} ${first}`,
 			{
@@ -144,7 +144,7 @@ describe('Path', () => {
 	})
 
 	it('Handle body', async () => {
-		const app = new KingWorld().post('/', ({ body }) => body, {
+		const app = new Elysia().post('/', ({ body }) => body, {
 			schema: {
 				body: t.String()
 			}
@@ -171,7 +171,7 @@ describe('Path', () => {
 			name: 'Okayu'
 		})
 
-		const app = new KingWorld().post('/', ({ body }) => body, {
+		const app = new Elysia().post('/', ({ body }) => body, {
 			schema: {
 				body: t.Object({
 					name: t.String()
@@ -193,23 +193,23 @@ describe('Path', () => {
 	})
 
 	it('Parse headers', async () => {
-		const app = new KingWorld().post('/', ({ request }) =>
+		const app = new Elysia().post('/', ({ request }) =>
 			request.headers.get('x-powered-by')
 		)
 		const res = await app.handle(
 			new Request('/', {
 				method: 'POST',
 				headers: {
-					'x-powered-by': 'KingWorld'
+					'x-powered-by': 'Elysia'
 				}
 			})
 		)
 
-		expect(await res.text()).toBe('KingWorld')
+		expect(await res.text()).toBe('Elysia')
 	})
 
 	it('Handle group', async () => {
-		const app = new KingWorld().group('/gamer', (app) => {
+		const app = new Elysia().group('/gamer', (app) => {
 			app.get('/korone', () => 'Yubi Yubi!')
 		})
 		const res = await app.handle(req('/gamer/korone'))
@@ -218,9 +218,9 @@ describe('Path', () => {
 	})
 
 	it('Handle plugin', async () => {
-		const plugin = (app: KingWorld) =>
+		const plugin = (app: Elysia) =>
 			app.get('/korone', () => 'Yubi Yubi!')
-		const app = new KingWorld().use(plugin)
+		const app = new Elysia().use(plugin)
 
 		const res = await app.handle(req('/korone'))
 
@@ -230,9 +230,9 @@ describe('Path', () => {
 	it('Handle error', async () => {
 		const error = 'Pardun?'
 
-		const plugin = (app: KingWorld) =>
+		const plugin = (app: Elysia) =>
 			app.get('/error', () => new Error(error))
-		const app = new KingWorld().use(plugin)
+		const app = new Elysia().use(plugin)
 
 		const res = await app.handle(req('/error'))
 		const { message } = (await res.json()) as unknown as {
@@ -243,7 +243,7 @@ describe('Path', () => {
 	})
 
 	it('Handle async', async () => {
-		const app = new KingWorld().get('/async', async () => {
+		const app = new Elysia().get('/async', async () => {
 			await new Promise<void>((resolve) =>
 				setTimeout(() => {
 					resolve()
@@ -258,14 +258,14 @@ describe('Path', () => {
 	})
 
 	it('Handle absolute path', async () => {
-		const app = new KingWorld().get('/', () => 'Hi')
+		const app = new Elysia().get('/', () => 'Hi')
 		const res = await app.handle(req('https://saltyaom.com/'))
 
 		expect(await res.text()).toBe('Hi')
 	})
 
 	it('Handle route which start with same letter', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.get('/aa', () => 'route 1')
 			.get('/ab', () => 'route 2')
 
@@ -275,7 +275,7 @@ describe('Path', () => {
 	})
 
 	it('Handle route which start with same letter', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.get('/aa', () => 'route 1')
 			.get('/ab', () => 'route 2')
 
@@ -285,8 +285,8 @@ describe('Path', () => {
 	})
 
 	it('Return file', async () => {
-		const app = new KingWorld().get('/', ({ set }) => {
-			set.headers.server = 'KingWorld'
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers.server = 'Elysia'
 
 			return Bun.file('./example/takodachi.png')
 		})
@@ -295,6 +295,6 @@ describe('Path', () => {
 		expect((await res.text()).length).toBe(
 			(await Bun.file('./example/takodachi.png').text()).length
 		)
-		expect(res.headers.get('Server')).toBe('KingWorld')
+		expect(res.headers.get('Server')).toBe('Elysia')
 	})
 })

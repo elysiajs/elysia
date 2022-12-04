@@ -1,6 +1,6 @@
-import { KingWorld, t, type KingWorldInstance } from '../src'
+import { Elysia, t } from '../src'
 
-const loggerPlugin = (app: KingWorld, { prefix = '/fbk' } = {}) =>
+const loggerPlugin = (app: Elysia, { prefix = '/fbk' } = {}) =>
 	app
 		.get('/hi', () => 'Hi')
 		.decorate('log', () => 'A')
@@ -8,7 +8,7 @@ const loggerPlugin = (app: KingWorld, { prefix = '/fbk' } = {}) =>
 		.state('fromPlugin', 'From Logger')
 		.use((app) => app.state('abc', 'abc'))
 
-const app = new KingWorld()
+const app = new Elysia()
 	.use(loggerPlugin)
 	.state('build', Date.now())
 	.get('/', () => 'KINGWORLD')

@@ -1,4 +1,4 @@
-import { KingWorld, t } from '../src'
+import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -6,7 +6,7 @@ const req = (path: string) => new Request(path)
 
 describe('Schema', () => {
 	it('validate query', async () => {
-		const app = new KingWorld().get('/', ({ query: { name } }) => name, {
+		const app = new Elysia().get('/', ({ query: { name } }) => name, {
 			schema: {
 				query: t.Object({
 					name: t.String()
@@ -20,7 +20,7 @@ describe('Schema', () => {
 	})
 
 	it('handle guard hook', async () => {
-		const app = new KingWorld().guard(
+		const app = new Elysia().guard(
 			{
 				schema: {
 					query: t.Object({

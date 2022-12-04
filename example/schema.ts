@@ -1,6 +1,6 @@
-import { KingWorld, t } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new KingWorld()
+const app = new Elysia()
 	// Strictly validate response
 	.get('/', () => 'hi', {
 		schema: {

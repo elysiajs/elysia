@@ -1,4 +1,4 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -6,7 +6,7 @@ const req = (path: string) => new Request(path)
 
 describe('Before Handle', () => {
 	it('Globally skip main handler', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.onBeforeHandle<{
 				params: {
 					name?: string
@@ -22,7 +22,7 @@ describe('Before Handle', () => {
 	})
 
 	it('Locally skip main handler', async () => {
-		const app = new KingWorld().get(
+		const app = new Elysia().get(
 			'/name/:name',
 			({ params: { name } }) => name,
 			{
@@ -38,7 +38,7 @@ describe('Before Handle', () => {
 	})
 
 	it('Group before handler', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.group('/type', (app) =>
 				app
 					.onBeforeHandle<{
@@ -60,7 +60,7 @@ describe('Before Handle', () => {
 	})
 
 	it('before handle from plugin', async () => {
-		const transformId = (app: KingWorld) =>
+		const transformId = (app: Elysia) =>
 			app.onBeforeHandle<{
 				params: {
 					name?: string
@@ -69,7 +69,7 @@ describe('Before Handle', () => {
 				if (name === 'Fubuki') return 'Cat'
 			})
 
-		const app = new KingWorld()
+		const app = new Elysia()
 			.use(transformId)
 			.get('/name/:name', ({ params: { name } }) => name)
 
@@ -79,7 +79,7 @@ describe('Before Handle', () => {
 	})
 
 	it('Before handle in order', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.get('/name/:name', ({ params: { name } }) => name)
 			.onBeforeHandle<{
 				params: {
@@ -95,7 +95,7 @@ describe('Before Handle', () => {
 	})
 
 	it('Globally and locally before handle', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.onBeforeHandle<{
 				params: {
 					name?: string
@@ -117,7 +117,7 @@ describe('Before Handle', () => {
 	})
 
 	it('Accept multiple before handler', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.onBeforeHandle<{
 				params: {
 					name?: string
@@ -142,7 +142,7 @@ describe('Before Handle', () => {
 	})
 
 	it('Handle async', async () => {
-		const app = new KingWorld().get(
+		const app = new Elysia().get(
 			'/name/:name',
 			({ params: { name } }) => name,
 			{
@@ -164,7 +164,7 @@ describe('Before Handle', () => {
 	})
 
 	it("Handle on('beforeHandle')", async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.on('beforeHandle', async ({ params: { name } }) => {
 				await new Promise<void>((resolve) =>
 					setTimeout(() => {

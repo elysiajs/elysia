@@ -1,14 +1,14 @@
-import { KingWorld } from '.'
+import { Elysia } from '.'
 
 import type { Context } from './context'
-import type KingWorldError from './error'
+import type ElysiaError from './error'
 import type { Static, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { Serve, Server } from 'bun'
 
 export type WithArray<T> = T | T[]
 
-export interface KingWorldInstance<
+export interface ElysiaInstance<
 	Instance extends {
 		store?: Record<any, any>
 		request?: Record<any, any>
@@ -26,7 +26,7 @@ export interface KingWorldInstance<
 
 export type Handler<
 	Route extends TypedRoute = TypedRoute,
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends ElysiaInstance = ElysiaInstance
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
 ) => Route['response'] | Promise<Route['response']> | Response
@@ -42,14 +42,14 @@ export type LifeCycleEvent =
 	| 'stop'
 
 export type ListenCallback<
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends ElysiaInstance = ElysiaInstance
 > = ((server: Server) => void) | ((server: Server) => Promise<void>)
 
 export type VoidLifeCycle<
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends ElysiaInstance = ElysiaInstance
 > =
-	| ((app: KingWorld<Instance>) => void)
-	| ((app: KingWorld<Instance>) => Promise<void>)
+	| ((app: Elysia<Instance>) => void)
+	| ((app: Elysia<Instance>) => Promise<void>)
 
 export type BodyParser = (
 	request: Request,
@@ -57,7 +57,7 @@ export type BodyParser = (
 ) => any | Promise<any>
 
 export interface LifeCycle<
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends ElysiaInstance = ElysiaInstance
 > {
 	start: VoidLifeCycle<Instance>
 	request: BeforeRequestHandler
@@ -71,14 +71,14 @@ export interface LifeCycle<
 
 export type AfterRequestHandler<
 	Route extends TypedRoute = TypedRoute,
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends ElysiaInstance = ElysiaInstance
 > = (
 	context: Context<Route, Instance['store']> & Instance['request'],
 	response: Route['response']
 ) => Route['response'] | Promise<Route['response']> | Response
 
 export interface LifeCycleStore<
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends ElysiaInstance = ElysiaInstance
 > {
 	start: VoidLifeCycle<Instance>[]
 	request: BeforeRequestHandler[]
@@ -96,7 +96,7 @@ export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
 ) => void | Promise<void> | Response | Promise<Response>
 
 export interface RegisteredHook<
-	Instance extends KingWorldInstance = KingWorldInstance
+	Instance extends ElysiaInstance = ElysiaInstance
 > {
 	schema?: TypedSchema
 	transform: Handler<any, Instance>[]
@@ -156,7 +156,7 @@ export type SchemaValidator = {
 
 export type HookHandler<
 	Schema extends TypedSchema = TypedSchema,
-	Instance extends KingWorldInstance = KingWorldInstance,
+	Instance extends ElysiaInstance = ElysiaInstance,
 	Path extends string = string
 > = Handler<
 	TypedSchemaToRoute<Schema>['params'] extends {}
@@ -187,7 +187,7 @@ export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
 
 export interface LocalHook<
 	Schema extends TypedSchema<any> = TypedSchema,
-	Instance extends KingWorldInstance = KingWorldInstance,
+	Instance extends ElysiaInstance = ElysiaInstance,
 	Path extends string = string
 > {
 	schema?: Schema
@@ -203,7 +203,7 @@ export interface LocalHook<
 
 export type LocalHandler<
 	Schema extends TypedSchema<any> = TypedSchema,
-	Instance extends KingWorldInstance = KingWorldInstance,
+	Instance extends ElysiaInstance = ElysiaInstance,
 	Path extends string = string
 > = Handler<
 	MergeSchema<Schema, Instance['schema']>['params'] extends NonNullable<
@@ -241,7 +241,7 @@ export type ComposedHandler = {
 	validator?: SchemaValidator
 }
 
-export interface KingWorldConfig {
+export interface ElysiaConfig {
 	/**
 	 * If set to `true`, path will **NOT** try to map trailing slash with none.
 	 *
@@ -260,7 +260,7 @@ export type ExtractKWPath<Path> = Path extends `${infer A}/${infer B}`
 	? IsKWPathParameter<A> | ExtractKWPath<B>
 	: IsKWPathParameter<Path>
 
-export interface InternalRoute<Instance extends KingWorldInstance> {
+export interface InternalRoute<Instance extends ElysiaInstance> {
 	method: HTTPMethod
 	path: string
 	handler: Handler<any, Instance>
@@ -316,7 +316,7 @@ export type ErrorCode =
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
-export type ErrorHandler = (errorCode: KingWorldError) => void | Response
+export type ErrorHandler = (errorCode: ElysiaError) => void | Response
 
 // ? From https://dev.to/svehla/typescript-how-to-deep-merge-170c
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

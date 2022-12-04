@@ -1,7 +1,7 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
-const app = new KingWorld()
-	.get('/', () => 'KINGWORLD')
+const app = new Elysia()
+	.get('/', () => 'Elysia')
 	// Retrieve params, automatically typed
 	.get('/id/:id', ({ params }) => params.id)
 	.listen(8080)

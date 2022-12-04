@@ -1,6 +1,6 @@
 import type { ErrorCode } from './types'
 
-export default class KingWorldError extends Error {
+export default class ElysiaError extends Error {
 	code: ErrorCode = 'UNKNOWN'
 
 	constructor(

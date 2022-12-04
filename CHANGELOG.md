@@ -1,4 +1,8 @@
-# 0.0.0-experimental.55 - 2 Dec 2022
+# 0.1.0 - 4 Dec 2022
+Feature:
+- Stabilized
+
+# 0.0.0-experimental.55 - 1 Dec 2022
 Bug fix:
 - `inject` now accept `Context`
 

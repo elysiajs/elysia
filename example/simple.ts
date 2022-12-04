@@ -1,7 +1,7 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
 // Simple Hello World
-new KingWorld()
+new Elysia()
 	.get('/', () => 'Hi')
 	.onStart(() => {
 		console.log('🦊 KINGWORLD is running at :8080')

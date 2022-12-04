@@ -1,11 +1,11 @@
-import { KingWorld, t } from '../src'
+import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 const req = (path: string) => new Request(path)
 
 describe('Transform', () => {
 	it('Globally Transform', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.onTransform<{
 				params: {
 					id?: number
@@ -20,7 +20,7 @@ describe('Transform', () => {
 	})
 
 	it('Locally transform', async () => {
-		const app = new KingWorld().get(
+		const app = new Elysia().get(
 			'/id/:id',
 			({ params: { id } }) => typeof id,
 			{
@@ -41,7 +41,7 @@ describe('Transform', () => {
 	})
 
 	it('Group transform', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.group('/scoped', (app) =>
 				app
 					.onTransform<{
@@ -64,7 +64,7 @@ describe('Transform', () => {
 	})
 
 	it('Transform from plugin', async () => {
-		const transformId = (app: KingWorld) =>
+		const transformId = (app: Elysia) =>
 			app.onTransform<{
 				params: {
 					id?: number
@@ -73,7 +73,7 @@ describe('Transform', () => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 
-		const app = new KingWorld()
+		const app = new Elysia()
 			.use(transformId)
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
@@ -83,7 +83,7 @@ describe('Transform', () => {
 	})
 
 	it('Transform from on', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.on('transform', (request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
@@ -95,7 +95,7 @@ describe('Transform', () => {
 	})
 
 	it('Transform in order', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 			.onTransform<{
 				params: {
@@ -111,7 +111,7 @@ describe('Transform', () => {
 	})
 
 	it('Globally and locally pre handle', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.onTransform<{
 				params: {
 					id?: number
@@ -140,7 +140,7 @@ describe('Transform', () => {
 	})
 
 	it('Accept multiple transform', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.onTransform<{
 				params: {
 					id?: number
@@ -167,7 +167,7 @@ describe('Transform', () => {
 	})
 
 	it('Transform async', async () => {
-		const app = new KingWorld().get(
+		const app = new Elysia().get(
 			'/id/:id',
 			({ params: { id } }) => typeof id,
 			{

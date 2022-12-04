@@ -1,4 +1,4 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -6,7 +6,7 @@ const req = (path: string) => new Request(path)
 
 describe('Guard', () => {
 	it('combine local and global', async () => {
-		const app = new KingWorld().state('counter', 0).guard(
+		const app = new Elysia().state('counter', 0).guard(
 			{
 				transform: ({ store }) => {
 					store.counter++

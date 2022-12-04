@@ -1,4 +1,4 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
@@ -6,7 +6,7 @@ describe('Life Cycle', () => {
 	it('handle onStart', async () => {
 		let started = false
 
-		const app = new KingWorld()
+		const app = new Elysia()
 			.get('/', () => 'hi')
 			.onStart(() => {
 				started = true
@@ -21,7 +21,7 @@ describe('Life Cycle', () => {
 	it("handle .on('start')", async () => {
 		let started = false
 
-		const app = new KingWorld()
+		const app = new Elysia()
 			.get('/', () => 'hi')
 			.on('start', () => {
 				started = true
@@ -36,7 +36,7 @@ describe('Life Cycle', () => {
 	it('handle onStop', async () => {
 		let stopped = false
 
-		const app = new KingWorld()
+		const app = new Elysia()
 			.get('/', () => 'hi')
 			.onStop(() => {
 				stopped = true
@@ -51,7 +51,7 @@ describe('Life Cycle', () => {
 	it("handle .on('stop')", async () => {
 		let started = false
 
-		const app = new KingWorld()
+		const app = new Elysia()
 			.get('/', () => 'hi')
 			.on('stop', () => {
 				started = true
@@ -65,7 +65,7 @@ describe('Life Cycle', () => {
 
 	// ? Blocking on https://github.com/oven-sh/bun/issues/1435
 	// it('handle onError', async () => {
-	// 	const app = new KingWorld()
+	// 	const app = new Elysia()
 	// 		.get('/', () => {
 	// 			throw new Error('Something')
 	// 		})

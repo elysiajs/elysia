@@ -1,7 +1,7 @@
 {
-  "name": "kingworld",
+  "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.0.0-experimental.55",
+  "version": "0.0.0-experimental.56",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/saltyaom/kingworld"
+    "url": "https://github.com/elysiajs/elysia"
   },
   "type": "module",
   "main": "build/index.js",
@@ -30,9 +30,9 @@
     "ts-node": "^10.8.2",
     "typescript": "^4.9.3"
   },
-  "bugs": "https://github.com/SaltyAom/kingworld/issues",
+  "bugs": "https://github.com/elysiajs/elysia/issues",
   "esnext": "build/es/index.js",
-  "homepage": "https://github.com/saltyaom/kingworld",
+  "homepage": "https://github.com/elysiajs/elysia",
   "keywords": [
     "bun",
     "http",

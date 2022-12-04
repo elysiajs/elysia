@@ -1,13 +1,13 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
 describe('Body Parser', () => {
 	it('handle onParse', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.onParse((request, contentType) => {
 				switch (contentType) {
-					case 'application/kingworld':
+					case 'application/Elysia':
 						return request.text()
 				}
 			})
@@ -19,7 +19,7 @@ describe('Body Parser', () => {
 				method: 'POST',
 				body: ':D',
 				headers: {
-					'content-type': 'application/kingworld',
+					'content-type': 'application/Elysia',
 					'content-length': '2'
 				}
 			})
@@ -29,10 +29,10 @@ describe('Body Parser', () => {
 	})
 
 	it("handle .on('parse')", async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.on('parse', (request, contentType) => {
 				switch (contentType) {
-					case 'application/kingworld':
+					case 'application/Elysia':
 						return request.text()
 				}
 			})
@@ -44,7 +44,7 @@ describe('Body Parser', () => {
 				method: 'POST',
 				body: ':D',
 				headers: {
-					'content-type': 'application/kingworld',
+					'content-type': 'application/Elysia',
 					'content-length': '2'
 				}
 			})
@@ -54,7 +54,7 @@ describe('Body Parser', () => {
 	})
 
 	it('overwrite default parser', async () => {
-		const app = new KingWorld()
+		const app = new Elysia()
 			.onParse((request, contentType) => {
 				switch (contentType) {
 					case 'text/plain':

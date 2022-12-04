@@ -1,6 +1,6 @@
-import { KingWorld, t, type KingWorldInstance, type TypedSchema } from '../src'
+import { Elysia, t } from '../src'
 
-new KingWorld()
+new Elysia()
 	.state('name', 'salt')
 	.get('/', ({ store: { name } }) => `Hi ${name}`, {
 		schema: {

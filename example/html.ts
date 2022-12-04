@@ -1,7 +1,7 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
-// ? Download from @kingworldjs/html
-const html = (app: KingWorld) =>
+// ? Download from @elysia/html
+const html = (app: Elysia) =>
 	app
 		.decorate(
 			'html',
@@ -20,7 +20,7 @@ const html = (app: KingWorld) =>
 				return context.html(response)
 		})
 
-new KingWorld()
+new Elysia()
 	.use(html)
 	.get(
 		'/',

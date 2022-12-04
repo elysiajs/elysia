@@ -1,6 +1,6 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
-new KingWorld()
+new Elysia()
 	.state('counter', 0)
 	.get('/', ({ store }) => store.counter++)
 	.listen(8080)

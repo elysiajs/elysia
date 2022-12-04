@@ -1,7 +1,7 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
 // This plugin will format JSON before return response
-const prettyJson = (app: KingWorld) =>
+const prettyJson = (app: Elysia) =>
 	// Custom
 	app.onAfterHandle((response, context) => {
 		if (response instanceof Object)
@@ -12,7 +12,7 @@ const prettyJson = (app: KingWorld) =>
 			}
 	})
 
-new KingWorld()
+new Elysia()
 	.use(prettyJson)
 	.get('/', () => ({
 		hello: 'world'

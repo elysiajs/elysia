@@ -1,6 +1,6 @@
-import { KingWorld } from '../src'
+import { Elysia } from '../src'
 
-new KingWorld()
+new Elysia()
 	.get('/', () => 'Hi')
 	.get('/redirect', ({ set }) => {
 		set.redirect = '/'
