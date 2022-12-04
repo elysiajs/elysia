@@ -1,6 +1,6 @@
-import { KingWorld, t } from '../src'
+import { Elysia, t } from '../src'
 
-new KingWorld()
+new Elysia()
 	.guard(
 		{
 			schema: {

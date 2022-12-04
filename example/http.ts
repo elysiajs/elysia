@@ -11,7 +11,7 @@ const loggerPlugin = (app: Elysia, { prefix = '/fbk' } = {}) =>
 const app = new Elysia()
 	.use(loggerPlugin)
 	.state('build', Date.now())
-	.get('/', () => 'KINGWORLD')
+	.get('/', () => 'Elysia')
 	.get('/tako', () => Bun.file('./example/takodachi.png'))
 	.get('/json', () => ({
 		hi: 'world'
@@ -22,7 +22,7 @@ const app = new Elysia()
 		return build
 	})
 	.get('/wildcard/*', () => 'Hi Wildcard')
-	.get('/kw', () => 'KINGWORLD', {
+	.get('/query', () => 'Elysia', {
 		beforeHandle: ({ query, log }) => {
 			console.log('Name:', query?.name)
 
@@ -46,7 +46,7 @@ const app = new Elysia()
 		beforeHandle: (ctx) => {
 			ctx.body = {
 				...ctx.body,
-				additional: 'KingWorld'
+				additional: 'Elysia'
 			}
 		},
 		schema: {
@@ -87,7 +87,7 @@ const app = new Elysia()
 		})
 			.get('/', () => 'From Group')
 			.get('/hi', () => 'HI GROUP')
-			.get('/kingworld', () => 'Welcome to KINGWORLD')
+			.get('/elysia', () => 'Welcome to Elysian Realm')
 			.get('/fbk', () => 'FuBuKing')
 	})
 	.get('/response-header', ({ set }) => {
@@ -121,5 +121,5 @@ const app = new Elysia()
 			})
 	})
 	.listen(8080, ({ hostname, port }) => {
-		console.log(`🦊 KingWorld is running at http://${hostname}:${port}`)
+		console.log(`🦊 Elysia is running at http://${hostname}:${port}`)
 	})

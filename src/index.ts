@@ -1254,7 +1254,14 @@ export default class Elysia<
 
 export { Elysia }
 export { Type as t } from '@sinclair/typebox'
-export { SCHEMA, getPath } from './utils'
+export {
+	SCHEMA,
+	getPath,
+	createValidationError,
+	getSchemaValidator
+} from './utils'
+export { Router } from './router'
+
 export type { Context } from './context'
 export type {
 	Handler,

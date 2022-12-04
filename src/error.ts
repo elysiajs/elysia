@@ -1,6 +1,6 @@
 import type { ErrorCode } from './types'
 
-export default class ElysiaError extends Error {
+export class ElysiaError extends Error {
 	code: ErrorCode = 'UNKNOWN'
 
 	constructor(
@@ -41,3 +41,5 @@ export default class ElysiaError extends Error {
 			this.code = 'VALIDATION'
 	}
 }
+
+export default ElysiaError

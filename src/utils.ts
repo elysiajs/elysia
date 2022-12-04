@@ -1,4 +1,4 @@
-import KingWorldError from './error'
+import { ElysiaError } from './error'
 
 import {
 	TypeCheck,
@@ -130,7 +130,7 @@ export const createValidationError = (
 ) => {
 	const error = validator.Errors(value).next().value as ValueError
 
-	return new KingWorldError(
+	return new ElysiaError(
 		'VALIDATION',
 		`Invalid ${type}, ${error?.path?.slice(1) || 'root'}: ${error.message}`
 	)

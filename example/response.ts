@@ -2,7 +2,7 @@ import { Elysia } from '../src'
 
 new Elysia()
 	.get('/', ({ set }) => {
-		set.headers['X-POWERED-BY'] = 'KingWorld'
+		set.headers['X-POWERED-BY'] = 'Elysia'
 
 		// Return custom response
 		return new Response('Shuba Shuba', {

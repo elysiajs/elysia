@@ -169,7 +169,7 @@ export type HookHandler<
 				},
 				'params'
 		  > & {
-				params: Record<ExtractKWPath<Path>, string>
+				params: Record<ExtractPath<Path>, string>
 		  },
 	Instance
 >
@@ -214,7 +214,7 @@ export type LocalHandler<
 				TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>,
 				'params'
 		  > & {
-				params: Record<ExtractKWPath<Path>, string>
+				params: Record<ExtractPath<Path>, string>
 		  },
 	Instance
 >
@@ -256,8 +256,8 @@ export interface ElysiaConfig {
 export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}`
 	? Parameter
 	: never
-export type ExtractKWPath<Path> = Path extends `${infer A}/${infer B}`
-	? IsKWPathParameter<A> | ExtractKWPath<B>
+export type ExtractPath<Path> = Path extends `${infer A}/${infer B}`
+	? IsKWPathParameter<A> | ExtractPath<B>
 	: IsKWPathParameter<Path>
 
 export interface InternalRoute<Instance extends ElysiaInstance> {

@@ -1,6 +1,6 @@
 <br>
 <p align=center>
-  <img width=480 src=https://user-images.githubusercontent.com/35027979/205498891-b75dc404-3232-4929-b216-823aa7373b71.png alt='KingWorld label' />
+  <img width=480 src=https://user-images.githubusercontent.com/35027979/205498891-b75dc404-3232-4929-b216-823aa7373b71.png alt='Elysia label' />
 </p>
 
 <p align=center>Fast and friendly <a href=https://bun.sh>Bun</a> web framework.</p>
@@ -20,12 +20,12 @@ Building on top of 3 philosophies:
 - Flexibility
     - You shall be able to customize most of the library to fits your need
 
-Designed with TypeScript in mind, you don't need to understand TypeScript to take advantage of KingWorld. The library understands what you want and automatically infers the type from your code.
+Designed with TypeScript in mind, you don't need to understand TypeScript to gains benefit of TypeScript with Elysia. The library understands what you want and automatically infers the type from your code.
 
 ⚡️ Elysia is [one of the fastest Bun web frameworks](https://github.com/SaltyAom/bun-http-framework-benchmark)
 
 ## Documentation
-The documentation is available on [elysiajs.com](https://kingworldjs.com).
+The documentation is available on [elysiajs.com](https://elysiajs.com).
 
 ## Discord
 Come join the [Discord channel~](https://discord.gg/eaFJ2KDJck)

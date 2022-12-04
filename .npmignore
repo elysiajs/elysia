@@ -8,11 +8,10 @@ bun.lockb
 
 node_modules
 tsconfig.json
-pnpm-lock.yaml
-jest.config.js
-nodemon.json
 CHANGELOG.md
 
 example
 tests
 docs
+src
+.DS_Store

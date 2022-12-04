@@ -1,8 +1,8 @@
-import KingWorld from '../src'
+import { Elysia } from '../src'
 
-const counter = (app: KingWorld) => app.state('counter', 0)
+const counter = (app: Elysia) => app.state('counter', 0)
 
-new KingWorld()
+new Elysia()
 	.use(counter)
 	.guard({}, (app) => app.get('/id/:id', ({ store: { counter } }) => counter))
 	.listen(8080)

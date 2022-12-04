@@ -4,7 +4,7 @@ const app = new Elysia()
 	// Add custom body parser
 	.onParse(async (request, contentType) => {
 		switch (contentType) {
-			case 'application/kingworld':
+			case 'application/Elysia':
 				return request.text()
 		}
 	})
@@ -31,4 +31,4 @@ const app = new Elysia()
 	.post('/mirror', ({ body }) => body)
 	.listen(8080)
 
-console.log('🦊 KINGWORLD is running at :8080')
+console.log('🦊 Elysia is running at :8080')
