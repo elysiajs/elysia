@@ -1,6 +1,6 @@
 <br>
 <p align=center>
-  <img width=661 src=https://user-images.githubusercontent.com/35027979/204073761-e7019531-def1-4f11-a9ee-b07df5334144.png alt='KingWorld label' />
+  <img width=480 src=https://user-images.githubusercontent.com/35027979/205498891-b75dc404-3232-4929-b216-823aa7373b71.png alt='KingWorld label' />
 </p>
 
 <p align=center>Fast and friendly <a href=https://bun.sh>Bun</a> web framework.</p>
