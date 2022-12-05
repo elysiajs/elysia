@@ -1,45 +1,12 @@
 import type { ErrorCode } from './types'
 
-export class ElysiaError extends Error {
-	code: ErrorCode = 'UNKNOWN'
+const knownErrors = new Set<string>([
+	'BODY_LIMIT',
+	'BODY_LIMIT',
+	'INTERNAL_SERVER_ERROR',
+	'NOT_FOUND',
+	'VALIDATION'
+])
 
-	constructor(
-		code: ErrorCode & string,
-		message: string = code,
-		options?: ErrorOptions
-	) {
-		super(message, options)
-
-		switch (message as ErrorCode) {
-			case 'BODY_LIMIT':
-				this.code = 'BODY_LIMIT'
-				break
-
-			case 'INTERNAL_SERVER_ERROR':
-				this.code = 'INTERNAL_SERVER_ERROR'
-				break
-
-			case 'NOT_FOUND':
-				this.code = 'NOT_FOUND'
-				break
-
-			case 'VALIDATION':
-				this.code = 'VALIDATION'
-				break
-
-			default:
-				break
-		}
-
-		if (
-			message.startsWith('Invalid query') ||
-			message.startsWith('Invalid body') ||
-			message.startsWith('Invalid params') ||
-			message.startsWith('Invalid headers') ||
-			message.startsWith('Invalid body')
-		)
-			this.code = 'VALIDATION'
-	}
-}
-
-export default ElysiaError
+export const mapErrorCode = (error: string): ErrorCode =>
+	knownErrors.has(error) ? (error as ErrorCode) : 'UNKNOWN'

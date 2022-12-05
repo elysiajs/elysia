@@ -1,9 +1,8 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 new Elysia()
-	// Custom error handler
-	.onError((error) => {
-		if (error.code === 'NOT_FOUND')
+	.onError((code, error) => {
+		if (code === 'NOT_FOUND')
 			return new Response('Not Found :(', {
 				status: 404
 			})

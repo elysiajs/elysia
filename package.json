@@ -11,13 +11,31 @@
 		"type": "git",
 		"url": "https://github.com/elysiajs/elysia"
 	},
+	"bugs": "https://github.com/elysiajs/elysia/issues",
+	"homepage": "https://github.com/elysiajs/elysia",
+	"keywords": [
+		"bun",
+		"http",
+		"web",
+		"server"
+	],
+	"license": "MIT",
 	"type": "module",
+	"scripts": {
+		"test": "bun wiptest",
+		"dev": "bun run --hot example/http.ts",
+		"build": "rimraf dist && npm run build:cjs && npm run build:esm",
+		"build:cjs": "tsc --project tsconfig.cjs.json",
+		"build:esm": "tsc --project tsconfig.esm.json",
+		"release": "npm run build && npm run test && npm publish"
+	},
 	"exports": {
 		"require": "./dist/cjs/index.js",
-		"import": "./dist/index.js"
+		"import": "./dist/index.js",
+		"node": "./dist/index.js",
+		"default": "./dist/index.js"
 	},
 	"types": "./dist/index.d.ts",
-	"typings": "./dist/index.d.ts",
 	"dependencies": {
 		"@sinclair/typebox": "0.25.10"
 	},
@@ -29,23 +47,5 @@
 		"eslint": "^8.29.0",
 		"rimraf": "^3.0.2",
 		"typescript": "^4.9.3"
-	},
-	"bugs": "https://github.com/elysiajs/elysia/issues",
-	"esnext": "build/es/index.js",
-	"homepage": "https://github.com/elysiajs/elysia",
-	"keywords": [
-		"bun",
-		"http",
-		"web",
-		"server"
-	],
-	"license": "MIT",
-	"scripts": {
-		"test": "bun wiptest",
-		"dev": "bun run --hot example/http.ts",
-		"build": "rimraf dist && npm run build:cjs && npm run build:esm",
-		"build:cjs": "tsc --project tsconfig.cjs.json",
-		"build:esm": "tsc --project tsconfig.esm.json",
-		"release": "npm run build && npm run test && npm publish"
 	}
 }

@@ -9,6 +9,8 @@
     <a href=https://elysiajs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a>
 </p>
 
+<p align=center>Former known as [KingWorld](https://github.com/saltyaom/kingworld)</p>
+
 
 ## Philosophies
 Building on top of 3 philosophies:

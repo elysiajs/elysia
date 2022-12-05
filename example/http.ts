@@ -112,10 +112,8 @@ const app = new Elysia()
 		return 'A'
 	})
 	.all('/all', () => 'hi')
-	.onError((error) => {
-		console.log(error.code, error)
-
-		if (error.code === 'NOT_FOUND')
+	.onError((code, error) => {
+		if (code === 'NOT_FOUND')
 			return new Response('Not Found :(', {
 				status: 404
 			})

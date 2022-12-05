@@ -1,7 +1,6 @@
 import { Elysia } from '.'
 
 import type { Context } from './context'
-import type ElysiaError from './error'
 import type { Static, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { Serve, Server } from 'bun'
@@ -41,13 +40,11 @@ export type LifeCycleEvent =
 	| 'error'
 	| 'stop'
 
-export type ListenCallback<
-	Instance extends ElysiaInstance = ElysiaInstance
-> = ((server: Server) => void) | ((server: Server) => Promise<void>)
+export type ListenCallback<Instance extends ElysiaInstance = ElysiaInstance> =
+	| ((server: Server) => void)
+	| ((server: Server) => Promise<void>)
 
-export type VoidLifeCycle<
-	Instance extends ElysiaInstance = ElysiaInstance
-> =
+export type VoidLifeCycle<Instance extends ElysiaInstance = ElysiaInstance> =
 	| ((app: Elysia<Instance>) => void)
 	| ((app: Elysia<Instance>) => Promise<void>)
 
@@ -56,9 +53,7 @@ export type BodyParser = (
 	contentType: string
 ) => any | Promise<any>
 
-export interface LifeCycle<
-	Instance extends ElysiaInstance = ElysiaInstance
-> {
+export interface LifeCycle<Instance extends ElysiaInstance = ElysiaInstance> {
 	start: VoidLifeCycle<Instance>
 	request: BeforeRequestHandler
 	parse: BodyParser
@@ -316,7 +311,7 @@ export type ErrorCode =
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
-export type ErrorHandler = (errorCode: ElysiaError) => void | Response
+export type ErrorHandler = (code: ErrorCode, error: Error) => void | Response
 
 // ? From https://dev.to/svehla/typescript-how-to-deep-merge-170c
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

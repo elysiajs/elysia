@@ -15,7 +15,7 @@ import {
 	getSchemaValidator
 } from './utils'
 import { registerSchemaPath } from './schema'
-import ElysiaError from './error'
+import { mapErrorCode } from './error'
 import type { Context } from './context'
 
 import type {
@@ -54,7 +54,7 @@ import type { TSchema } from '@sinclair/typebox'
  * ---
  * @example
  * ```typescript
- * import { Elysia } from 'Elysia'
+ * import { Elysia } from 'elysia'
  *
  * new Elysia()
  *     .get("/", () => "Hello")
@@ -447,7 +447,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { t } from 'Elysia'
+	 * import { t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .guard({
@@ -533,7 +533,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .get('/', () => 'hi')
@@ -561,7 +561,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .post('/', () => 'hi')
@@ -589,7 +589,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .put('/', () => 'hi')
@@ -617,7 +617,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .patch('/', () => 'hi')
@@ -645,7 +645,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .delete('/', () => 'hi')
@@ -673,7 +673,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .options('/', () => 'hi')
@@ -701,7 +701,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .all('/', () => 'hi')
@@ -724,7 +724,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .head('/', () => 'hi')
@@ -752,7 +752,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .trace('/', () => 'hi')
@@ -780,7 +780,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .connect('/', () => 'hi')
@@ -822,7 +822,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .route('CUSTOM', '/', () => 'hi')
@@ -969,7 +969,7 @@ export default class Elysia<
 	 * ---
 	 * @example
 	 * ```typescript
-	 * import { Elysia, t } from 'Elysia'
+	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
 	 *     .schema({
@@ -1132,45 +1132,18 @@ export default class Elysia<
 		return mapResponse(response, context)
 	}
 
-	private handleError(err: Error) {
-		const error =
-			err instanceof ElysiaError
-				? err
-				: new ElysiaError(err.name as any, err.message, {
-						cause: err.cause
-				  })
-
+	private handleError(error: Error) {
 		for (let i = 0; i < this.event.error.length; i++) {
-			const response = this.event.error[i](error)
+			const response = this.event.error[i](
+				mapErrorCode(error.message),
+				error
+			)
 			if (response instanceof Response) return response
 		}
 
-		switch (error.code) {
-			case 'BODY_LIMIT':
-				return new Response('Exceed Body Limit', {
-					status: 400
-				})
-
-			case 'INTERNAL_SERVER_ERROR':
-				return new Response('Internal Server Error', {
-					status: 500
-				})
-
-			case 'NOT_FOUND':
-				return new Response('Not Found', {
-					status: 404
-				})
-
-			case 'VALIDATION':
-				return new Response(error.message, {
-					status: 400
-				})
-
-			default:
-				return new Response(error.message, {
-					status: 500
-				})
-		}
+		return new Response(
+			typeof error.cause === 'string' ? error.cause : error.message
+		)
 	}
 
 	/**

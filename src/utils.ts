@@ -1,5 +1,3 @@
-import { ElysiaError } from './error'
-
 import {
 	TypeCheck,
 	TypeCompiler,
@@ -130,10 +128,11 @@ export const createValidationError = (
 ) => {
 	const error = validator.Errors(value).next().value as ValueError
 
-	return new ElysiaError(
-		'VALIDATION',
-		`Invalid ${type}, ${error?.path?.slice(1) || 'root'}: ${error.message}`
-	)
+	return new Error('VALIDATION', {
+		cause: `Invalid ${type}: '${error?.path?.slice(1) || "root"}'. ${
+			error.message
+		}`
+	})
 }
 
 export const getSchemaValidator = <
