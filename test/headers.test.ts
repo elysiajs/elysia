@@ -39,7 +39,7 @@ describe('Resposne Headers', () => {
 		expect(res.headers.get('x-powered-by')).toBe('Elysia')
 	})
 
-	it('add responseHeaders to Response', async () => {
+	it('add headers to Response', async () => {
 		const app = new Elysia()
 			.onTransform(({ set }) => {
 				set.headers['x-powered-by'] = 'Elysia'

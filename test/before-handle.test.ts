@@ -180,4 +180,24 @@ describe('Before Handle', () => {
 
 		expect(await res.text()).toBe('Warukunai yo ne')
 	})
+
+	it('execute afterHandle', async () => {
+		const app = new Elysia()
+			.onBeforeHandle<{
+				params: {
+					name?: string
+				}
+			}>(({ params: { name } }) => {
+				if (name === 'Fubuki') return 'Cat'
+			})
+			.onAfterHandle((context, response) => {
+				if(response === "Cat") return 'Not cat'
+			})
+			.get('/name/:name', ({ params: { name } }) => name)
+
+		const res = await app.handle(req('/name/Fubuki'))
+
+		expect(await res.text()).toBe('Not cat')
+	})
+
 })

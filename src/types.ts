@@ -1,15 +1,16 @@
-import { Elysia } from '.'
+import type { Elysia } from '.'
+import type { Serve, Server } from 'bun'
 
 import type { Context } from './context'
 import type { Static, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import type { Serve, Server } from 'bun'
+import type { SCHEMA } from './utils'
 
 export type WithArray<T> = T | T[]
 
 export interface ElysiaInstance<
 	Instance extends {
-		store?: Record<any, any>
+		store?: Record<any | typeof SCHEMA, any>
 		request?: Record<any, any>
 		schema?: TypedSchema
 	} = {
@@ -29,6 +30,13 @@ export type Handler<
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
 ) => Route['response'] | Promise<Route['response']> | Response
+
+export type NoReturnHandler<
+	Route extends TypedRoute = TypedRoute,
+	Instance extends ElysiaInstance = ElysiaInstance
+> = (
+	context: Context<Route, Instance['store']> & Instance['request']
+) => void | Promise<void>
 
 export type LifeCycleEvent =
 	| 'start'
@@ -57,7 +65,7 @@ export interface LifeCycle<Instance extends ElysiaInstance = ElysiaInstance> {
 	start: VoidLifeCycle<Instance>
 	request: BeforeRequestHandler
 	parse: BodyParser
-	transform: Handler<any, Instance>
+	transform: NoReturnHandler<any, Instance>
 	beforeHandle: Handler<any, Instance>
 	afterHandle: AfterRequestHandler<any, Instance>
 	error: ErrorHandler
@@ -78,7 +86,7 @@ export interface LifeCycleStore<
 	start: VoidLifeCycle<Instance>[]
 	request: BeforeRequestHandler[]
 	parse: BodyParser[]
-	transform: Handler<any, Instance>[]
+	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
 	error: ErrorHandler[]
@@ -94,7 +102,7 @@ export interface RegisteredHook<
 	Instance extends ElysiaInstance = ElysiaInstance
 > {
 	schema?: TypedSchema
-	transform: Handler<any, Instance>[]
+	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
 	error: ErrorHandler[]
@@ -103,20 +111,20 @@ export interface RegisteredHook<
 export interface TypedSchema<
 	Schema extends {
 		body: TSchema
-		header: TSchema
+		headers: TSchema
 		query: TSchema
 		params: TSchema
 		response: TSchema
 	} = {
 		body: TSchema
-		header: TSchema
+		headers: TSchema
 		query: TSchema
 		params: TSchema
 		response: TSchema
 	}
 > {
 	body?: Schema['body']
-	header?: Schema['header']
+	headers?: Schema['headers']
 	query?: Schema['query']
 	params?: Schema['params']
 	response?: Schema['response']
@@ -129,8 +137,8 @@ export type UnwrapSchema<
 
 export type TypedSchemaToRoute<Schema extends TypedSchema> = {
 	body: UnwrapSchema<Schema['body']>
-	header: UnwrapSchema<Schema['header']> extends Record<string, any>
-		? UnwrapSchema<Schema['header']>
+	header: UnwrapSchema<Schema['headers']> extends Record<string, any>
+		? UnwrapSchema<Schema['headers']>
 		: undefined
 	query: UnwrapSchema<Schema['query']> extends Record<string, any>
 		? UnwrapSchema<Schema['query']>
@@ -143,7 +151,7 @@ export type TypedSchemaToRoute<Schema extends TypedSchema> = {
 
 export type SchemaValidator = {
 	body?: TypeCheck<any>
-	header?: TypeCheck<any>
+	headers?: TypeCheck<any>
 	query?: TypeCheck<any>
 	params?: TypeCheck<any>
 	response?: TypeCheck<any>
@@ -174,7 +182,7 @@ export type UnknownFallback<A, B> = unknown extends A ? B : A
 export type PickInOrder<A, B> = A extends NonNullable<A> ? A : B
 export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
 	body: PickInOrder<PickInOrder<A['body'], B['body']>, undefined>
-	header: PickInOrder<PickInOrder<A['header'], B['header']>, undefined>
+	header: PickInOrder<PickInOrder<A['headers'], B['headers']>, undefined>
 	query: PickInOrder<PickInOrder<A['query'], B['query']>, undefined>
 	params: PickInOrder<PickInOrder<A['params'], B['params']>, undefined>
 	response: PickInOrder<PickInOrder<A['response'], B['response']>, undefined>

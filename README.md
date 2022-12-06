@@ -22,7 +22,7 @@ Building on top of 3 philosophies:
 - Flexibility
     - You shall be able to customize most of the library to fits your need
 
-Designed with TypeScript in mind, you don't need to understand TypeScript to gains benefit of TypeScript with Elysia. The library understands what you want and automatically infers the type from your code.
+Designed with TypeScript in mind, you don't need to understand TypeScript to gain the benefit of TypeScript with Elysia. The library understands what you want and automatically infers the type from your code.
 
 ⚡️ Elysia is [one of the fastest Bun web frameworks](https://github.com/SaltyAom/bun-http-framework-benchmark)
 

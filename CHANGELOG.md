@@ -1,6 +1,11 @@
-# 0.1.0 - 4 Dec 2022
+# 0.1.0.rc.0 - 6 Dec 2022
+Stabilized API
+
 Feature:
-- Stabilized
+- add header access to context via `context.header`
+
+Breaking Change:
+- rename `schema.header` to `schema.headers`
 
 # 0.0.0-experimental.55 - 1 Dec 2022
 Bug fix:

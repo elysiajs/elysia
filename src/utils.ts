@@ -31,7 +31,7 @@ export const mergeHook = (
 				? ({
 						// Merge local hook first
 						body: bSchema?.body ?? aSchema?.body,
-						header: bSchema?.header ?? aSchema?.header,
+						header: bSchema?.headers ?? aSchema?.headers,
 						params: bSchema?.params ?? aSchema?.params,
 						query: bSchema?.query ?? aSchema?.query,
 						response: bSchema?.response ?? aSchema?.response

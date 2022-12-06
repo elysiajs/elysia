@@ -43,7 +43,8 @@ import type {
 	IsAny,
 	OverwritableTypeRoute,
 	MergeSchema,
-	ListenCallback
+	ListenCallback,
+	NoReturnHandler
 } from './types'
 import type { TSchema } from '@sinclair/typebox'
 
@@ -73,7 +74,7 @@ export default class Elysia<
 	store: Instance['store'] = {
 		[SCHEMA]: {}
 	}
-	decorators: Record<string, unknown> | undefined
+	protected decorators: Record<string, unknown> | null = null
 	event: LifeCycleStore<Instance> = {
 		start: [],
 		request: [],
@@ -113,11 +114,11 @@ export default class Elysia<
 		Path extends string = string
 	>(
 		method: HTTPMethod,
-		_path: Path,
+		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<any>
 	) {
-		const path = _path.startsWith('/') ? _path : `/${_path}`
+		path.startsWith('/') ? path : `/${path}`
 
 		this.routes.push({
 			method,
@@ -130,7 +131,7 @@ export default class Elysia<
 			hook?.schema?.body ?? this.$schema?.body
 		)
 		const header = getSchemaValidator(
-			hook?.schema?.header ?? this.$schema?.header,
+			hook?.schema?.headers ?? this.$schema?.headers,
 			true
 		)
 		const params = getSchemaValidator(
@@ -255,7 +256,7 @@ export default class Elysia<
 	 * ```
 	 */
 	onTransform<Route extends OverwritableTypeRoute = TypedRoute>(
-		handler: Handler<Route, Instance>
+		handler: NoReturnHandler<Route, Instance>
 	) {
 		this.event.transform.push(handler)
 
@@ -802,20 +803,6 @@ export default class Elysia<
 	}
 
 	/**
-	 * @deprecated
-	 *
-	 * Use `route` instead
-	 */
-	method<Schema extends TypedSchema = {}, Path extends string = string>(
-		method: HTTPMethod,
-		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<Schema, Instance, Path>
-	) {
-		this.route(method, path, handler, hook)
-	}
-
-	/**
 	 * ### route
 	 * Register handler for path with custom method
 	 *
@@ -898,7 +885,7 @@ export default class Elysia<
 			schema: Instance['schema']
 		}>
 	>(name: Name, value: Value): NewInstance {
-		if (this.decorators === undefined) this.decorators = {}
+		if (!this.decorators) this.decorators = {}
 		this.decorators[name] = value
 
 		return this as unknown as NewInstance
@@ -988,7 +975,7 @@ export default class Elysia<
 	>(schema: Schema): NewInstance {
 		this.$schema = {
 			body: getSchemaValidator(schema?.body),
-			header: getSchemaValidator(schema?.header),
+			headers: getSchemaValidator(schema?.headers),
 			params: getSchemaValidator(schema?.params),
 			query: getSchemaValidator(schema?.query),
 			response: getSchemaValidator(schema?.response)
@@ -1005,11 +992,11 @@ export default class Elysia<
 		}
 
 		const route = this.router.find(getPath(request.url))
-		if (route === null) throw new Error('NOT_FOUND')
+		if (!route) throw new Error('NOT_FOUND')
 
 		const handler: ComposedHandler | undefined =
 			route.store[request.method] ?? route.store.ALL
-		if (handler === undefined) throw new Error('NOT_FOUND')
+		if (!handler) throw new Error('NOT_FOUND')
 
 		let body: string | Record<string, any> | undefined
 		if (request.method !== 'GET') {
@@ -1028,7 +1015,6 @@ export default class Elysia<
 		}
 
 		let context: Context = {
-			...this.decorators,
 			request,
 			params: route?.params ?? {},
 			query: mapQuery(request.url),
@@ -1040,41 +1026,35 @@ export default class Elysia<
 			}
 		}
 
+		if (this.decorators) Object.assign(context, this.decorators)
+
 		for (let i = 0; i < handler.hooks.transform.length; i++) {
-			let _context = handler.hooks.transform[i](context)
-			if (_context instanceof Promise) _context = await _context
-			if (_context) context = _context
+			const operation = handler.hooks.transform[i](context)
+			if (operation instanceof Promise) await operation
 		}
 
 		if (handler.validator) {
 			const validator = handler.validator
-			if (validator.header) {
+			if (validator.headers) {
 				const _header: Record<string, string> = {}
-
 				for (const v of request.headers.entries()) _header[v[0]] = v[1]
 
-				if (validator.header.Check(_header) === false)
+				if (!validator.headers.Check(_header))
 					throw createValidationError(
 						'header',
-						validator.header,
+						validator.headers,
 						_header
 					)
 			}
 
-			if (
-				validator.params &&
-				validator.params.Check(context.params) === false
-			)
+			if (validator.params && !validator.params?.Check(context.params))
 				throw createValidationError(
 					'params',
 					validator.params,
 					context.params
 				)
 
-			if (
-				validator.query &&
-				validator.query.Check(context.query) === false
-			) {
+			if (validator.query && !validator.query.Check(context.query)) {
 				throw createValidationError(
 					'query',
 					validator.query,
@@ -1082,7 +1062,7 @@ export default class Elysia<
 				)
 			}
 
-			if (validator.body && validator.body.Check(body) === false)
+			if (validator.body && !validator.body.Check(body))
 				throw createValidationError('body', validator.body, body)
 		}
 
@@ -1112,7 +1092,7 @@ export default class Elysia<
 
 		if (
 			handler.validator?.response &&
-			handler.validator.response.Check(response) === false
+			!handler.validator.response.Check(response)
 		)
 			throw createValidationError(
 				'response',

@@ -32,7 +32,7 @@ export const registerSchemaPath = ({
 
 	const bodySchema = hook?.schema?.body
 	const paramsSchema = hook?.schema?.params
-	const headerSchema = hook?.schema?.header
+	const headerSchema = hook?.schema?.headers
 	const querySchema = hook?.schema?.query
 	const responseSchema = hook?.schema?.response
 
