@@ -1,12 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.mapErrorCode = void 0;
-const knownErrors = new Set([
-    'BODY_LIMIT',
-    'BODY_LIMIT',
-    'INTERNAL_SERVER_ERROR',
-    'NOT_FOUND',
-    'VALIDATION'
-]);
+exports.mapErrorStatus = exports.mapErrorCode = void 0;
+const errorCodeToStatus = new Map();
+errorCodeToStatus.set('BODY_LIMIT', 400);
+errorCodeToStatus.set('INTERNAL_SERVER_ERROR', 500);
+errorCodeToStatus.set('NOT_FOUND', 404);
+errorCodeToStatus.set('VALIDATION', 400);
+const knownErrors = new Set(errorCodeToStatus.keys());
 const mapErrorCode = (error) => knownErrors.has(error) ? error : 'UNKNOWN';
 exports.mapErrorCode = mapErrorCode;
+const mapErrorStatus = (error) => errorCodeToStatus.get(error) ?? 500;
+exports.mapErrorStatus = mapErrorStatus;

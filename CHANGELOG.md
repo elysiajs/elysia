@@ -1,3 +1,12 @@
+# 0.1.0.rc.2 - 8 Dec 2022
+Fix:
+- skip body parsing for 'HEAD'
+- missing response status on some error
+- compatability for cjs
+- add main fields for Bundlephobia supports
+- add declaration file for both esm and cjs
+- ship `src` for TypeScript support with `declare global`
+
 # 0.1.0.rc.1 - 6 Dec 2022
 Stabilized API
 

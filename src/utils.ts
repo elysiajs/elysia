@@ -73,6 +73,7 @@ export const mapQuery = (url: string): Record<string, string> => {
 	const query: Record<string, string> = {}
 	let paths = url.slice(queryIndex)
 
+	// eslint-disable-next-line no-constant-condition
 	while (true) {
 		// Skip ?/&, and min length of query is 3, so start looking at 1 + 3
 		const sep = paths.indexOf('&', 4)

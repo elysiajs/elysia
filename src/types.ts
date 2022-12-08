@@ -48,7 +48,7 @@ export type LifeCycleEvent =
 	| 'error'
 	| 'stop'
 
-export type ListenCallback<Instance extends ElysiaInstance = ElysiaInstance> =
+export type ListenCallback =
 	| ((server: Server) => void)
 	| ((server: Server) => Promise<void>)
 
@@ -312,8 +312,6 @@ export type ErrorCode =
 	| 'NOT_FOUND'
 	// ? Default 502
 	| 'INTERNAL_SERVER_ERROR'
-	// ? Request exceed body limit (config.bodyLimit)
-	| 'BODY_LIMIT'
 	// ? Validation error
 	| 'VALIDATION'
 	// ? Error that's not in defined list

@@ -2,7 +2,7 @@ import { Router } from './router';
 import { mapResponse, mapEarlyResponse } from './handler';
 import { mapQuery, getPath, clone, mergeHook, mergeDeep, createValidationError, SCHEMA, getSchemaValidator } from './utils';
 import { registerSchemaPath } from './schema';
-import { mapErrorCode } from './error';
+import { mapErrorCode, mapErrorStatus } from './error';
 /**
  * ### Elysia Server
  * Main instance to create web server using Elysia
@@ -733,7 +733,7 @@ export default class Elysia {
         if (!handler)
             throw new Error('NOT_FOUND');
         let body;
-        if (request.method !== 'GET') {
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
             const contentType = request.headers.get('content-type') ?? '';
             if (contentType !== '')
                 for (let i = 0; i < this.event.parse.length; i++) {
@@ -746,7 +746,7 @@ export default class Elysia {
                     }
                 }
         }
-        let context = {
+        const context = {
             request,
             params: route?.params ?? {},
             query: mapQuery(request.url),
@@ -823,7 +823,9 @@ export default class Elysia {
             if (response instanceof Response)
                 return response;
         }
-        return new Response(typeof error.cause === 'string' ? error.cause : error.message);
+        return new Response(typeof error.cause === 'string' ? error.cause : error.message, {
+            status: mapErrorStatus(mapErrorCode(error.message))
+        });
     }
     /**
      * ### listen

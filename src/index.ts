@@ -1,7 +1,5 @@
 import type { Serve, Server } from 'bun'
 
-import { TypeCompiler } from '@sinclair/typebox/compiler'
-
 import { Router } from './router'
 import { mapResponse, mapEarlyResponse } from './handler'
 import {
@@ -15,7 +13,7 @@ import {
 	getSchemaValidator
 } from './utils'
 import { registerSchemaPath } from './schema'
-import { mapErrorCode } from './error'
+import { mapErrorCode, mapErrorStatus } from './error'
 import type { Context } from './context'
 
 import type {
@@ -46,7 +44,6 @@ import type {
 	ListenCallback,
 	NoReturnHandler
 } from './types'
-import type { TSchema } from '@sinclair/typebox'
 
 /**
  * ### Elysia Server
@@ -999,7 +996,7 @@ export default class Elysia<
 		if (!handler) throw new Error('NOT_FOUND')
 
 		let body: string | Record<string, any> | undefined
-		if (request.method !== 'GET') {
+		if (request.method !== 'GET' && request.method !== 'HEAD') {
 			const contentType = request.headers.get('content-type') ?? ''
 
 			if (contentType !== '')
@@ -1014,7 +1011,7 @@ export default class Elysia<
 				}
 		}
 
-		let context: Context = {
+		const context: Context = {
 			request,
 			params: route?.params ?? {},
 			query: mapQuery(request.url),
@@ -1112,7 +1109,7 @@ export default class Elysia<
 		return mapResponse(response, context)
 	}
 
-	private handleError(error: Error) {
+	handleError(error: Error) {
 		for (let i = 0; i < this.event.error.length; i++) {
 			const response = this.event.error[i](
 				mapErrorCode(error.message),
@@ -1122,7 +1119,10 @@ export default class Elysia<
 		}
 
 		return new Response(
-			typeof error.cause === 'string' ? error.cause : error.message
+			typeof error.cause === 'string' ? error.cause : error.message,
+			{
+				status: mapErrorStatus(mapErrorCode(error.message))
+			}
 		)
 	}
 

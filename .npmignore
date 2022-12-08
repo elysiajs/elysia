@@ -15,3 +15,8 @@ tests
 docs
 src
 .DS_Store
+test
+CHANGELOG.md
+.eslintrc.js
+tsconfig.cjs.json
+tsconfig.esm.json

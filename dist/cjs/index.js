@@ -736,7 +736,7 @@ class Elysia {
         if (!handler)
             throw new Error('NOT_FOUND');
         let body;
-        if (request.method !== 'GET') {
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
             const contentType = request.headers.get('content-type') ?? '';
             if (contentType !== '')
                 for (let i = 0; i < this.event.parse.length; i++) {
@@ -749,7 +749,7 @@ class Elysia {
                     }
                 }
         }
-        let context = {
+        const context = {
             request,
             params: route?.params ?? {},
             query: (0, utils_1.mapQuery)(request.url),
@@ -826,7 +826,9 @@ class Elysia {
             if (response instanceof Response)
                 return response;
         }
-        return new Response(typeof error.cause === 'string' ? error.cause : error.message);
+        return new Response(typeof error.cause === 'string' ? error.cause : error.message, {
+            status: (0, error_1.mapErrorStatus)((0, error_1.mapErrorCode)(error.message))
+        });
     }
     /**
      * ### listen
