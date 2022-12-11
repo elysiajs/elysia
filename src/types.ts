@@ -26,10 +26,13 @@ export interface ElysiaInstance<
 
 export type Handler<
 	Route extends TypedRoute = TypedRoute,
-	Instance extends ElysiaInstance = ElysiaInstance
+	Instance extends ElysiaInstance = ElysiaInstance,
+	CatchResponse = Route['response']
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
-) => Route['response'] | Promise<Route['response']> | Response
+) => CatchResponse extends Route['response']
+	? CatchResponse | Promise<CatchResponse> | Response
+	: Route['response'] | Promise<Route['response']> | Response
 
 export type NoReturnHandler<
 	Route extends TypedRoute = TypedRoute,
@@ -137,7 +140,7 @@ export type UnwrapSchema<
 
 export type TypedSchemaToRoute<Schema extends TypedSchema> = {
 	body: UnwrapSchema<Schema['body']>
-	header: UnwrapSchema<Schema['headers']> extends Record<string, any>
+	headers: UnwrapSchema<Schema['headers']> extends Record<string, any>
 		? UnwrapSchema<Schema['headers']>
 		: undefined
 	query: UnwrapSchema<Schema['query']> extends Record<string, any>
@@ -182,7 +185,7 @@ export type UnknownFallback<A, B> = unknown extends A ? B : A
 export type PickInOrder<A, B> = A extends NonNullable<A> ? A : B
 export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
 	body: PickInOrder<PickInOrder<A['body'], B['body']>, undefined>
-	header: PickInOrder<PickInOrder<A['headers'], B['headers']>, undefined>
+	headers: PickInOrder<PickInOrder<A['headers'], B['headers']>, undefined>
 	query: PickInOrder<PickInOrder<A['query'], B['query']>, undefined>
 	params: PickInOrder<PickInOrder<A['params'], B['params']>, undefined>
 	response: PickInOrder<PickInOrder<A['response'], B['response']>, undefined>
@@ -204,27 +207,61 @@ export interface LocalHook<
 	error?: WithArray<ErrorHandler>
 }
 
-export type LocalHandler<
+export type RouteToSchema<
 	Schema extends TypedSchema<any> = TypedSchema,
 	Instance extends ElysiaInstance = ElysiaInstance,
 	Path extends string = string
-> = Handler<
-	MergeSchema<Schema, Instance['schema']>['params'] extends NonNullable<
-		Schema['params']
-	>
-		? TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>
-		: Omit<
-				TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>,
-				'params'
-		  > & {
-				params: Record<ExtractPath<Path>, string>
-		  },
-	Instance
+> = MergeSchema<Schema, Instance['schema']>['params'] extends NonNullable<
+	Schema['params']
 >
+	? TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>
+	: Omit<
+			TypedSchemaToRoute<MergeSchema<Schema, Instance['schema']>>,
+			'params'
+	  > & {
+			params: Record<ExtractPath<Path>, string>
+	  }
+
+export type ElysiaRoute<
+	Method extends string = string,
+	Schema extends TypedSchema<any> = TypedSchema,
+	Instance extends ElysiaInstance = ElysiaInstance,
+	Path extends string = string,
+	CatchResponse = unknown
+> = Elysia<{
+	request: Instance['request']
+	store: Instance['store'] &
+		Record<
+			typeof SCHEMA,
+			Record<
+				Path,
+				Record<
+					Method,
+					RouteToSchema<Schema, Instance, Path> & {
+						response: CatchResponse extends RouteToSchema<
+							Schema,
+							Instance,
+							Path
+						>['response']
+							? CatchResponse
+							: RouteToSchema<Schema, Instance, Path>['response']
+					}
+				>
+			>
+		>
+	schema: Instance['schema']
+}>
+
+export type LocalHandler<
+	Schema extends TypedSchema<any> = TypedSchema,
+	Instance extends ElysiaInstance = ElysiaInstance,
+	Path extends string = string,
+	CatchResponse = unknown
+> = Handler<RouteToSchema<Schema, Instance, Path>, Instance, CatchResponse>
 
 export interface TypedRoute {
 	body?: unknown
-	header?: Record<string, any>
+	headers?: Record<string, any>
 	query?: Record<string, string>
 	params?: Record<string, string>
 	response?: unknown
@@ -232,7 +269,7 @@ export interface TypedRoute {
 
 export type OverwritableTypeRoute = {
 	body?: unknown
-	header?: Record<string, any>
+	headers?: Record<string, any>
 	query?: Record<string, any>
 	params?: Record<string, any>
 	response?: unknown
@@ -256,12 +293,13 @@ export interface ElysiaConfig {
 	serve?: Partial<Serve>
 }
 
-export type IsKWPathParameter<Part> = Part extends `:${infer Parameter}`
+export type IsPathParameter<Part> = Part extends `:${infer Parameter}`
 	? Parameter
 	: never
+
 export type ExtractPath<Path> = Path extends `${infer A}/${infer B}`
-	? IsKWPathParameter<A> | ExtractPath<B>
-	: IsKWPathParameter<Path>
+	? IsPathParameter<A> | ExtractPath<B>
+	: IsPathParameter<Path>
 
 export interface InternalRoute<Instance extends ElysiaInstance> {
 	method: HTTPMethod

@@ -13,10 +13,7 @@ describe('Path', () => {
 	})
 
 	it('Handle multiple level', async () => {
-		const app = new Elysia().get(
-			'/this/is/my/deep/nested/root',
-			() => 'Ok'
-		)
+		const app = new Elysia().get('/this/is/my/deep/nested/root', () => 'Ok')
 		const res = await app.handle(
 			req('http://localhost:8080/this/is/my/deep/nested/root')
 		)
@@ -218,8 +215,7 @@ describe('Path', () => {
 	})
 
 	it('Handle plugin', async () => {
-		const plugin = (app: Elysia) =>
-			app.get('/korone', () => 'Yubi Yubi!')
+		const plugin = (app: Elysia) => app.get('/korone', () => 'Yubi Yubi!')
 		const app = new Elysia().use(plugin)
 
 		const res = await app.handle(req('/korone'))
@@ -296,5 +292,41 @@ describe('Path', () => {
 			(await Bun.file('./example/takodachi.png').text()).length
 		)
 		expect(res.headers.get('Server')).toBe('Elysia')
+	})
+
+	it('Handle non start /', async () => {
+		const app = new Elysia().get('', () => 'Hi')
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('Hi')
+	})
+
+	it('Handle *', async () => {
+		const app = new Elysia().get('*', () => 'Hi')
+		const get = await app.handle(req('/')).then((r) => r.text())
+		const post = await app
+			.handle(req('/anything/should/match'))
+			.then((r) => r.text())
+
+		expect(get).toBe('Hi')
+		expect(post).toBe('Hi')
+	})
+
+	it('Handle * on multiple methods', async () => {
+		const app = new Elysia()
+			.get('/part', () => 'Part')
+			.options('*', () => 'Hi')
+
+		const get = await app.handle(req('/part')).then((r) => r.text())
+		const options = await app
+			.handle(
+				new Request('/part', {
+					method: 'OPTIONS'
+				})
+			)
+			.then((r) => r.text())
+
+		expect(get).toBe('Part')
+		expect(options).toBe('Hi')
 	})
 })

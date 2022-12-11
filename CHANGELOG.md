@@ -1,3 +1,12 @@
+# 0.1.0.rc.3 - 12 Dec 2022
+Feature:
+- Strict type for `SCHEMA`
+- Infered type parameters for `SCHEMA`
+
+Fix:
+- Auto prefix path with `/` for non
+- Fallback catch all route for registered parameter
+
 # 0.1.0.rc.2 - 8 Dec 2022
 Fix:
 - skip body parsing for 'HEAD'

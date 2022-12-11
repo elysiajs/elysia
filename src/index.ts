@@ -42,7 +42,8 @@ import type {
 	OverwritableTypeRoute,
 	MergeSchema,
 	ListenCallback,
-	NoReturnHandler
+	NoReturnHandler,
+	ElysiaRoute
 } from './types'
 
 /**
@@ -59,13 +60,7 @@ import type {
  *     .listen(8080)
  * ```
  */
-export default class Elysia<
-	Instance extends ElysiaInstance = ElysiaInstance<{
-		store: {}
-		request: {}
-		schema: {}
-	}>
-> {
+export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	config: ElysiaConfig
 
 	store: Instance['store'] = {
@@ -97,6 +92,8 @@ export default class Elysia<
 	private $schema: SchemaValidator | null = null
 
 	private router = new Router()
+	// This router is fallback for catch all route
+	private fallbackRoute = new Map<HTTPMethod, Record<string, any>>()
 	protected routes: InternalRoute<Instance>[] = []
 
 	constructor(config: Partial<ElysiaConfig> = {}) {
@@ -115,7 +112,7 @@ export default class Elysia<
 		handler: LocalHandler<Schema, Instance, Path>,
 		hook?: LocalHook<any>
 	) {
-		path.startsWith('/') ? path : `/${path}`
+		path = path.startsWith('/') ? path : (`/${path}` as Path)
 
 		this.routes.push({
 			method,
@@ -148,6 +145,24 @@ export default class Elysia<
 			method,
 			path
 		})
+
+		if (path === '/*') {
+			console.log('Set fallback', method)
+			this.fallbackRoute.set(method, {
+				handle: handler,
+				hooks: mergeHook(clone(this.event), hook as RegisteredHook),
+				validator:
+					body || header || params || query || response
+						? {
+								body,
+								header,
+								params,
+								query,
+								response
+						  }
+						: undefined
+			})
+		}
 
 		this.router.register(path)[method] = {
 			handle: handler,
@@ -542,14 +557,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	get<Schema extends TypedSchema = {}, Path extends string = string>(
+	get<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'GET', Schema, Instance, Path, Response> {
 		this._addHandler('GET', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -570,14 +589,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	post<Schema extends TypedSchema = {}, Path extends string = string>(
+	post<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'POST', Schema, Instance, Path, Response> {
 		this._addHandler('POST', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -598,14 +621,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	put<Schema extends TypedSchema = {}, Path extends string = string>(
+	put<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'PUT', Schema, Instance, Path, Response> {
 		this._addHandler('PUT', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -626,14 +653,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	patch<Schema extends TypedSchema = {}, Path extends string = string>(
+	patch<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'PATCH', Schema, Instance, Path, Response> {
 		this._addHandler('PATCH', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -654,14 +685,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	delete<Schema extends TypedSchema = {}, Path extends string = string>(
+	delete<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'DELETE', Schema, Instance, Path, Response> {
 		this._addHandler('DELETE', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -682,14 +717,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	options<Schema extends TypedSchema = {}, Path extends string = string>(
+	options<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'OPTIONS', Schema, Instance, Path, Response> {
 		this._addHandler('OPTIONS', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -705,14 +744,18 @@ export default class Elysia<
 	 *     .all('/', () => 'hi')
 	 * ```
 	 */
-	all<Schema extends TypedSchema = {}, Path extends string = string>(
+	all<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'ALL', Schema, Instance, Path, Response> {
 		this._addHandler('ALL', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -733,14 +776,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	head<Schema extends TypedSchema = {}, Path extends string = string>(
+	head<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'HEAD', Schema, Instance, Path, Response> {
 		this._addHandler('HEAD', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -761,14 +808,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	trace<Schema extends TypedSchema = {}, Path extends string = string>(
+	trace<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'TRACE', Schema, Instance, Path, Response> {
 		this._addHandler('TRACE', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -789,14 +840,18 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	connect<Schema extends TypedSchema = {}, Path extends string = string>(
+	connect<
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<'CONNECT', Schema, Instance, Path, Response> {
 		this._addHandler('CONNECT', path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -817,15 +872,20 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	route<Schema extends TypedSchema = {}, Path extends string = string>(
-		method: HTTPMethod,
+	route<
+		Method extends HTTPMethod = HTTPMethod,
+		Schema extends TypedSchema = {},
+		Path extends string = string,
+		Response = unknown
+	>(
+		method: Method,
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
+		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	) {
+	): ElysiaRoute<Method, Schema, Instance, Path, Response> {
 		this._addHandler(method, path, handler, hook as LocalHook)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -992,7 +1052,9 @@ export default class Elysia<
 		if (!route) throw new Error('NOT_FOUND')
 
 		const handler: ComposedHandler | undefined =
-			route.store[request.method] ?? route.store.ALL
+			route.store[request.method] ??
+			route.store.ALL ??
+			this.fallbackRoute.get(request.method as HTTPMethod)
 		if (!handler) throw new Error('NOT_FOUND')
 
 		let body: string | Record<string, any> | undefined
