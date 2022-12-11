@@ -146,8 +146,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			path
 		})
 
-		if (path === '/*') {
-			console.log('Set fallback', method)
+		if (path === '/*') 
 			this.fallbackRoute.set(method, {
 				handle: handler,
 				hooks: mergeHook(clone(this.event), hook as RegisteredHook),
@@ -162,7 +161,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						  }
 						: undefined
 			})
-		}
+		
 
 		this.router.register(path)[method] = {
 			handle: handler,

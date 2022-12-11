@@ -1,3 +1,7 @@
+# 0.1.0.rc.4 - 12 Dec 2022
+Fix:
+- Remove `console.log` for '*'
+
 # 0.1.0.rc.3 - 12 Dec 2022
 Feature:
 - Strict type for `SCHEMA`
