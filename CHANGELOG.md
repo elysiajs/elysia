@@ -1,3 +1,7 @@
+# 0.1.0.rc.6 - 13 Dec 2022
+Fix:
+- `.listen` object is now optional
+
 # 0.1.0.rc.5 - 13 Dec 2022
 Breaking Change:
 - `onError` change its type:

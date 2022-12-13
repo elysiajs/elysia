@@ -1237,7 +1237,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     .listen(8080)
 	 * ```
 	 */
-	listen(options: string | number | Serve, callback?: ListenCallback) {
+	listen(
+		options: string | number | Partial<Serve>,
+		callback?: ListenCallback
+	) {
 		if (!Bun) throw new Error('Bun to run')
 
 		const fetch = this.handle.bind(this)
