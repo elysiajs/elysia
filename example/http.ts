@@ -9,6 +9,11 @@ const loggerPlugin = (app: Elysia, { prefix = '/fbk' } = {}) =>
 		.use((app) => app.state('abc', 'abc'))
 
 const app = new Elysia()
+	.onRequest(({ set }) => {
+		set.headers = {
+			'Access-Control-Allow-Origin': '*'
+		}
+	})
 	.use(loggerPlugin)
 	.state('build', Date.now())
 	.get('/', () => 'Elysia')
@@ -30,7 +35,7 @@ const app = new Elysia()
 		},
 		schema: {
 			query: t.Object({
-				name: t.Optional(t.String())
+				name: t.String()
 			})
 		}
 	})
@@ -112,11 +117,12 @@ const app = new Elysia()
 		return 'A'
 	})
 	.all('/all', () => 'hi')
-	.onError((code, error) => {
-		if (code === 'NOT_FOUND')
-			return new Response('Not Found :(', {
-				status: 404
-			})
+	.onError(({ code, error, set }) => {
+		if (code === 'NOT_FOUND') {
+			set.status = 404
+
+			return 'Not Found :('
+		}
 	})
 	.listen(8080, ({ hostname, port }) => {
 		console.log(`🦊 Elysia is running at http://${hostname}:${port}`)

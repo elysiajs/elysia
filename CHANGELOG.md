@@ -1,3 +1,37 @@
+# 0.1.0.rc.5 - 13 Dec 2022
+Breaking Change:
+- `onError` change its type:
+```typescript
+// Previously
+onError: (error: Error, code: ErrorCode)
+
+// Now
+onError: (params: {
+    error: Error
+    code: ErrorCode
+    set: Context['set']
+}) => any
+```
+
+To migrate, add curly brace to `onError` parameters.
+
+- `onRequest` change its type:
+```typescript
+// Previously
+onRequest: (request: Request, store: Instance['Store']) => any
+
+// Now
+onRequest: (params: {
+    request: Request,
+    store: Instance['store']
+    set: Context['set']
+})
+```
+To migrate, add curly brace to `onRequest` parameters.
+
+Feature:
+- Manual patch for [bun#1435](https://github.com/oven-sh/bun/issues/1435), and unblock test suite for error handler.
+
 # 0.1.0.rc.4 - 12 Dec 2022
 Fix:
 - Remove `console.log` for '*'

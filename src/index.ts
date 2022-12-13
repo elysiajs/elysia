@@ -146,7 +146,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			path
 		})
 
-		if (path === '/*') 
+		if (path === '/*')
 			this.fallbackRoute.set(method, {
 				handle: handler,
 				hooks: mergeHook(clone(this.event), hook as RegisteredHook),
@@ -161,7 +161,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						  }
 						: undefined
 			})
-		
 
 		this.router.register(path)[method] = {
 			handle: handler,
@@ -1041,147 +1040,186 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	async handle(request: Request): Promise<Response> {
-		for (let i = 0; i < this.event.request.length; i++) {
-			let response = this.event.request[i](request, this.store)
-			if (response instanceof Promise) response = await response
-			if (response) return response
+		const set: Context['set'] = {
+			status: 200,
+			headers: {}
 		}
 
-		const route = this.router.find(getPath(request.url))
-		if (!route) throw new Error('NOT_FOUND')
+		try {
+			for (let i = 0; i < this.event.request.length; i++) {
+				let response = this.event.request[i]({
+					request,
+					store: this.store,
+					set
+				})
+				if (response instanceof Promise) response = await response
+				if (response) return response
+			}
 
-		const handler: ComposedHandler | undefined =
-			route.store[request.method] ??
-			route.store.ALL ??
-			this.fallbackRoute.get(request.method as HTTPMethod)
-		if (!handler) throw new Error('NOT_FOUND')
+			const route = this.router.find(getPath(request.url))
+			if (!route) throw new Error('NOT_FOUND')
 
-		let body: string | Record<string, any> | undefined
-		if (request.method !== 'GET' && request.method !== 'HEAD') {
-			const contentType = request.headers.get('content-type') ?? ''
+			const handler: ComposedHandler | undefined =
+				route.store[request.method] ??
+				route.store.ALL ??
+				this.fallbackRoute.get(request.method as HTTPMethod)
+			if (!handler) throw new Error('NOT_FOUND')
 
-			if (contentType !== '')
-				for (let i = 0; i < this.event.parse.length; i++) {
-					let temp = this.event.parse[i](request, contentType)
-					if (temp instanceof Promise) temp = await temp
+			let body: string | Record<string, any> | undefined
+			if (request.method !== 'GET' && request.method !== 'HEAD') {
+				const contentType = request.headers.get('content-type')
 
-					if (temp) {
-						body = temp
-						break
+				if (contentType)
+					for (let i = 0; i < this.event.parse.length; i++) {
+						let temp = this.event.parse[i](request, contentType)
+						if (temp instanceof Promise) temp = await temp
+
+						if (temp) {
+							body = temp
+							break
+						}
 					}
+			}
+
+			const context: Context = (
+				this.decorators
+					? clone(this.decorators)
+					: {
+							request,
+							body,
+							set,
+							store: this.store,
+							params: route?.params ?? {},
+							query: mapQuery(request.url)
+					  }
+			) as any
+
+			if (this.decorators) {
+				context.request = request
+				context.body = body
+				context.set = set
+				context.store = this.store
+				context.params = route?.params ?? {}
+				context.query = mapQuery(request.url)
+			}
+
+			for (let i = 0; i < handler.hooks.transform.length; i++) {
+				const operation = handler.hooks.transform[i](context)
+				if (operation instanceof Promise) await operation
+			}
+
+			if (handler.validator) {
+				const validator = handler.validator
+				if (validator.headers) {
+					const _header: Record<string, string> = {}
+					for (const v of request.headers.entries())
+						_header[v[0]] = v[1]
+
+					if (!validator.headers.Check(_header))
+						throw createValidationError(
+							'header',
+							validator.headers,
+							_header
+						)
 				}
-		}
 
-		const context: Context = {
-			request,
-			params: route?.params ?? {},
-			query: mapQuery(request.url),
-			body,
-			store: this.store,
-			set: {
-				status: 200,
-				headers: {}
-			}
-		}
-
-		if (this.decorators) Object.assign(context, this.decorators)
-
-		for (let i = 0; i < handler.hooks.transform.length; i++) {
-			const operation = handler.hooks.transform[i](context)
-			if (operation instanceof Promise) await operation
-		}
-
-		if (handler.validator) {
-			const validator = handler.validator
-			if (validator.headers) {
-				const _header: Record<string, string> = {}
-				for (const v of request.headers.entries()) _header[v[0]] = v[1]
-
-				if (!validator.headers.Check(_header))
+				if (
+					validator.params &&
+					!validator.params?.Check(context.params)
+				)
 					throw createValidationError(
-						'header',
-						validator.headers,
-						_header
+						'params',
+						validator.params,
+						context.params
 					)
+
+				if (validator.query && !validator.query.Check(context.query)) {
+					throw createValidationError(
+						'query',
+						validator.query,
+						context.query
+					)
+				}
+
+				if (validator.body && !validator.body.Check(body))
+					throw createValidationError('body', validator.body, body)
 			}
 
-			if (validator.params && !validator.params?.Check(context.params))
-				throw createValidationError(
-					'params',
-					validator.params,
-					context.params
-				)
+			for (let i = 0; i < handler.hooks.beforeHandle.length; i++) {
+				let response = handler.hooks.beforeHandle[i](context)
+				if (response instanceof Promise) response = await response
 
-			if (validator.query && !validator.query.Check(context.query)) {
-				throw createValidationError(
-					'query',
-					validator.query,
-					context.query
-				)
+				// `false` is a falsey value, check for null and undefined instead
+				if (response !== null && response !== undefined) {
+					for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
+						let newResponse = handler.hooks.afterHandle[i](
+							context,
+							response
+						)
+						if (newResponse instanceof Promise)
+							newResponse = await newResponse
+						if (newResponse) response = newResponse
+					}
+
+					const result = mapEarlyResponse(response, context.set)
+					if (result) return result
+				}
 			}
 
-			if (validator.body && !validator.body.Check(body))
-				throw createValidationError('body', validator.body, body)
-		}
-
-		for (let i = 0; i < handler.hooks.beforeHandle.length; i++) {
-			let response = handler.hooks.beforeHandle[i](context)
+			let response = handler.handle(context)
 			if (response instanceof Promise) response = await response
 
-			// `false` is a falsey value, check for null and undefined instead
-			if (response !== null && response !== undefined) {
-				for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
-					let newResponse = handler.hooks.afterHandle[i](
-						context,
-						response
-					)
-					if (newResponse instanceof Promise)
-						newResponse = await newResponse
-					if (newResponse) response = newResponse
-				}
+			if (
+				handler.validator?.response &&
+				!handler.validator.response.Check(response)
+			)
+				throw createValidationError(
+					'response',
+					handler.validator.response,
+					response
+				)
 
-				const result = mapEarlyResponse(response, context)
+			for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
+				let newResponse = handler.hooks.afterHandle[i](
+					context,
+					response
+				)
+				if (newResponse instanceof Promise)
+					newResponse = await newResponse
+				if (newResponse) response = newResponse
+
+				const result = mapEarlyResponse(response, context.set)
 				if (result) return result
 			}
+
+			return mapResponse(response, context.set)
+		} catch (error) {
+			return this.handleError(error as Error, set)
 		}
-
-		let response = handler.handle(context)
-		if (response instanceof Promise) response = await response
-
-		if (
-			handler.validator?.response &&
-			!handler.validator.response.Check(response)
-		)
-			throw createValidationError(
-				'response',
-				handler.validator.response,
-				response
-			)
-
-		for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
-			let newResponse = handler.hooks.afterHandle[i](context, response)
-			if (newResponse instanceof Promise) newResponse = await newResponse
-			if (newResponse) response = newResponse
-
-			const result = mapEarlyResponse(response, context)
-			if (result) return result
-		}
-
-		return mapResponse(response, context)
 	}
 
-	handleError(error: Error) {
+	async handleError(
+		error: Error,
+		set: Context['set'] = {
+			headers: {},
+			status: undefined
+		}
+	) {
 		for (let i = 0; i < this.event.error.length; i++) {
-			const response = this.event.error[i](
-				mapErrorCode(error.message),
-				error
-			)
-			if (response instanceof Response) return response
+			let response = this.event.error[i]({
+				code: mapErrorCode(error.message),
+				error,
+				set
+			})
+			if (response instanceof Promise) response = await response
+			if (response !== undefined && response !== null)
+				return mapResponse(response, set)
 		}
 
 		return new Response(
 			typeof error.cause === 'string' ? error.cause : error.message,
 			{
+				headers: set.headers,
 				status: mapErrorStatus(mapErrorCode(error.message))
 			}
 		)
@@ -1203,7 +1241,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (!Bun) throw new Error('Bun to run')
 
 		const fetch = this.handle.bind(this)
-		const error = this.handleError.bind(this)
 
 		if (typeof options === 'string') {
 			options = +options
@@ -1217,14 +1254,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				? {
 						...this.config.serve,
 						...options,
-						fetch,
-						error
+						fetch
 				  }
 				: {
 						...this.config.serve,
 						port: options,
-						fetch,
-						error
+						fetch
 				  }
 		)
 
@@ -1276,7 +1311,7 @@ export {
 } from './utils'
 export { Router } from './router'
 
-export type { Context } from './context'
+export type { Context, PreContext } from './context'
 export type {
 	Handler,
 	RegisteredHook,

@@ -19,3 +19,9 @@ export interface Context<
 		redirect?: string
 	}
 }
+
+// Use to mimic request before mapping route
+export type PreContext<Store extends Elysia['store'] = Elysia['store']> = Omit<
+	Context<{}, Store>,
+	'query' | 'params' | 'body'
+>

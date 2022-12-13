@@ -1,7 +1,7 @@
 import type { Elysia } from '.'
 import type { Serve, Server } from 'bun'
 
-import type { Context } from './context'
+import type { Context, PreContext } from './context'
 import type { Static, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { SCHEMA } from './utils'
@@ -97,8 +97,7 @@ export interface LifeCycleStore<
 }
 
 export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
-	request: Request,
-	store: Store
+	context: PreContext<Store>
 ) => void | Promise<void> | Response | Promise<Response>
 
 export interface RegisteredHook<
@@ -355,7 +354,11 @@ export type ErrorCode =
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
-export type ErrorHandler = (code: ErrorCode, error: Error) => void | Response
+export type ErrorHandler = (params: {
+	code: ErrorCode
+	error: Error
+	set: Context['set']
+}) => any | Promise<any>
 
 // ? From https://dev.to/svehla/typescript-how-to-deep-merge-170c
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

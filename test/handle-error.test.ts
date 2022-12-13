@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 
 describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
-		const res = new Elysia()
+		const res = await new Elysia()
 			.get('/', () => 'Hi')
 			.handleError(new Error('NOT_FOUND'))
 
@@ -13,7 +13,7 @@ describe('Handle Error', () => {
 	})
 
 	it('handle INTERNAL_SERVER_ERROR', async () => {
-		const res = new Elysia()
+		const res = await new Elysia()
 			.get('/', () => 'Hi')
 			.handleError(new Error('INTERNAL_SERVER_ERROR'))
 
@@ -22,7 +22,7 @@ describe('Handle Error', () => {
 	})
 
 	it('handle VALIDATION', async () => {
-		const res = new Elysia()
+		const res = await new Elysia()
 			.get('/', () => 'Hi')
 			.handleError(new Error('VALIDATION'))
 
@@ -31,7 +31,7 @@ describe('Handle Error', () => {
 	})
 
 	it('handle UNKNOWN', async () => {
-		const res = new Elysia()
+		const res = await new Elysia()
 			.get('/', () => 'Hi')
 			.handleError(new Error('UNKNOWN'))
 
@@ -40,7 +40,7 @@ describe('Handle Error', () => {
 	})
 
 	it('handle custom error', async () => {
-		const res = new Elysia()
+		const res = await new Elysia()
 			.get('/', () => 'Hi')
 			.handleError(new Error("I'm a teapot"))
 
@@ -49,9 +49,9 @@ describe('Handle Error', () => {
 	})
 
 	it('use custom error', async () => {
-		const res = new Elysia()
+		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			.onError((code) => {
+			.onError(({ code }) => {
 				if (code === 'NOT_FOUND')
 					return new Response("I'm a teapot", {
 						status: 418
@@ -60,6 +60,38 @@ describe('Handle Error', () => {
 			.handleError(new Error('NOT_FOUND'))
 
 		expect(await res.text()).toBe("I'm a teapot")
+		expect(res.status).toBe(418)
+	})
+
+	it('inject headers to error', async () => {
+		const app = new Elysia()
+			.onRequest(({ set }) => {
+				set.headers['Access-Control-Allow-Origin'] = '*'
+			})
+			.get('/', () => {
+				throw new Error('NOT_FOUND')
+			})
+
+		const res = await app.handle(new Request('/'))
+
+		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
+		expect(res.status).toBe(404)
+	})
+
+	it('transform any to error', async () => {
+		const app = new Elysia()
+			.onError(async ({ set }) => {
+				set.status = 418
+
+				return 'aw man'
+			})
+			.get('/', () => {
+				throw new Error('NOT_FOUND')
+			})
+
+		const res = await app.handle(new Request('/'))
+
+		expect(await res.text()).toBe('aw man')
 		expect(res.status).toBe(418)
 	})
 })

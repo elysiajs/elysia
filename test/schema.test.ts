@@ -22,7 +22,7 @@ describe('Schema', () => {
 	it('validate params', async () => {
 		const app = new Elysia().get(
 			'/hi/:id/:name',
-			({ params: { id, name } }) => name,
+			({ params: { name } }) => name,
 			{
 				schema: {
 					params: t.Object({

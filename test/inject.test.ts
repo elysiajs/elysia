@@ -1,5 +1,6 @@
+import { Elysia } from '../src'
+
 import { describe, expect, it } from 'bun:test'
-import { Elysia, t } from '../src'
 
 const req = (path: string) => new Request(path)
 

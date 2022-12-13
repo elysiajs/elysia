@@ -26,7 +26,7 @@ describe('Elysia', () => {
 		expect(res.status).toBe(200)
 	})
 
-	// If this break, many plugins will break too. DO NOT SKIP
+	// ! IMPORTANT, DO NOT SKIP
 	it('context should be mutable', async () => {
 		const app = new Elysia()
 			.use(
