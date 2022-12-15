@@ -50,24 +50,19 @@ export const mergeHook = (
 	}
 }
 
-// export const isPromise = <T>(
-// 	response: T | Promise<T>
-// ): response is Promise<T> => response instanceof Promise
-
 export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 	[value][0]
 
-export const getPath = (url: string): string => {
-	const queryIndex = url.indexOf('?')
-
-	return url.substring(
+export const getPath = (url: string, queryIndex: number): string =>
+	url.substring(
 		url.charCodeAt(0) === 47 ? 0 : url.indexOf('/', 11),
 		queryIndex === -1 ? url.length : queryIndex
 	)
-}
 
-export const mapQuery = (url: string): Record<string, string> => {
-	const queryIndex = url.indexOf('?')
+export const mapQuery = (
+	url: string,
+	queryIndex: number
+): Record<string, string> => {
 	if (queryIndex === -1) return {}
 
 	const query: Record<string, string> = {}
@@ -130,7 +125,7 @@ export const createValidationError = (
 	const error = validator.Errors(value).next().value as ValueError
 
 	return new Error('VALIDATION', {
-		cause: `Invalid ${type}: '${error?.path?.slice(1) || "root"}'. ${
+		cause: `Invalid ${type}: '${error?.path?.slice(1) || 'root'}'. ${
 			error.message
 		}`
 	})

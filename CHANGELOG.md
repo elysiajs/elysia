@@ -1,3 +1,9 @@
+# 0.1.0.rc.7 - 15 Dec 2022
+Improvement:
+- Minor optimization
+- `Router.register` now returns type
+- Inline default bodyParser
+
 # 0.1.0.rc.6 - 13 Dec 2022
 Fix:
 - `.listen` object is now optional

@@ -42,7 +42,7 @@ export const mapEarlyResponse = (response: unknown, set: Context['set']) => {
 						headers: set.headers
 					})
 
-				if (set.headers['Content-Type'] !== null)
+				if (!set.headers['Content-Type'])
 					set.headers['Content-Type'] = 'application/json'
 
 				return new Response(JSON.stringify(response), {
@@ -136,7 +136,7 @@ export const mapResponse = (
 						headers: set.headers
 					})
 
-				if (set.headers['Content-Type'] !== null)
+				if (!set.headers['Content-Type'])
 					set.headers['Content-Type'] = 'application/json'
 
 				return new Response(JSON.stringify(response), {

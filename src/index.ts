@@ -66,21 +66,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	store: Instance['store'] = {
 		[SCHEMA]: {}
 	}
+	// Will be applied to Context
 	protected decorators: Record<string, unknown> | null = null
+
 	event: LifeCycleStore<Instance> = {
 		start: [],
 		request: [],
-		parse: [
-			(request, contentType) => {
-				switch (contentType) {
-					case 'application/json':
-						return request.json()
-
-					case 'text/plain':
-						return request.text()
-				}
-			}
-		],
+		parse: [],
 		transform: [],
 		beforeHandle: [],
 		afterHandle: [],
@@ -93,7 +85,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	private router = new Router()
 	// This router is fallback for catch all route
-	private fallbackRoute = new Map<HTTPMethod, Record<string, any>>()
+	private fallbackRoute: Partial<Record<HTTPMethod, Record<string, any>>> = {}
 	protected routes: InternalRoute<Instance>[] = []
 
 	constructor(config: Partial<ElysiaConfig> = {}) {
@@ -147,7 +139,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		})
 
 		if (path === '/*')
-			this.fallbackRoute.set(method, {
+			this.fallbackRoute[method] = {
 				handle: handler,
 				hooks: mergeHook(clone(this.event), hook as RegisteredHook),
 				validator:
@@ -160,7 +152,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								response
 						  }
 						: undefined
-			})
+			}
 
 		this.router.register(path)[method] = {
 			handle: handler,
@@ -1056,20 +1048,21 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				if (response) return response
 			}
 
-			const route = this.router.find(getPath(request.url))
+			const index = request.url.indexOf('?')
+			const route = this.router.find(getPath(request.url, index))
 			if (!route) throw new Error('NOT_FOUND')
 
 			const handler: ComposedHandler | undefined =
 				route.store[request.method] ??
 				route.store.ALL ??
-				this.fallbackRoute.get(request.method as HTTPMethod)
+				this.fallbackRoute[request.method as HTTPMethod]
 			if (!handler) throw new Error('NOT_FOUND')
 
 			let body: string | Record<string, any> | undefined
-			if (request.method !== 'GET' && request.method !== 'HEAD') {
+			if (request.method !== 'GET') {
 				const contentType = request.headers.get('content-type')
 
-				if (contentType)
+				if (contentType) {
 					for (let i = 0; i < this.event.parse.length; i++) {
 						let temp = this.event.parse[i](request, contentType)
 						if (temp instanceof Promise) temp = await temp
@@ -1079,6 +1072,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							break
 						}
 					}
+
+					if (!body)
+						switch (contentType) {
+							case 'application/json':
+								body = await request.json()
+								break
+
+							case 'text/plain':
+								body = await request.text()
+								break
+						}
+				}
 			}
 
 			const context: Context = (
@@ -1090,7 +1095,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							set,
 							store: this.store,
 							params: route?.params ?? {},
-							query: mapQuery(request.url)
+							query: mapQuery(request.url, index)
 					  }
 			) as any
 
@@ -1100,7 +1105,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				context.set = set
 				context.store = this.store
 				context.params = route?.params ?? {}
-				context.query = mapQuery(request.url)
+				context.query = mapQuery(request.url, index)
 			}
 
 			for (let i = 0; i < handler.hooks.transform.length; i++) {
@@ -1109,40 +1114,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 
 			if (handler.validator) {
-				const validator = handler.validator
-				if (validator.headers) {
+				if (handler.validator.headers) {
 					const _header: Record<string, string> = {}
-					for (const v of request.headers.entries())
-						_header[v[0]] = v[1]
+					for (const key in request.headers)
+						_header[key] = request.headers.get(key)!
 
-					if (!validator.headers.Check(_header))
+					if (handler.validator.headers.Check(_header) === false)
 						throw createValidationError(
 							'header',
-							validator.headers,
+							handler.validator.headers,
 							_header
 						)
 				}
 
-				if (
-					validator.params &&
-					!validator.params?.Check(context.params)
-				)
+				if (handler.validator.params?.Check(context.params) === false)
 					throw createValidationError(
 						'params',
-						validator.params,
+						handler.validator.params,
 						context.params
 					)
 
-				if (validator.query && !validator.query.Check(context.query)) {
+				if (handler.validator.query?.Check(context.query) === false) {
 					throw createValidationError(
 						'query',
-						validator.query,
+						handler.validator.query,
 						context.query
 					)
 				}
 
-				if (validator.body && !validator.body.Check(body))
-					throw createValidationError('body', validator.body, body)
+				if (handler.validator.body?.Check(body) === false)
+					throw createValidationError(
+						'body',
+						handler.validator.body,
+						body
+					)
 			}
 
 			for (let i = 0; i < handler.hooks.beforeHandle.length; i++) {
@@ -1158,6 +1163,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						)
 						if (newResponse instanceof Promise)
 							newResponse = await newResponse
+
 						if (newResponse) response = newResponse
 					}
 
@@ -1169,10 +1175,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			let response = handler.handle(context)
 			if (response instanceof Promise) response = await response
 
-			if (
-				handler.validator?.response &&
-				!handler.validator.response.Check(response)
-			)
+			if (handler.validator?.response?.Check(response) === false)
 				throw createValidationError(
 					'response',
 					handler.validator.response,
@@ -1186,9 +1189,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				)
 				if (newResponse instanceof Promise)
 					newResponse = await newResponse
-				if (newResponse) response = newResponse
 
-				const result = mapEarlyResponse(response, context.set)
+				const result = mapEarlyResponse(newResponse, context.set)
 				if (result) return result
 			}
 
@@ -1297,10 +1299,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		this.server.stop()
 
-		for (let i = 0; i < this.event.stop.length; i++) {
-			const process = this.event.stop[i](this)
-			if (process instanceof Promise) await process
-		}
+		for (let i = 0; i < this.event.stop.length; i++)
+			await this.event.stop[i](this)
 	}
 }
 
