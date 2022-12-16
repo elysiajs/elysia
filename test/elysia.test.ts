@@ -1,8 +1,7 @@
 import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-
-const req = (path: string) => new Request(path)
+import { req } from './utils'
 
 describe('Elysia', () => {
 	it('handle state', async () => {

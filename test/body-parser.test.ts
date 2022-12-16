@@ -15,7 +15,7 @@ describe('Body Parser', () => {
 			.listen(8080)
 
 		const res = await app.handle(
-			new Request('/', {
+			new Request('http://localhost/', {
 				method: 'POST',
 				body: ':D',
 				headers: {
@@ -40,7 +40,7 @@ describe('Body Parser', () => {
 			.listen(8080)
 
 		const res = await app.handle(
-			new Request('/', {
+			new Request('http://localhost/', {
 				method: 'POST',
 				body: ':D',
 				headers: {
@@ -65,7 +65,7 @@ describe('Body Parser', () => {
 			.listen(8080)
 
 		const res = await app.handle(
-			new Request('/', {
+			new Request('http://localhost/', {
 				method: 'POST',
 				body: ':D',
 				headers: {

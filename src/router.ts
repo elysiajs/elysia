@@ -233,25 +233,22 @@ function matchRoute(
 	node: Node,
 	startIndex: number
 ): any {
-	const pathPartEndIndex = startIndex + node.pathPart.length
+	const pathPart = node.pathPart
+	const pathPartEndIndex = startIndex + pathPart.length
 
 	// Only check the pathPart if its length is > 1 since the parent has
 	// already checked that the url matches the first character
-	if (node.pathPart.length > 1) {
+	if (pathPart.length > 1) {
 		if (pathPartEndIndex > urlLength) return null
 
-		if (node.pathPart.length < 15)
+		if (pathPart.length < 15)
 			// Using a loop is faster for short strings
-			for (
-				let i = 1, j = startIndex + 1;
-				i < node.pathPart.length;
-				++i, ++j
-			) {
-				if (node.pathPart[i] !== url[j]) {
+			for (let i = 1, j = startIndex + 1; i < pathPart.length; ++i, ++j) {
+				if (pathPart[i] !== url[j]) {
 					return null
 				}
 			}
-		else if (url.slice(startIndex, pathPartEndIndex) !== node.pathPart)
+		else if (url.slice(startIndex, pathPartEndIndex) !== pathPart)
 			return null
 	}
 

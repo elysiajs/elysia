@@ -428,11 +428,42 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	group(prefix: string, run: (group: Elysia<Instance>) => void) {
-		const instance = new Elysia<Instance>()
+	group<
+		NewElysia extends Elysia<any> = Elysia<any>,
+		Prefix extends string = string
+	>(
+		prefix: Prefix,
+		run: (
+			group: Elysia<{
+				request: Instance['request']
+				store: Omit<Instance['store'], typeof SCHEMA> &
+					ElysiaInstance['store']
+				schema: Instance['schema']
+			}>
+		) => NewElysia
+	): NewElysia extends Elysia<infer NewInstance>
+		? Elysia<{
+				request: Instance['request'] & NewInstance['request']
+				schema: Instance['schema'] & NewInstance['schema']
+				store: Instance['store'] &
+					(Omit<NewInstance['store'], typeof SCHEMA> & {
+						[key in typeof SCHEMA]: {
+							[key in keyof NewInstance['store'][typeof SCHEMA] as key extends `${infer Rest}`
+								? `${Prefix}${Rest}`
+								: key]: NewInstance['store'][typeof SCHEMA][key]
+						}
+					})
+		  }>
+		: this {
+		const instance = new Elysia<{
+			request: Instance['request']
+			store: Omit<Instance['store'], typeof SCHEMA> &
+				ElysiaInstance['store']
+			schema: Instance['schema']
+		}>()
 		run(instance)
 
-		this.store = mergeDeep(this.store, instance.store)
+		this.store = mergeDeep(this.store, instance.store) as any
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
@@ -440,7 +471,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 		)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -466,20 +497,31 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	guard<Schema extends TypedSchema = {}>(
+	guard<
+		Schema extends TypedSchema = {},
+		NewElysia extends Elysia<any> = Elysia<any>
+	>(
 		hook: LocalHook<Schema, Instance>,
 		run: (
 			group: Elysia<{
 				request: Instance['request']
 				store: Instance['store']
-				schema: MergeIfNotNull<Schema, Instance['schema']>
+				schema: Omit<
+					MergeIfNotNull<Schema, Instance['schema']>,
+					typeof SCHEMA
+				>
 			}>
-		) => void
-	) {
+		) => NewElysia
+	): NewElysia extends Elysia<infer NewInstance>
+		? Elysia<NewInstance & Instance>
+		: this {
 		const instance = new Elysia<{
 			request: Instance['request']
 			store: Instance['store']
-			schema: MergeIfNotNull<Schema, Instance['schema']>
+			schema: Omit<
+				MergeIfNotNull<Schema, Instance['schema']>,
+				typeof SCHEMA
+			>
 		}>()
 		run(instance)
 
@@ -494,7 +536,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 		)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -964,7 +1006,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.store = mergeDeep(
 			this.store,
 			transform(() => this.store)
-		)
+		) as any
 
 		return this as any
 	}
@@ -1048,7 +1090,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				if (response) return response
 			}
 
-			const index = request.url.indexOf('?')
+			const index = request.url.indexOf('?', 12)
 			const route = this.router.find(getPath(request.url, index))
 			if (!route) throw new Error('NOT_FOUND')
 
@@ -1063,8 +1105,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				const contentType = request.headers.get('content-type')
 
 				if (contentType) {
-					for (let i = 0; i < this.event.parse.length; i++) {
-						let temp = this.event.parse[i](request, contentType)
+					const parse = this.event.parse
+
+					for (let i = 0; i < parse.length; i++) {
+						let temp = parse[i](request, contentType)
 						if (temp instanceof Promise) temp = await temp
 
 						if (temp) {
@@ -1086,6 +1130,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				}
 			}
 
+			const hooks = handler.hooks
 			const context: Context = (
 				this.decorators
 					? clone(this.decorators)
@@ -1108,56 +1153,53 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				context.query = mapQuery(request.url, index)
 			}
 
-			for (let i = 0; i < handler.hooks.transform.length; i++) {
-				const operation = handler.hooks.transform[i](context)
+			for (let i = 0; i < hooks.transform.length; i++) {
+				const operation = hooks.transform[i](context)
 				if (operation instanceof Promise) await operation
 			}
 
 			if (handler.validator) {
-				if (handler.validator.headers) {
+				const validator = handler.validator
+
+				if (validator.headers) {
 					const _header: Record<string, string> = {}
 					for (const key in request.headers)
 						_header[key] = request.headers.get(key)!
 
-					if (handler.validator.headers.Check(_header) === false)
+					if (validator.headers.Check(_header) === false)
 						throw createValidationError(
 							'header',
-							handler.validator.headers,
+							validator.headers,
 							_header
 						)
 				}
 
-				if (handler.validator.params?.Check(context.params) === false)
+				if (validator.params?.Check(context.params) === false)
 					throw createValidationError(
 						'params',
-						handler.validator.params,
+						validator.params,
 						context.params
 					)
 
-				if (handler.validator.query?.Check(context.query) === false) {
+				if (validator.query?.Check(context.query) === false)
 					throw createValidationError(
 						'query',
-						handler.validator.query,
+						validator.query,
 						context.query
 					)
-				}
 
-				if (handler.validator.body?.Check(body) === false)
-					throw createValidationError(
-						'body',
-						handler.validator.body,
-						body
-					)
+				if (validator.body?.Check(body) === false)
+					throw createValidationError('body', validator.body, body)
 			}
 
-			for (let i = 0; i < handler.hooks.beforeHandle.length; i++) {
-				let response = handler.hooks.beforeHandle[i](context)
+			for (let i = 0; i < hooks.beforeHandle.length; i++) {
+				let response = hooks.beforeHandle[i](context)
 				if (response instanceof Promise) response = await response
 
 				// `false` is a falsey value, check for null and undefined instead
 				if (response !== null && response !== undefined) {
-					for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
-						let newResponse = handler.hooks.afterHandle[i](
+					for (let i = 0; i < hooks.afterHandle.length; i++) {
+						let newResponse = hooks.afterHandle[i](
 							context,
 							response
 						)
@@ -1182,11 +1224,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					response
 				)
 
-			for (let i = 0; i < handler.hooks.afterHandle.length; i++) {
-				let newResponse = handler.hooks.afterHandle[i](
-					context,
-					response
-				)
+			for (let i = 0; i < hooks.afterHandle.length; i++) {
+				let newResponse = hooks.afterHandle[i](context, response)
 				if (newResponse instanceof Promise)
 					newResponse = await newResponse
 

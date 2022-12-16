@@ -1,3 +1,10 @@
+# 0.1.0.rc.8 - 16 Dec 2022
+Improvement:
+- Infers type from `group`, and `guard`
+
+Change:
+- `Elysia.handle` now only accept valid `URL`
+
 # 0.1.0.rc.7 - 15 Dec 2022
 Improvement:
 - Minor optimization

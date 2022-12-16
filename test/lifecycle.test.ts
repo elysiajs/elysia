@@ -1,6 +1,7 @@
 import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
+import { req } from './utils'
 
 describe('Life Cycle', () => {
 	it('handle onStart', async () => {
@@ -63,18 +64,17 @@ describe('Life Cycle', () => {
 		expect(started).toBe(true)
 	})
 
-	// ? Blocking on https://github.com/oven-sh/bun/issues/1435
-	// it('handle onError', async () => {
-	// 	const app = new Elysia()
-	// 		.get('/', () => {
-	// 			throw new Error('Something')
-	// 		})
-	// 		.onError((error) => {
-	// 			if (error.message === 'Something') return new Response(':P')
-	// 		})
+	it('handle onError', async () => {
+		const app = new Elysia()
+			.get('/', () => {
+				throw new Error('Something')
+			})
+			.onError(({ error }) => {
+				if (error.message === 'Something') return new Response(':P')
+			})
 
-	// 	const res = await app.handle(req('/'))
+		const res = await app.handle(req('/'))
 
-	// 	expect(await res.text()).toBe(':P')
-	// })
+		expect(await res.text()).toBe(':P')
+	})
 })

@@ -1,8 +1,7 @@
 import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-
-const req = (path: string) => new Request(path)
+import { req } from './utils'
 
 describe('Schema', () => {
 	it('validate query', async () => {
@@ -140,7 +139,7 @@ describe('Schema', () => {
 		})
 
 		const valid = await app.handle(
-			new Request('/user?name=salt', {
+			new Request('http://localhost/user?name=salt', {
 				method: 'POST',
 				body,
 				headers: {

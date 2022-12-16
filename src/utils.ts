@@ -11,6 +11,7 @@ import type {
 	TypedSchema
 } from './types'
 
+// ? Internal property
 export const SCHEMA: unique symbol = Symbol('schema')
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
@@ -55,7 +56,7 @@ export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 
 export const getPath = (url: string, queryIndex: number): string =>
 	url.substring(
-		url.charCodeAt(0) === 47 ? 0 : url.indexOf('/', 11),
+		url.indexOf('/', 11),
 		queryIndex === -1 ? url.length : queryIndex
 	)
 

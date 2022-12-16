@@ -10,11 +10,16 @@ export type WithArray<T> = T | T[]
 
 export interface ElysiaInstance<
 	Instance extends {
-		store?: Record<any | typeof SCHEMA, any>
+		store?: Record<any, any> &
+			Record<
+				typeof SCHEMA,
+				Record<string, Partial<Record<HTTPMethod, TypedSchema>>>
+			>
+
 		request?: Record<any, any>
 		schema?: TypedSchema
 	} = {
-		store: {}
+		store: Record<typeof SCHEMA, {}>
 		request: {}
 		schema: {}
 	}
@@ -96,7 +101,9 @@ export interface LifeCycleStore<
 	stop: VoidLifeCycle<Instance>[]
 }
 
-export type BeforeRequestHandler<Store extends Record<string, any> = {}> = (
+export type BeforeRequestHandler<
+	Store extends ElysiaInstance['store'] = ElysiaInstance['store']
+> = (
 	context: PreContext<Store>
 ) => void | Promise<void> | Response | Promise<Response>
 

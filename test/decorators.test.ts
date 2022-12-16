@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../src'
-
-const req = (path: string) => new Request(path)
+import { req } from './utils'
 
 describe('decorators', () => {
 	it('work', async () => {

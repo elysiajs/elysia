@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-const req = (path: string) => new Request(path)
+import { req } from './utils'
 
 describe('Transform', () => {
 	it('Globally Transform', async () => {

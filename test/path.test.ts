@@ -1,8 +1,7 @@
 import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-
-const req = (path: string) => new Request(path)
+import { req } from './utils'
 
 describe('Path', () => {
 	it('Handle root', async () => {
@@ -14,9 +13,7 @@ describe('Path', () => {
 
 	it('Handle multiple level', async () => {
 		const app = new Elysia().get('/this/is/my/deep/nested/root', () => 'Ok')
-		const res = await app.handle(
-			req('http://localhost:8080/this/is/my/deep/nested/root')
-		)
+		const res = await app.handle(req('/this/is/my/deep/nested/root'))
 
 		expect(await res.text()).toBe('Ok')
 	})
@@ -100,20 +97,19 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Wildcard')
 	})
 
-	// ? Blocking on https://github.com/oven-sh/bun/issues/1435
-	// it('Custom error', async () => {
-	// 	const app = new Elysia().onError((error) => {
-	// 		if (error.code === 'NOT_FOUND')
-	// 			return new Response('Not Stonk :(', {
-	// 				status: 404
-	// 			})
-	// 	})
+	it('Custom error', async () => {
+		const app = new Elysia().onError((error) => {
+			if (error.code === 'NOT_FOUND')
+				return new Response('Not Stonk :(', {
+					status: 404
+				})
+		})
 
-	// 	const res = await app.handle(req('/wildcard/okayu'))
+		const res = await app.handle(req('/wildcard/okayu'))
 
-	// 	expect(await res.text()).toBe('Not Stonk :(')
-	// 	expect(res.status).toBe(404)
-	// })
+		expect(await res.text()).toBe('Not Stonk :(')
+		expect(res.status).toBe(404)
+	})
 
 	it('Parse a querystring', async () => {
 		const app = new Elysia().get('/', ({ query: { id } }) => id)
@@ -255,7 +251,7 @@ describe('Path', () => {
 
 	it('Handle absolute path', async () => {
 		const app = new Elysia().get('/', () => 'Hi')
-		const res = await app.handle(req('https://saltyaom.com/'))
+		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('Hi')
 	})

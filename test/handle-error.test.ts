@@ -1,6 +1,7 @@
 import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
+import { req } from './utils'
 
 describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
@@ -72,7 +73,7 @@ describe('Handle Error', () => {
 				throw new Error('NOT_FOUND')
 			})
 
-		const res = await app.handle(new Request('/'))
+		const res = await app.handle(req('/'))
 
 		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
 		expect(res.status).toBe(404)
@@ -89,7 +90,7 @@ describe('Handle Error', () => {
 				throw new Error('NOT_FOUND')
 			})
 
-		const res = await app.handle(new Request('/'))
+		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('aw man')
 		expect(res.status).toBe(418)
