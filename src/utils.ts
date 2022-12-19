@@ -54,7 +54,7 @@ export const mergeHook = (
 export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 	[value][0]
 
-export const getPath = (url: string, queryIndex: number): string =>
+export const getPath = (url: string, queryIndex = url.indexOf('?')): string =>
 	url.substring(
 		url.indexOf('/', 11),
 		queryIndex === -1 ? url.length : queryIndex
@@ -62,7 +62,7 @@ export const getPath = (url: string, queryIndex: number): string =>
 
 export const mapQuery = (
 	url: string,
-	queryIndex: number
+	queryIndex = url.indexOf('?')
 ): Record<string, string> => {
 	if (queryIndex === -1) return {}
 

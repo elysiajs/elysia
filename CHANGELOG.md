@@ -1,3 +1,7 @@
+# 0.1.0.rc.9 - 19 Dec 2022
+Change:
+- Support plugins which use `getPath`, and `mapQuery` on 0.1.0-rc.6
+
 # 0.1.0.rc.8 - 16 Dec 2022
 Improvement:
 - Infers type from `group`, and `guard`
