@@ -12,7 +12,7 @@
 
     /* Language and Environment */
     "target": "ES2020",                                  /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
-    "lib": ["ESNext", "DOM", "ScriptHost"],                                        /* Specify a set of bundled library declaration files that describe the target runtime environment. */
+    "lib": ["ESNext"],                                        /* Specify a set of bundled library declaration files that describe the target runtime environment. */
     // "jsx": "preserve",                                /* Specify what JSX code is generated. */
     // "experimentalDecorators": true,                   /* Enable experimental support for TC39 stage 2 draft decorators. */
     // "emitDecoratorMetadata": true,                    /* Emit design-type metadata for decorated declarations in source files. */
@@ -55,7 +55,7 @@
     // "importHelpers": true,                            /* Allow importing helper functions from tslib once per project, instead of including them per-file. */
     // "importsNotUsedAsValues": "remove",               /* Specify emit/checking behavior for imports that are only used for types. */
     // "downlevelIteration": true,                       /* Emit more compliant, but verbose and less performant JavaScript for iteration. */
-    // "sourceRoot": "",                                 /* Specify the root path for debuggers to find the reference source code. */
+    // r"sourceRoot": "",                                 /* Specify the root path for debuggers to find the reference source code. */
     // "mapRoot": "",                                    /* Specify the location where debugger should locate map files instead of generated locations. */
     // "inlineSourceMap": true,                          /* Include sourcemap files inside the emitted JavaScript. */
     // "inlineSources": true,                            /* Include source code in the sourcemaps inside the emitted JavaScript. */

@@ -1,3 +1,8 @@
+# 0.1.0.rc.10 - 21 Dec 2022
+Change:
+- Remove cjs format as Bun can import ESM from CJS
+- Remove comment on build file, rely on .t.ds instead
+
 # 0.1.0.rc.9 - 19 Dec 2022
 Change:
 - Support plugins which use `getPath`, and `mapQuery` on 0.1.0-rc.6

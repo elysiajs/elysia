@@ -1105,10 +1105,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				const contentType = request.headers.get('content-type')
 
 				if (contentType) {
-					const parse = this.event.parse
-
-					for (let i = 0; i < parse.length; i++) {
-						let temp = parse[i](request, contentType)
+					for (let i = 0; i < this.event.parse.length; i++) {
+						let temp = this.event.parse[i](request, contentType)
 						if (temp instanceof Promise) temp = await temp
 
 						if (temp) {
@@ -1117,7 +1115,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						}
 					}
 
-					if (!body)
+					// body might be empty string
+					if (body === undefined)
 						switch (contentType) {
 							case 'application/json':
 								body = await request.json()
@@ -1130,7 +1129,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				}
 			}
 
-			const hooks = handler.hooks
 			const context: Context = (
 				this.decorators
 					? clone(this.decorators)
@@ -1152,6 +1150,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				context.params = route?.params ?? {}
 				context.query = mapQuery(request.url, index)
 			}
+
+			const hooks = handler.hooks
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)

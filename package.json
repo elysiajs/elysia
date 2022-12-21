@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.1.0-rc.9",
+  "version": "0.1.0-rc.10",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -9,7 +9,7 @@
   },
   "main": "./dist/index.js",
   "exports": {
-    "require": "./dist/cjs/index.js",
+    "require": "./dist/index.js",
     "import": "./dist/index.js",
     "node": "./dist/index.js",
     "default": "./dist/index.js"
@@ -31,9 +31,7 @@
   "scripts": {
     "test": "bun wiptest",
     "dev": "bun run --hot example/http.ts",
-    "build": "rimraf dist && npm run build:cjs && npm run build:esm",
-    "build:cjs": "tsc --project tsconfig.cjs.json",
-    "build:esm": "tsc --project tsconfig.esm.json",
+    "build": "rimraf dist && tsc --project tsconfig.esm.json",
     "release": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
