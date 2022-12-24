@@ -1,3 +1,46 @@
+# 0.1.0 - 24 Dec 2022
+[[Reburn](https://youtu.be/xVPDszGmTgg?t=1139)] is the first *stable* beta release for Elysia.
+
+Happy Christmas, wishing you happy tonight as we release the first stable release of Elysia.
+
+With this API is now stabilized, and Elysia will focus on growing its ecosystem and plugins for common patterns.
+
+## Eden
+Introducing [Eden](https://elysiajs.com/collections/eden.html), a fully type-safe client for Elysia server like tRPC.
+
+A 600 bytes client for Elysia server, no code generation need, creating a fully type-safe, and auto-complete for both client and server.
+
+See Eden in action [on Twitter](https://twitter.com/saltyAom/status/1602362204799438848?s=20&t=yqyxaNx_W0MNK9u3wnaK3g)
+
+## The fastest
+With a lot effort put into micro-optimization and re-architecture, Elysia is the fastest Bun web framework benchmarked on 24 December 2022, outperformed 2/3 category put into test.
+
+See benchmark results at [Bun http benchmark](https://github.com/SaltyAom/bun-http-framework-benchmark)
+
+## Improved Documentation
+Elysia now have an improved documentation at [elysiajs.com](https://elysiajs.com).
+
+Now with a proper landing page, searchable content, and revised content put into.
+
+## Afterward
+Merry Christmas, and happy new year.
+
+As 0.1 released, we recommended to give Elysia a try and build stuff with it.
+
+With the wonderful tools, we are happy to looking forward to see what wonderful software will you build.
+
+---
+
+> Fly away, let me fly away
+> Never hide in dark
+> Head on, start a riot
+> Fly away, defying fate in my way
+> Crush it
+> Make it!
+> Feel
+> My
+> Heart!
+
 # 0.1.0.rc.10 - 21 Dec 2022
 Change:
 - Remove cjs format as Bun can import ESM from CJS
