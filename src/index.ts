@@ -4,7 +4,6 @@ import { Router } from './router'
 import { mapResponse, mapEarlyResponse } from './handler'
 import {
 	mapQuery,
-	getPath,
 	clone,
 	mergeHook,
 	mergeDeep,
@@ -138,35 +137,28 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			path
 		})
 
+		const validator =
+			body || header || params || query || response
+				? {
+						body,
+						header,
+						params,
+						query,
+						response
+				  }
+				: undefined
+
 		if (path === '/*')
 			this.fallbackRoute[method] = {
 				handle: handler,
 				hooks: mergeHook(clone(this.event), hook as RegisteredHook),
-				validator:
-					body || header || params || query || response
-						? {
-								body,
-								header,
-								params,
-								query,
-								response
-						  }
-						: undefined
+				validator
 			}
 
 		this.router.register(path)[method] = {
 			handle: handler,
 			hooks: mergeHook(clone(this.event), hook as RegisteredHook),
-			validator:
-				body || header || params || query || response
-					? {
-							body,
-							header,
-							params,
-							query,
-							response
-					  }
-					: undefined
+			validator
 		}
 
 		if (!this.config.strictPath && path !== '/')
@@ -1091,12 +1083,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 
 			const index = request.url.indexOf('?', 12)
-			const route = this.router.find(getPath(request.url, index))
+			const route = this.router.find(request.url, index)
 			if (!route) throw new Error('NOT_FOUND')
 
 			const handler: ComposedHandler | undefined =
-				route.store[request.method] ??
-				route.store.ALL ??
+				route.store[request.method] ||
+				route.store.ALL ||
 				this.fallbackRoute[request.method as HTTPMethod]
 			if (!handler) throw new Error('NOT_FOUND')
 
@@ -1115,7 +1107,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						}
 					}
 
-					// body might be empty string
+					// body might be empty string thus can't use !body
 					if (body === undefined)
 						switch (contentType) {
 							case 'application/json':
@@ -1129,29 +1121,27 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				}
 			}
 
-			const context: Context = (
-				this.decorators
-					? clone(this.decorators)
-					: {
-							request,
-							body,
-							set,
-							store: this.store,
-							params: route?.params ?? {},
-							query: mapQuery(request.url, index)
-					  }
-			) as any
+			const hooks = handler.hooks
+			let context: Context
 
 			if (this.decorators) {
+				context = clone(this.decorators) as any as Context
+
 				context.request = request
 				context.body = body
 				context.set = set
 				context.store = this.store
-				context.params = route?.params ?? {}
+				context.params = route?.params || {}
 				context.query = mapQuery(request.url, index)
-			}
-
-			const hooks = handler.hooks
+			} else
+				context = {
+					request,
+					body,
+					set,
+					store: this.store,
+					params: route?.params || {},
+					query: mapQuery(request.url, index)
+				}
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)
@@ -1293,7 +1283,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				throw new Error('Port must be a numeric value')
 		}
 
-		this.server = Bun.serve(
+		const serve: Serve =
 			typeof options === 'object'
 				? {
 						...this.config.serve,
@@ -1305,7 +1295,19 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						port: options,
 						fetch
 				  }
-		)
+
+		const key = `$$Elysia:${serve.port}`
+
+		// ! Blasphemy !
+		// @ts-ignore
+		if (globalThis[key]) {
+			// @ts-ignore
+			this.server = globalThis[key]
+			this.server!.reload(serve)
+		} else {
+			// @ts-ignore
+			globalThis[key] = this.server = Bun.serve(serve)
+		}
 
 		for (let i = 0; i < this.event.start.length; i++)
 			this.event.start[i](this)
@@ -1342,6 +1344,24 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			await this.event.stop[i](this)
 	}
 }
+
+// // Hot reload
+// if (typeof Bun !== 'undefined') {
+// 	// @ts-ignore
+// 	if (globalThis[key])
+// 		// @ts-ignore
+// 		globalThis[key].reload({
+// 			port,
+// 			fetch: fe
+// 		})
+// 	else {
+// 		// @ts-ignore
+// 		globalThis[key] = Bun.serve({
+// 			port,
+// 			fetch: fe
+// 		})
+// 	}
+// }
 
 export { Elysia }
 export { Type as t } from '@sinclair/typebox'

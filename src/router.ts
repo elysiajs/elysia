@@ -25,6 +25,8 @@
  * @see https://github.com/medleyjs/router
  */
 
+import { getPath } from './utils'
+
 export interface FindResult {
 	store: Record<string, any>
 	params: Record<string, any>
@@ -222,7 +224,9 @@ export class Router {
 		return node.store!
 	}
 
-	find(url: string): FindResult | null {
+	find(url: string, queryIndex: number): FindResult | null {
+		url = getPath(url, queryIndex)
+
 		return matchRoute(url, url.length, this._root, 0)
 	}
 }

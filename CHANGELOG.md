@@ -1,3 +1,10 @@
+# 0.1.1 - 28 Dec 2022
+Improvement:
+- Parse encoded URI on querystring
+- Exclude URI fragment from querystring
+- Blasphemy hack for updating Elysia server using `--hot`
+- Exclude fragment on `getPath`
+
 # 0.1.0 - 24 Dec 2022
 [[Reburn](https://youtu.be/xVPDszGmTgg?t=1139)] is the first *stable* beta release for Elysia.
 

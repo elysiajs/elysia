@@ -54,11 +54,16 @@ export const mergeHook = (
 export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 	[value][0]
 
-export const getPath = (url: string, queryIndex = url.indexOf('?')): string =>
-	url.substring(
-		url.indexOf('/', 11),
-		queryIndex === -1 ? url.length : queryIndex
-	)
+export const getPath = (url: string, queryIndex = url.indexOf('?')): string => {
+	if (queryIndex === -1) {
+		const fragmentIndex = url.indexOf('#')
+
+		if (fragmentIndex !== -1) queryIndex = fragmentIndex
+		else queryIndex = url.length
+	}
+
+	return url.substring(url.indexOf('/', 11), queryIndex)
+}
 
 export const mapQuery = (
 	url: string,
@@ -75,14 +80,24 @@ export const mapQuery = (
 		const sep = paths.indexOf('&', 4)
 		if (sep === -1) {
 			const equal = paths.indexOf('=', 1)
-			query[paths.slice(1, equal)] = paths.slice(equal + 1)
+
+			let value = paths.slice(equal + 1)
+			const hashIndex = value.indexOf('#')
+			if (hashIndex !== -1) value = value.substring(0, hashIndex)
+			if (value.indexOf('%') !== -1) value = decodeURI(value)
+
+			query[paths.slice(1, equal)] = value
 
 			break
 		}
 
 		const path = paths.slice(0, sep)
 		const equal = path.indexOf('=')
-		query[path.slice(1, equal)] = path.slice(equal + 1)
+
+		let value = path.slice(equal + 1)
+		if (value.indexOf('%') !== -1) value = decodeURI(value)
+
+		query[path.slice(1, equal)] = value
 
 		paths = paths.slice(sep)
 	}

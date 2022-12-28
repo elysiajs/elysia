@@ -1,11 +1,5 @@
 import type { Context } from './context'
 
-const jsonHeader = {
-	headers: {
-		'content-type': 'application/json'
-	}
-}
-
 const isNotEmpty = (obj: Object) => {
 	for (const x in obj) return true
 
@@ -87,7 +81,11 @@ export const mapEarlyResponse = (response: unknown, set: Context['set']) => {
 					return errorToResponse(response, set.headers)
 				if (response instanceof Blob) return new Response(response)
 
-				return new Response(JSON.stringify(response), jsonHeader)
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
 
 			// ? Maybe response or Blob
 			case 'function':
@@ -184,7 +182,11 @@ export const mapResponse = (
 					return errorToResponse(response, set.headers)
 				if (response instanceof Blob) return new Response(response)
 
-				return new Response(JSON.stringify(response), jsonHeader)
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
 
 			// ? Maybe response or Blob
 			case 'function':

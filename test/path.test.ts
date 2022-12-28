@@ -4,14 +4,14 @@ import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
 
 describe('Path', () => {
-	it('Handle root', async () => {
+	it('handle root', async () => {
 		const app = new Elysia().get('/', () => 'Hi')
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('Hi')
 	})
 
-	it('Handle multiple level', async () => {
+	it('handle multiple level', async () => {
 		const app = new Elysia().get('/this/is/my/deep/nested/root', () => 'Ok')
 		const res = await app.handle(req('/this/is/my/deep/nested/root'))
 
@@ -136,7 +136,7 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Shirakami Fubuki')
 	})
 
-	it('Handle body', async () => {
+	it('handle body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			schema: {
 				body: t.String()
@@ -201,16 +201,17 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Elysia')
 	})
 
-	it('Handle group', async () => {
-		const app = new Elysia().group('/gamer', (app) => {
+	it('handle group', async () => {
+		const app = new Elysia().group('/gamer', (app) =>
 			app.get('/korone', () => 'Yubi Yubi!')
-		})
-		const res = await app.handle(req('/gamer/korone'))
+		)
 
-		expect(await res.text()).toBe('Yubi Yubi!')
+		const res = await app.handle(req('/gamer/korone')).then((r) => r.text())
+
+		expect(await res).toBe('Yubi Yubi!')
 	})
 
-	it('Handle plugin', async () => {
+	it('handle plugin', async () => {
 		const plugin = (app: Elysia) => app.get('/korone', () => 'Yubi Yubi!')
 		const app = new Elysia().use(plugin)
 
@@ -219,7 +220,7 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Yubi Yubi!')
 	})
 
-	it('Handle error', async () => {
+	it('handle error', async () => {
 		const error = 'Pardun?'
 
 		const plugin = (app: Elysia) =>
@@ -234,7 +235,7 @@ describe('Path', () => {
 		expect(message).toBe(error)
 	})
 
-	it('Handle async', async () => {
+	it('handle async', async () => {
 		const app = new Elysia().get('/async', async () => {
 			await new Promise<void>((resolve) =>
 				setTimeout(() => {
@@ -249,14 +250,14 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Hi')
 	})
 
-	it('Handle absolute path', async () => {
+	it('handle absolute path', async () => {
 		const app = new Elysia().get('/', () => 'Hi')
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('Hi')
 	})
 
-	it('Handle route which start with same letter', async () => {
+	it('handle route which start with same letter', async () => {
 		const app = new Elysia()
 			.get('/aa', () => 'route 1')
 			.get('/ab', () => 'route 2')
@@ -266,7 +267,7 @@ describe('Path', () => {
 		expect(text).toBe('route 2')
 	})
 
-	it('Handle route which start with same letter', async () => {
+	it('handle route which start with same letter', async () => {
 		const app = new Elysia()
 			.get('/aa', () => 'route 1')
 			.get('/ab', () => 'route 2')
@@ -290,14 +291,14 @@ describe('Path', () => {
 		expect(res.headers.get('Server')).toBe('Elysia')
 	})
 
-	it('Handle non start /', async () => {
+	it('handle non start /', async () => {
 		const app = new Elysia().get('', () => 'Hi')
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('Hi')
 	})
 
-	it('Handle *', async () => {
+	it('handle *', async () => {
 		const app = new Elysia().get('*', () => 'Hi')
 		const get = await app.handle(req('/')).then((r) => r.text())
 		const post = await app
@@ -308,7 +309,7 @@ describe('Path', () => {
 		expect(post).toBe('Hi')
 	})
 
-	it('Handle * on multiple methods', async () => {
+	it('handle * on multiple methods', async () => {
 		const app = new Elysia()
 			.get('/part', () => 'Part')
 			.options('*', () => 'Hi')
@@ -324,5 +325,36 @@ describe('Path', () => {
 
 		expect(get).toBe('Part')
 		expect(options).toBe('Hi')
+	})
+
+	it('decode uri', async () => {
+		const app = new Elysia().get('/', ({ query }) => query)
+
+		const res = await app
+			.handle(req('/?name=a%20b&c=d%20e'))
+			.then((r) => r.json())
+
+		expect(res).toEqual({
+			name: 'a b',
+			c: 'd e'
+		})
+	})
+
+	it('exclude fragment', async () => {
+		const app = new Elysia().get('/', ({ query }) => query)
+
+		const res = await app.handle(req('/#hi')).then((r) => r.json())
+
+		expect(res).toEqual({})
+	})
+
+	it('exclude fragment on querystring', async () => {
+		const app = new Elysia().get('/', ({ query }) => query)
+
+		const res = await app.handle(req('/?a=b#a')).then((r) => r.json())
+
+		expect(res).toEqual({
+			a: 'b'
+		})
 	})
 })

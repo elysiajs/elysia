@@ -83,7 +83,7 @@ const app = new Elysia()
 	})
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) => {
-		app.onBeforeHandle<{
+		return app.onBeforeHandle<{
 			query: {
 				name: string
 			}
