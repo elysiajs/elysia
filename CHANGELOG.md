@@ -1,3 +1,7 @@
+# 0.1.2 - 31 Dec 2022
+Bug fix:
+- onRequest doesn't run in `group` and `guard`
+
 # 0.1.1 - 28 Dec 2022
 Improvement:
 - Parse encoded URI on querystring
