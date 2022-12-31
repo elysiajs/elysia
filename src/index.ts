@@ -453,9 +453,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				ElysiaInstance['store']
 			schema: Instance['schema']
 		}>()
-		run(instance)
 
-		this.store = mergeDeep(this.store, instance.store) as any
+		instance.store = this.store
+
+		const sandbox = run(instance)
+
+		if (sandbox.event.request.length)
+			this.event.request = [
+				...this.event.request,
+				...sandbox.event.request
+			]
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
@@ -515,7 +522,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA
 			>
 		}>()
-		run(instance)
+
+		instance.store = this.store
+
+		const sandbox = run(instance)
+
+		if (sandbox.event.request.length)
+			this.event.request = [
+				...this.event.request,
+				...sandbox.event.request
+			]
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks: localHook }) => {
@@ -1073,7 +1089,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		try {
 			for (let i = 0; i < this.event.request.length; i++) {
-				let response = this.event.request[i]({
+				const onRequest = this.event.request[i]
+				let response = onRequest({
 					request,
 					store: this.store,
 					set
@@ -1082,7 +1099,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				if (response) return response
 			}
 
-			const index = request.url.indexOf('?', 12)
+			// Shortest possible: ws://a.a/
+			const index = request.url.indexOf('?', 10)
 			const route = this.router.find(request.url, index)
 			if (!route) throw new Error('NOT_FOUND')
 
