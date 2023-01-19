@@ -35,7 +35,7 @@ export type Handler<
 	CatchResponse = Route['response']
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
-) => CatchResponse extends Route['response']
+) => Route['response'] extends CatchResponse
 	? CatchResponse | Promise<CatchResponse> | Response
 	: Route['response'] | Promise<Route['response']> | Response
 
@@ -105,7 +105,7 @@ export type BeforeRequestHandler<
 	Store extends ElysiaInstance['store'] = ElysiaInstance['store']
 > = (
 	context: PreContext<Store>
-) => void | Promise<void> | Response | Promise<Response>
+) => any
 
 export interface RegisteredHook<
 	Instance extends ElysiaInstance = ElysiaInstance
@@ -244,11 +244,11 @@ export type ElysiaRoute<
 				Record<
 					Method,
 					RouteToSchema<Schema, Instance, Path> & {
-						response: CatchResponse extends RouteToSchema<
+						response: RouteToSchema<
 							Schema,
 							Instance,
 							Path
-						>['response']
+						>['response'] extends CatchResponse
 							? CatchResponse
 							: RouteToSchema<Schema, Instance, Path>['response']
 					}
@@ -296,6 +296,12 @@ export interface ElysiaConfig {
 	 * @default false
 	 */
 	strictPath: boolean
+	/**
+	 * Maximum querystring
+	 *
+	 * @default 48
+	 */
+	queryLimit: number
 	serve?: Partial<Serve>
 }
 
@@ -424,3 +430,7 @@ export type IsAny<T> = unknown extends T
 		? false
 		: true
 	: false
+
+export type MaybePromise<T> = T | Promise<T>
+
+export type IsNever<T> = [T] extends [never] ? true : false

@@ -1,3 +1,16 @@
+# 0.2.0-beta.0 - 17 Jan 2023
+Feature:
+- Support for Async / lazy-load plugin
+
+Improvement:
+- Decode URI parameter path parameter
+- Handle union type correctly
+
+# 0.1.3 - 12 Jan 2023
+Improvement:
+- Validate `Response` object
+- Union type inference on response
+
 # 0.1.2 - 31 Dec 2022
 Bug fix:
 - onRequest doesn't run in `group` and `guard`

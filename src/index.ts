@@ -42,7 +42,9 @@ import type {
 	MergeSchema,
 	ListenCallback,
 	NoReturnHandler,
-	ElysiaRoute
+	ElysiaRoute,
+	MaybePromise,
+	IsNever
 } from './types'
 
 /**
@@ -84,12 +86,15 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	private router = new Router()
 	// This router is fallback for catch all route
-	private fallbackRoute: Partial<Record<HTTPMethod, Record<string, any>>> = {}
+	private fallbackRoute: Partial<Record<HTTPMethod, ComposedHandler>> = {}
 	protected routes: InternalRoute<Instance>[] = []
+
+	private lazyLoadModules: Promise<Elysia>[] = []
 
 	constructor(config: Partial<ElysiaConfig> = {}) {
 		this.config = {
 			strictPath: false,
+			queryLimit: 48,
 			...config
 		}
 	}
@@ -562,21 +567,57 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	use<
-		NewElysia extends Elysia<any> = Elysia<any>,
-		Params extends Elysia = Elysia<any>
+		NewElysia extends MaybePromise<Elysia<any>> = Elysia<any>,
+		Params extends Elysia = Elysia<any>,
+		LazyLoadElysia extends never | ElysiaInstance = never
 	>(
-		plugin: (
-			app: Params extends Elysia<infer ParamsInstance>
-				? IsAny<ParamsInstance> extends true
-					? this
-					: Params
-				: Params
-		) => NewElysia
-	): NewElysia extends Elysia<infer NewInstance>
+		plugin:
+			| MaybePromise<
+					(
+						app: Params extends Elysia<infer ParamsInstance>
+							? IsAny<ParamsInstance> extends true
+								? this
+								: Params
+							: Params
+					) => MaybePromise<NewElysia>
+			  >
+			| Promise<{
+					default: (
+						elysia: Elysia<any>
+					) => MaybePromise<Elysia<LazyLoadElysia>>
+			  }>
+	): IsNever<LazyLoadElysia> extends false
+		? Elysia<LazyLoadElysia & Instance>
+		: NewElysia extends Elysia<infer NewInstance>
+		? IsNever<NewInstance> extends true
+			? Elysia<Instance>
+			: Elysia<NewInstance & Instance>
+		: NewElysia extends Promise<Elysia<infer NewInstance>>
 		? Elysia<NewInstance & Instance>
 		: this {
-		// ? Type enforce on function already
-		return plugin(this as unknown as any) as unknown as any
+		if (plugin instanceof Promise) {
+			this.lazyLoadModules.push(
+				plugin.then((plugin) => {
+					if (typeof plugin === 'function')
+						return plugin(this as unknown as any) as unknown as any
+
+					return plugin.default(
+						this as unknown as any
+					) as unknown as any
+				})
+			)
+
+			return this as unknown as any
+		}
+
+		const instance = plugin(this as unknown as any) as unknown as any
+		if (instance instanceof Promise) {
+			this.lazyLoadModules.push(instance)
+
+			return this as unknown as any
+		}
+
+		return instance
 	}
 
 	/**
@@ -1096,6 +1137,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					set
 				})
 				if (response instanceof Promise) response = await response
+
+				response = mapEarlyResponse(response, set)
 				if (response) return response
 			}
 
@@ -1225,12 +1268,27 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			let response = handler.handle(context)
 			if (response instanceof Promise) response = await response
 
-			if (handler.validator?.response?.Check(response) === false)
-				throw createValidationError(
-					'response',
-					handler.validator.response,
-					response
-				)
+			if (handler.validator?.response)
+				if (response instanceof Response) {
+					let res: string | Object
+
+					// @ts-ignore
+					if (handler.validator.response.schema.type === 'object')
+						res = await response.clone().json()
+					else res = await response.clone().text()
+
+					if (handler.validator.response.Check(res) === false)
+						throw createValidationError(
+							'response',
+							handler.validator.response,
+							response
+						)
+				} else if (handler.validator.response.Check(response) === false)
+					throw createValidationError(
+						'response',
+						handler.validator.response,
+						response
+					)
 
 			for (let i = 0; i < hooks.afterHandle.length; i++) {
 				let newResponse = hooks.afterHandle[i](context, response)
@@ -1332,6 +1390,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		if (callback) callback(this.server!)
 
+		Promise.all(this.lazyLoadModules).then(() => {
+			Bun.gc(true)
+		})
+
 		return this
 	}
 
@@ -1361,25 +1423,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		for (let i = 0; i < this.event.stop.length; i++)
 			await this.event.stop[i](this)
 	}
-}
 
-// // Hot reload
-// if (typeof Bun !== 'undefined') {
-// 	// @ts-ignore
-// 	if (globalThis[key])
-// 		// @ts-ignore
-// 		globalThis[key].reload({
-// 			port,
-// 			fetch: fe
-// 		})
-// 	else {
-// 		// @ts-ignore
-// 		globalThis[key] = Bun.serve({
-// 			port,
-// 			fetch: fe
-// 		})
-// 	}
-// }
+	/**
+	 * Wait until all lazy loaded modules all load is fully
+	 */
+	get modules() {
+		return Promise.all(this.lazyLoadModules)
+	}
+}
 
 export { Elysia }
 export { Type as t } from '@sinclair/typebox'
@@ -1417,5 +1468,7 @@ export type {
 	UnwrapSchema,
 	LifeCycleStore,
 	VoidLifeCycle,
-	SchemaValidator
+	SchemaValidator,
+	ElysiaRoute,
+	ExtractPath
 } from './types'

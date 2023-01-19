@@ -192,4 +192,20 @@ describe('Transform', () => {
 
 		expect(await res.text()).toBe('number')
 	})
+
+	it('Map returned value', async () => {
+		const app = new Elysia()
+			.onTransform<{
+				params: {
+					id?: number
+				}
+			}>((request) => {
+				if (request.params?.id) request.params.id = +request.params.id
+			})
+			.get('/id/:id', ({ params: { id } }) => typeof id)
+		const res = await app.handle(req('/id/1'))
+
+		expect(await res.text()).toBe('number')
+	})
+
 })

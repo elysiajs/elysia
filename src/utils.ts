@@ -8,7 +8,8 @@ import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,
 	LocalHook,
-	TypedSchema
+	TypedSchema,
+	RegisteredHook
 } from './types'
 
 // ? Internal property
@@ -22,7 +23,7 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 export const mergeHook = (
 	a: LocalHook<any> | LifeCycleStore<any>,
 	b: LocalHook<any>
-): LocalHook<any, any> => {
+): RegisteredHook<any> => {
 	const aSchema = 'schema' in a ? (a.schema as TypedSchema) : null
 	const bSchema = b && 'schema' in b ? b.schema : null
 
@@ -37,7 +38,7 @@ export const mergeHook = (
 						query: bSchema?.query ?? aSchema?.query,
 						response: bSchema?.response ?? aSchema?.response
 				  } as TypedSchema)
-				: null,
+				: undefined,
 		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []),
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle ?? [],
@@ -67,7 +68,7 @@ export const getPath = (url: string, queryIndex = url.indexOf('?')): string => {
 
 export const mapQuery = (
 	url: string,
-	queryIndex = url.indexOf('?')
+	queryIndex = url.indexOf('?'),
 ): Record<string, string> => {
 	if (queryIndex === -1) return {}
 
@@ -79,14 +80,14 @@ export const mapQuery = (
 		// Skip ?/&, and min length of query is 3, so start looking at 1 + 3
 		const sep = paths.indexOf('&', 4)
 		if (sep === -1) {
-			const equal = paths.indexOf('=', 1)
+			const equal = paths.indexOf('=')
 
 			let value = paths.slice(equal + 1)
 			const hashIndex = value.indexOf('#')
 			if (hashIndex !== -1) value = value.substring(0, hashIndex)
 			if (value.indexOf('%') !== -1) value = decodeURI(value)
 
-			query[paths.slice(1, equal)] = value
+			query[paths.slice(1, equal)] = decodeURI(value)
 
 			break
 		}
