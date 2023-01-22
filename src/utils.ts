@@ -63,7 +63,7 @@ export const getPath = (url: string, queryIndex = url.indexOf('?')): string => {
 		else queryIndex = url.length
 	}
 
-	return url.slice(url.indexOf('/', 9), queryIndex)
+	return url.substring(url.indexOf('/', 9), queryIndex)
 }
 
 export const mapQuery = (
