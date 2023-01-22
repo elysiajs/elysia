@@ -1,3 +1,15 @@
+# 0.2.0-beta.1 - 22 Jan 2023
+Breaking Change:
+- `onParse` now accepts `(context: PreContext, contentType: string)` instead of `(request: Request, contentType: string)`
+    - To migrate, add `.request` to context to access `Request`
+
+Feature:
+- `onRequest` and `onParse` now can access `PreContext`
+- Support `application/x-www-form-urlencoded` by default
+
+Improvement:
+- body parser now parse `content-type` with extra attribute eg. `application/json;charset=utf-8`
+
 # 0.2.0-beta.0 - 17 Jan 2023
 Feature:
 - Support for Async / lazy-load plugin

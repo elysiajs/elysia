@@ -135,7 +135,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		)
 
 		registerSchemaPath({
-			// @ts-ignore
 			schema: this.store[SCHEMA],
 			hook,
 			method,
@@ -209,7 +208,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	onRequest(handler: BeforeRequestHandler<Instance['store']>) {
+	onRequest<Route extends OverwritableTypeRoute = TypedRoute>(
+		handler: BeforeRequestHandler<Route, Instance>
+	) {
 		this.event.request.push(handler)
 
 		return this
@@ -234,7 +235,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	onParse(parser: BodyParser) {
+	onParse(parser: BodyParser<any, Instance>) {
 		this.event.parse.splice(this.event.parse.length - 1, 0, parser)
 
 		return this
@@ -1128,14 +1129,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			headers: {}
 		}
 
+		let context: Context
+		if (this.decorators) {
+			context = clone(this.decorators) as any as Context
+
+			context.request = request
+			context.set = set
+			context.store = this.store
+		} else {
+			// @ts-ignore
+			context = {
+				set,
+				store: this.store,
+				request
+			}
+		}
+
 		try {
 			for (let i = 0; i < this.event.request.length; i++) {
 				const onRequest = this.event.request[i]
-				let response = onRequest({
-					request,
-					store: this.store,
-					set
-				})
+				let response = onRequest(context)
 				if (response instanceof Promise) response = await response
 
 				response = mapEarlyResponse(response, set)
@@ -1153,13 +1166,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				this.fallbackRoute[request.method as HTTPMethod]
 			if (!handler) throw new Error('NOT_FOUND')
 
+			const hooks = handler.hooks
+
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET') {
-				const contentType = request.headers.get('content-type')
+				let contentType = request.headers.get('content-type')
 
 				if (contentType) {
+					const index = contentType.indexOf(';')
+					if (index !== -1) contentType = contentType.slice(0, index)
+
 					for (let i = 0; i < this.event.parse.length; i++) {
-						let temp = this.event.parse[i](request, contentType)
+						let temp = this.event.parse[i](context, contentType)
 						if (temp instanceof Promise) temp = await temp
 
 						if (temp) {
@@ -1169,7 +1187,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					}
 
 					// body might be empty string thus can't use !body
-					if (body === undefined)
+					if (body === undefined) {
 						switch (contentType) {
 							case 'application/json':
 								body = await request.json()
@@ -1178,31 +1196,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							case 'text/plain':
 								body = await request.text()
 								break
+
+							case 'application/x-www-form-urlencoded':
+								body = mapQuery(await request.text(), null)
+								break
 						}
+					}
 				}
 			}
 
-			const hooks = handler.hooks
-			let context: Context
-
-			if (this.decorators) {
-				context = clone(this.decorators) as any as Context
-
-				context.request = request
-				context.body = body
-				context.set = set
-				context.store = this.store
-				context.params = route?.params || {}
-				context.query = mapQuery(request.url, index)
-			} else
-				context = {
-					request,
-					body,
-					set,
-					store: this.store,
-					params: route?.params || {},
-					query: mapQuery(request.url, index)
-				}
+			context.body = body
+			context.params = route?.params || {}
+			context.query = mapQuery(request.url, index)
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)
@@ -1268,27 +1273,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			let response = handler.handle(context)
 			if (response instanceof Promise) response = await response
 
-			if (handler.validator?.response)
-				if (response instanceof Response) {
-					let res: string | Object
-
-					// @ts-ignore
-					if (handler.validator.response.schema.type === 'object')
-						res = await response.clone().json()
-					else res = await response.clone().text()
-
-					if (handler.validator.response.Check(res) === false)
-						throw createValidationError(
-							'response',
-							handler.validator.response,
-							response
-						)
-				} else if (handler.validator.response.Check(response) === false)
-					throw createValidationError(
-						'response',
-						handler.validator.response,
-						response
-					)
+			if (handler.validator?.response?.Check(response) === false)
+				throw createValidationError(
+					'response',
+					handler.validator.response,
+					response
+				)
 
 			for (let i = 0; i < hooks.afterHandle.length; i++) {
 				let newResponse = hooks.afterHandle[i](context, response)

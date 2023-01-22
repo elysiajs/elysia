@@ -64,15 +64,18 @@ export type VoidLifeCycle<Instance extends ElysiaInstance = ElysiaInstance> =
 	| ((app: Elysia<Instance>) => void)
 	| ((app: Elysia<Instance>) => Promise<void>)
 
-export type BodyParser = (
-	request: Request,
+export type BodyParser<
+	Route extends TypedRoute = TypedRoute,
+	Instance extends ElysiaInstance = ElysiaInstance
+> = (
+	context: PreContext<Route, Instance['store']> & Instance['request'],
 	contentType: string
 ) => any | Promise<any>
 
 export interface LifeCycle<Instance extends ElysiaInstance = ElysiaInstance> {
 	start: VoidLifeCycle<Instance>
-	request: BeforeRequestHandler
-	parse: BodyParser
+	request: BeforeRequestHandler<any, Instance>
+	parse: BodyParser<any, Instance>
 	transform: NoReturnHandler<any, Instance>
 	beforeHandle: Handler<any, Instance>
 	afterHandle: AfterRequestHandler<any, Instance>
@@ -92,8 +95,8 @@ export interface LifeCycleStore<
 	Instance extends ElysiaInstance = ElysiaInstance
 > {
 	start: VoidLifeCycle<Instance>[]
-	request: BeforeRequestHandler[]
-	parse: BodyParser[]
+	request: BeforeRequestHandler<any, Instance>[]
+	parse: BodyParser<any, Instance>[]
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
@@ -102,10 +105,9 @@ export interface LifeCycleStore<
 }
 
 export type BeforeRequestHandler<
-	Store extends ElysiaInstance['store'] = ElysiaInstance['store']
-> = (
-	context: PreContext<Store>
-) => any
+	Route extends TypedRoute = TypedRoute,
+	Instance extends ElysiaInstance = ElysiaInstance
+> = (context: PreContext<Route, Instance['store']> & Instance['request']) => any
 
 export interface RegisteredHook<
 	Instance extends ElysiaInstance = ElysiaInstance

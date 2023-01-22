@@ -68,31 +68,32 @@ export const getPath = (url: string, queryIndex = url.indexOf('?')): string => {
 
 export const mapQuery = (
 	url: string,
-	queryIndex = url.indexOf('?'),
+	queryIndex: number | null = url.indexOf('?')
 ): Record<string, string> => {
 	if (queryIndex === -1) return {}
 
 	const query: Record<string, string> = {}
-	let paths = url.slice(queryIndex)
+	if (queryIndex) url = url.slice(queryIndex)
+	else url = ';' + url
 
 	// eslint-disable-next-line no-constant-condition
 	while (true) {
 		// Skip ?/&, and min length of query is 3, so start looking at 1 + 3
-		const sep = paths.indexOf('&', 4)
+		const sep = url.indexOf('&', 4)
 		if (sep === -1) {
-			const equal = paths.indexOf('=')
+			const equal = url.indexOf('=')
 
-			let value = paths.slice(equal + 1)
+			let value = url.slice(equal + 1)
 			const hashIndex = value.indexOf('#')
 			if (hashIndex !== -1) value = value.substring(0, hashIndex)
 			if (value.indexOf('%') !== -1) value = decodeURI(value)
 
-			query[paths.slice(1, equal)] = decodeURI(value)
+			query[url.slice(1, equal)] = decodeURI(value)
 
 			break
 		}
 
-		const path = paths.slice(0, sep)
+		const path = url.slice(0, sep)
 		const equal = path.indexOf('=')
 
 		let value = path.slice(equal + 1)
@@ -100,7 +101,7 @@ export const mapQuery = (
 
 		query[path.slice(1, equal)] = value
 
-		paths = paths.slice(sep)
+		url = url.slice(sep)
 	}
 
 	return query
