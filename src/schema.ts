@@ -1,4 +1,5 @@
 import type { TSchema } from '@sinclair/typebox'
+import type { OpenAPIV2 } from 'openapi-types'
 
 import type { HTTPMethod, LocalHook } from './types'
 
@@ -23,10 +24,10 @@ export const registerSchemaPath = ({
 	method,
 	hook
 }: {
-	schema: Record<string, Object>
+	schema: OpenAPIV2.PathsObject
 	path: string
 	method: HTTPMethod
-	hook?: LocalHook<any>
+	hook?: LocalHook
 }) => {
 	path = toOpenAPIPath(path)
 
@@ -35,6 +36,7 @@ export const registerSchemaPath = ({
 	const headerSchema = hook?.schema?.headers
 	const querySchema = hook?.schema?.query
 	const responseSchema = hook?.schema?.response
+	const detail = hook?.schema?.detail
 
 	const parameters = [
 		...mapProperties('header', headerSchema),
@@ -66,7 +68,8 @@ export const registerSchemaPath = ({
 							}
 						}
 				  }
-				: {})
+				: {}),
+			...detail
 		}
 	}
 }

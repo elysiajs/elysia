@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, SCHEMA } from '../src'
 
 const app = new Elysia()
 	// Strictly validate response
@@ -16,8 +16,10 @@ const app = new Elysia()
 				profile: t.Object({
 					name: t.String()
 				})
-			}),
-			response: t.Number()
+			})
+			// response: {
+			// 	200: t.Number()
+			// }
 		}
 	})
 	// Strictly validate query, params, and body
@@ -28,7 +30,13 @@ const app = new Elysia()
 			}),
 			params: t.Object({
 				id: t.String()
-			})
+			}),
+			response: {
+				200: t.String(),
+				300: t.Object({
+					error: t.String()
+				})
+			}
 		}
 	})
 	.guard(
@@ -53,7 +61,7 @@ const app = new Elysia()
 						schema: {
 							params: t.Object({
 								id: t.Number()
-							}),
+							})
 						},
 						transform: ({ params }) => {
 							params.id = +params.id
@@ -62,3 +70,5 @@ const app = new Elysia()
 			)
 	)
 	.listen(8080)
+
+type A = typeof app['store'][typeof SCHEMA]['/query/:id']['GET']['query']

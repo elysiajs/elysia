@@ -94,7 +94,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	constructor(config: Partial<ElysiaConfig> = {}) {
 		this.config = {
 			strictPath: false,
-			queryLimit: 48,
 			...config
 		}
 	}
@@ -640,7 +639,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	get<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema = TypedSchema,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -1117,7 +1116,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			headers: getSchemaValidator(schema?.headers),
 			params: getSchemaValidator(schema?.params),
 			query: getSchemaValidator(schema?.query),
-			response: getSchemaValidator(schema?.response)
+			response: getSchemaValidator(
+				schema?.response?.['200'] ?? schema.response
+			)
 		}
 
 		return this as unknown as NewInstance
@@ -1422,7 +1423,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 }
 
-export { Elysia }
+export { Elysia, Router }
 export { Type as t } from '@sinclair/typebox'
 export {
 	SCHEMA,
@@ -1430,7 +1431,6 @@ export {
 	createValidationError,
 	getSchemaValidator
 } from './utils'
-export { Router } from './router'
 
 export type { Context, PreContext } from './context'
 export type {
@@ -1460,5 +1460,14 @@ export type {
 	VoidLifeCycle,
 	SchemaValidator,
 	ElysiaRoute,
-	ExtractPath
+	ExtractPath,
+	IsPathParameter,
+	IsAny,
+	IsNever,
+	UnknownFallback,
+	WithArray,
+	ObjectValues,
+	PickInOrder,
+	MaybePromise,
+	MergeIfNotNull
 } from './types'

@@ -1,3 +1,12 @@
+# 0.2.0-beta.2 - 22 Jan 2023
+Feature:
+- Add support for custom openapi field using `schema.detail`
+- Add support for custom code for `response`
+
+Improvement:
+- Unioned status type for response
+- Optimize TypeScript inference performance
+
 # 0.2.0-beta.1 - 22 Jan 2023
 Breaking Change:
 - `onParse` now accepts `(context: PreContext, contentType: string)` instead of `(request: Request, contentType: string)`
