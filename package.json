@@ -35,16 +35,16 @@
     "release": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "@sinclair/typebox": "0.25.10",
+    "@sinclair/typebox": "0.25.21",
     "openapi-types": "^12.1.0"
   },
   "devDependencies": {
-    "@types/node": "^18.11.10",
-    "@typescript-eslint/eslint-plugin": "^5.45.0",
-    "@typescript-eslint/parser": "^5.45.0",
-    "bun-types": "^0.3.0",
-    "eslint": "^8.29.0",
-    "rimraf": "^3.0.2",
+    "@types/node": "^18.11.18",
+    "@typescript-eslint/eslint-plugin": "^5.48.2",
+    "@typescript-eslint/parser": "^5.48.2",
+    "bun-types": "^0.5.0",
+    "eslint": "^8.32.0",
+    "rimraf": "^4.1.1",
     "typescript": "^4.9.4"
   }
 }
