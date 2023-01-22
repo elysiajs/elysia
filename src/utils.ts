@@ -63,7 +63,7 @@ export const getPath = (url: string, queryIndex = url.indexOf('?')): string => {
 		else queryIndex = url.length
 	}
 
-	return url.substring(url.indexOf('/', 9), queryIndex)
+	return url.slice(url.indexOf('/', 9), queryIndex)
 }
 
 export const mapQuery = (
@@ -85,10 +85,10 @@ export const mapQuery = (
 
 			let value = url.slice(equal + 1)
 			const hashIndex = value.indexOf('#')
-			if (hashIndex !== -1) value = value.substring(0, hashIndex)
-			if (value.indexOf('%') !== -1) value = decodeURI(value)
+			if (hashIndex !== -1) value = value.slice(0, hashIndex)
+			if (value.includes('%')) value = decodeURI(value)
 
-			query[url.slice(1, equal)] = decodeURI(value)
+			query[url.slice(1, equal)] = value
 
 			break
 		}
@@ -97,7 +97,7 @@ export const mapQuery = (
 		const equal = path.indexOf('=')
 
 		let value = path.slice(equal + 1)
-		if (value.indexOf('%') !== -1) value = decodeURI(value)
+		if (value.includes('%')) value = decodeURI(value)
 
 		query[path.slice(1, equal)] = value
 
