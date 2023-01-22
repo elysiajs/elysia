@@ -16,10 +16,10 @@ const app = new Elysia()
 				profile: t.Object({
 					name: t.String()
 				})
-			})
-			// response: {
-			// 	200: t.Number()
-			// }
+			}),
+			response: {
+				200: t.Number()
+			}
 		}
 	})
 	// Strictly validate query, params, and body

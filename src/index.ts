@@ -1425,6 +1425,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 export { Elysia, Router }
 export { Type as t } from '@sinclair/typebox'
+
 export {
 	SCHEMA,
 	getPath,
