@@ -1,9 +1,9 @@
+import { Kind, TSchema, Type } from '@sinclair/typebox'
 import {
 	TypeCheck,
 	TypeCompiler,
 	type ValueError
 } from '@sinclair/typebox/compiler'
-import type { TSchema } from '@sinclair/typebox'
 import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,
@@ -14,6 +14,7 @@ import type {
 
 // ? Internal property
 export const SCHEMA: unique symbol = Symbol('schema')
+export const DEFS: unique symbol = Symbol('definitions')
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 	...(Array.isArray(a) ? a : [a]),
@@ -149,13 +150,54 @@ export const createValidationError = (
 	})
 }
 
-export const getSchemaValidator = <
-	Schema extends TSchema | undefined = undefined
->(
-	schema: Schema,
+export const getSchemaValidator = (
+	s: TSchema | string | undefined,
+	models: Record<string, TSchema>,
 	additionalProperties = false
 ) => {
-	if (!schema) return
+	if (!s) return
+	if (typeof s === 'string' && !(s in models)) return
+
+	const schema: TSchema = typeof s === 'string' ? models[s] : s
+
+	// @ts-ignore
+	if (schema.type === 'object' && 'additionalProperties' in schema === false)
+		schema.additionalProperties = additionalProperties
+
+	return TypeCompiler.Compile(schema)
+}
+
+export const getResponseSchemaValidator = (
+	s: TypedSchema['response'] | undefined,
+	models: Record<string, TSchema>,
+	additionalProperties = false
+) => {
+	if (!s) return
+	if (typeof s === 'string' && !(s in models)) return
+
+	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
+
+	const schema: TSchema =
+		Kind in maybeSchemaOrRecord
+			? maybeSchemaOrRecord
+			: Type.Union(
+					Object.keys(maybeSchemaOrRecord)
+						.map((key): TSchema | undefined => {
+							const maybeNameOrSchema = maybeSchemaOrRecord[key]
+
+							if (typeof maybeNameOrSchema === 'string') {
+								if (maybeNameOrSchema in models) {
+									const schema = models[maybeNameOrSchema]
+									return schema
+								}
+
+								return undefined
+							}
+
+							return maybeNameOrSchema
+						})
+						.filter((a) => a) as TSchema[]
+			  )
 
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)

@@ -8,8 +8,10 @@ import {
 	mergeHook,
 	mergeDeep,
 	createValidationError,
+	getSchemaValidator,
 	SCHEMA,
-	getSchemaValidator
+	DEFS,
+	getResponseSchemaValidator
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
@@ -44,8 +46,10 @@ import type {
 	NoReturnHandler,
 	ElysiaRoute,
 	MaybePromise,
-	IsNever
+	IsNever,
+	InferSchema
 } from './types'
+import { type TSchema } from '@sinclair/typebox'
 
 /**
  * ### Elysia Server
@@ -65,7 +69,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	config: ElysiaConfig
 
 	store: Instance['store'] = {
-		[SCHEMA]: {}
+		[SCHEMA]: {},
+		[DEFS]: {}
 	}
 	// Will be applied to Context
 	protected decorators: Record<string, unknown> | null = null
@@ -99,7 +104,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	private _addHandler<
-		Schema extends TypedSchema = TypedSchema,
+		Schema extends TypedSchema,
 		Path extends string = string
 	>(
 		method: HTTPMethod,
@@ -116,28 +121,36 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			hooks: mergeHook(clone(this.event), hook as RegisteredHook)
 		})
 
+		const defs = this.store[DEFS]
+
 		const body = getSchemaValidator(
-			hook?.schema?.body ?? this.$schema?.body
+			hook?.schema?.body ?? this.$schema?.body,
+			defs
 		)
 		const header = getSchemaValidator(
 			hook?.schema?.headers ?? this.$schema?.headers,
+			defs,
 			true
 		)
 		const params = getSchemaValidator(
-			hook?.schema?.params ?? this.$schema?.params
+			hook?.schema?.params ?? this.$schema?.params,
+			defs
 		)
 		const query = getSchemaValidator(
-			hook?.schema?.query ?? this.$schema?.query
+			hook?.schema?.query ?? this.$schema?.query,
+			defs
 		)
-		const response = getSchemaValidator(
-			hook?.schema?.response ?? this.$schema?.response
+		const response = getResponseSchemaValidator(
+			hook?.schema?.response ?? this.$schema?.response,
+			defs
 		)
 
 		registerSchemaPath({
 			schema: this.store[SCHEMA],
 			hook,
 			method,
-			path
+			path,
+			models: this.store[DEFS]
 		})
 
 		const validator =
@@ -639,7 +652,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	get<
-		Schema extends TypedSchema = TypedSchema,
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -671,7 +684,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	post<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -703,7 +716,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	put<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -735,7 +748,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	patch<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -767,7 +780,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	delete<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -799,7 +812,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	options<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -826,7 +839,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	all<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -858,7 +871,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	head<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -890,7 +903,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	trace<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -922,7 +935,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	connect<
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -955,7 +968,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	route<
 		Method extends HTTPMethod = HTTPMethod,
-		Schema extends TypedSchema = {},
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -1104,21 +1117,22 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	schema<
-		Schema extends TypedSchema = TypedSchema,
+		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		NewInstance = Elysia<{
 			request: Instance['request']
 			store: Instance['store']
 			schema: MergeSchema<Schema, Instance['schema']>
 		}>
 	>(schema: Schema): NewInstance {
+		const defs = this.store[DEFS]
+
 		this.$schema = {
-			body: getSchemaValidator(schema?.body),
-			headers: getSchemaValidator(schema?.headers),
-			params: getSchemaValidator(schema?.params),
-			query: getSchemaValidator(schema?.query),
-			response: getSchemaValidator(
-				schema?.response?.['200'] ?? schema.response
-			)
+			body: getSchemaValidator(schema.body, defs),
+			headers: getSchemaValidator(schema?.headers, defs, true),
+			params: getSchemaValidator(schema?.params, defs),
+			query: getSchemaValidator(schema?.query, defs),
+			// @ts-ignore
+			response: getSchemaValidator(schema?.response, defs)
 		}
 
 		return this as unknown as NewInstance
@@ -1421,6 +1435,20 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	get modules() {
 		return Promise.all(this.lazyLoadModules)
 	}
+
+	setModel<Recorder extends Record<string, TSchema>>(
+		record: Recorder
+	): Elysia<{
+		store: Instance['store'] & {
+			[Defs in typeof DEFS]: Recorder
+		}
+		request: Instance['request']
+		schema: Instance['schema']
+	}> {
+		Object.assign(this.store[DEFS], record)
+
+		return this as unknown as any
+	}
 }
 
 export { Elysia, Router }
@@ -1428,6 +1456,7 @@ export { Type as t } from '@sinclair/typebox'
 
 export {
 	SCHEMA,
+	DEFS,
 	getPath,
 	createValidationError,
 	getSchemaValidator

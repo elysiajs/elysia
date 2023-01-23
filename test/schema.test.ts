@@ -152,43 +152,32 @@ describe('Schema', () => {
 		expect(await valid.text()).toBe('salt')
 		expect(valid.status).toBe(200)
 
-		// const invalidQuery = await app.handle(
-		// 	new Request('/user', {
-		// 		method: 'POST',
-		// 		body: JSON.stringify({
-		// 			id: 6,
-		// 			username: '',
-		// 			profile: {
-		// 				name: 'A'
-		// 			}
-		// 		})
-		// 	})
-		// )
+		const invalidQuery = await app.handle(
+			new Request('http://localhost/user', {
+				method: 'POST',
+				body: JSON.stringify({
+					id: 6,
+					username: '',
+					profile: {
+						name: 'A'
+					}
+				})
+			})
+		)
 
-		// expect(await invalidQuery.text()).toBe(
-		// 	"Invalid query, root should have required property 'name'"
-		// )
-		// expect(valid.status).toBe(400)
+		expect(invalidQuery.status).toBe(400)
 
-		// const invalidBody = await app.handle(
-		// 	new Request('/user?name=salt', {
-		// 		method: 'POST',
-		// 		body: JSON.stringify({
-		// 			id: 6,
-		// 			username: '',
-		// 			profile: {}
-		// 		})
-		// 	})
-		// )
+		const invalidBody = await app.handle(
+			new Request('http://localhost/user?name=salt', {
+				method: 'POST',
+				body: JSON.stringify({
+					id: 6,
+					username: '',
+					profile: {}
+				})
+			})
+		)
 
-		// expect(await invalidQuery.text()).toBe(
-		// 	"Invalid query, root should have required property 'name'"
-		// )
-		// expect(invalidBody.status).toBe(400)
-
-		// expect(await invalidBody.text()).toBe(
-		// 	"Invalid body, .profile should have required property 'name'"
-		// )
-		// expect(invalidBody.status).toBe(400)
+		expect(invalidBody.status).toBe(400)
 	})
 })
