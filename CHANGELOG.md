@@ -1,3 +1,10 @@
+# 0.2.0-rc.1 - 24 Jan 2023
+Improvement:
+- Map OpenAPI's schema detail on response
+- Fix Type instantiation is excessively deep and possibly infinite
+- Improve TypeScript inference time by removing recursive type in generic
+- Inferred body is never instead of unknown
+
 # 0.2.0-rc.0 - 23 Jan 2023
 Feature:
 - Add support for reference model via `.setModel`

@@ -226,7 +226,9 @@ describe('Models', () => {
 				get: {
 					responses: {
 						'200': {
-							type: 'string'
+							schema: {
+								type: 'string'
+							}
 						},
 						'300': {
 							schema: {

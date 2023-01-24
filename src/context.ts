@@ -1,18 +1,16 @@
 import { Elysia } from '.'
 import type { TypedRoute } from './types'
 
-type UnwrapFn<T> = T extends (...params: any) => any ? ReturnType<T> : T
-
 export interface Context<
 	Route extends TypedRoute = TypedRoute,
 	Store extends Elysia['store'] = Elysia['store']
 > {
 	request: Request
-	query: UnwrapFn<Route['query']> extends undefined
+	query: Route['query'] extends undefined
 		? Record<string, unknown>
-		: UnwrapFn<Route['query']>
-	params: UnwrapFn<Route['params']>
-	body: UnwrapFn<Route['body']>
+		: Route['query']
+	params: Route['params']
+	body: Route['body']
 	store: Store
 
 	set: {

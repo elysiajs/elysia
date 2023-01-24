@@ -46,8 +46,7 @@ import type {
 	NoReturnHandler,
 	ElysiaRoute,
 	MaybePromise,
-	IsNever,
-	InferSchema
+	IsNever
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
 
@@ -652,7 +651,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	get<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -684,7 +687,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	post<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -716,7 +723,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	put<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -748,7 +759,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	patch<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -780,7 +795,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	delete<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -812,7 +831,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	options<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -839,7 +862,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	all<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -871,7 +898,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	head<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -903,7 +934,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	trace<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -935,7 +970,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	connect<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -967,8 +1006,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	route<
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Method extends HTTPMethod = HTTPMethod,
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -1117,7 +1160,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	schema<
-		Schema extends InferSchema<Instance> = InferSchema<Instance>,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		NewInstance = Elysia<{
 			request: Instance['request']
 			store: Instance['store']
@@ -1391,7 +1438,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}
 
 		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i](this)
+			this.event.start[i](this as any)
 
 		if (callback) callback(this.server!)
 
@@ -1426,7 +1473,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.server.stop()
 
 		for (let i = 0; i < this.event.stop.length; i++)
-			await this.event.stop[i](this)
+			await this.event.stop[i](this as any)
 	}
 
 	/**

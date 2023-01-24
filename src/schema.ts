@@ -21,6 +21,8 @@ export const mapProperties = (
 		else throw new Error(`Can't find model ${schema}`)
 
 	return Object.entries(schema?.properties ?? []).map(([key, value]) => ({
+		// @ts-ignore
+		...value,
 		in: name,
 		name: key,
 		// @ts-ignore
@@ -53,34 +55,82 @@ export const registerSchemaPath = ({
 
 	if (typeof responseSchema === 'object') {
 		if (Kind in responseSchema) {
+			const { type, properties, required, ...rest } =
+				responseSchema as typeof responseSchema & {
+					type: string
+					properties: Object
+					required: string[]
+				}
+
 			responseSchema = {
-				// @ts-ignore
 				'200': {
-					schema: responseSchema
+					...rest,
+					schema: {
+						type,
+						properties,
+						required
+					}
 				}
 			}
 		} else {
 			Object.entries(responseSchema as Record<string, TSchema>).forEach(
 				([key, value]) => {
-					if (typeof value === 'string')
+					if (typeof value === 'string') {
+						const { type, properties, required, ...rest } = models[
+							value
+						] as TSchema & {
+							type: string
+							properties: Object
+							required: string[]
+						}
+
 						// @ts-ignore
 						responseSchema[key] = {
+							...rest,
 							schema: {
 								$ref: `#/definitions/${value}`
 							}
 						}
+					} else {
+						const { type, properties, required, ...rest } =
+							value as typeof value & {
+								type: string
+								properties: Object
+								required: string[]
+							}
+
+						// @ts-ignore
+						responseSchema[key] = {
+							...rest,
+							schema: {
+								type,
+								properties,
+								required
+							}
+						}
+					}
 				}
 			)
 		}
-	} else if (typeof responseSchema === 'string')
+	} else if (typeof responseSchema === 'string') {
+		const { type, properties, required, ...rest } = models[
+			responseSchema
+		] as TSchema & {
+			type: string
+			properties: Object
+			required: string[]
+		}
+
 		responseSchema = {
 			// @ts-ignore
 			'200': {
+				...rest,
 				schema: {
 					$ref: `#/definitions/${responseSchema}`
 				}
 			}
 		}
+	}
 
 	const parameters = [
 		...mapProperties('header', headerSchema, models),
