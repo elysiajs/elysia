@@ -1,18 +1,20 @@
+import { Kind, TSchema, Type } from '@sinclair/typebox'
 import {
 	TypeCheck,
 	TypeCompiler,
 	type ValueError
 } from '@sinclair/typebox/compiler'
-import type { TSchema } from '@sinclair/typebox'
 import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,
 	LocalHook,
-	TypedSchema
+	TypedSchema,
+	RegisteredHook
 } from './types'
 
 // ? Internal property
 export const SCHEMA: unique symbol = Symbol('schema')
+export const DEFS: unique symbol = Symbol('definitions')
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 	...(Array.isArray(a) ? a : [a]),
@@ -22,7 +24,7 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 export const mergeHook = (
 	a: LocalHook<any> | LifeCycleStore<any>,
 	b: LocalHook<any>
-): LocalHook<any, any> => {
+): RegisteredHook<any> => {
 	const aSchema = 'schema' in a ? (a.schema as TypedSchema) : null
 	const bSchema = b && 'schema' in b ? b.schema : null
 
@@ -37,7 +39,7 @@ export const mergeHook = (
 						query: bSchema?.query ?? aSchema?.query,
 						response: bSchema?.response ?? aSchema?.response
 				  } as TypedSchema)
-				: null,
+				: undefined,
 		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []),
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle ?? [],
@@ -67,39 +69,40 @@ export const getPath = (url: string, queryIndex = url.indexOf('?')): string => {
 
 export const mapQuery = (
 	url: string,
-	queryIndex = url.indexOf('?')
+	queryIndex: number | null = url.indexOf('?')
 ): Record<string, string> => {
 	if (queryIndex === -1) return {}
 
 	const query: Record<string, string> = {}
-	let paths = url.slice(queryIndex)
+	if (queryIndex) url = url.slice(queryIndex)
+	else url = ';' + url
 
 	// eslint-disable-next-line no-constant-condition
 	while (true) {
 		// Skip ?/&, and min length of query is 3, so start looking at 1 + 3
-		const sep = paths.indexOf('&', 4)
+		const sep = url.indexOf('&', 4)
 		if (sep === -1) {
-			const equal = paths.indexOf('=', 1)
+			const equal = url.indexOf('=')
 
-			let value = paths.slice(equal + 1)
+			let value = url.slice(equal + 1)
 			const hashIndex = value.indexOf('#')
-			if (hashIndex !== -1) value = value.substring(0, hashIndex)
-			if (value.indexOf('%') !== -1) value = decodeURI(value)
+			if (hashIndex !== -1) value = value.slice(0, hashIndex)
+			if (value.includes('%')) value = decodeURI(value)
 
-			query[paths.slice(1, equal)] = value
+			query[url.slice(1, equal)] = value
 
 			break
 		}
 
-		const path = paths.slice(0, sep)
+		const path = url.slice(0, sep)
 		const equal = path.indexOf('=')
 
 		let value = path.slice(equal + 1)
-		if (value.indexOf('%') !== -1) value = decodeURI(value)
+		if (value.includes('%')) value = decodeURI(value)
 
 		query[path.slice(1, equal)] = value
 
-		paths = paths.slice(sep)
+		url = url.slice(sep)
 	}
 
 	return query
@@ -147,13 +150,54 @@ export const createValidationError = (
 	})
 }
 
-export const getSchemaValidator = <
-	Schema extends TSchema | undefined = undefined
->(
-	schema: Schema,
+export const getSchemaValidator = (
+	s: TSchema | string | undefined,
+	models: Record<string, TSchema>,
 	additionalProperties = false
 ) => {
-	if (!schema) return
+	if (!s) return
+	if (typeof s === 'string' && !(s in models)) return
+
+	const schema: TSchema = typeof s === 'string' ? models[s] : s
+
+	// @ts-ignore
+	if (schema.type === 'object' && 'additionalProperties' in schema === false)
+		schema.additionalProperties = additionalProperties
+
+	return TypeCompiler.Compile(schema)
+}
+
+export const getResponseSchemaValidator = (
+	s: TypedSchema['response'] | undefined,
+	models: Record<string, TSchema>,
+	additionalProperties = false
+) => {
+	if (!s) return
+	if (typeof s === 'string' && !(s in models)) return
+
+	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
+
+	const schema: TSchema =
+		Kind in maybeSchemaOrRecord
+			? maybeSchemaOrRecord
+			: Type.Union(
+					Object.keys(maybeSchemaOrRecord)
+						.map((key): TSchema | undefined => {
+							const maybeNameOrSchema = maybeSchemaOrRecord[key]
+
+							if (typeof maybeNameOrSchema === 'string') {
+								if (maybeNameOrSchema in models) {
+									const schema = models[maybeNameOrSchema]
+									return schema
+								}
+
+								return undefined
+							}
+
+							return maybeNameOrSchema
+						})
+						.filter((a) => a) as TSchema[]
+			  )
 
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)

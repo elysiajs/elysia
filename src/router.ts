@@ -25,10 +25,15 @@
  * @see https://github.com/medleyjs/router
  */
 
+import type { ComposedHandler } from '../src'
 import { getPath } from './utils'
 
 export interface FindResult {
-	store: Record<string, any>
+	store: Partial<{
+		[k in string]: ComposedHandler
+	}> & Partial<{ 
+		wildcardStore?: Map<number, any> | null
+	}>
 	params: Record<string, any>
 }
 
@@ -215,6 +220,7 @@ export class Router {
 			if (node.wildcardStore === null)
 				node.wildcardStore = Object.create(null)
 
+			// @ts-ignore
 			return node.wildcardStore!
 		}
 
@@ -298,10 +304,12 @@ function matchRoute(
 			if (slashIndex === -1 || slashIndex >= urlLength) {
 				if (node.parametricChild.store) {
 					const params: Record<string, string> = {} // This is much faster than using a computed property
-					params[node.parametricChild.paramName] = url.slice(
-						pathPartEndIndex,
-						urlLength
-					)
+
+					let paramData = url.slice(pathPartEndIndex, urlLength)
+					if (paramData.includes('%'))
+						paramData = decodeURI(paramData)
+
+					params[node.parametricChild.paramName] = paramData
 					return {
 						store: node.parametricChild.store,
 						params
@@ -316,10 +324,11 @@ function matchRoute(
 				)
 
 				if (route) {
-					route.params[node.parametricChild.paramName] = url.slice(
-						pathPartEndIndex,
-						slashIndex
-					)
+					let paramData = url.slice(pathPartEndIndex, slashIndex)
+					if (paramData.includes('%'))
+						paramData = decodeURI(paramData)
+
+					route.params[node.parametricChild.paramName] = paramData
 
 					return route
 				}

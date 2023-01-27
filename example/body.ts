@@ -2,7 +2,7 @@ import { Elysia, t } from '../src'
 
 const app = new Elysia()
 	// Add custom body parser
-	.onParse(async (request, contentType) => {
+	.onParse(async ({ request }, contentType) => {
 		switch (contentType) {
 			case 'application/Elysia':
 				return request.text()
@@ -25,7 +25,10 @@ const app = new Elysia()
 			body: t.Object({
 				id: t.Number(),
 				username: t.String()
-			})
+			}),
+			detail: {
+				summary: 'A'
+			}
 		}
 	})
 	.post('/mirror', ({ body }) => body)

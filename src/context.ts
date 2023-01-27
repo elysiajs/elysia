@@ -21,7 +21,7 @@ export interface Context<
 }
 
 // Use to mimic request before mapping route
-export type PreContext<Store extends Elysia['store'] = Elysia['store']> = Omit<
-	Context<{}, Store>,
-	'query' | 'params' | 'body'
->
+export type PreContext<
+	Route extends TypedRoute = TypedRoute,
+	Store extends Elysia['store'] = Elysia['store']
+> = Omit<Context<Route, Store>, 'query' | 'params' | 'body'>

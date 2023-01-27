@@ -8,8 +8,10 @@ import {
 	mergeHook,
 	mergeDeep,
 	createValidationError,
+	getSchemaValidator,
 	SCHEMA,
-	getSchemaValidator
+	DEFS,
+	getResponseSchemaValidator
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
@@ -42,8 +44,11 @@ import type {
 	MergeSchema,
 	ListenCallback,
 	NoReturnHandler,
-	ElysiaRoute
+	ElysiaRoute,
+	MaybePromise,
+	IsNever
 } from './types'
+import { type TSchema } from '@sinclair/typebox'
 
 /**
  * ### Elysia Server
@@ -63,7 +68,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	config: ElysiaConfig
 
 	store: Instance['store'] = {
-		[SCHEMA]: {}
+		[SCHEMA]: {},
+		[DEFS]: {}
 	}
 	// Will be applied to Context
 	protected decorators: Record<string, unknown> | null = null
@@ -84,8 +90,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	private router = new Router()
 	// This router is fallback for catch all route
-	private fallbackRoute: Partial<Record<HTTPMethod, Record<string, any>>> = {}
+	private fallbackRoute: Partial<Record<HTTPMethod, ComposedHandler>> = {}
 	protected routes: InternalRoute<Instance>[] = []
+
+	private lazyLoadModules: Promise<Elysia>[] = []
 
 	constructor(config: Partial<ElysiaConfig> = {}) {
 		this.config = {
@@ -95,7 +103,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	private _addHandler<
-		Schema extends TypedSchema = TypedSchema,
+		Schema extends TypedSchema,
 		Path extends string = string
 	>(
 		method: HTTPMethod,
@@ -112,29 +120,36 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			hooks: mergeHook(clone(this.event), hook as RegisteredHook)
 		})
 
+		const defs = this.store[DEFS]
+
 		const body = getSchemaValidator(
-			hook?.schema?.body ?? this.$schema?.body
+			hook?.schema?.body ?? this.$schema?.body,
+			defs
 		)
 		const header = getSchemaValidator(
 			hook?.schema?.headers ?? this.$schema?.headers,
+			defs,
 			true
 		)
 		const params = getSchemaValidator(
-			hook?.schema?.params ?? this.$schema?.params
+			hook?.schema?.params ?? this.$schema?.params,
+			defs
 		)
 		const query = getSchemaValidator(
-			hook?.schema?.query ?? this.$schema?.query
+			hook?.schema?.query ?? this.$schema?.query,
+			defs
 		)
-		const response = getSchemaValidator(
-			hook?.schema?.response ?? this.$schema?.response
+		const response = getResponseSchemaValidator(
+			hook?.schema?.response ?? this.$schema?.response,
+			defs
 		)
 
 		registerSchemaPath({
-			// @ts-ignore
 			schema: this.store[SCHEMA],
 			hook,
 			method,
-			path
+			path,
+			models: this.store[DEFS]
 		})
 
 		const validator =
@@ -204,7 +219,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	onRequest(handler: BeforeRequestHandler<Instance['store']>) {
+	onRequest<Route extends OverwritableTypeRoute = TypedRoute>(
+		handler: BeforeRequestHandler<Route, Instance>
+	) {
 		this.event.request.push(handler)
 
 		return this
@@ -229,7 +246,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	onParse(parser: BodyParser) {
+	onParse(parser: BodyParser<any, Instance>) {
 		this.event.parse.splice(this.event.parse.length - 1, 0, parser)
 
 		return this
@@ -562,21 +579,57 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	use<
-		NewElysia extends Elysia<any> = Elysia<any>,
-		Params extends Elysia = Elysia<any>
+		NewElysia extends MaybePromise<Elysia<any>> = Elysia<any>,
+		Params extends Elysia = Elysia<any>,
+		LazyLoadElysia extends never | ElysiaInstance = never
 	>(
-		plugin: (
-			app: Params extends Elysia<infer ParamsInstance>
-				? IsAny<ParamsInstance> extends true
-					? this
-					: Params
-				: Params
-		) => NewElysia
-	): NewElysia extends Elysia<infer NewInstance>
+		plugin:
+			| MaybePromise<
+					(
+						app: Params extends Elysia<infer ParamsInstance>
+							? IsAny<ParamsInstance> extends true
+								? this
+								: Params
+							: Params
+					) => MaybePromise<NewElysia>
+			  >
+			| Promise<{
+					default: (
+						elysia: Elysia<any>
+					) => MaybePromise<Elysia<LazyLoadElysia>>
+			  }>
+	): IsNever<LazyLoadElysia> extends false
+		? Elysia<LazyLoadElysia & Instance>
+		: NewElysia extends Elysia<infer NewInstance>
+		? IsNever<NewInstance> extends true
+			? Elysia<Instance>
+			: Elysia<NewInstance & Instance>
+		: NewElysia extends Promise<Elysia<infer NewInstance>>
 		? Elysia<NewInstance & Instance>
 		: this {
-		// ? Type enforce on function already
-		return plugin(this as unknown as any) as unknown as any
+		if (plugin instanceof Promise) {
+			this.lazyLoadModules.push(
+				plugin.then((plugin) => {
+					if (typeof plugin === 'function')
+						return plugin(this as unknown as any) as unknown as any
+
+					return plugin.default(
+						this as unknown as any
+					) as unknown as any
+				})
+			)
+
+			return this as unknown as any
+		}
+
+		const instance = plugin(this as unknown as any) as unknown as any
+		if (instance instanceof Promise) {
+			this.lazyLoadModules.push(instance)
+
+			return this as unknown as any
+		}
+
+		return instance
 	}
 
 	/**
@@ -598,7 +651,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	get<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -630,7 +687,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	post<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -662,7 +723,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	put<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -694,7 +759,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	patch<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -726,7 +795,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	delete<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -758,7 +831,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	options<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -785,7 +862,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	all<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -817,7 +898,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	head<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -849,7 +934,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	trace<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -881,7 +970,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	connect<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -913,8 +1006,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	route<
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		Method extends HTTPMethod = HTTPMethod,
-		Schema extends TypedSchema = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -956,7 +1053,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			schema: Instance['schema']
 		}>
 	>(name: Key, value: Value): NewInstance {
-		;(this.store as Record<Key, Value>)[name] = value
+		if (!(name in this.store)) {
+			;(this.store as Record<Key, Value>)[name] = value
+		}
 
 		return this as unknown as NewInstance
 	}
@@ -983,7 +1082,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}>
 	>(name: Name, value: Value): NewInstance {
 		if (!this.decorators) this.decorators = {}
-		this.decorators[name] = value
+		if (!(name in this.decorators)) this.decorators[name] = value
 
 		return this as unknown as NewInstance
 	}
@@ -1063,19 +1162,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	schema<
-		Schema extends TypedSchema = TypedSchema,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		> = TypedSchema<
+			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+		>,
 		NewInstance = Elysia<{
 			request: Instance['request']
 			store: Instance['store']
 			schema: MergeSchema<Schema, Instance['schema']>
 		}>
 	>(schema: Schema): NewInstance {
+		const defs = this.store[DEFS]
+
 		this.$schema = {
-			body: getSchemaValidator(schema?.body),
-			headers: getSchemaValidator(schema?.headers),
-			params: getSchemaValidator(schema?.params),
-			query: getSchemaValidator(schema?.query),
-			response: getSchemaValidator(schema?.response)
+			body: getSchemaValidator(schema.body, defs),
+			headers: getSchemaValidator(schema?.headers, defs, true),
+			params: getSchemaValidator(schema?.params, defs),
+			query: getSchemaValidator(schema?.query, defs),
+			// @ts-ignore
+			response: getSchemaValidator(schema?.response, defs)
 		}
 
 		return this as unknown as NewInstance
@@ -1087,15 +1193,29 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			headers: {}
 		}
 
+		let context: Context
+		if (this.decorators) {
+			context = clone(this.decorators) as any as Context
+
+			context.request = request
+			context.set = set
+			context.store = this.store
+		} else {
+			// @ts-ignore
+			context = {
+				set,
+				store: this.store,
+				request
+			}
+		}
+
 		try {
 			for (let i = 0; i < this.event.request.length; i++) {
 				const onRequest = this.event.request[i]
-				let response = onRequest({
-					request,
-					store: this.store,
-					set
-				})
+				let response = onRequest(context)
 				if (response instanceof Promise) response = await response
+
+				response = mapEarlyResponse(response, set)
 				if (response) return response
 			}
 
@@ -1110,13 +1230,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				this.fallbackRoute[request.method as HTTPMethod]
 			if (!handler) throw new Error('NOT_FOUND')
 
+			const hooks = handler.hooks
+
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET') {
-				const contentType = request.headers.get('content-type')
+				let contentType = request.headers.get('content-type')
 
 				if (contentType) {
+					const index = contentType.indexOf(';')
+					if (index !== -1) contentType = contentType.slice(0, index)
+
 					for (let i = 0; i < this.event.parse.length; i++) {
-						let temp = this.event.parse[i](request, contentType)
+						let temp = this.event.parse[i](context, contentType)
 						if (temp instanceof Promise) temp = await temp
 
 						if (temp) {
@@ -1126,7 +1251,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					}
 
 					// body might be empty string thus can't use !body
-					if (body === undefined)
+					if (body === undefined) {
 						switch (contentType) {
 							case 'application/json':
 								body = await request.json()
@@ -1135,31 +1260,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							case 'text/plain':
 								body = await request.text()
 								break
+
+							case 'application/x-www-form-urlencoded':
+								body = mapQuery(await request.text(), null)
+								break
 						}
+					}
 				}
 			}
 
-			const hooks = handler.hooks
-			let context: Context
-
-			if (this.decorators) {
-				context = clone(this.decorators) as any as Context
-
-				context.request = request
-				context.body = body
-				context.set = set
-				context.store = this.store
-				context.params = route?.params || {}
-				context.query = mapQuery(request.url, index)
-			} else
-				context = {
-					request,
-					body,
-					set,
-					store: this.store,
-					params: route?.params || {},
-					query: mapQuery(request.url, index)
-				}
+			context.body = body
+			context.params = route?.params || {}
+			context.query = mapQuery(request.url, index)
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)
@@ -1328,9 +1440,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}
 
 		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i](this)
+			this.event.start[i](this as any)
 
 		if (callback) callback(this.server!)
+
+		Promise.all(this.lazyLoadModules).then(() => {
+			Bun.gc(true)
+		})
 
 		return this
 	}
@@ -1359,37 +1475,44 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.server.stop()
 
 		for (let i = 0; i < this.event.stop.length; i++)
-			await this.event.stop[i](this)
+			await this.event.stop[i](this as any)
+	}
+
+	/**
+	 * Wait until all lazy loaded modules all load is fully
+	 */
+	get modules() {
+		return Promise.all(this.lazyLoadModules)
+	}
+
+	setModel<Recorder extends Record<string, TSchema>>(
+		record: Recorder
+	): Elysia<{
+		store: Instance['store'] & {
+			[Defs in typeof DEFS]: Recorder
+		}
+		request: Instance['request']
+		schema: Instance['schema']
+	}> {
+		Object.entries(record).forEach(([key, value]) => {
+			// @ts-ignore
+			if (!(key in this.store[DEFS])) this.store[DEFS][key] = value
+		})
+
+		return this as unknown as any
 	}
 }
 
-// // Hot reload
-// if (typeof Bun !== 'undefined') {
-// 	// @ts-ignore
-// 	if (globalThis[key])
-// 		// @ts-ignore
-// 		globalThis[key].reload({
-// 			port,
-// 			fetch: fe
-// 		})
-// 	else {
-// 		// @ts-ignore
-// 		globalThis[key] = Bun.serve({
-// 			port,
-// 			fetch: fe
-// 		})
-// 	}
-// }
-
-export { Elysia }
+export { Elysia, Router }
 export { Type as t } from '@sinclair/typebox'
+
 export {
 	SCHEMA,
+	DEFS,
 	getPath,
 	createValidationError,
 	getSchemaValidator
 } from './utils'
-export { Router } from './router'
 
 export type { Context, PreContext } from './context'
 export type {
@@ -1417,5 +1540,16 @@ export type {
 	UnwrapSchema,
 	LifeCycleStore,
 	VoidLifeCycle,
-	SchemaValidator
+	SchemaValidator,
+	ElysiaRoute,
+	ExtractPath,
+	IsPathParameter,
+	IsAny,
+	IsNever,
+	UnknownFallback,
+	WithArray,
+	ObjectValues,
+	PickInOrder,
+	MaybePromise,
+	MergeIfNotNull
 } from './types'

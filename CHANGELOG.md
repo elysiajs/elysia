@@ -1,3 +1,49 @@
+# 0.2.0-rc.1 - 24 Jan 2023
+Improvement:
+- Map OpenAPI's schema detail on response
+- Fix Type instantiation is excessively deep and possibly infinite
+- Improve TypeScript inference time by removing recursive type in generic
+- Inferred body is never instead of unknown
+
+# 0.2.0-rc.0 - 23 Jan 2023
+Feature:
+- Add support for reference model via `.setModel`
+- Add support for OpenAPI's `definitions` field
+
+# 0.2.0-beta.2 - 22 Jan 2023
+Feature:
+- Add support for custom openapi field using `schema.detail`
+- Add support for custom code for `response`
+
+Improvement:
+- Unioned status type for response
+- Optimize TypeScript inference performance
+
+# 0.2.0-beta.1 - 22 Jan 2023
+Breaking Change:
+- `onParse` now accepts `(context: PreContext, contentType: string)` instead of `(request: Request, contentType: string)`
+    - To migrate, add `.request` to context to access `Request`
+
+Feature:
+- `onRequest` and `onParse` now can access `PreContext`
+- Support `application/x-www-form-urlencoded` by default
+
+Improvement:
+- body parser now parse `content-type` with extra attribute eg. `application/json;charset=utf-8`
+
+# 0.2.0-beta.0 - 17 Jan 2023
+Feature:
+- Support for Async / lazy-load plugin
+
+Improvement:
+- Decode URI parameter path parameter
+- Handle union type correctly
+
+# 0.1.3 - 12 Jan 2023
+Improvement:
+- Validate `Response` object
+- Union type inference on response
+
 # 0.1.2 - 31 Dec 2022
 Bug fix:
 - onRequest doesn't run in `group` and `guard`

@@ -2,13 +2,13 @@ import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 
-describe('Body Parser', () => {
+describe('Parser', () => {
 	it('handle onParse', async () => {
 		const app = new Elysia()
-			.onParse((request, contentType) => {
+			.onParse((context, contentType) => {
 				switch (contentType) {
 					case 'application/Elysia':
-						return request.text()
+						return context.request.text()
 				}
 			})
 			.post('/', ({ body }) => body)
@@ -30,10 +30,10 @@ describe('Body Parser', () => {
 
 	it("handle .on('parse')", async () => {
 		const app = new Elysia()
-			.on('parse', (request, contentType) => {
+			.on('parse', (context, contentType) => {
 				switch (contentType) {
 					case 'application/Elysia':
-						return request.text()
+						return context.request.text()
 				}
 			})
 			.post('/', ({ body }) => body)
@@ -55,7 +55,7 @@ describe('Body Parser', () => {
 
 	it('overwrite default parser', async () => {
 		const app = new Elysia()
-			.onParse((request, contentType) => {
+			.onParse((context, contentType) => {
 				switch (contentType) {
 					case 'text/plain':
 						return 'Overwrited'
@@ -76,5 +76,47 @@ describe('Body Parser', () => {
 		)
 
 		expect(await res.text()).toBe('Overwrited')
+	})
+
+	it('parse x-www-form-urlencoded', async () => {
+		const app = new Elysia().post('/', ({ body }) => body).listen(8080)
+
+		const body = {
+			username: 'salty aom',
+			password: '12345678'
+		}
+
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: `username=${body.username}&password=${body.password}`,
+				headers: {
+					'content-type': 'application/x-www-form-urlencoded'
+				}
+			})
+		)
+
+		expect(await res.json()).toEqual(body)
+	})
+
+	it('parse with extra content-type attribute', async () => {
+		const app = new Elysia().post('/', ({ body }) => body).listen(8080)
+
+		const body = {
+			username: 'salty aom',
+			password: '12345678'
+		}
+
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: JSON.stringify(body),
+				headers: {
+					'content-type': 'application/json;charset=utf-8'
+				}
+			})
+		)
+
+		expect(await res.json()).toEqual(body)
 	})
 })
