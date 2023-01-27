@@ -9,10 +9,19 @@ const app = new Elysia()
 			query: t.Object({
 				n: t.String()
 			}),
-			body: t.Object({
-				username: t.String(),
-				password: t.String()
-			})
+			body: t.Object(
+				{
+					username: t.String(),
+					password: t.String()
+				},
+				{
+					description: 'An expected body'
+				}
+			),
+			detail: {
+				summary: 'Sign in the user',
+				tags: ['authentication']
+			}
 		}
 	})
 	.get('/sign-in', ({ body }) => 'ok')
@@ -20,7 +29,7 @@ const app = new Elysia()
 	.get('/id2/:id', ({ params }) => 1, {
 		schema: {
 			detail: {
-				'summary': 'a',
+				summary: 'a'
 			}
 		}
 	})

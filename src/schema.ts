@@ -76,6 +76,7 @@ export const registerSchemaPath = ({
 			Object.entries(responseSchema as Record<string, TSchema>).forEach(
 				([key, value]) => {
 					if (typeof value === 'string') {
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
 						const { type, properties, required, ...rest } = models[
 							value
 						] as TSchema & {
@@ -113,6 +114,7 @@ export const registerSchemaPath = ({
 			)
 		}
 	} else if (typeof responseSchema === 'string') {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		const { type, properties, required, ...rest } = models[
 			responseSchema
 		] as TSchema & {

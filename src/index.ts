@@ -1053,7 +1053,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			schema: Instance['schema']
 		}>
 	>(name: Key, value: Value): NewInstance {
-		;(this.store as Record<Key, Value>)[name] = value
+		if (!(name in this.store)) {
+			;(this.store as Record<Key, Value>)[name] = value
+		}
 
 		return this as unknown as NewInstance
 	}
@@ -1080,7 +1082,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}>
 	>(name: Name, value: Value): NewInstance {
 		if (!this.decorators) this.decorators = {}
-		this.decorators[name] = value
+		if (!(name in this.decorators)) this.decorators[name] = value
 
 		return this as unknown as NewInstance
 	}
@@ -1492,7 +1494,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		schema: Instance['schema']
 	}> {
-		Object.assign(this.store[DEFS], record)
+		Object.entries(record).forEach(([key, value]) => {
+			// @ts-ignore
+			if (!(key in this.store[DEFS])) this.store[DEFS][key] = value
+		})
 
 		return this as unknown as any
 	}

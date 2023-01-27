@@ -1,18 +1,14 @@
 import { Elysia, t, SCHEMA, DEFS } from '../src'
 
 const app = new Elysia()
-	.setModel(
-		'a',
-		t.Object({
+	.setModel({
+		a: t.Object({
 			response: t.String()
-		})
-	)
-	.setModel(
-		'b',
-		t.Object({
+		}),
+		b: t.Object({
 			response: t.Number()
 		})
-	)
+	})
 	// Strictly validate response
 	.get('/', () => 'hi')
 	// Strictly validate body and response
