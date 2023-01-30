@@ -1,4 +1,4 @@
-# 0.2.1 - 30 Jan 2023
+# 0.2.2 - 30 Jan 2023
 Improvement:
 - Migrate from @medley/router to Raikiri
 - Minor optimization

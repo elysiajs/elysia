@@ -1530,7 +1530,12 @@ export {
 	SCHEMA,
 	DEFS,
 	createValidationError,
-	getSchemaValidator
+	getSchemaValidator,
+	mergeDeep,
+	mergeHook,
+	mergeObjectArray,
+	mapPathnameAndQueryRegEx,
+	mapQuery
 } from './utils'
 
 export type { Context, PreContext } from './context'
