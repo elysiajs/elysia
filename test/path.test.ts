@@ -146,7 +146,7 @@ describe('Path', () => {
 		const body = 'Botan'
 
 		const res = await app.handle(
-			new Request('/', {
+			new Request('http://localhost/', {
 				method: 'POST',
 				body,
 				headers: {
@@ -172,7 +172,7 @@ describe('Path', () => {
 			}
 		})
 		const res = await app.handle(
-			new Request('/', {
+			new Request('http://localhost/', {
 				method: 'POST',
 				body,
 				headers: {
@@ -190,7 +190,7 @@ describe('Path', () => {
 			request.headers.get('x-powered-by')
 		)
 		const res = await app.handle(
-			new Request('/', {
+			new Request('http://localhost/', {
 				method: 'POST',
 				headers: {
 					'x-powered-by': 'Elysia'
@@ -262,7 +262,7 @@ describe('Path', () => {
 			.get('/aa', () => 'route 1')
 			.get('/ab', () => 'route 2')
 
-		const response = await app.handle(new Request('/ab'))
+		const response = await app.handle(req('/ab'))
 		const text = await response.text()
 		expect(text).toBe('route 2')
 	})
@@ -272,7 +272,7 @@ describe('Path', () => {
 			.get('/aa', () => 'route 1')
 			.get('/ab', () => 'route 2')
 
-		const response = await app.handle(new Request('/ab'))
+		const response = await app.handle(req('/ab'))
 		const text = await response.text()
 		expect(text).toBe('route 2')
 	})
@@ -299,7 +299,7 @@ describe('Path', () => {
 	})
 
 	it('handle *', async () => {
-		const app = new Elysia().get('*', () => 'Hi')
+		const app = new Elysia().get('/*', () => 'Hi')
 		const get = await app.handle(req('/')).then((r) => r.text())
 		const post = await app
 			.handle(req('/anything/should/match'))
@@ -317,7 +317,7 @@ describe('Path', () => {
 		const get = await app.handle(req('/part')).then((r) => r.text())
 		const options = await app
 			.handle(
-				new Request('/part', {
+				new Request('http://localhost/part', {
 					method: 'OPTIONS'
 				})
 			)

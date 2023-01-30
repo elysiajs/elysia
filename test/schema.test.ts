@@ -46,7 +46,7 @@ describe('Schema', () => {
 			}
 		})
 		const res = await app.handle(
-			new Request('/', {
+			new Request('http://localhost/', {
 				method: 'post',
 				headers: {
 					authorization: 'Bearer 123',
@@ -76,7 +76,7 @@ describe('Schema', () => {
 		})
 
 		const res = await app.handle(
-			new Request('/', {
+			new Request('http://localhost/', {
 				method: 'post',
 				body,
 				headers: {

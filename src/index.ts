@@ -1,6 +1,7 @@
 import type { Serve, Server } from 'bun'
 
-import { Router } from './router'
+import { Raikiri } from 'raikiri'
+// import { Router } from './router'
 import { mapResponse, mapEarlyResponse } from './handler'
 import {
 	mapQuery,
@@ -11,7 +12,8 @@ import {
 	getSchemaValidator,
 	SCHEMA,
 	DEFS,
-	getResponseSchemaValidator
+	getResponseSchemaValidator,
+	mapPathnameAndQueryRegEx
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
@@ -49,6 +51,8 @@ import type {
 	IsNever
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
+
+const ASYNC_FN = 'AsyncFunction'
 
 /**
  * ### Elysia Server
@@ -88,7 +92,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	server: Server | null = null
 	private $schema: SchemaValidator | null = null
 
-	private router = new Router()
+	private router = new Raikiri<ComposedHandler>()
 	// This router is fallback for catch all route
 	private fallbackRoute: Partial<Record<HTTPMethod, ComposedHandler>> = {}
 	protected routes: InternalRoute<Instance>[] = []
@@ -170,20 +174,22 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				validator
 			}
 
-		this.router.register(path)[method] = {
+		const mainHandler = {
 			handle: handler,
 			hooks: mergeHook(clone(this.event), hook as RegisteredHook),
 			validator
 		}
 
+		this.router.add(method, path, mainHandler)
+
 		if (!this.config.strictPath && path !== '/')
 			if (path.endsWith('/'))
-				this.router.register(path.substring(0, path.length - 1))[
-					method
-				] = this.router.register(path)[method]
-			else
-				this.router.register(`${path}/`)[method] =
-					this.router.register(path)[method]
+				this.router.add(
+					method,
+					path.substring(0, path.length - 1),
+					mainHandler
+				)
+			else this.router.add(method, `${path}/`, mainHandler)
 	}
 
 	/**
@@ -1200,37 +1206,42 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			context.request = request
 			context.set = set
 			context.store = this.store
+			context.query = {}
 		} else {
 			// @ts-ignore
 			context = {
 				set,
 				store: this.store,
-				request
+				request,
+				query: {}
 			}
 		}
 
 		try {
-			for (let i = 0; i < this.event.request.length; i++) {
-				const onRequest = this.event.request[i]
-				let response = onRequest(context)
-				if (response instanceof Promise) response = await response
+			const event = this.event
 
-				response = mapEarlyResponse(response, set)
-				if (response) return response
-			}
+			if (event.request.length)
+				for (let i = 0; i < event.request.length; i++) {
+					const onRequest = event.request[i]
+					let response = onRequest(context)
+					if (onRequest.constructor.name === ASYNC_FN)
+						response = await response
 
-			// Shortest possible: ws://a.a/
-			const index = request.url.indexOf('?', 10)
-			const route = this.router.find(request.url, index)
+					response = mapEarlyResponse(response, set)
+					if (response) return response
+				}
+
+			const fracture = request.url.match(mapPathnameAndQueryRegEx)
+			if (!fracture) throw new Error('NOT_FOUND')
+
+			const route =
+				this.router.match(request.method, fracture[1]) ||
+				this.router.match('ALL', fracture[1])
 			if (!route) throw new Error('NOT_FOUND')
 
 			const handler: ComposedHandler | undefined =
-				route.store[request.method] ||
-				route.store.ALL ||
-				this.fallbackRoute[request.method as HTTPMethod]
+				route.store || this.fallbackRoute[request.method as HTTPMethod]
 			if (!handler) throw new Error('NOT_FOUND')
-
-			const hooks = handler.hooks
 
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET') {
@@ -1240,15 +1251,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					const index = contentType.indexOf(';')
 					if (index !== -1) contentType = contentType.slice(0, index)
 
-					for (let i = 0; i < this.event.parse.length; i++) {
-						let temp = this.event.parse[i](context, contentType)
-						if (temp instanceof Promise) temp = await temp
+					if (event.parse.length)
+						for (let i = 0; i < event.parse.length; i++) {
+							const fn = event.parse[i]
+							let temp = fn(context, contentType)
+							if (fn.constructor.name === ASYNC_FN)
+								temp = await temp
 
-						if (temp) {
-							body = temp
-							break
+							if (temp) {
+								body = temp
+								break
+							}
 						}
-					}
 
 					// body might be empty string thus can't use !body
 					if (body === undefined) {
@@ -1262,7 +1276,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								break
 
 							case 'application/x-www-form-urlencoded':
-								body = mapQuery(await request.text(), null)
+								body = mapQuery(await request.text())
 								break
 						}
 					}
@@ -1271,12 +1285,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			context.body = body
 			context.params = route?.params || {}
-			context.query = mapQuery(request.url, index)
+			if (fracture[2]) context.query = mapQuery(fracture[2])
 
-			for (let i = 0; i < hooks.transform.length; i++) {
-				const operation = hooks.transform[i](context)
-				if (operation instanceof Promise) await operation
-			}
+			const hooks = handler.hooks
+
+			if (hooks.transform.length)
+				for (let i = 0; i < hooks.transform.length; i++) {
+					const fn = hooks.transform[i]
+					const operation = fn(context)
+					if (fn.constructor.name === ASYNC_FN) await operation
+				}
 
 			if (handler.validator) {
 				const validator = handler.validator
@@ -1312,27 +1330,28 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					throw createValidationError('body', validator.body, body)
 			}
 
-			for (let i = 0; i < hooks.beforeHandle.length; i++) {
-				let response = hooks.beforeHandle[i](context)
-				if (response instanceof Promise) response = await response
+			if (hooks.beforeHandle.length)
+				for (let i = 0; i < hooks.beforeHandle.length; i++) {
+					const fn = hooks.beforeHandle[i]
+					let response = fn(context)
+					if (fn.constructor.name === ASYNC_FN)
+						response = await response
 
-				// `false` is a falsey value, check for null and undefined instead
-				if (response !== null && response !== undefined) {
-					for (let i = 0; i < hooks.afterHandle.length; i++) {
-						let newResponse = hooks.afterHandle[i](
-							context,
-							response
-						)
-						if (newResponse instanceof Promise)
-							newResponse = await newResponse
+					// `false` is a falsey value, check for null and undefined instead
+					if (response !== null && response !== undefined) {
+						for (let i = 0; i < hooks.afterHandle.length; i++) {
+							const fn = hooks.afterHandle[i]
+							let newResponse = fn(context, response)
+							if (fn.constructor.name === ASYNC_FN)
+								newResponse = await newResponse
 
-						if (newResponse) response = newResponse
+							if (newResponse) response = newResponse
+						}
+
+						const result = mapEarlyResponse(response, context.set)
+						if (result) return result
 					}
-
-					const result = mapEarlyResponse(response, context.set)
-					if (result) return result
 				}
-			}
 
 			let response = handler.handle(context)
 			if (response instanceof Promise) response = await response
@@ -1344,14 +1363,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					response
 				)
 
-			for (let i = 0; i < hooks.afterHandle.length; i++) {
-				let newResponse = hooks.afterHandle[i](context, response)
-				if (newResponse instanceof Promise)
-					newResponse = await newResponse
+			if (hooks.afterHandle.length)
+				for (let i = 0; i < hooks.afterHandle.length; i++) {
+					const afterHandle = hooks.afterHandle[i]
+					let newResponse = afterHandle(context, response)
+					if (afterHandle.constructor.name === ASYNC_FN)
+						newResponse = await newResponse
 
-				const result = mapEarlyResponse(newResponse, context.set)
-				if (result) return result
-			}
+					const result = mapEarlyResponse(newResponse, context.set)
+					if (result) return result
+				}
 
 			return mapResponse(response, context.set)
 		} catch (error) {
@@ -1362,8 +1383,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	async handleError(
 		error: Error,
 		set: Context['set'] = {
-			headers: {},
-			status: undefined
+			headers: {}
 		}
 	) {
 		for (let i = 0; i < this.event.error.length; i++) {
@@ -1404,14 +1424,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	) {
 		if (!Bun) throw new Error('Bun to run')
 
-		const fetch = this.handle.bind(this)
-
 		if (typeof options === 'string') {
 			options = +options
 
 			if (Number.isNaN(options))
 				throw new Error('Port must be a numeric value')
 		}
+
+		const fetch = this.handle.bind(this)
 
 		const serve: Serve =
 			typeof options === 'object'
@@ -1445,7 +1465,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (callback) callback(this.server!)
 
 		Promise.all(this.lazyLoadModules).then(() => {
-			Bun.gc(true)
+			if (!this.server!.pendingRequests) Bun.gc(true)
 		})
 
 		return this
@@ -1503,13 +1523,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 }
 
-export { Elysia, Router }
+export { Elysia }
 export { Type as t } from '@sinclair/typebox'
 
 export {
 	SCHEMA,
 	DEFS,
-	getPath,
 	createValidationError,
 	getSchemaValidator
 } from './utils'

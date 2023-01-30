@@ -1,3 +1,8 @@
+# 0.2.1 - 30 Jan 2023
+Improvement:
+- Migrate from @medley/router to Raikiri
+- Minor optimization
+
 # 0.2.0-rc.1 - 24 Jan 2023
 Improvement:
 - Map OpenAPI's schema detail on response

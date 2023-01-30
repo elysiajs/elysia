@@ -56,58 +56,23 @@ export const mergeHook = (
 export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 	[value][0]
 
-export const getPath = (url: string, queryIndex = url.indexOf('?')): string => {
-	if (queryIndex === -1) {
-		const fragmentIndex = url.indexOf('#')
+export const mapPathnameAndQueryRegEx = /:\/\/[^/]+([^#?]+)(?:\?([^#]+))?/
 
-		if (fragmentIndex !== -1) queryIndex = fragmentIndex
-		else queryIndex = url.length
+export const mapQuery = (url: string) => {
+	const mapped: Record<string, string> = {}
+	const paths = url.split('&')
+
+	for (let i = 0; i < paths.length; i++) {
+		const part = paths[i]
+		const index = part.indexOf('=')
+		let value = part.slice(index + 1)
+		if (value.includes('%')) value = decodeURIComponent(value)
+
+		mapped[part.slice(0, index)] = value
 	}
 
-	return url.substring(url.indexOf('/', 9), queryIndex)
+	return mapped
 }
-
-export const mapQuery = (
-	url: string,
-	queryIndex: number | null = url.indexOf('?')
-): Record<string, string> => {
-	if (queryIndex === -1) return {}
-
-	const query: Record<string, string> = {}
-	if (queryIndex) url = url.slice(queryIndex)
-	else url = ';' + url
-
-	// eslint-disable-next-line no-constant-condition
-	while (true) {
-		// Skip ?/&, and min length of query is 3, so start looking at 1 + 3
-		const sep = url.indexOf('&', 4)
-		if (sep === -1) {
-			const equal = url.indexOf('=')
-
-			let value = url.slice(equal + 1)
-			const hashIndex = value.indexOf('#')
-			if (hashIndex !== -1) value = value.slice(0, hashIndex)
-			if (value.includes('%')) value = decodeURI(value)
-
-			query[url.slice(1, equal)] = value
-
-			break
-		}
-
-		const path = url.slice(0, sep)
-		const equal = path.indexOf('=')
-
-		let value = path.slice(equal + 1)
-		if (value.includes('%')) value = decodeURI(value)
-
-		query[path.slice(1, equal)] = value
-
-		url = url.slice(sep)
-	}
-
-	return query
-}
-
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
