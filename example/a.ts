@@ -1,20 +1,24 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
+
+const dyn = async (app: Elysia) =>
+	app
+		.get('/v1/genres', ({ params }) => {
+			return 'statuse'
+		})
+		.get('/v1/genres/:id', ({ params }) => {
+			return 'statuse'
+		})
+		.get('/v1/statuse', ({ params }) => {
+			return 'statuse'
+		})
+		.get('/v1/statuse/:id', ({ params }) => {
+			return params
+		})
 
 const app = new Elysia()
-	.get('/', () => 'A')
-	.group('/counter', (app) =>
-		app
-			.state('counter', 0)
-			.onRequest(({ store }) => {
-				store.counter++
-			})
-			.get('/', ({ store: { counter } }) => counter)
-	)
-	.listen(8080)
+	.get('/', () => 'a')
+	.use(dyn)
+	.listen(3000)
 
 // @ts-ignore
-console.log(app.router)
-
-fetch('http://localhost:8080/counter')
-	.then((x) => x.text())
-	.then(console.log)
+console.log(app.router.root['GET'])
