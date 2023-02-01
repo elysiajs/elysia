@@ -379,14 +379,6 @@ export type ComposedHandler = {
 }
 
 export interface ElysiaConfig {
-	/**
-	 * If set to `true`, path will **NOT** try to map trailing slash with none.
-	 *
-	 * For example: `/group/` will not be map to `/group` or vice versa.
-	 *
-	 * @default false
-	 */
-	strictPath: boolean
 	serve?: Partial<Serve>
 }
 

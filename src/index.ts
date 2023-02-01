@@ -1,7 +1,6 @@
 import type { Serve, Server } from 'bun'
 
 import { Raikiri } from 'raikiri'
-// import { Router } from './router'
 import { mapResponse, mapEarlyResponse } from './handler'
 import {
 	mapQuery,
@@ -101,7 +100,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	constructor(config: Partial<ElysiaConfig> = {}) {
 		this.config = {
-			strictPath: false,
 			...config
 		}
 	}
@@ -181,15 +179,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}
 
 		this.router.add(method, path, mainHandler)
-
-		if (!this.config.strictPath && path !== '/')
-			if (path.endsWith('/'))
-				this.router.add(
-					method,
-					path.substring(0, path.length - 1),
-					mainHandler
-				)
-			else this.router.add(method, `${path}/`, mainHandler)
 	}
 
 	/**
@@ -489,7 +478,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
-				this._addHandler(method, `${prefix}${path}`, handler, hooks)
+				if (path === '/')
+					this._addHandler(method, prefix, handler, hooks)
+				else
+					this._addHandler(method, `${prefix}${path}`, handler, hooks)
 			}
 		)
 

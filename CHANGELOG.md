@@ -1,3 +1,10 @@
+# 0.2.3 - 30 Jan 2023
+Improvement:
+- Update Raikiri to 0.0.0-beta.4
+
+Change:
+- Remove strictPath option and enabled by default
+
 # 0.2.2 - 30 Jan 2023
 Improvement:
 - Migrate from @medley/router to Raikiri
