@@ -3,6 +3,7 @@
 .prettierrc
 .cjs.swcrc
 .es.swcrc
+.swcrc
 bun.lockb
 .github
 
