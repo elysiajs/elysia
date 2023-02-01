@@ -374,7 +374,7 @@ export type OverwritableTypeRoute = {
 
 export type ComposedHandler = {
 	handle: Handler<any, any>
-	hooks: RegisteredHook<any>
+	hooks?: RegisteredHook<any>
 	validator?: SchemaValidator
 }
 

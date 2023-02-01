@@ -1,3 +1,8 @@
+# 0.2.4 - 1 Feb 2023
+Improvement:
+- Using SWC to bundle and minification
+- Minor optimization
+
 # 0.2.3 - 30 Jan 2023
 Improvement:
 - Update Raikiri to 0.0.0-beta.4
