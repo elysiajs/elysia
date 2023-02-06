@@ -30,5 +30,8 @@ Designed with TypeScript in mind, you don't need to understand TypeScript to gai
 ## Documentation
 The documentation is available on [elysiajs.com](https://elysiajs.com).
 
+## Contributing
+See [Contributing Guide](CONTRIBUTING.md) and please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Discord
 Come join the [Discord channel~](https://discord.gg/eaFJ2KDJck)
