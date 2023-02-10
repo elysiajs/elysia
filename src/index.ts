@@ -1212,11 +1212,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}
 
 		try {
-			const event = this.event
-
-			if (event.request.length)
-				for (let i = 0; i < event.request.length; i++) {
-					let response = event.request[i](context)
+			if (this.event.request.length)
+				for (let i = 0; i < this.event.request.length; i++) {
+					let response = this.event.request[i](context)
 					if (response instanceof Promise) response = await response
 
 					response = mapEarlyResponse(response, set)
@@ -1242,9 +1240,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 					if (index !== -1) contentType = contentType.slice(0, index)
 
-					if (event.parse.length)
-						for (let i = 0; i < event.parse.length; i++) {
-							let temp = event.parse[i](context, contentType)
+					if (this.event.parse.length)
+						for (let i = 0; i < this.event.parse.length; i++) {
+							let temp = this.event.parse[i](context, contentType)
 							if (temp instanceof Promise) temp = await temp
 
 							if (temp !== undefined) {
@@ -1272,7 +1270,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 
 			context.body = body
-			context.params = route?.params || {}
+			context.params = route.params
 			if (fracture[2]) context.query = mapQuery(fracture[2])
 
 			const hooks = handler.hooks

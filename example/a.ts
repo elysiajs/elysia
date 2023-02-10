@@ -1,4 +1,4 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const dyn = async (app: Elysia) =>
 	app
@@ -17,6 +17,14 @@ const dyn = async (app: Elysia) =>
 
 const app = new Elysia()
 	.get('/', () => 'a')
+	.get('/multi', ({ set }) => {
+		set.headers = {
+			// @ts-ignore
+			"Set-Cookie": ["a=b", "c=d"]
+		}
+
+		return "a"
+	})
 	.use(dyn)
 	.listen(3000)
 

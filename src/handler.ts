@@ -6,8 +6,34 @@ const isNotEmpty = (obj: Object) => {
 	return false
 }
 
+const parseSetCookies = (headers: Headers, setCookie: string | string[]) => {
+	if (Array.isArray(setCookie)) {
+		headers.delete('Set-Cookie')
+
+		for (let i = 0; i < setCookie.length; i++) {
+			const index = setCookie[i].indexOf('=')
+
+			headers.append(
+				'Set-Cookie',
+				`${setCookie[i].slice(0, index)}=${setCookie[i].slice(
+					index + 1
+				)}`
+			)
+		}
+	}
+
+	return headers
+}
+
 // We don't want to assign new variable to be used only once here
 export const mapEarlyResponse = (response: unknown, set: Context['set']) => {
+	if (set.headers?.['Set-Cookie'])
+		// @ts-ignore
+		set.headers = parseSetCookies(
+			new Headers(set.headers),
+			set.headers['Set-Cookie']
+		)
+
 	if (set.redirect)
 		return Response.redirect(set.redirect, {
 			headers: set.headers
@@ -106,6 +132,13 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
+	if (set.headers?.['Set-Cookie'])
+		// @ts-ignore
+		set.headers = parseSetCookies(
+			new Headers(set.headers),
+			set.headers['Set-Cookie']
+		)
+
 	if (set.redirect)
 		return Response.redirect(set.redirect, {
 			headers: set.headers

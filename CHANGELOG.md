@@ -1,3 +1,11 @@
+# 0.2.6 - 10 Feb 2023
+Feature:
+- Add supports for multiple cookie
+
+# 0.2.5 - 1 Feb 2023
+Improvement:
+- Minor optimization
+
 # 0.2.4 - 1 Feb 2023
 Improvement:
 - Using SWC to bundle and minification
