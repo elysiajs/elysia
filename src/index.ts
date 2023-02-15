@@ -1187,7 +1187,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return this as unknown as NewInstance
 	}
 
-	async handle(request: Request): Promise<Response> {
+	handle = async (request: Request): Promise<Response> => {
 		const set: Context['set'] = {
 			status: 200,
 			headers: {}
@@ -1402,10 +1402,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     .listen(8080)
 	 * ```
 	 */
-	listen(
+	listen = (
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback
-	) {
+	) => {
 		if (!Bun) throw new Error('Bun to run')
 
 		if (typeof options === 'string') {
@@ -1415,7 +1415,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				throw new Error('Port must be a numeric value')
 		}
 
-		const fetch = this.handle.bind(this)
+		const fetch = this.handle
 
 		const serve: Serve =
 			typeof options === 'object'

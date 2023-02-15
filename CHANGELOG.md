@@ -1,3 +1,7 @@
+# 0.2.7 - 15 Feb 2023
+Improvement:
+- Remove `bind(this)`
+
 # 0.2.6 - 10 Feb 2023
 Feature:
 - Add supports for multiple cookie
