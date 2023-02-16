@@ -12,11 +12,18 @@ import {
 	SCHEMA,
 	DEFS,
 	getResponseSchemaValidator,
-	mapPathnameAndQueryRegEx
+	mapPathnameAndQueryRegEx,
+	EXPOSED,
+	exposePermission
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
 import type { Context } from './context'
+
+import {
+	serialize as superjsonSerialize,
+	deserialize as superjsonDeseiralize
+} from 'superjson'
 
 import type {
 	Handler,
@@ -70,10 +77,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	store: Instance['store'] = {
 		[SCHEMA]: {},
-		[DEFS]: {}
+		[DEFS]: {},
+		[EXPOSED]: {}
 	}
 	// Will be applied to Context
-	protected decorators: Record<string, unknown> | null = null
+	protected decorators: ElysiaInstance['request'] | null = null
 
 	event: LifeCycleStore<Instance> = {
 		start: [],
@@ -1040,14 +1048,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	state<
 		Key extends string | number | symbol = keyof Instance['store'],
 		Value = Instance['store'][keyof Instance['store']],
-		ReturnValue = Value extends () => infer Returned
-			? Returned extends Promise<infer AsyncReturned>
-				? AsyncReturned
-				: Returned
-			: Value,
 		NewInstance = Elysia<{
 			store: Instance['store'] & {
-				[key in Key]: ReturnValue
+				[key in Key]: Value
 			}
 			request: Instance['request']
 			schema: Instance['schema']
@@ -1082,6 +1085,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}>
 	>(name: Name, value: Value): NewInstance {
 		if (!this.decorators) this.decorators = {}
+		// @ts-ignore
 		if (!(name in this.decorators)) this.decorators[name] = value
 
 		return this as unknown as NewInstance
@@ -1089,6 +1093,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	/**
 	 * Create derived property from Context
+	 * @experimental
 	 *
 	 * ---
 	 * @example
@@ -1143,6 +1148,112 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return this.onTransform((context) => {
 			Object.assign(context, transform(context))
 		}) as unknown as any
+	}
+
+	expose<
+		T extends
+			| Record<string, unknown>
+			| ((
+					app: Instance['request'] & {
+						store: Instance['store']
+						permission: typeof exposePermission
+					}
+			  ) => Record<string, unknown>) =
+			| Record<string, unknown>
+			| ((
+					app: Instance['request'] & {
+						store: Instance['store']
+						permission: typeof exposePermission
+					}
+			  ) => Record<string, unknown>)
+	>(
+		value: T
+	): Elysia<{
+		store: Instance['store'] & {
+			[EXPOSED]: T extends (store: any) => infer Returned ? Returned : T
+		}
+		request: Instance['request']
+		schema: Instance['schema']
+	}> {
+		if (Object.keys(this.store[EXPOSED]).length === 0) {
+			this.post(
+				'/~fn',
+				// @ts-ignore
+				(context) => {
+					const exposed: Record<string, unknown> = this.store[EXPOSED]
+					const results = []
+
+					const body = context.body as { n: string[]; p: any }[]
+
+					batch: for (let i = 0; i < body.length; i++) {
+						const procedure = body[i]
+						let method: Record<string, any> = exposed
+
+						if (!Array.isArray(procedure.n)) {
+							results.push(new Error('Invalid procedure'))
+							continue batch
+						}
+
+						for (let j = 0; j < procedure.n.length; j++) {
+							// @ts-ignore
+							method = method[procedure.n[j]]
+
+							if (!method) {
+								results.push(new Error('Invalid procedure'))
+								continue batch
+							}
+
+							if (EXPOSED in method)
+								if (method.allow == false) {
+									results.push(new Error('Forbidden'))
+									continue batch
+								} else if (method.allow !== true) {
+									try {
+										const allowance = method.allow({
+											...context,
+											key: procedure.n
+												.slice(j + 1)
+												.join('.'),
+											params: procedure.p ?? null
+										})
+
+										if (allowance instanceof Error) {
+											results.push(allowance)
+											continue batch
+										}
+									} catch (error) {
+										results.push(error)
+										continue batch
+									}
+
+									method = method.value
+								}
+						}
+
+						if (typeof method === 'function')
+							if (procedure.p !== undefined)
+								results.push(method(procedure.p))
+							else results.push(method())
+						else results.push(new Error('Invalid procedure'))
+					}
+
+					return Promise.all(results).then(superjsonSerialize)
+				}
+			)
+		}
+
+		this.store[EXPOSED] = mergeDeep(
+			this.store[EXPOSED],
+			typeof value === 'function'
+				? value({
+						...this.decorators,
+						store: this.store,
+						permission: exposePermission
+				  })
+				: value
+		) as any
+
+		return this as any
 	}
 
 	/**
@@ -1265,6 +1376,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							case 'application/x-www-form-urlencoded':
 								body = mapQuery(await request.text())
 								break
+
+							case 'elysia/fn':
+								body = superjsonDeseiralize(
+									await request.json()
+								)
 						}
 				}
 			}
@@ -1513,6 +1629,7 @@ export { Type as t } from '@sinclair/typebox'
 export {
 	SCHEMA,
 	DEFS,
+	EXPOSED,
 	createValidationError,
 	getSchemaValidator,
 	mergeDeep,

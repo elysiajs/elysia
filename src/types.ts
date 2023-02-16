@@ -4,7 +4,7 @@ import type { Serve, Server } from 'bun'
 import type { Context, PreContext } from './context'
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import type { SCHEMA, DEFS } from './utils'
+import type { SCHEMA, DEFS, EXPOSED } from './utils'
 import type { OpenAPIV2 } from 'openapi-types'
 
 export type WithArray<T> = T | T[]
@@ -14,13 +14,15 @@ export interface ElysiaInstance<
 	Instance extends {
 		store?: Record<any, any> &
 			Record<typeof SCHEMA, Partial<OpenAPIV2.PathsObject>> &
-			Record<typeof DEFS, { [x in string]: TSchema }>
+			Record<typeof DEFS, { [x in string]: TSchema }> &
+			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 		request?: Record<any, any>
 		schema?: TypedSchema
 	} = {
 		store: Record<any, any> &
 			Record<typeof SCHEMA, {}> &
-			Record<typeof DEFS, {}>
+			Record<typeof DEFS, {}> &
+			Record<typeof EXPOSED, {}>
 		request: {}
 		schema: {}
 	}
@@ -511,3 +513,40 @@ export type IsAny<T> = unknown extends T
 export type MaybePromise<T> = T | Promise<T>
 
 export type IsNever<T> = [T] extends [never] ? true : false
+
+// https://stackoverflow.com/a/58436959
+export type FunctionalKeys<T, Prefix extends string = ''> =
+	| {
+			// @ts-ignore
+			[K in keyof T]-?: T[K] extends Function ? `${Prefix}${K}` : never
+	  }[keyof T]
+	| {
+			[K in keyof T]-?: T[K] extends object
+				? // @ts-ignore
+				  FunctionalKeys<T[K], `${Prefix}${K}.`>
+				: never
+	  }[keyof T]
+
+	  interface A {
+		a: () => 'a',
+		b: 2,
+		nested: {
+		  value: () => 'c'
+		}
+	  }
+	  
+	  type AKeys = FunctionalKeys<A>; // type AKeys is 'a' | 'nested.value'
+	  
+
+export type ConnectedKeysType<
+	T,
+	K extends string
+> = K extends `${infer Key}.${infer Rest}`
+	? Key extends keyof T
+		? ConnectedKeysType<T[Key], Rest>
+		: never
+	: K extends keyof T
+	? T[K] extends (...args: any) => any
+		? ReturnType<T[K]>
+		: never
+	: never

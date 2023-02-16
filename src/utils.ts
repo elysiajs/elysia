@@ -9,12 +9,15 @@ import type {
 	LifeCycleStore,
 	LocalHook,
 	TypedSchema,
-	RegisteredHook
+	RegisteredHook,
+	ConnectedKeysType,
+	FunctionalKeys
 } from './types'
 
 // ? Internal property
 export const SCHEMA: unique symbol = Symbol('schema')
 export const DEFS: unique symbol = Symbol('definitions')
+export const EXPOSED: unique symbol = Symbol('exposed')
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 	...(Array.isArray(a) ? a : [a]),
@@ -170,3 +173,34 @@ export const getResponseSchemaValidator = (
 
 	return TypeCompiler.Compile(schema)
 }
+
+export const exposePermission = <
+	T,
+	Key = T extends Record<any, any> ? FunctionalKeys<T> : never
+>({
+	value,
+	allow = true
+}: {
+	value: T
+	allow?:
+		| boolean
+		| ((context: {
+				request: Request
+				key: Key
+				params: Key extends string ? ConnectedKeysType<T, Key> : unknown
+		  }) => unknown)
+}): {
+	[EXPOSED]: true
+	value: T
+	allow?:
+		| boolean
+		| ((context: {
+				request: Request
+				key: Key
+				params: Key extends string ? ConnectedKeysType<T, Key> : unknown
+		  }) => unknown)
+} => ({
+	[EXPOSED]: true,
+	value,
+	allow
+})

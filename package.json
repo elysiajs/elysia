@@ -1,53 +1,54 @@
 {
-	"name": "elysia",
-	"description": "Fast, and friendly Bun web framework",
-	"version": "0.2.7",
-	"author": {
-		"name": "saltyAom",
-		"url": "https://github.com/SaltyAom",
-		"email": "saltyaom@gmail.com"
-	},
-	"main": "./dist/index.js",
-	"exports": {
-		"require": "./dist/index.js",
-		"import": "./dist/index.js",
-		"node": "./dist/index.js",
-		"default": "./dist/index.js"
-	},
-	"types": "./dist/index.d.ts",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/elysiajs/elysia"
-	},
-	"bugs": "https://github.com/elysiajs/elysia/issues",
-	"homepage": "https://github.com/elysiajs/elysia",
-	"keywords": [
-		"bun",
-		"http",
-		"web",
-		"server"
-	],
-	"license": "MIT",
-	"scripts": {
-		"test": "bun wiptest",
-		"dev": "bun run --hot example/http.ts",
-		"build": "rimraf dist && swc src -d dist && tsc --project tsconfig.esm.json",
-		"release": "npm run build && npm run test && npm publish"
-	},
-	"dependencies": {
-		"@sinclair/typebox": "^0.25.21",
-		"openapi-types": "^12.1.0",
-		"raikiri": "^0.0.0-beta.5"
-	},
-	"devDependencies": {
-		"@swc/cli": "^0.1.60",
-		"@swc/core": "^1.3.32",
-		"@types/node": "^18.11.18",
-		"@typescript-eslint/eslint-plugin": "^5.48.2",
-		"@typescript-eslint/parser": "^5.48.2",
-		"bun-types": "^0.5.0",
-		"eslint": "^8.32.0",
-		"rimraf": "^3.0.2",
-		"typescript": "^4.9.4"
-	}
+  "name": "elysia",
+  "description": "Fast, and friendly Bun web framework",
+  "version": "0.2.7",
+  "author": {
+    "name": "saltyAom",
+    "url": "https://github.com/SaltyAom",
+    "email": "saltyaom@gmail.com"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    "require": "./dist/index.js",
+    "import": "./dist/index.js",
+    "node": "./dist/index.js",
+    "default": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elysiajs/elysia"
+  },
+  "bugs": "https://github.com/elysiajs/elysia/issues",
+  "homepage": "https://github.com/elysiajs/elysia",
+  "keywords": [
+    "bun",
+    "http",
+    "web",
+    "server"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "bun wiptest",
+    "dev": "bun run --hot example/http.ts",
+    "build": "rimraf dist && swc src -d dist && tsc --project tsconfig.esm.json",
+    "release": "npm run build && npm run test && npm publish"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.25.21",
+    "openapi-types": "^12.1.0",
+    "raikiri": "^0.0.0-beta.5",
+    "superjson": "^1.12.2"
+  },
+  "devDependencies": {
+    "@swc/cli": "^0.1.60",
+    "@swc/core": "^1.3.32",
+    "@types/node": "^18.11.18",
+    "@typescript-eslint/eslint-plugin": "^5.48.2",
+    "@typescript-eslint/parser": "^5.48.2",
+    "bun-types": "^0.5.0",
+    "eslint": "^8.32.0",
+    "rimraf": "^3.0.2",
+    "typescript": "^4.9.4"
+  }
 }
