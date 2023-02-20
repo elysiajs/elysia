@@ -2,52 +2,32 @@ import { Elysia, t } from '../src'
 
 const authenticate = (app: Elysia) =>
 	app.group('/authenticate', (group) =>
-		group.group('/a', (a) =>
-			a
-				.post(
-					'/login',
-					({ body: { username, password }, set }) => {
-						set.status = 200
-						return {
-							status: 200,
-							body: {
-								username,
-								password
-							}
-						}
-					},
-					{
-						beforeHandle: ({
-							body: { username, password },
-							set
-						}) => {
-							throw new Error('This is a test')
-						},
-						schema: {
-							body: t.Object({
-								username: t.String(),
-								password: t.String()
-							})
-						}
+		group
+			.post(
+				'/login',
+				({ body: { username, password }, set }) => {
+					throw new Error('A')
+				},
+				{
+					beforeHandle: ({ body: { username, password }, set }) => {},
+					schema: {
+						body: t.Object({
+							username: t.String(),
+							password: t.String()
+						})
 					}
-				)
-				.onError(({ code, error, set }) => {
-					return {
-						status: 400,
-						body: {
-							error: 'Bad request'
-						}
+				}
+			)
+			.onError(({ code, error, set }) => {
+				console.log("A")
+
+				return {
+					status: 400,
+					body: {
+						error: 'Bad request'
 					}
-				})
-		)
+				}
+			})
 	)
 
-const app = new Elysia()
-	.use(authenticate)
-	.get('/a', () => {
-		throw new Error('A')
-	})
-	.onError(() => {
-		console.log('B')
-	})
-	.listen(8080)
+const app = new Elysia().use(authenticate).listen(8080)

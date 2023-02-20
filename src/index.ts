@@ -1225,6 +1225,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 		}
 
+		let handleErrors: ErrorHandler[] | undefined
+
 		try {
 			if (this.event.request.length)
 				for (let i = 0; i < this.event.request.length; i++) {
@@ -1288,6 +1290,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			if (fracture[2]) context.query = mapQuery(fracture[2])
 
 			const hooks = handler.hooks
+			if (hooks?.error) handleErrors = hooks?.error
 
 			if (hooks?.transform.length)
 				for (let i = 0; i < hooks.transform.length; i++) {
@@ -1375,6 +1378,23 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			return mapResponse(response, context.set)
 		} catch (error) {
 			if (!set.status || set.status < 300) set.status = 500
+
+			if (handleErrors) {
+				const code = mapErrorCode((error as Error).message)
+
+				for (let i = 0; i < handleErrors.length; i++) {
+					let handled = handleErrors[i]({
+						request,
+						error: error as Error,
+						set,
+						code
+					})
+					if (handled instanceof Promise) handled = await handled
+
+					const response = mapEarlyResponse(handled, set)
+					if (response) return response
+				}
+			}
 
 			return this.handleError(request, error as Error, set)
 		}
