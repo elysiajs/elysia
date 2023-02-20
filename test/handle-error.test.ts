@@ -1,9 +1,9 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
 
-const request = new Request("http://localhost:8080")
+const request = new Request('http://localhost:8080')
 
 describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
@@ -96,5 +96,47 @@ describe('Handle Error', () => {
 
 		expect(await res.text()).toBe('aw man')
 		expect(res.status).toBe(418)
+	})
+
+	it('handle error in group', async () => {
+		const authenticate = (app: Elysia) =>
+			app.group('/group', (group) =>
+				group
+					.get('/inner', () => {
+						throw new Error('A')
+					})
+					.onError(() => {
+						return 'handled'
+					})
+			)
+
+		const app = new Elysia().use(authenticate)
+
+		const response = await app.handle(req('/group/inner'))
+
+		expect(await response.text()).toEqual('handled')
+		expect(response.status).toEqual(500)
+	})
+
+	it('handle error status in group', async () => {
+		const authenticate = (app: Elysia) =>
+			app.group('/group', (group) =>
+				group
+					.get('/inner', ({ set }) => {
+						set.status = 418
+
+						throw new Error('A')
+					})
+					.onError(() => {
+						return 'handled'
+					})
+			)
+
+		const app = new Elysia().use(authenticate)
+
+		const response = await app.handle(req('/group/inner'))
+
+		expect(await response.text()).toEqual('handled')
+		expect(response.status).toEqual(418)
 	})
 })

@@ -6,18 +6,12 @@ const authenticate = (app: Elysia) =>
 			.post(
 				'/login',
 				({ body: { username, password }, set }) => {
-					throw new Error('Test')
+					throw new Error('A')
 				},
 				{
-					beforeHandle: ({ body: { username, password }, set }) => {
-						// In development
-					},
+					beforeHandle: ({ body: { username, password }, set }) => {},
 					schema: {
 						body: t.Object({
-							username: t.String(),
-							password: t.String()
-						}),
-						response: t.Object({
 							username: t.String(),
 							password: t.String()
 						})
@@ -25,7 +19,7 @@ const authenticate = (app: Elysia) =>
 				}
 			)
 			.onError(({ code, error, set }) => {
-				console.log(error)
+				console.log("A")
 
 				return {
 					status: 400,
@@ -36,6 +30,4 @@ const authenticate = (app: Elysia) =>
 			})
 	)
 
-const app = new Elysia()
-	.use(authenticate)
-	.listen(8080)
+const app = new Elysia().use(authenticate).listen(8080)
