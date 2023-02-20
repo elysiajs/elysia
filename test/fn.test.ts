@@ -7,7 +7,7 @@ const app = new Elysia()
 	.state('version', 1)
 	.decorate('getVersion', () => 1)
 	.decorate('mirrorDecorator', <T>(v: T) => v)
-	.expose(({ getVersion, mirrorDecorator, store: { version } }) => ({
+	.fn(({ getVersion, mirrorDecorator, store: { version } }) => ({
 		ping: () => 'pong',
 		mirror: (value: any) => value,
 		version: () => version,
@@ -19,7 +19,7 @@ const app = new Elysia()
 			}
 		}
 	}))
-	.expose(({ permission }) => ({
+	.fn(({ permission }) => ({
 		authorized: permission({
 			value: () => 'authorized',
 			allow({ request: { headers } }) {
@@ -149,14 +149,32 @@ describe('Elysia Fn', () => {
 
 		expect(res).toEqual([1, 1, 1])
 	})
-})
 
-// [
-// { n: ['prisma', 'users', 'create'], p: 'a' },
-// { n: ['prisma', 'users', 'delete'], p: 'a' }
-// { n: ['mirror'], p: 29301 },
-// { n: ['mirror'], p: 1 },
-// { n: ['decorator'], p: '' },
-// { n: ['store'] },
-// { n: ['nested', 'data'] },
-// ]
+	it('custom path', async () => {
+		const app = new Elysia({
+			fn: '/custom'
+		}).fn({
+			mirror: <T>(v: T) => v
+		})
+
+		const fn = (
+			body: Array<{ n: string[] } | { n: string[]; p: any }>,
+			headers: HeadersInit = {}
+		): Promise<unknown[]> =>
+			app
+				.handle(
+					new Request('http://localhost/custom', {
+						method: 'POST',
+						headers: {
+							'content-type': 'elysia/fn',
+							...headers
+						},
+						body: SuperJSON.stringify(body)
+					})
+				)
+				.then((x) => x.text())
+				.then((x) => SuperJSON.parse(x))
+
+		expect(await fn([{ n: ['mirror'], p: 1 }])).toEqual([1])
+	})
+})

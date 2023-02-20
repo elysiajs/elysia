@@ -3,7 +3,7 @@ import { Elysia, EXPOSED } from '../src'
 const app = new Elysia()
 	.state('store', () => new Date())
 	.decorate('decorator', () => new Date())
-	.expose(({ decorator, store: { store } }) => ({
+	.fn(({ decorator, store: { store } }) => ({
 		mirror: (value: any) => value,
 		decorator,
 		store,
@@ -13,7 +13,7 @@ const app = new Elysia()
 			}
 		}
 	}))
-	.expose(({ permission }) => ({
+	.fn(({ permission }) => ({
 		prisma: permission({
 			value: {
 				users: {

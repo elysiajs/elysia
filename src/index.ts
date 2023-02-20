@@ -3,17 +3,17 @@ import type { Serve, Server } from 'bun'
 import { Raikiri } from 'raikiri'
 import { mapResponse, mapEarlyResponse } from './handler'
 import {
+	SCHEMA,
+	EXPOSED,
+	DEFS,
 	mapQuery,
 	clone,
 	mergeHook,
 	mergeDeep,
 	createValidationError,
 	getSchemaValidator,
-	SCHEMA,
-	DEFS,
 	getResponseSchemaValidator,
 	mapPathnameAndQueryRegEx,
-	EXPOSED,
 	exposePermission
 } from './utils'
 import { registerSchemaPath } from './schema'
@@ -100,10 +100,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	private router = new Raikiri<ComposedHandler>()
 	protected routes: InternalRoute<Instance>[] = []
 
-	private lazyLoadModules: Promise<Elysia>[] = []
+	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
-	constructor(config: Partial<ElysiaConfig> = {}) {
+	constructor(config?: Partial<ElysiaConfig>) {
 		this.config = {
+			fn: '/~fn',
 			...config
 		}
 	}
@@ -483,7 +484,33 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (sandbox.event.request.length)
 			this.event.request = [
 				...this.event.request,
-				...sandbox.event.request
+				...sandbox.event.request.map(
+					(onRequest): BeforeRequestHandler =>
+						(context) => {
+							if (
+								context.request.url
+									.match(mapPathnameAndQueryRegEx)?.[1]
+									.startsWith(prefix)
+							)
+								return onRequest(context)
+						}
+				)
+			]
+
+		if (sandbox.event.error.length)
+			this.event.error = [
+				...this.event.error,
+				...sandbox.event.error.map(
+					(onError): ErrorHandler =>
+						(context) => {
+							if (
+								context.request.url
+									.match(mapPathnameAndQueryRegEx)?.[1]
+									.startsWith(prefix)
+							)
+								return onError(context)
+						}
+				)
 			]
 
 		Object.values(instance.routes).forEach(
@@ -1150,7 +1177,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}) as unknown as any
 	}
 
-	expose<
+	fn<
 		T extends
 			| Record<string, unknown>
 			| ((
@@ -1177,7 +1204,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}> {
 		if (Object.keys(this.store[EXPOSED]).length === 0) {
 			this.post(
-				'/~fn',
+				this.config.fn ?? '/~fn',
 				// @ts-ignore
 				(context) => {
 					const exposed: Record<string, unknown> = this.store[EXPOSED]
@@ -1476,11 +1503,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			return mapResponse(response, context.set)
 		} catch (error) {
-			return this.handleError(error as Error, set)
+			return this.handleError(request, error as Error, set)
 		}
 	}
 
 	async handleError(
+		request: Request,
 		error: Error,
 		set: Context['set'] = {
 			headers: {}
@@ -1488,6 +1516,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	) {
 		for (let i = 0; i < this.event.error.length; i++) {
 			let response = this.event.error[i]({
+				request,
 				code: mapErrorCode(error.message),
 				error,
 				set

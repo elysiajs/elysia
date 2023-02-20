@@ -12,17 +12,21 @@ export type ObjectValues<T extends object> = T[keyof T]
 
 export interface ElysiaInstance<
 	Instance extends {
-		store?: Record<any, any> &
-			Record<typeof SCHEMA, Partial<OpenAPIV2.PathsObject>> &
-			Record<typeof DEFS, { [x in string]: TSchema }> &
-			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
+		store?: {
+			[SCHEMA]: Partial<OpenAPIV2.PathsObject>
+			[DEFS]: { [x in string]: TSchema }
+			[EXPOSED]: Record<string, Record<string, unknown>>
+			[x: string]: any
+		}
 		request?: Record<any, any>
 		schema?: TypedSchema
 	} = {
-		store: Record<any, any> &
-			Record<typeof SCHEMA, {}> &
-			Record<typeof DEFS, {}> &
-			Record<typeof EXPOSED, {}>
+		store: {
+			[SCHEMA]: {}
+			[DEFS]: {}
+			[EXPOSED]: {}
+			[x: string]: any
+		}
 		request: {}
 		schema: {}
 	}
@@ -360,9 +364,9 @@ export type LocalHandler<
 
 export interface TypedRoute {
 	body?: unknown
-	headers?: Record<string, any>
-	query?: Record<string, string>
-	params?: Record<string, string>
+	headers?: Record<string, unknown>
+	query?: Record<string, unknown>
+	params?: Record<string, unknown>
 	response?: unknown
 }
 
@@ -381,6 +385,7 @@ export type ComposedHandler = {
 }
 
 export interface ElysiaConfig {
+	fn?: string
 	serve?: Partial<Serve>
 }
 
@@ -447,6 +452,7 @@ export type ErrorCode =
 	| 'UNKNOWN'
 
 export type ErrorHandler = (params: {
+	request: Request
 	code: ErrorCode
 	error: Error
 	set: Context['set']
@@ -527,26 +533,20 @@ export type FunctionalKeys<T, Prefix extends string = ''> =
 				: never
 	  }[keyof T]
 
-	  interface A {
-		a: () => 'a',
-		b: 2,
-		nested: {
-		  value: () => 'c'
-		}
-	  }
-	  
-	  type AKeys = FunctionalKeys<A>; // type AKeys is 'a' | 'nested.value'
-	  
+// export type ConnectedKeysType<
+// 	T,
+// 	K extends string
+// > = K extends `${infer Key}.${infer Rest}`
+// 	? Key extends keyof T
+// 		? ConnectedKeysType<T[Key], Rest>
+// 		: never
+// 	: K extends keyof T
+// 	? T[K] extends (...args: any) => any
+// 		? ReturnType<T[K]>
+// 		: never
+// 	: never
 
-export type ConnectedKeysType<
-	T,
-	K extends string
-> = K extends `${infer Key}.${infer Rest}`
-	? Key extends keyof T
-		? ConnectedKeysType<T[Key], Rest>
-		: never
-	: K extends keyof T
-	? T[K] extends (...args: any) => any
-		? ReturnType<T[K]>
-		: never
-	: never
+// https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
+export type Prettify<T> = {
+	[K in keyof T]: T[K]
+} & {}
