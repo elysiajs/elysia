@@ -1,44 +1,16 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, DEFS, SCHEMA } from '../src'
 
-const authenticate = (app: Elysia) =>
-	app.group('/authenticate', (group) =>
-		group
-			.onRequest(() => {
-				console.log("Here")
-			})
-			.post(
-				'/login',
-				({ body: { username, password }, set }) => {
-					set.status = 200
+const app = new Elysia()
+	.get('/', () => {})
+	.get('/a', () => 'hi', {
+		schema: {
+			response: {
+				200: t.String(),
+				418: t.Object({
+					name: t.Literal("I'm a teapot")
+				})
+			}
+		}
+	})
 
-					return {
-						status: 200,
-						body: {
-							username,
-							password
-						}
-					}
-				},
-				{
-					beforeHandle: ({ body: { username, password }, set }) => {
-						throw new Error('This is a test')
-					},
-					schema: {
-						body: t.Object({
-							username: t.String(),
-							password: t.String()
-						})
-					}
-				}
-			)
-			.onError(({ code, error, set }) => {
-				return {
-					status: 400,
-					body: {
-						error: 'Bad request'
-					}
-				}
-			})
-	)
-
-const app = new Elysia().use(authenticate).listen(8080)
+type A = typeof app['store'][typeof SCHEMA]['/a']

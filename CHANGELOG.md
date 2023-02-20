@@ -1,3 +1,7 @@
+# 0.2.8 - 20 Feb 2023
+Bug fix:
+- `group` doesn't inherits `onError`
+
 # 0.2.7 - 15 Feb 2023
 Improvement:
 - Remove `bind(this)`

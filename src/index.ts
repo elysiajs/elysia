@@ -484,17 +484,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (sandbox.event.request.length)
 			this.event.request = [
 				...this.event.request,
-				...sandbox.event.request.map(
-					(onRequest): BeforeRequestHandler =>
-						(context) => {
-							if (
-								context.request.url
-									.match(mapPathnameAndQueryRegEx)?.[1]
-									.startsWith(prefix)
-							)
-								return onRequest(context)
-						}
-				)
+				...sandbox.event.request
 			]
 
 		if (sandbox.event.error.length)
@@ -516,9 +506,23 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
 				if (path === '/')
-					this._addHandler(method, prefix, handler, hooks)
+					this._addHandler(
+						method,
+						prefix,
+						handler,
+						mergeHook(hooks, {
+							error: sandbox.event.error
+						})
+					)
 				else
-					this._addHandler(method, `${prefix}${path}`, handler, hooks)
+					this._addHandler(
+						method,
+						`${prefix}${path}`,
+						handler,
+						mergeHook(hooks, {
+							error: sandbox.event.error
+						})
+					)
 			}
 		)
 
@@ -1503,6 +1507,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			return mapResponse(response, context.set)
 		} catch (error) {
+			if (!set.status || set.status < 300) set.status = 500
+
 			return this.handleError(request, error as Error, set)
 		}
 	}

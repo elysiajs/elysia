@@ -12,21 +12,17 @@ export type ObjectValues<T extends object> = T[keyof T]
 
 export interface ElysiaInstance<
 	Instance extends {
-		store?: {
-			[SCHEMA]: Partial<OpenAPIV2.PathsObject>
-			[DEFS]: { [x in string]: TSchema }
-			[EXPOSED]: Record<string, Record<string, unknown>>
-			[x: string]: any
-		}
+		store?: Record<any, any> &
+			Record<typeof SCHEMA, Partial<OpenAPIV2.PathsObject>> &
+			Record<typeof DEFS, { [x in string]: TSchema }> &
+			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 		request?: Record<any, any>
 		schema?: TypedSchema
 	} = {
-		store: {
-			[SCHEMA]: {}
-			[DEFS]: {}
-			[EXPOSED]: {}
-			[x: string]: any
-		}
+		store: Record<any, any> &
+			Record<typeof SCHEMA, {}> &
+			Record<typeof DEFS, {}> &
+			Record<typeof EXPOSED, {}>
 		request: {}
 		schema: {}
 	}
@@ -533,18 +529,18 @@ export type FunctionalKeys<T, Prefix extends string = ''> =
 				: never
 	  }[keyof T]
 
-// export type ConnectedKeysType<
-// 	T,
-// 	K extends string
-// > = K extends `${infer Key}.${infer Rest}`
-// 	? Key extends keyof T
-// 		? ConnectedKeysType<T[Key], Rest>
-// 		: never
-// 	: K extends keyof T
-// 	? T[K] extends (...args: any) => any
-// 		? ReturnType<T[K]>
-// 		: never
-// 	: never
+export type ConnectedKeysType<
+	T,
+	K extends string
+> = K extends `${infer Key}.${infer Rest}`
+	? Key extends keyof T
+		? ConnectedKeysType<T[Key], Rest>
+		: never
+	: K extends keyof T
+	? T[K] extends (...args: any) => any
+		? ReturnType<T[K]>
+		: never
+	: never
 
 // https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
 export type Prettify<T> = {
