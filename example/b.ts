@@ -1,4 +1,3 @@
 import { Elysia } from '../src'
 
-const app = new Elysia()
-    .get("/", () => {})
+const app = new Elysia().get('/', () => {})

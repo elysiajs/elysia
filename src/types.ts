@@ -445,6 +445,7 @@ export type ErrorCode =
 	| 'UNKNOWN'
 
 export type ErrorHandler = (params: {
+	request: Request
 	code: ErrorCode
 	error: Error
 	set: Context['set']

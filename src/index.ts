@@ -481,9 +481,23 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
 				if (path === '/')
-					this._addHandler(method, prefix, handler, hooks)
+					this._addHandler(
+						method,
+						prefix,
+						handler,
+						mergeHook(hooks, {
+							error: sandbox.event.error
+						})
+					)
 				else
-					this._addHandler(method, `${prefix}${path}`, handler, hooks)
+					this._addHandler(
+						method,
+						`${prefix}${path}`,
+						handler,
+						mergeHook(hooks, {
+							error: sandbox.event.error
+						})
+					)
 			}
 		)
 
@@ -1360,11 +1374,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			return mapResponse(response, context.set)
 		} catch (error) {
-			return this.handleError(error as Error, set)
+			if (!set.status || set.status < 300) set.status = 500
+
+			return this.handleError(request, error as Error, set)
 		}
 	}
 
 	async handleError(
+		request: Request,
 		error: Error,
 		set: Context['set'] = {
 			headers: {}
@@ -1372,6 +1389,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	) {
 		for (let i = 0; i < this.event.error.length; i++) {
 			let response = this.event.error[i]({
+				request,
 				code: mapErrorCode(error.message),
 				error,
 				set
