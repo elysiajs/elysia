@@ -39,7 +39,7 @@ const app = new Elysia()
 				}
 			},
 			allow({ key, params }) {
-				if (key === 'user.delete' && params === 'Arona')
+				if (key === 'user.delete' && params[0] === 'Arona')
 					throw new Error('Forbidden')
 			}
 		})
@@ -47,7 +47,7 @@ const app = new Elysia()
 	.listen(8080)
 
 const fn = (
-	body: Array<{ n: string[] } | { n: string[]; p: any }>,
+	body: Array<{ n: string[] } | { n: string[]; p: any[] }>,
 	headers: HeadersInit = {}
 ): Promise<unknown[]> =>
 	app
@@ -72,13 +72,13 @@ describe('Elysia Fn', () => {
 	})
 
 	it('handle parameter', async () => {
-		const res = await fn([{ n: ['mirror'], p: 1 }])
+		const res = await fn([{ n: ['mirror'], p: [1] }])
 
 		expect(res[0]).toEqual(1)
 	})
 
 	it('extends SuperJSON parameter', async () => {
-		const res = await fn([{ n: ['mirror'], p: new Set([1, 2, 3]) }])
+		const res = await fn([{ n: ['mirror'], p: [new Set([1, 2, 3])] }])
 
 		expect(res[0]).toEqual(new Set([1, 2, 3]))
 	})
@@ -86,7 +86,7 @@ describe('Elysia Fn', () => {
 	it('multiple parameters', async () => {
 		const res = await fn([
 			{ n: ['ping'] },
-			{ n: ['mirror'], p: new Error('Hi') }
+			{ n: ['mirror'], p: [new Error('Hi')] }
 		])
 
 		expect(res).toEqual(['pong', new Error('Hi')])
@@ -94,7 +94,7 @@ describe('Elysia Fn', () => {
 
 	it('preserved order', async () => {
 		const arr = new Array(1000).fill(null).map((x, i) => i)
-		const res = await fn(arr.map((p) => ({ n: ['mirror'], p })))
+		const res = await fn(arr.map((p) => ({ n: ['mirror'], p: [p] })))
 
 		expect(res).toEqual(arr)
 	})
@@ -113,7 +113,7 @@ describe('Elysia Fn', () => {
 			{
 				n: ['invalid']
 			},
-			{ n: ['mirror'], p: date }
+			{ n: ['mirror'], p: [date] }
 		])
 
 		expect(res).toEqual(['a', new Error('Invalid procedure'), date])
@@ -129,9 +129,9 @@ describe('Elysia Fn', () => {
 
 	it('handle request parameters', async () => {
 		const res = await fn([
-			{ n: ['prisma', 'user', 'delete'], p: 'Yuuka' },
-			{ n: ['prisma', 'user', 'create'], p: 'Noa' },
-			{ n: ['prisma', 'user', 'delete'], p: 'Arona' }
+			{ n: ['prisma', 'user', 'delete'], p: ['Yuuka'] },
+			{ n: ['prisma', 'user', 'create'], p: ['Noa'] },
+			{ n: ['prisma', 'user', 'delete'], p: ['Arona'] }
 		])
 
 		expect(res).toEqual(['Yuuka', 'Noa', new Error('Forbidden')])
@@ -143,7 +143,7 @@ describe('Elysia Fn', () => {
 			{ n: ['version'] },
 			{
 				n: ['mirrorDecorator'],
-				p: 1
+				p: [1]
 			}
 		])
 
@@ -158,7 +158,7 @@ describe('Elysia Fn', () => {
 		})
 
 		const fn = (
-			body: Array<{ n: string[] } | { n: string[]; p: any }>,
+			body: Array<{ n: string[] } | { n: string[]; p: any[] }>,
 			headers: HeadersInit = {}
 		): Promise<unknown[]> =>
 			app
@@ -175,6 +175,6 @@ describe('Elysia Fn', () => {
 				.then((x) => x.text())
 				.then((x) => SuperJSON.parse(x))
 
-		expect(await fn([{ n: ['mirror'], p: 1 }])).toEqual([1])
+		expect(await fn([{ n: ['mirror'], p: [1] }])).toEqual([1])
 	})
 })

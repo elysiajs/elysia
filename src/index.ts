@@ -1172,7 +1172,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					const exposed: Record<string, unknown> = this.store[EXPOSED]
 					const results = []
 
-					const body = context.body as { n: string[]; p: any }[]
+					const body = context.body as {
+						n: string[]
+						p: any[] | undefined
+					}[]
 
 					batch: for (let i = 0; i < body.length; i++) {
 						const procedure = body[i]
@@ -1221,7 +1224,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 						if (typeof method === 'function')
 							if (procedure.p !== undefined)
-								results.push(method(procedure.p))
+								if (
+									Array.isArray(procedure.p) &&
+									procedure.p.length === 1
+								)
+									results.push(method(procedure.p[0]))
+								else results.push(method(...procedure.p))
 							else results.push(method())
 						else results.push(new Error('Invalid procedure'))
 					}
