@@ -81,7 +81,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		[EXPOSED]: {}
 	}
 	// Will be applied to Context
-	protected decorators: ElysiaInstance['request'] | null = null
+	protected decorators: ElysiaInstance['request'] = {
+		query: {},
+		set: {
+			status: 200,
+			headers: {}
+		},
+		store: this.store
+	}
 
 	event: LifeCycleStore<Instance> = {
 		start: [],
@@ -1099,43 +1106,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			schema: Instance['schema']
 		}>
 	>(name: Name, value: Value): NewInstance {
-		if (!this.decorators) this.decorators = {}
 		// @ts-ignore
 		if (!(name in this.decorators)) this.decorators[name] = value
 
 		return this as unknown as NewInstance
-	}
-
-	/**
-	 * Create derived property from Context
-	 * @experimental
-	 *
-	 * ---
-	 * @example
-	 * new Elysia()
-	 *     .state('counter', 1)
-	 *     .derive((store) => ({
-	 *         multiplied: () => store().counter * 2
-	 *     }))
-	 */
-	derive<
-		Returned extends Record<string | number | symbol, () => any> = Record<
-			string | number | symbol,
-			() => any
-		>
-	>(
-		transform: (store: () => Readonly<Instance['store']>) => Returned
-	): Elysia<{
-		store: Instance['store'] & Returned
-		request: Instance['request']
-		schema: Instance['schema']
-	}> {
-		this.store = mergeDeep(
-			this.store,
-			transform(() => this.store)
-		) as any
-
-		return this as any
 	}
 
 	/**
@@ -1314,28 +1288,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	handle = async (request: Request): Promise<Response> => {
-		const set: Context['set'] = {
-			status: 200,
-			headers: {}
-		}
-
-		let context: Context
-		if (this.decorators) {
-			context = clone(this.decorators) as any as Context
-
-			context.request = request
-			context.set = set
-			context.store = this.store
-			context.query = {}
-		} else {
-			// @ts-ignore
-			context = {
-				set,
-				store: this.store,
-				request,
-				query: {}
-			}
-		}
+		const context = clone(this.decorators) as any as Context
+		context.request = request
 
 		let handleErrors: ErrorHandler[] | undefined
 
@@ -1345,7 +1299,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					let response = this.event.request[i](context)
 					if (response instanceof Promise) response = await response
 
-					response = mapEarlyResponse(response, set)
+					response = mapEarlyResponse(response, context.set)
 					if (response) return response
 				}
 
@@ -1356,8 +1310,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				this.router.match(request.method, fracture[1]) ??
 				this.router.match('ALL', fracture[1])
 
-			const handler = route?.store
-			if (!handler) throw new Error('NOT_FOUND')
+			if (!route) throw new Error('NOT_FOUND')
+			const handler = route.store!
 
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET') {
@@ -1365,7 +1319,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 				if (contentType) {
 					const index = contentType.indexOf(';')
-
 					if (index !== -1) contentType = contentType.slice(0, index)
 
 					if (this.event.parse.length)
@@ -1417,6 +1370,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			if (handler.validator) {
 				const validator = handler.validator
+
+				if (hooks?.error) handleErrors = hooks?.error
 
 				if (validator.headers) {
 					const _header: Record<string, string> = {}
@@ -1475,12 +1430,15 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			let response = handler.handle(context)
 			if (response instanceof Promise) response = await response
 
-			if (handler.validator?.response?.Check(response) === false)
+			if (handler.validator?.response?.Check(response) === false) {
+				if (hooks?.error) handleErrors = hooks?.error
+
 				throw createValidationError(
 					'response',
 					handler.validator.response,
 					response
 				)
+			}
 
 			if (hooks?.afterHandle.length)
 				for (let i = 0; i < hooks.afterHandle.length; i++) {
@@ -1494,6 +1452,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			return mapResponse(response, context.set)
 		} catch (error) {
+			const set = context.set
+
 			if (!set.status || set.status < 300) set.status = 500
 
 			if (handleErrors) {

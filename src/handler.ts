@@ -1,6 +1,6 @@
 import type { Context } from './context'
 
-const isNotEmpty = (obj: Object) => {
+export const isNotEmpty = (obj: Object) => {
 	for (const x in obj) return true
 
 	return false
@@ -132,19 +132,18 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	if (set.headers?.['Set-Cookie'])
+	if (set.headers?.['Set-Cookie']) {
 		// @ts-ignore
 		set.headers = parseSetCookies(
 			new Headers(set.headers),
 			set.headers['Set-Cookie']
 		)
 
-	if (set.redirect)
-		return Response.redirect(set.redirect, {
-			headers: set.headers
-		})
+		if (set.redirect)
+			return Response.redirect(set.redirect, {
+				headers: set.headers
+			})
 
-	if (isNotEmpty(set.headers) || set.status !== 200)
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {
@@ -153,27 +152,108 @@ export const mapResponse = (
 				})
 
 			case 'object':
-				if (response instanceof Error)
-					return errorToResponse(response, set.headers)
-				if (response instanceof Response) {
-					for (const key in set.headers)
-						response.headers.append(key, set.headers[key])
+				switch (response!.constructor) {
+					case Error:
+						return errorToResponse(response as Error, set.headers)
 
-					return response
+					case Response:
+						for (const key in set.headers)
+							(response as Response)!.headers.append(
+								key,
+								set.headers[key]
+							)
+
+						return response as Response
+
+					case Blob:
+						return new Response(response as Blob, {
+							status: set.status,
+							headers: set.headers
+						})
+
+					default:
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
+
+						return new Response(JSON.stringify(response), {
+							status: set.status,
+							headers: set.headers
+						})
 				}
+
+			// ? Maybe response function or Blob
+			case 'function':
 				if (response instanceof Blob)
 					return new Response(response, {
 						status: set.status,
 						headers: set.headers
 					})
 
-				if (!set.headers['Content-Type'])
-					set.headers['Content-Type'] = 'application/json'
+				return response()
 
-				return new Response(JSON.stringify(response), {
+			case 'number':
+			case 'boolean':
+				return new Response(response.toString(), {
 					status: set.status,
 					headers: set.headers
 				})
+
+			case 'undefined':
+				return new Response('', {
+					status: set.status,
+					headers: set.headers
+				})
+
+			default:
+				return new Response(response as any, {
+					status: set.status,
+					headers: set.headers
+				})
+		}
+	}
+
+	if (set.redirect)
+		return Response.redirect(set.redirect, {
+			headers: set.headers
+		})
+
+	if (Object.keys(set.headers).length || set.status !== 200)
+		switch (typeof response) {
+			case 'string':
+				return new Response(response, {
+					status: set.status,
+					headers: set.headers
+				})
+
+			case 'object':
+				switch (response?.constructor) {
+					case Error:
+						return errorToResponse(response as Error, set.headers)
+
+					case Response:
+						for (const key in set.headers)
+							(response as Response)!.headers.append(
+								key,
+								set.headers[key]
+							)
+
+						return response as Response
+
+					case Blob:
+						return new Response(response as Blob, {
+							status: set.status,
+							headers: set.headers
+						})
+
+					default:
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
+
+						return new Response(JSON.stringify(response), {
+							status: set.status,
+							headers: set.headers
+						})
+				}
 
 			// ? Maybe response function or Blob
 			case 'function':
