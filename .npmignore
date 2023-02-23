@@ -1,12 +1,14 @@
 .git
 .gitignore
 .prettierrc
+.eslintrc.js
 .cjs.swcrc
-.es.swcrc
+.esm.swcrc
 .swcrc
-bun.lockb
+.husky
 .github
 
+bun.lockb
 node_modules
 tsconfig.json
 CHANGELOG.md
@@ -17,7 +19,8 @@ docs
 src
 .DS_Store
 test
-CHANGELOG.md
-.eslintrc.js
 tsconfig.cjs.json
 tsconfig.esm.json
+
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
