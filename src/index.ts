@@ -14,16 +14,16 @@ import {
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	mapPathnameAndQueryRegEx,
-	exposePermission
+	exposePermission,
+	type ExposePermission
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
 import type { Context } from './context'
 
-import {
-	serialize as superjsonSerialize,
-	deserialize as superjsonDeseiralize
-} from 'superjson'
+import { runFn } from './fn'
+
+import { deserialize as superjsonDeseiralize } from 'superjson'
 
 import type {
 	Handler,
@@ -78,7 +78,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	store: Instance['store'] = {
 		[SCHEMA]: {},
 		[DEFS]: {},
-		[EXPOSED]: {}
+		[EXPOSED]: Object.create(null)
 	}
 	// Will be applied to Context
 	protected decorators: ElysiaInstance['request'] = {
@@ -1145,14 +1145,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			| ((
 					app: Instance['request'] & {
 						store: Instance['store']
-						permission: typeof exposePermission
+						permission: ExposePermission
 					}
 			  ) => Record<string, unknown>) =
 			| Record<string, unknown>
 			| ((
 					app: Instance['request'] & {
 						store: Instance['store']
-						permission: typeof exposePermission
+						permission: ExposePermission
 					}
 			  ) => Record<string, unknown>)
 	>(
@@ -1167,75 +1167,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (Object.keys(this.store[EXPOSED]).length === 0) {
 			this.post(
 				this.config.fn ?? '/~fn',
-				// @ts-ignore
-				(context) => {
-					const exposed: Record<string, unknown> = this.store[EXPOSED]
-					const results = []
-
-					const body = context.body as {
-						n: string[]
-						p: any[] | undefined
-					}[]
-
-					batch: for (let i = 0; i < body.length; i++) {
-						const procedure = body[i]
-						let method: Record<string, any> = exposed
-
-						if (!Array.isArray(procedure.n)) {
-							results.push(new Error('Invalid procedure'))
-							continue batch
-						}
-
-						for (let j = 0; j < procedure.n.length; j++) {
-							// @ts-ignore
-							method = method[procedure.n[j]]
-
-							if (!method) {
-								results.push(new Error('Invalid procedure'))
-								continue batch
-							}
-
-							if (EXPOSED in method)
-								if (method.allow == false) {
-									results.push(new Error('Forbidden'))
-									continue batch
-								} else if (method.allow !== true) {
-									try {
-										const allowance = method.allow({
-											...context,
-											key: procedure.n
-												.slice(j + 1)
-												.join('.'),
-											params: procedure.p ?? null
-										})
-
-										if (allowance instanceof Error) {
-											results.push(allowance)
-											continue batch
-										}
-									} catch (error) {
-										results.push(error)
-										continue batch
-									}
-
-									method = method.value
-								}
-						}
-
-						if (typeof method === 'function')
-							if (procedure.p !== undefined)
-								if (
-									Array.isArray(procedure.p) &&
-									procedure.p.length === 1
-								)
-									results.push(method(procedure.p[0]))
-								else results.push(method(...procedure.p))
-							else results.push(method())
-						else results.push(new Error('Invalid procedure'))
-					}
-
-					return Promise.all(results).then(superjsonSerialize)
-				}
+				(context) => runFn(context, this.store[EXPOSED]) as Promise<any>
 			)
 		}
 

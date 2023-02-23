@@ -11,7 +11,8 @@ import type {
 	TypedSchema,
 	RegisteredHook,
 	ConnectedKeysType,
-	FunctionalKeys
+	FunctionProperties,
+	JoinKeys
 } from './types'
 
 // ? Internal property
@@ -176,31 +177,57 @@ export const getResponseSchemaValidator = (
 
 export const exposePermission = <
 	T,
-	Key = T extends Record<any, any> ? FunctionalKeys<T> : never
+	Key extends JoinKeys<FunctionProperties<T>> = JoinKeys<
+		FunctionProperties<T>
+	>
 >({
 	value,
-	allow = true
+	allow,
+	deny,
+	check = true
 }: {
 	value: T
-	allow?:
+	allow?: Key[]
+	deny?: Key[]
+	check?:
 		| boolean
 		| ((context: {
 				request: Request
 				key: Key
-				params: Key extends string ? ConnectedKeysType<T, Key> : unknown
+				params: T extends (...args: infer Args) => any
+					? Args
+					: Key extends string
+					? ConnectedKeysType<T, Key>
+					: unknown
+				match: <Case extends Key>(
+					a: Case extends string
+						? Partial<
+								| {
+										[x in Case]: (
+											params: ConnectedKeysType<T, Case>
+										) => any
+								  }
+								| {
+										default?: (
+											params: T extends (
+												...args: infer Args
+											) => any
+												? Args
+												: Key extends string
+												? ConnectedKeysType<T, Key>
+												: unknown
+										) => any
+								  }
+						  >
+						: {}
+				) => void
 		  }) => unknown)
-}): {
-	[EXPOSED]: true
-	value: T
-	allow?:
-		| boolean
-		| ((context: {
-				request: Request
-				key: Key
-				params: Key extends string ? ConnectedKeysType<T, Key> : unknown
-		  }) => unknown)
-} => ({
+}) => ({
 	[EXPOSED]: true,
 	value,
-	allow
+	check,
+	allow,
+	deny
 })
+
+export type ExposePermission = typeof exposePermission

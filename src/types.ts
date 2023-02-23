@@ -513,21 +513,39 @@ export type IsAny<T> = unknown extends T
 	: false
 
 export type MaybePromise<T> = T | Promise<T>
-
 export type IsNever<T> = [T] extends [never] ? true : false
 
-// https://stackoverflow.com/a/58436959
-export type FunctionalKeys<T, Prefix extends string = ''> =
-	| {
-			// @ts-ignore
-			[K in keyof T]-?: T[K] extends Function ? `${Prefix}${K}` : never
-	  }[keyof T]
-	| {
-			[K in keyof T]-?: T[K] extends object
-				? // @ts-ignore
-				  FunctionalKeys<T[K], `${Prefix}${K}.`>
-				: never
-	  }[keyof T]
+export type FunctionProperties<T> = {
+	[K in keyof T as T[K] extends Record<any, any> | ((...args: any[]) => any)
+		? IsAny<T[K]> extends true
+			? never
+			: K
+		: never]: T[K] extends (...args: any[]) => any
+		? T[K]
+		: T[K] extends Record<string, any>
+		? FunctionProperties<T[K]>
+		: never
+}
+
+export type JoinKeys<T, Prefix extends string = ''> = {
+	[K in keyof T]-?: T[K] extends string | Function
+		? '' extends Prefix
+			? K
+			: K extends string
+			? `${Prefix}.${K}`
+			: never
+		: K extends string
+		? JoinKeys<T[K], '' extends Prefix ? K : `${Prefix}.${K}`>
+		: never
+}[keyof T]
+
+// type ExcludeFunctionFromRoot<T extends Record<any, any>> = {
+// 	[K in keyof T as T[K] extends (...args: any) => any ? never : K]: T[K]
+// }
+
+// type ExcludeRecordFromRoot<T extends Record<any, any>> = {
+// 	[K in keyof T as T[K] extends Record<string, string> ? never : K]: T[K]
+// }
 
 export type ConnectedKeysType<
 	T,
@@ -537,8 +555,8 @@ export type ConnectedKeysType<
 		? ConnectedKeysType<T[Key], Rest>
 		: never
 	: K extends keyof T
-	? T[K] extends (...args: any) => any
-		? ReturnType<T[K]>
+	? T[K] extends (...args: infer A) => any
+		? A
 		: never
 	: never
 

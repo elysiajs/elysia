@@ -22,7 +22,7 @@ const app = new Elysia()
 	.fn(({ permission }) => ({
 		authorized: permission({
 			value: () => 'authorized',
-			allow({ request: { headers } }) {
+			check({ request: { headers } }) {
 				if (!headers.has('Authorization'))
 					throw new Error('Authorization is required')
 			}
@@ -38,9 +38,66 @@ const app = new Elysia()
 					}
 				}
 			},
-			allow({ key, params }) {
+			check({ key, params }) {
 				if (key === 'user.delete' && params[0] === 'Arona')
 					throw new Error('Forbidden')
+			}
+		}),
+		a: permission({
+			value: {
+				allow: () => true,
+				deny: () => false
+			},
+			allow: ['allow']
+		}),
+		b: permission({
+			value: {
+				allow: () => true,
+				deny: () => false
+			},
+			deny: ['deny']
+		}),
+		c: permission({
+			value: {
+				allow: () => true,
+				deny: () => false
+			},
+			check({ match }) {
+				return match({
+					deny() {
+						throw new Error('Denied')
+					}
+				})
+			}
+		}),
+		d: permission({
+			value: {
+				allow: () => true,
+				deny: () => false
+			},
+			check({ match }) {
+				return match({
+					allow() {
+						return
+					},
+					default() {
+						throw new Error('Denied')
+					}
+				})
+			}
+		}),
+		e: permission({
+			value: {
+				allow: () => true,
+				deny: () => false
+			},
+			allow: ['allow'],
+			check({ match }) {
+				return match({
+					default() {
+						throw new Error('Denied')
+					}
+				})
 			}
 		})
 	}))
@@ -48,9 +105,10 @@ const app = new Elysia()
 
 const fn = (
 	body: Array<{ n: string[] } | { n: string[]; p: any[] }>,
-	headers: HeadersInit = {}
+	headers: HeadersInit = {},
+	target: Elysia<any> = app as Elysia<any>
 ): Promise<unknown[]> =>
-	app
+	target
 		.handle(
 			new Request('http://localhost/~fn', {
 				method: 'POST',
@@ -99,7 +157,7 @@ describe('Elysia Fn', () => {
 		expect(res).toEqual(arr)
 	})
 
-	it('handle nested producer', async () => {
+	it('handle nested procedure', async () => {
 		const res = await fn([{ n: ['nested', 'data'] }])
 
 		expect(res[0]).toEqual('a')
@@ -176,5 +234,70 @@ describe('Elysia Fn', () => {
 				.then((x) => SuperJSON.parse(x))
 
 		expect(await fn([{ n: ['mirror'], p: [1] }])).toEqual([1])
+	})
+
+	it('allow', async () => {
+		const res = await fn([
+			{
+				n: ['a', 'allow']
+			},
+			{
+				n: ['a', 'deny']
+			}
+		])
+
+		expect(res).toEqual([true, new Error('Forbidden')])
+	})
+
+	it('deny', async () => {
+		const res = await fn([
+			{
+				n: ['b', 'allow']
+			},
+			{
+				n: ['b', 'deny']
+			}
+		])
+
+		expect(res).toEqual([true, new Error('Forbidden')])
+	})
+
+	it('match error', async () => {
+		const res = await fn([
+			{
+				n: ['c', 'allow']
+			},
+			{
+				n: ['c', 'deny']
+			}
+		])
+
+		expect(res).toEqual([true, new Error('Denied')])
+	})
+
+	it('match default', async () => {
+		const res = await fn([
+			{
+				n: ['d', 'allow']
+			},
+			{
+				n: ['d', 'deny']
+			}
+		])
+
+		expect(res).toEqual([true, new Error('Denied')])
+	})
+
+	it('skip check if on allow list when match default', async () => {
+		const res = await fn([
+			{
+				n: ['e', 'allow']
+			},
+			{
+				n: ['e', 'deny']
+			}
+		])
+
+		expect(res).toEqual([true, new Error('Denied')])
 	})
 })
