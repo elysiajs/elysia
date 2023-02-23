@@ -9,16 +9,13 @@ import type {
 	LifeCycleStore,
 	LocalHook,
 	TypedSchema,
-	RegisteredHook,
-	ConnectedKeysType,
-	FunctionProperties,
-	JoinKeys
+	RegisteredHook
 } from './types'
 
 // ? Internal property
-export const SCHEMA: unique symbol = Symbol('schema')
-export const DEFS: unique symbol = Symbol('definitions')
-export const EXPOSED: unique symbol = Symbol('exposed')
+export const SCHEMA = Symbol('schema')
+export const DEFS = Symbol('definitions')
+export const EXPOSED = Symbol('exposed')
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 	...(Array.isArray(a) ? a : [a]),
@@ -174,60 +171,3 @@ export const getResponseSchemaValidator = (
 
 	return TypeCompiler.Compile(schema)
 }
-
-export const exposePermission = <
-	T,
-	Key extends JoinKeys<FunctionProperties<T>> = JoinKeys<
-		FunctionProperties<T>
-	>
->({
-	value,
-	allow,
-	deny,
-	check = true
-}: {
-	value: T
-	allow?: Key[]
-	deny?: Key[]
-	check?:
-		| boolean
-		| ((context: {
-				request: Request
-				key: Key
-				params: T extends (...args: infer Args) => any
-					? Args
-					: Key extends string
-					? ConnectedKeysType<T, Key>
-					: unknown
-				match: <Case extends Key>(
-					a: Case extends string
-						? Partial<
-								| {
-										[x in Case]: (
-											params: ConnectedKeysType<T, Case>
-										) => any
-								  }
-								| {
-										default?: (
-											params: T extends (
-												...args: infer Args
-											) => any
-												? Args
-												: Key extends string
-												? ConnectedKeysType<T, Key>
-												: unknown
-										) => any
-								  }
-						  >
-						: {}
-				) => void
-		  }) => unknown)
-}) => ({
-	[EXPOSED]: true,
-	value,
-	check,
-	allow,
-	deny
-})
-
-export type ExposePermission = typeof exposePermission

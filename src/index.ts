@@ -2,6 +2,7 @@ import type { Serve, Server } from 'bun'
 
 import { Raikiri } from 'raikiri'
 import { mapResponse, mapEarlyResponse } from './handler'
+import { permission, type Permission } from './fn'
 import {
 	SCHEMA,
 	EXPOSED,
@@ -13,9 +14,7 @@ import {
 	createValidationError,
 	getSchemaValidator,
 	getResponseSchemaValidator,
-	mapPathnameAndQueryRegEx,
-	exposePermission,
-	type ExposePermission
+	mapPathnameAndQueryRegEx
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
@@ -1145,22 +1144,24 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			| ((
 					app: Instance['request'] & {
 						store: Instance['store']
-						permission: ExposePermission
+						permission: Permission
 					}
 			  ) => Record<string, unknown>) =
 			| Record<string, unknown>
 			| ((
 					app: Instance['request'] & {
 						store: Instance['store']
-						permission: ExposePermission
+						permission: Permission
 					}
 			  ) => Record<string, unknown>)
 	>(
 		value: T
 	): Elysia<{
-		store: Instance['store'] & {
-			[EXPOSED]: T extends (store: any) => infer Returned ? Returned : T
-		}
+		store: Instance['store'] &
+			Record<
+				typeof EXPOSED,
+				T extends (store: any) => infer Returned ? Returned : T
+			>
 		request: Instance['request']
 		schema: Instance['schema']
 	}> {
@@ -1177,7 +1178,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				? value({
 						...this.decorators,
 						store: this.store,
-						permission: exposePermission
+						permission
 				  })
 				: value
 		) as any
@@ -1562,7 +1563,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 }
 
-export { Elysia }
+export { Elysia, permission }
 export { Type as t } from '@sinclair/typebox'
 
 export {

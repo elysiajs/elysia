@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.3.0-exp-230222.1213",
+  "version": "0.3.0-exp-230222.1921",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -14,7 +14,7 @@
     "node": "./dist/index.js",
     "default": "./dist/index.js"
   },
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/elysiajs/elysia"

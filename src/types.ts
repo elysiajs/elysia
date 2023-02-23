@@ -276,25 +276,27 @@ export type ElysiaRoute<
 	CatchResponse = unknown
 > = Elysia<{
 	request: Instance['request']
-	store: Instance['store'] & {
-		[SCHEMA]: {
-			[path in Path]: {
-				[method in Method]: TypedRouteToEden<
-					Schema,
-					Instance,
-					Path
-				> extends infer FinalSchema extends AnyTypedSchema
-					? Omit<FinalSchema, 'response'> & {
-							response: undefined extends FinalSchema['response']
-								? {
-										'200': CatchResponse
-								  }
-								: FinalSchema['response']
-					  }
-					: never
+	store: Instance['store'] &
+		Record<
+			typeof SCHEMA,
+			{
+				[path in Path]: {
+					[method in Method]: TypedRouteToEden<
+						Schema,
+						Instance,
+						Path
+					> extends infer FinalSchema extends AnyTypedSchema
+						? Omit<FinalSchema, 'response'> & {
+								response: undefined extends FinalSchema['response']
+									? {
+											'200': CatchResponse
+									  }
+									: FinalSchema['response']
+						  }
+						: never
+				}
 			}
-		}
-	}
+		>
 	schema: Instance['schema']
 }>
 

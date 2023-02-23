@@ -1,8 +1,71 @@
+import { EXPOSED } from './utils'
+
 import type { Context } from './context'
-import { EXPOSED, type ExposePermission } from './utils'
-import type { ElysiaInstance } from './types'
+import type {
+	ConnectedKeysType,
+	ElysiaInstance,
+	FunctionProperties,
+	JoinKeys
+} from './types'
 
 import { serialize as superjsonSerialize } from 'superjson'
+
+export const permission = <
+	T,
+	Key extends JoinKeys<FunctionProperties<T>> = JoinKeys<
+		FunctionProperties<T>
+	>
+>({
+	value,
+	allow,
+	deny,
+	check = true
+}: {
+	value: T
+	allow?: Key[]
+	deny?: Key[]
+	check?:
+		| boolean
+		| ((context: {
+				request: Request
+				key: Key
+				params: T extends (...args: infer Args) => any
+					? Args
+					: Key extends string
+					? ConnectedKeysType<T, Key>
+					: unknown
+				match: <Case extends Key>(
+					a: Case extends string
+						? Partial<
+								| {
+										[x in Case]: (
+											params: ConnectedKeysType<T, Case>
+										) => any
+								  }
+								| {
+										default?: (
+											params: T extends (
+												...args: infer Args
+											) => any
+												? Args
+												: Key extends string
+												? ConnectedKeysType<T, Key>
+												: unknown
+										) => any
+								  }
+						  >
+						: {}
+				) => void
+		  }) => unknown)
+}) => ({
+	[EXPOSED]: true,
+	value,
+	check,
+	allow,
+	deny
+})
+
+export type Permission = typeof permission
 
 export const runFn = (
 	context: Context,
@@ -35,12 +98,13 @@ export const runFn = (
 					continue batch
 				} else if (method[caller].check !== true) {
 					try {
-						const allowance: ExposePermission = method[
+						const allowance: Permission = method[
 							caller
 						].check({
 							...context,
 							key: caller,
 							params: procedure.p ?? null,
+							// eslint-disable-next-line @typescript-eslint/no-unused-vars
 							match(_: {}) {
 								// Emtpy
 							}
