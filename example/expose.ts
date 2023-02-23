@@ -58,14 +58,15 @@ const app = new Elysia()
 		}),
 		a: permission({
 			value: {
-				allow: <T>(a: T) => a,
+				allow: () => true,
+				allow2: () => true,
 				deny: () => false
 			},
 			allow: ['allow'],
 			check({ match }) {
 				return match({
-					allow([param]) {
-						if (param === true) throw new Error('Forbidden Value')
+					allow2() {
+						return
 					}
 				})
 			}
@@ -83,13 +84,11 @@ await app
 			},
 			body: JSON.stringify({
 				json: [
+					// {
+					// 	n: ['a', 'allow']
+					// },
 					{
-						n: ['a', 'allow'],
-						p: [true]
-					},
-					{
-						n: ['a', 'allow'],
-						p: ["any"]
+						n: ['a', 'allow2']
 					},
 					// {
 					// 	n: ['b', 'allow']

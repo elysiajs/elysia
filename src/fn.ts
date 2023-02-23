@@ -70,11 +70,9 @@ export const runFn = (
 
 				if (EXPOSED in method) {
 					const key = names.slice(j + 1).join('.')
+					const hasCheckFn = typeof method.check === 'function'
 
-					if (
-						method.allow?.includes(key) === true &&
-						typeof method.check !== 'function'
-					) {
+					if (method.allow?.includes(key) === true && !hasCheckFn) {
 						method = method.value
 						continue
 					}
@@ -82,7 +80,9 @@ export const runFn = (
 					if (
 						method.check == false ||
 						method.deny?.includes(key) === true ||
-						(method.allow?.includes(key) === false && !method.deny)
+						(method.allow?.includes(key) === false &&
+							!method.deny &&
+							!hasCheckFn)
 					) {
 						results.push(new Error('Forbidden'))
 						continue batch
