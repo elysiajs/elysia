@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Fast, and friendly Bun web framework",
-	"version": "0.3.0-exp-230222.1944",
+	"version": "0.3.0-exp-230222.1952",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -37,7 +37,7 @@
 	"dependencies": {
 		"@sinclair/typebox": "^0.25.21",
 		"openapi-types": "^12.1.0",
-		"raikiri": "^0.0.0-beta.5",
+		"raikiri": "^0.0.0-beta.7",
 		"superjson": "^1.12.2"
 	},
 	"devDependencies": {
