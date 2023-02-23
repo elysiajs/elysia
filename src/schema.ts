@@ -39,7 +39,7 @@ export const registerSchemaPath = ({
 	hook,
 	models
 }: {
-	schema: OpenAPIV2.PathsObject
+	schema: Partial<OpenAPIV2.PathsObject>
 	path: string
 	method: HTTPMethod
 	hook?: LocalHook

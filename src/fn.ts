@@ -69,7 +69,7 @@ export type Permission = typeof permission
 
 export const runFn = (
 	context: Context,
-	exposed: ElysiaInstance['store'][typeof EXPOSED]
+	exposed: ElysiaInstance['meta'][typeof EXPOSED]
 ): Promise<Record<string, any>> => {
 	const results = []
 

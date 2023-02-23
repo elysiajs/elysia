@@ -24,7 +24,7 @@ const app = new Elysia()
 		}
 	})
 	// Strictly validate query, params, and body
-	.get('/query/:id', ({ query: { name } }) => name, {
+	.get('/query/:id', ({ query: { name }, params }) => name, {
 		schema: {
 			query: t.Object({
 				name: t.String()
@@ -43,36 +43,42 @@ const app = new Elysia()
 	.guard(
 		{
 			schema: {
-				query: t.Object({
-					name: t.String()
-				})
+				query: 'a'
 			}
 		},
 		(app) =>
-			app.guard(
-				{
-					schema: {
-						body: t.Object({
-							username: t.String()
-						})
-					}
-				},
-				(app) =>
-					app.post('/id/:id', ({ query, body, params }) => body, {
+			app
+				.get('/a', ({ query, r, a, merged }) => {
+					merged.query
+				}, {
+					// schema: {
+
+					// }
+				})
+				.guard(
+					{
 						schema: {
-							params: t.Object({
-								id: t.Number()
+							body: t.Object({
+								username: t.String()
 							})
-						},
-						transform: ({ params }) => {
-							params.id = +params.id
 						}
-					})
-			)
+					},
+					(app) =>
+						app.post('/id/:id', ({ query, body, params }) => body, {
+							schema: {
+								params: t.Object({
+									id: t.Number()
+								})
+							},
+							transform: ({ params }) => {
+								params.id = +params.id
+							}
+						})
+				)
 	)
 	.listen(8080)
 
-type A = typeof app['store'][typeof SCHEMA]['/']['POST']['query']
-type B = typeof app['store'][typeof DEFS]
+type A = typeof app['meta'][typeof SCHEMA]['/']['POST']
+type B = typeof app['meta'][typeof DEFS]
 
 // const a = app.getModel('b')

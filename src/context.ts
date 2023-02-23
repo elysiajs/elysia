@@ -1,5 +1,4 @@
-import { Elysia } from '.'
-import type { TypedRoute } from './types'
+import type { Elysia, TypedRoute, DEFS, SCHEMA, TypedSchema } from '.'
 
 export interface Context<
 	Route extends TypedRoute = TypedRoute,
@@ -12,6 +11,11 @@ export interface Context<
 	params: Route['params']
 	body: Route['body']
 	store: Store
+
+	[SCHEMA]: TypedSchema
+	[DEFS]: {
+        [index: string]: Record<string, unknown>;
+    }
 
 	set: {
 		headers: Record<string, string>

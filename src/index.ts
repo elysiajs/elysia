@@ -45,7 +45,6 @@ import type {
 	VoidLifeCycle,
 	AfterRequestHandler,
 	SchemaValidator,
-	MergeIfNotNull,
 	IsAny,
 	OverwritableTypeRoute,
 	MergeSchema,
@@ -74,9 +73,10 @@ import { type TSchema } from '@sinclair/typebox'
 export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	config: ElysiaConfig
 
-	store: Instance['store'] = {
-		[SCHEMA]: {},
-		[DEFS]: {},
+	store: Instance['store'] = {}
+	meta: Instance['meta'] = {
+		[SCHEMA]: Object.create(null),
+		[DEFS]: Object.create(null),
 		[EXPOSED]: Object.create(null)
 	}
 	// Will be applied to Context
@@ -86,7 +86,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			status: 200,
 			headers: {}
 		},
-		store: this.store
+		store: this.store,
+		[SCHEMA]: this.meta[SCHEMA],
+		[DEFS]: this.meta[DEFS]
 	}
 
 	event: LifeCycleStore<Instance> = {
@@ -133,7 +135,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			hooks: mergeHook(clone(this.event), hook as RegisteredHook)
 		})
 
-		const defs = this.store[DEFS]
+		const defs = this.meta[DEFS]
 
 		const body = getSchemaValidator(
 			hook?.schema?.body ?? this.$schema?.body,
@@ -158,11 +160,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		)
 
 		registerSchemaPath({
-			schema: this.store[SCHEMA],
+			schema: this.meta[SCHEMA],
 			hook,
 			method,
 			path,
-			models: this.store[DEFS]
+			models: this.meta[DEFS]
 		})
 
 		const validator =
@@ -415,7 +417,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			case 'beforeHandle':
 				this.event.beforeHandle.push(
-					handler as LifeCycle['beforeHandle']
+					handler as LifeCycle<Instance>['beforeHandle']
 				)
 				break
 
@@ -460,28 +462,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				store: Omit<Instance['store'], typeof SCHEMA> &
 					ElysiaInstance['store']
 				schema: Instance['schema']
+				meta: Omit<Instance['meta'], typeof SCHEMA> &
+					ElysiaInstance['meta']
 			}>
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
 				request: Instance['request'] & NewInstance['request']
 				schema: Instance['schema'] & NewInstance['schema']
-				store: Instance['store'] &
-					(Omit<NewInstance['store'], typeof SCHEMA> & {
+				store: Instance['store'] & NewInstance['store']
+				meta: Instance['meta'] &
+					(Omit<NewInstance['meta'], typeof SCHEMA> & {
 						[key in typeof SCHEMA]: {
-							[key in keyof NewInstance['store'][typeof SCHEMA] as key extends `${infer Rest}`
+							[key in keyof NewInstance['meta'][typeof SCHEMA] as key extends `${infer Rest}`
 								? `${Prefix}${Rest}`
-								: key]: NewInstance['store'][typeof SCHEMA][key]
+								: key]: NewInstance['meta'][typeof SCHEMA][key]
 						}
 					})
 		  }>
 		: this {
-		const instance = new Elysia<{
-			request: Instance['request']
-			store: Omit<Instance['store'], typeof SCHEMA> &
-				ElysiaInstance['store']
-			schema: Instance['schema']
-		}>()
+		const instance = new Elysia<any>()
 
 		instance.store = this.store
 
@@ -543,7 +543,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	guard<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		NewElysia extends Elysia<any> = Elysia<any>
 	>(
 		hook: LocalHook<Schema, Instance>,
@@ -551,23 +553,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			group: Elysia<{
 				request: Instance['request']
 				store: Instance['store']
-				schema: Omit<
-					MergeIfNotNull<Schema, Instance['schema']>,
-					typeof SCHEMA
-				>
+				schema: Schema & Instance['schema']
+				meta: Instance['meta']
 			}>
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<NewInstance & Instance>
 		: this {
-		const instance = new Elysia<{
-			request: Instance['request']
-			store: Instance['store']
-			schema: Omit<
-				MergeIfNotNull<Schema, Instance['schema']>,
-				typeof SCHEMA
-			>
-		}>()
+		const instance = new Elysia<any>()
 
 		instance.store = this.store
 
@@ -681,10 +674,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	get<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -717,10 +708,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	post<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -753,10 +742,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	put<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -789,10 +776,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	patch<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -825,10 +810,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	delete<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -861,10 +844,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	options<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -892,10 +873,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	all<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -928,10 +907,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	head<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -964,10 +941,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	trace<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -1000,10 +975,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	connect<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
 		Response = unknown
 	>(
@@ -1036,10 +1009,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	route<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Method extends HTTPMethod = HTTPMethod,
 		Path extends string = string,
 		Response = unknown
@@ -1075,6 +1046,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 			request: Instance['request']
 			schema: Instance['schema']
+			meta: Instance['meta']
 		}>
 	>(name: Key, value: Value): NewInstance {
 		if (!(name in this.store)) {
@@ -1103,6 +1075,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			store: Instance['store']
 			request: Instance['request'] & { [key in Name]: Value }
 			schema: Instance['schema']
+			meta: Instance['meta']
 		}>
 	>(name: Name, value: Value): NewInstance {
 		// @ts-ignore
@@ -1132,6 +1105,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		store: Instance['store']
 		request: Instance['request'] & Returned
 		schema: Instance['schema']
+		meta: Instance['meta']
 	}> {
 		return this.onTransform((context) => {
 			Object.assign(context, transform(context))
@@ -1157,23 +1131,24 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	>(
 		value: T
 	): Elysia<{
-		store: Instance['store'] &
+		store: Instance['store']
+		request: Instance['request']
+		schema: Instance['schema']
+		meta: Instance['meta'] &
 			Record<
 				typeof EXPOSED,
 				T extends (store: any) => infer Returned ? Returned : T
 			>
-		request: Instance['request']
-		schema: Instance['schema']
 	}> {
-		if (Object.keys(this.store[EXPOSED]).length === 0) {
+		if (Object.keys(this.meta[EXPOSED]).length === 0) {
 			this.post(
 				this.config.fn ?? '/~fn',
-				(context) => runFn(context, this.store[EXPOSED]) as Promise<any>
+				(context) => runFn(context, this.meta[EXPOSED]) as Promise<any>
 			)
 		}
 
-		this.store[EXPOSED] = mergeDeep(
-			this.store[EXPOSED],
+		this.meta[EXPOSED] = mergeDeep(
+			this.meta[EXPOSED],
 			typeof value === 'function'
 				? value({
 						...this.decorators,
@@ -1212,9 +1187,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			request: Instance['request']
 			store: Instance['store']
 			schema: MergeSchema<Schema, Instance['schema']>
+			meta: Instance['meta']
 		}>
 	>(schema: Schema): NewInstance {
-		const defs = this.store[DEFS]
+		const defs = this.meta[DEFS]
 
 		this.$schema = {
 			body: getSchemaValidator(schema.body, defs),
@@ -1548,15 +1524,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	setModel<Recorder extends Record<string, TSchema>>(
 		record: Recorder
 	): Elysia<{
-		store: Instance['store'] & {
-			[Defs in typeof DEFS]: Recorder
-		}
+		store: Instance['store']
 		request: Instance['request']
 		schema: Instance['schema']
+		meta: Instance['meta'] & Record<typeof DEFS, Recorder>
 	}> {
 		Object.entries(record).forEach(([key, value]) => {
 			// @ts-ignore
-			if (!(key in this.store[DEFS])) this.store[DEFS][key] = value
+			if (!(key in this.meta[DEFS])) this.meta[DEFS][key] = value
 		})
 
 		return this as unknown as any

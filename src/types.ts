@@ -10,30 +10,29 @@ import type { OpenAPIV2 } from 'openapi-types'
 export type WithArray<T> = T | T[]
 export type ObjectValues<T extends object> = T[keyof T]
 
-export interface ElysiaInstance<
+export type ElysiaInstance<
 	Instance extends {
-		store?: Record<any, any> &
-			Record<typeof SCHEMA, Partial<OpenAPIV2.PathsObject>> &
-			Record<typeof DEFS, { [x in string]: TSchema }> &
-			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
+		store?: Record<any, any>
 		request?: Record<any, any>
 		schema?: TypedSchema
+		meta?: Record<typeof SCHEMA, Partial<OpenAPIV2.PathsObject>> &
+			Record<typeof DEFS, { [x in string]: TSchema }> &
+			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 	} = {
-		store: Record<any, any> &
-			Record<typeof SCHEMA, {}> &
-			Record<typeof DEFS, {}> &
-			Record<typeof EXPOSED, {}>
+		store: Record<any, any>
 		request: {}
 		schema: {}
+		meta: Record<typeof SCHEMA, {}> &
+			Record<typeof DEFS, {}> &
+			Record<typeof EXPOSED, {}>
 	}
-> {
-	request: Instance['request'] extends undefined
-		? Record<typeof SCHEMA, {}>
-		: Instance['request']
+> = {
+	request: Instance['request']
 	store: Instance['store'] extends undefined ? {} : Instance['store']
 	schema: Instance['schema'] extends undefined
 		? TypedSchema
 		: Instance['schema']
+	meta: Instance['meta']
 }
 
 export type Handler<
@@ -41,7 +40,12 @@ export type Handler<
 	Instance extends ElysiaInstance = ElysiaInstance,
 	CatchResponse = Route['response']
 > = (
-	context: Context<Route, Instance['store']> & Instance['request']
+	context: Context<Route, Instance['store']> &
+		Instance['request'] & {
+			a: Instance
+			r: Route
+			merged: MergeSchema<Instance['schema'], Route>
+		}
 ) => // Catch function
 Route['response'] extends (models: Record<string, TSchema>) => TSchema
 	? undefined extends ReturnType<Route['response']>
@@ -146,10 +150,10 @@ export interface TypedSchema<ModelName extends string = string> {
 
 export type UnwrapSchema<
 	Schema extends TSchema | undefined | string,
-	Instance extends ElysiaInstance = ElysiaInstance,
+	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
 	Fallback = unknown
 > = Schema extends string
-	? Instance['store'][typeof DEFS] extends {
+	? Definitions extends {
 			[name in Schema]: infer NamedSchema extends TSchema
 	  }
 		? Static<NamedSchema>
@@ -159,34 +163,34 @@ export type UnwrapSchema<
 	: Fallback
 
 export type TypedSchemaToRoute<
-	Schema extends TypedSchema,
-	Instance extends ElysiaInstance
+	Schema extends TypedSchema<any>,
+	Definitions extends ElysiaInstance['meta'][typeof DEFS]
 > = {
-	body: UnwrapSchema<Schema['body'], Instance>
+	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
 		Schema['headers'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	query: UnwrapSchema<
 		Schema['query'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	params: UnwrapSchema<
 		Schema['params'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	response: Schema['response'] extends TSchema | string
-		? UnwrapSchema<Schema['response'], Instance>
+		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
 				[k in string]: TSchema | string
 		  }
-		? UnwrapSchema<ObjectValues<Schema['response']>, Instance>
+		? UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
 		: unknown
 }
 
@@ -210,7 +214,10 @@ export type HookHandler<
 	Schema extends TypedSchema = TypedSchema,
 	Instance extends ElysiaInstance = ElysiaInstance,
 	Path extends string = string,
-	Typed extends AnyTypedSchema = TypedSchemaToRoute<Schema, Instance>
+	Typed extends AnyTypedSchema = TypedSchemaToRoute<
+		Schema,
+		Instance['meta'][typeof DEFS]
+	>
 > = Handler<
 	Typed['params'] extends {}
 		? Omit<Typed, 'response'> & {
@@ -230,7 +237,10 @@ export type HookHandler<
 export type MergeIfNotNull<A, B> = B extends null ? A : A & B
 export type UnknownFallback<A, B> = unknown extends A ? B : A
 export type PickInOrder<A, B> = A extends NonNullable<A> ? A : B
-export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
+export type MergeSchema<
+	A extends TypedSchema<any>,
+	B extends TypedSchema<any>
+> = {
 	body: PickInOrder<PickInOrder<A['body'], B['body']>, undefined>
 	headers: PickInOrder<PickInOrder<A['headers'], B['headers']>, undefined>
 	query: PickInOrder<PickInOrder<A['query'], B['query']>, undefined>
@@ -255,16 +265,17 @@ export interface LocalHook<
 }
 
 export type RouteToSchema<
-	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance<any> = ElysiaInstance,
+	Schema extends TypedSchema,
+	InstanceSchema extends ElysiaInstance['schema'],
+	Definitions extends ElysiaInstance['meta'][typeof DEFS],
 	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, Instance['schema']> = MergeSchema<
+	FinalSchema extends MergeSchema<Schema, InstanceSchema> = MergeSchema<
 		Schema,
-		Instance['schema']
+		InstanceSchema
 	>
 > = FinalSchema['params'] extends NonNullable<Schema['params']>
-	? TypedSchemaToRoute<FinalSchema, Instance>
-	: Omit<TypedSchemaToRoute<FinalSchema, Instance>, 'params'> & {
+	? TypedSchemaToRoute<FinalSchema, Definitions>
+	: Omit<TypedSchemaToRoute<FinalSchema, Definitions>, 'params'> & {
 			params: Record<ExtractPath<Path>, string>
 	  }
 
@@ -276,14 +287,16 @@ export type ElysiaRoute<
 	CatchResponse = unknown
 > = Elysia<{
 	request: Instance['request']
-	store: Instance['store'] &
+	store: Instance['store']
+	schema: Instance['schema']
+	meta: Instance['meta'] &
 		Record<
 			typeof SCHEMA,
 			{
 				[path in Path]: {
 					[method in Method]: TypedRouteToEden<
 						Schema,
-						Instance,
+						Instance['schema'],
 						Path
 					> extends infer FinalSchema extends AnyTypedSchema
 						? Omit<FinalSchema, 'response'> & {
@@ -297,49 +310,48 @@ export type ElysiaRoute<
 				}
 			}
 		>
-	schema: Instance['schema']
 }>
 
 export type TypedRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance<any> = ElysiaInstance,
+	InstanceSchema extends TypedSchema<string> = ElysiaInstance['schema'],
 	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, Instance['schema']> = MergeSchema<
+	FinalSchema extends MergeSchema<Schema, InstanceSchema> = MergeSchema<
 		Schema,
-		Instance['schema']
+		InstanceSchema
 	>
 > = FinalSchema['params'] extends NonNullable<Schema['params']>
-	? TypedSchemaToEden<FinalSchema, Instance>
-	: Omit<TypedSchemaToEden<FinalSchema, Instance>, 'params'> & {
+	? TypedSchemaToEden<FinalSchema, InstanceSchema>
+	: Omit<TypedSchemaToEden<FinalSchema, InstanceSchema>, 'params'> & {
 			params: Record<ExtractPath<Path>, string>
 	  }
 
 export type TypedSchemaToEden<
 	Schema extends TypedSchema,
-	Instance extends ElysiaInstance
+	Definitions extends ElysiaInstance['meta'][typeof DEFS]
 > = {
-	body: UnwrapSchema<Schema['body'], Instance>
+	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
 		Schema['headers'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	query: UnwrapSchema<
 		Schema['query'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	params: UnwrapSchema<
 		Schema['params'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	response: Schema['response'] extends TSchema | string
 		? {
-				'200': UnwrapSchema<Schema['response'], Instance>
+				'200': UnwrapSchema<Schema['response'], Definitions>
 		  }
 		: Schema['response'] extends {
 				[x in string]: TSchema | string
@@ -347,18 +359,27 @@ export type TypedSchemaToEden<
 		? {
 				[key in keyof Schema['response']]: UnwrapSchema<
 					Schema['response'][key],
-					Instance
+					Definitions
 				>
 		  }
 		: unknown
 }
 
 export type LocalHandler<
-	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance = ElysiaInstance,
+	Schema extends TypedSchema,
+	Instance extends ElysiaInstance,
 	Path extends string = string,
 	CatchResponse = unknown
-> = Handler<RouteToSchema<Schema, Instance, Path>, Instance, CatchResponse>
+> = Handler<
+	RouteToSchema<
+		Schema,
+		Instance['schema'],
+		Instance['meta'][typeof DEFS],
+		Path
+	>,
+	Instance,
+	CatchResponse
+>
 
 export interface TypedRoute {
 	body?: unknown

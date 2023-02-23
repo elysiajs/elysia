@@ -13,7 +13,7 @@ describe('Models', () => {
 			.setModel({
 				boolean: t.Boolean()
 			})
-			.get('/', ({ store }) => Object.keys(store[DEFS]))
+			.get('/', (context) => Object.keys(context[DEFS]))
 
 		const res = await app.handle(req('/')).then((r) => r.json())
 
@@ -31,7 +31,7 @@ describe('Models', () => {
 					boolean: t.Boolean()
 				})
 			})
-			.get('/defs', ({ store }) => store[SCHEMA])
+			.get('/defs', (context) => context[SCHEMA])
 			.get('/', () => 1, {
 				schema: {
 					query: 'object',
@@ -114,7 +114,7 @@ describe('Models', () => {
 					boolean: t.Boolean()
 				})
 			})
-			.get('/defs', ({ store }) => store[SCHEMA])
+			.get('/defs', (context) => context[SCHEMA])
 			.get('/', () => 1, {
 				schema: {
 					query: 'object',
@@ -206,7 +206,7 @@ describe('Models', () => {
 					boolean: t.Boolean()
 				})
 			})
-			.get('/defs', ({ store }) => store[SCHEMA])
+			.get('/defs', (context) => context[SCHEMA])
 			.get('/', () => 1, {
 				schema: {
 					response: {
@@ -252,7 +252,7 @@ describe('Models', () => {
 					boolean: t.Boolean()
 				})
 			})
-			.get('/defs', ({ store }) => store[SCHEMA])
+			.get('/defs', (context) => context[SCHEMA])
 			.get('/', () => 1, {
 				schema: {
 					response: 'number'

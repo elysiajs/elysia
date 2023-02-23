@@ -74,7 +74,7 @@ describe('Modules', () => {
 			.use(import('./modules'))
 			.use(asyncPlugin)
 			.get('/', () => 'hi')
-			.get('/schema', ({ store }) => store[SCHEMA])
+			.get('/schema', (context) => context[SCHEMA])
 
 		await app.modules
 
