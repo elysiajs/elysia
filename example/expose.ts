@@ -42,15 +42,30 @@ const app = new Elysia()
 					throw new Error('Authorization is required')
 			}
 		}),
-		a: permission({
+		b: permission({
 			value: {
 				allow: () => true,
-				deny: () => false,
+				deny: () => false
 			},
+			allow: ['allow'],
 			check({ match }) {
 				return match({
-					deny() {
+					default() {
 						throw new Error('Denied')
+					}
+				})
+			}
+		}),
+		a: permission({
+			value: {
+				allow: <T>(a: T) => a,
+				deny: () => false
+			},
+			allow: ['allow'],
+			check({ match }) {
+				return match({
+					allow([param]) {
+						if (param === true) throw new Error('Forbidden Value')
 					}
 				})
 			}
@@ -69,11 +84,19 @@ await app
 			body: JSON.stringify({
 				json: [
 					{
-						n: ['a', 'allow']
+						n: ['a', 'allow'],
+						p: [true]
 					},
 					{
-						n: ['a', 'deny']
-					}
+						n: ['a', 'allow'],
+						p: ["any"]
+					},
+					// {
+					// 	n: ['b', 'allow']
+					// },
+					// {
+					// 	n: ['b', 'deny']
+					// }
 					// { n: ['redis', 'set'], p: ['hi', 'awa'] },
 					// { n: ['redis', 'get'], p: ['hi'] }
 				],

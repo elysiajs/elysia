@@ -99,6 +99,20 @@ const app = new Elysia()
 					}
 				})
 			}
+		}),
+		f: permission({
+			value: {
+				allow: <T>(a: T) => a,
+				deny: () => false
+			},
+			allow: ['allow'],
+			check({ match }) {
+				return match({
+					allow([param]) {
+						if (param === true) throw new Error('Forbidden Value')
+					}
+				})
+			}
 		})
 	}))
 	.listen(8080)
@@ -299,5 +313,20 @@ describe('Elysia Fn', () => {
 		])
 
 		expect(res).toEqual([true, new Error('Denied')])
+	})
+
+	it('validate both allow and check', async () => {
+		const res = await fn([
+			{
+				n: ['f', 'allow'],
+				p: [true],
+			},
+			{
+				n: ['f', 'allow'],
+				p: ['hello'],
+			}
+		])
+
+		expect(res).toEqual([new Error('Forbidden Value'), 'hello'])
 	})
 })

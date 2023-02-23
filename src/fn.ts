@@ -72,9 +72,17 @@ export const runFn = (
 					const key = names.slice(j + 1).join('.')
 
 					if (
+						method.allow?.includes(key) === true &&
+						typeof method.check !== 'function'
+					) {
+						method = method.value
+						continue
+					}
+
+					if (
 						method.check == false ||
-						method.allow?.includes(key) === false ||
-						method.deny?.includes(key) === true
+						method.deny?.includes(key) === true ||
+						(method.allow?.includes(key) === false && !method.deny)
 					) {
 						results.push(new Error('Forbidden'))
 						continue batch
@@ -110,12 +118,16 @@ export const runFn = (
 									if (response instanceof Error)
 										throw response
 								} catch (error) {
-									if (method.allow?.includes(key) === true) {
-										// Not Empty
-									} else {
-										results.push(error)
-										continue batch
+									if (
+										!(key in cases) &&
+										method.allow?.includes(key)
+									) {
+										method = method.value
+										continue
 									}
+
+									results.push(error)
+									continue batch
 								}
 							}
 
