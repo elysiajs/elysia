@@ -1230,7 +1230,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			if (!route) throw new Error('NOT_FOUND')
 			const handler = route.store!
 
-			let body: string | Record<string, any> | undefined
+			const hooks = handler.hooks
+			if (hooks?.error) handleErrors = hooks?.error
+
+			let body: string | Record<string, unknown | unknown[]> | undefined
 			if (request.method !== 'GET') {
 				let contentType = request.headers.get('content-type')!
 
@@ -1264,6 +1267,27 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								body = mapQuery(await request.text())
 								break
 
+							case 'multipart/form-data':
+								body = {}
+
+								await request.formData().then((form) => {
+									for (const key of form.keys()) {
+										if (
+											key in
+											(body as Record<string, unknown>)
+										)
+											continue
+
+										const value = form.getAll(key)
+										if (value.length === 1)
+											// @ts-ignore
+											body[key] = value[0]
+										// @ts-ignore
+										else body[key] = value
+									}
+								})
+								break
+
 							case 'elysia/fn':
 								body = superjsonDeseiralize(
 									await request.json()
@@ -1275,9 +1299,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			context.body = body
 			context.params = route.params
 			if (fracture[2]) context.query = mapQuery(fracture[2])
-
-			const hooks = handler.hooks
-			if (hooks?.error) handleErrors = hooks?.error
 
 			if (hooks?.transform.length)
 				for (let i = 0; i < hooks.transform.length; i++) {
@@ -1539,7 +1560,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 }
 
 export { Elysia, permission }
-export { Type as t } from '@sinclair/typebox'
+export { t } from './custom-types'
 
 export {
 	SCHEMA,

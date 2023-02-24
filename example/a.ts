@@ -1,33 +1,29 @@
 import { Elysia, t } from '../src'
+import { upload } from '../test/utils'
 
-const authenticate = (app: Elysia) =>
-	app.group('/authenticate', (group) =>
-		group
-			.post(
-				'/login',
-				({ body: { username, password }, set }) => {
-					throw new Error('A')
-				},
-				{
-					beforeHandle: ({ body: { username, password }, set }) => {},
-					schema: {
-						body: t.Object({
-							username: t.String(),
-							password: t.String()
-						})
-					}
-				}
-			)
-			.onError(({ code, error, set }) => {
-				console.log("A")
-
-				return {
-					status: 400,
-					body: {
-						error: 'Bad request'
-					}
-				}
+const app = new Elysia()
+	.post('/single', ({ body: { file } }) => file, {
+		schema: {
+			body: t.Object({
+				file: t.File()
 			})
+		}
+	})
+	.post(
+		'/multiple',
+		({ body: { files } }) => files.reduce((a, b) => a + b.size, 0),
+		{
+			schema: {
+				body: t.Object({
+					files: t.Files()
+				})
+			}
+		}
 	)
+	.listen(8080)
 
-const app = new Elysia().use(authenticate).listen(8080)
+app.handle(
+	upload('/single', {
+		file: 'millenium.jpg'
+	})
+).then(r => r.text()).then(console.log)
