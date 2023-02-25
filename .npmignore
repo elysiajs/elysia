@@ -16,7 +16,7 @@ CHANGELOG.md
 example
 tests
 docs
-src
+# src
 .DS_Store
 test
 tsconfig.cjs.json

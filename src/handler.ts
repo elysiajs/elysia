@@ -27,17 +27,17 @@ const parseSetCookies = (headers: Headers, setCookie: string | string[]) => {
 
 // We don't want to assign new variable to be used only once here
 export const mapEarlyResponse = (response: unknown, set: Context['set']) => {
-	if (set.headers?.['Set-Cookie'])
+	if (set.redirect) {
+		set.headers.Location = set.redirect
+		set.status = 302
+	}
+
+	if (set.headers['Set-Cookie'])
 		// @ts-ignore
 		set.headers = parseSetCookies(
 			new Headers(set.headers),
 			set.headers['Set-Cookie']
 		)
-
-	if (set.redirect)
-		return Response.redirect(set.redirect, {
-			headers: set.headers
-		})
 
 	if (isNotEmpty(set.headers) || set.status !== 200)
 		switch (typeof response) {
@@ -132,17 +132,17 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
+	if (set.redirect) {
+		set.headers.Location = set.redirect
+		set.status = 302
+	}
+
 	if (set.headers?.['Set-Cookie']) {
 		// @ts-ignore
 		set.headers = parseSetCookies(
 			new Headers(set.headers),
 			set.headers['Set-Cookie']
 		)
-
-		if (set.redirect)
-			return Response.redirect(set.redirect, {
-				headers: set.headers
-			})
 
 		switch (typeof response) {
 			case 'string':

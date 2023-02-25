@@ -22,8 +22,8 @@ new Elysia()
 				.guard(
 					{
 						schema: {
-							header: t.Object({
-								a: t.Number()
+							headers: t.Object({
+								a: t.String()
 							})
 						}
 					},

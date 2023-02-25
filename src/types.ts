@@ -5,7 +5,7 @@ import type { Context, PreContext } from './context'
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { SCHEMA, DEFS, EXPOSED } from './utils'
-import type { OpenAPIV2 } from 'openapi-types'
+import type { OpenAPIV3 } from 'openapi-types'
 
 export type WithArray<T> = T | T[]
 export type ObjectValues<T extends object> = T[keyof T]
@@ -15,7 +15,7 @@ export type ElysiaInstance<
 		store?: Record<any, any>
 		request?: Record<any, any>
 		schema?: TypedSchema
-		meta?: Record<typeof SCHEMA, Partial<OpenAPIV2.PathsObject>> &
+		meta?: Record<typeof SCHEMA, Partial<OpenAPIV3.PathsObject>> &
 			Record<typeof DEFS, { [x in string]: TSchema }> &
 			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 	} = {
@@ -248,6 +248,18 @@ export type MergeSchema<
 	response: PickInOrder<PickInOrder<A['response'], B['response']>, undefined>
 }
 
+type MaybeArray<T> = T | T[]
+
+type ExtractModelName<Type> = Type extends TypedSchema<infer X> ? X : never
+
+type ContentType = MaybeArray<
+	| (string & {})
+	| 'text/plain'
+	| 'application/json'
+	| 'multipart/form-data'
+	| 'application/x-www-form-urlencoded'
+>
+
 export interface LocalHook<
 	Schema extends TypedSchema = TypedSchema,
 	Instance extends ElysiaInstance<any> = ElysiaInstance,
@@ -255,9 +267,14 @@ export interface LocalHook<
 	FinalSchema extends MergeSchema<Schema, Instance['schema']> = MergeSchema<
 		Schema,
 		Instance['schema']
-	>
+	>,
+	Models extends TypedSchema = TypedSchema<ExtractModelName<Schema>>
 > {
-	schema?: Schema & { detail?: Partial<OpenAPIV2.OperationObject> }
+	// ? I have no idea why does this infer type, but it work anyway
+	schema?: (Models extends Schema ? Models : Models) & {
+		contentType?: ContentType
+		detail?: Partial<OpenAPIV3.OperationObject>
+	}
 	transform?: WithArray<HookHandler<FinalSchema, Instance, Path>>
 	beforeHandle?: WithArray<HookHandler<FinalSchema, Instance, Path>>
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>

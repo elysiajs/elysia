@@ -83,12 +83,12 @@ const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 	if (options.maxSize && value.size > parseFileUnit(options.maxSize))
 		return false
 
-	if (options.type)
-		if (typeof options.type === 'string') {
-			if (!value.type.startsWith(options.type)) return false
+	if (options.extension)
+		if (typeof options.extension === 'string') {
+			if (!value.type.startsWith(options.extension)) return false
 		} else {
-			for (let i = 0; i < options.type.length; i++)
-				if (value.type.startsWith(options.type[i])) return true
+			for (let i = 0; i < options.extension.length; i++)
+				if (value.type.startsWith(options.extension[i])) return true
 
 			return false
 		}
@@ -127,7 +127,22 @@ declare module '@sinclair/typebox' {
 	}
 }
 
-Type.File = ElysiaType.File
-Type.Files = ElysiaType.Files
+Type.File = (arg?: ElysiaTypeOptions.File) =>
+	ElysiaType.File({
+		default: 'File',
+		...arg,
+		extension: arg?.type,
+		type: 'string',
+		format: 'binary'
+	})
+
+Type.Files = (arg?: ElysiaTypeOptions.Files) =>
+	ElysiaType.Files({
+		default: 'Files',
+		...arg,
+		extension: arg?.type,
+		type: 'string',
+		format: 'binary'
+	})
 
 export { Type as t }

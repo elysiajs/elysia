@@ -124,7 +124,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		method: HTTPMethod,
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<any>
+		hook?: LocalHook
 	) {
 		path = path.startsWith('/') ? path : (`/${path}` as Path)
 
@@ -138,29 +138,30 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		const defs = this.meta[DEFS]
 
 		const body = getSchemaValidator(
-			hook?.schema?.body ?? this.$schema?.body,
+			hook?.schema?.body ?? (this.$schema?.body as any),
 			defs
 		)
 		const header = getSchemaValidator(
-			hook?.schema?.headers ?? this.$schema?.headers,
+			hook?.schema?.headers ?? (this.$schema?.headers as any),
 			defs,
 			true
 		)
 		const params = getSchemaValidator(
-			hook?.schema?.params ?? this.$schema?.params,
+			hook?.schema?.params ?? (this.$schema?.params as any),
 			defs
 		)
 		const query = getSchemaValidator(
-			hook?.schema?.query ?? this.$schema?.query,
+			hook?.schema?.query ?? (this.$schema?.query as any),
 			defs
 		)
 		const response = getResponseSchemaValidator(
-			hook?.schema?.response ?? this.$schema?.response,
+			hook?.schema?.response ?? (this.$schema?.response as any),
 			defs
 		)
 
 		registerSchemaPath({
 			schema: this.meta[SCHEMA],
+			contentType: hook?.schema?.contentType,
 			hook,
 			method,
 			path,

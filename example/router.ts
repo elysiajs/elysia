@@ -19,6 +19,6 @@ const a = new Elysia()
 	.use(prefix('prefixed'))
 	.listen(8080)
 
-type Router = typeof a['store'][typeof SCHEMA]
+type Router = typeof a['meta'][typeof SCHEMA]
 
 type Path = Router['/a']['GET']['response']

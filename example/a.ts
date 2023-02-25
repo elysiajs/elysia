@@ -1,29 +1,13 @@
-import { Elysia, t } from '../src'
-import { upload } from '../test/utils'
+import { Elysia, t, SCHEMA } from '../src'
 
 const app = new Elysia()
-	.post('/single', ({ body: { file } }) => file, {
-		schema: {
-			body: t.Object({
-				file: t.File()
-			})
-		}
-	})
-	.post(
-		'/multiple',
-		({ body: { files } }) => files.reduce((a, b) => a + b.size, 0),
-		{
-			schema: {
-				body: t.Object({
-					files: t.Files()
-				})
-			}
-		}
-	)
+	.get('/', (context) => context[SCHEMA])
+    .post('/any', ({ body: { name } }) => name, {
+        schema: {
+            body: t.Object({
+                name: t.String()
+            }),
+            response: t.String()
+        }
+    })
 	.listen(8080)
-
-app.handle(
-	upload('/single', {
-		file: 'millenium.jpg'
-	})
-).then(r => r.text()).then(console.log)
