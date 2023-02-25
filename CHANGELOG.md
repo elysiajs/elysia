@@ -1,3 +1,29 @@
+# 0.3.0-beta.0 - 25 Feb 2023
+Feature:
+- Elysia Fn
+- Suport `multipart/form-data`
+- `t.File` and `t.Files` for file validation
+- `schema.content` for specifying content type
+
+Improvement:
+- Improve TypeScript inference between plugin registration
+- Optimize TypeScript inference size
+- Context creation optimization
+- Use Raikiri router by default
+- Remove unused function
+- Refactor `registerSchemaPath` to support OpenAPI 3.0.3
+- Add `error` inference for Eden
+
+Fix:
+- `Exported variable has or is using name 'SCHEMA' from external module
+- `Exported variable has or is using name 'DEFS' from external module
+- Possible errors for building Elysia app with `declaration: true` in `tsconfig.json`
+
+Breaking Change:
+- Remove `derive`
+- Update from OpenAPI 2.x to OpenAPI 3.0.3
+- Move context.store[SYMBOL] to meta[SYMBOL]
+
 # 0.2.9 - 20 Feb 2023
 Bug fix:
 - `group` doesn't inherits `onError`
