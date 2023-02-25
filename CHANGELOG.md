@@ -1,3 +1,7 @@
+# 0.3.0-beta.1 - 25 Feb 2023
+Fix:
+- Handle error thrown in non permission function
+
 # 0.3.0-beta.0 - 25 Feb 2023
 Feature:
 - Elysia Fn

@@ -98,9 +98,7 @@ export const runFn = (
 					continue batch
 				} else if (method[caller].check !== true) {
 					try {
-						const allowance: Permission = method[
-							caller
-						].check({
+						const allowance: Permission = method[caller].check({
 							...context,
 							key: caller,
 							params: procedure.p ?? null,
@@ -173,7 +171,7 @@ export const runFn = (
 								}
 							})
 
-							if (cases) {
+							if (cases)
 								try {
 									const response = (
 										cases[key] ?? cases.default
@@ -193,7 +191,6 @@ export const runFn = (
 									results.push(error)
 									continue batch
 								}
-							}
 
 							if (allowance instanceof Error) {
 								results.push(allowance)
@@ -208,14 +205,31 @@ export const runFn = (
 				}
 			}
 
-		// ? Need to call Class.method to access this
-		if (typeof method[caller] !== 'function')
-			results.push(new Error('Invalid procedure'))
-		else if (procedure.p === undefined) results.push(method[caller]())
-		else if (procedure.p.length === 1)
-			results.push(method[caller](procedure.p[0]))
-		else results.push(method[caller](...procedure.p))
+		try {
+			// ? Need to call Class.method to access this
+			if (typeof method[caller] !== 'function')
+				results.push(new Error('Invalid procedure'))
+			else if (procedure.p === undefined) results.push(method[caller]())
+			else if (procedure.p.length === 1)
+				results.push(method[caller](procedure.p[0]))
+			else results.push(method[caller](...procedure.p))
+		} catch (error) {
+			results.push(error)
+		}
 	}
 
-	return Promise.all(results).then(superjsonSerialize)
+	return Promise.allSettled(results)
+		.then((x) => {
+			const ops: any[] = []
+
+			for (let i = 0; i < x.length; i++) {
+				const op = x[i]
+
+				if (op.status === 'fulfilled') ops.push(op.value)
+				else ops.push(op.reason)
+			}
+
+			return ops
+		})
+		.then(superjsonSerialize)
 }
