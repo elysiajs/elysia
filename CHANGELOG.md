@@ -13,6 +13,7 @@ Improvement:
 - Remove unused function
 - Refactor `registerSchemaPath` to support OpenAPI 3.0.3
 - Add `error` inference for Eden
+- Mark `@sinclair/typebox` as optional `peerDenpendencies`
 
 Fix:
 - `Exported variable has or is using name 'SCHEMA' from external module
