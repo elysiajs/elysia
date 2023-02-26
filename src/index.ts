@@ -50,9 +50,12 @@ import type {
 	MergeSchema,
 	ListenCallback,
 	NoReturnHandler,
-	ElysiaRoute,
 	MaybePromise,
-	IsNever
+	IsNever,
+	AnyTypedSchema,
+	TypedRouteToEden,
+	MergeUnionObjects,
+	ExtractPath
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
 
@@ -683,7 +686,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'GET', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'GET']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('GET', path, handler, hook as LocalHook)
 
 		return this as any
@@ -717,7 +760,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'POST', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'POST']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('POST', path, handler, hook as LocalHook)
 
 		return this as any
@@ -751,7 +834,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'PUT', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'PUT']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('PUT', path, handler, hook as LocalHook)
 
 		return this as any
@@ -785,7 +908,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'PATCH', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'PATCH']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('PATCH', path, handler, hook as LocalHook)
 
 		return this as any
@@ -819,7 +982,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'DELETE', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'DELETE']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('DELETE', path, handler, hook as LocalHook)
 
 		return this as any
@@ -853,7 +1056,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'OPTIONS', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'OPTIONS']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('OPTIONS', path, handler, hook as LocalHook)
 
 		return this as any
@@ -882,7 +1125,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'ALL', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'ALL']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('ALL', path, handler, hook as LocalHook)
 
 		return this as any
@@ -916,7 +1199,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'HEAD', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'HEAD']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('HEAD', path, handler, hook as LocalHook)
 
 		return this as any
@@ -950,7 +1273,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'TRACE', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'TRACE']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('TRACE', path, handler, hook as LocalHook)
 
 		return this as any
@@ -984,7 +1347,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'CONNECT', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'CONNECT']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('CONNECT', path, handler, hook as LocalHook)
 
 		return this as any
@@ -1020,7 +1423,47 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path, Response>,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<Method, Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in Method]: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path
+							> extends {
+								body: infer Body extends AnyTypedSchema['body']
+								headers: infer Headers extends AnyTypedSchema['headers']
+								query: infer Query extends AnyTypedSchema['query']
+								params: infer Params extends AnyTypedSchema['params']
+								response: infer Response extends AnyTypedSchema['response']
+							}
+								? {
+										body: Body
+										headers: Headers
+										query: Query
+										params: Params extends NonNullable<Params>
+											? Params
+											: Record<ExtractPath<Path>, string>
+										response: undefined extends Response
+											? {
+													'200': Response
+											  }
+											: Response
+								  }
+								: never
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler(method, path, handler, hook as LocalHook)
 
 		return this as any

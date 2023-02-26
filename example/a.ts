@@ -15,4 +15,4 @@ const app = new Elysia()
     })
 	.listen(8080)
 
-type App = typeof app['meta'][typeof SCHEMA]['/any']['POST']['response']
+type App = typeof app['meta'][typeof SCHEMA]

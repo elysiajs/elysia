@@ -4,7 +4,7 @@ import type { Serve, Server } from 'bun'
 import type { Context, PreContext } from './context'
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import type { SCHEMA, DEFS, EXPOSED } from './utils'
+import { SCHEMA, DEFS, EXPOSED } from './utils'
 import type { OpenAPIV3 } from 'openapi-types'
 
 export type WithArray<T> = T | T[]
@@ -291,48 +291,95 @@ export type RouteToSchema<
 			params: Record<ExtractPath<Path>, string>
 	  }
 
+export type MergeUnionObjects<T> = {} & { [P in keyof T]: T[P] }
+
+// export type ElysiaRouteSchema<
+// 	Method extends string,
+// 	Path extends string,
+// 	CatchResponse,
+// 	Schema extends TypedSchema<any>,
+// 	Parent extends ElysiaInstance<any>['meta'][typeof SCHEMA],
+// 	Definitions extends ElysiaInstance['meta'][typeof DEFS]
+// > = Record<
+// 	typeof SCHEMA,
+// 	MergeUnionObjects<
+// 		Parent & {
+// 			[path in Path]: {
+// 				[method in Method]: TypedRouteToEden<
+// 					Schema,
+// 					Definitions,
+// 					Path
+// 				> extends {
+// 					body: infer Body extends AnyTypedSchema['body']
+// 					headers: infer Headers extends AnyTypedSchema['headers']
+// 					query: infer Query extends AnyTypedSchema['query']
+// 					params: infer Params extends AnyTypedSchema['params']
+// 					response: infer Response extends AnyTypedSchema['response']
+// 				}
+// 					? {
+// 							body: Body
+// 							headers: Headers
+// 							query: Query
+// 							params: Params extends NonNullable<Params>
+// 								? Params
+// 								: Record<ExtractPath<Path>, string>
+// 							response: undefined extends Response
+// 								? {
+// 										'200': CatchResponse
+// 								  }
+// 								: Response
+// 					  }
+// 					: never
+// 			}
+// 		}
+// 	>
+// >
+
 export type ElysiaRoute<
 	Method extends string = string,
 	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance = ElysiaInstance,
+	Instance extends ElysiaInstance<any> = ElysiaInstance,
 	Path extends string = string,
 	CatchResponse = unknown
 > = Elysia<{
 	request: Instance['request']
 	store: Instance['store']
 	schema: Instance['schema']
-	meta: Instance['meta'] &
+	meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+		Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 		Record<
 			typeof SCHEMA,
-			{
-				[path in Path]: {
-					[method in Method]: TypedRouteToEden<
-						Schema,
-						Instance['meta'][typeof DEFS],
-						Path
-					> extends {
-						body: infer Body extends AnyTypedSchema['body']
-						headers: infer Headers extends AnyTypedSchema['headers']
-						query: infer Query extends AnyTypedSchema['query']
-						params: infer Params extends AnyTypedSchema['params']
-						response: infer Response extends AnyTypedSchema['response']
+			MergeUnionObjects<
+				Instance['meta'][typeof SCHEMA] & {
+					[path in Path]: {
+						[method in Method]: TypedRouteToEden<
+							Schema,
+							Instance['meta'][typeof DEFS],
+							Path
+						> extends {
+							body: infer Body extends AnyTypedSchema['body']
+							headers: infer Headers extends AnyTypedSchema['headers']
+							query: infer Query extends AnyTypedSchema['query']
+							params: infer Params extends AnyTypedSchema['params']
+							response: infer Response extends AnyTypedSchema['response']
+						}
+							? {
+									body: Body
+									headers: Headers
+									query: Query
+									params: Params extends NonNullable<Params>
+										? Params
+										: Record<ExtractPath<Path>, string>
+									response: undefined extends Response
+										? {
+												'200': CatchResponse
+										  }
+										: Response
+							  }
+							: never
 					}
-						? {
-								body: Body
-								headers: Headers
-								query: Query
-								params: Params extends NonNullable<Params>
-									? Params
-									: Record<ExtractPath<Path>, string>
-								response: undefined extends Response
-									? {
-											'200': CatchResponse
-									  }
-									: Response
-						  }
-						: never
 				}
-			}
+			>
 		>
 }>
 
