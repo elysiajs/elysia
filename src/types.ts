@@ -40,12 +40,7 @@ export type Handler<
 	Instance extends ElysiaInstance = ElysiaInstance,
 	CatchResponse = Route['response']
 > = (
-	context: Context<Route, Instance['store']> &
-		Instance['request'] & {
-			a: Instance
-			r: Route
-			merged: MergeSchema<Instance['schema'], Route>
-		}
+	context: Context<Route, Instance['store']> & Instance['request']
 ) => // Catch function
 Route['response'] extends (models: Record<string, TSchema>) => TSchema
 	? undefined extends ReturnType<Route['response']>
@@ -315,13 +310,25 @@ export type ElysiaRoute<
 						Schema,
 						Instance['meta'][typeof DEFS],
 						Path
-					> extends infer FinalSchema extends AnyTypedSchema
-						? Omit<FinalSchema, 'response'> & {
-								response: undefined extends FinalSchema['response']
+					> extends {
+						body: infer Body extends AnyTypedSchema['body']
+						headers: infer Headers extends AnyTypedSchema['headers']
+						query: infer Query extends AnyTypedSchema['query']
+						params: infer Params extends AnyTypedSchema['params']
+						response: infer Response extends AnyTypedSchema['response']
+					}
+						? {
+								body: Body
+								headers: Headers
+								query: Query
+								params: Params extends NonNullable<Params>
+									? Params
+									: Record<ExtractPath<Path>, string>
+								response: undefined extends Response
 									? {
 											'200': CatchResponse
 									  }
-									: FinalSchema['response']
+									: Response
 						  }
 						: never
 				}
@@ -333,13 +340,10 @@ export type TypedRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
 	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
 	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, Definitions> = MergeSchema<
-		Schema,
-		Definitions
-	>
-> = FinalSchema['params'] extends NonNullable<Schema['params']>
-	? TypedSchemaToEden<FinalSchema, Definitions>
-	: Omit<TypedSchemaToEden<FinalSchema, Definitions>, 'params'> & {
+	Typed extends AnyTypedSchema = TypedSchemaToEden<Schema, Definitions>
+> = Schema['params'] extends NonNullable<Schema['params']>
+	? Typed
+	: Omit<Typed, 'params'> & {
 			params: Record<ExtractPath<Path>, string>
 	  }
 
