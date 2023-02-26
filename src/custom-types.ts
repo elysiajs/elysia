@@ -141,6 +141,7 @@ Type.Files = (arg?: ElysiaTypeOptions.Files) =>
 		default: 'Files',
 		...arg,
 		extension: arg?.type,
+		// TODO: Migrate this to array of binary string
 		type: 'string',
 		format: 'binary'
 	})

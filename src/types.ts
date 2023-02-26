@@ -313,7 +313,7 @@ export type ElysiaRoute<
 				[path in Path]: {
 					[method in Method]: TypedRouteToEden<
 						Schema,
-						Instance['schema'],
+						Instance['meta'][typeof DEFS],
 						Path
 					> extends infer FinalSchema extends AnyTypedSchema
 						? Omit<FinalSchema, 'response'> & {
@@ -331,15 +331,15 @@ export type ElysiaRoute<
 
 export type TypedRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
-	InstanceSchema extends TypedSchema<string> = ElysiaInstance['schema'],
+	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
 	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, InstanceSchema> = MergeSchema<
+	FinalSchema extends MergeSchema<Schema, Definitions> = MergeSchema<
 		Schema,
-		InstanceSchema
+		Definitions
 	>
 > = FinalSchema['params'] extends NonNullable<Schema['params']>
-	? TypedSchemaToEden<FinalSchema, InstanceSchema>
-	: Omit<TypedSchemaToEden<FinalSchema, InstanceSchema>, 'params'> & {
+	? TypedSchemaToEden<FinalSchema, Definitions>
+	: Omit<TypedSchemaToEden<FinalSchema, Definitions>, 'params'> & {
 			params: Record<ExtractPath<Path>, string>
 	  }
 

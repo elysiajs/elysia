@@ -1,3 +1,7 @@
+# 0.3.0-beta.2 - 26 Feb 2023
+Fix:
+- Unable to type `setModel` inference definition via Eden
+
 # 0.3.0-beta.1 - 25 Feb 2023
 Fix:
 - Handle error thrown in non permission function
@@ -20,8 +24,8 @@ Improvement:
 - Mark `@sinclair/typebox` as optional `peerDenpendencies`
 
 Fix:
-- `Exported variable has or is using name 'SCHEMA' from external module
-- `Exported variable has or is using name 'DEFS' from external module
+- Exported variable has or is using name 'SCHEMA' from external module
+- Exported variable has or is using name 'DEFS' from external module
 - Possible errors for building Elysia app with `declaration: true` in `tsconfig.json`
 
 Breaking Change:
