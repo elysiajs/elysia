@@ -7,12 +7,7 @@ const app = new Elysia()
         })
     })
 	.get('/', (context) => context[SCHEMA])
-    .post('/any', ({ body }) => body, {
-        schema: {
-            body: 'name',
-            response: 'name'
-        }
-    })
+	.get('/a', (context) => context[SCHEMA])
 	.listen(8080)
 
 type App = typeof app['meta'][typeof SCHEMA]

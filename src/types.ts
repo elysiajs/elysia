@@ -389,10 +389,34 @@ export type TypedRouteToEden<
 	Path extends string = string,
 	Typed extends AnyTypedSchema = TypedSchemaToEden<Schema, Definitions>
 > = Schema['params'] extends NonNullable<Schema['params']>
-	? Typed
-	: Omit<Typed, 'params'> & {
-			params: Record<ExtractPath<Path>, string>
+	? Typed extends AnyTypedSchema
+		? {
+				body: Typed['body']
+				headers: Typed['headers']
+				query: Typed['query']
+				params: Typed['params'] extends NonNullable<Typed['params']>
+					? Typed['params']
+					: Record<ExtractPath<Path>, string>
+				response: undefined extends Response
+					? {
+							'200': Response
+					  }
+					: Response
+		  }
+		: AnyTypedSchema
+	: Typed extends AnyTypedSchema
+	? {
+			body: Typed['body']
+			headers: Typed['headers']
+			query: Typed['query']
+			params: never
+			response: undefined extends Response
+				? {
+						'200': Response
+				  }
+				: Response
 	  }
+	: AnyTypedSchema
 
 export type TypedSchemaToEden<
 	Schema extends TypedSchema,

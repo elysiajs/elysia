@@ -701,27 +701,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							>
 						}
 					}
 				>
@@ -775,27 +755,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							>
 						}
 					}
 				>
@@ -849,27 +809,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>
@@ -923,27 +863,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>
@@ -997,27 +917,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>
@@ -1071,27 +971,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>
@@ -1140,27 +1020,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>
@@ -1214,27 +1074,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>
@@ -1288,27 +1128,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>
@@ -1362,27 +1182,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>
@@ -1438,27 +1238,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path
-							> extends {
-								body: infer Body extends AnyTypedSchema['body']
-								headers: infer Headers extends AnyTypedSchema['headers']
-								query: infer Query extends AnyTypedSchema['query']
-								params: infer Params extends AnyTypedSchema['params']
-								response: infer Response extends AnyTypedSchema['response']
-							}
-								? {
-										body: Body
-										headers: Headers
-										query: Query
-										params: Params extends NonNullable<Params>
-											? Params
-											: Record<ExtractPath<Path>, string>
-										response: undefined extends Response
-											? {
-													'200': Response
-											  }
-											: Response
-								  }
-								: never
+							> 
 						}
 					}
 				>

@@ -1,6 +1,12 @@
-# 0.3.0-beta.2 - 26 Feb 2023
+# 0.3.0-beta.2 - 27 Feb 2023
 Fix:
 - Unable to type `setModel` inference definition via Eden
+- Compile `ElysiaRoute` type to literal
+- Optimize type compliation, type inference and auto-completion
+- Improve type compilation speed by ~3x
+
+Breaking Change:
+- Depreacate `ElysiaRoute`, changed to inline
 
 # 0.3.0-beta.1 - 25 Feb 2023
 Fix:
