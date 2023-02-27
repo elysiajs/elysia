@@ -138,12 +138,16 @@ Type.File = (arg?: ElysiaTypeOptions.File) =>
 
 Type.Files = (arg?: ElysiaTypeOptions.Files) =>
 	ElysiaType.Files({
-		default: 'Files',
 		...arg,
+		default: 'Files',
 		extension: arg?.type,
-		// TODO: Migrate this to array of binary string
-		type: 'string',
-		format: 'binary'
+		type: 'array',
+		items: {
+			...arg,
+			default: 'Files',
+			type: 'string',
+			format: 'binary'
+		}
 	})
 
 export { Type as t }

@@ -553,6 +553,7 @@ export type HTTPMethod =
 	| 'ALL'
 
 export type ErrorCode =
+	| (string & {})
 	// ? Default 404
 	| 'NOT_FOUND'
 	// ? Default 502
