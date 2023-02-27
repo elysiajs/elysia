@@ -41,7 +41,7 @@ export const mergeHook = (
 						response: bSchema?.response ?? aSchema?.response
 				  } as TypedSchema)
 				: undefined,
-		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []),
+		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []) as any,
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle ?? [],
 			b?.beforeHandle ?? []

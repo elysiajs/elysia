@@ -52,10 +52,8 @@ import type {
 	NoReturnHandler,
 	MaybePromise,
 	IsNever,
-	AnyTypedSchema,
-	TypedRouteToEden,
 	MergeUnionObjects,
-	ExtractPath
+	TypedRouteToEden
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
 
@@ -681,10 +679,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -700,7 +702,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'GET']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
+								Path,
+								ReturnType<Handler>
 							>
 						}
 					}
@@ -735,10 +738,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -754,7 +761,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'POST']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
+								Path,
+								ReturnType<Handler>
 							>
 						}
 					}
@@ -789,10 +797,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -808,8 +820,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'PUT']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -843,10 +856,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -862,8 +879,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'PATCH']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -897,10 +915,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -916,8 +938,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'DELETE']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -951,10 +974,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -970,8 +997,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'OPTIONS']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -1000,10 +1028,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -1019,8 +1051,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'ALL']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -1054,10 +1087,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -1073,8 +1110,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'HEAD']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -1108,10 +1146,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -1127,8 +1169,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'TRACE']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -1162,10 +1205,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -1181,8 +1228,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in 'CONNECT']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -1217,11 +1265,15 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		> = {},
 		Method extends HTTPMethod = HTTPMethod,
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		method: Method,
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
 		request: Instance['request']
@@ -1237,8 +1289,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							[method in Method]: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
-								Path
-							> 
+								Path,
+								ReturnType<Handler>
+							>
 						}
 					}
 				>
@@ -1403,9 +1456,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	schema<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		>,
 		NewInstance = Elysia<{
 			request: Instance['request']
@@ -1826,7 +1879,6 @@ export type {
 	LifeCycleStore,
 	VoidLifeCycle,
 	SchemaValidator,
-	ElysiaRoute,
 	ExtractPath,
 	IsPathParameter,
 	IsAny,
@@ -1836,5 +1888,11 @@ export type {
 	ObjectValues,
 	PickInOrder,
 	MaybePromise,
-	MergeIfNotNull
+	MergeIfNotNull,
+	ElysiaDefaultMeta,
+	TypedRouteToEden,
+	AnyTypedSchema,
+	RouteToSchema,
+	DeepMergeTwoTypes,
+	ConnectedKeysType
 } from './types'

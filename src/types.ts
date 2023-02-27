@@ -10,16 +10,21 @@ import type { OpenAPIV3 } from 'openapi-types'
 export type WithArray<T> = T | T[]
 export type ObjectValues<T extends object> = T[keyof T]
 
+export type ElysiaDefaultMeta = Record<
+	typeof SCHEMA,
+	Partial<OpenAPIV3.PathsObject>
+> &
+	Record<typeof DEFS, { [x in string]: TSchema }> &
+	Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
+
 export type ElysiaInstance<
 	Instance extends {
-		store?: Record<any, any>
-		request?: Record<any, any>
+		store?: Record<string, unknown>
+		request?: Record<string, unknown>
 		schema?: TypedSchema
-		meta?: Record<typeof SCHEMA, Partial<OpenAPIV3.PathsObject>> &
-			Record<typeof DEFS, { [x in string]: TSchema }> &
-			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
+		meta?: ElysiaDefaultMeta
 	} = {
-		store: Record<any, any>
+		store: Record<string, unknown>
 		request: {}
 		schema: {}
 		meta: Record<typeof SCHEMA, {}> &
@@ -36,20 +41,18 @@ export type ElysiaInstance<
 }
 
 export type Handler<
-	Route extends TypedRoute = TypedRoute,
+	Route extends OverwritableTypeRoute,
 	Instance extends ElysiaInstance = ElysiaInstance,
-	CatchResponse = Route['response']
+	CatchResponse = unknown
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
-) => // Catch function
-Route['response'] extends (models: Record<string, TSchema>) => TSchema
-	? undefined extends ReturnType<Route['response']>
-		? MaybePromise<CatchResponse> | Response
-		: MaybePromise<ReturnType<Route['response']>> | Response
-	: // Catch non-function
-	undefined extends Route['response']
-	? MaybePromise<CatchResponse> | Response
-	: MaybePromise<Route['response']> | Response
+) => IsUnknown<Route['response']> extends false
+	? Response | MaybePromise<Route['response']>
+	: Response | MaybePromise<CatchResponse>
+
+// undefined extends Route['response']
+// 	? MaybePromise<CatchResponse> | Response
+// 	: MaybePromise<Route['response']> | Response
 
 export type NoReturnHandler<
 	Route extends TypedRoute = TypedRoute,
@@ -280,143 +283,40 @@ export type RouteToSchema<
 	Schema extends TypedSchema,
 	InstanceSchema extends ElysiaInstance['schema'],
 	Definitions extends ElysiaInstance['meta'][typeof DEFS],
-	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, InstanceSchema> = MergeSchema<
-		Schema,
-		InstanceSchema
-	>
-> = FinalSchema['params'] extends NonNullable<Schema['params']>
-	? TypedSchemaToRoute<FinalSchema, Definitions>
-	: Omit<TypedSchemaToRoute<FinalSchema, Definitions>, 'params'> & {
-			params: Record<ExtractPath<Path>, string>
-	  }
+	Path extends string = string
+> = MergeSchema<Schema, InstanceSchema> extends infer Typed extends TypedSchema
+	? undefined extends Typed['params']
+		? Omit<TypedSchemaToRoute<Typed, Definitions>, 'params'> & {
+				params: Record<ExtractPath<Path>, string>
+		  }
+		: TypedSchemaToRoute<Typed, Definitions>
+	: never
 
 export type MergeUnionObjects<T> = {} & { [P in keyof T]: T[P] }
-
-// export type ElysiaRouteSchema<
-// 	Method extends string,
-// 	Path extends string,
-// 	CatchResponse,
-// 	Schema extends TypedSchema<any>,
-// 	Parent extends ElysiaInstance<any>['meta'][typeof SCHEMA],
-// 	Definitions extends ElysiaInstance['meta'][typeof DEFS]
-// > = Record<
-// 	typeof SCHEMA,
-// 	MergeUnionObjects<
-// 		Parent & {
-// 			[path in Path]: {
-// 				[method in Method]: TypedRouteToEden<
-// 					Schema,
-// 					Definitions,
-// 					Path
-// 				> extends {
-// 					body: infer Body extends AnyTypedSchema['body']
-// 					headers: infer Headers extends AnyTypedSchema['headers']
-// 					query: infer Query extends AnyTypedSchema['query']
-// 					params: infer Params extends AnyTypedSchema['params']
-// 					response: infer Response extends AnyTypedSchema['response']
-// 				}
-// 					? {
-// 							body: Body
-// 							headers: Headers
-// 							query: Query
-// 							params: Params extends NonNullable<Params>
-// 								? Params
-// 								: Record<ExtractPath<Path>, string>
-// 							response: undefined extends Response
-// 								? {
-// 										'200': CatchResponse
-// 								  }
-// 								: Response
-// 					  }
-// 					: never
-// 			}
-// 		}
-// 	>
-// >
-
-export type ElysiaRoute<
-	Method extends string = string,
-	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance<any> = ElysiaInstance,
-	Path extends string = string,
-	CatchResponse = unknown
-> = Elysia<{
-	request: Instance['request']
-	store: Instance['store']
-	schema: Instance['schema']
-	meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
-		Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
-		Record<
-			typeof SCHEMA,
-			MergeUnionObjects<
-				Instance['meta'][typeof SCHEMA] & {
-					[path in Path]: {
-						[method in Method]: TypedRouteToEden<
-							Schema,
-							Instance['meta'][typeof DEFS],
-							Path
-						> extends {
-							body: infer Body extends AnyTypedSchema['body']
-							headers: infer Headers extends AnyTypedSchema['headers']
-							query: infer Query extends AnyTypedSchema['query']
-							params: infer Params extends AnyTypedSchema['params']
-							response: infer Response extends AnyTypedSchema['response']
-						}
-							? {
-									body: Body
-									headers: Headers
-									query: Query
-									params: Params extends NonNullable<Params>
-										? Params
-										: Record<ExtractPath<Path>, string>
-									response: undefined extends Response
-										? {
-												'200': CatchResponse
-										  }
-										: Response
-							  }
-							: never
-					}
-				}
-			>
-		>
-}>
 
 export type TypedRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
 	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
 	Path extends string = string,
-	Typed extends AnyTypedSchema = TypedSchemaToEden<Schema, Definitions>
-> = Schema['params'] extends NonNullable<Schema['params']>
-	? Typed extends AnyTypedSchema
-		? {
-				body: Typed['body']
-				headers: Typed['headers']
-				query: Typed['query']
-				params: Typed['params'] extends NonNullable<Typed['params']>
-					? Typed['params']
-					: Record<ExtractPath<Path>, string>
-				response: undefined extends Response
-					? {
-							'200': Response
-					  }
-					: Response
-		  }
-		: AnyTypedSchema
-	: Typed extends AnyTypedSchema
+	Catch = unknown
+> = TypedSchemaToEden<
+	Schema,
+	Definitions
+> extends infer Typed extends AnyTypedSchema
 	? {
 			body: Typed['body']
 			headers: Typed['headers']
 			query: Typed['query']
-			params: never
-			response: undefined extends Response
+			params: IsUnknown<Typed['params']> extends true
+				? Record<ExtractPath<Path>, string>
+				: Typed['params']
+			response: undefined extends Typed['response']
 				? {
-						'200': Response
+						'200': Catch
 				  }
-				: Response
+				: Typed['response']
 	  }
-	: AnyTypedSchema
+	: never
 
 export type TypedSchemaToEden<
 	Schema extends TypedSchema,
@@ -622,14 +522,26 @@ export type DeepMergeTwoTypes<T, U> =
 		? MergeTwoObjects<T, U>
 		: T | U
 
-export type IsAny<T> = unknown extends T
-	? [keyof T] extends [never]
-		? false
-		: true
+/**
+ * @link https://stackoverflow.com/a/49928360/1490091
+ */
+export type IsAny<T> = 0 extends 1 & T ? true : false
+
+/**
+ * Returns a boolean for whether the the type is `never`.
+ */
+export type IsNever<T> = [T] extends [never] ? true : false
+
+/**
+ * Returns a boolean for whether the the type is `unknown`.
+ */
+export type IsUnknown<T> = IsAny<T> extends true
+	? false
+	: unknown extends T
+	? true
 	: false
 
 export type MaybePromise<T> = T | Promise<T>
-export type IsNever<T> = [T] extends [never] ? true : false
 
 export type FunctionProperties<T> = {
 	[K in keyof T as T[K] extends Record<any, any> | ((...args: any[]) => any)

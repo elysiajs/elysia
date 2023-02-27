@@ -1,9 +1,21 @@
-# 0.3.0-beta.2 - 27 Feb 2023
+# 0.3.0-beta.3 - 27 Feb 2023
+Improvement:
+- ~33% faster for compiling type inference
+- Reduce complex instruction for most Elysia types
+- Change store type to `unknown`
+
 Fix:
-- Unable to type `setModel` inference definition via Eden
+- `t.Files` in swagger is referring to single file
+- Eden response type is unknown
+
+# 0.3.0-beta.2 - 27 Feb 2023
+Improvement:
 - Compile `ElysiaRoute` type to literal
 - Optimize type compliation, type inference and auto-completion
 - Improve type compilation speed by ~3x
+
+Fix:
+- Unable to type `setModel` inference definition via Eden
 
 Breaking Change:
 - Depreacate `ElysiaRoute`, changed to inline
