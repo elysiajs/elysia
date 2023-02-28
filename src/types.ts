@@ -307,7 +307,7 @@ export type TypedRouteToEden<
 			body: Typed['body']
 			headers: Typed['headers']
 			query: Typed['query']
-			params: IsUnknown<Typed['params']> extends true
+			params: undefined extends Typed['params']
 				? Record<ExtractPath<Path>, string>
 				: Typed['params']
 			response: undefined extends Typed['response']
