@@ -699,7 +699,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'GET']: TypedRouteToEden<
+							[method in 'get']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -758,7 +758,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'POST']: TypedRouteToEden<
+							[method in 'post']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -817,7 +817,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'PUT']: TypedRouteToEden<
+							[method in 'put']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -876,7 +876,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'PATCH']: TypedRouteToEden<
+							[method in 'patch']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -935,7 +935,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'DELETE']: TypedRouteToEden<
+							[method in 'delete']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -994,7 +994,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'OPTIONS']: TypedRouteToEden<
+							[method in 'options']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -1048,7 +1048,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'ALL']: TypedRouteToEden<
+							[method in 'all']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -1107,7 +1107,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'HEAD']: TypedRouteToEden<
+							[method in 'head']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -1166,7 +1166,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'TRACE']: TypedRouteToEden<
+							[method in 'trace']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -1225,7 +1225,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'CONNECT']: TypedRouteToEden<
+							[method in 'connect']: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,
@@ -1286,7 +1286,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in Method]: TypedRouteToEden<
+							[method in Uppercase<Method>]: TypedRouteToEden<
 								Schema,
 								Instance['meta'][typeof DEFS],
 								Path,

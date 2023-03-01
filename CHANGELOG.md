@@ -1,6 +1,6 @@
 # 0.3.0-beta.4 - 1 Mar 2023
 Improvement:
-- Compile `params` as `Record<never, string>` if there's no params specified
+- Pre compile lowercase method for Eden
 
 # 0.3.0-beta.3 - 27 Feb 2023
 Improvement:
