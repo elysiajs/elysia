@@ -1,4 +1,4 @@
-# 0.3.0-beta.4 - 1 Mar 2023
+# 0.3.0-beta.5 - 1 Mar 2023
 Improvement:
 - Pre compile lowercase method for Eden
 
