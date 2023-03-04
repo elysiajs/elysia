@@ -1,3 +1,7 @@
+# 0.3.0-beta.6 - 4 Mar 2023
+Fix:
+- context side-effects
+
 # 0.3.0-beta.5 - 1 Mar 2023
 Improvement:
 - Pre compile lowercase method for Eden

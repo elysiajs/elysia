@@ -197,7 +197,7 @@ export type AnyTypedSchema = {
 	headers: Record<string, any> | undefined
 	query: Record<string, any> | undefined
 	params: Record<string, any> | undefined
-	response: TSchema | unknown | undefined
+	response: any
 }
 
 export type SchemaValidator = {

@@ -25,26 +25,19 @@ describe('Elysia', () => {
 		expect(res.status).toBe(200)
 	})
 
-	// ! IMPORTANT, DO NOT SKIP
-	it('context should be mutable', async () => {
+	it('has no side-effect', async () => {
 		const app = new Elysia()
-			.use(
-				(app) =>
-					app.onTransform((ctx) => {
-						Object.assign(ctx, {
-							a: 'a'
-						})
-					}) as unknown as Elysia<{
-						store: {}
-						request: {
-							a: 'a'
-						}
-						schema: {}
-					}>
-			)
-			.get('/', ({ a }) => a)
+			.get('/1', ({ set }) => {
+				set.headers['x-server'] = 'Elysia'
 
-		const res = await app.handle(req('/')).then((r) => r.text())
-		expect(res).toBe('a')
+				return 'hi'
+			})
+			.get('/2', () => 'hi')
+
+		const res1 = await app.handle(req('/1'))
+		const res2 = await app.handle(req('/2'))
+
+		expect(res1.headers.get('x-server')).toBe('Elysia')
+		expect(res2.headers.get('x-server')).toBe(null)
 	})
 })

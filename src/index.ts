@@ -82,12 +82,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 	// Will be applied to Context
 	protected decorators: ElysiaInstance['request'] = {
-		query: {},
-		set: {
-			status: 200,
-			headers: {}
-		},
-		store: this.store,
 		[SCHEMA]: this.meta[SCHEMA],
 		[DEFS]: this.meta[DEFS]
 	}
@@ -1411,11 +1405,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		store: Instance['store']
 		request: Instance['request']
 		schema: Instance['schema']
-		meta: Instance['meta'] &
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
 			Record<
 				typeof EXPOSED,
-				T extends (store: any) => infer Returned ? Returned : T
-			>
+				Instance['meta'][typeof EXPOSED] &
+					(T extends (store: any) => infer Returned ? Returned : T)
+			> &
+			Record<typeof SCHEMA, Instance['meta'][typeof SCHEMA]>
 	}> {
 		if (Object.keys(this.meta[EXPOSED]).length === 0) {
 			this.post(
@@ -1482,8 +1478,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	handle = async (request: Request): Promise<Response> => {
-		const context = clone(this.decorators) as any as Context
+		const context = this.decorators as any as Context
+		context.store = this.store
 		context.request = request
+		context.query = {}
+		context.set = {
+			status: 200,
+			headers: {}
+		}
 
 		let handleErrors: ErrorHandler[] | undefined
 
