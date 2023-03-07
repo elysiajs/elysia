@@ -1,3 +1,7 @@
+# 0.3.0-rc.1 - 7 Mar 2023
+Fix:
+- Missing nanoid
+
 # 0.3.0-beta.6 - 4 Mar 2023
 Fix:
 - context side-effects
