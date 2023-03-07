@@ -1,11 +1,12 @@
 import type { Elysia } from '.'
 import type { Serve, Server } from 'bun'
 
-import type { Context, PreContext } from './context'
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import { SCHEMA, DEFS, EXPOSED } from './utils'
 import type { OpenAPIV3 } from 'openapi-types'
+
+import type { Context, PreContext } from './context'
+import { SCHEMA, DEFS, EXPOSED } from './utils'
 
 export type WithArray<T> = T | T[]
 export type ObjectValues<T extends object> = T[keyof T]

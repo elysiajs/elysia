@@ -1,5 +1,6 @@
 import type { Serve, Server } from 'bun'
 
+import { nanoid } from 'nanoid'
 import { Raikiri } from 'raikiri'
 import { mapResponse, mapEarlyResponse } from './handler'
 import { permission, type Permission } from './fn'
@@ -56,6 +57,7 @@ import type {
 	TypedRouteToEden
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
+import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
 
 /**
  * ### Elysia Server
@@ -102,6 +104,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	private router = new Raikiri<ComposedHandler>()
 	protected routes: InternalRoute<Instance>[] = []
+	private wsRouter: Raikiri<ElysiaWSOptions> | undefined
 
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
@@ -1236,6 +1239,91 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	/**
+	 * ### connect
+	 * Register handler for path with method [CONNECT]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { Elysia, t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .connect('/', () => 'hi')
+	 *     .connect('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
+	ws<Path extends string = '', Schema = {}>(
+		/**
+		 * Path to register websocket to
+		 */
+		path: Path,
+		options: Path extends ''
+			? never
+			: this extends Elysia<infer Instance>
+			? ElysiaWSOptions<
+					Path,
+					Schema extends WSTypedSchema ? Schema : WSTypedSchema,
+					Instance['meta'][typeof DEFS]
+			  >
+			: never
+	): this extends Elysia<infer Instance> ? Elysia<Instance> : ElysiaInstance {
+		if (!this.wsRouter)
+			throw new Error(
+				"Can't find WebSocket. Please register WebSocket plugin first by importing 'elysia/ws'"
+			)
+
+		this.wsRouter.add('subscribe', path, options as any)
+
+		this.get(
+			path,
+			(context) => {
+				if (
+					// @ts-ignore
+					this.server!.upgrade(context.request, {
+						headers:
+							typeof options.headers === 'function'
+								? options.headers(context as any)
+								: options.headers,
+						data: {
+							...context,
+							id: nanoid(),
+							message: getSchemaValidator(
+								options.schema?.body,
+								this.meta[DEFS]
+							),
+							transformMessage: !options.transform
+								? []
+								: Array.isArray(options.transformMessage)
+								? options.transformMessage
+								: [options.transformMessage]
+						} as ElysiaWSContext<any>['data']
+					})
+				)
+					return
+
+				context.set.status = 400
+
+				return 'Expected a websocket connection'
+			},
+			{
+				beforeHandle: options.beforeHandle,
+				transform: options.transform,
+				schema: {
+					headers: options.schema?.headers,
+					params: options.schema?.params,
+					query: options.schema?.query
+				}
+			} as any
+		)
+
+		return this as any
+	}
+
+	/**
 	 * ### route
 	 * Register handler for path with custom method
 	 *
@@ -1840,6 +1928,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 export { Elysia, permission }
 export { t } from './custom-types'
+export { ws } from './ws'
 
 export {
 	SCHEMA,

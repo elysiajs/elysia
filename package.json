@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Fast, and friendly Bun web framework",
-	"version": "0.3.0-beta.6",
+	"version": "0.3.0-rc.0",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -9,9 +9,66 @@
 	},
 	"main": "./dist/index.js",
 	"exports": {
-		"import": "./dist/index.js",
-		"default": "./dist/index.js",
-		"node": "./dist/index.js"
+		"." :{
+			"bun": "./dist/index.js",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js",
+			"node": "./dist/index.js"
+		},
+		"./ws" :{
+			"bun": "./dist/ws/index.js",
+			"import": "./dist/ws/index.js",
+			"default": "./dist/ws/index.js",
+			"node": "./dist/ws/index.js"
+		},
+		"./context" :{
+			"bun": "./dist/ws/context.js",
+			"import": "./dist/ws/context.js",
+			"default": "./dist/ws/context.js",
+			"node": "./dist/ws/context.js"
+		},
+		"./custom-types" :{
+			"bun": "./dist/custom-types.js",
+			"import": "./dist/custom-types.js",
+			"default": "./dist/custom-types.js",
+			"node": "./dist/custom-types.js"
+		},
+		"./error" :{
+			"bun": "./dist/error.js",
+			"import": "./dist/error.js",
+			"default": "./dist/error.js",
+			"node": "./dist/error.js"
+		},
+		"./fn" :{
+			"bun": "./dist/fn.js",
+			"import": "./dist/fn.js",
+			"default": "./dist/fn.js",
+			"node": "./dist/fn.js"
+		},
+		"./handler": {
+			"bun": "./dist/handler.js",
+			"import": "./dist/handler.js",
+			"default": "./dist/handler.js",
+			"node": "./dist/handler.js"
+		},
+		"./schema": {
+			"bun": "./dist/schema.js",
+			"import": "./dist/schema.js",
+			"default": "./dist/schema.js",
+			"node": "./dist/schema.js"
+		},
+		"./types": {
+			"bun": "./dist/types.js",
+			"import": "./dist/types.js",
+			"default": "./dist/types.js",
+			"node": "./dist/types.js"
+		},
+		"./utils": {
+			"bun": "./dist/utils.js",
+			"import": "./dist/utils.js",
+			"default": "./dist/utils.js",
+			"node": "./dist/utils.js"
+		}
 	},
 	"types": "./src/index.ts",
 	"repository": {
