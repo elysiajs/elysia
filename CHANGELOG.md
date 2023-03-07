@@ -1,3 +1,7 @@
+# 0.3.0-rc.2 - 7 Mar 2023
+Fix:
+- Missing merged return type for `.ws`
+
 # 0.3.0-rc.1 - 7 Mar 2023
 Fix:
 - Missing nanoid

@@ -54,7 +54,8 @@ import type {
 	MaybePromise,
 	IsNever,
 	MergeUnionObjects,
-	TypedRouteToEden
+	TypedRouteToEden,
+	TypedWSRouteToEden
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
 import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
@@ -1256,7 +1257,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	ws<Path extends string = '', Schema = {}>(
+	ws<Path extends string = '', Schema extends TypedSchema = {}>(
 		/**
 		 * Path to register websocket to
 		 */
@@ -1270,7 +1271,25 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					Instance['meta'][typeof DEFS]
 			  >
 			: never
-	): this extends Elysia<infer Instance> ? Elysia<Instance> : ElysiaInstance {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Instance['meta'] &
+			Record<
+				typeof SCHEMA,
+				Record<
+					Path,
+					{
+						[method in 'subscribe']: TypedWSRouteToEden<
+							Schema,
+							Instance['meta'][typeof DEFS],
+							Path
+						>
+					}
+				>
+			>
+	}> {
 		if (!this.wsRouter)
 			throw new Error(
 				"Can't find WebSocket. Please register WebSocket plugin first by importing 'elysia/ws'"

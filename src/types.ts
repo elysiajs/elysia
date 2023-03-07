@@ -319,6 +319,28 @@ export type TypedRouteToEden<
 	  }
 	: never
 
+export type TypedWSRouteToEden<
+	Schema extends TypedSchema = TypedSchema,
+	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
+	Path extends string = string,
+	Catch = unknown
+> = TypedSchemaToEden<
+	Schema,
+	Definitions
+> extends infer Typed extends AnyTypedSchema
+	? {
+			body: Typed['body']
+			headers: Typed['headers']
+			query: Typed['query']
+			params: undefined extends Typed['params']
+				? Record<ExtractPath<Path>, string>
+				: Typed['params']
+			response: undefined extends Typed['response']
+				? Catch
+				: Typed['response']['200']
+	  }
+	: never
+
 export type TypedSchemaToEden<
 	Schema extends TypedSchema,
 	Definitions extends ElysiaInstance['meta'][typeof DEFS]
