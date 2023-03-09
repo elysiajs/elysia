@@ -1,3 +1,10 @@
+# 0.3.0-rc.5 - 10 Mar 2023
+Fix:
+- Definitions isn't defined on Swagger
+- details are missing on group plugin
+- group plugin, isn't unable to compile schema
+- group is not exportable because EXPOSED is a private property
+
 # 0.3.0-rc.4 - 9 Mar 2023
 Fix: 
 - console.log while using cookie

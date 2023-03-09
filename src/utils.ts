@@ -38,10 +38,19 @@ export const mergeHook = (
 						header: bSchema?.headers ?? aSchema?.headers,
 						params: bSchema?.params ?? aSchema?.params,
 						query: bSchema?.query ?? aSchema?.query,
-						response: bSchema?.response ?? aSchema?.response
+						response: bSchema?.response ?? aSchema?.response,
+						detail: mergeDeep(
+							// @ts-ignore
+							bSchema?.detail ?? {},
+							// @ts-ignore
+							aSchema?.detail ?? {}
+						)
 				  } as TypedSchema)
 				: undefined,
-		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []) as any,
+		transform: mergeObjectArray(
+			a.transform ?? [],
+			b?.transform ?? []
+		) as any,
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle ?? [],
 			b?.beforeHandle ?? []
@@ -154,6 +163,7 @@ export const getResponseSchemaValidator = (
 							if (typeof maybeNameOrSchema === 'string') {
 								if (maybeNameOrSchema in models) {
 									const schema = models[maybeNameOrSchema]
+
 									return schema
 								}
 
@@ -169,5 +179,10 @@ export const getResponseSchemaValidator = (
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
-	return TypeCompiler.Compile(schema)
+	try {
+		return TypeCompiler.Compile(schema)
+	} catch (error) {
+		// Likely is already compile
+		return maybeSchemaOrRecord
+	}
 }

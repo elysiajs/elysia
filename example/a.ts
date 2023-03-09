@@ -1,22 +1,40 @@
 import { Elysia, t, SCHEMA } from '../src'
 
-const app = new Elysia()
-	.group('/a', (app) =>
+export const plugin = (app: Elysia) =>
+	app.group('/a', (app) =>
 		app
-			.derive(() => {
-				return {
-					hi: 'there'
+			.setModel({
+				sign: t.Object({
+					username: t.String()
+				})
+			})
+			.post(
+				'/json/:id',
+				({ body, params: { id }, query: { name } }) => 'h',
+				{
+					schema: {
+						headers: 'sign',
+						params: t.Object({
+							id: t.Number()
+						}),
+						response: {
+							200: t.String(),
+							400: t.String()
+						},
+						detail: {
+							summary: 'Transform path parameter'
+						}
+					}
 				}
-			})
-			.get('/', (context) => {
-				console.log(context)
-
-				return 'a'
-			})
+			)
 	)
-	.get('/hi', (context) => {
-		console.log(context)
 
-		return 'hi'
-	})
+const app = new Elysia({
+	serve: {
+		// Max payload in byte
+		maxRequestBodySize: 1024
+	}
+})
+	.use(plugin)
+	.get('/', (context) => context[SCHEMA])
 	.listen(8080)

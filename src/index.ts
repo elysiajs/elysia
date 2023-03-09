@@ -182,6 +182,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			clone(this.event),
 			hook as RegisteredHook
 		)
+
 		if (
 			!hooks.schema &&
 			!hooks.transform.length &&
@@ -197,7 +198,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			validator
 		}
 
-		this.router.add(method, path, mainHandler)
+		this.router.add(method, path, mainHandler as any)
 	}
 
 	/**
@@ -472,13 +473,15 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				schema: Instance['schema'] & NewInstance['schema']
 				store: Instance['store'] & NewInstance['store']
 				meta: Instance['meta'] &
-					(Omit<NewInstance['meta'], typeof SCHEMA> & {
-						[key in typeof SCHEMA]: {
-							[key in keyof NewInstance['meta'][typeof SCHEMA] as key extends `${infer Rest}`
-								? `${Prefix}${Rest}`
-								: key]: NewInstance['meta'][typeof SCHEMA][key]
-						}
-					})
+					(Omit<NewInstance['meta'], typeof SCHEMA> &
+						Record<
+							typeof SCHEMA,
+							{
+								[key in keyof NewInstance['meta'][typeof SCHEMA] as key extends `${infer Rest}`
+									? `${Prefix}${Rest}`
+									: key]: NewInstance['meta'][typeof SCHEMA][key]
+							}
+						>)
 		  }>
 		: this {
 		const instance = new Elysia<any>()
@@ -492,6 +495,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				...this.event.request,
 				...sandbox.event.request
 			]
+
+		this.setModel(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
@@ -571,6 +576,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				...this.event.request,
 				...sandbox.event.request
 			]
+
+		this.setModel(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks: localHook }) => {
