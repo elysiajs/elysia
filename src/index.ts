@@ -1463,31 +1463,38 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	/**
-	 * Assign property which required access to Context
+	 * Derive new property for each request with access to `Context`.
+	 *
+	 * If error is thrown, the scope will skip to handling error instead.
 	 *
 	 * ---
 	 * @example
 	 * new Elysia()
 	 *     .state('counter', 1)
-	 *     .inject(({ store }) => ({
+	 *     .derive(({ store }) => ({
 	 *         increase() {
 	 *             store.counter++
 	 *         }
 	 *     }))
 	 */
-	inject<Returned extends Object = Object>(
+	derive<Returned extends Object = Object>(
 		transform: (
 			context: Context<{}, Instance['store']> & Instance['request']
-		) => Returned extends { store: any } ? never : Returned
+		) => MaybePromise<Returned> extends { store: any } ? never : Returned
 	): Elysia<{
 		store: Instance['store']
-		request: Instance['request'] & Returned
+		request: Instance['request'] & Awaited<Returned>
 		schema: Instance['schema']
 		meta: Instance['meta']
 	}> {
+		if (transform.constructor.name === 'AsyncFunction')
+			return this.onTransform(async (context) => {
+				Object.assign(context, await transform(context))
+			}) as any
+
 		return this.onTransform((context) => {
 			Object.assign(context, transform(context))
-		}) as unknown as any
+		}) as any
 	}
 
 	fn<
@@ -1534,7 +1541,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						...this.decorators,
 						store: this.store,
 						permission
-				  })
+				  } as any)
 				: value
 		) as any
 
@@ -1585,14 +1592,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	handle = async (request: Request): Promise<Response> => {
-		const context = this.decorators as any as Context
-		context.store = this.store
-		context.request = request
-		context.query = {}
-		context.set = {
-			status: 200,
-			headers: {}
-		}
+		const context = Object.assign(
+			{
+				query: {},
+				set: {
+					status: 200,
+					headers: {}
+				},
+				store: this.store,
+				request
+			},
+			this.decorators
+		) as any as Context
 
 		let handleErrors: ErrorHandler[] | undefined
 

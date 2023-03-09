@@ -1,14 +1,22 @@
 import { Elysia, t, SCHEMA } from '../src'
 
 const app = new Elysia()
-	.setModel({
-		a: t.Number()
-	})
-	.post('/c', ({ store }) => 1, {
-		schema: {
-			response: 'a'
-		}
+	.group('/a', (app) =>
+		app
+			.derive(() => {
+				return {
+					hi: 'there'
+				}
+			})
+			.get('/', (context) => {
+				console.log(context)
+
+				return 'a'
+			})
+	)
+	.get('/hi', (context) => {
+		console.log(context)
+
+		return 'hi'
 	})
 	.listen(8080)
-
-type App = typeof app['meta'][typeof SCHEMA]['/c']['POST']

@@ -3,10 +3,10 @@ import { Elysia } from '../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
 
-describe('inject', () => {
+describe('derive', () => {
 	it('work', async () => {
 		const app = new Elysia()
-			.inject(() => ({
+			.derive(() => ({
 				hi: () => 'hi'
 			}))
 			.get('/', ({ hi }) => hi())
@@ -17,7 +17,7 @@ describe('inject', () => {
 
 	it('inherits plugin', async () => {
 		const plugin = () => (app: Elysia) =>
-			app.inject(() => ({
+			app.derive(() => ({
 				hi: () => 'hi'
 			}))
 
@@ -30,7 +30,7 @@ describe('inject', () => {
 	it('can mutate store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
-			.inject(({ store }) => ({
+			.derive(({ store }) => ({
 				increase: () => store.counter++
 			}))
 			.get('/', ({ store, increase }) => {

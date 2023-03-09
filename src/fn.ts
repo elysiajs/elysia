@@ -10,6 +10,8 @@ import type {
 
 import { serialize as superjsonSerialize } from 'superjson'
 
+export type Permission = typeof permission
+
 export const permission = <
 	T,
 	Key extends JoinKeys<FunctionProperties<T>> = JoinKeys<
@@ -57,15 +59,19 @@ export const permission = <
 						: {}
 				) => void
 		  }) => unknown)
-}) => ({
-	[EXPOSED]: true,
-	value,
-	check,
-	allow,
-	deny
-})
-
-export type Permission = typeof permission
+}) =>
+	({
+		[EXPOSED]: true,
+		value,
+		check,
+		allow,
+		deny
+	} as {
+		value: T
+		check: unknown
+		allow: Key[]
+		deny: Key[]
+	} & Record<typeof EXPOSED, true>)
 
 export const runFn = (
 	context: Context,

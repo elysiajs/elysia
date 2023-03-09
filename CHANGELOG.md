@@ -1,3 +1,11 @@
+# 0.3.0-rc.3 - 9 Mar 2023
+Breaking Change:
+- Rename `inject` to `derive`
+
+Fix: 
+- Multiple cookies doesn't set `content-type` to `application/json`
+- `EXPOSED` is not export when using `fn.permission`
+
 # 0.3.0-rc.2 - 7 Mar 2023
 Fix:
 - Missing merged return type for `.ws`
