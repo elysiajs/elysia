@@ -13,13 +13,6 @@ const parseSetCookies = (headers: Headers, setCookie: string | string[]) => {
 		for (let i = 0; i < setCookie.length; i++) {
 			const index = setCookie[i].indexOf('=')
 
-			console.log(
-				'Append',
-				`${setCookie[i].slice(0, index)}=${setCookie[i].slice(
-					index + 1
-				)}`
-			)
-
 			headers.append(
 				'Set-Cookie',
 				`${setCookie[i].slice(0, index)}=${setCookie[i].slice(

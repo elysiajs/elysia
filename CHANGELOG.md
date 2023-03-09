@@ -1,3 +1,7 @@
+# 0.3.0-rc.4 - 9 Mar 2023
+Fix: 
+- console.log while using cookie
+
 # 0.3.0-rc.3 - 9 Mar 2023
 Breaking Change:
 - Rename `inject` to `derive`
