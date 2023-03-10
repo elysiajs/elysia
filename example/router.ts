@@ -1,4 +1,4 @@
-import { Elysia, type SCHEMA } from '../src'
+import { Elysia } from '../src'
 
 const prefix =
 	<Prefix extends string = string>(prefix: Prefix) =>
@@ -19,6 +19,3 @@ const a = new Elysia()
 	.use(prefix('prefixed'))
 	.listen(8080)
 
-type Router = typeof a['meta'][typeof SCHEMA]
-
-type Path = Router['/a']['GET']['response']

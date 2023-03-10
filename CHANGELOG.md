@@ -1,3 +1,7 @@
+# 0.3.0-rc.6 - 10 Mar 2023
+Fix:
+- Union response with `t.File` is not working
+
 # 0.3.0-rc.5 - 10 Mar 2023
 Fix:
 - Definitions isn't defined on Swagger

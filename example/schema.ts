@@ -48,13 +48,6 @@ const app = new Elysia()
 		},
 		(app) =>
 			app
-				.get('/a', ({ query, r, a, merged }) => {
-					merged.query
-				}, {
-					// schema: {
-
-					// }
-				})
 				.guard(
 					{
 						schema: {
@@ -78,7 +71,7 @@ const app = new Elysia()
 	)
 	.listen(8080)
 
-type A = typeof app['meta'][typeof SCHEMA]['/']['POST']
+type A = typeof app['meta'][typeof SCHEMA]['/']['post']
 type B = typeof app['meta'][typeof DEFS]
 
 // const a = app.getModel('b')

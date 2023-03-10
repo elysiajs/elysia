@@ -1306,6 +1306,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		this.get(
 			path,
+			// @ts-ignore
 			(context) => {
 				if (
 					// @ts-ignore
@@ -1537,7 +1538,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (Object.keys(this.meta[EXPOSED]).length === 0) {
 			this.post(
 				this.config.fn ?? '/~fn',
-				(context) => runFn(context, this.meta[EXPOSED]) as Promise<any>
+				(context) => runFn(context, this.meta[EXPOSED]) as any
 			)
 		}
 

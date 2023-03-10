@@ -48,12 +48,10 @@ export type Handler<
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
 ) => IsUnknown<Route['response']> extends false
-	? Response | MaybePromise<Route['response']>
+	? Route['response'] extends Record<number, infer Unioned>
+		? Response | MaybePromise<Unioned>
+		: Response | MaybePromise<Route['response']>
 	: Response | MaybePromise<CatchResponse>
-
-// undefined extends Route['response']
-// 	? MaybePromise<CatchResponse> | Response
-// 	: MaybePromise<Route['response']> | Response
 
 export type NoReturnHandler<
 	Route extends TypedRoute = TypedRoute,

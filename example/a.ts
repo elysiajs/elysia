@@ -36,5 +36,24 @@ const app = new Elysia({
 	}
 })
 	.use(plugin)
-	.get('/', (context) => context[SCHEMA])
+	.post(
+		'/file',
+		({ set }) => {
+			const file = Bun.file('')
+			if (file.size === 0) {
+				set.status = 404
+				return 2
+			}
+
+			return file
+		},
+		{
+			schema: {
+				response: t.Object({
+					200: t.File(),
+					404: t.Number()
+				})
+			}
+		}
+	)
 	.listen(8080)
