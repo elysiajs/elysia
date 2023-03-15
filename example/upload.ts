@@ -22,8 +22,8 @@ const app = new Elysia()
 	)
 	.listen(8080)
 
-app.handle(
-	upload('/single', {
-		file: 'millenium.jpg'
-	})
-).then(r => r.text()).then(console.log)
+const { request } = upload('/single', {
+	file: 'millenium.jpg'
+})
+
+app.handle(request).then(r => r.text()).then(console.log)

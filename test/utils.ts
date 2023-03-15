@@ -12,24 +12,27 @@ export const upload = (
 	>
 ) => {
 	const body = new FormData()
+	let size = 0
 
 	for (const [key, value] of Object.entries(fields)) {
 		if (Array.isArray(value))
 			value.forEach((value) => {
-				body.append(key, Bun.file(`./test/images/${value}`))
+				const file = Bun.file(`./test/images/${value}`)
+				size += file.size
+				body.append(key, file)
 			})
-		else if (value.includes('.'))
-			body.append(key, Bun.file(`./test/images/${value}`))
-		else body.append(key, value)
+		else if (value.includes('.')){
+			const file = Bun.file(`./test/images/${value}`)
+			size += file.size
+			body.append(key, file)
+		} else body.append(key, value)
 	}
 
-	console.log(body)
-
-	return new Request(`http://localhost${path}`, {
-		method: 'POST',
-		headers: {
-			'content-type': 'multipart/form-data'
-		},
-		body
-	})
+	return{
+		request:new Request(`http://localhost${path}`, {
+			method: 'POST',
+			body
+		}),
+		size
+	} 
 }
