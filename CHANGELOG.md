@@ -1,3 +1,7 @@
+# 0.3.0-rc.8 - 16 Mar 2023
+Fix:
+- Raikiri 0.2 thrown error on not found
+
 # 0.3.0-rc.7 - 16 Mar 2023
 Improvement:
 - Update @sinclair/typebox to 0.25.24

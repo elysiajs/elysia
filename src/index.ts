@@ -489,7 +489,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		  }>
 		: this {
 		const instance = new Elysia<any>()
-
 		instance.store = this.store
 
 		const sandbox = run(instance)
@@ -1630,7 +1629,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				this.router.match(request.method, fracture[1]) ??
 				this.router.match('ALL', fracture[1])
 
-			if (!route) throw new Error('NOT_FOUND')
+			if (!route?.store) throw new Error('NOT_FOUND')
 			const { hooks, validator } = route.store!
 
 			// const hooks = handler.hooks
