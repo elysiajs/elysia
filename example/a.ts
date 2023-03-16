@@ -1,4 +1,4 @@
-import { Elysia, t, SCHEMA, DEFS } from '../src'
+import { Elysia, t } from '../src'
 
 export const plugin = (app: Elysia) =>
 	app.group('/a', (app) =>
@@ -42,6 +42,18 @@ const app = new Elysia({
 		}
 	})
 	.decorate('A', 'b')
+	.post('/sign', ({ body }) => body, {
+		schema: {
+			body: t.Object({
+				email: t.String({
+					format: 'email'
+				}),
+				time: t.String({
+					format: 'date-time'
+				})
+			})
+		}
+	})
 	.post(
 		'/file',
 		({ set, a, A }) => {
@@ -64,19 +76,3 @@ const app = new Elysia({
 		}
 	)
 	.listen(8080)
-
-const app2 = new Elysia()
-	.setModel({
-		string: t.String(),
-		number: t.Number()
-	})
-	.setModel({
-		boolean: t.Boolean()
-	})
-	.get('/', async (context) => Object.keys(context[DEFS]))
-
-const res = await app2
-	.handle(new Request('http://localhost:8080/'))
-	.then((r) => r.text())
-
-console.log(res)

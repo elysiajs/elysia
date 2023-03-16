@@ -1,3 +1,7 @@
+# 0.3.0-rc.9 - 16 Mar 2023
+Improvement:
+- Add string format: 'email', 'uuid', 'date', 'date-time'
+
 # 0.3.0-rc.8 - 16 Mar 2023
 Fix:
 - Raikiri 0.2 thrown error on not found
