@@ -1,4 +1,4 @@
-import { Elysia, SCHEMA, DEFS, t } from '../src'
+import { Elysia, DEFS, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'

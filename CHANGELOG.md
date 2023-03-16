@@ -1,3 +1,9 @@
+# 0.3.0-rc.7 - 16 Mar 2023
+Improvement:
+- Update @sinclair/typebox to 0.25.24
+- Update Raikiri to 0.2.0-beta.0 (ei)
+- Add file upload test thanks to #21 (@amirrezamahyari)
+
 # 0.3.0-rc.6 - 10 Mar 2023
 Fix:
 - Union response with `t.File` is not working

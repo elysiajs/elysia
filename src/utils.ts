@@ -68,21 +68,6 @@ export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 
 export const mapPathnameAndQueryRegEx = /:\/\/[^/]+([^#?]+)(?:\?([^#]+))?/
 
-export const mapQuery = (url: string) => {
-	const mapped: Record<string, string> = {}
-	const paths = url.split('&')
-
-	for (let i = 0; i < paths.length; i++) {
-		const part = paths[i]
-		const index = part.indexOf('=')
-		let value = part.slice(index + 1)
-		if (value.includes('%')) value = decodeURIComponent(value)
-
-		mapped[part.slice(0, index)] = value
-	}
-
-	return mapped
-}
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 

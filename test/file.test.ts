@@ -25,18 +25,18 @@ const app = new Elysia()
 
 describe('File', () => {
 	it('accept single image', async () => {
-    const {request,size} = upload('/single', {
-      file: 'millenium.jpg'
-    })
-		const res = await app.handle(request)    
+		const { request, size } = upload('/single', {
+			file: 'millenium.jpg'
+		})
+		const res = await app.handle(request)
 
 		expect(await res.text()).toEqual(size.toString())
 	})
 
 	it('accept multiple image', async () => {
-    const {request,size} = upload('/multiple', {
-      files: ['aris-yuzu.jpg', 'aris-yuzu.jpg']
-    })
+		const { request, size } = upload('/multiple', {
+			files: ['aris-yuzu.jpg', 'aris-yuzu.jpg']
+		})
 		const res = await app.handle(request)
 
 		expect(await res.text()).toEqual(size.toString())

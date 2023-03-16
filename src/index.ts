@@ -2,13 +2,14 @@ import type { Serve, Server } from 'bun'
 
 import { nanoid } from 'nanoid'
 import { Raikiri } from 'raikiri'
+import { parse as parseQuery } from 'fast-querystring'
+
 import { mapResponse, mapEarlyResponse } from './handler'
 import { permission, type Permission } from './fn'
 import {
 	SCHEMA,
 	EXPOSED,
 	DEFS,
-	mapQuery,
 	clone,
 	mergeHook,
 	mergeDeep,
@@ -60,6 +61,8 @@ import type {
 import { type TSchema } from '@sinclair/typebox'
 import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
 
+const ASYNC_FN = 'AsyncFunction'
+
 /**
  * ### Elysia Server
  * Main instance to create web server using Elysia
@@ -86,7 +89,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	// Will be applied to Context
 	protected decorators: ElysiaInstance['request'] = {
 		[SCHEMA]: this.meta[SCHEMA],
-		[DEFS]: this.meta[DEFS]
+		[DEFS]: this.meta[DEFS],
+		store: this.store
 	}
 
 	event: LifeCycleStore<Instance> = {
@@ -1538,7 +1542,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (Object.keys(this.meta[EXPOSED]).length === 0) {
 			this.post(
 				this.config.fn ?? '/~fn',
-				(context) => runFn(context, this.meta[EXPOSED]) as any
+				// @ts-ignore
+				async (context) => runFn(context, this.meta[EXPOSED])
 			)
 		}
 
@@ -1600,30 +1605,23 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	handle = async (request: Request): Promise<Response> => {
-		const context = Object.assign(
-			{
-				query: {},
-				set: {
-					status: 200,
-					headers: {}
-				},
-				store: this.store,
-				request
-			},
-			this.decorators
-		) as any as Context
+		const context: Context = this.decorators as any as Context
+		context.request = request
+		context.set = {
+			status: 200,
+			headers: {}
+		}
 
 		let handleErrors: ErrorHandler[] | undefined
 
 		try {
-			if (this.event.request.length)
-				for (let i = 0; i < this.event.request.length; i++) {
-					let response = this.event.request[i](context)
-					if (response instanceof Promise) response = await response
+			for (let i = 0; i < this.event.request.length; i++) {
+				let response = this.event.request[i](context)
+				if (response instanceof Promise) response = await response
 
-					response = mapEarlyResponse(response, context.set)
-					if (response) return response
-				}
+				response = mapEarlyResponse(response, context.set)
+				if (response) return response
+			}
 
 			const fracture = request.url.match(mapPathnameAndQueryRegEx)
 			if (!fracture) throw new Error('NOT_FOUND')
@@ -1633,9 +1631,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				this.router.match('ALL', fracture[1])
 
 			if (!route) throw new Error('NOT_FOUND')
-			const handler = route.store!
+			const { hooks, validator } = route.store!
 
-			const hooks = handler.hooks
+			// const hooks = handler.hooks
+			// const validator = handler.validator
 			if (hooks?.error) handleErrors = hooks?.error
 
 			let body: string | Record<string, unknown | unknown[]> | undefined
@@ -1646,16 +1645,15 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					const index = contentType.indexOf(';')
 					if (index !== -1) contentType = contentType.slice(0, index)
 
-					if (this.event.parse.length)
-						for (let i = 0; i < this.event.parse.length; i++) {
-							let temp = this.event.parse[i](context, contentType)
-							if (temp instanceof Promise) temp = await temp
+					for (let i = 0; i < this.event.parse.length; i++) {
+						let temp = this.event.parse[i](context, contentType)
+						if (temp instanceof Promise) temp = await temp
 
-							if (temp !== undefined) {
-								body = temp
-								break
-							}
+						if (temp !== undefined) {
+							body = temp
+							break
 						}
+					}
 
 					// body might be empty string thus can't use !body
 					if (body === undefined)
@@ -1669,7 +1667,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								break
 
 							case 'application/x-www-form-urlencoded':
-								body = mapQuery(await request.text())
+								body = parseQuery(await request.text())
 								break
 
 							case 'multipart/form-data':
@@ -1703,17 +1701,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			context.body = body
 			context.params = route.params
-			if (fracture[2]) context.query = mapQuery(fracture[2])
+			if (fracture[2]) context.query = parseQuery(fracture[2])
+			else context.query = {}
 
-			if (hooks?.transform.length)
+			if (hooks)
 				for (let i = 0; i < hooks.transform.length; i++) {
 					const operation = hooks.transform[i](context)
 					if (operation instanceof Promise) await operation
 				}
 
-			if (handler.validator) {
-				const validator = handler.validator
-
+			if (validator) {
 				if (hooks?.error) handleErrors = hooks?.error
 
 				if (validator.headers) {
@@ -1747,7 +1744,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					throw createValidationError('body', validator.body, body)
 			}
 
-			if (hooks?.beforeHandle.length)
+			if (hooks)
 				for (let i = 0; i < hooks.beforeHandle.length; i++) {
 					let response = hooks.beforeHandle[i](context)
 					if (response instanceof Promise) response = await response
@@ -1770,20 +1767,20 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					}
 				}
 
-			let response = handler.handle(context)
+			let response = route.store!.handle(context)
 			if (response instanceof Promise) response = await response
 
-			if (handler.validator?.response?.Check(response) === false) {
-				if (hooks?.error) handleErrors = hooks?.error
+			if (validator?.response?.Check(response) === false) {
+				if (hooks?.error) handleErrors = hooks.error
 
 				throw createValidationError(
 					'response',
-					handler.validator.response,
+					validator.response,
 					response
 				)
 			}
 
-			if (hooks?.afterHandle.length)
+			if (hooks)
 				for (let i = 0; i < hooks.afterHandle.length; i++) {
 					let newResponse = hooks.afterHandle[i](context, response)
 					if (newResponse instanceof Promise)
@@ -1977,8 +1974,7 @@ export {
 	mergeDeep,
 	mergeHook,
 	mergeObjectArray,
-	mapPathnameAndQueryRegEx,
-	mapQuery
+	mapPathnameAndQueryRegEx
 } from './utils'
 
 export type { Context, PreContext } from './context'

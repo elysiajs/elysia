@@ -1,4 +1,4 @@
-import { Elysia, t, SCHEMA } from '../src'
+import { Elysia, t, SCHEMA, DEFS } from '../src'
 
 export const plugin = (app: Elysia) =>
 	app.group('/a', (app) =>
@@ -36,9 +36,15 @@ const app = new Elysia({
 	}
 })
 	.use(plugin)
+	.derive((context) => {
+		return {
+			a: 'b'
+		}
+	})
+	.decorate('A', 'b')
 	.post(
 		'/file',
-		({ set }) => {
+		({ set, a, A }) => {
 			const file = Bun.file('')
 			if (file.size === 0) {
 				set.status = 404
@@ -48,6 +54,7 @@ const app = new Elysia({
 			return file
 		},
 		{
+			error({ set }) {},
 			schema: {
 				response: t.Object({
 					200: t.File(),
@@ -57,3 +64,19 @@ const app = new Elysia({
 		}
 	)
 	.listen(8080)
+
+const app2 = new Elysia()
+	.setModel({
+		string: t.String(),
+		number: t.Number()
+	})
+	.setModel({
+		boolean: t.Boolean()
+	})
+	.get('/', async (context) => Object.keys(context[DEFS]))
+
+const res = await app2
+	.handle(new Request('http://localhost:8080/'))
+	.then((r) => r.text())
+
+console.log(res)
