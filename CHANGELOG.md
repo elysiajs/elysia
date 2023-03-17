@@ -1,4 +1,8 @@
 # 0.3.0 - 17 Mar 2023
+Fix:
+- Wildcard fallback of Raikiri
+
+# 0.3.0 - 17 Mar 2023
 Feature:
 - Elysia Fn
 - Suport `multipart/form-data`

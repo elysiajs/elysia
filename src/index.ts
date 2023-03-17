@@ -61,8 +61,6 @@ import type {
 import { type TSchema } from '@sinclair/typebox'
 import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
 
-const ASYNC_FN = 'AsyncFunction'
-
 /**
  * ### Elysia Server
  * Main instance to create web server using Elysia
