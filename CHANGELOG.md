@@ -1,3 +1,57 @@
+# 0.3.0 - 17 Mar 2023
+Feature:
+- Elysia Fn
+- Suport `multipart/form-data`
+- `t.File` and `t.Files` for file validation
+- `schema.content` for specifying content type
+
+Improvement:
+- Add string format: 'email', 'uuid', 'date', 'date-time'
+- Update @sinclair/typebox to 0.25.24
+- Update Raikiri to 0.2.0-beta.0 (ei)
+- Add file upload test thanks to #21 (@amirrezamahyari)
+- Pre compile lowercase method for Eden
+- Reduce complex instruction for most Elysia types
+- Change store type to `unknown`
+- Compile `ElysiaRoute` type to literal
+- Optimize type compliation, type inference and auto-completion
+- Improve type compilation speed
+- Improve TypeScript inference between plugin registration
+- Optimize TypeScript inference size
+- Context creation optimization
+- Use Raikiri router by default
+- Remove unused function
+- Refactor `registerSchemaPath` to support OpenAPI 3.0.3
+- Add `error` inference for Eden
+- Mark `@sinclair/typebox` as optional `peerDenpendencies`
+
+Fix:
+- Raikiri 0.2 thrown error on not found
+- Union response with `t.File` is not working
+- Definitions isn't defined on Swagger
+- details are missing on group plugin
+- group plugin, isn't unable to compile schema
+- group is not exportable because EXPOSED is a private property
+- Multiple cookies doesn't set `content-type` to `application/json`
+- `EXPOSED` is not export when using `fn.permission`
+- Missing merged return type for `.ws`
+- Missing nanoid
+- context side-effects
+- `t.Files` in swagger is referring to single file
+- Eden response type is unknown
+- Unable to type `setModel` inference definition via Eden
+- Handle error thrown in non permission function
+- Exported variable has or is using name 'SCHEMA' from external module
+- Exported variable has or is using name 'DEFS' from external module
+- Possible errors for building Elysia app with `declaration: true` in `tsconfig.json`
+
+Breaking Change:
+- Rename `inject` to `derive`
+- Depreacate `ElysiaRoute`, changed to inline
+- Remove `derive`
+- Update from OpenAPI 2.x to OpenAPI 3.0.3
+- Move context.store[SYMBOL] to meta[SYMBOL]
+
 # 0.3.0-rc.9 - 16 Mar 2023
 Improvement:
 - Add string format: 'email', 'uuid', 'date', 'date-time'
@@ -206,7 +260,7 @@ Happy Christmas, wishing you happy tonight as we release the first stable releas
 With this API is now stabilized, and Elysia will focus on growing its ecosystem and plugins for common patterns.
 
 ## Eden
-Introducing [Eden](https://elysiajs.com/collections/eden.html), a fully type-safe client for Elysia server like tRPC.
+Introducing [Eden](https://elysiajs.com/plugins/eden.html), a fully type-safe client for Elysia server like tRPC.
 
 A 600 bytes client for Elysia server, no code generation need, creating a fully type-safe, and auto-complete for both client and server.
 
