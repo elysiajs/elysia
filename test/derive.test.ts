@@ -3,105 +3,43 @@ import { Elysia } from '../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
 
-describe('Derive', () => {
-	it('derive', async () => {
+describe('derive', () => {
+	it('work', async () => {
 		const app = new Elysia()
-			.state('counter', 1)
-			.derive((getStore) => ({
-				doubled: () => getStore().counter * 2
+			.derive(() => ({
+				hi: () => 'hi'
 			}))
-			.get('/', ({ store: { counter, doubled } }) => ({
-				counter,
-				doubled: doubled()
-			}))
+			.get('/', ({ hi }) => hi())
 
-		const res = await app.handle(req('/')).then((r) => r.text())
-
-		expect(res).toBe(
-			JSON.stringify({
-				counter: 1,
-				doubled: 2
-			})
-		)
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('hi')
 	})
 
-	it('reactivity', async () => {
+	it('inherits plugin', async () => {
+		const plugin = () => (app: Elysia) =>
+			app.derive(() => ({
+				hi: () => 'hi'
+			}))
+
+		const app = new Elysia().use(plugin()).get('/', ({ hi }) => hi())
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('hi')
+	})
+
+	it('can mutate store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
-			.derive((getStore) => ({
-				doubled: () => getStore().counter * 2,
-				tripled: () => getStore().counter * 3
+			.derive(({ store }) => ({
+				increase: () => store.counter++
 			}))
-			.inject(({ store }) => ({
-				increase() {
-					store.counter++
-				}
-			}))
-			.get('/', ({ increase, store }) => {
-				store.counter++
+			.get('/', ({ store, increase }) => {
 				increase()
 
-				const { counter, doubled, tripled } = store
-
-				return {
-					counter,
-					doubled: doubled(),
-					tripled: tripled()
-				}
+				return store.counter
 			})
 
-		await Promise.all([app.handle(req('/')), app.handle(req('/'))])
-
-		const res = await app.handle(req('/'))
-		const result = await res.text()
-
-		expect(result).toBe(
-			JSON.stringify({
-				counter: 7,
-				doubled: 14,
-				tripled: 21
-			})
-		)
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('2')
 	})
-
-	// it('from plugin', async () => {
-	// 	const plugin = () => (app: Elysia) =>
-	// 		app.state('counter', 1).derive((getStore) => ({
-	// 			doubled: () => getStore.counter * 2,
-	// 			tripled: () => getStore.counter * 3
-	// 		}))
-
-	// 	const app = new Elysia()
-	// 		.use(plugin())
-	// 		.inject(({ store }) => ({
-	// 			increase() {
-	// 				store.counter++
-	// 			}
-	// 		}))
-	// 		.get('/', ({ increase, store }) => {
-	// 			store.counter++
-	// 			increase()
-
-	// 			const { counter, doubled, tripled } = store
-
-	// 			return {
-	// 				counter,
-	// 				doubled: doubled(),
-	// 				tripled: tripled()
-	// 			}
-	// 		})
-
-	// 	await Promise.all([app.handle(req('/')), app.handle(req('/'))])
-
-	// 	const res = await app.handle(req('/'))
-	// 	const result = await res.text()
-
-	// 	expect(result).toBe(
-	// 		JSON.stringify({
-	// 			counter: 7,
-	// 			doubled: 14,
-	// 			tripled: 21
-	// 		})
-	// 	)
-	// })
 })

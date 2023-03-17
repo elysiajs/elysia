@@ -13,8 +13,9 @@ import type {
 } from './types'
 
 // ? Internal property
-export const SCHEMA: unique symbol = Symbol('schema')
-export const DEFS: unique symbol = Symbol('definitions')
+export const SCHEMA = Symbol('schema')
+export const DEFS = Symbol('definitions')
+export const EXPOSED = Symbol('exposed')
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 	...(Array.isArray(a) ? a : [a]),
@@ -37,10 +38,19 @@ export const mergeHook = (
 						header: bSchema?.headers ?? aSchema?.headers,
 						params: bSchema?.params ?? aSchema?.params,
 						query: bSchema?.query ?? aSchema?.query,
-						response: bSchema?.response ?? aSchema?.response
+						response: bSchema?.response ?? aSchema?.response,
+						detail: mergeDeep(
+							// @ts-ignore
+							bSchema?.detail ?? {},
+							// @ts-ignore
+							aSchema?.detail ?? {}
+						)
 				  } as TypedSchema)
 				: undefined,
-		transform: mergeObjectArray(a.transform ?? [], b?.transform ?? []),
+		transform: mergeObjectArray(
+			a.transform ?? [],
+			b?.transform ?? []
+		) as any,
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle ?? [],
 			b?.beforeHandle ?? []
@@ -58,21 +68,6 @@ export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 
 export const mapPathnameAndQueryRegEx = /:\/\/[^/]+([^#?]+)(?:\?([^#]+))?/
 
-export const mapQuery = (url: string) => {
-	const mapped: Record<string, string> = {}
-	const paths = url.split('&')
-
-	for (let i = 0; i < paths.length; i++) {
-		const part = paths[i]
-		const index = part.indexOf('=')
-		let value = part.slice(index + 1)
-		if (value.includes('%')) value = decodeURIComponent(value)
-
-		mapped[part.slice(0, index)] = value
-	}
-
-	return mapped
-}
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
@@ -153,6 +148,7 @@ export const getResponseSchemaValidator = (
 							if (typeof maybeNameOrSchema === 'string') {
 								if (maybeNameOrSchema in models) {
 									const schema = models[maybeNameOrSchema]
+
 									return schema
 								}
 
@@ -168,5 +164,10 @@ export const getResponseSchemaValidator = (
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
-	return TypeCompiler.Compile(schema)
+	try {
+		return TypeCompiler.Compile(schema)
+	} catch (error) {
+		// Likely is already compile
+		return maybeSchemaOrRecord
+	}
 }

@@ -1,54 +1,57 @@
 import type { Elysia } from '.'
 import type { Serve, Server } from 'bun'
 
-import type { Context, PreContext } from './context'
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import type { SCHEMA, DEFS } from './utils'
-import type { OpenAPIV2 } from 'openapi-types'
+import type { OpenAPIV3 } from 'openapi-types'
+
+import type { Context, PreContext } from './context'
+import { SCHEMA, DEFS, EXPOSED } from './utils'
 
 export type WithArray<T> = T | T[]
 export type ObjectValues<T extends object> = T[keyof T]
 
-export interface ElysiaInstance<
+export type ElysiaDefaultMeta = Record<
+	typeof SCHEMA,
+	Partial<OpenAPIV3.PathsObject>
+> &
+	Record<typeof DEFS, { [x in string]: TSchema }> &
+	Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
+
+export type ElysiaInstance<
 	Instance extends {
-		store?: Record<any, any> &
-			Record<typeof SCHEMA, Partial<OpenAPIV2.PathsObject>> &
-			Record<typeof DEFS, { [x in string]: TSchema }>
-		request?: Record<any, any>
+		store?: Record<string, unknown>
+		request?: Record<string, unknown>
 		schema?: TypedSchema
+		meta?: ElysiaDefaultMeta
 	} = {
-		store: Record<any, any> &
-			Record<typeof SCHEMA, {}> &
-			Record<typeof DEFS, {}>
+		store: Record<string, unknown>
 		request: {}
 		schema: {}
+		meta: Record<typeof SCHEMA, {}> &
+			Record<typeof DEFS, {}> &
+			Record<typeof EXPOSED, {}>
 	}
-> {
-	request: Instance['request'] extends undefined
-		? Record<typeof SCHEMA, {}>
-		: Instance['request']
+> = {
+	request: Instance['request']
 	store: Instance['store'] extends undefined ? {} : Instance['store']
 	schema: Instance['schema'] extends undefined
 		? TypedSchema
 		: Instance['schema']
+	meta: Instance['meta']
 }
 
 export type Handler<
-	Route extends TypedRoute = TypedRoute,
+	Route extends OverwritableTypeRoute,
 	Instance extends ElysiaInstance = ElysiaInstance,
-	CatchResponse = Route['response']
+	CatchResponse = unknown
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
-) => // Catch function
-Route['response'] extends (models: Record<string, TSchema>) => TSchema
-	? undefined extends ReturnType<Route['response']>
-		? MaybePromise<CatchResponse> | Response
-		: MaybePromise<ReturnType<Route['response']>> | Response
-	: // Catch non-function
-	undefined extends Route['response']
-	? MaybePromise<CatchResponse> | Response
-	: MaybePromise<Route['response']> | Response
+) => IsUnknown<Route['response']> extends false
+	? Route['response'] extends Record<number, infer Unioned>
+		? Response | MaybePromise<Unioned>
+		: Response | MaybePromise<Route['response']>
+	: Response | MaybePromise<CatchResponse>
 
 export type NoReturnHandler<
 	Route extends TypedRoute = TypedRoute,
@@ -144,10 +147,10 @@ export interface TypedSchema<ModelName extends string = string> {
 
 export type UnwrapSchema<
 	Schema extends TSchema | undefined | string,
-	Instance extends ElysiaInstance = ElysiaInstance,
+	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
 	Fallback = unknown
 > = Schema extends string
-	? Instance['store'][typeof DEFS] extends {
+	? Definitions extends {
 			[name in Schema]: infer NamedSchema extends TSchema
 	  }
 		? Static<NamedSchema>
@@ -157,34 +160,34 @@ export type UnwrapSchema<
 	: Fallback
 
 export type TypedSchemaToRoute<
-	Schema extends TypedSchema,
-	Instance extends ElysiaInstance
+	Schema extends TypedSchema<any>,
+	Definitions extends ElysiaInstance['meta'][typeof DEFS]
 > = {
-	body: UnwrapSchema<Schema['body'], Instance>
+	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
 		Schema['headers'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	query: UnwrapSchema<
 		Schema['query'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	params: UnwrapSchema<
 		Schema['params'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	response: Schema['response'] extends TSchema | string
-		? UnwrapSchema<Schema['response'], Instance>
+		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
 				[k in string]: TSchema | string
 		  }
-		? UnwrapSchema<ObjectValues<Schema['response']>, Instance>
+		? UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
 		: unknown
 }
 
@@ -193,7 +196,7 @@ export type AnyTypedSchema = {
 	headers: Record<string, any> | undefined
 	query: Record<string, any> | undefined
 	params: Record<string, any> | undefined
-	response: TSchema | unknown | undefined
+	response: any
 }
 
 export type SchemaValidator = {
@@ -208,7 +211,10 @@ export type HookHandler<
 	Schema extends TypedSchema = TypedSchema,
 	Instance extends ElysiaInstance = ElysiaInstance,
 	Path extends string = string,
-	Typed extends AnyTypedSchema = TypedSchemaToRoute<Schema, Instance>
+	Typed extends AnyTypedSchema = TypedSchemaToRoute<
+		Schema,
+		Instance['meta'][typeof DEFS]
+	>
 > = Handler<
 	Typed['params'] extends {}
 		? Omit<Typed, 'response'> & {
@@ -228,13 +234,28 @@ export type HookHandler<
 export type MergeIfNotNull<A, B> = B extends null ? A : A & B
 export type UnknownFallback<A, B> = unknown extends A ? B : A
 export type PickInOrder<A, B> = A extends NonNullable<A> ? A : B
-export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
+export type MergeSchema<
+	A extends TypedSchema<any>,
+	B extends TypedSchema<any>
+> = {
 	body: PickInOrder<PickInOrder<A['body'], B['body']>, undefined>
 	headers: PickInOrder<PickInOrder<A['headers'], B['headers']>, undefined>
 	query: PickInOrder<PickInOrder<A['query'], B['query']>, undefined>
 	params: PickInOrder<PickInOrder<A['params'], B['params']>, undefined>
 	response: PickInOrder<PickInOrder<A['response'], B['response']>, undefined>
 }
+
+type MaybeArray<T> = T | T[]
+
+type ExtractModelName<Type> = Type extends TypedSchema<infer X> ? X : never
+
+type ContentType = MaybeArray<
+	| (string & {})
+	| 'text/plain'
+	| 'application/json'
+	| 'multipart/form-data'
+	| 'application/x-www-form-urlencoded'
+>
 
 export interface LocalHook<
 	Schema extends TypedSchema = TypedSchema,
@@ -243,9 +264,14 @@ export interface LocalHook<
 	FinalSchema extends MergeSchema<Schema, Instance['schema']> = MergeSchema<
 		Schema,
 		Instance['schema']
-	>
+	>,
+	Models extends TypedSchema = TypedSchema<ExtractModelName<Schema>>
 > {
-	schema?: Schema & { detail?: Partial<OpenAPIV2.OperationObject> }
+	// ? I have no idea why does this infer type, but it work anyway
+	schema?: (Models extends Schema ? Models : Models) & {
+		contentType?: ContentType
+		detail?: Partial<OpenAPIV3.OperationObject>
+	}
 	transform?: WithArray<HookHandler<FinalSchema, Instance, Path>>
 	beforeHandle?: WithArray<HookHandler<FinalSchema, Instance, Path>>
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
@@ -253,89 +279,92 @@ export interface LocalHook<
 }
 
 export type RouteToSchema<
-	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance<any> = ElysiaInstance,
-	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, Instance['schema']> = MergeSchema<
-		Schema,
-		Instance['schema']
-	>
-> = FinalSchema['params'] extends NonNullable<Schema['params']>
-	? TypedSchemaToRoute<FinalSchema, Instance>
-	: Omit<TypedSchemaToRoute<FinalSchema, Instance>, 'params'> & {
-			params: Record<ExtractPath<Path>, string>
-	  }
+	Schema extends TypedSchema,
+	InstanceSchema extends ElysiaInstance['schema'],
+	Definitions extends ElysiaInstance['meta'][typeof DEFS],
+	Path extends string = string
+> = MergeSchema<Schema, InstanceSchema> extends infer Typed extends TypedSchema
+	? undefined extends Typed['params']
+		? Omit<TypedSchemaToRoute<Typed, Definitions>, 'params'> & {
+				params: Record<ExtractPath<Path>, string>
+		  }
+		: TypedSchemaToRoute<Typed, Definitions>
+	: never
 
-export type ElysiaRoute<
-	Method extends string = string,
-	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance = ElysiaInstance,
-	Path extends string = string,
-	CatchResponse = unknown
-> = Elysia<{
-	request: Instance['request']
-	store: Instance['store'] & {
-		[SCHEMA]: {
-			[path in Path]: {
-				[method in Method]: TypedRouteToEden<
-					Schema,
-					Instance,
-					Path
-				> extends infer FinalSchema extends AnyTypedSchema
-					? Omit<FinalSchema, 'response'> & {
-							response: undefined extends FinalSchema['response']
-								? {
-										'200': CatchResponse
-								  }
-								: FinalSchema['response']
-					  }
-					: never
-			}
-		}
-	}
-	schema: Instance['schema']
-}>
+export type MergeUnionObjects<T> = {} & { [P in keyof T]: T[P] }
 
 export type TypedRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance<any> = ElysiaInstance,
+	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
 	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, Instance['schema']> = MergeSchema<
-		Schema,
-		Instance['schema']
-	>
-> = FinalSchema['params'] extends NonNullable<Schema['params']>
-	? TypedSchemaToEden<FinalSchema, Instance>
-	: Omit<TypedSchemaToEden<FinalSchema, Instance>, 'params'> & {
-			params: Record<ExtractPath<Path>, string>
+	Catch = unknown
+> = TypedSchemaToEden<
+	Schema,
+	Definitions
+> extends infer Typed extends AnyTypedSchema
+	? {
+			body: Typed['body']
+			headers: Typed['headers']
+			query: Typed['query']
+			params: undefined extends Typed['params']
+				? Record<ExtractPath<Path>, string>
+				: Typed['params']
+			response: undefined extends Typed['response']
+				? {
+						'200': Catch
+				  }
+				: Typed['response']
 	  }
+	: never
+
+export type TypedWSRouteToEden<
+	Schema extends TypedSchema = TypedSchema,
+	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
+	Path extends string = string,
+	Catch = unknown
+> = TypedSchemaToEden<
+	Schema,
+	Definitions
+> extends infer Typed extends AnyTypedSchema
+	? {
+			body: Typed['body']
+			headers: Typed['headers']
+			query: Typed['query']
+			params: undefined extends Typed['params']
+				? Record<ExtractPath<Path>, string>
+				: Typed['params']
+			response: undefined extends Typed['response']
+				? Catch
+				: Typed['response']['200']
+	  }
+	: never
 
 export type TypedSchemaToEden<
 	Schema extends TypedSchema,
-	Instance extends ElysiaInstance
+	Definitions extends ElysiaInstance['meta'][typeof DEFS]
 > = {
-	body: UnwrapSchema<Schema['body'], Instance>
+	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
 		Schema['headers'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	query: UnwrapSchema<
 		Schema['query'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	params: UnwrapSchema<
 		Schema['params'],
-		Instance
+		Definitions
 	> extends infer Result extends Record<string, any>
 		? Result
 		: undefined
 	response: Schema['response'] extends TSchema | string
 		? {
-				'200': UnwrapSchema<Schema['response'], Instance>
+				'200': UnwrapSchema<Schema['response'], Definitions>
 		  }
 		: Schema['response'] extends {
 				[x in string]: TSchema | string
@@ -343,24 +372,33 @@ export type TypedSchemaToEden<
 		? {
 				[key in keyof Schema['response']]: UnwrapSchema<
 					Schema['response'][key],
-					Instance
+					Definitions
 				>
 		  }
 		: unknown
 }
 
 export type LocalHandler<
-	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance = ElysiaInstance,
+	Schema extends TypedSchema,
+	Instance extends ElysiaInstance,
 	Path extends string = string,
 	CatchResponse = unknown
-> = Handler<RouteToSchema<Schema, Instance, Path>, Instance, CatchResponse>
+> = Handler<
+	RouteToSchema<
+		Schema,
+		Instance['schema'],
+		Instance['meta'][typeof DEFS],
+		Path
+	>,
+	Instance,
+	CatchResponse
+>
 
 export interface TypedRoute {
 	body?: unknown
-	headers?: Record<string, any>
-	query?: Record<string, string>
-	params?: Record<string, string>
+	headers?: Record<string, unknown>
+	query?: Record<string, unknown>
+	params?: Record<string, unknown>
 	response?: unknown
 }
 
@@ -379,6 +417,7 @@ export type ComposedHandler = {
 }
 
 export interface ElysiaConfig {
+	fn?: string
 	serve?: Partial<Serve>
 }
 
@@ -435,6 +474,7 @@ export type HTTPMethod =
 	| 'ALL'
 
 export type ErrorCode =
+	| (string & {})
 	// ? Default 404
 	| 'NOT_FOUND'
 	// ? Default 502
@@ -503,12 +543,73 @@ export type DeepMergeTwoTypes<T, U> =
 		? MergeTwoObjects<T, U>
 		: T | U
 
-export type IsAny<T> = unknown extends T
-	? [keyof T] extends [never]
-		? false
-		: true
+/**
+ * @link https://stackoverflow.com/a/49928360/1490091
+ */
+export type IsAny<T> = 0 extends 1 & T ? true : false
+
+/**
+ * Returns a boolean for whether the the type is `never`.
+ */
+export type IsNever<T> = [T] extends [never] ? true : false
+
+/**
+ * Returns a boolean for whether the the type is `unknown`.
+ */
+export type IsUnknown<T> = IsAny<T> extends true
+	? false
+	: unknown extends T
+	? true
 	: false
 
 export type MaybePromise<T> = T | Promise<T>
 
-export type IsNever<T> = [T] extends [never] ? true : false
+export type FunctionProperties<T> = {
+	[K in keyof T as T[K] extends Record<any, any> | ((...args: any[]) => any)
+		? IsAny<T[K]> extends true
+			? never
+			: K
+		: never]: T[K] extends (...args: any[]) => any
+		? T[K]
+		: T[K] extends Record<string, any>
+		? FunctionProperties<T[K]>
+		: never
+}
+
+export type JoinKeys<T, Prefix extends string = ''> = {
+	[K in keyof T]-?: T[K] extends string | Function
+		? '' extends Prefix
+			? K
+			: K extends string
+			? `${Prefix}.${K}`
+			: never
+		: K extends string
+		? JoinKeys<T[K], '' extends Prefix ? K : `${Prefix}.${K}`>
+		: never
+}[keyof T]
+
+// type ExcludeFunctionFromRoot<T extends Record<any, any>> = {
+// 	[K in keyof T as T[K] extends (...args: any) => any ? never : K]: T[K]
+// }
+
+// type ExcludeRecordFromRoot<T extends Record<any, any>> = {
+// 	[K in keyof T as T[K] extends Record<string, string> ? never : K]: T[K]
+// }
+
+export type ConnectedKeysType<
+	T,
+	K extends string
+> = K extends `${infer Key}.${infer Rest}`
+	? Key extends keyof T
+		? ConnectedKeysType<T[Key], Rest>
+		: never
+	: K extends keyof T
+	? T[K] extends (...args: infer A) => any
+		? A
+		: never
+	: never
+
+// https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
+export type Prettify<T> = {
+	[K in keyof T]: T[K]
+} & {}

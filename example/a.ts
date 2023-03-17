@@ -1,33 +1,78 @@
 import { Elysia, t } from '../src'
 
-const authenticate = (app: Elysia) =>
-	app.group('/authenticate', (group) =>
-		group
+export const plugin = (app: Elysia) =>
+	app.group('/a', (app) =>
+		app
+			.setModel({
+				sign: t.Object({
+					username: t.String()
+				})
+			})
 			.post(
-				'/login',
-				({ body: { username, password }, set }) => {
-					throw new Error('A')
-				},
+				'/json/:id',
+				({ body, params: { id }, query: { name } }) => 'h',
 				{
-					beforeHandle: ({ body: { username, password }, set }) => {},
 					schema: {
-						body: t.Object({
-							username: t.String(),
-							password: t.String()
-						})
+						headers: 'sign',
+						params: t.Object({
+							id: t.Number()
+						}),
+						response: {
+							200: t.String(),
+							400: t.String()
+						},
+						detail: {
+							summary: 'Transform path parameter'
+						}
 					}
 				}
 			)
-			.onError(({ code, error, set }) => {
-				console.log("A")
-
-				return {
-					status: 400,
-					body: {
-						error: 'Bad request'
-					}
-				}
-			})
 	)
 
-const app = new Elysia().use(authenticate).listen(8080)
+const app = new Elysia({
+	serve: {
+		// Max payload in byte
+		maxRequestBodySize: 1024
+	}
+})
+	.use(plugin)
+	.derive((context) => {
+		return {
+			a: 'b'
+		}
+	})
+	.decorate('A', 'b')
+	.post('/sign', ({ body }) => body, {
+		schema: {
+			body: t.Object({
+				email: t.String({
+					format: 'email'
+				}),
+				time: t.String({
+					format: 'date-time'
+				})
+			})
+		}
+	})
+	.post(
+		'/file',
+		({ set, a, A }) => {
+			const file = Bun.file('')
+			if (file.size === 0) {
+				set.status = 404
+				return 2
+			}
+
+			return file
+		},
+		{
+			error({ set }) {},
+			schema: {
+				response: t.Object({
+					200: t.File(),
+					404: t.Number()
+				})
+			}
+		}
+	)
+	.listen(8080)

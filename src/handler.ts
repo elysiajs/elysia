@@ -1,6 +1,6 @@
 import type { Context } from './context'
 
-const isNotEmpty = (obj: Object) => {
+export const isNotEmpty = (obj: Object) => {
 	for (const x in obj) return true
 
 	return false
@@ -27,19 +27,19 @@ const parseSetCookies = (headers: Headers, setCookie: string | string[]) => {
 
 // We don't want to assign new variable to be used only once here
 export const mapEarlyResponse = (response: unknown, set: Context['set']) => {
-	if (set.headers?.['Set-Cookie'])
-		// @ts-ignore
-		set.headers = parseSetCookies(
-			new Headers(set.headers),
-			set.headers['Set-Cookie']
-		)
+	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
+		if (set.redirect) {
+			set.headers.Location = set.redirect
+			set.status = 302
+		}
 
-	if (set.redirect)
-		return Response.redirect(set.redirect, {
-			headers: set.headers
-		})
+		if (set.headers['Set-Cookie'])
+			// @ts-ignore
+			set.headers = parseSetCookies(
+				new Headers(set.headers),
+				set.headers['Set-Cookie']
+			)
 
-	if (isNotEmpty(set.headers) || set.status !== 200)
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {
@@ -96,7 +96,7 @@ export const mapEarlyResponse = (response: unknown, set: Context['set']) => {
 			default:
 				break
 		}
-	else
+	} else
 		switch (typeof response) {
 			case 'string':
 				return new Response(response)
@@ -132,19 +132,19 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	if (set.headers?.['Set-Cookie'])
-		// @ts-ignore
-		set.headers = parseSetCookies(
-			new Headers(set.headers),
-			set.headers['Set-Cookie']
-		)
+	if (Object.keys(set.headers).length || set.status !== 200 || set.redirect) {
+		if (set.redirect) {
+			set.headers.Location = set.redirect
+			set.status = 302
+		}
 
-	if (set.redirect)
-		return Response.redirect(set.redirect, {
-			headers: set.headers
-		})
+		if (set.headers?.['Set-Cookie'])
+			// @ts-ignore
+			set.headers = parseSetCookies(
+				new Headers(set.headers),
+				set.headers['Set-Cookie']
+			)
 
-	if (isNotEmpty(set.headers) || set.status !== 200)
 		switch (typeof response) {
 			case 'string':
 				return new Response(response, {
@@ -153,27 +153,34 @@ export const mapResponse = (
 				})
 
 			case 'object':
-				if (response instanceof Error)
-					return errorToResponse(response, set.headers)
-				if (response instanceof Response) {
-					for (const key in set.headers)
-						response.headers.append(key, set.headers[key])
+				switch (response?.constructor) {
+					case Error:
+						return errorToResponse(response as Error, set.headers)
 
-					return response
+					case Response:
+						for (const key in set.headers)
+							(response as Response)!.headers.append(
+								key,
+								set.headers[key]
+							)
+
+						return response as Response
+
+					case Blob:
+						return new Response(response as Blob, {
+							status: set.status,
+							headers: set.headers
+						})
+
+					default:
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
+
+						return new Response(JSON.stringify(response), {
+							status: set.status,
+							headers: set.headers
+						})
 				}
-				if (response instanceof Blob)
-					return new Response(response, {
-						status: set.status,
-						headers: set.headers
-					})
-
-				if (!set.headers['Content-Type'])
-					set.headers['Content-Type'] = 'application/json'
-
-				return new Response(JSON.stringify(response), {
-					status: set.status,
-					headers: set.headers
-				})
 
 			// ? Maybe response function or Blob
 			case 'function':
@@ -204,7 +211,7 @@ export const mapResponse = (
 					headers: set.headers
 				})
 		}
-	else
+	} else
 		switch (typeof response) {
 			case 'string':
 				return new Response(response)

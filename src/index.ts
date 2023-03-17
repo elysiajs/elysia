@@ -1,22 +1,30 @@
 import type { Serve, Server } from 'bun'
 
+import { nanoid } from 'nanoid'
 import { Raikiri } from 'raikiri'
+import { parse as parseQuery } from 'fast-querystring'
+
 import { mapResponse, mapEarlyResponse } from './handler'
+import { permission, type Permission } from './fn'
 import {
-	mapQuery,
+	SCHEMA,
+	EXPOSED,
+	DEFS,
 	clone,
 	mergeHook,
 	mergeDeep,
 	createValidationError,
 	getSchemaValidator,
-	SCHEMA,
-	DEFS,
 	getResponseSchemaValidator,
 	mapPathnameAndQueryRegEx
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
 import type { Context } from './context'
+
+import { runFn } from './fn'
+
+import { deserialize as superjsonDeseiralize } from 'superjson'
 
 import type {
 	Handler,
@@ -39,17 +47,21 @@ import type {
 	VoidLifeCycle,
 	AfterRequestHandler,
 	SchemaValidator,
-	MergeIfNotNull,
 	IsAny,
 	OverwritableTypeRoute,
 	MergeSchema,
 	ListenCallback,
 	NoReturnHandler,
-	ElysiaRoute,
 	MaybePromise,
-	IsNever
+	IsNever,
+	MergeUnionObjects,
+	TypedRouteToEden,
+	TypedWSRouteToEden
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
+import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
+
+const ASYNC_FN = 'AsyncFunction'
 
 /**
  * ### Elysia Server
@@ -68,12 +80,18 @@ import { type TSchema } from '@sinclair/typebox'
 export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	config: ElysiaConfig
 
-	store: Instance['store'] = {
-		[SCHEMA]: {},
-		[DEFS]: {}
+	store: Instance['store'] = {}
+	meta: Instance['meta'] = {
+		[SCHEMA]: Object.create(null),
+		[DEFS]: Object.create(null),
+		[EXPOSED]: Object.create(null)
 	}
 	// Will be applied to Context
-	protected decorators: Record<string, unknown> | null = null
+	protected decorators: ElysiaInstance['request'] = {
+		[SCHEMA]: this.meta[SCHEMA],
+		[DEFS]: this.meta[DEFS],
+		store: this.store
+	}
 
 	event: LifeCycleStore<Instance> = {
 		start: [],
@@ -91,11 +109,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	private router = new Raikiri<ComposedHandler>()
 	protected routes: InternalRoute<Instance>[] = []
+	private wsRouter: Raikiri<ElysiaWSOptions> | undefined
 
-	private lazyLoadModules: Promise<Elysia>[] = []
+	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
-	constructor(config: Partial<ElysiaConfig> = {}) {
+	constructor(config?: Partial<ElysiaConfig>) {
 		this.config = {
+			fn: '/~fn',
 			...config
 		}
 	}
@@ -107,7 +127,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		method: HTTPMethod,
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook<any>
+		hook?: LocalHook
 	) {
 		path = path.startsWith('/') ? path : (`/${path}` as Path)
 
@@ -118,36 +138,37 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			hooks: mergeHook(clone(this.event), hook as RegisteredHook)
 		})
 
-		const defs = this.store[DEFS]
+		const defs = this.meta[DEFS]
 
 		const body = getSchemaValidator(
-			hook?.schema?.body ?? this.$schema?.body,
+			hook?.schema?.body ?? (this.$schema?.body as any),
 			defs
 		)
 		const header = getSchemaValidator(
-			hook?.schema?.headers ?? this.$schema?.headers,
+			hook?.schema?.headers ?? (this.$schema?.headers as any),
 			defs,
 			true
 		)
 		const params = getSchemaValidator(
-			hook?.schema?.params ?? this.$schema?.params,
+			hook?.schema?.params ?? (this.$schema?.params as any),
 			defs
 		)
 		const query = getSchemaValidator(
-			hook?.schema?.query ?? this.$schema?.query,
+			hook?.schema?.query ?? (this.$schema?.query as any),
 			defs
 		)
 		const response = getResponseSchemaValidator(
-			hook?.schema?.response ?? this.$schema?.response,
+			hook?.schema?.response ?? (this.$schema?.response as any),
 			defs
 		)
 
 		registerSchemaPath({
-			schema: this.store[SCHEMA],
+			schema: this.meta[SCHEMA],
+			contentType: hook?.schema?.contentType,
 			hook,
 			method,
 			path,
-			models: this.store[DEFS]
+			models: this.meta[DEFS]
 		})
 
 		const validator =
@@ -165,6 +186,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			clone(this.event),
 			hook as RegisteredHook
 		)
+
 		if (
 			!hooks.schema &&
 			!hooks.transform.length &&
@@ -180,7 +202,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			validator
 		}
 
-		this.router.add(method, path, mainHandler)
+		this.router.add(method, path, mainHandler as any)
 	}
 
 	/**
@@ -400,7 +422,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			case 'beforeHandle':
 				this.event.beforeHandle.push(
-					handler as LifeCycle['beforeHandle']
+					handler as LifeCycle<Instance>['beforeHandle']
 				)
 				break
 
@@ -445,29 +467,28 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				store: Omit<Instance['store'], typeof SCHEMA> &
 					ElysiaInstance['store']
 				schema: Instance['schema']
+				meta: Omit<Instance['meta'], typeof SCHEMA> &
+					ElysiaInstance['meta']
 			}>
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
 				request: Instance['request'] & NewInstance['request']
 				schema: Instance['schema'] & NewInstance['schema']
-				store: Instance['store'] &
-					(Omit<NewInstance['store'], typeof SCHEMA> & {
-						[key in typeof SCHEMA]: {
-							[key in keyof NewInstance['store'][typeof SCHEMA] as key extends `${infer Rest}`
-								? `${Prefix}${Rest}`
-								: key]: NewInstance['store'][typeof SCHEMA][key]
-						}
-					})
+				store: Instance['store'] & NewInstance['store']
+				meta: Instance['meta'] &
+					(Omit<NewInstance['meta'], typeof SCHEMA> &
+						Record<
+							typeof SCHEMA,
+							{
+								[key in keyof NewInstance['meta'][typeof SCHEMA] as key extends `${infer Rest}`
+									? `${Prefix}${Rest}`
+									: key]: NewInstance['meta'][typeof SCHEMA][key]
+							}
+						>)
 		  }>
 		: this {
-		const instance = new Elysia<{
-			request: Instance['request']
-			store: Omit<Instance['store'], typeof SCHEMA> &
-				ElysiaInstance['store']
-			schema: Instance['schema']
-		}>()
-
+		const instance = new Elysia<any>()
 		instance.store = this.store
 
 		const sandbox = run(instance)
@@ -477,6 +498,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				...this.event.request,
 				...sandbox.event.request
 			]
+
+		this.setModel(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
@@ -528,7 +551,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	guard<
-		Schema extends TypedSchema = {},
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		NewElysia extends Elysia<any> = Elysia<any>
 	>(
 		hook: LocalHook<Schema, Instance>,
@@ -536,23 +561,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			group: Elysia<{
 				request: Instance['request']
 				store: Instance['store']
-				schema: Omit<
-					MergeIfNotNull<Schema, Instance['schema']>,
-					typeof SCHEMA
-				>
+				schema: Schema & Instance['schema']
+				meta: Instance['meta']
 			}>
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<NewInstance & Instance>
 		: this {
-		const instance = new Elysia<{
-			request: Instance['request']
-			store: Instance['store']
-			schema: Omit<
-				MergeIfNotNull<Schema, Instance['schema']>,
-				typeof SCHEMA
-			>
-		}>()
+		const instance = new Elysia<any>()
 
 		instance.store = this.store
 
@@ -563,6 +579,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				...this.event.request,
 				...sandbox.event.request
 			]
+
+		this.setModel(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks: localHook }) => {
@@ -666,17 +684,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	get<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'GET', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'get']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('GET', path, handler, hook as LocalHook)
 
 		return this as any
@@ -702,17 +743,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	post<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'POST', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'post']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('POST', path, handler, hook as LocalHook)
 
 		return this as any
@@ -738,17 +802,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	put<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'PUT', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'put']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('PUT', path, handler, hook as LocalHook)
 
 		return this as any
@@ -774,17 +861,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	patch<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'PATCH', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'patch']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('PATCH', path, handler, hook as LocalHook)
 
 		return this as any
@@ -810,17 +920,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	delete<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'DELETE', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'delete']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('DELETE', path, handler, hook as LocalHook)
 
 		return this as any
@@ -846,17 +979,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	options<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'OPTIONS', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'options']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('OPTIONS', path, handler, hook as LocalHook)
 
 		return this as any
@@ -877,17 +1033,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	all<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'ALL', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'all']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('ALL', path, handler, hook as LocalHook)
 
 		return this as any
@@ -913,17 +1092,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	head<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'HEAD', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'head']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('HEAD', path, handler, hook as LocalHook)
 
 		return this as any
@@ -949,17 +1151,40 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	trace<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'TRACE', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'trace']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('TRACE', path, handler, hook as LocalHook)
 
 		return this as any
@@ -985,18 +1210,145 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	connect<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<'CONNECT', Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in 'connect']: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler('CONNECT', path, handler, hook as LocalHook)
+
+		return this as any
+	}
+
+	/**
+	 * ### connect
+	 * Register handler for path with method [CONNECT]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { Elysia, t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .connect('/', () => 'hi')
+	 *     .connect('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
+	ws<Path extends string = '', Schema extends TypedSchema = {}>(
+		/**
+		 * Path to register websocket to
+		 */
+		path: Path,
+		options: Path extends ''
+			? never
+			: this extends Elysia<infer Instance>
+			? ElysiaWSOptions<
+					Path,
+					Schema extends WSTypedSchema ? Schema : WSTypedSchema,
+					Instance['meta'][typeof DEFS]
+			  >
+			: never
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Instance['meta'] &
+			Record<
+				typeof SCHEMA,
+				Record<
+					Path,
+					{
+						[method in 'subscribe']: TypedWSRouteToEden<
+							Schema,
+							Instance['meta'][typeof DEFS],
+							Path
+						>
+					}
+				>
+			>
+	}> {
+		if (!this.wsRouter)
+			throw new Error(
+				"Can't find WebSocket. Please register WebSocket plugin first by importing 'elysia/ws'"
+			)
+
+		this.wsRouter.add('subscribe', path, options as any)
+
+		this.get(
+			path,
+			// @ts-ignore
+			(context) => {
+				if (
+					// @ts-ignore
+					this.server!.upgrade(context.request, {
+						headers:
+							typeof options.headers === 'function'
+								? options.headers(context as any)
+								: options.headers,
+						data: {
+							...context,
+							id: nanoid(),
+							message: getSchemaValidator(
+								options.schema?.body,
+								this.meta[DEFS]
+							),
+							transformMessage: !options.transform
+								? []
+								: Array.isArray(options.transformMessage)
+								? options.transformMessage
+								: [options.transformMessage]
+						} as ElysiaWSContext<any>['data']
+					})
+				)
+					return
+
+				context.set.status = 400
+
+				return 'Expected a websocket connection'
+			},
+			{
+				beforeHandle: options.beforeHandle,
+				transform: options.transform,
+				schema: {
+					headers: options.schema?.headers,
+					params: options.schema?.params,
+					query: options.schema?.query
+				}
+			} as any
+		)
 
 		return this as any
 	}
@@ -1021,19 +1373,42 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	route<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
-		>,
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		> = {},
 		Method extends HTTPMethod = HTTPMethod,
 		Path extends string = string,
-		Response = unknown
+		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+			Schema,
+			Instance,
+			Path
+		>
 	>(
 		method: Method,
 		path: Path,
-		handler: LocalHandler<Schema, Instance, Path, Response>,
+		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
-	): ElysiaRoute<Method, Schema, Instance, Path, Response> {
+	): Elysia<{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
+			Record<
+				typeof SCHEMA,
+				MergeUnionObjects<
+					Instance['meta'][typeof SCHEMA] & {
+						[path in Path]: {
+							[method in Uppercase<Method>]: TypedRouteToEden<
+								Schema,
+								Instance['meta'][typeof DEFS],
+								Path,
+								ReturnType<Handler>
+							>
+						}
+					}
+				>
+			>
+	}> {
 		this._addHandler(method, path, handler, hook as LocalHook)
 
 		return this as any
@@ -1054,17 +1429,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	state<
 		Key extends string | number | symbol = keyof Instance['store'],
 		Value = Instance['store'][keyof Instance['store']],
-		ReturnValue = Value extends () => infer Returned
-			? Returned extends Promise<infer AsyncReturned>
-				? AsyncReturned
-				: Returned
-			: Value,
 		NewInstance = Elysia<{
 			store: Instance['store'] & {
-				[key in Key]: ReturnValue
+				[key in Key]: Value
 			}
 			request: Instance['request']
 			schema: Instance['schema']
+			meta: Instance['meta']
 		}>
 	>(name: Key, value: Value): NewInstance {
 		if (!(name in this.store)) {
@@ -1093,70 +1464,100 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			store: Instance['store']
 			request: Instance['request'] & { [key in Name]: Value }
 			schema: Instance['schema']
+			meta: Instance['meta']
 		}>
 	>(name: Name, value: Value): NewInstance {
-		if (!this.decorators) this.decorators = {}
+		// @ts-ignore
 		if (!(name in this.decorators)) this.decorators[name] = value
 
 		return this as unknown as NewInstance
 	}
 
 	/**
-	 * Create derived property from Context
+	 * Derive new property for each request with access to `Context`.
+	 *
+	 * If error is thrown, the scope will skip to handling error instead.
 	 *
 	 * ---
 	 * @example
 	 * new Elysia()
 	 *     .state('counter', 1)
-	 *     .derive((store) => ({
-	 *         multiplied: () => store().counter * 2
-	 *     }))
-	 */
-	derive<
-		Returned extends Record<string | number | symbol, () => any> = Record<
-			string | number | symbol,
-			() => any
-		>
-	>(
-		transform: (store: () => Readonly<Instance['store']>) => Returned
-	): Elysia<{
-		store: Instance['store'] & Returned
-		request: Instance['request']
-		schema: Instance['schema']
-	}> {
-		this.store = mergeDeep(
-			this.store,
-			transform(() => this.store)
-		) as any
-
-		return this as any
-	}
-
-	/**
-	 * Assign property which required access to Context
-	 *
-	 * ---
-	 * @example
-	 * new Elysia()
-	 *     .state('counter', 1)
-	 *     .inject(({ store }) => ({
+	 *     .derive(({ store }) => ({
 	 *         increase() {
 	 *             store.counter++
 	 *         }
 	 *     }))
 	 */
-	inject<Returned extends Object = Object>(
+	derive<Returned extends Object = Object>(
 		transform: (
 			context: Context<{}, Instance['store']> & Instance['request']
-		) => Returned extends { store: any } ? never : Returned
+		) => MaybePromise<Returned> extends { store: any } ? never : Returned
 	): Elysia<{
 		store: Instance['store']
-		request: Instance['request'] & Returned
+		request: Instance['request'] & Awaited<Returned>
 		schema: Instance['schema']
+		meta: Instance['meta']
 	}> {
+		if (transform.constructor.name === 'AsyncFunction')
+			return this.onTransform(async (context) => {
+				Object.assign(context, await transform(context))
+			}) as any
+
 		return this.onTransform((context) => {
 			Object.assign(context, transform(context))
-		}) as unknown as any
+		}) as any
+	}
+
+	fn<
+		T extends
+			| Record<string, unknown>
+			| ((
+					app: Instance['request'] & {
+						store: Instance['store']
+						permission: Permission
+					}
+			  ) => Record<string, unknown>) =
+			| Record<string, unknown>
+			| ((
+					app: Instance['request'] & {
+						store: Instance['store']
+						permission: Permission
+					}
+			  ) => Record<string, unknown>)
+	>(
+		value: T
+	): Elysia<{
+		store: Instance['store']
+		request: Instance['request']
+		schema: Instance['schema']
+		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+			Record<
+				typeof EXPOSED,
+				Instance['meta'][typeof EXPOSED] &
+					(T extends (store: any) => infer Returned ? Returned : T)
+			> &
+			Record<typeof SCHEMA, Instance['meta'][typeof SCHEMA]>
+	}> {
+		if (Object.keys(this.meta[EXPOSED]).length === 0) {
+			this.post(
+				this.config.fn ?? '/~fn',
+				// @ts-ignore
+				async (context) => runFn(context, this.meta[EXPOSED])
+			)
+		}
+
+		this.meta[EXPOSED] = mergeDeep(
+			this.meta[EXPOSED],
+			typeof value === 'function'
+				? value({
+						...this.decorators,
+						store: this.store,
+						permission
+				  } as any)
+				: value
+		) as any
+
+		return this as any
 	}
 
 	/**
@@ -1177,17 +1578,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	schema<
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		> = TypedSchema<
-			Exclude<keyof Instance['store'][typeof DEFS], number | symbol>
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
 		>,
 		NewInstance = Elysia<{
 			request: Instance['request']
 			store: Instance['store']
 			schema: MergeSchema<Schema, Instance['schema']>
+			meta: Instance['meta']
 		}>
 	>(schema: Schema): NewInstance {
-		const defs = this.store[DEFS]
+		const defs = this.meta[DEFS]
 
 		this.$schema = {
 			body: getSchemaValidator(schema.body, defs),
@@ -1202,40 +1604,23 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	handle = async (request: Request): Promise<Response> => {
-		const set: Context['set'] = {
+		const context: Context = this.decorators as any as Context
+		context.request = request
+		context.set = {
 			status: 200,
 			headers: {}
-		}
-
-		let context: Context
-		if (this.decorators) {
-			context = clone(this.decorators) as any as Context
-
-			context.request = request
-			context.set = set
-			context.store = this.store
-			context.query = {}
-		} else {
-			// @ts-ignore
-			context = {
-				set,
-				store: this.store,
-				request,
-				query: {}
-			}
 		}
 
 		let handleErrors: ErrorHandler[] | undefined
 
 		try {
-			if (this.event.request.length)
-				for (let i = 0; i < this.event.request.length; i++) {
-					let response = this.event.request[i](context)
-					if (response instanceof Promise) response = await response
+			for (let i = 0; i < this.event.request.length; i++) {
+				let response = this.event.request[i](context)
+				if (response instanceof Promise) response = await response
 
-					response = mapEarlyResponse(response, set)
-					if (response) return response
-				}
+				response = mapEarlyResponse(response, context.set)
+				if (response) return response
+			}
 
 			const fracture = request.url.match(mapPathnameAndQueryRegEx)
 			if (!fracture) throw new Error('NOT_FOUND')
@@ -1244,28 +1629,30 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				this.router.match(request.method, fracture[1]) ??
 				this.router.match('ALL', fracture[1])
 
-			const handler = route?.store
-			if (!handler) throw new Error('NOT_FOUND')
+			if (!route?.store) throw new Error('NOT_FOUND')
+			const { hooks, validator } = route.store!
 
-			let body: string | Record<string, any> | undefined
+			// const hooks = handler.hooks
+			// const validator = handler.validator
+			if (hooks?.error) handleErrors = hooks?.error
+
+			let body: string | Record<string, unknown | unknown[]> | undefined
 			if (request.method !== 'GET') {
 				let contentType = request.headers.get('content-type')!
 
 				if (contentType) {
 					const index = contentType.indexOf(';')
-
 					if (index !== -1) contentType = contentType.slice(0, index)
 
-					if (this.event.parse.length)
-						for (let i = 0; i < this.event.parse.length; i++) {
-							let temp = this.event.parse[i](context, contentType)
-							if (temp instanceof Promise) temp = await temp
+					for (let i = 0; i < this.event.parse.length; i++) {
+						let temp = this.event.parse[i](context, contentType)
+						if (temp instanceof Promise) temp = await temp
 
-							if (temp !== undefined) {
-								body = temp
-								break
-							}
+						if (temp !== undefined) {
+							body = temp
+							break
 						}
+					}
 
 					// body might be empty string thus can't use !body
 					if (body === undefined)
@@ -1279,27 +1666,51 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								break
 
 							case 'application/x-www-form-urlencoded':
-								body = mapQuery(await request.text())
+								body = parseQuery(await request.text())
 								break
+
+							case 'multipart/form-data':
+								body = {}
+
+								await request.formData().then((form) => {
+									for (const key of form.keys()) {
+										if (
+											key in
+											(body as Record<string, unknown>)
+										)
+											continue
+
+										const value = form.getAll(key)
+										if (value.length === 1)
+											// @ts-ignore
+											body[key] = value[0]
+										// @ts-ignore
+										else body[key] = value
+									}
+								})
+								break
+
+							case 'elysia/fn':
+								body = superjsonDeseiralize(
+									await request.json()
+								)
 						}
 				}
 			}
 
 			context.body = body
 			context.params = route.params
-			if (fracture[2]) context.query = mapQuery(fracture[2])
+			if (fracture[2]) context.query = parseQuery(fracture[2])
+			else context.query = {}
 
-			const hooks = handler.hooks
-			if (hooks?.error) handleErrors = hooks?.error
-
-			if (hooks?.transform.length)
+			if (hooks)
 				for (let i = 0; i < hooks.transform.length; i++) {
 					const operation = hooks.transform[i](context)
 					if (operation instanceof Promise) await operation
 				}
 
-			if (handler.validator) {
-				const validator = handler.validator
+			if (validator) {
+				if (hooks?.error) handleErrors = hooks?.error
 
 				if (validator.headers) {
 					const _header: Record<string, string> = {}
@@ -1332,7 +1743,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					throw createValidationError('body', validator.body, body)
 			}
 
-			if (hooks?.beforeHandle.length)
+			if (hooks)
 				for (let i = 0; i < hooks.beforeHandle.length; i++) {
 					let response = hooks.beforeHandle[i](context)
 					if (response instanceof Promise) response = await response
@@ -1355,17 +1766,20 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					}
 				}
 
-			let response = handler.handle(context)
+			let response = route.store!.handle(context)
 			if (response instanceof Promise) response = await response
 
-			if (handler.validator?.response?.Check(response) === false)
+			if (validator?.response?.Check(response) === false) {
+				if (hooks?.error) handleErrors = hooks.error
+
 				throw createValidationError(
 					'response',
-					handler.validator.response,
+					validator.response,
 					response
 				)
+			}
 
-			if (hooks?.afterHandle.length)
+			if (hooks)
 				for (let i = 0; i < hooks.afterHandle.length; i++) {
 					let newResponse = hooks.afterHandle[i](context, response)
 					if (newResponse instanceof Promise)
@@ -1377,6 +1791,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			return mapResponse(response, context.set)
 		} catch (error) {
+			const set = context.set
+
 			if (!set.status || set.status < 300) set.status = 500
 
 			if (handleErrors) {
@@ -1530,34 +1946,34 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	setModel<Recorder extends Record<string, TSchema>>(
 		record: Recorder
 	): Elysia<{
-		store: Instance['store'] & {
-			[Defs in typeof DEFS]: Recorder
-		}
+		store: Instance['store']
 		request: Instance['request']
 		schema: Instance['schema']
+		meta: Instance['meta'] & Record<typeof DEFS, Recorder>
 	}> {
 		Object.entries(record).forEach(([key, value]) => {
 			// @ts-ignore
-			if (!(key in this.store[DEFS])) this.store[DEFS][key] = value
+			if (!(key in this.meta[DEFS])) this.meta[DEFS][key] = value
 		})
 
 		return this as unknown as any
 	}
 }
 
-export { Elysia }
-export { Type as t } from '@sinclair/typebox'
+export { Elysia, permission }
+export { t } from './custom-types'
+export { ws } from './ws'
 
 export {
 	SCHEMA,
 	DEFS,
+	EXPOSED,
 	createValidationError,
 	getSchemaValidator,
 	mergeDeep,
 	mergeHook,
 	mergeObjectArray,
-	mapPathnameAndQueryRegEx,
-	mapQuery
+	mapPathnameAndQueryRegEx
 } from './utils'
 
 export type { Context, PreContext } from './context'
@@ -1587,7 +2003,6 @@ export type {
 	LifeCycleStore,
 	VoidLifeCycle,
 	SchemaValidator,
-	ElysiaRoute,
 	ExtractPath,
 	IsPathParameter,
 	IsAny,
@@ -1597,5 +2012,11 @@ export type {
 	ObjectValues,
 	PickInOrder,
 	MaybePromise,
-	MergeIfNotNull
+	MergeIfNotNull,
+	ElysiaDefaultMeta,
+	TypedRouteToEden,
+	AnyTypedSchema,
+	RouteToSchema,
+	DeepMergeTwoTypes,
+	ConnectedKeysType
 } from './types'

@@ -6,11 +6,7 @@ import { req } from './utils'
 describe('Transform', () => {
 	it('Globally Transform', async () => {
 		const app = new Elysia()
-			.onTransform<{
-				params: {
-					id?: number
-				}
-			}>((request) => {
+			.onTransform((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
