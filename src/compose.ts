@@ -33,7 +33,8 @@ export const composeHandler = ({
 
 	const maybeAsync =
 		method !== 'GET' ||
-		hooks.parse ||
+		handler.constructor.name === ASYNC_FN ||
+		hooks.parse.length ||
 		hooks.afterHandle.find(isAsync) ||
 		hooks.beforeHandle.find(isAsync) ||
 		hooks.transform.find(isAsync)
@@ -191,28 +192,30 @@ export const composeHandler = ({
 
 	fnLiteral += `
 } catch(error) {
-	const set = c.set
+	${maybeAsync ? '' : 'return (async () => {'}
+		const set = c.set
 
-	if (!set.status || set.status < 300) set.status = 500
+		if (!set.status || set.status < 300) set.status = 500
 
-	if (handleErrors) {
-		const code = mapErrorCode(error.message)
+		if (handleErrors) {
+			const code = mapErrorCode(error.message)
 
-		for (let i = 0; i < handleErrors.length; i++) {
-			let handled = handleErrors[i]({
-				request: c.request,
-				error,
-				set,
-				code
-			})
-			if (handled instanceof Promise) handled = await handled
+			for (let i = 0; i < handleErrors.length; i++) {
+				let handled = handleErrors[i]({
+					request: c.request,
+					error,
+					set,
+					code
+				})
+				if (handled instanceof Promise) handled = await handled
 
-			const response = mapEarlyResponse(handled, set)
-			if (response) return response
+				const response = mapEarlyResponse(handled, set)
+				if (response) return response
+			}
 		}
-	}
 
-	return handleError(c.request, error, set)
+		return handleError(c.request, error, set)
+	${maybeAsync ? '' : '})()'}
 }`
 
 	fnLiteral = `const { 

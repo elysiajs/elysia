@@ -1591,7 +1591,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	private bodyParser = this.event.parse
 
-	handle = (request: Request): MaybePromise<Response> => {
+	handle = async (request: Request) => this.innerHandle(request)
+
+	innerHandle = (request: Request): MaybePromise<Response> => {
 		const context: Context = this.decorators as any as Context
 		context.request = request
 		context.set = {
@@ -1599,33 +1601,36 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			headers: {}
 		}
 
-		try {
-			for (let i = 0; i < this.event.request.length; i++) {
-				let response = this.event.request[i](context)
+		if (this.event.request.length)
+			try {
+				for (let i = 0; i < this.event.request.length; i++) {
+					let response = this.event.request[i](context)
 
-				response = mapEarlyResponse(response, context.set)
-				if (response) return response
+					response = mapEarlyResponse(response, context.set)
+					if (response) return response
+				}
+			} catch (error) {
+				return this.handleError(request, error as Error, context.set)
 			}
 
-			const fracture = request.url.match(mapPathnameAndQueryRegEx)
-			if (!fracture) throw new Error('NOT_FOUND')
+		const fracture = request.url.match(mapPathnameAndQueryRegEx)!
 
-			const route =
-				this.router.match(request.method, fracture[1]) ??
-				this.router.match('ALL', fracture[1])
+		const route =
+			this.router.match(request.method, fracture[1]) ??
+			this.router.match('ALL', fracture[1])
 
-			if (!route?.store) throw new Error('NOT_FOUND')
+		if (!route?.store)
+			return this.handleError(
+				request,
+				new Error('NOT_FOUND'),
+				context.set
+			)
 
-			context.params = route.params
-			if (fracture[2]) context.query = parseQuery(fracture[2])
-			else context.query = {}
+		context.params = route.params
+		if (fracture[2]) context.query = parseQuery(fracture[2])
+		else context.query = {}
 
-			return route.store.handle(context)
-		} catch (error) {
-			const set = context.set
-
-			return this.handleError(request, error as Error, set)
-		}
+		return route.store.handle(context)
 	}
 
 	handleError = async (
@@ -1681,7 +1686,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				throw new Error('Port must be a numeric value')
 		}
 
-		const fetch = this.handle
+		const fetch = this.innerHandle
 
 		const serve: Serve =
 			typeof options === 'object'
