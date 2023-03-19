@@ -130,6 +130,7 @@ export interface RegisteredHook<
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
+	parse: BodyParser[]
 	error: ErrorHandler[]
 }
 
@@ -272,6 +273,7 @@ export interface LocalHook<
 		contentType?: ContentType
 		detail?: Partial<OpenAPIV3.OperationObject>
 	}
+	parse?: WithArray<BodyParser[]>
 	transform?: WithArray<HookHandler<FinalSchema, Instance, Path>>
 	beforeHandle?: WithArray<HookHandler<FinalSchema, Instance, Path>>
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
@@ -411,9 +413,8 @@ export type OverwritableTypeRoute = {
 }
 
 export type ComposedHandler = {
-	handle: Handler<any, any>
-	hooks?: RegisteredHook<any>
-	validator?: SchemaValidator
+	handle: (context: Context) => MaybePromise<Response>
+	onError: ErrorHandler[]
 }
 
 export interface ElysiaConfig {

@@ -13,7 +13,6 @@ import {
 	clone,
 	mergeHook,
 	mergeDeep,
-	createValidationError,
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	mapPathnameAndQueryRegEx
@@ -23,8 +22,6 @@ import { mapErrorCode, mapErrorStatus } from './error'
 import type { Context } from './context'
 
 import { runFn } from './fn'
-
-import { deserialize as superjsonDeseiralize } from 'superjson'
 
 import type {
 	Handler,
@@ -60,6 +57,7 @@ import type {
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
 import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
+import { composeHandler } from './compose'
 
 /**
  * ### Elysia Server
@@ -142,7 +140,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			hook?.schema?.body ?? (this.$schema?.body as any),
 			defs
 		)
-		const header = getSchemaValidator(
+		const headers = getSchemaValidator(
 			hook?.schema?.headers ?? (this.$schema?.headers as any),
 			defs,
 			true
@@ -169,35 +167,25 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			models: this.meta[DEFS]
 		})
 
-		const validator =
-			body || header || params || query || response
-				? {
-						body,
-						header,
-						params,
-						query,
-						response
-				  }
-				: undefined
+		const validator = {
+			body,
+			headers,
+			params,
+			query,
+			response
+		}
 
-		let hooks: RegisteredHook | undefined = mergeHook(
-			clone(this.event),
-			hook as RegisteredHook
-		)
-
-		if (
-			!hooks.schema &&
-			!hooks.transform.length &&
-			!hooks.beforeHandle.length &&
-			!hooks.error.length &&
-			!hooks.afterHandle.length
-		)
-			hooks = undefined
+		const hooks = mergeHook(clone(this.event), hook as RegisteredHook)
 
 		const mainHandler = {
-			handle: handler,
-			hooks,
-			validator
+			handle: composeHandler({
+				method,
+				hooks,
+				validator: validator as any,
+				handler,
+				handleError: this.handleError
+			}),
+			onError: hooks.error
 		}
 
 		this.router.add(method, path, mainHandler as any)
@@ -1601,7 +1589,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return this as unknown as NewInstance
 	}
 
-	handle = async (request: Request): Promise<Response> => {
+	private bodyParser = this.event.parse
+
+	handle = (request: Request): MaybePromise<Response> => {
 		const context: Context = this.decorators as any as Context
 		context.request = request
 		context.set = {
@@ -1609,12 +1599,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			headers: {}
 		}
 
-		let handleErrors: ErrorHandler[] | undefined
-
 		try {
 			for (let i = 0; i < this.event.request.length; i++) {
 				let response = this.event.request[i](context)
-				if (response instanceof Promise) response = await response
 
 				response = mapEarlyResponse(response, context.set)
 				if (response) return response
@@ -1628,199 +1615,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				this.router.match('ALL', fracture[1])
 
 			if (!route?.store) throw new Error('NOT_FOUND')
-			const { hooks, validator } = route.store!
 
-			// const hooks = handler.hooks
-			// const validator = handler.validator
-			if (hooks?.error) handleErrors = hooks?.error
-
-			let body: string | Record<string, unknown | unknown[]> | undefined
-			if (request.method !== 'GET') {
-				let contentType = request.headers.get('content-type')!
-
-				if (contentType) {
-					const index = contentType.indexOf(';')
-					if (index !== -1) contentType = contentType.slice(0, index)
-
-					for (let i = 0; i < this.event.parse.length; i++) {
-						let temp = this.event.parse[i](context, contentType)
-						if (temp instanceof Promise) temp = await temp
-
-						if (temp !== undefined) {
-							body = temp
-							break
-						}
-					}
-
-					// body might be empty string thus can't use !body
-					if (body === undefined)
-						switch (contentType) {
-							case 'application/json':
-								body = await request.json()
-								break
-
-							case 'text/plain':
-								body = await request.text()
-								break
-
-							case 'application/x-www-form-urlencoded':
-								body = parseQuery(await request.text())
-								break
-
-							case 'multipart/form-data':
-								body = {}
-
-								await request.formData().then((form) => {
-									for (const key of form.keys()) {
-										if (
-											key in
-											(body as Record<string, unknown>)
-										)
-											continue
-
-										const value = form.getAll(key)
-										if (value.length === 1)
-											// @ts-ignore
-											body[key] = value[0]
-										// @ts-ignore
-										else body[key] = value
-									}
-								})
-								break
-
-							case 'elysia/fn':
-								body = superjsonDeseiralize(
-									await request.json()
-								)
-						}
-				}
-			}
-
-			context.body = body
 			context.params = route.params
 			if (fracture[2]) context.query = parseQuery(fracture[2])
 			else context.query = {}
 
-			if (hooks)
-				for (let i = 0; i < hooks.transform.length; i++) {
-					const operation = hooks.transform[i](context)
-					if (operation instanceof Promise) await operation
-				}
-
-			if (validator) {
-				if (hooks?.error) handleErrors = hooks?.error
-
-				if (validator.headers) {
-					const _header: Record<string, string> = {}
-					for (const key in request.headers)
-						_header[key] = request.headers.get(key)!
-
-					if (validator.headers.Check(_header) === false)
-						throw createValidationError(
-							'header',
-							validator.headers,
-							_header
-						)
-				}
-
-				if (validator.params?.Check(context.params) === false)
-					throw createValidationError(
-						'params',
-						validator.params,
-						context.params
-					)
-
-				if (validator.query?.Check(context.query) === false)
-					throw createValidationError(
-						'query',
-						validator.query,
-						context.query
-					)
-
-				if (validator.body?.Check(body) === false)
-					throw createValidationError('body', validator.body, body)
-			}
-
-			if (hooks)
-				for (let i = 0; i < hooks.beforeHandle.length; i++) {
-					let response = hooks.beforeHandle[i](context)
-					if (response instanceof Promise) response = await response
-
-					// `false` is a falsey value, check for null and undefined instead
-					if (response !== null && response !== undefined) {
-						for (let i = 0; i < hooks.afterHandle.length; i++) {
-							let newResponse = hooks.afterHandle[i](
-								context,
-								response
-							)
-							if (newResponse instanceof Promise)
-								newResponse = await newResponse
-
-							if (newResponse) response = newResponse
-						}
-
-						const result = mapEarlyResponse(response, context.set)
-						if (result) return result
-					}
-				}
-
-			let response = route.store!.handle(context)
-			if (response instanceof Promise) response = await response
-
-			if (validator?.response?.Check(response) === false) {
-				if (hooks?.error) handleErrors = hooks.error
-
-				throw createValidationError(
-					'response',
-					validator.response,
-					response
-				)
-			}
-
-			if (hooks)
-				for (let i = 0; i < hooks.afterHandle.length; i++) {
-					let newResponse = hooks.afterHandle[i](context, response)
-					if (newResponse instanceof Promise)
-						newResponse = await newResponse
-
-					const result = mapEarlyResponse(newResponse, context.set)
-					if (result) return result
-				}
-
-			return mapResponse(response, context.set)
+			return route.store.handle(context)
 		} catch (error) {
 			const set = context.set
-
-			if (!set.status || set.status < 300) set.status = 500
-
-			if (handleErrors) {
-				const code = mapErrorCode((error as Error).message)
-
-				for (let i = 0; i < handleErrors.length; i++) {
-					let handled = handleErrors[i]({
-						request,
-						error: error as Error,
-						set,
-						code
-					})
-					if (handled instanceof Promise) handled = await handled
-
-					const response = mapEarlyResponse(handled, set)
-					if (response) return response
-				}
-			}
 
 			return this.handleError(request, error as Error, set)
 		}
 	}
 
-	async handleError(
+	handleError = async (
 		request: Request,
 		error: Error,
 		set: Context['set'] = {
 			headers: {}
 		}
-	) {
+	) => {
 		for (let i = 0; i < this.event.error.length; i++) {
 			let response = this.event.error[i]({
 				request,

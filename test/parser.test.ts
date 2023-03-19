@@ -12,7 +12,6 @@ describe('Parser', () => {
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(8080)
 
 		const res = await app.handle(
 			new Request('http://localhost/', {
@@ -37,7 +36,6 @@ describe('Parser', () => {
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(8080)
 
 		const res = await app.handle(
 			new Request('http://localhost/', {
@@ -62,7 +60,6 @@ describe('Parser', () => {
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(8080)
 
 		const res = await app.handle(
 			new Request('http://localhost/', {
@@ -79,7 +76,7 @@ describe('Parser', () => {
 	})
 
 	it('parse x-www-form-urlencoded', async () => {
-		const app = new Elysia().post('/', ({ body }) => body).listen(8080)
+		const app = new Elysia().post('/', ({ body }) => body)
 
 		const body = {
 			username: 'salty aom',
@@ -100,7 +97,7 @@ describe('Parser', () => {
 	})
 
 	it('parse with extra content-type attribute', async () => {
-		const app = new Elysia().post('/', ({ body }) => body).listen(8080)
+		const app = new Elysia().post('/', ({ body }) => body)
 
 		const body = {
 			username: 'salty aom',

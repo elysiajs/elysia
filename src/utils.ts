@@ -55,6 +55,7 @@ export const mergeHook = (
 			a.beforeHandle ?? [],
 			b?.beforeHandle ?? []
 		),
+		parse: mergeObjectArray((a.parse as any) ?? [], b?.parse ?? []),
 		afterHandle: mergeObjectArray(
 			a.afterHandle ?? [],
 			b?.afterHandle ?? []
