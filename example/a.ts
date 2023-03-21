@@ -1,16 +1,14 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.get('/', () => 'hi')
-	.post('/a', ({ body }) => {
-		console.log(body)
-		
-		return body
-	}, {
+	.setModel({
+		number: t.Number()
+	})
+	.post('/', ({ body: { data } }) => data, {
 		schema: {
+			response: 'number',
 			body: t.Object({
-				username: t.String(),
-				password: t.String()
+				data: t.Number()
 			})
 		}
 	})

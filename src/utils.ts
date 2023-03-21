@@ -102,7 +102,7 @@ export const createValidationError = (
 	validator: TypeCheck<any>,
 	value: any
 ) => {
-	const error = validator.Errors(value).next().value as ValueError
+	const error = validator.Errors(value).First()!
 
 	return new Error('VALIDATION', {
 		cause: `Invalid ${type}: '${error?.path?.slice(1) || 'root'}'. ${
