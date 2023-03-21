@@ -6,7 +6,7 @@ export const isNotEmpty = (obj: Object) => {
 	return false
 }
 
-const parseSetCookies = (headers: Headers, setCookie: string | string[]) => {
+export const parseSetCookies = (headers: Headers, setCookie: string | string[]) => {
 	if (Array.isArray(setCookie)) {
 		headers.delete('Set-Cookie')
 
@@ -132,7 +132,7 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	if (Object.keys(set.headers).length || set.status !== 200 || set.redirect) {
+	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
 			set.status = 302

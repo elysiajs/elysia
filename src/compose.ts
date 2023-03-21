@@ -16,6 +16,33 @@ import { mapErrorCode } from './error'
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
+const handleErrorLiteral = (maybeAsync = false) => `
+${maybeAsync ? '' : 'return (async () => {'}
+const set = c.set
+
+if (!set.status || set.status < 300) set.status = 500
+
+if (handleErrors) {
+	const code = mapErrorCode(error.message)
+
+	for (let i = 0; i < handleErrors.length; i++) {
+		let handled = handleErrors[i]({
+			request: c.request,
+			error,
+			set,
+			code
+		})
+		if (handled instanceof Promise) handled = await handled
+
+		const response = mapEarlyResponse(handled, set)
+		if (response) return response
+	}
+}
+
+return handleError(c.request, error, set)
+${maybeAsync ? '' : '})()'}
+`
+
 export const composeHandler = ({
 	method,
 	hooks,
@@ -29,80 +56,15 @@ export const composeHandler = ({
 	handler: LocalHandler<any, any>
 	handleError: Elysia['handleError']
 }) => {
-	let fnLiteral = 'try {\n'
+	let fnLiteral = ''
 
-	const maybeAsync =
-		method !== 'GET' ||
+	const maybeAsync = !!(
 		handler.constructor.name === ASYNC_FN ||
 		hooks.parse.length ||
 		hooks.afterHandle.find(isAsync) ||
 		hooks.beforeHandle.find(isAsync) ||
 		hooks.transform.find(isAsync)
-
-	if (maybeAsync) {
-		fnLiteral += `
-            let contentType = c.request.headers.get('content-type');
-
-            if (contentType) {
-				const index = contentType.indexOf(';');
-                if (index !== -1) contentType = contentType.slice(0, index);
-`
-
-		if (hooks.parse.length) {
-			fnLiteral += `used = false\n`
-
-			for (let i = 0; i < hooks.parse.length; i++) {
-				const name = `bo${i}`
-
-				fnLiteral += `if(!c.request.bodyUsed) { 
-					let ${name} = parse[${i}](c, contentType);
-					if(${name} instanceof Promise) ${name} = await ${name}
-					if(${name} !== undefined) { c.body = ${name}; used = true }
-				}`
-			}
-
-			fnLiteral += `if (!used)`
-		}
-
-		fnLiteral += `switch (contentType) {
-			case 'application/json':
-				c.body = await c.request.json()
-				break
-
-			case 'text/plain':
-				c.body = await c.request.text()
-				break
-
-			case 'application/x-www-form-urlencoded':
-				c.body = parseQuery(await c.request.text())
-				break
-
-			case 'multipart/form-data':
-				c.body = {}
-
-				await c.request.formData().then((form) => {
-					for (const key of form.keys()) {
-						if (c.body[key])
-							continue
-
-						const value = form.getAll(key)
-						if (value.length === 1)
-							c.body[key] = value[0]
-						else c.body[key] = value
-					}
-				})
-
-				break
-
-			case 'elysia/fn':
-				c.body = superjsonDeserialize(
-					await c.request.json()
-				)
-				break
-		`.replace(/\t/g, '')
-
-		fnLiteral += `}}\n`
-	}
+	)
 
 	if (hooks?.transform)
 		for (let i = 0; i < hooks.transform.length; i++) {
@@ -190,33 +152,96 @@ export const composeHandler = ({
 				: `return mapResponse(handler(c), c.set);`
 	}
 
-	fnLiteral += `
-} catch(error) {
-	${maybeAsync ? '' : 'return (async () => {'}
-		const set = c.set
+	if (method !== 'GET') {
+		let bodyLiteral = `let contentType = c.request.headers.get('content-type');
 
-		if (!set.status || set.status < 300) set.status = 500
+		if (contentType) {
+			const index = contentType.indexOf(';');
+			if (index !== -1) contentType = contentType.slice(0, index);
+`
 
-		if (handleErrors) {
-			const code = mapErrorCode(error.message)
+		if (hooks.parse.length) {
+			bodyLiteral += `used = false\n`
 
-			for (let i = 0; i < handleErrors.length; i++) {
-				let handled = handleErrors[i]({
-					request: c.request,
-					error,
-					set,
-					code
+			for (let i = 0; i < hooks.parse.length; i++) {
+				const name = `bo${i}`
+
+				bodyLiteral += `if(!c.request.bodyUsed) { 
+					let ${name} = parse[${i}](c, contentType);
+					if(${name} instanceof Promise) ${name} = await ${name}
+					if(${name} !== undefined) { c.body = ${name}; used = true }
+				}`
+			}
+
+			bodyLiteral += `if (!used)`
+		}
+
+		const prefix = maybeAsync ? 'async ' : ''
+
+		bodyLiteral += `switch (contentType) {
+			case 'application/json':
+				return c.request.json().then(${prefix} (_body) => {
+					c.body = _body
+
+					${fnLiteral}
+				}).catch(${prefix} (error) => {
+					${handleErrorLiteral()}
 				})
-				if (handled instanceof Promise) handled = await handled
 
-				const response = mapEarlyResponse(handled, set)
-				if (response) return response
+			case 'text/plain':
+				return c.request.text().then(${prefix} (_body) => {
+					c.body = _body
+
+					${fnLiteral}
+				}).catch(${prefix} (error) => {
+					${handleErrorLiteral()}
+				})
+
+			case 'application/x-www-form-urlencoded':
+				return c.request.text().then(${prefix} (_body) => {
+					c.body = parseQuery(_body)
+
+					${fnLiteral}
+				}).catch(${prefix} (error) => {
+					${handleErrorLiteral()}
+				})
+
+			case 'multipart/form-data':
+				return c.request.formData().then(${prefix} (_form) => {
+					c.body = {}
+
+					for (const key of _form.keys()) {
+						if (c.body[key])
+							continue
+
+						const value = _form.getAll(key)
+						if (value.length === 1)
+							c.body[key] = value[0]
+						else c.body[key] = value
+					}
+
+					${fnLiteral}
+				})
+				.catch(${prefix} (error) => {
+					${handleErrorLiteral()}
+				})
+
+			case 'elysia/fn':
+				return c.request.json().then(${prefix} (_body) => {
+					c.body = superjsonDeserialize(_body)
+
+					${fnLiteral}
+				}).catch(${prefix} (error) => {
+					${handleErrorLiteral()}
+				})
 			}
 		}
 
-		return handleError(c.request, error, set)
-	${maybeAsync ? '' : '})()'}
-}`
+		${fnLiteral}
+		`.replace(/\t/g, '')
+
+		fnLiteral = bodyLiteral
+	}
 
 	fnLiteral = `const { 
 		handler,
@@ -245,12 +270,13 @@ export const composeHandler = ({
 		}
 	} = hooks
 
-	return ${maybeAsync ? 'async' : ''} function(c) {${fnLiteral}}`.replace(
-		/\t/g,
-		''
-	)
-
-	// console.log(fnLiteral)
+	return ${maybeAsync ? 'async' : ''} function(c) {
+		try {
+			${fnLiteral}
+		} catch(error) {
+			${handleErrorLiteral(maybeAsync)}
+		}
+	}`.replace(/\t/g, '')
 
 	const createHandler = Function('hooks', fnLiteral)
 
