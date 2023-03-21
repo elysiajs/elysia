@@ -1589,10 +1589,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return this as unknown as NewInstance
 	}
 
-	private bodyParser = this.event.parse
-
 	handle = async (request: Request) => this.innerHandle(request)
 
+	/**
+	 * Handle can be either sync or async to save performance.
+	 *
+	 * Beside for benchmark purpose, please use 'handle' instead.
+	 */
 	innerHandle = (request: Request): MaybePromise<Response> => {
 		const context: Context = this.decorators as any as Context
 		context.request = request
@@ -1604,22 +1607,22 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (this.event.request.length)
 			try {
 				for (let i = 0; i < this.event.request.length; i++) {
-					let response = this.event.request[i](context)
-
-					response = mapEarlyResponse(response, context.set)
-					if (response) return response
+					const response = mapEarlyResponse(
+						this.event.request[i](context),
+						context.set
+					)
+					if (response !== undefined) return response
 				}
 			} catch (error) {
 				return this.handleError(request, error as Error, context.set)
 			}
 
 		const fracture = request.url.match(mapPathnameAndQueryRegEx)!
-
 		const route =
 			this.router.match(request.method, fracture[1]) ??
 			this.router.match('ALL', fracture[1])
 
-		if (!route?.store)
+		if (!route)
 			return this.handleError(
 				request,
 				new Error('NOT_FOUND'),

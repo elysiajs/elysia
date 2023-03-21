@@ -91,11 +91,11 @@
     "release": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.25.24",
+    "@sinclair/typebox": "0.26.0",
     "fast-querystring": "^1.1.1",
     "nanoid": "^4.0.1",
     "openapi-types": "^12.1.0",
-    "raikiri": "0.1.0-beta.1",
+    "raikiri": "0.1.0-beta.2",
     "superjson": "^1.12.2"
   },
   "devDependencies": {
