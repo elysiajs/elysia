@@ -1,3 +1,8 @@
+# 0.4.0 - x
+Feature:
+- AoT compile
+- TypeBox 0.26
+
 # 0.3.0 - 17 Mar 2023
 Fix:
 - Wildcard fallback of Raikiri
