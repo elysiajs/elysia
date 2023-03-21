@@ -106,7 +106,7 @@
     "@typescript-eslint/parser": "^5.56.0",
     "bun-types": "^0.5.8",
     "eslint": "^8.36.0",
-    "rimraf": "^4.4.0",
+    "rimraf": "^3.0.2",
     "typescript": "^5.0.2"
   },
   "peerDependencies": {
