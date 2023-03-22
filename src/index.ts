@@ -1611,7 +1611,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						this.event.request[i](context),
 						context.set
 					)
-					if (response !== undefined) return response
+					if (response) return response
 				}
 			} catch (error) {
 				return this.handleError(request, error as Error, context.set)

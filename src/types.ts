@@ -205,7 +205,7 @@ export type SchemaValidator = {
 	headers?: TypeCheck<any>
 	query?: TypeCheck<any>
 	params?: TypeCheck<any>
-	response?: TypeCheck<any>
+	response?: Record<number, TypeCheck<any>>
 }
 
 export type HookHandler<

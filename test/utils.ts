@@ -21,18 +21,27 @@ export const upload = (
 				size += file.size
 				body.append(key, file)
 			})
-		else if (value.includes('.')){
+		else if (value.includes('.')) {
 			const file = Bun.file(`./test/images/${value}`)
 			size += file.size
 			body.append(key, file)
 		} else body.append(key, value)
 	}
 
-	return{
-		request:new Request(`http://localhost${path}`, {
+	return {
+		request: new Request(`http://localhost${path}`, {
 			method: 'POST',
 			body
 		}),
 		size
-	} 
+	}
 }
+
+export const post = (path: string, body: Record<string, any>) =>
+	new Request(`http://localhost${path}`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(body)
+	})

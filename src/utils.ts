@@ -132,43 +132,48 @@ export const getResponseSchemaValidator = (
 	s: TypedSchema['response'] | undefined,
 	models: Record<string, TSchema>,
 	additionalProperties = false
-) => {
+): Record<number, TypeCheck<any>> | undefined => {
 	if (!s) return
 	if (typeof s === 'string' && !(s in models)) return
 
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
-	const schema: TSchema =
-		Kind in maybeSchemaOrRecord
-			? maybeSchemaOrRecord
-			: Type.Union(
-					Object.keys(maybeSchemaOrRecord)
-						.map((key): TSchema | undefined => {
-							const maybeNameOrSchema = maybeSchemaOrRecord[key]
+	if (Kind in maybeSchemaOrRecord)
+		return {
+			200: TypeCompiler.Compile(maybeSchemaOrRecord)
+		}
 
-							if (typeof maybeNameOrSchema === 'string') {
-								if (maybeNameOrSchema in models) {
-									const schema = models[maybeNameOrSchema]
+	const record: Record<number, TypeCheck<any>> = {}
 
-									return schema
-								}
+	Object.keys(maybeSchemaOrRecord).forEach((status): TSchema | undefined => {
+		const maybeNameOrSchema = maybeSchemaOrRecord[status]
 
-								return undefined
-							}
+		if (typeof maybeNameOrSchema === 'string') {
+			if (maybeNameOrSchema in models) {
+				const schema = models[maybeNameOrSchema]
+				schema.type === 'object' &&
+					'additionalProperties' in schema === false
 
-							return maybeNameOrSchema
-						})
-						.filter((a) => a) as TSchema[]
-			  )
+				// Inherits model maybe already compiled
+				record[+status] =
+					Kind in schema ? TypeCompiler.Compile(schema) : schema
+			}
 
-	// @ts-ignore
-	if (schema.type === 'object' && 'additionalProperties' in schema === false)
-		schema.additionalProperties = additionalProperties
+			return undefined
+		}
 
-	try {
-		return TypeCompiler.Compile(schema)
-	} catch (error) {
-		// Likely is already compile
-		return maybeSchemaOrRecord
-	}
+		if (
+			maybeNameOrSchema.type === 'object' &&
+			'additionalProperties' in maybeNameOrSchema === false
+		)
+			maybeNameOrSchema.additionalProperties = additionalProperties
+
+		// Inherits model maybe already compiled
+		record[+status] =
+			Kind in maybeNameOrSchema
+				? TypeCompiler.Compile(maybeNameOrSchema)
+				: maybeNameOrSchema
+	})
+
+	return record
 }

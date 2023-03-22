@@ -2,6 +2,7 @@
 Feature:
 - AoT compile
 - TypeBox 0.26
+- Validate response per status instead of union
 
 # 0.3.0 - 17 Mar 2023
 Fix:

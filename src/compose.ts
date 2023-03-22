@@ -12,7 +12,6 @@ import type {
 	SchemaValidator
 } from './types'
 import { mapErrorCode } from './error'
-import { TypeCheck } from '@sinclair/typebox/compiler'
 
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
@@ -120,7 +119,7 @@ export const composeHandler = ({
                 for (const key of c.request.headers.keys())
                     _header[key] = c.request.headers.get(key)
 
-                if (headersCheck(_header) === false) {
+                if (headers.Check(_header) === false) {
                     throw createValidationError(
                         'header',
                         headers,
@@ -130,13 +129,13 @@ export const composeHandler = ({
         `.replace(/\t/g, '')
 
 		if (validator.params)
-			fnLiteral += `if(paramsCheck(c.params) === false) { throw createValidationError('params', params, c.params) }`
+			fnLiteral += `if(params.Check(c.params) === false) { throw createValidationError('params', params, c.params) }`
 
 		if (validator.query)
-			fnLiteral += `if(queryCheck(c.query) === false) { throw createValidationError('params', query, c.query) }`
+			fnLiteral += `if(query.Check(c.query) === false) { throw createValidationError('params', query, c.query) }`
 
 		if (validator.body)
-			fnLiteral += `if(bodyCheck(c.body) === false) { throw createValidationError('body', body, c.body) }`
+			fnLiteral += `if(body.Check(c.body) === false) { throw createValidationError('body', body, c.body) }`
 	}
 
 	if (hooks?.beforeHandle)
@@ -163,6 +162,9 @@ export const composeHandler = ({
 				}
 			}
 
+			if (validator.response)
+				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw createValidationError('response', response[c.set.status], ${name}) }\n`
+
 			fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
 		}
 
@@ -177,18 +179,36 @@ export const composeHandler = ({
 
 			fnLiteral +=
 				hooks.afterHandle[i].constructor.name === ASYNC_FN
-					? `const ${name} = mapEarlyResponse(await afterHandle[${i}](c, r), c.set);\n`
-					: `const ${name} = mapEarlyResponse(afterHandle[${i}](c, r), c.set);\n`
+					? `let ${name} = await afterHandle[${i}](c, r)\n`
+					: `let ${name} = afterHandle[${i}](c, r)\n`
 
-			fnLiteral += `if(${name}) return ${name};\n`
+			if (validator.response) {
+				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw createValidationError('response', response[c.set.status], ${name}) }\n`
+
+				fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+
+				fnLiteral += `if(${name}) return ${name};\n`
+			} else fnLiteral += `if(${name}) return ${name};\n`
 		}
+
+		if (validator.response)
+			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw createValidationError('response', response[c.set.status], r) }\n`
 
 		fnLiteral += `return mapResponse(r, c.set);\n`
 	} else {
-		fnLiteral +=
-			handler.constructor.name === ASYNC_FN
-				? `return mapResponse(await handler(c), c.set);`
-				: `return mapResponse(handler(c), c.set);`
+		if (validator.response) {
+			fnLiteral +=
+				handler.constructor.name === ASYNC_FN
+					? `const r = await handler(c);\n`
+					: `const r = handler(c);\n`
+
+			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw createValidationError('response', response[c.set.status], r) }\n`
+			fnLiteral += `return mapResponse(r, c.set);`
+		} else
+			fnLiteral +=
+				handler.constructor.name === ASYNC_FN
+					? `return mapResponse(await handler(c), c.set);`
+					: `return mapResponse(handler(c), c.set);`
 	}
 
 	fnLiteral += `
@@ -236,13 +256,6 @@ export const composeHandler = ({
 			query,
 			response
 		},
-		validatorAot: {
-			bodyCheck,
-			headersCheck,
-			paramsCheck,
-			queryCheck,
-			responseCheck,
-		},
 		utils: {
 			createValidationError,
 			superjsonDeserialize,
@@ -258,19 +271,14 @@ export const composeHandler = ({
 		''
 	)
 
+	// console.log(fnLiteral)
+
 	const createHandler = Function('hooks', fnLiteral)
 
 	return createHandler({
 		handler,
 		hooks,
 		validator,
-		validatorAot: {
-			bodyCheck: createTypeboxAot(validator.body),
-			headersCheck: createTypeboxAot(validator.headers),
-			paramsCheck: createTypeboxAot(validator.params),
-			queryCheck: createTypeboxAot(validator.query),
-			responseCheck: createTypeboxAot(validator.response)
-		},
 		handleError,
 		utils: {
 			createValidationError,
@@ -283,11 +291,11 @@ export const composeHandler = ({
 	})
 }
 
-const createTypeboxAot = (a: TypeCheck<any> | undefined) => {
-	if (!a) return
+// const createTypeboxAot = (a: TypeCheck<any> | undefined) => {
+// 	if (!a) return
 
-	const fnLiteral = a.Code()
+// 	const fnLiteral = a.Code()
 
-	if (fnLiteral.includes('custom(')) return (param: any) => a.Check(param)
-	return new Function(a.Code())()
-}
+// 	if (fnLiteral.includes('custom(')) return (param: any) => a.Check(param)
+// 	return new Function(a.Code())()
+// }
