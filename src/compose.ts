@@ -1,5 +1,4 @@
 import { parse as parseQuery } from 'fast-querystring'
-import { deserialize as superjsonDeserialize } from 'superjson'
 
 import { createValidationError } from './utils'
 import { mapEarlyResponse, mapResponse } from './handler'
@@ -74,7 +73,7 @@ export const composeHandler = ({
 				break
 
 			case 'application/x-www-form-urlencoded':
-				c.body = parseQuery(await c.request.text())
+				c.body = await c.request.text().then(parseQuery)
 				break
 
 			case 'multipart/form-data':
@@ -92,12 +91,6 @@ export const composeHandler = ({
 					}
 				})
 
-				break
-
-			case 'elysia/fn':
-				c.body = superjsonDeserialize(
-					await c.request.json()
-				)
 				break
 		`.replace(/\t/g, '')
 
@@ -258,7 +251,6 @@ export const composeHandler = ({
 		},
 		utils: {
 			createValidationError,
-			superjsonDeserialize,
 			mapResponse,
 			mapEarlyResponse,
 			mapErrorCode,
@@ -282,7 +274,6 @@ export const composeHandler = ({
 		handleError,
 		utils: {
 			createValidationError,
-			superjsonDeserialize,
 			mapResponse,
 			mapEarlyResponse,
 			mapErrorCode,

@@ -95,8 +95,7 @@
     "fast-querystring": "^1.1.1",
     "nanoid": "^4.0.1",
     "openapi-types": "^12.1.0",
-    "raikiri": "0.1.0-beta.2",
-    "superjson": "^1.12.2"
+    "raikiri": "0.1.0-beta.2"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.62",

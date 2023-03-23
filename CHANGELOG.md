@@ -4,6 +4,9 @@ Feature:
 - TypeBox 0.26
 - Validate response per status instead of union
 
+Breaking Change:
+- Separate `.fn` to `@elysiajs/fn`
+
 # 0.3.0 - 17 Mar 2023
 Fix:
 - Wildcard fallback of Raikiri

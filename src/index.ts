@@ -5,14 +5,12 @@ import { Raikiri } from 'raikiri'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapResponse, mapEarlyResponse } from './handler'
-import { permission, type Permission } from './fn'
 import {
 	SCHEMA,
 	EXPOSED,
 	DEFS,
 	clone,
 	mergeHook,
-	mergeDeep,
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	mapPathnameAndQueryRegEx
@@ -20,8 +18,6 @@ import {
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
 import type { Context } from './context'
-
-import { runFn } from './fn'
 
 import type {
 	Handler,
@@ -1494,58 +1490,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}) as any
 	}
 
-	fn<
-		T extends
-			| Record<string, unknown>
-			| ((
-					app: Instance['request'] & {
-						store: Instance['store']
-						permission: Permission
-					}
-			  ) => Record<string, unknown>) =
-			| Record<string, unknown>
-			| ((
-					app: Instance['request'] & {
-						store: Instance['store']
-						permission: Permission
-					}
-			  ) => Record<string, unknown>)
-	>(
-		value: T
-	): Elysia<{
-		store: Instance['store']
-		request: Instance['request']
-		schema: Instance['schema']
-		meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
-			Record<
-				typeof EXPOSED,
-				Instance['meta'][typeof EXPOSED] &
-					(T extends (store: any) => infer Returned ? Returned : T)
-			> &
-			Record<typeof SCHEMA, Instance['meta'][typeof SCHEMA]>
-	}> {
-		if (Object.keys(this.meta[EXPOSED]).length === 0) {
-			this.post(
-				this.config.fn ?? '/~fn',
-				// @ts-ignore
-				async (context) => runFn(context, this.meta[EXPOSED])
-			)
-		}
-
-		this.meta[EXPOSED] = mergeDeep(
-			this.meta[EXPOSED],
-			typeof value === 'function'
-				? value({
-						...this.decorators,
-						store: this.store,
-						permission
-				  } as any)
-				: value
-		) as any
-
-		return this as any
-	}
-
 	/**
 	 * ### schema
 	 * Define type strict validation for request
@@ -1780,7 +1724,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 }
 
-export { Elysia, permission }
+export { Elysia }
 export { t } from './custom-types'
 export { ws } from './ws'
 
@@ -1837,6 +1781,5 @@ export type {
 	TypedRouteToEden,
 	AnyTypedSchema,
 	RouteToSchema,
-	DeepMergeTwoTypes,
-	ConnectedKeysType
+	DeepMergeTwoTypes
 } from './types'

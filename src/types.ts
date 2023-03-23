@@ -565,51 +565,6 @@ export type IsUnknown<T> = IsAny<T> extends true
 
 export type MaybePromise<T> = T | Promise<T>
 
-export type FunctionProperties<T> = {
-	[K in keyof T as T[K] extends Record<any, any> | ((...args: any[]) => any)
-		? IsAny<T[K]> extends true
-			? never
-			: K
-		: never]: T[K] extends (...args: any[]) => any
-		? T[K]
-		: T[K] extends Record<string, any>
-		? FunctionProperties<T[K]>
-		: never
-}
-
-export type JoinKeys<T, Prefix extends string = ''> = {
-	[K in keyof T]-?: T[K] extends string | Function
-		? '' extends Prefix
-			? K
-			: K extends string
-			? `${Prefix}.${K}`
-			: never
-		: K extends string
-		? JoinKeys<T[K], '' extends Prefix ? K : `${Prefix}.${K}`>
-		: never
-}[keyof T]
-
-// type ExcludeFunctionFromRoot<T extends Record<any, any>> = {
-// 	[K in keyof T as T[K] extends (...args: any) => any ? never : K]: T[K]
-// }
-
-// type ExcludeRecordFromRoot<T extends Record<any, any>> = {
-// 	[K in keyof T as T[K] extends Record<string, string> ? never : K]: T[K]
-// }
-
-export type ConnectedKeysType<
-	T,
-	K extends string
-> = K extends `${infer Key}.${infer Rest}`
-	? Key extends keyof T
-		? ConnectedKeysType<T[Key], Rest>
-		: never
-	: K extends keyof T
-	? T[K] extends (...args: infer A) => any
-		? A
-		: never
-	: never
-
 // https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
 export type Prettify<T> = {
 	[K in keyof T]: T[K]
