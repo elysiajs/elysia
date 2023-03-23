@@ -56,7 +56,7 @@ import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
 import { composeHandler } from './compose'
 
 // @ts-ignore
-import type { Permission } from 'elysia/src/fn'
+import type { Permission } from '@elysiajs/fn'
 
 /**
  * ### Elysia Server
