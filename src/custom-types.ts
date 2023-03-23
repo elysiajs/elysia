@@ -2,24 +2,24 @@ import { Type, type SchemaOptions } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 
 try {
-	TypeSystem.CreateFormat('email', (value) =>
+	TypeSystem.Format('email', (value) =>
 		/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(
 			value
 		)
 	)
 
-	TypeSystem.CreateFormat('uuid', (value) =>
+	TypeSystem.Format('uuid', (value) =>
 		/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
 			value
 		)
 	)
 
-	TypeSystem.CreateFormat(
+	TypeSystem.Format(
 		'date',
 		(value) => !Number.isNaN(new Date(value).getTime())
 	)
 
-	TypeSystem.CreateFormat(
+	TypeSystem.Format(
 		'date-time',
 		(value) => !Number.isNaN(new Date(value).getTime())
 	)

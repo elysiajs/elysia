@@ -113,6 +113,9 @@
     "openapi-types": ">= 12.0.0"
   },
   "peerDependenciesMeta": {
+    "@elysiajs/fn": {
+      "optional": true
+    },
     "@sinclair/typebox": {
       "optional": true
     },

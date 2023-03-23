@@ -55,6 +55,9 @@ import { type TSchema } from '@sinclair/typebox'
 import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
 import { composeHandler } from './compose'
 
+// @ts-ignore
+import type { Permission } from 'elysia/src/fn'
+
 /**
  * ### Elysia Server
  * Main instance to create web server using Elysia
@@ -1487,6 +1490,65 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		return this.onTransform((context) => {
 			Object.assign(context, transform(context))
+		}) as any
+	}
+
+	fn<
+		PluginInstalled extends boolean = IsAny<Permission> extends true
+			? false
+			: true,
+		T extends PluginInstalled extends true
+			?
+					| Record<string, unknown>
+					| ((
+							app: Instance['request'] & {
+								store: Instance['store']
+								permission: Permission
+							}
+					  ) => Record<string, unknown>)
+			: "Please install '@elysiajs/fn' before using Elysia Fn" = PluginInstalled extends true
+			?
+					| Record<string, unknown>
+					| ((
+							app: Instance['request'] & {
+								store: Instance['store']
+								permission: Permission
+							}
+					  ) => Record<string, unknown>)
+			: "Please install '@elysiajs/fn' before using Elysia Fn"
+	>(
+		value: T
+	): PluginInstalled extends true
+		? Elysia<{
+				store: Instance['store']
+				request: Instance['request']
+				schema: Instance['schema']
+				meta: Record<typeof DEFS, Instance['meta'][typeof DEFS]> &
+					Record<
+						typeof EXPOSED,
+						Instance['meta'][typeof EXPOSED] &
+							(T extends (store: any) => infer Returned
+								? Returned
+								: T)
+					> &
+					Record<typeof SCHEMA, Instance['meta'][typeof SCHEMA]>
+		  }>
+		: this {
+		return this.use(async () => {
+			// @ts-ignore
+			const { fn } = await import('@elysiajs/fn')
+
+			if (typeof fn === undefined)
+				throw new Error(
+					"Please install '@elysiajs/fn' before using Elysia Fn"
+				)
+
+			// @ts-ignore
+			return fn({
+				app: this as any,
+				value: value as any,
+				path: this.config.fn
+			})
 		}) as any
 	}
 

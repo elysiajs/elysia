@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, EXPOSED } from '../src'
 
 const app = new Elysia()
 	.setModel({
@@ -24,4 +24,7 @@ const app = new Elysia()
 			}
 		}
 	)
+	.fn({
+		sum: (a: number, b: number) => a + b
+	})
 	.listen(8080)
