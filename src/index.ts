@@ -59,7 +59,7 @@ import type {
 	TypedWSRouteToEden
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
-import { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
+import { ElysiaWSContext, ElysiaWSOptions, ws, WSTypedSchema } from './ws'
 
 /**
  * ### Elysia Server
@@ -489,6 +489,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		const instance = new Elysia<any>()
 		instance.store = this.store
 
+		if (this.wsRouter) instance.use(ws())
+
 		const sandbox = run(instance)
 
 		if (sandbox.event.request.length)
@@ -500,27 +502,36 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.setModel(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
-			({ method, path, handler, hooks }) => {
-				if (path === '/')
-					this._addHandler(
-						method,
-						prefix,
-						handler,
-						mergeHook(hooks, {
-							error: sandbox.event.error
-						})
+			({ method, path: originalPath, handler, hooks }) => {
+				const path =
+					originalPath === '/' ? prefix : `${prefix}${originalPath}`
+
+				const hasWsRoute = instance.wsRouter?.match('subscribe', path)
+				if (hasWsRoute) {
+					const wsRoute = instance.wsRouter!.history.find(
+						([_, wsPath]) => originalPath === wsPath
 					)
-				else
-					this._addHandler(
-						method,
-						`${prefix}${path}`,
-						handler,
-						mergeHook(hooks, {
-							error: sandbox.event.error
-						})
-					)
+					if (!wsRoute) return
+
+					return this.ws(path as any, wsRoute[2] as any)
+				}
+
+				this._addHandler(
+					method,
+					prefix,
+					handler,
+					mergeHook(hooks, {
+						error: sandbox.event.error
+					})
+				)
 			}
 		)
+
+		if (instance.wsRouter && this.wsRouter)
+			instance.wsRouter.history.forEach(([method, path, handler]) => {
+				if (path === '/') this.wsRouter?.add(method, prefix, handler)
+				else this.wsRouter?.add(method, `${prefix}${path}`, handler)
+			})
 
 		return this as any
 	}
@@ -567,8 +578,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		? Elysia<NewInstance & Instance>
 		: this {
 		const instance = new Elysia<any>()
-
 		instance.store = this.store
+		if (this.wsRouter) instance.use(ws())
 
 		const sandbox = run(instance)
 
@@ -581,15 +592,32 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.setModel(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
-			({ method, path, handler, hooks: localHook }) => {
+			({ method, path, handler, hooks }) => {
+				const hasWsRoute = instance.wsRouter?.match('subscribe', path)
+				if (hasWsRoute) {
+					const wsRoute = instance.wsRouter!.history.find(
+						([_, wsPath]) => path === wsPath
+					)
+					if (!wsRoute) return
+
+					return this.ws(path as any, wsRoute[2] as any)
+				}
+
 				this._addHandler(
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any>, localHook)
+					mergeHook(hooks, {
+						error: sandbox.event.error
+					})
 				)
 			}
 		)
+
+		if (instance.wsRouter && this.wsRouter)
+			instance.wsRouter.history.forEach(([method, path, handler]) => {
+				this.wsRouter?.add(method, path, handler)
+			})
 
 		return this as any
 	}
@@ -1309,9 +1337,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			path,
 			// @ts-ignore
 			(context) => {
+				console.log('Got', context.request.url)
+
 				if (
 					// @ts-ignore
-					this.server!.upgrade(context.request, {
+					this.server?.upgrade(context.request, {
 						headers:
 							typeof options.headers === 'function'
 								? options.headers(context as any)

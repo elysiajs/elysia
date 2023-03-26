@@ -1,9 +1,31 @@
-import { Elysia, t } from '../src'
+import { Elysia, ws, t } from '../src'
 
 const app = new Elysia()
-	.get('/', () => 'Mutsuki need correction 💢💢💢', {
+	.use(ws())
+	.get('/', () => 'Welcome to Elysia!')
+	.ws('/websocket', {
+		message(ws, message) {
+			ws.send(message)
+		},
 		schema: {
-			response: t.String()
+			body: t.String()
 		}
 	})
-	.listen(8080)
+	.group('/group', (app) =>
+		app.ws('/websocket', {
+			message(ws, message) {
+				ws.send(message)
+			},
+			schema: {
+				body: t.String()
+			}
+		})
+	)
+	.listen(3000)
+
+// console.log({
+// 	// @ts-ignore
+// 	route: app.router.history,
+// 	// @ts-ignore
+// 	wsRoute: app.wsRouter?.history,
+// })
