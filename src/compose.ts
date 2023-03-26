@@ -40,11 +40,13 @@ export const composeHandler = ({
 
 	if (maybeAsync) {
 		fnLiteral += `
-            let contentType = c.request.headers.get('content-type');
+			let contentType = c.request.headers.get('content-type');
 
             if (contentType) {
-				const index = contentType.indexOf(';');
-                if (index !== -1) contentType = contentType.slice(0, index);
+				if(contentType.indexOf(';')) {
+					const index = contentType.indexOf(';');
+					if (index !== -1) contentType = contentType.slice(0, index);
+				}
 `
 
 		if (hooks.parse.length) {
