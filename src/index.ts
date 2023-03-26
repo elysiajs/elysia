@@ -133,7 +133,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			method,
 			path,
 			handler,
-			hooks: mergeHook(clone(this.event), hook as RegisteredHook)
+			hooks: mergeHook({ ...this.event }, hook as RegisteredHook)
 		})
 
 		const defs = this.meta[DEFS]

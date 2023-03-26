@@ -157,7 +157,8 @@ export const getResponseSchemaValidator = (
 
 							return maybeNameOrSchema
 						})
-						.filter((a) => a) as TSchema[]
+						.filter((a) => a)
+						.reduce((a, b) => a.concat(b!), [] as TSchema[])
 			  )
 
 	// @ts-ignore
@@ -167,7 +168,8 @@ export const getResponseSchemaValidator = (
 	try {
 		return TypeCompiler.Compile(schema)
 	} catch (error) {
+		console.log(error)
 		// Likely is already compile
-		return maybeSchemaOrRecord
+		return s
 	}
 }

@@ -1,5 +1,6 @@
 import { Kind, type TSchema } from '@sinclair/typebox'
 import type { OpenAPIV3 } from 'openapi-types'
+import deepClone from 'lodash.clonedeep'
 
 import type { HTTPMethod, LocalHook } from './types'
 
@@ -72,6 +73,8 @@ export const registerSchemaPath = ({
 	hook?: LocalHook
 	models: Record<string, TSchema>
 }) => {
+	if (hook) hook = deepClone(hook)
+
 	path = toOpenAPIPath(path)
 
 	const contentTypes =
