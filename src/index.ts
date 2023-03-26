@@ -518,7 +518,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 				this._addHandler(
 					method,
-					prefix,
+					path,
 					handler,
 					mergeHook(hooks, {
 						error: sandbox.event.error
@@ -592,7 +592,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.setModel(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
-			({ method, path, handler, hooks }) => {
+			({ method, path, handler, hooks: localHook }) => {
 				const hasWsRoute = instance.wsRouter?.match('subscribe', path)
 				if (hasWsRoute) {
 					const wsRoute = instance.wsRouter!.history.find(
@@ -607,9 +607,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					method,
 					path,
 					handler,
-					mergeHook(hooks, {
-						error: sandbox.event.error
-					})
+					mergeHook(hook as LocalHook<any>, localHook)
 				)
 			}
 		)
