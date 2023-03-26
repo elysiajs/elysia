@@ -323,4 +323,39 @@ describe('Schema', () => {
 
 		// expect(invalidBody.status).toBe(400)
 	})
+
+	// https://github.com/elysiajs/elysia/issues/28
+	// Error is possibly from reference object from `registerSchemaPath`
+	// Most likely missing an deep clone object
+	it('validate group response', async () => {
+		const app = new Elysia()
+			.group('/deep', (app) =>
+				app
+					.get('/correct', () => 'a', {
+						schema: {
+							response: {
+								200: t.String(),
+								400: t.String()
+							}
+						}
+					})
+					.get('/wrong', () => 1 as any, {
+						schema: {
+							response: {
+								200: t.String(),
+								400: t.String()
+							}
+						}
+					})
+			)
+			.listen(8080)
+
+		const correct = await app
+			.handle(req('/deep/correct'))
+			.then((x) => x.status)
+		const wrong = await app.handle(req('/deep/wrong')).then((x) => x.status)
+
+		expect(correct).toBe(200)
+		expect(wrong).toBe(400)
+	})
 })

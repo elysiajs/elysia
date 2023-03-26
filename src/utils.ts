@@ -1,9 +1,5 @@
-import { Kind, TSchema, Type } from '@sinclair/typebox'
-import {
-	TypeCheck,
-	TypeCompiler,
-	type ValueError
-} from '@sinclair/typebox/compiler'
+import { Kind, TSchema } from '@sinclair/typebox'
+import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,

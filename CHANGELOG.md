@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 0.4.0 - x
 Feature:
 - AoT compile
@@ -8,6 +9,14 @@ Breaking Change:
 - Separate `.fn` to `@elysiajs/fn`
 
 # 0.3.0 - 17 Mar 2023
+=======
+# 0.3.2 - 26 Mar 2023
+Fix:
+- child to inhertis WebSocket plugin (https://github.com/elysiajs/elysia/issues/27)
+- multiple status response does not work with the group (https://github.com/elysiajs/elysia/issues/28)
+
+# 0.3.1 - 17 Mar 2023
+>>>>>>> main
 Fix:
 - Wildcard fallback of Raikiri
 

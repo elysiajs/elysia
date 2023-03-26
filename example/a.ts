@@ -24,7 +24,21 @@ const app = new Elysia()
 			}
 		}
 	)
-	.fn({
-		sum: (a: number, b: number) => a + b
-	})
-	.listen(8080)
+	.group('/group', (app) =>
+		app.ws('/websocket', {
+			message(ws, message) {
+				ws.send(message)
+			},
+			schema: {
+				body: t.String()
+			}
+		})
+	)
+	.listen(3000)
+
+// console.log({
+// 	// @ts-ignore
+// 	route: app.router.history,
+// 	// @ts-ignore
+// 	wsRoute: app.wsRouter?.history,
+// })
