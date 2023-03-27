@@ -71,7 +71,7 @@ const app = new Elysia()
 	)
 	.listen(8080)
 
-type A = typeof app['meta'][typeof SCHEMA]['/']['post']
+type A = typeof app['meta'][typeof SCHEMA]['/']
 type B = typeof app['meta'][typeof DEFS]
 
 // const a = app.getModel('b')

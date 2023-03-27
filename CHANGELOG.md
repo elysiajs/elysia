@@ -1,22 +1,19 @@
-<<<<<<< HEAD
 # 0.4.0 - x
 Feature:
 - AoT compile
 - TypeBox 0.26
 - Validate response per status instead of union
+- add `if` for conditional route
 
 Breaking Change:
 - Separate `.fn` to `@elysiajs/fn`
 
-# 0.3.0 - 17 Mar 2023
-=======
 # 0.3.2 - 26 Mar 2023
 Fix:
 - child to inhertis WebSocket plugin (https://github.com/elysiajs/elysia/issues/27)
 - multiple status response does not work with the group (https://github.com/elysiajs/elysia/issues/28)
 
 # 0.3.1 - 17 Mar 2023
->>>>>>> main
 Fix:
 - Wildcard fallback of Raikiri
 
@@ -422,7 +419,7 @@ Feature:
 - `.all` for registering path with any method
 
 Improvement:
-- `getSchemaValidator` now infer output type to be reusable with `@kingworldjs/tpc`
+- `getSchemaValidator` now infer output type to be reusable with `@kingworldjs/trpc`
 
 Bug fix:
 - `handler.hooks` is undefined on 404

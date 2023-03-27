@@ -15,7 +15,7 @@ export type ElysiaDefaultMeta = Record<
 	typeof SCHEMA,
 	Partial<OpenAPIV3.PathsObject>
 > &
-	Record<typeof DEFS, { [x in string]: TSchema }> &
+	Record<typeof DEFS, Record<string, TSchema>> &
 	Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 
 export type ElysiaInstance<
@@ -23,9 +23,11 @@ export type ElysiaInstance<
 		store?: Record<string, unknown>
 		request?: Record<string, unknown>
 		schema?: TypedSchema
-		meta?: ElysiaDefaultMeta
+		meta?: Record<typeof SCHEMA, Partial<OpenAPIV3.PathsObject>> &
+			Record<typeof DEFS, Record<string, TSchema>> &
+			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 	} = {
-		store: Record<string, unknown>
+		store: {}
 		request: {}
 		schema: {}
 		meta: Record<typeof SCHEMA, {}> &
@@ -34,10 +36,8 @@ export type ElysiaInstance<
 	}
 > = {
 	request: Instance['request']
-	store: Instance['store'] extends undefined ? {} : Instance['store']
-	schema: Instance['schema'] extends undefined
-		? TypedSchema
-		: Instance['schema']
+	store: Instance['store']
+	schema: Instance['schema']
 	meta: Instance['meta']
 }
 
@@ -151,9 +151,7 @@ export type UnwrapSchema<
 	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
 	Fallback = unknown
 > = Schema extends string
-	? Definitions extends {
-			[name in Schema]: infer NamedSchema extends TSchema
-	  }
+	? Definitions extends Record<Schema, infer NamedSchema extends TSchema>
 		? Static<NamedSchema>
 		: Fallback
 	: Schema extends TSchema
@@ -300,24 +298,42 @@ export type TypedRouteToEden<
 	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
 	Path extends string = string,
 	Catch = unknown
-> = TypedSchemaToEden<
-	Schema,
-	Definitions
-> extends infer Typed extends AnyTypedSchema
-	? {
-			body: Typed['body']
-			headers: Typed['headers']
-			query: Typed['query']
-			params: undefined extends Typed['params']
-				? Record<ExtractPath<Path>, string>
-				: Typed['params']
-			response: undefined extends Typed['response']
-				? {
-						'200': Catch
-				  }
-				: Typed['response']
-	  }
-	: never
+> = {
+	body: UnwrapSchema<Schema['body'], Definitions>
+	headers: UnwrapSchema<
+		Schema['headers'],
+		Definitions
+	> extends infer Result extends Record<string, any>
+		? Result
+		: undefined
+	query: UnwrapSchema<
+		Schema['query'],
+		Definitions
+	> extends infer Result extends Record<string, any>
+		? Result
+		: undefined
+	params: UnwrapSchema<
+		Schema['params'],
+		Definitions
+	> extends infer Result extends Record<string, any>
+		? Result
+		: Record<ExtractPath<Path>, string>
+	response: Schema['response'] extends TSchema | string
+		? {
+				'200': UnwrapSchema<Schema['response'], Definitions, Catch>
+		  }
+		: Schema['response'] extends {
+				[x in string]: TSchema | string
+		  }
+		? {
+				[key in keyof Schema['response']]: UnwrapSchema<
+					Schema['response'][key],
+					Definitions,
+					Catch
+				>
+		  }
+		: Catch
+}
 
 export type TypedWSRouteToEden<
 	Schema extends TypedSchema = TypedSchema,

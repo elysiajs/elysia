@@ -1,44 +1,22 @@
-import { Elysia, t, EXPOSED } from '../src'
+import { Elysia, t, EXPOSED, SCHEMA } from '../src'
+
+const isProduction = process.env.NODE_ENV === 'production'
 
 const app = new Elysia()
 	.setModel({
 		number: t.Number()
 	})
-	.post(
-		'/',
-		({ set, body: { status, response } }) => {
-			set.status = status
-
-			return response
-		},
-		{
-			schema: {
-				body: t.Object({
-					status: t.Number(),
-					response: t.Any()
-				}),
-				response: {
-					200: t.String(),
-					201: t.Number()
-				}
-			}
+	.get('/', () => 'hi', {
+		schema: {
+			body: 'number'
 		}
-	)
-	.group('/group', (app) =>
-		app.ws('/websocket', {
-			message(ws, message) {
-				ws.send(message)
-			},
+	})
+	.if(isProduction, (app) =>
+		app.get('/registered', () => 'hi', {
 			schema: {
-				body: t.String()
+				body: 'number'
 			}
 		})
 	)
-	.listen(3000)
 
-// console.log({
-// 	// @ts-ignore
-// 	route: app.router.history,
-// 	// @ts-ignore
-// 	wsRoute: app.wsRouter?.history,
-// })
+type App = typeof app

@@ -54,7 +54,9 @@ import type {
 	IsNever,
 	MergeUnionObjects,
 	TypedRouteToEden,
-	TypedWSRouteToEden
+	TypedWSRouteToEden,
+	UnwrapSchema,
+	ExtractPath
 } from './types'
 import { type TSchema } from '@sinclair/typebox'
 
@@ -645,13 +647,28 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					) => MaybePromise<Elysia<LazyLoadElysia>>
 			  }>
 	): IsNever<LazyLoadElysia> extends false
-		? Elysia<LazyLoadElysia & Instance>
+		? Elysia<{
+				request: Instance['request'] & LazyLoadElysia['request']
+				store: Instance['store'] & LazyLoadElysia['store']
+				schema: Instance['schema'] & LazyLoadElysia['schema']
+				meta: Instance['meta'] & LazyLoadElysia['meta']
+		  }>
 		: NewElysia extends Elysia<infer NewInstance>
 		? IsNever<NewInstance> extends true
 			? Elysia<Instance>
-			: Elysia<NewInstance & Instance>
+			: Elysia<{
+					request: Instance['request'] & NewInstance['request']
+					store: Instance['store'] & NewInstance['store']
+					schema: Instance['schema'] & NewInstance['schema']
+					meta: Instance['meta'] & NewInstance['meta']
+			  }>
 		: NewElysia extends Promise<Elysia<infer NewInstance>>
-		? Elysia<NewInstance & Instance>
+		? Elysia<{
+				request: Instance['request'] & NewInstance['request']
+				store: Instance['store'] & NewInstance['store']
+				schema: Instance['schema'] & NewInstance['schema']
+				meta: Instance['meta'] & NewInstance['meta']
+		  }>
 		: this {
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
@@ -678,6 +695,57 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return instance
 	}
 
+	if<
+		Condition extends boolean,
+		NewElysia extends MaybePromise<Elysia<any>> = Elysia<any>,
+		Params extends Elysia = Elysia<any>,
+		LazyLoadElysia extends never | ElysiaInstance = never
+	>(
+		condition: Condition,
+		run:
+			| MaybePromise<
+					(
+						app: Params extends Elysia<infer ParamsInstance>
+							? IsAny<ParamsInstance> extends true
+								? this
+								: Params
+							: Params
+					) => MaybePromise<NewElysia>
+			  >
+			| Promise<{
+					default: (
+						elysia: Elysia<any>
+					) => MaybePromise<Elysia<LazyLoadElysia>>
+			  }>
+	): IsNever<LazyLoadElysia> extends false
+		? Elysia<{
+				request: Instance['request'] & LazyLoadElysia['request']
+				store: Instance['store'] & LazyLoadElysia['store']
+				schema: Instance['schema'] & LazyLoadElysia['schema']
+				meta: Instance['meta'] & LazyLoadElysia['meta']
+		  }>
+		: NewElysia extends Elysia<infer NewInstance>
+		? IsNever<NewInstance> extends true
+			? Elysia<Instance>
+			: Elysia<{
+					request: Instance['request'] & NewInstance['request']
+					store: Instance['store'] & NewInstance['store']
+					schema: Instance['schema'] & NewInstance['schema']
+					meta: Instance['meta'] & NewInstance['meta']
+			  }>
+		: NewElysia extends Promise<Elysia<infer NewInstance>>
+		? Elysia<{
+				request: Instance['request'] & NewInstance['request']
+				store: Instance['store'] & NewInstance['store']
+				schema: Instance['schema'] & NewInstance['schema']
+				meta: Instance['meta'] & NewInstance['meta']
+		  }>
+		: this {
+		if (!condition) return this as any
+
+		return this.use(run) as any
+	}
+
 	/**
 	 * ### get
 	 * Register handler for path with method [GET]
@@ -697,15 +765,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	get<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -721,12 +785,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'get']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							post: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -756,15 +869,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	post<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -780,12 +889,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'post']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							post: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -815,15 +973,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	put<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -839,12 +993,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'put']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							put: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -874,15 +1077,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	patch<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -898,12 +1097,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'patch']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							patch: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -933,15 +1181,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	delete<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -957,12 +1201,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'delete']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							delete: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -992,15 +1285,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	options<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1016,12 +1305,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'options']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							options: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -1046,15 +1384,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	all<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1070,12 +1404,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'all']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							all: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -1105,15 +1488,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	head<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1129,12 +1508,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'head']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							head: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -1164,15 +1592,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	trace<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1188,12 +1612,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'trace']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							trace: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
@@ -1223,15 +1696,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	connect<
+		Path extends string,
 		Schema extends TypedSchema<
-			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
-			Schema,
-			Instance,
-			Path
-		>
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>,
+		Handler extends LocalHandler<Schema, Instance, Path>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1247,12 +1716,61 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in 'connect']: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							connect: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result extends Record<
+									string,
+									any
+								>
+									? Result
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
