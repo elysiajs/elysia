@@ -73,5 +73,6 @@ const app = new Elysia()
 
 type A = typeof app['meta'][typeof SCHEMA]['/']
 type B = typeof app['meta'][typeof DEFS]
+type C = typeof app['meta'][typeof SCHEMA]['/query/:id']
 
 // const a = app.getModel('b')
