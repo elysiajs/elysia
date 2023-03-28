@@ -785,7 +785,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							post: {
+							get: {
 								body: UnwrapSchema<
 									Schema['body'],
 									Instance['meta'][typeof DEFS]
@@ -793,29 +793,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -897,29 +894,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1001,29 +995,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1105,29 +1096,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1209,29 +1197,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1313,29 +1298,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1412,29 +1394,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1516,29 +1495,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1620,29 +1596,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1724,29 +1697,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 								headers: UnwrapSchema<
 									Schema['headers'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								query: UnwrapSchema<
 									Schema['query'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: undefined
 								params: UnwrapSchema<
 									Schema['params'],
 									Instance['meta'][typeof DEFS]
-								> extends infer Result extends Record<
-									string,
-									any
-								>
-									? Result
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
 									: Record<ExtractPath<Path>, string>
 								response: Schema['response'] extends
 									| TSchema
@@ -1932,12 +1902,58 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				MergeUnionObjects<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
-							[method in Uppercase<Method>]: TypedRouteToEden<
-								Schema,
-								Instance['meta'][typeof DEFS],
-								Path,
-								ReturnType<Handler>
-							>
+							[method in Method]: {
+								body: UnwrapSchema<
+									Schema['body'],
+									Instance['meta'][typeof DEFS]
+								>
+								headers: UnwrapSchema<
+									Schema['headers'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
+									: undefined
+								query: UnwrapSchema<
+									Schema['query'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
+									: undefined
+								params: UnwrapSchema<
+									Schema['params'],
+									Instance['meta'][typeof DEFS]
+								> extends infer Result
+									? Result extends Record<string, any>
+										? Result
+										: undefined
+									: Record<ExtractPath<Path>, string>
+								response: Schema['response'] extends
+									| TSchema
+									| string
+									? {
+											'200': UnwrapSchema<
+												Schema['response'],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: Schema['response'] extends Record<
+											string,
+											TSchema | string
+									  >
+									? {
+											[key in keyof Schema['response']]: UnwrapSchema<
+												Schema['response'][key],
+												Instance['meta'][typeof DEFS],
+												ReturnType<Handler>
+											>
+									  }
+									: ReturnType<Handler>
+							}
 						}
 					}
 				>
