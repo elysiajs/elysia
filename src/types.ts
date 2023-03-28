@@ -269,7 +269,7 @@ export interface LocalHook<
 	// ? I have no idea why does this infer type, but it work anyway
 	schema?: (Models extends Schema ? Models : Models) & {
 		contentType?: ContentType
-		detail?: unknown
+		detail?: Partial<OpenAPIV3.OperationObject>
 	}
 	parse?: WithArray<BodyParser[]>
 	transform?: WithArray<HookHandler<FinalSchema, Instance, Path>>
