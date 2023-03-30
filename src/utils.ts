@@ -1,5 +1,6 @@
 import { Kind, TSchema } from '@sinclair/typebox'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
+import { ValidationError } from './errors'
 import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,
@@ -99,11 +100,15 @@ export const createValidationError = (
 	value: any
 ) => {
 	const error = validator.Errors(value).First()
+	const cause = `Invalid ${type}: '${error?.path?.slice(1) || 'root'}'. ${
+		error?.message
+	}`
 
-	return new Error('VALIDATION', {
-		cause: `Invalid ${type}: '${error?.path?.slice(1) || 'root'}'. ${
-			error?.message
-		}`
+	return new ValidationError({
+		cause,
+		type,
+		validator,
+		value
 	})
 }
 
