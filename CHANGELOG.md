@@ -3,7 +3,8 @@ Feature:
 - Ahead of Time compilation
 - TypeBox 0.26
 - Validate response per status instead of union
-- add `if` for conditional route
+- Add `if` for conditional route
+- Custom Validation Error
 
 Improvement:
 - Update TypeBox to 0.26.8

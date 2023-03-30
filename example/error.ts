@@ -7,7 +7,7 @@ new Elysia()
 				status: 404
 			})
 
-		if (error instanceof ValidationError) {
+		if (code === 'VALIDATION') {
 			set.status = 400
 
 			// return all invalid fields

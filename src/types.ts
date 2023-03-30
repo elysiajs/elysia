@@ -1,4 +1,4 @@
-import type { Elysia } from '.'
+import type { Elysia, ValidationError } from '.'
 import type { Serve, Server } from 'bun'
 
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
@@ -501,12 +501,21 @@ export type ErrorCode =
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
-export type ErrorHandler = (params: {
-	request: Request
-	code: ErrorCode
-	error: Error
-	set: Context['set']
-}) => any | Promise<any>
+export type ErrorHandler = (
+	params:
+		| {
+				request: Request
+				code: 'NOT_FOUND' | 'INTERNAL_SERVER_ERROR' | 'UNKNOWN'
+				error: Error
+				set: Context['set']
+		  }
+		| {
+				request: Request
+				code: 'VALIDATION'
+				error: ValidationError
+				set: Context['set']
+		  }
+) => any | Promise<any>
 
 // ? From https://dev.to/svehla/typescript-how-to-deep-merge-170c
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

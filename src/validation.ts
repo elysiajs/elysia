@@ -1,10 +1,17 @@
 import { TypeCheck } from '@sinclair/typebox/compiler'
-import { ElysiaError } from './base-elysia-error'
+import type { ErrorCode } from './types'
 
-interface ValidationErrorOptions extends ErrorOptions {
+interface ValidationErrorOptions<T = unknown> extends ErrorOptions {
 	validator: TypeCheck<any>
-	value: any
+	value: T
 	type: string
+}
+
+
+export class ElysiaError extends Error {
+	constructor(message: ErrorCode, opts?: ErrorOptions) {
+		super(message, opts)
+	}
 }
 
 export class ValidationError extends ElysiaError {

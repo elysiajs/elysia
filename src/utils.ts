@@ -1,6 +1,6 @@
 import { Kind, TSchema } from '@sinclair/typebox'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
-import { ValidationError } from './errors'
+import { ValidationError } from './validation'
 import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,

@@ -2217,7 +2217,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		for (let i = 0; i < this.event.error.length; i++) {
 			let response = this.event.error[i]({
 				request,
-				code: mapErrorCode(error.message),
+				code: mapErrorCode(error.message) as any,
 				error,
 				set
 			})
@@ -2367,7 +2367,7 @@ export {
 	mapPathnameAndQueryRegEx
 } from './utils'
 
-export { ElysiaError, ValidationError } from './errors'
+export { ElysiaError, ValidationError } from './validation'
 
 export type { Context, PreContext } from './context'
 export type {
