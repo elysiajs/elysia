@@ -2367,6 +2367,8 @@ export {
 	mapPathnameAndQueryRegEx
 } from './utils'
 
+export { ElysiaError, ValidationError } from './errors'
+
 export type { Context, PreContext } from './context'
 export type {
 	Handler,
