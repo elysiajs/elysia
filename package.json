@@ -92,8 +92,8 @@
     "release": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
+    "@sinclair/typebox": "0.26.8",
     "@types/lodash.clonedeep": "^4.5.7",
-    "@sinclair/typebox": "0.26.0",
     "fast-querystring": "^1.1.1",
     "lodash.clonedeep": "^4.5.0",
     "nanoid": "^4.0.1",

@@ -1,9 +1,16 @@
 # 0.4.0 - x
 Feature:
-- AoT compile
+- Ahead of Time compilation
 - TypeBox 0.26
 - Validate response per status instead of union
 - add `if` for conditional route
+
+Improvement:
+- Update TypeBox to 0.26.8
+- Inline an declaration for response type
+- Refactor some type for faster response
+- Use Typebox `Error().First()` instead of iteration
+- Add `innerHandle` for returning an actual response (for benchmark)
 
 Breaking Change:
 - Separate `.fn` to `@elysiajs/fn`
