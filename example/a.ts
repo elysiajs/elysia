@@ -1,9 +1,21 @@
-import { Elysia, t, EXPOSED, SCHEMA } from '../src'
+import { Elysia, t } from '../src'
 
-const isProduction = process.env.NODE_ENV === 'production'
+const app = new Elysia()
+	.use(async (app) => app.post('/', ({ body }) => body))
+	.listen(8080)
 
-const app = new Elysia().if(isProduction, (app) =>
-	app.get('/registered', () => 'hi')
+await app.modules
+
+app.handle(
+	new Request('http://localhost/', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: 'a'
+	})
 )
+	.then((x) => x.text())
+	.then(console.log)
 
 type App = typeof app

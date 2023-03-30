@@ -8,7 +8,7 @@ describe('Parser', () => {
 			.onParse((context, contentType) => {
 				switch (contentType) {
 					case 'application/Elysia':
-						return context.request.text()
+						return 'A'
 				}
 			})
 			.post('/', ({ body }) => body)
@@ -24,7 +24,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.text()).toBe(':D')
+		expect(await res.text()).toBe('A')
 	})
 
 	it("handle .on('parse')", async () => {
