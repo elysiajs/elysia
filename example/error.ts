@@ -1,22 +1,27 @@
-import { Elysia, ValidationError } from '../src'
+import { Elysia, t } from '../src'
 
 new Elysia()
 	.onError(({ code, error, set }) => {
-		if (code === 'NOT_FOUND')
-			return new Response('Not Found :(', {
-				status: 404
-			})
+		if (code === 'NOT_FOUND') {
+			set.status = 404
+
+			return 'Not Found :('
+		}
 
 		if (code === 'VALIDATION') {
 			set.status = 400
 
-			// return all invalid fields
 			return {
 				fields: error.all()
 			}
 		}
 	})
-	.get('/', () => {
-		throw new Error('A')
+	.post('/a', () => 'hi', {
+		schema: {
+			body: t.Object({
+				username: t.String(),
+				password: t.String()
+			})
+		}
 	})
 	.listen(8080)
