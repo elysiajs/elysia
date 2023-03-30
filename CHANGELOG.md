@@ -7,7 +7,7 @@ Feature:
 
 Improvement:
 - Update TypeBox to 0.26.8
-- Inline an declaration for response type
+- Inline a declaration for response type
 - Refactor some type for faster response
 - Use Typebox `Error().First()` instead of iteration
 - Add `innerHandle` for returning an actual response (for benchmark)
