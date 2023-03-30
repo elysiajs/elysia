@@ -1,4 +1,4 @@
-# 0.4.0 - x
+# 0.4.0 - 30 Mar 2023
 Feature:
 - Ahead of Time compilation
 - TypeBox 0.26
