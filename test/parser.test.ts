@@ -8,11 +8,10 @@ describe('Parser', () => {
 			.onParse((context, contentType) => {
 				switch (contentType) {
 					case 'application/Elysia':
-						return context.request.text()
+						return 'A'
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(8080)
 
 		const res = await app.handle(
 			new Request('http://localhost/', {
@@ -25,7 +24,7 @@ describe('Parser', () => {
 			})
 		)
 
-		expect(await res.text()).toBe(':D')
+		expect(await res.text()).toBe('A')
 	})
 
 	it("handle .on('parse')", async () => {
@@ -37,7 +36,6 @@ describe('Parser', () => {
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(8080)
 
 		const res = await app.handle(
 			new Request('http://localhost/', {
@@ -62,7 +60,6 @@ describe('Parser', () => {
 				}
 			})
 			.post('/', ({ body }) => body)
-			.listen(8080)
 
 		const res = await app.handle(
 			new Request('http://localhost/', {
@@ -79,7 +76,7 @@ describe('Parser', () => {
 	})
 
 	it('parse x-www-form-urlencoded', async () => {
-		const app = new Elysia().post('/', ({ body }) => body).listen(8080)
+		const app = new Elysia().post('/', ({ body }) => body)
 
 		const body = {
 			username: 'salty aom',
@@ -100,7 +97,7 @@ describe('Parser', () => {
 	})
 
 	it('parse with extra content-type attribute', async () => {
-		const app = new Elysia().post('/', ({ body }) => body).listen(8080)
+		const app = new Elysia().post('/', ({ body }) => body)
 
 		const body = {
 			username: 'salty aom',

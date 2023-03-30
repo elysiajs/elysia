@@ -1,4 +1,4 @@
-import type { Elysia } from '.'
+import type { Elysia, ValidationError } from '.'
 import type { Serve, Server } from 'bun'
 
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
@@ -15,7 +15,7 @@ export type ElysiaDefaultMeta = Record<
 	typeof SCHEMA,
 	Partial<OpenAPIV3.PathsObject>
 > &
-	Record<typeof DEFS, { [x in string]: TSchema }> &
+	Record<typeof DEFS, Record<string, TSchema>> &
 	Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 
 export type ElysiaInstance<
@@ -23,9 +23,11 @@ export type ElysiaInstance<
 		store?: Record<string, unknown>
 		request?: Record<string, unknown>
 		schema?: TypedSchema
-		meta?: ElysiaDefaultMeta
+		meta?: Record<typeof SCHEMA, Partial<OpenAPIV3.PathsObject>> &
+			Record<typeof DEFS, Record<string, TSchema>> &
+			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 	} = {
-		store: Record<string, unknown>
+		store: {}
 		request: {}
 		schema: {}
 		meta: Record<typeof SCHEMA, {}> &
@@ -34,10 +36,8 @@ export type ElysiaInstance<
 	}
 > = {
 	request: Instance['request']
-	store: Instance['store'] extends undefined ? {} : Instance['store']
-	schema: Instance['schema'] extends undefined
-		? TypedSchema
-		: Instance['schema']
+	store: Instance['store']
+	schema: Instance['schema']
 	meta: Instance['meta']
 }
 
@@ -130,6 +130,7 @@ export interface RegisteredHook<
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
+	parse: BodyParser[]
 	error: ErrorHandler[]
 }
 
@@ -150,9 +151,7 @@ export type UnwrapSchema<
 	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
 	Fallback = unknown
 > = Schema extends string
-	? Definitions extends {
-			[name in Schema]: infer NamedSchema extends TSchema
-	  }
+	? Definitions extends Record<Schema, infer NamedSchema extends TSchema>
 		? Static<NamedSchema>
 		: Fallback
 	: Schema extends TSchema
@@ -204,7 +203,7 @@ export type SchemaValidator = {
 	headers?: TypeCheck<any>
 	query?: TypeCheck<any>
 	params?: TypeCheck<any>
-	response?: TypeCheck<any>
+	response?: Record<number, TypeCheck<any>>
 }
 
 export type HookHandler<
@@ -272,6 +271,7 @@ export interface LocalHook<
 		contentType?: ContentType
 		detail?: Partial<OpenAPIV3.OperationObject>
 	}
+	parse?: WithArray<BodyParser[]>
 	transform?: WithArray<HookHandler<FinalSchema, Instance, Path>>
 	beforeHandle?: WithArray<HookHandler<FinalSchema, Instance, Path>>
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
@@ -298,24 +298,42 @@ export type TypedRouteToEden<
 	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
 	Path extends string = string,
 	Catch = unknown
-> = TypedSchemaToEden<
-	Schema,
-	Definitions
-> extends infer Typed extends AnyTypedSchema
-	? {
-			body: Typed['body']
-			headers: Typed['headers']
-			query: Typed['query']
-			params: undefined extends Typed['params']
-				? Record<ExtractPath<Path>, string>
-				: Typed['params']
-			response: undefined extends Typed['response']
-				? {
-						'200': Catch
-				  }
-				: Typed['response']
-	  }
-	: never
+> = {
+	body: UnwrapSchema<Schema['body'], Definitions>
+	headers: UnwrapSchema<
+		Schema['headers'],
+		Definitions
+	> extends infer Result extends Record<string, any>
+		? Result
+		: undefined
+	query: UnwrapSchema<
+		Schema['query'],
+		Definitions
+	> extends infer Result extends Record<string, any>
+		? Result
+		: undefined
+	params: UnwrapSchema<
+		Schema['params'],
+		Definitions
+	> extends infer Result extends Record<string, any>
+		? Result
+		: Record<ExtractPath<Path>, string>
+	response: Schema['response'] extends TSchema | string
+		? {
+				'200': UnwrapSchema<Schema['response'], Definitions, Catch>
+		  }
+		: Schema['response'] extends {
+				[x in string]: TSchema | string
+		  }
+		? {
+				[key in keyof Schema['response']]: UnwrapSchema<
+					Schema['response'][key],
+					Definitions,
+					Catch
+				>
+		  }
+		: Catch
+}
 
 export type TypedWSRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
@@ -411,9 +429,8 @@ export type OverwritableTypeRoute = {
 }
 
 export type ComposedHandler = {
-	handle: Handler<any, any>
-	hooks?: RegisteredHook<any>
-	validator?: SchemaValidator
+	handle: (context: Context) => MaybePromise<Response>
+	onError: ErrorHandler[]
 }
 
 export interface ElysiaConfig {
@@ -484,12 +501,21 @@ export type ErrorCode =
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
-export type ErrorHandler = (params: {
-	request: Request
-	code: ErrorCode
-	error: Error
-	set: Context['set']
-}) => any | Promise<any>
+export type ErrorHandler = (
+	params:
+		| {
+				request: Request
+				code: 'NOT_FOUND' | 'INTERNAL_SERVER_ERROR' | 'UNKNOWN'
+				error: Error
+				set: Context['set']
+		  }
+		| {
+				request: Request
+				code: 'VALIDATION'
+				error: ValidationError
+				set: Context['set']
+		  }
+) => any | Promise<any>
 
 // ? From https://dev.to/svehla/typescript-how-to-deep-merge-170c
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -563,51 +589,6 @@ export type IsUnknown<T> = IsAny<T> extends true
 	: false
 
 export type MaybePromise<T> = T | Promise<T>
-
-export type FunctionProperties<T> = {
-	[K in keyof T as T[K] extends Record<any, any> | ((...args: any[]) => any)
-		? IsAny<T[K]> extends true
-			? never
-			: K
-		: never]: T[K] extends (...args: any[]) => any
-		? T[K]
-		: T[K] extends Record<string, any>
-		? FunctionProperties<T[K]>
-		: never
-}
-
-export type JoinKeys<T, Prefix extends string = ''> = {
-	[K in keyof T]-?: T[K] extends string | Function
-		? '' extends Prefix
-			? K
-			: K extends string
-			? `${Prefix}.${K}`
-			: never
-		: K extends string
-		? JoinKeys<T[K], '' extends Prefix ? K : `${Prefix}.${K}`>
-		: never
-}[keyof T]
-
-// type ExcludeFunctionFromRoot<T extends Record<any, any>> = {
-// 	[K in keyof T as T[K] extends (...args: any) => any ? never : K]: T[K]
-// }
-
-// type ExcludeRecordFromRoot<T extends Record<any, any>> = {
-// 	[K in keyof T as T[K] extends Record<string, string> ? never : K]: T[K]
-// }
-
-export type ConnectedKeysType<
-	T,
-	K extends string
-> = K extends `${infer Key}.${infer Rest}`
-	? Key extends keyof T
-		? ConnectedKeysType<T[Key], Rest>
-		: never
-	: K extends keyof T
-	? T[K] extends (...args: infer A) => any
-		? A
-		: never
-	: never
 
 // https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
 export type Prettify<T> = {

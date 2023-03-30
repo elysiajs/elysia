@@ -286,11 +286,11 @@ describe('Models', () => {
 			})
 			.post('/', ({ body: { data } }) => data, {
 				schema: {
+					response: 'number',
 					body: t.Object({
 						data: t.Number()
 					}),
-					response: 'number'
-				} as const
+				}
 			})
 
 		const correct = await app.handle(

@@ -1,3 +1,21 @@
+# 0.4.0 - 30 Mar 2023
+Feature:
+- Ahead of Time compilation
+- TypeBox 0.26
+- Validate response per status instead of union
+- Add `if` for conditional route
+- Custom Validation Error
+
+Improvement:
+- Update TypeBox to 0.26.8
+- Inline a declaration for response type
+- Refactor some type for faster response
+- Use Typebox `Error().First()` instead of iteration
+- Add `innerHandle` for returning an actual response (for benchmark)
+
+Breaking Change:
+- Separate `.fn` to `@elysiajs/fn`
+
 # 0.3.2 - 26 Mar 2023
 Fix:
 - child to inhertis WebSocket plugin (https://github.com/elysiajs/elysia/issues/27)
@@ -409,7 +427,7 @@ Feature:
 - `.all` for registering path with any method
 
 Improvement:
-- `getSchemaValidator` now infer output type to be reusable with `@kingworldjs/tpc`
+- `getSchemaValidator` now infer output type to be reusable with `@kingworldjs/trpc`
 
 Bug fix:
 - `handler.hooks` is undefined on 404

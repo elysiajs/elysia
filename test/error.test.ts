@@ -1,6 +1,6 @@
-import { Elysia } from '../src'
+import { Elysia, t, ValidationError } from '../src'
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { post, req } from './utils'
 
 describe('error', () => {
 	it('use custom 404', async () => {
@@ -21,5 +21,33 @@ describe('error', () => {
 
 		expect(root).toBe('hello')
 		expect(notFound).toBe('UwU')
+	})
+
+	it('custom validation error', async () => {
+		const app = new Elysia()
+			.post('/login', ({ body }) => body, {
+				schema: {
+					body: t.Object({
+						username: t.String(),
+						password: t.String()
+					})
+				}
+			})
+			.onError(({ code, error, set }) => {
+				if (code === 'VALIDATION') {
+					set.status = 400
+
+					return error.all().map((i) => ({
+						filed: i.path.slice(1) || 'root',
+						reason: i.message
+					}))
+				}
+			})
+
+		const res = await app.handle(post('/login', {}))
+		const data = await res.json<any[]>()
+
+		expect(data.length).toBe(4)
+		expect(res.status).toBe(400)
 	})
 })
