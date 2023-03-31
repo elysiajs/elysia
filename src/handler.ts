@@ -31,7 +31,7 @@ const parseSetCookies = (headers: Headers, setCookie: string | string[]) => {
 export const mapEarlyResponse = (
 	response: unknown,
 	set: Context['set']
-): MaybePromise<Response | undefined> => {
+): Response | undefined => {
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
@@ -73,6 +73,7 @@ export const mapEarlyResponse = (
 						})
 
 					case Promise:
+						// @ts-ignore
 						return (response as Promise<unknown>).then((x) => {
 							const r = mapEarlyResponse(x, set)
 
@@ -134,6 +135,7 @@ export const mapEarlyResponse = (
 						return new Response(response as Blob)
 
 					case Promise:
+						// @ts-ignore
 						return (response as Promise<unknown>).then((x) => {
 							const r = mapEarlyResponse(x, set)
 
