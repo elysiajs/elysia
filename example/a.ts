@@ -1,5 +1,5 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.get('/', () => new Promise((resolve) => resolve('A')))
+	.group('/v1', (app) => app.decorate('a', 'b').get('/', ({ a }) => a))
 	.listen(8080)

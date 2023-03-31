@@ -1,3 +1,7 @@
+# 0.4.3 - 31 Mar 2023
+Fix:
+- Scoped decorators
+
 # 0.4.2 - 31 Mar 2023
 Improvement:
 - Use constructor name for faster handler matching

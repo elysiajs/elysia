@@ -13,7 +13,8 @@ import {
 	mergeHook,
 	getSchemaValidator,
 	getResponseSchemaValidator,
-	mapPathnameAndQueryRegEx
+	mapPathnameAndQueryRegEx,
+	mergeDeep
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
@@ -484,6 +485,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (this.wsRouter) instance.use(ws())
 
 		const sandbox = run(instance)
+		this.decorators = mergeDeep(this.decorators, instance.decorators)
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -574,6 +576,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (this.wsRouter) instance.use(ws())
 
 		const sandbox = run(instance)
+
+		this.decorators = mergeDeep(this.decorators, instance.decorators)
 
 		if (sandbox.event.request.length)
 			this.event.request = [

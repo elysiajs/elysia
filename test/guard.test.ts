@@ -41,4 +41,14 @@ describe('Guard', () => {
 
 		expect(res).toBe('2')
 	})
+
+	it('decorate guard', async () => {
+		const app = new Elysia().guard({}, (app) =>
+			app.decorate('a', 'b').get('/', ({ a }) => a)
+		)
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toBe('b')
+	})
 })
