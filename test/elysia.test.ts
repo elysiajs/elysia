@@ -40,4 +40,14 @@ describe('Elysia', () => {
 		expect(res1.headers.get('x-server')).toBe('Elysia')
 		expect(res2.headers.get('x-server')).toBe(null)
 	})
+
+	it('return Promise', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => new Promise((resolve) => resolve('h'))
+		)
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+		expect(res).toBe('h')
+	})
 })

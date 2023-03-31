@@ -1,3 +1,8 @@
+# 0.4.2 - 31 Mar 2023
+Improvement:
+- Use constructor name for faster handler matching
+- Map Promise
+
 # 0.4.1 - 31 Mar 2023
 Fix:
 - remove type module from package.json
