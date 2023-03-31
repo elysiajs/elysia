@@ -1,3 +1,7 @@
+# 0.4.1 - 31 Mar 2023
+Fix:
+- remove type module from package.json
+
 # 0.4.0 - 30 Mar 2023
 Feature:
 - Ahead of Time compilation
