@@ -2,10 +2,11 @@ import { Elysia, t } from '../src'
 import { upload } from '../test/utils'
 
 const app = new Elysia()
-	.post('/single', ({ body: { file } }) => file, {
+	.post('/single', ({ body: { text } }) => text, {
 		schema: {
 			body: t.Object({
-				file: t.File()
+				file: t.File(),
+				text: t.String()
 			})
 		}
 	})

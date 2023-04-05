@@ -1,16 +1,17 @@
+import { Elysia } from '.'
+
 import { parse as parseQuery } from 'fast-querystring'
 
-import { createValidationError } from './utils'
 import { mapEarlyResponse, mapResponse } from './handler'
+import { createValidationError } from './utils'
+import { mapErrorCode } from './error'
 
-import { Elysia } from '.'
 import type {
 	HTTPMethod,
 	LocalHandler,
 	RegisteredHook,
 	SchemaValidator
 } from './types'
-import { mapErrorCode } from './error'
 
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN

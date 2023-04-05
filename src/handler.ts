@@ -1,5 +1,4 @@
 /* eslint-disable no-case-declarations */
-import type { MaybePromise } from './types'
 import type { Context } from './context'
 
 export const isNotEmpty = (obj: Object) => {
@@ -8,20 +7,16 @@ export const isNotEmpty = (obj: Object) => {
 	return false
 }
 
-const parseSetCookies = (headers: Headers, setCookie: string | string[]) => {
-	if (Array.isArray(setCookie)) {
-		headers.delete('Set-Cookie')
+const parseSetCookies = (headers: Headers, setCookie: string[]) => {
+	headers.delete('Set-Cookie')
 
-		for (let i = 0; i < setCookie.length; i++) {
-			const index = setCookie[i].indexOf('=')
+	for (let i = 0; i < setCookie.length; i++) {
+		const index = setCookie[i].indexOf('=')
 
-			headers.append(
-				'Set-Cookie',
-				`${setCookie[i].slice(0, index)}=${setCookie[i].slice(
-					index + 1
-				)}`
-			)
-		}
+		headers.append(
+			'Set-Cookie',
+			`${setCookie[i].slice(0, index)}=${setCookie[i].slice(index + 1)}`
+		)
 	}
 
 	return headers
@@ -32,13 +27,16 @@ export const mapEarlyResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response | undefined => {
-	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
+	if (isNotEmpty(set.headers) || set.status || set.redirect) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
 			set.status = 302
 		}
 
-		if (set.headers['Set-Cookie'])
+		if (
+			set.headers['Set-Cookie'] &&
+			Array.isArray(set.headers['Set-Cookie'])
+		)
 			// @ts-ignore
 			set.headers = parseSetCookies(
 				new Headers(set.headers),
@@ -171,13 +169,16 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	if (Object.keys(set.headers).length || set.status !== 200 || set.redirect) {
+	if (isNotEmpty(set.headers) || set.status || set.redirect) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
 			set.status = 302
 		}
 
-		if (set.headers?.['Set-Cookie'])
+		if (
+			set.headers['Set-Cookie'] &&
+			Array.isArray(set.headers['Set-Cookie'])
+		)
 			// @ts-ignore
 			set.headers = parseSetCookies(
 				new Headers(set.headers),

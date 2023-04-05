@@ -1817,8 +1817,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			path,
 			// @ts-ignore
 			(context) => {
-				console.log('Got', context.request.url)
-
 				if (
 					// @ts-ignore
 					this.server?.upgrade(context.request, {
@@ -2169,14 +2167,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	/**
 	 * Handle can be either sync or async to save performance.
 	 *
-	 * Beside for benchmark purpose, please use 'handle' instead.
+	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
 	innerHandle = (request: Request): MaybePromise<Response> => {
 		const context: Context = this.decorators as any as Context
 		context.request = request
 		context.set = {
-			status: 200,
-			headers: {}
+			headers: {},
+			status: 200
 		}
 
 		if (this.event.request.length)
@@ -2192,7 +2190,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				return this.handleError(request, error as Error, context.set)
 			}
 
-		const fracture = request.url.match(mapPathnameAndQueryRegEx)!
+		const fracture = mapPathnameAndQueryRegEx.exec(request.url)!
 		const route =
 			this.router.match(request.method, fracture[1]) ??
 			this.router.match('ALL', fracture[1])

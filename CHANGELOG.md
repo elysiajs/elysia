@@ -1,3 +1,9 @@
+# 0.4.4 - 6 Apr 2023
+Improvement:
+- using `isNotEmpty` for `mapResponse`
+- pre check if `set.headers['Set-Cookie']` is array before converting to headers
+- using `mapPathnameAndQueryRegEx.exec(request.url)` instead of `request.url.match(mapPathnameAndQueryRegEx)`
+
 # 0.4.3 - 31 Mar 2023
 Fix:
 - Scoped decorators
