@@ -27,7 +27,7 @@ export const mapEarlyResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response | undefined => {
-	if (isNotEmpty(set.headers) || set.status || set.redirect) {
+	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
 			set.status = 302
@@ -169,7 +169,7 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	if (isNotEmpty(set.headers) || set.status || set.redirect) {
+	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
 			set.status = 302

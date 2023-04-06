@@ -1,3 +1,7 @@
+# 0.4.5 - 6 Apr 2023
+Fix:
+- Using default value check for `set.status` instead truthy value
+
 # 0.4.4 - 6 Apr 2023
 Improvement:
 - using `isNotEmpty` for `mapResponse`
