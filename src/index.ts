@@ -1846,6 +1846,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				return 'Expected a websocket connection'
 			},
 			{
+				parse: options.parse,
 				beforeHandle: options.beforeHandle,
 				transform: options.transform,
 				schema: {
