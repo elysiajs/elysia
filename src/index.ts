@@ -1976,14 +1976,44 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * Assign global mutatable state accessible for all handler
 	 *
 	 * ---
+	 * @deprecated Use `setStore` instead
+	 *
+	 * ---
 	 * @example
 	 * ```typescript
 	 * new Elysia()
 	 *     .state('counter', 0)
-	 *     .get('/', (({ counter }) => ++counter)
+	 *     .get('/', (({ store }) => ++store.counter)
 	 * ```
 	 */
 	state<
+		Key extends string | number | symbol = keyof Instance['store'],
+		Value = Instance['store'][keyof Instance['store']],
+		NewInstance = Elysia<{
+			store: Instance['store'] & {
+				[key in Key]: Value
+			}
+			request: Instance['request']
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}>
+	>(name: Key, value: Value): NewInstance {
+		return this.setStore(name, value) as NewInstance
+	}
+
+	/**
+	 * ### setStore
+	 * Store global mutatable state accessible for all handler via `context.store[key]`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .setStore('counter', 0)
+	 *     .get('/', (({ store }) => ++store.counter)
+	 * ```
+	 */
+	setStore<
 		Key extends string | number | symbol = keyof Instance['store'],
 		Value = Instance['store'][keyof Instance['store']],
 		NewInstance = Elysia<{
@@ -2000,6 +2030,43 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}
 
 		return this as unknown as NewInstance
+	}
+
+	/**
+	 * ### setStoreOnRequest
+	 * Store local mutatable state for each request that is accessible via `context.store[key]`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .setStoreOnRequest((context) => ({
+	 * 		   timestamp: Date.now()
+	 *     }))
+	 *     .get('/', (({ store }) => ++store.timestamp)
+	 * ```
+	 */
+	setStoreOnRequest<
+		Returned extends Object = Object,
+		NewInstance = Elysia<{
+			store: Instance['store'] & Awaited<Returned>
+			request: Instance['request']
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}>
+	>(
+		setStore: (
+			context: Context<{}, Instance['store']> & Instance['request']
+		) => MaybePromise<Returned>
+	): NewInstance {
+		if (setStore.constructor.name === 'AsyncFunction')
+			return this.onTransform(async (context) => {
+				Object.assign(context.store, await setStore(context))
+			}) as any
+
+		return this.onTransform((context) => {
+			Object.assign(context.store, setStore(context))
+		}) as any
 	}
 
 	/**
@@ -2031,9 +2098,52 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	/**
+	 * ### decorateOnRequest
+	 * Define custom method to `Context` for each request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *	   .setStore('counter', 1)
+	 *     .decorateOnRequest(({ store }) => ({
+	 *         increase() {
+	 *             store.counter++
+	 *         }
+	 *     }))
+	 *     .get('/', (({ increase }) => increase())
+	 * ```
+	 */
+	decorateOnRequest<
+		Returned extends Object = Object,
+		NewInstance = Elysia<{
+			store: Instance['store']
+			request: Instance['request'] & Awaited<Returned>
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}>
+	>(
+		decorate: (
+			context: Context<{}, Instance['store']> & Instance['request']
+		) => MaybePromise<Returned>
+	): NewInstance {
+		if (decorate.constructor.name === 'AsyncFunction')
+			return this.onTransform(async (context) => {
+				Object.assign(context, await decorate(context))
+			}) as any
+
+		return this.onTransform((context) => {
+			Object.assign(context, decorate(context))
+		}) as any
+	}
+
+	/**
 	 * Derive new property for each request with access to `Context`.
 	 *
 	 * If error is thrown, the scope will skip to handling error instead.
+	 *
+	 * ---
+	 * @deprecated Use `setStoreOnRequest` and `decorateOnRequest` instead
 	 *
 	 * ---
 	 * @example
