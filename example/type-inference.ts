@@ -1,6 +1,6 @@
 import { Elysia } from '../src'
 
-const counter = (app: Elysia) => app.state('counter', 0)
+const counter = (app: Elysia) => app.setStore('counter', 0)
 
 new Elysia()
 	.use(counter)

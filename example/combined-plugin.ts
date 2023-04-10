@@ -1,9 +1,9 @@
 import { Elysia, t } from '../src'
 
-const counter = (app: Elysia) => app.state('nested-counter', 1)
+const counter = (app: Elysia) => app.setStore('nested-counter', 1)
 
 new Elysia()
 	.decorate('getDate', () => new Date())
-	.state('counter', 1)
+	.setStore('counter', 1)
 	.use(counter)
 	.get('/:id', ({ params, getDate, store }) => getDate())

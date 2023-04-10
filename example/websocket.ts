@@ -2,7 +2,7 @@ import { Elysia, t, ws } from '../src'
 
 const app = new Elysia()
 	.use(ws())
-	.state('start', 'here')
+	.setStore('start', 'here')
 	.ws('/ws', {
 		open(ws) {
 			ws.subscribe('asdf')

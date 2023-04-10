@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
 new Elysia()
-	.state('name', 'salt')
+	.setStore('name', 'salt')
 	.get('/', ({ store: { name } }) => `Hi ${name}`, {
 		schema: {
 			query: t.Object({

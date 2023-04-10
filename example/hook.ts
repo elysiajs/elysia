@@ -2,7 +2,7 @@ import { Elysia } from '../src'
 
 new Elysia()
 	// Create global mutable state
-	.state('counter', 0)
+	.setStore('counter', 0)
 	// Increase counter by 1 on every request on any handler
 	.onTransform(({ store }) => {
 		store.counter++

@@ -5,8 +5,8 @@ const loggerPlugin = (app: Elysia, { prefix = '/fbk' } = {}) =>
 		.get('/hi', () => 'Hi')
 		.decorate('log', () => 'A')
 		.decorate('date', () => new Date())
-		.state('fromPlugin', 'From Logger')
-		.use((app) => app.state('abc', 'abc'))
+		.setStore('fromPlugin', 'From Logger')
+		.use((app) => app.setStore('abc', 'abc'))
 
 const app = new Elysia()
 	.onRequest(({ set }) => {
@@ -15,7 +15,7 @@ const app = new Elysia()
 		}
 	})
 	.use(loggerPlugin)
-	.state('build', Date.now())
+	.setStore('build', Date.now())
 	.get('/', () => 'Elysia')
 	.get('/tako', () => Bun.file('./example/takodachi.png'))
 	.get('/json', () => ({
@@ -83,13 +83,14 @@ const app = new Elysia()
 	})
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) => {
-		return app.onBeforeHandle<{
-			query: {
-				name: string
-			}
-		}>(({ query }) => {
-			if (query?.name === 'aom') return 'Hi saltyaom'
-		})
+		return app
+			.onBeforeHandle<{
+				query: {
+					name: string
+				}
+			}>(({ query }) => {
+				if (query?.name === 'aom') return 'Hi saltyaom'
+			})
 			.get('/', () => 'From Group')
 			.get('/hi', () => 'HI GROUP')
 			.get('/elysia', () => 'Welcome to Elysian Realm')

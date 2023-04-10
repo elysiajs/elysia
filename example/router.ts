@@ -5,7 +5,7 @@ const prefix =
 	(app: Elysia) =>
 		app.group(`${prefix}/api`, (app) =>
 			app
-				.state('b', 'b')
+				.setStore('b', 'b')
 				.get('/2', () => 2)
 				.guard({}, (app) => app.get('/do', () => 'something'))
 				.group('/v2', (app) =>
@@ -18,4 +18,3 @@ const a = new Elysia()
 	.guard({}, (app) => app.get('/guard', () => 'a'))
 	.use(prefix('prefixed'))
 	.listen(8080)
-

@@ -1,13 +1,13 @@
 import { Elysia } from '../src'
 
 new Elysia()
-	.state('counter', 0)
-	.derive(({ store }) => ({
+	.setStore('counter', 0)
+	.decorateOnRequest(({ store }) => ({
 		increase() {
 			store.counter++
 		}
 	}))
-	.derive(({ store }) => ({
+	.setStoreOnRequest(({ store }) => ({
 		doubled: store.counter * 2,
 		tripled: store.counter * 3
 	}))
