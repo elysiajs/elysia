@@ -1,3 +1,11 @@
+# 0.4.6 - 10 Apr 2023
+Improvement:
+- perf: add static route main class
+- perf: reduce `ComposedHandler` to function instead of nested object
+
+Fix:
+- `group` and `guard` shouldn't decorate a request on type-level (acceptable on run-time level for shared memory)
+
 # 0.4.5 - 6 Apr 2023
 Fix:
 - Using default value check for `set.status` instead truthy value

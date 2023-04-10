@@ -1,3 +1,11 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia().get('/', () => 'Hi').listen(8080)
+const html = () => (app: Elysia) =>
+	app.decorate('html', (a: string) => new Response(a))
+
+const page = ''
+
+const app = new Elysia()
+	.guard({}, (app) => app.use(html()).get('/html', ({ html }) => page))
+	.get('/', () => page)
+	.listen(8080)

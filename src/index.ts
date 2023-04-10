@@ -54,7 +54,6 @@ import type {
 	MaybePromise,
 	IsNever,
 	MergeUnionObjects,
-	TypedRouteToEden,
 	TypedWSRouteToEden,
 	UnwrapSchema,
 	ExtractPath
@@ -110,6 +109,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	private router = new Raikiri<ComposedHandler>()
 	protected routes: InternalRoute<Instance>[] = []
+	// Static
+	private _s: Map<string, ComposedHandler> = new Map()
 	private wsRouter: Raikiri<ElysiaWSOptions> | undefined
 
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
@@ -182,16 +183,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		const hooks = mergeHook(clone(this.event), hook as RegisteredHook)
 
-		const mainHandler = {
-			handle: composeHandler({
-				method,
-				hooks,
-				validator: validator as any,
-				handler,
-				handleError: this.handleError
-			}),
-			onError: hooks.error
-		}
+		const mainHandler = composeHandler({
+			method,
+			hooks,
+			validator: validator as any,
+			handler,
+			handleError: this.handleError
+		})
+
+		if (!path.includes('/:') && !path.includes('/*'))
+			this._s.set(method + path, mainHandler)
 
 		this.router.add(method, path, mainHandler as any)
 	}
@@ -464,9 +465,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
-				request: Instance['request'] & NewInstance['request']
-				schema: Instance['schema'] & NewInstance['schema']
-				store: Instance['store'] & NewInstance['store']
+				request: Instance['request']
+				schema: Instance['schema']
+				store: Instance['store']
 				meta: Instance['meta'] &
 					(Omit<NewInstance['meta'], typeof SCHEMA> &
 						Record<
@@ -569,14 +570,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}>
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
-		? Elysia<NewInstance & Instance>
+		? Elysia<{
+				request: Instance['request']
+				store: Instance['store']
+				schema: Instance['schema']
+				meta: Instance['meta'] & NewInstance['schema']
+		  }>
 		: this {
 		const instance = new Elysia<any>()
 		instance.store = this.store
 		if (this.wsRouter) instance.use(ws())
 
 		const sandbox = run(instance)
-
 		this.decorators = mergeDeep(this.decorators, instance.decorators)
 
 		if (sandbox.event.request.length)
@@ -2191,22 +2196,31 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 
 		const fracture = mapPathnameAndQueryRegEx.exec(request.url)!
-		const route =
-			this.router.match(request.method, fracture[1]) ??
-			this.router.match('ALL', fracture[1])
 
-		if (!route)
-			return this.handleError(
-				request,
-				new Error('NOT_FOUND'),
-				context.set
-			)
-
-		context.params = route.params
 		if (fracture[2]) context.query = parseQuery(fracture[2])
 		else context.query = {}
 
-		return route.store.handle(context)
+		const handle = this._s.get(request.method + fracture[1])
+		if (handle) {
+			context.params = {}
+
+			return handle(context)
+		} else {
+			const route =
+				this.router.match(request.method, fracture[1]) ??
+				this.router.match('ALL', fracture[1])
+
+			if (!route)
+				return this.handleError(
+					request,
+					new Error('NOT_FOUND'),
+					context.set
+				)
+
+			context.params = route.params
+
+			return route.store(context)
+		}
 	}
 
 	handleError = async (

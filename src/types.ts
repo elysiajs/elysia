@@ -428,10 +428,7 @@ export type OverwritableTypeRoute = {
 	response?: unknown
 }
 
-export type ComposedHandler = {
-	handle: (context: Context) => MaybePromise<Response>
-	onError: ErrorHandler[]
-}
+export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
 export interface ElysiaConfig {
 	fn?: string
