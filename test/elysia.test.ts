@@ -6,11 +6,23 @@ import { req } from './utils'
 describe('Elysia', () => {
 	it('handle state', async () => {
 		const app = new Elysia()
-			.state('a', 'a')
+			.setStore('a', 'a')
 			.get('/', ({ store: { a } }) => a)
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('a')
+	})
+
+	it('handle request state', async () => {
+		let id = 0
+
+		const app = new Elysia()
+			.setStoreOnRequest(() => ({ requestId: ++id }))
+			.get('/', ({ store: { requestId } }) => requestId)
+		const res1 = await app.handle(req('/'))
+		const res2 = await app.handle(req('/'))
+
+		expect((await res1.text()) === (await res2.text())).toBeFalsy()
 	})
 
 	// https://github.com/oven-sh/bun/issues/1523
