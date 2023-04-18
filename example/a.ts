@@ -1,11 +1,12 @@
 import { Elysia, t } from '../src'
 
-const html = () => (app: Elysia) =>
-	app.decorate('html', (a: string) => new Response(a))
-
-const page = ''
-
 const app = new Elysia()
-	.guard({}, (app) => app.use(html()).get('/html', ({ html }) => page))
-	.get('/', () => page)
+	.get('/', () => 'A' as const, {
+		schema: {
+			response: {
+				200: t.Literal('A'),
+				400: t.Literal('B')
+			}
+		}
+	})
 	.listen(8080)

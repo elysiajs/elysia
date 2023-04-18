@@ -48,7 +48,7 @@ export type Handler<
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
 ) => IsUnknown<Route['response']> extends false
-	? Route['response'] extends Record<number, infer Unioned>
+	? Route['response'] extends Record<number, infer Unioned extends TSchema>
 		? Response | MaybePromise<Unioned>
 		: Response | MaybePromise<Route['response']>
 	: Response | MaybePromise<CatchResponse>

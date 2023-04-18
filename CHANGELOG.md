@@ -1,3 +1,7 @@
+# 0.4.8 - 18 Apr 2023
+Fix:
+- Fix LocalHandler doesn't check single type response
+
 # 0.4.7 - 18 Apr 2023
 Improvement:
 - Update Raikiri to ^1.1.0
