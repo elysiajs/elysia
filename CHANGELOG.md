@@ -1,3 +1,7 @@
+# 0.4.7 - 18 Apr 2023
+Improvement:
+- Update Raikiri to ^1.1.0
+
 # 0.4.6 - 10 Apr 2023
 Improvement:
 - perf: add static route main class

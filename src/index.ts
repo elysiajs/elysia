@@ -2207,8 +2207,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			return handle(context)
 		} else {
 			const route =
-				this.router.match(request.method, fracture[1]) ??
-				this.router.match('ALL', fracture[1])
+				// @ts-ignore
+				this.router._m(request.method, fracture[1]) ??
+				// @ts-ignore
+				this.router._m('ALL', fracture[1])
 
 			if (!route)
 				return this.handleError(

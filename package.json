@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -97,7 +97,7 @@
     "lodash.clonedeep": "^4.5.0",
     "nanoid": "^4.0.1",
     "openapi-types": "^12.1.0",
-    "raikiri": "0.1.0-beta.2"
+    "raikiri": "^0.1.1"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.62",
