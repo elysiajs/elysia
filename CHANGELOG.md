@@ -1,3 +1,7 @@
+# 0.4.9 - x Apr 2023
+Fix:
+- Inherits out-of-order `onError` life cycle in nested group
+
 # 0.4.8 - 18 Apr 2023
 Fix:
 - Fix LocalHandler doesn't check single type response

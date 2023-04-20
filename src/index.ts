@@ -608,7 +608,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any>, localHook)
+					mergeHook(hook as LocalHook<any>, {
+						...localHook,
+						error: !localHook.error
+							? sandbox.event.error
+							: Array.isArray(localHook.error)
+							? [...localHook.error, ...sandbox.event.error]
+							: [localHook.error, ...sandbox.event.error]
+					})
 				)
 			}
 		)
