@@ -1,48 +1,36 @@
 import { Elysia, t } from '../src'
 
-const signInDTO = t.Object({
-	username: t.String(),
-	password: t.String()
-})
-
 const app = new Elysia()
-	.get('/', () => 'Hello Elysia')
-	.onTransform(() => {
-		console.log('Hi')
-	})
-	.group('/auth', (app) =>
-		app.guard(
-			{
-				schema: {
-					body: signInDTO
-				}
-			},
-			(app) =>
-				app
-					.post('/sign-in', async ({ body }) => {
-						const result = {
-							success: false
-						}
-
-						if (!result.success) {
-							// this logs
-							console.log('before hook?')
-							throw new Error() // this error should activate the onError right?
-						}
-
-						return result
-					})
-					.onError(({ error, set, request, code }) => {
-						// I am not getting any logs
-						console.log('onError!')
-
-						set.status = 404
-
-						console.log('code', code)
-						console.log('error', error)
-						console.log('request', request)
-						return 'HA?'
-					})
-		)
+	.group('/users', (app) =>
+		app.get('/:userId', () => {
+			return {}
+		})
 	)
-	.listen(3000)
+	.group('/game', (app) =>
+		app
+			.get('/', () => {
+				return 'GET /game'
+			})
+			.post('/', () => {
+				return 'POST /game'
+			})
+			.post('/join', () => {
+				return 'POST /game/join'
+			})
+			.get('/:gameId/state', () => {
+				return 'GET /game/:gameId/state'
+			})
+			.get('/:gameId', () => {
+				return 'GET /game/:gameId'
+			})
+			.post('/:gameId', () => {
+				return 'POST /game/:gameId'
+			})
+	)
+	.listen(4000, ({ hostname, port }) => {
+		console.log(`Running at http://${hostname}:${port}`)
+	})
+
+app.handle(new Request('http://localhost:8080/game/1/state'))
+	.then((x) => x.text())
+	.then(console.log)

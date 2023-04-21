@@ -1,6 +1,7 @@
-# 0.4.9 - x Apr 2023
+# 0.4.9 - 21 Apr 2023
 Fix:
 - Inherits out-of-order `onError` life cycle in nested group
+- Update Raikiri to 0.1.2 to handle mangled part
 
 # 0.4.8 - 18 Apr 2023
 Fix:
