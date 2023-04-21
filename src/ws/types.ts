@@ -11,7 +11,8 @@ import type {
 	ExtractPath,
 	WithArray,
 	NoReturnHandler,
-	HookHandler
+	HookHandler,
+	BodyParser
 } from '../types'
 
 export type WSTypedSchema<ModelName extends string = string> = Omit<
@@ -144,6 +145,7 @@ export type ElysiaWSOptions<
 	> extends infer WS
 	? {
 			schema?: Schema
+			parse?: WithArray<BodyParser[]>
 			beforeHandle?: WithArray<HookHandler<Schema>>
 			transform?: WithArray<NoReturnHandler<TypedWSSchemaToRoute<Schema>>>
 			transformMessage?: WithArray<
