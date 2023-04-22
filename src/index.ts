@@ -2,25 +2,22 @@ import type { Serve, Server } from 'bun'
 
 import { nanoid } from 'nanoid'
 import { Raikiri } from 'raikiri'
-import { parse as parseQuery } from 'fast-querystring'
 
-import { mapResponse, mapEarlyResponse } from './handler'
+import { mapResponse } from './handler'
 import {
 	SCHEMA,
 	EXPOSED,
 	DEFS,
-	clone,
 	mergeHook,
 	getSchemaValidator,
 	getResponseSchemaValidator,
-	mapPathnameAndQueryRegEx,
 	mergeDeep
 } from './utils'
 import { registerSchemaPath } from './schema'
 import { mapErrorCode, mapErrorStatus } from './error'
 import type { Context } from './context'
 
-import { composeHandler } from './compose'
+import { composeGeneralHandler, composeHandler } from './compose'
 
 import { ws } from './ws'
 import type { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
@@ -120,6 +117,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			fn: '/~fn',
 			...config
 		}
+
+		this.innerHandle = composeGeneralHandler(this)
 	}
 
 	private _addHandler<
@@ -189,6 +188,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			this._s.set(method + path, mainHandler)
 
 		this.router.add(method, path, mainHandler as any)
+
+		this.innerHandle = composeGeneralHandler(this)
 	}
 
 	/**
@@ -2176,56 +2177,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	innerHandle = (request: Request): MaybePromise<Response> => {
-		const context: Context = this.decorators as any as Context
-		context.request = request
-		context.set = {
-			headers: {},
-			status: 200
-		}
-
-		if (this.event.request.length)
-			try {
-				for (let i = 0; i < this.event.request.length; i++) {
-					const response = mapEarlyResponse(
-						this.event.request[i](context),
-						context.set
-					)
-					if (response) return response
-				}
-			} catch (error) {
-				return this.handleError(request, error as Error, context.set)
-			}
-
-		const fracture = mapPathnameAndQueryRegEx.exec(request.url)!
-
-		if (fracture[2]) context.query = parseQuery(fracture[2])
-		else context.query = {}
-
-		const handle = this._s.get(request.method + fracture[1])
-		if (handle) {
-			context.params = {}
-
-			return handle(context)
-		} else {
-			const route =
-				// @ts-ignore
-				this.router._m(request.method, fracture[1]) ??
-				// @ts-ignore
-				this.router._m('ALL', fracture[1])
-
-			if (!route)
-				return this.handleError(
-					request,
-					new Error('NOT_FOUND'),
-					context.set
-				)
-
-			context.params = route.params
-
-			return route.store(context)
-		}
-	}
+	// @ts-ignore
+	innerHandle(request: Request): MaybePromise<Response>
 
 	handleError = async (
 		request: Request,

@@ -3,7 +3,7 @@ import { Elysia } from '.'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse } from './handler'
-import { createValidationError } from './utils'
+import { createValidationError, mapPathnameAndQueryRegEx } from './utils'
 import { mapErrorCode } from './error'
 
 import type {
@@ -285,11 +285,96 @@ export const composeHandler = ({
 	})
 }
 
-// const createTypeboxAot = (a: TypeCheck<any> | undefined) => {
-// 	if (!a) return
+export const composeGeneralHandler = (app: Elysia<any>) => {
+	// @ts-ignore
+	const hasDecorators = Object.keys(app.decorators).length > 0
 
-// 	const fnLiteral = a.Code()
+	return Function(
+		'data',
+		`const { 
+			app,
+			parseQuery,
+			mapPathnameAndQueryRegEx: map,
+			mapEarlyResponse
+		} = data
 
-// 	if (fnLiteral.includes('custom(')) return (param: any) => a.Check(param)
-// 	return new Function(a.Code())()
-// }
+		// staticRouter
+		const _static = app._s
+
+		// Raikiri
+		const router = app.router
+
+		const ctx = ${
+			hasDecorators
+				? `app.decorators`
+				: `{
+			set: {
+				headers: {},
+				status: 200
+			},
+			params: {},
+			query: {}
+		}`
+		}
+
+		return (request) => {
+			${
+				hasDecorators
+					? `
+			ctx.set = {
+				headers: {},
+				status: 200
+			}`
+					: ''
+			}
+
+			ctx.request = request
+
+			${
+				app.event.request.length
+					? `			
+					try {
+						for (let i = 0; i < app.event.request.length; i++) {
+							const response = mapEarlyResponse(
+								app.event.request[i](ctx),
+								ctx.set
+							)
+							if (response) return response
+						}
+					} catch (error) {
+						return app.handleError(request, error, ctx.set)
+					}`
+					: ''
+			}
+
+			const fracture = map.exec(request.url)
+			if (fracture[2]) ctx.query = parseQuery(fracture[2])
+			${hasDecorators ? `else ctx.query = {}` : ''}
+
+			const handle = _static.get(request.method + fracture[1])
+			if (handle) {
+				${hasDecorators ? `ctx.params = {}` : ''}
+
+				return handle(ctx)
+			} else {
+				const route = router._m(request.method, fracture[1]) ?? router._m('ALL', fracture[1])
+
+				if (!route)
+					return app.handleError(
+						request,
+						new Error('NOT_FOUND'),
+						ctx.set
+					)
+
+				ctx.params = route.params
+
+				return route.store(ctx)
+			}
+		}`
+	)({
+		app,
+		parseQuery,
+		mapPathnameAndQueryRegEx,
+		mapEarlyResponse
+	})
+}
