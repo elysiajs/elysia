@@ -142,28 +142,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		const defs = this.meta[DEFS]
 
-		const body = getSchemaValidator(
-			hook?.schema?.body ?? (this.$schema?.body as any),
-			defs
-		)
-		const headers = getSchemaValidator(
-			hook?.schema?.headers ?? (this.$schema?.headers as any),
-			defs,
-			true
-		)
-		const params = getSchemaValidator(
-			hook?.schema?.params ?? (this.$schema?.params as any),
-			defs
-		)
-		const query = getSchemaValidator(
-			hook?.schema?.query ?? (this.$schema?.query as any),
-			defs
-		)
-		const response = getResponseSchemaValidator(
-			hook?.schema?.response ?? (this.$schema?.response as any),
-			defs
-		)
-
 		registerSchemaPath({
 			schema: this.meta[SCHEMA],
 			contentType: hook?.schema?.contentType,
@@ -174,14 +152,30 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		})
 
 		const validator = {
-			body,
-			headers,
-			params,
-			query,
-			response
+			body: getSchemaValidator(
+				hook?.schema?.body ?? (this.$schema?.body as any),
+				defs
+			),
+			headers: getSchemaValidator(
+				hook?.schema?.headers ?? (this.$schema?.headers as any),
+				defs,
+				true
+			),
+			params: getSchemaValidator(
+				hook?.schema?.params ?? (this.$schema?.params as any),
+				defs
+			),
+			query: getSchemaValidator(
+				hook?.schema?.query ?? (this.$schema?.query as any),
+				defs
+			),
+			response: getResponseSchemaValidator(
+				hook?.schema?.response ?? (this.$schema?.response as any),
+				defs
+			)
 		}
 
-		const hooks = mergeHook(clone(this.event), hook as RegisteredHook)
+		const hooks = mergeHook(this.event, hook as RegisteredHook)
 
 		const mainHandler = composeHandler({
 			method,
@@ -191,7 +185,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			handleError: this.handleError
 		})
 
-		if (!path.includes('/:') && !path.includes('/*'))
+		if (path.indexOf(':') === -1 && path.indexOf('*') === -1)
 			this._s.set(method + path, mainHandler)
 
 		this.router.add(method, path, mainHandler as any)

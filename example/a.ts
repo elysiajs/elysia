@@ -1,36 +1,34 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.group('/users', (app) =>
-		app.get('/:userId', () => {
-			return {}
-		})
-	)
-	.group('/game', (app) =>
-		app
-			.get('/', () => {
-				return 'GET /game'
-			})
-			.post('/', () => {
-				return 'POST /game'
-			})
-			.post('/join', () => {
-				return 'POST /game/join'
-			})
-			.get('/:gameId/state', () => {
-				return 'GET /game/:gameId/state'
-			})
-			.get('/:gameId', () => {
-				return 'GET /game/:gameId'
-			})
-			.post('/:gameId', () => {
-				return 'POST /game/:gameId'
-			})
-	)
-	.listen(4000, ({ hostname, port }) => {
-		console.log(`Running at http://${hostname}:${port}`)
-	})
+  .get('/game/', () => {
+    return 'GET /game'
+  })
+  .post('/game/', () => {
+    return 'POST /game'
+  })
+  .post('/game/join', () => {
+    return 'POST /game/join'
+  })
+  .get('/game/:gameId', () => {
+    return 'GET /game/:gameId'
+  })
+  .get('/game/:gameId/state', () => {
+    return 'GET /game/:gameId/state'
+  })
+  .post('/game/:gameId', () => {
+    return 'POST /game/:gameId'
+  })
+  .get('/users/:userId', () => { // <------- not working "NOT_FOUND"
+    return 'GET /users/:userId'
+  })
+  .get('/users/:userId/games', () => {
+    return 'GET /users/:userId/games'
+  })
+  .listen(4000, ({ hostname, port }) => {
+    console.log(`Running at http://${hostname}:${port}`)
+  })
 
-app.handle(new Request('http://localhost:8080/game/1/state'))
+app.handle(new Request('http://localhost:8080/users/2'))
 	.then((x) => x.text())
 	.then(console.log)
