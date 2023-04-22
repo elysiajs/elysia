@@ -83,13 +83,14 @@ const app = new Elysia()
 	})
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) => {
-		return app.onBeforeHandle<{
-			query: {
-				name: string
-			}
-		}>(({ query }) => {
-			if (query?.name === 'aom') return 'Hi saltyaom'
-		})
+		return app
+			.onBeforeHandle<{
+				query: {
+					name: string
+				}
+			}>(({ query }) => {
+				if (query?.name === 'aom') return 'Hi saltyaom'
+			})
 			.get('/', () => 'From Group')
 			.get('/hi', () => 'HI GROUP')
 			.get('/elysia', () => 'Welcome to Elysian Realm')

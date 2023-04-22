@@ -16,6 +16,15 @@ import type {
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
+const transpiler = Bun?.Transpiler
+	? new Bun.Transpiler({
+			minifyWhitespace: true,
+			inline: true,
+			platform: 'bun',
+			allowBunRuntime: true
+	  })
+	: null
+
 export const composeHandler = ({
 	method,
 	hooks,
@@ -95,7 +104,7 @@ export const composeHandler = ({
 				})
 
 				break
-		`.replace(/\t/g, '')
+		`
 
 		fnLiteral += `}}\n`
 	}
@@ -122,7 +131,7 @@ export const composeHandler = ({
                         _header
                     )
 				}
-        `.replace(/\t/g, '')
+        `
 
 		if (validator.params)
 			fnLiteral += `if(params.Check(c.params) === false) { throw createValidationError('params', params, c.params) }`
@@ -261,12 +270,9 @@ export const composeHandler = ({
 		}
 	} = hooks
 
-	return ${maybeAsync ? 'async' : ''} function(c) {${fnLiteral}}`.replace(
-		/\t/g,
-		''
-	)
+	return ${maybeAsync ? 'async' : ''} function(c) {${fnLiteral}}`
 
-	// console.log(fnLiteral)
+	if (transpiler) fnLiteral = transpiler.transformSync(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 
@@ -285,96 +291,114 @@ export const composeHandler = ({
 	})
 }
 
+let composedCache: [number, number, string] | null = null
+
 export const composeGeneralHandler = (app: Elysia<any>) => {
 	// @ts-ignore
-	const hasDecorators = Object.keys(app.decorators).length > 0
+	const totalDecorators = Object.keys(app.decorators).length
+	const hasDecorators = totalDecorators > 0
 
-	return Function(
-		'data',
-		`const { 
-			app,
-			parseQuery,
-			mapPathnameAndQueryRegEx: map,
-			mapEarlyResponse
-		} = data
+	if (
+		composedCache?.[0] === totalDecorators &&
+		composedCache[1] === app.event.request.length
+	) {
+		return composedCache[2]
+	}
 
-		// staticRouter
-		const _static = app._s
+	let fnLiteral = `const { 
+		app,
+		parseQuery,
+		mapPathnameAndQueryRegEx: map,
+		mapEarlyResponse
+	} = data
 
-		// Raikiri
-		const router = app.router
+	// staticRouter
+	const _static = app._s
 
-		const ctx = ${
+	// Raikiri
+	const router = app.router
+
+	const ctx = ${
+		hasDecorators
+			? `app.decorators`
+			: `{
+		set: {
+			headers: {},
+			status: 200
+		},
+		params: {},
+		query: {}
+	}`
+	}
+
+	return (request) => {
+		${
 			hasDecorators
-				? `app.decorators`
-				: `{
-			set: {
-				headers: {},
-				status: 200
-			},
-			params: {},
-			query: {}
+				? `
+		ctx.set = {
+			headers: {},
+			status: 200
 		}`
+				: ''
 		}
 
-		return (request) => {
-			${
-				hasDecorators
-					? `
-			ctx.set = {
-				headers: {},
-				status: 200
-			}`
-					: ''
-			}
+		ctx.request = request
 
-			ctx.request = request
+		${
+			app.event.request.length
+				? `			
+				try {
+					for (let i = 0; i < app.event.request.length; i++) {
+						const response = mapEarlyResponse(
+							app.event.request[i](ctx),
+							ctx.set
+						)
+						if (response) return response
+					}
+				} catch (error) {
+					return app.handleError(request, error, ctx.set)
+				}`
+				: ''
+		}
 
-			${
-				app.event.request.length
-					? `			
-					try {
-						for (let i = 0; i < app.event.request.length; i++) {
-							const response = mapEarlyResponse(
-								app.event.request[i](ctx),
-								ctx.set
-							)
-							if (response) return response
-						}
-					} catch (error) {
-						return app.handleError(request, error, ctx.set)
-					}`
-					: ''
-			}
+		const fracture = map.exec(request.url)
+		if (fracture[2]) ctx.query = parseQuery(fracture[2])
+		${hasDecorators ? `else ctx.query = {}` : ''}
 
-			const fracture = map.exec(request.url)
-			if (fracture[2]) ctx.query = parseQuery(fracture[2])
-			${hasDecorators ? `else ctx.query = {}` : ''}
+		const handle = _static.get(request.method + fracture[1])
+		if (handle) {
+			${hasDecorators ? `ctx.params = {}` : ''}
 
-			const handle = _static.get(request.method + fracture[1])
-			if (handle) {
-				${hasDecorators ? `ctx.params = {}` : ''}
+			return handle(ctx)
+		} else {
+			const route = router._m(request.method, fracture[1]) ?? router._m('ALL', fracture[1])
 
-				return handle(ctx)
-			} else {
-				const route = router._m(request.method, fracture[1]) ?? router._m('ALL', fracture[1])
+			if (!route)
+				return app.handleError(
+					request,
+					new Error('NOT_FOUND'),
+					ctx.set
+				)
 
-				if (!route)
-					return app.handleError(
-						request,
-						new Error('NOT_FOUND'),
-						ctx.set
-					)
+			ctx.params = route.params
 
-				ctx.params = route.params
+			return route.store(ctx)
+		}
+	}`
 
-				return route.store(ctx)
-			}
-		}`
+	if (transpiler) fnLiteral = transpiler.transformSync(fnLiteral)
+
+	const fn = Function(
+		'data',
+		fnLiteral
 	)({
 		app,
 		parseQuery,
 		mapPathnameAndQueryRegEx,
 		mapEarlyResponse
 	})
+
+	composedCache = [totalDecorators, app.event.request.length, fn]
+
+	return fn
 }
