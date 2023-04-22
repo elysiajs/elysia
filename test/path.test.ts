@@ -43,7 +43,7 @@ describe('Path', () => {
 				name: 'takodachi'
 			})
 		)
-		expect(res.headers.get('content-type')).toBe('application/json')
+		expect(res.headers.get('content-type')).toBe('application/json;charset=utf-8')
 	})
 
 	it('Return response', async () => {

@@ -1,3 +1,9 @@
+# 0.5.0-exp.0 - x Apr 2023
+Improvement:
+- constructor name for mapping object type
+- conditional literal fn for checking onRequest iteration
+- Bun.Transpiler for minifying literal fn 
+
 # 0.4.9 - 21 Apr 2023
 Improvement:
 - Add support for `parse` in websocket [#33](https://github.com/elysiajs/elysia/pull/33)

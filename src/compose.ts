@@ -309,31 +309,39 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	// Raikiri
 	const router = app.router
 
-	const ctx = ${
-		hasDecorators
-			? `app.decorators`
-			: `{
+	const ctx = {
+		...app.decorators,
 		set: {
 			headers: {},
 			status: 200
 		},
 		params: {},
 		query: {}
-	}`
 	}
 
-	return (request) => {
+	return function(request) {
 		${
 			hasDecorators
 				? `
 		ctx.set = {
 			headers: {},
 			status: 200
-		}`
-				: ''
 		}
-
+		
 		ctx.request = request
+		`
+				: `
+		const ctx = {
+			set: {
+				headers: {},
+				status: 200
+			},
+				params: {},
+				query: {}
+			},
+			request
+		}`
+		}
 
 		${
 			app.event.request.length
