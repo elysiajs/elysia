@@ -291,19 +291,10 @@ export const composeHandler = ({
 	})
 }
 
-let composedCache: [number, number, string] | null = null
-
 export const composeGeneralHandler = (app: Elysia<any>) => {
 	// @ts-ignore
 	const totalDecorators = Object.keys(app.decorators).length
 	const hasDecorators = totalDecorators > 0
-
-	if (
-		composedCache?.[0] === totalDecorators &&
-		composedCache[1] === app.event.request.length
-	) {
-		return composedCache[2]
-	}
 
 	let fnLiteral = `const { 
 		app,
@@ -388,7 +379,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	if (transpiler) fnLiteral = transpiler.transformSync(fnLiteral)
 
-	const fn = Function(
+	return Function(
 		'data',
 		fnLiteral
 	)({
@@ -397,8 +388,4 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		mapPathnameAndQueryRegEx,
 		mapEarlyResponse
 	})
-
-	composedCache = [totalDecorators, app.event.request.length, fn]
-
-	return fn
 }
