@@ -3,7 +3,13 @@ import { Elysia } from '.'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse } from './handler'
-import { createValidationError, mapPathnameAndQueryRegEx } from './utils'
+import {
+	createValidationError,
+	removeHostnameRegex,
+	removeFragmentRegex,
+	removePathRegex,
+	removeQueryRegex
+} from './utils'
 import { mapErrorCode } from './error'
 
 import type {
@@ -120,15 +126,15 @@ export const composeHandler = ({
 	if (validator) {
 		if (validator.headers)
 			fnLiteral += `
-                const _header = {}
+                const h = {}
                 for (const key of c.request.headers.keys())
-                    _header[key] = c.request.headers.get(key)
+				h[key] = c.request.headers.get(key)
 
-                if (headers.Check(_header) === false) {
+                if (headers.Check(h) === false) {
                     throw createValidationError(
                         'header',
                         headers,
-                        _header
+                        h
                     )
 				}
         `
@@ -291,16 +297,40 @@ export const composeHandler = ({
 	})
 }
 
+// This is a cached for composeGeneralHandler generated function literal
+// to prevent minimize transpiler work
+let generalCached: [number, number, string] | undefined
+
 export const composeGeneralHandler = (app: Elysia<any>) => {
 	// @ts-ignore
 	const totalDecorators = Object.keys(app.decorators).length
 	const hasDecorators = totalDecorators > 0
 
+	if (
+		generalCached?.[0] === totalDecorators &&
+		generalCached[1] === app.event.request.length
+	)
+		return Function(
+			'data',
+			generalCached?.[2]
+		)({
+			app,
+			parseQuery,
+			mapEarlyResponse,
+			removeHostnameRegex,
+			removeQueryRegex,
+			removePathRegex,
+			removeFragmentRegex
+		})
+
 	let fnLiteral = `const { 
 		app,
 		parseQuery,
-		mapPathnameAndQueryRegEx: map,
-		mapEarlyResponse
+		${app.event.request.length ? 'mapEarlyResponse,' : ''}
+		removeHostnameRegex: rHost,
+		removeQueryRegex: rQuery,
+		removePathRegex: rPath,
+		removeFragmentRegex: rFrag
 	} = data
 
 	// staticRouter
@@ -360,17 +390,20 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				: ''
 		}
 
-		const fracture = map.exec(request.url)
-		if (fracture[2]) ctx.query = parseQuery(fracture[2])
+		const p = request.url.replace(rHost, '')
+		const path = p.replace(rQuery, '').replace(rFrag, '')
+		const query = p.replace(rPath, '').replace(rFrag, '')
+	
+		if (query) ctx.query = parseQuery(query)
 		${hasDecorators ? `else ctx.query = {}` : ''}
 
-		const handle = _static.get(request.method + fracture[1])
+		const handle = _static.get(request.method + path)
 		if (handle) {
 			${hasDecorators ? `ctx.params = {}` : ''}
 
 			return handle(ctx)
 		} else {
-			const route = router._m(request.method, fracture[1]) ?? router._m('ALL', fracture[1])
+			const route = router._m(request.method, path) ?? router._m('ALL', path)
 
 			if (!route)
 				return app.handleError(
@@ -387,13 +420,18 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	if (transpiler) fnLiteral = transpiler.transformSync(fnLiteral)
 
+	generalCached = [totalDecorators, app.event.request.length, fnLiteral]
+
 	return Function(
 		'data',
 		fnLiteral
 	)({
 		app,
 		parseQuery,
-		mapPathnameAndQueryRegEx,
-		mapEarlyResponse
+		mapEarlyResponse,
+		removeHostnameRegex,
+		removeQueryRegex,
+		removePathRegex,
+		removeFragmentRegex
 	})
 }

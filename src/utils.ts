@@ -64,7 +64,17 @@ export const mergeHook = (
 export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 	[value][0]
 
+/**
+ * @deprecated
+ * 
+ * should be removed in 0.6
+ */
 export const mapPathnameAndQueryRegEx = /:\/\/[^/]+([^#?]+)(?:\?([^#]+))?/
+
+export const removeHostnameRegex = /^[a-z]+?:\/\/[^/]+/
+export const removeQueryRegex = /\?.*?([\w=&%]+)/
+export const removePathRegex = /^[^?]*(\?|$)/
+export const removeFragmentRegex = /#(\S+)/;
 
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
