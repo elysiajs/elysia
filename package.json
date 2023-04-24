@@ -88,7 +88,8 @@
     "test": "bun test",
     "dev": "bun run --hot example/http.ts",
     "build": "rimraf dist && swc src -d dist && tsc --project tsconfig.esm.json",
-    "release": "npm run build && npm run test && npm publish"
+    "prepublishOnly": "npm run build && npm run test",
+    "release": "bunx bumpp package.json --commit --push --tag"
   },
   "dependencies": {
     "@sinclair/typebox": "0.26.8",
@@ -105,6 +106,7 @@
     "@types/node": "^18.15.5",
     "@typescript-eslint/eslint-plugin": "^5.56.0",
     "@typescript-eslint/parser": "^5.56.0",
+    "bumpp": "^9.1.0",
     "bun-types": "^0.5.8",
     "eslint": "^8.36.0",
     "rimraf": "^3.0.2",
