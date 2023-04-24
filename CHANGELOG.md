@@ -2,7 +2,7 @@
 Improvement:
 - constructor name for mapping object type
 - conditional literal fn for checking onRequest iteration
-- Bun.Transpiler for minifying literal fn 
+- Bun.Transpiler for minifying literal fn
 
 # 0.4.9 - 21 Apr 2023
 Improvement:

@@ -353,24 +353,23 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		${
 			hasDecorators
 				? `
-		ctx.set = {
-			headers: {},
-			status: 200
-		}
-		
-		ctx.request = request
-		`
-				: `
-		const ctx = {
-			set: {
+			ctx.request = request
+
+			ctx.set = {
 				headers: {},
 				status: 200
-			},
-				params: {},
-				query: {}
-			},
-			request
-		}`
+			}`
+				: `
+			const ctx = {
+				set: {
+					headers: {},
+					status: 200
+				},
+					params: {},
+					query: {}
+				},
+				request
+			}`
 		}
 
 		${
@@ -390,12 +389,34 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				: ''
 		}
 
-		const p = request.url.replace(rHost, '')
-		const path = p.replace(rQuery, '').replace(rFrag, '')
-		const query = p.replace(rPath, '').replace(rFrag, '')
-	
-		if (query) ctx.query = parseQuery(query)
-		${hasDecorators ? `else ctx.query = {}` : ''}
+		let path;
+
+		const url = request.url,
+			i = request.url.indexOf('?', 11),
+			f = request.url.indexOf('#', 12)
+
+		${
+			// path = url.slice(url.indexOf('/', 10), i !== -1 ? i : f !== -1 ? f : undefined)
+			''
+		}
+
+		if (i !== -1) {
+			path = url.slice(url.indexOf('/', 10), i)
+
+			if(f === -1) {
+				ctx.query = parseQuery(url.slice(i + 1), i)
+			} else {
+				ctx.query = parseQuery(url.slice(i + 1, f), i)
+			}
+		} else {
+			if(f === -1) {
+				path = url.slice(url.indexOf('/', 10))
+			} else {
+				path = url.slice(url.indexOf('/', 10), f)
+			}
+
+			${hasDecorators ? `ctx.query = {}` : ''}
+		}
 
 		const handle = _static.get(request.method + path)
 		if (handle) {
