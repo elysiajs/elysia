@@ -1,3 +1,7 @@
+# 0.4.10 - 25 Apr 2023
+Fix:
+- Update Raikiri stability
+
 # 0.4.9 - 21 Apr 2023
 Improvement:
 - Add support for `parse` in websocket [#33](https://github.com/elysiajs/elysia/pull/33)
