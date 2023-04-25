@@ -1,7 +1,8 @@
 import type { Serve, Server } from 'bun'
 
 import { nanoid } from 'nanoid'
-import { Raikiri } from 'raikiri'
+// import { Raikiri } from 'raikiri'
+import { Memoirist } from 'memoirist'
 
 import { mapResponse } from './handler'
 import {
@@ -104,11 +105,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	server: Server | null = null
 	private $schema: SchemaValidator | null = null
 
-	private router = new Raikiri<ComposedHandler>()
+	private router = new Memoirist<ComposedHandler>()
 	protected routes: InternalRoute<Instance>[] = []
 	// Static
 	private _s: Map<string, ComposedHandler> = new Map()
-	private wsRouter: Raikiri<ElysiaWSOptions> | undefined
+	private wsRouter: Memoirist<ElysiaWSOptions> | undefined
 
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
@@ -496,7 +497,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				const path =
 					originalPath === '/' ? prefix : `${prefix}${originalPath}`
 
-				const hasWsRoute = instance.wsRouter?.match('subscribe', path)
+				const hasWsRoute = instance.wsRouter?.find('subscribe', path)
 				if (hasWsRoute) {
 					const wsRoute = instance.wsRouter!.history.find(
 						([_, wsPath]) => originalPath === wsPath
@@ -589,7 +590,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks: localHook }) => {
-				const hasWsRoute = instance.wsRouter?.match('subscribe', path)
+				const hasWsRoute = instance.wsRouter?.find('subscribe', path)
 				if (hasWsRoute) {
 					const wsRoute = instance.wsRouter!.history.find(
 						([_, wsPath]) => path === wsPath
@@ -2337,7 +2338,9 @@ export {
 	mergeDeep,
 	mergeHook,
 	mergeObjectArray,
-	mapPathnameAndQueryRegEx
+	getPath,
+	getPathAndQuery,
+	getResponseSchemaValidator
 } from './utils'
 
 export { ElysiaError, ValidationError } from './validation'

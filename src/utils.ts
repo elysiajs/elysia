@@ -64,17 +64,34 @@ export const mergeHook = (
 export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 	[value][0]
 
-/**
- * @deprecated
- * 
- * should be removed in 0.6
- */
-export const mapPathnameAndQueryRegEx = /:\/\/[^/]+([^#?]+)(?:\?([^#]+))?/
+export const getPath = (url: string) => {
+	const i = url.indexOf('?', 11)
+	if (i !== -1) return url.slice(url.indexOf('/', 10), i)
+
+	const f = url.indexOf('#', 12)
+	if (f !== -1) return url.slice(url.indexOf('/', 10), f)
+
+	return url.slice(url.indexOf('/', 10))
+}
+
+export const getPathAndQuery = (url: string) => {
+	const i = url.indexOf('?', 11)
+	const f = url.indexOf('#', 12)
+
+	if (i !== -1)
+		if (f !== -1)
+			return [url.slice(url.indexOf('/', 10), i), url.slice(i + 1, f)]
+		else return [url.slice(url.indexOf('/', 10), i), url.slice(i + 1)]
+
+	if (f !== -1) return [url.slice(url.indexOf('/', 10), f), '']
+
+	return [url.slice(url.indexOf('/', 10)), '']
+}
 
 export const removeHostnameRegex = /^[a-z]+?:\/\/[^/]+/
 export const removeQueryRegex = /\?.*?([\w=&%]+)/
 export const removePathRegex = /^[^?]*(\?|$)/
-export const removeFragmentRegex = /#(\S+)/;
+export const removeFragmentRegex = /#(\S+)/
 
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)

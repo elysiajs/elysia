@@ -392,8 +392,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		let path;
 
 		const url = request.url,
-			i = request.url.indexOf('?', 11),
-			f = request.url.indexOf('#', 12)
+			i = url.indexOf('?', 11),
+			f = url.indexOf('#', 12)
 
 		${
 			// path = url.slice(url.indexOf('/', 10), i !== -1 ? i : f !== -1 ? f : undefined)
@@ -424,7 +424,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 			return handle(ctx)
 		} else {
-			const route = router._m(request.method, path) ?? router._m('ALL', path)
+			const route = router.find(request.method, path) ?? router.find('ALL', path)
 
 			if (!route)
 				return app.handleError(

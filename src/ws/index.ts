@@ -3,11 +3,7 @@ import type { Server, ServerWebSocket, WebSocketHandler } from 'bun'
 import { Raikiri } from 'raikiri'
 
 import type { Elysia, Context } from '..'
-import {
-	createValidationError,
-	mapPathnameAndQueryRegEx,
-	type DEFS
-} from '../utils'
+import { createValidationError, getPath, type DEFS } from '../utils'
 
 import type { ElysiaWSContext, WSTypedSchema } from './types'
 import type { ElysiaInstance, UnwrapSchema } from '../types'
@@ -120,12 +116,12 @@ export const ws =
 					open(ws) {
 						if (!ws.data) return
 
-						const url = (
-							ws?.data as unknown as Context
-						).request.url.match(mapPathnameAndQueryRegEx)?.[1]
+						const url = getPath(
+							(ws?.data as unknown as Context).request.url
+						)
 						if (!url) return
 
-						const route = router.match('subscribe', url)?.store
+						const route = router.find('subscribe', url)?.store
 
 						if (route && route.open)
 							route.open(new ElysiaWS(ws as any))
@@ -133,12 +129,12 @@ export const ws =
 					message(ws, message: any): void {
 						if (!ws.data) return
 
-						const url = (
-							ws?.data as unknown as Context
-						).request.url.match(mapPathnameAndQueryRegEx)?.[1]
+						const url = getPath(
+							(ws?.data as unknown as Context).request.url
+						)
 						if (!url) return
 
-						const route = router.match('subscribe', url)?.store
+						const route = router.find('subscribe', url)?.store
 
 						if (!route?.message) return
 
@@ -186,12 +182,12 @@ export const ws =
 					close(ws, code, reason) {
 						if (!ws.data) return
 
-						const url = (
-							ws?.data as unknown as Context
-						).request.url.match(mapPathnameAndQueryRegEx)?.[1]
+						const url = getPath(
+							(ws?.data as unknown as Context).request.url
+						)
 						if (!url) return
 
-						const route = router.match('subscribe', url)?.store
+						const route = router.find('subscribe', url)?.store
 
 						if (route && route.close)
 							route.close(new ElysiaWS(ws as any), code, reason)
@@ -199,12 +195,12 @@ export const ws =
 					drain(ws) {
 						if (!ws.data) return
 
-						const url = (
-							ws?.data as unknown as Context
-						).request.url.match(mapPathnameAndQueryRegEx)?.[1]
+						const url = getPath(
+							(ws?.data as unknown as Context).request.url
+						)
 						if (!url) return
 
-						const route = router.match('subscribe', url)?.store
+						const route = router.find('subscribe', url)?.store
 
 						if (route && route.drain)
 							route.drain(new ElysiaWS(ws as any))
