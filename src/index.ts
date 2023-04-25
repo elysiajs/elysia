@@ -1,7 +1,6 @@
 import type { Serve, Server } from 'bun'
 
 import { nanoid } from 'nanoid'
-// import { Raikiri } from 'raikiri'
 import { Memoirist } from 'memoirist'
 
 import { mapResponse } from './handler'
