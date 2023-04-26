@@ -47,11 +47,11 @@ export type Handler<
 	CatchResponse = unknown
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
-) => IsUnknown<Route['response']> extends false
-	? Route['response'] extends Record<number, infer Unioned extends TSchema>
-		? Response | MaybePromise<Unioned>
-		: Response | MaybePromise<Route['response']>
-	: Response | MaybePromise<CatchResponse>
+) => IsUnknown<Route['response']> extends true
+	? Response | MaybePromise<CatchResponse>
+	: Route['response'] extends TSchema
+	? Response | MaybePromise<UnwrapSchema<Route['response']>>
+	: Response | MaybePromise<Route['response']>
 
 export type NoReturnHandler<
 	Route extends TypedRoute = TypedRoute,

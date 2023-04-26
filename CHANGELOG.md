@@ -1,3 +1,7 @@
+# 0.4.11 - 26 Apr 2023
+Fix:
+- response schema doesn't unwrap response type
+
 # 0.4.10 - 25 Apr 2023
 Fix:
 - Update Raikiri stability

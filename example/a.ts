@@ -6,6 +6,24 @@ const app = new Elysia()
 			return {}
 		})
 	)
+	.post('/sign-in', ({ body }) => body, {
+		schema: {
+			body: t.Object({
+				username: t.String(),
+				password: t.String()
+			}),
+			response: {
+				200: t.Object({
+					username: t.String(),
+					password: t.String()
+				}),
+				400: t.Object({
+					username: t.String(),
+					password: t.String()
+				}),
+			}
+		}
+	})
 	.group('/game', (app) =>
 		app
 			.get('/', () => {
