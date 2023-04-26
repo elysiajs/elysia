@@ -851,7 +851,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -952,7 +954,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1053,7 +1057,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1154,7 +1160,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1255,7 +1263,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1356,7 +1366,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1452,7 +1464,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1553,7 +1567,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1654,7 +1670,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1755,7 +1773,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}
@@ -1967,7 +1987,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									  : {
+										'200': ReturnType<Handler>
+									}
 							}
 						}
 					}

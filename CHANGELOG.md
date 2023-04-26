@@ -1,3 +1,7 @@
+# 0.4.12 - 26 Apr 2023
+Fix:
+- CatchResponse to return 200 status code by default when using Eden Treaty
+
 # 0.4.11 - 26 Apr 2023
 Fix:
 - response schema doesn't unwrap response type
