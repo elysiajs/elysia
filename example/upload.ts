@@ -8,6 +8,9 @@ const app = new Elysia()
 				file: t.File(),
 				text: t.String()
 			})
+		},
+		error: ({ body }) => {
+			console.log(body)
 		}
 	})
 	.post(

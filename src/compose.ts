@@ -25,14 +25,43 @@ import type {
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
-const transpiler = Bun?.Transpiler
-	? new Bun.Transpiler({
-			minifyWhitespace: true,
-			inline: true,
-			platform: 'bun',
-			allowBunRuntime: true
-	  })
-	: undefined
+const isFnUse = (keyword: string, fnLiteral: string) => {
+	const argument = fnLiteral.slice(
+		fnLiteral.indexOf('(') + 1,
+		fnLiteral.indexOf(')')
+	)
+
+	if (argument === '') return false
+
+	// Using object destructuring
+	if (argument.charCodeAt(0) === 123) {
+		// Since Function already format the code, styling is confirmed
+		if (
+			argument.includes(`{ ${keyword}`) ||
+			argument.includes(`, ${keyword}`)
+		)
+			return true
+
+		return false
+	}
+
+	// Match dot notation
+	if (fnLiteral.includes(`${argument}.${keyword}`)) return true
+
+	const findAliases = new RegExp(` (\\w+) = context`, 'g')
+
+	const aliases = [argument]
+	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
+
+	const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
+
+	for (const [params] of fnLiteral.matchAll(destructuringRegex)) {
+		if (params.includes(`{ ${keyword}`) || params.includes(`, ${keyword}`))
+			return true
+	}
+
+	return false
+}
 
 export const composeHandler = ({
 	method,
@@ -51,27 +80,35 @@ export const composeHandler = ({
 }): ComposedHandler => {
 	let fnLiteral = 'try {\n'
 
+	const hasBody =
+		method !== 'GET' &&
+		(validator.body ||
+			[
+				handler,
+				...hooks.transform,
+				...hooks.beforeHandle,
+				...hooks.afterHandle
+			].some((fn) => isFnUse('body', fn.toString())))
+
 	const maybeAsync =
-		method !== 'GET' ||
 		handler.constructor.name === ASYNC_FN ||
 		hooks.parse.length ||
 		hooks.afterHandle.find(isAsync) ||
 		hooks.beforeHandle.find(isAsync) ||
-		hooks.transform.find(isAsync)
+		hooks.transform.find(isAsync) ||
+		hasBody
 
-	if (maybeAsync) {
+	if (hasBody) {
 		fnLiteral += `
-			let contentType = c.request.headers.get('content-type');
+			let contentType = c.request.headers.get('content-type')
 
             if (contentType) {
-				if(contentType.indexOf(';')) {
-					const index = contentType.indexOf(';');
-					if (index !== -1) contentType = contentType.substring(0, index);
-				}
+				const index = contentType.indexOf(';')
+				if (index !== -1) contentType = contentType.substring(0, index)
 `
 
 		if (hooks.parse.length) {
-			fnLiteral += `used = false\n`
+			fnLiteral += `let used = false\n`
 
 			for (let i = 0; i < hooks.parse.length; i++) {
 				const name = `bo${i}`
@@ -295,8 +332,6 @@ export const composeHandler = ({
 		${fnLiteral}
 	}`
 
-	if (transpiler) fnLiteral = transpiler.transformSync(fnLiteral)
-
 	const createHandler = Function('hooks', fnLiteral)
 
 	return createHandler({
@@ -313,7 +348,7 @@ export const composeHandler = ({
 		},
 		meta,
 		SCHEMA: meta ? SCHEMA : undefined,
-		DEFS: meta ? DEFS : undefined,
+		DEFS: meta ? DEFS : undefined
 	})
 }
 
@@ -348,7 +383,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	for (const key of Object.keys(decorators))
 		decoratorsLiteral += `,${key}: app.decorators.${key}`
 
-	let fnLiteral = `const { 
+	const fnLiteral = `const { 
 		app,
 		app: { store, router, _s: _static },
 		parseQuery,
@@ -419,7 +454,6 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		}
 
 		const handle = _static.get(request.method)?.get(path)
-		// const handle = _static.get(request.method + path)
 		if (handle) {
 			return handle(ctx)
 		} else {
@@ -437,8 +471,6 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			return route.store(ctx)
 		}
 	}`
-
-	if (transpiler) fnLiteral = transpiler.transformSync(fnLiteral)
 
 	generalCached = [totalDecorators, app.event.request.length, fnLiteral]
 

@@ -1,27 +1,9 @@
 // // Using navitve Bun http server
-// Bun.serve({
-// 	port: 8080,
-// 	fetch: (request: Request) => {
-// 		const hasBody = !!request.body ? true : false
-
-// 		return new Response(hasBody.toString())
-// 	}
-// })
-
 Bun.serve({
 	port: 8080,
-	fetch(request) {
-		return new Response(
-			JSON.stringify({
-				name: 'saltyaom'
-			}),
-			{
-				headers: { 'Content-Type': 'application/json' }
-			}
-		)
+	fetch: async (request) => {
+		if (request.body) return new Response(JSON.stringify(await request.json()))
 
-		// return Response.json({
-		// 	name: 'saltyaom'
-		// })
+		return new Response('w/o body')
 	}
 })
