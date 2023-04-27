@@ -7,7 +7,7 @@ import type { HTTPMethod, LocalHook } from './types'
 export const toOpenAPIPath = (path: string) =>
 	path
 		.split('/')
-		.map((x) => (x.startsWith(':') ? `{${x.substring(1, x.length)}}` : x))
+		.map((x) => (x.startsWith(':') ? `{${x.slice(1, x.length)}}` : x))
 		.join('/')
 
 export const mapProperties = (

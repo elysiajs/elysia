@@ -15,7 +15,7 @@ const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 
 		headers.append(
 			'Set-Cookie',
-			`${setCookie[i].substring(0, index)}=${setCookie[i].substring(index + 1)}`
+			`${setCookie[i].slice(0, index)}=${setCookie[i].slice(index + 1)}`
 		)
 	}
 
@@ -52,6 +52,10 @@ export const mapEarlyResponse = (
 
 			case 'object':
 				switch (response?.constructor.name) {
+					case 'Object':
+					case undefined:
+						return Response.json(response)
+	
 					case 'Error':
 						return errorToResponse(response as Error, set.headers)
 
@@ -124,6 +128,7 @@ export const mapEarlyResponse = (
 			case 'object':
 				switch (response?.constructor?.name) {
 					case 'Object':
+					case undefined:
 						return Response.json(response)
 
 					case 'Response':
@@ -193,6 +198,10 @@ export const mapResponse = (
 
 			case 'object':
 				switch (response?.constructor?.name) {
+					case 'Object':
+					case undefined:
+						return Response.json(response)
+
 					case 'Error':
 						return errorToResponse(response as Error, set.headers)
 
@@ -262,6 +271,7 @@ export const mapResponse = (
 			case 'object':
 				switch (response?.constructor?.name) {
 					case 'Object':
+					case undefined:
 						return Response.json(response)
 
 					case 'Response':

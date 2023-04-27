@@ -391,9 +391,9 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				: ''
 		}
 
-		const url = request.url
-		const i = url.indexOf('?', 11)
-		const f = url.indexOf('#', 12)
+		const url = request.url,
+			i = url.indexOf('?', 11),
+			f = url.indexOf('#', 12)
 
 		let path;
 
@@ -413,7 +413,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			}
 		}
 
-		const handle = _static.get(request.method + path)
+		const handle = _static.get(request.method)?.get(path)
+		// const handle = _static.get(request.method + path)
 		if (handle) {
 			return handle(ctx)
 		} else {
