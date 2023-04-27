@@ -279,9 +279,14 @@ export const composeHandler = ({
 			mapErrorCode,
 			parseQuery
 		},
-		meta,
-		SCHEMA,
-		DEFS
+		${
+			meta
+				? `
+			meta,
+			SCHEMA,
+			DEFS,`
+				: ''
+		}
 	} = hooks
 
 	return ${maybeAsync ? 'async' : ''} function(c) {
@@ -307,8 +312,8 @@ export const composeHandler = ({
 			parseQuery
 		},
 		meta,
-		SCHEMA,
-		DEFS
+		SCHEMA: meta ? SCHEMA : undefined,
+		DEFS: meta ? DEFS : undefined,
 	})
 }
 
@@ -401,9 +406,9 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			path = url.substring(url.indexOf('/', 10), i)
 
 			if(f === -1) {
-				ctx.query = parseQuery(url.substring(i + 1), i)
+				ctx.query = { ...parseQuery(url.substring(i + 1), i) }
 			} else {
-				ctx.query = parseQuery(url.substring(i + 1, f), i)
+				ctx.query = { ...parseQuery(url.substring(i + 1, f), i) }
 			}
 		} else {
 			if(f === -1) {
