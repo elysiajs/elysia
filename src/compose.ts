@@ -4,6 +4,8 @@ import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse } from './handler'
 import {
+	SCHEMA,
+	DEFS,
 	createValidationError,
 	removeHostnameRegex,
 	removeFragmentRegex,
@@ -13,6 +15,7 @@ import {
 import { mapErrorCode } from './error'
 
 import type {
+	ComposedHandler,
 	HTTPMethod,
 	LocalHandler,
 	RegisteredHook,
@@ -29,21 +32,23 @@ const transpiler = Bun?.Transpiler
 			platform: 'bun',
 			allowBunRuntime: true
 	  })
-	: null
+	: undefined
 
 export const composeHandler = ({
 	method,
 	hooks,
 	validator,
 	handler,
-	handleError
+	handleError,
+	meta
 }: {
 	method: HTTPMethod
 	hooks: RegisteredHook<any>
 	validator: SchemaValidator
 	handler: LocalHandler<any, any>
 	handleError: Elysia['handleError']
-}) => {
+	meta?: Elysia['meta']
+}): ComposedHandler => {
 	let fnLiteral = 'try {\n'
 
 	const maybeAsync =
@@ -273,10 +278,17 @@ export const composeHandler = ({
 			mapEarlyResponse,
 			mapErrorCode,
 			parseQuery
-		}
+		},
+		meta,
+		SCHEMA,
+		DEFS
 	} = hooks
 
-	return ${maybeAsync ? 'async' : ''} function(c) {${fnLiteral}}`
+	return ${maybeAsync ? 'async' : ''} function(c) {
+		${meta ? 'c[SCHEMA] = meta[SCHEMA]; c[DEFS] = meta[DEFS];' : ''}
+
+		${fnLiteral}
+	}`
 
 	if (transpiler) fnLiteral = transpiler.transformSync(fnLiteral)
 
@@ -293,7 +305,10 @@ export const composeHandler = ({
 			mapEarlyResponse,
 			mapErrorCode,
 			parseQuery
-		}
+		},
+		meta,
+		SCHEMA,
+		DEFS
 	})
 }
 
@@ -303,8 +318,12 @@ let generalCached: [number, number, string] | undefined
 
 export const composeGeneralHandler = (app: Elysia<any>) => {
 	// @ts-ignore
-	const totalDecorators = Object.keys(app.decorators).length
-	const hasDecorators = totalDecorators > 0
+	const decorators = app.decorators
+
+	const totalDecorators = Object.keys(decorators).length
+
+	// Decorator has default one property which is store
+	const hasDecorators = totalDecorators > 1
 
 	if (
 		generalCached?.[0] === totalDecorators &&
@@ -323,8 +342,14 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			removeFragmentRegex
 		})
 
+	let decoratorsLiteral = ''
+
+	for(const key of Object.keys(decorators))
+		decoratorsLiteral += `,${key}: app.decorators.${key}`
+
 	let fnLiteral = `const { 
 		app,
+		app: { store, router, _s: _static },
 		parseQuery,
 		${app.event.request.length ? 'mapEarlyResponse,' : ''}
 		removeHostnameRegex: rHost,
@@ -333,52 +358,33 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		removeFragmentRegex: rFrag
 	} = data
 
-	// staticRouter
-	const _static = app._s
-
-	// Raikiri
-	const router = app.router
-
-	const ctx = {
-		...app.decorators,
-		set: {
-			headers: {},
-			status: 200
-		},
-		params: {},
-		query: {}
+	${
+		app.event.request.length
+			? `const onRequest = app.event.request
+			   const requestLength = app.event.request.length`
+			: ''
 	}
 
 	return function(request) {
-		${
-			hasDecorators
-				? `
-			ctx.request = request
-
-			ctx.set = {
+		const ctx = {
+			set: {
 				headers: {},
 				status: 200
-			}`
-				: `
-			const ctx = {
-				set: {
-					headers: {},
-					status: 200
-				},
-					params: {},
-					query: {}
-				},
-				request
-			}`
+			},
+			params: {},
+			query: {},
+			request,
+			store
+			${decoratorsLiteral}
 		}
 
 		${
 			app.event.request.length
 				? `			
 				try {
-					for (let i = 0; i < app.event.request.length; i++) {
+					for (let i = 0; i < requestLength; i++) {
 						const response = mapEarlyResponse(
-							app.event.request[i](ctx),
+							onRequest[i](ctx),
 							ctx.set
 						)
 						if (response) return response
@@ -388,17 +394,12 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				}`
 				: ''
 		}
-
-		let path;
-
+		
 		const url = request.url,
 			i = url.indexOf('?', 11),
 			f = url.indexOf('#', 12)
 
-		${
-			// path = url.slice(url.indexOf('/', 10), i !== -1 ? i : f !== -1 ? f : undefined)
-			''
-		}
+		let path;
 
 		if (i !== -1) {
 			path = url.slice(url.indexOf('/', 10), i)

@@ -66,12 +66,12 @@ export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
 
 export const getPath = (url: string) => {
 	const i = url.indexOf('?', 11)
-	if (i !== -1) return url.slice(url.indexOf('/', 10), i)
-
 	const f = url.indexOf('#', 12)
-	if (f !== -1) return url.slice(url.indexOf('/', 10), f)
 
-	return url.slice(url.indexOf('/', 10))
+	return url.slice(
+		url.indexOf('/', 10),
+		i !== -1 ? i : f !== -1 ? f : undefined
+	)
 }
 
 export const getPathAndQuery = (url: string) => {

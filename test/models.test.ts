@@ -13,7 +13,11 @@ describe('Models', () => {
 			.setModel({
 				boolean: t.Boolean()
 			})
-			.get('/', (context) => Object.keys(context[DEFS]))
+			.route('GET', '/', (context) => Object.keys(context[DEFS]!), {
+				config: {
+					allowMeta: true
+				}
+			})
 
 		const res = await app.handle(req('/')).then((r) => r.json())
 
@@ -289,7 +293,7 @@ describe('Models', () => {
 					response: 'number',
 					body: t.Object({
 						data: t.Number()
-					}),
+					})
 				}
 			})
 

@@ -74,7 +74,11 @@ describe('Modules', () => {
 			.use(import('./modules'))
 			.use(asyncPlugin)
 			.get('/', () => 'hi')
-			.get('/schema', (context) => context[SCHEMA])
+			.route('GET', '/schema', (context) => context[SCHEMA], {
+				config: {
+					allowMeta: true
+				}
+			})
 
 		await app.modules
 

@@ -12,8 +12,8 @@ export interface Context<
 	body: Route['body']
 	store: Store
 
-	[SCHEMA]: TypedSchema
-	[DEFS]: {
+	[SCHEMA]?: TypedSchema
+	[DEFS]?: {
         [index: string]: Record<string, unknown>;
     }
 

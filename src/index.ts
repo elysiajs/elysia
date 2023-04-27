@@ -83,12 +83,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		[DEFS]: Object.create(null),
 		[EXPOSED]: Object.create(null)
 	}
+
 	// Will be applied to Context
-	protected decorators: ElysiaInstance['request'] = {
-		[SCHEMA]: this.meta[SCHEMA],
-		[DEFS]: this.meta[DEFS],
-		store: this.store
-	}
+	protected decorators: ElysiaInstance['request'] = {}
 
 	event: LifeCycleStore<Instance> = {
 		start: [],
@@ -118,7 +115,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			...config
 		}
 
-		this.innerHandle = composeGeneralHandler(this)
+		this.fetch = composeGeneralHandler(this)
 	}
 
 	private _addHandler<
@@ -128,7 +125,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		method: HTTPMethod,
 		path: Path,
 		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook
+		hook?: LocalHook,
+		{ allowMeta = false } = {
+			allowMeta: false as boolean | undefined
+		}
 	) {
 		path = path.startsWith('/') ? path : (`/${path}` as Path)
 
@@ -181,15 +181,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			hooks,
 			validator: validator as any,
 			handler,
-			handleError: this.handleError
+			handleError: this.handleError,
+			meta: allowMeta ? this.meta : undefined
 		})
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1)
 			this._s.set(method + path, mainHandler)
 
-		this.router.add(method, path, mainHandler as any)
+		this.router.add(method, path, mainHandler)
 
-		this.innerHandle = composeGeneralHandler(this)
+		this.fetch = composeGeneralHandler(this)
 	}
 
 	/**
@@ -1900,7 +1901,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		method: Method,
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		{
+			config,
+			...hook
+		}: LocalHook<Schema, Instance, Path> & {
+			config: {
+				allowMeta?: boolean
+			}
+		} = {
+			config: {
+				allowMeta: false
+			}
+		}
 	): Elysia<{
 		request: Instance['request']
 		store: Instance['store']
@@ -1969,7 +1981,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler(method, path, handler, hook as LocalHook)
+		this._addHandler(method, path, handler, hook as LocalHook, config)
 
 		return this as any
 	}
@@ -2170,7 +2182,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return this as unknown as NewInstance
 	}
 
-	handle = async (request: Request) => this.innerHandle(request)
+	handle = async (request: Request) => this.fetch(request)
 
 	/**
 	 * Handle can be either sync or async to save performance.
@@ -2178,7 +2190,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
 	// @ts-ignore
-	innerHandle(request: Request): MaybePromise<Response>
+	fetch(request: Request): MaybePromise<Response>
 
 	handleError = async (
 		request: Request,
@@ -2233,7 +2245,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				throw new Error('Port must be a numeric value')
 		}
 
-		const fetch = this.innerHandle
+		const fetch = this.fetch
 
 		const serve: Serve =
 			typeof options === 'object'
