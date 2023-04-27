@@ -88,10 +88,10 @@ const parseFileUnit = (size: ElysiaTypeOptions.FileUnit) => {
 	if (typeof size === 'string')
 		switch (size.slice(-1)) {
 			case 'k':
-				return +size.slice(0, size.length - 1) * 1024
+				return +size.substring(0, size.length - 1) * 1024
 
 			case 'm':
-				return +size.slice(0, size.length - 1) * 1048576
+				return +size.substring(0, size.length - 1) * 1048576
 
 			default:
 				return +size

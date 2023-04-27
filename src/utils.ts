@@ -68,7 +68,7 @@ export const getPath = (url: string) => {
 	const i = url.indexOf('?', 11)
 	const f = url.indexOf('#', 12)
 
-	return url.slice(
+	return url.substring(
 		url.indexOf('/', 10),
 		i !== -1 ? i : f !== -1 ? f : undefined
 	)
@@ -80,12 +80,12 @@ export const getPathAndQuery = (url: string) => {
 
 	if (i !== -1)
 		if (f !== -1)
-			return [url.slice(url.indexOf('/', 10), i), url.slice(i + 1, f)]
-		else return [url.slice(url.indexOf('/', 10), i), url.slice(i + 1)]
+			return [url.substring(url.indexOf('/', 10), i), url.substring(i + 1, f)]
+		else return [url.substring(url.indexOf('/', 10), i), url.substring(i + 1)]
 
-	if (f !== -1) return [url.slice(url.indexOf('/', 10), f), '']
+	if (f !== -1) return [url.substring(url.indexOf('/', 10), f), '']
 
-	return [url.slice(url.indexOf('/', 10)), '']
+	return [url.substring(url.indexOf('/', 10)), '']
 }
 
 export const removeHostnameRegex = /^[a-z]+?:\/\/[^/]+/

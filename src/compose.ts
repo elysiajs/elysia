@@ -66,7 +66,7 @@ export const composeHandler = ({
             if (contentType) {
 				if(contentType.indexOf(';')) {
 					const index = contentType.indexOf(';');
-					if (index !== -1) contentType = contentType.slice(0, index);
+					if (index !== -1) contentType = contentType.substring(0, index);
 				}
 `
 
@@ -223,7 +223,7 @@ export const composeHandler = ({
 		} else
 			fnLiteral +=
 				handler.constructor.name === ASYNC_FN
-					? `return mapResponse(await handler(c), c.set);`
+					? `return handler(c).then((v) => mapResponse(v, c.set))`
 					: `return mapResponse(handler(c), c.set);`
 	}
 
@@ -319,11 +319,7 @@ let generalCached: [number, number, string] | undefined
 export const composeGeneralHandler = (app: Elysia<any>) => {
 	// @ts-ignore
 	const decorators = app.decorators
-
 	const totalDecorators = Object.keys(decorators).length
-
-	// Decorator has default one property which is store
-	const hasDecorators = totalDecorators > 1
 
 	if (
 		generalCached?.[0] === totalDecorators &&
@@ -344,7 +340,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	let decoratorsLiteral = ''
 
-	for(const key of Object.keys(decorators))
+	for (const key of Object.keys(decorators))
 		decoratorsLiteral += `,${key}: app.decorators.${key}`
 
 	let fnLiteral = `const { 
@@ -394,35 +390,31 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				}`
 				: ''
 		}
-		
-		const url = request.url,
-			i = url.indexOf('?', 11),
-			f = url.indexOf('#', 12)
+
+		const url = request.url
+		const i = url.indexOf('?', 11)
+		const f = url.indexOf('#', 12)
 
 		let path;
 
 		if (i !== -1) {
-			path = url.slice(url.indexOf('/', 10), i)
+			path = url.substring(url.indexOf('/', 10), i)
 
 			if(f === -1) {
-				ctx.query = parseQuery(url.slice(i + 1), i)
+				ctx.query = parseQuery(url.substring(i + 1), i)
 			} else {
-				ctx.query = parseQuery(url.slice(i + 1, f), i)
+				ctx.query = parseQuery(url.substring(i + 1, f), i)
 			}
 		} else {
 			if(f === -1) {
-				path = url.slice(url.indexOf('/', 10))
+				path = url.substring(url.indexOf('/', 10))
 			} else {
-				path = url.slice(url.indexOf('/', 10), f)
+				path = url.substring(url.indexOf('/', 10), f)
 			}
-
-			${hasDecorators ? `ctx.query = {}` : ''}
 		}
 
 		const handle = _static.get(request.method + path)
 		if (handle) {
-			${hasDecorators ? `ctx.params = {}` : ''}
-
 			return handle(ctx)
 		} else {
 			const route = router.find(request.method, path) ?? router.find('ALL', path)
