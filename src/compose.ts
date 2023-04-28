@@ -22,8 +22,6 @@ import type {
 	SchemaValidator
 } from './types'
 
-import type { TypeCheck } from '@sinclair/typebox/compiler'
-
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
@@ -535,9 +533,9 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			path = url.substring(url.indexOf('/', 10), i)
 
 			if(f === -1) {
-				ctx.query = { ...parseQuery(url.substring(i + 1), i) }
+				ctx.query = parseQuery(url.substring(i + 1), i)
 			} else {
-				ctx.query = { ...parseQuery(url.substring(i + 1, f), i) }
+				ctx.query = parseQuery(url.substring(i + 1, f), i)
 			}
 		} else {
 			if(f === -1) {
@@ -567,6 +565,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	}`
 
 	generalCached = [totalDecorators, app.event.request.length, fnLiteral]
+
+	console.log(fnLiteral)
 
 	return Function(
 		'data',

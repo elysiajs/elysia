@@ -2295,6 +2295,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				// @ts-ignore
 				globalThis[key] = this.server = Bun.serve(serve)
 			}
+		} else {
+			this.server = Bun.serve(serve)
 		}
 
 		for (let i = 0; i < this.event.start.length; i++)
