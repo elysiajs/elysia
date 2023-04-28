@@ -57,7 +57,8 @@ export const mergeHook = (
 			a.afterHandle ?? [],
 			b?.afterHandle ?? []
 		),
-		error: mergeObjectArray(a.error ?? [], b?.error ?? [])
+		error: mergeObjectArray(a.error ?? [], b?.error ?? []),
+		type: a?.type || b?.type
 	}
 }
 

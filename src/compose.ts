@@ -80,9 +80,12 @@ export const composeHandler = ({
 }): ComposedHandler => {
 	let fnLiteral = 'try {\n'
 
+	const hasStrictContentType = typeof hooks.type === 'string'
+
 	const hasBody =
 		method !== 'GET' &&
 		(validator.body ||
+			hasStrictContentType ||
 			[
 				handler,
 				...hooks.transform,
@@ -91,53 +94,30 @@ export const composeHandler = ({
 			].some((fn) => isFnUse('body', fn.toString())))
 
 	const maybeAsync =
+		hasBody ||
 		handler.constructor.name === ASYNC_FN ||
 		hooks.parse.length ||
 		hooks.afterHandle.find(isAsync) ||
 		hooks.beforeHandle.find(isAsync) ||
-		hooks.transform.find(isAsync) ||
-		hasBody
+		hooks.transform.find(isAsync)
 
-	if (hasBody) {
-		fnLiteral += `
-			let contentType = c.request.headers.get('content-type')
+	if (hasBody)
+		if (hasStrictContentType || validator.body) {
+			if (!validator.body) fnLiteral += 'if(body) '
 
-            if (contentType) {
-				const index = contentType.indexOf(';')
-				if (index !== -1) contentType = contentType.substring(0, index)
-`
+			fnLiteral += `try {\n`
 
-		if (hooks.parse.length) {
-			fnLiteral += `let used = false\n`
+			if (validator.body) {
+				// @ts-ignore
+				const schema = validator.body.schema
 
-			for (let i = 0; i < hooks.parse.length; i++) {
-				const name = `bo${i}`
-
-				fnLiteral += `if(!c.request.bodyUsed) { 
-					let ${name} = parse[${i}](c, contentType);
-					if(${name} instanceof Promise) ${name} = await ${name}
-					if(${name} !== undefined) { c.body = ${name}; used = true }
-				}`
-			}
-
-			fnLiteral += `if (!used)`
-		}
-
-		fnLiteral += `switch (contentType) {
-			case 'application/json':
-				c.body = await c.request.json()
-				break
-
-			case 'text/plain':
-				c.body = await c.request.text()
-				break
-
-			case 'application/x-www-form-urlencoded':
-				c.body = await c.request.text().then(parseQuery)
-				break
-
-			case 'multipart/form-data':
-				c.body = {}
+				switch (schema.type) {
+					case 'object':
+						if (schema.elysiaMeta === 'URLEncoded')
+							fnLiteral += `c.body = parseQuery(await c.request.text())`
+						// Accept file which means it's formdata
+						else if (validator.body.Code().includes("custom('File"))
+							fnLiteral += `c.body = {}
 
 				await c.request.formData().then((form) => {
 					for (const key of form.keys()) {
@@ -149,13 +129,106 @@ export const composeHandler = ({
 							c.body[key] = value[0]
 						else c.body[key] = value
 					}
-				})
+				})`
+						else {
+							// Since it's an object an not accepting file
+							// we can infer that it's JSON
+							fnLiteral += `c.body = JSON.parse(await c.request.text())`
+						}
+						break
+
+					case 'string':
+						fnLiteral += 'c.body = await c.request.text()'
+						break
+				}
+			} else
+				switch (hooks.type) {
+					case 'application/json':
+						fnLiteral += `c.body = JSON.parse(await c.request.text());`
+						break
+
+					case 'text/plain':
+						fnLiteral += `c.body = await c.request.text();`
+						break
+
+					case 'application/x-www-form-urlencoded':
+						fnLiteral += `c.body = parseQuery(await c.request.text());`
+						break
+
+					case 'multipart/form-data':
+						fnLiteral += `c.body = {}
+
+					for (const key of (await c.request.formData()).keys()) {
+						if (c.body[key])
+							continue
+
+						const value = form.getAll(key)
+						if (value.length === 1)
+							c.body[key] = value[0]
+						else c.body[key] = value
+					}`
+						break
+				}
+
+			fnLiteral += `} catch(error) {
+			throw new Error('PARSE')
+		}`
+		} else {
+			fnLiteral += `
+			let contentType = c.request.headers.get('content-type')
+
+            if (contentType) {
+				const index = contentType.indexOf(';')
+				if (index !== -1) contentType = contentType.substring(0, index)
+`
+
+			if (hooks.parse.length) {
+				fnLiteral += `let used = false\n`
+
+				for (let i = 0; i < hooks.parse.length; i++) {
+					const name = `bo${i}`
+
+					fnLiteral += `if(!c.request.bodyUsed) { 
+					let ${name} = parse[${i}](c, contentType);
+					if(${name} instanceof Promise) ${name} = await ${name}
+					if(${name} !== undefined) { c.body = ${name}; used = true }
+				}`
+				}
+
+				fnLiteral += `if (!used)`
+			}
+
+			fnLiteral += `switch (contentType) {
+			case 'application/json':
+				c.body = JSON.parse(await c.request.text())
+				break
+
+			case 'text/plain':
+				c.body = await c.request.text()
+				break
+
+			case 'application/x-www-form-urlencoded':
+				c.body = parseQuery(await c.request.text())
+				break
+
+			case 'multipart/form-data':
+				c.body = {}
+
+				for (const key of (await c.request.formData()).keys()) {
+					if (c.body[key])
+						continue
+
+					const value = form.getAll(key)
+					if (value.length === 1)
+						c.body[key] = value[0]
+					else c.body[key] = value
+				}
 
 				break
 		`
 
-		fnLiteral += `}}\n`
-	}
+			fnLiteral += `}}\n`
+		}
 
 	if (hooks?.transform)
 		for (let i = 0; i < hooks.transform.length; i++) {
@@ -170,7 +243,7 @@ export const composeHandler = ({
 			fnLiteral += `
                 const h = {}
                 for (const key of c.request.headers.keys())
-				h[key] = c.request.headers.get(key)
+					h[key] = c.request.headers.get(key)
 
                 if (headers.Check(h) === false) {
                     throw createValidationError(
@@ -331,6 +404,8 @@ export const composeHandler = ({
 
 		${fnLiteral}
 	}`
+
+	// console.log(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 

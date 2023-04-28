@@ -108,6 +108,7 @@ export type AfterRequestHandler<
 export interface LifeCycleStore<
 	Instance extends ElysiaInstance = ElysiaInstance
 > {
+	type?: ContentType
 	start: VoidLifeCycle<Instance>[]
 	request: BeforeRequestHandler<any, Instance>[]
 	parse: BodyParser<any, Instance>[]
@@ -126,6 +127,7 @@ export type BeforeRequestHandler<
 export interface RegisteredHook<
 	Instance extends ElysiaInstance = ElysiaInstance
 > {
+	type?: ContentType
 	schema?: TypedSchema
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
@@ -250,6 +252,14 @@ type ExtractModelName<Type> = Type extends TypedSchema<infer X> ? X : never
 
 type ContentType = MaybeArray<
 	| (string & {})
+	// Shorthand for 'text/plain'
+	| 'text'
+	// Shorthand for 'application/json'
+	| 'json'
+	// Shorthand for 'multipart/form-data'
+	| 'formdata'
+	// Shorthand for 'application/x-www-form-urlencoded'\
+	| 'urlencoded'
 	| 'text/plain'
 	| 'application/json'
 	| 'multipart/form-data'
@@ -266,9 +276,9 @@ export interface LocalHook<
 	>,
 	Models extends TypedSchema = TypedSchema<ExtractModelName<Schema>>
 > {
+	type?: ContentType
 	// ? I have no idea why does this infer type, but it work anyway
 	schema?: (Models extends Schema ? Models : Models) & {
-		contentType?: ContentType
 		detail?: Partial<OpenAPIV3.OperationObject>
 	}
 	parse?: WithArray<BodyParser[]>
@@ -502,7 +512,11 @@ export type ErrorHandler = (
 	params:
 		| {
 				request: Request
-				code: 'NOT_FOUND' | 'INTERNAL_SERVER_ERROR' | 'UNKNOWN'
+				code:
+					| 'NOT_FOUND'
+					| 'INTERNAL_SERVER_ERROR'
+					| 'UNKNOWN'
+					| 'PARSE'
 				error: Error
 				set: Context['set']
 		  }

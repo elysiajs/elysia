@@ -123,11 +123,8 @@ const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 }
 
 export const ElysiaType = {
-	File: TypeSystem.CreateType<Blob, ElysiaTypeOptions.File>(
-		'File',
-		validateFile
-	),
-	Files: TypeSystem.CreateType<Blob[], ElysiaTypeOptions.Files>(
+	File: TypeSystem.Type<Blob, ElysiaTypeOptions.File>('File', validateFile),
+	Files: TypeSystem.Type<Blob[], ElysiaTypeOptions.Files>(
 		'Files',
 		(options, value) => {
 			if (!Array.isArray(value)) return false
@@ -150,11 +147,20 @@ declare module '@sinclair/typebox' {
 	interface TypeBuilder {
 		File: typeof ElysiaType.File
 		Files: typeof ElysiaType.Files
+		URLEncoded: (typeof Type)['Object']
 	}
+}
+
+Type.URLEncoded = (property, options) => {
+	return Type.Object(property, {
+		...options,
+		elysiaMeta: 'URLEncoded'
+	}) as any
 }
 
 Type.File = (arg?: ElysiaTypeOptions.File) =>
 	ElysiaType.File({
+		elysiaMeta: 'File',
 		default: 'File',
 		...arg,
 		extension: arg?.type,
@@ -165,6 +171,7 @@ Type.File = (arg?: ElysiaTypeOptions.File) =>
 Type.Files = (arg?: ElysiaTypeOptions.Files) =>
 	ElysiaType.Files({
 		...arg,
+		elysiaMeta: 'Files',
 		default: 'Files',
 		extension: arg?.type,
 		type: 'array',

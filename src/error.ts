@@ -1,10 +1,12 @@
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { ErrorCode } from './types'
 
-const errorCodeToStatus = new Map<ErrorCode, number>()
-errorCodeToStatus.set('INTERNAL_SERVER_ERROR', 500)
-errorCodeToStatus.set('NOT_FOUND', 404)
-errorCodeToStatus.set('VALIDATION', 400)
+const errorCodeToStatus = new Map<ErrorCode, number>([
+	['INTERNAL_SERVER_ERROR', 500],
+	['NOT_FOUND', 404],
+	['VALIDATION', 400],
+	['PARSE', 400]
+])
 
 const knownErrors = new Set<ErrorCode>(errorCodeToStatus.keys())
 

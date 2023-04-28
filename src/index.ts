@@ -141,9 +141,28 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		const defs = this.meta[DEFS]
 
+		if (hook?.type)
+			switch (hook.type) {
+				case 'text':
+					hook.type = 'text/plain'
+					break
+
+				case 'json':
+					hook.type = 'application/json'
+					break
+
+				case 'formdata':
+					hook.type = 'multipart/form-data'
+					break
+
+				case 'urlencoded':
+					hook.type = 'application/x-www-form-urlencoded'
+					break
+			}
+
 		registerSchemaPath({
 			schema: this.meta[SCHEMA],
-			contentType: hook?.schema?.contentType,
+			contentType: hook?.type,
 			hook,
 			method,
 			path,
@@ -2263,17 +2282,19 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						fetch
 				  }
 
-		const key = `$$Elysia:${serve.port}`
+		if (process.env.ENV !== 'production') {
+			const key = `$$Elysia:${serve.port}`
 
-		// ! Blasphemy !
-		// @ts-ignore
-		if (globalThis[key]) {
+			// ! Blasphemy !
 			// @ts-ignore
-			this.server = globalThis[key]
-			this.server!.reload(serve)
-		} else {
-			// @ts-ignore
-			globalThis[key] = this.server = Bun.serve(serve)
+			if (globalThis[key]) {
+				// @ts-ignore
+				this.server = globalThis[key]
+				this.server!.reload(serve)
+			} else {
+				// @ts-ignore
+				globalThis[key] = this.server = Bun.serve(serve)
+			}
 		}
 
 		for (let i = 0; i < this.event.start.length; i++)
@@ -2282,7 +2303,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		if (callback) callback(this.server!)
 
 		Promise.all(this.lazyLoadModules).then(() => {
-			if (!this.server!.pendingRequests) Bun.gc(true)
+			Bun.gc(true)
 		})
 
 		return this
