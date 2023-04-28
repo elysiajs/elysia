@@ -2,9 +2,10 @@ import { Elysia, t } from '../src'
 
 const app = new Elysia().post('/', ({ body }) => body, {
 	schema: {
-		body: t.URLEncoded({
-			name: t.String()
-		})
+		// body: t.Object({
+		// 	username: t.String(),
+		// 	password: t.String()
+		// })
 	}
 })
 

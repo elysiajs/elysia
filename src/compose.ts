@@ -22,6 +22,8 @@ import type {
 	SchemaValidator
 } from './types'
 
+import type { TypeCheck } from '@sinclair/typebox/compiler'
+
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
@@ -101,22 +103,40 @@ export const composeHandler = ({
 		hooks.beforeHandle.find(isAsync) ||
 		hooks.transform.find(isAsync)
 
-	if (hasBody)
-		if (hasStrictContentType || validator.body) {
-			if (!validator.body) fnLiteral += 'if(body) '
+	if (hasBody) {
+		// @ts-ignore
+		let schema = validator?.body?.schema
+
+		if (schema && 'anyOf' in schema) {
+			let foundDifference = false
+			const model = schema.anyOf[0].type
+
+			for (const validator of schema.anyOf as { type: string }[]) {
+				if (validator.type !== model) {
+					foundDifference = true
+					break
+				}
+			}
+
+			if (foundDifference) {
+				schema = undefined
+			}
+		}
+
+		if (hasStrictContentType || schema) {
+			if (!schema) fnLiteral += 'if(body) '
 
 			fnLiteral += `try {\n`
 
-			if (validator.body) {
-				// @ts-ignore
-				const schema = validator.body.schema
-
+			if (schema) {
 				switch (schema.type) {
 					case 'object':
 						if (schema.elysiaMeta === 'URLEncoded')
 							fnLiteral += `c.body = parseQuery(await c.request.text())`
 						// Accept file which means it's formdata
-						else if (validator.body.Code().includes("custom('File"))
+						else if (
+							validator.body!.Code().includes("custom('File")
+						)
 							fnLiteral += `c.body = {}
 
 				await c.request.formData().then((form) => {
@@ -229,6 +249,7 @@ export const composeHandler = ({
 
 			fnLiteral += `}}\n`
 		}
+	}
 
 	if (hooks?.transform)
 		for (let i = 0; i < hooks.transform.length; i++) {
@@ -404,8 +425,6 @@ export const composeHandler = ({
 
 		${fnLiteral}
 	}`
-
-	// console.log(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 
