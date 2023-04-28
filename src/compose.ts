@@ -566,7 +566,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	generalCached = [totalDecorators, app.event.request.length, fnLiteral]
 
-	console.log(fnLiteral)
+	// console.log(fnLiteral)
 
 	return Function(
 		'data',
