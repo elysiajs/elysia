@@ -2,11 +2,14 @@ import { Elysia, t, SCHEMA, DEFS } from '../src'
 
 const app = new Elysia()
 	.setModel({
-		a: t.Object({
-			response: t.String()
+		name: t.Object({
+			name: t.String()
 		}),
 		b: t.Object({
 			response: t.Number()
+		}),
+		authorization: t.Object({
+			Authorization: t.String()
 		})
 	})
 	// Strictly validate response
@@ -43,36 +46,30 @@ const app = new Elysia()
 	.guard(
 		{
 			schema: {
-				query: 'a'
+				headers: 'authorization'
 			}
 		},
 		(app) =>
 			app
-				.guard(
-					{
-						schema: {
-							body: t.Object({
-								username: t.String()
-							})
-						}
-					},
-					(app) =>
-						app.post('/id/:id', ({ query, body, params }) => body, {
-							schema: {
-								params: t.Object({
-									id: t.Number()
-								})
-							},
-							transform: ({ params }) => {
-								params.id = +params.id
-							}
+				.derive(({ request: { headers } }) => ({
+					userId: headers.get('Authorization')
+				}))
+				.get('/', ({ userId }) => 'A')
+				.post('/id/:id', ({ query, body, params, userId }) => body, {
+					schema: {
+						params: t.Object({
+							id: t.Number()
 						})
-				)
+					},
+					transform({ params }) {
+						params.id = +params.id
+					}
+				})
 	)
 	.listen(8080)
 
-type A = typeof app['meta'][typeof SCHEMA]['/']
-type B = typeof app['meta'][typeof DEFS]
-type C = typeof app['meta'][typeof SCHEMA]['/query/:id']
+type A = (typeof app)['meta'][typeof SCHEMA]['/']
+type B = (typeof app)['meta'][typeof DEFS]
+type C = (typeof app)['meta'][typeof SCHEMA]['/query/:id']
 
 // const a = app.getModel('b')

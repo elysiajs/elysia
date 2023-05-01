@@ -55,7 +55,7 @@ export const mapEarlyResponse = (
 					case 'Object':
 					case undefined:
 						return Response.json(response)
-	
+
 					case 'Error':
 						return errorToResponse(response as Error, set.headers)
 
@@ -85,10 +85,7 @@ export const mapEarlyResponse = (
 						})
 
 					default:
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(JSON.stringify(response), {
+						return new Response(response as any, {
 							status: set.status,
 							headers: set.headers
 						})
@@ -151,7 +148,7 @@ export const mapEarlyResponse = (
 						})
 
 					default:
-						return Response.json(response)
+						return new Response(response as any)
 				}
 
 			// ? Maybe response or Blob
@@ -225,10 +222,7 @@ export const mapResponse = (
 						return response.then((x) => mapResponse(x, set))
 
 					default:
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(JSON.stringify(response), {
+						return new Response(response as any, {
 							status: set.status,
 							headers: set.headers
 						})
@@ -285,16 +279,18 @@ export const mapResponse = (
 
 					case 'Promise':
 						// @ts-ignore
-						return (response as any as Promise<unknown>).then((x) => {
-							const r = mapEarlyResponse(x, set)
+						return (response as any as Promise<unknown>).then(
+							(x) => {
+								const r = mapEarlyResponse(x, set)
 
-							if (r !== undefined) return r
+								if (r !== undefined) return r
 
-							return new Response('')
-						})
+								return new Response('')
+							}
+						)
 
 					default:
-						return Response.json(response)
+						return new Response(response as any)
 				}
 
 			// ? Maybe response or Blob

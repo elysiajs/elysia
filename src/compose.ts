@@ -384,6 +384,8 @@ export const composeHandler = ({
 	${maybeAsync ? '' : '})()'}
 }`
 
+	console.log(fnLiteral)
+
 	fnLiteral = `const { 
 		handler,
 		handleError,
@@ -565,8 +567,6 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	}`
 
 	generalCached = [totalDecorators, app.event.request.length, fnLiteral]
-
-	// console.log(fnLiteral)
 
 	return Function(
 		'data',
