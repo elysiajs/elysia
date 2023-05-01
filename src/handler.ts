@@ -53,8 +53,12 @@ export const mapEarlyResponse = (
 			case 'object':
 				switch (response!.constructor.name) {
 					case 'Object':
+					case 'Array':
 					case undefined:
-						return Response.json(response)
+						return new Response(JSON.stringify(response), {
+							status: set.status,
+							headers: set.headers
+						})
 
 					case 'Error':
 						return errorToResponse(response as Error, set.headers)
@@ -125,6 +129,7 @@ export const mapEarlyResponse = (
 			case 'object':
 				switch (response!.constructor?.name) {
 					case 'Object':
+					case 'Array':
 					case undefined:
 						return Response.json(response)
 
@@ -196,8 +201,12 @@ export const mapResponse = (
 			case 'object':
 				switch (response!.constructor?.name) {
 					case 'Object':
+					case 'Array':
 					case undefined:
-						return Response.json(response)
+						return new Response(JSON.stringify(response), {
+							status: set.status,
+							headers: set.headers
+						})
 
 					case 'Error':
 						return errorToResponse(response as Error, set.headers)
@@ -265,6 +274,7 @@ export const mapResponse = (
 			case 'object':
 				switch (response!.constructor?.name) {
 					case 'Object':
+					case 'Array':
 					case undefined:
 						return Response.json(response)
 
