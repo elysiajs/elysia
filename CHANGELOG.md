@@ -1,3 +1,11 @@
+# 0.4.14 - 2 May 2023
+Fix:
+- set default object handler to inherits
+
+# 0.4.13 - 28 Apr 2023
+Fix:
+- emergency override experimental version
+
 # 0.4.12 - 26 Apr 2023
 Fix:
 - CatchResponse to return 200 status code by default when using Eden Treaty

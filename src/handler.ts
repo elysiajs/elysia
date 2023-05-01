@@ -51,11 +51,15 @@ export const mapEarlyResponse = (
 				})
 
 			case 'object':
-				switch (response?.constructor) {
-					case Error:
+				switch (response!.constructor.name) {
+					case 'Object':
+					case undefined:
+						return Response.json(response)
+
+					case 'Error':
 						return errorToResponse(response as Error, set.headers)
 
-					case Response:
+					case 'Response':
 						for (const key in set.headers)
 							(response as Response)!.headers.append(
 								key,
@@ -64,13 +68,13 @@ export const mapEarlyResponse = (
 
 						return response as Response
 
-					case Blob:
+					case 'Blob':
 						return new Response(response as Blob, {
 							status: set.status,
 							headers: set.headers
 						})
 
-					case Promise:
+					case 'Promise':
 						// @ts-ignore
 						return (response as Promise<unknown>).then((x) => {
 							const r = mapEarlyResponse(x, set)
@@ -81,10 +85,7 @@ export const mapEarlyResponse = (
 						})
 
 					default:
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(JSON.stringify(response), {
+						return new Response(response as any, {
 							status: set.status,
 							headers: set.headers
 						})
@@ -122,17 +123,21 @@ export const mapEarlyResponse = (
 				return new Response(response)
 
 			case 'object':
-				switch (response?.constructor) {
-					case Error:
-						return errorToResponse(response as Error, set.headers)
+				switch (response!.constructor?.name) {
+					case 'Object':
+					case undefined:
+						return Response.json(response)
 
-					case Response:
+					case 'Response':
 						return response as Response
 
-					case Blob:
+					case 'Error':
+						return errorToResponse(response as Error, set.headers)
+
+					case 'Blob':
 						return new Response(response as Blob)
 
-					case Promise:
+					case 'Promise':
 						// @ts-ignore
 						return (response as Promise<unknown>).then((x) => {
 							const r = mapEarlyResponse(x, set)
@@ -143,11 +148,7 @@ export const mapEarlyResponse = (
 						})
 
 					default:
-						return new Response(JSON.stringify(response), {
-							headers: {
-								'content-type': 'application/json'
-							}
-						})
+						return new Response(response as any)
 				}
 
 			// ? Maybe response or Blob
@@ -193,11 +194,15 @@ export const mapResponse = (
 				})
 
 			case 'object':
-				switch (response?.constructor) {
-					case Error:
+				switch (response!.constructor?.name) {
+					case 'Object':
+					case undefined:
+						return Response.json(response)
+
+					case 'Error':
 						return errorToResponse(response as Error, set.headers)
 
-					case Response:
+					case 'Response':
 						for (const key in set.headers)
 							(response as Response)!.headers.append(
 								key,
@@ -206,21 +211,18 @@ export const mapResponse = (
 
 						return response as Response
 
-					case Blob:
+					case 'Blob':
 						return new Response(response as Blob, {
 							status: set.status,
 							headers: set.headers
 						})
 
-					case Promise:
+					case 'Promise':
 						// @ts-ignore
 						return response.then((x) => mapResponse(x, set))
 
 					default:
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(JSON.stringify(response), {
+						return new Response(response as any, {
 							status: set.status,
 							headers: set.headers
 						})
@@ -261,26 +263,34 @@ export const mapResponse = (
 				return new Response(response)
 
 			case 'object':
-				switch (response?.constructor) {
-					case Error:
-						return errorToResponse(response as Error, set.headers)
+				switch (response!.constructor?.name) {
+					case 'Object':
+					case undefined:
+						return Response.json(response)
 
-					case Response:
+					case 'Response':
 						return response as Response
 
-					case Blob:
+					case 'Error':
+						return errorToResponse(response as Error, set.headers)
+
+					case 'Blob':
 						return new Response(response as Blob)
 
-					case Promise:
+					case 'Promise':
 						// @ts-ignore
-						return response.then((x) => mapResponse(x, set))
+						return (response as any as Promise<unknown>).then(
+							(x) => {
+								const r = mapEarlyResponse(x, set)
+
+								if (r !== undefined) return r
+
+								return new Response('')
+							}
+						)
 
 					default:
-						return new Response(JSON.stringify(response), {
-							headers: {
-								'content-type': 'application/json'
-							}
-						})
+						return new Response(response as any)
 				}
 
 			// ? Maybe response or Blob
