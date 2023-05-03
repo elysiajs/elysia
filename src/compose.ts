@@ -384,7 +384,7 @@ export const composeHandler = ({
 	${maybeAsync ? '' : '})()'}
 }`
 
-	console.log(fnLiteral)
+	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
