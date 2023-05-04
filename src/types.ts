@@ -22,9 +22,15 @@ export type ElysiaInstance<
 	Instance extends {
 		store?: Record<string, unknown>
 		request?: Record<string, unknown>
-		schema?: TypedSchema
+		schema?: {
+			body?: TSchema
+			headers?: TObject
+			query?: TObject
+			params?: TObject
+			response?: Record<string, TSchema>
+		}
 		meta?: Record<typeof SCHEMA, Partial<OpenAPIV3.PathsObject>> &
-			Record<typeof DEFS, Record<string, TSchema>> &
+			Record<typeof DEFS, Record<string, unknown>> &
 			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 	} = {
 		store: {}
@@ -42,16 +48,13 @@ export type ElysiaInstance<
 }
 
 export type Handler<
-	Route extends OverwritableTypeRoute,
-	Instance extends ElysiaInstance = ElysiaInstance,
-	CatchResponse = unknown
+	Route extends TypedRoute,
+	Instance extends ElysiaInstance
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
 ) => IsUnknown<Route['response']> extends false
-	? Route['response'] extends Record<number, infer Unioned extends TSchema>
-		? Response | MaybePromise<Unioned>
-		: Response | MaybePromise<Route['response']>
-	: Response | MaybePromise<CatchResponse>
+	? Response | MaybePromise<Route['response']>
+	: Response | MaybePromise<unknown>
 
 export type NoReturnHandler<
 	Route extends TypedRoute = TypedRoute,
@@ -153,9 +156,9 @@ export type UnwrapSchema<
 	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
 	Fallback = unknown
 > = Schema extends string
-	? Definitions extends Record<Schema, infer NamedSchema extends TSchema>
-		? Static<NamedSchema>
-		: Fallback
+	? Definitions extends Record<Schema, infer NamedSchema>
+		? NamedSchema
+		: Definitions
 	: Schema extends TSchema
 	? Static<NonNullable<Schema>>
 	: Fallback
@@ -217,38 +220,57 @@ export type HookHandler<
 		Instance['meta'][typeof DEFS]
 	>
 > = Handler<
-	Typed['params'] extends {}
-		? Omit<Typed, 'response'> & {
-				response: void | Typed['response']
+	Typed extends {
+		body: infer Body
+		headers: infer Headers
+		query: infer Query
+		params: infer Params
+		response: infer Response
+	}
+		? {
+				body: Body
+				headers: Headers
+				query: Query
+				params: Params extends undefined
+					? Record<ExtractPath<Path>, string>
+					: Params
+				response: Response | void
 		  }
-		: Omit<
-				Omit<Typed, 'response'> & {
-					response: void | Typed['response']
-				},
-				'params'
-		  > & {
-				params: Record<ExtractPath<Path>, string>
-		  },
+		: Typed,
 	Instance
 >
 
 export type MergeIfNotNull<A, B> = B extends null ? A : A & B
 export type UnknownFallback<A, B> = unknown extends A ? B : A
-export type PickInOrder<A, B> = A extends NonNullable<A> ? A : B
-export type MergeSchema<
-	A extends TypedSchema<any>,
-	B extends TypedSchema<any>
-> = {
-	body: PickInOrder<PickInOrder<A['body'], B['body']>, undefined>
-	headers: PickInOrder<PickInOrder<A['headers'], B['headers']>, undefined>
-	query: PickInOrder<PickInOrder<A['query'], B['query']>, undefined>
-	params: PickInOrder<PickInOrder<A['params'], B['params']>, undefined>
-	response: PickInOrder<PickInOrder<A['response'], B['response']>, undefined>
+export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
+	body: undefined extends A['body']
+		? B['body'] extends undefined
+			? undefined
+			: B['body']
+		: A['body']
+	headers: undefined extends A['headers']
+		? B['headers'] extends undefined
+			? undefined
+			: B['headers']
+		: A['headers']
+	query: undefined extends A['query']
+		? B['query'] extends undefined
+			? undefined
+			: B['query']
+		: A['query']
+	params: undefined extends A['params']
+		? B['params'] extends undefined
+			? undefined
+			: B['params']
+		: A['params']
+	response: undefined extends A['response']
+		? B['response'] extends undefined
+			? undefined
+			: B['response']
+		: A['response']
 }
 
 type MaybeArray<T> = T | T[]
-
-type ExtractModelName<Type> = Type extends TypedSchema<infer X> ? X : never
 
 type ContentType = MaybeArray<
 	| (string & {})
@@ -267,26 +289,49 @@ type ContentType = MaybeArray<
 >
 
 export interface LocalHook<
-	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance<any> = ElysiaInstance,
-	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, Instance['schema']> = MergeSchema<
-		Schema,
-		Instance['schema']
-	>,
-	Models extends TypedSchema = TypedSchema<ExtractModelName<Schema>>
+	Schema extends TypedSchema,
+	Instance extends ElysiaInstance<any>,
+	Path extends string = string
 > {
 	type?: ContentType
 	// ? I have no idea why does this infer type, but it work anyway
-	schema?: (Models extends Schema ? Models : Models) & {
-		detail?: Partial<OpenAPIV3.OperationObject>
-	}
+	schema?:
+		| TypedSchema<Extract<keyof Instance['meta'][typeof DEFS], string>>
+		| Schema
+		| {
+				detail?: Partial<OpenAPIV3.OperationObject>
+		  }
 	parse?: WithArray<BodyParser[]>
-	transform?: WithArray<HookHandler<FinalSchema, Instance, Path>>
-	beforeHandle?: WithArray<HookHandler<FinalSchema, Instance, Path>>
+	transform?: WithArray<
+		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
+	>
+	beforeHandle?: this['transform']
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
 	error?: WithArray<ErrorHandler>
 }
+
+// export type MergeRouteSchema<
+// 	Schema extends TypedSchema,
+// 	Definitions extends ElysiaInstance['meta'][typeof DEFS],
+// 	Path extends string
+// > = TypedSchemaToRoute<Schema, Definitions> extends {
+// 	body: infer Body
+// 	params: infer Params
+// 	query: infer Query
+// 	headers: infer Headers
+// 	response: infer Response
+// }
+// 	? {
+// 			body: Body
+// 			params: Params extends undefined
+// 				? Record<ExtractPath<Path>, string>
+// 				: Params
+// 			query: Query
+// 			headers: Headers
+// 			response: Response
+// 	  }
+// 	: // It's impossible to land here, create a fallback for type integrity
+// 	  TypedSchemaToRoute<Schema, Definitions>
 
 export type RouteToSchema<
 	Schema extends TypedSchema,
@@ -294,14 +339,27 @@ export type RouteToSchema<
 	Definitions extends ElysiaInstance['meta'][typeof DEFS],
 	Path extends string = string
 > = MergeSchema<Schema, InstanceSchema> extends infer Typed extends TypedSchema
-	? undefined extends Typed['params']
-		? Omit<TypedSchemaToRoute<Typed, Definitions>, 'params'> & {
-				params: Record<ExtractPath<Path>, string>
+	? TypedSchemaToRoute<Typed, Definitions> extends {
+			body: infer Body
+			params: infer Params
+			query: infer Query
+			headers: infer Headers
+			response: infer Response
+	  }
+		? {
+				body: Body
+				params: Params extends undefined
+					? Record<ExtractPath<Path>, string>
+					: Params
+				query: Query
+				headers: Headers
+				response: Response
 		  }
-		: TypedSchemaToRoute<Typed, Definitions>
+		: // It's impossible to land here, create a fallback for type integrity
+		  TypedSchemaToRoute<Typed, Definitions>
 	: never
 
-export type MergeUnionObjects<T> = {} & { [P in keyof T]: T[P] }
+export type FlattenObject<T> = {} & { [P in keyof T]: T[P] }
 
 export type TypedRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
@@ -409,17 +467,32 @@ export type TypedSchemaToEden<
 export type LocalHandler<
 	Schema extends TypedSchema,
 	Instance extends ElysiaInstance,
-	Path extends string = string,
-	CatchResponse = unknown
+	Path extends string = string
 > = Handler<
-	RouteToSchema<
+	MergeSchema<
 		Schema,
-		Instance['schema'],
-		Instance['meta'][typeof DEFS],
-		Path
-	>,
-	Instance,
-	CatchResponse
+		Instance['schema']
+	> extends infer Typed extends TypedSchema<any>
+		? TypedSchemaToRoute<Typed, Instance['meta'][typeof DEFS]> extends {
+				body: infer Body
+				params: infer Params
+				query: infer Query
+				headers: infer Headers
+				response: infer Response
+		  }
+			? {
+					body: Body
+					params: Params extends undefined
+						? Record<ExtractPath<Path>, string>
+						: Params
+					query: Query
+					headers: Headers
+					response: Response
+			  }
+			: // It's impossible to land here
+			  any
+		: never,
+	Instance
 >
 
 export interface TypedRoute {
@@ -457,7 +530,7 @@ export interface InternalRoute<Instance extends ElysiaInstance> {
 	method: HTTPMethod
 	path: string
 	handler: Handler<any, Instance>
-	hooks: LocalHook<any>
+	hooks: LocalHook<any, any, string>
 }
 
 export type HTTPMethod =

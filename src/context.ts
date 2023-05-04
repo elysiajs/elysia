@@ -5,6 +5,9 @@ export interface Context<
 	Store extends Elysia['store'] = Elysia['store']
 > {
 	request: Request
+	headers: Route['headers'] extends undefined
+		? Record<string, unknown>
+		: Route['headers']
 	query: Route['query'] extends undefined
 		? Record<string, unknown>
 		: Route['query']
@@ -14,8 +17,8 @@ export interface Context<
 
 	[SCHEMA]?: TypedSchema
 	[DEFS]?: {
-        [index: string]: Record<string, unknown>;
-    }
+		[index: string]: Record<string, unknown>
+	}
 
 	set: {
 		headers: Record<string, string>

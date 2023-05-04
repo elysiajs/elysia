@@ -190,7 +190,7 @@ describe('Before Handle', () => {
 				if (name === 'Fubuki') return 'Cat'
 			})
 			.onAfterHandle((context, response) => {
-				if(response === "Cat") return 'Not cat'
+				if (response === 'Cat') return 'Not cat'
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
 
@@ -198,5 +198,4 @@ describe('Before Handle', () => {
 
 		expect(await res.text()).toBe('Not cat')
 	})
-
 })

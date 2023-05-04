@@ -20,8 +20,8 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 ]
 
 export const mergeHook = (
-	a: LocalHook<any> | LifeCycleStore<any>,
-	b: LocalHook<any>
+	a: LocalHook<any, any> | LifeCycleStore<any>,
+	b: LocalHook<any, any>
 ): RegisteredHook<any> => {
 	const aSchema = 'schema' in a ? (a.schema as TypedSchema) : null
 	const bSchema = b && 'schema' in b ? b.schema : null
@@ -32,7 +32,7 @@ export const mergeHook = (
 				? ({
 						// Merge local hook first
 						body: bSchema?.body ?? aSchema?.body,
-						header: bSchema?.headers ?? aSchema?.headers,
+						headers: bSchema?.headers ?? aSchema?.headers,
 						params: bSchema?.params ?? aSchema?.params,
 						query: bSchema?.query ?? aSchema?.query,
 						response: bSchema?.response ?? aSchema?.response,
@@ -81,8 +81,15 @@ export const getPathAndQuery = (url: string) => {
 
 	if (i !== -1)
 		if (f !== -1)
-			return [url.substring(url.indexOf('/', 10), i), url.substring(i + 1, f)]
-		else return [url.substring(url.indexOf('/', 10), i), url.substring(i + 1)]
+			return [
+				url.substring(url.indexOf('/', 10), i),
+				url.substring(i + 1, f)
+			]
+		else
+			return [
+				url.substring(url.indexOf('/', 10), i),
+				url.substring(i + 1)
+			]
 
 	if (f !== -1) return [url.substring(url.indexOf('/', 10), f), '']
 

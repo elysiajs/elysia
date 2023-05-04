@@ -70,7 +70,7 @@ export const registerSchemaPath = ({
 	contentType?: string | string[]
 	path: string
 	method: HTTPMethod
-	hook?: LocalHook
+	hook?: LocalHook<any, any>
 	models: Record<string, TSchema>
 }) => {
 	if (hook) hook = deepClone(hook)

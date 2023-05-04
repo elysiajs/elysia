@@ -50,12 +50,13 @@ import type {
 	NoReturnHandler,
 	MaybePromise,
 	IsNever,
-	MergeUnionObjects,
+	FlattenObject,
 	TypedWSRouteToEden,
 	UnwrapSchema,
-	ExtractPath
+	ExtractPath,
+	RouteToSchema
 } from './types'
-import { type TSchema } from '@sinclair/typebox'
+import { Static, type TSchema } from '@sinclair/typebox'
 
 // @ts-ignore
 import type { Permission } from '@elysiajs/fn'
@@ -118,19 +119,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.fetch = composeGeneralHandler(this)
 	}
 
-	private _addHandler<
-		Schema extends TypedSchema,
-		Path extends string = string
-	>(
+	private _addHandler(
 		method: HTTPMethod,
-		path: Path,
-		handler: LocalHandler<Schema, Instance, Path>,
-		hook?: LocalHook,
+		path: string,
+		handler: LocalHandler<any, any>,
+		hook?: LocalHook<any, any, string>,
 		{ allowMeta = false } = {
 			allowMeta: false as boolean | undefined
 		}
 	) {
-		path = path.startsWith('/') ? path : (`/${path}` as Path)
+		path = path.startsWith('/') ? path : `/${path}`
 
 		this.routes.push({
 			method,
@@ -452,20 +450,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return this
 	}
 
-	/**
-	 * ### group
-	 * Encapsulate and group path with prefix
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * new Elysia()
-	 *     .group('/v1', app => app
-	 *         .get('/', () => 'Hi')
-	 *         .get('/name', () => 'Elysia')
-	 *     })
-	 * ```
-	 */
 	group<
 		NewElysia extends Elysia<any> = Elysia<any>,
 		Prefix extends string = string
@@ -497,13 +481,104 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							}
 						>)
 		  }>
+		: this
+
+	group<
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		>,
+		NewElysia extends Elysia<any> = Elysia<any>,
+		Prefix extends string = string
+	>(
+		prefix: Prefix,
+		schema: LocalHook<Schema, Instance>,
+		run: (
+			group: Elysia<{
+				request: Instance['request']
+				store: Omit<Instance['store'], typeof SCHEMA> &
+					ElysiaInstance['store']
+				schema: Schema & Instance['schema']
+				meta: Omit<Instance['meta'], typeof SCHEMA> &
+					ElysiaInstance['meta']
+			}>
+		) => NewElysia
+	): NewElysia extends Elysia<infer NewInstance>
+		? Elysia<{
+				request: Instance['request']
+				schema: Instance['schema']
+				store: Instance['store']
+				meta: Instance['meta'] &
+					(Omit<NewInstance['meta'], typeof SCHEMA> &
+						Record<
+							typeof SCHEMA,
+							{
+								[key in keyof NewInstance['meta'][typeof SCHEMA] as key extends `${infer Rest}`
+									? `${Prefix}${Rest}`
+									: key]: NewInstance['meta'][typeof SCHEMA][key]
+							}
+						>)
+		  }>
+		: this
+
+	/**
+	 * ### group
+	 * Encapsulate and group path with prefix
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .group('/v1', app => app
+	 *         .get('/', () => 'Hi')
+	 *         .get('/name', () => 'Elysia')
+	 *     })
+	 * ```
+	 */
+	group<
+		Executor extends (
+			group: Elysia<{
+				request: Instance['request']
+				store: Omit<Instance['store'], typeof SCHEMA> &
+					ElysiaInstance['store']
+				schema: Schema & Instance['schema']
+				meta: Omit<Instance['meta'], typeof SCHEMA> &
+					ElysiaInstance['meta']
+			}>
+		) => NewElysia,
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
+		>,
+		NewElysia extends Elysia<any> = Elysia<any>,
+		Prefix extends string = string
+	>(
+		prefix: Prefix,
+		schemaOrRun: LocalHook<Schema, Instance> | Executor,
+		run?: Executor
+	): NewElysia extends Elysia<infer NewInstance>
+		? Elysia<{
+				request: Instance['request']
+				schema: Instance['schema']
+				store: Instance['store']
+				meta: Instance['meta'] &
+					(Omit<NewInstance['meta'], typeof SCHEMA> &
+						Record<
+							typeof SCHEMA,
+							{
+								[key in keyof NewInstance['meta'][typeof SCHEMA] as key extends `${infer Rest}`
+									? `${Prefix}${Rest}`
+									: key]: NewInstance['meta'][typeof SCHEMA][key]
+							}
+						>)
+		  }>
 		: this {
 		const instance = new Elysia<any>()
 		instance.store = this.store
 
 		if (this.wsRouter) instance.use(ws())
 
-		const sandbox = run(instance)
+		const isSchema = typeof schemaOrRun === 'object'
+
+		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
 		this.decorators = mergeDeep(this.decorators, instance.decorators)
 
 		if (sandbox.event.request.length)
@@ -516,27 +591,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		Object.values(instance.routes).forEach(
 			({ method, path: originalPath, handler, hooks }) => {
-				const path =
-					originalPath === '/' ? prefix : `${prefix}${originalPath}`
+				if (isSchema) {
+					const hook = schemaOrRun
+					const localHook = hooks
 
-				const hasWsRoute = instance.wsRouter?.find('subscribe', path)
-				if (hasWsRoute) {
-					const wsRoute = instance.wsRouter!.history.find(
-						([_, wsPath]) => originalPath === wsPath
+					const path =
+						originalPath === '/'
+							? prefix
+							: `${prefix}${originalPath}`
+
+					// Same as guard
+					const hasWsRoute = instance.wsRouter?.find(
+						'subscribe',
+						path
 					)
-					if (!wsRoute) return
+					if (hasWsRoute) {
+						const wsRoute = instance.wsRouter!.history.find(
+							([_, wsPath]) => path === wsPath
+						)
+						if (!wsRoute) return
 
-					return this.ws(path as any, wsRoute[2] as any)
+						return this.ws(path as any, wsRoute[2] as any)
+					}
+
+					this._addHandler(
+						method,
+						path,
+						handler,
+						mergeHook(hook as LocalHook<any, any>, {
+							...localHook,
+							error: !localHook.error
+								? sandbox.event.error
+								: Array.isArray(localHook.error)
+								? [...localHook.error, ...sandbox.event.error]
+								: [localHook.error, ...sandbox.event.error]
+						})
+					)
+				} else {
+					const path =
+						originalPath === '/'
+							? prefix
+							: `${prefix}${originalPath}`
+
+					const hasWsRoute = instance.wsRouter?.find(
+						'subscribe',
+						path
+					)
+					if (hasWsRoute) {
+						const wsRoute = instance.wsRouter!.history.find(
+							([_, wsPath]) => originalPath === wsPath
+						)
+						if (!wsRoute) return
+
+						return this.ws(path as any, wsRoute[2] as any)
+					}
+
+					this._addHandler(
+						method,
+						path,
+						handler,
+						mergeHook(hooks, {
+							error: sandbox.event.error
+						})
+					)
 				}
-
-				this._addHandler(
-					method,
-					path,
-					handler,
-					mergeHook(hooks, {
-						error: sandbox.event.error
-					})
-				)
 			}
 		)
 
@@ -626,7 +744,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any>, {
+					mergeHook(hook as LocalHook<any, any>, {
 						...localHook,
 						error: !localHook.error
 							? sandbox.event.error
@@ -800,10 +918,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	get<
 		Path extends string,
-		Schema extends TypedSchema<
-			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		Handler extends LocalHandler<Schema, Instance, Path>,
+		Schema extends TypedSchema = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -816,7 +932,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							get: {
@@ -869,14 +985,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
 				>
 			>
 	}> {
-		this._addHandler('GET', path, handler, hook as LocalHook)
+		this._addHandler('GET', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -901,10 +1019,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	post<
 		Path extends string,
-		Schema extends TypedSchema<
-			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		Handler extends LocalHandler<Schema, Instance, Path>,
+		Schema extends TypedSchema = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -917,7 +1033,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							post: {
@@ -970,14 +1086,21 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
 				>
 			>
 	}> {
-		this._addHandler('POST', path, handler, hook as LocalHook)
+		this._addHandler(
+			'POST',
+			path,
+			handler as any,
+			hook as LocalHook<any, any>
+		)
 
 		return this as any
 	}
@@ -1002,10 +1125,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	put<
 		Path extends string,
+		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		> = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -1018,7 +1141,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							put: {
@@ -1078,7 +1201,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('PUT', path, handler, hook as LocalHook)
+		this._addHandler('PUT', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1103,10 +1226,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	patch<
 		Path extends string,
+		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		> = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -1119,7 +1242,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							patch: {
@@ -1179,7 +1302,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('PATCH', path, handler, hook as LocalHook)
+		this._addHandler('PATCH', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1204,10 +1327,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	delete<
 		Path extends string,
+		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		> = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -1220,7 +1343,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							delete: {
@@ -1280,7 +1403,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('DELETE', path, handler, hook as LocalHook)
+		this._addHandler('DELETE', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1305,10 +1428,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	options<
 		Path extends string,
+		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		> = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -1321,7 +1444,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							options: {
@@ -1381,7 +1504,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('OPTIONS', path, handler, hook as LocalHook)
+		this._addHandler('OPTIONS', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1401,10 +1524,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	all<
 		Path extends string,
+		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		> = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -1417,7 +1540,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							all: {
@@ -1477,7 +1600,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('ALL', path, handler, hook as LocalHook)
+		this._addHandler('ALL', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1502,10 +1625,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	head<
 		Path extends string,
+		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		> = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -1518,7 +1641,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							head: {
@@ -1578,7 +1701,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('HEAD', path, handler, hook as LocalHook)
+		this._addHandler('HEAD', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1603,10 +1726,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	trace<
 		Path extends string,
+		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		> = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -1619,7 +1742,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							trace: {
@@ -1679,7 +1802,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('TRACE', path, handler, hook as LocalHook)
+		this._addHandler('TRACE', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1704,10 +1827,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	connect<
 		Path extends string,
+		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		>,
-		Handler extends LocalHandler<Schema, Instance, Path>
+		> = {}
 	>(
 		path: Path,
 		handler: Handler,
@@ -1720,7 +1843,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							connect: {
@@ -1780,7 +1903,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('CONNECT', path, handler, hook as LocalHook)
+		this._addHandler('CONNECT', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1943,7 +2066,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				MergeUnionObjects<
+				FlattenObject<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							[method in Method]: {
@@ -2003,7 +2126,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler(method, path, handler, hook as LocalHook, config)
+		this._addHandler(
+			method,
+			path,
+			handler,
+			hook as LocalHook<any, any>,
+			config
+		)
 
 		return this as any
 	}
@@ -2351,7 +2480,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		store: Instance['store']
 		request: Instance['request']
 		schema: Instance['schema']
-		meta: Instance['meta'] & Record<typeof DEFS, Recorder>
+		meta: Instance['meta'] &
+			Record<
+				typeof DEFS,
+				{
+					[key in keyof Recorder]: Static<Recorder[key]>
+				}
+			>
 	}> {
 		Object.entries(record).forEach(([key, value]) => {
 			// @ts-ignore
@@ -2416,7 +2551,6 @@ export type {
 	UnknownFallback,
 	WithArray,
 	ObjectValues,
-	PickInOrder,
 	MaybePromise,
 	MergeIfNotNull,
 	ElysiaDefaultMeta,

@@ -25,7 +25,9 @@ import type {
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
-const isFnUse = (keyword: string, fnLiteral: string) => {
+const _demoHeaders = new Headers()
+
+export const isFnUse = (keyword: string, fnLiteral: string) => {
 	const argument = fnLiteral.slice(
 		fnLiteral.indexOf('(') + 1,
 		fnLiteral.indexOf(')')
@@ -92,6 +94,36 @@ export const composeHandler = ({
 				...hooks.beforeHandle,
 				...hooks.afterHandle
 			].some((fn) => isFnUse('body', fn.toString())))
+
+	const hasHeaders =
+		validator.headers ||
+		[
+			handler,
+			...hooks.transform,
+			...hooks.beforeHandle,
+			...hooks.afterHandle
+		].some((fn) => isFnUse('headers', fn.toString()))
+
+	if (hasHeaders) {
+		fnLiteral += '\n'
+
+		// This function is Bun specific
+		// @ts-ignore
+		fnLiteral += _demoHeaders.toJSON
+			? `c.headers = c.request.headers.toJSON()\n`
+			: `c.headers = {}
+                for (const key of c.request.headers.keys())
+					h[key] = c.request.headers.get(key)
+
+                if (headers.Check(h) === false) {
+                    throw createValidationError(
+                        'header',
+                        headers,
+                        h
+                    )
+				}
+			`
+	}
 
 	const maybeAsync =
 		hasBody ||
@@ -192,13 +224,15 @@ export const composeHandler = ({
 			throw new Error('PARSE')
 		}`
 		} else {
-			fnLiteral += `
-			let contentType = c.request.headers.get('content-type')
+			fnLiteral += '\n'
+			fnLiteral += hasHeaders
+				? `let contentType = c.headers['content-type']`
+				: `let contentType = c.request.headers.get('content-type')`
 
+			fnLiteral += `
             if (contentType) {
 				const index = contentType.indexOf(';')
-				if (index !== -1) contentType = contentType.substring(0, index)
-`
+				if (index !== -1) contentType = contentType.substring(0, index)\n`
 
 			if (hooks.parse.length) {
 				fnLiteral += `let used = false\n`
@@ -243,9 +277,8 @@ export const composeHandler = ({
 				}
 
 				break
-		`
-
-			fnLiteral += `}}\n`
+			}
+		}\n`
 		}
 	}
 
@@ -260,15 +293,11 @@ export const composeHandler = ({
 	if (validator) {
 		if (validator.headers)
 			fnLiteral += `
-                const h = {}
-                for (const key of c.request.headers.keys())
-					h[key] = c.request.headers.get(key)
-
-                if (headers.Check(h) === false) {
+                if (headers.Check(c.headers) === false) {
                     throw createValidationError(
                         'header',
                         headers,
-                        h
+                        c.headers
                     )
 				}
         `
@@ -277,7 +306,7 @@ export const composeHandler = ({
 			fnLiteral += `if(params.Check(c.params) === false) { throw createValidationError('params', params, c.params) }`
 
 		if (validator.query)
-			fnLiteral += `if(query.Check(c.query) === false) { throw createValidationError('params', query, c.query) }`
+			fnLiteral += `if(query.Check(c.query) === false) { throw createValidationError('query', query, c.query) }`
 
 		if (validator.body)
 			fnLiteral += `if(body.Check(c.body) === false) { throw createValidationError('body', body, c.body) }`

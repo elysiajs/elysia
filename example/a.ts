@@ -1,26 +1,26 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.post('/login', ({ body }) => body, {
-		schema: {
-			body: t.Object({
-				username: t.String(),
-				password: t.String()
-			})
-		}
-	})
-	.onError(({ code, error, set }) => {
-		console.log("Hi")
+	.get('/', ({ headers }) => headers)
+	.group(
+		'/v1',
+		{
+			beforeHandle({ headers, set }) {
+				// @ts-ignore
+				if (!validateToken(headers)) {
+					set.status = 401
 
-		if (code === 'VALIDATION') {
-			set.status = 400
-
-			return error.all().map((i) => ({
-				filed: i.path.slice(1) || 'root',
-				reason: i.message
-			}))
-		}
-	})
+					throw new Error('Invalid token')
+				}
+			},
+			schema: {
+				headers: t.Object({
+					authorization: t.String()
+				})
+			}
+		},
+		(app) => app.post('/', () => {})
+	)
 	.listen(3000, ({ hostname, port }) => {
 		console.log(`Running at http://${hostname}:${port}`)
 	})
