@@ -1,7 +1,7 @@
 import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from './utils'
+import { post } from './utils'
 
 const payload = { hello: 'world' }
 

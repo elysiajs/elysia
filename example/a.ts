@@ -2,6 +2,8 @@ import { Elysia, t } from '../src'
 
 const app = new Elysia()
 	.get('/', () => 'Hi')
+	.get('/a', () => 'Hi')
+	.post('/hello', () => 'Hello')
 	// .onError(({ code }) => {
 	// 	console.log(code)
 

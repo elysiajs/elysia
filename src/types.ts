@@ -595,31 +595,31 @@ export type ErrorHandler = (
 		| {
 				request: Request
 				code: 'UNKNOWN'
-				error: Error
+				error: Readonly<Error>
 				set: Context['set']
 		  }
 		| {
 				request: Request
 				code: 'VALIDATION'
-				error: ValidationError
+				error: Readonly<ValidationError>
 				set: Context['set']
 		  }
 		| {
 				request: Request
 				code: 'NOT_FOUND'
-				error: NotFoundError
+				error: Readonly<NotFoundError>
 				set: Context['set']
 		  }
 		| {
 				request: Request
 				code: 'PARSE'
-				error: ParseError
+				error: Readonly<ParseError>
 				set: Context['set']
 		  }
 		| {
 				request: Request
 				code: 'INTERNAL_SERVER_ERROR'
-				error: InternalServerError
+				error: Readonly<InternalServerError>
 				set: Context['set']
 		  }
 ) => any | Promise<any>

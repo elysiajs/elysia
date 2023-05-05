@@ -109,8 +109,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	private router = new Memoirist<ComposedHandler>()
 	protected routes: InternalRoute<Instance>[] = []
-	// Static
-	private _s: Map<string, Map<string, ComposedHandler>> = new Map()
+
+	private staticRouter = {
+		handlers: [] as ComposedHandler[],
+		variables: '',
+		map: {} as Record<string, string>
+	}
 	private wsRouter: Memoirist<ElysiaWSOptions> | undefined
 
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
@@ -208,9 +212,15 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		})
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-			if (!this._s.has(method)) this._s.set(method, new Map())
+			const index = this.staticRouter.handlers.length
+			this.staticRouter.handlers.push(mainHandler)
 
-			this._s.get(method)!.set(path, mainHandler)
+			this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+
+			if (!this.staticRouter.map[path]) this.staticRouter.map[path] = ``
+
+			this.staticRouter.map[path] += `case '${method}':\n`
+			this.staticRouter.map[path] += `return st${index}(ctx)\n`
 		}
 
 		this.router.add(method, path, mainHandler)

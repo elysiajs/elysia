@@ -1,4 +1,4 @@
-import { Elysia } from '.'
+import type { Elysia } from '.'
 
 import { parse as parseQuery } from 'fast-querystring'
 
@@ -487,49 +487,36 @@ export const composeHandler = ({
 	})
 }
 
-// This is a cached for composeGeneralHandler generated function literal
-// to prevent minimize transpiler work
-let generalCached: [number, number, string] | undefined
-
 export const composeGeneralHandler = (app: Elysia<any>) => {
 	// @ts-ignore
 	const decorators = app.decorators
-	const totalDecorators = Object.keys(decorators).length
-
-	if (
-		generalCached?.[0] === totalDecorators &&
-		generalCached[1] === app.event.request.length
-	)
-		return Function(
-			'data',
-			generalCached?.[2]
-		)({
-			app,
-			parseQuery,
-			mapEarlyResponse,
-			removeHostnameRegex,
-			removeQueryRegex,
-			removePathRegex,
-			removeFragmentRegex,
-			NotFoundError
-		})
 
 	let decoratorsLiteral = ''
 
 	for (const key of Object.keys(decorators))
 		decoratorsLiteral += `,${key}: app.decorators.${key}`
 
+	// @ts-ignore
+	const staticRouter = app.staticRouter
+
+	let switchMap = ``
+	for (const [path, code] of Object.entries(staticRouter.map))
+		switchMap += `case '${path}':\nswitch(method) {\n${code}}\n\n`
+
 	const fnLiteral = `const { 
 		app,
-		app: { store, router, _s: _static },
+		app: { store, router, staticRouter },
 		parseQuery,
 		${app.event.request.length ? 'mapEarlyResponse,' : ''}
 		removeHostnameRegex: rHost,
 		removeQueryRegex: rQuery,
 		removePathRegex: rPath,
 		removeFragmentRegex: rFrag,
-		NotFoundError
+		NotFoundError,
+		mapStaticRoute
 	} = data
+
+	const notFound = new NotFoundError()
 
 	${
 		app.event.request.length
@@ -537,6 +524,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			   const requestLength = app.event.request.length`
 			: ''
 	}
+
+	${staticRouter.variables}
 
 	return function(request) {
 		const ctx = {
@@ -568,7 +557,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				: ''
 		}
 
-		const url = request.url,
+		const { url, method } = request,
 			i = url.indexOf('?', 11),
 			f = url.indexOf('#', 12)
 
@@ -590,26 +579,25 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			}
 		}
 
-		const handle = _static.get(request.method)?.get(path)
-		if (handle) {
-			return handle(ctx)
-		} else {
-			const route = router.find(request.method, path) ?? router.find('ALL', path)
-
-			if (!route)
-				return app.handleError(
-					request,
-					new NotFoundError(),
-					ctx.set
-				)
-
-			ctx.params = route.params
-
-			return route.store(ctx)
+		switch(path) {
+			${switchMap}
 		}
+	
+		const route = router.find(method, path) ?? router.find('ALL', path)
+
+		if (route === null)
+			return app.handleError(
+				request,
+				notFound,
+				ctx.set
+			)
+
+		ctx.params = route.params
+
+		return route.store(ctx)
 	}`
 
-	generalCached = [totalDecorators, app.event.request.length, fnLiteral]
+	// console.log(fnLiteral)
 
 	return Function(
 		'data',

@@ -6,8 +6,6 @@ export class InternalServerError extends Error {
 
 	constructor() {
 		super('INTERNAL_SERVER_ERROR')
-
-		Error.captureStackTrace(this, InternalServerError)
 	}
 }
 
@@ -17,8 +15,6 @@ export class NotFoundError extends Error {
 
 	constructor() {
 		super('NOT_FOUND')
-
-		Error.captureStackTrace(this, InternalServerError)
 	}
 }
 
@@ -28,8 +24,6 @@ export class ParseError extends Error {
 
 	constructor() {
 		super('PARSE')
-
-		Error.captureStackTrace(this, InternalServerError)
 	}
 }
 
@@ -49,8 +43,6 @@ export class ValidationError extends Error {
 				error?.message
 			}`
 		)
-
-		Error.captureStackTrace(this, ValidationError)
 	}
 
 	get all() {
