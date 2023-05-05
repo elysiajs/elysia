@@ -457,7 +457,6 @@ export const composeHandler = ({
 
 	return ${maybeAsync ? 'async' : ''} function(c) {
 		${meta ? 'c[SCHEMA] = meta[SCHEMA]; c[DEFS] = meta[DEFS];' : ''}
-
 		${fnLiteral}
 	}`
 

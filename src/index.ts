@@ -2418,11 +2418,15 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		const fetch = this.fetch
 
+		const development =
+			(process.env.ENV ?? process.env.NODE_ENV) !== 'production'
+
 		const serve: Serve =
 			typeof options === 'object'
 				? {
 						...this.config.serve,
 						...options,
+						development,
 						fetch
 				  }
 				: {
