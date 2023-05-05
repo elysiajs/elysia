@@ -6,13 +6,17 @@ import { mapEarlyResponse, mapResponse } from './handler'
 import {
 	SCHEMA,
 	DEFS,
-	createValidationError,
 	removeHostnameRegex,
 	removeFragmentRegex,
 	removePathRegex,
 	removeQueryRegex
 } from './utils'
-import { mapErrorCode } from './error'
+import {
+	ParseError,
+	NotFoundError,
+	ValidationError,
+	InternalServerError
+} from './error'
 
 import type {
 	ComposedHandler,
@@ -116,7 +120,7 @@ export const composeHandler = ({
 					h[key] = c.request.headers.get(key)
 
                 if (headers.Check(h) === false) {
-                    throw createValidationError(
+                    throw throw new ValidationError(
                         'header',
                         headers,
                         h
@@ -221,7 +225,7 @@ export const composeHandler = ({
 				}
 
 			fnLiteral += `} catch(error) {
-			throw new Error('PARSE')
+			throw new ParseError()
 		}`
 		} else {
 			fnLiteral += '\n'
@@ -294,7 +298,7 @@ export const composeHandler = ({
 		if (validator.headers)
 			fnLiteral += `
                 if (headers.Check(c.headers) === false) {
-                    throw createValidationError(
+                    throw new ValidationError(
                         'header',
                         headers,
                         c.headers
@@ -303,13 +307,13 @@ export const composeHandler = ({
         `
 
 		if (validator.params)
-			fnLiteral += `if(params.Check(c.params) === false) { throw createValidationError('params', params, c.params) }`
+			fnLiteral += `if(params.Check(c.params) === false) { throw new ValidationError('params', params, c.params) }`
 
 		if (validator.query)
-			fnLiteral += `if(query.Check(c.query) === false) { throw createValidationError('query', query, c.query) }`
+			fnLiteral += `if(query.Check(c.query) === false) { throw new ValidationError('query', query, c.query) }`
 
 		if (validator.body)
-			fnLiteral += `if(body.Check(c.body) === false) { throw createValidationError('body', body, c.body) }`
+			fnLiteral += `if(body.Check(c.body) === false) { throw new ValidationError('body', body, c.body) }`
 	}
 
 	if (hooks?.beforeHandle)
@@ -337,7 +341,7 @@ export const composeHandler = ({
 			}
 
 			if (validator.response)
-				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw createValidationError('response', response[c.set.status], ${name}) }\n`
+				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw new ValidationError('response', response[c.set.status], ${name}) }\n`
 
 			fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
 		}
@@ -357,7 +361,7 @@ export const composeHandler = ({
 					: `let ${name} = afterHandle[${i}](c, r)\n`
 
 			if (validator.response) {
-				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw createValidationError('response', response[c.set.status], ${name}) }\n`
+				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw new ValidationError('response', response[c.set.status], ${name}) }\n`
 
 				fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
 
@@ -366,7 +370,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.response)
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw createValidationError('response', response[c.set.status], r) }\n`
+			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw new ValidationError('response', response[c.set.status], r) }\n`
 
 		fnLiteral += `return mapResponse(r, c.set);\n`
 	} else {
@@ -376,7 +380,7 @@ export const composeHandler = ({
 					? `const r = await handler(c);\n`
 					: `const r = handler(c);\n`
 
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw createValidationError('response', response[c.set.status], r) }\n`
+			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw new ValidationError('response', response[c.set.status], r) }\n`
 			fnLiteral += `return mapResponse(r, c.set);`
 		} else
 			fnLiteral +=
@@ -387,20 +391,19 @@ export const composeHandler = ({
 
 	fnLiteral += `
 } catch(error) {
+	// Optimize this error return
 	${maybeAsync ? '' : 'return (async () => {'}
 		const set = c.set
 
 		if (!set.status || set.status < 300) set.status = 500
 
 		if (handleErrors) {
-			const code = mapErrorCode(error.message)
-
 			for (let i = 0; i < handleErrors.length; i++) {
 				let handled = handleErrors[i]({
 					request: c.request,
-					error,
+					error: error,
 					set,
-					code
+					code: error.code ?? "UNKNOWN"
 				})
 				if (handled instanceof Promise) handled = await handled
 
@@ -433,11 +436,16 @@ export const composeHandler = ({
 			response
 		},
 		utils: {
-			createValidationError,
 			mapResponse,
 			mapEarlyResponse,
 			mapErrorCode,
 			parseQuery
+		},
+		error: {
+			ParseError,
+			NotFoundError,
+			ValidationError,
+			InternalServerError
 		},
 		${
 			meta
@@ -463,11 +471,15 @@ export const composeHandler = ({
 		validator,
 		handleError,
 		utils: {
-			createValidationError,
 			mapResponse,
 			mapEarlyResponse,
-			mapErrorCode,
 			parseQuery
+		},
+		error: {
+			ParseError,
+			NotFoundError,
+			ValidationError,
+			InternalServerError
 		},
 		meta,
 		SCHEMA: meta ? SCHEMA : undefined,
@@ -498,7 +510,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			removeHostnameRegex,
 			removeQueryRegex,
 			removePathRegex,
-			removeFragmentRegex
+			removeFragmentRegex,
+			NotFoundError
 		})
 
 	let decoratorsLiteral = ''
@@ -514,7 +527,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		removeHostnameRegex: rHost,
 		removeQueryRegex: rQuery,
 		removePathRegex: rPath,
-		removeFragmentRegex: rFrag
+		removeFragmentRegex: rFrag,
+		NotFoundError
 	} = data
 
 	${
@@ -585,7 +599,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			if (!route)
 				return app.handleError(
 					request,
-					new Error('NOT_FOUND'),
+					new NotFoundError(),
 					ctx.set
 				)
 
@@ -607,6 +621,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		removeHostnameRegex,
 		removeQueryRegex,
 		removePathRegex,
-		removeFragmentRegex
+		removeFragmentRegex,
+		NotFoundError
 	})
 }

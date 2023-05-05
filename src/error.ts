@@ -1,34 +1,59 @@
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import type { ErrorCode } from './types'
 
-const errorCodeToStatus = new Map<ErrorCode, number>([
-	['INTERNAL_SERVER_ERROR', 500],
-	['NOT_FOUND', 404],
-	['VALIDATION', 400],
-	['PARSE', 400]
-])
+export class InternalServerError extends Error {
+	code = 'NOT_FOUND'
+	status = 500
 
-const knownErrors = new Set<ErrorCode>(errorCodeToStatus.keys())
+	constructor() {
+		super('INTERNAL_SERVER_ERROR')
 
-export const mapErrorCode = (error: string): ErrorCode =>
-	knownErrors.has(error as ErrorCode) ? (error as ErrorCode) : 'UNKNOWN'
+		Error.captureStackTrace(this, InternalServerError)
+	}
+}
 
-export const mapErrorStatus = (error: string): number =>
-	errorCodeToStatus.get(error as ErrorCode) ?? 500
+export class NotFoundError extends Error {
+	code = 'NOT_FOUND'
+	status = 404
 
-interface ValidationErrorOptions<T = unknown> extends ErrorOptions {
-	validator: TypeCheck<any>
-	value: T
-	type: string
+	constructor() {
+		super('NOT_FOUND')
+
+		Error.captureStackTrace(this, InternalServerError)
+	}
+}
+
+export class ParseError extends Error {
+	code = 'PARSE'
+	status = 400
+
+	constructor() {
+		super('PARSE')
+
+		Error.captureStackTrace(this, InternalServerError)
+	}
 }
 
 export class ValidationError extends Error {
-	constructor(public readonly opts: ValidationErrorOptions) {
-		super('VALIDATION', { cause: opts.cause })
-		Object.setPrototypeOf(this, ValidationError.prototype)
+	code = 'VALIDATION'
+	status = 400
+
+	constructor(
+		type: string,
+		public validator: TypeCheck<any>,
+		public value: unknown
+	) {
+		const error = validator.Errors(value).First()
+
+		super(
+			`Invalid ${type}: '${error?.path?.slice(1) || 'root'}'. ${
+				error?.message
+			}`
+		)
+
+		Error.captureStackTrace(this, ValidationError)
 	}
 
-	all() {
-		return [...this.opts.validator.Errors(this.opts.value)]
+	get all() {
+		return [...this.validator.Errors(this.value)]
 	}
 }

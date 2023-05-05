@@ -1,4 +1,4 @@
-import { Elysia } from '../src'
+import { Elysia, InternalServerError, NotFoundError, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
@@ -9,7 +9,9 @@ describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			.handleError(request, new Error('NOT_FOUND'))
+			.handleError(request, new NotFoundError(), {
+				headers: {}
+			})
 
 		expect(await res.text()).toBe('NOT_FOUND')
 		expect(res.status).toBe(404)
@@ -18,7 +20,9 @@ describe('Handle Error', () => {
 	it('handle INTERNAL_SERVER_ERROR', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			.handleError(request, new Error('INTERNAL_SERVER_ERROR'))
+			.handleError(request, new InternalServerError(), {
+				headers: {}
+			})
 
 		expect(await res.text()).toBe('INTERNAL_SERVER_ERROR')
 		expect(res.status).toBe(500)
@@ -26,26 +30,24 @@ describe('Handle Error', () => {
 
 	it('handle VALIDATION', async () => {
 		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			.handleError(request, new Error('VALIDATION'))
+			.get('/', () => 'Hi', {
+				schema: {
+					query: t.Object({
+						name: t.String()
+					})
+				}
+			})
+			.handle(req('/'))
 
-		expect(await res.text()).toBe('VALIDATION')
 		expect(res.status).toBe(400)
-	})
-
-	it('handle UNKNOWN', async () => {
-		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			.handleError(request, new Error('UNKNOWN'))
-
-		expect(await res.text()).toBe('UNKNOWN')
-		expect(res.status).toBe(500)
 	})
 
 	it('handle custom error', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			.handleError(request, new Error("I'm a teapot"))
+			.handleError(request, new Error("I'm a teapot"), {
+				headers: {}
+			})
 
 		expect(await res.text()).toBe("I'm a teapot")
 		expect(res.status).toBe(500)
@@ -60,7 +62,7 @@ describe('Handle Error', () => {
 						status: 418
 					})
 			})
-			.handleError(request, new Error('NOT_FOUND'))
+			.handle(req('/not-found'))
 
 		expect(await res.text()).toBe("I'm a teapot")
 		expect(res.status).toBe(418)
@@ -72,7 +74,7 @@ describe('Handle Error', () => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
 			.get('/', () => {
-				throw new Error('NOT_FOUND')
+				throw new NotFoundError()
 			})
 
 		const res = await app.handle(req('/'))
@@ -89,7 +91,7 @@ describe('Handle Error', () => {
 				return 'aw man'
 			})
 			.get('/', () => {
-				throw new Error('NOT_FOUND')
+				throw new NotFoundError()
 			})
 
 		const res = await app.handle(req('/'))

@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { post, req } from './utils'
 
 describe('Path', () => {
 	it('handle root', async () => {
@@ -43,7 +43,9 @@ describe('Path', () => {
 				name: 'takodachi'
 			})
 		)
-		expect(res.headers.get('content-type')).toBe('application/json;charset=utf-8')
+		expect(res.headers.get('content-type')).toBe(
+			'application/json;charset=utf-8'
+		)
 	})
 
 	it('Return response', async () => {
@@ -356,5 +358,14 @@ describe('Path', () => {
 		expect(res).toEqual({
 			a: 'b'
 		})
+	})
+
+	it('handle all method', async () => {
+		const app = new Elysia().all('/', () => 'Hi')
+		const res1 = await app.handle(req('/')).then((res) => res.text())
+		const res2 = await app.handle(post('/', {})).then((res) => res.text())
+
+		expect(res1).toBe('Hi')
+		expect(res2).toBe('Hi')
 	})
 })

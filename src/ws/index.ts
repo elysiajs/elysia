@@ -3,10 +3,11 @@ import type { Server, ServerWebSocket, WebSocketHandler } from 'bun'
 import { Raikiri } from 'raikiri'
 
 import type { Elysia, Context } from '..'
-import { createValidationError, getPath, type DEFS } from '../utils'
+import { getPath, type DEFS } from '../utils'
 
 import type { ElysiaWSContext, WSTypedSchema } from './types'
 import type { ElysiaInstance, UnwrapSchema } from '../types'
+import { ValidationError } from '../error'
 
 export class ElysiaWS<
 	WS extends ElysiaWSContext<any> = ElysiaWSContext,
@@ -169,7 +170,7 @@ export const ws =
 							) === false
 						)
 							return void ws.send(
-								createValidationError(
+								new ValidationError(
 									'message',
 									(ws.data as ElysiaWSContext['data'])
 										.message as any,

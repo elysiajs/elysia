@@ -1,5 +1,12 @@
-import type { Elysia, ValidationError } from '.'
 import type { Serve, Server } from 'bun'
+
+import type { Elysia } from '.'
+import {
+	ParseError,
+	NotFoundError,
+	ValidationError,
+	InternalServerError
+} from './error'
 
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
@@ -333,31 +340,31 @@ export interface LocalHook<
 // 	: // It's impossible to land here, create a fallback for type integrity
 // 	  TypedSchemaToRoute<Schema, Definitions>
 
-export type RouteToSchema<
-	Schema extends TypedSchema,
-	InstanceSchema extends ElysiaInstance['schema'],
-	Definitions extends ElysiaInstance['meta'][typeof DEFS],
-	Path extends string = string
-> = MergeSchema<Schema, InstanceSchema> extends infer Typed extends TypedSchema
-	? TypedSchemaToRoute<Typed, Definitions> extends {
-			body: infer Body
-			params: infer Params
-			query: infer Query
-			headers: infer Headers
-			response: infer Response
-	  }
-		? {
-				body: Body
-				params: Params extends undefined
-					? Record<ExtractPath<Path>, string>
-					: Params
-				query: Query
-				headers: Headers
-				response: Response
-		  }
-		: // It's impossible to land here, create a fallback for type integrity
-		  TypedSchemaToRoute<Typed, Definitions>
-	: never
+// export type RouteToSchema<
+// 	Schema extends TypedSchema,
+// 	InstanceSchema extends ElysiaInstance['schema'],
+// 	Definitions extends ElysiaInstance['meta'][typeof DEFS],
+// 	Path extends string = string
+// > = MergeSchema<Schema, InstanceSchema> extends infer Typed extends TypedSchema
+// 	? TypedSchemaToRoute<Typed, Definitions> extends {
+// 			body: infer Body
+// 			params: infer Params
+// 			query: infer Query
+// 			headers: infer Headers
+// 			response: infer Response
+// 	  }
+// 		? {
+// 				body: Body
+// 				params: Params extends undefined
+// 					? Record<ExtractPath<Path>, string>
+// 					: Params
+// 				query: Query
+// 				headers: Headers
+// 				response: Response
+// 		  }
+// 		: // It's impossible to land here, create a fallback for type integrity
+// 		  TypedSchemaToRoute<Typed, Definitions>
+// 	: never
 
 export type FlattenObject<T> = {} & { [P in keyof T]: T[P] }
 
@@ -578,6 +585,8 @@ export type ErrorCode =
 	| 'INTERNAL_SERVER_ERROR'
 	// ? Validation error
 	| 'VALIDATION'
+	// ? Body parsing error
+	| 'PARSE'
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
@@ -585,11 +594,7 @@ export type ErrorHandler = (
 	params:
 		| {
 				request: Request
-				code:
-					| 'NOT_FOUND'
-					| 'INTERNAL_SERVER_ERROR'
-					| 'UNKNOWN'
-					| 'PARSE'
+				code: 'UNKNOWN'
 				error: Error
 				set: Context['set']
 		  }
@@ -597,6 +602,24 @@ export type ErrorHandler = (
 				request: Request
 				code: 'VALIDATION'
 				error: ValidationError
+				set: Context['set']
+		  }
+		| {
+				request: Request
+				code: 'NOT_FOUND'
+				error: NotFoundError
+				set: Context['set']
+		  }
+		| {
+				request: Request
+				code: 'PARSE'
+				error: ParseError
+				set: Context['set']
+		  }
+		| {
+				request: Request
+				code: 'INTERNAL_SERVER_ERROR'
+				error: InternalServerError
 				set: Context['set']
 		  }
 ) => any | Promise<any>

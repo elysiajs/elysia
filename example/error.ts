@@ -2,18 +2,18 @@ import { Elysia, t } from '../src'
 
 new Elysia()
 	.onError(({ code, error, set }) => {
-		if (code === 'NOT_FOUND') {
-			set.status = 404
+		switch (code) {
+			case 'NOT_FOUND':
+				set.status = 404
 
-			return 'Not Found :('
-		}
+				return 'Not Found :('
 
-		if (code === 'VALIDATION') {
-			set.status = 400
+			case 'VALIDATION':
+				set.status = 400
 
-			return {
-				fields: error.all()
-			}
+				return {
+					fields: error.all
+				}
 		}
 	})
 	.post('/a', () => 'hi', {

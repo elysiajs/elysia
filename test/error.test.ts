@@ -37,7 +37,7 @@ describe('error', () => {
 				if (code === 'VALIDATION') {
 					set.status = 400
 
-					return error.all().map((i) => ({
+					return error.all.map((i) => ({
 						filed: i.path.slice(1) || 'root',
 						reason: i.message
 					}))

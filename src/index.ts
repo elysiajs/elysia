@@ -14,7 +14,6 @@ import {
 	mergeDeep
 } from './utils'
 import { registerSchemaPath } from './schema'
-import { mapErrorCode, mapErrorStatus } from './error'
 import type { Context } from './context'
 
 import { composeGeneralHandler, composeHandler } from './compose'
@@ -53,10 +52,16 @@ import type {
 	FlattenObject,
 	TypedWSRouteToEden,
 	UnwrapSchema,
-	ExtractPath,
-	RouteToSchema
+	ExtractPath
 } from './types'
 import { Static, type TSchema } from '@sinclair/typebox'
+
+import type {
+	ValidationError,
+	ParseError,
+	NotFoundError,
+	InternalServerError
+} from './error'
 
 // @ts-ignore
 import type { Permission } from '@elysiajs/fn'
@@ -607,6 +612,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					)
 					if (hasWsRoute) {
 						const wsRoute = instance.wsRouter!.history.find(
+							// eslint-disable-next-line @typescript-eslint/no-unused-vars
 							([_, wsPath]) => path === wsPath
 						)
 						if (!wsRoute) return
@@ -639,6 +645,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					)
 					if (hasWsRoute) {
 						const wsRoute = instance.wsRouter!.history.find(
+							// eslint-disable-next-line @typescript-eslint/no-unused-vars
 							([_, wsPath]) => originalPath === wsPath
 						)
 						if (!wsRoute) return
@@ -733,6 +740,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				const hasWsRoute = instance.wsRouter?.find('subscribe', path)
 				if (hasWsRoute) {
 					const wsRoute = instance.wsRouter!.history.find(
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
 						([_, wsPath]) => path === wsPath
 					)
 					if (!wsRoute) return
@@ -2345,15 +2353,19 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	handleError = async (
 		request: Request,
-		error: Error,
-		set: Context['set'] = {
-			headers: {}
-		}
+		error:
+			| Error
+			| ValidationError
+			| ParseError
+			| NotFoundError
+			| InternalServerError,
+		set: Context['set']
 	) => {
 		for (let i = 0; i < this.event.error.length; i++) {
 			let response = this.event.error[i]({
 				request,
-				code: mapErrorCode(error.message) as any,
+				// @ts-ignore
+				code: error.code ?? 'UNKNOWN',
 				error,
 				set
 			})
@@ -2362,13 +2374,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				return mapResponse(response, set)
 		}
 
-		return new Response(
-			typeof error.cause === 'string' ? error.cause : error.message,
-			{
-				headers: set.headers,
-				status: mapErrorStatus(mapErrorCode(error.message))
-			}
-		)
+		return new Response(error.message, {
+			headers: set.headers,
+			// @ts-ignore
+			status: error.status ?? 500
+		})
 	}
 
 	/**
@@ -2505,7 +2515,6 @@ export {
 	SCHEMA,
 	DEFS,
 	EXPOSED,
-	createValidationError,
 	getSchemaValidator,
 	mergeDeep,
 	mergeHook,
@@ -2515,7 +2524,12 @@ export {
 	getResponseSchemaValidator
 } from './utils'
 
-export { ElysiaError, ValidationError } from './validation'
+export {
+	ParseError,
+	NotFoundError,
+	ValidationError,
+	InternalServerError
+} from './error'
 
 export type { Context, PreContext } from './context'
 export type {
@@ -2556,6 +2570,5 @@ export type {
 	ElysiaDefaultMeta,
 	TypedRouteToEden,
 	AnyTypedSchema,
-	RouteToSchema,
 	DeepMergeTwoTypes
 } from './types'
