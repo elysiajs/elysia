@@ -3,6 +3,6 @@ Bun.serve({
 	serverName: 'Elysia',
 	port: 8080,
 	async fetch(request) {
-		return 'a'
+		return new Request("Hi")
 	}
 })

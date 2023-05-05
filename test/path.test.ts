@@ -350,15 +350,16 @@ describe('Path', () => {
 		expect(res).toEqual({})
 	})
 
-	it('exclude fragment on querystring', async () => {
-		const app = new Elysia().get('/', ({ query }) => query)
+	// ? This is not used because fragment is strip out by default
+	// it('exclude fragment on querystring', async () => {
+	// 	const app = new Elysia().get('/', ({ query }) => query)
 
-		const res = await app.handle(req('/?a=b#a')).then((r) => r.json())
+	// 	const res = await app.handle(req('/?a=b#a')).then((r) => r.json())
 
-		expect(res).toEqual({
-			a: 'b'
-		})
-	})
+	// 	expect(res).toEqual({
+	// 		a: 'b'
+	// 	})
+	// })
 
 	it('handle all method', async () => {
 		const app = new Elysia().all('/', () => 'Hi')

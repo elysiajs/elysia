@@ -74,32 +74,6 @@ export const getPath = (url: string) => {
 	)
 }
 
-export const getPathAndQuery = (url: string) => {
-	const i = url.indexOf('?', 11)
-	const f = url.indexOf('#', 12)
-
-	if (i !== -1)
-		if (f !== -1)
-			return [
-				url.substring(url.indexOf('/', 10), i),
-				url.substring(i + 1, f)
-			]
-		else
-			return [
-				url.substring(url.indexOf('/', 10), i),
-				url.substring(i + 1)
-			]
-
-	if (f !== -1) return [url.substring(url.indexOf('/', 10), f), '']
-
-	return [url.substring(url.indexOf('/', 10)), '']
-}
-
-export const removeHostnameRegex = /^[a-z]+?:\/\/[^/]+/
-export const removeQueryRegex = /\?.*?([\w=&%]+)/
-export const removePathRegex = /^[^?]*(\?|$)/
-export const removeFragmentRegex = /#(\S+)/
-
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 

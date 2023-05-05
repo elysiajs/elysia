@@ -3,14 +3,7 @@ import type { Elysia } from '.'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse } from './handler'
-import {
-	SCHEMA,
-	DEFS,
-	removeHostnameRegex,
-	removeFragmentRegex,
-	removePathRegex,
-	removeQueryRegex
-} from './utils'
+import { SCHEMA, DEFS } from './utils'
 import {
 	ParseError,
 	NotFoundError,
@@ -70,6 +63,7 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 }
 
 export const composeHandler = ({
+	path,
 	method,
 	hooks,
 	validator,
@@ -77,6 +71,7 @@ export const composeHandler = ({
 	handleError,
 	meta
 }: {
+	path: string
 	method: HTTPMethod
 	hooks: RegisteredHook<any>
 	validator: SchemaValidator
@@ -109,8 +104,6 @@ export const composeHandler = ({
 		].some((fn) => isFnUse('headers', fn.toString()))
 
 	if (hasHeaders) {
-		fnLiteral += '\n'
-
 		// This function is Bun specific
 		// @ts-ignore
 		fnLiteral += _demoHeaders.toJSON
@@ -127,6 +120,28 @@ export const composeHandler = ({
                     )
 				}
 			`
+	}
+
+	const hasQuery =
+		validator.query ||
+		[
+			handler,
+			...hooks.transform,
+			...hooks.beforeHandle,
+			...hooks.afterHandle
+		].some((fn) => isFnUse('query', fn.toString()))
+
+	if (hasQuery) {
+		fnLiteral += `const url = c.request.url
+
+		if(url.charCodeAt(c.query) === 63 || (c.query = url.indexOf("?", ${
+			10 + path.length
+		})) !== -1) {
+			c.query = parseQuery(url.substring(c.query + 1))
+		} else {
+			c.query = {}
+		}
+		`
 	}
 
 	const maybeAsync =
@@ -485,12 +500,10 @@ export const composeHandler = ({
 }
 
 export const composeGeneralHandler = (app: Elysia<any>) => {
-	// @ts-ignore
-	const decorators = app.decorators
-
 	let decoratorsLiteral = ''
 
-	for (const key of Object.keys(decorators))
+	// @ts-ignore
+	for (const key of Object.keys(app.decorators))
 		decoratorsLiteral += `,${key}: app.decorators.${key}`
 
 	// @ts-ignore
@@ -503,16 +516,11 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	const fnLiteral = `const { 
 		app,
 		app: { store, router, staticRouter },
-		parseQuery,
 		${app.event.request.length ? 'mapEarlyResponse,' : ''}
-		removeHostnameRegex: rHost,
-		removeQueryRegex: rQuery,
-		removePathRegex: rPath,
-		removeFragmentRegex: rFrag,
-		NotFoundError,
-		mapStaticRoute
+		NotFoundError
 	} = data
 
+	const getPath = /\\/[^?#]+/g
 	const notFound = new NotFoundError()
 
 	${
@@ -526,14 +534,13 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	return function(request) {
 		const ctx = {
+			request,
+			store,
 			set: {
 				headers: {},
 				status: 200
 			},
-			params: {},
-			query: {},
-			request,
-			store
+			params: {}
 			${decoratorsLiteral}
 		}
 
@@ -554,27 +561,12 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				: ''
 		}
 
-		const { url, method } = request,
-			i = url.indexOf('?', 11),
-			f = url.indexOf('#', 12)
+		getPath.lastIndex = 10
+		const url = request.url,
+			method = request.method,
+			path = getPath.exec(url)?.[0] ?? '/'
 
-		let path;
-
-		if (i !== -1) {
-			path = url.substring(url.indexOf('/', 10), i)
-
-			if(f === -1) {
-				ctx.query = parseQuery(url.substring(i + 1), i)
-			} else {
-				ctx.query = parseQuery(url.substring(i + 1, f), i)
-			}
-		} else {
-			if(f === -1) {
-				path = url.substring(url.indexOf('/', 10))
-			} else {
-				path = url.substring(url.indexOf('/', 10), f)
-			}
-		}
+		ctx.query = getPath.lastIndex
 
 		switch(path) {
 			${switchMap}
@@ -601,12 +593,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		fnLiteral
 	)({
 		app,
-		parseQuery,
 		mapEarlyResponse,
-		removeHostnameRegex,
-		removeQueryRegex,
-		removePathRegex,
-		removeFragmentRegex,
 		NotFoundError
 	})
 }

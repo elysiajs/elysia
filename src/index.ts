@@ -203,6 +203,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		const hooks = mergeHook(this.event, hook as RegisteredHook)
 
 		const mainHandler = composeHandler({
+			path,
 			method,
 			hooks,
 			validator: validator as any,
@@ -2534,7 +2535,6 @@ export {
 	mergeHook,
 	mergeObjectArray,
 	getPath,
-	getPathAndQuery,
 	getResponseSchemaValidator
 } from './utils'
 
