@@ -1,9 +1,9 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.get('/', () => 'Hi')
-	.get('/a', () => 'Hi')
-	.post('/hello', () => 'Hello')
+	.post('/json', (c) => c.body, {
+		type: 'json'
+	})
 	// .onError(({ code }) => {
 	// 	console.log(code)
 

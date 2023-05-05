@@ -158,8 +158,6 @@ export const composeHandler = ({
 		}
 
 		if (hasStrictContentType || schema) {
-			if (!schema) fnLiteral += 'if(body) '
-
 			fnLiteral += `try {\n`
 
 			if (schema) {

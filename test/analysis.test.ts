@@ -85,4 +85,18 @@ describe('Static code analysis', () => {
 
 		expect(res).toEqual(payload)
 	})
+
+	it('parse body type json', async () => {
+		const body = {
+			message: 'Rikuhachima Aru'
+		}
+
+		const app = new Elysia().post('/json', (c) => c.body, {
+			type: 'json'
+		})
+
+		const res = await app.handle(post('/json', body)).then((x) => x.json())
+
+		expect(res).toEqual(body)
+	})
 })
