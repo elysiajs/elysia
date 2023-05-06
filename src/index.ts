@@ -220,11 +220,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			if (!this.staticRouter.map[path]) this.staticRouter.map[path] = ``
 
-			this.staticRouter.map[path] += `case '${method}':\n`
+			this.staticRouter.map[path] +=
+				method === 'ALL' ? `default:\n` : `case '${method}':\n`
 			this.staticRouter.map[path] += `return st${index}(ctx)\n`
+		} else {
+			this.router.add(method, path, mainHandler)
 		}
-
-		this.router.add(method, path, mainHandler)
 
 		this.fetch = composeGeneralHandler(this)
 	}

@@ -474,8 +474,6 @@ export const composeHandler = ({
 		${fnLiteral}
 	}`
 
-	// console.log(fnLiteral)
-
 	const createHandler = Function('hooks', fnLiteral)
 
 	return createHandler({
@@ -573,8 +571,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			${switchMap}
 		}
 	
-		const route = router.find(method, path) ?? router.find('ALL', path)
-
+		const route = router.find(method, path)
 		if (route === null)
 			return app.handleError(
 				request,

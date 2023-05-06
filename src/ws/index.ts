@@ -1,7 +1,5 @@
 import type { Server, ServerWebSocket, WebSocketHandler } from 'bun'
 
-import { Raikiri } from 'raikiri'
-
 import type { Elysia, Context } from '..'
 import { getPath, type DEFS } from '../utils'
 
