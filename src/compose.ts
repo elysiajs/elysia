@@ -398,20 +398,20 @@ export const composeHandler = ({
 		} else
 			fnLiteral +=
 				handler.constructor.name === ASYNC_FN
-					? `return handler(c).then((v) => mapResponse(v, c.set))`
+					? `return mapResponse(await handler(c), c.set);`
 					: `return mapResponse(handler(c), c.set);`
 	}
 
 	fnLiteral += `
 } catch(error) {
-	// Optimize this error return
 	${maybeAsync ? '' : 'return (async () => {'}
 		const set = c.set
 
 		if (!set.status || set.status < 300) set.status = 500
 
-		if (handleErrors) {
-			for (let i = 0; i < handleErrors.length; i++) {
+		${
+			hooks.error.length
+				? `for (let i = 0; i < handleErrors.length; i++) {
 				let handled = handleErrors[i]({
 					request: c.request,
 					error: error,
@@ -422,14 +422,13 @@ export const composeHandler = ({
 
 				const response = mapEarlyResponse(handled, set)
 				if (response) return response
-			}
+			}`
+				: ''
 		}
 
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
 }`
-
-	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
@@ -474,6 +473,8 @@ export const composeHandler = ({
 		${meta ? 'c[SCHEMA] = meta[SCHEMA]; c[DEFS] = meta[DEFS];' : ''}
 		${fnLiteral}
 	}`
+
+	// console.log(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 
