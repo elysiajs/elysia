@@ -24,6 +24,8 @@ const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
 const _demoHeaders = new Headers()
 
+const findAliases = new RegExp(` (\\w+) = context`, 'g')
+
 export const isFnUse = (keyword: string, fnLiteral: string) => {
 	const argument = fnLiteral.slice(
 		fnLiteral.indexOf('(') + 1,
@@ -44,10 +46,9 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 		return false
 	}
 
-	// Match dot notation
-	if (fnLiteral.includes(`${argument}.${keyword}`)) return true
-
-	const findAliases = new RegExp(` (\\w+) = context`, 'g')
+	// Match dot notation and named access
+	if (fnLiteral.match(new RegExp(`${argument}.(${keyword}|["${keyword}"])`)))
+		return true
 
 	const aliases = [argument]
 	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
@@ -83,25 +84,25 @@ export const composeHandler = ({
 
 	const hasStrictContentType = typeof hooks.type === 'string'
 
+	const lifeCycleLiteral =
+		validator || method !== 'GET'
+			? [
+					handler,
+					...hooks.transform,
+					...hooks.beforeHandle,
+					...hooks.afterHandle
+			  ].map((x) => x.toString())
+			: []
+
 	const hasBody =
 		method !== 'GET' &&
 		(validator.body ||
 			hasStrictContentType ||
-			[
-				handler,
-				...hooks.transform,
-				...hooks.beforeHandle,
-				...hooks.afterHandle
-			].some((fn) => isFnUse('body', fn.toString())))
+			lifeCycleLiteral.some((fn) => isFnUse('body', fn)))
 
 	const hasHeaders =
 		validator.headers ||
-		[
-			handler,
-			...hooks.transform,
-			...hooks.beforeHandle,
-			...hooks.afterHandle
-		].some((fn) => isFnUse('headers', fn.toString()))
+		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
 
 	if (hasHeaders) {
 		// This function is Bun specific
@@ -123,19 +124,13 @@ export const composeHandler = ({
 	}
 
 	const hasQuery =
-		validator.query ||
-		[
-			handler,
-			...hooks.transform,
-			...hooks.beforeHandle,
-			...hooks.afterHandle
-		].some((fn) => isFnUse('query', fn.toString()))
+		validator.query || lifeCycleLiteral.some((fn) => isFnUse('query', fn))
 
 	if (hasQuery) {
 		fnLiteral += `const url = c.request.url
 
 		if(url.charCodeAt(c.query) === 63 || (c.query = url.indexOf("?", ${
-			10 + path.length
+			11 + path.length
 		})) !== -1) {
 			c.query = parseQuery(url.substring(c.query + 1))
 		} else {
@@ -173,14 +168,12 @@ export const composeHandler = ({
 		}
 
 		if (hasStrictContentType || schema) {
-			fnLiteral += `try {\n`
-
 			if (schema) {
 				switch (schema.type) {
 					case 'object':
-						if (schema.elysiaMeta === 'URLEncoded')
+						if (schema.elysiaMeta === 'URLEncoded') {
 							fnLiteral += `c.body = parseQuery(await c.request.text())`
-						// Accept file which means it's formdata
+						} // Accept file which means it's formdata
 						else if (
 							validator.body!.Code().includes("custom('File")
 						)
@@ -236,10 +229,6 @@ export const composeHandler = ({
 					}`
 						break
 				}
-
-			fnLiteral += `} catch(error) {
-			throw new ParseError()
-		}`
 		} else {
 			fnLiteral += '\n'
 			fnLiteral += hasHeaders
@@ -297,6 +286,8 @@ export const composeHandler = ({
 			}
 		}\n`
 		}
+
+		fnLiteral += '\n'
 	}
 
 	if (hooks?.transform)
@@ -404,6 +395,14 @@ export const composeHandler = ({
 
 	fnLiteral += `
 } catch(error) {
+	${
+		hasStrictContentType ||
+		// @ts-ignore
+		validator?.body?.schema
+			? `if(!c.body) error = parseError`
+			: ''
+	}
+
 	${maybeAsync ? '' : 'return (async () => {'}
 		const set = c.set
 
@@ -429,6 +428,8 @@ export const composeHandler = ({
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
 }`
+
+	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
@@ -468,6 +469,8 @@ export const composeHandler = ({
 				: ''
 		}
 	} = hooks
+
+	const parseError = new ParseError()
 
 	return ${maybeAsync ? 'async' : ''} function(c) {
 		${meta ? 'c[SCHEMA] = meta[SCHEMA]; c[DEFS] = meta[DEFS];' : ''}
@@ -538,8 +541,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			set: {
 				headers: {},
 				status: 200
-			},
-			params: {}
+			}
 			${decoratorsLiteral}
 		}
 
@@ -560,9 +562,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				: ''
 		}
 
-		getPath.lastIndex = 10
-		const url = request.url,
-			method = request.method,
+		getPath.lastIndex = 11
+		const { url, method } = request,
 			path = getPath.exec(url)?.[0] ?? '/'
 
 		ctx.query = getPath.lastIndex

@@ -61,19 +61,6 @@ export const mergeHook = (
 	}
 }
 
-export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
-	[value][0]
-
-export const getPath = (url: string) => {
-	const i = url.indexOf('?', 11)
-	const f = url.indexOf('#', 12)
-
-	return url.substring(
-		url.indexOf('/', 10),
-		i !== -1 ? i : f !== -1 ? f : undefined
-	)
-}
-
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 

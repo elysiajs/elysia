@@ -22,6 +22,14 @@ describe('Static code analysis', () => {
 		expect(res).toEqual(payload)
 	})
 
+	it('parse context access using square bracket', async () => {
+		const app = new Elysia().post('/', (context) => context['body'])
+
+		const res = await app.handle(post('/', payload)).then((x) => x.json())
+
+		expect(res).toEqual(payload)
+	})
+
 	it('parse assignment', async () => {
 		const app = new Elysia().post('/', (context) => {
 			const a = context.body

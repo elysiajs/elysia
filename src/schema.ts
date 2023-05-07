@@ -58,6 +58,25 @@ const mapTypesResponse = (
 	return responses
 }
 
+export const capitalize = (word: string) =>
+	word.charAt(0).toUpperCase() + word.slice(1)
+
+export const generateOperationId = (method: string, paths: string) => {
+	let operationId = method.toLowerCase()
+
+	if (paths === '/') return operationId + 'Index'
+
+	for (const path of paths.split('/')) {
+		if (path.charCodeAt(0) === 123) {
+			operationId += 'By' + capitalize(path.slice(1, -1))
+		} else {
+			operationId += capitalize(path)
+		}
+	}
+
+	return operationId
+}
+
 export const registerSchemaPath = ({
 	schema,
 	contentType = ['application/json', 'multipart/form-data', 'text/plain'],
@@ -189,6 +208,9 @@ export const registerSchemaPath = ({
 						responses: responseSchema
 				  }
 				: {}),
+			operationId:
+				hook?.schema?.detail?.operationId ??
+				generateOperationId(method, path),
 			...hook?.schema?.detail,
 			...(bodySchema
 				? {

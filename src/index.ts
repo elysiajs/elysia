@@ -2535,7 +2535,6 @@ export {
 	mergeDeep,
 	mergeHook,
 	mergeObjectArray,
-	getPath,
 	getResponseSchemaValidator
 } from './utils'
 
@@ -2583,7 +2582,6 @@ export type {
 	MaybePromise,
 	MergeIfNotNull,
 	ElysiaDefaultMeta,
-	TypedRouteToEden,
 	AnyTypedSchema,
 	DeepMergeTwoTypes
 } from './types'

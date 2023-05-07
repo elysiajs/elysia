@@ -1,7 +1,7 @@
 import type { Server, ServerWebSocket, WebSocketHandler } from 'bun'
 
 import type { Elysia, Context } from '..'
-import { getPath, type DEFS } from '../utils'
+import { type DEFS } from '../utils'
 
 import type { ElysiaWSContext, WSTypedSchema } from './types'
 import type { ElysiaInstance, UnwrapSchema } from '../types'
@@ -107,6 +107,7 @@ export const ws =
 
 		// @ts-ignore
 		const router = app.wsRouter!
+		const getPath = /\/[^?#]+/g
 
 		if (!app.config.serve)
 			app.config.serve = {
@@ -115,9 +116,12 @@ export const ws =
 					open(ws) {
 						if (!ws.data) return
 
-						const url = getPath(
-							(ws?.data as unknown as Context).request.url
-						)
+						getPath.lastIndex = 9
+						const url =
+							getPath.exec(
+								(ws?.data as unknown as Context).request.url
+							)?.[0] ?? '/'
+
 						if (!url) return
 
 						const route = router.find('subscribe', url)?.store
@@ -128,9 +132,12 @@ export const ws =
 					message(ws, message: any): void {
 						if (!ws.data) return
 
-						const url = getPath(
-							(ws?.data as unknown as Context).request.url
-						)
+						getPath.lastIndex = 9
+						const url =
+							getPath.exec(
+								(ws?.data as unknown as Context).request.url
+							)?.[0] ?? '/'
+
 						if (!url) return
 
 						const route = router.find('subscribe', url)?.store
@@ -181,9 +188,12 @@ export const ws =
 					close(ws, code, reason) {
 						if (!ws.data) return
 
-						const url = getPath(
-							(ws?.data as unknown as Context).request.url
-						)
+						getPath.lastIndex = 9
+						const url =
+							getPath.exec(
+								(ws?.data as unknown as Context).request.url
+							)?.[0] ?? '/'
+
 						if (!url) return
 
 						const route = router.find('subscribe', url)?.store
@@ -194,9 +204,12 @@ export const ws =
 					drain(ws) {
 						if (!ws.data) return
 
-						const url = getPath(
-							(ws?.data as unknown as Context).request.url
-						)
+						getPath.lastIndex = 9
+						const url =
+							getPath.exec(
+								(ws?.data as unknown as Context).request.url
+							)?.[0] ?? '/'
+
 						if (!url) return
 
 						const route = router.find('subscribe', url)?.store
