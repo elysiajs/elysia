@@ -5,10 +5,10 @@ export interface Context<
 	Store extends Elysia['store'] = Elysia['store']
 > {
 	request: Request
-	headers: Route['headers'] extends undefined
+	headers: undefined extends Route['headers']
 		? Record<string, unknown>
 		: Route['headers']
-	query: Route['query'] extends undefined
+	query: undefined extends Route['query']
 		? Record<string, unknown>
 		: Route['query']
 	params: Route['params']

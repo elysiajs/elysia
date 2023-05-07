@@ -26,6 +26,20 @@ const _demoHeaders = new Headers()
 
 const findAliases = new RegExp(` (\\w+) = context`, 'g')
 
+export const hasReturn = (fnLiteral: string) => {
+	const parenthesisEnd = fnLiteral.indexOf(')')
+
+	// Is direct arrow function return eg. () => 1
+	if (
+		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
+		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
+	) {
+		return true
+	}
+
+	return fnLiteral.includes('return')
+}
+
 export const isFnUse = (keyword: string, fnLiteral: string) => {
 	const argument = fnLiteral.slice(
 		fnLiteral.indexOf('(') + 1,
@@ -47,7 +61,11 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 	}
 
 	// Match dot notation and named access
-	if (fnLiteral.match(new RegExp(`${argument}(.${keyword}|\\["${keyword}"\\])`))) {
+	if (
+		fnLiteral.match(
+			new RegExp(`${argument}(.${keyword}|\\["${keyword}"\\])`)
+		)
+	) {
 		return true
 	}
 
@@ -131,7 +149,8 @@ export const composeHandler = ({
 		fnLiteral += `const url = c.request.url
 
 		if(url.charCodeAt(c.query) === 63 || (c.query = url.indexOf("?", ${
-			11 + path.length
+			11 +
+			path.split('/').map((x) => (x.startsWith(':') ? '-' : '')).length
 		})) !== -1) {
 			c.query = parseQuery(url.substring(c.query + 1))
 		} else {
@@ -325,30 +344,56 @@ export const composeHandler = ({
 		for (let i = 0; i < hooks.beforeHandle.length; i++) {
 			const name = `be${i}`
 
-			fnLiteral +=
-				hooks.beforeHandle[i].constructor.name === ASYNC_FN
-					? `let ${name} = await beforeHandle[${i}](c);\n`
-					: `let ${name} = beforeHandle[${i}](c);\n`
+			const returning = hasReturn(hooks.beforeHandle[i].toString())
 
-			fnLiteral += `if(${name} !== undefined) {\n`
-			if (hooks?.afterHandle) {
-				const beName = name
-				for (let i = 0; i < hooks.afterHandle.length; i++) {
-					const name = `af${i}`
+			console.log({
+				returning
+			})
 
-					fnLiteral +=
-						hooks.afterHandle[i].constructor.name === ASYNC_FN
-							? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
-							: `const ${name} = afterHandle[${i}](c, ${beName});\n`
+			if (!returning) {
+				fnLiteral +=
+					hooks.beforeHandle[i].constructor.name === ASYNC_FN
+						? `await beforeHandle[${i}](c);\n`
+						: `beforeHandle[${i}](c);\n`
+			} else {
+				fnLiteral +=
+					hooks.beforeHandle[i].constructor.name === ASYNC_FN
+						? `let ${name} = await beforeHandle[${i}](c);\n`
+						: `let ${name} = beforeHandle[${i}](c);\n`
 
-					fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
+				fnLiteral += `if(${name} !== undefined) {\n`
+				if (hooks?.afterHandle) {
+					const beName = name
+					for (let i = 0; i < hooks.afterHandle.length; i++) {
+						const returning = hasReturn(
+							hooks.afterHandle[i].toString()
+						)
+
+						if (!returning) {
+							fnLiteral +=
+								hooks.afterHandle[i].constructor.name ===
+								ASYNC_FN
+									? `await afterHandle[${i}](c, ${beName});\n`
+									: `afterHandle[${i}](c, ${beName});\n`
+						} else {
+							const name = `af${i}`
+
+							fnLiteral +=
+								hooks.afterHandle[i].constructor.name ===
+								ASYNC_FN
+									? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
+									: `const ${name} = afterHandle[${i}](c, ${beName});\n`
+
+							fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
+						}
+					}
 				}
+
+				if (validator.response)
+					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw new ValidationError('response', response[c.set.status], ${name}) }\n`
+
+				fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
 			}
-
-			if (validator.response)
-				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw new ValidationError('response', response[c.set.status], ${name}) }\n`
-
-			fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
 		}
 
 	if (hooks?.afterHandle.length) {
@@ -360,18 +405,27 @@ export const composeHandler = ({
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const name = `af${i}`
 
-			fnLiteral +=
-				hooks.afterHandle[i].constructor.name === ASYNC_FN
-					? `let ${name} = await afterHandle[${i}](c, r)\n`
-					: `let ${name} = afterHandle[${i}](c, r)\n`
+			const returning = hasReturn(hooks.afterHandle[i].toString())
 
-			if (validator.response) {
-				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw new ValidationError('response', response[c.set.status], ${name}) }\n`
+			if (!returning) {
+				fnLiteral +=
+					hooks.afterHandle[i].constructor.name === ASYNC_FN
+						? `await afterHandle[${i}](c, r)\n`
+						: `afterHandle[${i}](c, r)\n`
+			} else {
+				fnLiteral +=
+					hooks.afterHandle[i].constructor.name === ASYNC_FN
+						? `let ${name} = await afterHandle[${i}](c, r)\n`
+						: `let ${name} = afterHandle[${i}](c, r)\n`
 
-				fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+				if (validator.response) {
+					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw new ValidationError('response', response[c.set.status], ${name}) }\n`
 
-				fnLiteral += `if(${name}) return ${name};\n`
-			} else fnLiteral += `if(${name}) return ${name};\n`
+					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+
+					fnLiteral += `if(${name}) return ${name};\n`
+				} else fnLiteral += `if(${name}) return ${name};\n`
+			}
 		}
 
 		if (validator.response)
@@ -429,6 +483,8 @@ export const composeHandler = ({
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
 }`
+
+	console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
@@ -533,6 +589,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	${staticRouter.variables}
 
+	const find = router.find.bind(router)
+
 	return function(request) {
 		const ctx = {
 			request,
@@ -571,7 +629,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			${switchMap}
 		}
 	
-		const route = router.find(method, path)
+		const route = find(method, path)
 		if (route === null)
 			return app.handleError(
 				request,
