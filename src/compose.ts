@@ -346,10 +346,6 @@ export const composeHandler = ({
 
 			const returning = hasReturn(hooks.beforeHandle[i].toString())
 
-			console.log({
-				returning
-			})
-
 			if (!returning) {
 				fnLiteral +=
 					hooks.beforeHandle[i].constructor.name === ASYNC_FN
@@ -484,7 +480,7 @@ export const composeHandler = ({
 	${maybeAsync ? '' : '})()'}
 }`
 
-	console.log(fnLiteral)
+	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
