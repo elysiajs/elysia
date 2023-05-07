@@ -47,8 +47,9 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 	}
 
 	// Match dot notation and named access
-	if (fnLiteral.match(new RegExp(`${argument}.(${keyword}|["${keyword}"])`)))
+	if (fnLiteral.match(new RegExp(`${argument}.(${keyword}|\\["${keyword}"\\])`))) {
 		return true
+	}
 
 	const aliases = [argument]
 	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
@@ -428,8 +429,6 @@ export const composeHandler = ({
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
 }`
-
-	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
