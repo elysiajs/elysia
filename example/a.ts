@@ -1,6 +1,9 @@
 import { Elysia } from '../src'
 
 const app = new Elysia()
+	.onBeforeHandle(({ query, headers }) => {
+
+	})
 	.get('/id/:id', (ctx) => {
 		ctx.set.headers['x-powered-by'] = 'benchmark'
 

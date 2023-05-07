@@ -101,6 +101,8 @@ export type ElysiaWSContext<
 		ExtractPath<Path> extends never
 			? WebSocketSchemaToRoute<Schema>
 			: Omit<WebSocketSchemaToRoute<Schema>, 'params'> & {
+					query: any
+					headers: any
 					params: Record<ExtractPath<Path>, string>
 			  }
 	> & {

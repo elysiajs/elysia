@@ -141,7 +141,6 @@ export const ws =
 						if (!url) return
 
 						const route = router.find('subscribe', url)?.store
-
 						if (!route?.message) return
 
 						message = message.toString()
