@@ -47,7 +47,7 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 	}
 
 	// Match dot notation and named access
-	if (fnLiteral.match(new RegExp(`${argument}.(${keyword}|\\["${keyword}"\\])`))) {
+	if (fnLiteral.match(new RegExp(`${argument}(.${keyword}|\\["${keyword}"\\])`))) {
 		return true
 	}
 
