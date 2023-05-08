@@ -51,6 +51,14 @@ const app = new Elysia({
 				time: t.String({
 					format: 'date-time'
 				})
+			}),
+			response: t.Object({
+				email: t.String({
+					format: 'email'
+				}),
+				time: t.String({
+					format: 'date-time'
+				})
 			})
 		}
 	})
