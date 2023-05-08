@@ -60,7 +60,9 @@ export type Handler<
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
 ) => IsUnknown<Route['response']> extends false
-	? Response | MaybePromise<Route['response']>
+	? Route['response'] extends { 200: unknown }
+		? Response | MaybePromise<Route['response'][keyof Route['response']]>
+		: Response | MaybePromise<Route['response']>
 	: Response | MaybePromise<unknown>
 
 export type NoReturnHandler<

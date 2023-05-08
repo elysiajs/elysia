@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.5.0-exp-230507.1922",
+  "version": "0.5.0-exp-230509.0157",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -91,7 +91,7 @@
     "release": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "@sinclair/typebox": "0.26.8",
+    "@sinclair/typebox": "^0.28.9",
     "@types/lodash.clonedeep": "^4.5.7",
     "fast-querystring": "^1.1.1",
     "lodash.clonedeep": "^4.5.0",

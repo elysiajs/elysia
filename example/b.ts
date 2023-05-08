@@ -56,14 +56,14 @@ const app = new Elysia({
 	})
 	.post(
 		'/file',
-		({ set, a, A }) => {
+		({ set }) => {
 			const file = Bun.file('')
 			if (file.size === 0) {
 				set.status = 404
-				return 2
+				return file
 			}
 
-			return file
+			return 2
 		},
 		{
 			error({ set }) {},
