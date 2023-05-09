@@ -9,7 +9,7 @@ const app = new Elysia()
 			response: t.Number()
 		}),
 		authorization: t.Object({
-			Authorization: t.String()
+			authorization: t.String()
 		})
 	})
 	// Strictly validate response
@@ -51,8 +51,8 @@ const app = new Elysia()
 		},
 		(app) =>
 			app
-				.derive(({ request: { headers } }) => ({
-					userId: headers.get('Authorization')
+				.derive(({ headers }) => ({
+					userId: headers.authorization
 				}))
 				.get('/', ({ userId }) => 'A')
 				.post('/id/:id', ({ query, body, params, userId }) => body, {

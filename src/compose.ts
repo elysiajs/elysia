@@ -566,7 +566,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	for (const [path, code] of Object.entries(staticRouter.map))
 		switchMap += `case '${path}':\nswitch(method) {\n${code}}\n\n`
 
-	const fnLiteral = `const { 
+	const fnLiteral = `const {
 		app,
 		app: { store, router, staticRouter },
 		${app.event.request.length ? 'mapEarlyResponse,' : ''}

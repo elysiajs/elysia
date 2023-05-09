@@ -107,4 +107,14 @@ describe('Modules', () => {
 
 		expect(res).toBe('hi')
 	})
+
+	it('Handle deferred import', async () => {
+		const app = new Elysia().use(import('./modules'))
+
+		await app.modules
+
+		const res = await app.handle(req('/lazy')).then((x) => x.text())
+
+		expect(res).toBe('lazy')
+	})
 })

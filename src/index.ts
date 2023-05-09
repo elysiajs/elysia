@@ -52,7 +52,8 @@ import type {
 	FlattenObject,
 	TypedWSRouteToEden,
 	UnwrapSchema,
-	ExtractPath
+	ExtractPath,
+	TypedSchemaToRoute
 } from './types'
 import { Static, type TSchema } from '@sinclair/typebox'
 
@@ -124,8 +125,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			fn: '/~fn',
 			...config
 		}
-
-		this.fetch = composeGeneralHandler(this)
 	}
 
 	private _addHandler(
@@ -227,7 +226,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			this.router.add(method, path, mainHandler)
 		}
 
-		this.fetch = composeGeneralHandler(this)
+		// this.fetch = composeGeneralHandler(this)
 	}
 
 	/**
@@ -844,14 +843,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		: this {
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
-				plugin.then((plugin) => {
-					if (typeof plugin === 'function')
-						return plugin(this as unknown as any) as unknown as any
+				plugin
+					.then((plugin) => {
+						if (typeof plugin === 'function')
+							return plugin(
+								this as unknown as any
+							) as unknown as Elysia
 
-					return plugin.default(
-						this as unknown as any
-					) as unknown as any
-				})
+						return plugin.default(
+							this as unknown as any
+						) as unknown as Elysia
+					})
+					.then((x) => x.compile())
 			)
 
 			return this as unknown as any
@@ -2233,7 +2236,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 */
 	derive<Returned extends Object = Object>(
 		transform: (
-			context: Context<{}, Instance['store']> & Instance['request']
+			context: Context<
+				TypedSchemaToRoute<
+					Instance['schema'],
+					Instance['meta'][typeof DEFS]
+				>,
+				Instance['store']
+			> &
+				Instance['request']
 		) => MaybePromise<Returned> extends { store: any } ? never : Returned
 	): Elysia<{
 		store: Instance['store']
@@ -2243,11 +2253,11 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}> {
 		if (transform.constructor.name === 'AsyncFunction')
 			return this.onTransform(async (context) => {
-				Object.assign(context, await transform(context))
+				Object.assign(context, await transform(context as any))
 			}) as any
 
 		return this.onTransform((context) => {
-			Object.assign(context, transform(context))
+			Object.assign(context, transform(context as any))
 		}) as any
 	}
 
@@ -2355,13 +2365,20 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	handle = async (request: Request) => this.fetch(request)
 
+	compile = () => {
+		this.fetch = composeGeneralHandler(this)
+
+		return this
+	}
+
 	/**
 	 * Handle can be either sync or async to save performance.
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	// @ts-ignore
-	fetch(request: Request): MaybePromise<Response>
+	fetch(request: Request): MaybePromise<Response> {
+		return (this.fetch = composeGeneralHandler(this))(request)
+	}
 
 	handleError = async (
 		request: Request,
@@ -2410,6 +2427,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		callback?: ListenCallback
 	) => {
 		if (!Bun) throw new Error('Bun to run')
+
+		this.compile()
 
 		if (typeof options === 'string') {
 			options = +options

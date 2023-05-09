@@ -68,10 +68,11 @@ const app = new Elysia({
 			const file = Bun.file('')
 			if (file.size === 0) {
 				set.status = 404
+
 				return file
 			}
 
-			return 2
+			return 1
 		},
 		{
 			error({ set }) {},
