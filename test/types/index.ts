@@ -230,3 +230,174 @@ app.setModel({
 					})
 			)
 )
+
+app.state('a', 'b')
+	// ? Infer state
+	.get('/', ({ store }) => {
+		expectTypeOf<typeof store>().toEqualTypeOf<{
+			a: string
+		}>()
+	})
+	.state('b', 'c')
+	// ? Merge state
+	.get('/', ({ store }) => {
+		expectTypeOf<typeof store>().toEqualTypeOf<{
+			a: string
+			b: string
+		}>()
+	})
+
+app.decorate('a', 'b')
+	// ? Infer state
+	.get('/', ({ a }) => {
+		expectTypeOf<typeof a>().toBeString()
+	})
+	.decorate('b', 'c')
+	// ? Merge state
+	.get('/', ({ a, b }) => {
+		expectTypeOf<typeof a>().toBeString()
+		expectTypeOf<typeof b>().toBeString()
+	})
+
+app.derive(({ headers }) => {
+	return {
+		authorization: headers.authorization as string
+	}
+})
+	.get('/', ({ authorization }) => {
+		// ? infers derive type
+		expectTypeOf<typeof authorization>().toBeString()
+	})
+	.decorate('a', 'b')
+	.derive(({ a }) => {
+		// ? derive from current context
+		expectTypeOf<typeof a>().toBeString()
+
+		return {
+			b: a
+		}
+	})
+	.get('/', ({ a, b }) => {
+		// ? save previous derivation
+		expectTypeOf<typeof a>().toBeString()
+		// ? derive from context
+		expectTypeOf<typeof b>().toBeString()
+	})
+
+const plugin = (app: Elysia) =>
+	app.decorate('decorate', 'a').state('state', 'a').setModel({
+		string: t.String()
+	})
+
+// ? inherits plugin type
+app.use(plugin).get(
+	'/',
+	({ body, decorate, store: { state } }) => {
+		expectTypeOf<typeof decorate>().toBeString()
+		expectTypeOf<typeof state>().toBeString()
+		expectTypeOf<typeof body>().toBeString()
+	},
+	{
+		schema: {
+			body: 'string'
+		}
+	}
+)
+
+export const asyncPlugin = async (app: Elysia) =>
+	app.decorate('decorate', 'a').state('state', 'a').setModel({
+		string: t.String()
+	})
+
+// ? inherits async plugin type
+app.use(asyncPlugin).get(
+	'/',
+	({ body, decorate, store: { state } }) => {
+		expectTypeOf<typeof decorate>().toBeString()
+		expectTypeOf<typeof state>().toBeString()
+		expectTypeOf<typeof body>().toBeString()
+	},
+	{
+		schema: {
+			body: 'string'
+		}
+	}
+)
+
+// ? inherits lazy loading plugin type
+app.use(import('./plugins')).get(
+	'/',
+	({ body, decorate, store: { state } }) => {
+		expectTypeOf<typeof decorate>().toBeString()
+		expectTypeOf<typeof state>().toBeString()
+		expectTypeOf<typeof body>().toBeString()
+	},
+	{
+		schema: {
+			body: 'string'
+		}
+	}
+)
+
+// ? group inherits type
+app.use(plugin).group('/', (app) =>
+	app.get(
+		'/',
+		({ body, decorate, store: { state } }) => {
+			expectTypeOf<typeof decorate>().toBeString()
+			expectTypeOf<typeof state>().toBeString()
+			expectTypeOf<typeof body>().toBeString()
+		},
+		{
+			schema: {
+				body: 'string'
+			}
+		}
+	)
+)
+
+// ? guard inherits type
+app.use(plugin).guard({}, (app) =>
+	app.get(
+		'/',
+		({ body, decorate, store: { state } }) => {
+			expectTypeOf<typeof decorate>().toBeString()
+			expectTypeOf<typeof state>().toBeString()
+			expectTypeOf<typeof body>().toBeString()
+		},
+		{
+			schema: {
+				body: 'string'
+			}
+		}
+	)
+)
+
+// ? guarded group inherits type
+app.use(plugin).group(
+	'/',
+	{
+		schema: {
+			query: t.Object({
+				username: t.String()
+			})
+		}
+	},
+	(app) =>
+		app.get(
+			'/',
+			({ query, body, decorate, store: { state } }) => {
+				expectTypeOf<typeof query>().toEqualTypeOf<{
+					username: string
+				}>()
+				expectTypeOf<typeof decorate>().toBeString()
+				expectTypeOf<typeof state>().toBeString()
+				expectTypeOf<typeof body>().toBeString()
+			},
+			{
+				schema: {
+					body: 'string'
+				}
+			}
+		)
+)

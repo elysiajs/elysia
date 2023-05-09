@@ -1,12 +1,11 @@
 .git
 .gitignore
+.github
 .prettierrc
 .eslintrc.js
-.cjs.swcrc
-.esm.swcrc
+.swc.cjs.swcrc
 .swcrc
 .husky
-.github
 
 bun.lockb
 node_modules

@@ -89,7 +89,9 @@
     "test:functionality": "bun test",
     "test:types": "tsc --project tsconfig.test.json",
     "dev": "bun run --hot example/http.ts",
-    "build": "rimraf dist && swc src -d dist && tsc --project tsconfig.esm.json",
+    "build": "rimraf dist && npm run build:esm && npm run build:cjs",
+    "build:esm": "swc src -d dist && tsc --project tsconfig.esm.json",
+    "build:cjs": "swc src --config-file .swc.cjs.swcrc -d dist/cjs && tsc --project tsconfig.cjs.json",
     "release": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
