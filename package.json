@@ -85,7 +85,9 @@
   ],
   "license": "MIT",
   "scripts": {
-    "test": "bun test",
+    "test": "npm run test:functionality && npm run test:types",
+    "test:functionality": "bun test",
+    "test:types": "tsc --project tsconfig.test.json",
     "dev": "bun run --hot example/http.ts",
     "build": "rimraf dist && swc src -d dist && tsc --project tsconfig.esm.json",
     "release": "npm run build && npm run test && npm publish"
@@ -107,6 +109,7 @@
     "@typescript-eslint/parser": "^5.56.0",
     "bun-types": "^0.5.8",
     "eslint": "^8.36.0",
+    "expect-type": "^0.15.0",
     "rimraf": "^3.0.2",
     "typescript": "^5.0.2"
   },
