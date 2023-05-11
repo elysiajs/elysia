@@ -1,4 +1,8 @@
-import { Type, type SchemaOptions } from '@sinclair/typebox'
+import {
+	Type,
+	type SchemaOptions,
+	type NumericOptions
+} from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 
 try {
@@ -30,6 +34,8 @@ try {
 type MaybeArray<T> = T | T[]
 
 export namespace ElysiaTypeOptions {
+	export type Numeric = NumericOptions<number>
+
 	export type FileUnit = number | `${number}${'k' | 'm'}`
 
 	export interface File extends SchemaOptions {
@@ -123,6 +129,11 @@ const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 }
 
 export const ElysiaType = {
+	// Numeric type is for type reference only since it's aliased to t.Number
+	Numeric: TypeSystem.Type<number, NumericOptions<number>>(
+		'Numeric',
+		{} as any
+	),
 	File: TypeSystem.Type<Blob, ElysiaTypeOptions.File>('File', validateFile),
 	Files: TypeSystem.Type<Blob[], ElysiaTypeOptions.Files>(
 		'Files',
@@ -145,10 +156,24 @@ export const ElysiaType = {
 
 declare module '@sinclair/typebox' {
 	interface TypeBuilder {
+		// @ts-ignore
+		Numeric: typeof ElysiaType.Numeric
 		File: typeof ElysiaType.File
 		Files: typeof ElysiaType.Files
 		URLEncoded: (typeof Type)['Object']
 	}
+}
+
+/**
+ * A Numeric string
+ *
+ * Will be parse to Number
+ */
+Type.Numeric = (properties) => {
+	return Type.Number({
+		...properties,
+		elysiaMeta: 'Numeric'
+	}) as any
 }
 
 Type.URLEncoded = (property, options) => {

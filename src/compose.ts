@@ -18,6 +18,7 @@ import type {
 	RegisteredHook,
 	SchemaValidator
 } from './types'
+import { TAnySchema } from '@sinclair/typebox'
 
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
@@ -80,6 +81,45 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 	}
 
 	return false
+}
+
+export const findElysiaMeta = (
+	type: string,
+	schema: TAnySchema,
+	found: string[] = [],
+	parent = ''
+) => {
+	if (schema.type === 'object') {
+		const properties = schema.properties as Record<string, TAnySchema>
+		for (const key in properties) {
+			const property = properties[key]
+
+			const accessor = !parent ? key : parent + '.' + key
+
+			if (property.type === 'object') {
+				findElysiaMeta(type, property, found, accessor)
+				continue
+			} else if (property.anyOf) {
+				for (const prop of property.anyOf) {
+					findElysiaMeta(type, prop, found, accessor)
+				}
+
+				continue
+			}
+
+			if (property.elysiaMeta === type) found.push(accessor)
+		}
+
+		if (found.length === 0) return null
+
+		return found
+	} else if (schema?.elysiaMeta === type) {
+		if (parent) found.push(parent)
+
+		return 'root'
+	}
+
+	return null
 }
 
 export const composeHandler = ({
@@ -217,11 +257,11 @@ export const composeHandler = ({
 						}
 						break
 
-					case 'string':
+					default:
 						fnLiteral += 'c.body = await c.request.text()'
 						break
 				}
-			} else
+			} else {
 				switch (hooks.type) {
 					case 'application/json':
 						fnLiteral += `c.body = JSON.parse(await c.request.text());`
@@ -249,6 +289,7 @@ export const composeHandler = ({
 					}`
 						break
 				}
+			}
 		} else {
 			fnLiteral += '\n'
 			fnLiteral += hasHeaders
@@ -308,6 +349,74 @@ export const composeHandler = ({
 		}
 
 		fnLiteral += '\n'
+	}
+
+	if (validator.params) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.params.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `c.params.${property} = +c.params.${property}`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
+	}
+
+	if (validator.query) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.query.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `c.query.${property} = +c.query.${property}`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
+	}
+
+	if (validator.headers) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.headers.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `c.headers.${property} = +c.headers.${property}`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
+	}
+
+	if (validator.body) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.body.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'string':
+					fnLiteral += `c.body = +c.body`
+					break
+
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `c.body.${property} = +c.body.${property}`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
 	}
 
 	if (hooks?.transform)
@@ -459,11 +568,12 @@ export const composeHandler = ({
 	fnLiteral += `
 } catch(error) {
 	${
-		hasStrictContentType ||
-		// @ts-ignore
-		validator?.body?.schema
-			? `if(!c.body) error = parseError`
-			: ''
+		''
+		// hasStrictContentType ||
+		// // @ts-ignore
+		// validator?.body?.schema
+		// 	? `if(!c.body) error = parseError`
+		// 	: ''
 	}
 
 	${maybeAsync ? '' : 'return (async () => {'}

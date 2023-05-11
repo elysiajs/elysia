@@ -1,7 +1,8 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post } from './utils'
+import { findElysiaMeta } from '../src/compose'
 
 const payload = { hello: 'world' }
 
@@ -106,5 +107,49 @@ describe('Static code analysis', () => {
 		const res = await app.handle(post('/json', body)).then((x) => x.json())
 
 		expect(res).toEqual(body)
+	})
+
+	it('find nested Elysia Schema', () => {
+		const schema = t.Object({
+			a: t.Object({
+				b: t.Object({
+					c: t.Numeric()
+				}),
+				d: t.String()
+			}),
+			id: t.Numeric(),
+			b: t.Object({
+				c: t.Numeric()
+			})
+		})
+
+		expect(findElysiaMeta('Numeric', schema)).toEqual([
+			'a.b.c',
+			'id',
+			'b.c'
+		])
+	})
+
+	it('find Elysia Schema on root', () => {
+		const schema = t.Numeric()
+
+		expect(findElysiaMeta('Numeric', schema)).toEqual('root')
+	})
+
+	it('find return null if Elysia Schema is not found', () => {
+		const schema = t.Object({
+			a: t.Object({
+				b: t.Object({
+					c: t.Number()
+				}),
+				d: t.String()
+			}),
+			id: t.Number(),
+			b: t.Object({
+				c: t.Number()
+			})
+		})
+
+		expect(findElysiaMeta('Numeric', schema)).toBeNull()
 	})
 })

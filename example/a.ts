@@ -1,37 +1,20 @@
-import { TypedSchema } from '../dist'
-import { LocalHook } from '../dist/cjs'
-import { Elysia, t } from '../src'
-
-export const createSchema = (body: TypedSchema | undefined): LocalHook<any, any> => ({
-	schema: {
-		body
-	}
-})
+import { Elysia, t, Context } from '../src'
 
 const app = new Elysia()
-	.get('/', () => {
-		throw new Error('Unknown error: Hi')
+	.setModel({
+		a: t.String()
 	})
-	.guard(
-		{
-			beforeHandle({ body }) {
-				if (body.name.includes(' '))
-					throw new Error("Shouldn't include space")
-			},
-			schema: {
-				body: t.Object({
-					name: t.String()
-				})
-			}
-		},
-		(app) => app.post('/', ({ body }) => body, {})
-	)
-	.group('/group', (app) => app.get('', () => 'empty').get('/', () => '/'))
-	.get('/id/:id', (ctx) => {
-		ctx.set.headers['x-powered-by'] = 'benchmark'
+	.post(
+		'/',
+		({ body }) => {
+			console.log(typeof body)
 
-		return `${ctx.params.id} ${ctx.query.name}`
-	})
+			return body
+		},
+		{
+			body: 'a'
+		}
+	)
 	.listen(3000, ({ hostname, port }) => {
 		console.log(`Running at http://${hostname}:${port}`)
 	})

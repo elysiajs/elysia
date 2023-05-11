@@ -310,7 +310,7 @@ export interface LocalHook<
 		| {
 				detail?: Partial<OpenAPIV3.OperationObject>
 		  }
-	parse?: WithArray<BodyParser[]>
+	parse?: WithArray<BodyParser>
 	transform?: WithArray<
 		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
 	>
