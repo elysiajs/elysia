@@ -70,7 +70,7 @@
       "node": "./dist/utils.js"
     }
   },
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/elysiajs/elysia"

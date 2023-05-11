@@ -4,6 +4,7 @@ import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
 
+// ? default value of context
 app.get('/', ({ headers, query, params, body, store }) => {
 	// ? default keyof params should be never
 	expectTypeOf<keyof typeof params>().toBeNever()

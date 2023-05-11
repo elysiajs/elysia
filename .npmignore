@@ -15,11 +15,12 @@ CHANGELOG.md
 example
 tests
 docs
-# src
+src
 .DS_Store
 test
 tsconfig.cjs.json
 tsconfig.esm.json
+tsconfig.test.json
 
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md

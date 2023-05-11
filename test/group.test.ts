@@ -3,6 +3,19 @@ import { Elysia, t } from '../src'
 import { post, req } from './utils'
 
 describe('group', () => {
+	it('handle empty and root', async () => {
+		const app = new Elysia().group('/v1', (app) =>
+			app.get('', () => 1).get('/', () => 2)
+		)
+
+		await app.handle(req('/'))
+		const r1 = await app.handle(req('/v1')).then((r) => r.text())
+		const r2 = await app.handle(req('/v1/')).then((r) => r.text())
+
+		expect(r1).toBe('1')
+		expect(r2).toBe('2')
+	})
+
 	it('delegate onRequest', async () => {
 		const app = new Elysia()
 			.get('/', () => 'A')
@@ -26,7 +39,7 @@ describe('group', () => {
 			app.decorate('a', 'b').get('/', ({ a }) => a)
 		)
 
-		const res = await app.handle(req('/v1')).then((x) => x.text())
+		const res = await app.handle(req('/v1/')).then((x) => x.text())
 
 		expect(res).toBe('b')
 	})
@@ -41,7 +54,7 @@ describe('group', () => {
 					})
 				}
 			},
-			(app) => app.get('/', () => 'Hello')
+			(app) => app.get('', () => 'Hello')
 		)
 
 		const error = await app.handle(req('/v1'))
@@ -90,7 +103,7 @@ describe('group', () => {
 					})
 				}
 			},
-			(app) => app.get('/', () => 'Hello')
+			(app) => app.get('', () => 'Hello')
 		)
 
 		const error = await app.handle(req('/v1?id=1'))
@@ -110,7 +123,7 @@ describe('group', () => {
 					})
 				}
 			},
-			(app) => app.post('/', ({ body }) => body)
+			(app) => app.post('', ({ body }) => body)
 		)
 
 		const error = await app.handle(

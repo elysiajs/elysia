@@ -293,13 +293,6 @@ describe('Path', () => {
 		expect(res.headers.get('Server')).toBe('Elysia')
 	})
 
-	it('handle non start /', async () => {
-		const app = new Elysia().get('', () => 'Hi')
-		const res = await app.handle(req('/'))
-
-		expect(await res.text()).toBe('Hi')
-	})
-
 	it('handle *', async () => {
 		const app = new Elysia().get('/*', () => 'Hi')
 		const get = await app.handle(req('/')).then((r) => r.text())

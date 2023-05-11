@@ -136,7 +136,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			allowMeta: false as boolean | undefined
 		}
 	) {
-		path = path.startsWith('/') ? path : `/${path}`
+		path =
+			path === '' ? path : path.charCodeAt(0) === 47 ? path : `/${path}`
 
 		this.routes.push({
 			method,
@@ -611,10 +612,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					const hook = schemaOrRun
 					const localHook = hooks
 
-					const path =
-						originalPath === '/'
-							? prefix
-							: `${prefix}${originalPath}`
+					const path = `${prefix}${originalPath}`
 
 					// Same as guard
 					const hasWsRoute = instance.wsRouter?.find(
@@ -645,10 +643,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						})
 					)
 				} else {
-					const path =
-						originalPath === '/'
-							? prefix
-							: `${prefix}${originalPath}`
+					const path = `${prefix}${originalPath}`
 
 					const hasWsRoute = instance.wsRouter?.find(
 						'subscribe',

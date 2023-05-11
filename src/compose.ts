@@ -386,7 +386,10 @@ export const composeHandler = ({
 				}
 
 				if (validator.response)
-					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw new ValidationError('response', response[c.set.status], ${name}) }\n`
+					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
+						if(!(response instanceof Error))
+							throw new ValidationError('response', response[c.set.status], ${name}) 
+					}\n`
 
 				fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
 			}
@@ -415,7 +418,10 @@ export const composeHandler = ({
 						: `let ${name} = afterHandle[${i}](c, r)\n`
 
 				if (validator.response) {
-					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw new ValidationError('response', response[c.set.status], ${name}) }\n`
+					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
+						if(!(response instanceof Error))
+							throw new ValidationError('response', response[c.set.status], ${name}) 
+					}\n`
 
 					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
 
@@ -425,7 +431,10 @@ export const composeHandler = ({
 		}
 
 		if (validator.response)
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw new ValidationError('response', response[c.set.status], r) }\n`
+			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
+				if(!(response instanceof Error))
+					throw new ValidationError('response', response[c.set.status], r) 
+			}\n`
 
 		fnLiteral += `return mapResponse(r, c.set);\n`
 	} else {
@@ -435,7 +444,10 @@ export const composeHandler = ({
 					? `const r = await handler(c);\n`
 					: `const r = handler(c);\n`
 
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw new ValidationError('response', response[c.set.status], r) }\n`
+			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
+				if(!(response instanceof Error))
+					throw new ValidationError('response', response[c.set.status], r) 
+			}\n`
 			fnLiteral += `return mapResponse(r, c.set);`
 		} else
 			fnLiteral +=
