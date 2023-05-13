@@ -301,13 +301,7 @@ export type LocalHook<
 	Schema extends TypedSchema,
 	Instance extends ElysiaInstance<any>,
 	Path extends string = string
-> = Partial<
-	TypedSchema<
-		Extract<keyof Instance['meta'][typeof DEFS], string>
-	> extends infer Reference extends Schema
-		? Reference
-		: Schema
-> & {
+> = Partial<Schema> & {
 	type?: ContentType
 	detail?: Partial<OpenAPIV3.OperationObject>
 	/**
@@ -350,8 +344,6 @@ export type LocalHook<
 	 */
 	parse?: WithArray<BodyParser>
 }
-
-export type FlattenObject<T> = {} & { [P in keyof T]: T[P] }
 
 export type TypedWSRouteToEden<
 	Schema extends TypedSchema = TypedSchema,

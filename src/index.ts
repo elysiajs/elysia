@@ -49,7 +49,7 @@ import type {
 	NoReturnHandler,
 	MaybePromise,
 	IsNever,
-	FlattenObject,
+	Prettify,
 	TypedWSRouteToEden,
 	UnwrapSchema,
 	ExtractPath,
@@ -938,7 +938,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	get<
 		Path extends string,
 		Handler extends LocalHandler<Schema, Instance, Path>,
-		Schema extends TypedSchema = {}
+		Schema extends TypedSchema<
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -951,7 +953,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							get: {
@@ -1039,7 +1041,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	post<
 		Path extends string,
 		Handler extends LocalHandler<Schema, Instance, Path>,
-		Schema extends TypedSchema = {}
+		Schema extends TypedSchema<
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1052,7 +1056,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							post: {
@@ -1160,7 +1164,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							put: {
@@ -1213,7 +1217,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
@@ -1261,7 +1267,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							patch: {
@@ -1314,7 +1320,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
@@ -1362,7 +1370,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							delete: {
@@ -1415,7 +1423,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
@@ -1463,7 +1473,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							options: {
@@ -1516,7 +1526,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
@@ -1559,7 +1571,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							all: {
@@ -1612,7 +1624,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
@@ -1660,7 +1674,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							head: {
@@ -1713,7 +1727,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
@@ -1761,7 +1777,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							trace: {
@@ -1814,7 +1830,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
@@ -1862,7 +1880,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							connect: {
@@ -1915,7 +1933,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}
@@ -2086,7 +2106,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<typeof EXPOSED, Instance['meta'][typeof EXPOSED]> &
 			Record<
 				typeof SCHEMA,
-				FlattenObject<
+				Prettify<
 					Instance['meta'][typeof SCHEMA] & {
 						[path in Path]: {
 							[method in Method]: {
@@ -2139,7 +2159,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 												ReturnType<Handler>
 											>
 									  }
-									: ReturnType<Handler>
+									: {
+											'200': ReturnType<Handler>
+									  }
 							}
 						}
 					}

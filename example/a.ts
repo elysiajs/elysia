@@ -20,7 +20,7 @@ const app = new Elysia()
 	})
 	// ! state, decorate, now support literal
 	.get('/', ({ name, number, body }) => number, {
-		body: 'number',
+		body: 'string',
 		response: t.Literal(2)
 	})
 	.get('/here', (context) => {})

@@ -190,8 +190,7 @@ app.model({
 					}>()
 				},
 				{
-					headers: 'authorization',
-					body: 'number'
+					headers: 'authorization'
 				}
 			)
 			.guard(

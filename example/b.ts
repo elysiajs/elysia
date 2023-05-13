@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src'
+import { DEFS, Elysia, t } from '../src'
 
 export const plugin = (app: Elysia) =>
 	app.group('/a', (app) =>
@@ -12,6 +12,7 @@ export const plugin = (app: Elysia) =>
 				'/json/:id',
 				({ body, params: { id }, query: { name } }) => 'h',
 				{
+					body: t.Numeric(),
 					headers: 'sign',
 					params: t.Object({
 						id: t.Number()

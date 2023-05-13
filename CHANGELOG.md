@@ -1,8 +1,30 @@
+<<<<<<< HEAD
+# 0.4.14 - 2 May 2023
+Fix:
+- set default object handler to inherits
+
+# 0.4.13 - 28 Apr 2023
+Fix:
+- emergency override experimental version
+
+# 0.4.12 - 26 Apr 2023
+Fix:
+- CatchResponse to return 200 status code by default when using Eden Treaty
+
+# 0.4.11 - 26 Apr 2023
+Fix:
+- response schema doesn't unwrap response type
+
+# 0.4.10 - 25 Apr 2023
+Fix:
+- Update Raikiri stability
+=======
 # 0.5.0-exp.0 - x Apr 2023
 Improvement:
 - constructor name for mapping object type
 - conditional literal fn for checking onRequest iteration
 - Bun.Transpiler for minifying literal fn
+>>>>>>> mudrock
 
 # 0.4.9 - 21 Apr 2023
 Improvement:
