@@ -302,7 +302,11 @@ export type LocalHook<
 	Instance extends ElysiaInstance<any>,
 	Path extends string = string
 > = Partial<
-	Schema | TypedSchema<Extract<keyof Instance['meta'][typeof DEFS], string>>
+	TypedSchema<
+		Extract<keyof Instance['meta'][typeof DEFS], string>
+	> extends infer Reference extends Schema
+		? Reference
+		: Schema
 > & {
 	type?: ContentType
 	detail?: Partial<OpenAPIV3.OperationObject>

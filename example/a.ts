@@ -1,4 +1,4 @@
-import { Elysia, t, Context } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
 	// ! set model using label
@@ -19,7 +19,8 @@ const app = new Elysia()
 		number: 2
 	})
 	// ! state, decorate, now support literal
-	.get('/', ({ name, number }) => number, {
-		body: 'string',
+	.get('/', ({ name, number, body }) => number, {
+		body: 'number',
 		response: t.Literal(2)
 	})
+	.get('/here', (context) => {})
