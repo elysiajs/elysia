@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.5.0-exp-230509.0157",
+  "version": "0.5.0-exp-230513.2235",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -92,9 +92,9 @@
     "build": "rimraf dist && npm run build:esm && npm run build:cjs",
     "build:esm": "swc src -d dist && tsc --project tsconfig.esm.json",
     "build:cjs": "swc src --config-file .swc.cjs.swcrc -d dist/cjs && tsc --project tsconfig.cjs.json",
-    "release": "npm run release:test && npm run release:github && npm publish",
+    "release": "npm run release:test && npm run release:github",
     "release:test": "npm run build && npm run test",
-    "release:github": "bunx bumpp package.json --commit --push --tag",
+    "release:github": "bumpp package.json --commit --push --tag",
     "release:local": "npm run build && npm run test && npm publish"
   },
   "dependencies": {

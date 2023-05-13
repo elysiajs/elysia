@@ -31,9 +31,9 @@ describe('Handle Error', () => {
 	it('handle VALIDATION', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi', {
-					query: t.Object({
-						name: t.String()
-					})
+				query: t.Object({
+					name: t.String()
+				})
 			})
 			.handle(req('/'))
 
@@ -83,13 +83,13 @@ describe('Handle Error', () => {
 
 	it('transform any to error', async () => {
 		const app = new Elysia()
+			.get('/', () => {
+				throw new NotFoundError()
+			})
 			.onError(async ({ set }) => {
 				set.status = 418
 
 				return 'aw man'
-			})
-			.get('/', () => {
-				throw new NotFoundError()
 			})
 
 		const res = await app.handle(req('/'))

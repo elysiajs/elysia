@@ -16,7 +16,11 @@ import {
 import { registerSchemaPath } from './schema'
 import type { Context } from './context'
 
-import { composeGeneralHandler, composeHandler } from './compose'
+import {
+	composeErrorHandler,
+	composeGeneralHandler,
+	composeHandler
+} from './compose'
 
 import { ws } from './ws'
 import type { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
@@ -2525,26 +2529,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			| NotFoundError
 			| InternalServerError,
 		set: Context['set']
-	) => {
-		for (let i = 0; i < this.event.error.length; i++) {
-			let response = this.event.error[i]({
-				request,
-				// @ts-ignore
-				code: error.code ?? 'UNKNOWN',
-				error,
-				set
-			})
-			if (response instanceof Promise) response = await response
-			if (response !== undefined && response !== null)
-				return mapResponse(response, set)
-		}
-
-		return new Response(error.message, {
-			headers: set.headers,
-			// @ts-ignore
-			status: error.status ?? 500
-		})
-	}
+	) => (this.handleError = composeErrorHandler(this))(request, error, set)
 
 	/**
 	 * ### listen

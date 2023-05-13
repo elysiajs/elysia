@@ -688,7 +688,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	for (const [path, code] of Object.entries(staticRouter.map))
 		switchMap += `case '${path}':\nswitch(method) {\n${code}}\n\n`
 
-	const fnLiteral = `const {
+	let fnLiteral = `const {
 		app,
 		app: { store, router, staticRouter },
 		${app.event.request.length ? 'mapEarlyResponse,' : ''}
@@ -698,16 +698,18 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	const getPath = /\\/[^?#]+/g
 	const notFound = new NotFoundError()
 
-	${
-		app.event.request.length
-			? `const onRequest = app.event.request
-			   const requestLength = app.event.request.length`
-			: ''
-	}
+	${app.event.request.length ? `const onRequest = app.event.request` : ''}
 
 	${staticRouter.variables}
 
 	const find = router.find.bind(router)
+	const handleError = app.handleError.bind(this)
+
+	${
+		app.event.error.length
+			? ''
+			: `const error404 = notFound.message.toString()`
+	}
 
 	return function(request) {
 		const ctx = {
@@ -719,24 +721,29 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			}
 			${decoratorsLiteral}
 		}
+	`
 
-		${
-			app.event.request.length
-				? `			
-				try {
-					for (let i = 0; i < requestLength; i++) {
-						const response = mapEarlyResponse(
-							onRequest[i](ctx),
-							ctx.set
-						)
-						if (response) return response
-					}
-				} catch (error) {
-					return app.handleError(request, error, ctx.set)
-				}`
-				: ''
+	if (app.event.request.length) {
+		fnLiteral += `try {`
+
+		for (let i = 0; i < app.event.request.length; i++) {
+			const withReturn = hasReturn(app.event.request[i].toString())
+
+			fnLiteral += !withReturn
+				? `mapEarlyResponse(onRequest[${i}](ctx), ctx.set)`
+				: `const response = mapEarlyResponse(
+					onRequest[${i}](ctx),
+					ctx.set
+				)
+				if (response) return response\n`
 		}
 
+		fnLiteral += `} catch (error) {
+			return handleError(request, error, ctx.set)
+		}`
+	}
+
+	fnLiteral += `
 		getPath.lastIndex = 11
 		const { url, method } = request,
 			path = getPath.exec(url)?.[0] ?? '/'
@@ -748,12 +755,19 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		}
 	
 		const route = find(method, path)
-		if (route === null)
-			return app.handleError(
+		if (route === null) {
+			return ${
+				app.event.error.length
+					? `handleError(
 				request,
 				notFound,
 				ctx.set
-			)
+			)`
+					: `new Response(error404, {
+						status: 404
+					})`
+			}
+		}
 
 		ctx.params = route.params
 
@@ -762,6 +776,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	// console.log(fnLiteral)
 
+	app.handleError = composeErrorHandler(app) as any
+
 	return Function(
 		'data',
 		fnLiteral
@@ -769,5 +785,46 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		app,
 		mapEarlyResponse,
 		NotFoundError
+	})
+}
+
+export const composeErrorHandler = (app: Elysia<any>) => {
+	let fnLiteral = `const {
+		app: { event: { error: onError } },
+		mapResponse
+	} = inject
+	
+	return ${
+		app.event.error.find((fn) => fn.constructor.name === ASYNC_FN)
+			? 'async'
+			: ''
+	} function(request, error, set) {`
+
+	for (let i = 0; i < app.event.error.length; i++) {
+		const handler = app.event.error[i]
+
+		const response = `${
+			handler.constructor.name === ASYNC_FN ? 'await ' : ''
+		}onError[${i}]({
+			request,
+			code: error.code ?? 'UNKNOWN',
+			error,
+			set
+		})`
+
+		if (hasReturn(handler.toString()))
+			fnLiteral += `const r${i} = ${response}; if(r${i} !== null) return mapResponse(r${i}, set)\n`
+		else fnLiteral += response + '\n'
+	}
+
+	fnLiteral += `return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
+}`
+
+	return Function(
+		'inject',
+		fnLiteral
+	)({
+		app,
+		mapResponse
 	})
 }
