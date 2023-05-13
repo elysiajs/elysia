@@ -6,11 +6,11 @@ import { req } from './utils'
 describe('Models', () => {
 	it('register models', async () => {
 		const app = new Elysia()
-			.setModel({
+			.model({
 				string: t.String(),
 				number: t.Number()
 			})
-			.setModel({
+			.model({
 				boolean: t.Boolean()
 			})
 			.route('GET', '/', (context) => Object.keys(context[DEFS]!), {
@@ -26,7 +26,7 @@ describe('Models', () => {
 
 	// it('map model parameters as OpenAPI schema', async () => {
 	// 	const app = new Elysia()
-	// 		.setModel({
+	// 		.model({
 	// 			number: t.Number(),
 	// 			string: t.String(),
 	// 			boolean: t.Boolean(),
@@ -109,7 +109,7 @@ describe('Models', () => {
 
 	// it('map model and inline parameters as OpenAPI schema', async () => {
 	// 	const app = new Elysia()
-	// 		.setModel({
+	// 		.model({
 	// 			number: t.Number(),
 	// 			string: t.String(),
 	// 			boolean: t.Boolean(),
@@ -201,7 +201,7 @@ describe('Models', () => {
 
 	// it('map model and inline response as OpenAPI schema', async () => {
 	// 	const app = new Elysia()
-	// 		.setModel({
+	// 		.model({
 	// 			number: t.Number(),
 	// 			string: t.String(),
 	// 			boolean: t.Boolean(),
@@ -247,7 +247,7 @@ describe('Models', () => {
 
 	// it('map model default response', async () => {
 	// 	const app = new Elysia()
-	// 		.setModel({
+	// 		.model({
 	// 			number: t.Number(),
 	// 			string: t.String(),
 	// 			boolean: t.Boolean(),
@@ -285,16 +285,14 @@ describe('Models', () => {
 
 	it('validate reference model', async () => {
 		const app = new Elysia()
-			.setModel({
+			.model({
 				number: t.Number()
 			})
 			.post('/', ({ body: { data } }) => data, {
-				schema: {
-					response: 'number',
-					body: t.Object({
-						data: t.Number()
-					})
-				}
+				response: 'number',
+				body: t.Object({
+					data: t.Number()
+				})
 			})
 
 		const correct = await app.handle(

@@ -78,12 +78,10 @@ describe('Path', () => {
 			'/id/:id/:name',
 			({ params: { id, name } }) => `${id}/${name}`,
 			{
-				schema: {
-					params: t.Object({
-						id: t.String(),
-						name: t.String()
-					})
-				}
+				params: t.Object({
+					id: t.String(),
+					name: t.String()
+				})
 			}
 		)
 		const res = await app.handle(req('/id/fubuki/Elysia'))
@@ -125,12 +123,10 @@ describe('Path', () => {
 			'/',
 			({ query: { first, last } }) => `${last} ${first}`,
 			{
-				schema: {
-					query: t.Object({
-						first: t.String(),
-						last: t.String()
-					})
-				}
+				query: t.Object({
+					first: t.String(),
+					last: t.String()
+				})
 			}
 		)
 		const res = await app.handle(req('/?first=Fubuki&last=Shirakami'))
@@ -140,9 +136,7 @@ describe('Path', () => {
 
 	it('handle body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
-			schema: {
-				body: t.String()
-			}
+			body: t.String()
 		})
 
 		const body = 'Botan'
@@ -167,11 +161,9 @@ describe('Path', () => {
 		})
 
 		const app = new Elysia().post('/', ({ body }) => body, {
-			schema: {
-				body: t.Object({
-					name: t.String()
-				})
-			}
+			body: t.Object({
+				name: t.String()
+			})
 		})
 		const res = await app.handle(
 			new Request('http://localhost/', {

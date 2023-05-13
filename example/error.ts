@@ -17,11 +17,9 @@ new Elysia()
 		}
 	})
 	.post('/a', () => 'hi', {
-		schema: {
-			body: t.Object({
-				username: t.String(),
-				password: t.String()
-			})
-		}
+		body: t.Object({
+			username: t.String(),
+			password: t.String()
+		})
 	})
 	.listen(8080)

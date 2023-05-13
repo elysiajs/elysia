@@ -1,20 +1,25 @@
 import { Elysia, t, Context } from '../src'
 
 const app = new Elysia()
-	.setModel({
-		a: t.String()
+	// ! set model using label
+	.model('string', t.String())
+	.model({
+		number: t.Number()
 	})
-	.post(
-		'/',
-		({ body }) => {
-			console.log(typeof body)
-
-			return body
-		},
-		{
-			body: 'a'
-		}
-	)
-	.listen(3000, ({ hostname, port }) => {
-		console.log(`Running at http://${hostname}:${port}`)
+	.state('visitor', 1)
+	// ! set model using object
+	.state({
+		multiple: 'value',
+		are: 'now supported!'
+	})
+	.decorate('visitor', 1)
+	// ! set model using object
+	.decorate({
+		name: 'world',
+		number: 2
+	})
+	// ! state, decorate, now support literal
+	.get('/', ({ name, number }) => number, {
+		body: 'string',
+		response: t.Literal(2)
 	})

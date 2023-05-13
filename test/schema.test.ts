@@ -6,11 +6,9 @@ import { post, req } from './utils'
 describe('Schema', () => {
 	it('validate query', async () => {
 		const app = new Elysia().get('/', ({ query: { name } }) => name, {
-			schema: {
-				query: t.Object({
-					name: t.String()
-				})
-			}
+			query: t.Object({
+				name: t.String()
+			})
 		})
 		const res = await app.handle(req('/?name=sucrose'))
 
@@ -23,12 +21,10 @@ describe('Schema', () => {
 			'/hi/:id/:name',
 			({ params: { name } }) => name,
 			{
-				schema: {
-					params: t.Object({
-						id: t.String(),
-						name: t.String()
-					})
-				}
+				params: t.Object({
+					id: t.String(),
+					name: t.String()
+				})
 			}
 		)
 		const res = await app.handle(req('/hi/1/sucrose'))
@@ -39,11 +35,9 @@ describe('Schema', () => {
 
 	it('validate headers', async () => {
 		const app = new Elysia().post('/', () => 'welcome back', {
-			schema: {
-				headers: t.Object({
-					authorization: t.String()
-				})
-			}
+			headers: t.Object({
+				authorization: t.String()
+			})
 		})
 		const res = await app.handle(
 			new Request('http://localhost/', {
@@ -62,12 +56,10 @@ describe('Schema', () => {
 
 	it('validate body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
-			schema: {
-				body: t.Object({
-					username: t.String(),
-					password: t.String()
-				})
-			}
+			body: t.Object({
+				username: t.String(),
+				password: t.String()
+			})
 		})
 
 		const body = JSON.stringify({
@@ -92,14 +84,10 @@ describe('Schema', () => {
 	it('validate response', async () => {
 		const app = new Elysia()
 			.get('/', () => 'Mutsuki need correction 💢💢💢', {
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			})
 			.get('/invalid', () => 1 as any, {
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			})
 		const res = await app.handle(req('/'))
 		const invalid = await app.handle(req('/invalid'))
@@ -116,17 +104,13 @@ describe('Schema', () => {
 				beforeHandle() {
 					return 'Mutsuki need correction 💢💢💢'
 				},
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			})
 			.get('/invalid', () => 1 as any, {
 				beforeHandle() {
 					return 1 as any
 				},
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			})
 		const res = await app.handle(req('/'))
 		const invalid = await app.handle(req('/invalid'))
@@ -143,17 +127,13 @@ describe('Schema', () => {
 				afterHandle() {
 					return 'Mutsuki need correction 💢💢💢'
 				},
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			})
 			.get('/invalid', () => 1 as any, {
 				afterHandle() {
 					return 1 as any
 				},
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			})
 		const res = await app.handle(req('/'))
 		const invalid = await app.handle(req('/invalid'))
@@ -173,17 +153,13 @@ describe('Schema', () => {
 				afterHandle() {
 					return 'Mutsuki need correction 💢💢💢'
 				},
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			})
 			.get('/invalid', () => 1 as any, {
 				afterHandle() {
 					return 1 as any
 				},
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			})
 		const res = await app.handle(req('/'))
 		const invalid = await app.handle(req('/invalid'))
@@ -203,15 +179,13 @@ describe('Schema', () => {
 				return response
 			},
 			{
-				schema: {
-					body: t.Object({
-						status: t.Number(),
-						response: t.Any()
-					}),
-					response: {
-						200: t.String(),
-						201: t.Number()
-					}
+				body: t.Object({
+					status: t.Number(),
+					response: t.Any()
+				}),
+				response: {
+					200: t.String(),
+					201: t.Number()
 				}
 			}
 		)
@@ -251,25 +225,21 @@ describe('Schema', () => {
 	it('handle guard hook', async () => {
 		const app = new Elysia().guard(
 			{
-				schema: {
-					query: t.Object({
-						name: t.String()
-					})
-				}
+				query: t.Object({
+					name: t.String()
+				})
 			},
 			(app) =>
 				app
 					// Store is inherited
 					.post('/user', ({ query: { name } }) => name, {
-						schema: {
-							body: t.Object({
-								id: t.Number(),
-								username: t.String(),
-								profile: t.Object({
-									name: t.String()
-								})
+						body: t.Object({
+							id: t.Number(),
+							username: t.String(),
+							profile: t.Object({
+								name: t.String()
 							})
-						}
+						})
 					})
 		)
 
@@ -332,19 +302,15 @@ describe('Schema', () => {
 			.group('/deep', (app) =>
 				app
 					.get('/correct', () => 'a', {
-						schema: {
-							response: {
-								200: t.String(),
-								400: t.String()
-							}
+						response: {
+							200: t.String(),
+							400: t.String()
 						}
 					})
 					.get('/wrong', () => 1 as any, {
-						schema: {
-							response: {
-								200: t.String(),
-								400: t.String()
-							}
+						response: {
+							200: t.String(),
+							400: t.String()
 						}
 					})
 			)

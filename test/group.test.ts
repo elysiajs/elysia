@@ -48,11 +48,9 @@ describe('group', () => {
 		const app = new Elysia().group(
 			'/v1',
 			{
-				schema: {
-					headers: t.Object({
-						authorization: t.String()
-					})
-				}
+				headers: t.Object({
+					authorization: t.String()
+				})
 			},
 			(app) => app.get('', () => 'Hello')
 		)
@@ -77,11 +75,9 @@ describe('group', () => {
 				transform({ params }) {
 					if (!+Number.isNaN(params.id)) params.id = +params.id
 				},
-				schema: {
-					params: t.Object({
-						id: t.Number()
-					})
-				}
+				params: t.Object({
+					id: t.Number()
+				})
 			},
 			(app) => app.get('/id/:id', () => 'Hello')
 		)
@@ -97,11 +93,9 @@ describe('group', () => {
 		const app = new Elysia().group(
 			'/v1',
 			{
-				schema: {
-					query: t.Object({
-						name: t.String()
-					})
-				}
+				query: t.Object({
+					name: t.String()
+				})
 			},
 			(app) => app.get('', () => 'Hello')
 		)
@@ -117,11 +111,9 @@ describe('group', () => {
 		const app = new Elysia().group(
 			'/v1',
 			{
-				schema: {
-					body: t.Object({
-						name: t.String()
-					})
-				}
+				body: t.Object({
+					name: t.String()
+				})
 			},
 			(app) => app.post('', ({ body }) => body)
 		)
@@ -145,9 +137,7 @@ describe('group', () => {
 		const app = new Elysia().group(
 			'/v1',
 			{
-				schema: {
-					response: t.String()
-				}
+				response: t.String()
 			},
 			(app) =>
 				app

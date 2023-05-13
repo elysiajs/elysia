@@ -33,19 +33,15 @@ const app = new Elysia()
 
 			if (query?.name === 'aom') return 'Hi saltyaom'
 		},
-		schema: {
-			query: t.Object({
-				name: t.String()
-			})
-		}
+		query: t.Object({
+			name: t.String()
+		})
 	})
 	.post('/json', async ({ body }) => body, {
-		schema: {
-			body: t.Object({
-				name: t.String(),
-				additional: t.String()
-			})
-		}
+		body: t.Object({
+			name: t.String(),
+			additional: t.String()
+		})
 	})
 	.post('/transform-body', async ({ body }) => body, {
 		beforeHandle: (ctx) => {
@@ -54,32 +50,26 @@ const app = new Elysia()
 				additional: 'Elysia'
 			}
 		},
-		schema: {
-			body: t.Object({
-				name: t.String(),
-				additional: t.String()
-			})
-		}
+		body: t.Object({
+			name: t.String(),
+			additional: t.String()
+		})
 	})
 	.get('/id/:id', ({ params: { id } }) => id, {
 		transform({ params }) {
 			params.id = +params.id
 		},
-		schema: {
-			params: t.Object({
-				id: t.Number()
-			})
-		}
+		params: t.Object({
+			id: t.Number()
+		})
 	})
 	.post('/new/:id', async ({ body, params }) => body, {
-		schema: {
-			params: t.Object({
-				id: t.Number()
-			}),
-			body: t.Object({
-				username: t.String()
-			})
-		}
+		params: t.Object({
+			id: t.Number()
+		}),
+		body: t.Object({
+			username: t.String()
+		})
 	})
 	.get('/trailing-slash', () => 'A')
 	.group('/group', (app) => {

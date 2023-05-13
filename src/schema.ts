@@ -101,12 +101,11 @@ export const registerSchemaPath = ({
 			? [contentType]
 			: contentType ?? ['application/json']
 
-	const bodySchema = hook?.schema?.body
-	const paramsSchema = hook?.schema?.params
-	const headerSchema = hook?.schema?.headers
-	const querySchema = hook?.schema?.query
-	let responseSchema = hook?.schema
-		?.response as unknown as OpenAPIV3.ResponsesObject
+	const bodySchema = hook?.body
+	const paramsSchema = hook?.params
+	const headerSchema = hook?.headers
+	const querySchema = hook?.query
+	let responseSchema = hook?.response as unknown as OpenAPIV3.ResponsesObject
 
 	if (typeof responseSchema === 'object') {
 		if (Kind in responseSchema) {
@@ -209,9 +208,8 @@ export const registerSchemaPath = ({
 				  }
 				: {}),
 			operationId:
-				hook?.schema?.detail?.operationId ??
-				generateOperationId(method, path),
-			...hook?.schema?.detail,
+				hook?.detail?.operationId ?? generateOperationId(method, path),
+			...hook?.detail,
 			...(bodySchema
 				? {
 						requestBody: {

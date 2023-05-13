@@ -55,11 +55,9 @@ describe('guard', () => {
 	it('validate headers', async () => {
 		const app = new Elysia().guard(
 			{
-				schema: {
 					headers: t.Object({
 						authorization: t.String()
 					})
-				}
 			},
 			(app) => app.get('/', () => 'Hello')
 		)
@@ -83,11 +81,9 @@ describe('guard', () => {
 				transform({ params }) {
 					if (!+Number.isNaN(params.id)) params.id = +params.id
 				},
-				schema: {
 					params: t.Object({
 						id: t.Number()
 					})
-				}
 			},
 			(app) => app.get('/id/:id', () => 'Hello')
 		)
@@ -102,11 +98,9 @@ describe('guard', () => {
 	it('validate query', async () => {
 		const app = new Elysia().guard(
 			{
-				schema: {
 					query: t.Object({
 						name: t.String()
 					})
-				}
 			},
 			(app) => app.get('/', () => 'Hello')
 		)
@@ -121,11 +115,9 @@ describe('guard', () => {
 	it('validate body', async () => {
 		const app = new Elysia().guard(
 			{
-				schema: {
 					body: t.Object({
 						name: t.String()
 					})
-				}
 			},
 			(app) => app.post('/', ({ body }) => body)
 		)
@@ -148,9 +140,7 @@ describe('guard', () => {
 	it('validate response', async () => {
 		const app = new Elysia().guard(
 			{
-				schema: {
 					response: t.String()
-				}
 			},
 			(app) =>
 				app

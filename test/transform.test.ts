@@ -10,6 +10,7 @@ describe('Transform', () => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
+
 		const res = await app.handle(req('/id/1'))
 
 		expect(await res.text()).toBe('number')
@@ -24,11 +25,9 @@ describe('Transform', () => {
 					if (request.params?.id)
 						request.params.id = +request.params.id
 				},
-				schema: {
-					params: t.Object({
-						id: t.Number()
-					})
-				}
+				params: t.Object({
+					id: t.Number()
+				})
 			}
 		)
 		const res = await app.handle(req('/id/1'))
@@ -116,11 +115,9 @@ describe('Transform', () => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 			.get('/id/:id', ({ params: { id } }) => id, {
-				schema: {
-					params: t.Object({
-						id: t.Number()
-					})
-				},
+				params: t.Object({
+					id: t.Number()
+				}),
 				transform: (request) => {
 					if (
 						request.params?.id &&
@@ -167,11 +164,9 @@ describe('Transform', () => {
 			'/id/:id',
 			({ params: { id } }) => typeof id,
 			{
-				schema: {
-					params: t.Object({
-						id: t.Number()
-					})
-				},
+				params: t.Object({
+					id: t.Number()
+				}),
 				transform: async ({ params }) => {
 					await new Promise<void>((resolve) =>
 						setTimeout(() => {
@@ -203,5 +198,4 @@ describe('Transform', () => {
 
 		expect(await res.text()).toBe('number')
 	})
-
 })

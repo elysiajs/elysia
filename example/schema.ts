@@ -1,7 +1,7 @@
 import { Elysia, t, SCHEMA, DEFS } from '../src'
 
 const app = new Elysia()
-	.setModel({
+	.model({
 		name: t.Object({
 			name: t.String()
 		}),
@@ -16,38 +16,32 @@ const app = new Elysia()
 	.get('/', () => 'hi')
 	// Strictly validate body and response
 	.post('/', ({ body, query }) => body.id, {
-		schema: {
-			body: t.Object({
-				id: t.Number(),
-				username: t.String(),
-				profile: t.Object({
-					name: t.String()
-				})
+		body: t.Object({
+			id: t.Number(),
+			username: t.String(),
+			profile: t.Object({
+				name: t.String()
 			})
-		}
+		})
 	})
 	// Strictly validate query, params, and body
 	.get('/query/:id', ({ query: { name }, params }) => name, {
-		schema: {
-			query: t.Object({
-				name: t.String()
-			}),
-			params: t.Object({
-				id: t.String()
-			}),
-			response: {
-				200: t.String(),
-				300: t.Object({
-					error: t.String()
-				})
-			}
+		query: t.Object({
+			name: t.String()
+		}),
+		params: t.Object({
+			id: t.String()
+		}),
+		response: {
+			200: t.String(),
+			300: t.Object({
+				error: t.String()
+			})
 		}
 	})
 	.guard(
 		{
-			schema: {
-				headers: 'authorization'
-			}
+			headers: 'authorization'
 		},
 		(app) =>
 			app
@@ -56,11 +50,9 @@ const app = new Elysia()
 				}))
 				.get('/', ({ userId }) => 'A')
 				.post('/id/:id', ({ query, body, params, userId }) => body, {
-					schema: {
-						params: t.Object({
-							id: t.Number()
-						})
-					},
+					params: t.Object({
+						id: t.Number()
+					}),
 					transform({ params }) {
 						params.id = +params.id
 					}

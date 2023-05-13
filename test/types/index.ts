@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { t, Elysia } from '../../src'
+import { t, Elysia, DEFS } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -22,7 +22,7 @@ app.get('/', ({ headers, query, params, body, store }) => {
 	expectTypeOf<typeof store>().toEqualTypeOf<{}>()
 })
 
-app.setModel({
+app.model({
 	t: t.Object({
 		username: t.String(),
 		password: t.String()
@@ -57,13 +57,11 @@ app.setModel({
 		return body
 	},
 	{
-		schema: {
-			body: 't',
-			params: 't',
-			query: 't',
-			headers: 't',
-			response: 't'
-		}
+		body: 't',
+		params: 't',
+		query: 't',
+		headers: 't',
+		response: 't'
 	}
 )
 
@@ -84,18 +82,14 @@ app.get('/id/:id/name/:name', ({ params }) => {
 
 // ? support unioned response
 app.get('/', () => '1', {
-	schema: {
-		response: {
-			200: t.String(),
-			400: t.Number()
-		}
+	response: {
+		200: t.String(),
+		400: t.Number()
 	}
 }).get('/', () => 1, {
-	schema: {
-		response: {
-			200: t.String(),
-			400: t.Number()
-		}
+	response: {
+		200: t.String(),
+		400: t.Number()
 	}
 })
 
@@ -117,20 +111,16 @@ app.schema({
 		expectTypeOf<typeof body>().toBeNumber()
 	},
 	{
-		schema: {
-			body: t.Number()
-		}
+		body: t.Number()
 	}
 )
 
 // ? override schema
-app.setModel({
+app.model({
 	string: t.String()
 }).guard(
 	{
-		schema: {
-			body: t.String()
-		}
+		body: t.String()
 	},
 	(app) =>
 		app
@@ -147,9 +137,7 @@ app.setModel({
 					expectTypeOf<typeof body>().toBeNumber()
 				},
 				{
-					schema: {
-						body: t.Number()
-					}
+					body: t.Number()
 				}
 			)
 			// ? Merge schema and inherits typed
@@ -167,11 +155,9 @@ app.setModel({
 					expectTypeOf<typeof body>().toBeString()
 				},
 				{
-					schema: {
-						query: t.Object({
-							a: t.String()
-						})
-					}
+					query: t.Object({
+						a: t.String()
+					})
 				}
 			)
 			// ? Inherits schema reference
@@ -182,12 +168,10 @@ app.setModel({
 					expectTypeOf<typeof body>().toEqualTypeOf<string>()
 				},
 				{
-					schema: {
-						body: 'string'
-					}
+					body: 'string'
 				}
 			)
-			.setModel({
+			.model({
 				authorization: t.Object({
 					authorization: t.String()
 				})
@@ -206,17 +190,13 @@ app.setModel({
 					}>()
 				},
 				{
-					schema: {
-						headers: 'authorization',
-						body: 'number'
-					}
+					headers: 'authorization',
+					body: 'number'
 				}
 			)
 			.guard(
 				{
-					schema: {
-						headers: 'authorization'
-					}
+					headers: 'authorization'
 				},
 				(app) =>
 					// ? To reconcilate multiple level of schema
@@ -236,15 +216,28 @@ app.state('a', 'b')
 	// ? Infer state
 	.get('/', ({ store }) => {
 		expectTypeOf<typeof store>().toEqualTypeOf<{
-			a: string
+			a: 'b'
 		}>()
 	})
 	.state('b', 'c')
 	// ? Merge state
 	.get('/', ({ store }) => {
 		expectTypeOf<typeof store>().toEqualTypeOf<{
-			a: string
-			b: string
+			a: 'b'
+			b: 'c'
+		}>()
+	})
+	.state({
+		c: 'd',
+		d: 'e'
+	})
+	// ? Use multiple state
+	.get('/', ({ store }) => {
+		expectTypeOf<typeof store>().toEqualTypeOf<{
+			a: 'b'
+			b: 'c'
+			c: 'd'
+			d: 'e'
 		}>()
 	})
 
@@ -259,6 +252,51 @@ app.decorate('a', 'b')
 		expectTypeOf<typeof a>().toBeString()
 		expectTypeOf<typeof b>().toBeString()
 	})
+	.decorate({
+		c: 'd',
+		d: 'e'
+	})
+	// ? Use multiple decorate
+	.get('/', ({ a, b, c, d }) => {
+		expectTypeOf<{
+			a: typeof a
+			b: typeof b
+			c: typeof c
+			d: typeof d
+		}>().toEqualTypeOf<{
+			a: 'b'
+			b: 'c'
+			c: 'd'
+			d: 'e'
+		}>()
+	})
+
+const b = app
+	.model('a', t.Literal('a'))
+	// ? Infer label model
+	.post(
+		'/',
+		({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf<'a'>()
+		},
+		{
+			body: 'a'
+		}
+	)
+	// ? Infer multiple model
+	.model({
+		b: t.Literal('b'),
+		c: t.Literal('c')
+	})
+	.post(
+		'/',
+		({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf<'b'>()
+		},
+		{
+			body: 'b'
+		}
+	)
 
 app.derive(({ headers }) => {
 	return {
@@ -286,7 +324,7 @@ app.derive(({ headers }) => {
 	})
 
 const plugin = (app: Elysia) =>
-	app.decorate('decorate', 'a').state('state', 'a').setModel({
+	app.decorate('decorate', 'a').state('state', 'a').model({
 		string: t.String()
 	})
 
@@ -299,14 +337,12 @@ app.use(plugin).get(
 		expectTypeOf<typeof body>().toBeString()
 	},
 	{
-		schema: {
-			body: 'string'
-		}
+		body: 'string'
 	}
 )
 
 export const asyncPlugin = async (app: Elysia) =>
-	app.decorate('decorate', 'a').state('state', 'a').setModel({
+	app.decorate('decorate', 'a').state('state', 'a').model({
 		string: t.String()
 	})
 
@@ -319,9 +355,7 @@ app.use(asyncPlugin).get(
 		expectTypeOf<typeof body>().toBeString()
 	},
 	{
-		schema: {
-			body: 'string'
-		}
+		body: 'string'
 	}
 )
 
@@ -334,9 +368,7 @@ app.use(import('./plugins')).get(
 		expectTypeOf<typeof body>().toBeString()
 	},
 	{
-		schema: {
-			body: 'string'
-		}
+		body: 'string'
 	}
 )
 
@@ -350,9 +382,7 @@ app.use(plugin).group('/', (app) =>
 			expectTypeOf<typeof body>().toBeString()
 		},
 		{
-			schema: {
-				body: 'string'
-			}
+			body: 'string'
 		}
 	)
 )
@@ -367,9 +397,7 @@ app.use(plugin).guard({}, (app) =>
 			expectTypeOf<typeof body>().toBeString()
 		},
 		{
-			schema: {
-				body: 'string'
-			}
+			body: 'string'
 		}
 	)
 )
@@ -378,11 +406,9 @@ app.use(plugin).guard({}, (app) =>
 app.use(plugin).group(
 	'/',
 	{
-		schema: {
-			query: t.Object({
-				username: t.String()
-			})
-		}
+		query: t.Object({
+			username: t.String()
+		})
 	},
 	(app) =>
 		app.get(
@@ -396,9 +422,7 @@ app.use(plugin).group(
 				expectTypeOf<typeof body>().toBeString()
 			},
 			{
-				schema: {
-					body: 'string'
-				}
+				body: 'string'
 			}
 		)
 )

@@ -284,7 +284,7 @@ Improvement:
 
 # 0.2.0-rc.0 - 23 Jan 2023
 Feature:
-- Add support for reference model via `.setModel`
+- Add support for reference model via `.model`
 - Add support for OpenAPI's `definitions` field
 
 # 0.2.0-beta.2 - 22 Jan 2023

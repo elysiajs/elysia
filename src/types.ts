@@ -297,26 +297,54 @@ type ContentType = MaybeArray<
 	| 'application/x-www-form-urlencoded'
 >
 
-export interface LocalHook<
+export type LocalHook<
 	Schema extends TypedSchema,
 	Instance extends ElysiaInstance<any>,
 	Path extends string = string
-> {
+> = Partial<
+	Schema | TypedSchema<Extract<keyof Instance['meta'][typeof DEFS], string>>
+> & {
 	type?: ContentType
-	// ? I have no idea why does this infer type, but it work anyway
-	schema?:
-		| TypedSchema<Extract<keyof Instance['meta'][typeof DEFS], string>>
-		| Schema
-		| {
-				detail?: Partial<OpenAPIV3.OperationObject>
-		  }
-	parse?: WithArray<BodyParser>
+	detail?: Partial<OpenAPIV3.OperationObject>
+	/**
+	 * Transform context's value
+	 *
+	 * ---
+	 * Lifecycle:
+	 *
+	 * __transform__ -> beforeHandle -> handler -> afterHandle
+	 */
 	transform?: WithArray<
 		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
 	>
-	beforeHandle?: this['transform']
+	/**
+	 * Execute before main handler
+	 *
+	 * ---
+	 * Lifecycle:
+	 *
+	 * transform -> __beforeHandle__ -> handler -> afterHandle
+	 */
+	beforeHandle?: WithArray<
+		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
+	>
+	/**
+	 * Execute after main handler
+	 *
+	 * ---
+	 * Lifecycle:
+	 *
+	 * transform -> beforeHandle -> handler -> __afterHandle__
+	 */
 	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
+	/**
+	 * Catch error
+	 */
 	error?: WithArray<ErrorHandler>
+	/**
+	 * Custom body parser
+	 */
+	parse?: WithArray<BodyParser>
 }
 
 export type FlattenObject<T> = {} & { [P in keyof T]: T[P] }
@@ -534,6 +562,8 @@ export type ErrorHandler = (
 				set: Context['set']
 		  }
 ) => any | Promise<any>
+
+export type DeepWritable<T> = { -readonly [P in keyof T]: DeepWritable<T[P]> }
 
 // ? From https://dev.to/svehla/typescript-how-to-deep-merge-170c
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

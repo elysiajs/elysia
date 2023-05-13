@@ -22,27 +22,24 @@ export const mergeHook = (
 	a: LocalHook<any, any> | LifeCycleStore<any>,
 	b: LocalHook<any, any>
 ): RegisteredHook<any> => {
-	const aSchema = 'schema' in a ? (a.schema as TypedSchema) : null
-	const bSchema = b && 'schema' in b ? b.schema : null
-
 	return {
-		schema:
-			aSchema || bSchema
-				? ({
-						// Merge local hook first
-						body: bSchema?.body ?? aSchema?.body,
-						headers: bSchema?.headers ?? aSchema?.headers,
-						params: bSchema?.params ?? aSchema?.params,
-						query: bSchema?.query ?? aSchema?.query,
-						response: bSchema?.response ?? aSchema?.response,
-						detail: mergeDeep(
-							// @ts-ignore
-							bSchema?.detail ?? {},
-							// @ts-ignore
-							aSchema?.detail ?? {}
-						)
-				  } as TypedSchema)
-				: undefined,
+		// Merge local hook first
+		// @ts-ignore
+		body: b?.body ?? a?.body,
+		// @ts-ignore
+		headers: b?.headers ?? a?.headers,
+		// @ts-ignore
+		params: b?.params ?? a?.params,
+		// @ts-ignore
+		query: b?.query ?? a?.query,
+		// @ts-ignore
+		response: b?.response ?? a?.response,
+		detail: mergeDeep(
+			// @ts-ignore
+			b?.detail ?? {},
+			// @ts-ignore
+			a?.detail ?? {}
+		),
 		transform: mergeObjectArray(
 			a.transform ?? [],
 			b?.transform ?? []

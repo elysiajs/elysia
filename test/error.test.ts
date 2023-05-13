@@ -26,12 +26,10 @@ describe('error', () => {
 	it('custom validation error', async () => {
 		const app = new Elysia()
 			.post('/login', ({ body }) => body, {
-				schema: {
-					body: t.Object({
-						username: t.String(),
-						password: t.String()
-					})
-				}
+				body: t.Object({
+					username: t.String(),
+					password: t.String()
+				})
 			})
 			.onError(({ code, error, set }) => {
 				if (code === 'VALIDATION') {

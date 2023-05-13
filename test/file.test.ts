@@ -4,21 +4,17 @@ import { upload } from './utils'
 
 const app = new Elysia()
 	.post('/single', ({ body: { file } }) => file.size, {
-		schema: {
-			body: t.Object({
-				file: t.File()
-			})
-		}
+		body: t.Object({
+			file: t.File()
+		})
 	})
 	.post(
 		'/multiple',
 		({ body: { files } }) => files.reduce((a, b) => a + b.size, 0),
 		{
-			schema: {
-				body: t.Object({
-					files: t.Files()
-				})
-			}
+			body: t.Object({
+				files: t.Files()
+			})
 		}
 	)
 	.listen(8080)

@@ -31,11 +31,9 @@ describe('Handle Error', () => {
 	it('handle VALIDATION', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi', {
-				schema: {
 					query: t.Object({
 						name: t.String()
 					})
-				}
 			})
 			.handle(req('/'))
 

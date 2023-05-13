@@ -53,7 +53,8 @@ import type {
 	TypedWSRouteToEden,
 	UnwrapSchema,
 	ExtractPath,
-	TypedSchemaToRoute
+	TypedSchemaToRoute,
+	DeepWritable
 } from './types'
 import { Static, type TSchema } from '@sinclair/typebox'
 
@@ -178,27 +179,27 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		const validator = {
 			body: getSchemaValidator(
-				hook?.schema?.body ?? (this.$schema?.body as any),
+				hook?.body ?? (this.$schema?.body as any),
 				defs
 			),
 			headers: getSchemaValidator(
-				hook?.schema?.headers ?? (this.$schema?.headers as any),
+				hook?.headers ?? (this.$schema?.headers as any),
 				defs,
 				true
 			),
 			params: getSchemaValidator(
-				hook?.schema?.params ?? (this.$schema?.params as any),
+				hook?.params ?? (this.$schema?.params as any),
 				defs
 			),
 			query: getSchemaValidator(
-				hook?.schema?.query ?? (this.$schema?.query as any),
+				hook?.query ?? (this.$schema?.query as any),
 				defs
 			),
 			response: getResponseSchemaValidator(
-				hook?.schema?.response ?? (this.$schema?.response as any),
+				hook?.response ?? (this.$schema?.response as any),
 				defs
 			)
-		}
+		} as any
 
 		const hooks = mergeHook(this.event, hook as RegisteredHook)
 
@@ -206,7 +207,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			path,
 			method,
 			hooks,
-			validator: validator as any,
+			validator,
 			handler,
 			handleError: this.handleError,
 			meta: allowMeta ? this.meta : undefined
@@ -604,7 +605,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				...sandbox.event.request
 			]
 
-		this.setModel(sandbox.meta[DEFS])
+		this.model(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
 			({ method, path: originalPath, handler, hooks }) => {
@@ -739,7 +740,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				...sandbox.event.request
 			]
 
-		this.setModel(sandbox.meta[DEFS])
+		this.model(sandbox.meta[DEFS])
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks: localHook }) => {
@@ -1146,7 +1147,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -2064,6 +2065,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		method: Method,
 		path: Path,
 		handler: Handler,
+		// @ts-ignore
 		{
 			config,
 			...hook
@@ -2163,27 +2165,71 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * @example
 	 * ```typescript
 	 * new Elysia()
+	 *     .state({ counter: 0 })
+	 *     .get('/', (({ counter }) => ++counter)
+	 * ```
+	 */
+	state<const Key extends string | number | symbol, const Value>(
+		name: Key,
+		value: Value
+	): Elysia<{
+		store: Instance['store'] & {
+			[key in Key]: Value
+		}
+		request: Instance['request']
+		schema: Instance['schema']
+		meta: Instance['meta']
+	}>
+
+	/**
+	 * ### state
+	 * Assign global mutatable state accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
 	 *     .state('counter', 0)
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
 	 */
-	state<
-		Key extends string | number | symbol = keyof Instance['store'],
-		Value = Instance['store'][keyof Instance['store']],
-		NewInstance = Elysia<{
-			store: Instance['store'] & {
-				[key in Key]: Value
-			}
-			request: Instance['request']
-			schema: Instance['schema']
-			meta: Instance['meta']
-		}>
-	>(name: Key, value: Value): NewInstance {
-		if (!(name in this.store)) {
-			;(this.store as Record<Key, Value>)[name] = value
+	state<const NewStore extends Record<string, unknown>>(
+		store: NewStore
+	): Elysia<{
+		store: Instance['store'] & DeepWritable<NewStore>
+		request: Instance['request']
+		schema: Instance['schema']
+		meta: Instance['meta']
+	}>
+
+	/**
+	 * ### state
+	 * Assign global mutatable state accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .state('counter', 0)
+	 *     .get('/', (({ counter }) => ++counter)
+	 * ```
+	 */
+	state(
+		name: string | number | symbol | Record<string, unknown>,
+		value?: unknown
+	) {
+		if (typeof name === 'object') {
+			this.store = mergeDeep(this.store, name)
+
+			return this as any
 		}
 
-		return this as unknown as NewInstance
+		if (!(name in this.store)) {
+			;(this.store as Record<string | number | symbol, unknown>)[name] =
+				value
+		}
+
+		return this as any
 	}
 
 	/**
@@ -2198,20 +2244,60 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
-	decorate<
-		Name extends string,
-		Value = any,
-		NewInstance = Elysia<{
-			store: Instance['store']
-			request: Instance['request'] & { [key in Name]: Value }
-			schema: Instance['schema']
-			meta: Instance['meta']
-		}>
-	>(name: Name, value: Value): NewInstance {
+	decorate<const Name extends string, const Value>(
+		name: Name,
+		value: Value
+	): Elysia<{
+		store: Instance['store']
+		request: Instance['request'] & { [key in Name]: Value }
+		schema: Instance['schema']
+		meta: Instance['meta']
+	}>
+
+	/**
+	 * ### decorate
+	 * Define custom method to `Context` accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .decorate('getDate', () => Date.now())
+	 *     .get('/', (({ getDate }) => getDate())
+	 * ```
+	 */
+	decorate<const Decorators extends Record<string, unknown>>(
+		name: Decorators
+	): Elysia<{
+		store: Instance['store']
+		request: Instance['request'] & DeepWritable<Decorators>
+		schema: Instance['schema']
+		meta: Instance['meta']
+	}>
+
+	/**
+	 * ### decorate
+	 * Define custom method to `Context` accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .decorate('getDate', () => Date.now())
+	 *     .get('/', (({ getDate }) => getDate())
+	 * ```
+	 */
+	decorate(name: string | Record<string, unknown>, value?: unknown) {
+		if (typeof name === 'object') {
+			this.decorators = mergeDeep(this.decorators, name)
+
+			return this as any
+		}
+
 		// @ts-ignore
 		if (!(name in this.decorators)) this.decorators[name] = value
 
-		return this as unknown as NewInstance
+		return this as any
 	}
 
 	/**
@@ -2255,6 +2341,39 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Object.assign(context, transform(context as any))
 		}) as any
 	}
+
+	/**
+	 * Derive new property for each request with access to `Context`.
+	 *
+	 * If error is thrown, the scope will skip to handling error instead.
+	 *
+	 * ---
+	 * @example
+	 * new Elysia()
+	 *     .state('counter', 1)
+	 *     .derive(({ store }) => ({
+	 *         increase() {
+	 *             store.counter++
+	 *         }
+	 *     }))
+	 */
+	// signal<Returned extends Object = Object>(
+	// 	createSignal: (
+	// 		getStore: () => Instance['store']
+	// 	) => MaybePromise<Returned> extends {} ? Returned : never
+	// ): Elysia<{
+	// 	store: Instance['store'] & Awaited<Returned>
+	// 	request: Instance['request']
+	// 	schema: Instance['schema']
+	// 	meta: Instance['meta']
+	// }> {
+	// 	Object.assign(
+	// 		this.store,
+	// 		createSignal(() => this.store)
+	// 	)
+
+	// 	return this as any
+	// }
 
 	fn<
 		PluginInstalled extends boolean = IsAny<Permission> extends true
@@ -2355,7 +2474,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			response: getSchemaValidator(schema?.response, defs)
 		}
 
-		return this as unknown as NewInstance
+		return this as any
 	}
 
 	handle = async (request: Request) => this.fetch(request)
@@ -2514,7 +2633,23 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return Promise.all(this.lazyLoadModules)
 	}
 
-	setModel<Recorder extends Record<string, TSchema>>(
+	model<Name extends string, Model extends TSchema>(
+		name: Name,
+		model: Model
+	): Elysia<{
+		store: Instance['store']
+		request: Instance['request']
+		schema: Instance['schema']
+		meta: Instance['meta'] &
+			Record<
+				typeof DEFS,
+				{
+					[name in Name]: Static<Model>
+				}
+			>
+	}>
+
+	model<Recorder extends Record<string, TSchema>>(
 		record: Recorder
 	): Elysia<{
 		store: Instance['store']
@@ -2527,13 +2662,17 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					[key in keyof Recorder]: Static<Recorder[key]>
 				}
 			>
-	}> {
-		Object.entries(record).forEach(([key, value]) => {
-			// @ts-ignore
-			if (!(key in this.meta[DEFS])) this.meta[DEFS][key] = value
-		})
+	}>
 
-		return this as unknown as any
+	model(name: string, model?: TSchema) {
+		if (typeof name === 'object')
+			Object.entries(name).forEach(([key, value]) => {
+				// @ts-ignore
+				if (!(key in this.meta[DEFS])) this.meta[DEFS][key] = value
+			})
+		else (this.meta[DEFS] as Record<string, TSchema>)[name] = model!
+
+		return this as any
 	}
 }
 
