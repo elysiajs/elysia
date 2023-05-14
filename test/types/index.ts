@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { t, Elysia, DEFS } from '../../src'
+import { t, Elysia, DEFS, SCHEMA, TypedSchema } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -425,3 +425,86 @@ app.use(plugin).group(
 			}
 		)
 )
+
+// ? It inherits group type to Eden
+{
+	const server = app.group(
+		'/v1',
+		{
+			query: t.Object({
+				name: t.String()
+			})
+		},
+		(app) =>
+			app.guard(
+				{
+					headers: t.Object({
+						authorization: t.String()
+					})
+				},
+				(app) =>
+					app.get('/a', () => 1, {
+						body: t.String()
+					})
+			)
+	)
+
+	type App = (typeof server)['meta'][typeof SCHEMA]
+	type Route = App['/v1/a']['get']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		headers: {
+			authorization: string
+		}
+		body: string
+		query: {
+			name: string
+		}
+		params: undefined
+		response: {
+			'200': number
+		}
+	}>()
+}
+
+// ? Register websocket
+{
+	const server = app.group(
+		'/v1',
+		{
+			query: t.Object({
+				name: t.String()
+			})
+		},
+		(app) =>
+			app.guard(
+				{
+					headers: t.Object({
+						authorization: t.String()
+					})
+				},
+				(app) =>
+					app.ws('/a', {
+						message(ws, message) {
+							message
+						},
+						body: t.String()
+					})
+			)
+	)
+
+	type App = (typeof server)['meta'][typeof SCHEMA]
+	type Route = App['/v1/a']['subscribe']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		headers: {
+			authorization: string
+		}
+		body: string
+		query: {
+			name: string
+		}
+		params: Record<never, string>
+		response: unknown
+	}>()
+}

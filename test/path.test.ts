@@ -327,13 +327,14 @@ describe('Path', () => {
 		})
 	})
 
-	it('exclude fragment', async () => {
-		const app = new Elysia().get('/', ({ query }) => query)
+	// ? This is not used because fragment is strip out by default
+	// it('exclude fragment', async () => {
+	// 	const app = new Elysia().get('/', ({ query }) => query)
 
-		const res = await app.handle(req('/#hi')).then((r) => r.json())
+	// 	const res = await app.handle(req('/#hi')).then((r) => r.json())
 
-		expect(res).toEqual({})
-	})
+	// 	expect(res).toEqual({})
+	// })
 
 	// ? This is not used because fragment is strip out by default
 	// it('exclude fragment on querystring', async () => {

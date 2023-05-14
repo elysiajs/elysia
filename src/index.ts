@@ -3,7 +3,6 @@ import type { Serve, Server } from 'bun'
 import { nanoid } from 'nanoid'
 import { Memoirist } from 'memoirist'
 
-import { mapResponse } from './handler'
 import {
 	SCHEMA,
 	EXPOSED,
@@ -582,15 +581,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				schema: Instance['schema']
 				store: Instance['store']
 				meta: Instance['meta'] &
-					(Omit<NewInstance['meta'], typeof SCHEMA> &
-						Record<
-							typeof SCHEMA,
-							{
-								[key in keyof NewInstance['meta'][typeof SCHEMA] as key extends `${infer Rest}`
-									? `${Prefix}${Rest}`
-									: key]: NewInstance['meta'][typeof SCHEMA][key]
-							}
-						>)
+					Record<
+						typeof SCHEMA,
+						{
+							[key in keyof NewInstance['meta'][typeof SCHEMA] as key extends `${infer Rest}`
+								? `${Prefix}${Rest}`
+								: key]: NewInstance['meta'][typeof SCHEMA][key]
+						}
+					>
 		  }>
 		: this {
 		const instance = new Elysia<any>()
@@ -727,8 +725,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		? Elysia<{
 				request: Instance['request']
 				store: Instance['store']
-				schema: Instance['schema']
-				meta: Instance['meta'] & NewInstance['schema']
+				schema: Instance['schema'] & NewInstance['schema']
+				meta: Instance['meta'] &
+					Record<
+						typeof SCHEMA,
+						{
+							[key in keyof NewInstance['meta'][typeof SCHEMA]]: NewInstance['meta'][typeof SCHEMA][key]
+						}
+					>
 		  }>
 		: this {
 		const instance = new Elysia<any>()
@@ -958,64 +962,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							get: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									get: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1061,64 +1071,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							post: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									post: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1169,64 +1185,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							put: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									put: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1272,64 +1294,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							patch: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									patch: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1375,64 +1403,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							delete: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									delete: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1478,64 +1512,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							options: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									options: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1576,64 +1616,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							all: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									all: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1679,64 +1725,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							head: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									head: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1782,64 +1834,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							trace: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									trace: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1885,64 +1943,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							connect: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									connect: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -1969,7 +2033,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	ws<Path extends string = '', Schema extends TypedSchema = {}>(
+	ws<
+		Path extends string = '',
+		Schema extends WSTypedSchema<
+			Extract<keyof Instance['meta'][typeof DEFS], string>
+		> = {}
+	>(
 		/**
 		 * Path to register websocket to
 		 */
@@ -1977,11 +2046,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		options: Path extends ''
 			? never
 			: this extends Elysia<infer Instance>
-			? ElysiaWSOptions<
-					Path,
-					Schema extends WSTypedSchema ? Schema : WSTypedSchema,
-					Instance['meta'][typeof DEFS]
-			  >
+			? ElysiaWSOptions<Path, Schema, Instance['meta'][typeof DEFS]>
 			: never
 	): Elysia<{
 		request: Instance['request']
@@ -1992,13 +2057,18 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Record<
 					Path,
-					{
-						[method in 'subscribe']: TypedWSRouteToEden<
-							Schema,
-							Instance['meta'][typeof DEFS],
-							Path
-						>
-					}
+					MergeSchema<
+						Schema,
+						Instance['schema']
+					> extends infer Typed extends TypedSchema
+						? {
+								subscribe: TypedWSRouteToEden<
+									Typed,
+									Instance['meta'][typeof DEFS],
+									Path
+								>
+						  }
+						: never
 				>
 			>
 	}> {
@@ -2017,14 +2087,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					// @ts-ignore
 					this.server?.upgrade(context.request, {
 						headers:
-							typeof options.headers === 'function'
-								? options.headers(context as any)
-								: options.headers,
+							typeof options.upgrade === 'function'
+								? options.upgrade(context as any)
+								: options.upgrade,
 						data: {
 							...context,
 							id: nanoid(),
 							message: getSchemaValidator(
-								options.schema?.body,
+								options?.body,
 								this.meta[DEFS]
 							),
 							transformMessage: !options.transform
@@ -2042,14 +2112,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				return 'Expected a websocket connection'
 			},
 			{
-				parse: options.parse,
+				// parse: options.parse,
 				beforeHandle: options.beforeHandle,
 				transform: options.transform,
-				schema: {
-					headers: options.schema?.headers,
-					params: options.schema?.params,
-					query: options.schema?.query
-				}
+				headers: options?.headers,
+				params: options?.params,
+				query: options?.query
 			} as any
 		)
 
@@ -2111,64 +2179,70 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				typeof SCHEMA,
 				Prettify<
-					Instance['meta'][typeof SCHEMA] & {
-						[path in Path]: {
-							[method in Method]: {
-								body: UnwrapSchema<
-									Schema['body'],
-									Instance['meta'][typeof DEFS]
-								>
-								headers: UnwrapSchema<
-									Schema['headers'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								query: UnwrapSchema<
-									Schema['query'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: undefined
-								params: UnwrapSchema<
-									Schema['params'],
-									Instance['meta'][typeof DEFS]
-								> extends infer Result
-									? Result extends Record<string, any>
-										? Result
-										: undefined
-									: Record<ExtractPath<Path>, string>
-								response: Schema['response'] extends
-									| TSchema
-									| string
-									? {
-											'200': UnwrapSchema<
-												Schema['response'],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: Schema['response'] extends Record<
-											string,
-											TSchema | string
-									  >
-									? {
-											[key in keyof Schema['response']]: UnwrapSchema<
-												Schema['response'][key],
-												Instance['meta'][typeof DEFS],
-												ReturnType<Handler>
-											>
-									  }
-									: {
-											'200': ReturnType<Handler>
-									  }
-							}
-						}
-					}
+					Instance['meta'][typeof SCHEMA] &
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+						? {
+								[path in Path]: {
+									[method in Method]: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta'][typeof DEFS]
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta'][typeof DEFS]
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<ExtractPath<Path>, string>
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta'][typeof DEFS],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: never
 				>
 			>
 	}> {
@@ -2503,22 +2577,21 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		return this as any
 	}
 
-	handle = async (request: Request) => this.fetch(request)
-
-	compile = () => {
+	compile() {
 		this.fetch = composeGeneralHandler(this)
 
 		return this
 	}
+
+	handle = async (request: Request) => this.fetch(request)
 
 	/**
 	 * Handle can be either sync or async to save performance.
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	fetch(request: Request): MaybePromise<Response> {
-		return (this.fetch = composeGeneralHandler(this))(request)
-	}
+	fetch = (request: Request): MaybePromise<Response> =>
+		(this.fetch = composeGeneralHandler(this))(request)
 
 	handleError = async (
 		request: Request,

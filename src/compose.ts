@@ -188,10 +188,7 @@ export const composeHandler = ({
 	if (hasQuery) {
 		fnLiteral += `const url = c.request.url
 
-		if(url.charCodeAt(c.query) === 63 || (c.query = url.indexOf("?", ${
-			11 +
-			path.split('/').map((x) => (x.startsWith(':') ? '-' : '')).length
-		})) !== -1) {
+		if(c.query !== -1) {
 			c.query = parseQuery(url.substring(c.query + 1))
 		} else {
 			c.query = {}
@@ -695,7 +692,6 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		NotFoundError
 	} = data
 
-	const getPath = /\\/[^?#]+/g
 	const notFound = new NotFoundError()
 
 	${app.event.request.length ? `const onRequest = app.event.request` : ''}
@@ -705,11 +701,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	const find = router.find.bind(router)
 	const handleError = app.handleError.bind(this)
 
-	${
-		app.event.error.length
-			? ''
-			: `const error404 = notFound.message.toString()`
-	}
+	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
 
 	return function(request) {
 		const ctx = {
@@ -744,11 +736,10 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	}
 
 	fnLiteral += `
-		getPath.lastIndex = 11
 		const { url, method } = request,
-			path = getPath.exec(url)?.[0] ?? '/'
-
-		ctx.query = getPath.lastIndex
+			s = url.indexOf('/', 12)
+			ctx.query = i = url.indexOf('?', s),
+			path = i === -1 ? url.substring(s) : url.substring(s, i)
 
 		switch(path) {
 			${switchMap}

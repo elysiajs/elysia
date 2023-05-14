@@ -1,4 +1,5 @@
 import type { ServerWebSocket, WebSocketHandler } from 'bun'
+import type { TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 import type { ElysiaWS } from '.'
@@ -11,15 +12,14 @@ import type {
 	ExtractPath,
 	WithArray,
 	NoReturnHandler,
-	HookHandler,
-	BodyParser
+	HookHandler
 } from '../types'
 
 export type WSTypedSchema<ModelName extends string = string> = Omit<
 	TypedSchema<ModelName>,
 	'response'
 > & {
-	response?: TypedSchema<ModelName>['body']
+	response?: TSchema | ModelName
 }
 
 export type TypedWSSchemaToRoute<
@@ -145,9 +145,8 @@ export type ElysiaWSOptions<
 		Schema,
 		Definitions
 	> extends infer WS
-	? {
-			schema?: Schema
-			parse?: WithArray<BodyParser[]>
+	? Partial<Schema> & {
+			// parse?: WithArray<BodyParser>
 			beforeHandle?: WithArray<HookHandler<Schema>>
 			transform?: WithArray<NoReturnHandler<TypedWSSchemaToRoute<Schema>>>
 			transformMessage?: WithArray<
@@ -157,7 +156,7 @@ export type ElysiaWSOptions<
 			/**
 			 * Headers to register to websocket before `upgrade`
 			 */
-			headers?: HeadersInit | WebSocketHeaderHandler<Schema>
+			upgrade?: HeadersInit | WebSocketHeaderHandler<Schema>
 
 			/**
 			 * The {@link ServerWebSocket} has been opened
@@ -176,7 +175,7 @@ export type ElysiaWSOptions<
 			 */
 			message?: (
 				ws: WS,
-				message: UnwrapSchema<Schema['body'], Definitions>,
+				message: UnwrapSchema<Schema['body'], Definitions>
 			) => any
 
 			/**
@@ -199,3 +198,13 @@ export type ElysiaWSOptions<
 			drain?: (ws: WS) => void | Promise<void>
 	  }
 	: never
+
+type Merge<A, B> = {
+	[K in keyof A | keyof B]: K extends keyof A & keyof B
+		? A[K] | B[K]
+		: K extends keyof B
+		? B[K]
+		: K extends keyof A
+		? A[K]
+		: never
+}
