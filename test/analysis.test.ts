@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post } from './utils'
+import { post, req } from './utils'
 import { findElysiaMeta } from '../src/compose'
 
 const payload = { hello: 'world' }
@@ -151,5 +151,21 @@ describe('Static code analysis', () => {
 		})
 
 		expect(findElysiaMeta('Numeric', schema)).toBeNull()
+	})
+
+	it('restart server once analyze', async () => {
+		const plugin = async () => {
+			await new Promise((resolve) => setTimeout(resolve, 1))
+
+			return (app: Elysia) => app.get('/', () => 'hi')
+		}
+
+		const app = new Elysia().use(plugin())
+
+		await new Promise((resolve) => setTimeout(resolve, 25))
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toBe('hi')
 	})
 })

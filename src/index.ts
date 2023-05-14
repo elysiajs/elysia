@@ -2580,6 +2580,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	compile() {
 		this.fetch = composeGeneralHandler(this)
 
+		if (this.server)
+			this.server.reload({
+				...this.server,
+				fetch: this.fetch
+			})
+
 		return this
 	}
 

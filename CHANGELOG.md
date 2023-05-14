@@ -1,6 +1,10 @@
-# 0.5.0-exp.0 - x Apr 2023
+# 0.5.0-beta.2 - 14 May 2023
 Improvement:
-- conditional literal fn for checking onRequest iteration
+- Re-compile on lazy modules
+
+# 0.5.0-beta.1 - 14 May 2023
+Improvement:
+- Merge nested schema type
 
 # 0.4.14 - 2 May 2023
 Fix:
