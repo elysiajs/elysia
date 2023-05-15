@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.4.15",
+  "version": "0.5.0",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -11,66 +11,76 @@
   "exports": {
     ".": {
       "bun": "./dist/index.js",
+      "require": "./dist/cjs/index.js",
       "import": "./dist/index.js",
       "default": "./dist/index.js",
       "node": "./dist/index.js"
     },
     "./ws": {
       "bun": "./dist/ws/index.js",
+      "require": "./dist/cjs/ws/index.js",
       "import": "./dist/ws/index.js",
       "default": "./dist/ws/index.js",
       "node": "./dist/ws/index.js"
     },
     "./context": {
-      "bun": "./dist/ws/context.js",
-      "import": "./dist/ws/context.js",
-      "default": "./dist/ws/context.js",
-      "node": "./dist/ws/context.js"
+      "bun": "./dist/context.js",
+      "require": "./dist/cjs/context.js",
+      "import": "./dist/context.js",
+      "default": "./dist/context.js",
+      "node": "./dist/context.js"
+    },
+    "./compose": {
+      "bun": "./dist/compose.js",
+      "require": "./dist/cjs/compose.js",
+      "import": "./dist/compose.js",
+      "default": "./dist/compose.js",
+      "node": "./dist/compose.js"
     },
     "./custom-types": {
       "bun": "./dist/custom-types.js",
+      "require": "./dist/custom-types.js",
       "import": "./dist/custom-types.js",
       "default": "./dist/custom-types.js",
       "node": "./dist/custom-types.js"
     },
     "./error": {
       "bun": "./dist/error.js",
+      "require": "./dist/cjs/error.js",
       "import": "./dist/error.js",
       "default": "./dist/error.js",
       "node": "./dist/error.js"
     },
-    "./fn": {
-      "bun": "./dist/fn.js",
-      "import": "./dist/fn.js",
-      "default": "./dist/fn.js",
-      "node": "./dist/fn.js"
-    },
     "./handler": {
       "bun": "./dist/handler.js",
+      "require": "./dist/cjs/handler.js",
       "import": "./dist/handler.js",
       "default": "./dist/handler.js",
       "node": "./dist/handler.js"
     },
     "./schema": {
       "bun": "./dist/schema.js",
+      "require": "./dist/cjs/schema.js",
       "import": "./dist/schema.js",
       "default": "./dist/schema.js",
       "node": "./dist/schema.js"
     },
     "./types": {
       "bun": "./dist/types.js",
+      "require": "./dist/cjs/types.js",
       "import": "./dist/types.js",
       "default": "./dist/types.js",
       "node": "./dist/types.js"
     },
     "./utils": {
       "bun": "./dist/utils.js",
+      "require": "./dist/cjs/utils.js",
       "import": "./dist/utils.js",
       "default": "./dist/utils.js",
       "node": "./dist/utils.js"
     }
   },
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/elysiajs/elysia"
@@ -85,22 +95,25 @@
   ],
   "license": "MIT",
   "scripts": {
-    "test": "bun test",
+    "test": "npm run test:functionality && npm run test:types",
+    "test:functionality": "bun test",
+    "test:types": "tsc --project tsconfig.test.json",
     "dev": "bun run --hot example/http.ts",
-    "build": "rimraf dist && swc src -d dist && tsc --project tsconfig.esm.json",
-    "release": "npm run release:test && npm run release:github && npm publish",
+    "build": "rimraf dist && npm run build:esm && npm run build:cjs",
+    "build:esm": "swc src --config-file .swc.esm.swcrc -d dist && tsc --project tsconfig.esm.json",
+    "build:cjs": "swc src --config-file .swc.cjs.swcrc -d dist/cjs && tsc --project tsconfig.cjs.json",
+    "release": "npm run release:test && npm run release:github",
     "release:test": "npm run build && npm run test",
-    "release:github": "bunx bumpp package.json --commit --push --tag",
-    "release:npm": "npm run build && npm run test && npm publish"
+    "release:github": "bumpp package.json --commit --push --tag",
+    "release:local": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "@sinclair/typebox": "0.26.8",
+    "@sinclair/typebox": "^0.28.10",
     "@types/lodash.clonedeep": "^4.5.7",
     "fast-querystring": "^1.1.1",
     "lodash.clonedeep": "^4.5.0",
-    "nanoid": "^4.0.1",
-    "openapi-types": "^12.1.0",
-    "raikiri": "0.1.3"
+    "memoirist": "0.1.3",
+    "openapi-types": "^12.1.0"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.62",
@@ -111,12 +124,14 @@
     "bumpp": "^9.1.0",
     "bun-types": "^0.5.8",
     "eslint": "^8.36.0",
+    "expect-type": "^0.15.0",
     "rimraf": "^3.0.2",
     "typescript": "^5.0.2"
   },
   "peerDependencies": {
     "@sinclair/typebox": ">= 0.26.0",
-    "openapi-types": ">= 12.0.0"
+    "openapi-types": ">= 12.0.0",
+    "typescript": ">= 5.0.0"
   },
   "peerDependenciesMeta": {
     "@elysiajs/fn": {
@@ -126,6 +141,9 @@
       "optional": true
     },
     "openapi-types": {
+      "optional": true
+    },
+    "typescript": {
       "optional": true
     }
   }

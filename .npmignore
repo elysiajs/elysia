@@ -1,12 +1,12 @@
 .git
 .gitignore
+.github
 .prettierrc
 .eslintrc.js
-.cjs.swcrc
-.esm.swcrc
+.swc.cjs.swcrc
+.swc.esm.swcrc
 .swcrc
 .husky
-.github
 
 bun.lockb
 node_modules
@@ -16,11 +16,12 @@ CHANGELOG.md
 example
 tests
 docs
-# src
+src
 .DS_Store
 test
 tsconfig.cjs.json
 tsconfig.esm.json
+tsconfig.test.json
 
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md

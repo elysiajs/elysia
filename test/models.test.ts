@@ -6,14 +6,18 @@ import { req } from './utils'
 describe('Models', () => {
 	it('register models', async () => {
 		const app = new Elysia()
-			.setModel({
+			.model({
 				string: t.String(),
 				number: t.Number()
 			})
-			.setModel({
+			.model({
 				boolean: t.Boolean()
 			})
-			.get('/', (context) => Object.keys(context[DEFS]))
+			.route('GET', '/', (context) => Object.keys(context[DEFS]!), {
+				config: {
+					allowMeta: true
+				}
+			})
 
 		const res = await app.handle(req('/')).then((r) => r.json())
 
@@ -22,7 +26,7 @@ describe('Models', () => {
 
 	// it('map model parameters as OpenAPI schema', async () => {
 	// 	const app = new Elysia()
-	// 		.setModel({
+	// 		.model({
 	// 			number: t.Number(),
 	// 			string: t.String(),
 	// 			boolean: t.Boolean(),
@@ -105,7 +109,7 @@ describe('Models', () => {
 
 	// it('map model and inline parameters as OpenAPI schema', async () => {
 	// 	const app = new Elysia()
-	// 		.setModel({
+	// 		.model({
 	// 			number: t.Number(),
 	// 			string: t.String(),
 	// 			boolean: t.Boolean(),
@@ -197,7 +201,7 @@ describe('Models', () => {
 
 	// it('map model and inline response as OpenAPI schema', async () => {
 	// 	const app = new Elysia()
-	// 		.setModel({
+	// 		.model({
 	// 			number: t.Number(),
 	// 			string: t.String(),
 	// 			boolean: t.Boolean(),
@@ -243,7 +247,7 @@ describe('Models', () => {
 
 	// it('map model default response', async () => {
 	// 	const app = new Elysia()
-	// 		.setModel({
+	// 		.model({
 	// 			number: t.Number(),
 	// 			string: t.String(),
 	// 			boolean: t.Boolean(),
@@ -281,16 +285,14 @@ describe('Models', () => {
 
 	it('validate reference model', async () => {
 		const app = new Elysia()
-			.setModel({
+			.model({
 				number: t.Number()
 			})
 			.post('/', ({ body: { data } }) => data, {
-				schema: {
-					response: 'number',
-					body: t.Object({
-						data: t.Number()
-					}),
-				}
+				response: 'number',
+				body: t.Object({
+					data: t.Number()
+				})
 			})
 
 		const correct = await app.handle(

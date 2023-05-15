@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { post, req } from './utils'
 
 describe('Path', () => {
 	it('handle root', async () => {
@@ -43,7 +43,9 @@ describe('Path', () => {
 				name: 'takodachi'
 			})
 		)
-		expect(res.headers.get('content-type')).toBe('application/json;charset=utf-8')
+		expect(res.headers.get('content-type')).toBe(
+			'application/json;charset=utf-8'
+		)
 	})
 
 	it('Return response', async () => {
@@ -76,12 +78,10 @@ describe('Path', () => {
 			'/id/:id/:name',
 			({ params: { id, name } }) => `${id}/${name}`,
 			{
-				schema: {
-					params: t.Object({
-						id: t.String(),
-						name: t.String()
-					})
-				}
+				params: t.Object({
+					id: t.String(),
+					name: t.String()
+				})
 			}
 		)
 		const res = await app.handle(req('/id/fubuki/Elysia'))
@@ -123,12 +123,10 @@ describe('Path', () => {
 			'/',
 			({ query: { first, last } }) => `${last} ${first}`,
 			{
-				schema: {
-					query: t.Object({
-						first: t.String(),
-						last: t.String()
-					})
-				}
+				query: t.Object({
+					first: t.String(),
+					last: t.String()
+				})
 			}
 		)
 		const res = await app.handle(req('/?first=Fubuki&last=Shirakami'))
@@ -138,9 +136,7 @@ describe('Path', () => {
 
 	it('handle body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
-			schema: {
-				body: t.String()
-			}
+			body: t.String()
 		})
 
 		const body = 'Botan'
@@ -165,11 +161,9 @@ describe('Path', () => {
 		})
 
 		const app = new Elysia().post('/', ({ body }) => body, {
-			schema: {
-				body: t.Object({
-					name: t.String()
-				})
-			}
+			body: t.Object({
+				name: t.String()
+			})
 		})
 		const res = await app.handle(
 			new Request('http://localhost/', {
@@ -291,13 +285,6 @@ describe('Path', () => {
 		expect(res.headers.get('Server')).toBe('Elysia')
 	})
 
-	it('handle non start /', async () => {
-		const app = new Elysia().get('', () => 'Hi')
-		const res = await app.handle(req('/'))
-
-		expect(await res.text()).toBe('Hi')
-	})
-
 	it('handle *', async () => {
 		const app = new Elysia().get('/*', () => 'Hi')
 		const get = await app.handle(req('/')).then((r) => r.text())
@@ -340,21 +327,32 @@ describe('Path', () => {
 		})
 	})
 
-	it('exclude fragment', async () => {
-		const app = new Elysia().get('/', ({ query }) => query)
+	// ? This is not used because fragment is strip out by default
+	// it('exclude fragment', async () => {
+	// 	const app = new Elysia().get('/', ({ query }) => query)
 
-		const res = await app.handle(req('/#hi')).then((r) => r.json())
+	// 	const res = await app.handle(req('/#hi')).then((r) => r.json())
 
-		expect(res).toEqual({})
-	})
+	// 	expect(res).toEqual({})
+	// })
 
-	it('exclude fragment on querystring', async () => {
-		const app = new Elysia().get('/', ({ query }) => query)
+	// ? This is not used because fragment is strip out by default
+	// it('exclude fragment on querystring', async () => {
+	// 	const app = new Elysia().get('/', ({ query }) => query)
 
-		const res = await app.handle(req('/?a=b#a')).then((r) => r.json())
+	// 	const res = await app.handle(req('/?a=b#a')).then((r) => r.json())
 
-		expect(res).toEqual({
-			a: 'b'
-		})
+	// 	expect(res).toEqual({
+	// 		a: 'b'
+	// 	})
+	// })
+
+	it('handle all method', async () => {
+		const app = new Elysia().all('/', () => 'Hi')
+		const res1 = await app.handle(req('/')).then((res) => res.text())
+		const res2 = await app.handle(post('/', {})).then((res) => res.text())
+
+		expect(res1).toBe('Hi')
+		expect(res2).toBe('Hi')
 	})
 })

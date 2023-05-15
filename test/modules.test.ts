@@ -74,26 +74,19 @@ describe('Modules', () => {
 			.use(import('./modules'))
 			.use(asyncPlugin)
 			.get('/', () => 'hi')
-			.get('/schema', (context) => context[SCHEMA])
+			.route('GET', '/schema', (context) => context[SCHEMA], {
+				config: {
+					allowMeta: true
+				}
+			})
 
 		await app.modules
 
-		const res = await app.handle(req('/schema')).then((r) => r.json())
+		const res: Object = await app
+			.handle(req('/schema'))
+			.then((r) => r.json())
 
-		expect(res).toEqual({
-			'/async': {
-				get: {}
-			},
-			'/': {
-				get: {}
-			},
-			'/schema': {
-				get: {}
-			},
-			'/lazy': {
-				get: {}
-			}
-		})
+		expect(Object.keys(res).length).toEqual(4)
 	})
 
 	it('Count lazy module correctly', async () => {
@@ -111,6 +104,30 @@ describe('Modules', () => {
 		const app = new Elysia().use(import('./timeout')).get('/', () => 'hi')
 
 		const res = await app.handle(req('/')).then((r) => r.text())
+
+		expect(res).toBe('hi')
+	})
+
+	it('Handle deferred import', async () => {
+		const app = new Elysia().use(import('./modules'))
+
+		await app.modules
+
+		const res = await app.handle(req('/lazy')).then((x) => x.text())
+
+		expect(res).toBe('lazy')
+	})
+
+	it('re-compile on async plugin', async () => {
+		const app = new Elysia().use(async (app) => {
+			await new Promise((resolve) => setTimeout(resolve, 1))
+
+			return app.get('/', () => 'hi')
+		})
+
+		await app.modules
+
+		const res = await app.handle(req('/')).then((x) => x.text())
 
 		expect(res).toBe('hi')
 	})

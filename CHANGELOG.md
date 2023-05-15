@@ -1,3 +1,81 @@
+# 0.5.0 - 15 May 2023
+Improvement:
+- Add CommonJS support for running Elysia with Node adapter
+- Remove manual fragment mapping to speed up path extraction
+- Inline validator in `composeHandler` to improve performance
+- Use one time context assignment
+- Add support for lazy context injection via Static Code Analysis
+- Ensure response non nullability
+- Add unioned body validator check
+- Set default object handler to inherits
+- Using `constructor.name` mapping instead of `instanceof` to improve speed
+- Add dedicated error constructor to improve performance
+- Conditional literal fn for checking onRequest iteration
+- improve WebSocket type
+
+Bug fix:
+- Possible 
+
+Breaking Change:
+- Rename `innerHandle` to `fetch`
+    - to migrate: rename `.innerHandle` to `fetch`
+- Rename `.setModel` to `.model`
+    - to migrate: rename `setModel` to `model`
+- Remove `hook.schema` to `hook`
+    - to migrate: remove schema and curly brace `schema.type`:
+    ```ts
+    // from
+    app.post('/', ({ body }) => body, {
+        schema: {
+            body: t.Object({
+                username: t.String()
+            })
+        }
+    })
+
+    // to
+    app.post('/', ({ body }) => body, {
+        body: t.Object({
+            username: t.String()
+        })
+    })
+    ```
+- remove `mapPathnameRegex` (internal)
+
+# 0.5.0-beta.8 - 15 May 2023
+Bug fix:
+- it recompile on async
+
+# 0.5.0-beta.7 15 May 2023
+Bug fix:
+- detect promise on parse
+- using swc to compile to commonjs
+
+# 0.5.0-beta.6 - 15 May 2023
+Improvement:
+- Improve merge schema type
+
+# 0.5.0-beta.5 - 15 May 2023
+Bug fix:
+- Add support for ALL method for dynamic path 
+- Add support for parser in pre-compiled body
+
+# 0.5.0-beta.4 - 15 May 2023
+Bug fix:
+- Use Memoirist instead of Raikiri in ws
+
+# 0.5.0-beta.3 - 15 May 2023
+Improvement:
+- Static Code Analysis on derive
+
+# 0.5.0-beta.2 - 14 May 2023
+Improvement:
+- Re-compile on lazy modules
+
+# 0.5.0-beta.1 - 14 May 2023
+Improvement:
+- Merge nested schema type
+
 # 0.4.14 - 2 May 2023
 Fix:
 - set default object handler to inherits
@@ -298,7 +376,7 @@ Improvement:
 
 # 0.2.0-rc.0 - 23 Jan 2023
 Feature:
-- Add support for reference model via `.setModel`
+- Add support for reference model via `.model`
 - Add support for OpenAPI's `definitions` field
 
 # 0.2.0-beta.2 - 22 Jan 2023

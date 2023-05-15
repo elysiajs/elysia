@@ -55,7 +55,7 @@ export const mapEarlyResponse = (
 					case 'Object':
 					case 'Array':
 					case undefined:
-						return new Response(JSON.stringify(response), {
+						return Response.json(response, {
 							status: set.status,
 							headers: set.headers
 						})
@@ -203,7 +203,7 @@ export const mapResponse = (
 					case 'Object':
 					case 'Array':
 					case undefined:
-						return new Response(JSON.stringify(response), {
+						return Response.json(response, {
 							status: set.status,
 							headers: set.headers
 						})

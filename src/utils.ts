@@ -1,6 +1,5 @@
 import { Kind, TSchema } from '@sinclair/typebox'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
-import { ValidationError } from './validation'
 import type {
 	DeepMergeTwoTypes,
 	LifeCycleStore,
@@ -20,30 +19,27 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 ]
 
 export const mergeHook = (
-	a: LocalHook<any> | LifeCycleStore<any>,
-	b: LocalHook<any>
+	a: LocalHook<any, any> | LifeCycleStore<any>,
+	b: LocalHook<any, any>
 ): RegisteredHook<any> => {
-	const aSchema = 'schema' in a ? (a.schema as TypedSchema) : null
-	const bSchema = b && 'schema' in b ? b.schema : null
-
 	return {
-		schema:
-			aSchema || bSchema
-				? ({
-						// Merge local hook first
-						body: bSchema?.body ?? aSchema?.body,
-						header: bSchema?.headers ?? aSchema?.headers,
-						params: bSchema?.params ?? aSchema?.params,
-						query: bSchema?.query ?? aSchema?.query,
-						response: bSchema?.response ?? aSchema?.response,
-						detail: mergeDeep(
-							// @ts-ignore
-							bSchema?.detail ?? {},
-							// @ts-ignore
-							aSchema?.detail ?? {}
-						)
-				  } as TypedSchema)
-				: undefined,
+		// Merge local hook first
+		// @ts-ignore
+		body: b?.body ?? a?.body,
+		// @ts-ignore
+		headers: b?.headers ?? a?.headers,
+		// @ts-ignore
+		params: b?.params ?? a?.params,
+		// @ts-ignore
+		query: b?.query ?? a?.query,
+		// @ts-ignore
+		response: b?.response ?? a?.response,
+		detail: mergeDeep(
+			// @ts-ignore
+			b?.detail ?? {},
+			// @ts-ignore
+			a?.detail ?? {}
+		),
 		transform: mergeObjectArray(
 			a.transform ?? [],
 			b?.transform ?? []
@@ -57,14 +53,10 @@ export const mergeHook = (
 			a.afterHandle ?? [],
 			b?.afterHandle ?? []
 		),
-		error: mergeObjectArray(a.error ?? [], b?.error ?? [])
+		error: mergeObjectArray(a.error ?? [], b?.error ?? []),
+		type: a?.type || b?.type
 	}
 }
-
-export const clone = <T extends Object | any[] = Object | any[]>(value: T): T =>
-	[value][0]
-
-export const mapPathnameAndQueryRegEx = /:\/\/[^/]+([^#?]+)(?:\?([^#]+))?/
 
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
@@ -92,24 +84,6 @@ export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
 	}
 
 	return output as DeepMergeTwoTypes<A, B>
-}
-
-export const createValidationError = (
-	type: string,
-	validator: TypeCheck<any>,
-	value: any
-) => {
-	const error = validator.Errors(value).First()
-	const cause = `Invalid ${type}: '${error?.path?.slice(1) || 'root'}'. ${
-		error?.message
-	}`
-
-	return new ValidationError({
-		cause,
-		type,
-		validator,
-		value
-	})
 }
 
 export const getSchemaValidator = (

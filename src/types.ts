@@ -1,5 +1,12 @@
-import type { Elysia, ValidationError } from '.'
 import type { Serve, Server } from 'bun'
+
+import type { Elysia } from '.'
+import {
+	ParseError,
+	NotFoundError,
+	ValidationError,
+	InternalServerError
+} from './error'
 
 import type { Static, TObject, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
@@ -22,9 +29,15 @@ export type ElysiaInstance<
 	Instance extends {
 		store?: Record<string, unknown>
 		request?: Record<string, unknown>
-		schema?: TypedSchema
+		schema?: {
+			body?: TSchema
+			headers?: TObject
+			query?: TObject
+			params?: TObject
+			response?: Record<string, TSchema>
+		}
 		meta?: Record<typeof SCHEMA, Partial<OpenAPIV3.PathsObject>> &
-			Record<typeof DEFS, Record<string, TSchema>> &
+			Record<typeof DEFS, Record<string, unknown>> &
 			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
 	} = {
 		store: {}
@@ -42,16 +55,15 @@ export type ElysiaInstance<
 }
 
 export type Handler<
-	Route extends OverwritableTypeRoute,
-	Instance extends ElysiaInstance = ElysiaInstance,
-	CatchResponse = unknown
+	Route extends TypedRoute,
+	Instance extends ElysiaInstance
 > = (
 	context: Context<Route, Instance['store']> & Instance['request']
-) => IsUnknown<Route['response']> extends true
-	? Response | MaybePromise<CatchResponse>
-	: Route['response'] extends TSchema
-	? Response | MaybePromise<UnwrapSchema<Route['response']>>
-	: Response | MaybePromise<Route['response']>
+) => IsUnknown<Route['response']> extends false
+	? Route['response'] extends { 200: unknown }
+		? Response | MaybePromise<Route['response'][keyof Route['response']]>
+		: Response | MaybePromise<Route['response']>
+	: Response | MaybePromise<unknown>
 
 export type NoReturnHandler<
 	Route extends TypedRoute = TypedRoute,
@@ -108,6 +120,7 @@ export type AfterRequestHandler<
 export interface LifeCycleStore<
 	Instance extends ElysiaInstance = ElysiaInstance
 > {
+	type?: ContentType
 	start: VoidLifeCycle<Instance>[]
 	request: BeforeRequestHandler<any, Instance>[]
 	parse: BodyParser<any, Instance>[]
@@ -126,6 +139,7 @@ export type BeforeRequestHandler<
 export interface RegisteredHook<
 	Instance extends ElysiaInstance = ElysiaInstance
 > {
+	type?: ContentType
 	schema?: TypedSchema
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
@@ -151,9 +165,9 @@ export type UnwrapSchema<
 	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
 	Fallback = unknown
 > = Schema extends string
-	? Definitions extends Record<Schema, infer NamedSchema extends TSchema>
-		? Static<NamedSchema>
-		: Fallback
+	? Definitions extends Record<Schema, infer NamedSchema>
+		? NamedSchema
+		: Definitions
 	: Schema extends TSchema
 	? Static<NonNullable<Schema>>
 	: Fallback
@@ -215,124 +229,122 @@ export type HookHandler<
 		Instance['meta'][typeof DEFS]
 	>
 > = Handler<
-	Typed['params'] extends {}
-		? Omit<Typed, 'response'> & {
-				response: void | Typed['response']
+	Typed extends {
+		body: infer Body
+		headers: infer Headers
+		query: infer Query
+		params: infer Params
+		response: infer Response
+	}
+		? {
+				body: Body
+				headers: Headers
+				query: Query
+				params: Params extends undefined
+					? Record<ExtractPath<Path>, string>
+					: Params
+				response: Response | void
 		  }
-		: Omit<
-				Omit<Typed, 'response'> & {
-					response: void | Typed['response']
-				},
-				'params'
-		  > & {
-				params: Record<ExtractPath<Path>, string>
-		  },
+		: Typed,
 	Instance
 >
 
+type NotUndefined<T> = undefined extends T ? false : true
+
 export type MergeIfNotNull<A, B> = B extends null ? A : A & B
 export type UnknownFallback<A, B> = unknown extends A ? B : A
-export type PickInOrder<A, B> = A extends NonNullable<A> ? A : B
-export type MergeSchema<
-	A extends TypedSchema<any>,
-	B extends TypedSchema<any>
-> = {
-	body: PickInOrder<PickInOrder<A['body'], B['body']>, undefined>
-	headers: PickInOrder<PickInOrder<A['headers'], B['headers']>, undefined>
-	query: PickInOrder<PickInOrder<A['query'], B['query']>, undefined>
-	params: PickInOrder<PickInOrder<A['params'], B['params']>, undefined>
-	response: PickInOrder<PickInOrder<A['response'], B['response']>, undefined>
+export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
+	body: NotUndefined<A['body']> extends true
+		? A['body']
+		: NotUndefined<B['body']> extends true
+		? B['body']
+		: undefined
+	headers: NotUndefined<A['headers']> extends true
+		? A['headers']
+		: NotUndefined<B['headers']> extends true
+		? B['headers']
+		: undefined
+	query: NotUndefined<A['query']> extends true
+		? A['query']
+		: NotUndefined<B['query']> extends true
+		? B['query']
+		: undefined
+	params: NotUndefined<A['params']> extends true
+		? A['params']
+		: NotUndefined<B['params']> extends true
+		? B['params']
+		: undefined
+	response: NotUndefined<A['response']> extends true
+		? A['response']
+		: NotUndefined<B['response']> extends true
+		? B['response']
+		: undefined
 }
 
 type MaybeArray<T> = T | T[]
 
-type ExtractModelName<Type> = Type extends TypedSchema<infer X> ? X : never
-
 type ContentType = MaybeArray<
 	| (string & {})
+	// Shorthand for 'text/plain'
+	| 'text'
+	// Shorthand for 'application/json'
+	| 'json'
+	// Shorthand for 'multipart/form-data'
+	| 'formdata'
+	// Shorthand for 'application/x-www-form-urlencoded'\
+	| 'urlencoded'
 	| 'text/plain'
 	| 'application/json'
 	| 'multipart/form-data'
 	| 'application/x-www-form-urlencoded'
 >
 
-export interface LocalHook<
-	Schema extends TypedSchema = TypedSchema,
-	Instance extends ElysiaInstance<any> = ElysiaInstance,
-	Path extends string = string,
-	FinalSchema extends MergeSchema<Schema, Instance['schema']> = MergeSchema<
-		Schema,
-		Instance['schema']
-	>,
-	Models extends TypedSchema = TypedSchema<ExtractModelName<Schema>>
-> {
-	// ? I have no idea why does this infer type, but it work anyway
-	schema?: (Models extends Schema ? Models : Models) & {
-		contentType?: ContentType
-		detail?: Partial<OpenAPIV3.OperationObject>
-	}
-	parse?: WithArray<BodyParser[]>
-	transform?: WithArray<HookHandler<FinalSchema, Instance, Path>>
-	beforeHandle?: WithArray<HookHandler<FinalSchema, Instance, Path>>
-	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
-	error?: WithArray<ErrorHandler>
-}
-
-export type RouteToSchema<
+export type LocalHook<
 	Schema extends TypedSchema,
-	InstanceSchema extends ElysiaInstance['schema'],
-	Definitions extends ElysiaInstance['meta'][typeof DEFS],
+	Instance extends ElysiaInstance<any>,
 	Path extends string = string
-> = MergeSchema<Schema, InstanceSchema> extends infer Typed extends TypedSchema
-	? undefined extends Typed['params']
-		? Omit<TypedSchemaToRoute<Typed, Definitions>, 'params'> & {
-				params: Record<ExtractPath<Path>, string>
-		  }
-		: TypedSchemaToRoute<Typed, Definitions>
-	: never
-
-export type MergeUnionObjects<T> = {} & { [P in keyof T]: T[P] }
-
-export type TypedRouteToEden<
-	Schema extends TypedSchema = TypedSchema,
-	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
-	Path extends string = string,
-	Catch = unknown
-> = {
-	body: UnwrapSchema<Schema['body'], Definitions>
-	headers: UnwrapSchema<
-		Schema['headers'],
-		Definitions
-	> extends infer Result extends Record<string, any>
-		? Result
-		: undefined
-	query: UnwrapSchema<
-		Schema['query'],
-		Definitions
-	> extends infer Result extends Record<string, any>
-		? Result
-		: undefined
-	params: UnwrapSchema<
-		Schema['params'],
-		Definitions
-	> extends infer Result extends Record<string, any>
-		? Result
-		: Record<ExtractPath<Path>, string>
-	response: Schema['response'] extends TSchema | string
-		? {
-				'200': UnwrapSchema<Schema['response'], Definitions, Catch>
-		  }
-		: Schema['response'] extends {
-				[x in string]: TSchema | string
-		  }
-		? {
-				[key in keyof Schema['response']]: UnwrapSchema<
-					Schema['response'][key],
-					Definitions,
-					Catch
-				>
-		  }
-		: Catch
+> = Partial<Schema> & {
+	type?: ContentType
+	detail?: Partial<OpenAPIV3.OperationObject>
+	/**
+	 * Transform context's value
+	 *
+	 * ---
+	 * Lifecycle:
+	 *
+	 * __transform__ -> beforeHandle -> handler -> afterHandle
+	 */
+	transform?: WithArray<
+		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
+	>
+	/**
+	 * Execute before main handler
+	 *
+	 * ---
+	 * Lifecycle:
+	 *
+	 * transform -> __beforeHandle__ -> handler -> afterHandle
+	 */
+	beforeHandle?: WithArray<
+		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
+	>
+	/**
+	 * Execute after main handler
+	 *
+	 * ---
+	 * Lifecycle:
+	 *
+	 * transform -> beforeHandle -> handler -> __afterHandle__
+	 */
+	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
+	/**
+	 * Catch error
+	 */
+	error?: WithArray<ErrorHandler>
+	/**
+	 * Custom body parser
+	 */
+	parse?: WithArray<BodyParser>
 }
 
 export type TypedWSRouteToEden<
@@ -399,17 +411,32 @@ export type TypedSchemaToEden<
 export type LocalHandler<
 	Schema extends TypedSchema,
 	Instance extends ElysiaInstance,
-	Path extends string = string,
-	CatchResponse = unknown
+	Path extends string = string
 > = Handler<
-	RouteToSchema<
+	MergeSchema<
 		Schema,
-		Instance['schema'],
-		Instance['meta'][typeof DEFS],
-		Path
-	>,
-	Instance,
-	CatchResponse
+		Instance['schema']
+	> extends infer Typed extends TypedSchema<any>
+		? TypedSchemaToRoute<Typed, Instance['meta'][typeof DEFS]> extends {
+				body: infer Body
+				params: infer Params
+				query: infer Query
+				headers: infer Headers
+				response: infer Response
+		  }
+			? {
+					body: Body
+					params: Params extends undefined
+						? Record<ExtractPath<Path>, string>
+						: Params
+					query: Query
+					headers: Headers
+					response: Response
+			  }
+			: // It's impossible to land here
+			  any
+		: never,
+	Instance
 >
 
 export interface TypedRoute {
@@ -447,7 +474,7 @@ export interface InternalRoute<Instance extends ElysiaInstance> {
 	method: HTTPMethod
 	path: string
 	handler: Handler<any, Instance>
-	hooks: LocalHook<any>
+	hooks: LocalHook<any, any, string>
 }
 
 export type HTTPMethod =
@@ -495,6 +522,8 @@ export type ErrorCode =
 	| 'INTERNAL_SERVER_ERROR'
 	// ? Validation error
 	| 'VALIDATION'
+	// ? Body parsing error
+	| 'PARSE'
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
@@ -502,17 +531,37 @@ export type ErrorHandler = (
 	params:
 		| {
 				request: Request
-				code: 'NOT_FOUND' | 'INTERNAL_SERVER_ERROR' | 'UNKNOWN'
-				error: Error
+				code: 'UNKNOWN'
+				error: Readonly<Error>
 				set: Context['set']
 		  }
 		| {
 				request: Request
 				code: 'VALIDATION'
-				error: ValidationError
+				error: Readonly<ValidationError>
+				set: Context['set']
+		  }
+		| {
+				request: Request
+				code: 'NOT_FOUND'
+				error: Readonly<NotFoundError>
+				set: Context['set']
+		  }
+		| {
+				request: Request
+				code: 'PARSE'
+				error: Readonly<ParseError>
+				set: Context['set']
+		  }
+		| {
+				request: Request
+				code: 'INTERNAL_SERVER_ERROR'
+				error: Readonly<InternalServerError>
 				set: Context['set']
 		  }
 ) => any | Promise<any>
+
+export type DeepWritable<T> = { -readonly [P in keyof T]: DeepWritable<T[P]> }
 
 // ? From https://dev.to/svehla/typescript-how-to-deep-merge-170c
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

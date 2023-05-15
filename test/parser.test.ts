@@ -116,4 +116,26 @@ describe('Parser', () => {
 
 		expect(await res.json()).toEqual(body)
 	})
+
+	it('inline parse', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			parse({ request }) {
+				return request.text().then(() => 'hi')
+			}
+		})
+
+		const res = await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body: 'ok',
+					headers: {
+						'Content-Type': 'application/json'
+					}
+				})
+			)
+			.then((x) => x.text())
+
+		expect(res).toBe('hi')
+	})
 })

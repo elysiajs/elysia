@@ -2,20 +2,22 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../src'
 import { req } from './utils'
 
-describe('decorators', () => {
+describe('store', () => {
 	it('work', async () => {
 		const app = new Elysia()
-			.decorate('hi', () => 'hi')
-			.get('/', ({ hi }) => hi())
+			.state('hi', () => 'hi')
+			.get('/', ({ store: { hi } }) => hi())
 
 		const res = await app.handle(req('/')).then((r) => r.text())
 		expect(res).toBe('hi')
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = () => (app: Elysia) => app.decorate('hi', () => 'hi')
+		const plugin = () => (app: Elysia) => app.state('hi', () => 'hi')
 
-		const app = new Elysia().use(plugin()).get('/', ({ hi }) => hi())
+		const app = new Elysia()
+			.use(plugin())
+			.get('/', ({ store: { hi } }) => hi())
 
 		const res = await app.handle(req('/')).then((r) => r.text())
 		expect(res).toBe('hi')
@@ -23,12 +25,12 @@ describe('decorators', () => {
 
 	it('accepts any type', async () => {
 		const app = new Elysia()
-			.decorate('hi', {
+			.state('hi', {
 				there: {
 					hello: 'world'
 				}
 			})
-			.get('/', ({ hi }) => hi.there.hello)
+			.get('/', ({ store: { hi } }) => hi.there.hello)
 
 		const res = await app.handle(req('/')).then((r) => r.text())
 		expect(res).toBe('world')
@@ -36,11 +38,11 @@ describe('decorators', () => {
 
 	it('accepts multiple', async () => {
 		const app = new Elysia()
-			.decorate({
+			.state({
 				hello: 'world',
 				my: 'name'
 			})
-			.get('/', ({ hello }) => hello)
+			.get('/', ({ store: { hello } }) => hello)
 
 		const res = await app.handle(req('/')).then((r) => r.text())
 		expect(res).toBe('world')

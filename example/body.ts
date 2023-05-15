@@ -9,19 +9,16 @@ const app = new Elysia()
 		}
 	})
 	.post('/', ({ body: { username } }) => `Hi ${username}`, {
-		schema: {
 			body: t.Object({
 				id: t.Number(),
 				username: t.String()
 			})
-		}
 	})
 	// Increase id by 1 from body before main handler
 	.post('/transform', ({ body }) => body, {
 		transform: ({ body }) => {
 			body.id = body.id + 1
 		},
-		schema: {
 			body: t.Object({
 				id: t.Number(),
 				username: t.String()
@@ -29,7 +26,6 @@ const app = new Elysia()
 			detail: {
 				summary: 'A'
 			}
-		}
 	})
 	.post('/mirror', ({ body }) => body)
 	.listen(8080)

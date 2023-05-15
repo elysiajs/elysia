@@ -1,86 +1,269 @@
-import { Elysia } from '.'
+import type { Elysia } from '.'
 
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse } from './handler'
-import { createValidationError } from './utils'
-import { mapErrorCode } from './error'
+import { SCHEMA, DEFS } from './utils'
+import {
+	ParseError,
+	NotFoundError,
+	ValidationError,
+	InternalServerError
+} from './error'
 
 import type {
+	ComposedHandler,
 	HTTPMethod,
 	LocalHandler,
 	RegisteredHook,
 	SchemaValidator
 } from './types'
+import { TAnySchema } from '@sinclair/typebox'
 
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
+const _demoHeaders = new Headers()
+
+const findAliases = new RegExp(` (\\w+) = context`, 'g')
+
+export const hasReturn = (fnLiteral: string) => {
+	const parenthesisEnd = fnLiteral.indexOf(')')
+
+	// Is direct arrow function return eg. () => 1
+	if (
+		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
+		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
+	) {
+		return true
+	}
+
+	return fnLiteral.includes('return')
+}
+
+export const isFnUse = (keyword: string, fnLiteral: string) => {
+	const argument = fnLiteral.slice(
+		fnLiteral.indexOf('(') + 1,
+		fnLiteral.indexOf(')')
+	)
+
+	if (argument === '') return false
+
+	// Using object destructuring
+	if (argument.charCodeAt(0) === 123) {
+		// Since Function already format the code, styling is confirmed
+		if (
+			argument.includes(`{ ${keyword}`) ||
+			argument.includes(`, ${keyword}`)
+		)
+			return true
+
+		return false
+	}
+
+	// Match dot notation and named access
+	if (
+		fnLiteral.match(
+			new RegExp(`${argument}(.${keyword}|\\["${keyword}"\\])`)
+		)
+	) {
+		return true
+	}
+
+	const aliases = [argument]
+	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
+
+	const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
+
+	for (const [params] of fnLiteral.matchAll(destructuringRegex)) {
+		if (params.includes(`{ ${keyword}`) || params.includes(`, ${keyword}`))
+			return true
+	}
+
+	return false
+}
+
+export const findElysiaMeta = (
+	type: string,
+	schema: TAnySchema,
+	found: string[] = [],
+	parent = ''
+) => {
+	if (schema.type === 'object') {
+		const properties = schema.properties as Record<string, TAnySchema>
+		for (const key in properties) {
+			const property = properties[key]
+
+			const accessor = !parent ? key : parent + '.' + key
+
+			if (property.type === 'object') {
+				findElysiaMeta(type, property, found, accessor)
+				continue
+			} else if (property.anyOf) {
+				for (const prop of property.anyOf) {
+					findElysiaMeta(type, prop, found, accessor)
+				}
+
+				continue
+			}
+
+			if (property.elysiaMeta === type) found.push(accessor)
+		}
+
+		if (found.length === 0) return null
+
+		return found
+	} else if (schema?.elysiaMeta === type) {
+		if (parent) found.push(parent)
+
+		return 'root'
+	}
+
+	return null
+}
+
 export const composeHandler = ({
+	path,
 	method,
 	hooks,
 	validator,
 	handler,
-	handleError
+	handleError,
+	meta
 }: {
+	path: string
 	method: HTTPMethod
 	hooks: RegisteredHook<any>
 	validator: SchemaValidator
 	handler: LocalHandler<any, any>
 	handleError: Elysia['handleError']
-}) => {
+	meta?: Elysia['meta']
+}): ComposedHandler => {
 	let fnLiteral = 'try {\n'
 
+	const hasStrictContentType = typeof hooks.type === 'string'
+
+	const lifeCycleLiteral =
+		validator || method !== 'GET'
+			? [
+					handler,
+					...hooks.transform,
+					...hooks.beforeHandle,
+					...hooks.afterHandle
+			  ].map((x) => x.toString())
+			: []
+
+	const hasBody =
+		method !== 'GET' &&
+		(validator.body ||
+			hasStrictContentType ||
+			lifeCycleLiteral.some((fn) => isFnUse('body', fn)))
+
+	const hasHeaders =
+		validator.headers ||
+		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
+
+	if (hasHeaders) {
+		// This function is Bun specific
+		// @ts-ignore
+		fnLiteral += _demoHeaders.toJSON
+			? `c.headers = c.request.headers.toJSON()\n`
+			: `c.headers = {}
+                for (const key of c.request.headers.keys())
+					h[key] = c.request.headers.get(key)
+
+                if (headers.Check(h) === false) {
+                    throw throw new ValidationError(
+                        'header',
+                        headers,
+                        h
+                    )
+				}
+			`
+	}
+
+	const hasQuery =
+		validator.query || lifeCycleLiteral.some((fn) => isFnUse('query', fn))
+
+	if (hasQuery) {
+		fnLiteral += `const url = c.request.url
+
+		if(c.query !== -1) {
+			c.query = parseQuery(url.substring(c.query + 1))
+		} else {
+			c.query = {}
+		}
+		`
+	}
+
 	const maybeAsync =
-		method !== 'GET' ||
+		hasBody ||
 		handler.constructor.name === ASYNC_FN ||
 		hooks.parse.length ||
 		hooks.afterHandle.find(isAsync) ||
 		hooks.beforeHandle.find(isAsync) ||
 		hooks.transform.find(isAsync)
 
-	if (maybeAsync) {
-		fnLiteral += `
-			let contentType = c.request.headers.get('content-type');
+	if (hasBody) {
+		// @ts-ignore
+		let schema = validator?.body?.schema
 
-            if (contentType) {
-				if(contentType.indexOf(';')) {
-					const index = contentType.indexOf(';');
-					if (index !== -1) contentType = contentType.slice(0, index);
+		if (schema && 'anyOf' in schema) {
+			let foundDifference = false
+			const model = schema.anyOf[0].type
+
+			for (const validator of schema.anyOf as { type: string }[]) {
+				if (validator.type !== model) {
+					foundDifference = true
+					break
 				}
-`
-
-		if (hooks.parse.length) {
-			fnLiteral += `used = false\n`
-
-			for (let i = 0; i < hooks.parse.length; i++) {
-				const name = `bo${i}`
-
-				fnLiteral += `if(!c.request.bodyUsed) { 
-					let ${name} = parse[${i}](c, contentType);
-					if(${name} instanceof Promise) ${name} = await ${name}
-					if(${name} !== undefined) { c.body = ${name}; used = true }
-				}`
 			}
 
-			fnLiteral += `if (!used)`
+			if (foundDifference) {
+				schema = undefined
+			}
 		}
 
-		fnLiteral += `switch (contentType) {
-			case 'application/json':
-				c.body = await c.request.json()
-				break
+		if (hasStrictContentType || schema) {
+			if (hooks.parse.length) {
+				fnLiteral += hasHeaders
+					? `let contentType = c.headers['content-type']`
+					: `let contentType = c.request.headers.get('content-type')`
 
-			case 'text/plain':
-				c.body = await c.request.text()
-				break
+				fnLiteral += `
+            if (contentType) {
+				const index = contentType.indexOf(';')
+				if (index !== -1) contentType = contentType.substring(0, index)\n`
 
-			case 'application/x-www-form-urlencoded':
-				c.body = await c.request.text().then(parseQuery)
-				break
+				fnLiteral += `let used = false\n`
 
-			case 'multipart/form-data':
-				c.body = {}
+				for (let i = 0; i < hooks.parse.length; i++) {
+					const name = `bo${i}`
+
+					if (i !== 0) fnLiteral += `if(!used) {\n`
+
+					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
+					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name};`
+
+					fnLiteral += `
+						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
+
+					if (i !== 0) fnLiteral += `}`
+				}
+
+				fnLiteral += `if (!used) {`
+			}
+
+			if (schema) {
+				switch (schema.type) {
+					case 'object':
+						if (schema.elysiaMeta === 'URLEncoded') {
+							fnLiteral += `c.body = parseQuery(await c.request.text())`
+						} // Accept file which means it's formdata
+						else if (
+							validator.body!.Code().includes("custom('File")
+						)
+							fnLiteral += `c.body = {}
 
 				await c.request.formData().then((form) => {
 					for (const key of form.keys()) {
@@ -92,76 +275,274 @@ export const composeHandler = ({
 							c.body[key] = value[0]
 						else c.body[key] = value
 					}
-				})
+				})`
+						else {
+							// Since it's an object an not accepting file
+							// we can infer that it's JSON
+							fnLiteral += `c.body = JSON.parse(await c.request.text())`
+						}
+						break
+
+					default:
+						fnLiteral += 'c.body = await c.request.text()'
+						break
+				}
+			} else {
+				switch (hooks.type) {
+					case 'application/json':
+						fnLiteral += `c.body = JSON.parse(await c.request.text());`
+						break
+
+					case 'text/plain':
+						fnLiteral += `c.body = await c.request.text();`
+						break
+
+					case 'application/x-www-form-urlencoded':
+						fnLiteral += `c.body = parseQuery(await c.request.text());`
+						break
+
+					case 'multipart/form-data':
+						fnLiteral += `c.body = {}
+
+					for (const key of (await c.request.formData()).keys()) {
+						if (c.body[key])
+							continue
+
+						const value = form.getAll(key)
+						if (value.length === 1)
+							c.body[key] = value[0]
+						else c.body[key] = value
+					}`
+						break
+				}
+			}
+
+			if (hooks.parse.length) fnLiteral += '}}'
+		} else {
+			fnLiteral += '\n'
+			fnLiteral += hasHeaders
+				? `let contentType = c.headers['content-type']`
+				: `let contentType = c.request.headers.get('content-type')`
+
+			fnLiteral += `
+            if (contentType) {
+				const index = contentType.indexOf(';')
+				if (index !== -1) contentType = contentType.substring(0, index)\n`
+
+			if (hooks.parse.length) {
+				fnLiteral += `let used = false\n`
+
+				for (let i = 0; i < hooks.parse.length; i++) {
+					const name = `bo${i}`
+
+					if (i !== 0) fnLiteral += `if(!used) {\n`
+
+					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
+					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name};`
+
+					fnLiteral += `
+						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
+
+					if (i !== 0) fnLiteral += `}`
+				}
+
+				fnLiteral += `if (!used)`
+			}
+
+			fnLiteral += `switch (contentType) {
+			case 'application/json':
+				c.body = JSON.parse(await c.request.text())
+				break
+
+			case 'text/plain':
+				c.body = await c.request.text()
+				break
+
+			case 'application/x-www-form-urlencoded':
+				c.body = parseQuery(await c.request.text())
+				break
+
+			case 'multipart/form-data':
+				c.body = {}
+
+				for (const key of (await c.request.formData()).keys()) {
+					if (c.body[key])
+						continue
+
+					const value = form.getAll(key)
+					if (value.length === 1)
+						c.body[key] = value[0]
+					else c.body[key] = value
+				}
 
 				break
-		`.replace(/\t/g, '')
+			}
+		}\n`
+		}
 
-		fnLiteral += `}}\n`
+		fnLiteral += '\n'
+	}
+
+	if (validator.params) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.params.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `c.params.${property} = +c.params.${property}`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
+	}
+
+	if (validator.query) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.query.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `c.query.${property} = +c.query.${property}`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
+	}
+
+	if (validator.headers) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.headers.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `c.headers.${property} = +c.headers.${property}`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
+	}
+
+	if (validator.body) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.body.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'string':
+					fnLiteral += `c.body = +c.body`
+					break
+
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `c.body.${property} = +c.body.${property}`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
 	}
 
 	if (hooks?.transform)
 		for (let i = 0; i < hooks.transform.length; i++) {
-			fnLiteral +=
-				hooks.transform[i].constructor.name === ASYNC_FN
-					? `await transform[${i}](c);`
-					: `transform[${i}](c);`
+			const transform = hooks.transform[i]
+
+			// @ts-ignore
+			if (transform.$elysia === 'derive')
+				fnLiteral +=
+					hooks.transform[i].constructor.name === ASYNC_FN
+						? `Object.assign(c, await transform[${i}](c));`
+						: `Object.assign(c, transform[${i}](c));`
+			else
+				fnLiteral +=
+					hooks.transform[i].constructor.name === ASYNC_FN
+						? `await transform[${i}](c);`
+						: `transform[${i}](c);`
 		}
 
 	if (validator) {
 		if (validator.headers)
 			fnLiteral += `
-                const _header = {}
-                for (const key of c.request.headers.keys())
-                    _header[key] = c.request.headers.get(key)
-
-                if (headers.Check(_header) === false) {
-                    throw createValidationError(
+                if (headers.Check(c.headers) === false) {
+                    throw new ValidationError(
                         'header',
                         headers,
-                        _header
+                        c.headers
                     )
 				}
-        `.replace(/\t/g, '')
+        `
 
 		if (validator.params)
-			fnLiteral += `if(params.Check(c.params) === false) { throw createValidationError('params', params, c.params) }`
+			fnLiteral += `if(params.Check(c.params) === false) { throw new ValidationError('params', params, c.params) }`
 
 		if (validator.query)
-			fnLiteral += `if(query.Check(c.query) === false) { throw createValidationError('params', query, c.query) }`
+			fnLiteral += `if(query.Check(c.query) === false) { throw new ValidationError('query', query, c.query) }`
 
 		if (validator.body)
-			fnLiteral += `if(body.Check(c.body) === false) { throw createValidationError('body', body, c.body) }`
+			fnLiteral += `if(body.Check(c.body) === false) { throw new ValidationError('body', body, c.body) }`
 	}
 
 	if (hooks?.beforeHandle)
 		for (let i = 0; i < hooks.beforeHandle.length; i++) {
 			const name = `be${i}`
 
-			fnLiteral +=
-				hooks.beforeHandle[i].constructor.name === ASYNC_FN
-					? `let ${name} = await beforeHandle[${i}](c);\n`
-					: `let ${name} = beforeHandle[${i}](c);\n`
+			const returning = hasReturn(hooks.beforeHandle[i].toString())
 
-			fnLiteral += `if(${name} !== undefined) {\n`
-			if (hooks?.afterHandle) {
-				const beName = name
-				for (let i = 0; i < hooks.afterHandle.length; i++) {
-					const name = `af${i}`
+			if (!returning) {
+				fnLiteral +=
+					hooks.beforeHandle[i].constructor.name === ASYNC_FN
+						? `await beforeHandle[${i}](c);\n`
+						: `beforeHandle[${i}](c);\n`
+			} else {
+				fnLiteral +=
+					hooks.beforeHandle[i].constructor.name === ASYNC_FN
+						? `let ${name} = await beforeHandle[${i}](c);\n`
+						: `let ${name} = beforeHandle[${i}](c);\n`
 
-					fnLiteral +=
-						hooks.afterHandle[i].constructor.name === ASYNC_FN
-							? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
-							: `const ${name} = afterHandle[${i}](c, ${beName});\n`
+				fnLiteral += `if(${name} !== undefined) {\n`
+				if (hooks?.afterHandle) {
+					const beName = name
+					for (let i = 0; i < hooks.afterHandle.length; i++) {
+						const returning = hasReturn(
+							hooks.afterHandle[i].toString()
+						)
 
-					fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
+						if (!returning) {
+							fnLiteral +=
+								hooks.afterHandle[i].constructor.name ===
+								ASYNC_FN
+									? `await afterHandle[${i}](c, ${beName});\n`
+									: `afterHandle[${i}](c, ${beName});\n`
+						} else {
+							const name = `af${i}`
+
+							fnLiteral +=
+								hooks.afterHandle[i].constructor.name ===
+								ASYNC_FN
+									? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
+									: `const ${name} = afterHandle[${i}](c, ${beName});\n`
+
+							fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
+						}
+					}
 				}
+
+				if (validator.response)
+					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
+						if(!(response instanceof Error))
+							throw new ValidationError('response', response[c.set.status], ${name}) 
+					}\n`
+
+				fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
 			}
-
-			if (validator.response)
-				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw createValidationError('response', response[c.set.status], ${name}) }\n`
-
-			fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
 		}
 
 	if (hooks?.afterHandle.length) {
@@ -173,22 +554,37 @@ export const composeHandler = ({
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const name = `af${i}`
 
-			fnLiteral +=
-				hooks.afterHandle[i].constructor.name === ASYNC_FN
-					? `let ${name} = await afterHandle[${i}](c, r)\n`
-					: `let ${name} = afterHandle[${i}](c, r)\n`
+			const returning = hasReturn(hooks.afterHandle[i].toString())
 
-			if (validator.response) {
-				fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { throw createValidationError('response', response[c.set.status], ${name}) }\n`
+			if (!returning) {
+				fnLiteral +=
+					hooks.afterHandle[i].constructor.name === ASYNC_FN
+						? `await afterHandle[${i}](c, r)\n`
+						: `afterHandle[${i}](c, r)\n`
+			} else {
+				fnLiteral +=
+					hooks.afterHandle[i].constructor.name === ASYNC_FN
+						? `let ${name} = await afterHandle[${i}](c, r)\n`
+						: `let ${name} = afterHandle[${i}](c, r)\n`
 
-				fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+				if (validator.response) {
+					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
+						if(!(response instanceof Error))
+							throw new ValidationError('response', response[c.set.status], ${name}) 
+					}\n`
 
-				fnLiteral += `if(${name}) return ${name};\n`
-			} else fnLiteral += `if(${name}) return ${name};\n`
+					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+
+					fnLiteral += `if(${name}) return ${name};\n`
+				} else fnLiteral += `if(${name}) return ${name};\n`
+			}
 		}
 
 		if (validator.response)
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw createValidationError('response', response[c.set.status], r) }\n`
+			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
+				if(!(response instanceof Error))
+					throw new ValidationError('response', response[c.set.status], r) 
+			}\n`
 
 		fnLiteral += `return mapResponse(r, c.set);\n`
 	} else {
@@ -198,7 +594,10 @@ export const composeHandler = ({
 					? `const r = await handler(c);\n`
 					: `const r = handler(c);\n`
 
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { throw createValidationError('response', response[c.set.status], r) }\n`
+			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
+				if(!(response instanceof Error))
+					throw new ValidationError('response', response[c.set.status], r) 
+			}\n`
 			fnLiteral += `return mapResponse(r, c.set);`
 		} else
 			fnLiteral +=
@@ -209,31 +608,42 @@ export const composeHandler = ({
 
 	fnLiteral += `
 } catch(error) {
+	${
+		''
+		// hasStrictContentType ||
+		// // @ts-ignore
+		// validator?.body?.schema
+		// 	? `if(!c.body) error = parseError`
+		// 	: ''
+	}
+
 	${maybeAsync ? '' : 'return (async () => {'}
 		const set = c.set
 
 		if (!set.status || set.status < 300) set.status = 500
 
-		if (handleErrors) {
-			const code = mapErrorCode(error.message)
-
-			for (let i = 0; i < handleErrors.length; i++) {
+		${
+			hooks.error.length
+				? `for (let i = 0; i < handleErrors.length; i++) {
 				let handled = handleErrors[i]({
 					request: c.request,
-					error,
+					error: error,
 					set,
-					code
+					code: error.code ?? "UNKNOWN"
 				})
 				if (handled instanceof Promise) handled = await handled
 
 				const response = mapEarlyResponse(handled, set)
 				if (response) return response
-			}
+			}`
+				: ''
 		}
 
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
 }`
+
+	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
@@ -253,20 +663,33 @@ export const composeHandler = ({
 			response
 		},
 		utils: {
-			createValidationError,
 			mapResponse,
 			mapEarlyResponse,
 			mapErrorCode,
 			parseQuery
+		},
+		error: {
+			ParseError,
+			NotFoundError,
+			ValidationError,
+			InternalServerError
+		},
+		${
+			meta
+				? `
+			meta,
+			SCHEMA,
+			DEFS,`
+				: ''
 		}
 	} = hooks
 
-	return ${maybeAsync ? 'async' : ''} function(c) {${fnLiteral}}`.replace(
-		/\t/g,
-		''
-	)
+	const parseError = new ParseError()
 
-	// console.log(fnLiteral)
+	return ${maybeAsync ? 'async' : ''} function(c) {
+		${meta ? 'c[SCHEMA] = meta[SCHEMA]; c[DEFS] = meta[DEFS];' : ''}
+		${fnLiteral}
+	}`
 
 	const createHandler = Function('hooks', fnLiteral)
 
@@ -276,20 +699,165 @@ export const composeHandler = ({
 		validator,
 		handleError,
 		utils: {
-			createValidationError,
 			mapResponse,
 			mapEarlyResponse,
-			mapErrorCode,
 			parseQuery
-		}
+		},
+		error: {
+			ParseError,
+			NotFoundError,
+			ValidationError,
+			InternalServerError
+		},
+		meta,
+		SCHEMA: meta ? SCHEMA : undefined,
+		DEFS: meta ? DEFS : undefined
 	})
 }
 
-// const createTypeboxAot = (a: TypeCheck<any> | undefined) => {
-// 	if (!a) return
+export const composeGeneralHandler = (app: Elysia<any>) => {
+	let decoratorsLiteral = ''
 
-// 	const fnLiteral = a.Code()
+	// @ts-ignore
+	for (const key of Object.keys(app.decorators))
+		decoratorsLiteral += `,${key}: app.decorators.${key}`
 
-// 	if (fnLiteral.includes('custom(')) return (param: any) => a.Check(param)
-// 	return new Function(a.Code())()
-// }
+	// @ts-ignore
+	const staticRouter = app.staticRouter
+
+	let switchMap = ``
+	for (const [path, code] of Object.entries(staticRouter.map))
+		switchMap += `case '${path}':\nswitch(method) {\n${code}}\n\n`
+
+	let fnLiteral = `const {
+		app,
+		app: { store, router, staticRouter },
+		${app.event.request.length ? 'mapEarlyResponse,' : ''}
+		NotFoundError
+	} = data
+
+	const notFound = new NotFoundError()
+
+	${app.event.request.length ? `const onRequest = app.event.request` : ''}
+
+	${staticRouter.variables}
+
+	const find = router.find.bind(router)
+	const handleError = app.handleError.bind(this)
+
+	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
+
+	return function(request) {
+		const ctx = {
+			request,
+			store,
+			set: {
+				headers: {},
+				status: 200
+			}
+			${decoratorsLiteral}
+		}
+	`
+
+	if (app.event.request.length) {
+		fnLiteral += `try {`
+
+		for (let i = 0; i < app.event.request.length; i++) {
+			const withReturn = hasReturn(app.event.request[i].toString())
+
+			fnLiteral += !withReturn
+				? `mapEarlyResponse(onRequest[${i}](ctx), ctx.set)`
+				: `const response = mapEarlyResponse(
+					onRequest[${i}](ctx),
+					ctx.set
+				)
+				if (response) return response\n`
+		}
+
+		fnLiteral += `} catch (error) {
+			return handleError(request, error, ctx.set)
+		}`
+	}
+
+	fnLiteral += `
+		const { url, method } = request,
+			s = url.indexOf('/', 12)
+			ctx.query = i = url.indexOf('?', s),
+			path = i === -1 ? url.substring(s) : url.substring(s, i)
+
+		switch(path) {
+			${switchMap}
+		}
+	
+		const route = find(method, path) ?? find('ALL', path)
+		if (route === null) {
+			return ${
+				app.event.error.length
+					? `handleError(
+				request,
+				notFound,
+				ctx.set
+			)`
+					: `new Response(error404, {
+						status: 404
+					})`
+			}
+		}
+
+		ctx.params = route.params
+
+		return route.store(ctx)
+	}`
+
+	app.handleError = composeErrorHandler(app) as any
+
+	return Function(
+		'data',
+		fnLiteral
+	)({
+		app,
+		mapEarlyResponse,
+		NotFoundError
+	})
+}
+
+export const composeErrorHandler = (app: Elysia<any>) => {
+	let fnLiteral = `const {
+		app: { event: { error: onError } },
+		mapResponse
+	} = inject
+	
+	return ${
+		app.event.error.find((fn) => fn.constructor.name === ASYNC_FN)
+			? 'async'
+			: ''
+	} function(request, error, set) {`
+
+	for (let i = 0; i < app.event.error.length; i++) {
+		const handler = app.event.error[i]
+
+		const response = `${
+			handler.constructor.name === ASYNC_FN ? 'await ' : ''
+		}onError[${i}]({
+			request,
+			code: error.code ?? 'UNKNOWN',
+			error,
+			set
+		})`
+
+		if (hasReturn(handler.toString()))
+			fnLiteral += `const r${i} = ${response}; if(r${i} !== null) return mapResponse(r${i}, set)\n`
+		else fnLiteral += response + '\n'
+	}
+
+	fnLiteral += `return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
+}`
+
+	return Function(
+		'inject',
+		fnLiteral
+	)({
+		app,
+		mapResponse
+	})
+}

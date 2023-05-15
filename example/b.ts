@@ -1,9 +1,9 @@
-import { Elysia, t } from '../src'
+import { DEFS, Elysia, t } from '../src'
 
 export const plugin = (app: Elysia) =>
 	app.group('/a', (app) =>
 		app
-			.setModel({
+			.model({
 				sign: t.Object({
 					username: t.String()
 				})
@@ -12,18 +12,17 @@ export const plugin = (app: Elysia) =>
 				'/json/:id',
 				({ body, params: { id }, query: { name } }) => 'h',
 				{
-					schema: {
-						headers: 'sign',
-						params: t.Object({
-							id: t.Number()
-						}),
-						response: {
-							200: t.String(),
-							400: t.String()
-						},
-						detail: {
-							summary: 'Transform path parameter'
-						}
+					body: t.Numeric(),
+					headers: 'sign',
+					params: t.Object({
+						id: t.Number()
+					}),
+					response: {
+						200: t.String(),
+						400: t.String()
+					},
+					detail: {
+						summary: 'Transform path parameter'
 					}
 				}
 			)
@@ -43,36 +42,40 @@ const app = new Elysia({
 	})
 	.decorate('A', 'b')
 	.post('/sign', ({ body }) => body, {
-		schema: {
-			body: t.Object({
-				email: t.String({
-					format: 'email'
-				}),
-				time: t.String({
-					format: 'date-time'
-				})
+		body: t.Object({
+			email: t.String({
+				format: 'email'
+			}),
+			time: t.String({
+				format: 'date-time'
 			})
-		}
+		}),
+		response: t.Object({
+			email: t.String({
+				format: 'email'
+			}),
+			time: t.String({
+				format: 'date-time'
+			})
+		})
 	})
 	.post(
 		'/file',
-		({ set, a, A }) => {
+		({ set }) => {
 			const file = Bun.file('')
 			if (file.size === 0) {
 				set.status = 404
-				return 2
+
+				return file
 			}
 
-			return file
+			return 1
 		},
 		{
-			error({ set }) {},
-			schema: {
-				response: t.Object({
-					200: t.File(),
-					404: t.Number()
-				})
-			}
+			response: t.Object({
+				200: t.File(),
+				404: t.Number()
+			})
 		}
 	)
 	.listen(8080)

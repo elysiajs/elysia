@@ -8,8 +8,10 @@ new Elysia()
 		}
 	}))
 	.derive(({ store }) => ({
-		doubled: store.counter * 2,
-		tripled: store.counter * 3
+		store: {
+			doubled: store.counter * 2,
+			tripled: store.counter * 3
+		}
 	}))
 	.get('/', ({ increase, store }) => {
 		increase()

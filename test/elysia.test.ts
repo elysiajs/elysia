@@ -50,4 +50,11 @@ describe('Elysia', () => {
 		const res = await app.handle(req('/')).then((x) => x.text())
 		expect(res).toBe('h')
 	})
+
+	it('handle dynamic all method', async () => {
+		const app = new Elysia().all('/all/*', () => 'ALL')
+
+		const res = await app.handle(req('/all/world')).then((x) => x.text())
+		expect(res).toBe('ALL')
+	})
 })

@@ -1,7 +1,8 @@
 import { Kind, type TSchema } from '@sinclair/typebox'
 import type { OpenAPIV3 } from 'openapi-types'
-import deepClone from 'lodash.clonedeep'
 
+import deepClone from 'lodash.clonedeep'
+  
 import type { HTTPMethod, LocalHook } from './types'
 
 export const toOpenAPIPath = (path: string) =>
@@ -58,6 +59,25 @@ const mapTypesResponse = (
 	return responses
 }
 
+export const capitalize = (word: string) =>
+	word.charAt(0).toUpperCase() + word.slice(1)
+
+export const generateOperationId = (method: string, paths: string) => {
+	let operationId = method.toLowerCase()
+
+	if (paths === '/') return operationId + 'Index'
+
+	for (const path of paths.split('/')) {
+		if (path.charCodeAt(0) === 123) {
+			operationId += 'By' + capitalize(path.slice(1, -1))
+		} else {
+			operationId += capitalize(path)
+		}
+	}
+
+	return operationId
+}
+
 export const registerSchemaPath = ({
 	schema,
 	contentType = ['application/json', 'multipart/form-data', 'text/plain'],
@@ -70,7 +90,7 @@ export const registerSchemaPath = ({
 	contentType?: string | string[]
 	path: string
 	method: HTTPMethod
-	hook?: LocalHook
+	hook?: LocalHook<any, any>
 	models: Record<string, TSchema>
 }) => {
 	if (hook) hook = deepClone(hook)
@@ -82,12 +102,11 @@ export const registerSchemaPath = ({
 			? [contentType]
 			: contentType ?? ['application/json']
 
-	const bodySchema = hook?.schema?.body
-	const paramsSchema = hook?.schema?.params
-	const headerSchema = hook?.schema?.headers
-	const querySchema = hook?.schema?.query
-	let responseSchema = hook?.schema
-		?.response as unknown as OpenAPIV3.ResponsesObject
+	const bodySchema = hook?.body
+	const paramsSchema = hook?.params
+	const headerSchema = hook?.headers
+	const querySchema = hook?.query
+	let responseSchema = hook?.response as unknown as OpenAPIV3.ResponsesObject
 
 	if (typeof responseSchema === 'object') {
 		if (Kind in responseSchema) {
@@ -189,7 +208,9 @@ export const registerSchemaPath = ({
 						responses: responseSchema
 				  }
 				: {}),
-			...hook?.schema?.detail,
+			operationId:
+				hook?.detail?.operationId ?? generateOperationId(method, path),
+			...hook?.detail,
 			...(bodySchema
 				? {
 						requestBody: {
