@@ -119,8 +119,8 @@ describe('Parser', () => {
 
 	it('inline parse', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
-			parse(context) {
-				return context.request.json().then(() => 'hi')
+			parse({ request }) {
+				return request.text().then(() => 'hi')
 			}
 		})
 
@@ -128,7 +128,10 @@ describe('Parser', () => {
 			.handle(
 				new Request('http://localhost/', {
 					method: 'POST',
-					body: 'Hi'
+					body: 'ok',
+					headers: {
+						'Content-Type': 'application/json'
+					}
 				})
 			)
 			.then((x) => x.text())

@@ -243,7 +243,7 @@ export const composeHandler = ({
 					if (i !== 0) fnLiteral += `if(!used) {\n`
 
 					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
-					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}`
+					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name};`
 
 					fnLiteral += `
 						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
@@ -338,7 +338,7 @@ export const composeHandler = ({
 					if (i !== 0) fnLiteral += `if(!used) {\n`
 
 					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
-					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}`
+					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name};`
 
 					fnLiteral += `
 						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
