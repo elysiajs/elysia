@@ -1,10 +1,7 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.onParse((request, contentType) => {
-		if (contentType === 'application/elysia') return 'hi'
-	})
-	.post('/', ({ body }) => body, {
-		body: t.String()
-	})
-	.listen(3000)
+new Elysia().post('/', ({ body }) => body, {
+	parse(context) {
+		return context.request.json().then(() => 'hi')
+	}
+})

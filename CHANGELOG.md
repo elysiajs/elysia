@@ -1,3 +1,8 @@
+# 0.5.0-beta.7 15 May 2023
+Bug fix:
+- detect promise on parse
+- using swc to compile to commonjs
+
 # 0.5.0-beta.6 - 15 May 2023
 Improvement:
 - Improve merge schema type

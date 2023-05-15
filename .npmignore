@@ -4,6 +4,7 @@
 .prettierrc
 .eslintrc.js
 .swc.cjs.swcrc
+.swc.esm.swcrc
 .swcrc
 .husky
 

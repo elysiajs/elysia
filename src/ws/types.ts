@@ -106,7 +106,7 @@ export type ElysiaWSContext<
 					params: Record<ExtractPath<Path>, string>
 			  }
 	> & {
-		id: string
+		id: number
 		message: TypeCheck<any>
 		transformMessage: TransformMessageHandler<Schema['body']>[]
 	}
@@ -198,13 +198,3 @@ export type ElysiaWSOptions<
 			drain?: (ws: WS) => void | Promise<void>
 	  }
 	: never
-
-type Merge<A, B> = {
-	[K in keyof A | keyof B]: K extends keyof A & keyof B
-		? A[K] | B[K]
-		: K extends keyof B
-		? B[K]
-		: K extends keyof A
-		? A[K]
-		: never
-}

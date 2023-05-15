@@ -235,27 +235,23 @@ export const composeHandler = ({
 				const index = contentType.indexOf(';')
 				if (index !== -1) contentType = contentType.substring(0, index)\n`
 
-				if (hooks.parse.length) {
-					fnLiteral += `let used = false\n`
+				fnLiteral += `let used = false\n`
 
-					for (let i = 0; i < hooks.parse.length; i++) {
-						const name = `bo${i}`
+				for (let i = 0; i < hooks.parse.length; i++) {
+					const name = `bo${i}`
 
-						if (i !== 0) fnLiteral += `if(!used) {\n`
+					if (i !== 0) fnLiteral += `if(!used) {\n`
 
-						fnLiteral += `let ${name} = parse[${i}](c, contentType);`
+					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
+					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}`
 
-						if (hooks.parse[i].constructor.name === ASYNC_FN)
-							fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}`
+					fnLiteral += `
+						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
 
-						fnLiteral += `
-							if(${name} !== undefined) { c.body = ${name}; used = true }\n`
-
-						if (i !== 0) fnLiteral += `}`
-					}
-
-					fnLiteral += `if (!used) {`
+					if (i !== 0) fnLiteral += `}`
 				}
+
+				fnLiteral += `if (!used) {`
 			}
 
 			if (schema) {
@@ -342,9 +338,7 @@ export const composeHandler = ({
 					if (i !== 0) fnLiteral += `if(!used) {\n`
 
 					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
-
-					if (hooks.parse[i].constructor.name === ASYNC_FN)
-						fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}`
+					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}`
 
 					fnLiteral += `
 						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
@@ -648,6 +642,8 @@ export const composeHandler = ({
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
 }`
+
+	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
