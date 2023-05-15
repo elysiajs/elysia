@@ -2432,14 +2432,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		schema: Instance['schema']
 		meta: Instance['meta']
 	}> {
-		if (transform.constructor.name === 'AsyncFunction')
-			return this.onTransform(async (context) => {
-				Object.assign(context, await transform(context as any))
-			}) as any
+		// @ts-ignore
+		transform.$elysia = 'derive'
 
-		return this.onTransform((context) => {
-			Object.assign(context, transform(context as any))
-		}) as any
+		return this.onTransform(transform as any) as any
 	}
 
 	/**

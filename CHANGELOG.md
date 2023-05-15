@@ -1,3 +1,7 @@
+# 0.5.0-beta.3 - 15 May 2023
+Improvement:
+- Static Code Analysis on derive
+
 # 0.5.0-beta.2 - 14 May 2023
 Improvement:
 - Re-compile on lazy modules

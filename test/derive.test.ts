@@ -42,4 +42,24 @@ describe('derive', () => {
 		const res = await app.handle(req('/')).then((t) => t.text())
 		expect(res).toBe('2')
 	})
+
+	it('derive with static analysis', async () => {
+		const app = new Elysia()
+			.derive(({ headers: { name } }) => ({
+				name
+			}))
+			.get('/', ({ name }) => name)
+
+		const res = await app
+			.handle(
+				new Request('http://localhost/', {
+					headers: {
+						name: 'Elysia'
+					}
+				})
+			)
+			.then((t) => t.text())
+
+		expect(res).toBe('Elysia')
+	})
 })

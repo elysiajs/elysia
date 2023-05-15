@@ -418,10 +418,19 @@ export const composeHandler = ({
 
 	if (hooks?.transform)
 		for (let i = 0; i < hooks.transform.length; i++) {
-			fnLiteral +=
-				hooks.transform[i].constructor.name === ASYNC_FN
-					? `await transform[${i}](c);`
-					: `transform[${i}](c);`
+			const transform = hooks.transform[i]
+
+			// @ts-ignore
+			if (transform.$elysia === 'derive')
+				fnLiteral +=
+					hooks.transform[i].constructor.name === ASYNC_FN
+						? `Object.assign(c, await transform[${i}](c));`
+						: `Object.assign(c, transform[${i}](c));`
+			else
+				fnLiteral +=
+					hooks.transform[i].constructor.name === ASYNC_FN
+						? `await transform[${i}](c);`
+						: `transform[${i}](c);`
 		}
 
 	if (validator) {
@@ -764,8 +773,6 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 		return route.store(ctx)
 	}`
-
-	// console.log(fnLiteral)
 
 	app.handleError = composeErrorHandler(app) as any
 

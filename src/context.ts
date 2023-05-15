@@ -6,7 +6,7 @@ export interface Context<
 > {
 	request: Request
 	headers: undefined extends Route['headers']
-		? Record<string, unknown>
+		? Record<string, string | null>
 		: Route['headers']
 	query: undefined extends Route['query']
 		? Record<string, unknown>

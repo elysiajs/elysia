@@ -1,16 +1,15 @@
 import { Elysia } from '../src'
-import { req } from '../test/utils'
 
-const plugin = async () => {
-	await new Promise((resolve) => setTimeout(resolve, 1))
+const app = new Elysia()
+	.derive(({ query, headers: { authorization } }) => ({
+		get bearer() {
+			if (authorization?.startsWith('Bearer')) return 'hi'
 
-	return (app: Elysia) => app.get('/', () => 'hi')
-}
+			return 'hi'
+		}
+	}))
+	.get('/', ({ bearer }) => bearer)
+	.listen(3000)
 
-const app = new Elysia().use(plugin())
-
-await new Promise((resolve) => setTimeout(resolve, 10))
-
-app.handle(req('/'))
-	.then((x) => x.text())
-	.then(console.log)
+const a = []
+const b = () => {}
