@@ -963,69 +963,81 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
-						? {
-								[path in Path]: {
-									get: {
-										body: UnwrapSchema<
-											Typed['body'],
-											Instance['meta'][typeof DEFS]
-										>
-										headers: UnwrapSchema<
-											Typed['headers'],
-											Instance['meta'][typeof DEFS]
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
+							? {
+									[path in Path]: {
+										get: {
+											body: UnwrapSchema<
+												Typed['body'],
+												Instance['meta'][typeof DEFS]
+											>
+											headers: UnwrapSchema<
+												Typed['headers'],
+												Instance['meta'][typeof DEFS]
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
 												: undefined
-											: undefined
-										query: UnwrapSchema<
-											Typed['query'],
-											Instance['meta'][typeof DEFS]
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
+											query: UnwrapSchema<
+												Typed['query'],
+												Instance['meta'][typeof DEFS]
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
 												: undefined
-											: undefined
-										params: UnwrapSchema<
-											Typed['params'],
-											Instance['meta'][typeof DEFS]
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
-												: undefined
-											: Record<ExtractPath<Path>, string>
-										response: Typed['response'] extends
-											| TSchema
-											| string
-											? {
-													'200': UnwrapSchema<
-														Typed['response'],
-														Instance['meta'][typeof DEFS],
-														ReturnType<Handler>
-													>
-											  }
-											: Typed['response'] extends Record<
-													string,
-													TSchema | string
-											  >
-											? {
-													[key in keyof Typed['response']]: UnwrapSchema<
-														Typed['response'][key],
-														Instance['meta'][typeof DEFS],
-														ReturnType<Handler>
-													>
-											  }
-											: {
-													'200': ReturnType<Handler>
-											  }
+											params: UnwrapSchema<
+												Typed['params'],
+												Instance['meta'][typeof DEFS]
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
+												: Record<
+														ExtractPath<Path>,
+														string
+												  >
+											response: Typed['response'] extends
+												| TSchema
+												| string
+												? {
+														'200': UnwrapSchema<
+															Typed['response'],
+															Instance['meta'][typeof DEFS],
+															ReturnType<Handler>
+														>
+												  }
+												: Typed['response'] extends Record<
+														string,
+														TSchema | string
+												  >
+												? {
+														[key in keyof Typed['response']]: UnwrapSchema<
+															Typed['response'][key],
+															Instance['meta'][typeof DEFS],
+															ReturnType<Handler>
+														>
+												  }
+												: {
+														'200': ReturnType<Handler>
+												  }
+										}
 									}
-								}
-						  }
-						: never
+							  }
+							: {})
 				>
 			>
 	}> {
@@ -1072,69 +1084,81 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
-						? {
-								[path in Path]: {
-									post: {
-										body: UnwrapSchema<
-											Typed['body'],
-											Instance['meta'][typeof DEFS]
-										>
-										headers: UnwrapSchema<
-											Typed['headers'],
-											Instance['meta'][typeof DEFS]
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
+							? {
+									[path in Path]: {
+										post: {
+											body: UnwrapSchema<
+												Typed['body'],
+												Instance['meta'][typeof DEFS]
+											>
+											headers: UnwrapSchema<
+												Typed['headers'],
+												Instance['meta'][typeof DEFS]
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
 												: undefined
-											: undefined
-										query: UnwrapSchema<
-											Typed['query'],
-											Instance['meta'][typeof DEFS]
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
+											query: UnwrapSchema<
+												Typed['query'],
+												Instance['meta'][typeof DEFS]
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
 												: undefined
-											: undefined
-										params: UnwrapSchema<
-											Typed['params'],
-											Instance['meta'][typeof DEFS]
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
-												: undefined
-											: Record<ExtractPath<Path>, string>
-										response: Typed['response'] extends
-											| TSchema
-											| string
-											? {
-													'200': UnwrapSchema<
-														Typed['response'],
-														Instance['meta'][typeof DEFS],
-														ReturnType<Handler>
-													>
-											  }
-											: Typed['response'] extends Record<
-													string,
-													TSchema | string
-											  >
-											? {
-													[key in keyof Typed['response']]: UnwrapSchema<
-														Typed['response'][key],
-														Instance['meta'][typeof DEFS],
-														ReturnType<Handler>
-													>
-											  }
-											: {
-													'200': ReturnType<Handler>
-											  }
+											params: UnwrapSchema<
+												Typed['params'],
+												Instance['meta'][typeof DEFS]
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
+												: Record<
+														ExtractPath<Path>,
+														string
+												  >
+											response: Typed['response'] extends
+												| TSchema
+												| string
+												? {
+														'200': UnwrapSchema<
+															Typed['response'],
+															Instance['meta'][typeof DEFS],
+															ReturnType<Handler>
+														>
+												  }
+												: Typed['response'] extends Record<
+														string,
+														TSchema | string
+												  >
+												? {
+														[key in keyof Typed['response']]: UnwrapSchema<
+															Typed['response'][key],
+															Instance['meta'][typeof DEFS],
+															ReturnType<Handler>
+														>
+												  }
+												: {
+														'200': ReturnType<Handler>
+												  }
+										}
 									}
-								}
-						  }
-						: never
+							  }
+							: {})
 				>
 			>
 	}> {
@@ -1186,7 +1210,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
@@ -1248,7 +1272,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									}
 								}
 						  }
-						: never
+						: {})
 				>
 			>
 	}> {
@@ -1295,7 +1319,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
@@ -1357,7 +1381,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									}
 								}
 						  }
-						: never
+						: {})
 				>
 			>
 	}> {
@@ -1404,7 +1428,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
@@ -1466,7 +1490,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									}
 								}
 						  }
-						: never
+						: {})
 				>
 			>
 	}> {
@@ -1513,7 +1537,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
@@ -1575,7 +1599,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									}
 								}
 						  }
-						: never
+						: {})
 				>
 			>
 	}> {
@@ -1617,7 +1641,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
@@ -1679,7 +1703,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									}
 								}
 						  }
-						: never
+						: {})
 				>
 			>
 	}> {
@@ -1726,7 +1750,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
@@ -1788,7 +1812,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									}
 								}
 						  }
-						: never
+						: {})
 				>
 			>
 	}> {
@@ -1835,7 +1859,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
@@ -1897,7 +1921,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									}
 								}
 						  }
-						: never
+						: {})
 				>
 			>
 	}> {
@@ -1944,7 +1968,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				typeof SCHEMA,
 				Prettify<
 					Instance['meta'][typeof SCHEMA] &
-						MergeSchema<
+						(MergeSchema<
 							Schema,
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
@@ -2006,7 +2030,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									}
 								}
 						  }
-						: never
+						: {})
 				>
 			>
 	}> {
@@ -2053,7 +2077,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		store: Instance['store']
 		schema: Instance['schema']
 		meta: Instance['meta'] &
-			Record<
+			(Record<
 				typeof SCHEMA,
 				Record<
 					Path,
@@ -2068,9 +2092,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 									Path
 								>
 						  }
-						: never
+						: {}
 				>
-			>
+			>)
 	}> {
 		if (!this.wsRouter)
 			throw new Error(

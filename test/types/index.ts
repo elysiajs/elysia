@@ -10,7 +10,9 @@ app.get('/', ({ headers, query, params, body, store }) => {
 	expectTypeOf<keyof typeof params>().toBeNever()
 
 	// ? default headers should be Record<string, unknown>
-	expectTypeOf<typeof headers>().toEqualTypeOf<Record<string, string | null>>()
+	expectTypeOf<typeof headers>().toEqualTypeOf<
+		Record<string, string | null>
+	>()
 
 	// ? default query should be Record<string, unknown>
 	expectTypeOf<typeof query>().toEqualTypeOf<Record<string, unknown>>()
@@ -506,5 +508,23 @@ app.use(plugin).group(
 		}
 		params: Record<never, string>
 		response: unknown
+	}>()
+}
+
+// ? Register empty model
+{
+	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
+
+	type App = (typeof server)['meta'][typeof SCHEMA]
+	type Route = App['/']['get']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		body: unknown
+		headers: undefined
+		query: undefined
+		params: undefined
+		response: {
+			'200': string
+		}
 	}>()
 }

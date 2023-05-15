@@ -249,34 +249,36 @@ export type HookHandler<
 	Instance
 >
 
+type NotUndefined<T> = undefined extends T ? false : true
+
 export type MergeIfNotNull<A, B> = B extends null ? A : A & B
 export type UnknownFallback<A, B> = unknown extends A ? B : A
 export type MergeSchema<A extends TypedSchema, B extends TypedSchema> = {
-	body: undefined extends A['body']
-		? undefined extends B['body']
-			? undefined
-			: B['body']
-		: A['body']
-	headers: undefined extends A['headers']
-		? undefined extends B['headers']
-			? undefined
-			: B['headers']
-		: A['headers']
-	query: undefined extends A['query']
-		? undefined extends B['query']
-			? undefined
-			: B['query']
-		: A['query']
-	params: undefined extends A['params']
-		? undefined extends B['params']
-			? undefined
-			: B['params']
-		: A['params']
-	response: undefined extends A['response']
-		? undefined extends B['response']
-			? undefined
-			: B['response']
-		: A['response']
+	body: NotUndefined<A['body']> extends true
+		? A['body']
+		: NotUndefined<B['body']> extends true
+		? B['body']
+		: undefined
+	headers: NotUndefined<A['headers']> extends true
+		? A['headers']
+		: NotUndefined<B['headers']> extends true
+		? B['headers']
+		: undefined
+	query: NotUndefined<A['query']> extends true
+		? A['query']
+		: NotUndefined<B['query']> extends true
+		? B['query']
+		: undefined
+	params: NotUndefined<A['params']> extends true
+		? A['params']
+		: NotUndefined<B['params']> extends true
+		? B['params']
+		: undefined
+	response: NotUndefined<A['response']> extends true
+		? A['response']
+		: NotUndefined<B['response']> extends true
+		? B['response']
+		: undefined
 }
 
 type MaybeArray<T> = T | T[]

@@ -1,3 +1,7 @@
+# 0.5.0-beta.6 - 15 May 2023
+Improvement:
+- Improve merge schema type
+
 # 0.5.0-beta.5 - 15 May 2023
 Bug fix:
 - Add support for ALL method for dynamic path 
