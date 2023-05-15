@@ -1,3 +1,7 @@
+# 0.5.0-beta.4 - 15 May 2023
+Bug fix:
+- Use Memoirist instead of Raikiri in ws
+
 # 0.5.0-beta.3 - 15 May 2023
 Improvement:
 - Static Code Analysis on derive

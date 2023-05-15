@@ -1,3 +1,4 @@
+import { Memoirist } from 'memoirist'
 import type { Server, ServerWebSocket, WebSocketHandler } from 'bun'
 
 import type { Elysia, Context } from '..'
@@ -6,6 +7,15 @@ import { type DEFS } from '../utils'
 import type { ElysiaWSContext, WSTypedSchema } from './types'
 import type { ElysiaInstance, UnwrapSchema } from '../types'
 import { ValidationError } from '../error'
+
+const getPath = (url: string) => {
+	const start = url.indexOf('/', 10)
+	const end = url.indexOf('?', start)
+
+	if (end === -1) return url.slice(start)
+
+	return url.slice(start, end)
+}
 
 export class ElysiaWS<
 	WS extends ElysiaWSContext<any> = ElysiaWSContext,
@@ -103,11 +113,10 @@ export const ws =
 	(config?: Omit<WebSocketHandler, 'open' | 'message' | 'close' | 'drain'>) =>
 	(app: Elysia) => {
 		// @ts-ignore
-		if (!app.wsRouter) app.wsRouter = new Raikiri()
+		if (!app.wsRouter) app.wsRouter = new Memoirist()
 
 		// @ts-ignore
 		const router = app.wsRouter!
-		const getPath = /\/[^?#]+/g
 
 		if (!app.config.serve)
 			app.config.serve = {
@@ -116,11 +125,9 @@ export const ws =
 					open(ws) {
 						if (!ws.data) return
 
-						getPath.lastIndex = 9
-						const url =
-							getPath.exec(
-								(ws?.data as unknown as Context).request.url
-							)?.[0] ?? '/'
+						const url = getPath(
+							(ws?.data as unknown as Context).request.url
+						)
 
 						if (!url) return
 
@@ -132,11 +139,9 @@ export const ws =
 					message(ws, message: any): void {
 						if (!ws.data) return
 
-						getPath.lastIndex = 9
-						const url =
-							getPath.exec(
-								(ws?.data as unknown as Context).request.url
-							)?.[0] ?? '/'
+						const url = getPath(
+							(ws?.data as unknown as Context).request.url
+						)
 
 						if (!url) return
 
@@ -187,11 +192,9 @@ export const ws =
 					close(ws, code, reason) {
 						if (!ws.data) return
 
-						getPath.lastIndex = 9
-						const url =
-							getPath.exec(
-								(ws?.data as unknown as Context).request.url
-							)?.[0] ?? '/'
+						const url = getPath(
+							(ws?.data as unknown as Context).request.url
+						)
 
 						if (!url) return
 
@@ -203,11 +206,9 @@ export const ws =
 					drain(ws) {
 						if (!ws.data) return
 
-						getPath.lastIndex = 9
-						const url =
-							getPath.exec(
-								(ws?.data as unknown as Context).request.url
-							)?.[0] ?? '/'
+						const url = getPath(
+							(ws?.data as unknown as Context).request.url
+						)
 
 						if (!url) return
 
