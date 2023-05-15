@@ -1,15 +1,10 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.derive(({ query, headers: { authorization } }) => ({
-		get bearer() {
-			if (authorization?.startsWith('Bearer')) return 'hi'
-
-			return 'hi'
-		}
-	}))
-	.get('/', ({ bearer }) => bearer)
+	.onParse((request, contentType) => {
+		if (contentType === 'application/elysia') return 'hi'
+	})
+	.post('/', ({ body }) => body, {
+		body: t.String()
+	})
 	.listen(3000)
-
-const a = []
-const b = () => {}

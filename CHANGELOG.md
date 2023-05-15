@@ -1,3 +1,8 @@
+# 0.5.0-beta.5 - 15 May 2023
+Bug fix:
+- Add support for ALL method for dynamic path 
+- Add support for parser in pre-compiled body
+
 # 0.5.0-beta.4 - 15 May 2023
 Bug fix:
 - Use Memoirist instead of Raikiri in ws

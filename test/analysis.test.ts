@@ -168,4 +168,30 @@ describe('Static code analysis', () => {
 
 		expect(response).toBe('hi')
 	})
+
+	it('parse custom parser with schema', async () => {
+		const app = new Elysia()
+			.onParse((request, contentType) => {
+				if (contentType === 'application/elysia') return 'hi'
+			})
+			.post('/', ({ body }) => body, {
+				body: t.String()
+			})
+
+		await new Promise((resolve) => setTimeout(resolve, 25))
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/elysia'
+					},
+					body: 'need correction'
+				})
+			)
+			.then((x) => x.text())
+
+		expect(response).toBe('hi')
+	})
 })

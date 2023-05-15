@@ -225,6 +225,39 @@ export const composeHandler = ({
 		}
 
 		if (hasStrictContentType || schema) {
+			if (hooks.parse.length) {
+				fnLiteral += hasHeaders
+					? `let contentType = c.headers['content-type']`
+					: `let contentType = c.request.headers.get('content-type')`
+
+				fnLiteral += `
+            if (contentType) {
+				const index = contentType.indexOf(';')
+				if (index !== -1) contentType = contentType.substring(0, index)\n`
+
+				if (hooks.parse.length) {
+					fnLiteral += `let used = false\n`
+
+					for (let i = 0; i < hooks.parse.length; i++) {
+						const name = `bo${i}`
+
+						if (i !== 0) fnLiteral += `if(!used) {\n`
+
+						fnLiteral += `let ${name} = parse[${i}](c, contentType);`
+
+						if (hooks.parse[i].constructor.name === ASYNC_FN)
+							fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}`
+
+						fnLiteral += `
+							if(${name} !== undefined) { c.body = ${name}; used = true }\n`
+
+						if (i !== 0) fnLiteral += `}`
+					}
+
+					fnLiteral += `if (!used) {`
+				}
+			}
+
 			if (schema) {
 				switch (schema.type) {
 					case 'object':
@@ -287,6 +320,8 @@ export const composeHandler = ({
 						break
 				}
 			}
+
+			if (hooks.parse.length) fnLiteral += '}}'
 		} else {
 			fnLiteral += '\n'
 			fnLiteral += hasHeaders
@@ -304,11 +339,17 @@ export const composeHandler = ({
 				for (let i = 0; i < hooks.parse.length; i++) {
 					const name = `bo${i}`
 
-					fnLiteral += `if(!c.request.bodyUsed) { 
-					let ${name} = parse[${i}](c, contentType);
-					if(${name} instanceof Promise) ${name} = await ${name}
-					if(${name} !== undefined) { c.body = ${name}; used = true }
-				}`
+					if (i !== 0) fnLiteral += `if(!used) {\n`
+
+					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
+
+					if (hooks.parse[i].constructor.name === ASYNC_FN)
+						fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}`
+
+					fnLiteral += `
+						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
+
+					if (i !== 0) fnLiteral += `}`
 				}
 
 				fnLiteral += `if (!used)`
@@ -608,8 +649,6 @@ export const composeHandler = ({
 	${maybeAsync ? '' : '})()'}
 }`
 
-	// console.log(fnLiteral)
-
 	fnLiteral = `const { 
 		handler,
 		handleError,
@@ -754,7 +793,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			${switchMap}
 		}
 	
-		const route = find(method, path)
+		const route = find(method, path) ?? find('ALL', path)
 		if (route === null) {
 			return ${
 				app.event.error.length
