@@ -117,4 +117,18 @@ describe('Modules', () => {
 
 		expect(res).toBe('lazy')
 	})
+
+	it('re-compile on async plugin', async () => {
+		const app = new Elysia().use(async (app) => {
+			await new Promise((resolve) => setTimeout(resolve, 1))
+
+			return app.get('/', () => 'hi')
+		})
+
+		await app.modules
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toBe('hi')
+	})
 })

@@ -1,3 +1,7 @@
+# 0.5.0-beta.8 - 15 May 2023
+Bug fix:
+- it recompile on async
+
 # 0.5.0-beta.7 15 May 2023
 Bug fix:
 - detect promise on parse

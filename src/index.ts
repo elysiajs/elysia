@@ -865,7 +865,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		const instance = plugin(this as unknown as any) as unknown as any
 		if (instance instanceof Promise) {
-			this.lazyLoadModules.push(instance)
+			this.lazyLoadModules.push(instance.then((x) => x.compile()))
 
 			return this as unknown as any
 		}
