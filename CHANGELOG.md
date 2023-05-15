@@ -1,3 +1,47 @@
+# 0.5.0 - 15 May 2023
+Improvement:
+- Add CommonJS support for running Elysia with Node adapter
+- Remove manual fragment mapping to speed up path extraction
+- Inline validator in `composeHandler` to improve performance
+- Use one time context assignment
+- Add support for lazy context injection via Static Code Analysis
+- Ensure response non nullability
+- Add unioned body validator check
+- Set default object handler to inherits
+- Using `constructor.name` mapping instead of `instanceof` to improve speed
+- Add dedicated error constructor to improve performance
+- Conditional literal fn for checking onRequest iteration
+- improve WebSocket type
+
+Bug fix:
+- Possible 
+
+Breaking Change:
+- Rename `innerHandle` to `fetch`
+    - to migrate: rename `.innerHandle` to `fetch`
+- Rename `.setModel` to `.model`
+    - to migrate: rename `setModel` to `model`
+- Remove `hook.schema` to `hook`
+    - to migrate: remove schema and curly brace `schema.type`:
+    ```ts
+    // from
+    app.post('/', ({ body }) => body, {
+        schema: {
+            body: t.Object({
+                username: t.String()
+            })
+        }
+    })
+
+    // to
+    app.post('/', ({ body }) => body, {
+        body: t.Object({
+            username: t.String()
+        })
+    })
+    ```
+- remove `mapPathnameRegex` (internal)
+
 # 0.5.0-beta.8 - 15 May 2023
 Bug fix:
 - it recompile on async
