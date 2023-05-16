@@ -1,3 +1,8 @@
+# 0.5.1 - 16 May 2023
+Bug fix:
+- syntax error if multiple numeric type is set
+- prevent fallthrough behavior of switch map
+
 # 0.5.0 - 15 May 2023
 Improvement:
 - Add CommonJS support for running Elysia with Node adapter

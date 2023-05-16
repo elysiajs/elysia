@@ -117,7 +117,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	private staticRouter = {
 		handlers: [] as ComposedHandler[],
 		variables: '',
-		map: {} as Record<string, string>
+		map: {} as Record<
+			string,
+			{
+				code: string
+				all: string
+			}
+		>,
+		all: ''
 	}
 	private wsRouter: Memoirist<ElysiaWSOptions> | undefined
 
@@ -221,11 +228,20 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
 
-			if (!this.staticRouter.map[path]) this.staticRouter.map[path] = ``
+			if (!this.staticRouter.map[path])
+				this.staticRouter.map[path] = {
+					code: '',
+					all: 'default: break map\n'
+				}
 
-			this.staticRouter.map[path] +=
-				method === 'ALL' ? `default:\n` : `case '${method}':\n`
-			this.staticRouter.map[path] += `return st${index}(ctx)\n`
+			if (method === 'ALL')
+				this.staticRouter.map[
+					path
+				].all = `default: return st${index}(ctx)\n`
+			else
+				this.staticRouter.map[
+					path
+				].code += `case '${method}': return st${index}(ctx)\n`
 		} else {
 			this.router.add(method, path, mainHandler)
 		}

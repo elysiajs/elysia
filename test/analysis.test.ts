@@ -194,4 +194,42 @@ describe('Static code analysis', () => {
 
 		expect(response).toBe('hi')
 	})
+
+	it('handle multiple numeric type', async () => {
+		const app = new Elysia()
+			.get('/', () => 'Hello Elysia1')
+			.get(
+				'/products',
+				({ query }) =>
+					`pageIndex=${query.pageIndex}; pageSize=${query.pageSize}`,
+				{
+					query: t.Object({
+						pageIndex: t.Numeric(),
+						pageSize: t.Numeric()
+					})
+				}
+			)
+
+		const response = await app
+			.handle(req('/products?pageIndex=1&pageSize=2'))
+			.then((x) => x.text())
+
+		expect(response).toBe(`pageIndex=1; pageSize=2`)
+	})
+
+	it('break out of switch map when path is not found', async () => {
+		const app = new Elysia()
+			.options('/', () => 'hi')
+			.get('/games', () => 'games')
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'OPTIONS'
+				})
+			)
+			.then((x) => x.text())
+
+		expect(response).toBe('hi')
+	})
 })

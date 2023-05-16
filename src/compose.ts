@@ -391,7 +391,7 @@ export const composeHandler = ({
 			switch (typeof properties) {
 				case 'object':
 					for (const property of properties)
-						fnLiteral += `c.params.${property} = +c.params.${property}`
+						fnLiteral += `c.params.${property} = +c.params.${property};`
 					break
 			}
 
@@ -407,7 +407,7 @@ export const composeHandler = ({
 			switch (typeof properties) {
 				case 'object':
 					for (const property of properties)
-						fnLiteral += `c.query.${property} = +c.query.${property}`
+						fnLiteral += `c.query.${property} = +c.query.${property};`
 					break
 			}
 
@@ -423,7 +423,7 @@ export const composeHandler = ({
 			switch (typeof properties) {
 				case 'object':
 					for (const property of properties)
-						fnLiteral += `c.headers.${property} = +c.headers.${property}`
+						fnLiteral += `c.headers.${property} = +c.headers.${property};`
 					break
 			}
 
@@ -438,12 +438,12 @@ export const composeHandler = ({
 		if (properties) {
 			switch (typeof properties) {
 				case 'string':
-					fnLiteral += `c.body = +c.body`
+					fnLiteral += `c.body = +c.body;`
 					break
 
 				case 'object':
 					for (const property of properties)
-						fnLiteral += `c.body.${property} = +c.body.${property}`
+						fnLiteral += `c.body.${property} = +c.body.${property};`
 					break
 			}
 
@@ -726,8 +726,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	const staticRouter = app.staticRouter
 
 	let switchMap = ``
-	for (const [path, code] of Object.entries(staticRouter.map))
-		switchMap += `case '${path}':\nswitch(method) {\n${code}}\n\n`
+	for (const [path, { code, all }] of Object.entries(staticRouter.map))
+		switchMap += `case '${path}':\nswitch(method) {\n${code}\n${all}}\n\n`
 
 	let fnLiteral = `const {
 		app,
@@ -785,7 +785,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			ctx.query = i = url.indexOf('?', s),
 			path = i === -1 ? url.substring(s) : url.substring(s, i)
 
-		switch(path) {
+		map: switch(path) {
 			${switchMap}
 		}
 	

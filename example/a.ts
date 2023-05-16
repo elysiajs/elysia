@@ -1,9 +1,30 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
 
-new Elysia()
-	.use(async (app) => {
-		await new Promise((resolve) => setTimeout(resolve, 1))
+class Group {
+	constructor(
+		public prefix: string,
+		public group: (app: Elysia) => Elysia<any>
+	) {}
 
-		return app.get('/', () => 'hi')
-	})
+	getPrefix() {
+		return this.prefix
+	}
+
+	getGroup() {
+		return this.group
+	}
+}
+
+const group = new Group('/games', (app) => app.get('/blue-archive', () => '😭'))
+
+const app = new Elysia()
+	.all('/', () => 'Hi')
+	.group(group.getPrefix(), group.getGroup())
 	.listen(3000)
+
+// console.log({
+//     routes: app.routes,
+//     handler: app.staticRouter
+// })
+
+console.log('Server is running on port 3000.')
