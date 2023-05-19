@@ -127,7 +127,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		all: ''
 	}
 	private wsRouter: Memoirist<ElysiaWSOptions> | undefined
-
+	
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
 	constructor(config?: Partial<ElysiaConfig>) {
@@ -137,7 +137,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		}
 	}
 
-	private _addHandler(
+	private add(
 		method: HTTPMethod,
 		path: string,
 		handler: LocalHandler<any, any>,
@@ -647,7 +647,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						return this.ws(path as any, wsRoute[2] as any)
 					}
 
-					this._addHandler(
+					this.add(
 						method,
 						path,
 						handler,
@@ -677,7 +677,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						return this.ws(path as any, wsRoute[2] as any)
 					}
 
-					this._addHandler(
+					this.add(
 						method,
 						path,
 						handler,
@@ -778,7 +778,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					return this.ws(path as any, wsRoute[2] as any)
 				}
 
-				this._addHandler(
+				this.add(
 					method,
 					path,
 					handler,
@@ -1056,7 +1056,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('GET', path, handler, hook as LocalHook<any, any>)
+		this.add('GET', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1177,7 +1177,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler(
+		this.add(
 			'POST',
 			path,
 			handler as any,
@@ -1303,7 +1303,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('PUT', path, handler, hook as LocalHook<any, any>)
+		this.add('PUT', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1424,7 +1424,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('PATCH', path, handler, hook as LocalHook<any, any>)
+		this.add('PATCH', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1545,7 +1545,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('DELETE', path, handler, hook as LocalHook<any, any>)
+		this.add('DELETE', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1666,7 +1666,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('OPTIONS', path, handler, hook as LocalHook<any, any>)
+		this.add('OPTIONS', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1782,7 +1782,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('ALL', path, handler, hook as LocalHook<any, any>)
+		this.add('ALL', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1903,7 +1903,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('HEAD', path, handler, hook as LocalHook<any, any>)
+		this.add('HEAD', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2024,7 +2024,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('TRACE', path, handler, hook as LocalHook<any, any>)
+		this.add('TRACE', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2145,7 +2145,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler('CONNECT', path, handler, hook as LocalHook<any, any>)
+		this.add('CONNECT', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2381,7 +2381,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this._addHandler(
+		this.add(
 			method,
 			path,
 			handler,
@@ -2404,7 +2404,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
 	 */
-	state<const Key extends string | number | symbol, const Value>(
+	state<Key extends string | number | symbol, Value>(
 		name: Key,
 		value: Value
 	): Elysia<{
@@ -2428,7 +2428,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
 	 */
-	state<const NewStore extends Record<string, unknown>>(
+	state<NewStore extends Record<string, unknown>>(
 		store: NewStore
 	): Elysia<{
 		store: Instance['store'] & DeepWritable<NewStore>

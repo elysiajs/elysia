@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -122,14 +122,14 @@
     "@typescript-eslint/eslint-plugin": "^5.56.0",
     "@typescript-eslint/parser": "^5.56.0",
     "bumpp": "^9.1.0",
-    "bun-types": "^0.5.8",
+    "bun-types": "^0.6.2",
     "eslint": "^8.36.0",
     "expect-type": "^0.15.0",
     "rimraf": "^3.0.2",
     "typescript": "^5.0.2"
   },
   "peerDependencies": {
-    "@sinclair/typebox": ">= 0.26.0",
+    "@sinclair/typebox": ">= 0.28.10",
     "openapi-types": ">= 12.0.0",
     "typescript": ">= 5.0.0"
   },

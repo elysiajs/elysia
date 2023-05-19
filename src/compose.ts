@@ -729,6 +729,9 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	for (const [path, { code, all }] of Object.entries(staticRouter.map))
 		switchMap += `case '${path}':\nswitch(method) {\n${code}\n${all}}\n\n`
 
+	// @ts-ignore
+	const router = app.router
+
 	let fnLiteral = `const {
 		app,
 		app: { store, router, staticRouter },
@@ -782,14 +785,16 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	fnLiteral += `
 		const { url, method } = request,
 			s = url.indexOf('/', 12)
-			ctx.query = i = url.indexOf('?', s),
+			ctx.query = i = url.indexOf('?', s + 1),
 			path = i === -1 ? url.substring(s) : url.substring(s, i)
 
 		map: switch(path) {
 			${switchMap}
 		}
 	
-		const route = find(method, path) ?? find('ALL', path)
+		const route = find(method, path) ${
+			router.root.ALL ? '?? find("ALL", path)' : ''
+		}
 		if (route === null) {
 			return ${
 				app.event.error.length

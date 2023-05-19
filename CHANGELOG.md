@@ -1,3 +1,10 @@
+# 0.5.2 - 16 May 2023
+Improvement:
+- Static Code Analysis for fallback route
+
+Bug fix:
+- Remove constant generic from `state` to be mutable
+
 # 0.5.1 - 16 May 2023
 Bug fix:
 - syntax error if multiple numeric type is set

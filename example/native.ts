@@ -1,8 +1,19 @@
 // Using navitve Bun http server
 Bun.serve({
-	serverName: 'Elysia',
-	port: 8080,
+	port: 3000,
 	async fetch(request) {
-		return new Request("Hi")
+		return new Response('')
 	}
 })
+
+const transpiler = new Bun.Transpiler({
+	"inline": true
+})
+
+const code = transpiler.transformSync(`
+  function averylongfunctioname(param) {
+	return param
+  }
+`)
+
+console.log(code)
