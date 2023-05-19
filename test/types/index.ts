@@ -217,15 +217,15 @@ app.state('a', 'b')
 	// ? Infer state
 	.get('/', ({ store }) => {
 		expectTypeOf<typeof store>().toEqualTypeOf<{
-			a: 'b'
+			a: string
 		}>()
 	})
 	.state('b', 'c')
 	// ? Merge state
 	.get('/', ({ store }) => {
 		expectTypeOf<typeof store>().toEqualTypeOf<{
-			a: 'b'
-			b: 'c'
+			a: string
+			b: string
 		}>()
 	})
 	.state({
@@ -235,10 +235,10 @@ app.state('a', 'b')
 	// ? Use multiple state
 	.get('/', ({ store }) => {
 		expectTypeOf<typeof store>().toEqualTypeOf<{
-			a: 'b'
-			b: 'c'
-			c: 'd'
-			d: 'e'
+			a: string
+			b: string
+			c: string
+			d: string
 		}>()
 	})
 
