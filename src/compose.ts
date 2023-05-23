@@ -2,7 +2,7 @@ import type { Elysia } from '.'
 
 import { parse as parseQuery } from 'fast-querystring'
 
-import { mapEarlyResponse, mapResponse } from './handler'
+import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
 import { SCHEMA, DEFS } from './utils'
 import {
 	ParseError,
@@ -12,6 +12,7 @@ import {
 } from './error'
 
 import type {
+	BeforeRequestHandler,
 	ComposedHandler,
 	HTTPMethod,
 	LocalHandler,
@@ -129,7 +130,8 @@ export const composeHandler = ({
 	validator,
 	handler,
 	handleError,
-	meta
+	meta,
+	onRequest
 }: {
 	path: string
 	method: HTTPMethod
@@ -138,6 +140,7 @@ export const composeHandler = ({
 	handler: LocalHandler<any, any>
 	handleError: Elysia['handleError']
 	meta?: Elysia['meta']
+	onRequest: BeforeRequestHandler<any, any>[]
 }): ComposedHandler => {
 	let fnLiteral = 'try {\n'
 
@@ -195,6 +198,10 @@ export const composeHandler = ({
 		}
 		`
 	}
+
+	const hasSet =
+		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
+		onRequest.some((fn) => isFnUse('set', fn.toString()))
 
 	const maybeAsync =
 		hasBody ||
@@ -586,7 +593,8 @@ export const composeHandler = ({
 					throw new ValidationError('response', response[c.set.status], r) 
 			}\n`
 
-		fnLiteral += `return mapResponse(r, c.set);\n`
+		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
 		if (validator.response) {
 			fnLiteral +=
@@ -598,12 +606,18 @@ export const composeHandler = ({
 				if(!(response instanceof Error))
 					throw new ValidationError('response', response[c.set.status], r) 
 			}\n`
-			fnLiteral += `return mapResponse(r, c.set);`
-		} else
-			fnLiteral +=
+
+			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+			else fnLiteral += `return mapCompactResponse(r)\n`
+		} else {
+			const handled =
 				handler.constructor.name === ASYNC_FN
-					? `return mapResponse(await handler(c), c.set);`
-					: `return mapResponse(handler(c), c.set);`
+					? 'await handler(c) '
+					: 'handler(c)'
+
+			if (hasSet) fnLiteral += `return mapResponse(${handled}, c.set)\n`
+			else fnLiteral += `return mapCompactResponse(${handled})\n`
+		}
 	}
 
 	fnLiteral += `
@@ -664,6 +678,7 @@ export const composeHandler = ({
 		},
 		utils: {
 			mapResponse,
+			mapCompactResponse,
 			mapEarlyResponse,
 			mapErrorCode,
 			parseQuery
@@ -700,6 +715,7 @@ export const composeHandler = ({
 		handleError,
 		utils: {
 			mapResponse,
+			mapCompactResponse,
 			mapEarlyResponse,
 			parseQuery
 		},
@@ -723,14 +739,33 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		decoratorsLiteral += `,${key}: app.decorators.${key}`
 
 	// @ts-ignore
-	const staticRouter = app.staticRouter
+	const { router, staticRouter } = app
+
+	const dynamicHandler = `const route = find(method, path) ${
+		router.root.ALL ? '?? find("ALL", path)' : ''
+	}
+	if (route === null)
+		return ${
+			app.event.error.length
+				? `handleError(
+			request,
+			notFound,
+			ctx.set
+		)`
+				: `new Response(error404, {
+					status: 404
+				})`
+		}
+
+	ctx.params = route.params
+
+	return route.store(ctx)`
 
 	let switchMap = ``
 	for (const [path, { code, all }] of Object.entries(staticRouter.map))
-		switchMap += `case '${path}':\nswitch(method) {\n${code}\n${all}}\n\n`
-
-	// @ts-ignore
-	const router = app.router
+		switchMap += `case '${path}':\nswitch(method) {\n${code}\n${
+			all ?? 'default:\n' + dynamicHandler
+		}}\n\n`
 
 	let fnLiteral = `const {
 		app,
@@ -784,35 +819,18 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	fnLiteral += `
 		const { url, method } = request,
-			s = url.indexOf('/', 12)
-			ctx.query = i = url.indexOf('?', s + 1),
+			s = url.indexOf('/', 12),
+			i = ctx.query = url.indexOf('?', s + 1),
 			path = i === -1 ? url.substring(s) : url.substring(s, i)
 
-		map: switch(path) {
+		switch(path) {
 			${switchMap}
-		}
-	
-		const route = find(method, path) ${
-			router.root.ALL ? '?? find("ALL", path)' : ''
-		}
-		if (route === null) {
-			return ${
-				app.event.error.length
-					? `handleError(
-				request,
-				notFound,
-				ctx.set
-			)`
-					: `new Response(error404, {
-						status: 404
-					})`
-			}
-		}
 
-		ctx.params = route.params
-
-		return route.store(ctx)
+			default: ${dynamicHandler}
+		}
 	}`
+
+	// console.log(fnLiteral)
 
 	app.handleError = composeErrorHandler(app) as any
 

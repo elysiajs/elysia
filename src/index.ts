@@ -121,7 +121,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			string,
 			{
 				code: string
-				all: string
+				all?: string
 			}
 		>,
 		all: ''
@@ -219,7 +219,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			validator,
 			handler,
 			handleError: this.handleError,
-			meta: allowMeta ? this.meta : undefined
+			meta: allowMeta ? this.meta : undefined,
+			onRequest: this.event.request
 		})
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
@@ -230,8 +231,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 			if (!this.staticRouter.map[path])
 				this.staticRouter.map[path] = {
-					code: '',
-					all: 'default: break map\n'
+					code: ''
 				}
 
 			if (method === 'ALL')
@@ -2228,6 +2228,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						data: {
 							...context,
 							id: Date.now(),
+							headers: context.request.headers.toJSON(),
 							message: getSchemaValidator(
 								options?.body,
 								this.meta[DEFS]
@@ -2247,7 +2248,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				return 'Expected a websocket connection'
 			},
 			{
-				// parse: options.parse,
 				beforeHandle: options.beforeHandle,
 				transform: options.transform,
 				headers: options?.headers,

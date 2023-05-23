@@ -1,3 +1,13 @@
+# 0.5.3 - 22 May 2023
+Improvement:
+- Add `mapCompactResponse` for static code analysis
+- Using `constructor.name` to inline object mapping
+- Using single assignment for URL destructuring
+- Using default map for dynamic route to remove static map label and break
+
+Bug fix:
+- Web Socket context.headers is empty [Elysia#46](https://github.com/elysiajs/elysia/issues/46)
+
 # 0.5.2 - 16 May 2023
 Improvement:
 - Static Code Analysis for fallback route
@@ -7,8 +17,8 @@ Bug fix:
 
 # 0.5.1 - 16 May 2023
 Bug fix:
-- syntax error if multiple numeric type is set
-- prevent fallthrough behavior of switch map
+- Syntax error if multiple numeric type is set
+- Prevent fallthrough behavior of switch map
 
 # 0.5.0 - 15 May 2023
 Improvement:

@@ -1,9 +1,12 @@
-import { Elysia, t } from '../src'
+import { Elysia, ws } from '../src'
 
 const app = new Elysia()
-	.post('/', ({ body }) => body, {
-		body: t.URLEncoded({
-			username: t.String()
-		})
+	.use(ws())
+	.ws('/', {
+		message(ws, message) {
+			console.log(ws.data.headers)
+
+			ws.send(message)
+		}
 	})
 	.listen(3000)

@@ -22,7 +22,6 @@ const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 	return headers
 }
 
-// We don't want to assign new variable to be used only once here
 export const mapEarlyResponse = (
 	response: unknown,
 	set: Context['set']
@@ -43,131 +42,95 @@ export const mapEarlyResponse = (
 				set.headers['Set-Cookie']
 			)
 
-		switch (typeof response) {
-			case 'string':
-				return new Response(response, {
-					status: set.status,
-					headers: set.headers
-				})
+		switch (response?.constructor?.name) {
+			case 'String':
+			case 'Blob':
+				return new Response(response as string | Blob, set)
 
-			case 'object':
-				switch (response!.constructor.name) {
-					case 'Object':
-					case 'Array':
-					case undefined:
-						return Response.json(response, {
-							status: set.status,
-							headers: set.headers
-						})
+			case 'Object':
+			case 'Array':
+				return Response.json(response, set)
 
-					case 'Error':
-						return errorToResponse(response as Error, set.headers)
+			case undefined:
+				if (!response) return
 
-					case 'Response':
-						for (const key in set.headers)
-							(response as Response)!.headers.append(
-								key,
-								set.headers[key]
-							)
+				return Response.json(response, set)
 
-						return response as Response
-
-					case 'Blob':
-						return new Response(response as Blob, {
-							status: set.status,
-							headers: set.headers
-						})
-
-					case 'Promise':
-						// @ts-ignore
-						return (response as Promise<unknown>).then((x) => {
-							const r = mapEarlyResponse(x, set)
-
-							if (r !== undefined) return r
-
-							return
-						})
-
-					default:
-						return new Response(response as any, {
-							status: set.status,
-							headers: set.headers
-						})
-				}
-
-			// ? Maybe response or Blob
-			case 'function':
-				if (response instanceof Blob)
-					return new Response(response, {
-						status: set.status,
-						headers: set.headers
-					})
-
+			case 'Response':
 				for (const key in set.headers)
-					(response as unknown as Response).headers.append(
+					(response as Response)!.headers.append(
 						key,
 						set.headers[key]
 					)
 
-				return response as unknown as Response
+				return response as Response
 
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString(), {
-					status: set.status,
-					headers: set.headers
+			case 'Promise':
+				// @ts-ignore
+				return (response as Promise<unknown>).then((x) => {
+					const r = mapEarlyResponse(x, set)
+
+					if (r !== undefined) return r
+
+					return
 				})
 
+			case 'Error':
+				return errorToResponse(response as Error, set.headers)
+
+			case 'Function':
+				return (response as Function)()
+
+			case 'Number':
+			case 'Boolean':
+				return new Response(
+					(response as number | boolean).toString(),
+					set
+				)
+
 			default:
-				break
+				return
 		}
 	} else
-		switch (typeof response) {
-			case 'string':
-				return new Response(response)
+		switch (response?.constructor?.name) {
+			case 'String':
+			case 'Blob':
+				return new Response(response as string | Blob)
 
-			case 'object':
-				switch (response!.constructor?.name) {
-					case 'Object':
-					case 'Array':
-					case undefined:
-						return Response.json(response)
+			case 'Object':
+			case 'Array':
+				return Response.json(response)
 
-					case 'Response':
-						return response as Response
+			case undefined:
+				if (!response) return new Response('')
 
-					case 'Error':
-						return errorToResponse(response as Error, set.headers)
+				return Response.json(response)
 
-					case 'Blob':
-						return new Response(response as Blob)
+			case 'Response':
+				return response as Response
 
-					case 'Promise':
-						// @ts-ignore
-						return (response as Promise<unknown>).then((x) => {
-							const r = mapEarlyResponse(x, set)
+			case 'Promise':
+				// @ts-ignore
+				return (response as Promise<unknown>).then((x) => {
+					const r = mapEarlyResponse(x, set)
 
-							if (r !== undefined) return r
+					if (r !== undefined) return r
 
-							return
-						})
+					return
+				})
 
-					default:
-						return new Response(response as any)
-				}
+			case 'Error':
+				return errorToResponse(response as Error, set.headers)
 
-			// ? Maybe response or Blob
-			case 'function':
-				if (response instanceof Blob) return new Response(response)
+			case 'Function':
+				return (response as Function)()
 
-				return response as unknown as Response
-
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString())
+			case 'Number':
+			case 'Boolean':
+				return new Response((response as number | boolean).toString())
 
 			default:
-				break
+				return
 		}
 }
 
@@ -191,134 +154,138 @@ export const mapResponse = (
 				set.headers['Set-Cookie']
 			)
 
-		switch (typeof response) {
-			case 'string':
-				return new Response(response, {
+		switch (response?.constructor?.name) {
+			case 'String':
+			case 'Blob':
+				return new Response(response as string | Blob, {
 					status: set.status,
 					headers: set.headers
 				})
 
-			case 'object':
-				switch (response!.constructor?.name) {
-					case 'Object':
-					case 'Array':
-					case undefined:
-						return Response.json(response, {
-							status: set.status,
-							headers: set.headers
-						})
+			case 'Object':
+			case 'Array':
+				return Response.json(response, set)
 
-					case 'Error':
-						return errorToResponse(response as Error, set.headers)
+			case undefined:
+				if (!response) return new Response('', set)
 
-					case 'Response':
-						for (const key in set.headers)
-							(response as Response)!.headers.append(
-								key,
-								set.headers[key]
-							)
+				return Response.json(response, set)
 
-						return response as Response
+			case 'Response':
+				for (const key in set.headers)
+					(response as Response)!.headers.append(
+						key,
+						set.headers[key]
+					)
 
-					case 'Blob':
-						return new Response(response as Blob, {
-							status: set.status,
-							headers: set.headers
-						})
+				return response as Response
 
-					case 'Promise':
-						// @ts-ignore
-						return response.then((x) => mapResponse(x, set))
+			case 'Error':
+				return errorToResponse(response as Error, set.headers)
 
-					default:
-						return new Response(response as any, {
-							status: set.status,
-							headers: set.headers
-						})
-				}
+			case 'Promise':
+				// @ts-ignore
+				return response.then((x) => mapResponse(x, set))
 
-			// ? Maybe response function or Blob
-			case 'function':
-				if (response instanceof Blob)
-					return new Response(response, {
-						status: set.status,
-						headers: set.headers
-					})
+			case 'Function':
+				return (response as Function)()
 
-				return response()
-
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString(), {
-					status: set.status,
-					headers: set.headers
-				})
-
-			case 'undefined':
-				return new Response('', {
-					status: set.status,
-					headers: set.headers
-				})
+			case 'Number':
+			case 'Boolean':
+				return new Response(
+					(response as number | boolean).toString(),
+					set
+				)
 
 			default:
-				return new Response(response as any, {
-					status: set.status,
-					headers: set.headers
-				})
+				return new Response(response as any, set)
 		}
 	} else
-		switch (typeof response) {
-			case 'string':
-				return new Response(response)
+		switch (response?.constructor?.name) {
+			case 'String':
+			case 'Blob':
+				return new Response(response as string | Blob)
 
-			case 'object':
-				switch (response!.constructor?.name) {
-					case 'Object':
-					case 'Array':
-					case undefined:
-						return Response.json(response)
+			case 'Object':
+			case 'Array':
+				return Response.json(response)
 
-					case 'Response':
-						return response as Response
+			case undefined:
+				if (!response) return new Response('')
 
-					case 'Error':
-						return errorToResponse(response as Error, set.headers)
+				return Response.json(response)
 
-					case 'Blob':
-						return new Response(response as Blob)
+			case 'Response':
+				return response as Response
 
-					case 'Promise':
-						// @ts-ignore
-						return (response as any as Promise<unknown>).then(
-							(x) => {
-								const r = mapEarlyResponse(x, set)
+			case 'Error':
+				return errorToResponse(response as Error)
 
-								if (r !== undefined) return r
+			case 'Promise':
+				// @ts-ignore
+				return (response as any as Promise<unknown>).then((x) => {
+					const r = mapResponse(x, set)
 
-								return new Response('')
-							}
-						)
+					if (r !== undefined) return r
 
-					default:
-						return new Response(response as any)
-				}
+					return new Response('')
+				})
 
 			// ? Maybe response or Blob
-			case 'function':
-				if (response instanceof Blob) return new Response(response)
+			case 'Function':
+				return (response as Function)()
 
-				return response()
-
-			case 'number':
-			case 'boolean':
-				return new Response(response.toString())
-
-			case 'undefined':
-				return new Response('')
+			case 'Number':
+			case 'Boolean':
+				return new Response((response as number | boolean).toString())
 
 			default:
-				return new Response(response as any)
+				return response as any
 		}
+}
+
+export const mapCompactResponse = (response: unknown): Response => {
+	switch (response!.constructor?.name) {
+		case 'String':
+		case 'Blob':
+			return new Response(response as string | Blob)
+
+		case 'Object':
+		case 'Array':
+			return Response.json(response)
+
+		case undefined:
+			if (!response) return new Response('')
+
+			return Response.json(response)
+
+		case 'Response':
+			return response as Response
+
+		case 'Error':
+			return errorToResponse(response as Error)
+
+		case 'Promise':
+			// @ts-ignore
+			return (response as any as Promise<unknown>).then((x) => {
+				const r = mapCompactResponse(x)
+
+				if (r !== undefined) return r
+
+				return new Response('')
+			})
+
+		// ? Maybe response or Blob
+		case 'Function':
+			return (response as Function)()
+
+		case 'Number':
+		case 'Boolean':
+			return new Response((response as number | boolean).toString())
+
+		default:
+			return response as any
+	}
 }
 
 export const errorToResponse = (error: Error, headers?: HeadersInit) =>

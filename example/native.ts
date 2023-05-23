@@ -1,19 +1,13 @@
-// Using navitve Bun http server
-Bun.serve({
-	port: 3000,
-	async fetch(request) {
-		return new Response('')
+const cached = new Response('cached', {
+	status: 200,
+	headers: {
+		'content-type': 'text/plain'
 	}
 })
 
-const transpiler = new Bun.Transpiler({
-	"inline": true
+Bun.serve({
+	port: 3000,
+	async fetch(request) {
+		return cached.clone()
+	}
 })
-
-const code = transpiler.transformSync(`
-  function averylongfunctioname(param) {
-	return param
-  }
-`)
-
-console.log(code)
