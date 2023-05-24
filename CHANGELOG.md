@@ -1,3 +1,7 @@
+# 0.5.6 - 25 May 2023
+Improvement:
+- Using `new Response` instead of factory `Response.json`
+
 # 0.5.5 - 25 May 2023
 Improvement:
 - Using request.json() to handle application/json body instead of JSON.parse(await c.text())

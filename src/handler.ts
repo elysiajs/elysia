@@ -99,12 +99,20 @@ export const mapEarlyResponse = (
 
 			case 'Object':
 			case 'Array':
-				return Response.json(response)
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
 
 			case undefined:
 				if (!response) return new Response('')
 
-				return Response.json(response)
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
 
 			case 'Response':
 				return response as Response
@@ -208,12 +216,20 @@ export const mapResponse = (
 
 			case 'Object':
 			case 'Array':
-				return Response.json(response)
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
 
 			case undefined:
 				if (!response) return new Response('')
 
-				return Response.json(response)
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
 
 			case 'Response':
 				return response as Response
@@ -252,12 +268,20 @@ export const mapCompactResponse = (response: unknown): Response => {
 
 		case 'Object':
 		case 'Array':
-			return Response.json(response)
+			return new Response(JSON.stringify(response), {
+				headers: {
+					'content-type': 'application/json'
+				}
+			})
 
 		case undefined:
 			if (!response) return new Response('')
 
-			return Response.json(response)
+			return new Response(JSON.stringify(response), {
+				headers: {
+					'content-type': 'application/json'
+				}
+			})
 
 		case 'Response':
 			return response as Response
