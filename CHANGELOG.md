@@ -1,3 +1,7 @@
+# 0.5.5 - 25 May 2023
+Improvement:
+- Using request.json() to handle application/json body instead of JSON.parse(await c.text())
+
 # 0.5.4 - 25 May 2023
 Improvement:
 - Add Static Code Analysis for conditional try-catch

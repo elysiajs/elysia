@@ -1,9 +1,7 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.get('/', () => {
-		throw new Error('Ai')
-
-		return 'a'
+	.post('/', ({ body }) => body, {
+		type: 'json'
 	})
 	.listen(3000)

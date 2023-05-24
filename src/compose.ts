@@ -319,7 +319,7 @@ export const composeHandler = ({
 						else {
 							// Since it's an object an not accepting file
 							// we can infer that it's JSON
-							fnLiteral += `c.body = JSON.parse(await c.request.text())`
+							fnLiteral += `c.body = await c.request.json();`
 						}
 						break
 
@@ -330,7 +330,7 @@ export const composeHandler = ({
 			} else {
 				switch (hooks.type) {
 					case 'application/json':
-						fnLiteral += `c.body = JSON.parse(await c.request.text());`
+						fnLiteral += `c.body = await c.request.json();`
 						break
 
 					case 'text/plain':
@@ -391,7 +391,7 @@ export const composeHandler = ({
 
 			fnLiteral += `switch (contentType) {
 			case 'application/json':
-				c.body = JSON.parse(await c.request.text())
+				c.body = await c.request.json()
 				break
 
 			case 'text/plain':
@@ -693,8 +693,6 @@ export const composeHandler = ({
 	${maybeAsync ? '' : '})()'}
 }`
 	}
-
-	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
