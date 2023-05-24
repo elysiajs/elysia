@@ -1,3 +1,8 @@
+# 0.5.4 - 25 May 2023
+Improvement:
+- Add Static Code Analysis for conditional try-catch
+- Reduce usage of method to accessor
+
 # 0.5.3 - 22 May 2023
 Improvement:
 - Add `mapCompactResponse` for static code analysis

@@ -25,12 +25,6 @@ describe('error', () => {
 
 	it('custom validation error', async () => {
 		const app = new Elysia()
-			.post('/login', ({ body }) => body, {
-				body: t.Object({
-					username: t.String(),
-					password: t.String()
-				})
-			})
 			.onError(({ code, error, set }) => {
 				if (code === 'VALIDATION') {
 					set.status = 400
@@ -40,6 +34,12 @@ describe('error', () => {
 						reason: i.message
 					}))
 				}
+			})
+			.post('/login', ({ body }) => body, {
+				body: t.Object({
+					username: t.String(),
+					password: t.String()
+				})
 			})
 
 		const res = await app.handle(post('/login', {}))

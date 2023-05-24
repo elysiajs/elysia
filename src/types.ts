@@ -460,6 +460,10 @@ export type ComposedHandler = (context: Context) => MaybePromise<Response>
 export interface ElysiaConfig {
 	fn?: string
 	serve?: Partial<Serve>
+	/**
+	 * Disable `new Error` thrown marked as Error on Bun 0.6
+	 */
+	forceErrorEncapsulation?: boolean
 }
 
 export type IsPathParameter<Part> = Part extends `:${infer Parameter}`

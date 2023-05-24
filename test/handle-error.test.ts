@@ -67,7 +67,9 @@ describe('Handle Error', () => {
 	})
 
 	it('inject headers to error', async () => {
-		const app = new Elysia()
+		const app = new Elysia({
+			forceErrorEncapsulation: true
+		})
 			.onRequest(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
@@ -82,7 +84,9 @@ describe('Handle Error', () => {
 	})
 
 	it('transform any to error', async () => {
-		const app = new Elysia()
+		const app = new Elysia({
+			forceErrorEncapsulation: true
+		})
 			.get('/', () => {
 				throw new NotFoundError()
 			})

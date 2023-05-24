@@ -127,12 +127,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		all: ''
 	}
 	private wsRouter: Memoirist<ElysiaWSOptions> | undefined
-	
+
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
 	constructor(config?: Partial<ElysiaConfig>) {
 		this.config = {
 			fn: '/~fn',
+			forceErrorEncapsulation: false,
 			...config
 		}
 	}
@@ -220,7 +221,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			handler,
 			handleError: this.handleError,
 			meta: allowMeta ? this.meta : undefined,
-			onRequest: this.event.request
+			onRequest: this.event.request,
+			config: this.config
 		})
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
@@ -1177,12 +1179,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this.add(
-			'POST',
-			path,
-			handler as any,
-			hook as LocalHook<any, any>
-		)
+		this.add('POST', path, handler as any, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2381,13 +2378,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				>
 			>
 	}> {
-		this.add(
-			method,
-			path,
-			handler,
-			hook as LocalHook<any, any>,
-			config
-		)
+		this.add(method, path, handler, hook as LocalHook<any, any>, config)
 
 		return this as any
 	}
@@ -2741,6 +2732,12 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		set: Context['set']
 	) => (this.handleError = composeErrorHandler(this))(request, error, set)
 
+	private outerErrorHandler = (error: Error) =>
+		new Response(error.message, {
+			// @ts-ignore
+			status: error?.status ?? 500
+		})
+
 	/**
 	 * ### listen
 	 * Assign current instance to port and start serving
@@ -2779,12 +2776,14 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						...this.config.serve,
 						...options,
 						development,
-						fetch
+						fetch,
+						error: this.outerErrorHandler
 				  }
 				: {
 						...this.config.serve,
 						port: options,
-						fetch
+						fetch,
+						error: this.outerErrorHandler
 				  }
 
 		if (process.env.ENV !== 'production') {

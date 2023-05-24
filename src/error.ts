@@ -48,4 +48,11 @@ export class ValidationError extends Error {
 	get all() {
 		return [...this.validator.Errors(this.value)]
 	}
+
+	toResponse(headers?: Record<string, any>) {
+		return new Response(this.message, {
+			status: 400,
+			headers
+		})
+	}
 }

@@ -12,6 +12,7 @@ import {
 } from './error'
 
 import type {
+	ElysiaConfig,
 	BeforeRequestHandler,
 	ComposedHandler,
 	HTTPMethod,
@@ -19,7 +20,7 @@ import type {
 	RegisteredHook,
 	SchemaValidator
 } from './types'
-import { TAnySchema } from '@sinclair/typebox'
+import type { TAnySchema } from '@sinclair/typebox'
 
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
@@ -41,6 +42,33 @@ export const hasReturn = (fnLiteral: string) => {
 
 	return fnLiteral.includes('return')
 }
+
+const composeValidationFactory = (hasErrorHandler: boolean) => ({
+	composeValidation: (type: string, value = `c.${type}`) =>
+		hasErrorHandler
+			? `throw new ValidationError(
+'${type}',
+${type},
+${value}
+)`
+			: `return new ValidationError(
+	'${type}',
+	${type},
+	${value}
+).toResponse(c.set.headers)`,
+	composeResponseValidation: (value = 'r') =>
+		hasErrorHandler
+			? `throw new ValidationError(
+'response',
+response[c.set.status],
+${value}
+)`
+			: `return new ValidationError(
+'response',
+response[c.set.status],
+${value}
+).toResponse(c.set.headers)`
+})
 
 export const isFnUse = (keyword: string, fnLiteral: string) => {
 	const argument = fnLiteral.slice(
@@ -124,14 +152,15 @@ export const findElysiaMeta = (
 }
 
 export const composeHandler = ({
-	path,
+	// path,
 	method,
 	hooks,
 	validator,
 	handler,
 	handleError,
 	meta,
-	onRequest
+	onRequest,
+	config
 }: {
 	path: string
 	method: HTTPMethod
@@ -141,8 +170,17 @@ export const composeHandler = ({
 	handleError: Elysia['handleError']
 	meta?: Elysia['meta']
 	onRequest: BeforeRequestHandler<any, any>[]
+	config: ElysiaConfig
 }): ComposedHandler => {
-	let fnLiteral = 'try {\n'
+	const hasErrorHandler =
+		config.forceErrorEncapsulation ||
+		hooks.error.length > 0 ||
+		Bun === undefined
+
+	const { composeValidation, composeResponseValidation } =
+		composeValidationFactory(hasErrorHandler)
+
+	let fnLiteral = hasErrorHandler ? 'try {\n' : ''
 
 	const hasStrictContentType = typeof hooks.type === 'string'
 
@@ -175,13 +213,8 @@ export const composeHandler = ({
                 for (const key of c.request.headers.keys())
 					h[key] = c.request.headers.get(key)
 
-                if (headers.Check(h) === false) {
-                    throw throw new ValidationError(
-                        'header',
-                        headers,
-                        h
-                    )
-				}
+                if (headers.Check(c.headers) === false)
+					${composeValidation('headers')}
 			`
 	}
 
@@ -479,22 +512,24 @@ export const composeHandler = ({
 		if (validator.headers)
 			fnLiteral += `
                 if (headers.Check(c.headers) === false) {
-                    throw new ValidationError(
-                        'header',
-                        headers,
-                        c.headers
-                    )
+                    ${composeValidation('headers')}
 				}
         `
 
 		if (validator.params)
-			fnLiteral += `if(params.Check(c.params) === false) { throw new ValidationError('params', params, c.params) }`
+			fnLiteral += `if(params.Check(c.params) === false) { ${composeValidation(
+				'params'
+			)} }`
 
 		if (validator.query)
-			fnLiteral += `if(query.Check(c.query) === false) { throw new ValidationError('query', query, c.query) }`
+			fnLiteral += `if(query.Check(c.query) === false) { ${composeValidation(
+				'query'
+			)} }`
 
 		if (validator.body)
-			fnLiteral += `if(body.Check(c.body) === false) { throw new ValidationError('body', body, c.body) }`
+			fnLiteral += `if(body.Check(c.body) === false) { ${composeValidation(
+				'body'
+			)} }`
 	}
 
 	if (hooks?.beforeHandle)
@@ -545,7 +580,7 @@ export const composeHandler = ({
 				if (validator.response)
 					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
 						if(!(response instanceof Error))
-							throw new ValidationError('response', response[c.set.status], ${name}) 
+							${composeResponseValidation(name)}
 					}\n`
 
 				fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
@@ -577,7 +612,7 @@ export const composeHandler = ({
 				if (validator.response) {
 					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
 						if(!(response instanceof Error))
-							throw new ValidationError('response', response[c.set.status], ${name}) 
+						${composeResponseValidation(name)}
 					}\n`
 
 					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
@@ -590,7 +625,7 @@ export const composeHandler = ({
 		if (validator.response)
 			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
 				if(!(response instanceof Error))
-					throw new ValidationError('response', response[c.set.status], r) 
+					${composeResponseValidation()}
 			}\n`
 
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
@@ -604,7 +639,7 @@ export const composeHandler = ({
 
 			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
 				if(!(response instanceof Error))
-					throw new ValidationError('response', response[c.set.status], r) 
+					${composeResponseValidation()}
 			}\n`
 
 			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
@@ -620,7 +655,8 @@ export const composeHandler = ({
 		}
 	}
 
-	fnLiteral += `
+	if (hasErrorHandler) {
+		fnLiteral += `
 } catch(error) {
 	${
 		''
@@ -656,6 +692,7 @@ export const composeHandler = ({
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
 }`
+	}
 
 	// console.log(fnLiteral)
 
@@ -680,7 +717,6 @@ export const composeHandler = ({
 			mapResponse,
 			mapCompactResponse,
 			mapEarlyResponse,
-			mapErrorCode,
 			parseQuery
 		},
 		error: {
@@ -741,7 +777,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	// @ts-ignore
 	const { router, staticRouter } = app
 
-	const dynamicHandler = `const route = find(method, path) ${
+	const findDynamicRoute = `
+	const route = find(request.method, path) ${
 		router.root.ALL ? '?? find("ALL", path)' : ''
 	}
 	if (route === null)
@@ -763,8 +800,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 	let switchMap = ``
 	for (const [path, { code, all }] of Object.entries(staticRouter.map))
-		switchMap += `case '${path}':\nswitch(method) {\n${code}\n${
-			all ?? 'default:\n' + dynamicHandler
+		switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
+			all ?? `default: ${findDynamicRoute}`
 		}}\n\n`
 
 	let fnLiteral = `const {
@@ -786,19 +823,21 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
 
 	return function(request) {
-		const ctx = {
-			request,
-			store,
-			set: {
-				headers: {},
-				status: 200
-			}
-			${decoratorsLiteral}
-		}
 	`
 
 	if (app.event.request.length) {
-		fnLiteral += `try {`
+		fnLiteral += `
+			const ctx = {
+				request,
+				store,
+				set: {
+					headers: {},
+					status: 200
+				}
+				${decoratorsLiteral}
+			}
+
+			try {\n`
 
 		for (let i = 0; i < app.event.request.length; i++) {
 			const withReturn = hasReturn(app.event.request[i].toString())
@@ -814,19 +853,40 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 		fnLiteral += `} catch (error) {
 			return handleError(request, error, ctx.set)
-		}`
+		}
+		
+		const url = request.url,
+		s = url.indexOf('/', 12),
+		i = ctx.query = url.indexOf('?', s + 1),
+		path = i === -1 ? url.substring(s) : url.substring(s, i);`
+	} else {
+		fnLiteral += `
+			const url = request.url,
+			s = url.indexOf('/', 12)
+
+		const ctx = {
+			request,
+			store,
+			query: url.indexOf('?', s + 1),
+			set: {
+				headers: {},
+				status: 200
+			}
+			${decoratorsLiteral}
+		}
+
+		const path =
+			ctx.query === -1
+				? url.substring(s)
+				: url.substring(s, ctx.query);`
 	}
 
 	fnLiteral += `
-		const { url, method } = request,
-			s = url.indexOf('/', 12),
-			i = ctx.query = url.indexOf('?', s + 1),
-			path = i === -1 ? url.substring(s) : url.substring(s, i)
-
 		switch(path) {
 			${switchMap}
 
-			default: ${dynamicHandler}
+			default:
+				${findDynamicRoute}
 		}
 	}`
 

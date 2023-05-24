@@ -65,7 +65,9 @@ describe('Life Cycle', () => {
 	})
 
 	it('handle onError', async () => {
-		const app = new Elysia()
+		const app = new Elysia({
+			forceErrorEncapsulation: true
+		})
 			.get('/', () => {
 				throw new Error('Something')
 			})

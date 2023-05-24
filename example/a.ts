@@ -1,12 +1,9 @@
-import { Elysia, ws } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.use(ws())
-	.ws('/', {
-		message(ws, message) {
-			console.log(ws.data.headers)
+	.get('/', () => {
+		throw new Error('Ai')
 
-			ws.send(message)
-		}
+		return 'a'
 	})
 	.listen(3000)
