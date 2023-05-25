@@ -1,3 +1,7 @@
+# 0.5.7 - 25 May 2023
+Bug fix:
+- Bun is undefined on other runtime
+
 # 0.5.6 - 25 May 2023
 Improvement:
 - Using `new Response` instead of factory `Response.json`

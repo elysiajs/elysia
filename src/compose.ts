@@ -175,7 +175,7 @@ export const composeHandler = ({
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
 		hooks.error.length > 0 ||
-		Bun === undefined
+		typeof Bun === "undefined"
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory(hasErrorHandler)
