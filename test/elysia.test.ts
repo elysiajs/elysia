@@ -57,4 +57,39 @@ describe('Elysia', () => {
 		const res = await app.handle(req('/all/world')).then((x) => x.text())
 		expect(res).toBe('ALL')
 	})
+
+	it('handle object of class', async () => {
+		class SomeResponse {
+			constructor(public message: string) {}
+		}
+
+		const app = new Elysia().get(
+			'/',
+			() => new SomeResponse('Hello, world!')
+		)
+
+		const res = await app.handle(req('/')).then((x) => x.json())
+		expect(res).toStrictEqual({
+			message: 'Hello, world!'
+		})
+	})
+
+	it('handle object of class (async)', async () => {
+		class SomeResponse {
+			constructor(public message: string) {}
+		}
+
+		const app = new Elysia().get(
+			'/',
+			async () => {
+				await Bun.sleep(1)
+				return new SomeResponse('Hello, world!')
+			}
+		)
+
+		const res = await app.handle(req('/')).then((x) => x.json())
+		expect(res).toStrictEqual({
+			message: 'Hello, world!'
+		})
+	})
 })
