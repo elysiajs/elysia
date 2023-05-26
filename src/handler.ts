@@ -89,7 +89,17 @@ export const mapEarlyResponse = (
 				)
 
 			default:
-				return
+				if (response instanceof Response) return response
+
+				const r = JSON.stringify(response)
+				if (r.charCodeAt(0) === 123) {
+					if (!set.headers['Content-Type'])
+						set.headers['Content-Type'] = 'application/json'
+
+					return new Response(JSON.stringify(response), set) as any
+				}
+
+				return new Response(r, set)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -138,7 +148,17 @@ export const mapEarlyResponse = (
 				return new Response((response as number | boolean).toString())
 
 			default:
-				return
+				if (response instanceof Response) return response
+
+				const r = JSON.stringify(response)
+				if (r.charCodeAt(0) === 123)
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'Content-Type': 'application/json'
+						}
+					}) as any
+
+				return new Response(r)
 		}
 }
 
@@ -206,7 +226,17 @@ export const mapResponse = (
 				)
 
 			default:
-				return new Response(response as any, set)
+				if (response instanceof Response) return response
+
+				const r = JSON.stringify(response)
+				if (r.charCodeAt(0) === 123) {
+					if (!set.headers['Content-Type'])
+						set.headers['Content-Type'] = 'application/json'
+
+					return new Response(JSON.stringify(response), set) as any
+				}
+
+				return new Response(r, set)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -256,7 +286,17 @@ export const mapResponse = (
 				return new Response((response as number | boolean).toString())
 
 			default:
-				return response as any
+				if (response instanceof Response) return response
+
+				const r = JSON.stringify(response)
+				if (r.charCodeAt(0) === 123)
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'Content-Type': 'application/json'
+						}
+					}) as any
+
+				return new Response(r)
 		}
 }
 
@@ -308,7 +348,17 @@ export const mapCompactResponse = (response: unknown): Response => {
 			return new Response((response as number | boolean).toString())
 
 		default:
-			return response as any
+			if (response instanceof Response) return response
+
+			const r = JSON.stringify(response)
+			if (r.charCodeAt(0) === 123)
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'Content-Type': 'application/json'
+					}
+				}) as any
+
+			return new Response(r)
 	}
 }
 

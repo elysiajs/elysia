@@ -1,3 +1,7 @@
+# 0.5.8 - 27 May 2023
+Improvement:
+- Add support for returning a class instance
+
 # 0.5.7 - 25 May 2023
 Bug fix:
 - Bun is undefined on other runtime
