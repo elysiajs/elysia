@@ -1,3 +1,9 @@
+# 0.5.9 - 30 May 2023
+Improvement:
+- Add content-type support for 'none', 'arrayBuffer' / 'application/octet-stream'
+- Add type support type registration of wildcard params
+- Add support for 'config.basePath'
+
 # 0.5.8 - 27 May 2023
 Improvement:
 - Add support for returning a class instance

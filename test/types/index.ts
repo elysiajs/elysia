@@ -528,3 +528,18 @@ app.use(plugin).group(
 		}
 	}>()
 }
+
+app.get('/*', ({ params }) => {
+	expectTypeOf<typeof params>().toEqualTypeOf<{
+		'*': string
+	}>()
+
+	return 'hello'
+}).get('/id/:id/*', ({ params }) => {
+	expectTypeOf<typeof params>().toEqualTypeOf<{
+		id: string
+		'*': string
+	}>()
+
+	return 'hello'
+})

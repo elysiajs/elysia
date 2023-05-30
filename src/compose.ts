@@ -175,7 +175,7 @@ export const composeHandler = ({
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
 		hooks.error.length > 0 ||
-		typeof Bun === "undefined"
+		typeof Bun === 'undefined'
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory(hasErrorHandler)
@@ -196,6 +196,7 @@ export const composeHandler = ({
 
 	const hasBody =
 		method !== 'GET' &&
+		hooks.type !== 'none' &&
 		(validator.body ||
 			hasStrictContentType ||
 			lifeCycleLiteral.some((fn) => isFnUse('body', fn)))
@@ -341,6 +342,10 @@ export const composeHandler = ({
 						fnLiteral += `c.body = parseQuery(await c.request.text());`
 						break
 
+					case 'application/octet-stream':
+						fnLiteral += `c.body = await c.request.arrayBuffer();`
+						break
+
 					case 'multipart/form-data':
 						fnLiteral += `c.body = {}
 
@@ -400,6 +405,10 @@ export const composeHandler = ({
 
 			case 'application/x-www-form-urlencoded':
 				c.body = parseQuery(await c.request.text())
+				break
+
+			case 'application/octet-stream':
+				c.body = await c.request.arrayBuffer();
 				break
 
 			case 'multipart/form-data':

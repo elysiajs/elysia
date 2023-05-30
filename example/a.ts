@@ -1,14 +1,16 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
+
+const server = 'https://lotto.api.rayriffy.com/'
 
 const app = new Elysia()
-	.get('/', () => {
-		class SomeResponse {
-			constructor(public message: string) {}
+	.all(
+		'/*',
+		async ({ params, request }) =>
+			fetch(server + params['*'], {
+				...request
+			}),
+		{
+			type: 'none'
 		}
-
-		return new SomeResponse('Hello World')
-	})
-	.post('/', ({ body }) => body, {
-		type: 'json'
-	})
+	)
 	.listen(3000)

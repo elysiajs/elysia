@@ -134,6 +134,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.config = {
 			fn: '/~fn',
 			forceErrorEncapsulation: false,
+			basePath: '',
 			...config
 		}
 	}
@@ -149,6 +150,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	) {
 		path =
 			path === '' ? path : path.charCodeAt(0) === 47 ? path : `/${path}`
+
+		if (this.config.basePath) this.config.basePath + path
 
 		this.routes.push({
 			method,
@@ -175,6 +178,13 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 				case 'urlencoded':
 					hook.type = 'application/x-www-form-urlencoded'
+					break
+
+				case 'arrayBuffer':
+					hook.type = 'application/octet-stream'
+					break
+
+				default:
 					break
 			}
 

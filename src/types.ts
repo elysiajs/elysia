@@ -285,14 +285,18 @@ type MaybeArray<T> = T | T[]
 
 type ContentType = MaybeArray<
 	| (string & {})
+	// Do not parse body
+	| 'none'
 	// Shorthand for 'text/plain'
 	| 'text'
 	// Shorthand for 'application/json'
 	| 'json'
 	// Shorthand for 'multipart/form-data'
 	| 'formdata'
-	// Shorthand for 'application/x-www-form-urlencoded'\
+	// Shorthand for 'application/x-www-form-urlencoded'
 	| 'urlencoded'
+	// Shorthand for 'application/octet-stream'
+	| 'arrayBuffer'
 	| 'text/plain'
 	| 'application/json'
 	| 'multipart/form-data'
@@ -304,7 +308,21 @@ export type LocalHook<
 	Instance extends ElysiaInstance<any>,
 	Path extends string = string
 > = Partial<Schema> & {
+	/**
+	 * Short for 'Content-Type'
+	 * 
+	 * Available:
+	 * - 'none': do not parse body
+	 * - 'text' / 'text/plain': parse body as string
+	 * - 'json' / 'application/json': parse body as json
+	 * - 'formdata' / 'multipart/form-data': parse body as form-data
+	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+	 * - 'arraybuffer': parse body as readable stream
+	 */
 	type?: ContentType
+	/**
+	 * Short for 'Content-Type'
+	 */
 	detail?: Partial<OpenAPIV3.OperationObject>
 	/**
 	 * Transform context's value
@@ -460,6 +478,7 @@ export type ComposedHandler = (context: Context) => MaybePromise<Response>
 export interface ElysiaConfig {
 	fn?: string
 	serve?: Partial<Serve>
+	basePath?: string
 	/**
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */
@@ -468,6 +487,8 @@ export interface ElysiaConfig {
 
 export type IsPathParameter<Part> = Part extends `:${infer Parameter}`
 	? Parameter
+	: Part extends `*`
+	? '*'
 	: never
 
 export type ExtractPath<Path> = Path extends `${infer A}/${infer B}`
