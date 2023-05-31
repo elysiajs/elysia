@@ -1,3 +1,7 @@
+# 0.5.11 - 31 May 2023
+Improvement:
+- Experimental basic support for Static Code Analysis in Nodejs
+
 # 0.5.10 - 31 May 2023
 Bug fix:
 - h is undefined when using headers in Node environment

@@ -3,14 +3,7 @@ import { Elysia } from '../src'
 const server = 'https://lotto.api.rayriffy.com/'
 
 const app = new Elysia()
-	.all(
-		'/*',
-		async ({ params, request }) =>
-			fetch(server + params['*'], {
-				...request
-			}),
-		{
-			type: 'none'
-		}
-	)
+	.post('/', function ({ body }) {
+		return body
+	})
 	.listen(3000)

@@ -71,19 +71,29 @@ ${value}
 })
 
 export const isFnUse = (keyword: string, fnLiteral: string) => {
-	const argument = fnLiteral.slice(
-		fnLiteral.indexOf('(') + 1,
-		fnLiteral.indexOf(')')
-	)
+	fnLiteral = fnLiteral.trimStart()
+
+	const argument =
+		// CharCode 40 is '('
+		fnLiteral.charCodeAt(0) === 40 || fnLiteral.startsWith('function')
+			? // Bun: (context) => {}
+			  fnLiteral.slice(
+					fnLiteral.indexOf('(') + 1,
+					fnLiteral.indexOf(')')
+			  )
+			: // Node: context => {}
+			  fnLiteral.slice(0, fnLiteral.indexOf('=') - 1)
 
 	if (argument === '') return false
 
 	// Using object destructuring
 	if (argument.charCodeAt(0) === 123) {
-		// Since Function already format the code, styling is confirmed
+		// Since Function already format the code, styling is enforced
 		if (
 			argument.includes(`{ ${keyword}`) ||
-			argument.includes(`, ${keyword}`)
+			argument.includes(`, ${keyword}`) ||
+			// Node
+			argument.includes(`,${keyword}`)
 		)
 			return true
 
