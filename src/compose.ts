@@ -211,12 +211,9 @@ export const composeHandler = ({
 		fnLiteral += _demoHeaders.toJSON
 			? `c.headers = c.request.headers.toJSON()\n`
 			: `c.headers = {}
-                for (const key of c.request.headers.keys())
-					h[key] = c.request.headers.get(key)
-
-                if (headers.Check(c.headers) === false)
-					${composeValidation('headers')}
-			`
+                for (const [key, value] of c.request.headers.entries())
+					c.headers[key] = value
+				`
 	}
 
 	const hasQuery =

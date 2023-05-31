@@ -1,3 +1,8 @@
+# 0.5.10 - 31 May 2023
+Bug fix:
+- h is undefined when using headers in Node environment
+- Update Memoirist to 0.1.4 to support full CommonJS
+
 # 0.5.9 - 30 May 2023
 Improvement:
 - Add content-type support for 'none', 'arrayBuffer' / 'application/octet-stream'
