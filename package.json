@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.5.11",
+  "version": "0.5.12",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -116,6 +116,7 @@
     "openapi-types": "^12.1.0"
   },
   "devDependencies": {
+    "@elysiajs/cors": "^0.5.0",
     "@swc/cli": "^0.1.62",
     "@swc/core": "^1.3.41",
     "@types/node": "^18.15.5",

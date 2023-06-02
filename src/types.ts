@@ -452,7 +452,7 @@ export type LocalHandler<
 					response: Response
 			  }
 			: // It's impossible to land here
-			  any
+			  never
 		: never,
 	Instance
 >

@@ -1,3 +1,7 @@
+# 0.5.12 - 3 June 2023
+Bug fix:
+- multiple onRequest cause error
+
 # 0.5.11 - 31 May 2023
 Improvement:
 - Experimental basic support for Static Code Analysis in Nodejs

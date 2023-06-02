@@ -859,7 +859,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			const withReturn = hasReturn(app.event.request[i].toString())
 
 			fnLiteral += !withReturn
-				? `mapEarlyResponse(onRequest[${i}](ctx), ctx.set)`
+				? `mapEarlyResponse(onRequest[${i}](ctx), ctx.set);`
 				: `const response = mapEarlyResponse(
 					onRequest[${i}](ctx),
 					ctx.set
@@ -905,8 +905,6 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 				${findDynamicRoute}
 		}
 	}`
-
-	// console.log(fnLiteral)
 
 	app.handleError = composeErrorHandler(app) as any
 

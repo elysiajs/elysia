@@ -736,7 +736,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	guard<
 		Schema extends TypedSchema<
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
+		>,
 		NewElysia extends Elysia<any> = Elysia<any>
 	>(
 		hook: LocalHook<Schema, Instance>,
@@ -1338,7 +1338,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1459,7 +1459,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1580,7 +1580,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1696,7 +1696,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1817,7 +1817,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -1938,7 +1938,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -2059,7 +2059,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		Handler extends LocalHandler<Schema, Instance, Path>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		path: Path,
 		handler: Handler,
@@ -2176,10 +2176,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * ```
 	 */
 	ws<
-		Path extends string = '',
+		Path extends string,
 		Schema extends WSTypedSchema<
 			Extract<keyof Instance['meta'][typeof DEFS], string>
-		> = {}
+		>
 	>(
 		/**
 		 * Path to register websocket to
@@ -2287,7 +2287,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	route<
 		Schema extends TypedSchema<
 			Exclude<keyof Instance['meta'][typeof DEFS], number | symbol>
-		> = {},
+		>,
 		Method extends HTTPMethod = HTTPMethod,
 		Path extends string = string,
 		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
