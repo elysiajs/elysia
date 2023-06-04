@@ -310,7 +310,7 @@ export type LocalHook<
 > = Partial<Schema> & {
 	/**
 	 * Short for 'Content-Type'
-	 * 
+	 *
 	 * Available:
 	 * - 'none': do not parse body
 	 * - 'text' / 'text/plain': parse body as string
@@ -556,7 +556,7 @@ export type ErrorHandler = (
 	params:
 		| {
 				request: Request
-				code: 'UNKNOWN'
+				code: 'UNKNOWN' | (string & {})
 				error: Readonly<Error>
 				set: Context['set']
 		  }

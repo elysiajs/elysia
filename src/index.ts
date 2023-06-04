@@ -2796,7 +2796,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						error: this.outerErrorHandler
 				  }
 
-		if (process.env.ENV !== 'production') {
+		if (development) {
 			const key = `$$Elysia:${serve.port}`
 
 			// ! Blasphemy !

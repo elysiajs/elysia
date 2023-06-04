@@ -1,6 +1,10 @@
+# 0.5.13 - 4 June 2023
+Bug fix:
+- Add loosen type for onError's code for defying custom error status
+
 # 0.5.12 - 3 June 2023
 Bug fix:
-- multiple onRequest cause error
+- Multiple onRequest cause error
 
 # 0.5.11 - 31 May 2023
 Improvement:
