@@ -1,3 +1,7 @@
+# 0.5.15 - 4 Jun 2023
+Improvement:
+- Map CommonJS module in package.json
+
 # 0.5.14 - 4 June 2023
 Improvement:
 - Using tsc to compile CommonJS instead of SWC to support `module.exports` syntax
