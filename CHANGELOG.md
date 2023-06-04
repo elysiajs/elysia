@@ -1,3 +1,7 @@
+# 0.5.14 - 4 June 2023
+Improvement:
+- Using tsc to compile CommonJS instead of SWC to support `module.exports` syntax
+
 # 0.5.13 - 4 June 2023
 Bug fix:
 - Add loosen type for onError's code for defying custom error status
