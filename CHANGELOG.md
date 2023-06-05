@@ -1,3 +1,11 @@
+# 0.5.16 - 5 Jun 2023
+Improvement:
+- Respect inner scope of lifecycle first
+- Add type support for local `afterHandle`
+
+Bug fix:
+- `onAfterHandler` cause response to mutate on void
+
 # 0.5.15 - 4 Jun 2023
 Improvement:
 - Map CommonJS module in package.json

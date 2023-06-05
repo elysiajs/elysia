@@ -110,16 +110,14 @@ export interface LifeCycle<Instance extends ElysiaInstance = ElysiaInstance> {
 }
 
 export type AfterRequestHandler<
-	Route extends TypedRoute = TypedRoute,
-	Instance extends ElysiaInstance = ElysiaInstance
+	Route extends TypedRoute,
+	Instance extends ElysiaInstance
 > = (
 	context: Context<Route, Instance['store']> & Instance['request'],
 	response: Route['response']
-) => Route['response'] | Promise<Route['response']> | Response
+) => void | MaybePromise<Route['response']> | Response
 
-export interface LifeCycleStore<
-	Instance extends ElysiaInstance = ElysiaInstance
-> {
+export interface LifeCycleStore<Instance extends ElysiaInstance> {
 	type?: ContentType
 	start: VoidLifeCycle<Instance>[]
 	request: BeforeRequestHandler<any, Instance>[]
@@ -307,63 +305,73 @@ export type LocalHook<
 	Schema extends TypedSchema,
 	Instance extends ElysiaInstance<any>,
 	Path extends string = string
-> = Partial<Schema> & {
-	/**
-	 * Short for 'Content-Type'
-	 *
-	 * Available:
-	 * - 'none': do not parse body
-	 * - 'text' / 'text/plain': parse body as string
-	 * - 'json' / 'application/json': parse body as json
-	 * - 'formdata' / 'multipart/form-data': parse body as form-data
-	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-	 * - 'arraybuffer': parse body as readable stream
-	 */
-	type?: ContentType
-	/**
-	 * Short for 'Content-Type'
-	 */
-	detail?: Partial<OpenAPIV3.OperationObject>
-	/**
-	 * Transform context's value
-	 *
-	 * ---
-	 * Lifecycle:
-	 *
-	 * __transform__ -> beforeHandle -> handler -> afterHandle
-	 */
-	transform?: WithArray<
-		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
-	>
-	/**
-	 * Execute before main handler
-	 *
-	 * ---
-	 * Lifecycle:
-	 *
-	 * transform -> __beforeHandle__ -> handler -> afterHandle
-	 */
-	beforeHandle?: WithArray<
-		HookHandler<MergeSchema<Schema, Instance['schema']>, Instance, Path>
-	>
-	/**
-	 * Execute after main handler
-	 *
-	 * ---
-	 * Lifecycle:
-	 *
-	 * transform -> beforeHandle -> handler -> __afterHandle__
-	 */
-	afterHandle?: WithArray<AfterRequestHandler<any, Instance>>
-	/**
-	 * Catch error
-	 */
-	error?: WithArray<ErrorHandler>
-	/**
-	 * Custom body parser
-	 */
-	parse?: WithArray<BodyParser>
-}
+> = Partial<Schema> &
+	(MergeSchema<
+		Schema,
+		Instance['schema']
+	> extends infer Route extends TypedSchema
+		? {
+				/**
+				 * Short for 'Content-Type'
+				 *
+				 * Available:
+				 * - 'none': do not parse body
+				 * - 'text' / 'text/plain': parse body as string
+				 * - 'json' / 'application/json': parse body as json
+				 * - 'formdata' / 'multipart/form-data': parse body as form-data
+				 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+				 * - 'arraybuffer': parse body as readable stream
+				 */
+				type?: ContentType
+				/**
+				 * Short for 'Content-Type'
+				 */
+				detail?: Partial<OpenAPIV3.OperationObject>
+				/**
+				 * Transform context's value
+				 *
+				 * ---
+				 * Lifecycle:
+				 *
+				 * __transform__ -> beforeHandle -> handler -> afterHandle
+				 */
+				transform?: WithArray<HookHandler<Route, Instance, Path>>
+				/**
+				 * Execute before main handler
+				 *
+				 * ---
+				 * Lifecycle:
+				 *
+				 * transform -> __beforeHandle__ -> handler -> afterHandle
+				 */
+				beforeHandle?: WithArray<HookHandler<Route, Instance, Path>>
+				/**
+				 * Execute after main handler
+				 *
+				 * ---
+				 * Lifecycle:
+				 *
+				 * transform -> beforeHandle -> handler -> __afterHandle__
+				 */
+				afterHandle?: WithArray<
+					AfterRequestHandler<
+						TypedSchemaToRoute<
+							Route,
+							Instance['meta'][typeof SCHEMA]
+						>,
+						Instance
+					>
+				>
+				/**
+				 * Catch error
+				 */
+				error?: WithArray<ErrorHandler>
+				/**
+				 * Custom body parser
+				 */
+				parse?: WithArray<BodyParser>
+		  }
+		: never)
 
 export type TypedWSRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
@@ -556,7 +564,7 @@ export type ErrorHandler = (
 	params:
 		| {
 				request: Request
-				code: 'UNKNOWN' | (string & {})
+				code: 'UNKNOWN'
 				error: Readonly<Error>
 				set: Context['set']
 		  }

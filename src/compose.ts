@@ -5,7 +5,6 @@ import { parse as parseQuery } from 'fast-querystring'
 import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
 import { SCHEMA, DEFS } from './utils'
 import {
-	ParseError,
 	NotFoundError,
 	ValidationError,
 	InternalServerError
@@ -626,6 +625,7 @@ export const composeHandler = ({
 						: `let ${name} = afterHandle[${i}](c, r)\n`
 
 				if (validator.response) {
+					fnLiteral += `if(${name} !== undefined) {`
 					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
 						if(!(response instanceof Error))
 						${composeResponseValidation(name)}
@@ -633,7 +633,7 @@ export const composeHandler = ({
 
 					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
 
-					fnLiteral += `if(${name}) return ${name};\n`
+					fnLiteral += `if(${name}) return ${name};\n}`
 				} else fnLiteral += `if(${name}) return ${name};\n`
 			}
 		}
@@ -736,7 +736,6 @@ export const composeHandler = ({
 			parseQuery
 		},
 		error: {
-			ParseError,
 			NotFoundError,
 			ValidationError,
 			InternalServerError
@@ -751,12 +750,12 @@ export const composeHandler = ({
 		}
 	} = hooks
 
-	const parseError = new ParseError()
-
 	return ${maybeAsync ? 'async' : ''} function(c) {
 		${meta ? 'c[SCHEMA] = meta[SCHEMA]; c[DEFS] = meta[DEFS];' : ''}
 		${fnLiteral}
 	}`
+
+	// console.log(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 
@@ -772,7 +771,6 @@ export const composeHandler = ({
 			parseQuery
 		},
 		error: {
-			ParseError,
 			NotFoundError,
 			ValidationError,
 			InternalServerError
