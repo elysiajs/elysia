@@ -298,23 +298,21 @@ describe('Schema', () => {
 	// Error is possibly from reference object from `registerSchemaPath`
 	// Most likely missing an deep clone object
 	it('validate group response', async () => {
-		const app = new Elysia()
-			.group('/deep', (app) =>
-				app
-					.get('/correct', () => 'a', {
-						response: {
-							200: t.String(),
-							400: t.String()
-						}
-					})
-					.get('/wrong', () => 1 as any, {
-						response: {
-							200: t.String(),
-							400: t.String()
-						}
-					})
-			)
-			.listen(8080)
+		const app = new Elysia().group('/deep', (app) =>
+			app
+				.get('/correct', () => 'a', {
+					response: {
+						200: t.String(),
+						400: t.String()
+					}
+				})
+				.get('/wrong', () => 1 as any, {
+					response: {
+						200: t.String(),
+						400: t.String()
+					}
+				})
+		)
 
 		const correct = await app
 			.handle(req('/deep/correct'))
@@ -323,5 +321,44 @@ describe('Schema', () => {
 
 		expect(correct).toBe(200)
 		expect(wrong).toBe(400)
+	})
+
+	it('validate union', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Union([
+				t.Object({
+					password: t.String()
+				}),
+				t.Object({
+					token: t.String()
+				})
+			])
+		})
+
+		const r1 = await app
+			.handle(
+				post('/', {
+					password: 'a'
+				})
+			)
+			.then((x) => x.status)
+		const r2 = await app
+			.handle(
+				post('/', {
+					token: 'a'
+				})
+			)
+			.then((x) => x.status)
+		const r3 = await app
+			.handle(
+				post('/', {
+					notUnioned: true
+				})
+			)
+			.then((x) => x.status)
+
+		expect(r1).toBe(200)
+		expect(r2).toBe(200)
+		expect(r3).toBe(400)
 	})
 })

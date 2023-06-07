@@ -1,3 +1,12 @@
+# 0.5.16 - 7 Jun 2023
+Improvement:
+- Respect explicit body type first
+- `mapCompactResponse` on `null` or `undefined` type
+
+Bug fix:
+- Mapped unioned type on Static Code Analysis
+- `form` is `undefined` when using parsing `formData`
+
 # 0.5.16 - 5 Jun 2023
 Improvement:
 - Respect inner scope of lifecycle first

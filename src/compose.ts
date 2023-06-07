@@ -4,11 +4,7 @@ import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
 import { SCHEMA, DEFS } from './utils'
-import {
-	NotFoundError,
-	ValidationError,
-	InternalServerError
-} from './error'
+import { NotFoundError, ValidationError, InternalServerError } from './error'
 
 import type {
 	ElysiaConfig,
@@ -20,6 +16,7 @@ import type {
 	SchemaValidator
 } from './types'
 import type { TAnySchema } from '@sinclair/typebox'
+import { TypeCheck } from '@sinclair/typebox/compiler'
 
 const ASYNC_FN = 'AsyncFunction'
 const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
@@ -160,6 +157,42 @@ export const findElysiaMeta = (
 	return null
 }
 
+/**
+ * This function will return the type of unioned if all unioned type is the same.
+ * It's intent to use for content-type mapping only
+ *
+ * ```ts
+ * t.Union([
+ *   t.Object({
+ *     password: t.String()
+ *   }),
+ *   t.Object({
+ *     token: t.String()
+ *   })
+ * ])
+ * ```
+ */
+const getUnionedType = (validator: TypeCheck<any> | undefined) => {
+	if (!validator) return
+
+	// @ts-ignore
+	const schema = validator?.schema
+
+	if (schema && 'anyOf' in schema) {
+		let foundDifference = false
+		const type: string = schema.anyOf[0].type
+
+		for (const validator of schema.anyOf as { type: string }[]) {
+			if (validator.type !== type) {
+				foundDifference = true
+				break
+			}
+		}
+
+		if (!foundDifference) return type
+	}
+}
+
 export const composeHandler = ({
 	// path,
 	method,
@@ -191,8 +224,6 @@ export const composeHandler = ({
 
 	let fnLiteral = hasErrorHandler ? 'try {\n' : ''
 
-	const hasStrictContentType = typeof hooks.type === 'string'
-
 	const lifeCycleLiteral =
 		validator || method !== 'GET'
 			? [
@@ -207,7 +238,7 @@ export const composeHandler = ({
 		method !== 'GET' &&
 		hooks.type !== 'none' &&
 		(validator.body ||
-			hasStrictContentType ||
+			hooks.type ||
 			lifeCycleLiteral.some((fn) => isFnUse('body', fn)))
 
 	const hasHeaders =
@@ -252,89 +283,10 @@ export const composeHandler = ({
 		hooks.transform.find(isAsync)
 
 	if (hasBody) {
-		// @ts-ignore
-		let schema = validator?.body?.schema
+		const type = getUnionedType(validator?.body)
 
-		if (schema && 'anyOf' in schema) {
-			let foundDifference = false
-			const model = schema.anyOf[0].type
-
-			for (const validator of schema.anyOf as { type: string }[]) {
-				if (validator.type !== model) {
-					foundDifference = true
-					break
-				}
-			}
-
-			if (foundDifference) {
-				schema = undefined
-			}
-		}
-
-		if (hasStrictContentType || schema) {
-			if (hooks.parse.length) {
-				fnLiteral += hasHeaders
-					? `let contentType = c.headers['content-type']`
-					: `let contentType = c.request.headers.get('content-type')`
-
-				fnLiteral += `
-            if (contentType) {
-				const index = contentType.indexOf(';')
-				if (index !== -1) contentType = contentType.substring(0, index)\n`
-
-				fnLiteral += `let used = false\n`
-
-				for (let i = 0; i < hooks.parse.length; i++) {
-					const name = `bo${i}`
-
-					if (i !== 0) fnLiteral += `if(!used) {\n`
-
-					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
-					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name};`
-
-					fnLiteral += `
-						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
-
-					if (i !== 0) fnLiteral += `}`
-				}
-
-				fnLiteral += `if (!used) {`
-			}
-
-			if (schema) {
-				switch (schema.type) {
-					case 'object':
-						if (schema.elysiaMeta === 'URLEncoded') {
-							fnLiteral += `c.body = parseQuery(await c.request.text())`
-						} // Accept file which means it's formdata
-						else if (
-							validator.body!.Code().includes("custom('File")
-						)
-							fnLiteral += `c.body = {}
-
-				await c.request.formData().then((form) => {
-					for (const key of form.keys()) {
-						if (c.body[key])
-							continue
-
-						const value = form.getAll(key)
-						if (value.length === 1)
-							c.body[key] = value[0]
-						else c.body[key] = value
-					}
-				})`
-						else {
-							// Since it's an object an not accepting file
-							// we can infer that it's JSON
-							fnLiteral += `c.body = JSON.parse(await c.request.text())`
-						}
-						break
-
-					default:
-						fnLiteral += 'c.body = await c.request.text()'
-						break
-				}
-			} else {
+		if (hooks.type || type) {
+			if (hooks.type) {
 				switch (hooks.type) {
 					case 'application/json':
 						fnLiteral += `c.body = JSON.parse(await c.request.text());`
@@ -355,7 +307,8 @@ export const composeHandler = ({
 					case 'multipart/form-data':
 						fnLiteral += `c.body = {}
 
-					for (const key of (await c.request.formData()).keys()) {
+					const form = await c.request.formData()
+					for (const key of form.keys()) {
 						if (c.body[key])
 							continue
 
@@ -364,6 +317,41 @@ export const composeHandler = ({
 							c.body[key] = value[0]
 						else c.body[key] = value
 					}`
+						break
+				}
+			} else if (type) {
+				// @ts-ignore
+				const schema = validator?.body?.schema
+
+				switch (type) {
+					case 'object':
+						if (schema.elysiaMeta === 'URLEncoded') {
+							fnLiteral += `c.body = parseQuery(await c.request.text())`
+						} // Accept file which means it's formdata
+						else if (
+							validator.body!.Code().includes("custom('File")
+						)
+							fnLiteral += `c.body = {}
+
+							const form = await c.request.formData()
+							for (const key of form.keys()) {
+								if (c.body[key])
+									continue
+		
+								const value = form.getAll(key)
+								if (value.length === 1)
+									c.body[key] = value[0]
+								else c.body[key] = value
+							}`
+						else {
+							// Since it's an object an not accepting file
+							// we can infer that it's JSON
+							fnLiteral += `c.body = JSON.parse(await c.request.text())`
+						}
+						break
+
+					default:
+						fnLiteral += 'c.body = await c.request.text()'
 						break
 				}
 			}
@@ -420,7 +408,8 @@ export const composeHandler = ({
 			case 'multipart/form-data':
 				c.body = {}
 
-				for (const key of (await c.request.formData()).keys()) {
+				const form = await c.request.formData()
+				for (const key of form.keys()) {
 					if (c.body[key])
 						continue
 

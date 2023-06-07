@@ -2,10 +2,9 @@ import { Elysia, t } from '../src'
 import { upload } from '../test/utils'
 
 const app = new Elysia()
-	.post('/single', ({ body: { text } }) => text, {
+	.post('/single', ({ body: { file } }) => file, {
 		body: t.Object({
-			file: t.File(),
-			text: t.String()
+			file: t.File()
 		})
 	})
 	.post(
@@ -17,7 +16,7 @@ const app = new Elysia()
 			})
 		}
 	)
-	.listen(8080)
+	.listen(3000)
 
 const { request } = upload('/single', {
 	file: 'millenium.jpg'

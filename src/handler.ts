@@ -301,7 +301,7 @@ export const mapResponse = (
 }
 
 export const mapCompactResponse = (response: unknown): Response => {
-	switch (response!.constructor?.name) {
+	switch (response?.constructor?.name) {
 		case 'String':
 		case 'Blob':
 			return new Response(response as string | Blob)
