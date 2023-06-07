@@ -1,4 +1,4 @@
-# 0.5.16 - 7 Jun 2023
+# 0.5.17 - 7 Jun 2023
 Improvement:
 - Respect explicit body type first
 - `mapCompactResponse` on `null` or `undefined` type
