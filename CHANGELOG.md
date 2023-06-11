@@ -1,3 +1,7 @@
+# 0.5.18 - 11 Jun 2023
+Bug fix:
+- `mapEarlyResponse` is missing on request
+
 # 0.5.17 - 7 Jun 2023
 Improvement:
 - Respect explicit body type first

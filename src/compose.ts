@@ -810,7 +810,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	let fnLiteral = `const {
 		app,
 		app: { store, router, staticRouter },
-		${app.event.request.length ? 'mapEarlyResponse,' : ''}
+		mapEarlyResponse,
 		NotFoundError
 	} = data
 

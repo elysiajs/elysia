@@ -1,14 +1,8 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
+import { cors } from '@elysiajs/cors'
 
 const app = new Elysia()
-	.post('/', ({ body }) => body, {
-		body: t.Union([
-			t.Object({
-				password: t.String()
-			}),
-			t.Object({
-				token: t.String()
-			})
-		])
-	})
+	.use(cors())
+	.onRequest(({ set }) => {})
+	.get('/', () => 'Hi')
 	.listen(3000)
