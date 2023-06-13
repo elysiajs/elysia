@@ -7,9 +7,9 @@ import { Elysia } from '../src'
  * @see https://github.com/elysiajs/elysia-static
  */
 new Elysia()
-	.get('/tako', ({ set }) => {
-		set.headers.server = 'Elysia'
+  .get('/tako', ({ set }) => {
+    set.headers.server = 'Elysia'
 
-		return Bun.file('./example/takodachi.png')
-	})
-	.listen(8080)
+    return Bun.file('./example/takodachi.png')
+  })
+  .listen(8080)

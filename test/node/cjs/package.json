@@ -1,6 +1,6 @@
 {
-    "type": "commonjs",
-    "dependencies": {
-        "elysia": "../../.."
-    }
+  "type": "commonjs",
+  "dependencies": {
+    "elysia": "../../.."
+  }
 }

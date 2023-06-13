@@ -7,229 +7,225 @@ import { findElysiaMeta } from '../src/compose'
 const payload = { hello: 'world' }
 
 describe('Static code analysis', () => {
-	it('parse object destructuring', async () => {
-		const app = new Elysia().post('/', ({ body }) => body)
+  it('parse object destructuring', async () => {
+    const app = new Elysia().post('/', ({ body }) => body)
 
-		const res = await app.handle(post('/', payload)).then((x) => x.json())
+    const res = await app.handle(post('/', payload)).then((x) => x.json())
 
-		expect(res).toEqual(payload)
-	})
+    expect(res).toEqual(payload)
+  })
 
-	it('parse context access', async () => {
-		const app = new Elysia().post('/', (context) => context.body)
+  it('parse context access', async () => {
+    const app = new Elysia().post('/', (context) => context.body)
 
-		const res = await app.handle(post('/', payload)).then((x) => x.json())
+    const res = await app.handle(post('/', payload)).then((x) => x.json())
 
-		expect(res).toEqual(payload)
-	})
+    expect(res).toEqual(payload)
+  })
 
-	it('parse context access using square bracket', async () => {
-		const app = new Elysia().post('/', (context) => context['body'])
+  it('parse context access using square bracket', async () => {
+    const app = new Elysia().post('/', (context) => context['body'])
 
-		const res = await app.handle(post('/', payload)).then((x) => x.json())
+    const res = await app.handle(post('/', payload)).then((x) => x.json())
 
-		expect(res).toEqual(payload)
-	})
+    expect(res).toEqual(payload)
+  })
 
-	it('parse assignment', async () => {
-		const app = new Elysia().post('/', (context) => {
-			const a = context.body
+  it('parse assignment', async () => {
+    const app = new Elysia().post('/', (context) => {
+      const a = context.body
 
-			return a
-		})
+      return a
+    })
 
-		const res = await app.handle(post('/', payload)).then((x) => x.json())
+    const res = await app.handle(post('/', payload)).then((x) => x.json())
 
-		expect(res).toEqual(payload)
-	})
+    expect(res).toEqual(payload)
+  })
 
-	it('parse multiple assignment', async () => {
-		const app = new Elysia().post('/', (context) => {
-			const _ = 1,
-				b = context.body
+  it('parse multiple assignment', async () => {
+    const app = new Elysia().post('/', (context) => {
+      const _ = 1,
+        b = context.body
 
-			return b
-		})
+      return b
+    })
 
-		const res = await app.handle(post('/', payload)).then((x) => x.json())
+    const res = await app.handle(post('/', payload)).then((x) => x.json())
 
-		expect(res).toEqual(payload)
-	})
+    expect(res).toEqual(payload)
+  })
 
-	it('parse multiple assignment with object destructuring', async () => {
-		const app = new Elysia().post('/', (context) => {
-			const _ = 1,
-				{ body } = context
+  it('parse multiple assignment with object destructuring', async () => {
+    const app = new Elysia().post('/', (context) => {
+      const _ = 1,
+        { body } = context
 
-			return body
-		})
+      return body
+    })
 
-		const res = await app.handle(post('/', payload)).then((x) => x.json())
+    const res = await app.handle(post('/', payload)).then((x) => x.json())
 
-		expect(res).toEqual(payload)
-	})
+    expect(res).toEqual(payload)
+  })
 
-	it('parse lazy object destructuring', async () => {
-		const app = new Elysia().post('/', (context) => {
-			const { body: a } = context
+  it('parse lazy object destructuring', async () => {
+    const app = new Elysia().post('/', (context) => {
+      const { body: a } = context
 
-			return a
-		})
+      return a
+    })
 
-		const res = await app.handle(post('/', payload)).then((x) => x.json())
+    const res = await app.handle(post('/', payload)).then((x) => x.json())
 
-		expect(res).toEqual(payload)
-	})
+    expect(res).toEqual(payload)
+  })
 
-	it('parse headers', async () => {
-		const app = new Elysia().get('/', ({ headers }) => headers)
+  it('parse headers', async () => {
+    const app = new Elysia().get('/', ({ headers }) => headers)
 
-		const res = await app
-			.handle(
-				new Request('http://localhost/', {
-					headers: payload
-				})
-			)
-			.then((x) => x.json())
+    const res = await app
+      .handle(
+        new Request('http://localhost/', {
+          headers: payload
+        })
+      )
+      .then((x) => x.json())
 
-		expect(res).toEqual(payload)
-	})
+    expect(res).toEqual(payload)
+  })
 
-	it('parse body type json', async () => {
-		const body = {
-			message: 'Rikuhachima Aru'
-		}
+  it('parse body type json', async () => {
+    const body = {
+      message: 'Rikuhachima Aru'
+    }
 
-		const app = new Elysia().post('/json', (c) => c.body, {
-			type: 'json'
-		})
+    const app = new Elysia().post('/json', (c) => c.body, {
+      type: 'json'
+    })
 
-		const res = await app.handle(post('/json', body)).then((x) => x.json())
+    const res = await app.handle(post('/json', body)).then((x) => x.json())
 
-		expect(res).toEqual(body)
-	})
+    expect(res).toEqual(body)
+  })
 
-	it('find nested Elysia Schema', () => {
-		const schema = t.Object({
-			a: t.Object({
-				b: t.Object({
-					c: t.Numeric()
-				}),
-				d: t.String()
-			}),
-			id: t.Numeric(),
-			b: t.Object({
-				c: t.Numeric()
-			})
-		})
+  it('find nested Elysia Schema', () => {
+    const schema = t.Object({
+      a: t.Object({
+        b: t.Object({
+          c: t.Numeric()
+        }),
+        d: t.String()
+      }),
+      id: t.Numeric(),
+      b: t.Object({
+        c: t.Numeric()
+      })
+    })
 
-		expect(findElysiaMeta('Numeric', schema)).toEqual([
-			'a.b.c',
-			'id',
-			'b.c'
-		])
-	})
+    expect(findElysiaMeta('Numeric', schema)).toEqual(['a.b.c', 'id', 'b.c'])
+  })
 
-	it('find Elysia Schema on root', () => {
-		const schema = t.Numeric()
+  it('find Elysia Schema on root', () => {
+    const schema = t.Numeric()
 
-		expect(findElysiaMeta('Numeric', schema)).toEqual('root')
-	})
+    expect(findElysiaMeta('Numeric', schema)).toEqual('root')
+  })
 
-	it('find return null if Elysia Schema is not found', () => {
-		const schema = t.Object({
-			a: t.Object({
-				b: t.Object({
-					c: t.Number()
-				}),
-				d: t.String()
-			}),
-			id: t.Number(),
-			b: t.Object({
-				c: t.Number()
-			})
-		})
+  it('find return null if Elysia Schema is not found', () => {
+    const schema = t.Object({
+      a: t.Object({
+        b: t.Object({
+          c: t.Number()
+        }),
+        d: t.String()
+      }),
+      id: t.Number(),
+      b: t.Object({
+        c: t.Number()
+      })
+    })
 
-		expect(findElysiaMeta('Numeric', schema)).toBeNull()
-	})
+    expect(findElysiaMeta('Numeric', schema)).toBeNull()
+  })
 
-	it('restart server once analyze', async () => {
-		const plugin = async () => {
-			await new Promise((resolve) => setTimeout(resolve, 1))
+  it('restart server once analyze', async () => {
+    const plugin = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1))
 
-			return (app: Elysia) => app.get('/', () => 'hi')
-		}
+      return (app: Elysia) => app.get('/', () => 'hi')
+    }
 
-		const app = new Elysia().use(plugin())
+    const app = new Elysia().use(plugin())
 
-		await new Promise((resolve) => setTimeout(resolve, 25))
+    await new Promise((resolve) => setTimeout(resolve, 25))
 
-		const response = await app.handle(req('/')).then((x) => x.text())
+    const response = await app.handle(req('/')).then((x) => x.text())
 
-		expect(response).toBe('hi')
-	})
+    expect(response).toBe('hi')
+  })
 
-	it('parse custom parser with schema', async () => {
-		const app = new Elysia()
-			.onParse((request, contentType) => {
-				if (contentType === 'application/elysia') return 'hi'
-			})
-			.post('/', ({ body }) => body, {
-				body: t.String()
-			})
+  it('parse custom parser with schema', async () => {
+    const app = new Elysia()
+      .onParse((request, contentType) => {
+        if (contentType === 'application/elysia') return 'hi'
+      })
+      .post('/', ({ body }) => body, {
+        body: t.String()
+      })
 
-		await new Promise((resolve) => setTimeout(resolve, 25))
+    await new Promise((resolve) => setTimeout(resolve, 25))
 
-		const response = await app
-			.handle(
-				new Request('http://localhost/', {
-					method: 'POST',
-					headers: {
-						'content-type': 'application/elysia'
-					},
-					body: 'need correction'
-				})
-			)
-			.then((x) => x.text())
+    const response = await app
+      .handle(
+        new Request('http://localhost/', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/elysia'
+          },
+          body: 'need correction'
+        })
+      )
+      .then((x) => x.text())
 
-		expect(response).toBe('hi')
-	})
+    expect(response).toBe('hi')
+  })
 
-	it('handle multiple numeric type', async () => {
-		const app = new Elysia()
-			.get('/', () => 'Hello Elysia1')
-			.get(
-				'/products',
-				({ query }) =>
-					`pageIndex=${query.pageIndex}; pageSize=${query.pageSize}`,
-				{
-					query: t.Object({
-						pageIndex: t.Numeric(),
-						pageSize: t.Numeric()
-					})
-				}
-			)
+  it('handle multiple numeric type', async () => {
+    const app = new Elysia()
+      .get('/', () => 'Hello Elysia1')
+      .get(
+        '/products',
+        ({ query }) =>
+          `pageIndex=${query.pageIndex}; pageSize=${query.pageSize}`,
+        {
+          query: t.Object({
+            pageIndex: t.Numeric(),
+            pageSize: t.Numeric()
+          })
+        }
+      )
 
-		const response = await app
-			.handle(req('/products?pageIndex=1&pageSize=2'))
-			.then((x) => x.text())
+    const response = await app
+      .handle(req('/products?pageIndex=1&pageSize=2'))
+      .then((x) => x.text())
 
-		expect(response).toBe(`pageIndex=1; pageSize=2`)
-	})
+    expect(response).toBe(`pageIndex=1; pageSize=2`)
+  })
 
-	it('break out of switch map when path is not found', async () => {
-		const app = new Elysia()
-			.options('/', () => 'hi')
-			.get('/games', () => 'games')
+  it('break out of switch map when path is not found', async () => {
+    const app = new Elysia()
+      .options('/', () => 'hi')
+      .get('/games', () => 'games')
 
-		const response = await app
-			.handle(
-				new Request('http://localhost/', {
-					method: 'OPTIONS'
-				})
-			)
-			.then((x) => x.text())
+    const response = await app
+      .handle(
+        new Request('http://localhost/', {
+          method: 'OPTIONS'
+        })
+      )
+      .then((x) => x.text())
 
-		expect(response).toBe('hi')
-	})
+    expect(response).toBe('hi')
+  })
 })

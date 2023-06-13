@@ -7,13 +7,13 @@ import { SCHEMA, DEFS } from './utils'
 import { NotFoundError, ValidationError, InternalServerError } from './error'
 
 import type {
-	ElysiaConfig,
-	BeforeRequestHandler,
-	ComposedHandler,
-	HTTPMethod,
-	LocalHandler,
-	RegisteredHook,
-	SchemaValidator
+  ElysiaConfig,
+  BeforeRequestHandler,
+  ComposedHandler,
+  HTTPMethod,
+  LocalHandler,
+  RegisteredHook,
+  SchemaValidator
 } from './types'
 import type { TAnySchema } from '@sinclair/typebox'
 import { TypeCheck } from '@sinclair/typebox/compiler'
@@ -26,40 +26,40 @@ const _demoHeaders = new Headers()
 const findAliases = new RegExp(` (\\w+) = context`, 'g')
 
 export const hasReturn = (fnLiteral: string) => {
-	const parenthesisEnd = fnLiteral.indexOf(')')
+  const parenthesisEnd = fnLiteral.indexOf(')')
 
-	// Is direct arrow function return eg. () => 1
-	if (
-		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
-		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
-	) {
-		return true
-	}
+  // Is direct arrow function return eg. () => 1
+  if (
+    fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
+    fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
+  ) {
+    return true
+  }
 
-	return fnLiteral.includes('return')
+  return fnLiteral.includes('return')
 }
 
 const composeValidationFactory = (hasErrorHandler: boolean) => ({
-	composeValidation: (type: string, value = `c.${type}`) =>
-		hasErrorHandler
-			? `throw new ValidationError(
+  composeValidation: (type: string, value = `c.${type}`) =>
+    hasErrorHandler
+      ? `throw new ValidationError(
 '${type}',
 ${type},
 ${value}
 )`
-			: `return new ValidationError(
+      : `return new ValidationError(
 	'${type}',
 	${type},
 	${value}
 ).toResponse(c.set.headers)`,
-	composeResponseValidation: (value = 'r') =>
-		hasErrorHandler
-			? `throw new ValidationError(
+  composeResponseValidation: (value = 'r') =>
+    hasErrorHandler
+      ? `throw new ValidationError(
 'response',
 response[c.set.status],
 ${value}
 )`
-			: `return new ValidationError(
+      : `return new ValidationError(
 'response',
 response[c.set.status],
 ${value}
@@ -67,94 +67,89 @@ ${value}
 })
 
 export const isFnUse = (keyword: string, fnLiteral: string) => {
-	fnLiteral = fnLiteral.trimStart()
+  fnLiteral = fnLiteral.trimStart()
 
-	const argument =
-		// CharCode 40 is '('
-		fnLiteral.charCodeAt(0) === 40 || fnLiteral.startsWith('function')
-			? // Bun: (context) => {}
-			  fnLiteral.slice(
-					fnLiteral.indexOf('(') + 1,
-					fnLiteral.indexOf(')')
-			  )
-			: // Node: context => {}
-			  fnLiteral.slice(0, fnLiteral.indexOf('=') - 1)
+  const argument =
+    // CharCode 40 is '('
+    fnLiteral.charCodeAt(0) === 40 || fnLiteral.startsWith('function')
+      ? // Bun: (context) => {}
+        fnLiteral.slice(fnLiteral.indexOf('(') + 1, fnLiteral.indexOf(')'))
+      : // Node: context => {}
+        fnLiteral.slice(0, fnLiteral.indexOf('=') - 1)
 
-	if (argument === '') return false
+  if (argument === '') return false
 
-	// Using object destructuring
-	if (argument.charCodeAt(0) === 123) {
-		// Since Function already format the code, styling is enforced
-		if (
-			argument.includes(`{ ${keyword}`) ||
-			argument.includes(`, ${keyword}`) ||
-			// Node
-			argument.includes(`,${keyword}`)
-		)
-			return true
+  // Using object destructuring
+  if (argument.charCodeAt(0) === 123) {
+    // Since Function already format the code, styling is enforced
+    if (
+      argument.includes(`{ ${keyword}`) ||
+      argument.includes(`, ${keyword}`) ||
+      // Node
+      argument.includes(`,${keyword}`)
+    )
+      return true
 
-		return false
-	}
+    return false
+  }
 
-	// Match dot notation and named access
-	if (
-		fnLiteral.match(
-			new RegExp(`${argument}(.${keyword}|\\["${keyword}"\\])`)
-		)
-	) {
-		return true
-	}
+  // Match dot notation and named access
+  if (
+    fnLiteral.match(new RegExp(`${argument}(.${keyword}|\\["${keyword}"\\])`))
+  ) {
+    return true
+  }
 
-	const aliases = [argument]
-	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
+  const aliases = [argument]
+  for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
 
-	const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
+  const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
 
-	for (const [params] of fnLiteral.matchAll(destructuringRegex)) {
-		if (params.includes(`{ ${keyword}`) || params.includes(`, ${keyword}`))
-			return true
-	}
+  for (const [params] of fnLiteral.matchAll(destructuringRegex)) {
+    if (params.includes(`{ ${keyword}`) || params.includes(`, ${keyword}`))
+      return true
+  }
 
-	return false
+  return false
 }
 
 export const findElysiaMeta = (
-	type: string,
-	schema: TAnySchema,
-	found: string[] = [],
-	parent = ''
+  type: string,
+  schema: TAnySchema,
+  found: string[] = [],
+  parent = ''
 ) => {
-	if (schema.type === 'object') {
-		const properties = schema.properties as Record<string, TAnySchema>
-		for (const key in properties) {
-			const property = properties[key]
+  if (schema.type === 'object') {
+    const properties = schema.properties as Record<string, TAnySchema>
+    for (const key in properties) {
+      const property = properties[key]
 
-			const accessor = !parent ? key : parent + '.' + key
+      const accessor = !parent ? key : parent + '.' + key
 
-			if (property.type === 'object') {
-				findElysiaMeta(type, property, found, accessor)
-				continue
-			} else if (property.anyOf) {
-				for (const prop of property.anyOf) {
-					findElysiaMeta(type, prop, found, accessor)
-				}
+      if (property.type === 'object') {
+        findElysiaMeta(type, property, found, accessor)
+        continue
+      } else if (property.anyOf) {
+        for (const prop of property.anyOf) {
+          findElysiaMeta(type, prop, found, accessor)
+        }
 
-				continue
-			}
+        continue
+      }
 
-			if (property.elysiaMeta === type) found.push(accessor)
-		}
+      if (property.elysiaMeta === type) found.push(accessor)
+    }
 
-		if (found.length === 0) return null
+    if (found.length === 0) return null
 
-		return found
-	} else if (schema?.elysiaMeta === type) {
-		if (parent) found.push(parent)
+    return found
+  } else if (schema?.elysiaMeta === type) {
+    if (parent) found.push(parent)
 
-		return 'root'
-	}
+    return 'root'
+  }
 
-	return null
+  return null
 }
 
 /**
@@ -173,94 +168,93 @@ export const findElysiaMeta = (
  * ```
  */
 const getUnionedType = (validator: TypeCheck<any> | undefined) => {
-	if (!validator) return
+  if (!validator) return
 
-	// @ts-ignore
-	const schema = validator?.schema
+  // @ts-ignore
+  const schema = validator?.schema
 
-	if (schema && 'anyOf' in schema) {
-		let foundDifference = false
-		const type: string = schema.anyOf[0].type
+  if (schema && 'anyOf' in schema) {
+    let foundDifference = false
+    const type: string = schema.anyOf[0].type
 
-		for (const validator of schema.anyOf as { type: string }[]) {
-			if (validator.type !== type) {
-				foundDifference = true
-				break
-			}
-		}
+    for (const validator of schema.anyOf as { type: string }[]) {
+      if (validator.type !== type) {
+        foundDifference = true
+        break
+      }
+    }
 
-		if (!foundDifference) return type
-	}
+    if (!foundDifference) return type
+  }
 }
 
 export const composeHandler = ({
-	// path,
-	method,
-	hooks,
-	validator,
-	handler,
-	handleError,
-	meta,
-	onRequest,
-	config
+  // path,
+  method,
+  hooks,
+  validator,
+  handler,
+  handleError,
+  meta,
+  onRequest,
+  config
 }: {
-	path: string
-	method: HTTPMethod
-	hooks: RegisteredHook<any>
-	validator: SchemaValidator
-	handler: LocalHandler<any, any>
-	handleError: Elysia['handleError']
-	meta?: Elysia['meta']
-	onRequest: BeforeRequestHandler<any, any>[]
-	config: ElysiaConfig
+  path: string
+  method: HTTPMethod
+  hooks: RegisteredHook<any>
+  validator: SchemaValidator
+  handler: LocalHandler<any, any>
+  handleError: Elysia['handleError']
+  meta?: Elysia['meta']
+  onRequest: BeforeRequestHandler<any, any>[]
+  config: ElysiaConfig
 }): ComposedHandler => {
-	const hasErrorHandler =
-		config.forceErrorEncapsulation ||
-		hooks.error.length > 0 ||
-		typeof Bun === 'undefined'
+  const hasErrorHandler =
+    config.forceErrorEncapsulation ||
+    hooks.error.length > 0 ||
+    typeof Bun === 'undefined'
 
-	const { composeValidation, composeResponseValidation } =
-		composeValidationFactory(hasErrorHandler)
+  const { composeValidation, composeResponseValidation } =
+    composeValidationFactory(hasErrorHandler)
 
-	let fnLiteral = hasErrorHandler ? 'try {\n' : ''
+  let fnLiteral = hasErrorHandler ? 'try {\n' : ''
 
-	const lifeCycleLiteral =
-		validator || method !== 'GET'
-			? [
-					handler,
-					...hooks.transform,
-					...hooks.beforeHandle,
-					...hooks.afterHandle
-			  ].map((x) => x.toString())
-			: []
+  const lifeCycleLiteral =
+    validator || method !== 'GET'
+      ? [
+          handler,
+          ...hooks.transform,
+          ...hooks.beforeHandle,
+          ...hooks.afterHandle
+        ].map((x) => x.toString())
+      : []
 
-	const hasBody =
-		method !== 'GET' &&
-		hooks.type !== 'none' &&
-		(validator.body ||
-			hooks.type ||
-			lifeCycleLiteral.some((fn) => isFnUse('body', fn)))
+  const hasBody =
+    method !== 'GET' &&
+    hooks.type !== 'none' &&
+    (validator.body ||
+      hooks.type ||
+      lifeCycleLiteral.some((fn) => isFnUse('body', fn)))
 
-	const hasHeaders =
-		validator.headers ||
-		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
+  const hasHeaders =
+    validator.headers || lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
 
-	if (hasHeaders) {
-		// This function is Bun specific
-		// @ts-ignore
-		fnLiteral += _demoHeaders.toJSON
-			? `c.headers = c.request.headers.toJSON()\n`
-			: `c.headers = {}
+  if (hasHeaders) {
+    // This function is Bun specific
+    // @ts-ignore
+    fnLiteral += _demoHeaders.toJSON
+      ? `c.headers = c.request.headers.toJSON()\n`
+      : `c.headers = {}
                 for (const [key, value] of c.request.headers.entries())
 					c.headers[key] = value
 				`
-	}
+  }
 
-	const hasQuery =
-		validator.query || lifeCycleLiteral.some((fn) => isFnUse('query', fn))
+  const hasQuery =
+    validator.query || lifeCycleLiteral.some((fn) => isFnUse('query', fn))
 
-	if (hasQuery) {
-		fnLiteral += `const url = c.request.url
+  if (hasQuery) {
+    fnLiteral += `const url = c.request.url
 
 		if(c.query !== -1) {
 			c.query = parseQuery(url.substring(c.query + 1))
@@ -268,44 +262,44 @@ export const composeHandler = ({
 			c.query = {}
 		}
 		`
-	}
+  }
 
-	const hasSet =
-		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
-		onRequest.some((fn) => isFnUse('set', fn.toString()))
+  const hasSet =
+    lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
+    onRequest.some((fn) => isFnUse('set', fn.toString()))
 
-	const maybeAsync =
-		hasBody ||
-		handler.constructor.name === ASYNC_FN ||
-		hooks.parse.length ||
-		hooks.afterHandle.find(isAsync) ||
-		hooks.beforeHandle.find(isAsync) ||
-		hooks.transform.find(isAsync)
+  const maybeAsync =
+    hasBody ||
+    handler.constructor.name === ASYNC_FN ||
+    hooks.parse.length ||
+    hooks.afterHandle.find(isAsync) ||
+    hooks.beforeHandle.find(isAsync) ||
+    hooks.transform.find(isAsync)
 
-	if (hasBody) {
-		const type = getUnionedType(validator?.body)
+  if (hasBody) {
+    const type = getUnionedType(validator?.body)
 
-		if (hooks.type || type) {
-			if (hooks.type) {
-				switch (hooks.type) {
-					case 'application/json':
-						fnLiteral += `c.body = JSON.parse(await c.request.text());`
-						break
+    if (hooks.type || type) {
+      if (hooks.type) {
+        switch (hooks.type) {
+          case 'application/json':
+            fnLiteral += `c.body = JSON.parse(await c.request.text());`
+            break
 
-					case 'text/plain':
-						fnLiteral += `c.body = await c.request.text();`
-						break
+          case 'text/plain':
+            fnLiteral += `c.body = await c.request.text();`
+            break
 
-					case 'application/x-www-form-urlencoded':
-						fnLiteral += `c.body = parseQuery(await c.request.text());`
-						break
+          case 'application/x-www-form-urlencoded':
+            fnLiteral += `c.body = parseQuery(await c.request.text());`
+            break
 
-					case 'application/octet-stream':
-						fnLiteral += `c.body = await c.request.arrayBuffer();`
-						break
+          case 'application/octet-stream':
+            fnLiteral += `c.body = await c.request.arrayBuffer();`
+            break
 
-					case 'multipart/form-data':
-						fnLiteral += `c.body = {}
+          case 'multipart/form-data':
+            fnLiteral += `c.body = {}
 
 					const form = await c.request.formData()
 					for (const key of form.keys()) {
@@ -317,21 +311,19 @@ export const composeHandler = ({
 							c.body[key] = value[0]
 						else c.body[key] = value
 					}`
-						break
-				}
-			} else if (type) {
-				// @ts-ignore
-				const schema = validator?.body?.schema
+            break
+        }
+      } else if (type) {
+        // @ts-ignore
+        const schema = validator?.body?.schema
 
-				switch (type) {
-					case 'object':
-						if (schema.elysiaMeta === 'URLEncoded') {
-							fnLiteral += `c.body = parseQuery(await c.request.text())`
-						} // Accept file which means it's formdata
-						else if (
-							validator.body!.Code().includes("custom('File")
-						)
-							fnLiteral += `c.body = {}
+        switch (type) {
+          case 'object':
+            if (schema.elysiaMeta === 'URLEncoded') {
+              fnLiteral += `c.body = parseQuery(await c.request.text())`
+            } // Accept file which means it's formdata
+            else if (validator.body!.Code().includes("custom('File"))
+              fnLiteral += `c.body = {}
 
 							const form = await c.request.formData()
 							for (const key of form.keys()) {
@@ -343,52 +335,52 @@ export const composeHandler = ({
 									c.body[key] = value[0]
 								else c.body[key] = value
 							}`
-						else {
-							// Since it's an object an not accepting file
-							// we can infer that it's JSON
-							fnLiteral += `c.body = JSON.parse(await c.request.text())`
-						}
-						break
+            else {
+              // Since it's an object an not accepting file
+              // we can infer that it's JSON
+              fnLiteral += `c.body = JSON.parse(await c.request.text())`
+            }
+            break
 
-					default:
-						fnLiteral += 'c.body = await c.request.text()'
-						break
-				}
-			}
+          default:
+            fnLiteral += 'c.body = await c.request.text()'
+            break
+        }
+      }
 
-			if (hooks.parse.length) fnLiteral += '}}'
-		} else {
-			fnLiteral += '\n'
-			fnLiteral += hasHeaders
-				? `let contentType = c.headers['content-type']`
-				: `let contentType = c.request.headers.get('content-type')`
+      if (hooks.parse.length) fnLiteral += '}}'
+    } else {
+      fnLiteral += '\n'
+      fnLiteral += hasHeaders
+        ? `let contentType = c.headers['content-type']`
+        : `let contentType = c.request.headers.get('content-type')`
 
-			fnLiteral += `
+      fnLiteral += `
             if (contentType) {
 				const index = contentType.indexOf(';')
 				if (index !== -1) contentType = contentType.substring(0, index)\n`
 
-			if (hooks.parse.length) {
-				fnLiteral += `let used = false\n`
+      if (hooks.parse.length) {
+        fnLiteral += `let used = false\n`
 
-				for (let i = 0; i < hooks.parse.length; i++) {
-					const name = `bo${i}`
+        for (let i = 0; i < hooks.parse.length; i++) {
+          const name = `bo${i}`
 
-					if (i !== 0) fnLiteral += `if(!used) {\n`
+          if (i !== 0) fnLiteral += `if(!used) {\n`
 
-					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
-					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name};`
+          fnLiteral += `let ${name} = parse[${i}](c, contentType);`
+          fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name};`
 
-					fnLiteral += `
+          fnLiteral += `
 						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
 
-					if (i !== 0) fnLiteral += `}`
-				}
+          if (i !== 0) fnLiteral += `}`
+        }
 
-				fnLiteral += `if (!used)`
-			}
+        fnLiteral += `if (!used)`
+      }
 
-			fnLiteral += `switch (contentType) {
+      fnLiteral += `switch (contentType) {
 			case 'application/json':
 				c.body = JSON.parse(await c.request.text())
 				break
@@ -422,255 +414,251 @@ export const composeHandler = ({
 				break
 			}
 		}\n`
-		}
+    }
 
-		fnLiteral += '\n'
-	}
+    fnLiteral += '\n'
+  }
 
-	if (validator.params) {
-		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.params.schema)
+  if (validator.params) {
+    // @ts-ignore
+    const properties = findElysiaMeta('Numeric', validator.params.schema)
 
-		if (properties) {
-			switch (typeof properties) {
-				case 'object':
-					for (const property of properties)
-						fnLiteral += `c.params.${property} = +c.params.${property};`
-					break
-			}
+    if (properties) {
+      switch (typeof properties) {
+        case 'object':
+          for (const property of properties)
+            fnLiteral += `c.params.${property} = +c.params.${property};`
+          break
+      }
 
-			fnLiteral += '\n'
-		}
-	}
+      fnLiteral += '\n'
+    }
+  }
 
-	if (validator.query) {
-		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.query.schema)
+  if (validator.query) {
+    // @ts-ignore
+    const properties = findElysiaMeta('Numeric', validator.query.schema)
 
-		if (properties) {
-			switch (typeof properties) {
-				case 'object':
-					for (const property of properties)
-						fnLiteral += `c.query.${property} = +c.query.${property};`
-					break
-			}
+    if (properties) {
+      switch (typeof properties) {
+        case 'object':
+          for (const property of properties)
+            fnLiteral += `c.query.${property} = +c.query.${property};`
+          break
+      }
 
-			fnLiteral += '\n'
-		}
-	}
+      fnLiteral += '\n'
+    }
+  }
 
-	if (validator.headers) {
-		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.headers.schema)
+  if (validator.headers) {
+    // @ts-ignore
+    const properties = findElysiaMeta('Numeric', validator.headers.schema)
 
-		if (properties) {
-			switch (typeof properties) {
-				case 'object':
-					for (const property of properties)
-						fnLiteral += `c.headers.${property} = +c.headers.${property};`
-					break
-			}
+    if (properties) {
+      switch (typeof properties) {
+        case 'object':
+          for (const property of properties)
+            fnLiteral += `c.headers.${property} = +c.headers.${property};`
+          break
+      }
 
-			fnLiteral += '\n'
-		}
-	}
+      fnLiteral += '\n'
+    }
+  }
 
-	if (validator.body) {
-		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.body.schema)
+  if (validator.body) {
+    // @ts-ignore
+    const properties = findElysiaMeta('Numeric', validator.body.schema)
 
-		if (properties) {
-			switch (typeof properties) {
-				case 'string':
-					fnLiteral += `c.body = +c.body;`
-					break
+    if (properties) {
+      switch (typeof properties) {
+        case 'string':
+          fnLiteral += `c.body = +c.body;`
+          break
 
-				case 'object':
-					for (const property of properties)
-						fnLiteral += `c.body.${property} = +c.body.${property};`
-					break
-			}
+        case 'object':
+          for (const property of properties)
+            fnLiteral += `c.body.${property} = +c.body.${property};`
+          break
+      }
 
-			fnLiteral += '\n'
-		}
-	}
+      fnLiteral += '\n'
+    }
+  }
 
-	if (hooks?.transform)
-		for (let i = 0; i < hooks.transform.length; i++) {
-			const transform = hooks.transform[i]
+  if (hooks?.transform)
+    for (let i = 0; i < hooks.transform.length; i++) {
+      const transform = hooks.transform[i]
 
-			// @ts-ignore
-			if (transform.$elysia === 'derive')
-				fnLiteral +=
-					hooks.transform[i].constructor.name === ASYNC_FN
-						? `Object.assign(c, await transform[${i}](c));`
-						: `Object.assign(c, transform[${i}](c));`
-			else
-				fnLiteral +=
-					hooks.transform[i].constructor.name === ASYNC_FN
-						? `await transform[${i}](c);`
-						: `transform[${i}](c);`
-		}
+      // @ts-ignore
+      if (transform.$elysia === 'derive')
+        fnLiteral +=
+          hooks.transform[i].constructor.name === ASYNC_FN
+            ? `Object.assign(c, await transform[${i}](c));`
+            : `Object.assign(c, transform[${i}](c));`
+      else
+        fnLiteral +=
+          hooks.transform[i].constructor.name === ASYNC_FN
+            ? `await transform[${i}](c);`
+            : `transform[${i}](c);`
+    }
 
-	if (validator) {
-		if (validator.headers)
-			fnLiteral += `
+  if (validator) {
+    if (validator.headers)
+      fnLiteral += `
                 if (headers.Check(c.headers) === false) {
                     ${composeValidation('headers')}
 				}
         `
 
-		if (validator.params)
-			fnLiteral += `if(params.Check(c.params) === false) { ${composeValidation(
-				'params'
-			)} }`
+    if (validator.params)
+      fnLiteral += `if(params.Check(c.params) === false) { ${composeValidation(
+        'params'
+      )} }`
 
-		if (validator.query)
-			fnLiteral += `if(query.Check(c.query) === false) { ${composeValidation(
-				'query'
-			)} }`
+    if (validator.query)
+      fnLiteral += `if(query.Check(c.query) === false) { ${composeValidation(
+        'query'
+      )} }`
 
-		if (validator.body)
-			fnLiteral += `if(body.Check(c.body) === false) { ${composeValidation(
-				'body'
-			)} }`
-	}
+    if (validator.body)
+      fnLiteral += `if(body.Check(c.body) === false) { ${composeValidation(
+        'body'
+      )} }`
+  }
 
-	if (hooks?.beforeHandle)
-		for (let i = 0; i < hooks.beforeHandle.length; i++) {
-			const name = `be${i}`
+  if (hooks?.beforeHandle)
+    for (let i = 0; i < hooks.beforeHandle.length; i++) {
+      const name = `be${i}`
 
-			const returning = hasReturn(hooks.beforeHandle[i].toString())
+      const returning = hasReturn(hooks.beforeHandle[i].toString())
 
-			if (!returning) {
-				fnLiteral +=
-					hooks.beforeHandle[i].constructor.name === ASYNC_FN
-						? `await beforeHandle[${i}](c);\n`
-						: `beforeHandle[${i}](c);\n`
-			} else {
-				fnLiteral +=
-					hooks.beforeHandle[i].constructor.name === ASYNC_FN
-						? `let ${name} = await beforeHandle[${i}](c);\n`
-						: `let ${name} = beforeHandle[${i}](c);\n`
+      if (!returning) {
+        fnLiteral +=
+          hooks.beforeHandle[i].constructor.name === ASYNC_FN
+            ? `await beforeHandle[${i}](c);\n`
+            : `beforeHandle[${i}](c);\n`
+      } else {
+        fnLiteral +=
+          hooks.beforeHandle[i].constructor.name === ASYNC_FN
+            ? `let ${name} = await beforeHandle[${i}](c);\n`
+            : `let ${name} = beforeHandle[${i}](c);\n`
 
-				fnLiteral += `if(${name} !== undefined) {\n`
-				if (hooks?.afterHandle) {
-					const beName = name
-					for (let i = 0; i < hooks.afterHandle.length; i++) {
-						const returning = hasReturn(
-							hooks.afterHandle[i].toString()
-						)
+        fnLiteral += `if(${name} !== undefined) {\n`
+        if (hooks?.afterHandle) {
+          const beName = name
+          for (let i = 0; i < hooks.afterHandle.length; i++) {
+            const returning = hasReturn(hooks.afterHandle[i].toString())
 
-						if (!returning) {
-							fnLiteral +=
-								hooks.afterHandle[i].constructor.name ===
-								ASYNC_FN
-									? `await afterHandle[${i}](c, ${beName});\n`
-									: `afterHandle[${i}](c, ${beName});\n`
-						} else {
-							const name = `af${i}`
+            if (!returning) {
+              fnLiteral +=
+                hooks.afterHandle[i].constructor.name === ASYNC_FN
+                  ? `await afterHandle[${i}](c, ${beName});\n`
+                  : `afterHandle[${i}](c, ${beName});\n`
+            } else {
+              const name = `af${i}`
 
-							fnLiteral +=
-								hooks.afterHandle[i].constructor.name ===
-								ASYNC_FN
-									? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
-									: `const ${name} = afterHandle[${i}](c, ${beName});\n`
+              fnLiteral +=
+                hooks.afterHandle[i].constructor.name === ASYNC_FN
+                  ? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
+                  : `const ${name} = afterHandle[${i}](c, ${beName});\n`
 
-							fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
-						}
-					}
-				}
+              fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
+            }
+          }
+        }
 
-				if (validator.response)
-					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
+        if (validator.response)
+          fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
 						if(!(response instanceof Error))
 							${composeResponseValidation(name)}
 					}\n`
 
-				fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
-			}
-		}
+        fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
+      }
+    }
 
-	if (hooks?.afterHandle.length) {
-		fnLiteral +=
-			handler.constructor.name === ASYNC_FN
-				? `let r = await handler(c);\n`
-				: `let r = handler(c);\n`
+  if (hooks?.afterHandle.length) {
+    fnLiteral +=
+      handler.constructor.name === ASYNC_FN
+        ? `let r = await handler(c);\n`
+        : `let r = handler(c);\n`
 
-		for (let i = 0; i < hooks.afterHandle.length; i++) {
-			const name = `af${i}`
+    for (let i = 0; i < hooks.afterHandle.length; i++) {
+      const name = `af${i}`
 
-			const returning = hasReturn(hooks.afterHandle[i].toString())
+      const returning = hasReturn(hooks.afterHandle[i].toString())
 
-			if (!returning) {
-				fnLiteral +=
-					hooks.afterHandle[i].constructor.name === ASYNC_FN
-						? `await afterHandle[${i}](c, r)\n`
-						: `afterHandle[${i}](c, r)\n`
-			} else {
-				fnLiteral +=
-					hooks.afterHandle[i].constructor.name === ASYNC_FN
-						? `let ${name} = await afterHandle[${i}](c, r)\n`
-						: `let ${name} = afterHandle[${i}](c, r)\n`
+      if (!returning) {
+        fnLiteral +=
+          hooks.afterHandle[i].constructor.name === ASYNC_FN
+            ? `await afterHandle[${i}](c, r)\n`
+            : `afterHandle[${i}](c, r)\n`
+      } else {
+        fnLiteral +=
+          hooks.afterHandle[i].constructor.name === ASYNC_FN
+            ? `let ${name} = await afterHandle[${i}](c, r)\n`
+            : `let ${name} = afterHandle[${i}](c, r)\n`
 
-				if (validator.response) {
-					fnLiteral += `if(${name} !== undefined) {`
-					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
+        if (validator.response) {
+          fnLiteral += `if(${name} !== undefined) {`
+          fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
 						if(!(response instanceof Error))
 						${composeResponseValidation(name)}
 					}\n`
 
-					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+          fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
 
-					fnLiteral += `if(${name}) return ${name};\n}`
-				} else fnLiteral += `if(${name}) return ${name};\n`
-			}
-		}
+          fnLiteral += `if(${name}) return ${name};\n}`
+        } else fnLiteral += `if(${name}) return ${name};\n`
+      }
+    }
 
-		if (validator.response)
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
+    if (validator.response)
+      fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
 				if(!(response instanceof Error))
 					${composeResponseValidation()}
 			}\n`
 
-		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-		else fnLiteral += `return mapCompactResponse(r)\n`
-	} else {
-		if (validator.response) {
-			fnLiteral +=
-				handler.constructor.name === ASYNC_FN
-					? `const r = await handler(c);\n`
-					: `const r = handler(c);\n`
+    if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+    else fnLiteral += `return mapCompactResponse(r)\n`
+  } else {
+    if (validator.response) {
+      fnLiteral +=
+        handler.constructor.name === ASYNC_FN
+          ? `const r = await handler(c);\n`
+          : `const r = handler(c);\n`
 
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
+      fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
 				if(!(response instanceof Error))
 					${composeResponseValidation()}
 			}\n`
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(r)\n`
-		} else {
-			const handled =
-				handler.constructor.name === ASYNC_FN
-					? 'await handler(c) '
-					: 'handler(c)'
+      if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+      else fnLiteral += `return mapCompactResponse(r)\n`
+    } else {
+      const handled =
+        handler.constructor.name === ASYNC_FN
+          ? 'await handler(c) '
+          : 'handler(c)'
 
-			if (hasSet) fnLiteral += `return mapResponse(${handled}, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(${handled})\n`
-		}
-	}
+      if (hasSet) fnLiteral += `return mapResponse(${handled}, c.set)\n`
+      else fnLiteral += `return mapCompactResponse(${handled})\n`
+    }
+  }
 
-	if (hasErrorHandler) {
-		fnLiteral += `
+  if (hasErrorHandler) {
+    fnLiteral += `
 } catch(error) {
 	${
-		''
-		// hasStrictContentType ||
-		// // @ts-ignore
-		// validator?.body?.schema
-		// 	? `if(!c.body) error = parseError`
-		// 	: ''
-	}
+    ''
+    // hasStrictContentType ||
+    // // @ts-ignore
+    // validator?.body?.schema
+    // 	? `if(!c.body) error = parseError`
+    // 	: ''
+  }
 
 	${maybeAsync ? '' : 'return (async () => {'}
 		const set = c.set
@@ -678,8 +666,8 @@ export const composeHandler = ({
 		if (!set.status || set.status < 300) set.status = 500
 
 		${
-			hooks.error.length
-				? `for (let i = 0; i < handleErrors.length; i++) {
+      hooks.error.length
+        ? `for (let i = 0; i < handleErrors.length; i++) {
 				let handled = handleErrors[i]({
 					request: c.request,
 					error: error,
@@ -691,17 +679,17 @@ export const composeHandler = ({
 				const response = mapEarlyResponse(handled, set)
 				if (response) return response
 			}`
-				: ''
-		}
+        : ''
+    }
 
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
 }`
-	}
+  }
 
-	// console.log(fnLiteral)
+  // console.log(fnLiteral)
 
-	fnLiteral = `const { 
+  fnLiteral = `const { 
 		handler,
 		handleError,
 		hooks: {
@@ -730,13 +718,13 @@ export const composeHandler = ({
 			InternalServerError
 		},
 		${
-			meta
-				? `
+      meta
+        ? `
 			meta,
 			SCHEMA,
 			DEFS,`
-				: ''
-		}
+        : ''
+    }
 	} = hooks
 
 	return ${maybeAsync ? 'async' : ''} function(c) {
@@ -744,70 +732,70 @@ export const composeHandler = ({
 		${fnLiteral}
 	}`
 
-	// console.log(fnLiteral)
+  // console.log(fnLiteral)
 
-	const createHandler = Function('hooks', fnLiteral)
+  const createHandler = Function('hooks', fnLiteral)
 
-	return createHandler({
-		handler,
-		hooks,
-		validator,
-		handleError,
-		utils: {
-			mapResponse,
-			mapCompactResponse,
-			mapEarlyResponse,
-			parseQuery
-		},
-		error: {
-			NotFoundError,
-			ValidationError,
-			InternalServerError
-		},
-		meta,
-		SCHEMA: meta ? SCHEMA : undefined,
-		DEFS: meta ? DEFS : undefined
-	})
+  return createHandler({
+    handler,
+    hooks,
+    validator,
+    handleError,
+    utils: {
+      mapResponse,
+      mapCompactResponse,
+      mapEarlyResponse,
+      parseQuery
+    },
+    error: {
+      NotFoundError,
+      ValidationError,
+      InternalServerError
+    },
+    meta,
+    SCHEMA: meta ? SCHEMA : undefined,
+    DEFS: meta ? DEFS : undefined
+  })
 }
 
 export const composeGeneralHandler = (app: Elysia<any>) => {
-	let decoratorsLiteral = ''
+  let decoratorsLiteral = ''
 
-	// @ts-ignore
-	for (const key of Object.keys(app.decorators))
-		decoratorsLiteral += `,${key}: app.decorators.${key}`
+  // @ts-ignore
+  for (const key of Object.keys(app.decorators))
+    decoratorsLiteral += `,${key}: app.decorators.${key}`
 
-	// @ts-ignore
-	const { router, staticRouter } = app
+  // @ts-ignore
+  const { router, staticRouter } = app
 
-	const findDynamicRoute = `
+  const findDynamicRoute = `
 	const route = find(request.method, path) ${
-		router.root.ALL ? '?? find("ALL", path)' : ''
-	}
+    router.root.ALL ? '?? find("ALL", path)' : ''
+  }
 	if (route === null)
 		return ${
-			app.event.error.length
-				? `handleError(
+      app.event.error.length
+        ? `handleError(
 			request,
 			notFound,
 			ctx.set
 		)`
-				: `new Response(error404, {
+        : `new Response(error404, {
 					status: 404
 				})`
-		}
+    }
 
 	ctx.params = route.params
 
 	return route.store(ctx)`
 
-	let switchMap = ``
-	for (const [path, { code, all }] of Object.entries(staticRouter.map))
-		switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
-			all ?? `default: ${findDynamicRoute}`
-		}}\n\n`
+  let switchMap = ``
+  for (const [path, { code, all }] of Object.entries(staticRouter.map))
+    switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
+      all ?? `default: ${findDynamicRoute}`
+    }}\n\n`
 
-	let fnLiteral = `const {
+  let fnLiteral = `const {
 		app,
 		app: { store, router, staticRouter },
 		mapEarlyResponse,
@@ -828,8 +816,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	return function(request) {
 	`
 
-	if (app.event.request.length) {
-		fnLiteral += `
+  if (app.event.request.length) {
+    fnLiteral += `
 			const ctx = {
 				request,
 				store,
@@ -842,19 +830,19 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 			try {\n`
 
-		for (let i = 0; i < app.event.request.length; i++) {
-			const withReturn = hasReturn(app.event.request[i].toString())
+    for (let i = 0; i < app.event.request.length; i++) {
+      const withReturn = hasReturn(app.event.request[i].toString())
 
-			fnLiteral += !withReturn
-				? `mapEarlyResponse(onRequest[${i}](ctx), ctx.set);`
-				: `const response = mapEarlyResponse(
+      fnLiteral += !withReturn
+        ? `mapEarlyResponse(onRequest[${i}](ctx), ctx.set);`
+        : `const response = mapEarlyResponse(
 					onRequest[${i}](ctx),
 					ctx.set
 				)
 				if (response) return response\n`
-		}
+    }
 
-		fnLiteral += `} catch (error) {
+    fnLiteral += `} catch (error) {
 			return handleError(request, error, ctx.set)
 		}
 		
@@ -862,8 +850,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		s = url.indexOf('/', 12),
 		i = ctx.query = url.indexOf('?', s + 1),
 		path = i === -1 ? url.substring(s) : url.substring(s, i);`
-	} else {
-		fnLiteral += `
+  } else {
+    fnLiteral += `
 			const url = request.url,
 			s = url.indexOf('/', 12)
 
@@ -882,9 +870,9 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 			ctx.query === -1
 				? url.substring(s)
 				: url.substring(s, ctx.query);`
-	}
+  }
 
-	fnLiteral += `
+  fnLiteral += `
 		switch(path) {
 			${switchMap}
 
@@ -893,55 +881,55 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		}
 	}`
 
-	app.handleError = composeErrorHandler(app) as any
+  app.handleError = composeErrorHandler(app) as any
 
-	return Function(
-		'data',
-		fnLiteral
-	)({
-		app,
-		mapEarlyResponse,
-		NotFoundError
-	})
+  return Function(
+    'data',
+    fnLiteral
+  )({
+    app,
+    mapEarlyResponse,
+    NotFoundError
+  })
 }
 
 export const composeErrorHandler = (app: Elysia<any>) => {
-	let fnLiteral = `const {
+  let fnLiteral = `const {
 		app: { event: { error: onError } },
 		mapResponse
 	} = inject
 	
 	return ${
-		app.event.error.find((fn) => fn.constructor.name === ASYNC_FN)
-			? 'async'
-			: ''
-	} function(request, error, set) {`
+    app.event.error.find((fn) => fn.constructor.name === ASYNC_FN)
+      ? 'async'
+      : ''
+  } function(request, error, set) {`
 
-	for (let i = 0; i < app.event.error.length; i++) {
-		const handler = app.event.error[i]
+  for (let i = 0; i < app.event.error.length; i++) {
+    const handler = app.event.error[i]
 
-		const response = `${
-			handler.constructor.name === ASYNC_FN ? 'await ' : ''
-		}onError[${i}]({
+    const response = `${
+      handler.constructor.name === ASYNC_FN ? 'await ' : ''
+    }onError[${i}]({
 			request,
 			code: error.code ?? 'UNKNOWN',
 			error,
 			set
 		})`
 
-		if (hasReturn(handler.toString()))
-			fnLiteral += `const r${i} = ${response}; if(r${i} !== null) return mapResponse(r${i}, set)\n`
-		else fnLiteral += response + '\n'
-	}
+    if (hasReturn(handler.toString()))
+      fnLiteral += `const r${i} = ${response}; if(r${i} !== null) return mapResponse(r${i}, set)\n`
+    else fnLiteral += response + '\n'
+  }
 
-	fnLiteral += `return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
+  fnLiteral += `return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
 }`
 
-	return Function(
-		'inject',
-		fnLiteral
-	)({
-		app,
-		mapResponse
-	})
+  return Function(
+    'inject',
+    fnLiteral
+  )({
+    app,
+    mapResponse
+  })
 }

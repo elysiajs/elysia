@@ -1,4 +1,4 @@
-import Elysia from "../../src";
+import Elysia from '../../src'
 
 export const lazy = (app: Elysia) => app.get('/lazy', () => 'Hi')
 

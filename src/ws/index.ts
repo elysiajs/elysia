@@ -9,87 +9,87 @@ import type { ElysiaInstance, UnwrapSchema } from '../types'
 import { ValidationError } from '../error'
 
 const getPath = (url: string) => {
-	const start = url.indexOf('/', 10)
-	const end = url.indexOf('?', start)
+  const start = url.indexOf('/', 10)
+  const end = url.indexOf('?', start)
 
-	if (end === -1) return url.slice(start)
+  if (end === -1) return url.slice(start)
 
-	return url.slice(start, end)
+  return url.slice(start, end)
 }
 
 export class ElysiaWS<
-	WS extends ElysiaWSContext<any> = ElysiaWSContext,
-	Schema extends WSTypedSchema = WSTypedSchema,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {}
+  WS extends ElysiaWSContext<any> = ElysiaWSContext,
+  Schema extends WSTypedSchema = WSTypedSchema,
+  Definitions extends ElysiaInstance['meta'][typeof DEFS] = {}
 > {
-	raw: WS
-	data: WS['data']
-	isSubscribed: WS['isSubscribed']
+  raw: WS
+  data: WS['data']
+  isSubscribed: WS['isSubscribed']
 
-	constructor(ws: WS) {
-		this.raw = ws
-		this.data = ws.data
-		this.isSubscribed = ws.isSubscribed
-	}
+  constructor(ws: WS) {
+    this.raw = ws
+    this.data = ws.data
+    this.isSubscribed = ws.isSubscribed
+  }
 
-	publish(
-		topic: string,
-		data: UnwrapSchema<Schema['response'], Definitions> = undefined as any,
-		compress?: boolean
-	) {
-		// @ts-ignore
-		if (typeof data === 'object') data = JSON.stringify(data)
+  publish(
+    topic: string,
+    data: UnwrapSchema<Schema['response'], Definitions> = undefined as any,
+    compress?: boolean
+  ) {
+    // @ts-ignore
+    if (typeof data === 'object') data = JSON.stringify(data)
 
-		this.raw.publish(topic, data as string, compress)
+    this.raw.publish(topic, data as string, compress)
 
-		return this
-	}
+    return this
+  }
 
-	publishToSelf(
-		topic: string,
-		data: UnwrapSchema<Schema['response'], Definitions> = undefined as any,
-		compress?: boolean
-	) {
-		// @ts-ignore
-		if (typeof data === 'object') data = JSON.stringify(data)
+  publishToSelf(
+    topic: string,
+    data: UnwrapSchema<Schema['response'], Definitions> = undefined as any,
+    compress?: boolean
+  ) {
+    // @ts-ignore
+    if (typeof data === 'object') data = JSON.stringify(data)
 
-		this.raw.publish(topic, data as string, compress)
+    this.raw.publish(topic, data as string, compress)
 
-		return this
-	}
+    return this
+  }
 
-	send(data: UnwrapSchema<Schema['response'], Definitions>) {
-		// @ts-ignore
-		if (typeof data === 'object') data = JSON.stringify(data)
+  send(data: UnwrapSchema<Schema['response'], Definitions>) {
+    // @ts-ignore
+    if (typeof data === 'object') data = JSON.stringify(data)
 
-		this.raw.send(data as string)
+    this.raw.send(data as string)
 
-		return this
-	}
+    return this
+  }
 
-	subscribe(room: string) {
-		this.raw.subscribe(room)
+  subscribe(room: string) {
+    this.raw.subscribe(room)
 
-		return this
-	}
+    return this
+  }
 
-	unsubscribe(room: string) {
-		this.raw.unsubscribe(room)
+  unsubscribe(room: string) {
+    this.raw.unsubscribe(room)
 
-		return this
-	}
+    return this
+  }
 
-	cork(callback: (ws: ServerWebSocket<any>) => any) {
-		this.raw.cork(callback)
+  cork(callback: (ws: ServerWebSocket<any>) => any) {
+    this.raw.cork(callback)
 
-		return this
-	}
+    return this
+  }
 
-	close() {
-		this.raw.close()
+  close() {
+    this.raw.close()
 
-		return this
-	}
+    return this
+  }
 }
 
 /**
@@ -110,129 +110,115 @@ export class ElysiaWS<
  * ```
  */
 export const ws =
-	(config?: Omit<WebSocketHandler, 'open' | 'message' | 'close' | 'drain'>) =>
-	(app: Elysia) => {
-		// @ts-ignore
-		if (!app.wsRouter) app.wsRouter = new Memoirist()
+  (config?: Omit<WebSocketHandler, 'open' | 'message' | 'close' | 'drain'>) =>
+  (app: Elysia) => {
+    // @ts-ignore
+    if (!app.wsRouter) app.wsRouter = new Memoirist()
 
-		// @ts-ignore
-		const router = app.wsRouter!
+    // @ts-ignore
+    const router = app.wsRouter!
 
-		if (!app.config.serve)
-			app.config.serve = {
-				websocket: {
-					...config,
-					open(ws) {
-						if (!ws.data) return
+    if (!app.config.serve)
+      app.config.serve = {
+        websocket: {
+          ...config,
+          open(ws) {
+            if (!ws.data) return
 
-						const url = getPath(
-							(ws?.data as unknown as Context).request.url
-						)
+            const url = getPath((ws?.data as unknown as Context).request.url)
 
-						if (!url) return
+            if (!url) return
 
-						const route = router.find('subscribe', url)?.store
+            const route = router.find('subscribe', url)?.store
 
-						if (route && route.open)
-							route.open(new ElysiaWS(ws as any))
-					},
-					message(ws, message: any): void {
-						if (!ws.data) return
+            if (route && route.open) route.open(new ElysiaWS(ws as any))
+          },
+          message(ws, message: any): void {
+            if (!ws.data) return
 
-						const url = getPath(
-							(ws?.data as unknown as Context).request.url
-						)
+            const url = getPath((ws?.data as unknown as Context).request.url)
 
-						if (!url) return
+            if (!url) return
 
-						const route = router.find('subscribe', url)?.store
-						if (!route?.message) return
+            const route = router.find('subscribe', url)?.store
+            if (!route?.message) return
 
-						message = message.toString()
-						const start = message.charCodeAt(0)
+            message = message.toString()
+            const start = message.charCodeAt(0)
 
-						if (start === 47 || start === 123)
-							try {
-								message = JSON.parse(message)
-							} catch (error) {
-								// Not empty
-							}
-						else if (!Number.isNaN(+message)) message = +message
+            if (start === 47 || start === 123)
+              try {
+                message = JSON.parse(message)
+              } catch (error) {
+                // Not empty
+              }
+            else if (!Number.isNaN(+message)) message = +message
 
-						for (
-							let i = 0;
-							i <
-							(ws.data as ElysiaWSContext['data'])
-								.transformMessage.length;
-							i++
-						) {
-							const temp: any = (
-								ws.data as ElysiaWSContext['data']
-							).transformMessage[i](message)
+            for (
+              let i = 0;
+              i < (ws.data as ElysiaWSContext['data']).transformMessage.length;
+              i++
+            ) {
+              const temp: any = (
+                ws.data as ElysiaWSContext['data']
+              ).transformMessage[i](message)
 
-							if (temp !== undefined) message = temp
-						}
+              if (temp !== undefined) message = temp
+            }
 
-						if (
-							(ws.data as ElysiaWSContext['data']).message?.Check(
-								message
-							) === false
-						)
-							return void ws.send(
-								new ValidationError(
-									'message',
-									(ws.data as ElysiaWSContext['data'])
-										.message as any,
-									message
-								).cause as string
-							)
+            if (
+              (ws.data as ElysiaWSContext['data']).message?.Check(message) ===
+              false
+            )
+              return void ws.send(
+                new ValidationError(
+                  'message',
+                  (ws.data as ElysiaWSContext['data']).message as any,
+                  message
+                ).cause as string
+              )
 
-						route.message(new ElysiaWS(ws as any), message)
-					},
-					close(ws, code, reason) {
-						if (!ws.data) return
+            route.message(new ElysiaWS(ws as any), message)
+          },
+          close(ws, code, reason) {
+            if (!ws.data) return
 
-						const url = getPath(
-							(ws?.data as unknown as Context).request.url
-						)
+            const url = getPath((ws?.data as unknown as Context).request.url)
 
-						if (!url) return
+            if (!url) return
 
-						const route = router.find('subscribe', url)?.store
+            const route = router.find('subscribe', url)?.store
 
-						if (route && route.close)
-							route.close(new ElysiaWS(ws as any), code, reason)
-					},
-					drain(ws) {
-						if (!ws.data) return
+            if (route && route.close)
+              route.close(new ElysiaWS(ws as any), code, reason)
+          },
+          drain(ws) {
+            if (!ws.data) return
 
-						const url = getPath(
-							(ws?.data as unknown as Context).request.url
-						)
+            const url = getPath((ws?.data as unknown as Context).request.url)
 
-						if (!url) return
+            if (!url) return
 
-						const route = router.find('subscribe', url)?.store
+            const route = router.find('subscribe', url)?.store
 
-						if (route && route.drain)
-							route.drain(new ElysiaWS(ws as any))
-					}
-				}
-			}
+            if (route && route.drain) route.drain(new ElysiaWS(ws as any))
+          }
+        }
+      }
 
-		return app
-			.decorate('publish', app.server?.publish as Server['publish'])
-			.onStart((app) => {
-				// @ts-ignore
-				app.decorators.publish = app.server?.publish
-			})
-	}
+    return app
+      .decorate('publish', app.server?.publish as Server['publish'])
+      .onStart((app) => {
+        // @ts-ignore
+        app.decorators.publish = app.server?.publish
+      })
+  }
 
 export type {
-	WSTypedSchema,
-	WebSocketHeaderHandler,
-	WebSocketSchemaToRoute,
-	ElysiaWSContext,
-	ElysiaWSOptions,
-	TransformMessageHandler
+  WSTypedSchema,
+  WebSocketHeaderHandler,
+  WebSocketSchemaToRoute,
+  ElysiaWSContext,
+  ElysiaWSOptions,
+  TransformMessageHandler
 } from './types'

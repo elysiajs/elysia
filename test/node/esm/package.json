@@ -1,6 +1,6 @@
 {
-    "type": "module",
-    "dependencies": {
-        "elysia": "../../.."
-    }
+  "type": "module",
+  "dependencies": {
+    "elysia": "../../.."
+  }
 }
