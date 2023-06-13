@@ -1,30 +1,30 @@
-import { Elysia } from '../src'
+import { Elysia } from "../src";
 
 // ? Download from @elysia/html
 const html = (app: Elysia) =>
-	app
-		.decorate(
-			'html',
-			(value: string) =>
-				new Response(value, {
-					headers: {
-						'content-type': 'text/html'
-					}
-				})
-		)
-		.onAfterHandle((context, response) => {
-			if (
-				typeof response === 'string' &&
-				response.trimStart().startsWith('<!DOCTYPE')
-			)
-				return context.html(response)
-		})
+  app
+    .decorate(
+      "html",
+      (value: string) =>
+        new Response(value, {
+          headers: {
+            "content-type": "text/html",
+          },
+        })
+    )
+    .onAfterHandle((context, response) => {
+      if (
+        typeof response === "string" &&
+        response.trimStart().startsWith("<!DOCTYPE")
+      )
+        return context.html(response);
+    });
 
 new Elysia()
-	.use(html)
-	.get(
-		'/',
-		() => `
+  .use(html)
+  .get(
+    "/",
+    () => `
 		<!DOCTYPE html>
 			<html>
 				<head>
@@ -34,5 +34,5 @@ new Elysia()
 					<h1>Hello World</h1>
 				</body>
 			</html>`
-	)
-	.listen(8080)
+  )
+  .listen(8080);
