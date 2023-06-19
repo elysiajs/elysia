@@ -1,3 +1,7 @@
+# 0.5.19 - 19 Jun 2023
+Bug fix:
+- optimize `ws` plugin type
+
 # 0.5.18 - 11 Jun 2023
 Bug fix:
 - `mapEarlyResponse` is missing on request

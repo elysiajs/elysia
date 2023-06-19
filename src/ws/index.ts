@@ -1,11 +1,14 @@
 import { Memoirist } from 'memoirist'
-import type { Server, ServerWebSocket, WebSocketHandler } from 'bun'
+import type {
+	Server,
+	ServerWebSocket,
+	ServerWebSocketSendStatus,
+	WebSocketHandler
+} from 'bun'
 
-import type { Elysia, Context } from '..'
-import { type DEFS } from '../utils'
+import type { Elysia, Context, SCHEMA } from '..'
 
-import type { ElysiaWSContext, WSTypedSchema } from './types'
-import type { ElysiaInstance, UnwrapSchema } from '../types'
+import type { ElysiaWSContext } from './types'
 import { ValidationError } from '../error'
 
 const getPath = (url: string) => {
@@ -17,11 +20,7 @@ const getPath = (url: string) => {
 	return url.slice(start, end)
 }
 
-export class ElysiaWS<
-	WS extends ElysiaWSContext<any> = ElysiaWSContext,
-	Schema extends WSTypedSchema = WSTypedSchema,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {}
-> {
+export class ElysiaWS<WS extends ElysiaWSContext> {
 	raw: WS
 	data: WS['data']
 	isSubscribed: WS['isSubscribed']
@@ -34,35 +33,35 @@ export class ElysiaWS<
 
 	publish(
 		topic: string,
-		data: UnwrapSchema<Schema['response'], Definitions> = undefined as any,
+		data: WS['data'][typeof SCHEMA]['response'] = undefined as any,
 		compress?: boolean
 	) {
 		// @ts-ignore
 		if (typeof data === 'object') data = JSON.stringify(data)
 
-		this.raw.publish(topic, data as string, compress)
+		this.raw.publish(topic, data as unknown as string, compress)
 
 		return this
 	}
 
 	publishToSelf(
 		topic: string,
-		data: UnwrapSchema<Schema['response'], Definitions> = undefined as any,
+		data: WS['data'][typeof SCHEMA]['response'] = undefined as any,
 		compress?: boolean
 	) {
 		// @ts-ignore
 		if (typeof data === 'object') data = JSON.stringify(data)
 
-		this.raw.publish(topic, data as string, compress)
+		this.raw.publish(topic, data as unknown as string, compress)
 
 		return this
 	}
 
-	send(data: UnwrapSchema<Schema['response'], Definitions>) {
+	send(data: WS['data'][typeof SCHEMA]['response']) {
 		// @ts-ignore
 		if (typeof data === 'object') data = JSON.stringify(data)
 
-		this.raw.send(data as string)
+		this.raw.send(data as unknown as string)
 
 		return this
 	}
@@ -221,12 +220,18 @@ export const ws =
 			}
 
 		return app
-			.decorate('publish', app.server?.publish as Server['publish'])
+			.decorate('publish', app.server?.publish as WSPublish)
 			.onStart((app) => {
 				// @ts-ignore
 				app.decorators.publish = app.server?.publish
 			})
 	}
+
+type WSPublish = (
+	topic: string,
+	data: string | ArrayBufferView | ArrayBuffer | SharedArrayBuffer,
+	compress?: boolean
+) => ServerWebSocketSendStatus
 
 export type {
 	WSTypedSchema,

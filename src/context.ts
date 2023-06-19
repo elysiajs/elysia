@@ -1,9 +1,9 @@
-import type { Elysia, TypedRoute, DEFS, SCHEMA, TypedSchema } from '.'
+import type { Elysia, TypedRoute, SCHEMA } from '.'
 
-export interface Context<
+export type Context<
 	Route extends TypedRoute = TypedRoute,
 	Store extends Elysia['store'] = Elysia['store']
-> {
+> = {
 	request: Request
 	headers: undefined extends Route['headers']
 		? Record<string, string | null>
@@ -15,17 +15,12 @@ export interface Context<
 	body: Route['body']
 	store: Store
 
-	[SCHEMA]?: TypedSchema
-	[DEFS]?: {
-		[index: string]: Record<string, unknown>
-	}
-
 	set: {
 		headers: Record<string, string>
 		status?: number
 		redirect?: string
 	}
-}
+} & Record<typeof SCHEMA, Route>
 
 // Use to mimic request before mapping route
 export type PreContext<

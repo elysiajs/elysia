@@ -126,7 +126,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		>,
 		all: ''
 	}
-	private wsRouter: Memoirist<ElysiaWSOptions> | undefined
+	private wsRouter: Memoirist<any> | undefined
 
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
