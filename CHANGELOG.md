@@ -1,3 +1,7 @@
+# 0.5.20 - 23 Jun 2023
+Bug fix:
+- async fn on Static Code Analysis
+
 # 0.5.19 - 19 Jun 2023
 Bug fix:
 - optimize `ws` plugin type

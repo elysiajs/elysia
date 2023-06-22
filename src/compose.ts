@@ -68,6 +68,7 @@ ${value}
 
 export const isFnUse = (keyword: string, fnLiteral: string) => {
 	fnLiteral = fnLiteral.trimStart()
+	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
 
 	const argument =
 		// CharCode 40 is '('
@@ -85,13 +86,7 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 	// Using object destructuring
 	if (argument.charCodeAt(0) === 123) {
 		// Since Function already format the code, styling is enforced
-		if (
-			argument.includes(`{ ${keyword}`) ||
-			argument.includes(`, ${keyword}`) ||
-			// Node
-			argument.includes(`,${keyword}`)
-		)
-			return true
+		if (argument.includes(keyword)) return true
 
 		return false
 	}
