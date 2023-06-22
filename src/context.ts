@@ -1,4 +1,4 @@
-import type { Elysia, TypedRoute, SCHEMA } from '.'
+import type { Elysia, TypedRoute, SCHEMA, HTTPStatus } from '.'
 
 export type Context<
 	Route extends TypedRoute = TypedRoute,
@@ -17,7 +17,7 @@ export type Context<
 
 	set: {
 		headers: Record<string, string>
-		status?: number
+		status?: HTTPStatus
 		redirect?: string
 	}
 } & Record<typeof SCHEMA, Route>

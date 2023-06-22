@@ -2962,5 +2962,6 @@ export type {
 	MergeIfNotNull,
 	ElysiaDefaultMeta,
 	AnyTypedSchema,
-	DeepMergeTwoTypes
+	DeepMergeTwoTypes,
+	HTTPStatus
 } from './types'
