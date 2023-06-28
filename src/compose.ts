@@ -3,7 +3,6 @@ import type { Elysia } from '.'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
-import { SCHEMA, DEFS } from './utils'
 import { NotFoundError, ValidationError, InternalServerError } from './error'
 
 import type {
@@ -24,6 +23,9 @@ const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 const _demoHeaders = new Headers()
 
 const findAliases = new RegExp(` (\\w+) = context`, 'g')
+
+const isProduction =
+	process.env.NODE_ENV === 'production' || process.env.ENV === 'production'
 
 export const hasReturn = (fnLiteral: string) => {
 	const parenthesisEnd = fnLiteral.indexOf(')')
@@ -724,18 +726,11 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		${
-			meta
-				? `
-			meta,
-			SCHEMA,
-			DEFS,`
-				: ''
-		}
+		meta
 	} = hooks
 
 	return ${maybeAsync ? 'async' : ''} function(c) {
-		${meta ? 'c[SCHEMA] = meta[SCHEMA]; c[DEFS] = meta[DEFS];' : ''}
+		${meta ? 'c["schema"] = meta["schema"]; c["defs"] = meta["defs"];' : ''}
 		${fnLiteral}
 	}`
 
@@ -759,9 +754,7 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		meta,
-		SCHEMA: meta ? SCHEMA : undefined,
-		DEFS: meta ? DEFS : undefined
+		meta
 	})
 }
 
@@ -929,7 +922,15 @@ export const composeErrorHandler = (app: Elysia<any>) => {
 		else fnLiteral += response + '\n'
 	}
 
-	fnLiteral += `return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
+	fnLiteral += `
+	if(error.constructor.name === "ValidationError") {
+		return new Response(
+			error.message, 
+			{ headers: set.headers, status: error.status ?? 400 }
+		)
+	} else {
+		return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
+	}
 }`
 
 	return Function(

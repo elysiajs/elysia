@@ -1,4 +1,4 @@
-import { Elysia, SCHEMA } from '../src'
+import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
@@ -74,7 +74,8 @@ describe('Modules', () => {
 			.use(import('./modules'))
 			.use(asyncPlugin)
 			.get('/', () => 'hi')
-			.route('GET', '/schema', (context) => context[SCHEMA], {
+			// @ts-ignore
+			.route('GET', '/schema', (context) => context.schema, {
 				config: {
 					allowMeta: true
 				}

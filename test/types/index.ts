@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { t, Elysia, DEFS, SCHEMA, TypedSchema } from '../../src'
+import { t, Elysia, TypedSchema } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -451,7 +451,7 @@ app.use(plugin).group(
 			)
 	)
 
-	type App = (typeof server)['meta'][typeof SCHEMA]
+	type App = (typeof server)['meta']['schema']
 	type Route = App['/v1/a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -495,7 +495,7 @@ app.use(plugin).group(
 			)
 	)
 
-	type App = (typeof server)['meta'][typeof SCHEMA]
+	type App = (typeof server)['meta']['schema']
 	type Route = App['/v1/a']['subscribe']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -515,7 +515,7 @@ app.use(plugin).group(
 {
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
-	type App = (typeof server)['meta'][typeof SCHEMA]
+	type App = (typeof server)['meta']['schema']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{

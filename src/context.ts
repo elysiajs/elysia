@@ -1,4 +1,4 @@
-import type { Elysia, TypedRoute, SCHEMA } from '.'
+import type { Elysia, TypedRoute } from '.'
 
 export type Context<
 	Route extends TypedRoute = TypedRoute,
@@ -20,7 +20,7 @@ export type Context<
 		status?: number
 		redirect?: string
 	}
-} & Record<typeof SCHEMA, Route>
+}
 
 // Use to mimic request before mapping route
 export type PreContext<

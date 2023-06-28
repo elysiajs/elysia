@@ -3,14 +3,14 @@ import type { TObject, TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 import type { Context } from '../context'
-import type { DEFS } from '../utils'
 import type {
 	ElysiaInstance,
 	UnwrapSchema,
 	ExtractPath,
 	WithArray,
 	NoReturnHandler,
-	HookHandler
+	HookHandler,
+	TypedRoute
 } from '../types'
 import type { ElysiaWS } from '.'
 
@@ -24,7 +24,7 @@ export interface WSTypedSchema<ModelName extends string = string> {
 
 export type TypedWSSchemaToRoute<
 	Schema extends WSTypedSchema = WSTypedSchema,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {}
+	Definitions extends ElysiaInstance['meta']['defs'] = {}
 > = {
 	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
@@ -55,7 +55,7 @@ export type TypedWSSchemaToRoute<
 
 export type WebSocketSchemaToRoute<
 	Schema extends WSTypedSchema,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {}
+	Definitions extends ElysiaInstance['meta']['defs'] = {}
 > = {
 	body: UnwrapSchema<Schema['body'], Definitions, undefined>
 	headers: UnwrapSchema<Schema['headers'], Definitions, undefined>
@@ -70,7 +70,7 @@ export type TransformMessageHandler<Message extends WSTypedSchema['body']> = (
 
 export type ElysiaWSContext<
 	Schema extends WSTypedSchema<any> = WSTypedSchema<never>,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
+	Definitions extends ElysiaInstance['meta']['defs'] = {},
 	Path extends string = never
 > = ServerWebSocket<
 	Context<{
@@ -85,6 +85,7 @@ export type ElysiaWSContext<
 		id: number
 		message: TypeCheck<any>
 		transformMessage: TransformMessageHandler<Schema['body']>[]
+		schema: TypedRoute
 	}
 >
 
@@ -109,7 +110,7 @@ export type WebSocketHeaderHandler<
 export type ElysiaWSOptions<
 	Path extends string,
 	Schema extends WSTypedSchema<any>,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS]
+	Definitions extends ElysiaInstance['meta']['defs']
 > = Omit<
 	Partial<WebSocketHandler<Context>>,
 	'open' | 'message' | 'close' | 'drain' | 'publish' | 'publishToSelf'

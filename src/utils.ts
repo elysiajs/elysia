@@ -8,11 +8,6 @@ import type {
 	RegisteredHook
 } from './types'
 
-// ? Internal property
-export const SCHEMA = Symbol('schema')
-export const DEFS = Symbol('definitions')
-export const EXPOSED = Symbol('exposed')
-
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
 	...(Array.isArray(a) ? a : [a]),
 	...(Array.isArray(b) ? b : [b])

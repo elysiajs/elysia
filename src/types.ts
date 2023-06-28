@@ -13,17 +13,27 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { OpenAPIV3 } from 'openapi-types'
 
 import type { Context, PreContext } from './context'
-import { SCHEMA, DEFS, EXPOSED } from './utils'
 
 export type WithArray<T> = T | T[]
 export type ObjectValues<T extends object> = T[keyof T]
 
-export type ElysiaDefaultMeta = Record<
-	typeof SCHEMA,
-	Partial<OpenAPIV3.PathsObject>
-> &
-	Record<typeof DEFS, Record<string, TSchema>> &
-	Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
+export type ElysiaDefaultMeta = {
+	schema: Record<
+		string,
+		Record<
+			string,
+			{
+				body: unknown
+				headers: unknown
+				query: unknown
+				params: unknown
+				response: unknown
+			}
+		>
+	>
+	defs: Record<string, TSchema>
+	exposed: Record<string, Record<string, unknown>>
+}
 
 export type ElysiaInstance<
 	Instance extends {
@@ -36,16 +46,16 @@ export type ElysiaInstance<
 			params?: TObject
 			response?: Record<string, TSchema>
 		}
-		meta?: Record<typeof SCHEMA, Partial<OpenAPIV3.PathsObject>> &
-			Record<typeof DEFS, Record<string, unknown>> &
-			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
+		meta?: ElysiaDefaultMeta
 	} = {
 		store: {}
 		request: {}
 		schema: {}
-		meta: Record<typeof SCHEMA, {}> &
-			Record<typeof DEFS, {}> &
-			Record<typeof EXPOSED, {}>
+		meta: {
+			schema: {}
+			defs: {}
+			exposed: {}
+		}
 	}
 > = {
 	request: Instance['request']
@@ -160,7 +170,7 @@ export interface TypedSchema<ModelName extends string = string> {
 
 export type UnwrapSchema<
 	Schema extends TSchema | undefined | string,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
+	Definitions extends ElysiaInstance['meta']['defs'] = {},
 	Fallback = unknown
 > = Schema extends string
 	? Definitions extends Record<Schema, infer NamedSchema>
@@ -172,7 +182,7 @@ export type UnwrapSchema<
 
 export type TypedSchemaToRoute<
 	Schema extends TypedSchema<any>,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS]
+	Definitions extends ElysiaInstance['meta']['defs']
 > = {
 	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
@@ -224,7 +234,7 @@ export type HookHandler<
 	Path extends string = string,
 	Typed extends AnyTypedSchema = TypedSchemaToRoute<
 		Schema,
-		Instance['meta'][typeof DEFS]
+		Instance['meta']['defs']
 	>
 > = Handler<
 	Typed extends {
@@ -355,10 +365,7 @@ export type LocalHook<
 				 */
 				afterHandle?: WithArray<
 					AfterRequestHandler<
-						TypedSchemaToRoute<
-							Route,
-							Instance['meta'][typeof SCHEMA]
-						>,
+						TypedSchemaToRoute<Route, Instance['meta']['schema']>,
 						Instance
 					>
 				>
@@ -375,7 +382,7 @@ export type LocalHook<
 
 export type TypedWSRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
-	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
+	Definitions extends TypedSchema<string> = ElysiaInstance['meta']['defs'],
 	Path extends string = string,
 	Catch = unknown
 > = TypedSchemaToEden<
@@ -397,7 +404,7 @@ export type TypedWSRouteToEden<
 
 export type TypedSchemaToEden<
 	Schema extends TypedSchema,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS]
+	Definitions extends ElysiaInstance['meta']['defs']
 > = {
 	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
@@ -443,7 +450,7 @@ export type LocalHandler<
 		Schema,
 		Instance['schema']
 	> extends infer Typed extends TypedSchema<any>
-		? TypedSchemaToRoute<Typed, Instance['meta'][typeof DEFS]> extends {
+		? TypedSchemaToRoute<Typed, Instance['meta']['defs']> extends {
 				body: infer Body
 				params: infer Params
 				query: infer Query
