@@ -4,6 +4,12 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 const isProduction =
 	process.env.NODE_ENV === 'production' || process.env.ENV === 'production'
 
+export type ElysiaErrors =
+	| InternalServerError
+	| NotFoundError
+	| ParseError
+	| ValidationError
+
 export class InternalServerError extends Error {
 	code = 'NOT_FOUND'
 	status = 500

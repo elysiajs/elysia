@@ -66,6 +66,11 @@ import type {
 
 // @ts-ignore
 import type { Permission } from '@elysiajs/fn'
+import {
+	createDynamicErrorHandler,
+	createDynamicHandler,
+	type DynamicHandler
+} from './dynamic-handle'
 
 /**
  * ### Elysia Server
@@ -109,7 +114,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	private $schema: SchemaValidator | null = null
 
 	private router = new Memoirist<ComposedHandler>()
-	protected routes: InternalRoute<Instance>[] = []
+	private routes: InternalRoute<Instance>[] = []
 
 	private staticRouter = {
 		handlers: [] as ComposedHandler[],
@@ -123,7 +128,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		>,
 		all: ''
 	}
-	private wsRouter: Memoirist<any> | undefined
+	wsRouter: Memoirist<any> | undefined
+
+	private dynamicRouter = new Memoirist<DynamicHandler>()
 
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
@@ -132,6 +139,8 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			fn: '/~fn',
 			forceErrorEncapsulation: false,
 			basePath: '',
+			// @ts-ignore
+			aot: typeof CF === 'undefined',
 			...config
 		}
 	}
@@ -220,6 +229,17 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 		const hooks = mergeHook(this.event, hook as RegisteredHook)
 
+		if (this.config.aot === false) {
+			this.dynamicRouter.add(method, path, {
+				validator,
+				hooks,
+				content: hook?.type as string,
+				handle: handler
+			})
+
+			return
+		}
+
 		const mainHandler = composeHandler({
 			path,
 			method,
@@ -254,8 +274,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		} else {
 			this.router.add(method, path, mainHandler)
 		}
-
-		// this.fetch = composeGeneralHandler(this)
 	}
 
 	/**
@@ -2692,7 +2710,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	compile() {
-		this.fetch = composeGeneralHandler(this)
+		this.fetch = this.config.aot
+			? composeGeneralHandler(this)
+			: createDynamicHandler(this)
 
 		if (this.server)
 			this.server.reload({
@@ -2711,7 +2731,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
 	fetch = (request: Request): MaybePromise<Response> =>
-		(this.fetch = composeGeneralHandler(this))(request)
+		(this.fetch = this.config.aot
+			? composeGeneralHandler(this)
+			: createDynamicHandler(this))(request)
 
 	handleError = async (
 		request: Request,
@@ -2722,7 +2744,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			| NotFoundError
 			| InternalServerError,
 		set: Context['set']
-	) => (this.handleError = composeErrorHandler(this))(request, error, set)
+	) =>
+		(this.handleError = this.config.aot
+			? composeErrorHandler(this)
+			: createDynamicErrorHandler(this))(request, error, set)
 
 	private outerErrorHandler = (error: Error) =>
 		new Response(error.message, {

@@ -498,6 +498,14 @@ export interface ElysiaConfig {
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */
 	forceErrorEncapsulation?: boolean
+	/**
+	 * Disable Ahead of Time compliation
+	 * 
+	 * Reduced performance but faster startup time
+	 * 
+	 * @default !isCloudflareWorker (false if not Cloudflare worker)
+	 */
+	aot: boolean
 }
 
 export type IsPathParameter<Part> = Part extends `:${infer Parameter}`

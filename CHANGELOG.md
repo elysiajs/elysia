@@ -1,3 +1,10 @@
+# 0.6.0-alpha.0
+Feature:
+- Add Dynamic mode for Cloudflare Worker
+
+Breaking Change:
+- (Internal) remove Elysia Symbol
+
 # 0.5.20 - 23 Jun 2023
 Bug fix:
 - async fn on Static Code Analysis
@@ -947,7 +954,7 @@ It has a lot of feature change for better performance, and introduce lots of dep
 
 Be sure to follow the migration section in `Breaking Change`.
 
-New Feature:
+Feature:
 - Auto infer type from `plugin` after merging with `use`
 - `decorate` to extends `Context` method
 - add `addParser`, for custom handler for parsing body
@@ -998,7 +1005,7 @@ Improvement:
 - Faster hook initialization
 
 # 0.0.0-experimental.27 - 23 Sep 2022
-New Feature:
+Feature:
 - Add `config.strictPath` for handling strict path
 
 # 0.0.0-experimental.26 - 10 Sep 2022
@@ -1011,7 +1018,7 @@ Bug fix:
 - 404 on absolute path
 
 # 0.0.0-experimental.25 - 9 Sep 2022
-New Feature:
+Feature:
 - Auto infer typed for `params`, `state`, `ref`
 - `onRequest` now accept async function
 - `refFn` syntax sugar for adding fn as reference instead of `() => () => value`
@@ -1030,7 +1037,7 @@ Change:
 - optimized for `await`
 
 # 0.0.0-experimental.23 - 21 Aug 2022
-New Feature:
+Feature:
 - Initialial config is now available, starting with `bodyLimit` config for limiting body size
 
 Breaking Change:

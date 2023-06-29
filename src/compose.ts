@@ -24,9 +24,6 @@ const _demoHeaders = new Headers()
 
 const findAliases = new RegExp(` (\\w+) = context`, 'g')
 
-const isProduction =
-	process.env.NODE_ENV === 'production' || process.env.ENV === 'production'
-
 export const hasReturn = (fnLiteral: string) => {
 	const parenthesisEnd = fnLiteral.indexOf(')')
 
@@ -286,7 +283,7 @@ export const composeHandler = ({
 			if (hooks.type) {
 				switch (hooks.type) {
 					case 'application/json':
-						fnLiteral += `c.body = JSON.parse(await c.request.text());`
+						fnLiteral += `c.body = await c.request.json();`
 						break
 
 					case 'text/plain':
@@ -387,7 +384,7 @@ export const composeHandler = ({
 
 			fnLiteral += `switch (contentType) {
 			case 'application/json':
-				c.body = JSON.parse(await c.request.text())
+				c.body = await c.request.json()
 				break
 
 			case 'text/plain':

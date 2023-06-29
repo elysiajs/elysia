@@ -1,13 +1,15 @@
 import { Elysia, t } from '../src'
-import { swagger } from '@elysiajs/swagger'
 
-new Elysia()
-	// @ts-ignore
-	.use(swagger)
-	.get('/id/:id', ({ params: { id } }) => id)
-	.post("/", ({ body }) => body, {
-		body: t.Object({
-			hello: t.String()
-		})
+const res = new Elysia({
+	aot: false
+})
+	.get('/', () => 'Hi')
+	.onError(({ code }) => {
+		if (code === 'NOT_FOUND')
+			return new Response("I'm a teapot", {
+				status: 418
+			})
 	})
 	.listen(3000)
+
+console.log('Running a.ts')
