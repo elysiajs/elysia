@@ -1,15 +1,30 @@
 import { Elysia, t } from '../src'
 
-const res = new Elysia({
-	aot: false
-})
-	.get('/', () => 'Hi')
-	.onError(({ code }) => {
-		if (code === 'NOT_FOUND')
-			return new Response("I'm a teapot", {
-				status: 418
-			})
+class Teapot extends Error {}
+
+const knownError = (app: Elysia) =>
+	app
+		.onError<{
+			IM_TEAPOT: Teapot
+		}>()
+		.onError<{
+			UH_NO: Error
+			TAROMARU: Error
+		}>(({ code, error }) => {
+			if (code === 'IM_TEAPOT')
+				return new Response("I'm a teapot", {
+					status: 418
+				})
+		})
+
+const app = new Elysia()
+	.use(knownError)
+	.onError(({ code, error, set }) => {
+		switch (code) {
+			case 'IM_TEAPOT':
+				set.status = 400
+
+				return error.message
+		}
 	})
 	.listen(3000)
-
-console.log('Running a.ts')

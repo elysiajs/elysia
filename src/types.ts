@@ -39,6 +39,7 @@ export type ElysiaInstance<
 	Instance extends {
 		store?: Record<string, unknown>
 		request?: Record<string, unknown>
+		error?: Record<string, Error>
 		schema?: {
 			body?: TSchema
 			headers?: TObject
@@ -51,6 +52,7 @@ export type ElysiaInstance<
 		store: {}
 		request: {}
 		schema: {}
+		error: {}
 		meta: {
 			schema: {}
 			defs: {}
@@ -58,6 +60,7 @@ export type ElysiaInstance<
 		}
 	}
 > = {
+	error: Instance['error']
 	request: Instance['request']
 	store: Instance['store']
 	schema: Instance['schema']
@@ -500,9 +503,9 @@ export interface ElysiaConfig {
 	forceErrorEncapsulation?: boolean
 	/**
 	 * Disable Ahead of Time compliation
-	 * 
+	 *
 	 * Reduced performance but faster startup time
-	 * 
+	 *
 	 * @default !isCloudflareWorker (false if not Cloudflare worker)
 	 */
 	aot: boolean
@@ -575,7 +578,7 @@ export type ErrorCode =
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
-export type ErrorHandler = (
+export type ErrorHandler<T extends Record<string, Error> = {}> = (
 	params:
 		| {
 				request: Request
@@ -607,6 +610,14 @@ export type ErrorHandler = (
 				error: Readonly<InternalServerError>
 				set: Context['set']
 		  }
+		| {
+				[K in keyof T]: {
+					request: Request
+					code: K
+					error: Readonly<T[K]>
+					set: Context['set']
+				}
+		  }[keyof T]
 ) => any | Promise<any>
 
 export type DeepWritable<T> = { -readonly [P in keyof T]: DeepWritable<T[P]> }

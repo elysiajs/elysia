@@ -111,7 +111,9 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	}
 
 	server: Server | null = null
+
 	private $schema: SchemaValidator | null = null
+	private error: Instance['error'] = {}
 
 	private router = new Memoirist<ComposedHandler>()
 	private routes: InternalRoute<Instance>[] = []
@@ -131,7 +133,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	wsRouter: Memoirist<any> | undefined
 
 	private dynamicRouter = new Memoirist<DynamicHandler>()
-
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
 
 	constructor(config?: Partial<ElysiaConfig>) {
@@ -429,10 +430,26 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *     })
 	 * ```
 	 */
-	onError(errorHandler: ErrorHandler) {
-		this.event.error.push(errorHandler)
+	onError<Errors extends Record<string, Error> = Instance['error']>(
+		handler?: ErrorHandler<
+			{
+				[K in NonNullable<keyof Errors>]: Errors[K]
+			} & {
+				[K in NonNullable<keyof Instance['error']>]: Errors[K]
+			}
+		>
+	): Elysia<{
+		store: Instance['store']
+		error: Instance['error'] & {
+			[K in NonNullable<keyof Errors>]: Errors[K]
+		}
+		request: Instance['request']
+		schema: Instance['schema']
+		meta: Instance['meta']
+	}> {
+		if (handler) this.event.error.push(handler)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -520,6 +537,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		prefix: Prefix,
 		run: (
 			group: Elysia<{
+				error: Instance['error']
 				request: Instance['request']
 				store: Omit<Instance['store'], 'schema'> &
 					ElysiaInstance['store']
@@ -529,6 +547,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
+				error: Instance['error']
 				request: Instance['request']
 				schema: Instance['schema']
 				store: Instance['store']
@@ -556,6 +575,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		schema: LocalHook<Schema, Instance>,
 		run: (
 			group: Elysia<{
+				error: Instance['error']
 				request: Instance['request']
 				store: Omit<Instance['store'], 'schema'> &
 					ElysiaInstance['store']
@@ -565,6 +585,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
+				error: Instance['error']
 				request: Instance['request']
 				schema: Instance['schema']
 				store: Instance['store']
@@ -598,6 +619,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	group<
 		Executor extends (
 			group: Elysia<{
+				error: Instance['error']
 				request: Instance['request']
 				store: Omit<Instance['store'], 'schema'> &
 					ElysiaInstance['store']
@@ -616,6 +638,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		run?: Executor
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
+				error: Instance['error']
 				request: Instance['request']
 				schema: Instance['schema']
 				store: Instance['store']
@@ -754,6 +777,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		hook: LocalHook<Schema, Instance>,
 		run: (
 			group: Elysia<{
+				error: Instance['error']
 				request: Instance['request']
 				store: Instance['store']
 				schema: Schema & Instance['schema']
@@ -762,6 +786,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
+				error: Instance['error']
 				request: Instance['request']
 				store: Instance['store']
 				schema: Instance['schema'] & NewInstance['schema']
@@ -862,6 +887,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			  }>
 	): IsNever<LazyLoadElysia> extends false
 		? Elysia<{
+				error: Instance['error'] & LazyLoadElysia['error']
 				request: Instance['request'] & LazyLoadElysia['request']
 				store: Instance['store'] & LazyLoadElysia['store']
 				schema: Instance['schema'] & LazyLoadElysia['schema']
@@ -871,6 +897,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		? IsNever<NewInstance> extends true
 			? Elysia<Instance>
 			: Elysia<{
+					error: Instance['error'] & NewInstance['error']
 					request: Instance['request'] & NewInstance['request']
 					store: Instance['store'] & NewInstance['store']
 					schema: Instance['schema'] & NewInstance['schema']
@@ -878,6 +905,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			  }>
 		: NewElysia extends Promise<Elysia<infer NewInstance>>
 		? Elysia<{
+				error: Instance['error'] & NewInstance['error']
 				request: Instance['request'] & NewInstance['request']
 				store: Instance['store'] & NewInstance['store']
 				schema: Instance['schema'] & NewInstance['schema']
@@ -937,6 +965,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			  }>
 	): IsNever<LazyLoadElysia> extends false
 		? Elysia<{
+				error: Instance['error']
 				request: Instance['request'] & LazyLoadElysia['request']
 				store: Instance['store'] & LazyLoadElysia['store']
 				schema: Instance['schema'] & LazyLoadElysia['schema']
@@ -946,6 +975,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		? IsNever<NewInstance> extends true
 			? Elysia<Instance>
 			: Elysia<{
+					error: Instance['error']
 					request: Instance['request'] & NewInstance['request']
 					store: Instance['store'] & NewInstance['store']
 					schema: Instance['schema'] & NewInstance['schema']
@@ -953,6 +983,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			  }>
 		: NewElysia extends Promise<Elysia<infer NewInstance>>
 		? Elysia<{
+				error: Instance['error']
 				request: Instance['request'] & NewInstance['request']
 				store: Instance['store'] & NewInstance['store']
 				schema: Instance['schema'] & NewInstance['schema']
@@ -996,6 +1027,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: {
 			defs: Instance['meta']['defs']
 			exposed: Instance['meta']['exposed']
@@ -1104,6 +1136,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -1225,6 +1258,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -1346,6 +1380,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -1467,6 +1502,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -1588,6 +1624,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -1704,6 +1741,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -1825,6 +1863,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -1946,6 +1985,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -2067,6 +2107,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -2193,6 +2234,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Instance['meta'] &
 			Record<
 				'schema',
@@ -2316,6 +2358,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Record<'defs', Instance['meta']['defs']> &
 			Record<'exposed', Instance['meta']['exposed']> &
 			Record<
@@ -2412,6 +2455,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		store: Instance['store'] & {
 			[key in Key]: Value
 		}
+		error: Instance['error']
 		request: Instance['request']
 		schema: Instance['schema']
 		meta: Instance['meta']
@@ -2433,6 +2477,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		store: NewStore
 	): Elysia<{
 		store: Instance['store'] & DeepWritable<NewStore>
+		error: Instance['error']
 		request: Instance['request']
 		schema: Instance['schema']
 		meta: Instance['meta']
@@ -2485,6 +2530,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		value: Value
 	): Elysia<{
 		store: Instance['store']
+		error: Instance['error']
 		request: Instance['request'] & { [key in Name]: Value }
 		schema: Instance['schema']
 		meta: Instance['meta']
@@ -2506,6 +2552,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		name: Decorators
 	): Elysia<{
 		store: Instance['store']
+		error: Instance['error']
 		request: Instance['request'] & DeepWritable<Decorators>
 		schema: Instance['schema']
 		meta: Instance['meta']
@@ -2564,6 +2611,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		) => MaybePromise<Returned> extends { store: any } ? never : Returned
 	): Elysia<{
 		store: Instance['store']
+		error: Instance['error']
 		request: Instance['request'] & Awaited<Returned>
 		schema: Instance['schema']
 		meta: Instance['meta']
@@ -2636,6 +2684,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		? Elysia<{
 				store: Instance['store']
 				request: Instance['request']
+				error: Instance['error']
 				schema: Instance['schema']
 				meta: Record<'defs', Instance['meta']['defs']> &
 					Record<
@@ -2691,6 +2740,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		NewInstance = Elysia<{
 			request: Instance['request']
 			store: Instance['store']
+			error: Instance['error']
 			schema: MergeSchema<Schema, Instance['schema']>
 			meta: Instance['meta']
 		}>
@@ -2873,6 +2923,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		store: Instance['store']
 		request: Instance['request']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Instance['meta'] &
 			Record<
 				'defs',
@@ -2888,6 +2939,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		store: Instance['store']
 		request: Instance['request']
 		schema: Instance['schema']
+		error: Instance['error']
 		meta: Instance['meta'] &
 			Record<
 				'defs',

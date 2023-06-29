@@ -1,9 +1,10 @@
 # 0.6.0-alpha.0
 Feature:
 - Add Dynamic mode for Cloudflare Worker
+- Add support for registering custom error code
 
 Breaking Change:
-- (Internal) remove Elysia Symbol
+- Remove Elysia Symbol (Internal)
 
 # 0.5.20 - 23 Jun 2023
 Bug fix:
