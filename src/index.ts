@@ -55,7 +55,7 @@ import type {
 	TypedSchemaToRoute,
 	DeepWritable
 } from './types'
-import { Static, type TSchema } from '@sinclair/typebox'
+import type { Static, TSchema } from '@sinclair/typebox'
 
 import type {
 	ValidationError,
@@ -64,8 +64,6 @@ import type {
 	InternalServerError
 } from './error'
 
-// @ts-ignore
-import type { Permission } from '@elysiajs/fn'
 import {
 	createDynamicErrorHandler,
 	createDynamicHandler,
@@ -86,7 +84,20 @@ import {
  *     .listen(8080)
  * ```
  */
-export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
+export default class Elysia<
+	Instance extends ElysiaInstance = {
+		path: ''
+		store: {}
+		request: {}
+		schema: {}
+		error: {}
+		meta: {
+			schema: {}
+			defs: {}
+			exposed: {}
+		}
+	}
+> {
 	config: ElysiaConfig
 
 	store: Instance['store'] = {}
@@ -137,7 +148,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	constructor(config?: Partial<ElysiaConfig>) {
 		this.config = {
-			fn: '/~fn',
 			forceErrorEncapsulation: false,
 			basePath: '',
 			// @ts-ignore
@@ -158,7 +168,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		path =
 			path === '' ? path : path.charCodeAt(0) === 47 ? path : `/${path}`
 
-		if (this.config.basePath) this.config.basePath + path
+		if (this.config.basePath) path = this.config.basePath + path
 
 		this.routes.push({
 			method,
@@ -439,6 +449,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 		>
 	): Elysia<{
+		path: Instance['path']
 		store: Instance['store']
 		error: Instance['error'] & {
 			[K in NonNullable<keyof Errors>]: Errors[K]
@@ -537,16 +548,21 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		prefix: Prefix,
 		run: (
 			group: Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request']
-				store: Omit<Instance['store'], 'schema'> &
-					ElysiaInstance['store']
+				store: Instance['store'] & ElysiaInstance['store']
 				schema: Instance['schema']
-				meta: Omit<Instance['meta'], 'schema'> & ElysiaInstance['meta']
+				meta: {
+					schema: Instance['meta']['schema']
+					defs: Instance['meta']['defs']
+					exposed: {}
+				}
 			}>
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request']
 				schema: Instance['schema']
@@ -575,30 +591,42 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		schema: LocalHook<Schema, Instance>,
 		run: (
 			group: Elysia<{
+				path: Prefix
 				error: Instance['error']
 				request: Instance['request']
-				store: Omit<Instance['store'], 'schema'> &
-					ElysiaInstance['store']
-				schema: Schema & Instance['schema']
-				meta: Omit<Instance['meta'], 'schema'> & ElysiaInstance['meta']
+				store: Instance['store'] & ElysiaInstance['store']
+				schema: {
+					body: undefined extends Schema['body']
+						? Instance['schema']['body']
+						: Schema['body']
+					headers: undefined extends Schema['headers']
+						? Instance['schema']['headers']
+						: Schema['headers']
+					query: undefined extends Schema['query']
+						? Instance['schema']['query']
+						: Schema['query']
+					params: undefined extends Schema['params']
+						? Instance['schema']['params']
+						: Schema['params']
+					response: undefined extends Schema['response']
+						? Instance['schema']['response']
+						: Schema['response']
+				}
+				meta: {
+					schema: Instance['meta']['schema']
+					defs: Instance['meta']['defs']
+					exposed: {}
+				}
 			}>
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request']
 				schema: Instance['schema']
 				store: Instance['store']
-				meta: Instance['meta'] &
-					(Omit<NewInstance['meta'], 'schema'> &
-						Record<
-							'schema',
-							{
-								[key in keyof NewInstance['meta']['schema'] as key extends `${infer Rest}`
-									? `${Prefix}${Rest}`
-									: key]: NewInstance['meta']['schema'][key]
-							}
-						>)
+				meta: Instance['meta'] & NewInstance['meta']
 		  }>
 		: this
 
@@ -619,12 +647,16 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	group<
 		Executor extends (
 			group: Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request']
-				store: Omit<Instance['store'], 'schema'> &
-					ElysiaInstance['store']
+				store: Instance['store'] & ElysiaInstance['store']
 				schema: Schema & Instance['schema']
-				meta: Omit<Instance['meta'], 'schema'> & ElysiaInstance['meta']
+				meta: {
+					schema: {}
+					defs: Instance['meta']['defs']
+					exposed: {}
+				}
 			}>
 		) => NewElysia,
 		Schema extends TypedSchema<
@@ -638,6 +670,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		run?: Executor
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request']
 				schema: Instance['schema']
@@ -653,7 +686,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					>
 		  }>
 		: this {
-		const instance = new Elysia<any>()
+		const instance = new Elysia<any>({
+			...this.config,
+			basePath: this.config.basePath + prefix
+		})
 		instance.store = this.store
 
 		if (this.wsRouter) instance.use(ws())
@@ -672,12 +708,10 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		this.model(sandbox.meta.defs)
 
 		Object.values(instance.routes).forEach(
-			({ method, path: originalPath, handler, hooks }) => {
+			({ method, path, handler, hooks }) => {
 				if (isSchema) {
 					const hook = schemaOrRun
 					const localHook = hooks
-
-					const path = `${prefix}${originalPath}`
 
 					// Same as guard
 					const hasWsRoute = instance.wsRouter?.find(
@@ -708,8 +742,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						})
 					)
 				} else {
-					const path = `${prefix}${originalPath}`
-
 					const hasWsRoute = instance.wsRouter?.find(
 						'subscribe',
 						path
@@ -717,7 +749,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 					if (hasWsRoute) {
 						const wsRoute = instance.wsRouter!.history.find(
 							// eslint-disable-next-line @typescript-eslint/no-unused-vars
-							([_, wsPath]) => originalPath === wsPath
+							([_, wsPath]) => path === wsPath
 						)
 						if (!wsRoute) return
 
@@ -777,19 +809,37 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		hook: LocalHook<Schema, Instance>,
 		run: (
 			group: Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request']
 				store: Instance['store']
-				schema: Schema & Instance['schema']
+				schema: {
+					body: undefined extends Schema['body']
+						? Instance['schema']['body']
+						: Schema['body']
+					headers: undefined extends Schema['headers']
+						? Instance['schema']['headers']
+						: Schema['headers']
+					query: undefined extends Schema['query']
+						? Instance['schema']['query']
+						: Schema['query']
+					params: undefined extends Schema['params']
+						? Instance['schema']['params']
+						: Schema['params']
+					response: undefined extends Schema['response']
+						? Instance['schema']['response']
+						: Schema['response']
+				}
 				meta: Instance['meta']
 			}>
 		) => NewElysia
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request']
 				store: Instance['store']
-				schema: Instance['schema'] & NewInstance['schema']
+				schema: Instance['schema']
 				meta: Instance['meta'] &
 					Record<
 						'schema',
@@ -887,6 +937,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			  }>
 	): IsNever<LazyLoadElysia> extends false
 		? Elysia<{
+				path: Instance['path']
 				error: Instance['error'] & LazyLoadElysia['error']
 				request: Instance['request'] & LazyLoadElysia['request']
 				store: Instance['store'] & LazyLoadElysia['store']
@@ -897,6 +948,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		? IsNever<NewInstance> extends true
 			? Elysia<Instance>
 			: Elysia<{
+					path: Instance['path']
 					error: Instance['error'] & NewInstance['error']
 					request: Instance['request'] & NewInstance['request']
 					store: Instance['store'] & NewInstance['store']
@@ -905,6 +957,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			  }>
 		: NewElysia extends Promise<Elysia<infer NewInstance>>
 		? Elysia<{
+				path: Instance['path']
 				error: Instance['error'] & NewInstance['error']
 				request: Instance['request'] & NewInstance['request']
 				store: Instance['store'] & NewInstance['store']
@@ -965,6 +1018,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			  }>
 	): IsNever<LazyLoadElysia> extends false
 		? Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request'] & LazyLoadElysia['request']
 				store: Instance['store'] & LazyLoadElysia['store']
@@ -975,6 +1029,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		? IsNever<NewInstance> extends true
 			? Elysia<Instance>
 			: Elysia<{
+					path: Instance['path']
 					error: Instance['error']
 					request: Instance['request'] & NewInstance['request']
 					store: Instance['store'] & NewInstance['store']
@@ -983,6 +1038,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			  }>
 		: NewElysia extends Promise<Elysia<infer NewInstance>>
 		? Elysia<{
+				path: Instance['path']
 				error: Instance['error']
 				request: Instance['request'] & NewInstance['request']
 				store: Instance['store'] & NewInstance['store']
@@ -1024,6 +1080,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1038,7 +1095,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						Instance['schema']
 					> extends infer Typed extends TypedSchema
 						? {
-								[path in Path]: {
+								[path in `${Instance['path']}${Path}`]: {
 									get: {
 										body: UnwrapSchema<
 											Typed['body'],
@@ -1133,6 +1190,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1148,7 +1206,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										post: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -1255,6 +1313,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1270,7 +1329,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										put: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -1377,6 +1436,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1392,7 +1452,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										patch: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -1499,6 +1559,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1514,7 +1575,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										delete: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -1621,6 +1682,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1636,7 +1698,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										options: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -1738,6 +1800,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1753,7 +1816,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										all: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -1860,6 +1923,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1875,7 +1939,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										head: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -1982,6 +2046,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -1997,7 +2062,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										trace: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -2104,6 +2169,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		handler: Handler,
 		hook?: LocalHook<Schema, Instance, Path>
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -2119,7 +2185,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${Instance['path']}${Path}`]: {
 										connect: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -2231,6 +2297,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			? ElysiaWSOptions<Path, Schema, Instance['meta']['defs']>
 			: never
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -2239,7 +2306,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Record<
 				'schema',
 				Record<
-					Path,
+					`${Instance['path']}${Path}`,
 					MergeSchema<
 						Schema,
 						Instance['schema']
@@ -2355,6 +2422,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			}
 		}
 	): Elysia<{
+		path: Instance['path']
 		request: Instance['request']
 		store: Instance['store']
 		schema: Instance['schema']
@@ -2370,7 +2438,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 						? {
-								[path in Path]: {
+								[path in `${Instance['path']}${Path}`]: {
 									[method in Method]: {
 										body: UnwrapSchema<
 											Typed['body'],
@@ -2452,6 +2520,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		name: Key,
 		value: Value
 	): Elysia<{
+		path: Instance['path']
 		store: Instance['store'] & {
 			[key in Key]: Value
 		}
@@ -2476,6 +2545,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	state<NewStore extends Record<string, unknown>>(
 		store: NewStore
 	): Elysia<{
+		path: Instance['path']
 		store: Instance['store'] & DeepWritable<NewStore>
 		error: Instance['error']
 		request: Instance['request']
@@ -2529,6 +2599,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		name: Name,
 		value: Value
 	): Elysia<{
+		path: Instance['path']
 		store: Instance['store']
 		error: Instance['error']
 		request: Instance['request'] & { [key in Name]: Value }
@@ -2551,6 +2622,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	decorate<const Decorators extends Record<string, unknown>>(
 		name: Decorators
 	): Elysia<{
+		path: Instance['path']
 		store: Instance['store']
 		error: Instance['error']
 		request: Instance['request'] & DeepWritable<Decorators>
@@ -2610,6 +2682,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 				Instance['request']
 		) => MaybePromise<Returned> extends { store: any } ? never : Returned
 	): Elysia<{
+		path: Instance['path']
 		store: Instance['store']
 		error: Instance['error']
 		request: Instance['request'] & Awaited<Returned>
@@ -2637,6 +2710,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	 *         }
 	 *     }))
 	 */
+
 	// signal<Returned extends Object = Object>(
 	// 	createSignal: (
 	// 		getStore: () => Instance['store']
@@ -2654,66 +2728,6 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 
 	// 	return this as any
 	// }
-
-	fn<
-		PluginInstalled extends boolean = IsAny<Permission> extends true
-			? false
-			: true,
-		T extends PluginInstalled extends true
-			?
-					| Record<string, unknown>
-					| ((
-							app: Instance['request'] & {
-								store: Instance['store']
-								permission: Permission
-							}
-					  ) => Record<string, unknown>)
-			: "Please install '@elysiajs/fn' before using Elysia Fn" = PluginInstalled extends true
-			?
-					| Record<string, unknown>
-					| ((
-							app: Instance['request'] & {
-								store: Instance['store']
-								permission: Permission
-							}
-					  ) => Record<string, unknown>)
-			: "Please install '@elysiajs/fn' before using Elysia Fn"
-	>(
-		value: T
-	): PluginInstalled extends true
-		? Elysia<{
-				store: Instance['store']
-				request: Instance['request']
-				error: Instance['error']
-				schema: Instance['schema']
-				meta: Record<'defs', Instance['meta']['defs']> &
-					Record<
-						'exposed',
-						Instance['meta']['exposed'] &
-							(T extends (store: any) => infer Returned
-								? Returned
-								: T)
-					> &
-					Record<'schema', Instance['meta']['schema']>
-		  }>
-		: this {
-		return this.use(async (app) => {
-			// @ts-ignore
-			const { fn } = await import('@elysiajs/fn')
-
-			if (typeof fn === undefined)
-				throw new Error(
-					"Please install '@elysiajs/fn' before using Elysia Fn"
-				)
-
-			// @ts-ignore
-			return fn({
-				app,
-				value: value as any,
-				path: app.config.fn
-			})
-		}) as any
-	}
 
 	/**
 	 * ### schema
@@ -2738,6 +2752,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 			Exclude<keyof Instance['meta']['defs'], number | symbol>
 		>,
 		NewInstance = Elysia<{
+			path: Instance['path']
 			request: Instance['request']
 			store: Instance['store']
 			error: Instance['error']
@@ -2853,22 +2868,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 						error: this.outerErrorHandler
 				  }
 
-		if (development) {
-			const key = `$$Elysia:${serve.port}`
-
-			// ! Blasphemy !
-			// @ts-ignore
-			if (globalThis[key]) {
-				// @ts-ignore
-				this.server = globalThis[key]
-				this.server!.reload(serve)
-			} else {
-				// @ts-ignore
-				globalThis[key] = this.server = Bun.serve(serve)
-			}
-		} else {
-			this.server = Bun.serve(serve)
-		}
+		this.server = Bun.serve(serve)
 
 		for (let i = 0; i < this.event.start.length; i++)
 			this.event.start[i](this as any)
@@ -2920,6 +2920,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		name: Name,
 		model: Model
 	): Elysia<{
+		path: Instance['path']
 		store: Instance['store']
 		request: Instance['request']
 		schema: Instance['schema']
@@ -2936,6 +2937,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 	model<Recorder extends Record<string, TSchema>>(
 		record: Recorder
 	): Elysia<{
+		path: Instance['path']
 		store: Instance['store']
 		request: Instance['request']
 		schema: Instance['schema']

@@ -895,7 +895,7 @@ export const composeErrorHandler = (app: Elysia<any>) => {
 		app: { event: { error: onError } },
 		mapResponse
 	} = inject
-	
+
 	return ${
 		app.event.error.find((fn) => fn.constructor.name === ASYNC_FN)
 			? 'async'
@@ -915,7 +915,7 @@ export const composeErrorHandler = (app: Elysia<any>) => {
 		})`
 
 		if (hasReturn(handler.toString()))
-			fnLiteral += `const r${i} = ${response}; if(r${i} !== null) return mapResponse(r${i}, set)\n`
+			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) return mapResponse(r${i}, set)\n`
 		else fnLiteral += response + '\n'
 	}
 

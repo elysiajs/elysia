@@ -37,34 +37,28 @@ export type ElysiaDefaultMeta = {
 
 export type ElysiaInstance<
 	Instance extends {
+		path?: string
 		store?: Record<string, unknown>
 		request?: Record<string, unknown>
 		error?: Record<string, Error>
-		schema?: {
-			body?: TSchema
-			headers?: TObject
-			query?: TObject
-			params?: TObject
-			response?: Record<string, TSchema>
-		}
+		schema?: TypedSchema<any>
 		meta?: ElysiaDefaultMeta
-	} = {
-		store: {}
-		request: {}
-		schema: {}
-		error: {}
-		meta: {
-			schema: {}
-			defs: {}
-			exposed: {}
-		}
-	}
+	} = {}
 > = {
-	error: Instance['error']
-	request: Instance['request']
-	store: Instance['store']
-	schema: Instance['schema']
-	meta: Instance['meta']
+	path: undefined extends Instance['path'] ? string : Instance['path']
+	error: undefined extends Instance['error'] ? {} : Instance['error']
+	request: undefined extends Instance['request'] ? {} : Instance['request']
+	store: undefined extends Instance['store'] ? {} : Instance['store']
+	schema: undefined extends Instance['schema']
+		? TypedSchema<any>
+		: Instance['schema']
+	meta: undefined extends Instance['meta']
+		? {
+				schema: {}
+				defs: {}
+				exposed: {}
+		  }
+		: Instance['meta']
 }
 
 export type Handler<
@@ -494,7 +488,6 @@ export type OverwritableTypeRoute = {
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
 export interface ElysiaConfig {
-	fn?: string
 	serve?: Partial<Serve>
 	basePath?: string
 	/**
