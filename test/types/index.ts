@@ -529,6 +529,7 @@ app.use(plugin).group(
 	}>()
 }
 
+// ? Register wildcard as params
 app.get('/*', ({ params }) => {
 	expectTypeOf<typeof params>().toEqualTypeOf<{
 		'*': string
@@ -543,3 +544,97 @@ app.get('/*', ({ params }) => {
 
 	return 'hello'
 })
+
+// ? Handle recursive path typing
+app.group(
+	'/:a',
+	{
+		beforeHandle({ params, params: { a } }) {
+			expectTypeOf<typeof params>().toEqualTypeOf<{
+				a: string
+			}>()
+
+			return a
+		}
+	},
+	(app) =>
+		app
+			.get('/', ({ params, params: { a } }) => {
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					a: string
+				}>()
+
+				return a
+			})
+			.group('/:b', (app) =>
+				app.get('/', ({ params, params: { a, b } }) => {
+					expectTypeOf<typeof params>().toEqualTypeOf<{
+						a: string
+						b: string
+					}>()
+
+					return b
+				})
+			)
+			.group(
+				'/:c',
+				{
+					beforeHandle({ params, params: { a, c } }) {
+						expectTypeOf<typeof params>().toEqualTypeOf<{
+							a: string
+							c: string
+						}>()
+
+						return a
+					}
+				},
+				(app) =>
+					app.get('/', ({ params, params: { a, c } }) => {
+						expectTypeOf<typeof params>().toEqualTypeOf<{
+							a: string
+							c: string
+						}>()
+
+						return c
+					})
+			)
+)
+
+// ? Handle recursive schema collision causing infinite type
+app.group(
+	'/:a',
+	{
+		body: t.Object({
+			username: t.String()
+		}),
+		beforeHandle({ body }) {
+			expectTypeOf<typeof body>().toEqualTypeOf<{
+				username: string
+			}>()
+		}
+	},
+	(app) =>
+		app.group(
+			'/:c',
+			{
+				beforeHandle({ body }) {
+					expectTypeOf<typeof body>().toEqualTypeOf<{
+						password: string
+					}>()
+
+					return body
+				},
+				body: t.Object({
+					password: t.String()
+				})
+			},
+			(app) =>
+				app.get('/', ({ body }) => {
+					expectTypeOf<typeof body>().toEqualTypeOf<{
+						password: string
+					}>()
+
+					return body
+				})
+		)
+)

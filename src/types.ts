@@ -501,7 +501,8 @@ export interface ElysiaConfig {
 	 *
 	 * @default !isCloudflareWorker (false if not Cloudflare worker)
 	 */
-	aot: boolean
+	aot?: boolean
+	strictPath?: boolean
 }
 
 export type IsPathParameter<Part> = Part extends `:${infer Parameter}`

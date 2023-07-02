@@ -1,7 +1,16 @@
 # 0.6.0-alpha.0
 Feature:
-- Add Dynamic mode for Cloudflare Worker
-- Add support for registering custom error code
+- Dynamic mode for Cloudflare Worker
+- Support for registering custom error code
+- Using `loosePath` (by default), and add `config.strictPath
+- Support for setting basePath
+- Recursive path typing
+
+Improvement:
+- Slighty improve type checking speed
+
+Bug Fix:
+- recursive schema collision causing infinite type
 
 Breaking Change:
 - Remove Elysia Symbol (Internal)

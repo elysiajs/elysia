@@ -152,6 +152,7 @@ export default class Elysia<
 			basePath: '',
 			// @ts-ignore
 			aot: typeof CF === 'undefined',
+			strictPath: false,
 			...config
 		}
 	}
@@ -239,6 +240,7 @@ export default class Elysia<
 		} as any
 
 		const hooks = mergeHook(this.event, hook as RegisteredHook)
+		const loosePath = path.slice(0, path.length - 1)
 
 		if (this.config.aot === false) {
 			this.dynamicRouter.add(method, path, {
@@ -247,6 +249,15 @@ export default class Elysia<
 				content: hook?.type as string,
 				handle: handler
 			})
+
+			if (this.config.strictPath === false) {
+				this.dynamicRouter.add(method, loosePath, {
+					validator,
+					hooks,
+					content: hook?.type as string,
+					handle: handler
+				})
+			}
 
 			return
 		}
@@ -282,8 +293,32 @@ export default class Elysia<
 				this.staticRouter.map[
 					path
 				].code += `case '${method}': return st${index}(ctx)\n`
+
+			if (!this.config.strictPath) {
+				if (!this.staticRouter.map[loosePath])
+					this.staticRouter.map[loosePath] = {
+						code: ''
+					}
+
+				if (method === 'ALL')
+					this.staticRouter.map[
+						loosePath
+					].all = `default: return st${index}(ctx)\n`
+				else
+					this.staticRouter.map[
+						loosePath
+					].code += `case '${method}': return st${index}(ctx)\n`
+			}
 		} else {
 			this.router.add(method, path, mainHandler)
+			if (!this.config.strictPath)
+				this.router.add(
+					method,
+					path.endsWith('/')
+						? path.slice(0, path.length - 1)
+						: path + '/',
+					mainHandler
+				)
 		}
 	}
 
@@ -548,7 +583,7 @@ export default class Elysia<
 		prefix: Prefix,
 		run: (
 			group: Elysia<{
-				path: Instance['path']
+				path: `${Instance['path']}${Prefix}`
 				error: Instance['error']
 				request: Instance['request']
 				store: Instance['store'] & ElysiaInstance['store']
@@ -588,10 +623,10 @@ export default class Elysia<
 		Prefix extends string = string
 	>(
 		prefix: Prefix,
-		schema: LocalHook<Schema, Instance>,
+		schema: LocalHook<Schema, Instance, `${Instance['path']}${Prefix}`>,
 		run: (
 			group: Elysia<{
-				path: Prefix
+				path: `${Instance['path']}${Prefix}`
 				error: Instance['error']
 				request: Instance['request']
 				store: Instance['store'] & ElysiaInstance['store']
@@ -647,7 +682,7 @@ export default class Elysia<
 	group<
 		Executor extends (
 			group: Elysia<{
-				path: Instance['path']
+				path: `${Instance['path']}${Prefix}`
 				error: Instance['error']
 				request: Instance['request']
 				store: Instance['store'] & ElysiaInstance['store']
@@ -666,7 +701,7 @@ export default class Elysia<
 		Prefix extends string = string
 	>(
 		prefix: Prefix,
-		schemaOrRun: LocalHook<Schema, Instance> | Executor,
+		schemaOrRun: LocalHook<Schema, Instance, `${Instance['path']}${Prefix}`> | Executor,
 		run?: Executor
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
@@ -1071,14 +1106,18 @@ export default class Elysia<
 	 */
 	get<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -1181,14 +1220,18 @@ export default class Elysia<
 	 */
 	post<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -1304,14 +1347,18 @@ export default class Elysia<
 	 */
 	put<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -1427,14 +1474,18 @@ export default class Elysia<
 	 */
 	patch<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -1550,14 +1601,18 @@ export default class Elysia<
 	 */
 	delete<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -1673,14 +1728,18 @@ export default class Elysia<
 	 */
 	options<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -1791,14 +1850,18 @@ export default class Elysia<
 	 */
 	all<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -1914,14 +1977,18 @@ export default class Elysia<
 	 */
 	head<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -2037,14 +2104,18 @@ export default class Elysia<
 	 */
 	trace<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -2160,14 +2231,18 @@ export default class Elysia<
 	 */
 	connect<
 		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, Path>,
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${Instance['path']}${Path}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, Path>
+		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
 	): Elysia<{
 		path: Instance['path']
 		request: Instance['request']
@@ -2294,7 +2369,11 @@ export default class Elysia<
 		options: Path extends ''
 			? never
 			: this extends Elysia<infer Instance>
-			? ElysiaWSOptions<Path, Schema, Instance['meta']['defs']>
+			? ElysiaWSOptions<
+					`${Instance['path']}${Path}`,
+					Schema,
+					Instance['meta']['defs']
+			  >
 			: never
 	): Elysia<{
 		path: Instance['path']
@@ -2315,7 +2394,7 @@ export default class Elysia<
 								subscribe: TypedWSRouteToEden<
 									Typed,
 									Instance['meta']['defs'],
-									Path
+									`${Instance['path']}${Path}`
 								>
 						  }
 						: {}
@@ -2397,12 +2476,12 @@ export default class Elysia<
 		Schema extends TypedSchema<
 			Exclude<keyof Instance['meta']['defs'], number | symbol>
 		>,
-		Method extends HTTPMethod = HTTPMethod,
-		Path extends string = string,
-		Handler extends LocalHandler<Schema, Instance, Path> = LocalHandler<
+		Method extends HTTPMethod,
+		Path extends string,
+		Handler extends LocalHandler<
 			Schema,
 			Instance,
-			Path
+			`${Instance['path']}${Path}`
 		>
 	>(
 		method: Method,
@@ -2412,7 +2491,7 @@ export default class Elysia<
 		{
 			config,
 			...hook
-		}: LocalHook<Schema, Instance, Path> & {
+		}: LocalHook<Schema, Instance, `${Instance['path']}${Path}`> & {
 			config: {
 				allowMeta?: boolean
 			}
