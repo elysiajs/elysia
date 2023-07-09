@@ -1,3 +1,7 @@
+# 0.6.0-alpha.2
+Feature:
+- [Internal] Add qi (queryIndex) to context
+
 # 0.6.0-alpha.1
 Feature:
 - [Internal] Add support for accessing composedHandler via routes

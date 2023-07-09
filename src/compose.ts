@@ -256,10 +256,10 @@ export const composeHandler = ({
 	if (hasQuery) {
 		fnLiteral += `const url = c.request.url
 
-		if(c.query !== -1) {
-			c.query = parseQuery(url.substring(c.query + 1))
+		if(c.qi !== -1) {
+			c.query ??= parseQuery(url.substring(c.qi + 1))
 		} else {
-			c.query = {}
+			c.qi ??= {}
 		}
 		`
 	}
@@ -845,7 +845,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		
 		const url = request.url,
 		s = url.indexOf('/', 12),
-		i = ctx.query = url.indexOf('?', s + 1),
+		i = ctx.qi = url.indexOf('?', s + 1),
 		path = i === -1 ? url.substring(s) : url.substring(s, i);`
 	} else {
 		fnLiteral += `
@@ -855,7 +855,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		const ctx = {
 			request,
 			store,
-			query: url.indexOf('?', s + 1),
+			qi: url.indexOf('?', s + 1),
 			set: {
 				headers: {},
 				status: 200
@@ -864,9 +864,9 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		}
 
 		const path =
-			ctx.query === -1
+			ctx.qi === -1
 				? url.substring(s)
-				: url.substring(s, ctx.query);`
+				: url.substring(s, ctx.qi);`
 	}
 
 	fnLiteral += `
