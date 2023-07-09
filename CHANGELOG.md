@@ -1,3 +1,7 @@
+# 0.5.22 - 9 Jul 2023
+Bug fix:
+- update onAfterHandle to be Response only
+
 # 0.5.20 - 23 Jun 2023
 Bug fix:
 - async fn on Static Code Analysis

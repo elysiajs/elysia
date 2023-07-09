@@ -115,7 +115,7 @@ export type AfterRequestHandler<
 > = (
 	context: Context<Route, Instance['store']> & Instance['request'],
 	response: Route['response']
-) => void | MaybePromise<Route['response']> | Response
+) => void | MaybePromise<Response>
 
 export interface LifeCycleStore<Instance extends ElysiaInstance> {
 	type?: ContentType
