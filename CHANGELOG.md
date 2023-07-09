@@ -1,3 +1,7 @@
+# 0.6.0-alpha.1
+Feature:
+- [Internal] Add support for accessing composedHandler via routes
+
 # 0.6.0-alpha.0
 Feature:
 - Dynamic mode for Cloudflare Worker
