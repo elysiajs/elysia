@@ -607,6 +607,9 @@ app.group(
 		body: t.Object({
 			username: t.String()
 		}),
+		query: t.Object({
+			user: t.String()
+		}),
 		beforeHandle({ body }) {
 			expectTypeOf<typeof body>().toEqualTypeOf<{
 				username: string
@@ -617,9 +620,13 @@ app.group(
 		app.group(
 			'/:c',
 			{
-				beforeHandle({ body }) {
+				beforeHandle({ body, query }) {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						password: string
+					}>()
+
+					expectTypeOf<typeof query>().toEqualTypeOf<{
+						user: string
 					}>()
 
 					return body
@@ -638,3 +645,71 @@ app.group(
 				})
 		)
 )
+
+// ? Reconcilation on state
+{
+	const a = app.state('a', 'a' as const)
+	const b = a.state('a', 'b' as const)
+
+	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
+		a: 'a'
+	}>()
+
+	expectTypeOf<(typeof b)['store']>().toEqualTypeOf<{
+		a: 'b'
+	}>()
+}
+
+// ? Reconcilation on decorator
+{
+	const a = app.decorate('a', 'a' as const)
+	const b = a.decorate('a', 'b' as const)
+
+	expectTypeOf<(typeof a)['decorators']>().toEqualTypeOf<{
+		a: 'a'
+	}>()
+
+	expectTypeOf<(typeof b)['decorators']>().toEqualTypeOf<{
+		a: 'b'
+	}>()
+}
+
+// ? Reconcilation on model
+{
+	const a = app.model('a', t.String())
+	const b = a.model('a', t.Number())
+
+	expectTypeOf<(typeof a)['meta']['defs']>().toEqualTypeOf<{
+		a: string
+	}>()
+
+	expectTypeOf<(typeof b)['meta']['defs']>().toEqualTypeOf<{
+		a: number
+	}>()
+}
+
+// ? Reconcilation on use
+{
+	const a = app
+		.state('a', 'a' as const)
+		.model('a', t.String())
+		.decorate('a', 'b' as const)
+		.use((app) =>
+			app
+				.state('a', 'b' as const)
+				.model('a', t.Number())
+				.decorate('a', 'b' as const)
+		)
+
+	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
+		a: 'b'
+	}>()
+
+	expectTypeOf<(typeof a)['decorators']>().toEqualTypeOf<{
+		a: 'b'
+	}>()
+
+	expectTypeOf<(typeof a)['meta']['defs']>().toEqualTypeOf<{
+		a: number
+	}>()
+}

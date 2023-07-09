@@ -47,13 +47,13 @@ import type {
 	ListenCallback,
 	NoReturnHandler,
 	MaybePromise,
-	IsNever,
 	Prettify,
 	TypedWSRouteToEden,
 	UnwrapSchema,
 	ExtractPath,
 	TypedSchemaToRoute,
-	DeepWritable
+	DeepWritable,
+	Reconciliation
 } from './types'
 import type { Static, TSchema } from '@sinclair/typebox'
 
@@ -108,7 +108,7 @@ export default class Elysia<
 	}
 
 	// Will be applied to Context
-	protected decorators: ElysiaInstance['request'] = {}
+	decorators: Instance['request'] = {}
 
 	event: LifeCycleStore<Instance> = {
 		start: [],
@@ -701,7 +701,9 @@ export default class Elysia<
 		Prefix extends string = string
 	>(
 		prefix: Prefix,
-		schemaOrRun: LocalHook<Schema, Instance, `${Instance['path']}${Prefix}`> | Executor,
+		schemaOrRun:
+			| LocalHook<Schema, Instance, `${Instance['path']}${Prefix}`>
+			| Executor,
 		run?: Executor
 	): NewElysia extends Elysia<infer NewInstance>
 		? Elysia<{
@@ -936,6 +938,62 @@ export default class Elysia<
 		return this as any
 	}
 
+	// Inline
+	use<
+		NewInstance extends ElysiaInstance,
+		Params extends Elysia = Elysia<any>
+	>(
+		plugin: MaybePromise<
+			(
+				app: Params extends Elysia<infer ParamsInstance>
+					? IsAny<ParamsInstance> extends true
+						? this
+						: any
+					: Params
+			) => MaybePromise<Elysia<NewInstance>>
+		>
+	): Elysia<{
+		path: Instance['path']
+		error: Instance['error'] & NewInstance['error']
+		request: Reconciliation<Instance['request'], NewInstance['request']>
+		store: Reconciliation<Instance['store'], NewInstance['store']>
+		schema: Instance['schema'] & NewInstance['schema']
+		meta: {
+			schema: Instance['meta']['schema'] & NewInstance['meta']['schema']
+			defs: Reconciliation<
+				Instance['meta']['defs'],
+				NewInstance['meta']['defs']
+			>
+			exposed: Instance['meta']['exposed'] &
+				NewInstance['meta']['exposed']
+		}
+	}>
+
+	// Import
+	use<LazyLoadElysia extends ElysiaInstance>(
+		plugin: Promise<{
+			default: (
+				elysia: Elysia<any>
+			) => MaybePromise<Elysia<LazyLoadElysia>>
+		}>
+	): Elysia<{
+		path: Instance['path']
+		error: Instance['error'] & LazyLoadElysia['error']
+		request: Reconciliation<Instance['request'], LazyLoadElysia['request']>
+		store: Reconciliation<Instance['store'], LazyLoadElysia['store']>
+		schema: Instance['schema'] & LazyLoadElysia['schema']
+		meta: {
+			schema: Instance['meta']['schema'] &
+				LazyLoadElysia['meta']['schema']
+			defs: Reconciliation<
+				Instance['meta']['defs'],
+				LazyLoadElysia['meta']['defs']
+			>
+			exposed: Instance['meta']['exposed'] &
+				LazyLoadElysia['meta']['exposed']
+		}
+	}>
+
 	/**
 	 * ### use
 	 * Merge separate logic of Elysia with current
@@ -950,56 +1008,13 @@ export default class Elysia<
 	 *     .use(plugin)
 	 * ```
 	 */
-	use<
-		NewElysia extends MaybePromise<Elysia<any>> = Elysia<any>,
-		Params extends Elysia = Elysia<any>,
-		LazyLoadElysia extends never | ElysiaInstance = never
-	>(
+	use(
 		plugin:
-			| MaybePromise<
-					(
-						app: Params extends Elysia<infer ParamsInstance>
-							? IsAny<ParamsInstance> extends true
-								? this
-								: Params
-							: Params
-					) => MaybePromise<NewElysia>
-			  >
+			| MaybePromise<(app: Elysia<any>) => MaybePromise<Elysia<any>>>
 			| Promise<{
-					default: (
-						elysia: Elysia<any>
-					) => MaybePromise<Elysia<LazyLoadElysia>>
+					default: (elysia: Elysia<any>) => MaybePromise<Elysia<any>>
 			  }>
-	): IsNever<LazyLoadElysia> extends false
-		? Elysia<{
-				path: Instance['path']
-				error: Instance['error'] & LazyLoadElysia['error']
-				request: Instance['request'] & LazyLoadElysia['request']
-				store: Instance['store'] & LazyLoadElysia['store']
-				schema: Instance['schema'] & LazyLoadElysia['schema']
-				meta: Instance['meta'] & LazyLoadElysia['meta']
-		  }>
-		: NewElysia extends Elysia<infer NewInstance>
-		? IsNever<NewInstance> extends true
-			? Elysia<Instance>
-			: Elysia<{
-					path: Instance['path']
-					error: Instance['error'] & NewInstance['error']
-					request: Instance['request'] & NewInstance['request']
-					store: Instance['store'] & NewInstance['store']
-					schema: Instance['schema'] & NewInstance['schema']
-					meta: Instance['meta'] & NewInstance['meta']
-			  }>
-		: NewElysia extends Promise<Elysia<infer NewInstance>>
-		? Elysia<{
-				path: Instance['path']
-				error: Instance['error'] & NewInstance['error']
-				request: Instance['request'] & NewInstance['request']
-				store: Instance['store'] & NewInstance['store']
-				schema: Instance['schema'] & NewInstance['schema']
-				meta: Instance['meta'] & NewInstance['meta']
-		  }>
-		: this {
+	): Elysia<any> {
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
 				plugin
@@ -1027,63 +1042,6 @@ export default class Elysia<
 		}
 
 		return instance
-	}
-
-	if<
-		Condition extends boolean,
-		NewElysia extends MaybePromise<Elysia<any>> = Elysia<any>,
-		Params extends Elysia = Elysia<any>,
-		LazyLoadElysia extends never | ElysiaInstance = never
-	>(
-		condition: Condition,
-		run:
-			| MaybePromise<
-					(
-						app: Params extends Elysia<infer ParamsInstance>
-							? IsAny<ParamsInstance> extends true
-								? this
-								: Params
-							: Params
-					) => MaybePromise<NewElysia>
-			  >
-			| Promise<{
-					default: (
-						elysia: Elysia<any>
-					) => MaybePromise<Elysia<LazyLoadElysia>>
-			  }>
-	): IsNever<LazyLoadElysia> extends false
-		? Elysia<{
-				path: Instance['path']
-				error: Instance['error']
-				request: Instance['request'] & LazyLoadElysia['request']
-				store: Instance['store'] & LazyLoadElysia['store']
-				schema: Instance['schema'] & LazyLoadElysia['schema']
-				meta: Instance['meta'] & LazyLoadElysia['meta']
-		  }>
-		: NewElysia extends Elysia<infer NewInstance>
-		? IsNever<NewInstance> extends true
-			? Elysia<Instance>
-			: Elysia<{
-					path: Instance['path']
-					error: Instance['error']
-					request: Instance['request'] & NewInstance['request']
-					store: Instance['store'] & NewInstance['store']
-					schema: Instance['schema'] & NewInstance['schema']
-					meta: Instance['meta'] & NewInstance['meta']
-			  }>
-		: NewElysia extends Promise<Elysia<infer NewInstance>>
-		? Elysia<{
-				path: Instance['path']
-				error: Instance['error']
-				request: Instance['request'] & NewInstance['request']
-				store: Instance['store'] & NewInstance['store']
-				schema: Instance['schema'] & NewInstance['schema']
-				meta: Instance['meta'] & NewInstance['meta']
-		  }>
-		: this {
-		if (!condition) return this as any
-
-		return this.use(run) as any
 	}
 
 	/**
@@ -2600,9 +2558,7 @@ export default class Elysia<
 		value: Value
 	): Elysia<{
 		path: Instance['path']
-		store: Instance['store'] & {
-			[key in Key]: Value
-		}
+		store: Reconciliation<Instance['store'], Record<Key, Value>>
 		error: Instance['error']
 		request: Instance['request']
 		schema: Instance['schema']
@@ -2625,7 +2581,7 @@ export default class Elysia<
 		store: NewStore
 	): Elysia<{
 		path: Instance['path']
-		store: Instance['store'] & DeepWritable<NewStore>
+		store: Reconciliation<Instance['store'], DeepWritable<NewStore>>
 		error: Instance['error']
 		request: Instance['request']
 		schema: Instance['schema']
@@ -2681,7 +2637,7 @@ export default class Elysia<
 		path: Instance['path']
 		store: Instance['store']
 		error: Instance['error']
-		request: Instance['request'] & { [key in Name]: Value }
+		request: Reconciliation<Instance['request'], Record<Name, Value>>
 		schema: Instance['schema']
 		meta: Instance['meta']
 	}>
@@ -2704,7 +2660,7 @@ export default class Elysia<
 		path: Instance['path']
 		store: Instance['store']
 		error: Instance['error']
-		request: Instance['request'] & DeepWritable<Decorators>
+		request: Reconciliation<Instance['request'], DeepWritable<Decorators>>
 		schema: Instance['schema']
 		meta: Instance['meta']
 	}>
@@ -3004,13 +2960,14 @@ export default class Elysia<
 		request: Instance['request']
 		schema: Instance['schema']
 		error: Instance['error']
-		meta: Instance['meta'] &
-			Record<
-				'defs',
-				{
-					[name in Name]: Static<Model>
-				}
+		meta: {
+			schema: Instance['meta']['schema']
+			defs: Reconciliation<
+				Instance['meta']['defs'],
+				Record<Name, Static<Model>>
 			>
+			exposed: Instance['meta']['exposed']
+		}
 	}>
 
 	model<Recorder extends Record<string, TSchema>>(
@@ -3021,13 +2978,16 @@ export default class Elysia<
 		request: Instance['request']
 		schema: Instance['schema']
 		error: Instance['error']
-		meta: Instance['meta'] &
-			Record<
-				'defs',
+		meta: {
+			schema: Instance['meta']['schema']
+			defs: Reconciliation<
+				Instance['meta']['defs'],
 				{
 					[key in keyof Recorder]: Static<Recorder[key]>
 				}
 			>
+			exposed: Instance['meta']['exposed']
+		}
 	}>
 
 	model(name: string, model?: TSchema) {

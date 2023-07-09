@@ -505,15 +505,17 @@ export interface ElysiaConfig {
 	strictPath?: boolean
 }
 
-export type IsPathParameter<Part> = Part extends `:${infer Parameter}`
-	? Parameter
-	: Part extends `*`
-	? '*'
-	: never
+export type IsPathParameter<Part extends string> =
+	Part extends `:${infer Parameter}`
+		? Parameter
+		: Part extends `*`
+		? '*'
+		: never
 
-export type ExtractPath<Path> = Path extends `${infer A}/${infer B}`
-	? IsPathParameter<A> | ExtractPath<B>
-	: IsPathParameter<Path>
+export type ExtractPath<Path extends string> =
+	Path extends `${infer A}/${infer B}`
+		? IsPathParameter<A> | ExtractPath<B>
+		: IsPathParameter<Path>
 
 export interface InternalRoute<Instance extends ElysiaInstance> {
 	method: HTTPMethod
@@ -693,3 +695,17 @@ export type MaybePromise<T> = T | Promise<T>
 export type Prettify<T> = {
 	[K in keyof T]: T[K]
 } & {}
+
+export type Reconciliation<A extends Object, B extends Object> = {
+	[key in keyof A as key extends keyof B ? never : key]: A[key]
+} extends infer Collision
+	? {} extends Collision
+		? {
+				[key in keyof B]: B[key]
+		  }
+		: Prettify<
+				Collision & {
+					[key in keyof B]: B[key]
+				}
+		  >
+	: never
