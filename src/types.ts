@@ -520,6 +520,7 @@ export type ExtractPath<Path extends string> =
 export interface InternalRoute<Instance extends ElysiaInstance> {
 	method: HTTPMethod
 	path: string
+	composed: ComposedHandler,
 	handler: Handler<any, Instance>
 	hooks: LocalHook<any, any, string>
 }

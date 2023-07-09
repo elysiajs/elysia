@@ -171,13 +171,6 @@ export default class Elysia<
 
 		if (this.config.basePath) path = this.config.basePath + path
 
-		this.routes.push({
-			method,
-			path,
-			handler,
-			hooks: mergeHook({ ...this.event }, hook as RegisteredHook)
-		})
-
 		const defs = this.meta.defs
 
 		if (hook?.type)
@@ -272,6 +265,14 @@ export default class Elysia<
 			meta: allowMeta ? this.meta : undefined,
 			onRequest: this.event.request,
 			config: this.config
+		})
+
+		this.routes.push({
+			method,
+			path,
+			composed: mainHandler,
+			handler,
+			hooks: mergeHook({ ...this.event }, hook as RegisteredHook)
 		})
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
@@ -3002,6 +3003,7 @@ export default class Elysia<
 	}
 }
 
+export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
 export { Elysia }
 export { t } from './custom-types'
 export { ws } from './ws'
