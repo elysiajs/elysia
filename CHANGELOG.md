@@ -1,6 +1,7 @@
 # 0.6.0-alpha.2
 Feature:
 - [Internal] Add qi (queryIndex) to context
+- Add `error` field to Elysia type system for adding custom error message
 
 # 0.6.0-alpha.1
 Feature:

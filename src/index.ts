@@ -1095,6 +1095,7 @@ export default class Elysia<
 						? {
 								[path in `${Instance['path']}${Path}`]: {
 									get: {
+										handler?: Handler
 										body: UnwrapSchema<
 											Typed['body'],
 											Instance['meta']['defs']
@@ -1210,6 +1211,7 @@ export default class Elysia<
 							? {
 									[path in `${Instance['path']}${Path}`]: {
 										post: {
+											handler?: Handler
 											body: UnwrapSchema<
 												Typed['body'],
 												Instance['meta']['defs']

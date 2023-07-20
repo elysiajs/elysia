@@ -3,6 +3,7 @@ import {
 	type SchemaOptions,
 	type NumericOptions
 } from '@sinclair/typebox'
+import type { TypeCheck } from '@sinclair/typebox/compiler'
 import { TypeSystem } from '@sinclair/typebox/system'
 
 try {
@@ -161,6 +162,16 @@ declare module '@sinclair/typebox' {
 		File: typeof ElysiaType.File
 		Files: typeof ElysiaType.Files
 		URLEncoded: (typeof Type)['Object']
+	}
+
+	interface SchemaOptions {
+		error?:
+			| string
+			| ((
+					type: string,
+					validator: TypeCheck<any>,
+					value: unknown
+			  ) => string | void)
 	}
 }
 

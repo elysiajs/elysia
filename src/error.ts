@@ -47,24 +47,32 @@ export class ValidationError extends Error {
 		public value: unknown
 	) {
 		const error = isProduction ? undefined : validator.Errors(value).First()
+		const customError = error?.schema.error
+			? typeof error.schema.error === 'function'
+				? error.schema.error(type, validator, value)
+				: error.schema.error
+			: undefined
 
 		const message = isProduction
-			? `Invalid ${type}`
-			: `Invalid ${type}, '${error?.path?.slice(1) || 'type'}': ${
+			? customError ??
+			  `Invalid ${type ?? error?.schema.error ?? error?.message}`
+			: customError ??
+			  `Invalid ${type}, '${error?.path?.slice(1) || 'type'}': ${
 					error?.message
 			  }` +
-			  '\n\n' +
-			  'Expected: ' +
-			  // @ts-ignore
-			  JSON.stringify(Value.Create(validator.schema), null, 2) +
-			  '\n\n' +
-			  'Found: ' +
-			  JSON.stringify(value, null, 2) +
-			  '\n\n' +
-			  'Schema: ' +
-			  // @ts-ignore
-			  JSON.stringify(validator.schema, null, 2) +
-			  '\n'
+					'\n\n' +
+					'Expected: ' +
+					// @ts-ignore
+					JSON.stringify(Value.Create(validator.schema), null, 2) +
+					'\n\n' +
+					'Found: ' +
+					JSON.stringify(value, null, 2) 
+					// +
+					// '\n\n' +
+					// 'Schema: ' +
+					// // @ts-ignore
+					// JSON.stringify(validator.schema, null, 2) +
+					// '\n'
 
 		super(message)
 
