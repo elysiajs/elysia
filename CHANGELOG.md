@@ -1,3 +1,7 @@
+# 0.5.23 - 20 Jul 2023
+Bug fix:
+- [#68](https://github.com/elysiajs/elysia/issues/68) invalid optional query params when using numeric
+
 # 0.5.22 - 9 Jul 2023
 Bug fix:
 - update onAfterHandle to be Response only

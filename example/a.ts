@@ -1,13 +1,21 @@
 import { Elysia, t } from '../src'
-import { swagger } from '@elysiajs/swagger'
 
-new Elysia()
-	// @ts-ignore
-	.use(swagger)
-	.get('/id/:id', ({ params: { id } }) => id)
-	.post("/", ({ body }) => body, {
-		body: t.Object({
-			hello: t.String()
-		})
-	})
+const app = new Elysia()
+	.get(
+		'/qtest',
+		({ query }) => {
+			return {
+				query
+			}
+		},
+		{
+			transform({ query }) {
+				console.log(query)
+			},
+			query: t.Object({
+				pageNum: t.Optional(t.Numeric({ default: 1 })),
+				pageSize: t.Optional(t.Numeric({ default: 10 }))
+			})
+		}
+	)
 	.listen(3000)
