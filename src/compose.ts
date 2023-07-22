@@ -430,7 +430,7 @@ export const composeHandler = ({
 			switch (typeof properties) {
 				case 'object':
 					for (const property of properties)
-						fnLiteral += `if(c.query.${property}) c.params.${property} = +c.params.${property};`
+						fnLiteral += `if(c.params.${property}) c.params.${property} = +c.params.${property};`
 					break
 			}
 
