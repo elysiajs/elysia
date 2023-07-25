@@ -949,6 +949,7 @@ export default class Elysia<Instance extends ElysiaInstance = ElysiaInstance> {
 		: this {
 		if (!condition) return this as any
 
+		// @ts-ignore
 		return this.use(run) as any
 	}
 

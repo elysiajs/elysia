@@ -1,11 +1,20 @@
-import { Elysia, t } from '../src'
+import { ClientRequest } from 'http'
+import { Elysia, ws, t } from '../src'
 
-const app = new Elysia()
-	.get('/test/:id/:id2/:id3', ({ params }) => params, {
-		params: t.Object({
-			id: t.Numeric(),
-			id2: t.Optional(t.Numeric()),
-			id3: t.String()
-		})
-	})
-	.listen(3000)
+const grid = [[1]]
+
+const app = new Elysia().use(ws()).ws('/ws', {
+	body: t.Object({
+		type: t.String(),
+		row: t.Number(),
+		col: t.Number()
+	}),
+	message(ws, message) {
+		if (message.type === 'increment') {
+			grid[message.row][message.col] += 1
+		}
+	},
+	open(ws) {
+		ws.send(grid)
+	}
+})

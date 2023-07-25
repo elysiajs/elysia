@@ -1,3 +1,7 @@
+# 0.5.24 - 25 Jul 2023
+Bug fix:
+- ws resolve type to undefined instead of unknown cause unexpected type mismatched when not provided
+
 # 0.5.24 - 22 Jul 2023
 Bug fix:
 - [#68](https://github.com/elysiajs/elysia/issues/68) invalid path params when using numeric
