@@ -1,6 +1,8 @@
 import { Elysia } from '../src'
 
-const app = new Elysia()
+const app = new Elysia({
+	aot: false
+})
 const total = 10_000
 
 const t = performance.now()
@@ -15,4 +17,4 @@ console.log(
 	+took.toFixed(4),
 	'ms'
 )
-console.log('Average', +(took / total).toFixed(4), 'route / ms')
+console.log('Average', +(took / total).toFixed(4), 'ms / route')

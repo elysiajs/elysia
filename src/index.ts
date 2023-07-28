@@ -22,7 +22,7 @@ import type { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
 import type {
 	Handler,
 	RegisteredHook,
-	BeforeRequestHandler,
+	VoidRequestHandler,
 	TypedRoute,
 	ElysiaInstance,
 	ElysiaConfig,
@@ -52,7 +52,8 @@ import type {
 	ExtractPath,
 	TypedSchemaToRoute,
 	DeepWritable,
-	Reconciliation
+	Reconciliation,
+	BeforeRequestHandler
 } from './types'
 import type { Static, TSchema } from '@sinclair/typebox'
 
@@ -116,6 +117,7 @@ export default class Elysia<
 		transform: [],
 		beforeHandle: [],
 		afterHandle: [],
+		onResponse: [],
 		error: [],
 		stop: []
 	}
@@ -238,7 +240,7 @@ export default class Elysia<
 		} as any
 
 		const hooks = mergeHook(this.event, hook as RegisteredHook)
-		const loosePath = path.slice(0, path.length - 1)
+		const loosePath = path.endsWith("/") ? path.slice(0, path.length - 1) : path + '/'
 
 		if (this.config.aot === false) {
 			this.dynamicRouter.add(method, path, {
@@ -468,6 +470,30 @@ export default class Elysia<
 	}
 
 	/**
+	 * ### response | Life cycle event
+	 * Called when handler is executed
+	 * Good for analytic metrics
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onError(({ code }) => {
+	 *         if(code === "NOT_FOUND")
+	 *             return "Path not found :("
+	 *     })
+	 * ```
+	 */
+
+	onResponse<Route extends OverwritableTypeRoute = TypedRoute>(
+		handler: VoidRequestHandler<Route, Instance>
+	) {
+		this.event.onResponse.push(handler)
+
+		return this
+	}
+
+	/**
 	 * ### Error | Life cycle event
 	 * Called when error is thrown during processing request
 	 *
@@ -550,6 +576,10 @@ export default class Elysia<
 
 			case 'request':
 				this.event.request.push(handler as LifeCycle['request'])
+				break
+
+			case 'response':
+				this.event.onResponse.push(handler as LifeCycle['response'])
 				break
 
 			case 'parse':
@@ -3087,6 +3117,7 @@ export type {
 	Handler,
 	RegisteredHook,
 	BeforeRequestHandler,
+	VoidRequestHandler,
 	TypedRoute,
 	OverwritableTypeRoute,
 	ElysiaInstance,

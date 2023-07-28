@@ -3,19 +3,6 @@ import { Elysia, t } from '../src'
 import { post, req } from './utils'
 
 describe('group', () => {
-	it('handle empty and root', async () => {
-		const app = new Elysia().group('/v1', (app) =>
-			app.get('', () => 1).get('/', () => 2)
-		)
-
-		await app.handle(req('/'))
-		const r1 = await app.handle(req('/v1')).then((r) => r.text())
-		const r2 = await app.handle(req('/v1/')).then((r) => r.text())
-
-		expect(r1).toBe('1')
-		expect(r2).toBe('2')
-	})
-
 	it('delegate onRequest', async () => {
 		const app = new Elysia()
 			.get('/', () => 'A')

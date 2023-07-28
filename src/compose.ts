@@ -7,7 +7,7 @@ import { NotFoundError, ValidationError, InternalServerError } from './error'
 
 import type {
 	ElysiaConfig,
-	BeforeRequestHandler,
+	VoidRequestHandler,
 	ComposedHandler,
 	HTTPMethod,
 	LocalHandler,
@@ -205,16 +205,23 @@ export const composeHandler = ({
 	handler: LocalHandler<any, any>
 	handleError: Elysia['handleError']
 	meta?: Elysia['meta']
-	onRequest: BeforeRequestHandler<any, any>[]
+	onRequest: VoidRequestHandler<any, any>[]
 	config: ElysiaConfig
 }): ComposedHandler => {
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
 		hooks.error.length > 0 ||
-		typeof Bun === 'undefined'
+		typeof Bun === 'undefined' ||
+		hooks.onResponse.length > 0
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory(hasErrorHandler)
+
+	const handleResponse = hooks.onResponse.length
+		? `\n;(async () => {${hooks.onResponse
+				.map((_, i) => `await res${i}(c)`)
+				.join(';')}})();\n`
+		: ''
 
 	let fnLiteral = hasErrorHandler ? 'try {\n' : ''
 
@@ -627,7 +634,8 @@ export const composeHandler = ({
 					${composeResponseValidation()}
 			}\n`
 
-		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+		if (hasSet)
+			fnLiteral += `return mapResponse(r, c.set)\n`
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
 		if (validator.response) {
@@ -641,16 +649,20 @@ export const composeHandler = ({
 					${composeResponseValidation()}
 			}\n`
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(r)\n`
+			if (hasSet)
+				fnLiteral += `return mapResponse(r, c.set)\n`
+			else
+				fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
 			const handled =
 				handler.constructor.name === ASYNC_FN
 					? 'await handler(c) '
 					: 'handler(c)'
 
-			if (hasSet) fnLiteral += `return mapResponse(${handled}, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(${handled})\n`
+			if (hasSet)
+				fnLiteral += `return mapResponse(${handled}, c.set)\n`
+			else
+				fnLiteral += `return mapCompactResponse(${handled})\n`
 		}
 	}
 
@@ -690,6 +702,8 @@ export const composeHandler = ({
 
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
+} finally {
+	${handleResponse}
 }`
 	}
 
@@ -703,7 +717,8 @@ export const composeHandler = ({
 			beforeHandle,
 			afterHandle,
 			parse,
-			error: handleErrors
+			error: handleErrors,
+			onResponse
 		},
 		validator: {
 			body,
@@ -726,12 +741,18 @@ export const composeHandler = ({
 		meta
 	} = hooks
 
+	${
+		hooks.onResponse.length
+			? `const ${hooks.onResponse
+					.map((x, i) => `res${i} = onResponse[${i}]`)
+					.join(',')}`
+			: ''
+	}
+
 	return ${maybeAsync ? 'async' : ''} function(c) {
 		${meta ? 'c["schema"] = meta["schema"]; c["defs"] = meta["defs"];' : ''}
 		${fnLiteral}
 	}`
-
-	// console.log(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 
@@ -892,7 +913,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 export const composeErrorHandler = (app: Elysia<any>) => {
 	let fnLiteral = `const {
-		app: { event: { error: onError } },
+		app: { event: { error: onError, onResponse: res } },
 		mapResponse
 	} = inject
 
@@ -919,8 +940,7 @@ export const composeErrorHandler = (app: Elysia<any>) => {
 		else fnLiteral += response + '\n'
 	}
 
-	fnLiteral += `
-	if(error.constructor.name === "ValidationError") {
+	fnLiteral += `if(error.constructor.name === "ValidationError") {
 		return new Response(
 			error.message, 
 			{ headers: set.headers, status: error.status ?? 400 }

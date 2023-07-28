@@ -86,6 +86,7 @@ export type LifeCycleEvent =
 	| 'transform'
 	| 'beforeHandle'
 	| 'afterHandle'
+	| 'response'
 	| 'error'
 	| 'stop'
 
@@ -112,6 +113,7 @@ export interface LifeCycle<Instance extends ElysiaInstance = ElysiaInstance> {
 	transform: NoReturnHandler<any, Instance>
 	beforeHandle: Handler<any, Instance>
 	afterHandle: AfterRequestHandler<any, Instance>
+	response: VoidRequestHandler<any, Instance>
 	error: ErrorHandler
 	stop: VoidLifeCycle<Instance>
 }
@@ -132,6 +134,7 @@ export interface LifeCycleStore<Instance extends ElysiaInstance> {
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
+	onResponse: VoidRequestHandler<any, Instance>[]
 	error: ErrorHandler[]
 	stop: VoidLifeCycle<Instance>[]
 }
@@ -141,6 +144,11 @@ export type BeforeRequestHandler<
 	Instance extends ElysiaInstance = ElysiaInstance
 > = (context: PreContext<Route, Instance['store']> & Instance['request']) => any
 
+export type VoidRequestHandler<
+	Route extends TypedRoute = TypedRoute,
+	Instance extends ElysiaInstance = ElysiaInstance
+> = (context: Context<Route, Instance['store']> & Instance['request']) => any
+
 export interface RegisteredHook<
 	Instance extends ElysiaInstance = ElysiaInstance
 > {
@@ -149,6 +157,7 @@ export interface RegisteredHook<
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
+	onResponse: VoidRequestHandler<any, Instance>[]
 	parse: BodyParser[]
 	error: ErrorHandler[]
 }
@@ -374,6 +383,10 @@ export type LocalHook<
 				 * Custom body parser
 				 */
 				parse?: WithArray<BodyParser>
+				/**
+				 * Custom body parser
+				 */
+				onResponse?: WithArray<HookHandler<Route, Instance>>
 		  }
 		: never)
 

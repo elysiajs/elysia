@@ -258,6 +258,9 @@ export const createDynamicHandler =
 			return mapResponse(response, context.set)
 		} catch (error) {
 			return app.handleError(request, error as Error, set)
+		} finally {
+			for(const onResponse of app.event.onResponse)
+				await onResponse(context)
 		}
 	}
 

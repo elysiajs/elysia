@@ -30,6 +30,10 @@ export const mergeHook = (
 		query: b?.query ?? a?.query,
 		// @ts-ignore
 		response: b?.response ?? a?.response,
+		onResponse: mergeObjectArray(
+			a.onResponse ?? [],
+			b?.onResponse ?? []
+		) as any,
 		detail: mergeDeep(
 			// @ts-ignore
 			b?.detail ?? {},

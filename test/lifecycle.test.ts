@@ -79,4 +79,23 @@ describe('Life Cycle', () => {
 
 		expect(await res.text()).toBe(':P')
 	})
+
+	it('handle onResponse', async () => {
+		const app = new Elysia()
+			.state('report', {} as Record<string, boolean>)
+			.onResponse(({ store, path }) => {
+				store.report[path] = true
+			})
+			.get('/', () => 'Hello World')
+			.get('/async', async () => 'Hello World')
+			.get('/error', () => {}, {
+				error() {}
+			})
+
+		const keys = ['/', '/async', '/error']
+
+		for (const key of keys) await app.handle(req(key))
+
+		expect(Object.keys(app.store.report)).toEqual(keys)
+	})
 })
