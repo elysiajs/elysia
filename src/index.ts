@@ -8,7 +8,6 @@ import {
 	getResponseSchemaValidator,
 	mergeDeep
 } from './utils'
-import { registerSchemaPath } from './schema'
 import type { Context } from './context'
 
 import {
@@ -199,36 +198,42 @@ export default class Elysia<
 					break
 			}
 
-		registerSchemaPath({
-			schema: this.meta.schema,
-			contentType: hook?.type,
-			hook,
-			method,
-			path,
-			models: this.meta.defs
-		})
-
 		const validator = {
 			body: getSchemaValidator(
 				hook?.body ?? (this.$schema?.body as any),
-				defs
+				{
+					dynamic: !this.config.aot,
+					models: defs
+				}
 			),
 			headers: getSchemaValidator(
 				hook?.headers ?? (this.$schema?.headers as any),
-				defs,
-				true
+				{
+					dynamic: !this.config.aot,
+					models: defs,
+					additionalProperties: true
+				}
 			),
 			params: getSchemaValidator(
 				hook?.params ?? (this.$schema?.params as any),
-				defs
+				{
+					dynamic: !this.config.aot,
+					models: defs
+				}
 			),
 			query: getSchemaValidator(
 				hook?.query ?? (this.$schema?.query as any),
-				defs
+				{
+					dynamic: !this.config.aot,
+					models: defs
+				}
 			),
 			response: getResponseSchemaValidator(
 				hook?.response ?? (this.$schema?.response as any),
-				defs
+				{
+					dynamic: !this.config.aot,
+					models: defs
+				}
 			)
 		} as any
 
@@ -1045,6 +1050,48 @@ export default class Elysia<
 		return instance
 	}
 
+	mount(handle: (request: Request) => MaybePromise<Response>): this
+	mount(
+		path: string,
+		handle: (request: Request) => MaybePromise<Response>
+	): this
+
+	mount(
+		path: string | ((request: Request) => MaybePromise<Response>),
+		handle?: (request: Request) => MaybePromise<Response>
+	) {
+		if (typeof path === 'function' || path.length === 0 || path === '/') {
+			const run = typeof path === 'function' ? path : handle!
+
+			const handler: Handler<any, any> = async ({ request, path }) =>
+				run(new Request('http://a.cc' + path || '/', request))
+
+			this.all('/', handler, {
+				type: 'none'
+			})
+			this.all('/*', handler, {
+				type: 'none'
+			})
+
+			return this
+		}
+
+		const length = path.length
+		const handler: Handler<any, any> = async ({ request, path }) =>
+			handle!(
+				new Request('http://a.cc' + path.slice(length) || '/', request)
+			)
+
+		this.all(path, handler, {
+			type: 'none'
+		})
+		this.all(path + (path.endsWith('/') ? '*' : '/*'), handler, {
+			type: 'none'
+		})
+
+		return this
+	}
+
 	/**
 	 * ### get
 	 * Register handler for path with method [GET]
@@ -1095,7 +1142,6 @@ export default class Elysia<
 						? {
 								[path in `${Instance['path']}${Path}`]: {
 									get: {
-										handler?: Handler
 										body: UnwrapSchema<
 											Typed['body'],
 											Instance['meta']['defs']
@@ -2385,10 +2431,9 @@ export default class Elysia<
 							...context,
 							id: Date.now(),
 							headers: context.request.headers.toJSON(),
-							message: getSchemaValidator(
-								options?.body,
-								this.meta.defs
-							),
+							message: getSchemaValidator(options?.body, {
+								models: this.meta.defs
+							}),
 							transformMessage: !options.transform
 								? []
 								: Array.isArray(options.transformMessage)
@@ -2614,6 +2659,7 @@ export default class Elysia<
 		}
 
 		if (!(name in this.store)) {
+			// eslint-disable-next-line no-extra-semi
 			;(this.store as Record<string | number | symbol, unknown>)[name] =
 				value
 		}
@@ -2798,15 +2844,26 @@ export default class Elysia<
 			meta: Instance['meta']
 		}>
 	>(schema: Schema): NewInstance {
-		const defs = this.meta.defs
+		const models = this.meta.defs
 
 		this.$schema = {
-			body: getSchemaValidator(schema.body, defs),
-			headers: getSchemaValidator(schema?.headers, defs, true),
-			params: getSchemaValidator(schema?.params, defs),
-			query: getSchemaValidator(schema?.query, defs),
+			body: getSchemaValidator(schema.body, {
+				models
+			}),
+			headers: getSchemaValidator(schema?.headers, {
+				models,
+				additionalProperties: true
+			}),
+			params: getSchemaValidator(schema?.params, {
+				models
+			}),
+			query: getSchemaValidator(schema?.query, {
+				models
+			}),
 			// @ts-ignore
-			response: getSchemaValidator(schema?.response, defs)
+			response: getSchemaValidator(schema?.response, {
+				models
+			})
 		}
 
 		return this as any

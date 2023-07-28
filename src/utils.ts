@@ -1,4 +1,5 @@
 import { Kind, TSchema } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 import type {
 	DeepMergeTwoTypes,
@@ -83,8 +84,15 @@ export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
 
 export const getSchemaValidator = (
 	s: TSchema | string | undefined,
-	models: Record<string, TSchema>,
-	additionalProperties = false
+	{
+		models = {},
+		additionalProperties = false,
+		dynamic = false
+	}: {
+		models?: Record<string, TSchema>
+		additionalProperties?: boolean
+		dynamic?: boolean
+	}
 ) => {
 	if (!s) return
 	if (typeof s === 'string' && !(s in models)) return
@@ -95,22 +103,55 @@ export const getSchemaValidator = (
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
+	if (dynamic)
+		return {
+			schema,
+			references: '',
+			checkFunc: () => {},
+			code: '',
+			Check: (value: unknown) => Value.Check(schema, value),
+			Errors: (value: unknown) => Value.Errors(schema, value),
+			Code: () => ''
+		} as unknown as TypeCheck<TSchema>
+
 	return TypeCompiler.Compile(schema)
 }
 
 export const getResponseSchemaValidator = (
 	s: TypedSchema['response'] | undefined,
-	models: Record<string, TSchema>,
-	additionalProperties = false
+	{
+		models = {},
+		additionalProperties = false,
+		dynamic = false
+	}: {
+		models?: Record<string, TSchema>
+		additionalProperties?: boolean
+		dynamic?: boolean
+	}
 ): Record<number, TypeCheck<any>> | undefined => {
 	if (!s) return
 	if (typeof s === 'string' && !(s in models)) return
 
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
+	const compile = (schema: TSchema) => {
+		if (dynamic)
+			return {
+				schema,
+				references: '',
+				checkFunc: () => {},
+				code: '',
+				Check: (value: unknown) => Value.Check(schema, value),
+				Errors: (value: unknown) => Value.Errors(schema, value),
+				Code: () => ''
+			} as unknown as TypeCheck<TSchema>
+
+		return TypeCompiler.Compile(schema)
+	}
+
 	if (Kind in maybeSchemaOrRecord)
 		return {
-			200: TypeCompiler.Compile(maybeSchemaOrRecord)
+			200: compile(maybeSchemaOrRecord)
 		}
 
 	const record: Record<number, TypeCheck<any>> = {}
@@ -125,8 +166,7 @@ export const getResponseSchemaValidator = (
 					'additionalProperties' in schema === false
 
 				// Inherits model maybe already compiled
-				record[+status] =
-					Kind in schema ? TypeCompiler.Compile(schema) : schema
+				record[+status] = Kind in schema ? compile(schema) : schema
 			}
 
 			return undefined
@@ -141,7 +181,7 @@ export const getResponseSchemaValidator = (
 		// Inherits model maybe already compiled
 		record[+status] =
 			Kind in maybeNameOrSchema
-				? TypeCompiler.Compile(maybeNameOrSchema)
+				? compile(maybeNameOrSchema)
 				: maybeNameOrSchema
 	})
 

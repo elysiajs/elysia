@@ -74,20 +74,12 @@ describe('Modules', () => {
 			.use(import('./modules'))
 			.use(asyncPlugin)
 			.get('/', () => 'hi')
-			// @ts-ignore
-			.route('GET', '/schema', (context) => context.schema, {
-				config: {
-					allowMeta: true
-				}
-			})
 
 		await app.modules
 
-		const res: Object = await app
-			.handle(req('/schema'))
-			.then((r) => r.json())
+		const res = await app.handle(req('/async'))
 
-		expect(Object.keys(res).length).toEqual(4)
+		expect(res.status).toEqual(200)
 	})
 
 	it('Count lazy module correctly', async () => {

@@ -1,27 +1,17 @@
 import { Elysia, t } from '../src'
+import { Hono } from 'hono'
 
-const app = new Elysia()
-	.get('/id/:id', ({ params: { id } }) => id, {
-		params: t.Object({
-			id: t.Numeric({
-				error: 'userId is expected to be numeric value like 1, 2, 3'
-			})
-		})
-	})
-	.get(
-		'/qtest',
-		({ query }) => {
-			return {
-				query
-			}
-		},
-		{
-			query: t.Optional(
-				t.Object({
-					pageNum: t.Optional(t.Numeric({ default: 1 })),
-					pageSize: t.Optional(t.Numeric({ default: 10 }))
-				})
-			)
-		}
-	)
+const elysia = new Elysia()
+	.get('/', () => 'Hello from Elysia inside Hono inside Elysia!')
+	.get('/id/:id', ({ params: { id } }) => id)
+
+const hono = new Hono()
+	.get('/', ({ text }) => text('Hello from Hono!'))
+	.get('/id/:id', ({ text, req }) => text(req.param('id')))
+	.mount('/elysia', elysia.fetch)
+
+const main = new Elysia()
+	.get('/', () => 'Hello from Elysia!')
+	.get('/id/:id', ({ params: { id } }) => id)
+	.mount(hono.fetch)
 	.listen(3000)

@@ -110,4 +110,31 @@ describe('Dynamic Mode', () => {
 		expect(await res.text()).toBe('aw man')
 		expect(res.status).toBe(418)
 	})
+
+	it('validate', async () => {
+		const app = new Elysia({
+			// aot: false
+		}).post('/', ({ query: { id } }) => id.toString(), {
+			body: t.Object({
+				username: t.String(),
+				password: t.String()
+			}),
+			query: t.Object({
+				id: t.String()
+			}),
+			response: {
+				200: t.String()
+			}
+		})
+
+		const res = await app
+			.handle(
+				post('/?id=me', {
+					username: 'username',
+					password: 'password'
+				})
+			)
+			.then((x) => x.text())
+		expect(res).toBe('me')
+	})
 })

@@ -14,6 +14,7 @@ export type Context<
 	params: Route['params']
 	body: Route['body']
 	store: Store
+	path: string
 
 	set: {
 		headers: Record<string, string>

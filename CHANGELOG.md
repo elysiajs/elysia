@@ -1,3 +1,15 @@
+# 0.6.0-alpha.3
+Feature:
+- Introduce `.mount`
+- Add dynamic mode for TypeBox
+
+Change:
+- Using Bun Build for target Bun
+
+Breaking Change:
+- [Internal] refactored `getSchemaValidator`, `getResponseSchemaValidator` to named parameters
+- [Internal] moved `registerSchemaPath` to `@elysiajs/swagger`
+
 # 0.6.0-alpha.2
 Feature:
 - [Internal] Add qi (queryIndex) to context

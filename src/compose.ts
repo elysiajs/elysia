@@ -844,29 +844,29 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		}
 		
 		const url = request.url,
-		s = url.indexOf('/', 12),
+		s = url.indexOf('/', 11),
 		i = ctx.qi = url.indexOf('?', s + 1),
-		path = i === -1 ? url.substring(s) : url.substring(s, i);`
+		path = ctx.path = i === -1 ? url.substring(s) : url.substring(s, i);`
 	} else {
 		fnLiteral += `
-			const url = request.url,
-			s = url.indexOf('/', 12)
+		const url = request.url,
+			s = url.indexOf('/', 11),
+			qi = url.indexOf('?', s + 1),
+			path = qi === -1
+				? url.substring(s)
+				: url.substring(s, qi)
 
 		const ctx = {
 			request,
 			store,
-			qi: url.indexOf('?', s + 1),
+			qi,
+			path,
 			set: {
 				headers: {},
 				status: 200
 			}
 			${decoratorsLiteral}
-		}
-
-		const path =
-			ctx.qi === -1
-				? url.substring(s)
-				: url.substring(s, ctx.qi);`
+		}`
 	}
 
 	fnLiteral += `
