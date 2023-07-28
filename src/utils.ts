@@ -2,6 +2,7 @@ import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 import type {
+	ElysiaInstance,
 	DeepMergeTwoTypes,
 	LifeCycleStore,
 	LocalHook,
@@ -9,10 +10,29 @@ import type {
 	RegisteredHook
 } from './types'
 
-export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
-	...(Array.isArray(a) ? a : [a]),
-	...(Array.isArray(b) ? b : [b])
-]
+// export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
+// 	...(Array.isArray(a) ? a : [a]),
+// 	...(Array.isArray(b) ? b : [b])
+// ]
+
+export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
+	const array = [...(Array.isArray(a) ? a : [a])]
+	const checksums = []
+
+	for (const item of array) {
+		// @ts-ignore
+		if (item.$elysiaChecksum)
+			// @ts-ignore
+			checksums.push(item.$elysiaChecksum)
+	}
+
+	for (const item of Array.isArray(b) ? b : [b]) {
+		// @ts-ignore
+		if (!checksums.includes(item.$elysiaChecksum)) array.push(item)
+	}
+
+	return array
+}
 
 export const mergeHook = (
 	a: LocalHook<any, any> | LifeCycleStore<any>,
@@ -190,4 +210,81 @@ export const getResponseSchemaValidator = (
 	})
 
 	return record
+}
+
+// https://stackoverflow.com/a/52171480
+export const checksum = (s: string) => {
+	let h = 9
+
+	for (let i = 0; i < s.length; ) h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
+
+	return (h = h ^ (h >>> 9))
+}
+
+export const mergeLifeCycle = <
+	A extends ElysiaInstance,
+	B extends ElysiaInstance
+>(
+	a: LifeCycleStore<A>,
+	b: LifeCycleStore<B> | LocalHook<{}, B>,
+	checksum?: number
+): LifeCycleStore<A & B> => {
+	const injectChecksum = <T>(x: T): T => {
+		// @ts-ignore
+		x.$elysiaChecksum = checksum
+
+		return x
+	}
+
+	// if (a.transform.length)
+	// 	console.log({
+	// 		"A": "A",
+	// 		a: a.transform.map((x) => x.$elysiaChecksum),
+	// 		b: a.transform.map((x) => x.$elysiaChecksum)
+	// 	})
+
+	const basd = {
+		start: mergeObjectArray(
+			a.start as any,
+			('start' in b ? b.start : []).map(injectChecksum) as any
+		),
+		request: mergeObjectArray(
+			a.request as any,
+			('request' in b ? b.request : []).map(injectChecksum) as any
+		),
+		parse: mergeObjectArray(a.parse as any, b.parse as any).map(
+			injectChecksum
+		),
+		transform: mergeObjectArray(
+			a.transform as any,
+			(b.transform as any).map(injectChecksum)
+		),
+		beforeHandle: mergeObjectArray(
+			a.beforeHandle as any,
+			(b.beforeHandle as any).map(injectChecksum)
+		),
+		afterHandle: mergeObjectArray(
+			a.afterHandle as any,
+			(b.afterHandle as any).map(injectChecksum)
+		),
+		onResponse: mergeObjectArray(
+			a.onResponse as any,
+			(b.onResponse as any).map(injectChecksum)
+		),
+		error: mergeObjectArray(
+			a.error as any,
+			(b.error as any).map(injectChecksum)
+		),
+		stop: mergeObjectArray(
+			a.stop as any,
+			('stop' in b ? b.stop : ([] as any)).map(injectChecksum)
+		)
+	}
+
+	// if (a.transform.length)
+	// 	console.log({
+	// 		summed: basd.transform.map((x) => x.$elysiaChecksum)
+	// 	})
+
+	return basd
 }

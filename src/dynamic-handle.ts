@@ -48,7 +48,10 @@ export const createDynamicHandler =
 			path = q === -1 ? url.substring(s) : url.substring(s, q)
 
 		try {
+			// @ts-ignore
+
 			for (let i = 0; i < app.event.request.length; i++) {
+				// @ts-ignore
 				const onRequest = app.event.request[i]
 				let response = onRequest(context)
 				if (response instanceof Promise) response = await response
@@ -109,7 +112,9 @@ export const createDynamicHandler =
 						if (index !== -1)
 							contentType = contentType.slice(0, index)
 
+						// @ts-ignore
 						for (let i = 0; i < app.event.parse.length; i++) {
+							// @ts-ignore
 							let temp = app.event.parse[i](context, contentType)
 							if (temp instanceof Promise) temp = await temp
 
@@ -259,7 +264,8 @@ export const createDynamicHandler =
 		} catch (error) {
 			return app.handleError(request, error as Error, set)
 		} finally {
-			for(const onResponse of app.event.onResponse)
+			// @ts-ignore
+			for (const onResponse of app.event.onResponse)
 				await onResponse(context)
 		}
 	}
@@ -273,7 +279,9 @@ export const createDynamicErrorHandler =
 			headers: {}
 		}
 	) => {
+		// @ts-ignore
 		for (let i = 0; i < app.event.error.length; i++) {
+			// @ts-ignore
 			let response = app.event.error[i]({
 				request,
 				code: (error.code as any) ?? 'UNKNOWN',

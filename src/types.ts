@@ -500,9 +500,11 @@ export type OverwritableTypeRoute = {
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
-export interface ElysiaConfig {
+export type ElysiaConfig = {
+	name?: string
+	seed?: unknown
 	serve?: Partial<Serve>
-	basePath?: string
+	prefix?: string
 	/**
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */
@@ -533,7 +535,7 @@ export type ExtractPath<Path extends string> =
 export interface InternalRoute<Instance extends ElysiaInstance> {
 	method: HTTPMethod
 	path: string
-	composed: ComposedHandler,
+	composed: ComposedHandler
 	handler: Handler<any, Instance>
 	hooks: LocalHook<any, any, string>
 }

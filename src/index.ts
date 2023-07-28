@@ -6,7 +6,9 @@ import {
 	mergeHook,
 	getSchemaValidator,
 	getResponseSchemaValidator,
-	mergeDeep
+	mergeDeep,
+	checksum,
+	mergeLifeCycle
 } from './utils'
 import type { Context } from './context'
 
@@ -99,6 +101,13 @@ export default class Elysia<
 	}
 > {
 	config: ElysiaConfig
+	private dependencies: Record<
+		string,
+		{
+			seed: unknown
+			checksum: number
+		}[]
+	> = {}
 
 	store: Instance['store'] = {}
 	meta: Instance['meta'] = {
@@ -108,7 +117,7 @@ export default class Elysia<
 	}
 
 	// Will be applied to Context
-	decorators: Instance['request'] = {}
+	private decorators: Instance['request'] = {}
 
 	event: LifeCycleStore<Instance> = {
 		start: [],
@@ -142,7 +151,7 @@ export default class Elysia<
 		>,
 		all: ''
 	}
-	wsRouter: Memoirist<any> | undefined
+	private wsRouter: Memoirist<any> | undefined
 
 	private dynamicRouter = new Memoirist<DynamicHandler>()
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
@@ -150,7 +159,7 @@ export default class Elysia<
 	constructor(config?: Partial<ElysiaConfig>) {
 		this.config = {
 			forceErrorEncapsulation: false,
-			basePath: '',
+			prefix: '',
 			// @ts-ignore
 			aot: typeof CF === 'undefined',
 			strictPath: false,
@@ -170,7 +179,7 @@ export default class Elysia<
 		path =
 			path === '' ? path : path.charCodeAt(0) === 47 ? path : `/${path}`
 
-		if (this.config.basePath) path = this.config.basePath + path
+		if (this.config.prefix) path = this.config.prefix + path
 
 		const defs = this.meta.defs
 
@@ -240,7 +249,9 @@ export default class Elysia<
 		} as any
 
 		const hooks = mergeHook(this.event, hook as RegisteredHook)
-		const loosePath = path.endsWith("/") ? path.slice(0, path.length - 1) : path + '/'
+		const loosePath = path.endsWith('/')
+			? path.slice(0, path.length - 1)
+			: path + '/'
 
 		if (this.config.aot === false) {
 			this.dynamicRouter.add(method, path, {
@@ -279,7 +290,7 @@ export default class Elysia<
 			path,
 			composed: mainHandler,
 			handler,
-			hooks: mergeHook({ ...this.event }, hook as RegisteredHook)
+			hooks: mergeHook(this.event, hook as RegisteredHook)
 		})
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
@@ -761,7 +772,7 @@ export default class Elysia<
 		: this {
 		const instance = new Elysia<any>({
 			...this.config,
-			basePath: this.config.basePath + prefix
+			prefix: this.config.prefix + prefix
 		})
 		instance.store = this.store
 
@@ -776,6 +787,12 @@ export default class Elysia<
 			this.event.request = [
 				...this.event.request,
 				...sandbox.event.request
+			]
+
+		if (sandbox.event.onResponse.length)
+			this.event.onResponse = [
+				...this.event.onResponse,
+				...sandbox.event.onResponse
 			]
 
 		this.model(sandbox.meta.defs)
@@ -850,29 +867,27 @@ export default class Elysia<
 		return this as any
 	}
 
-	/**
-	 * ### guard
-	 * Encapsulate and pass hook into all child handler
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .guard({
-	 *          schema: {
-	 *              body: t.Object({
-	 *                  username: t.String(),
-	 *                  password: t.String()
-	 *              })
-	 *          }
-	 *     }, app => app
-	 *         .get("/", () => 'Hi')
-	 *         .get("/name", () => 'Elysia')
-	 *     })
-	 * ```
-	 */
+	guard<
+		Schema extends TypedSchema<
+			Exclude<keyof Instance['meta']['defs'], number | symbol>
+		>
+	>(
+		hook: LocalHook<Schema, Instance>
+	): Elysia<{
+		path: Instance['path']
+		error: Instance['error']
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		meta: Instance['meta'] &
+			Record<
+				'schema',
+				{
+					[key in keyof Schema]: Schema[key]
+				}
+			>
+	}>
+
 	guard<
 		Schema extends TypedSchema<
 			Exclude<keyof Instance['meta']['defs'], number | symbol>
@@ -921,7 +936,41 @@ export default class Elysia<
 						}
 					>
 		  }>
-		: this {
+		: this
+
+	/**
+	 * ### guard
+	 * Encapsulate and pass hook into all child handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .guard({
+	 *          schema: {
+	 *              body: t.Object({
+	 *                  username: t.String(),
+	 *                  password: t.String()
+	 *              })
+	 *          }
+	 *     }, app => app
+	 *         .get("/", () => 'Hi')
+	 *         .get("/name", () => 'Elysia')
+	 *     })
+	 * ```
+	 */
+	guard(
+		hook: LocalHook<any, Instance>,
+		run?: (group: Elysia<any>) => Elysia<any>
+	): Elysia<any> {
+		if (!run) {
+			this.event = mergeLifeCycle(this.event, hook)
+
+			return this
+		}
+
 		const instance = new Elysia<any>()
 		instance.store = this.store
 		if (this.wsRouter) instance.use(ws())
@@ -933,6 +982,12 @@ export default class Elysia<
 			this.event.request = [
 				...this.event.request,
 				...sandbox.event.request
+			]
+
+		if (sandbox.event.onResponse.length)
+			this.event.onResponse = [
+				...this.event.onResponse,
+				...sandbox.event.onResponse
 			]
 
 		this.model(sandbox.meta.defs)
@@ -974,7 +1029,7 @@ export default class Elysia<
 		return this as any
 	}
 
-	// Inline
+	// Inline Fn
 	use<
 		NewInstance extends ElysiaInstance,
 		Params extends Elysia = Elysia<any>
@@ -1005,12 +1060,54 @@ export default class Elysia<
 		}
 	}>
 
-	// Import
+	use<NewInstance extends ElysiaInstance>(
+		instance: Elysia<NewInstance>
+	): Elysia<{
+		path: Instance['path']
+		error: Instance['error'] & NewInstance['error']
+		request: Reconciliation<Instance['request'], NewInstance['request']>
+		store: Reconciliation<Instance['store'], NewInstance['store']>
+		schema: Instance['schema'] & NewInstance['schema']
+		meta: {
+			schema: Instance['meta']['schema'] & NewInstance['meta']['schema']
+			defs: Reconciliation<
+				Instance['meta']['defs'],
+				NewInstance['meta']['defs']
+			>
+			exposed: Instance['meta']['exposed'] &
+				NewInstance['meta']['exposed']
+		}
+	}>
+
+	// Import Fn
 	use<LazyLoadElysia extends ElysiaInstance>(
 		plugin: Promise<{
 			default: (
 				elysia: Elysia<any>
 			) => MaybePromise<Elysia<LazyLoadElysia>>
+		}>
+	): Elysia<{
+		path: Instance['path']
+		error: Instance['error'] & LazyLoadElysia['error']
+		request: Reconciliation<Instance['request'], LazyLoadElysia['request']>
+		store: Reconciliation<Instance['store'], LazyLoadElysia['store']>
+		schema: Instance['schema'] & LazyLoadElysia['schema']
+		meta: {
+			schema: Instance['meta']['schema'] &
+				LazyLoadElysia['meta']['schema']
+			defs: Reconciliation<
+				Instance['meta']['defs'],
+				LazyLoadElysia['meta']['defs']
+			>
+			exposed: Instance['meta']['exposed'] &
+				LazyLoadElysia['meta']['exposed']
+		}
+	}>
+
+	// Import inline
+	use<LazyLoadElysia extends ElysiaInstance>(
+		plugin: Promise<{
+			default: (elysia: Elysia<any>) => Elysia<LazyLoadElysia>
 		}>
 	): Elysia<{
 		path: Instance['path']
@@ -1046,7 +1143,11 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
+			| Elysia<any>
 			| MaybePromise<(app: Elysia<any>) => MaybePromise<Elysia<any>>>
+			| Promise<{
+					default: Elysia<any>
+			  }>
 			| Promise<{
 					default: (elysia: Elysia<any>) => MaybePromise<Elysia<any>>
 			  }>
@@ -1060,9 +1161,86 @@ export default class Elysia<
 								this as unknown as any
 							) as unknown as Elysia
 
-						return plugin.default(
-							this as unknown as any
-						) as unknown as Elysia
+						if (typeof plugin.default === 'function')
+							return plugin.default(
+								this as unknown as any
+							) as unknown as Elysia
+
+						const instance = plugin.default as Elysia<any>
+
+						const {
+							config: { name, seed }
+						} = instance
+
+						if (name) {
+							if (!this.dependencies[name])
+								this.dependencies[name] = []
+
+							const current = {
+								seed,
+								checksum: seed?.toString
+									? checksum(name + seed.toString())
+									: 0
+							}
+
+							if (
+								this.dependencies[name].some(
+									({ checksum }) =>
+										current.checksum === checksum
+								)
+							)
+								return this
+
+							this.dependencies[name].push(current)
+							this.event = mergeLifeCycle(
+								this.event,
+								instance.event,
+								current.checksum
+							)
+						} else
+							this.event = mergeLifeCycle(
+								this.event,
+								instance.event
+							)
+
+						this.decorators = mergeDeep(
+							this.decorators,
+							instance.decorators
+						)
+						this.model(instance.meta.defs)
+
+						Object.values(instance.routes).forEach(
+							({ method, path, handler, hooks }) => {
+								const hasWsRoute = instance.wsRouter?.find(
+									'subscribe',
+									path
+								)
+								if (hasWsRoute) {
+									const wsRoute =
+										instance.wsRouter!.history.find(
+											// eslint-disable-next-line @typescript-eslint/no-unused-vars
+											([_, wsPath]) => path === wsPath
+										)
+									if (!wsRoute) return
+
+									return this.ws(
+										path as any,
+										wsRoute[2] as any
+									)
+								}
+
+								this.add(
+									method,
+									path,
+									handler,
+									mergeHook(hooks, {
+										error: instance.event.error
+									})
+								)
+							}
+						)
+
+						return this
 					})
 					.then((x) => x.compile())
 			)
@@ -1070,14 +1248,73 @@ export default class Elysia<
 			return this as unknown as any
 		}
 
-		const instance = plugin(this as unknown as any) as unknown as any
-		if (instance instanceof Promise) {
-			this.lazyLoadModules.push(instance.then((x) => x.compile()))
+		if (typeof plugin === 'function') {
+			const instance = plugin(this as unknown as any) as unknown as any
+			if (instance instanceof Promise) {
+				this.lazyLoadModules.push(instance.then((x) => x.compile()))
 
-			return this as unknown as any
+				return this as unknown as any
+			}
+
+			return instance
 		}
 
-		return instance
+		const {
+			config: { name, seed }
+		} = plugin
+
+		if (name) {
+			if (!(name in this.dependencies)) this.dependencies[name] = []
+
+			const current = {
+				seed,
+				checksum: seed?.toString ? checksum(name + seed.toString()) : 0
+			}
+
+			if (
+				this.dependencies[name].some(
+					({ checksum }) => current.checksum === checksum
+				)
+			)
+				return this
+
+			this.dependencies[name].push(current)
+
+			this.event = mergeLifeCycle(
+				this.event,
+				plugin.event,
+				current.checksum
+			)
+		} else this.event = mergeLifeCycle(this.event, plugin.event)
+
+		this.decorators = mergeDeep(this.decorators, plugin.decorators)
+		this.model(plugin.meta.defs)
+
+		Object.values(plugin.routes).forEach(
+			({ method, path, handler, hooks }) => {
+				const hasWsRoute = plugin.wsRouter?.find('subscribe', path)
+				if (hasWsRoute) {
+					const wsRoute = plugin.wsRouter!.history.find(
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
+						([_, wsPath]) => path === wsPath
+					)
+					if (!wsRoute) return
+
+					return this.ws(path as any, wsRoute[2] as any)
+				}
+
+				this.add(
+					method,
+					path,
+					handler,
+					mergeHook(hooks, {
+						error: plugin.event.error
+					})
+				)
+			}
+		)
+
+		return this
 	}
 
 	mount(handle: (request: Request) => MaybePromise<Response>): this

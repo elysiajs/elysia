@@ -1,8 +1,6 @@
-import { Elysia } from '../src'
+import { Elysia } from '../../src'
 
-const app = new Elysia({
-	aot: false
-})
+const app = new Elysia()
 const total = 10_000
 
 const t = performance.now()
