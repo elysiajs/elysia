@@ -2,6 +2,7 @@
 Feature:
 - Introduce `.mount`
 - Add dynamic mode for TypeBox
+- Add $elysiaChecksum to deduplicate lifecycle event
 
 Change:
 - Using Bun Build for target Bun

@@ -1,14 +1,24 @@
 import { Elysia, t } from '../src'
-import { cookie } from '@elysiajs/cookie'
 
-const group = new Elysia({ prefix: '/v1' })
-	.use(cookie())
-	.get('/cookie', () => 'Hi')
+const cookie = (options?: Record<string, unknown>) =>
+	new Elysia({
+		// name: '@elysiajs/cookie',
+		seed: options
+	}).onTransform(() => {})
+
+const group = new Elysia()
+	.use(
+		cookie({
+			not: 'same'
+		})
+	)
+	.get('/a', () => 'Hi')
 
 const app = new Elysia()
 	.use(cookie())
 	.use(group)
-	.get('/', () => 'Mutsuki need correction 💢💢💢')
+	.get('/cookie', () => 'Hi')
 
-console.log(app.routes[0].path)
-console.log(app.routes[0].hooks.transform.map((x) => x.$elysiaChecksum))
+
+console.log(app.routes[0].hooks.transform.length)
+console.log(app.routes[1].hooks.transform.length)

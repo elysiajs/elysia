@@ -101,13 +101,7 @@ export default class Elysia<
 	}
 > {
 	config: ElysiaConfig
-	private dependencies: Record<
-		string,
-		{
-			seed: unknown
-			checksum: number
-		}[]
-	> = {}
+	private dependencies: Record<string, number[]> = {}
 
 	store: Instance['store'] = {}
 	meta: Instance['meta'] = {
@@ -163,7 +157,8 @@ export default class Elysia<
 			// @ts-ignore
 			aot: typeof CF === 'undefined',
 			strictPath: false,
-			...config
+			...config,
+			seed: config?.name && config.seed === undefined ? '' : config?.seed
 		}
 	}
 
@@ -1176,17 +1171,14 @@ export default class Elysia<
 							if (!this.dependencies[name])
 								this.dependencies[name] = []
 
-							const current = {
-								seed,
-								checksum: seed?.toString
-									? checksum(name + seed.toString())
+							const current =
+								seed !== undefined
+									? checksum(name + JSON.stringify(seed))
 									: 0
-							}
 
 							if (
 								this.dependencies[name].some(
-									({ checksum }) =>
-										current.checksum === checksum
+									(checksum) => current === checksum
 								)
 							)
 								return this
@@ -1195,7 +1187,7 @@ export default class Elysia<
 							this.event = mergeLifeCycle(
 								this.event,
 								instance.event,
-								current.checksum
+								current
 							)
 						} else
 							this.event = mergeLifeCycle(
@@ -1266,25 +1258,16 @@ export default class Elysia<
 		if (name) {
 			if (!(name in this.dependencies)) this.dependencies[name] = []
 
-			const current = {
-				seed,
-				checksum: seed?.toString ? checksum(name + seed.toString()) : 0
-			}
+			const current =
+				seed !== undefined ? checksum(name + JSON.stringify(seed)) : 0
 
 			if (
-				this.dependencies[name].some(
-					({ checksum }) => current.checksum === checksum
-				)
+				this.dependencies[name].some((checksum) => current === checksum)
 			)
 				return this
 
 			this.dependencies[name].push(current)
-
-			this.event = mergeLifeCycle(
-				this.event,
-				plugin.event,
-				current.checksum
-			)
+			this.event = mergeLifeCycle(this.event, plugin.event, current)
 		} else this.event = mergeLifeCycle(this.event, plugin.event)
 
 		this.decorators = mergeDeep(this.decorators, plugin.decorators)

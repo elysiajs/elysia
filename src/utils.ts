@@ -230,8 +230,9 @@ export const mergeLifeCycle = <
 	checksum?: number
 ): LifeCycleStore<A & B> => {
 	const injectChecksum = <T>(x: T): T => {
-		// @ts-ignore
-		x.$elysiaChecksum = checksum
+		if (checksum)
+			// @ts-ignore
+			x.$elysiaChecksum = checksum
 
 		return x
 	}
