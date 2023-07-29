@@ -713,3 +713,47 @@ app.group(
 		a: number
 	}>()
 }
+
+// ? Inherits plugin instance path
+{
+	const plugin = new Elysia().get('/', () => 'hello')
+
+	const server = app.use(plugin)
+
+	type App = (typeof server)['meta']['schema']
+	type Route = App['/']['get']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		body: unknown
+		headers: undefined
+		query: undefined
+		params: undefined
+		response: {
+			'200': string
+		}
+	}>()
+}
+
+// ? Inherits plugin instance prefix
+// {
+// 	const plugin = new Elysia({
+// 		prefix: '/v1'
+// 	}).get('/', () => 'hello')
+
+// 	plugin.config.prefix
+
+// 	const server = app.use(plugin)
+
+// 	type App = (typeof server)['meta']['schema']
+// 	type Route = App['/v1/']['get']
+
+// 	expectTypeOf<Route>().toEqualTypeOf<{
+// 		body: unknown
+// 		headers: undefined
+// 		query: undefined
+// 		params: undefined
+// 		response: {
+// 			'200': string
+// 		}
+// 	}>()
+// }

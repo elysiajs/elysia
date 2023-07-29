@@ -1,4 +1,4 @@
-# 0.6.0-alpha.3
+# 0.6.0-alpha.3 - 29 Jul 2023
 Feature:
 - Introduce `.mount`
 - Add dynamic mode for TypeBox

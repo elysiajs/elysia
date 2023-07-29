@@ -100,7 +100,7 @@ export default class Elysia<
 			defs: {}
 			exposed: {}
 		}
-	}
+	},
 > {
 	config: ElysiaConfig
 	private dependencies: Record<string, number[]> = {}
@@ -151,8 +151,9 @@ export default class Elysia<
 
 	private dynamicRouter = new Memoirist<DynamicHandler>()
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
+	path: Instance['path'] = '' as any
 
-	constructor(config?: Partial<ElysiaConfig>) {
+	constructor(config?: Partial<ElysiaConfig<Instance['path']>>) {
 		this.config = {
 			forceErrorEncapsulation: false,
 			prefix: '',
@@ -161,7 +162,7 @@ export default class Elysia<
 			strictPath: false,
 			...config,
 			seed: config?.name && config.seed === undefined ? '' : config?.seed
-		}
+		} as any
 	}
 
 	private add(
@@ -1067,7 +1068,7 @@ export default class Elysia<
 	use<NewInstance extends ElysiaInstance>(
 		instance: Elysia<NewInstance>
 	): Elysia<{
-		path: Instance['path']
+		path: NewInstance['path']
 		error: Instance['error'] & NewInstance['error']
 		request: Reconciliation<Instance['request'], NewInstance['request']>
 		store: Reconciliation<Instance['store'], NewInstance['store']>
