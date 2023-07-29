@@ -8,7 +8,9 @@ import {
 	getResponseSchemaValidator,
 	mergeDeep,
 	checksum,
-	mergeLifeCycle
+	mergeLifeCycle,
+	injectLocalHookMeta,
+	filterInlineHook
 } from './utils'
 import type { Context } from './context'
 
@@ -285,7 +287,7 @@ export default class Elysia<
 			path,
 			composed: mainHandler,
 			handler,
-			hooks: mergeHook(this.event, hook as RegisteredHook)
+			hooks
 		})
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
@@ -962,6 +964,13 @@ export default class Elysia<
 	): Elysia<any> {
 		if (!run) {
 			this.event = mergeLifeCycle(this.event, hook)
+			this.$schema = {
+				body: hook.body,
+				headers: hook.headers,
+				params: hook.params,
+				query: hook.query,
+				response: hook.response
+			}
 
 			return this
 		}
@@ -1290,7 +1299,7 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(hooks, {
+					mergeHook(filterInlineHook(hooks), {
 						error: plugin.event.error
 					})
 				)
@@ -1451,7 +1460,12 @@ export default class Elysia<
 			>
 		}
 	}> {
-		this.add('GET', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'GET',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -1579,7 +1593,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('POST', path, handler as any, hook as LocalHook<any, any>)
+		this.add(
+			'POST',
+			path,
+			handler as any,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -1706,7 +1725,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('PUT', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'PUT',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -1833,7 +1857,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('PATCH', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'PATCH',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -1960,7 +1989,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('DELETE', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'DELETE',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -2087,7 +2121,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('OPTIONS', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'OPTIONS',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -2209,7 +2248,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('ALL', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'ALL',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -2336,7 +2380,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('HEAD', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'HEAD',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -2463,7 +2512,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('TRACE', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'TRACE',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -2590,7 +2644,12 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add('CONNECT', path, handler, hook as LocalHook<any, any>)
+		this.add(
+			'CONNECT',
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>)
+		)
 
 		return this as any
 	}
@@ -2834,7 +2893,13 @@ export default class Elysia<
 				>
 			>
 	}> {
-		this.add(method, path, handler, hook as LocalHook<any, any>, config)
+		this.add(
+			method,
+			path,
+			handler,
+			injectLocalHookMeta(hook as LocalHook<any, any>),
+			config
+		)
 
 		return this as any
 	}

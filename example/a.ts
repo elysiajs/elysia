@@ -1,24 +1,27 @@
 import { Elysia, t } from '../src'
+import { cookie } from '@elysiajs/cookie'
 
-const cookie = (options?: Record<string, unknown>) =>
-	new Elysia({
-		// name: '@elysiajs/cookie',
-		seed: options
-	}).onTransform(() => {})
-
-const group = new Elysia()
+const setup = new Elysia()
+	.use(cookie())
+	.use(cookie())
+	.use(cookie())
+	.use(cookie())
+	.use(cookie())
+	.use(cookie())
+	.use(cookie())
+	.use(cookie())
+	.use(cookie())
+	.use(cookie())
 	.use(
-		cookie({
-			not: 'same'
+		cookie({ // Difference options, register this
+			secret: 'A'
 		})
 	)
-	.get('/a', () => 'Hi')
 
 const app = new Elysia()
-	.use(cookie())
-	.use(group)
+	.use(cookie()) // Register this once
+	.use(setup)
 	.get('/cookie', () => 'Hi')
 
-
-console.log(app.routes[0].hooks.transform.length)
-console.log(app.routes[1].hooks.transform.length)
+// @ts-ignore: private
+console.log(app.routes[0].hooks.transform!.length)

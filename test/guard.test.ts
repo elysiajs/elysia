@@ -55,9 +55,9 @@ describe('guard', () => {
 	it('validate headers', async () => {
 		const app = new Elysia().guard(
 			{
-					headers: t.Object({
-						authorization: t.String()
-					})
+				headers: t.Object({
+					authorization: t.String()
+				})
 			},
 			(app) => app.get('/', () => 'Hello')
 		)
@@ -81,9 +81,9 @@ describe('guard', () => {
 				transform({ params }) {
 					if (!+Number.isNaN(params.id)) params.id = +params.id
 				},
-					params: t.Object({
-						id: t.Number()
-					})
+				params: t.Object({
+					id: t.Number()
+				})
 			},
 			(app) => app.get('/id/:id', () => 'Hello')
 		)
@@ -98,9 +98,9 @@ describe('guard', () => {
 	it('validate query', async () => {
 		const app = new Elysia().guard(
 			{
-					query: t.Object({
-						name: t.String()
-					})
+				query: t.Object({
+					name: t.String()
+				})
 			},
 			(app) => app.get('/', () => 'Hello')
 		)
@@ -115,9 +115,9 @@ describe('guard', () => {
 	it('validate body', async () => {
 		const app = new Elysia().guard(
 			{
-					body: t.Object({
-						name: t.String()
-					})
+				body: t.Object({
+					name: t.String()
+				})
 			},
 			(app) => app.post('/', ({ body }) => body)
 		)
@@ -140,7 +140,7 @@ describe('guard', () => {
 	it('validate response', async () => {
 		const app = new Elysia().guard(
 			{
-					response: t.String()
+				response: t.String()
 			},
 			(app) =>
 				app
@@ -148,6 +148,22 @@ describe('guard', () => {
 					// @ts-ignore
 					.get('/error', () => 1)
 		)
+
+		const error = await app.handle(req('/error'))
+		const correct = await app.handle(req('/correct'))
+
+		expect(correct.status).toBe(200)
+		expect(error.status).toBe(400)
+	})
+
+	it('apply guard globally', async () => {
+		const app = new Elysia()
+			.guard({
+				response: t.String()
+			})
+			.get('/correct', () => 'Hello')
+			// @ts-ignore
+			.get('/error', () => 1)
 
 		const error = await app.handle(req('/error'))
 		const correct = await app.handle(req('/correct'))

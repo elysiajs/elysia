@@ -7,7 +7,8 @@ import type {
 	LifeCycleStore,
 	LocalHook,
 	TypedSchema,
-	RegisteredHook
+	RegisteredHook,
+	WithArray
 } from './types'
 
 // export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
@@ -28,7 +29,7 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 
 	for (const item of Array.isArray(b) ? b : [b]) {
 		// @ts-ignore
-		if (!checksums.includes(item.$elysiaChecksum)) array.push(item)
+		if (!checksums.includes(item?.$elysiaChecksum)) array.push(item)
 	}
 
 	return array
@@ -50,16 +51,14 @@ export const mergeHook = (
 		query: b?.query ?? a?.query,
 		// @ts-ignore
 		response: b?.response ?? a?.response,
-		onResponse: mergeObjectArray(
-			a.onResponse ?? [],
-			b?.onResponse ?? []
-		) as any,
+		type: a?.type || b?.type,
 		detail: mergeDeep(
 			// @ts-ignore
 			b?.detail ?? {},
 			// @ts-ignore
 			a?.detail ?? {}
 		),
+		parse: mergeObjectArray((a.parse as any) ?? [], b?.parse ?? []),
 		transform: mergeObjectArray(
 			a.transform ?? [],
 			b?.transform ?? []
@@ -68,13 +67,16 @@ export const mergeHook = (
 			a.beforeHandle ?? [],
 			b?.beforeHandle ?? []
 		),
-		parse: mergeObjectArray((a.parse as any) ?? [], b?.parse ?? []),
 		afterHandle: mergeObjectArray(
 			a.afterHandle ?? [],
 			b?.afterHandle ?? []
 		),
-		error: mergeObjectArray(a.error ?? [], b?.error ?? []),
-		type: a?.type || b?.type
+		onResponse: mergeObjectArray(
+			a.onResponse ?? [],
+			b?.onResponse ?? []
+		) as any,
+
+		error: mergeObjectArray(a.error ?? [], b?.error ?? [])
 	}
 }
 
@@ -237,14 +239,7 @@ export const mergeLifeCycle = <
 		return x
 	}
 
-	// if (a.transform.length)
-	// 	console.log({
-	// 		"A": "A",
-	// 		a: a.transform.map((x) => x.$elysiaChecksum),
-	// 		b: a.transform.map((x) => x.$elysiaChecksum)
-	// 	})
-
-	const basd = {
+	return {
 		start: mergeObjectArray(
 			a.start as any,
 			('start' in b ? b.start : []).map(injectChecksum) as any
@@ -253,39 +248,94 @@ export const mergeLifeCycle = <
 			a.request as any,
 			('request' in b ? b.request : []).map(injectChecksum) as any
 		),
-		parse: mergeObjectArray(a.parse as any, b.parse as any).map(
+		parse: mergeObjectArray(a.parse as any, b?.parse ?? ([] as any)).map(
 			injectChecksum
 		),
 		transform: mergeObjectArray(
 			a.transform as any,
-			(b.transform as any).map(injectChecksum)
+			(b?.transform ?? ([] as any)).map(injectChecksum)
 		),
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle as any,
-			(b.beforeHandle as any).map(injectChecksum)
+			(b?.beforeHandle ?? ([] as any)).map(injectChecksum)
 		),
 		afterHandle: mergeObjectArray(
 			a.afterHandle as any,
-			(b.afterHandle as any).map(injectChecksum)
+			(b?.afterHandle ?? ([] as any)).map(injectChecksum)
 		),
 		onResponse: mergeObjectArray(
 			a.onResponse as any,
-			(b.onResponse as any).map(injectChecksum)
+			(b?.onResponse ?? ([] as any)).map(injectChecksum)
 		),
 		error: mergeObjectArray(
 			a.error as any,
-			(b.error as any).map(injectChecksum)
+			(b?.error ?? ([] as any)).map(injectChecksum)
 		),
 		stop: mergeObjectArray(
 			a.stop as any,
 			('stop' in b ? b.stop : ([] as any)).map(injectChecksum)
 		)
 	}
+}
 
-	// if (a.transform.length)
-	// 	console.log({
-	// 		summed: basd.transform.map((x) => x.$elysiaChecksum)
-	// 	})
+const injectInline = <T extends WithArray<Function> | undefined>(fn: T): T => {
+	if (!fn) return fn
 
-	return basd
+	if (typeof fn === 'function') {
+		// @ts-ignore
+		fn.$elysiaHookType = 'inline'
+
+		return fn
+	}
+
+	return fn.map((x) => {
+		// @ts-ignore
+		x.$elysiaHookType = 'inline'
+
+		return x
+	}) as T
+}
+
+export const injectLocalHookMeta = <T extends LocalHook<any, any>>(
+	hook: T
+): T => {
+	return {
+		// rest is validator
+		...hook,
+		type: hook?.type,
+		detail: hook?.detail,
+		parse: injectInline(hook?.parse),
+		transform: injectInline(hook?.transform),
+		beforeHandle: injectInline(hook?.beforeHandle),
+		afterHandle: injectInline(hook?.afterHandle),
+		onResponse: injectInline(hook?.onResponse),
+		error: injectInline(hook?.error)
+	} as T
+}
+
+const filterInline = <T extends WithArray<Function> | undefined>(fn: T): T => {
+	if (!fn) return fn
+
+	if (typeof fn === 'function') {
+		// @ts-ignore
+		return fn.$elysiaHookType === 'inline' ? fn : undefined
+	}
+
+	// @ts-ignore
+	return fn.filter((x) => x.$elysiaHookType === 'inline') as T
+}
+
+export const filterInlineHook = <T extends LocalHook<any, any>>(hook: T): T => {
+	return {
+		// rest is validator
+		...hook,
+		type: hook?.type,
+		detail: hook?.detail,
+		parse: filterInline(hook?.parse),
+		transform: filterInline(hook?.transform),
+		beforeHandle: filterInline(hook?.beforeHandle),
+		afterHandle: filterInline(hook?.afterHandle),
+		onResponse: filterInline(hook?.onResponse),
+		error: filterInline(hook?.error)
+	} as T
 }

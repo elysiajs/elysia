@@ -3,6 +3,10 @@ Feature:
 - Introduce `.mount`
 - Add dynamic mode for TypeBox
 - Add $elysiaChecksum to deduplicate lifecycle event
+- Add $elysiaHookType to differentiate between global and local hook in `use`
+
+Fix:
+- Deduplication of plugin's lifecycle (see $elysiaHookType)
 
 Change:
 - Using Bun Build for target Bun
