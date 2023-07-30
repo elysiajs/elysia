@@ -100,7 +100,7 @@ export default class Elysia<
 			defs: {}
 			exposed: {}
 		}
-	},
+	}
 > {
 	config: ElysiaConfig
 	private dependencies: Record<string, number[]> = {}
@@ -133,7 +133,7 @@ export default class Elysia<
 	private error: Instance['error'] = {}
 
 	private router = new Memoirist<ComposedHandler>()
-	private routes: InternalRoute<Instance>[] = []
+	routes: InternalRoute<Instance>[] = []
 
 	private staticRouter = {
 		handlers: [] as ComposedHandler[],
@@ -153,7 +153,7 @@ export default class Elysia<
 	private lazyLoadModules: Promise<Elysia<any>>[] = []
 	path: Instance['path'] = '' as any
 
-	constructor(config?: Partial<ElysiaConfig<Instance['path']>>) {
+	constructor(config?: Partial<ElysiaConfig>) {
 		this.config = {
 			forceErrorEncapsulation: false,
 			prefix: '',
@@ -502,6 +502,91 @@ export default class Elysia<
 		return this
 	}
 
+	addError<
+		const Errors extends Record<
+			string,
+			| Error
+			| {
+					prototype: Error
+			  }
+		>
+	>(
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		errors: Errors
+	): Elysia<{
+		path: Instance['path']
+		store: Instance['store']
+		error: Instance['error'] & {
+			[K in NonNullable<keyof Errors>]: Errors[K] extends {
+				prototype: infer LiteralError extends Error
+			}
+				? LiteralError
+				: Errors[K]
+		}
+		request: Instance['request']
+		schema: Instance['schema']
+		meta: Instance['meta']
+	}>
+
+	addError<
+		Name extends string,
+		const CustomError extends
+			| Error
+			| {
+					prototype: Error
+			  }
+	>(
+		name: Name,
+		errors: CustomError
+	): Elysia<{
+		path: Instance['path']
+		store: Instance['store']
+		error: Instance['error'] & {
+			[name in Name]: CustomError extends {
+				prototype: infer LiteralError extends Error
+			}
+				? LiteralError
+				: CustomError
+		}
+		request: Instance['request']
+		schema: Instance['schema']
+		meta: Instance['meta']
+	}>
+
+	/**
+	 * Register errors
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onError(({ code }) => {
+	 *         if(code === "NOT_FOUND")
+	 *             return "Path not found :("
+	 *     })
+	 * ```
+	 */
+	addError(
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		name:
+			| string
+			| Record<
+					string,
+					| Error
+					| {
+							prototype: Error
+					  }
+			  >,
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		error?:
+			| Error
+			| {
+					prototype: Error
+			  }
+	): Elysia<any> {
+		return this
+	}
+
 	/**
 	 * ### Error | Life cycle event
 	 * Called when error is thrown during processing request
@@ -516,20 +601,10 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onError<Errors extends Record<string, Error> = Instance['error']>(
-		handler?: ErrorHandler<
-			{
-				[K in NonNullable<keyof Errors>]: Errors[K]
-			} & {
-				[K in NonNullable<keyof Instance['error']>]: Errors[K]
-			}
-		>
-	): Elysia<{
+	onError(handler?: ErrorHandler<Instance['error']>): Elysia<{
 		path: Instance['path']
 		store: Instance['store']
-		error: Instance['error'] & {
-			[K in NonNullable<keyof Errors>]: Errors[K]
-		}
+		error: Instance['error']
 		request: Instance['request']
 		schema: Instance['schema']
 		meta: Instance['meta']
@@ -3211,7 +3286,7 @@ export default class Elysia<
 			? composeGeneralHandler(this)
 			: createDynamicHandler(this))(request)
 
-	handleError = async (
+	private handleError = async (
 		request: Request,
 		error:
 			| Error

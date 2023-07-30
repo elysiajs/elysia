@@ -1,3 +1,7 @@
+# 0.6.0-alpha.4
+Feature:
+- Add `addError` to declaratively add Error to scope
+
 # 0.6.0-alpha.3 - 29 Jul 2023
 Feature:
 - Introduce `.mount`

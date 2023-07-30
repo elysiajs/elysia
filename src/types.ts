@@ -500,11 +500,11 @@ export type OverwritableTypeRoute = {
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
-export type ElysiaConfig<Prefix extends string = ''> = {
+export type ElysiaConfig = {
 	name?: string
 	seed?: unknown
 	serve?: Partial<Serve>
-	prefix?: Prefix
+	prefix?: string
 	/**
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */

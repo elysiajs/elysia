@@ -1,27 +1,31 @@
 import { Elysia, t } from '../src'
-import { cookie } from '@elysiajs/cookie'
 
-const setup = new Elysia()
-	.use(cookie())
-	.use(cookie())
-	.use(cookie())
-	.use(cookie())
-	.use(cookie())
-	.use(cookie())
-	.use(cookie())
-	.use(cookie())
-	.use(cookie())
-	.use(cookie())
-	.use(
-		cookie({ // Difference options, register this
-			secret: 'A'
-		})
-	)
+class CustomError extends Error {
+	constructor(public message: string) {
+		super(message)
+	}
+}
 
-const app = new Elysia()
-	.use(cookie()) // Register this once
+const setup = new Elysia({
+	name: 'setup'
+})
+	.decorate('A', 'A')
+	.state('B', 'B')
+	.model('string', t.String())
+	.addError('CUSTOM_ERROR_0', CustomError)
+	.addError({
+		CUSTOM_ERROR_1: CustomError,
+		CUSTOM_ERROR_2: CustomError
+	})
+
+const a = new Elysia({ prefix: '/hello' })
 	.use(setup)
-	.get('/cookie', () => 'Hi')
-
-// @ts-ignore: private
-console.log(app.routes[0].hooks.transform!.length)
+	.post('/', ({ A, store: { B } }) => 'Hello', {
+		body: 'string'
+	})
+	.onError(({ code, error }) => {
+		switch (code) {
+			case 'CUSTOM_ERROR_0':
+				return error
+		}
+	})
