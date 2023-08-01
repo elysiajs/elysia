@@ -1,6 +1,7 @@
 # 0.6.0-alpha.4
 Feature:
 - Add `addError` to declaratively add Error to scope
+- Add `afterHandle` now can return a literal value instead of limited to only `Response`
 
 # 0.6.0-alpha.3 - 29 Jul 2023
 Feature:

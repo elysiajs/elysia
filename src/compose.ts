@@ -569,14 +569,14 @@ export const composeHandler = ({
 
 						if (!returning) {
 							fnLiteral += isAsync(hooks.afterHandle[i])
-								? `await afterHandle[${i}](c, ${beName});\n`
-								: `afterHandle[${i}](c, ${beName});\n`
+								? `mapEarlyResponse(await afterHandle[${i}](c, ${beName}), c.set);\n`
+								: `mapEarlyResponse(afterHandle[${i}](c, ${beName}), c.set);\n`
 						} else {
 							const name = `af${i}`
 
 							fnLiteral += isAsync(hooks.afterHandle[i])
-								? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
-								: `const ${name} = afterHandle[${i}](c, ${beName});\n`
+								? `const ${name} = mapEarlyResponse(await afterHandle[${i}](c, ${beName}), c.set);\n`
+								: `const ${name} = mapEarlyResponse(afterHandle[${i}](c, ${beName}), c.set);\n`
 
 							fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
 						}
@@ -605,12 +605,12 @@ export const composeHandler = ({
 
 			if (!returning) {
 				fnLiteral += isAsync(hooks.afterHandle[i])
-					? `await afterHandle[${i}](c, r)\n`
-					: `afterHandle[${i}](c, r)\n`
+					? `mapEarlyResponse(await afterHandle[${i}](c, r), c.set)\n`
+					: `mapEarlyResponse(afterHandle[${i}](c, r), c.set)\n`
 			} else {
 				fnLiteral += isAsync(hooks.afterHandle[i])
-					? `let ${name} = await afterHandle[${i}](c, r)\n`
-					: `let ${name} = afterHandle[${i}](c, r)\n`
+					? `let ${name} = mapEarlyResponse(await afterHandle[${i}](c, r), c.set)\n`
+					: `let ${name} = mapEarlyResponse(afterHandle[${i}](c, r), c.set)\n`
 
 				if (validator.response) {
 					fnLiteral += `if(${name} !== undefined) {`
@@ -697,8 +697,6 @@ export const composeHandler = ({
 	${handleResponse}
 }`
 	}
-
-	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,
