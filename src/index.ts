@@ -3327,7 +3327,7 @@ export default class Elysia<
 		this.compile()
 
 		if (typeof options === 'string') {
-			options = +options
+			options = +(options.trim())
 
 			if (Number.isNaN(options))
 				throw new Error('Port must be a numeric value')
@@ -3336,7 +3336,7 @@ export default class Elysia<
 		const fetch = this.fetch
 
 		const development =
-			(process.env.ENV ?? process.env.NODE_ENV) !== 'production'
+			(Bun?.env.NODE_ENV ?? process.env.ENV ?? process.env.NODE_ENV) !== 'production'
 
 		const serve: Serve =
 			typeof options === 'object'
