@@ -1,4 +1,5 @@
 import type { Serve, Server } from 'bun'
+import * as nodeProcess from 'node:process'
 
 import { Memoirist } from 'memoirist'
 
@@ -3335,8 +3336,8 @@ export default class Elysia<
 
 		const fetch = this.fetch
 
-		const development =
-			(Bun?.env.NODE_ENV ?? process.env.ENV ?? process.env.NODE_ENV) !== 'production'
+		const env = (Bun !== null ? Bun.env : process !== null ? process.env : nodeProcess.env)
+		const development = (env?.ENV ?? env?.NODE_ENV) !== 'production'
 
 		const serve: Serve =
 			typeof options === 'object'
