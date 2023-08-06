@@ -445,7 +445,7 @@ export const composeHandler = ({
 			switch (typeof properties) {
 				case 'object':
 					for (const property of properties)
-						fnLiteral += `c.params.${property} = +c.params.${property};`
+						fnLiteral += `if(c.params.${property}) c.params.${property} = +c.params.${property};`
 					break
 			}
 
@@ -461,7 +461,7 @@ export const composeHandler = ({
 			switch (typeof properties) {
 				case 'object':
 					for (const property of properties)
-						fnLiteral += `c.query.${property} = +c.query.${property};`
+						fnLiteral += `if(c.query.${property}) c.query.${property} = +c.query.${property};`
 					break
 			}
 

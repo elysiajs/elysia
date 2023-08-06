@@ -357,4 +357,26 @@ describe('Schema', () => {
 		expect(r2).toBe(200)
 		expect(r3).toBe(400)
 	})
+
+	it('parse numeric params', async () => {
+		const app = new Elysia().get(
+			'/test/:id/:id2/:id3',
+			({ params }) => params,
+			{
+				params: t.Object({
+					id: t.Numeric(),
+					id2: t.Optional(t.Numeric()),
+					id3: t.String()
+				})
+			}
+		)
+
+		const res = await app.handle(req('/test/1/2/3')).then((x) => x.json())
+
+		expect(res).toEqual({
+			id: 1,
+			id2: 2,
+			id3: '3'
+		})
+	})
 })

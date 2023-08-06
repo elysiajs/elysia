@@ -74,13 +74,13 @@ export type ElysiaWSContext<
 	Path extends string = never
 > = ServerWebSocket<
 	Context<{
-		body: UnwrapSchema<Schema['body'], Definitions, undefined>
-		headers: UnwrapSchema<Schema['headers'], Definitions, undefined>
-		query: UnwrapSchema<Schema['query'], Definitions, undefined>
+		body: UnwrapSchema<Schema['body'], Definitions>
+		headers: UnwrapSchema<Schema['headers'], Definitions, Record<string, string>>
+		query: UnwrapSchema<Schema['query'], Definitions, Record<string, string>>
 		params: ExtractPath<Path> extends infer Params extends string
 			? Record<Params, string>
-			: UnwrapSchema<Schema['params'], Definitions, undefined>
-		response: UnwrapSchema<Schema['response'], Definitions, undefined>
+			: UnwrapSchema<Schema['params'], Definitions, Record<string, string>>
+		response: UnwrapSchema<Schema['response'], Definitions>
 	}> & {
 		id: number
 		message: TypeCheck<any>
