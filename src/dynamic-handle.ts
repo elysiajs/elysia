@@ -262,6 +262,7 @@ export const createDynamicHandler =
 
 			return mapResponse(response, context.set)
 		} catch (error) {
+			// @ts-ignore
 			return app.handleError(request, error as Error, set)
 		} finally {
 			// @ts-ignore

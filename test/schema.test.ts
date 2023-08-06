@@ -124,15 +124,11 @@ describe('Schema', () => {
 	it('validate afterHandle', async () => {
 		const app = new Elysia()
 			.get('/', () => 'Mutsuki need correction 💢💢💢', {
-				afterHandle() {
-					return 'Mutsuki need correction 💢💢💢'
-				},
+				afterHandle: () => 'Mutsuki need correction 💢💢💢',
 				response: t.String()
 			})
 			.get('/invalid', () => 1 as any, {
-				afterHandle() {
-					return 1 as any
-				},
+				afterHandle: () => 1 as any,
 				response: t.String()
 			})
 		const res = await app.handle(req('/'))
