@@ -1,20 +1,12 @@
-import { ClientRequest } from 'http'
-import { Elysia, ws, t } from '../src'
+import { Elysia, t } from '../src'
 
-const grid = [[1]]
-
-const app = new Elysia().use(ws()).ws('/ws', {
-	body: t.Object({
-		type: t.String(),
-		row: t.Number(),
-		col: t.Number()
-	}),
-	message(ws, message) {
-		if (message.type === 'increment') {
-			grid[message.row][message.col] += 1
-		}
-	},
-	open(ws) {
-		ws.send(grid)
-	}
-})
+const app = new Elysia()
+	.get('/', () => 'Mutsuki need correction 💢💢💢', {
+		afterHandle: () => 'Mutsuki need correction 💢💢💢',
+		response: t.String()
+	})
+	.get('/invalid', () => 1 as any, {
+		afterHandle: () => 1 as any,
+		response: t.String()
+	})
+	.listen(3000)

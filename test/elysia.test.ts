@@ -89,4 +89,20 @@ describe('Elysia', () => {
 			message: 'Hello, world!'
 		})
 	})
+
+	it('handle strict path and loose path', async () => {
+		const loose = new Elysia().group('/a', (app) =>
+			app.get('/', () => 'Hi')
+		)
+
+		expect(await loose.handle(req('/a')).then((x) => x.status)).toBe(200)
+		expect(await loose.handle(req('/a/')).then((x) => x.status)).toBe(200)
+
+		const strict = new Elysia({
+			strictPath: true
+		}).group('/a', (app) => app.get('/', () => 'Hi'))
+
+		expect(await strict.handle(req('/a')).then((x) => x.status)).toBe(404)
+		expect(await strict.handle(req('/a/')).then((x) => x.status)).toBe(200)
+	})
 })

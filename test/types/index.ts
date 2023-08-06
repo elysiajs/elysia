@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { t, Elysia, DEFS, SCHEMA, TypedSchema } from '../../src'
+import { t, Elysia, TypedSchema } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -451,7 +451,7 @@ app.use(plugin).group(
 			)
 	)
 
-	type App = (typeof server)['meta'][typeof SCHEMA]
+	type App = (typeof server)['meta']['schema']
 	type Route = App['/v1/a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -495,7 +495,7 @@ app.use(plugin).group(
 			)
 	)
 
-	type App = (typeof server)['meta'][typeof SCHEMA]
+	type App = (typeof server)['meta']['schema']
 	type Route = App['/v1/a']['subscribe']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -515,7 +515,7 @@ app.use(plugin).group(
 {
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
-	type App = (typeof server)['meta'][typeof SCHEMA]
+	type App = (typeof server)['meta']['schema']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -529,6 +529,7 @@ app.use(plugin).group(
 	}>()
 }
 
+// ? Register wildcard as params
 app.get('/*', ({ params }) => {
 	expectTypeOf<typeof params>().toEqualTypeOf<{
 		'*': string
@@ -543,3 +544,216 @@ app.get('/*', ({ params }) => {
 
 	return 'hello'
 })
+
+// ? Handle recursive path typing
+app.group(
+	'/:a',
+	{
+		beforeHandle({ params, params: { a } }) {
+			expectTypeOf<typeof params>().toEqualTypeOf<{
+				a: string
+			}>()
+
+			return a
+		}
+	},
+	(app) =>
+		app
+			.get('/', ({ params, params: { a } }) => {
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					a: string
+				}>()
+
+				return a
+			})
+			.group('/:b', (app) =>
+				app.get('/', ({ params, params: { a, b } }) => {
+					expectTypeOf<typeof params>().toEqualTypeOf<{
+						a: string
+						b: string
+					}>()
+
+					return b
+				})
+			)
+			.group(
+				'/:c',
+				{
+					beforeHandle({ params, params: { a, c } }) {
+						expectTypeOf<typeof params>().toEqualTypeOf<{
+							a: string
+							c: string
+						}>()
+
+						return a
+					}
+				},
+				(app) =>
+					app.get('/', ({ params, params: { a, c } }) => {
+						expectTypeOf<typeof params>().toEqualTypeOf<{
+							a: string
+							c: string
+						}>()
+
+						return c
+					})
+			)
+)
+
+// ? Handle recursive schema collision causing infinite type
+app.group(
+	'/:a',
+	{
+		body: t.Object({
+			username: t.String()
+		}),
+		query: t.Object({
+			user: t.String()
+		}),
+		beforeHandle({ body }) {
+			expectTypeOf<typeof body>().toEqualTypeOf<{
+				username: string
+			}>()
+		}
+	},
+	(app) =>
+		app.group(
+			'/:c',
+			{
+				beforeHandle({ body, query }) {
+					expectTypeOf<typeof body>().toEqualTypeOf<{
+						password: string
+					}>()
+
+					expectTypeOf<typeof query>().toEqualTypeOf<{
+						user: string
+					}>()
+
+					return body
+				},
+				body: t.Object({
+					password: t.String()
+				})
+			},
+			(app) =>
+				app.get('/', ({ body }) => {
+					expectTypeOf<typeof body>().toEqualTypeOf<{
+						password: string
+					}>()
+
+					return body
+				})
+		)
+)
+
+// ? Reconcilation on state
+{
+	const a = app.state('a', 'a' as const)
+	const b = a.state('a', 'b' as const)
+
+	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
+		a: 'a'
+	}>()
+
+	expectTypeOf<(typeof b)['store']>().toEqualTypeOf<{
+		a: 'b'
+	}>()
+}
+
+// ? Reconcilation on decorator
+{
+	const a = app.decorate('a', 'a' as const)
+	const b = a.decorate('a', 'b' as const)
+
+	expectTypeOf<(typeof a)['decorators']>().toEqualTypeOf<{
+		a: 'a'
+	}>()
+
+	expectTypeOf<(typeof b)['decorators']>().toEqualTypeOf<{
+		a: 'b'
+	}>()
+}
+
+// ? Reconcilation on model
+{
+	const a = app.model('a', t.String())
+	const b = a.model('a', t.Number())
+
+	expectTypeOf<(typeof a)['meta']['defs']>().toEqualTypeOf<{
+		a: string
+	}>()
+
+	expectTypeOf<(typeof b)['meta']['defs']>().toEqualTypeOf<{
+		a: number
+	}>()
+}
+
+// ? Reconcilation on use
+{
+	const a = app
+		.state('a', 'a' as const)
+		.model('a', t.String())
+		.decorate('a', 'b' as const)
+		.use((app) =>
+			app
+				.state('a', 'b' as const)
+				.model('a', t.Number())
+				.decorate('a', 'b' as const)
+		)
+
+	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
+		a: 'b'
+	}>()
+
+	expectTypeOf<(typeof a)['decorators']>().toEqualTypeOf<{
+		a: 'b'
+	}>()
+
+	expectTypeOf<(typeof a)['meta']['defs']>().toEqualTypeOf<{
+		a: number
+	}>()
+}
+
+// ? Inherits plugin instance path
+{
+	const plugin = new Elysia().get('/', () => 'hello')
+
+	const server = app.use(plugin)
+
+	type App = (typeof server)['meta']['schema']
+	type Route = App['/']['get']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		body: unknown
+		headers: undefined
+		query: undefined
+		params: undefined
+		response: {
+			'200': string
+		}
+	}>()
+}
+
+// ? Inherits plugin instance prefix
+// {
+// 	const plugin = new Elysia({
+// 		prefix: '/v1'
+// 	}).get('/', () => 'hello')
+
+// 	plugin.config.prefix
+
+// 	const server = app.use(plugin)
+
+// 	type App = (typeof server)['meta']['schema']
+// 	type Route = App['/v1/']['get']
+
+// 	expectTypeOf<Route>().toEqualTypeOf<{
+// 		body: unknown
+// 		headers: undefined
+// 		query: undefined
+// 		params: undefined
+// 		response: {
+// 			'200': string
+// 		}
+// 	}>()
+// }

@@ -3,23 +3,19 @@ import type { Elysia } from '.'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
-import { SCHEMA, DEFS } from './utils'
 import { NotFoundError, ValidationError, InternalServerError } from './error'
 
 import type {
 	ElysiaConfig,
-	BeforeRequestHandler,
 	ComposedHandler,
 	HTTPMethod,
 	LocalHandler,
 	RegisteredHook,
-	SchemaValidator
+	SchemaValidator,
+	BeforeRequestHandler
 } from './types'
 import type { TAnySchema } from '@sinclair/typebox'
 import { TypeCheck } from '@sinclair/typebox/compiler'
-
-const ASYNC_FN = 'AsyncFunction'
-const isAsync = (x: Function) => x.constructor.name === ASYNC_FN
 
 const _demoHeaders = new Headers()
 
@@ -188,6 +184,18 @@ const getUnionedType = (validator: TypeCheck<any> | undefined) => {
 	}
 }
 
+const matchFnReturn = /(?:return|=>) \S*\(/g
+
+export const isAsync = (fn: Function) => {
+	if (fn.constructor.name === 'AsyncFunction') return true
+
+	const literal = fn.toString()
+
+	if (literal.match(matchFnReturn)) return true
+
+	return false
+}
+
 export const composeHandler = ({
 	// path,
 	method,
@@ -212,10 +220,17 @@ export const composeHandler = ({
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
 		hooks.error.length > 0 ||
-		typeof Bun === 'undefined'
+		typeof Bun === 'undefined' ||
+		hooks.onResponse.length > 0
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory(hasErrorHandler)
+
+	const handleResponse = hooks.onResponse.length
+		? `\n;(async () => {${hooks.onResponse
+				.map((_, i) => `await res${i}(c)`)
+				.join(';')}})();\n`
+		: ''
 
 	let fnLiteral = hasErrorHandler ? 'try {\n' : ''
 
@@ -232,8 +247,8 @@ export const composeHandler = ({
 	const hasBody =
 		method !== 'GET' &&
 		hooks.type !== 'none' &&
-		(validator.body ||
-			hooks.type ||
+		(!!validator.body ||
+			!!hooks.type ||
 			lifeCycleLiteral.some((fn) => isFnUse('body', fn)))
 
 	const hasHeaders =
@@ -257,10 +272,10 @@ export const composeHandler = ({
 	if (hasQuery) {
 		fnLiteral += `const url = c.request.url
 
-		if(c.query !== -1) {
-			c.query = parseQuery(url.substring(c.query + 1))
+		if(c.qi !== -1) {
+			c.query ??= parseQuery(url.substring(c.qi + 1))
 		} else {
-			c.query = {}
+			c.qi ??= {}
 		}
 		`
 	}
@@ -271,11 +286,11 @@ export const composeHandler = ({
 
 	const maybeAsync =
 		hasBody ||
-		handler.constructor.name === ASYNC_FN ||
-		hooks.parse.length ||
-		hooks.afterHandle.find(isAsync) ||
-		hooks.beforeHandle.find(isAsync) ||
-		hooks.transform.find(isAsync)
+		isAsync(handler) ||
+		hooks.parse.length > 0 ||
+		hooks.afterHandle.some(isAsync) ||
+		hooks.beforeHandle.some(isAsync) ||
+		hooks.transform.some(isAsync)
 
 	if (hasBody) {
 		const type = getUnionedType(validator?.body)
@@ -284,7 +299,7 @@ export const composeHandler = ({
 			if (hooks.type) {
 				switch (hooks.type) {
 					case 'application/json':
-						fnLiteral += `c.body = JSON.parse(await c.request.text());`
+						fnLiteral += `c.body = await c.request.json();`
 						break
 
 					case 'text/plain':
@@ -385,7 +400,7 @@ export const composeHandler = ({
 
 			fnLiteral += `switch (contentType) {
 			case 'application/json':
-				c.body = JSON.parse(await c.request.text())
+				c.body = await c.request.json()
 				break
 
 			case 'text/plain':
@@ -496,15 +511,13 @@ export const composeHandler = ({
 
 			// @ts-ignore
 			if (transform.$elysia === 'derive')
-				fnLiteral +=
-					hooks.transform[i].constructor.name === ASYNC_FN
-						? `Object.assign(c, await transform[${i}](c));`
-						: `Object.assign(c, transform[${i}](c));`
+				fnLiteral += isAsync(hooks.transform[i])
+					? `Object.assign(c, await transform[${i}](c));`
+					: `Object.assign(c, transform[${i}](c));`
 			else
-				fnLiteral +=
-					hooks.transform[i].constructor.name === ASYNC_FN
-						? `await transform[${i}](c);`
-						: `transform[${i}](c);`
+				fnLiteral += isAsync(hooks.transform[i])
+					? `await transform[${i}](c);`
+					: `transform[${i}](c);`
 		}
 
 	if (validator) {
@@ -538,15 +551,13 @@ export const composeHandler = ({
 			const returning = hasReturn(hooks.beforeHandle[i].toString())
 
 			if (!returning) {
-				fnLiteral +=
-					hooks.beforeHandle[i].constructor.name === ASYNC_FN
-						? `await beforeHandle[${i}](c);\n`
-						: `beforeHandle[${i}](c);\n`
+				fnLiteral += isAsync(hooks.beforeHandle[i])
+					? `await beforeHandle[${i}](c);\n`
+					: `beforeHandle[${i}](c);\n`
 			} else {
-				fnLiteral +=
-					hooks.beforeHandle[i].constructor.name === ASYNC_FN
-						? `let ${name} = await beforeHandle[${i}](c);\n`
-						: `let ${name} = beforeHandle[${i}](c);\n`
+				fnLiteral += isAsync(hooks.beforeHandle[i])
+					? `let ${name} = await beforeHandle[${i}](c);\n`
+					: `let ${name} = beforeHandle[${i}](c);\n`
 
 				fnLiteral += `if(${name} !== undefined) {\n`
 				if (hooks?.afterHandle) {
@@ -557,19 +568,15 @@ export const composeHandler = ({
 						)
 
 						if (!returning) {
-							fnLiteral +=
-								hooks.afterHandle[i].constructor.name ===
-								ASYNC_FN
-									? `await afterHandle[${i}](c, ${beName});\n`
-									: `afterHandle[${i}](c, ${beName});\n`
+							fnLiteral += isAsync(hooks.afterHandle[i])
+								? `await afterHandle[${i}](c, ${beName});\n`
+								: `afterHandle[${i}](c, ${beName});\n`
 						} else {
 							const name = `af${i}`
 
-							fnLiteral +=
-								hooks.afterHandle[i].constructor.name ===
-								ASYNC_FN
-									? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
-									: `const ${name} = afterHandle[${i}](c, ${beName});\n`
+							fnLiteral += isAsync(hooks.afterHandle[i])
+								? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
+								: `const ${name} = afterHandle[${i}](c, ${beName});\n`
 
 							fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
 						}
@@ -587,10 +594,9 @@ export const composeHandler = ({
 		}
 
 	if (hooks?.afterHandle.length) {
-		fnLiteral +=
-			handler.constructor.name === ASYNC_FN
-				? `let r = await handler(c);\n`
-				: `let r = handler(c);\n`
+		fnLiteral += isAsync(handler)
+			? `let r = await handler(c);\n`
+			: `let r = handler(c);\n`
 
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const name = `af${i}`
@@ -598,15 +604,13 @@ export const composeHandler = ({
 			const returning = hasReturn(hooks.afterHandle[i].toString())
 
 			if (!returning) {
-				fnLiteral +=
-					hooks.afterHandle[i].constructor.name === ASYNC_FN
-						? `await afterHandle[${i}](c, r)\n`
-						: `afterHandle[${i}](c, r)\n`
+				fnLiteral += isAsync(hooks.afterHandle[i])
+					? `await afterHandle[${i}](c, r)\n`
+					: `afterHandle[${i}](c, r)\n`
 			} else {
-				fnLiteral +=
-					hooks.afterHandle[i].constructor.name === ASYNC_FN
-						? `let ${name} = await afterHandle[${i}](c, r)\n`
-						: `let ${name} = afterHandle[${i}](c, r)\n`
+				fnLiteral += isAsync(hooks.afterHandle[i])
+					? `let ${name} = await afterHandle[${i}](c, r)\n`
+					: `let ${name} = afterHandle[${i}](c, r)\n`
 
 				if (validator.response) {
 					fnLiteral += `if(${name} !== undefined) {`
@@ -632,10 +636,9 @@ export const composeHandler = ({
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
 		if (validator.response) {
-			fnLiteral +=
-				handler.constructor.name === ASYNC_FN
-					? `const r = await handler(c);\n`
-					: `const r = handler(c);\n`
+			fnLiteral += isAsync(handler)
+				? `const r = await handler(c);\n`
+				: `const r = handler(c);\n`
 
 			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
 				if(!(response instanceof Error))
@@ -645,10 +648,9 @@ export const composeHandler = ({
 			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
-			const handled =
-				handler.constructor.name === ASYNC_FN
-					? 'await handler(c) '
-					: 'handler(c)'
+			const handled = isAsync(handler)
+				? 'await handler(c) '
+				: 'handler(c)'
 
 			if (hasSet) fnLiteral += `return mapResponse(${handled}, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(${handled})\n`
@@ -691,6 +693,8 @@ export const composeHandler = ({
 
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
+} finally {
+	${handleResponse}
 }`
 	}
 
@@ -704,7 +708,8 @@ export const composeHandler = ({
 			beforeHandle,
 			afterHandle,
 			parse,
-			error: handleErrors
+			error: handleErrors,
+			onResponse
 		},
 		validator: {
 			body,
@@ -724,18 +729,19 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		${
-			meta
-				? `
-			meta,
-			SCHEMA,
-			DEFS,`
-				: ''
-		}
+		meta
 	} = hooks
 
+	${
+		hooks.onResponse.length
+			? `const ${hooks.onResponse
+					.map((x, i) => `res${i} = onResponse[${i}]`)
+					.join(',')}`
+			: ''
+	}
+
 	return ${maybeAsync ? 'async' : ''} function(c) {
-		${meta ? 'c[SCHEMA] = meta[SCHEMA]; c[DEFS] = meta[DEFS];' : ''}
+		${meta ? 'c["schema"] = meta["schema"]; c["defs"] = meta["defs"];' : ''}
 		${fnLiteral}
 	}`
 
@@ -759,9 +765,7 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		meta,
-		SCHEMA: meta ? SCHEMA : undefined,
-		DEFS: meta ? DEFS : undefined
+		meta
 	})
 }
 
@@ -854,29 +858,29 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		}
 		
 		const url = request.url,
-		s = url.indexOf('/', 12),
-		i = ctx.query = url.indexOf('?', s + 1),
-		path = i === -1 ? url.substring(s) : url.substring(s, i);`
+		s = url.indexOf('/', 11),
+		i = ctx.qi = url.indexOf('?', s + 1),
+		path = ctx.path = i === -1 ? url.substring(s) : url.substring(s, i);`
 	} else {
 		fnLiteral += `
-			const url = request.url,
-			s = url.indexOf('/', 12)
+		const url = request.url,
+			s = url.indexOf('/', 11),
+			qi = url.indexOf('?', s + 1),
+			path = qi === -1
+				? url.substring(s)
+				: url.substring(s, qi)
 
 		const ctx = {
 			request,
 			store,
-			query: url.indexOf('?', s + 1),
+			qi,
+			path,
 			set: {
 				headers: {},
 				status: 200
 			}
 			${decoratorsLiteral}
-		}
-
-		const path =
-			ctx.query === -1
-				? url.substring(s)
-				: url.substring(s, ctx.query);`
+		}`
 	}
 
 	fnLiteral += `
@@ -888,6 +892,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 		}
 	}`
 
+	// @ts-ignore
 	app.handleError = composeErrorHandler(app) as any
 
 	return Function(
@@ -902,22 +907,18 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 
 export const composeErrorHandler = (app: Elysia<any>) => {
 	let fnLiteral = `const {
-		app: { event: { error: onError } },
+		app: { event: { error: onError, onResponse: res } },
 		mapResponse
 	} = inject
-	
+
 	return ${
-		app.event.error.find((fn) => fn.constructor.name === ASYNC_FN)
-			? 'async'
-			: ''
+		app.event.error.find(isAsync) ? 'async' : ''
 	} function(request, error, set) {`
 
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
 
-		const response = `${
-			handler.constructor.name === ASYNC_FN ? 'await ' : ''
-		}onError[${i}]({
+		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}]({
 			request,
 			code: error.code ?? 'UNKNOWN',
 			error,
@@ -925,11 +926,18 @@ export const composeErrorHandler = (app: Elysia<any>) => {
 		})`
 
 		if (hasReturn(handler.toString()))
-			fnLiteral += `const r${i} = ${response}; if(r${i} !== null) return mapResponse(r${i}, set)\n`
+			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) return mapResponse(r${i}, set)\n`
 		else fnLiteral += response + '\n'
 	}
 
-	fnLiteral += `return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
+	fnLiteral += `if(error.constructor.name === "ValidationError") {
+		return new Response(
+			error.message, 
+			{ headers: set.headers, status: error.status ?? 400 }
+		)
+	} else {
+		return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
+	}
 }`
 
 	return Function(

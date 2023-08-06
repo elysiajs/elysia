@@ -1,4 +1,14 @@
+import { Value } from '@sinclair/typebox/value'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
+
+const isProduction =
+	process.env.NODE_ENV === 'production' || process.env.ENV === 'production'
+
+export type ElysiaErrors =
+	| InternalServerError
+	| NotFoundError
+	| ParseError
+	| ValidationError
 
 export class InternalServerError extends Error {
 	code = 'NOT_FOUND'
@@ -32,21 +42,50 @@ export class ValidationError extends Error {
 	status = 400
 
 	constructor(
-		type: string,
+		public type: string,
 		public validator: TypeCheck<any>,
 		public value: unknown
 	) {
-		const error = validator.Errors(value).First()
+		const error = isProduction ? undefined : validator.Errors(value).First()
+		const customError = error?.schema.error
+			? typeof error.schema.error === 'function'
+				? error.schema.error(type, validator, value)
+				: error.schema.error
+			: undefined
 
-		super(
-			`Invalid ${type}: '${error?.path?.slice(1) || 'root'}'. ${
-				error?.message
-			}`
-		)
+		const message = isProduction
+			? customError ??
+			  `Invalid ${type ?? error?.schema.error ?? error?.message}`
+			: customError ??
+			  `Invalid ${type}, '${error?.path?.slice(1) || 'type'}': ${
+					error?.message
+			  }` +
+					'\n\n' +
+					'Expected: ' +
+					// @ts-ignore
+					JSON.stringify(Value.Create(validator.schema), null, 2) +
+					'\n\n' +
+					'Found: ' +
+					JSON.stringify(value, null, 2) 
+					// +
+					// '\n\n' +
+					// 'Schema: ' +
+					// // @ts-ignore
+					// JSON.stringify(validator.schema, null, 2) +
+					// '\n'
+
+		super(message)
+
+		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
 
 	get all() {
 		return [...this.validator.Errors(this.value)]
+	}
+
+	get model() {
+		// @ts-ignore
+		return Value.Create(this.validator.schema)
 	}
 
 	toResponse(headers?: Record<string, any>) {

@@ -1,12 +1,12 @@
 import { Elysia, t } from '../src'
 
-const loggerPlugin = (app: Elysia, { prefix = '/fbk' } = {}) =>
-	app
-		.get('/hi', () => 'Hi')
-		.decorate('log', () => 'A')
-		.decorate('date', () => new Date())
-		.state('fromPlugin', 'From Logger')
-		.use((app) => app.state('abc', 'abc'))
+const t1 = performance.now()
+const loggerPlugin = new Elysia()
+	.get('/hi', () => 'Hi')
+	.decorate('log', () => 'A')
+	.decorate('date', () => new Date())
+	.state('fromPlugin', 'From Logger')
+	.use((app) => app.state('abc', 'abc'))
 
 const app = new Elysia()
 	.onRequest(({ set }) => {
@@ -118,3 +118,7 @@ const app = new Elysia()
 	.listen(8080, ({ hostname, port }) => {
 		console.log(`🦊 Elysia is running at http://${hostname}:${port}`)
 	})
+
+const t2 = performance.now()
+
+console.log('took', t2 - t1, 'ms')

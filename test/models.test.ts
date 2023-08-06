@@ -1,4 +1,4 @@
-import { Elysia, DEFS, t } from '../src'
+import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
@@ -13,7 +13,8 @@ describe('Models', () => {
 			.model({
 				boolean: t.Boolean()
 			})
-			.route('GET', '/', (context) => Object.keys(context[DEFS]!), {
+			// @ts-ignore
+			.route('GET', '/', (context) => Object.keys(context.defs!), {
 				config: {
 					allowMeta: true
 				}

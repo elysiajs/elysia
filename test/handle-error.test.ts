@@ -40,17 +40,6 @@ describe('Handle Error', () => {
 		expect(res.status).toBe(400)
 	})
 
-	it('handle custom error', async () => {
-		const res = await new Elysia()
-			.get('/', () => 'Hi')
-			.handleError(request, new Error("I'm a teapot"), {
-				headers: {}
-			})
-
-		expect(await res.text()).toBe("I'm a teapot")
-		expect(res.status).toBe(500)
-	})
-
 	it('use custom error', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')

@@ -1,4 +1,51 @@
-# 0.5.24 - 25 Jul 2023
+# 0.6.0-alpha.4
+Feature:
+- Add `addError` to declaratively add Error to scope
+- Add `afterHandle` now can return a literal value instead of limited to only `Response`
+
+# 0.6.0-alpha.3 - 29 Jul 2023
+Feature:
+- Introduce `.mount`
+- Add dynamic mode for TypeBox
+- Add $elysiaChecksum to deduplicate lifecycle event
+- Add $elysiaHookType to differentiate between global and local hook in `use`
+
+Fix:
+- Deduplication of plugin's lifecycle (see $elysiaHookType)
+
+Change:
+- Using Bun Build for target Bun
+
+Breaking Change:
+- [Internal] refactored `getSchemaValidator`, `getResponseSchemaValidator` to named parameters
+- [Internal] moved `registerSchemaPath` to `@elysiajs/swagger`
+
+# 0.6.0-alpha.2
+Feature:
+- [Internal] Add qi (queryIndex) to context
+- Add `error` field to Elysia type system for adding custom error message
+
+# 0.6.0-alpha.1
+Feature:
+- [Internal] Add support for accessing composedHandler via routes
+
+# 0.6.0-alpha.0
+Feature:
+- Dynamic mode for Cloudflare Worker
+- Support for registering custom error code
+- Using `loosePath` (by default), and add `config.strictPath
+- Support for setting basePath
+- Recursive path typing
+
+Improvement:
+- Slighty improve type checking speed
+
+Bug Fix:
+- recursive schema collision causing infinite type
+
+Breaking Change:
+- Remove Elysia Symbol (Internal)
+# 0.5.25 - 25 Jul 2023
 Bug fix:
 - ws resolve type to undefined instead of unknown cause unexpected type mismatched when not provided
 
@@ -963,7 +1010,7 @@ It has a lot of feature change for better performance, and introduce lots of dep
 
 Be sure to follow the migration section in `Breaking Change`.
 
-New Feature:
+Feature:
 - Auto infer type from `plugin` after merging with `use`
 - `decorate` to extends `Context` method
 - add `addParser`, for custom handler for parsing body
@@ -1014,7 +1061,7 @@ Improvement:
 - Faster hook initialization
 
 # 0.0.0-experimental.27 - 23 Sep 2022
-New Feature:
+Feature:
 - Add `config.strictPath` for handling strict path
 
 # 0.0.0-experimental.26 - 10 Sep 2022
@@ -1027,7 +1074,7 @@ Bug fix:
 - 404 on absolute path
 
 # 0.0.0-experimental.25 - 9 Sep 2022
-New Feature:
+Feature:
 - Auto infer typed for `params`, `state`, `ref`
 - `onRequest` now accept async function
 - `refFn` syntax sugar for adding fn as reference instead of `() => () => value`
@@ -1046,7 +1093,7 @@ Change:
 - optimized for `await`
 
 # 0.0.0-experimental.23 - 21 Aug 2022
-New Feature:
+Feature:
 - Initialial config is now available, starting with `bodyLimit` config for limiting body size
 
 Breaking Change:

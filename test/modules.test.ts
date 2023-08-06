@@ -1,4 +1,4 @@
-import { Elysia, SCHEMA } from '../src'
+import { Elysia } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
@@ -74,19 +74,12 @@ describe('Modules', () => {
 			.use(import('./modules'))
 			.use(asyncPlugin)
 			.get('/', () => 'hi')
-			.route('GET', '/schema', (context) => context[SCHEMA], {
-				config: {
-					allowMeta: true
-				}
-			})
 
 		await app.modules
 
-		const res: Object = await app
-			.handle(req('/schema'))
-			.then((r) => r.json())
+		const res = await app.handle(req('/async'))
 
-		expect(Object.keys(res).length).toEqual(4)
+		expect(res.status).toEqual(200)
 	})
 
 	it('Count lazy module correctly', async () => {

@@ -13,45 +13,52 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { OpenAPIV3 } from 'openapi-types'
 
 import type { Context, PreContext } from './context'
-import { SCHEMA, DEFS, EXPOSED } from './utils'
 
 export type WithArray<T> = T | T[]
 export type ObjectValues<T extends object> = T[keyof T]
 
-export type ElysiaDefaultMeta = Record<
-	typeof SCHEMA,
-	Partial<OpenAPIV3.PathsObject>
-> &
-	Record<typeof DEFS, Record<string, TSchema>> &
-	Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
+export type ElysiaDefaultMeta = {
+	schema: Record<
+		string,
+		Record<
+			string,
+			{
+				body: unknown
+				headers: unknown
+				query: unknown
+				params: unknown
+				response: unknown
+			}
+		>
+	>
+	defs: Record<string, TSchema>
+	exposed: Record<string, Record<string, unknown>>
+}
 
 export type ElysiaInstance<
 	Instance extends {
+		path?: string
 		store?: Record<string, unknown>
 		request?: Record<string, unknown>
-		schema?: {
-			body?: TSchema
-			headers?: TObject
-			query?: TObject
-			params?: TObject
-			response?: Record<string, TSchema>
-		}
-		meta?: Record<typeof SCHEMA, Partial<OpenAPIV3.PathsObject>> &
-			Record<typeof DEFS, Record<string, unknown>> &
-			Record<typeof EXPOSED, Record<string, Record<string, unknown>>>
-	} = {
-		store: {}
-		request: {}
-		schema: {}
-		meta: Record<typeof SCHEMA, {}> &
-			Record<typeof DEFS, {}> &
-			Record<typeof EXPOSED, {}>
-	}
+		error?: Record<string, Error>
+		schema?: TypedSchema<any>
+		meta?: ElysiaDefaultMeta
+	} = {}
 > = {
-	request: Instance['request']
-	store: Instance['store']
-	schema: Instance['schema']
-	meta: Instance['meta']
+	path: undefined extends Instance['path'] ? string : Instance['path']
+	error: undefined extends Instance['error'] ? {} : Instance['error']
+	request: undefined extends Instance['request'] ? {} : Instance['request']
+	store: undefined extends Instance['store'] ? {} : Instance['store']
+	schema: undefined extends Instance['schema']
+		? TypedSchema<any>
+		: Instance['schema']
+	meta: undefined extends Instance['meta']
+		? {
+				schema: {}
+				defs: {}
+				exposed: {}
+		  }
+		: Instance['meta']
 }
 
 export type Handler<
@@ -79,6 +86,7 @@ export type LifeCycleEvent =
 	| 'transform'
 	| 'beforeHandle'
 	| 'afterHandle'
+	| 'response'
 	| 'error'
 	| 'stop'
 
@@ -105,6 +113,7 @@ export interface LifeCycle<Instance extends ElysiaInstance = ElysiaInstance> {
 	transform: NoReturnHandler<any, Instance>
 	beforeHandle: Handler<any, Instance>
 	afterHandle: AfterRequestHandler<any, Instance>
+	response: VoidRequestHandler<any, Instance>
 	error: ErrorHandler
 	stop: VoidLifeCycle<Instance>
 }
@@ -115,7 +124,7 @@ export type AfterRequestHandler<
 > = (
 	context: Context<Route, Instance['store']> & Instance['request'],
 	response: Route['response']
-) => void | MaybePromise<Response>
+) => void | MaybePromise<Route['response']> | Response
 
 export interface LifeCycleStore<Instance extends ElysiaInstance> {
 	type?: ContentType
@@ -125,6 +134,7 @@ export interface LifeCycleStore<Instance extends ElysiaInstance> {
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
+	onResponse: VoidRequestHandler<any, Instance>[]
 	error: ErrorHandler[]
 	stop: VoidLifeCycle<Instance>[]
 }
@@ -134,6 +144,11 @@ export type BeforeRequestHandler<
 	Instance extends ElysiaInstance = ElysiaInstance
 > = (context: PreContext<Route, Instance['store']> & Instance['request']) => any
 
+export type VoidRequestHandler<
+	Route extends TypedRoute = TypedRoute,
+	Instance extends ElysiaInstance = ElysiaInstance
+> = (context: Context<Route, Instance['store']> & Instance['request']) => any
+
 export interface RegisteredHook<
 	Instance extends ElysiaInstance = ElysiaInstance
 > {
@@ -142,6 +157,7 @@ export interface RegisteredHook<
 	transform: NoReturnHandler<any, Instance>[]
 	beforeHandle: Handler<any, Instance>[]
 	afterHandle: AfterRequestHandler<any, Instance>[]
+	onResponse: VoidRequestHandler<any, Instance>[]
 	parse: BodyParser[]
 	error: ErrorHandler[]
 }
@@ -160,7 +176,7 @@ export interface TypedSchema<ModelName extends string = string> {
 
 export type UnwrapSchema<
 	Schema extends TSchema | undefined | string,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS] = {},
+	Definitions extends ElysiaInstance['meta']['defs'] = {},
 	Fallback = unknown
 > = Schema extends string
 	? Definitions extends Record<Schema, infer NamedSchema>
@@ -172,7 +188,7 @@ export type UnwrapSchema<
 
 export type TypedSchemaToRoute<
 	Schema extends TypedSchema<any>,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS]
+	Definitions extends ElysiaInstance['meta']['defs']
 > = {
 	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
@@ -224,7 +240,7 @@ export type HookHandler<
 	Path extends string = string,
 	Typed extends AnyTypedSchema = TypedSchemaToRoute<
 		Schema,
-		Instance['meta'][typeof DEFS]
+		Instance['meta']['defs']
 	>
 > = Handler<
 	Typed extends {
@@ -355,10 +371,7 @@ export type LocalHook<
 				 */
 				afterHandle?: WithArray<
 					AfterRequestHandler<
-						TypedSchemaToRoute<
-							Route,
-							Instance['meta'][typeof SCHEMA]
-						>,
+						TypedSchemaToRoute<Route, Instance['meta']['schema']>,
 						Instance
 					>
 				>
@@ -370,12 +383,16 @@ export type LocalHook<
 				 * Custom body parser
 				 */
 				parse?: WithArray<BodyParser>
+				/**
+				 * Custom body parser
+				 */
+				onResponse?: WithArray<HookHandler<Route, Instance>>
 		  }
 		: never)
 
 export type TypedWSRouteToEden<
 	Schema extends TypedSchema = TypedSchema,
-	Definitions extends TypedSchema<string> = ElysiaInstance['meta'][typeof DEFS],
+	Definitions extends TypedSchema<string> = ElysiaInstance['meta']['defs'],
 	Path extends string = string,
 	Catch = unknown
 > = TypedSchemaToEden<
@@ -397,7 +414,7 @@ export type TypedWSRouteToEden<
 
 export type TypedSchemaToEden<
 	Schema extends TypedSchema,
-	Definitions extends ElysiaInstance['meta'][typeof DEFS]
+	Definitions extends ElysiaInstance['meta']['defs']
 > = {
 	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
@@ -443,7 +460,7 @@ export type LocalHandler<
 		Schema,
 		Instance['schema']
 	> extends infer Typed extends TypedSchema<any>
-		? TypedSchemaToRoute<Typed, Instance['meta'][typeof DEFS]> extends {
+		? TypedSchemaToRoute<Typed, Instance['meta']['defs']> extends {
 				body: infer Body
 				params: infer Params
 				query: infer Query
@@ -483,29 +500,42 @@ export type OverwritableTypeRoute = {
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
-export interface ElysiaConfig {
-	fn?: string
+export type ElysiaConfig = {
+	name?: string
+	seed?: unknown
 	serve?: Partial<Serve>
-	basePath?: string
+	prefix?: string
 	/**
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */
 	forceErrorEncapsulation?: boolean
+	/**
+	 * Disable Ahead of Time compliation
+	 *
+	 * Reduced performance but faster startup time
+	 *
+	 * @default !isCloudflareWorker (false if not Cloudflare worker)
+	 */
+	aot?: boolean
+	strictPath?: boolean
 }
 
-export type IsPathParameter<Part> = Part extends `:${infer Parameter}`
-	? Parameter
-	: Part extends `*`
-	? '*'
-	: never
+export type IsPathParameter<Part extends string> =
+	Part extends `:${infer Parameter}`
+		? Parameter
+		: Part extends `*`
+		? '*'
+		: never
 
-export type ExtractPath<Path> = Path extends `${infer A}/${infer B}`
-	? IsPathParameter<A> | ExtractPath<B>
-	: IsPathParameter<Path>
+export type ExtractPath<Path extends string> =
+	Path extends `${infer A}/${infer B}`
+		? IsPathParameter<A> | ExtractPath<B>
+		: IsPathParameter<Path>
 
 export interface InternalRoute<Instance extends ElysiaInstance> {
 	method: HTTPMethod
 	path: string
+	composed: ComposedHandler
 	handler: Handler<any, Instance>
 	hooks: LocalHook<any, any, string>
 }
@@ -560,7 +590,7 @@ export type ErrorCode =
 	// ? Error that's not in defined list
 	| 'UNKNOWN'
 
-export type ErrorHandler = (
+export type ErrorHandler<T extends Record<string, Error> = {}> = (
 	params:
 		| {
 				request: Request
@@ -592,6 +622,14 @@ export type ErrorHandler = (
 				error: Readonly<InternalServerError>
 				set: Context['set']
 		  }
+		| {
+				[K in keyof T]: {
+					request: Request
+					code: K
+					error: Readonly<T[K]>
+					set: Context['set']
+				}
+		  }[keyof T]
 ) => any | Promise<any>
 
 export type DeepWritable<T> = { -readonly [P in keyof T]: DeepWritable<T[P]> }
@@ -673,3 +711,17 @@ export type MaybePromise<T> = T | Promise<T>
 export type Prettify<T> = {
 	[K in keyof T]: T[K]
 } & {}
+
+export type Reconciliation<A extends Object, B extends Object> = {
+	[key in keyof A as key extends keyof B ? never : key]: A[key]
+} extends infer Collision
+	? {} extends Collision
+		? {
+				[key in keyof B]: B[key]
+		  }
+		: Prettify<
+				Collision & {
+					[key in keyof B]: B[key]
+				}
+		  >
+	: never

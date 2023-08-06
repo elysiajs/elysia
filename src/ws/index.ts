@@ -1,12 +1,11 @@
 import { Memoirist } from 'memoirist'
 import type {
-	Server,
 	ServerWebSocket,
 	ServerWebSocketSendStatus,
 	WebSocketHandler
 } from 'bun'
 
-import type { Elysia, Context, SCHEMA } from '..'
+import type { Elysia, Context } from '..'
 
 import type { ElysiaWSContext } from './types'
 import { ValidationError } from '../error'
@@ -33,7 +32,7 @@ export class ElysiaWS<WS extends ElysiaWSContext> {
 
 	publish(
 		topic: string,
-		data: WS['data'][typeof SCHEMA]['response'] = undefined as any,
+		data: WS['data']['schema']['response'] = undefined as any,
 		compress?: boolean
 	) {
 		// @ts-ignore
@@ -46,7 +45,7 @@ export class ElysiaWS<WS extends ElysiaWSContext> {
 
 	publishToSelf(
 		topic: string,
-		data: WS['data'][typeof SCHEMA]['response'] = undefined as any,
+		data: WS['data']['schema']['response'] = undefined as any,
 		compress?: boolean
 	) {
 		// @ts-ignore
@@ -57,7 +56,7 @@ export class ElysiaWS<WS extends ElysiaWSContext> {
 		return this
 	}
 
-	send(data: WS['data'][typeof SCHEMA]['response']) {
+	send(data: WS['data']['schema']['response']) {
 		// @ts-ignore
 		if (typeof data === 'object') data = JSON.stringify(data)
 
