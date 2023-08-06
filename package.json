@@ -111,14 +111,12 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.29.6",
-    "@types/lodash.clonedeep": "^4.5.7",
     "fast-querystring": "^1.1.2",
-    "lodash.clonedeep": "^4.5.0",
     "memoirist": "0.1.4",
     "openapi-types": "^12.1.3"
   },
   "devDependencies": {
-    "@elysiajs/cookie": "../cookie",
+    "@elysiajs/cookie": "^0.6.0-rc.0",
     "@elysiajs/html": "^0.5.2",
     "@elysiajs/swagger": "^0.5.2",
     "@swc/cli": "^0.1.62",
