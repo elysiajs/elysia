@@ -1,3 +1,7 @@
+# 0.6.1 - 6 Aug 2023
+Improvement:
+- Drop usage of `node:process` to support Cloudflare Worker
+
 # 0.6.0 - 6 Aug 2023
 Feature:
 - Introducing Dynamic Mode (aot: false)
@@ -62,6 +66,7 @@ Bug Fix:
 
 Breaking Change:
 - Remove Elysia Symbol (Internal)
+
 # 0.5.25 - 25 Jul 2023
 Bug fix:
 - ws resolve type to undefined instead of unknown cause unexpected type mismatched when not provided

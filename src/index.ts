@@ -1,7 +1,5 @@
-import type { Serve, Server } from 'bun'
-import * as nodeProcess from 'node:process'
-
 import { Memoirist } from 'memoirist'
+import type { Serve, Server } from 'bun'
 
 import {
 	mergeHook,
@@ -62,11 +60,12 @@ import type {
 } from './types'
 import type { Static, TSchema } from '@sinclair/typebox'
 
-import type {
-	ValidationError,
-	ParseError,
-	NotFoundError,
-	InternalServerError
+import {
+	type ValidationError,
+	type ParseError,
+	type NotFoundError,
+	type InternalServerError,
+	isProduction
 } from './error'
 
 import {
@@ -3328,7 +3327,7 @@ export default class Elysia<
 		this.compile()
 
 		if (typeof options === 'string') {
-			options = +(options.trim())
+			options = +options.trim()
 
 			if (Number.isNaN(options))
 				throw new Error('Port must be a numeric value')
@@ -3336,26 +3335,29 @@ export default class Elysia<
 
 		const fetch = this.fetch
 
-		const env = (Bun !== null ? Bun.env : process !== null ? process.env : nodeProcess.env)
-		const development = (env?.ENV ?? env?.NODE_ENV) !== 'production'
-
 		const serve: Serve =
 			typeof options === 'object'
 				? {
+						development: !isProduction,
 						...this.config.serve,
 						...options,
-						development,
 						fetch,
 						error: this.outerErrorHandler
 				  }
 				: {
+						development: !isProduction,
 						...this.config.serve,
 						port: options,
 						fetch,
 						error: this.outerErrorHandler
 				  }
 
-		this.server = Bun.serve(serve)
+		if (typeof Bun === 'undefined')
+			throw new Error(
+				'.listen() is designed to run on Bun only. If you are running Elysia in other environment please use a dedicated plugin or export the handler via Elysia.fetch'
+			)
+
+		this.server = Bun?.serve(serve)
 
 		for (let i = 0; i < this.event.start.length; i++)
 			this.event.start[i](this as any)
@@ -3363,7 +3365,7 @@ export default class Elysia<
 		if (callback) callback(this.server!)
 
 		Promise.all(this.lazyLoadModules).then(() => {
-			Bun.gc(true)
+			Bun?.gc(true)
 		})
 
 		return this

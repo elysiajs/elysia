@@ -1,8 +1,15 @@
 import { Value } from '@sinclair/typebox/value'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
-const isProduction =
-	process.env.NODE_ENV === 'production' || process.env.ENV === 'production'
+// ? Cloudflare worker support
+const env =
+	typeof Bun !== 'undefined'
+		? Bun.env
+		: typeof process !== 'undefined'
+		? process?.env
+		: undefined
+
+export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
 
 export type ElysiaErrors =
 	| InternalServerError
@@ -66,13 +73,13 @@ export class ValidationError extends Error {
 					JSON.stringify(Value.Create(validator.schema), null, 2) +
 					'\n\n' +
 					'Found: ' +
-					JSON.stringify(value, null, 2) 
-					// +
-					// '\n\n' +
-					// 'Schema: ' +
-					// // @ts-ignore
-					// JSON.stringify(validator.schema, null, 2) +
-					// '\n'
+					JSON.stringify(value, null, 2)
+		// +
+		// '\n\n' +
+		// 'Schema: ' +
+		// // @ts-ignore
+		// JSON.stringify(validator.schema, null, 2) +
+		// '\n'
 
 		super(message)
 
