@@ -1,3 +1,20 @@
+# 0.6.0 - 6 Aug 2023
+Feature:
+- Introducing Dynamic Mode (aot: false)
+- Introducing `.mount`
+- Introducing `.error` for handling Strict Error Type
+- Plugin checksum for plugin deduplication
+- Add `.onResponse`
+
+Improvement:
+- TypeBox 0.30
+- AfterHandle now automatically maps the value
+- Using Bun Build for targeting Bun
+- Support Cloudflare worker with Dynamic Mode (and ENV)
+
+Change:
+- Moved registerSchemaPath to @elysiajs/swagger
+
 # 0.6.0-alpha.4
 Feature:
 - Add `addError` to declaratively add Error to scope
