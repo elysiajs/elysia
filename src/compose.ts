@@ -686,7 +686,7 @@ export const composeHandler = ({
 					request: c.request,
 					error: error,
 					set,
-					code: error[ERROR_CODE] ?? "UNKNOWN"
+					code: error.code ?? error[ERROR_CODE] ?? "UNKNOWN"
 				})
 				if (handled instanceof Promise) handled = await handled
 
@@ -928,7 +928,7 @@ export const composeErrorHandler = (app: Elysia<any>) => {
 
 		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}]({
 			request,
-			code: error[ERROR_CODE] ?? 'UNKNOWN',
+			code: error.code ?? error[ERROR_CODE] ?? 'UNKNOWN',
 			error,
 			set
 		})`

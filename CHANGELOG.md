@@ -1,3 +1,7 @@
+# 0.6.3 - 8 Aug 2023
+Bug fix:
+- resolve .code and [ERROR_CODE]
+
 # 0.6.2 - 8 Aug 2023
 Change:
 - Add **ErrorCode** symbol

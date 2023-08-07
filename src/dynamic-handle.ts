@@ -290,7 +290,8 @@ export const createDynamicErrorHandler =
 			// @ts-ignore
 			let response = app.event.error[i]({
 				request,
-				code: (error[ERROR_CODE] as any) ?? 'UNKNOWN',
+				// @ts-ignore
+				code: error.code ?? error[ERROR_CODE] ?? 'UNKNOWN',
 				error,
 				set
 			})
