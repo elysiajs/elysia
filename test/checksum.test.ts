@@ -1,4 +1,4 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from './utils'
@@ -139,5 +139,23 @@ describe('Checksum', () => {
 		await Promise.all(['/a', '/cookie'].map((x) => app.handle(req(x))))
 
 		expect(count).toBe(2)
+	})
+
+	it("Don't deduplicate guard hook", async () => {
+		const guard = new Elysia({ prefix: '/guard' }).guard(
+			{
+				params: t.Object({ id: t.Number() }),
+				transform({ params }) {
+					const id = +params.id
+					if (!Number.isNaN(id)) params.id = id
+				}
+			},
+			(app) => app.get('/id/:id', ({ params: { id } }) => id)
+		)
+
+		const app = new Elysia().use(guard)
+		const res = await app.handle(req('/guard/id/123'))
+
+		expect(res.status).toBe(200)
 	})
 })

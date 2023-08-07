@@ -1,11 +1,28 @@
 import { Elysia, t } from '../src'
 
-const plugin = new Elysia()
-	.state('counter', 0)
-	.get('/counter', ({ store }) => store.counter++)
+class CustomError extends Error {
+	constructor(public message: string) {
+		super(message)
+	}
+}
 
 const app = new Elysia()
-	.state('counter', 0)
-	.use(plugin)
-	.get('/', ({ store }) => store.counter)
+	.addError({
+		Code1: CustomError,
+		Code2: CustomError
+	})
+	.onError(({ code, error }) => {
+		switch (code) {
+			case 'Code1':
+				return error
+
+			case 'Code2':
+				return error
+		}
+	})
+	.get('/', () => {
+		throw new CustomError('Server is during maintainance')
+
+		return 'unreachable'
+	})
 	.listen(3000)

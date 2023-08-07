@@ -3,7 +3,12 @@ import type { Elysia } from '.'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
-import { NotFoundError, ValidationError, InternalServerError } from './error'
+import {
+	NotFoundError,
+	ValidationError,
+	InternalServerError,
+	ERROR_CODE
+} from './error'
 
 import type {
 	ElysiaConfig,
@@ -275,7 +280,7 @@ export const composeHandler = ({
 		if(c.qi !== -1) {
 			c.query ??= parseQuery(url.substring(c.qi + 1))
 		} else {
-			c.qi ??= {}
+			c.query ??= {}
 		}
 		`
 	}
@@ -681,7 +686,7 @@ export const composeHandler = ({
 					request: c.request,
 					error: error,
 					set,
-					code: error.code ?? "UNKNOWN"
+					code: error[ERROR_CODE] ?? "UNKNOWN"
 				})
 				if (handled instanceof Promise) handled = await handled
 
@@ -729,7 +734,8 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		meta
+		meta,
+		ERROR_CODE
 	} = hooks
 
 	${
@@ -765,7 +771,8 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		meta
+		meta,
+		ERROR_CODE
 	})
 }
 
@@ -908,7 +915,8 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 export const composeErrorHandler = (app: Elysia<any>) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
-		mapResponse
+		mapResponse,
+		ERROR_CODE
 	} = inject
 
 	return ${
@@ -920,7 +928,7 @@ export const composeErrorHandler = (app: Elysia<any>) => {
 
 		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}]({
 			request,
-			code: error.code ?? 'UNKNOWN',
+			code: error[ERROR_CODE] ?? 'UNKNOWN',
 			error,
 			set
 		})`
@@ -945,6 +953,7 @@ export const composeErrorHandler = (app: Elysia<any>) => {
 		fnLiteral
 	)({
 		app,
-		mapResponse
+		mapResponse,
+		ERROR_CODE
 	})
 }

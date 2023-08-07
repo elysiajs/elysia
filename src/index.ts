@@ -65,7 +65,8 @@ import {
 	type ParseError,
 	type NotFoundError,
 	type InternalServerError,
-	isProduction
+	isProduction,
+	ERROR_CODE
 } from './error'
 
 import {
@@ -505,10 +506,9 @@ export default class Elysia<
 	addError<
 		const Errors extends Record<
 			string,
-			| Error
-			| {
-					prototype: Error
-			  }
+			{
+				prototype: Error
+			}
 		>
 	>(
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -530,11 +530,9 @@ export default class Elysia<
 
 	addError<
 		Name extends string,
-		const CustomError extends
-			| Error
-			| {
-					prototype: Error
-			  }
+		const CustomError extends {
+			prototype: Error
+		}
 	>(
 		name: Name,
 		errors: CustomError
@@ -572,18 +570,26 @@ export default class Elysia<
 			| string
 			| Record<
 					string,
-					| Error
-					| {
-							prototype: Error
-					  }
+					{
+						prototype: Error
+					}
 			  >,
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		error?:
-			| Error
-			| {
-					prototype: Error
-			  }
+		error?: {
+			prototype: Error
+		}
 	): Elysia<any> {
+		if (typeof name === 'string' && error) {
+			// @ts-ignore
+			error.prototype[ERROR_CODE] = name
+
+			return this
+		}
+
+		// @ts-ignore
+		for (const [code, error] of Object.entries(name))
+			error.prototype[ERROR_CODE] = code
+
 		return this
 	}
 
@@ -1089,14 +1095,16 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any, any>, {
-						...localHook,
-						error: !localHook.error
-							? sandbox.event.error
-							: Array.isArray(localHook.error)
-							? [...localHook.error, ...sandbox.event.error]
-							: [localHook.error, ...sandbox.event.error]
-					})
+					injectLocalHookMeta(
+						mergeHook(hook as LocalHook<any, any>, {
+							...localHook,
+							error: !localHook.error
+								? sandbox.event.error
+								: Array.isArray(localHook.error)
+								? [...localHook.error, ...sandbox.event.error]
+								: [localHook.error, ...sandbox.event.error]
+						})
+					)
 				)
 			}
 		)

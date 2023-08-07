@@ -1,8 +1,21 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import { Elysia } from '../src'
-import { req, post } from './utils'
+import { Elysia, t } from '../src'
+import { post, req } from './utils'
 
 describe('code generation', () => {
+	it('fallback query if not presented', async () => {
+		const app = new Elysia().get('/', () => 'hi', {
+			query: t.Object({
+				id: t.Optional(t.Number())
+			})
+		})
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toBe('hi')
+	})
+
 	it('process body', async () => {
 		const body = { hello: 'Wanderschaffen' }
 

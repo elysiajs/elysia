@@ -1,6 +1,11 @@
 import type { Elysia } from '.'
 
-import { ElysiaErrors, NotFoundError, ValidationError } from './error'
+import {
+	ElysiaErrors,
+	NotFoundError,
+	ValidationError,
+	ERROR_CODE
+} from './error'
 import { mapEarlyResponse, mapResponse } from './handler'
 
 import type { Context } from './context'
@@ -285,7 +290,7 @@ export const createDynamicErrorHandler =
 			// @ts-ignore
 			let response = app.event.error[i]({
 				request,
-				code: (error.code as any) ?? 'UNKNOWN',
+				code: (error[ERROR_CODE] as any) ?? 'UNKNOWN',
 				error,
 				set
 			})

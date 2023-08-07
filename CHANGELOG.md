@@ -1,3 +1,12 @@
+# 0.6.2 - 8 Aug 2023
+Change:
+- Add **ErrorCode** symbol
+
+Bug fix:
+- Inline guard hook
+- Error code not handled
+- Set default query to {} when presented
+
 # 0.6.1 - 6 Aug 2023
 Improvement:
 - Drop usage of `node:process` to support Cloudflare Worker

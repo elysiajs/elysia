@@ -9,6 +9,8 @@ const env =
 		? process?.env
 		: undefined
 
+export const ERROR_CODE = Symbol("ErrorCode")
+
 export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
 
 export type ElysiaErrors =
@@ -18,7 +20,7 @@ export type ElysiaErrors =
 	| ValidationError
 
 export class InternalServerError extends Error {
-	code = 'NOT_FOUND'
+	[ERROR_CODE] = 'NOT_FOUND'
 	status = 500
 
 	constructor() {
@@ -27,7 +29,7 @@ export class InternalServerError extends Error {
 }
 
 export class NotFoundError extends Error {
-	code = 'NOT_FOUND'
+	[ERROR_CODE] = 'NOT_FOUND'
 	status = 404
 
 	constructor() {
@@ -36,7 +38,7 @@ export class NotFoundError extends Error {
 }
 
 export class ParseError extends Error {
-	code = 'PARSE'
+	[ERROR_CODE] = 'PARSE'
 	status = 400
 
 	constructor() {
@@ -45,7 +47,7 @@ export class ParseError extends Error {
 }
 
 export class ValidationError extends Error {
-	code = 'VALIDATION'
+	[ERROR_CODE] = 'VALIDATION'
 	status = 400
 
 	constructor(
