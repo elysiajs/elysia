@@ -139,4 +139,14 @@ describe('group', () => {
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(400)
 	})
+
+	it('validate request with prefix', async () => {
+		const app = new Elysia({ prefix: '/api' }).group('/v1', (app) =>
+			app.get('', () => 'Hello')
+		)
+
+		const res = await app.handle(req('/api/v1'))
+
+		expect(res.status).toBe(200)
+	})
 })
