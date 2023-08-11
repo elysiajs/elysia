@@ -111,6 +111,23 @@ describe('Dynamic Mode', () => {
 		expect(res.status).toBe(418)
 	})
 
+	it('derive', async () => {
+		const app = new Elysia({
+			aot: false
+		})
+			.derive(() => {
+				return {
+					A: 'A'
+				}
+			})
+			.get('/', ({ A }) => A)
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('A')
+		expect(res.status).toBe(200)
+	})
+
 	it('validate', async () => {
 		const app = new Elysia({
 			// aot: false

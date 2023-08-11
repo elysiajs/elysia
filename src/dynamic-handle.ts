@@ -174,7 +174,13 @@ export const createDynamicHandler =
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)
-				if (operation instanceof Promise) await operation
+
+				// @ts-ignore
+				if (hooks.transform[i].$elysia === 'derive') {
+					if (operation instanceof Promise)
+						Object.assign(context, await operation)
+					else Object.assign(context, operation)
+				} else if (operation instanceof Promise) await operation
 			}
 
 			if (validator) {

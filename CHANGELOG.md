@@ -1,3 +1,7 @@
+# 0.6.9 - 11 Aug 2023
+Bug fix:
+- Derive not working on dynamic mode
+
 # 0.6.8 - 11 Aug 2023
 Bug fix:
 - append routes on dynamic mode
