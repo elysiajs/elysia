@@ -277,6 +277,14 @@ export default class Elysia<
 				})
 			}
 
+			this.routes.push({
+				method,
+				path,
+				composed: null,
+				handler,
+				hooks
+			})
+
 			return
 		}
 

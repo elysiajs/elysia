@@ -1,16 +1,9 @@
-import { Elysia, ElysiaInstance } from '../src'
-import { cookie } from '@elysiajs/cookie'
-import { jwt } from '@elysiajs/jwt'
-
-const a = cookie()
-const b = jwt({
-	name: 'jwt',
-	secret: "A"
-})
+import { Elysia } from '../src'
 
 const app = new Elysia({
-	prefix: '/api'
+	aot: false
 })
-	.use(cookie())
-	.get('/b', (c) => 'A')
-	.listen(3000)
+	.get('/', () => "Hello")
+	.post('/', () => "world")
+
+console.log(app.meta.schema)

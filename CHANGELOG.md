@@ -1,16 +1,20 @@
-# 0.6.7 - 13 Aug 2023
+# 0.6.8 - 11 Aug 2023
+Bug fix:
+- append routes on dynamic mode
+
+# 0.6.7 - 11 Aug 2023
 Bug fix:
 - use: Plugin type inference
 
-# 0.6.6 - 13 Aug 2023
+# 0.6.6 - 11 Aug 2023
 Bug fix:
 - Collide Elysia.prefix on other methods
 
-# 0.6.5 - 13 Aug 2023
+# 0.6.5 - 11 Aug 2023
 Bug fix:
 - Collide Elysia.prefix type
 
-# 0.6.4 - 13 Aug 2023
+# 0.6.4 - 11 Aug 2023
 Bug fix:
 - Collide Elysia.prefix type
 - Add skip group with prefix instance see [#85](https://github.com/elysiajs/elysia/pull/85)
