@@ -181,12 +181,13 @@ export default class Elysia<
 		hook?: LocalHook<any, any, string>,
 		{ allowMeta = false } = {
 			allowMeta: false as boolean | undefined
-		}
+		},
+		skipPrefix?: boolean
 	) {
 		path =
 			path === '' ? path : path.charCodeAt(0) === 47 ? path : `/${path}`
 
-		if (this.config.prefix) path = this.config.prefix + path
+		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
 
 		const defs = this.meta.defs
 
@@ -928,7 +929,9 @@ export default class Elysia<
 						handler,
 						mergeHook(hooks, {
 							error: sandbox.event.error
-						})
+						}),
+						undefined,
+						true
 					)
 				}
 			}
