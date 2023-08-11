@@ -1646,7 +1646,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											post: {
 												handler?: Handler
 												body: UnwrapSchema<
@@ -1777,7 +1777,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											put: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -1907,7 +1907,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											patch: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2037,7 +2037,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											delete: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2167,7 +2167,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											options: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2292,7 +2292,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											all: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2422,7 +2422,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											head: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2552,7 +2552,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											trace: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2682,7 +2682,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in Path]: {
+										[path in `${BasePath}${Path}`]: {
 											connect: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2941,7 +2941,7 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${BasePath}${Path}`]: {
 										[method in Method]: {
 											body: UnwrapSchema<
 												Typed['body'],

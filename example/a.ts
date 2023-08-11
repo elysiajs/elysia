@@ -1,8 +1,12 @@
 import { Elysia } from '../src'
 
 const plugin = new Elysia({
-	prefix: '/plugin'
-}).get('/test-path', () => 'Test')
+	prefix: '/folder'
+})
+	.get('/get', () => 'Test')
+	.post('/post', () => 'Test')
+	.put('/put', () => 'Test')
+	.patch('/patch', () => 'Test')
 
 const app = new Elysia({
 	prefix: '/api'

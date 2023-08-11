@@ -1,3 +1,7 @@
+# 0.6.6 - 13 Aug 2023
+Bug fix:
+- Collide Elysia.prefix on other methods
+
 # 0.6.5 - 13 Aug 2023
 Bug fix:
 - Collide Elysia.prefix type
