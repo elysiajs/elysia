@@ -1124,11 +1124,11 @@ export default class Elysia<
 	// Inline Fn
 	use<
 		NewInstance extends ElysiaInstance,
-		Params extends Elysia = Elysia<any>
+		Params extends Elysia = Elysia<any, any>
 	>(
 		plugin: MaybePromise<
 			(
-				app: Params extends Elysia<infer ParamsInstance>
+				app: Params extends Elysia<any, infer ParamsInstance>
 					? IsAny<ParamsInstance> extends true
 						? this
 						: any

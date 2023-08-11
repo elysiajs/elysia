@@ -1,17 +1,16 @@
-import { Elysia } from '../src'
+import { Elysia, ElysiaInstance } from '../src'
+import { cookie } from '@elysiajs/cookie'
+import { jwt } from '@elysiajs/jwt'
 
-const plugin = new Elysia({
-	prefix: '/folder'
+const a = cookie()
+const b = jwt({
+	name: 'jwt',
+	secret: "A"
 })
-	.get('/get', () => 'Test')
-	.post('/post', () => 'Test')
-	.put('/put', () => 'Test')
-	.patch('/patch', () => 'Test')
 
 const app = new Elysia({
 	prefix: '/api'
 })
-	.use(plugin)
+	.use(cookie())
+	.get('/b', (c) => 'A')
 	.listen(3000)
-
-const routes = app.routes

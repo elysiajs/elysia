@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -116,9 +116,10 @@
     "openapi-types": "^12.1.3"
   },
   "devDependencies": {
-    "@elysiajs/cookie": "^0.6.0-rc.0",
-    "@elysiajs/html": "^0.5.2",
-    "@elysiajs/swagger": "^0.5.2",
+    "@elysiajs/cookie": "^0.6.1",
+    "@elysiajs/html": "^0.6.0",
+    "@elysiajs/jwt": "^0.6.2",
+    "@elysiajs/swagger": "^0.6.0",
     "@swc/cli": "^0.1.62",
     "@swc/core": "^1.3.71",
     "@types/node": "^20.4.5",
@@ -128,7 +129,6 @@
     "bun-types": "^0.7.0",
     "eslint": "^8.45.0",
     "expect-type": "^0.16.0",
-    "hono": "^3.3.4",
     "rimraf": "4.4.1",
     "typescript": "^5.1.6"
   },

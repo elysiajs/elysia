@@ -1,3 +1,7 @@
+# 0.6.7 - 13 Aug 2023
+Bug fix:
+- use: Plugin type inference
+
 # 0.6.6 - 13 Aug 2023
 Bug fix:
 - Collide Elysia.prefix on other methods
