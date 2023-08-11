@@ -1,6 +1,7 @@
 # 0.6.4 - 13 Aug 2023
 Bug fix:
 - Collide Elysia.prefix type
+- Add skip group with prefix instance see [#85](https://github.com/elysiajs/elysia/pull/85)
 
 # 0.6.3 - 8 Aug 2023
 Bug fix:
