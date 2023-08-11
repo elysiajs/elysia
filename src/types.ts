@@ -37,7 +37,6 @@ export type ElysiaDefaultMeta = {
 
 export type ElysiaInstance<
 	Instance extends {
-		path?: string
 		store?: Record<string, unknown>
 		request?: Record<string, unknown>
 		error?: Record<string, Error>
@@ -45,7 +44,6 @@ export type ElysiaInstance<
 		meta?: ElysiaDefaultMeta
 	} = {}
 > = {
-	path: undefined extends Instance['path'] ? string : Instance['path']
 	error: undefined extends Instance['error'] ? {} : Instance['error']
 	request: undefined extends Instance['request'] ? {} : Instance['request']
 	store: undefined extends Instance['store'] ? {} : Instance['store']
@@ -95,8 +93,8 @@ export type ListenCallback =
 	| ((server: Server) => Promise<void>)
 
 export type VoidLifeCycle<Instance extends ElysiaInstance = ElysiaInstance> =
-	| ((app: Elysia<Instance>) => void)
-	| ((app: Elysia<Instance>) => Promise<void>)
+	| ((app: Elysia<any, Instance>) => void)
+	| ((app: Elysia<any, Instance>) => Promise<void>)
 
 export type BodyParser<
 	Route extends TypedRoute = TypedRoute,
@@ -327,6 +325,7 @@ export type LocalHook<
 		Instance['schema']
 	> extends infer Route extends TypedSchema
 		? {
+				ab?: Path
 				/**
 				 * Short for 'Content-Type'
 				 *
@@ -500,11 +499,11 @@ export type OverwritableTypeRoute = {
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
-export type ElysiaConfig = {
+export type ElysiaConfig<T extends string = ''> = {
 	name?: string
 	seed?: unknown
 	serve?: Partial<Serve>
-	prefix?: string
+	prefix?: T
 	/**
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */

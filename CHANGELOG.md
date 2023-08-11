@@ -1,3 +1,7 @@
+# 0.6.4 - 13 Aug 2023
+Bug fix:
+- Collide Elysia.prefix type
+
 # 0.6.3 - 8 Aug 2023
 Bug fix:
 - resolve .code and [ERROR_CODE]

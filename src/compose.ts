@@ -220,7 +220,7 @@ export const composeHandler = ({
 	handleError: Elysia['handleError']
 	meta?: Elysia['meta']
 	onRequest: BeforeRequestHandler<any, any>[]
-	config: ElysiaConfig
+	config: ElysiaConfig<any>
 }): ComposedHandler => {
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
@@ -776,7 +776,7 @@ export const composeHandler = ({
 	})
 }
 
-export const composeGeneralHandler = (app: Elysia<any>) => {
+export const composeGeneralHandler = (app: Elysia<any, any>) => {
 	let decoratorsLiteral = ''
 
 	// @ts-ignore
@@ -912,7 +912,7 @@ export const composeGeneralHandler = (app: Elysia<any>) => {
 	})
 }
 
-export const composeErrorHandler = (app: Elysia<any>) => {
+export const composeErrorHandler = (app: Elysia<any, any>) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,

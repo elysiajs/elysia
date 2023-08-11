@@ -1,28 +1,10 @@
 import { Elysia, t } from '../src'
 
-class CustomError extends Error {
-	constructor(public message: string) {
-		super(message)
-	}
-}
+const plugin = new Elysia({ prefix: '/hello' }).get('/', () => 'A')
 
 const app = new Elysia()
-	.addError({
-		Code1: CustomError,
-		Code2: CustomError
-	})
-	.onError(({ code, error }) => {
-		switch (code) {
-			case 'Code1':
-				return error
-
-			case 'Code2':
-				return error
-		}
-	})
-	.get('/', () => {
-		throw new CustomError('Server is during maintainance')
-
-		return 'unreachable'
-	})
+	.get('/', () => 'A')
+	.use(plugin)
 	.listen(3000)
+
+const a = app.routes

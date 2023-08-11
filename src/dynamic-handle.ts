@@ -21,7 +21,7 @@ export type DynamicHandler = {
 }
 
 export const createDynamicHandler =
-	(app: Elysia<any>) =>
+	(app: Elysia<any, any>) =>
 	async (request: Request): Promise<Response> => {
 		const set: Context['set'] = {
 			status: 200,
@@ -277,7 +277,7 @@ export const createDynamicHandler =
 	}
 
 export const createDynamicErrorHandler =
-	(app: Elysia<any>) =>
+	(app: Elysia<any, any>) =>
 	async (
 		request: Request,
 		error: ElysiaErrors,

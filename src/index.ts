@@ -56,7 +56,8 @@ import type {
 	TypedSchemaToRoute,
 	DeepWritable,
 	Reconciliation,
-	BeforeRequestHandler
+	BeforeRequestHandler,
+	ElysiaDefaultMeta
 } from './types'
 import type { Static, TSchema } from '@sinclair/typebox'
 
@@ -90,7 +91,14 @@ import {
  * ```
  */
 export default class Elysia<
-	Instance extends ElysiaInstance = {
+	BasePath extends string = '',
+	Instance extends ElysiaInstance<{
+		store?: Record<string, unknown>
+		request?: Record<string, unknown>
+		error?: Record<string, Error>
+		schema?: TypedSchema<any>
+		meta?: ElysiaDefaultMeta
+	}> = {
 		path: ''
 		store: {}
 		request: {}
@@ -103,7 +111,7 @@ export default class Elysia<
 		}
 	}
 > {
-	config: ElysiaConfig
+	config: ElysiaConfig<BasePath>
 	private dependencies: Record<string, number[]> = {}
 
 	store: Instance['store'] = {}
@@ -151,10 +159,10 @@ export default class Elysia<
 	private wsRouter: Memoirist<any> | undefined
 
 	private dynamicRouter = new Memoirist<DynamicHandler>()
-	private lazyLoadModules: Promise<Elysia<any>>[] = []
-	path: Instance['path'] = '' as any
+	private lazyLoadModules: Promise<Elysia<any, any>>[] = []
+	path: BasePath = '' as any
 
-	constructor(config?: Partial<ElysiaConfig>) {
+	constructor(config?: Partial<ElysiaConfig<BasePath>>) {
 		this.config = {
 			forceErrorEncapsulation: false,
 			prefix: '',
@@ -513,20 +521,22 @@ export default class Elysia<
 	>(
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		errors: Errors
-	): Elysia<{
-		path: Instance['path']
-		store: Instance['store']
-		error: Instance['error'] & {
-			[K in NonNullable<keyof Errors>]: Errors[K] extends {
-				prototype: infer LiteralError extends Error
+	): Elysia<
+		BasePath,
+		{
+			store: Instance['store']
+			error: Instance['error'] & {
+				[K in NonNullable<keyof Errors>]: Errors[K] extends {
+					prototype: infer LiteralError extends Error
+				}
+					? LiteralError
+					: Errors[K]
 			}
-				? LiteralError
-				: Errors[K]
+			request: Instance['request']
+			schema: Instance['schema']
+			meta: Instance['meta']
 		}
-		request: Instance['request']
-		schema: Instance['schema']
-		meta: Instance['meta']
-	}>
+	>
 
 	addError<
 		Name extends string,
@@ -536,20 +546,22 @@ export default class Elysia<
 	>(
 		name: Name,
 		errors: CustomError
-	): Elysia<{
-		path: Instance['path']
-		store: Instance['store']
-		error: Instance['error'] & {
-			[name in Name]: CustomError extends {
-				prototype: infer LiteralError extends Error
+	): Elysia<
+		BasePath,
+		{
+			store: Instance['store']
+			error: Instance['error'] & {
+				[name in Name]: CustomError extends {
+					prototype: infer LiteralError extends Error
+				}
+					? LiteralError
+					: CustomError
 			}
-				? LiteralError
-				: CustomError
+			request: Instance['request']
+			schema: Instance['schema']
+			meta: Instance['meta']
 		}
-		request: Instance['request']
-		schema: Instance['schema']
-		meta: Instance['meta']
-	}>
+	>
 
 	/**
 	 * Register errors
@@ -578,7 +590,7 @@ export default class Elysia<
 		error?: {
 			prototype: Error
 		}
-	): Elysia<any> {
+	): Elysia<any, any> {
 		if (typeof name === 'string' && error) {
 			// @ts-ignore
 			error.prototype[ERROR_CODE] = name
@@ -607,14 +619,16 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onError(handler?: ErrorHandler<Instance['error']>): Elysia<{
-		path: Instance['path']
-		store: Instance['store']
-		error: Instance['error']
-		request: Instance['request']
-		schema: Instance['schema']
-		meta: Instance['meta']
-	}> {
+	onError(handler?: ErrorHandler<Instance['error']>): Elysia<
+		BasePath,
+		{
+			store: Instance['store']
+			error: Instance['error']
+			request: Instance['request']
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}
+	> {
 		if (handler) this.event.error.push(handler)
 
 		return this as any
@@ -703,92 +717,109 @@ export default class Elysia<
 	}
 
 	group<
-		NewElysia extends Elysia<any> = Elysia<any>,
+		NewElysia extends Elysia<any, any> = Elysia<any, any>,
 		Prefix extends string = string
 	>(
 		prefix: Prefix,
 		run: (
-			group: Elysia<{
-				path: `${Instance['path']}${Prefix}`
-				error: Instance['error']
-				request: Instance['request']
-				store: Instance['store'] & ElysiaInstance['store']
-				schema: Instance['schema']
-				meta: {
-					schema: Instance['meta']['schema']
-					defs: Instance['meta']['defs']
-					exposed: {}
+			group: Elysia<
+				`${BasePath}${Prefix}`,
+				{
+					error: Instance['error']
+					request: Instance['request']
+					store: Instance['store'] & ElysiaInstance['store']
+					schema: Instance['schema']
+					meta: {
+						schema: Instance['meta']['schema']
+						defs: Instance['meta']['defs']
+						exposed: {}
+					}
 				}
-			}>
+			>
 		) => NewElysia
-	): NewElysia extends Elysia<infer NewInstance>
-		? Elysia<{
-				path: Instance['path']
-				error: Instance['error']
-				request: Instance['request']
-				schema: Instance['schema']
-				store: Instance['store']
-				meta: Instance['meta'] &
-					(Omit<NewInstance['meta'], 'schema'> &
-						Record<
-							'schema',
-							{
-								[key in keyof NewInstance['meta']['schema'] as key extends `${infer Rest}`
-									? `${Prefix}${Rest}`
-									: key]: NewInstance['meta']['schema'][key]
-							}
-						>)
-		  }>
+	): NewElysia extends Elysia<`${BasePath}${Prefix}`, infer NewInstance>
+		? Elysia<
+				BasePath,
+				{
+					error: Instance['error']
+					request: Instance['request']
+					schema: Instance['schema']
+					store: Instance['store']
+					meta: Instance['meta'] &
+						(Omit<NewInstance['meta'], 'schema'> &
+							Record<
+								'schema',
+								{
+									[key in keyof NewInstance['meta']['schema'] as key extends `${infer Rest}`
+										? `${Prefix}${Rest}`
+										: key]: NewInstance['meta']['schema'][key]
+								}
+							>)
+				}
+		  >
 		: this
 
 	group<
 		Schema extends TypedSchema<
 			Exclude<keyof Instance['meta']['defs'], number | symbol>
 		>,
-		NewElysia extends Elysia<any> = Elysia<any>,
+		NewElysia extends Elysia<any, any> = Elysia<any, any>,
 		Prefix extends string = string
 	>(
 		prefix: Prefix,
-		schema: LocalHook<Schema, Instance, `${Instance['path']}${Prefix}`>,
+		schema: LocalHook<Schema, Instance, `${BasePath}${Prefix}`>,
 		run: (
-			group: Elysia<{
-				path: `${Instance['path']}${Prefix}`
-				error: Instance['error']
-				request: Instance['request']
-				store: Instance['store'] & ElysiaInstance['store']
-				schema: {
-					body: undefined extends Schema['body']
-						? Instance['schema']['body']
-						: Schema['body']
-					headers: undefined extends Schema['headers']
-						? Instance['schema']['headers']
-						: Schema['headers']
-					query: undefined extends Schema['query']
-						? Instance['schema']['query']
-						: Schema['query']
-					params: undefined extends Schema['params']
-						? Instance['schema']['params']
-						: Schema['params']
-					response: undefined extends Schema['response']
-						? Instance['schema']['response']
-						: Schema['response']
+			group: Elysia<
+				`${BasePath}${Prefix}`,
+				{
+					error: Instance['error']
+					request: Instance['request']
+					store: Instance['store'] & ElysiaInstance['store']
+					schema: {
+						body: undefined extends Schema['body']
+							? Instance['schema']['body']
+							: Schema['body']
+						headers: undefined extends Schema['headers']
+							? Instance['schema']['headers']
+							: Schema['headers']
+						query: undefined extends Schema['query']
+							? Instance['schema']['query']
+							: Schema['query']
+						params: undefined extends Schema['params']
+							? Instance['schema']['params']
+							: Schema['params']
+						response: undefined extends Schema['response']
+							? Instance['schema']['response']
+							: Schema['response']
+					}
+					meta: {
+						schema: Instance['meta']['schema']
+						defs: Instance['meta']['defs']
+						exposed: {}
+					}
 				}
-				meta: {
-					schema: Instance['meta']['schema']
-					defs: Instance['meta']['defs']
-					exposed: {}
-				}
-			}>
+			>
 		) => NewElysia
-	): NewElysia extends Elysia<infer NewInstance>
-		? Elysia<{
-				path: Instance['path']
-				error: Instance['error']
-				request: Instance['request']
-				schema: Instance['schema']
-				store: Instance['store']
-				meta: Instance['meta'] & NewInstance['meta']
-		  }>
+	): NewElysia extends Elysia<`${BasePath}${Prefix}`, infer NewInstance>
+		? Elysia<
+				BasePath,
+				{
+					error: Instance['error']
+					request: Instance['request']
+					schema: Instance['schema']
+					store: Instance['store']
+					meta: Instance['meta'] &
+						(Omit<NewInstance['meta'], 'schema'> &
+							Record<
+								'schema',
+								{
+									[key in keyof NewInstance['meta']['schema'] as key extends `${infer Rest}`
+										? `${Prefix}${Rest}`
+										: key]: NewInstance['meta']['schema'][key]
+								}
+							>)
+				}
+		  >
 		: this
 
 	/**
@@ -806,50 +837,16 @@ export default class Elysia<
 	 * ```
 	 */
 	group<
-		Executor extends (
-			group: Elysia<{
-				path: `${Instance['path']}${Prefix}`
-				error: Instance['error']
-				request: Instance['request']
-				store: Instance['store'] & ElysiaInstance['store']
-				schema: Schema & Instance['schema']
-				meta: {
-					schema: {}
-					defs: Instance['meta']['defs']
-					exposed: {}
-				}
-			}>
-		) => NewElysia,
+		Executor extends (group: Elysia) => Elysia,
 		Schema extends TypedSchema<
 			Exclude<keyof Instance['meta']['defs'], number | symbol>
-		>,
-		NewElysia extends Elysia<any> = Elysia<any>,
-		Prefix extends string = string
+		>
 	>(
-		prefix: Prefix,
-		schemaOrRun:
-			| LocalHook<Schema, Instance, `${Instance['path']}${Prefix}`>
-			| Executor,
+		prefix: string,
+		schemaOrRun: LocalHook<Schema, Instance> | Executor,
 		run?: Executor
-	): NewElysia extends Elysia<infer NewInstance>
-		? Elysia<{
-				path: Instance['path']
-				error: Instance['error']
-				request: Instance['request']
-				schema: Instance['schema']
-				store: Instance['store']
-				meta: Instance['meta'] &
-					Record<
-						'schema',
-						{
-							[key in keyof NewInstance['meta']['schema'] as key extends `${infer Rest}`
-								? `${Prefix}${Rest}`
-								: key]: NewInstance['meta']['schema'][key]
-						}
-					>
-		  }>
-		: this {
-		const instance = new Elysia<any>({
+	): this {
+		const instance = new Elysia<any, any>({
 			...this.config,
 			prefix: this.config.prefix + prefix
 		})
@@ -865,13 +862,13 @@ export default class Elysia<
 		if (sandbox.event.request.length)
 			this.event.request = [
 				...this.event.request,
-				...sandbox.event.request
+				...(sandbox.event.request as any)
 			]
 
 		if (sandbox.event.onResponse.length)
 			this.event.onResponse = [
 				...this.event.onResponse,
-				...sandbox.event.onResponse
+				...(sandbox.event.onResponse as any)
 			]
 
 		this.model(sandbox.meta.defs)
@@ -952,69 +949,75 @@ export default class Elysia<
 		>
 	>(
 		hook: LocalHook<Schema, Instance>
-	): Elysia<{
-		path: Instance['path']
-		error: Instance['error']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		meta: Instance['meta'] &
-			Record<
-				'schema',
-				{
-					[key in keyof Schema]: Schema[key]
-				}
-			>
-	}>
+	): Elysia<
+		any,
+		{
+			error: Instance['error']
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			meta: Instance['meta'] &
+				Record<
+					'schema',
+					{
+						[key in keyof Schema]: Schema[key]
+					}
+				>
+		}
+	>
 
 	guard<
 		Schema extends TypedSchema<
 			Exclude<keyof Instance['meta']['defs'], number | symbol>
 		>,
-		NewElysia extends Elysia<any> = Elysia<any>
+		NewElysia extends Elysia<any, any> = Elysia<any, any>
 	>(
 		hook: LocalHook<Schema, Instance>,
 		run: (
-			group: Elysia<{
-				path: Instance['path']
-				error: Instance['error']
-				request: Instance['request']
-				store: Instance['store']
-				schema: {
-					body: undefined extends Schema['body']
-						? Instance['schema']['body']
-						: Schema['body']
-					headers: undefined extends Schema['headers']
-						? Instance['schema']['headers']
-						: Schema['headers']
-					query: undefined extends Schema['query']
-						? Instance['schema']['query']
-						: Schema['query']
-					params: undefined extends Schema['params']
-						? Instance['schema']['params']
-						: Schema['params']
-					response: undefined extends Schema['response']
-						? Instance['schema']['response']
-						: Schema['response']
+			group: Elysia<
+				BasePath,
+				{
+					error: Instance['error']
+					request: Instance['request']
+					store: Instance['store']
+					schema: {
+						body: undefined extends Schema['body']
+							? Instance['schema']['body']
+							: Schema['body']
+						headers: undefined extends Schema['headers']
+							? Instance['schema']['headers']
+							: Schema['headers']
+						query: undefined extends Schema['query']
+							? Instance['schema']['query']
+							: Schema['query']
+						params: undefined extends Schema['params']
+							? Instance['schema']['params']
+							: Schema['params']
+						response: undefined extends Schema['response']
+							? Instance['schema']['response']
+							: Schema['response']
+					}
+					meta: Instance['meta']
 				}
-				meta: Instance['meta']
-			}>
+			>
 		) => NewElysia
-	): NewElysia extends Elysia<infer NewInstance>
-		? Elysia<{
-				path: Instance['path']
-				error: Instance['error']
-				request: Instance['request']
-				store: Instance['store']
-				schema: Instance['schema']
-				meta: Instance['meta'] &
-					Record<
-						'schema',
-						{
-							[key in keyof NewInstance['meta']['schema']]: NewInstance['meta']['schema'][key]
-						}
-					>
-		  }>
+	): NewElysia extends Elysia<any, infer NewInstance>
+		? Elysia<
+				BasePath,
+				{
+					error: Instance['error']
+					request: Instance['request']
+					store: Instance['store']
+					schema: Instance['schema']
+					meta: Instance['meta'] &
+						Record<
+							'schema',
+							{
+								[key in keyof NewInstance['meta']['schema']]: NewInstance['meta']['schema'][key]
+							}
+						>
+				}
+		  >
 		: this
 
 	/**
@@ -1042,8 +1045,8 @@ export default class Elysia<
 	 */
 	guard(
 		hook: LocalHook<any, Instance>,
-		run?: (group: Elysia<any>) => Elysia<any>
-	): Elysia<any> {
+		run?: (group: Elysia<any, any>) => Elysia<any, any>
+	): Elysia<any, any> {
 		if (!run) {
 			this.event = mergeLifeCycle(this.event, hook)
 			this.$schema = {
@@ -1129,91 +1132,107 @@ export default class Elysia<
 						? this
 						: any
 					: Params
-			) => MaybePromise<Elysia<NewInstance>>
+			) => MaybePromise<Elysia<any, NewInstance>>
 		>
-	): Elysia<{
-		path: Instance['path']
-		error: Instance['error'] & NewInstance['error']
-		request: Reconciliation<Instance['request'], NewInstance['request']>
-		store: Reconciliation<Instance['store'], NewInstance['store']>
-		schema: Instance['schema'] & NewInstance['schema']
-		meta: {
-			schema: Instance['meta']['schema'] & NewInstance['meta']['schema']
-			defs: Reconciliation<
-				Instance['meta']['defs'],
-				NewInstance['meta']['defs']
-			>
-			exposed: Instance['meta']['exposed'] &
-				NewInstance['meta']['exposed']
+	): Elysia<
+		BasePath,
+		{
+			error: Instance['error'] & NewInstance['error']
+			request: Reconciliation<Instance['request'], NewInstance['request']>
+			store: Reconciliation<Instance['store'], NewInstance['store']>
+			schema: Instance['schema'] & NewInstance['schema']
+			meta: {
+				schema: Instance['meta']['schema'] &
+					NewInstance['meta']['schema']
+				defs: Reconciliation<
+					Instance['meta']['defs'],
+					NewInstance['meta']['defs']
+				>
+				exposed: Instance['meta']['exposed'] &
+					NewInstance['meta']['exposed']
+			}
 		}
-	}>
+	>
 
 	use<NewInstance extends ElysiaInstance>(
-		instance: Elysia<NewInstance>
-	): Elysia<{
-		path: NewInstance['path']
-		error: Instance['error'] & NewInstance['error']
-		request: Reconciliation<Instance['request'], NewInstance['request']>
-		store: Reconciliation<Instance['store'], NewInstance['store']>
-		schema: Instance['schema'] & NewInstance['schema']
-		meta: {
-			schema: Instance['meta']['schema'] & NewInstance['meta']['schema']
-			defs: Reconciliation<
-				Instance['meta']['defs'],
-				NewInstance['meta']['defs']
-			>
-			exposed: Instance['meta']['exposed'] &
-				NewInstance['meta']['exposed']
+		instance: Elysia<any, NewInstance>
+	): Elysia<
+		BasePath,
+		{
+			error: Instance['error'] & NewInstance['error']
+			request: Reconciliation<Instance['request'], NewInstance['request']>
+			store: Reconciliation<Instance['store'], NewInstance['store']>
+			schema: Instance['schema'] & NewInstance['schema']
+			meta: {
+				schema: Instance['meta']['schema'] &
+					NewInstance['meta']['schema']
+				defs: Reconciliation<
+					Instance['meta']['defs'],
+					NewInstance['meta']['defs']
+				>
+				exposed: Instance['meta']['exposed'] &
+					NewInstance['meta']['exposed']
+			}
 		}
-	}>
+	>
 
 	// Import Fn
 	use<LazyLoadElysia extends ElysiaInstance>(
 		plugin: Promise<{
 			default: (
-				elysia: Elysia<any>
-			) => MaybePromise<Elysia<LazyLoadElysia>>
+				elysia: Elysia<any, any>
+			) => MaybePromise<Elysia<any, LazyLoadElysia>>
 		}>
-	): Elysia<{
-		path: Instance['path']
-		error: Instance['error'] & LazyLoadElysia['error']
-		request: Reconciliation<Instance['request'], LazyLoadElysia['request']>
-		store: Reconciliation<Instance['store'], LazyLoadElysia['store']>
-		schema: Instance['schema'] & LazyLoadElysia['schema']
-		meta: {
-			schema: Instance['meta']['schema'] &
-				LazyLoadElysia['meta']['schema']
-			defs: Reconciliation<
-				Instance['meta']['defs'],
-				LazyLoadElysia['meta']['defs']
+	): Elysia<
+		BasePath,
+		{
+			error: Instance['error'] & LazyLoadElysia['error']
+			request: Reconciliation<
+				Instance['request'],
+				LazyLoadElysia['request']
 			>
-			exposed: Instance['meta']['exposed'] &
-				LazyLoadElysia['meta']['exposed']
+			store: Reconciliation<Instance['store'], LazyLoadElysia['store']>
+			schema: Instance['schema'] & LazyLoadElysia['schema']
+			meta: {
+				schema: Instance['meta']['schema'] &
+					LazyLoadElysia['meta']['schema']
+				defs: Reconciliation<
+					Instance['meta']['defs'],
+					LazyLoadElysia['meta']['defs']
+				>
+				exposed: Instance['meta']['exposed'] &
+					LazyLoadElysia['meta']['exposed']
+			}
 		}
-	}>
+	>
 
 	// Import inline
 	use<LazyLoadElysia extends ElysiaInstance>(
 		plugin: Promise<{
-			default: (elysia: Elysia<any>) => Elysia<LazyLoadElysia>
+			default: (elysia: Elysia<any, any>) => Elysia<any, LazyLoadElysia>
 		}>
-	): Elysia<{
-		path: Instance['path']
-		error: Instance['error'] & LazyLoadElysia['error']
-		request: Reconciliation<Instance['request'], LazyLoadElysia['request']>
-		store: Reconciliation<Instance['store'], LazyLoadElysia['store']>
-		schema: Instance['schema'] & LazyLoadElysia['schema']
-		meta: {
-			schema: Instance['meta']['schema'] &
-				LazyLoadElysia['meta']['schema']
-			defs: Reconciliation<
-				Instance['meta']['defs'],
-				LazyLoadElysia['meta']['defs']
+	): Elysia<
+		BasePath,
+		{
+			error: Instance['error'] & LazyLoadElysia['error']
+			request: Reconciliation<
+				Instance['request'],
+				LazyLoadElysia['request']
 			>
-			exposed: Instance['meta']['exposed'] &
-				LazyLoadElysia['meta']['exposed']
+			store: Reconciliation<Instance['store'], LazyLoadElysia['store']>
+			schema: Instance['schema'] & LazyLoadElysia['schema']
+			meta: {
+				schema: Instance['meta']['schema'] &
+					LazyLoadElysia['meta']['schema']
+				defs: Reconciliation<
+					Instance['meta']['defs'],
+					LazyLoadElysia['meta']['defs']
+				>
+				exposed: Instance['meta']['exposed'] &
+					LazyLoadElysia['meta']['exposed']
+			}
 		}
-	}>
+	>
 
 	/**
 	 * ### use
@@ -1231,15 +1250,19 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| Elysia<any>
-			| MaybePromise<(app: Elysia<any>) => MaybePromise<Elysia<any>>>
+			| Elysia<any, any>
+			| MaybePromise<
+					(app: Elysia<any, any>) => MaybePromise<Elysia<any, any>>
+			  >
 			| Promise<{
-					default: Elysia<any>
+					default: Elysia<any, any>
 			  }>
 			| Promise<{
-					default: (elysia: Elysia<any>) => MaybePromise<Elysia<any>>
+					default: (
+						elysia: Elysia<any, any>
+					) => MaybePromise<Elysia<any, any>>
 			  }>
-	): Elysia<any> {
+	): Elysia<any, any> {
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
 				plugin
@@ -1281,12 +1304,12 @@ export default class Elysia<
 								this.event,
 								instance.event,
 								current
-							)
+							) as any
 						} else
 							this.event = mergeLifeCycle(
 								this.event,
 								instance.event
-							)
+							) as any
 
 						this.decorators = mergeDeep(
 							this.decorators,
@@ -1455,95 +1478,105 @@ export default class Elysia<
 	 */
 	get<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: {
-			defs: Instance['meta']['defs']
-			exposed: Instance['meta']['exposed']
-			schema: Prettify<
-				Instance['meta']['schema'] &
-					(MergeSchema<
-						Schema,
-						Instance['schema']
-					> extends infer Typed extends TypedSchema
-						? {
-								[path in `${Instance['path']}${Path}`]: {
-									get: {
-										body: UnwrapSchema<
-											Typed['body'],
-											Instance['meta']['defs']
-										>
-										headers: UnwrapSchema<
-											Typed['headers'],
-											Instance['meta']['defs']
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: {
+				defs: Instance['meta']['defs']
+				exposed: Instance['meta']['exposed']
+				schema: Prettify<
+					Instance['meta']['schema'] &
+						(MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+							? {
+									[path in Path]: {
+										get: {
+											body: UnwrapSchema<
+												Typed['body'],
+												Instance['meta']['defs']
+											>
+											headers: UnwrapSchema<
+												Typed['headers'],
+												Instance['meta']['defs']
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
 												: undefined
-											: undefined
-										query: UnwrapSchema<
-											Typed['query'],
-											Instance['meta']['defs']
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
+											query: UnwrapSchema<
+												Typed['query'],
+												Instance['meta']['defs']
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
 												: undefined
-											: undefined
-										params: UnwrapSchema<
-											Typed['params'],
-											Instance['meta']['defs']
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
-												: undefined
-											: Record<ExtractPath<Path>, string>
-										response: Typed['response'] extends
-											| TSchema
-											| string
-											? {
-													'200': UnwrapSchema<
-														Typed['response'],
-														Instance['meta']['defs'],
-														ReturnType<Handler>
-													>
-											  }
-											: Typed['response'] extends Record<
-													string,
-													TSchema | string
-											  >
-											? {
-													[key in keyof Typed['response']]: UnwrapSchema<
-														Typed['response'][key],
-														Instance['meta']['defs'],
-														ReturnType<Handler>
-													>
-											  }
-											: {
-													'200': ReturnType<Handler>
-											  }
+											params: UnwrapSchema<
+												Typed['params'],
+												Instance['meta']['defs']
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
+												: Record<
+														ExtractPath<Path>,
+														string
+												  >
+											response: Typed['response'] extends
+												| TSchema
+												| string
+												? {
+														'200': UnwrapSchema<
+															Typed['response'],
+															Instance['meta']['defs'],
+															ReturnType<Handler>
+														>
+												  }
+												: Typed['response'] extends Record<
+														string,
+														TSchema | string
+												  >
+												? {
+														[key in keyof Typed['response']]: UnwrapSchema<
+															Typed['response'][key],
+															Instance['meta']['defs'],
+															ReturnType<Handler>
+														>
+												  }
+												: {
+														'200': ReturnType<Handler>
+												  }
+										}
 									}
-								}
-						  }
-						: {})
-			>
+							  }
+							: {})
+				>
+			}
 		}
-	}> {
+	> {
 		this.add(
 			'GET',
 			path,
@@ -1574,109 +1607,107 @@ export default class Elysia<
 	 */
 	post<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										post: {
-											handler?: Handler
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											post: {
+												handler?: Handler
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'POST',
 			path,
@@ -1707,108 +1738,106 @@ export default class Elysia<
 	 */
 	put<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										put: {
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											put: {
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'PUT',
 			path,
@@ -1839,108 +1868,106 @@ export default class Elysia<
 	 */
 	patch<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										patch: {
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											patch: {
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'PATCH',
 			path,
@@ -1971,108 +1998,106 @@ export default class Elysia<
 	 */
 	delete<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										delete: {
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											delete: {
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'DELETE',
 			path,
@@ -2103,108 +2128,106 @@ export default class Elysia<
 	 */
 	options<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										options: {
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											options: {
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'OPTIONS',
 			path,
@@ -2230,108 +2253,106 @@ export default class Elysia<
 	 */
 	all<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										all: {
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											all: {
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'ALL',
 			path,
@@ -2362,108 +2383,106 @@ export default class Elysia<
 	 */
 	head<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										head: {
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											head: {
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'HEAD',
 			path,
@@ -2494,108 +2513,106 @@ export default class Elysia<
 	 */
 	trace<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										trace: {
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											trace: {
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'TRACE',
 			path,
@@ -2626,108 +2643,106 @@ export default class Elysia<
 	 */
 	connect<
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>,
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
 		path: Path,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${Instance['path']}${Path}`>
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						(MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-							? {
-									[path in `${Instance['path']}${Path}`]: {
-										connect: {
-											body: UnwrapSchema<
-												Typed['body'],
-												Instance['meta']['defs']
-											>
-											headers: UnwrapSchema<
-												Typed['headers'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							(MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+								? {
+										[path in Path]: {
+											connect: {
+												body: UnwrapSchema<
+													Typed['body'],
+													Instance['meta']['defs']
+												>
+												headers: UnwrapSchema<
+													Typed['headers'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											query: UnwrapSchema<
-												Typed['query'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
+												query: UnwrapSchema<
+													Typed['query'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
 													: undefined
-												: undefined
-											params: UnwrapSchema<
-												Typed['params'],
-												Instance['meta']['defs']
-											> extends infer Result
-												? Result extends Record<
-														string,
-														any
-												  >
-													? Result
-													: undefined
-												: Record<
-														ExtractPath<Path>,
-														string
-												  >
-											response: Typed['response'] extends
-												| TSchema
-												| string
-												? {
-														'200': UnwrapSchema<
-															Typed['response'],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: Typed['response'] extends Record<
-														string,
-														TSchema | string
-												  >
-												? {
-														[key in keyof Typed['response']]: UnwrapSchema<
-															Typed['response'][key],
-															Instance['meta']['defs'],
-															ReturnType<Handler>
-														>
-												  }
-												: {
-														'200': ReturnType<Handler>
-												  }
+												params: UnwrapSchema<
+													Typed['params'],
+													Instance['meta']['defs']
+												> extends infer Result
+													? Result extends Record<
+															string,
+															any
+													  >
+														? Result
+														: undefined
+													: Record<
+															ExtractPath<Path>,
+															string
+													  >
+												response: Typed['response'] extends
+													| TSchema
+													| string
+													? {
+															'200': UnwrapSchema<
+																Typed['response'],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: Typed['response'] extends Record<
+															string,
+															TSchema | string
+													  >
+													? {
+															[key in keyof Typed['response']]: UnwrapSchema<
+																Typed['response'][key],
+																Instance['meta']['defs'],
+																ReturnType<Handler>
+															>
+													  }
+													: {
+															'200': ReturnType<Handler>
+													  }
+											}
 										}
-									}
-							  }
-							: {})
+								  }
+								: {})
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			'CONNECT',
 			path,
@@ -2766,41 +2781,41 @@ export default class Elysia<
 		 * Path to register websocket to
 		 */
 		path: Path,
-		options: Path extends ''
-			? never
-			: this extends Elysia<infer Instance>
+		options: this extends Elysia<any, infer Instance>
 			? ElysiaWSOptions<
-					`${Instance['path']}${Path}`,
+					`${BasePath}${Path}`,
 					Schema,
 					Instance['meta']['defs']
 			  >
 			: never
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Instance['meta'] &
-			Record<
-				'schema',
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Instance['meta'] &
 				Record<
-					`${Instance['path']}${Path}`,
-					MergeSchema<
-						Schema,
-						Instance['schema']
-					> extends infer Typed extends TypedSchema
-						? {
-								subscribe: TypedWSRouteToEden<
-									Typed,
-									Instance['meta']['defs'],
-									`${Instance['path']}${Path}`
-								>
-						  }
-						: {}
+					'schema',
+					Record<
+						Path,
+						MergeSchema<
+							Schema,
+							Instance['schema']
+						> extends infer Typed extends TypedSchema
+							? {
+									subscribe: TypedWSRouteToEden<
+										Typed,
+										Instance['meta']['defs'],
+										`${BasePath}${Path}`
+									>
+							  }
+							: {}
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		if (!this.wsRouter)
 			throw new Error(
 				"Can't find WebSocket. Please register WebSocket plugin first by importing 'elysia/ws'"
@@ -2877,11 +2892,7 @@ export default class Elysia<
 		>,
 		Method extends HTTPMethod,
 		Path extends string,
-		Handler extends LocalHandler<
-			Schema,
-			Instance,
-			`${Instance['path']}${Path}`
-		>
+		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>
 	>(
 		method: Method,
 		path: Path,
@@ -2890,7 +2901,7 @@ export default class Elysia<
 		{
 			config,
 			...hook
-		}: LocalHook<Schema, Instance, `${Instance['path']}${Path}`> & {
+		}: LocalHook<Schema, Instance, `${BasePath}${Path}`> & {
 			config: {
 				allowMeta?: boolean
 			}
@@ -2899,84 +2910,98 @@ export default class Elysia<
 				allowMeta: false
 			}
 		}
-	): Elysia<{
-		path: Instance['path']
-		request: Instance['request']
-		store: Instance['store']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: Record<'defs', Instance['meta']['defs']> &
-			Record<'exposed', Instance['meta']['exposed']> &
-			Record<
-				'schema',
-				Prettify<
-					Instance['meta']['schema'] &
-						MergeSchema<
-							Schema,
-							Instance['schema']
-						> extends infer Typed extends TypedSchema
-						? {
-								[path in `${Instance['path']}${Path}`]: {
-									[method in Method]: {
-										body: UnwrapSchema<
-											Typed['body'],
-											Instance['meta']['defs']
-										>
-										headers: UnwrapSchema<
-											Typed['headers'],
-											Instance['meta']['defs']
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
+	): Elysia<
+		BasePath,
+		{
+			request: Instance['request']
+			store: Instance['store']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: Record<'defs', Instance['meta']['defs']> &
+				Record<'exposed', Instance['meta']['exposed']> &
+				Record<
+					'schema',
+					Prettify<
+						Instance['meta']['schema'] &
+							MergeSchema<
+								Schema,
+								Instance['schema']
+							> extends infer Typed extends TypedSchema
+							? {
+									[path in Path]: {
+										[method in Method]: {
+											body: UnwrapSchema<
+												Typed['body'],
+												Instance['meta']['defs']
+											>
+											headers: UnwrapSchema<
+												Typed['headers'],
+												Instance['meta']['defs']
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
 												: undefined
-											: undefined
-										query: UnwrapSchema<
-											Typed['query'],
-											Instance['meta']['defs']
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
+											query: UnwrapSchema<
+												Typed['query'],
+												Instance['meta']['defs']
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
 												: undefined
-											: undefined
-										params: UnwrapSchema<
-											Typed['params'],
-											Instance['meta']['defs']
-										> extends infer Result
-											? Result extends Record<string, any>
-												? Result
-												: undefined
-											: Record<ExtractPath<Path>, string>
-										response: Typed['response'] extends
-											| TSchema
-											| string
-											? {
-													'200': UnwrapSchema<
-														Typed['response'],
-														Instance['meta']['defs'],
-														ReturnType<Handler>
-													>
-											  }
-											: Typed['response'] extends Record<
-													string,
-													TSchema | string
-											  >
-											? {
-													[key in keyof Typed['response']]: UnwrapSchema<
-														Typed['response'][key],
-														Instance['meta']['defs'],
-														ReturnType<Handler>
-													>
-											  }
-											: {
-													'200': ReturnType<Handler>
-											  }
+											params: UnwrapSchema<
+												Typed['params'],
+												Instance['meta']['defs']
+											> extends infer Result
+												? Result extends Record<
+														string,
+														any
+												  >
+													? Result
+													: undefined
+												: Record<
+														ExtractPath<Path>,
+														string
+												  >
+											response: Typed['response'] extends
+												| TSchema
+												| string
+												? {
+														'200': UnwrapSchema<
+															Typed['response'],
+															Instance['meta']['defs'],
+															ReturnType<Handler>
+														>
+												  }
+												: Typed['response'] extends Record<
+														string,
+														TSchema | string
+												  >
+												? {
+														[key in keyof Typed['response']]: UnwrapSchema<
+															Typed['response'][key],
+															Instance['meta']['defs'],
+															ReturnType<Handler>
+														>
+												  }
+												: {
+														'200': ReturnType<Handler>
+												  }
+										}
 									}
-								}
-						  }
-						: never
+							  }
+							: never
+					>
 				>
-			>
-	}> {
+		}
+	> {
 		this.add(
 			method,
 			path,
@@ -3003,14 +3028,16 @@ export default class Elysia<
 	state<Key extends string | number | symbol, Value>(
 		name: Key,
 		value: Value
-	): Elysia<{
-		path: Instance['path']
-		store: Reconciliation<Instance['store'], Record<Key, Value>>
-		error: Instance['error']
-		request: Instance['request']
-		schema: Instance['schema']
-		meta: Instance['meta']
-	}>
+	): Elysia<
+		BasePath,
+		{
+			store: Reconciliation<Instance['store'], Record<Key, Value>>
+			error: Instance['error']
+			request: Instance['request']
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}
+	>
 
 	/**
 	 * ### state
@@ -3026,14 +3053,16 @@ export default class Elysia<
 	 */
 	state<NewStore extends Record<string, unknown>>(
 		store: NewStore
-	): Elysia<{
-		path: Instance['path']
-		store: Reconciliation<Instance['store'], DeepWritable<NewStore>>
-		error: Instance['error']
-		request: Instance['request']
-		schema: Instance['schema']
-		meta: Instance['meta']
-	}>
+	): Elysia<
+		BasePath,
+		{
+			store: Reconciliation<Instance['store'], DeepWritable<NewStore>>
+			error: Instance['error']
+			request: Instance['request']
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}
+	>
 
 	/**
 	 * ### state
@@ -3081,14 +3110,16 @@ export default class Elysia<
 	decorate<const Name extends string, const Value>(
 		name: Name,
 		value: Value
-	): Elysia<{
-		path: Instance['path']
-		store: Instance['store']
-		error: Instance['error']
-		request: Reconciliation<Instance['request'], Record<Name, Value>>
-		schema: Instance['schema']
-		meta: Instance['meta']
-	}>
+	): Elysia<
+		BasePath,
+		{
+			store: Instance['store']
+			error: Instance['error']
+			request: Reconciliation<Instance['request'], Record<Name, Value>>
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}
+	>
 
 	/**
 	 * ### decorate
@@ -3104,14 +3135,19 @@ export default class Elysia<
 	 */
 	decorate<const Decorators extends Record<string, unknown>>(
 		name: Decorators
-	): Elysia<{
-		path: Instance['path']
-		store: Instance['store']
-		error: Instance['error']
-		request: Reconciliation<Instance['request'], DeepWritable<Decorators>>
-		schema: Instance['schema']
-		meta: Instance['meta']
-	}>
+	): Elysia<
+		BasePath,
+		{
+			store: Instance['store']
+			error: Instance['error']
+			request: Reconciliation<
+				Instance['request'],
+				DeepWritable<Decorators>
+			>
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}
+	>
 
 	/**
 	 * ### decorate
@@ -3164,14 +3200,16 @@ export default class Elysia<
 			> &
 				Instance['request']
 		) => MaybePromise<Returned> extends { store: any } ? never : Returned
-	): Elysia<{
-		path: Instance['path']
-		store: Instance['store']
-		error: Instance['error']
-		request: Instance['request'] & Awaited<Returned>
-		schema: Instance['schema']
-		meta: Instance['meta']
-	}> {
+	): Elysia<
+		BasePath,
+		{
+			store: Instance['store']
+			error: Instance['error']
+			request: Instance['request'] & Awaited<Returned>
+			schema: Instance['schema']
+			meta: Instance['meta']
+		}
+	> {
 		// @ts-ignore
 		transform.$elysia = 'derive'
 
@@ -3234,14 +3272,16 @@ export default class Elysia<
 		> = TypedSchema<
 			Exclude<keyof Instance['meta']['defs'], number | symbol>
 		>,
-		NewInstance = Elysia<{
-			path: Instance['path']
-			request: Instance['request']
-			store: Instance['store']
-			error: Instance['error']
-			schema: MergeSchema<Schema, Instance['schema']>
-			meta: Instance['meta']
-		}>
+		NewInstance = Elysia<
+			BasePath,
+			{
+				request: Instance['request']
+				store: Instance['store']
+				error: Instance['error']
+				schema: MergeSchema<Schema, Instance['schema']>
+				meta: Instance['meta']
+			}
+		>
 	>(schema: Schema): NewInstance {
 		const models = this.meta.defs
 
@@ -3416,41 +3456,45 @@ export default class Elysia<
 	model<Name extends string, Model extends TSchema>(
 		name: Name,
 		model: Model
-	): Elysia<{
-		path: Instance['path']
-		store: Instance['store']
-		request: Instance['request']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: {
-			schema: Instance['meta']['schema']
-			defs: Reconciliation<
-				Instance['meta']['defs'],
-				Record<Name, Static<Model>>
-			>
-			exposed: Instance['meta']['exposed']
+	): Elysia<
+		BasePath,
+		{
+			store: Instance['store']
+			request: Instance['request']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: {
+				schema: Instance['meta']['schema']
+				defs: Reconciliation<
+					Instance['meta']['defs'],
+					Record<Name, Static<Model>>
+				>
+				exposed: Instance['meta']['exposed']
+			}
 		}
-	}>
+	>
 
 	model<Recorder extends Record<string, TSchema>>(
 		record: Recorder
-	): Elysia<{
-		path: Instance['path']
-		store: Instance['store']
-		request: Instance['request']
-		schema: Instance['schema']
-		error: Instance['error']
-		meta: {
-			schema: Instance['meta']['schema']
-			defs: Reconciliation<
-				Instance['meta']['defs'],
-				{
-					[key in keyof Recorder]: Static<Recorder[key]>
-				}
-			>
-			exposed: Instance['meta']['exposed']
+	): Elysia<
+		BasePath,
+		{
+			store: Instance['store']
+			request: Instance['request']
+			schema: Instance['schema']
+			error: Instance['error']
+			meta: {
+				schema: Instance['meta']['schema']
+				defs: Reconciliation<
+					Instance['meta']['defs'],
+					{
+						[key in keyof Recorder]: Static<Recorder[key]>
+					}
+				>
+				exposed: Instance['meta']['exposed']
+			}
 		}
-	}>
+	>
 
 	model(name: string, model?: TSchema) {
 		if (typeof name === 'object')
