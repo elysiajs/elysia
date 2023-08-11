@@ -1,10 +1,13 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
 
-const plugin = new Elysia({ prefix: '/hello' }).get('/', () => 'A')
+const plugin = new Elysia({
+	prefix: '/plugin'
+}).get('/test-path', () => 'Test')
 
-const app = new Elysia()
-	.get('/', () => 'A')
+const app = new Elysia({
+	prefix: '/api'
+})
 	.use(plugin)
 	.listen(3000)
 
-const a = app.routes
+const routes = app.routes

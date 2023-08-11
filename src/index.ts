@@ -99,7 +99,6 @@ export default class Elysia<
 		schema?: TypedSchema<any>
 		meta?: ElysiaDefaultMeta
 	}> = {
-		path: ''
 		store: {}
 		request: {}
 		schema: {}
@@ -814,9 +813,7 @@ export default class Elysia<
 							Record<
 								'schema',
 								{
-									[key in keyof NewInstance['meta']['schema'] as key extends `${infer Rest}`
-										? `${Prefix}${Rest}`
-										: key]: NewInstance['meta']['schema'][key]
+									[Path in keyof NewInstance['meta']['schema']]: NewInstance['meta']['schema'][Path]
 								}
 							>)
 				}
@@ -1146,8 +1143,11 @@ export default class Elysia<
 			store: Reconciliation<Instance['store'], NewInstance['store']>
 			schema: Instance['schema'] & NewInstance['schema']
 			meta: {
-				schema: Instance['meta']['schema'] &
-					NewInstance['meta']['schema']
+				schema: Instance['meta']['schema'] & {
+					[Path in keyof NewInstance['meta']['schema'] as Path extends string
+						? `${BasePath}${Path}`
+						: Path]: NewInstance['meta']['schema'][Path]
+				}
 				defs: Reconciliation<
 					Instance['meta']['defs'],
 					NewInstance['meta']['defs']
@@ -1168,8 +1168,11 @@ export default class Elysia<
 			store: Reconciliation<Instance['store'], NewInstance['store']>
 			schema: Instance['schema'] & NewInstance['schema']
 			meta: {
-				schema: Instance['meta']['schema'] &
-					NewInstance['meta']['schema']
+				schema: Instance['meta']['schema'] & {
+					[Path in keyof NewInstance['meta']['schema'] as Path extends string
+						? `${BasePath}${Path}`
+						: Path]: NewInstance['meta']['schema'][Path]
+				}
 				defs: Reconciliation<
 					Instance['meta']['defs'],
 					NewInstance['meta']['defs']
@@ -1198,8 +1201,11 @@ export default class Elysia<
 			store: Reconciliation<Instance['store'], LazyLoadElysia['store']>
 			schema: Instance['schema'] & LazyLoadElysia['schema']
 			meta: {
-				schema: Instance['meta']['schema'] &
-					LazyLoadElysia['meta']['schema']
+				schema: Instance['meta']['schema'] & {
+					[Path in keyof LazyLoadElysia['meta']['schema'] as Path extends string
+						? `${BasePath}${Path}`
+						: Path]: LazyLoadElysia['meta']['schema'][Path]
+				}
 				defs: Reconciliation<
 					Instance['meta']['defs'],
 					LazyLoadElysia['meta']['defs']
@@ -1226,8 +1232,11 @@ export default class Elysia<
 			store: Reconciliation<Instance['store'], LazyLoadElysia['store']>
 			schema: Instance['schema'] & LazyLoadElysia['schema']
 			meta: {
-				schema: Instance['meta']['schema'] &
-					LazyLoadElysia['meta']['schema']
+				schema: Instance['meta']['schema'] & {
+					[Path in keyof LazyLoadElysia['meta']['schema'] as Path extends string
+						? `${BasePath}${Path}`
+						: Path]: LazyLoadElysia['meta']['schema'][Path]
+				}
 				defs: Reconciliation<
 					Instance['meta']['defs'],
 					LazyLoadElysia['meta']['defs']
@@ -1507,7 +1516,7 @@ export default class Elysia<
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in Path]: {
+									[path in `${BasePath}${Path}`]: {
 										get: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -2803,7 +2812,7 @@ export default class Elysia<
 				Record<
 					'schema',
 					Record<
-						Path,
+						`${BasePath}${Path}`,
 						MergeSchema<
 							Schema,
 							Instance['schema']

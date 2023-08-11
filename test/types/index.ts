@@ -734,6 +734,24 @@ app.group(
 	}>()
 }
 
+// ? Inherits plugin prefix path
+{
+	const plugin = new Elysia({
+		prefix: '/plugin'
+	}).get('/test-path', () => 'Test')
+
+	const app = new Elysia({
+		prefix: '/api'
+	})
+		.use(plugin)
+		.get('/a', () => 'A')
+		.listen(3000)
+
+	type Routes = keyof (typeof app)['meta']['schema']
+
+	expectTypeOf<Routes>().toEqualTypeOf<'/api/a' | '/api/plugin/test-path'>()
+}
+
 // ? Inherits plugin instance prefix
 // {
 // 	const plugin = new Elysia({
