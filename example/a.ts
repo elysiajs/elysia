@@ -1,15 +1,9 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new Elysia({
-	aot: false
-})
-	.derive(() => {
-		return {
-			a: 'B'
-		}
+new Elysia({ aot: false })
+	.get('/', ({ query }) => {}, {
+		query: t.Object({
+			redirect_uri: t.Optional(t.String())
+		})
 	})
-	.get('/', ({ a }) => `a: ${a}`)
-	.post('/', () => 'world')
-	.listen(3000)
-
-// console.log(app.routes)
+	.listen(8080)

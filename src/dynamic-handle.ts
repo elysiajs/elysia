@@ -48,7 +48,7 @@ export const createDynamicHandler =
 		}
 
 		const url = request.url,
-			s = url.indexOf('/', 12),
+			s = url.indexOf('/', 11),
 			q = url.indexOf('?', s + 1),
 			path = q === -1 ? url.substring(s) : url.substring(s, q)
 
@@ -170,7 +170,7 @@ export const createDynamicHandler =
 
 			context.body = body
 			context.params = handler?.params || {}
-			context.query = parseQuery(url.substring(q + 1))
+			context.query = q === -1 ? {} : parseQuery(url.substring(q + 1))
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)

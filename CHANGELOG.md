@@ -1,3 +1,7 @@
+# 0.6.10 - 13 Aug 2023
+Bug fix:
+- Query is set to pathname when ? not presented in dynamic mode
+
 # 0.6.9 - 11 Aug 2023
 Bug fix:
 - Derive not working on dynamic mode
