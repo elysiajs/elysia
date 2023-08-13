@@ -154,4 +154,22 @@ describe('Dynamic Mode', () => {
 			.then((x) => x.text())
 		expect(res).toBe('me')
 	})
+
+	it('handle non query fallback', async () => {
+		const app = new Elysia({ aot: false })
+			.get('/', () => 'hi', {
+				query: t.Object({
+					redirect_uri: t.Optional(t.String())
+				})
+			})
+			.listen(8080)
+
+		const res1 = await app.handle(req('/'))
+		const res2 = await app.handle(req('/?'))
+		const res3 = await app.handle(req('/?redirect_uri=a'))
+
+		expect(res1.status).toBe(200)
+		expect(res2.status).toBe(200)
+		expect(res3.status).toBe(200)
+	})
 })
