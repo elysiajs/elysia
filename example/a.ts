@@ -1,9 +1,12 @@
 import { Elysia, t } from '../src'
 
 new Elysia({ aot: false })
-	.get('/', ({ query }) => {}, {
+	.get('/', ({ query }) => "Hi", {
 		query: t.Object({
-			redirect_uri: t.Optional(t.String())
+			redirect_uri: t.String()
 		})
+	})
+	.onResponse(({ set }) => {
+		console.log(set)
 	})
 	.listen(8080)

@@ -43,12 +43,12 @@ export const hasReturn = (fnLiteral: string) => {
 const composeValidationFactory = (hasErrorHandler: boolean) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
 		hasErrorHandler
-			? `throw new ValidationError(
+			? `c.set.status = 400; throw new ValidationError(
 '${type}',
 ${type},
 ${value}
 )`
-			: `return new ValidationError(
+			: `c.set.status = 400; return new ValidationError(
 	'${type}',
 	${type},
 	${value}
@@ -939,9 +939,10 @@ export const composeErrorHandler = (app: Elysia<any, any>) => {
 	}
 
 	fnLiteral += `if(error.constructor.name === "ValidationError") {
+		set.status = error.status ?? 400
 		return new Response(
 			error.message, 
-			{ headers: set.headers, status: error.status ?? 400 }
+			{ headers: set.headers, status: set.status }
 		)
 	} else {
 		return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })

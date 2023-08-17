@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import { expect } from 'bun:test'
 import { t, Elysia, TypedSchema } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
@@ -753,25 +754,42 @@ app.group(
 }
 
 // ? Inherits plugin instance prefix
-// {
-// 	const plugin = new Elysia({
-// 		prefix: '/v1'
-// 	}).get('/', () => 'hello')
+{
+	const plugin = new Elysia({
+		prefix: '/v1'
+	}).get('/', () => 'hello')
 
-// 	plugin.config.prefix
+	plugin.config.prefix
 
-// 	const server = app.use(plugin)
+	const server = app.use(plugin)
 
-// 	type App = (typeof server)['meta']['schema']
-// 	type Route = App['/v1/']['get']
+	type App = (typeof server)['meta']['schema']
+	type Route = App['/v1/']['get']
 
-// 	expectTypeOf<Route>().toEqualTypeOf<{
-// 		body: unknown
-// 		headers: undefined
-// 		query: undefined
-// 		params: undefined
-// 		response: {
-// 			'200': string
-// 		}
-// 	}>()
-// }
+	expectTypeOf<Route>().toEqualTypeOf<{
+		body: unknown
+		headers: undefined
+		query: undefined
+		params: undefined
+		response: {
+			'200': string
+		}
+	}>()
+}
+
+// ? Inlining function callback don't repeat prefix
+{
+	const test = (app: Elysia) =>
+		app.group('/app', (group) =>
+			group.get('/test', async () => {
+				return 'Test'
+			})
+		)
+
+	const app = new Elysia().use(test)
+
+	type App = (typeof app)['meta']['schema']
+	type Routes = keyof App
+
+	expectTypeOf<Routes>().toEqualTypeOf<'/app/test'>()
+}

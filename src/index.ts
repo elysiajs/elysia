@@ -753,16 +753,7 @@ export default class Elysia<
 					request: Instance['request']
 					schema: Instance['schema']
 					store: Instance['store']
-					meta: Instance['meta'] &
-						(Omit<NewInstance['meta'], 'schema'> &
-							Record<
-								'schema',
-								{
-									[key in keyof NewInstance['meta']['schema'] as key extends `${infer Rest}`
-										? `${Prefix}${Rest}`
-										: key]: NewInstance['meta']['schema'][key]
-								}
-							>)
+					meta: Instance['meta'] & NewInstance['meta']
 				}
 		  >
 		: this

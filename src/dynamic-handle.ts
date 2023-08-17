@@ -273,6 +273,9 @@ export const createDynamicHandler =
 
 			return mapResponse(response, context.set)
 		} catch (error) {
+			if ((error as ElysiaErrors).status)
+				set.status = (error as ElysiaErrors).status
+
 			// @ts-ignore
 			return app.handleError(request, error as Error, set)
 		} finally {

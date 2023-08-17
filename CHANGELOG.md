@@ -1,3 +1,8 @@
+# 0.6.11 - 16 Aug 2023
+Bug fix:
+- [#86](https://github.com/elysiajs/elysia/issues/86) Group prefix repeating on inline function callback
+- [#88](https://github.com/elysiajs/elysia/issues/88), onResponse hooks validation return non 400
+
 # 0.6.10 - 13 Aug 2023
 Bug fix:
 - Query is set to pathname when ? not presented in dynamic mode
