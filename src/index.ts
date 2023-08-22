@@ -2797,7 +2797,7 @@ export default class Elysia<
 			? ElysiaWSOptions<
 					`${BasePath}${Path}`,
 					Schema,
-					Instance['meta']['defs']
+					Instance
 			  >
 			: never
 	): Elysia<
