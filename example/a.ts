@@ -1,12 +1,25 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, Context } from '../src'
 
-new Elysia({ aot: false })
-	.get('/', ({ query }) => "Hi", {
-		query: t.Object({
-			redirect_uri: t.String()
-		})
-	})
-	.onResponse(({ set }) => {
-		console.log(set)
-	})
-	.listen(8080)
+const app = new Elysia().group('/course', (app) =>
+	app
+		.get('', () => '')
+		.put('/new', () => '')
+		.group(
+			'/id/:courseId',
+			{
+				params: t.Object({
+					courseId: t.Numeric()
+				})
+			},
+			(app) =>
+				app
+					// .get('', ({ params: { courseId } }) => courseId)
+					// .patch('', () => '')
+					.group('/chapter', (app) =>
+						app.get('/hello', ({ params: { courseId } }) => '')
+					)
+		)
+)
+
+type App = typeof app
+type B = keyof App['meta']['schema']

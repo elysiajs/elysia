@@ -843,10 +843,7 @@ export default class Elysia<
 		schemaOrRun: LocalHook<Schema, Instance> | Executor,
 		run?: Executor
 	): this {
-		const instance = new Elysia<any, any>({
-			...this.config,
-			prefix: this.config.prefix + prefix
-		})
+		const instance = new Elysia<any, any>(this.config)
 		instance.store = this.store
 
 		if (this.wsRouter) instance.use(ws())
@@ -872,6 +869,8 @@ export default class Elysia<
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
+				path = this.config.prefix + prefix + path
+
 				if (isSchema) {
 					const hook = schemaOrRun
 					const localHook = hooks
@@ -936,6 +935,8 @@ export default class Elysia<
 
 		if (instance.wsRouter && this.wsRouter)
 			instance.wsRouter.history.forEach(([method, path, handler]) => {
+				path = this.config.prefix + prefix + path
+
 				if (path === '/') this.wsRouter?.add(method, prefix, handler)
 				else this.wsRouter?.add(method, `${prefix}${path}`, handler)
 			})
@@ -3325,7 +3326,7 @@ export default class Elysia<
 			? composeGeneralHandler(this)
 			: createDynamicHandler(this)
 
-		if (this.server)
+		if (typeof this.server?.reload === 'function')
 			this.server.reload({
 				...this.server,
 				fetch: this.fetch

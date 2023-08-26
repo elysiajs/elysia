@@ -1,3 +1,11 @@
+# 0.6.13 - 26 Aug 2023
+Bug fix:
+- make this.server.reload optional to make Node compatability work
+
+# 0.6.12 - 26 Aug 2023
+Bug fix:
+- make this.server.reload optional to make Node compatability work
+
 # 0.6.11 - 16 Aug 2023
 Bug fix:
 - [#86](https://github.com/elysiajs/elysia/issues/86) Group prefix repeating on inline function callback

@@ -162,7 +162,6 @@ describe('Dynamic Mode', () => {
 					redirect_uri: t.Optional(t.String())
 				})
 			})
-			.listen(8080)
 
 		const res1 = await app.handle(req('/'))
 		const res2 = await app.handle(req('/?'))
