@@ -1,8 +1,15 @@
+# 0.6.14 - 28 Aug 2023
+Bug fix:
+- deduplicate plugin via global model
+- duplicated life-cycle
+- top-down plugin deduplication
+- plugin life-cycle leak on new model
+
 # 0.6.13 - 28 Aug 2023
 Bug fix:
 - make this.server.reload optional to make Node compatability work
-- Duplicate path name when using prefix config with group
-- Don't filter local event inside new plugin model group
+- duplicate path name when using prefix config with group
+- don't filter local event inside new plugin model group
 - Remove post.handler in return
 
 # 0.6.12 - 26 Aug 2023

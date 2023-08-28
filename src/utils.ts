@@ -278,64 +278,74 @@ export const mergeLifeCycle = <
 	}
 }
 
-const injectInline = <T extends WithArray<Function> | undefined>(fn: T): T => {
-	if (!fn) return fn
-
-	if (typeof fn === 'function') {
-		// @ts-ignore
-		fn.$elysiaHookType = 'inline'
-
-		return fn
-	}
-
-	return fn.map((x) => {
-		// @ts-ignore
-		x.$elysiaHookType = 'inline'
-
-		return x
-	}) as T
-}
-
-export const injectLocalHookMeta = <T extends LocalHook<any, any>>(
-	hook: T
+export const asGlobalHook = <T extends LocalHook<any, any>>(
+	hook: T,
+	inject = true
 ): T => {
 	return {
 		// rest is validator
 		...hook,
 		type: hook?.type,
 		detail: hook?.detail,
-		parse: injectInline(hook?.parse),
-		transform: injectInline(hook?.transform),
-		beforeHandle: injectInline(hook?.beforeHandle),
-		afterHandle: injectInline(hook?.afterHandle),
-		onResponse: injectInline(hook?.onResponse),
-		error: injectInline(hook?.error)
+		parse: asGlobal(hook?.parse, inject),
+		transform: asGlobal(hook?.transform, inject),
+		beforeHandle: asGlobal(hook?.beforeHandle, inject),
+		afterHandle: asGlobal(hook?.afterHandle, inject),
+		onResponse: asGlobal(hook?.onResponse, inject),
+		error: asGlobal(hook?.error, inject)
 	} as T
 }
 
-const filterInline = <T extends WithArray<Function> | undefined>(fn: T): T => {
+export const asGlobal = <T extends WithArray<Function> | undefined>(
+	fn: T,
+	inject = true
+): T => {
+	if (!fn) return fn
+
+	if (typeof fn === 'function') {
+		if (inject)
+			// @ts-ignore
+			fn.$elysiaHookType = 'global'
+		// @ts-ignore
+		else fn.$elysiaHookType = undefined
+
+		return fn
+	}
+
+	return fn.map((x) => {
+		if (inject)
+			// @ts-ignore
+			x.$elysiaHookType = 'global'
+		// @ts-ignore
+		else x.$elysiaHookType = undefined
+
+		return x
+	}) as T
+}
+
+const filterGlobal = <T extends WithArray<Function> | undefined>(fn: T): T => {
 	if (!fn) return fn
 
 	if (typeof fn === 'function') {
 		// @ts-ignore
-		return fn.$elysiaHookType === 'inline' ? fn : undefined
+		return fn.$elysiaHookType === 'global' ? fn : undefined
 	}
 
 	// @ts-ignore
-	return fn.filter((x) => x.$elysiaHookType === 'inline') as T
+	return fn.filter((x) => x.$elysiaHookType === 'global') as T
 }
 
-export const filterInlineHook = <T extends LocalHook<any, any>>(hook: T): T => {
+export const filterGlobalHook = <T extends LocalHook<any, any>>(hook: T): T => {
 	return {
 		// rest is validator
 		...hook,
 		type: hook?.type,
 		detail: hook?.detail,
-		parse: filterInline(hook?.parse),
-		transform: filterInline(hook?.transform),
-		beforeHandle: filterInline(hook?.beforeHandle),
-		afterHandle: filterInline(hook?.afterHandle),
-		onResponse: filterInline(hook?.onResponse),
-		error: filterInline(hook?.error)
+		parse: filterGlobal(hook?.parse),
+		transform: filterGlobal(hook?.transform),
+		beforeHandle: filterGlobal(hook?.beforeHandle),
+		afterHandle: filterGlobal(hook?.afterHandle),
+		onResponse: filterGlobal(hook?.onResponse),
+		error: filterGlobal(hook?.error)
 	} as T
 }

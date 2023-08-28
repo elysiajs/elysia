@@ -1,24 +1,14 @@
-import { Elysia, t, Context } from '../src'
-
-const plugin = new Elysia()
-	.group('/v1', (app) =>
-		app
-			.onBeforeHandle(() => {
-				console.log('A')
-			})
-			.get('', () => 'A')
-			.group('/v1', (app) =>
-				app
-					.onBeforeHandle(() => {
-						console.log('B')
-					})
-					.get('/', () => 'B')
-			)
-	)
+import { Elysia } from '../src'
 
 const app = new Elysia()
-	.use(plugin)
-	.get('/', () => 'A')
-	.listen(8080)
+	.use(
+		new Elysia({ prefix: '/test', scoped: true })
+			.derive(() => {
+				console.log('test')
+				return { test: 'test' }
+			})
+			.get('/', ({ test }) => test)
+	)
+	.use(new Elysia({ prefix: '/asdf' }).get('/', () => 'asdf'))
 
-console.log(app.routes)
+new Elysia().use(app).listen(3000)

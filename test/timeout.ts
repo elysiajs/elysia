@@ -1,4 +1,4 @@
-import Elysia from '../src'
+import { Elysia } from '../src'
 
 const largePlugin = async (app: Elysia) => {
 	await new Promise((resolve) => setTimeout(resolve, 1000))

@@ -325,7 +325,6 @@ export type LocalHook<
 		Instance['schema']
 	> extends infer Route extends TypedSchema
 		? {
-				ab?: Path
 				/**
 				 * Short for 'Content-Type'
 				 *
@@ -516,7 +515,18 @@ export type ElysiaConfig<T extends string = ''> = {
 	 * @default !isCloudflareWorker (false if not Cloudflare worker)
 	 */
 	aot?: boolean
+	/**
+	 * Whether should Elysia tolerate suffix '/' or vice-versa
+	 *
+	 * @default false
+	 */
 	strictPath?: boolean
+	/**
+	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
+	 *
+	 * @default false
+	 */
+	scoped: boolean
 }
 
 export type IsPathParameter<Part extends string> =

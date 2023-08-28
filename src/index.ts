@@ -8,8 +8,8 @@ import {
 	mergeDeep,
 	checksum,
 	mergeLifeCycle,
-	injectLocalHookMeta,
-	filterInlineHook
+	filterGlobalHook,
+	asGlobal
 } from './utils'
 import type { Context } from './context'
 
@@ -165,11 +165,11 @@ export default class Elysia<
 		this.config = {
 			forceErrorEncapsulation: false,
 			prefix: '',
-			// @ts-ignore
-			aot: typeof CF === 'undefined',
+			aot: true,
 			strictPath: false,
+			scoped: false,
 			...config,
-			seed: config?.name && config.seed === undefined ? '' : config?.seed
+			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
 	}
 
@@ -371,7 +371,7 @@ export default class Elysia<
 	 * ```
 	 */
 	onStart(handler: VoidLifeCycle<Instance>) {
-		this.event.start.push(handler)
+		this.on('start', handler)
 
 		return this
 	}
@@ -392,7 +392,7 @@ export default class Elysia<
 	onRequest<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: BeforeRequestHandler<Route, Instance>
 	) {
-		this.event.request.push(handler)
+		this.on('request', handler)
 
 		return this
 	}
@@ -417,7 +417,7 @@ export default class Elysia<
 	 * ```
 	 */
 	onParse(parser: BodyParser<any, Instance>) {
-		this.event.parse.splice(this.event.parse.length - 1, 0, parser)
+		this.on('parse', parser)
 
 		return this
 	}
@@ -439,7 +439,7 @@ export default class Elysia<
 	onTransform<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: NoReturnHandler<Route, Instance>
 	) {
-		this.event.transform.push(handler)
+		this.on('transform', handler)
 
 		return this
 	}
@@ -466,7 +466,7 @@ export default class Elysia<
 	onBeforeHandle<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: Handler<Route, Instance>
 	) {
-		this.event.beforeHandle.push(handler)
+		this.on('beforeHandle', handler)
 
 		return this
 	}
@@ -490,7 +490,7 @@ export default class Elysia<
 	onAfterHandle<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: AfterRequestHandler<Route, Instance>
 	) {
-		this.event.afterHandle.push(handler)
+		this.on('afterHandle', handler)
 
 		return this
 	}
@@ -514,7 +514,7 @@ export default class Elysia<
 	onResponse<Route extends OverwritableTypeRoute = TypedRoute>(
 		handler: VoidRequestHandler<Route, Instance>
 	) {
-		this.event.onResponse.push(handler)
+		this.on('response', handler)
 
 		return this
 	}
@@ -656,7 +656,7 @@ export default class Elysia<
 	 * ```
 	 */
 	onStop(handler: VoidLifeCycle<Instance>) {
-		this.event.stop.push(handler)
+		this.on('stop', handler)
 
 		return this
 	}
@@ -681,6 +681,8 @@ export default class Elysia<
 		type: Event,
 		handler: LifeCycle<Instance>[Event]
 	) {
+		handler = asGlobal(handler)
+
 		switch (type) {
 			case 'start':
 				this.event.start.push(handler as LifeCycle<Instance>['start'])
@@ -695,7 +697,11 @@ export default class Elysia<
 				break
 
 			case 'parse':
-				this.event.parse.push(handler as LifeCycle['parse'])
+				this.event.parse.splice(
+					this.event.parse.length - 1,
+					0,
+					handler as BodyParser<any, Instance>
+				)
 				break
 
 			case 'transform':
@@ -873,8 +879,6 @@ export default class Elysia<
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
 				path = this.config.prefix + prefix + path
-
-				hooks = injectLocalHookMeta(hooks)
 
 				if (isSchema) {
 					const hook = schemaOrRun
@@ -1104,16 +1108,14 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					injectLocalHookMeta(
-						mergeHook(hook as LocalHook<any, any>, {
-							...localHook,
-							error: !localHook.error
-								? sandbox.event.error
-								: Array.isArray(localHook.error)
-								? [...localHook.error, ...sandbox.event.error]
-								: [localHook.error, ...sandbox.event.error]
-						})
-					)
+					mergeHook(hook as LocalHook<any, any>, {
+						...localHook,
+						error: !localHook.error
+							? sandbox.event.error
+							: Array.isArray(localHook.error)
+							? [...localHook.error, ...sandbox.event.error]
+							: [localHook.error, ...sandbox.event.error]
+					})
 				)
 			}
 		)
@@ -1281,6 +1283,91 @@ export default class Elysia<
 					) => MaybePromise<Elysia<any, any>>
 			  }>
 	): Elysia<any, any> {
+		const register = (
+			plugin:
+				| Elysia<any, any>
+				| ((app: Elysia<any, any>) => MaybePromise<Elysia<any, any>>)
+		) => {
+			if (typeof plugin === 'function') {
+				const instance = plugin(
+					this as unknown as any
+				) as unknown as any
+				if (instance instanceof Promise) {
+					this.lazyLoadModules.push(instance.then((x) => x.compile()))
+
+					return this as unknown as any
+				}
+
+				return instance
+			}
+
+			const isScoped = plugin.config.scoped
+
+			if (!isScoped) {
+				this.decorators = mergeDeep(this.decorators, plugin.decorators)
+				this.model(plugin.meta.defs)
+			}
+
+			const {
+				config: { name, seed }
+			} = plugin
+
+			Object.values(plugin.routes).forEach(
+				({ method, path, handler, hooks }) => {
+					const hasWsRoute = plugin.wsRouter?.find('subscribe', path)
+					if (hasWsRoute) {
+						const wsRoute = plugin.wsRouter!.history.find(
+							// eslint-disable-next-line @typescript-eslint/no-unused-vars
+							([_, wsPath]) => path === wsPath
+						)
+						if (!wsRoute) return
+
+						return this.ws(path as any, wsRoute[2] as any)
+					}
+
+					this.add(
+						method,
+						path,
+						handler,
+						mergeHook(hooks, {
+							error: plugin.event.error
+						})
+					)
+				}
+			)
+
+			if (!isScoped)
+				if (name) {
+					if (!(name in this.dependencies))
+						this.dependencies[name] = []
+
+					const current =
+						seed !== undefined
+							? checksum(name + JSON.stringify(seed))
+							: 0
+
+					if (
+						this.dependencies[name].some(
+							(checksum) => current === checksum
+						)
+					)
+						return this
+
+					this.dependencies[name].push(current)
+					this.event = mergeLifeCycle(
+						this.event,
+						filterGlobalHook(plugin.event),
+						current
+					)
+				} else
+					this.event = mergeLifeCycle(
+						this.event,
+						filterGlobalHook(plugin.event)
+					)
+
+			return this
+		}
+
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
 				plugin
@@ -1295,141 +1382,13 @@ export default class Elysia<
 								this as unknown as any
 							) as unknown as Elysia
 
-						const instance = plugin.default as Elysia<any>
-
-						const {
-							config: { name, seed }
-						} = instance
-
-						if (name) {
-							if (!this.dependencies[name])
-								this.dependencies[name] = []
-
-							const current =
-								seed !== undefined
-									? checksum(name + JSON.stringify(seed))
-									: 0
-
-							if (
-								this.dependencies[name].some(
-									(checksum) => current === checksum
-								)
-							)
-								return this
-
-							this.dependencies[name].push(current)
-							this.event = mergeLifeCycle(
-								this.event,
-								instance.event,
-								current
-							) as any
-						} else
-							this.event = mergeLifeCycle(
-								this.event,
-								instance.event
-							) as any
-
-						this.decorators = mergeDeep(
-							this.decorators,
-							instance.decorators
-						)
-						this.model(instance.meta.defs)
-
-						Object.values(instance.routes).forEach(
-							({ method, path, handler, hooks }) => {
-								const hasWsRoute = instance.wsRouter?.find(
-									'subscribe',
-									path
-								)
-								if (hasWsRoute) {
-									const wsRoute =
-										instance.wsRouter!.history.find(
-											// eslint-disable-next-line @typescript-eslint/no-unused-vars
-											([_, wsPath]) => path === wsPath
-										)
-									if (!wsRoute) return
-
-									return this.ws(
-										path as any,
-										wsRoute[2] as any
-									)
-								}
-
-								this.add(
-									method,
-									path,
-									handler,
-									mergeHook(hooks, {
-										error: instance.event.error
-									})
-								)
-							}
-						)
-
-						return this
+						return register(plugin.default)
 					})
 					.then((x) => x.compile())
 			)
 
 			return this as unknown as any
-		}
-
-		if (typeof plugin === 'function') {
-			const instance = plugin(this as unknown as any) as unknown as any
-			if (instance instanceof Promise) {
-				this.lazyLoadModules.push(instance.then((x) => x.compile()))
-
-				return this as unknown as any
-			}
-
-			return instance
-		}
-
-		const {
-			config: { name, seed }
-		} = plugin
-
-		if (name) {
-			if (!(name in this.dependencies)) this.dependencies[name] = []
-
-			const current =
-				seed !== undefined ? checksum(name + JSON.stringify(seed)) : 0
-
-			if (
-				this.dependencies[name].some((checksum) => current === checksum)
-			)
-				return this
-
-			this.dependencies[name].push(current)
-			this.event = mergeLifeCycle(this.event, plugin.event, current)
-		} else this.event = mergeLifeCycle(this.event, plugin.event)
-
-		this.decorators = mergeDeep(this.decorators, plugin.decorators)
-		this.model(plugin.meta.defs)
-
-		Object.values(plugin.routes).forEach(
-			({ method, path, handler, hooks }) => {
-				const hasWsRoute = plugin.wsRouter?.find('subscribe', path)
-				if (hasWsRoute) {
-					const wsRoute = plugin.wsRouter!.history.find(
-						// eslint-disable-next-line @typescript-eslint/no-unused-vars
-						([_, wsPath]) => path === wsPath
-					)
-					if (!wsRoute) return
-
-					return this.ws(path as any, wsRoute[2] as any)
-				}
-
-				this.add(
-					method,
-					path,
-					handler,
-					mergeHook(filterInlineHook(hooks), {
-						error: plugin.event.error
-					})
-				)
-			}
-		)
+		} else return register(plugin)
 
 		return this
 	}
@@ -1595,12 +1554,7 @@ export default class Elysia<
 			}
 		}
 	> {
-		this.add(
-			'GET',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('GET', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1725,12 +1679,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'POST',
-			path,
-			handler as any,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('POST', path, handler as any, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1855,12 +1804,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'PUT',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('PUT', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -1985,12 +1929,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'PATCH',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('PATCH', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2115,12 +2054,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'DELETE',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('DELETE', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2245,12 +2179,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'OPTIONS',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('OPTIONS', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2370,12 +2299,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'ALL',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('ALL', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2500,12 +2424,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'HEAD',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('HEAD', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2630,12 +2549,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'TRACE',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('TRACE', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -2760,12 +2674,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			'CONNECT',
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>)
-		)
+		this.add('CONNECT', path, handler, hook as LocalHook<any, any>)
 
 		return this as any
 	}
@@ -3019,13 +2928,7 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(
-			method,
-			path,
-			handler,
-			injectLocalHookMeta(hook as LocalHook<any, any>),
-			config
-		)
+		this.add(method, path, handler, hook as LocalHook<any, any>, config)
 
 		return this as any
 	}

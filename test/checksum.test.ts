@@ -46,7 +46,7 @@ describe('Checksum', () => {
 		expect(b.hooks.transform!.length).toBe(1)
 	})
 
-	it('Accept plugin when seed is different', async () => {
+	it('Accept plugin when on different different', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
 				name: '@elysiajs/cookie',
@@ -75,6 +75,7 @@ describe('Checksum', () => {
 	it('Deduplicate global hook on use', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
+				name: '@elysiajs/cookie',
 				seed: options
 			}).onTransform(() => {})
 
@@ -93,9 +94,10 @@ describe('Checksum', () => {
 		).toBe(0)
 	})
 
-	it("Don't filter inline hook", async () => {
+	it('Filter inline hook', async () => {
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
+				name: '@elysiajs/cookie',
 				seed: options
 			}).onTransform(() => {})
 
@@ -121,6 +123,7 @@ describe('Checksum', () => {
 
 		const cookie = (options?: Record<string, unknown>) =>
 			new Elysia({
+				name: '@elysiajs/cookie',
 				seed: options
 			}).onTransform(() => {})
 
@@ -141,7 +144,7 @@ describe('Checksum', () => {
 		expect(count).toBe(2)
 	})
 
-	it("Don't deduplicate guard hook", async () => {
+	it('Deduplicate guard hook', async () => {
 		const guard = new Elysia({ prefix: '/guard' }).guard(
 			{
 				params: t.Object({ id: t.Number() }),
@@ -194,7 +197,7 @@ describe('Checksum', () => {
 		expect(root).toBe('mock')
 	})
 
-	it("don't filter event inside group", async () => {
+	it('Filter global event', async () => {
 		let x = 0
 		let a = 0
 		let b = 0
@@ -230,5 +233,101 @@ describe('Checksum', () => {
 		expect(x).toBe(3)
 		expect(a).toBe(2)
 		expect(b).toBe(1)
+	})
+
+	it('invalidate non-root lifecycle', async () => {
+		let a = 0
+		let b = 0
+		let c = 0
+
+		const plugin = new Elysia()
+			.use(
+				new Elysia()
+					.derive(() => {
+						a++
+
+						return {}
+					})
+					.get('/1', () => 'asdf')
+			)
+			.use(
+				new Elysia()
+					.derive(() => {
+						b++
+
+						return { test: 'test' }
+					})
+					.get('/2', ({ test }) => test)
+					.use(
+						new Elysia()
+							.derive(() => {
+								c++
+
+								return { test: 'test' }
+							})
+							.get('/3', ({ test }) => test)
+					)
+			)
+
+		const app = new Elysia()
+			.get('/root', () => 'A')
+			.use(plugin)
+			.get('/all', () => 'A')
+			.listen(3000)
+
+		await Promise.all(
+			['/root', '/1', '/2', '/3', '/all'].map((path) =>
+				app.handle(req(path))
+			)
+		)
+
+		expect(a).toBe(4)
+		expect(b).toBe(3)
+		expect(c).toBe(2)
+	})
+
+	it('read lifecylce top-down', async () => {
+		let i = 0
+
+		const plugin = new Elysia()
+			.use(new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf'))
+			.use(
+				new Elysia({ prefix: '/call' })
+					.derive(() => {
+						i++ // <-- should not be called, when requesting /asdf
+						return { test: 'test' }
+					})
+					.get('/', ({ test }) => test)
+			)
+
+		const app = new Elysia().use(plugin)
+
+		await Promise.all(
+			['/not-call', '/call'].map((path) => app.handle(req(path)))
+		)
+
+		expect(i).toBe(1)
+	})
+
+	it('scope plugin', async () => {
+		let i = 0
+
+		const plugin = new Elysia().use(
+			new Elysia({ prefix: '/call', scoped: true })
+				.derive(() => {
+					i++ // <-- should not be called, when requesting /asdf
+					return { test: 'test' }
+				})
+				.get('/', ({ test }) => test)
+				.use(new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf'))
+		)
+
+		const app = new Elysia().use(plugin)
+
+		await Promise.all(
+			['/not-call', '/call'].map((path) => app.handle(req(path)))
+		)
+
+		expect(i).toBe(1)
 	})
 })
