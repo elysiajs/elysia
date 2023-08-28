@@ -1,10 +1,13 @@
-# 0.6.13 - 26 Aug 2023
+# 0.6.13 - 28 Aug 2023
 Bug fix:
 - make this.server.reload optional to make Node compatability work
+- Duplicate path name when using prefix config with group
+- Don't filter local event inside new plugin model group
+- Remove post.handler in return
 
 # 0.6.12 - 26 Aug 2023
 Bug fix:
-- make this.server.reload optional to make Node compatability work
+- Make this.server.reload optional to make Node compatability work
 
 # 0.6.11 - 16 Aug 2023
 Bug fix:

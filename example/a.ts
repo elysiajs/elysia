@@ -1,25 +1,24 @@
 import { Elysia, t, Context } from '../src'
 
-const app = new Elysia().group('/course', (app) =>
-	app
-		.get('', () => '')
-		.put('/new', () => '')
-		.group(
-			'/id/:courseId',
-			{
-				params: t.Object({
-					courseId: t.Numeric()
-				})
-			},
-			(app) =>
+const plugin = new Elysia()
+	.group('/v1', (app) =>
+		app
+			.onBeforeHandle(() => {
+				console.log('A')
+			})
+			.get('', () => 'A')
+			.group('/v1', (app) =>
 				app
-					// .get('', ({ params: { courseId } }) => courseId)
-					// .patch('', () => '')
-					.group('/chapter', (app) =>
-						app.get('/hello', ({ params: { courseId } }) => '')
-					)
-		)
-)
+					.onBeforeHandle(() => {
+						console.log('B')
+					})
+					.get('/', () => 'B')
+			)
+	)
 
-type App = typeof app
-type B = keyof App['meta']['schema']
+const app = new Elysia()
+	.use(plugin)
+	.get('/', () => 'A')
+	.listen(8080)
+
+console.log(app.routes)

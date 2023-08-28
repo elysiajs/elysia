@@ -17,7 +17,6 @@ const app = new Elysia()
 			})
 		}
 	)
-	.listen(8080)
 
 describe('File', () => {
 	it('accept single image', async () => {

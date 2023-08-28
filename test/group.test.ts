@@ -149,4 +149,35 @@ describe('group', () => {
 
 		expect(res.status).toBe(200)
 	})
+
+	it('handle nested prefix with group', () => {
+		const plugin = new Elysia({ prefix: '/v1' }).group('/course', (app) =>
+			app
+				.get('', () => '')
+				.put('/new', () => '')
+				.group(
+					'/id/:courseId',
+					{
+						params: t.Object({
+							courseId: t.Numeric()
+						})
+					},
+					(app) =>
+						app.group('/chapter', (app) =>
+							app.get(
+								'/hello',
+								({ params: { courseId } }) => courseId
+							)
+						)
+				)
+		)
+
+		const app = new Elysia().use(plugin)
+
+		expect(app.routes.map((x) => x.path)).toEqual([
+			'/v1/course',
+			'/v1/course/new',
+			'/v1/course/id/:courseId/chapter/hello'
+		])
+	})
 })

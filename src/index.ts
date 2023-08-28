@@ -843,7 +843,10 @@ export default class Elysia<
 		schemaOrRun: LocalHook<Schema, Instance> | Executor,
 		run?: Executor
 	): this {
-		const instance = new Elysia<any, any>(this.config)
+		const instance = new Elysia<any, any>({
+			...this.config,
+			prefix: ''
+		})
 		instance.store = this.store
 
 		if (this.wsRouter) instance.use(ws())
@@ -870,6 +873,8 @@ export default class Elysia<
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
 				path = this.config.prefix + prefix + path
+
+				hooks = injectLocalHookMeta(hooks)
 
 				if (isSchema) {
 					const hook = schemaOrRun
@@ -1648,7 +1653,6 @@ export default class Elysia<
 								? {
 										[path in `${BasePath}${Path}`]: {
 											post: {
-												handler?: Handler
 												body: UnwrapSchema<
 													Typed['body'],
 													Instance['meta']['defs']

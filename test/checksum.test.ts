@@ -158,4 +158,77 @@ describe('Checksum', () => {
 
 		expect(res.status).toBe(200)
 	})
+
+	it('deduplicate in new instance', async () => {
+		const cookie = (options?: Record<string, unknown>) =>
+			new Elysia({
+				name: '@elysiajs/cookie',
+				seed: options
+			}).derive(() => {
+				return {
+					cookie: 'mock'
+				}
+			})
+
+		const plugin = new Elysia({ prefix: '/v1' })
+			.use(cookie())
+			.get('/plugin', ({ cookie }) => cookie)
+
+		const plugin2 = new Elysia({ prefix: '/v2' })
+			.use(cookie())
+			.get('/plugin', ({ cookie }) => cookie)
+
+		const app = new Elysia()
+			.use(cookie())
+			.use(plugin)
+			.use(plugin2)
+			.get('/root', ({ cookie }) => cookie)
+
+		const res1 = await app.handle(req('/v1/plugin')).then((x) => x.text())
+		expect(res1).toBe('mock')
+
+		const res2 = await app.handle(req('/v1/plugin')).then((x) => x.text())
+		expect(res2).toBe('mock')
+
+		const root = await app.handle(req('/root')).then((x) => x.text())
+		expect(root).toBe('mock')
+	})
+
+	it("don't filter event inside group", async () => {
+		let x = 0
+		let a = 0
+		let b = 0
+
+		const plugin = new Elysia()
+			.onBeforeHandle(() => {
+				x++
+			})
+			.group('/v1', (app) =>
+				app
+					.onBeforeHandle(() => {
+						a++
+					})
+					.get('', () => 'A')
+					.group('/v1', (app) =>
+						app
+							.onBeforeHandle(() => {
+								b++
+							})
+							.get('/', () => 'B')
+					)
+			)
+
+		const app = new Elysia()
+			.use(plugin)
+			.get('/', () => 'A')
+			.listen(8080)
+
+		await Promise.all(
+			['/v1', '/v1/v1', '/'].map((path) => app.handle(req(path)))
+		)
+
+		expect(x).toBe(3)
+		expect(a).toBe(2)
+		expect(b).toBe(1)
+	})
 })
