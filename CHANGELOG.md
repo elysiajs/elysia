@@ -4,6 +4,7 @@ Bug fix:
 - duplicated life-cycle
 - top-down plugin deduplication
 - plugin life-cycle leak on new model
+- add `Elysia.scope` to contain lifecycle, store, and decorators
 
 # 0.6.13 - 28 Aug 2023
 Bug fix:
