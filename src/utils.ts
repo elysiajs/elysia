@@ -1,20 +1,13 @@
 import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
+
 import type {
-	ElysiaInstance,
-	DeepMergeTwoTypes,
 	LifeCycleStore,
 	LocalHook,
-	TypedSchema,
-	RegisteredHook,
-	WithArray
-} from './types'
-
-// export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
-// 	...(Array.isArray(a) ? a : [a]),
-// 	...(Array.isArray(b) ? b : [b])
-// ]
+	MaybeArray,
+	InputSchema
+} from './ns/types'
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 	const array = [...(Array.isArray(a) ? a : [a])]
@@ -36,9 +29,9 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 }
 
 export const mergeHook = (
-	a: LocalHook<any, any> | LifeCycleStore<any>,
-	b: LocalHook<any, any>
-): RegisteredHook<any> => {
+	a?: LocalHook<any, any, any, any> | LifeCycleStore,
+	b?: LocalHook<any, any, any, any>
+): LifeCycleStore => {
 	return {
 		// Merge local hook first
 		// @ts-ignore
@@ -58,25 +51,24 @@ export const mergeHook = (
 			// @ts-ignore
 			a?.detail ?? {}
 		),
-		parse: mergeObjectArray((a.parse as any) ?? [], b?.parse ?? []),
+		parse: mergeObjectArray((a?.parse as any) ?? [], b?.parse ?? []),
 		transform: mergeObjectArray(
-			a.transform ?? [],
+			a?.transform ?? [],
 			b?.transform ?? []
 		) as any,
 		beforeHandle: mergeObjectArray(
-			a.beforeHandle ?? [],
+			a?.beforeHandle ?? [],
 			b?.beforeHandle ?? []
 		),
 		afterHandle: mergeObjectArray(
-			a.afterHandle ?? [],
+			a?.afterHandle ?? [],
 			b?.afterHandle ?? []
 		),
 		onResponse: mergeObjectArray(
-			a.onResponse ?? [],
+			a?.onResponse ?? [],
 			b?.onResponse ?? []
 		) as any,
-
-		error: mergeObjectArray(a.error ?? [], b?.error ?? [])
+		error: mergeObjectArray(a?.error ?? [], b?.error ?? [])
 	}
 }
 
@@ -87,8 +79,8 @@ const isObject = (item: any): item is Object =>
 export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
 	target: A,
 	source: B
-): DeepMergeTwoTypes<A, B> => {
-	const output: Partial<DeepMergeTwoTypes<A, B>> = Object.assign({}, target)
+): A & B => {
+	const output: A & B = Object.assign({}, target) as any
 	if (isObject(target) && isObject(source)) {
 		Object.keys(source).forEach((key) => {
 			// @ts-ignore
@@ -105,7 +97,7 @@ export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
 		})
 	}
 
-	return output as DeepMergeTwoTypes<A, B>
+	return output
 }
 
 export const getSchemaValidator = (
@@ -144,7 +136,7 @@ export const getSchemaValidator = (
 }
 
 export const getResponseSchemaValidator = (
-	s: TypedSchema['response'] | undefined,
+	s: InputSchema['response'] | undefined,
 	{
 		models = {},
 		additionalProperties = false,
@@ -223,14 +215,11 @@ export const checksum = (s: string) => {
 	return (h = h ^ (h >>> 9))
 }
 
-export const mergeLifeCycle = <
-	A extends ElysiaInstance,
-	B extends ElysiaInstance
->(
-	a: LifeCycleStore<A>,
-	b: LifeCycleStore<B> | LocalHook<{}, B>,
+export const mergeLifeCycle = (
+	a: LifeCycleStore,
+	b: LifeCycleStore | LocalHook,
 	checksum?: number
-): LifeCycleStore<A & B> => {
+): LifeCycleStore => {
 	const injectChecksum = <T>(x: T): T => {
 		if (checksum)
 			// @ts-ignore
@@ -248,9 +237,10 @@ export const mergeLifeCycle = <
 			a.request as any,
 			('request' in b ? b.request : []).map(injectChecksum) as any
 		),
-		parse: mergeObjectArray(a.parse as any, b?.parse ?? ([] as any)).map(
-			injectChecksum
-		),
+		parse: mergeObjectArray(
+			a.parse as any,
+			'parse' in b ? b?.parse : undefined ?? ([] as any)
+		).map(injectChecksum),
 		transform: mergeObjectArray(
 			a.transform as any,
 			(b?.transform ?? ([] as any)).map(injectChecksum)
@@ -296,7 +286,7 @@ export const asGlobalHook = <T extends LocalHook<any, any>>(
 	} as T
 }
 
-export const asGlobal = <T extends WithArray<Function> | undefined>(
+export const asGlobal = <T extends MaybeArray<Function> | undefined>(
 	fn: T,
 	inject = true
 ): T => {
@@ -323,7 +313,7 @@ export const asGlobal = <T extends WithArray<Function> | undefined>(
 	}) as T
 }
 
-const filterGlobal = <T extends WithArray<Function> | undefined>(fn: T): T => {
+const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
 	if (!fn) return fn
 
 	if (typeof fn === 'function') {

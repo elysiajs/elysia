@@ -8,20 +8,21 @@ import {
 } from './error'
 import { mapEarlyResponse, mapResponse } from './handler'
 
-import type { Context } from './context'
-import type { Handler, RegisteredHook, SchemaValidator } from './types'
+import type { Context } from './ns/context'
+import type { Handler, LifeCycleStore, SchemaValidator } from './ns/types'
 
 import { parse as parseQuery } from 'fast-querystring'
 
+// JIT Handler
 export type DynamicHandler = {
 	handle: Handler<any, any>
 	content?: string
-	hooks: RegisteredHook<any>
+	hooks: LifeCycleStore
 	validator?: SchemaValidator
 }
 
 export const createDynamicHandler =
-	(app: Elysia<any, any>) =>
+	(app: Elysia<any, any, any, any, any>) =>
 	async (request: Request): Promise<Response> => {
 		const set: Context['set'] = {
 			status: 200,

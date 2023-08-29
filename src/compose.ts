@@ -1,5 +1,8 @@
 import type { Elysia } from '.'
 
+import { TypeCheck } from '@sinclair/typebox/compiler'
+import type { TAnySchema } from '@sinclair/typebox'
+
 import { parse as parseQuery } from 'fast-querystring'
 
 import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
@@ -10,17 +13,14 @@ import {
 	ERROR_CODE
 } from './error'
 
-import type {
-	ElysiaConfig,
+import {
 	ComposedHandler,
-	HTTPMethod,
-	LocalHandler,
-	RegisteredHook,
-	SchemaValidator,
-	BeforeRequestHandler
-} from './types'
-import type { TAnySchema } from '@sinclair/typebox'
-import { TypeCheck } from '@sinclair/typebox/compiler'
+	ElysiaConfig,
+	Handler,
+	LifeCycleStore,
+	PreHandler,
+	SchemaValidator
+} from './ns/types'
 
 const _demoHeaders = new Headers()
 
@@ -208,18 +208,20 @@ export const composeHandler = ({
 	validator,
 	handler,
 	handleError,
-	meta,
+	definitions,
+	schema,
 	onRequest,
 	config
 }: {
 	path: string
-	method: HTTPMethod
-	hooks: RegisteredHook<any>
+	method: string
+	hooks: LifeCycleStore
 	validator: SchemaValidator
-	handler: LocalHandler<any, any>
+	handler: Handler<any, any>
 	handleError: Elysia['handleError']
-	meta?: Elysia['meta']
-	onRequest: BeforeRequestHandler<any, any>[]
+	definitions?: Elysia['definitions']['type']
+	schema?: Elysia['typedRoutes']
+	onRequest: PreHandler<any, any>[]
 	config: ElysiaConfig<any>
 }): ComposedHandler => {
 	const hasErrorHandler =
@@ -734,7 +736,8 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		meta,
+		schema,
+		definitions,
 		ERROR_CODE
 	} = hooks
 
@@ -747,7 +750,7 @@ export const composeHandler = ({
 	}
 
 	return ${maybeAsync ? 'async' : ''} function(c) {
-		${meta ? 'c["schema"] = meta["schema"]; c["defs"] = meta["defs"];' : ''}
+		${schema && definitions ? 'c.schema = schema; c.defs = meta.definitions;' : ''}
 		${fnLiteral}
 	}`
 
@@ -771,12 +774,13 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		meta,
+		schema,
+		definitions,
 		ERROR_CODE
 	})
 }
 
-export const composeGeneralHandler = (app: Elysia<any, any>) => {
+export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	let decoratorsLiteral = ''
 
 	// @ts-ignore
@@ -912,7 +916,7 @@ export const composeGeneralHandler = (app: Elysia<any, any>) => {
 	})
 }
 
-export const composeErrorHandler = (app: Elysia<any, any>) => {
+export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,

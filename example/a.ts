@@ -1,14 +1,37 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
+
+const b = (app: Elysia) => app.model('B', t.String()).get('/', () => 'A')
 
 const app = new Elysia()
-	.use(
-		new Elysia({ prefix: '/test', scoped: true })
-			.derive(() => {
-				console.log('test')
-				return { test: 'test' }
+	.model({
+		A: t.String()
+	})
+	// .use(b)
+	.get(
+		'/id/:id',
+		(context) => {
+			return {
+				a: 'A'
+			}
+		},
+		{
+			body: 'A',
+			response: t.Object({
+				a: t.String()
 			})
-			.get('/', ({ test }) => test)
+		}
 	)
-	.use(new Elysia({ prefix: '/asdf' }).get('/', () => 'asdf'))
 
-new Elysia().use(app).listen(3000)
+type A = typeof app
+
+// .use(
+// 	new Elysia({ prefix: '/test', scoped: true })
+// 		.derive(() => {
+// 			console.log('test')
+// 			return { test: 'test' }
+// 		})
+// 		.get('/', ({ test }) => test)
+// )
+// .use(new Elysia({ prefix: '/asdf' }).get('/', () => 'asdf'))
+
+// new Elysia().use(app).listen(3000)
