@@ -8,8 +8,8 @@ import {
 } from './error'
 import { mapEarlyResponse, mapResponse } from './handler'
 
-import type { Context } from './ns/context'
-import type { Handler, LifeCycleStore, SchemaValidator } from './ns/types'
+import type { Context } from './context'
+import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 
 import { parse as parseQuery } from 'fast-querystring'
 

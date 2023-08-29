@@ -1,10 +1,10 @@
+import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
 	type SchemaOptions,
 	type NumericOptions
 } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import { TypeSystem } from '@sinclair/typebox/system'
 
 try {
 	TypeSystem.Format('email', (value) =>

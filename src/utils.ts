@@ -7,7 +7,7 @@ import type {
 	LocalHook,
 	MaybeArray,
 	InputSchema
-} from './ns/types'
+} from './types'
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 	const array = [...(Array.isArray(a) ? a : [a])]

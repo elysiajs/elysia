@@ -1,5 +1,5 @@
 /* eslint-disable no-case-declarations */
-import type { Context } from './ns/context'
+import type { Context } from './context'
 
 export const isNotEmpty = (obj: Object) => {
 	for (const x in obj) return true

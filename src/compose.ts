@@ -20,7 +20,7 @@ import {
 	LifeCycleStore,
 	PreHandler,
 	SchemaValidator
-} from './ns/types'
+} from './types'
 
 const _demoHeaders = new Headers()
 
@@ -220,7 +220,7 @@ export const composeHandler = ({
 	handler: Handler<any, any>
 	handleError: Elysia['handleError']
 	definitions?: Elysia['definitions']['type']
-	schema?: Elysia['typedRoutes']
+	schema?: Elysia['schema']
 	onRequest: PreHandler<any, any>[]
 	config: ElysiaConfig<any>
 }): ComposedHandler => {
