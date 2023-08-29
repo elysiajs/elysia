@@ -750,7 +750,7 @@ export const composeHandler = ({
 	}
 
 	return ${maybeAsync ? 'async' : ''} function(c) {
-		${schema && definitions ? 'c.schema = schema; c.defs = meta.definitions;' : ''}
+		${schema && definitions ? 'c.schema = schema; c.defs = definitions;' : ''}
 		${fnLiteral}
 	}`
 

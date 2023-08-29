@@ -175,7 +175,7 @@ export const getResponseSchemaValidator = (
 	const record: Record<number, TypeCheck<any>> = {}
 
 	Object.keys(maybeSchemaOrRecord).forEach((status): TSchema | undefined => {
-		const maybeNameOrSchema = maybeSchemaOrRecord[status]
+		const maybeNameOrSchema = maybeSchemaOrRecord[+status]
 
 		if (typeof maybeNameOrSchema === 'string') {
 			if (maybeNameOrSchema in models) {
@@ -268,10 +268,10 @@ export const mergeLifeCycle = (
 	}
 }
 
-export const asGlobalHook = <T extends LocalHook<any, any>>(
-	hook: T,
+export const asGlobalHook = (
+	hook: LocalHook<any, any>,
 	inject = true
-): T => {
+): LocalHook<any, any> => {
 	return {
 		// rest is validator
 		...hook,
@@ -283,7 +283,7 @@ export const asGlobalHook = <T extends LocalHook<any, any>>(
 		afterHandle: asGlobal(hook?.afterHandle, inject),
 		onResponse: asGlobal(hook?.onResponse, inject),
 		error: asGlobal(hook?.error, inject)
-	} as T
+	} as LocalHook<any, any>
 }
 
 export const asGlobal = <T extends MaybeArray<Function> | undefined>(
@@ -325,7 +325,7 @@ const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
 	return fn.filter((x) => x.$elysiaHookType === 'global') as T
 }
 
-export const filterGlobalHook = <T extends LocalHook<any, any>>(hook: T): T => {
+export const filterGlobalHook = (hook: LocalHook<any, any>): LocalHook<any, any> => {
 	return {
 		// rest is validator
 		...hook,
@@ -337,5 +337,5 @@ export const filterGlobalHook = <T extends LocalHook<any, any>>(hook: T): T => {
 		afterHandle: filterGlobal(hook?.afterHandle),
 		onResponse: filterGlobal(hook?.onResponse),
 		error: filterGlobal(hook?.error)
-	} as T
+	} as LocalHook<any, any>
 }
