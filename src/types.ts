@@ -78,7 +78,7 @@ export type Prettify<T> = {
 } & {}
 
 export type Reconcile<A extends Object, B extends Object> = {
-	[key in keyof B as key extends keyof A ? never : key]: B[key]
+	[key in keyof A as key extends keyof B ? never : key]: A[key]
 } extends infer Collision
 	? {} extends Collision
 		? {
@@ -137,6 +137,38 @@ export type UnwrapSchema<
 	: unknown
 
 export type UnwrapRoute<
+	Schema extends InputSchema<any>,
+	Definitions extends DefinitionBase['type'] = {}
+> = {
+	body: UnwrapSchema<Schema['body'], Definitions>
+	headers: UnwrapSchema<
+		Schema['headers'],
+		Definitions
+	> extends infer A extends Record<string, any>
+		? A
+		: undefined
+	query: UnwrapSchema<
+		Schema['query'],
+		Definitions
+	> extends infer A extends Record<string, any>
+		? A
+		: undefined
+	params: UnwrapSchema<
+		Schema['params'],
+		Definitions
+	> extends infer A extends Record<string, any>
+		? A
+		: undefined
+	response: Schema['response'] extends TSchema | string
+		? UnwrapSchema<Schema['response'], Definitions>
+		: Schema['response'] extends {
+				[k in string]: TSchema | string
+		  }
+		? UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
+		: unknown | void
+}
+
+export type UnwrapGroupGuardRoute<
 	Schema extends InputSchema<any>,
 	Definitions extends DefinitionBase['type'] = {},
 	Path extends string = ''
@@ -272,9 +304,10 @@ export type Handler<
 	Decorators extends DecoratorBase = {
 		request: {}
 		store: {}
-	}
+	},
+	Path extends string = ''
 > = (
-	context: Prettify<Context<Route, Decorators>>
+	context: Prettify<Context<Route, Decorators, Path>>
 ) => Route['response'] extends { 200: unknown }
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
@@ -376,7 +409,15 @@ export type LocalHook<
 		request: {}
 		store: {}
 	},
-	Errors extends Record<string, Error> = {}
+	Errors extends Record<string, Error> = {},
+	Path extends string = '',
+	TypedRoute extends RouteSchema = Route extends {
+		params: Record<string, unknown>
+	}
+		? Route
+		: Route & {
+				params: Record<GetPathParameter<Path>, string>
+		  }
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) & {
 	/**
 	 * Short for 'Content-Type'
@@ -394,15 +435,15 @@ export type LocalHook<
 	/**
 	 * Transform context's value
 	 */
-	transform?: MaybeArray<VoidHandler<Route, Decorators>>
+	transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
 	/**
 	 * Execute before main handler
 	 */
-	beforeHandle?: MaybeArray<Handler<Route, Decorators>>
+	beforeHandle?: MaybeArray<Handler<TypedRoute, Decorators>>
 	/**
 	 * Execute after main handler
 	 */
-	afterHandle?: MaybeArray<AfterHandler<Route, Decorators>>
+	afterHandle?: MaybeArray<AfterHandler<TypedRoute, Decorators>>
 	/**
 	 * Catch error
 	 */
@@ -414,7 +455,7 @@ export type LocalHook<
 	/**
 	 * Custom body parser
 	 */
-	onResponse?: MaybeArray<VoidHandler<Route, Decorators>>
+	onResponse?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
 }
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>

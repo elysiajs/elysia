@@ -1,18 +1,26 @@
-import type { DecoratorBase, RouteSchema, Prettify } from './types'
+import type {
+	DecoratorBase,
+	RouteSchema,
+	Prettify,
+	GetPathParameter
+} from './types'
 
 export type Context<
 	Route extends RouteSchema = RouteSchema,
 	Decorators extends DecoratorBase = {
 		request: {}
 		store: {}
-	}
+	},
+	Path extends string = ''
 > = Prettify<
 	{
 		body: Route['body']
 		query: undefined extends Route['query']
 			? Record<string, string | null>
 			: Route['query']
-		params: Route['params']
+		params: undefined extends Route['params']
+			? Record<GetPathParameter<Path>, string>
+			: Route['params']
 		headers: undefined extends Route['headers']
 			? Record<string, string | null>
 			: Route['headers']

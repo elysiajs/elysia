@@ -158,7 +158,7 @@ export default class Elysia<
 	private add(
 		method: HTTPMethod,
 		path: string,
-		handler: Handler<any, any>,
+		handler: Handler<any, any, any>,
 		hook?: LocalHook<any, any, any, any>,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
@@ -739,11 +739,7 @@ export default class Elysia<
 		const NewElysia extends Elysia<any, any, any, any, any>,
 		const Prefix extends string,
 		const Schema extends MergeSchema<
-			UnwrapRoute<
-				LocalSchema,
-				Definitions['type'],
-				`${BasePath}${Prefix}`
-			>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
@@ -752,7 +748,8 @@ export default class Elysia<
 			LocalSchema,
 			Schema,
 			Decorators,
-			Definitions['error']
+			Definitions['error'],
+			`${BasePath}${Prefix}`
 		>,
 		run: (
 			group: Elysia<
@@ -918,7 +915,13 @@ export default class Elysia<
 			ParentSchema
 		>
 	>(
-		hook: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			BasePath
+		>
 	): Elysia<BasePath, Decorators, Definitions, Route, Routes>
 
 	// : Elysia<
@@ -944,7 +947,7 @@ export default class Elysia<
 		>,
 		const NewElysia extends Elysia<any, any, any, any, any>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], BasePath>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
@@ -1106,9 +1109,7 @@ export default class Elysia<
 					error: Definitions['error'] & PluginDefinitions['error']
 				},
 				MergeSchema<ParentSchema, PluginSchema>,
-				BasePath extends ``
-					? Routes & NewElysia['schema']
-					: Routes & AddRoutePrefix<BasePath, NewElysia['schema']>
+				Routes & NewElysia['schema']
 		  >
 		: this
 
@@ -1196,7 +1197,8 @@ export default class Elysia<
 				MergeSchema<PluginSchema, ParentSchema>,
 				BasePath extends ``
 					? Routes & LazyLoadElysia['schema']
-					: Routes & AddRoutePrefix<BasePath, LazyLoadElysia['schema']>
+					: Routes &
+							AddRoutePrefix<BasePath, LazyLoadElysia['schema']>
 		  >
 		: this
 
@@ -1409,14 +1411,20 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators>
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1448,7 +1456,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('GET', path, handler, hook as any)
+		this.add('GET', path, handler, hook)
 
 		return this as any
 	}
@@ -1477,14 +1485,20 @@ export default class Elysia<
 			Extract<keyof Definitions['type'], string>
 		>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators>
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1516,7 +1530,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('POST', path, handler, hook as any)
+		this.add('POST', path, handler, hook)
 
 		return this as any
 	}
@@ -1545,14 +1559,20 @@ export default class Elysia<
 			Extract<keyof Definitions['type'], string>
 		>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators>
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1584,7 +1604,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('PUT', path, handler, hook as any)
+		this.add('PUT', path, handler, hook)
 
 		return this as any
 	}
@@ -1612,15 +1632,21 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<Route, Decorators>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1652,7 +1678,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('PATCH', path, handler, hook as any)
+		this.add('PATCH', path, handler, hook)
 
 		return this as any
 	}
@@ -1682,13 +1708,19 @@ export default class Elysia<
 		>,
 		const Function extends Handler<Route, Decorators>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1720,7 +1752,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('DELETE', path, handler, hook as any)
+		this.add('DELETE', path, handler, hook)
 
 		return this as any
 	}
@@ -1748,15 +1780,21 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<Route, Decorators>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1788,7 +1826,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('OPTIONS', path, handler, hook as any)
+		this.add('OPTIONS', path, handler, hook)
 
 		return this as any
 	}
@@ -1811,15 +1849,21 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<Route, Decorators>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1851,7 +1895,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('ALL', path, handler, hook as any)
+		this.add('ALL', path, handler, hook)
 
 		return this as any
 	}
@@ -1879,15 +1923,21 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<Route, Decorators>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1919,7 +1969,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('HEAD', path, handler, hook as any)
+		this.add('HEAD', path, handler, hook)
 
 		return this as any
 	}
@@ -1947,15 +1997,21 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<Route, Decorators>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -1987,7 +2043,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('TRACE', path, handler, hook as any)
+		this.add('TRACE', path, handler, hook)
 
 		return this as any
 	}
@@ -2015,15 +2071,21 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<Route, Decorators>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
 		path: Path,
 		handler: Function,
-		hook?: LocalHook<LocalSchema, Route, Decorators, Definitions['error']>
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -2055,7 +2117,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add('CONNECT', path, handler, hook as any)
+		this.add('CONNECT', path, handler, hook)
 
 		return this as any
 	}
@@ -2205,9 +2267,9 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<Route, Decorators>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type'], `${BasePath}${Path}`>,
+			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>
 	>(
@@ -2218,7 +2280,13 @@ export default class Elysia<
 		{
 			config,
 			...hook
-		}: LocalHook<LocalSchema, Route, Decorators, Definitions['error']> & {
+		}: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		> & {
 			config: {
 				allowMeta?: boolean
 			}
@@ -2258,7 +2326,7 @@ export default class Elysia<
 			}
 		>
 	> {
-		this.add(method, path, handler, hook as any, config)
+		this.add(method, path, handler, hook, config)
 
 		return this as any
 	}

@@ -15,24 +15,50 @@ const plugin = new Elysia().use(cookie).model({
 })
 
 const app = new Elysia()
-	.use(cookie)
-	.use(plugin)
-	.model({
-		A: t.String()
-	})
-	.get(
+	// .use(cookie)
+	// .use(plugin)
+	// .model({
+	// 	A: t.String()
+	// })
+	// .get(
+	// 	'/id/:id',
+	// 	(context) => {
+	// 		return {
+	// 			a: 'A'
+	// 		}
+	// 	},
+	// 	{
+	// 		body: 'A',
+	// 		response: t.Object({
+	// 			a: t.String()
+	// 		})
+	// 	}
+	// )
+	// .guard({
+	//     query: t.Object({
+	//         id: t.Numeric()
+	//     })
+	// })
+	.group(
 		'/id/:id',
-		(context) => {
-			return {
-				a: 'A'
-			}
-		},
 		{
-			body: 'A',
-			response: t.Object({
-				a: t.String()
+			params: t.Object({
+				id: t.Numeric()
 			})
-		}
+		},
+		(app) =>
+			app
+				.get('/awd', ({ params }) => {})
+				.group(
+					'/name/:name',
+					{
+						params: t.Object({
+							id: t.Numeric(),
+                            name: t.Numeric()
+						})
+					},
+					(app) => app.get('/awd', ({ params }) => {})
+				)
 	)
 
 type A = typeof app
