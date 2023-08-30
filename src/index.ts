@@ -54,9 +54,9 @@ import type {
 	ErrorHandler,
 	LifeCycleStore,
 	MaybePromise,
-	Reconcile,
 	Prettify,
-	ListenCallback
+	ListenCallback,
+	AddRoutePrefix
 } from './types'
 
 import {
@@ -101,7 +101,7 @@ export default class Elysia<
 		type: {},
 		error: {}
 	} as {
-		type: Record<string, TSchema>
+		type: Definitions['type']
 		error: Definitions['error']
 	}
 
@@ -196,7 +196,7 @@ export default class Elysia<
 					break
 			}
 
-		const models = this.definitions.type
+		const models = this.definitions.type as Record<string, TSchema>
 		const validator = {
 			body: getSchemaValidator(
 				hook?.body ?? (this.validator?.body as any),
@@ -772,18 +772,12 @@ export default class Elysia<
 	>
 		? Elysia<
 				BasePath,
-				Reconcile<PluginDecorators, Decorators>,
+				Decorators & PluginDecorators,
 				{
-					type: Reconcile<
-						PluginDefinitions['type'],
-						Definitions['type']
-					>
-					error: Reconcile<
-						PluginDefinitions['error'],
-						Definitions['error']
-					>
+					type: Definitions['type'] & PluginDefinitions['type']
+					error: Definitions['error'] & PluginDefinitions['error']
 				},
-				Reconcile<PluginSchema, ParentSchema>,
+				ParentSchema & PluginSchema,
 				Routes & NewElysia['schema']
 		  >
 		: this
@@ -1104,27 +1098,17 @@ export default class Elysia<
 		? Elysia<
 				BasePath,
 				{
-					request: Reconcile<
-						PluginDecorators['request'],
-						Decorators['request']
-					>
-					store: Reconcile<
-						PluginDecorators['store'],
-						Decorators['store']
-					>
+					request: Decorators['request'] & PluginDecorators['request']
+					store: Decorators['store'] & PluginDecorators['store']
 				},
 				{
-					type: Reconcile<
-						PluginDefinitions['type'],
-						Definitions['type']
-					>
-					error: Reconcile<
-						PluginDefinitions['error'],
-						Definitions['error']
-					>
+					type: Definitions['type'] & PluginDefinitions['type']
+					error: Definitions['error'] & PluginDefinitions['error']
 				},
-				MergeSchema<PluginSchema, ParentSchema>,
-				Routes & NewElysia['schema']
+				MergeSchema<ParentSchema, PluginSchema>,
+				BasePath extends ``
+					? Routes & NewElysia['schema']
+					: Routes & AddRoutePrefix<BasePath, NewElysia['schema']>
 		  >
 		: this
 
@@ -1141,27 +1125,17 @@ export default class Elysia<
 		? Elysia<
 				BasePath,
 				{
-					request: Reconcile<
-						PluginDecorators['request'],
-						Decorators['request']
-					>
-					store: Reconcile<
-						PluginDecorators['store'],
-						Decorators['store']
-					>
+					request: Decorators['request'] & PluginDecorators['request']
+					store: Decorators['store'] & PluginDecorators['store']
 				},
 				{
-					type: Reconcile<
-						PluginDefinitions['type'],
-						Definitions['type']
-					>
-					error: Reconcile<
-						PluginDefinitions['error'],
-						Definitions['error']
-					>
+					type: Definitions['type'] & PluginDefinitions['type']
+					error: Definitions['error'] & PluginDefinitions['error']
 				},
-				MergeSchema<PluginSchema, ParentSchema>,
-				Routes & NewElysia['schema']
+				MergeSchema<ParentSchema, PluginSchema>,
+				BasePath extends ``
+					? Routes & NewElysia['schema']
+					: Routes & AddRoutePrefix<BasePath, NewElysia['schema']>
 		  >
 		: this
 
@@ -1182,31 +1156,21 @@ export default class Elysia<
 		? Elysia<
 				BasePath,
 				{
-					request: Reconcile<
-						PluginDecorators['request'],
-						Decorators['request']
-					>
-					store: Reconcile<
-						PluginDecorators['store'],
-						Decorators['store']
-					>
+					request: Decorators['request'] & PluginDecorators['request']
+					store: Decorators['store'] & PluginDecorators['store']
 				},
 				{
-					type: Reconcile<
-						PluginDefinitions['type'],
-						Definitions['type']
-					>
-					error: Reconcile<
-						PluginDefinitions['error'],
-						Definitions['error']
-					>
+					type: Definitions['type'] & PluginDefinitions['type']
+					error: Definitions['error'] & PluginDefinitions['error']
 				},
-				Reconcile<PluginSchema, ParentSchema>,
-				Routes & NewElysia['schema']
+				MergeSchema<ParentSchema, PluginSchema>,
+				BasePath extends ``
+					? Routes & NewElysia['schema']
+					: Routes & AddRoutePrefix<BasePath, NewElysia['schema']>
 		  >
 		: this
 
-	// Import inline
+	// Import entire instance
 	use<LazyLoadElysia extends Elysia<any, any, any, any, any>>(
 		plugin: Promise<{
 			default: LazyLoadElysia
@@ -1221,26 +1185,18 @@ export default class Elysia<
 		? Elysia<
 				BasePath,
 				{
-					request: Reconcile<
-						PluginDecorators['request'],
-						Decorators['request']
-					>
-					store: Reconcile<
-						PluginDecorators['store'],
-						Decorators['store']
-					>
+					request: PluginDecorators['request'] & Decorators['request']
+					store: PluginDecorators['store'] & Decorators['store']
 				},
 				{
-					type: Reconcile<
-						PluginDefinitions['type'],
-						Definitions['type']
-					>
-					error: Reconcile<
-						PluginDefinitions['error'],
-						Definitions['error']
-					>
+					type: PluginDefinitions['type'] & Definitions['type']
+
+					error: PluginDefinitions['error'] & Definitions['error']
 				},
-				Reconcile<PluginSchema, ParentSchema>
+				MergeSchema<PluginSchema, ParentSchema>,
+				BasePath extends ``
+					? Routes & LazyLoadElysia['schema']
+					: Routes & AddRoutePrefix<BasePath, LazyLoadElysia['schema']>
 		  >
 		: this
 
@@ -1670,29 +1626,31 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Prettify<Routes & {
-			[path in `${BasePath}${Path}`]: {
-				patch: Route extends {
-					body: infer Body
-					params: infer Params
-					query: infer Query
-					headers: infer Headers
-					response: infer Response
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					patch: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: unknown extends Response
+									? {
+											200: ReturnType<Function>
+									  }
+									: Response
+						  }
+						: never
 				}
-					? {
-							body: Body
-							params: Params
-							query: Query
-							headers: Headers
-							response: unknown extends Response
-								? {
-										200: ReturnType<Function>
-								  }
-								: Response
-					  }
-					: never
 			}
-		}>
+		>
 	> {
 		this.add('PATCH', path, handler, hook as any)
 
@@ -1736,29 +1694,31 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Prettify<Routes & {
-			[path in `${BasePath}${Path}`]: {
-				delete: Route extends {
-					body: infer Body
-					params: infer Params
-					query: infer Query
-					headers: infer Headers
-					response: infer Response
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					delete: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: unknown extends Response
+									? {
+											200: ReturnType<Function>
+									  }
+									: Response
+						  }
+						: never
 				}
-					? {
-							body: Body
-							params: Params
-							query: Query
-							headers: Headers
-							response: unknown extends Response
-								? {
-										200: ReturnType<Function>
-								  }
-								: Response
-					  }
-					: never
 			}
-		}>
+		>
 	> {
 		this.add('DELETE', path, handler, hook as any)
 
@@ -1802,29 +1762,31 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Prettify<Routes & {
-			[path in `${BasePath}${Path}`]: {
-				options: Route extends {
-					body: infer Body
-					params: infer Params
-					query: infer Query
-					headers: infer Headers
-					response: infer Response
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					options: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: unknown extends Response
+									? {
+											200: ReturnType<Function>
+									  }
+									: Response
+						  }
+						: never
 				}
-					? {
-							body: Body
-							params: Params
-							query: Query
-							headers: Headers
-							response: unknown extends Response
-								? {
-										200: ReturnType<Function>
-								  }
-								: Response
-					  }
-					: never
 			}
-		}>
+		>
 	> {
 		this.add('OPTIONS', path, handler, hook as any)
 
@@ -1863,29 +1825,31 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Prettify<Routes & {
-			[path in `${BasePath}${Path}`]: {
-				[x: string]: Route extends {
-					body: infer Body
-					params: infer Params
-					query: infer Query
-					headers: infer Headers
-					response: infer Response
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					[x: string]: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: unknown extends Response
+									? {
+											200: ReturnType<Function>
+									  }
+									: Response
+						  }
+						: never
 				}
-					? {
-							body: Body
-							params: Params
-							query: Query
-							headers: Headers
-							response: unknown extends Response
-								? {
-										200: ReturnType<Function>
-								  }
-								: Response
-					  }
-					: never
 			}
-		}>
+		>
 	> {
 		this.add('ALL', path, handler, hook as any)
 
@@ -1929,29 +1893,31 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Prettify<Routes & {
-			[path in `${BasePath}${Path}`]: {
-				head: Route extends {
-					body: infer Body
-					params: infer Params
-					query: infer Query
-					headers: infer Headers
-					response: infer Response
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					head: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: unknown extends Response
+									? {
+											200: ReturnType<Function>
+									  }
+									: Response
+						  }
+						: never
 				}
-					? {
-							body: Body
-							params: Params
-							query: Query
-							headers: Headers
-							response: unknown extends Response
-								? {
-										200: ReturnType<Function>
-								  }
-								: Response
-					  }
-					: never
 			}
-		}>
+		>
 	> {
 		this.add('HEAD', path, handler, hook as any)
 
@@ -1995,29 +1961,31 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Prettify<Routes & {
-			[path in `${BasePath}${Path}`]: {
-				trace: Route extends {
-					body: infer Body
-					params: infer Params
-					query: infer Query
-					headers: infer Headers
-					response: infer Response
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					trace: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: unknown extends Response
+									? {
+											200: ReturnType<Function>
+									  }
+									: Response
+						  }
+						: never
 				}
-					? {
-							body: Body
-							params: Params
-							query: Query
-							headers: Headers
-							response: unknown extends Response
-								? {
-										200: ReturnType<Function>
-								  }
-								: Response
-					  }
-					: never
 			}
-		}>
+		>
 	> {
 		this.add('TRACE', path, handler, hook as any)
 
@@ -2061,29 +2029,31 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Prettify<Routes & {
-			[path in `${BasePath}${Path}`]: {
-				connect: Route extends {
-					body: infer Body
-					params: infer Params
-					query: infer Query
-					headers: infer Headers
-					response: infer Response
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					connect: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: unknown extends Response
+									? {
+											200: ReturnType<Function>
+									  }
+									: Response
+						  }
+						: never
 				}
-					? {
-							body: Body
-							params: Params
-							query: Query
-							headers: Headers
-							response: unknown extends Response
-								? {
-										200: ReturnType<Function>
-								  }
-								: Response
-					  }
-					: never
 			}
-		}>
+		>
 	> {
 		this.add('CONNECT', path, handler, hook as any)
 
@@ -2262,29 +2232,31 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Prettify<Routes & {
-			[path in `${BasePath}${Path}`]: {
-				[x in HTTPMethod]: Route extends {
-					body: infer Body
-					params: infer Params
-					query: infer Query
-					headers: infer Headers
-					response: infer Response
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					[x in HTTPMethod]: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: unknown extends Response
+									? {
+											200: ReturnType<Function>
+									  }
+									: Response
+						  }
+						: never
 				}
-					? {
-							body: Body
-							params: Params
-							query: Query
-							headers: Headers
-							response: unknown extends Response
-								? {
-										200: ReturnType<Function>
-								  }
-								: Response
-					  }
-					: never
 			}
-		}>
+		>
 	> {
 		this.add(method, path, handler, hook as any, config)
 
@@ -2567,6 +2539,7 @@ export default class Elysia<
 		if (typeof name === 'object')
 			Object.entries(name).forEach(([key, value]) => {
 				if (!(key in this.definitions.type))
+					// @ts-ignore
 					this.definitions.type[key] = value as TSchema
 			})
 		else (this.definitions.type as Record<string, TSchema>)[name] = model!
@@ -2799,6 +2772,5 @@ export type {
 	ErrorHandler,
 	LifeCycleStore,
 	MaybePromise,
-	Reconcile,
 	ListenCallback
 } from './types'

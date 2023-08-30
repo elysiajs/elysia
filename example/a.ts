@@ -1,26 +1,39 @@
 import { Elysia, t } from '../src'
 
-const b = (app: Elysia) => app.model('B', t.String()).get('/', () => 'A')
+const cookie = new Elysia({
+	name: '@elysiajs/cookie'
+}).derive(() => {
+	return {
+		cookie: {
+			a: 'B'
+		}
+	}
+})
+
+const plugin = new Elysia().use(cookie).model({
+	A: t.String()
+})
 
 const app = new Elysia()
-    .model({
-        A: t.String()
-    })
-    // .use(b)
-    .get(
-        '/id/:id',
-        (context) => {
-            return {
-                a: 'A'
-            }
-        },
-        {
-            body: 'A',
-            response: t.Object({
-                a: t.String()
-            })
-        }
-    )
+	.use(cookie)
+	.use(plugin)
+	.model({
+		A: t.String()
+	})
+	.get(
+		'/id/:id',
+		(context) => {
+			return {
+				a: 'A'
+			}
+		},
+		{
+			body: 'A',
+			response: t.Object({
+				a: t.String()
+			})
+		}
+	)
 
 type A = typeof app
 

@@ -78,7 +78,7 @@ export type Prettify<T> = {
 } & {}
 
 export type Reconcile<A extends Object, B extends Object> = {
-	[key in keyof A as key extends keyof B ? never : key]: A[key]
+	[key in keyof B as key extends keyof A ? never : key]: B[key]
 } extends infer Collision
 	? {} extends Collision
 		? {
@@ -366,8 +366,8 @@ export type ErrorHandler<T extends Record<string, Error> = {}> = (
 ) => any | Promise<any>
 
 type Isolate<T> = {
-    [P in keyof T]: T[P];
-};
+	[P in keyof T]: T[P]
+}
 
 export type LocalHook<
 	LocalSchema extends InputSchema = {},
@@ -377,7 +377,7 @@ export type LocalHook<
 		store: {}
 	},
 	Errors extends Record<string, Error> = {}
-> = Isolate<LocalSchema> & {
+> = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) & {
 	/**
 	 * Short for 'Content-Type'
 	 *
@@ -436,3 +436,7 @@ export type SchemaValidator = {
 }
 
 export type ListenCallback = (server: Server) => MaybePromise<void>
+
+export type AddRoutePrefix<Prefix extends string, T extends string> = {
+	[K in keyof T as `${Prefix}${K & string}`]: T[K]
+}

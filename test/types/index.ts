@@ -282,8 +282,8 @@ const b = app
 			expectTypeOf<typeof body>().toEqualTypeOf<'a'>()
 		},
 		{
-			body: 'a',
-			beforeHandle() {}
+			body: "a",
+			transform() {}
 		}
 	)
 	// ? Infer multiple model
@@ -432,26 +432,28 @@ app.use(plugin).group(
 
 // ? It inherits group type to Eden
 {
-	const server = app.group(
-		'/v1',
-		{
-			query: t.Object({
-				name: t.String()
-			})
-		},
-		(app) =>
-			app.guard(
-				{
-					headers: t.Object({
-						authorization: t.String()
-					})
-				},
-				(app) =>
-					app.get('/a', () => 1, {
-						body: t.String()
-					})
-			)
-	).get('/', ({ params }) => params)
+	const server = app
+		.group(
+			'/v1',
+			{
+				query: t.Object({
+					name: t.String()
+				})
+			},
+			(app) =>
+				app.guard(
+					{
+						headers: t.Object({
+							authorization: t.String()
+						})
+					},
+					(app) =>
+						app.get('/a', () => 1, {
+							body: t.String()
+						})
+				)
+		)
+		.get('/', ({ params }) => params)
 
 	type App = (typeof server)['schema']
 	type Route = App['/v1/a']['get']
@@ -488,7 +490,8 @@ app.use(plugin).group(
 					})
 				},
 				(app) =>
-					app.ws('/a', {
+					app
+					.ws('/a', {
 						message(ws, message) {
 							message
 						},
@@ -650,8 +653,8 @@ app.group(
 
 // ? Reconcilation on state
 {
-	const a = app.state('a', 'a' as const)
-	const b = a.state('a', 'b' as const)
+	const a = app.state('a', 'a')
+	const b = a.state('a', 'b')
 
 	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
 		a: 'a'
@@ -681,11 +684,11 @@ app.group(
 	const a = app.model('a', t.String())
 	const b = a.model('a', t.Number())
 
-	expectTypeOf<(typeof a)['meta']['defs']>().toEqualTypeOf<{
+	expectTypeOf<(typeof a)['definitions']['type']>().toEqualTypeOf<{
 		a: string
 	}>()
 
-	expectTypeOf<(typeof b)['meta']['defs']>().toEqualTypeOf<{
+	expectTypeOf<(typeof b)['definitions']['type']>().toEqualTypeOf<{
 		a: number
 	}>()
 }
@@ -711,7 +714,7 @@ app.group(
 		a: 'b'
 	}>()
 
-	expectTypeOf<(typeof a)['meta']['defs']>().toEqualTypeOf<{
+	expectTypeOf<(typeof a)['definitions']['type']>().toEqualTypeOf<{
 		a: number
 	}>()
 }
@@ -722,16 +725,16 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['meta']['schema']
+	type App = (typeof server)['schema']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
-		headers: undefined
-		query: undefined
-		params: undefined
+		headers: unknown
+		query: unknown
+		params: never
 		response: {
-			'200': string
+			200: string
 		}
 	}>()
 }
@@ -749,7 +752,7 @@ app.group(
 		.get('/a', () => 'A')
 		.listen(3000)
 
-	type Routes = keyof (typeof app)['meta']['schema']
+	type Routes = keyof (typeof app)['schema']
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/api/a' | '/api/plugin/test-path'>()
 }
@@ -764,16 +767,16 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['meta']['schema']
+	type App = (typeof server)['schema']
 	type Route = App['/v1/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
-		headers: undefined
-		query: undefined
-		params: undefined
+		headers: unknown
+		query: unknown
+		params: never
 		response: {
-			'200': string
+			200: string
 		}
 	}>()
 }
@@ -789,7 +792,7 @@ app.group(
 
 	const app = new Elysia().use(test)
 
-	type App = (typeof app)['meta']['schema']
+	type App = (typeof app)['schema']
 	type Routes = keyof App
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/app/test'>()
