@@ -3303,7 +3303,7 @@ export default class Elysia<
 
 		const fetch = this.fetch
 
-		const serve: Serve =
+		const serve =
 			typeof options === 'object'
 				? {
 						development: !isProduction,
@@ -3311,14 +3311,14 @@ export default class Elysia<
 						...options,
 						fetch,
 						error: this.outerErrorHandler
-				  }
+				  } as Serve
 				: {
 						development: !isProduction,
 						...this.config.serve,
 						port: options,
 						fetch,
 						error: this.outerErrorHandler
-				  }
+				  } as Serve
 
 		if (typeof Bun === 'undefined')
 			throw new Error(

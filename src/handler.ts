@@ -1,6 +1,8 @@
 /* eslint-disable no-case-declarations */
 import type { Context } from './context'
 
+const hasHeaderShorthand = 'toJSON' in new Headers()
+
 export const isNotEmpty = (obj: Object) => {
 	for (const x in obj) return true
 
@@ -57,11 +59,21 @@ export const mapEarlyResponse = (
 				return Response.json(response, set)
 
 			case 'Response':
-				for (const key in set.headers)
-					(response as Response)!.headers.append(
-						key,
-						set.headers[key]
-					)
+				const inherits = { ...set.headers }
+
+				if (hasHeaderShorthand)
+					set.headers = (response as Response).headers.toJSON()
+				else
+					for (const [key, value] of (
+						response as Response
+					).headers.entries())
+						if (!(key in set.headers)) set.headers[key] = value
+
+				for (const key in inherits)
+					(response as Response).headers.append(key, inherits[key])
+
+				if ((response as Response).status !== set.status)
+					set.status = (response as Response).status
 
 				return response as Response
 
@@ -200,11 +212,18 @@ export const mapResponse = (
 				return Response.json(response, set)
 
 			case 'Response':
-				for (const key in set.headers)
-					(response as Response)!.headers.append(
-						key,
-						set.headers[key]
-					)
+				const inherits = { ...set.headers }
+
+				if (hasHeaderShorthand)
+					set.headers = (response as Response).headers.toJSON()
+				else
+					for (const [key, value] of (
+						response as Response
+					).headers.entries())
+						if (!(key in set.headers)) set.headers[key] = value
+
+				for (const key in inherits)
+					(response as Response).headers.append(key, inherits[key])
 
 				return response as Response
 
