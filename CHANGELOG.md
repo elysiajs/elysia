@@ -1,6 +1,6 @@
 # 0.6.15 - 31 Aug 2023
 Bug fix:
-- inherits `set.status` if `Response` is returned
+- inherits `set` if `Response` is returned
 
 # 0.6.14 - 28 Aug 2023
 Bug fix:
