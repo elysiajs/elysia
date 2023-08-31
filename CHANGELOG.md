@@ -1,3 +1,7 @@
+# 0.6.15 - 31 Aug 2023
+Bug fix:
+- inherits `set` if `Response` is returned
+
 # 0.6.14 - 28 Aug 2023
 Bug fix:
 - deduplicate plugin via global model
