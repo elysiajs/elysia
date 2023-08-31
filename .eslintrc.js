@@ -18,7 +18,8 @@ module.exports = {
 		'@typescript-eslint/no-extra-semi': 'off',
 		'@typescript-eslint/ban-ts-comment': 'off',
 		'@typescript-eslint/no-namespace': 'off',
-		'no-case-declarations': 'off'
+		'no-case-declarations': 'off',
+		'no-extra-semi': 'off'
 	},
 	ignorePatterns: ['example/*', 'tests/**/*']
 }

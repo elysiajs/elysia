@@ -55,7 +55,10 @@ import type {
 	MaybePromise,
 	Prettify,
 	ListenCallback,
-	AddRoutePrefix
+	AddPrefix,
+	AddSuffix,
+	AddPrefixCapitalize,
+	AddSuffixCapitalize
 } from './types'
 
 import {
@@ -555,6 +558,19 @@ export default class Elysia<
 		Routes
 	>
 
+	addError<const NewError extends Record<string, Error>>(
+		mapper: (decorators: Definitions['error']) => NewError
+	): Elysia<
+		BasePath,
+		Decorators,
+		{
+			type: Definitions['type']
+			error: NewError
+		},
+		ParentSchema,
+		Routes
+	>
+
 	/**
 	 * Register errors
 	 *
@@ -577,21 +593,36 @@ export default class Elysia<
 					{
 						prototype: Error
 					}
-			  >,
+			  >
+			| Function,
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		error?: {
 			prototype: Error
 		}
 	): Elysia<any, any, any, any, any> {
-		if (typeof name === 'string' && error) {
-			// @ts-ignore
-			error.prototype[ERROR_CODE] = name
+		switch (typeof name) {
+			case 'string':
+				// @ts-ignore
+				error.prototype[ERROR_CODE] = name
 
-			return this
+				// @ts-ignore
+				this.definitions.error[name] = error
+
+				return this
+
+			case 'function':
+				this.definitions.error = name(this.definitions.error)
+
+				return this as any
 		}
 
-		for (const [code, error] of Object.entries(name))
+		for (const [code, error] of Object.entries(name)) {
+			// @ts-ignore
 			error.prototype[ERROR_CODE] = code
+
+			// @ts-ignore
+			this.definitions.error[name] = error
+		}
 
 		return this
 	}
@@ -1080,7 +1111,7 @@ export default class Elysia<
 				MergeSchema<ParentSchema, PluginSchema>,
 				BasePath extends ``
 					? Routes & NewElysia['schema']
-					: Routes & AddRoutePrefix<BasePath, NewElysia['schema']>
+					: Routes & AddPrefix<BasePath, NewElysia['schema']>
 		  >
 		: this
 
@@ -1111,7 +1142,7 @@ export default class Elysia<
 				MergeSchema<ParentSchema, PluginSchema>,
 				BasePath extends ``
 					? Routes & NewElysia['schema']
-					: Routes & AddRoutePrefix<BasePath, NewElysia['schema']>
+					: Routes & AddPrefix<BasePath, NewElysia['schema']>
 		  >
 		: this
 
@@ -1141,8 +1172,7 @@ export default class Elysia<
 				MergeSchema<PluginSchema, ParentSchema>,
 				BasePath extends ``
 					? Routes & LazyLoadElysia['schema']
-					: Routes &
-							AddRoutePrefix<BasePath, LazyLoadElysia['schema']>
+					: Routes & AddPrefix<BasePath, LazyLoadElysia['schema']>
 		  >
 		: this
 
@@ -2487,6 +2517,19 @@ export default class Elysia<
 		Routes
 	>
 
+	state<const NewStore extends Record<string, unknown>>(
+		mapper: (decorators: Decorators['request']) => NewStore
+	): Elysia<
+		BasePath,
+		{
+			request: Decorators['request']
+			store: NewStore
+		},
+		Definitions,
+		ParentSchema,
+		Routes
+	>
+
 	/**
 	 * ### state
 	 * Assign global mutatable state accessible for all handler
@@ -2500,13 +2543,19 @@ export default class Elysia<
 	 * ```
 	 */
 	state(
-		name: string | number | symbol | Record<string, unknown>,
+		name: string | number | symbol | Record<string, unknown> | Function,
 		value?: unknown
 	) {
-		if (typeof name === 'object') {
-			this.store = mergeDeep(this.store, name)
+		switch (typeof name) {
+			case 'object':
+				this.store = mergeDeep(this.store, name)
 
-			return this as any
+				return this as any
+
+			case 'function':
+				this.store = name(this.store)
+
+				return this as any
 		}
 
 		if (!(name in this.store)) {
@@ -2584,19 +2633,18 @@ export default class Elysia<
 		Routes
 	>
 
-	// : Elysia<
-	// 	BasePath,
-	// 	{
-	// 		store: Instance['store']
-	// 		error: Instance['error']
-	// 		request: Reconciliation<
-	// 			Instance['request'],
-	// 			DeepWritable<Decorators>
-	// 		>
-	// 		schema: Instance['schema']
-	// 		meta: Instance['meta']
-	// 	}
-	// >
+	decorate<const NewDecorators extends Record<string, unknown>>(
+		mapper: (decorators: Decorators['request']) => NewDecorators
+	): Elysia<
+		BasePath,
+		{
+			request: NewDecorators
+			store: Decorators['store']
+		},
+		Definitions,
+		ParentSchema,
+		Routes
+	>
 
 	/**
 	 * ### decorate
@@ -2610,11 +2658,20 @@ export default class Elysia<
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
-	decorate(name: string | Record<string, unknown>, value?: unknown) {
-		if (typeof name === 'object') {
-			this.decorators = mergeDeep(this.decorators, name)
+	decorate(
+		name: string | Record<string, unknown> | Function,
+		value?: unknown
+	) {
+		switch (typeof name) {
+			case 'object':
+				this.decorators = mergeDeep(this.decorators, name)
 
-			return this as any
+				return this as any
+
+			case 'function':
+				this.decorators = name(this.decorators)
+
+				return this as any
 		}
 
 		// @ts-ignore
@@ -2693,51 +2750,196 @@ export default class Elysia<
 		Routes
 	>
 
-	model(name: string, model?: TSchema) {
-		if (typeof name === 'object')
-			Object.entries(name).forEach(([key, value]) => {
-				if (!(key in this.definitions.type))
-					// @ts-ignore
-					this.definitions.type[key] = value as TSchema
-			})
-		else (this.definitions.type as Record<string, TSchema>)[name] = model!
+	model<const NewType extends Record<string, unknown>>(
+		mapper: (decorators: Definitions['type']) => NewType
+	): Elysia<
+		BasePath,
+		Decorators,
+		{
+			type: NewType
+			error: Definitions['error']
+		},
+		ParentSchema,
+		Routes
+	>
+
+	model(name: string | Record<string, TSchema> | Function, model?: TSchema) {
+		switch (typeof name) {
+			case 'object':
+				Object.entries(name).forEach(([key, value]) => {
+					if (!(key in this.definitions.type))
+						// @ts-ignore
+						this.definitions.type[key] = value as TSchema
+				})
+
+				return this
+
+			case 'function':
+				this.definitions.type = name(this.definitions.type)
+
+				return this as any
+		}
+
+		;(this.definitions.type as Record<string, TSchema>)[name] = model!
 
 		return this as any
 	}
 
-	/**
-	 * Derive new property for each request with access to `Context`.
-	 *
-	 * If error is thrown, the scope will skip to handling error instead.
-	 *
-	 * ---
-	 * @example
-	 * new Elysia()
-	 *     .state('counter', 1)
-	 *     .derive(({ store }) => ({
-	 *         increase() {
-	 *             store.counter++
-	 *         }
-	 *     }))
-	 */
+	mapDerive<const NewStore extends Record<string, unknown>>(
+		mapper: (decorators: Decorators['request']) => MaybePromise<NewStore>
+	): Elysia<
+		BasePath,
+		{
+			request: Decorators['request']
+			store: NewStore
+		},
+		Definitions,
+		ParentSchema,
+		Routes
+	> {
+		// @ts-ignore
+		mapper.$elysia = 'derive'
 
-	// signal<Returned extends Object = Object>(
-	// 	createSignal: (
-	// 		getStore: () => Instance['store']
-	// 	) => MaybePromise<Returned> extends {} ? Returned : never
-	// ): Elysia<{
-	// 	store: Instance['store'] & Awaited<Returned>
-	// 	request: Instance['request']
-	// 	schema: Instance['schema']
-	// 	meta: Instance['meta']
-	// }> {
-	// 	Object.assign(
-	// 		this.store,
-	// 		createSignal(() => this.store)
-	// 	)
+		return this.onTransform(mapper as any) as any
+	}
 
-	// 	return this as any
-	// }
+	affix<
+		const Base extends 'prefix' | 'suffix',
+		const Type extends 'all' | 'decorator' | 'state' | 'model' | 'error',
+		const Word extends string
+	>(
+		base: Base,
+		type: Type,
+		word: Word
+	): Elysia<
+		BasePath,
+		{
+			request: Type extends 'decorator' | 'all'
+				? 'prefix' extends Base
+					? Word extends `${string}${'_' | '-' | ' '}`
+						? AddPrefix<Word, Decorators['request']>
+						: AddPrefixCapitalize<Word, Decorators['request']>
+					: AddSuffixCapitalize<Word, Decorators['request']>
+				: Decorators['request']
+			store: Type extends 'state' | 'all'
+				? 'prefix' extends Base
+					? Word extends `${string}${'_' | '-' | ' '}`
+						? AddPrefix<Word, Decorators['store']>
+						: AddPrefixCapitalize<Word, Decorators['store']>
+					: AddSuffix<Word, Decorators['store']>
+				: Decorators['store']
+		},
+		{
+			type: Type extends 'model' | 'all'
+				? 'prefix' extends Base
+					? Word extends `${string}${'_' | '-' | ' '}`
+						? AddPrefix<Word, Definitions['type']>
+						: AddPrefixCapitalize<Word, Definitions['type']>
+					: AddSuffixCapitalize<Word, Definitions['type']>
+				: Definitions['type']
+			error: Type extends 'error' | 'all'
+				? 'prefix' extends Base
+					? Word extends `${string}${'_' | '-' | ' '}`
+						? AddPrefix<Word, Definitions['error']>
+						: AddPrefixCapitalize<Word, Definitions['error']>
+					: AddSuffixCapitalize<Word, Definitions['error']>
+				: Definitions['error']
+		},
+		ParentSchema,
+		Routes
+	> {
+		const delimieter = ['_', '-', ' ']
+		const capitalize = (word: string) =>
+			word[0].toUpperCase() + word.slice(1)
+
+		const joinKey =
+			base === 'prefix'
+				? (prefix: string, word: string) =>
+						delimieter.includes(prefix.at(-1) ?? '')
+							? prefix + word
+							: prefix + capitalize(word)
+				: delimieter.includes(word.at(-1) ?? '')
+				? (suffix: string, word: string) => word + suffix
+				: (suffix: string, word: string) => word + capitalize(suffix)
+
+		const remap = (type: 'decorator' | 'state' | 'model' | 'error') => {
+			switch (type) {
+				case 'decorator':
+					for (const key in this.decorators) {
+						// @ts-ignore
+						this.decorators[joinKey(word, key)] =
+							this.decorators[key]
+
+						delete this.decorators[word]
+					}
+					break
+
+				case 'state':
+					for (const key in this.store) {
+						// @ts-ignore
+						this.store[joinKey(word, key)] = this.decorators[key]
+
+						delete this.store[word]
+					}
+					break
+
+				case 'model':
+					for (const key in this.definitions.type) {
+						if (base === 'prefix') {
+							// @ts-ignore
+							this.definitions.type[word + key] =
+								this.definitions.type[key]
+						} else {
+							// @ts-ignore
+							this.definitions.type[word + key] =
+								this.definitions.type[key]
+						}
+
+						delete this.definitions.type[word]
+					}
+					break
+
+				case 'error':
+					for (const key in this.definitions.error) {
+						if (base === 'prefix') {
+							// @ts-ignore
+							this.definitions.error[word + key] =
+								this.definitions.error[key]
+						} else {
+							// @ts-ignore
+							this.definitions.error[word + key] =
+								this.definitions.error[key]
+						}
+
+						delete this.definitions.error[word]
+					}
+					break
+			}
+		}
+
+		const types = Array.isArray(type) ? type : [type]
+
+		for (const type of types.some((x) => x === 'all')
+			? ['decorator', 'state', 'model', 'error']
+			: types)
+			remap(type as 'decorator')
+
+		return this as any
+	}
+
+	prefix<
+		const Type extends 'all' | 'decorator' | 'state' | 'model' | 'error',
+		const Word extends string
+	>(type: Type, word: Word) {
+		return this.affix('prefix', type, word)
+	}
+
+	suffix<
+		const Type extends 'all' | 'decorator' | 'state' | 'model' | 'error',
+		const Word extends string
+	>(type: Type, word: Word) {
+		return this.affix('suffix', type, word)
+	}
 
 	compile() {
 		this.fetch = this.config.aot

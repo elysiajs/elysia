@@ -2,6 +2,8 @@
 Feature:
 - Rewrite type
 - Rewrite Web Socket
+- Add mapper method
+- Add affix, prefix, suffix
 
 Improvement:
 - Static Code Analysis now support rest parameter

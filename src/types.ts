@@ -42,7 +42,10 @@ export type ElysiaConfig<T extends string = ''> = {
 	 * @default false
 	 */
 	scoped?: boolean
-	websocket?: Omit<WebSocketHandler<any>, 'open' | 'close' | 'message' | 'drain'>
+	websocket?: Omit<
+		WebSocketHandler<any>,
+		'open' | 'close' | 'message' | 'drain'
+	>
 }
 
 export type MaybeArray<T> = T | T[]
@@ -479,6 +482,18 @@ export type SchemaValidator = {
 
 export type ListenCallback = (server: Server) => MaybePromise<void>
 
-export type AddRoutePrefix<Prefix extends string, T extends string> = {
+export type AddPrefix<Prefix extends string, T> = {
 	[K in keyof T as `${Prefix}${K & string}`]: T[K]
+}
+
+export type AddPrefixCapitalize<Prefix extends string, T> = {
+	[K in keyof T as `${Prefix}${Capitalize<K & string>}`]: T[K]
+}
+
+export type AddSuffix<Suffix extends string, T> = {
+	[K in keyof T as `${K & string}${Suffix}`]: T[K]
+}
+
+export type AddSuffixCapitalize<Suffix extends string, T> = {
+	[K in keyof T as `${K & string}${Capitalize<Suffix>}`]: T[K]
 }
