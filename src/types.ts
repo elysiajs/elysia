@@ -1,4 +1,4 @@
-import type { Serve, Server } from 'bun'
+import type { Serve, Server, WebSocketHandler } from 'bun'
 
 import type { TSchema, TObject, Static } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
@@ -41,7 +41,8 @@ export type ElysiaConfig<T extends string = ''> = {
 	 *
 	 * @default false
 	 */
-	scoped: boolean
+	scoped?: boolean
+	websocket?: Omit<WebSocketHandler<any>, 'open' | 'close' | 'message' | 'drain'>
 }
 
 export type MaybeArray<T> = T | T[]
@@ -398,7 +399,7 @@ export type ErrorHandler<T extends Record<string, Error> = {}> = (
 		  }[keyof T]
 ) => any | Promise<any>
 
-type Isolate<T> = {
+export type Isolate<T> = {
 	[P in keyof T]: T[P]
 }
 

@@ -170,7 +170,8 @@ export const createDynamicHandler =
 			}
 
 			context.body = body
-			context.params = handler?.params || {}
+			// @ts-ignore
+			context.params = handler?.params || undefined
 			context.query = q === -1 ? {} : parseQuery(url.substring(q + 1))
 
 			for (let i = 0; i < hooks.transform.length; i++) {

@@ -1,5 +1,6 @@
 import { Memoirist } from 'memoirist'
-import type { Serve, Server } from 'bun'
+
+import type { Serve, Server, ServerWebSocket } from 'bun'
 
 import {
 	mergeHook,
@@ -11,7 +12,6 @@ import {
 	filterGlobalHook,
 	asGlobal
 } from './utils'
-import type { Context } from './context'
 
 import {
 	composeHandler,
@@ -19,14 +19,13 @@ import {
 	composeErrorHandler
 } from './compose'
 
-import { ws } from './ws'
-// import type { ElysiaWSContext, ElysiaWSOptions, WSTypedSchema } from './ws'
+import type { Context } from './context'
 import type { Static, TSchema } from '@sinclair/typebox'
 
 import {
 	isProduction,
 	ERROR_CODE,
-	type ValidationError,
+	ValidationError,
 	type ParseError,
 	type NotFoundError,
 	type InternalServerError
@@ -64,6 +63,8 @@ import {
 	createDynamicHandler,
 	type DynamicHandler
 } from './dynamic-handle'
+import { WS } from './ws/types'
+import { ElysiaWS, websocket } from './ws'
 
 /**
  * ### Elysia Server
@@ -137,7 +138,6 @@ export default class Elysia<
 		>,
 		all: ''
 	}
-	private wsRouter: Memoirist<any> | undefined
 
 	private dynamicRouter = new Memoirist<DynamicHandler>()
 	private lazyLoadModules: Promise<Elysia<any, any>>[] = []
@@ -810,8 +810,6 @@ export default class Elysia<
 		})
 		instance.store = this.store
 
-		if (this.wsRouter) instance.use(ws())
-
 		const isSchema = typeof schemaOrRun === 'object'
 
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
@@ -839,21 +837,6 @@ export default class Elysia<
 					const hook = schemaOrRun
 					const localHook = hooks as LocalHook<any, any, any, any>
 
-					// Same as guard
-					const hasWsRoute = instance.wsRouter?.find(
-						'subscribe',
-						path
-					)
-					if (hasWsRoute) {
-						const wsRoute = instance.wsRouter!.history.find(
-							// eslint-disable-next-line @typescript-eslint/no-unused-vars
-							([_, wsPath]) => path === wsPath
-						)
-						if (!wsRoute) return
-
-						return this.ws(path as any, wsRoute[2] as any)
-					}
-
 					this.add(
 						method,
 						path,
@@ -868,20 +851,6 @@ export default class Elysia<
 						})
 					)
 				} else {
-					const hasWsRoute = instance.wsRouter?.find(
-						'subscribe',
-						path
-					)
-					if (hasWsRoute) {
-						const wsRoute = instance.wsRouter!.history.find(
-							// eslint-disable-next-line @typescript-eslint/no-unused-vars
-							([_, wsPath]) => path === wsPath
-						)
-						if (!wsRoute) return
-
-						return this.ws(path as any, wsRoute[2] as any)
-					}
-
 					this.add(
 						method,
 						path,
@@ -896,14 +865,6 @@ export default class Elysia<
 				}
 			}
 		)
-
-		if (instance.wsRouter && this.wsRouter)
-			instance.wsRouter.history.forEach(([method, path, handler]) => {
-				path = this.config.prefix + prefix + path
-
-				if (path === '/') this.wsRouter?.add(method, prefix, handler)
-				else this.wsRouter?.add(method, `${prefix}${path}`, handler)
-			})
 
 		return this as any
 	}
@@ -1020,7 +981,6 @@ export default class Elysia<
 
 		const instance = new Elysia<any>()
 		instance.store = this.store
-		if (this.wsRouter) instance.use(ws())
 
 		const sandbox = run(instance)
 		this.decorators = mergeDeep(this.decorators, instance.decorators)
@@ -1041,17 +1001,6 @@ export default class Elysia<
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks: localHook }) => {
-				const hasWsRoute = instance.wsRouter?.find('subscribe', path)
-				if (hasWsRoute) {
-					const wsRoute = instance.wsRouter!.history.find(
-						// eslint-disable-next-line @typescript-eslint/no-unused-vars
-						([_, wsPath]) => path === wsPath
-					)
-					if (!wsRoute) return
-
-					return this.ws(path as any, wsRoute[2] as any)
-				}
-
 				this.add(
 					method,
 					path,
@@ -1067,11 +1016,6 @@ export default class Elysia<
 				)
 			}
 		)
-
-		if (instance.wsRouter && this.wsRouter)
-			instance.wsRouter.history.forEach(([method, path, handler]) => {
-				this.wsRouter?.add(method, path, handler)
-			})
 
 		return this as any
 	}
@@ -1266,17 +1210,6 @@ export default class Elysia<
 
 			Object.values(plugin.routes).forEach(
 				({ method, path, handler, hooks }) => {
-					const hasWsRoute = plugin.wsRouter?.find('subscribe', path)
-					if (hasWsRoute) {
-						const wsRoute = plugin.wsRouter!.history.find(
-							// eslint-disable-next-line @typescript-eslint/no-unused-vars
-							([_, wsPath]) => path === wsPath
-						)
-						if (!wsRoute) return
-
-						// return this.ws(path as any, wsRoute[2] as any)
-					}
-
 					this.add(
 						method,
 						path,
@@ -2141,10 +2074,167 @@ export default class Elysia<
 	 * ```
 	 */
 
-	ws(path: string, options: Object) {
-		path
-		options
-		return this
+	ws<
+		const Path extends string,
+		const LocalSchema extends InputSchema<
+			keyof Definitions['type'] & string
+		>,
+		const Route extends MergeSchema<
+			UnwrapRoute<LocalSchema, Definitions['type']>,
+			ParentSchema
+		>
+	>(
+		path: Path,
+		options: WS.LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
+	): Elysia<
+		BasePath,
+		Decorators,
+		Definitions,
+		ParentSchema,
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					subscribe: Route extends {
+						body: infer Body
+						params: infer Params
+						query: infer Query
+						headers: infer Headers
+						response: infer Response
+					}
+						? {
+								body: Body
+								params: Params
+								query: Query
+								headers: Headers
+								response: Response
+						  }
+						: never
+				}
+			}
+		>
+	> {
+		const transform = options.transformMessage
+			? Array.isArray(options.transformMessage)
+				? options.transformMessage
+				: [options.transformMessage]
+			: undefined
+
+		this.get(
+			path,
+			// @ts-ignore
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			(context) => {
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
+				const { set, path, qi, ...wsContext } = context
+
+				// For Aot evaluation
+				context.headers
+				context.query
+				context.params
+
+				const validateMessage = getSchemaValidator(options?.body, {
+					models: this.definitions.type as Record<string, TSchema>
+				})
+
+				const validateResponse = getSchemaValidator(
+					options?.response as any,
+					{
+						models: this.definitions.type as Record<string, TSchema>
+					}
+				)
+
+				const parseMessage = (message: any) => {
+					const start = message.charCodeAt(0)
+
+					if (start === 47 || start === 123)
+						try {
+							message = JSON.parse(message)
+						} catch {
+							// Not empty
+						}
+					else if (!Number.isNaN(+message)) message = +message
+
+					if (transform?.length)
+						for (let i = 0; i < transform.length; i++) {
+							const temp = transform[i](message)
+
+							if (temp !== undefined) message = temp
+						}
+
+					return message
+				}
+
+				if (
+					this.server?.upgrade<any>(context.request, {
+						headers:
+							typeof options.upgrade === 'function'
+								? options.upgrade(context as Context)
+								: options.upgrade,
+						data: {
+							validator: validateResponse,
+							open(ws: ServerWebSocket<any>) {
+								options.open?.(
+									new ElysiaWS(ws, wsContext as any)
+								)
+							},
+							message: (ws: ServerWebSocket<any>, msg: any) => {
+								const message = parseMessage(msg)
+
+								if (validateMessage?.Check(message) === false)
+									return void ws.send(
+										new ValidationError(
+											'message',
+											validateMessage,
+											message
+										).message as string
+									)
+
+								options.message?.(
+									new ElysiaWS(ws, wsContext as any),
+									message
+								)
+							},
+							drain(ws: ServerWebSocket<any>) {
+								options.drain?.(
+									new ElysiaWS(ws, wsContext as any)
+								)
+							},
+							close(
+								ws: ServerWebSocket<any>,
+								code: number,
+								reason: string
+							) {
+								options.close?.(
+									new ElysiaWS(ws, wsContext as any),
+									code,
+									reason
+								)
+							}
+						}
+					})
+				)
+					return
+
+				set.status = 400
+
+				return 'Expected a websocket connection'
+			},
+			{
+				beforeHandle: options.beforeHandle,
+				transform: options.transform,
+				headers: options.headers,
+				params: options.params,
+				query: options.query
+			} as any
+		)
+
+		return this as any
 	}
 	// ws<
 	// 	Path extends string,
@@ -2730,12 +2820,20 @@ export default class Elysia<
 						development: !isProduction,
 						...this.config.serve,
 						...options,
+						websocket: {
+							...this.config.websocket,
+							...websocket
+						},
 						fetch,
 						error: this.outerErrorHandler
 				  } as Serve)
 				: ({
 						development: !isProduction,
 						...this.config.serve,
+						websocket: {
+							...this.config.websocket,
+							...websocket
+						},
 						port: options,
 						fetch,
 						error: this.outerErrorHandler

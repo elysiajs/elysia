@@ -8,7 +8,7 @@ const app = new Elysia()
 // ? default value of context
 app.get('/', ({ headers, query, params, body, store }) => {
 	// ? default keyof params should be never
-	expectTypeOf<typeof params>().not.toBeNever()
+	expectTypeOf<typeof params>().toBeNever()
 
 	// ? default headers should be Record<string, unknown>
 	expectTypeOf<typeof headers>().toEqualTypeOf<
@@ -475,43 +475,42 @@ app.use(plugin).group(
 
 // ? Register websocket
 {
-	// const server = app.group(
-	// 	'/v1',
-	// 	{
-	// 		query: t.Object({
-	// 			name: t.String()
-	// 		})
-	// 	},
-	// 	(app) =>
-	// 		app.guard(
-	// 			{
-	// 				headers: t.Object({
-	// 					authorization: t.String()
-	// 				})
-	// 			},
-	// 			(app) =>
-	// 				app
-	// 				.ws('/a', {
-	// 					message(ws, message) {
-	// 						message
-	// 					},
-	// 					body: t.String()
-	// 				})
-	// 		)
-	// )
-	// type App = (typeof server)['schema']
-	// type Route = App['/v1/a']['subscribe']
-	// expectTypeOf<Route>().toEqualTypeOf<{
-	// 	headers: {
-	// 		authorization: string
-	// 	}
-	// 	body: string
-	// 	query: {
-	// 		name: string
-	// 	}
-	// 	params: never
-	// 	response: unknown
-	// }>()
+	const server = app.group(
+		'/v1',
+		{
+			query: t.Object({
+				name: t.String()
+			})
+		},
+		(app) =>
+			app.guard(
+				{
+					headers: t.Object({
+						authorization: t.String()
+					})
+				},
+				(app) =>
+					app.ws('/a', {
+						message(ws, message) {
+							message
+						},
+						body: t.String()
+					})
+			)
+	)
+	type App = (typeof server)['schema']
+	type Route = App['/v1/a']['subscribe']
+	expectTypeOf<Route>().toEqualTypeOf<{
+		headers: {
+			authorization: string
+		}
+		body: string
+		query: {
+			name: string
+		}
+		params: unknown
+		response: unknown
+	}>()
 }
 
 // ? Register empty model

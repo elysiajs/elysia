@@ -1,3 +1,14 @@
+# 0.7.0 - x Sep 2023
+Feature:
+- Rewrite type
+- Rewrite Web Socket
+
+Improvement:
+- Static Code Analysis now support rest parameter
+
+Breaking Change:
+- Remove `ws` plugin, migrate to core
+
 # 0.6.15 - 31 Aug 2023
 Bug fix:
 - inherits `set` if `Response` is returned

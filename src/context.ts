@@ -19,7 +19,9 @@ export type Context<
 			? Record<string, string | null>
 			: Route['query']
 		params: undefined extends Route['params']
-			? Record<GetPathParameter<Path>, string>
+			? Path extends `${string}/${':' | '*'}${string}`
+				? Record<GetPathParameter<Path>, string>
+				: never
 			: Route['params']
 		headers: undefined extends Route['headers']
 			? Record<string, string | null>

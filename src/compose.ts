@@ -84,12 +84,15 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 
 	if (argument === '') return false
 
+	const restIndex =
+		argument.charCodeAt(0) === 123 ? argument.indexOf('...') : -1
+
 	// Using object destructuring
 	if (argument.charCodeAt(0) === 123) {
 		// Since Function already format the code, styling is enforced
 		if (argument.includes(keyword)) return true
 
-		return false
+		if (restIndex === -1) return false
 	}
 
 	// Match dot notation and named access
@@ -101,7 +104,24 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 		return true
 	}
 
+	const restAlias =
+		restIndex !== -1
+			? argument.slice(
+					restIndex + 3,
+					argument.indexOf(' ', restIndex + 3)
+			  )
+			: undefined
+
+	if (
+		fnLiteral.match(
+			new RegExp(`${restAlias}(.${keyword}|\\["${keyword}"\\])`)
+		)
+	)
+		return true
+
 	const aliases = [argument]
+	if (restAlias) aliases.push(restAlias)
+
 	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
 
 	const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
