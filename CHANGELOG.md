@@ -10,6 +10,9 @@ Improvement:
 
 Breaking Change:
 - Remove `ws` plugin, migrate to core
+# 0.6.16 - 1 Sep 2023
+Bug fix:
+- inherits `onError` lifecycle from plugin instance
 
 # 0.6.15 - 31 Aug 2023
 Bug fix:

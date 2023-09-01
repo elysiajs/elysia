@@ -641,8 +641,8 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onError(handler?: ErrorHandler<Definitions['error']>) {
-		if (handler) this.event.error.push(handler)
+	onError(handler: ErrorHandler<Definitions['error']>) {
+		this.onError(handler)
 
 		return this as any
 	}
