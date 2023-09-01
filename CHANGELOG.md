@@ -1,3 +1,7 @@
+# 0.6.16 - 1 Sep 2023
+Bug fix:
+- inherits `onError` lifecycle from plugin instance
+
 # 0.6.15 - 31 Aug 2023
 Bug fix:
 - inherits `set` if `Response` is returned

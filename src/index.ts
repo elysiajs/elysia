@@ -627,7 +627,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onError(handler?: ErrorHandler<Instance['error']>): Elysia<
+	onError(handler: ErrorHandler<Instance['error']>): Elysia<
 		BasePath,
 		{
 			store: Instance['store']
@@ -637,7 +637,7 @@ export default class Elysia<
 			meta: Instance['meta']
 		}
 	> {
-		if (handler) this.event.error.push(handler)
+		this.on('error', handler)
 
 		return this as any
 	}
