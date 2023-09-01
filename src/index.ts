@@ -71,7 +71,8 @@ import type {
 	TraceReporter,
 	TraceStream,
 	TraceHandler,
-	TraceListener
+	TraceProcess,
+	TraceEvent
 } from './types'
 
 /**
@@ -534,28 +535,180 @@ export default class Elysia<
 	 */
 	onTrace(handler: TraceHandler) {
 		if (!this.event.trace.length) {
-			const listener: TraceListener = new EventEmitter()
-
-			const store: Record<number, () => void> = {}
 			handler({
-				onEvent() {},
-				listener
-			})
+				onRequest: (callback) => {
+					this.reporter.on('event', (event: TraceStream) => {
+						const id = event.id
 
-			this.reporter.on('event', (event: TraceStream) => {
-				const { event: eventName, order, type } = event
+						if (event.event === 'parse' && event.type === 'begin') {
+							const createSignal = () => {
+								let resolveHandle: (
+									value: TraceProcess<'begin'>
+								) => void
+								let resolveHandleEnd: (
+									value: TraceProcess<'end'>
+								) => void
 
-				if (type === 'begin') {
-					const detail = {
-						...event,
-						process: new Promise<void>((resolve) => {
-							store[order] = resolve
-						})
-					}
+								let resolved = false
+								const handle = new Promise<
+									TraceProcess<'begin'>
+								>((resolve) => {
+									resolveHandle = (a) => {
+										if (!resolved) resolved = true
 
-					listener.emit(eventName, detail)
-					listener.emit('all', detail)
-				} else if (store[order]) store[order]()
+										resolve(a)
+									}
+								})
+
+								let resolvedEnd = false
+								const handleEnd = new Promise<
+									TraceProcess<'end'>
+								>((resolve) => {
+									resolveHandleEnd = (a) => {
+										if (!resolvedEnd) resolvedEnd = true
+
+										resolve(a)
+									}
+								})
+
+								return {
+									signal: handle,
+									consume: ({
+										type,
+										...event
+									}: TraceStream) => {
+										if (type === 'begin') {
+											resolveHandle({
+												...event,
+												process: handleEnd
+											} as TraceProcess<'begin'>)
+										} else if (type === 'end') {
+											resolveHandleEnd({
+												...event,
+												process: undefined
+											} as TraceProcess<'end'>)
+										}
+									},
+									forceResolve(
+										id: number,
+										event: TraceEvent
+									) {
+										const isGroup =
+											event.indexOf('.unit') === -1
+
+										// eslint-disable-next-line prefer-const
+										let end: TraceProcess<'end'>
+										const start: TraceProcess<'begin'> = {
+											event,
+											id,
+											name: 'anonymous',
+											time: performance.now(),
+											type: 'begin',
+											isGroup,
+											order: -1,
+											process: new Promise<
+												TraceProcess<'end'>
+											>((resolve) => {
+												resolve(end)
+											})
+										}
+
+										end = {
+											event,
+											id,
+											name: 'anonymous',
+											time: performance.now(),
+											type: 'end',
+											isGroup,
+											order: -1
+										}
+
+										resolveHandle(start)
+										resolveHandleEnd(end)
+									}
+								}
+							}
+
+							const parse = createSignal()
+							const transform = createSignal()
+							const beforeHandle = createSignal()
+							const handle = createSignal()
+							const afterHandle = createSignal()
+							const response = createSignal()
+
+							const reducer = (event: TraceStream) => {
+								if (event.id === id)
+									switch (event.event) {
+										case 'parse':
+											parse.consume(event)
+											break
+
+										case 'transform':
+											transform.consume(event)
+											break
+
+										case 'beforeHandle':
+											beforeHandle.consume(event)
+											break
+
+										case 'handle':
+											handle.consume(event)
+											break
+
+										case 'afterHandle':
+											afterHandle.consume(event)
+											break
+
+										case 'response':
+											parse.forceResolve(id, 'parse')
+											transform.forceResolve(
+												id,
+												'transform'
+											)
+											beforeHandle.forceResolve(
+												id,
+												'beforeHandle'
+											)
+											handle.forceResolve(id, 'handle')
+											afterHandle.forceResolve(
+												id,
+												'afterHandle'
+											)
+
+											response.consume(event)
+											this.reporter.off('event', reducer)
+									}
+							}
+							this.reporter.on('event', reducer)
+
+							callback({
+								parse: parse.signal,
+								transform: parse.signal,
+								beforeHandle: beforeHandle.signal,
+								handle: handle.signal,
+								afterHandle: afterHandle.signal,
+								response: response.signal
+							})
+
+							// this.reporter.on('event', ({ type, ...event }) => {
+							// 	if (
+							// 		event.event === 'handle' ||
+							// 		// @ts-ignore
+							// 		event.event === 'handle.unit'
+							// 	) {
+							// 		if (type === 'begin') {
+							// 			resolveHandle({
+							// 				...event,
+							// 				process: handleEnd
+							// 			})
+							// 		} else if (type === 'end') {
+							// 			resolveHandleEnd([])
+							// 		}
+							// 	}
+							// })
+						}
+					})
+				}
 			})
 		}
 

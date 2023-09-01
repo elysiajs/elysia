@@ -1,26 +1,16 @@
 import { Elysia } from '../src'
 
 const app = new Elysia()
-	.onTrace(({ onEvent, listener }) => {
-		listener.on(
-			'all',
-			async ({ id, event, name, type, process, isGroup }) => {
-				const a = performance.now()
+	.onTrace(({ onRequest }) => {
+		onRequest(async ({ handle, response, afterHandle }) => {
+			const { process: handler, time } = await handle
 
-				await process
+			const a = await afterHandle
 
-				console.log(
-					id,
-					event,
-					name,
-					'took',
-					performance.now() - a,
-					'ms'
-				)
-			}
-		)
+			console.log('handler took', (await handler).time - time)
+		})
 	})
-	.get('/', () => 'hi', {
-		beforeHandle: [function a() {}, function b() {}]
+	.get('/', () => {
+		throw new Error("Error")
 	})
 	.listen(8080)

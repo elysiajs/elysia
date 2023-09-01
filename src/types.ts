@@ -342,15 +342,11 @@ export type VoidHandler<
 > = (context: Prettify<Context<Route, Decorators>>) => MaybePromise<void>
 
 export type TraceEvent =
-	| 'request'
 	| 'parse'
 	| 'transform'
 	| 'beforeHandle'
-	| 'handle'
-	| 'afterHandle'
-	| 'error'
-	| 'response' extends infer Events extends string
-	? Events | `${Events}.unit`
+	| 'afterHandle' extends infer Events extends string
+	? Events | `${Events}.unit` | 'handle' | 'response'
 	: never
 
 export type TraceStream = {
@@ -359,6 +355,7 @@ export type TraceStream = {
 	event: TraceEvent
 	type: 'begin' | 'end'
 	name: string
+	time: number
 	isGroup: boolean
 }
 
@@ -366,16 +363,30 @@ export type TraceReporter = EventEmitter<{
 	event(stream: TraceStream): MaybePromise<void>
 }>
 
-export interface TraceProcess extends TraceStream {
-	process: Promise<void>
-}
+export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> = Omit<
+	TraceStream,
+	'type' | 'process'
+> &
+	(Type extends 'begin'
+		? {
+				type: 'begin'
+				process: Promise<TraceProcess<'end'>>
+		  }
+		: {
+				type: 'end'
+				process?: undefined
+		  })
 
 export type TraceHandler = (listeners: {
-	// onEvent(callback: (stream: TraceStream) => MaybePromise<void>): void
-	listener: TraceListener
-	onEvent(
+	onRequest(
 		callback: (lifecycle: {
-			handle: Promise<TraceStream>
+			[x in
+				| 'parse'
+				| 'transform'
+				| 'beforeHandle'
+				| 'handle'
+				| 'afterHandle'
+				| 'response']: Promise<TraceProcess<'begin'>>
 		}) => MaybePromise<void>
 	): void
 }) => MaybePromise<void>

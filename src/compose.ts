@@ -252,7 +252,8 @@ export const composeHandler = ({
 		config.forceErrorEncapsulation ||
 		hooks.error.length > 0 ||
 		typeof Bun === 'undefined' ||
-		hooks.onResponse.length > 0
+		hooks.onResponse.length > 0 ||
+		!!hooks.trace.length
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory(hasErrorHandler)
@@ -316,10 +317,10 @@ export const composeHandler = ({
 		onRequest.some((fn) => isFnUse('set', fn.toString()))
 
 	const hasTrace = hooks.trace.length
-	if(hasTrace) fnLiteral += `\nrequestId.value++\n`
+	if (hasTrace) fnLiteral += `\nrequestId.value++\n`
 
 	const requestId = { value: -1 }
-	let order = -1
+	let order = 0
 
 	const report = hasTrace
 		? ({
@@ -332,6 +333,8 @@ export const composeHandler = ({
 				condition?: boolean | number
 		  }) => {
 				const isGroup = event !== 'handle' && event.indexOf('.') === -1
+
+				condition = true
 
 				if (isGroup) name ||= event
 				else name ||= 'anonymous'
@@ -350,6 +353,7 @@ export const composeHandler = ({
 			event: '${event}',
 			type: 'begin',
 			name: '${name}',
+			time: performance.now(),
 			isGroup: ${isGroup}
 		})\n`
 
@@ -365,6 +369,7 @@ export const composeHandler = ({
 						event: '${event}',
 						type: 'end',
 						name: '${name}',
+						time: performance.now(),
 						isGroup: ${isGroup}
 					})\n`
 				}
@@ -379,12 +384,11 @@ export const composeHandler = ({
 		hooks.beforeHandle.some(isAsync) ||
 		hooks.transform.some(isAsync)
 
+	const endParse = report({
+		event: 'parse'
+	})
 	if (hasBody) {
 		const type = getUnionedType(validator?.body)
-
-		const endParse = report({
-			event: 'parse'
-		})
 
 		if (hooks.type || type) {
 			if (hooks.type) {
@@ -525,10 +529,9 @@ export const composeHandler = ({
 		}\n`
 		}
 
-		endParse()
-
 		fnLiteral += '\n'
 	}
+	endParse()
 
 	if (validator.params) {
 		// @ts-ignore
@@ -681,12 +684,11 @@ export const composeHandler = ({
 				endUnit()
 
 				fnLiteral += `if(${name} !== undefined) {\n`
-				if (hooks?.afterHandle) {
-					const endAfterHandle = report({
-						event: 'afterHandle',
-						condition: hooks.afterHandle.length
-					})
-
+				const endAfterHandle = report({
+					event: 'afterHandle',
+					condition: hooks.afterHandle.length
+				})
+				if (hooks.afterHandle) {
 					const beName = name
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						const returning = hasReturn(
@@ -714,9 +716,8 @@ export const composeHandler = ({
 
 						endUnit()
 					}
-
-					endAfterHandle()
 				}
+				endAfterHandle()
 
 				if (validator.response)
 					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
@@ -817,6 +818,10 @@ export const composeHandler = ({
 					${composeResponseValidation()}
 			}\n`
 
+			report({
+				event: 'afterHandle'
+			})()
+
 			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
@@ -826,12 +831,16 @@ export const composeHandler = ({
 
 			endHandle()
 
+			report({
+				event: 'afterHandle'
+			})()
+
 			if (hasSet) fnLiteral += `return mapResponse(${handled}, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(${handled})\n`
 		}
 	}
 
-	if (hasErrorHandler) {
+	if (hasErrorHandler || handleResponse) {
 		fnLiteral += `
 } catch(error) {
 	${maybeAsync ? '' : 'return (async () => {'}
@@ -858,12 +867,20 @@ export const composeHandler = ({
 
 		return handleError(c.request, error, set)
 	${maybeAsync ? '' : '})()'}
-} finally {
-	${handleResponse}
 }`
-	}
 
-	// console.log(fnLiteral)
+		if (handleResponse || hasTrace) {
+			fnLiteral += ` finally {
+				${handleResponse}
+			`
+
+			report({
+				event: 'response'
+			})()
+
+			fnLiteral += `}`
+		}
+	}
 
 	fnLiteral = `const { 
 		handler,
