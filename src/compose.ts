@@ -20,9 +20,9 @@ import {
 	LifeCycleStore,
 	PreHandler,
 	SchemaValidator,
-	TraceEvent
+	TraceEvent,
+	TraceReporter
 } from './types'
-import EventEmitter from 'eventemitter3'
 
 const _demoHeaders = new Headers()
 
@@ -246,7 +246,7 @@ export const composeHandler = ({
 	schema?: Elysia['schema']
 	onRequest: PreHandler<any, any>[]
 	config: ElysiaConfig<any>
-	reporter: EventEmitter
+	reporter: TraceReporter
 }): ComposedHandler => {
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
@@ -315,27 +315,61 @@ export const composeHandler = ({
 		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
 		onRequest.some((fn) => isFnUse('set', fn.toString()))
 
-	reporter.emit('event', {
-		event: 'event'
-	})
-
 	const hasTrace = hooks.trace.length
-	const report = ({
-		event,
-		type,
-		name = 'anonymous'
-	}: {
-		event: TraceEvent
-		type: 'begin' | 'end'
-		name?: string | 'anonymous'
-	}) => {
-		if (!hasTrace)
-			fnLiteral += `\nreporter.emit('${event}', { 
-				type: '${type}',
-				name: '${name}',
-				time: performance.now()
-			})\n`
-	}
+	if(hasTrace) fnLiteral += `\nrequestId.value++\n`
+
+	const requestId = { value: -1 }
+	let order = -1
+
+	const report = hasTrace
+		? ({
+				event,
+				name,
+				condition = true
+		  }: {
+				event: TraceEvent
+				name?: string | 'anonymous'
+				condition?: boolean | number
+		  }) => {
+				const isGroup = event !== 'handle' && event.indexOf('.') === -1
+
+				if (isGroup) name ||= event
+				else name ||= 'anonymous'
+
+				const idName = `id${order++}`
+				const orderName = `order${order}`
+
+				if (condition)
+					fnLiteral += `
+			const ${idName} = requestId.value
+			const ${orderName} = ${order - 1}
+
+		reporter.emit('event', { 
+			id: ${idName},
+			order: ${orderName},
+			event: '${event}',
+			type: 'begin',
+			name: '${name}',
+			isGroup: ${isGroup}
+		})\n`
+
+				let handled = false
+
+				return () => {
+					if (handled || !condition) return
+
+					handled = true
+					fnLiteral += `\nreporter.emit('event', { 
+						id: ${idName},
+						order: ${orderName},
+						event: '${event}',
+						type: 'end',
+						name: '${name}',
+						isGroup: ${isGroup}
+					})\n`
+				}
+		  }
+		: () => () => {}
 
 	const maybeAsync =
 		hasBody ||
@@ -348,9 +382,8 @@ export const composeHandler = ({
 	if (hasBody) {
 		const type = getUnionedType(validator?.body)
 
-		report({
-			event: 'parse',
-			type: 'begin'
+		const endParse = report({
+			event: 'parse'
 		})
 
 		if (hooks.type || type) {
@@ -492,10 +525,7 @@ export const composeHandler = ({
 		}\n`
 		}
 
-		report({
-			event: 'parse',
-			type: 'end'
-		})
+		endParse()
 
 		fnLiteral += '\n'
 	}
@@ -568,13 +598,17 @@ export const composeHandler = ({
 		}
 	}
 
-	if (hooks?.transform)
+	if (hooks?.transform) {
+		const endTransform = report({
+			event: 'transform',
+			condition: hooks.transform.length
+		})
+
 		for (let i = 0; i < hooks.transform.length; i++) {
 			const transform = hooks.transform[i]
 
-			report({
+			const endUnit = report({
 				event: 'transform.unit',
-				type: 'begin',
 				name: transform.name
 			})
 
@@ -588,12 +622,11 @@ export const composeHandler = ({
 					? `await transform[${i}](c);`
 					: `transform[${i}](c);`
 
-			report({
-				event: 'transform.unit',
-				type: 'begin',
-				name: transform.name
-			})
+			endUnit()
 		}
+
+		endTransform()
+	}
 
 	if (validator) {
 		if (validator.headers)
@@ -619,28 +652,51 @@ export const composeHandler = ({
 			)} }`
 	}
 
-	if (hooks?.beforeHandle)
-		for (let i = 0; i < hooks.beforeHandle.length; i++) {
-			const name = `be${i}`
+	if (hooks?.beforeHandle) {
+		const endBeforeHandle = report({
+			event: 'beforeHandle',
+			condition: hooks.beforeHandle.length
+		})
 
+		for (let i = 0; i < hooks.beforeHandle.length; i++) {
+			const endUnit = report({
+				event: 'beforeHandle.unit',
+				name: hooks.beforeHandle[i].name
+			})
+
+			const name = `be${i}`
 			const returning = hasReturn(hooks.beforeHandle[i].toString())
 
 			if (!returning) {
 				fnLiteral += isAsync(hooks.beforeHandle[i])
 					? `await beforeHandle[${i}](c);\n`
 					: `beforeHandle[${i}](c);\n`
+
+				endUnit()
 			} else {
 				fnLiteral += isAsync(hooks.beforeHandle[i])
 					? `let ${name} = await beforeHandle[${i}](c);\n`
 					: `let ${name} = beforeHandle[${i}](c);\n`
 
+				endUnit()
+
 				fnLiteral += `if(${name} !== undefined) {\n`
 				if (hooks?.afterHandle) {
+					const endAfterHandle = report({
+						event: 'afterHandle',
+						condition: hooks.afterHandle.length
+					})
+
 					const beName = name
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						const returning = hasReturn(
 							hooks.afterHandle[i].toString()
 						)
+
+						const endUnit = report({
+							event: 'afterHandle.unit',
+							name: hooks.afterHandle[i].name
+						})
 
 						if (!returning) {
 							fnLiteral += isAsync(hooks.afterHandle[i])
@@ -655,7 +711,11 @@ export const composeHandler = ({
 
 							fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
 						}
+
+						endUnit()
 					}
+
+					endAfterHandle()
 				}
 
 				if (validator.response)
@@ -668,24 +728,46 @@ export const composeHandler = ({
 			}
 		}
 
+		endBeforeHandle()
+	}
+
 	if (hooks?.afterHandle.length) {
+		const endHandle = report({
+			event: 'handle',
+			name: handler.name
+		})
+
 		fnLiteral += isAsync(handler)
 			? `let r = await handler(c);\n`
 			: `let r = handler(c);\n`
 
+		endHandle()
+
+		const endAfterHandle = report({
+			event: 'afterHandle'
+		})
+
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const name = `af${i}`
-
 			const returning = hasReturn(hooks.afterHandle[i].toString())
+
+			const endUnit = report({
+				event: 'afterHandle.unit',
+				name: hooks.afterHandle[i].name
+			})
 
 			if (!returning) {
 				fnLiteral += isAsync(hooks.afterHandle[i])
 					? `await afterHandle[${i}](c, r)\n`
 					: `afterHandle[${i}](c, r)\n`
+
+				endUnit()
 			} else {
 				fnLiteral += isAsync(hooks.afterHandle[i])
 					? `let ${name} = await afterHandle[${i}](c, r)\n`
 					: `let ${name} = afterHandle[${i}](c, r)\n`
+
+				endUnit()
 
 				if (validator.response) {
 					fnLiteral += `if(${name} !== undefined) {`
@@ -696,10 +778,18 @@ export const composeHandler = ({
 
 					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
 
-					fnLiteral += `if(${name}) return ${name};\n}`
-				} else fnLiteral += `if(${name}) return ${name};\n`
+					fnLiteral += `if(${name}) {`
+					endAfterHandle()
+					fnLiteral += `return ${name} } }`
+				} else {
+					fnLiteral += `if(${name}) {`
+					endAfterHandle()
+					fnLiteral += `return ${name} }\n`
+				}
 			}
 		}
+
+		endAfterHandle()
 
 		if (validator.response)
 			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
@@ -710,10 +800,17 @@ export const composeHandler = ({
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
+		const endHandle = report({
+			event: 'handle',
+			name: handler.name
+		})
+
 		if (validator.response) {
 			fnLiteral += isAsync(handler)
 				? `const r = await handler(c);\n`
 				: `const r = handler(c);\n`
+
+			endHandle()
 
 			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
 				if(!(response instanceof Error))
@@ -727,6 +824,8 @@ export const composeHandler = ({
 				? 'await handler(c) '
 				: 'handler(c)'
 
+			endHandle()
+
 			if (hasSet) fnLiteral += `return mapResponse(${handled}, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(${handled})\n`
 		}
@@ -735,15 +834,6 @@ export const composeHandler = ({
 	if (hasErrorHandler) {
 		fnLiteral += `
 } catch(error) {
-	${
-		''
-		// hasStrictContentType ||
-		// // @ts-ignore
-		// validator?.body?.schema
-		// 	? `if(!c.body) error = parseError`
-		// 	: ''
-	}
-
 	${maybeAsync ? '' : 'return (async () => {'}
 		const set = c.set
 
@@ -807,7 +897,8 @@ export const composeHandler = ({
 		schema,
 		definitions,
 		ERROR_CODE,
-		reporter
+		reporter,
+		requestId
 	} = hooks
 
 	${
@@ -844,7 +935,8 @@ export const composeHandler = ({
 		schema,
 		definitions,
 		ERROR_CODE,
-		reporter
+		reporter,
+		requestId
 	})
 }
 

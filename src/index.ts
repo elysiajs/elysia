@@ -1,6 +1,7 @@
 import type { Serve, Server, ServerWebSocket } from 'bun'
 
 import { Memoirist } from 'memoirist'
+import EventEmitter from 'eventemitter3'
 import type { Static, TSchema } from '@sinclair/typebox'
 
 import type { Context } from './context'
@@ -67,9 +68,11 @@ import type {
 	AddSuffix,
 	AddPrefixCapitalize,
 	AddSuffixCapitalize,
-	TraceHandler
+	TraceReporter,
+	TraceStream,
+	TraceHandler,
+	TraceListener
 } from './types'
-import EventEmitter from 'eventemitter3'
 
 /**
  * ### Elysia Server
@@ -126,7 +129,7 @@ export default class Elysia<
 		stop: []
 	}
 
-	private reporter: EventEmitter = new EventEmitter()
+	private reporter: TraceReporter = new EventEmitter()
 
 	server: Server | null = null
 	private validator: SchemaValidator | null = null
@@ -530,6 +533,32 @@ export default class Elysia<
 	 * ```
 	 */
 	onTrace(handler: TraceHandler) {
+		if (!this.event.trace.length) {
+			const listener: TraceListener = new EventEmitter()
+
+			const store: Record<number, () => void> = {}
+			handler({
+				onEvent() {},
+				listener
+			})
+
+			this.reporter.on('event', (event: TraceStream) => {
+				const { event: eventName, order, type } = event
+
+				if (type === 'begin') {
+					const detail = {
+						...event,
+						process: new Promise<void>((resolve) => {
+							store[order] = resolve
+						})
+					}
+
+					listener.emit(eventName, detail)
+					listener.emit('all', detail)
+				} else if (store[order]) store[order]()
+			})
+		}
+
 		this.on('trace', handler)
 
 		return this

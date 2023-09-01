@@ -353,8 +353,36 @@ export type TraceEvent =
 	? Events | `${Events}.unit`
 	: never
 
-export type TraceListener = EventEmitter<TraceEvent>
-export type TraceHandler = (listener: TraceListener) => MaybePromise<void>
+export type TraceStream = {
+	id: number
+	order: number
+	event: TraceEvent
+	type: 'begin' | 'end'
+	name: string
+	isGroup: boolean
+}
+
+export type TraceReporter = EventEmitter<{
+	event(stream: TraceStream): MaybePromise<void>
+}>
+
+export interface TraceProcess extends TraceStream {
+	process: Promise<void>
+}
+
+export type TraceHandler = (listeners: {
+	// onEvent(callback: (stream: TraceStream) => MaybePromise<void>): void
+	listener: TraceListener
+	onEvent(
+		callback: (lifecycle: {
+			handle: Promise<TraceStream>
+		}) => MaybePromise<void>
+	): void
+}) => MaybePromise<void>
+
+export type TraceListener = EventEmitter<{
+	[event in TraceEvent | 'all']: (trace: TraceProcess) => MaybePromise<void>
+}>
 
 export type BodyHandler<
 	Route extends RouteSchema = {},
