@@ -533,7 +533,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onTrace(handler: TraceHandler) {
+	trace(handler: TraceHandler) {
 		if (!this.event.trace.length) {
 			handler({
 				onRequest: (callback) => {
@@ -2147,80 +2147,6 @@ export default class Elysia<
 		>
 	> {
 		this.add('HEAD', path, handler, hook)
-
-		return this as any
-	}
-
-	/**
-	 * ### trace
-	 * Register handler for path with method [TRACE]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .trace('/', () => 'hi')
-	 *     .trace('/with-hook', () => 'hi', {
-	 *         schema: {
-	 *             response: t.String()
-	 *         }
-	 *     })
-	 * ```
-	 */
-	trace<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
-		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>
-	>(
-		path: Path,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Path}`]: {
-					trace: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
-					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
-				}
-			}
-		>
-	> {
-		this.add('TRACE', path, handler, hook)
 
 		return this as any
 	}

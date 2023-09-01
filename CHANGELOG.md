@@ -10,6 +10,10 @@ Improvement:
 
 Breaking Change:
 - Remove `ws` plugin, migrate to core
+
+Change:
+- Using single findDynamicRoute instead of inlining to static map
+
 # 0.6.16 - 1 Sep 2023
 Bug fix:
 - inherits `onError` lifecycle from plugin instance

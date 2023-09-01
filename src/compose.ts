@@ -991,7 +991,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	let switchMap = ``
 	for (const [path, { code, all }] of Object.entries(staticRouter.map))
 		switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
-			all ?? `default: ${findDynamicRoute}`
+			all ?? `default: break map`
 		}}\n\n`
 
 	let fnLiteral = `const {
@@ -1072,12 +1072,14 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	}
 
 	fnLiteral += `
-		switch(path) {
+		map: switch(path) {
 			${switchMap}
 
 			default:
-				${findDynamicRoute}
+				break
 		}
+
+		${findDynamicRoute}
 	}`
 
 	// @ts-ignore
