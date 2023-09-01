@@ -4,6 +4,7 @@ import type { TSchema, TObject, Static } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
+import type { EventEmitter } from 'eventemitter3'
 
 import type { Context, PreContext } from './context'
 import type {
@@ -216,6 +217,7 @@ export interface LifeCycleStore {
 	beforeHandle: Handler<any, any>[]
 	afterHandle: AfterHandler<any, any>[]
 	onResponse: VoidHandler<any, any>[]
+	trace: TraceHandler[]
 	error: ErrorHandler<any>[]
 	stop: VoidHandler<any, any>[]
 }
@@ -338,6 +340,21 @@ export type VoidHandler<
 		store: {}
 	}
 > = (context: Prettify<Context<Route, Decorators>>) => MaybePromise<void>
+
+export type TraceEvent =
+	| 'request'
+	| 'parse'
+	| 'transform'
+	| 'beforeHandle'
+	| 'handle'
+	| 'afterHandle'
+	| 'error'
+	| 'response' extends infer Events extends string
+	? Events | `${Events}.unit`
+	: never
+
+export type TraceListener = EventEmitter<TraceEvent>
+export type TraceHandler = (listener: TraceListener) => MaybePromise<void>
 
 export type BodyHandler<
 	Route extends RouteSchema = {},

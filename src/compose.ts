@@ -19,8 +19,10 @@ import {
 	Handler,
 	LifeCycleStore,
 	PreHandler,
-	SchemaValidator
+	SchemaValidator,
+	TraceEvent
 } from './types'
+import EventEmitter from 'eventemitter3'
 
 const _demoHeaders = new Headers()
 
@@ -231,7 +233,8 @@ export const composeHandler = ({
 	definitions,
 	schema,
 	onRequest,
-	config
+	config,
+	reporter
 }: {
 	path: string
 	method: string
@@ -243,6 +246,7 @@ export const composeHandler = ({
 	schema?: Elysia['schema']
 	onRequest: PreHandler<any, any>[]
 	config: ElysiaConfig<any>
+	reporter: EventEmitter
 }): ComposedHandler => {
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
@@ -311,6 +315,28 @@ export const composeHandler = ({
 		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
 		onRequest.some((fn) => isFnUse('set', fn.toString()))
 
+	reporter.emit('event', {
+		event: 'event'
+	})
+
+	const hasTrace = hooks.trace.length
+	const report = ({
+		event,
+		type,
+		name = 'anonymous'
+	}: {
+		event: TraceEvent
+		type: 'begin' | 'end'
+		name?: string | 'anonymous'
+	}) => {
+		if (!hasTrace)
+			fnLiteral += `\nreporter.emit('${event}', { 
+				type: '${type}',
+				name: '${name}',
+				time: performance.now()
+			})\n`
+	}
+
 	const maybeAsync =
 		hasBody ||
 		isAsync(handler) ||
@@ -321,6 +347,11 @@ export const composeHandler = ({
 
 	if (hasBody) {
 		const type = getUnionedType(validator?.body)
+
+		report({
+			event: 'parse',
+			type: 'begin'
+		})
 
 		if (hooks.type || type) {
 			if (hooks.type) {
@@ -461,6 +492,11 @@ export const composeHandler = ({
 		}\n`
 		}
 
+		report({
+			event: 'parse',
+			type: 'end'
+		})
+
 		fnLiteral += '\n'
 	}
 
@@ -536,6 +572,12 @@ export const composeHandler = ({
 		for (let i = 0; i < hooks.transform.length; i++) {
 			const transform = hooks.transform[i]
 
+			report({
+				event: 'transform.unit',
+				type: 'begin',
+				name: transform.name
+			})
+
 			// @ts-ignore
 			if (transform.$elysia === 'derive')
 				fnLiteral += isAsync(hooks.transform[i])
@@ -545,6 +587,12 @@ export const composeHandler = ({
 				fnLiteral += isAsync(hooks.transform[i])
 					? `await transform[${i}](c);`
 					: `transform[${i}](c);`
+
+			report({
+				event: 'transform.unit',
+				type: 'begin',
+				name: transform.name
+			})
 		}
 
 	if (validator) {
@@ -758,7 +806,8 @@ export const composeHandler = ({
 		},
 		schema,
 		definitions,
-		ERROR_CODE
+		ERROR_CODE,
+		reporter
 	} = hooks
 
 	${
@@ -773,8 +822,6 @@ export const composeHandler = ({
 		${schema && definitions ? 'c.schema = schema; c.defs = definitions;' : ''}
 		${fnLiteral}
 	}`
-
-	// console.log(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 
@@ -796,7 +843,8 @@ export const composeHandler = ({
 		},
 		schema,
 		definitions,
-		ERROR_CODE
+		ERROR_CODE,
+		reporter
 	})
 }
 

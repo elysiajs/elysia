@@ -1,7 +1,18 @@
-import { Memoirist } from 'memoirist'
-
 import type { Serve, Server, ServerWebSocket } from 'bun'
 
+import { Memoirist } from 'memoirist'
+import type { Static, TSchema } from '@sinclair/typebox'
+
+import type { Context } from './context'
+
+import { ElysiaWS, websocket } from './ws'
+import type { WS } from './ws/types'
+
+import {
+	composeHandler,
+	composeGeneralHandler,
+	composeErrorHandler
+} from './compose'
 import {
 	mergeHook,
 	getSchemaValidator,
@@ -14,13 +25,10 @@ import {
 } from './utils'
 
 import {
-	composeHandler,
-	composeGeneralHandler,
-	composeErrorHandler
-} from './compose'
-
-import type { Context } from './context'
-import type { Static, TSchema } from '@sinclair/typebox'
+	createDynamicErrorHandler,
+	createDynamicHandler,
+	type DynamicHandler
+} from './dynamic-handle'
 
 import {
 	isProduction,
@@ -58,16 +66,10 @@ import type {
 	AddPrefix,
 	AddSuffix,
 	AddPrefixCapitalize,
-	AddSuffixCapitalize
+	AddSuffixCapitalize,
+	TraceHandler
 } from './types'
-
-import {
-	createDynamicErrorHandler,
-	createDynamicHandler,
-	type DynamicHandler
-} from './dynamic-handle'
-import { WS } from './ws/types'
-import { ElysiaWS, websocket } from './ws'
+import EventEmitter from 'eventemitter3'
 
 /**
  * ### Elysia Server
@@ -119,9 +121,12 @@ export default class Elysia<
 		beforeHandle: [],
 		afterHandle: [],
 		onResponse: [],
+		trace: [],
 		error: [],
 		stop: []
 	}
+
+	private reporter: EventEmitter = new EventEmitter()
 
 	server: Server | null = null
 	private validator: SchemaValidator | null = null
@@ -282,7 +287,8 @@ export default class Elysia<
 			onRequest: this.event.request,
 			config: this.config,
 			definitions: allowMeta ? this.definitions.type : undefined,
-			schema: allowMeta ? this.schema : undefined
+			schema: allowMeta ? this.schema : undefined,
+			reporter: this.reporter
 		})
 
 		this.routes.push({
@@ -507,6 +513,28 @@ export default class Elysia<
 		return this
 	}
 
+	/**
+	 * ### After Handle | Life cycle event
+	 * Intercept request **after** main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onAfterHandle((context, response) => {
+	 *         if(typeof response === "object")
+	 *             return JSON.stringify(response)
+	 *     })
+	 * ```
+	 */
+	onTrace(handler: TraceHandler) {
+		this.on('trace', handler)
+
+		return this
+	}
+
 	addError<
 		const Errors extends Record<
 			string,
@@ -642,7 +670,7 @@ export default class Elysia<
 	 * ```
 	 */
 	onError(handler: ErrorHandler<Definitions['error']>) {
-		this.onError(handler)
+		this.on('error', handler)
 
 		return this as any
 	}
@@ -719,6 +747,10 @@ export default class Elysia<
 
 			case 'afterHandle':
 				this.event.afterHandle.push(handler as any)
+				break
+
+			case 'trace':
+				this.event.trace.push(handler as any)
 				break
 
 			case 'error':

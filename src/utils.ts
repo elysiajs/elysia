@@ -68,6 +68,10 @@ export const mergeHook = (
 			a?.onResponse ?? [],
 			b?.onResponse ?? []
 		) as any,
+		trace: mergeObjectArray(
+			a?.trace ?? [],
+			b?.trace ?? []
+		) as any,
 		error: mergeObjectArray(a?.error ?? [], b?.error ?? [])
 	}
 }
@@ -231,15 +235,15 @@ export const mergeLifeCycle = (
 	return {
 		start: mergeObjectArray(
 			a.start as any,
-			('start' in b ? b.start : []).map(injectChecksum) as any
+			('start' in b ? b.start ?? [] : []).map(injectChecksum) as any
 		),
 		request: mergeObjectArray(
 			a.request as any,
-			('request' in b ? b.request : []).map(injectChecksum) as any
+			('request' in b ? b.request ?? [] : []).map(injectChecksum) as any
 		),
 		parse: mergeObjectArray(
 			a.parse as any,
-			'parse' in b ? b?.parse : undefined ?? ([] as any)
+			'parse' in b ? b?.parse ?? [] : undefined ?? ([] as any)
 		).map(injectChecksum),
 		transform: mergeObjectArray(
 			a.transform as any,
@@ -257,13 +261,17 @@ export const mergeLifeCycle = (
 			a.onResponse as any,
 			(b?.onResponse ?? ([] as any)).map(injectChecksum)
 		),
+		trace: mergeObjectArray(
+			a.trace as any,
+			('trace' in b ? b.trace ?? [] : ([] as any)).map(injectChecksum)
+		),
 		error: mergeObjectArray(
 			a.error as any,
 			(b?.error ?? ([] as any)).map(injectChecksum)
 		),
 		stop: mergeObjectArray(
 			a.stop as any,
-			('stop' in b ? b.stop : ([] as any)).map(injectChecksum)
+			('stop' in b ? b.stop ?? [] : ([] as any)).map(injectChecksum)
 		)
 	}
 }
@@ -325,7 +333,9 @@ const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
 	return fn.filter((x) => x.$elysiaHookType === 'global') as T
 }
 
-export const filterGlobalHook = (hook: LocalHook<any, any>): LocalHook<any, any> => {
+export const filterGlobalHook = (
+	hook: LocalHook<any, any>
+): LocalHook<any, any> => {
 	return {
 		// rest is validator
 		...hook,

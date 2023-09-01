@@ -111,6 +111,7 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.31.6",
+    "eventemitter3": "^5.0.1",
     "fast-querystring": "^1.1.2",
     "memoirist": "0.1.4",
     "openapi-types": "^12.1.3"
