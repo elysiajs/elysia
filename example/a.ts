@@ -1,7 +1,8 @@
 import { Elysia } from '../src'
 
 const app = new Elysia()
-	.get('/', () => {
-		throw new Error('Error')
+	.trace(({ id }) => {
+		// console.log(id)
 	})
+	.get('/', ({ set }) => 'A', {})
 	.listen(8080)

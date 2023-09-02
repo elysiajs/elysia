@@ -130,7 +130,7 @@ export default class Elysia<
 		stop: []
 	}
 
-	private reporter: TraceReporter = new EventEmitter()
+	reporter: TraceReporter = new EventEmitter()
 
 	server: Server | null = null
 	private validator: SchemaValidator | null = null
@@ -533,180 +533,166 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	trace(handler: TraceHandler) {
+	trace<Route extends RouteSchema = {}>(
+		handler: TraceHandler<Route, Decorators>
+	) {
 		if (!this.event.trace.length) {
-			handler({
-				onRequest: (callback) => {
-					this.reporter.on('event', (event: TraceStream) => {
-						const id = event.id
+			this.reporter.on('event', (event: TraceStream) => {
+				const id = event.id
 
-						if (event.event === 'parse' && event.type === 'begin') {
-							const createSignal = () => {
-								let resolveHandle: (
-									value: TraceProcess<'begin'>
-								) => void
-								let resolveHandleEnd: (
-									value: TraceProcess<'end'>
-								) => void
+				if (event.event === 'request' && event.type === 'begin') {
+					const createSignal = () => {
+						let resolveHandle: (
+							value: TraceProcess<'begin'>
+						) => void
+						let resolveHandleEnd: (
+							value: TraceProcess<'end'>
+						) => void
 
-								let resolved = false
-								const handle = new Promise<
-									TraceProcess<'begin'>
-								>((resolve) => {
-									resolveHandle = (a) => {
-										if (!resolved) resolved = true
+						let resolved = false
+						const handle = new Promise<TraceProcess<'begin'>>(
+							(resolve) => {
+								resolveHandle = (a) => {
+									if (!resolved) resolved = true
 
-										resolve(a)
-									}
-								})
-
-								let resolvedEnd = false
-								const handleEnd = new Promise<
-									TraceProcess<'end'>
-								>((resolve) => {
-									resolveHandleEnd = (a) => {
-										if (!resolvedEnd) resolvedEnd = true
-
-										resolve(a)
-									}
-								})
-
-								return {
-									signal: handle,
-									consume: ({
-										type,
-										...event
-									}: TraceStream) => {
-										if (type === 'begin') {
-											resolveHandle({
-												...event,
-												process: handleEnd
-											} as TraceProcess<'begin'>)
-										} else if (type === 'end') {
-											resolveHandleEnd({
-												...event,
-												process: undefined
-											} as TraceProcess<'end'>)
-										}
-									},
-									forceResolve(
-										id: number,
-										event: TraceEvent
-									) {
-										const isGroup =
-											event.indexOf('.unit') === -1
-
-										// eslint-disable-next-line prefer-const
-										let end: TraceProcess<'end'>
-										const start: TraceProcess<'begin'> = {
-											event,
-											id,
-											name: 'anonymous',
-											time: performance.now(),
-											type: 'begin',
-											isGroup,
-											order: -1,
-											process: new Promise<
-												TraceProcess<'end'>
-											>((resolve) => {
-												resolve(end)
-											})
-										}
-
-										end = {
-											event,
-											id,
-											name: 'anonymous',
-											time: performance.now(),
-											type: 'end',
-											isGroup,
-											order: -1
-										}
-
-										resolveHandle(start)
-										resolveHandleEnd(end)
-									}
+									resolve(a)
 								}
 							}
+						)
 
-							const parse = createSignal()
-							const transform = createSignal()
-							const beforeHandle = createSignal()
-							const handle = createSignal()
-							const afterHandle = createSignal()
-							const response = createSignal()
+						let resolvedEnd = false
+						const handleEnd = new Promise<TraceProcess<'end'>>(
+							(resolve) => {
+								resolveHandleEnd = (a) => {
+									if (!resolvedEnd) resolvedEnd = true
 
-							const reducer = (event: TraceStream) => {
-								if (event.id === id)
-									switch (event.event) {
-										case 'parse':
-											parse.consume(event)
-											break
-
-										case 'transform':
-											transform.consume(event)
-											break
-
-										case 'beforeHandle':
-											beforeHandle.consume(event)
-											break
-
-										case 'handle':
-											handle.consume(event)
-											break
-
-										case 'afterHandle':
-											afterHandle.consume(event)
-											break
-
-										case 'response':
-											parse.forceResolve(id, 'parse')
-											transform.forceResolve(
-												id,
-												'transform'
-											)
-											beforeHandle.forceResolve(
-												id,
-												'beforeHandle'
-											)
-											handle.forceResolve(id, 'handle')
-											afterHandle.forceResolve(
-												id,
-												'afterHandle'
-											)
-
-											response.consume(event)
-											this.reporter.off('event', reducer)
-									}
+									resolve(a)
+								}
 							}
-							this.reporter.on('event', reducer)
+						)
 
-							callback({
-								parse: parse.signal,
-								transform: parse.signal,
-								beforeHandle: beforeHandle.signal,
-								handle: handle.signal,
-								afterHandle: afterHandle.signal,
-								response: response.signal
-							})
+						return {
+							signal: handle,
+							consume: ({ type, ...event }: TraceStream) => {
+								switch (type) {
+									case 'begin':
+										resolveHandle({
+											...event,
+											process: handleEnd
+										} as TraceProcess<'begin'>)
+										break
 
-							// this.reporter.on('event', ({ type, ...event }) => {
-							// 	if (
-							// 		event.event === 'handle' ||
-							// 		// @ts-ignore
-							// 		event.event === 'handle.unit'
-							// 	) {
-							// 		if (type === 'begin') {
-							// 			resolveHandle({
-							// 				...event,
-							// 				process: handleEnd
-							// 			})
-							// 		} else if (type === 'end') {
-							// 			resolveHandleEnd([])
-							// 		}
-							// 	}
-							// })
+									case 'end':
+										resolveHandleEnd({
+											...event,
+											process: undefined
+										} as TraceProcess<'end'>)
+										break
+								}
+							},
+							forceResolve(id: number, event: TraceEvent) {
+								// eslint-disable-next-line prefer-const
+								let end: TraceProcess<'end'>
+								const start: TraceProcess<'begin'> = {
+									event,
+									id,
+									name: 'anonymous',
+									time: performance.now(),
+									type: 'begin',
+									process: new Promise<TraceProcess<'end'>>(
+										(resolve) => {
+											resolve(end)
+										}
+									)
+								}
+
+								end = {
+									event,
+									id,
+									name: 'anonymous',
+									time: performance.now(),
+									type: 'end',
+								}
+
+								resolveHandle(start)
+								resolveHandleEnd(end)
+							}
 						}
+					}
+
+					const request = createSignal()
+					const parse = createSignal()
+					const transform = createSignal()
+					const beforeHandle = createSignal()
+					const handle = createSignal()
+					const afterHandle = createSignal()
+					const response = createSignal()
+
+					request.consume(event)
+
+					const reducer = (event: TraceStream) => {
+						if (event.id === id)
+							switch (event.event) {
+								case 'request':
+									request.consume(event)
+									break
+
+								case 'parse':
+									parse.consume(event)
+									break
+
+								case 'transform':
+									transform.consume(event)
+									break
+
+								case 'beforeHandle':
+									beforeHandle.consume(event)
+									break
+
+								case 'handle':
+									handle.consume(event)
+									break
+
+								case 'afterHandle':
+									afterHandle.consume(event)
+									break
+
+								case 'response':
+									if (event.type === 'begin') {
+										request.forceResolve(id, 'request')
+										parse.forceResolve(id, 'parse')
+										transform.forceResolve(id, 'transform')
+										beforeHandle.forceResolve(
+											id,
+											'beforeHandle'
+										)
+										handle.forceResolve(id, 'handle')
+										afterHandle.forceResolve(
+											id,
+											'afterHandle'
+										)
+									} else this.reporter.off('event', reducer)
+
+									response.consume(event)
+							}
+					}
+
+					this.reporter.on('event', reducer)
+
+					handler({
+						id: event.id,
+						// @ts-ignore
+						context: event.ctx,
+						// @ts-ignore
+						set: event.ctx.set,
+						time: event.time,
+						request: request.signal,
+						parse: parse.signal,
+						transform: parse.signal,
+						beforeHandle: beforeHandle.signal,
+						handle: handle.signal,
+						afterHandle: afterHandle.signal,
+						response: response.signal
 					})
 				}
 			})

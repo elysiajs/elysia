@@ -217,7 +217,7 @@ export interface LifeCycleStore {
 	beforeHandle: Handler<any, any>[]
 	afterHandle: AfterHandler<any, any>[]
 	onResponse: VoidHandler<any, any>[]
-	trace: TraceHandler[]
+	trace: TraceHandler<any, any>[]
 	error: ErrorHandler<any>[]
 	stop: VoidHandler<any, any>[]
 }
@@ -342,6 +342,7 @@ export type VoidHandler<
 > = (context: Prettify<Context<Route, Decorators>>) => MaybePromise<void>
 
 export type TraceEvent =
+	| 'request'
 	| 'parse'
 	| 'transform'
 	| 'beforeHandle'
@@ -351,12 +352,10 @@ export type TraceEvent =
 
 export type TraceStream = {
 	id: number
-	order: number
 	event: TraceEvent
 	type: 'begin' | 'end'
 	name: string
 	time: number
-	isGroup: boolean
 }
 
 export type TraceReporter = EventEmitter<{
@@ -377,19 +376,31 @@ export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> = Omit<
 				process?: undefined
 		  })
 
-export type TraceHandler = (listeners: {
-	onRequest(
-		callback: (lifecycle: {
+export type TraceHandler<
+	Route extends RouteSchema = {},
+	Decorators extends DecoratorBase = {
+		request: {}
+		store: {}
+	}
+> = (
+	lifecycle: Prettify<
+		{
+			context: Context<Route, Decorators>
+			set: Context['set']
+			id: number
+			time: number
+		} & {
 			[x in
+				| 'request'
 				| 'parse'
 				| 'transform'
 				| 'beforeHandle'
 				| 'handle'
 				| 'afterHandle'
 				| 'response']: Promise<TraceProcess<'begin'>>
-		}) => MaybePromise<void>
-	): void
-}) => MaybePromise<void>
+		}
+	>
+) => MaybePromise<void>
 
 export type TraceListener = EventEmitter<{
 	[event in TraceEvent | 'all']: (trace: TraceProcess) => MaybePromise<void>
