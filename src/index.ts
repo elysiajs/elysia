@@ -573,24 +573,31 @@ export default class Elysia<
 
 						return {
 							signal: handle,
-							consume: ({ type, ...event }: TraceStream) => {
-								switch (type) {
+							consume: (event: TraceStream) => {
+								switch (event.type) {
 									case 'begin':
 										resolveHandle({
-											...event,
+											event: event.event,
+											id: event.id,
+											name: event.name,
+											time: event.time,
 											process: handleEnd
 										} as TraceProcess<'begin'>)
 										break
 
 									case 'end':
 										resolveHandleEnd({
-											...event,
-											process: undefined
+											event: event.event,
+											id: event.id,
+											name: event.name,
+											time: event.time
 										} as TraceProcess<'end'>)
 										break
 								}
 							},
 							forceResolve(id: number, event: TraceEvent) {
+								if (resolved && resolvedEnd) return
+
 								// eslint-disable-next-line prefer-const
 								let end: TraceProcess<'end'>
 								const start: TraceProcess<'begin'> = {
@@ -611,7 +618,7 @@ export default class Elysia<
 									id,
 									name: 'anonymous',
 									time: performance.now(),
-									type: 'end',
+									type: 'end'
 								}
 
 								resolveHandle(start)

@@ -373,7 +373,6 @@ export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> = Omit<
 		  }
 		: {
 				type: 'end'
-				process?: undefined
 		  })
 
 export type TraceHandler<

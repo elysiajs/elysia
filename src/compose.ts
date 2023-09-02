@@ -32,7 +32,7 @@ const requestId = { value: 0 }
 const createReport = ({
 	hasTrace,
 	hasTraceSet = false,
-	addFn,
+	addFn
 }: {
 	hasTrace: boolean | number
 	hasTraceSet?: boolean
@@ -330,13 +330,12 @@ export const composeHandler = ({
 				.map((_, i) => `await res${i}(c)`)
 				.join(';')}})();\n`
 		: ''
-		
+
 	const hasTrace = hooks.trace.length
 
 	let fnLiteral = ''
 
-	if(hasTrace)
-		fnLiteral += '\nconst id = c.$$requestId\n'
+	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
 	fnLiteral += hasErrorHandler ? 'try {\n' : ''
 
@@ -829,16 +828,31 @@ export const composeHandler = ({
 			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
-			const handled = isAsync(handler)
-				? 'await handler(c) '
-				: 'handler(c)'
+			if (hasTrace) {
+				fnLiteral += isAsync(handler)
+					? `let r = await handler(c);\n`
+					: `let r = handler(c);\n`
 
-			endHandle()
+				endHandle()
 
-			report('afterHandle')()
+				report('afterHandle')()
 
-			if (hasSet) fnLiteral += `return mapResponse(${handled}, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(${handled})\n`
+				if (hasSet)
+					fnLiteral += `return mapResponse(r, c.set)\n`
+				else fnLiteral += `return mapCompactResponse(r)\n`
+			} else {
+				endHandle()
+
+				const handled = isAsync(handler)
+					? 'await handler(c) '
+					: 'handler(c)'
+
+				report('afterHandle')()
+
+				if (hasSet)
+					fnLiteral += `return mapResponse(${handled}, c.set)\n`
+				else fnLiteral += `return mapCompactResponse(${handled})\n`
+			}
 		}
 	}
 
