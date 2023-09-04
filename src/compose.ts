@@ -32,7 +32,7 @@ const requestId = { value: 0 }
 const createReport = ({
 	hasTrace,
 	hasTraceSet = false,
-	addFn
+	addFn,
 }: {
 	hasTrace: boolean | number
 	hasTraceSet?: boolean
@@ -43,10 +43,12 @@ const createReport = ({
 			event: TraceEvent,
 			{
 				name,
-				attribute = ''
+				attribute = '',
+				unit = 0
 			}: {
 				name?: string
 				attribute?: string
+				unit?: number
 			} = {}
 		) => {
 			const isGroup = event !== 'handle' && event.indexOf('.') === -1
@@ -62,6 +64,7 @@ const createReport = ({
 					type: 'begin',
 					name: '${name}',
 					time: performance.now(),
+					${isGroup ? `unit: ${unit},` : ''}
 					${attribute}
 				})`.replace(/(\t| |\n)/g, '') +
 					'\n'
@@ -409,7 +412,9 @@ export const composeHandler = ({
 		hooks.beforeHandle.some(isAsync) ||
 		hooks.transform.some(isAsync)
 
-	const endParse = report('parse')
+	const endParse = report('parse', {
+		unit: hooks.parse.length
+	})
 
 	if (hasBody) {
 		const type = getUnionedType(validator?.body)
@@ -626,7 +631,9 @@ export const composeHandler = ({
 	}
 
 	if (hooks?.transform) {
-		const endTransform = report('transform')
+		const endTransform = report('transform', {
+			unit: hooks.transform.length
+		})
 
 		for (let i = 0; i < hooks.transform.length; i++) {
 			const transform = hooks.transform[i]
@@ -674,7 +681,9 @@ export const composeHandler = ({
 	}
 
 	if (hooks?.beforeHandle) {
-		const endBeforeHandle = report('beforeHandle')
+		const endBeforeHandle = report('beforeHandle',{
+			unit: hooks.beforeHandle.length
+		})
 
 		for (let i = 0; i < hooks.beforeHandle.length; i++) {
 			const endUnit = report('beforeHandle.unit', {
@@ -698,7 +707,9 @@ export const composeHandler = ({
 				endUnit()
 
 				fnLiteral += `if(${name} !== undefined) {\n`
-				const endAfterHandle = report('afterHandle')
+				const endAfterHandle = report('afterHandle',{
+					unit: hooks.transform.length
+				})
 				if (hooks.afterHandle) {
 					const beName = name
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
@@ -753,7 +764,9 @@ export const composeHandler = ({
 
 		endHandle()
 
-		const endAfterHandle = report('afterHandle')
+		const endAfterHandle = report('afterHandle',{
+			unit: hooks.afterHandle.length
+		})
 
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const name = `af${i}`
@@ -888,7 +901,9 @@ export const composeHandler = ({
 		if (handleResponse || hasTrace) {
 			fnLiteral += ` finally { `
 
-			const endResponse = report('response')
+			const endResponse = report('response',{
+				unit: hooks.onResponse.length
+			})
 
 			fnLiteral += handleResponse
 
@@ -1062,7 +1077,8 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		`
 
 		const endReport = report('request', {
-			attribute: 'ctx'
+			attribute: 'ctx',
+			unit: app.event.request.length
 		})
 
 		fnLiteral += `try {\n`

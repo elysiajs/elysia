@@ -346,8 +346,9 @@ export type TraceEvent =
 	| 'parse'
 	| 'transform'
 	| 'beforeHandle'
-	| 'afterHandle' extends infer Events extends string
-	? Events | `${Events}.unit` | 'handle' | 'response'
+	| 'afterHandle'
+	| 'response' extends infer Events extends string
+	? Events | `${Events}.unit` | 'handle'
 	: never
 
 export type TraceStream = {
@@ -356,6 +357,7 @@ export type TraceStream = {
 	type: 'begin' | 'end'
 	name: string
 	time: number
+	unit?: number
 }
 
 export type TraceReporter = EventEmitter<{
@@ -364,12 +366,13 @@ export type TraceReporter = EventEmitter<{
 
 export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> = Omit<
 	TraceStream,
-	'type' | 'process'
+	'type' | 'process' | 'unit'
 > &
 	(Type extends 'begin'
 		? {
 				type: 'begin'
 				process: Promise<TraceProcess<'end'>>
+				children: Promise<TraceProcess<'begin'>>[]
 		  }
 		: {
 				type: 'end'

@@ -1,16 +1,16 @@
 import { Elysia } from '../src'
 
 const app = new Elysia()
-	.trace(async ({ handle, set }) => {
-		const { time: start, process } = await handle
-		const { time: end } = await process
+	.trace(async ({ handle, set, beforeHandle }) => {
+		const { children } = await beforeHandle
+		for (const child of children) {
+			const { time: start, process, name } = await child
+			const { time: end } = await process
 
-		set.headers['Server-Timing'] = `handle;dur=${end - start}`
+			console.log(name, 'took', end - start, 'ms')
+		}
 	})
-	.get('/', async () => {
-		// Delay for 100ms
-		await new Promise((r) => setTimeout(r, 100))
-
-		return 'Done'
+	.get('/', () => 'Hi', {
+		beforeHandle: [function setup() {}, function work() {}]
 	})
-	.listen(8080)
+	.listen(3000)

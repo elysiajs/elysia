@@ -571,17 +571,75 @@ export default class Elysia<
 							}
 						)
 
+						const children: ((
+							stream: TraceProcess<'begin'>
+						) => void)[] = []
+						let endChild:
+							| ((stream: TraceProcess<'end'>) => void)
+							| undefined = undefined
+						let childIteration = 0
+
 						return {
 							signal: handle,
-							consume: (event: TraceStream) => {
+							consumeChild(event: TraceStream) {
 								switch (event.type) {
 									case 'begin':
+										children[childIteration++]({
+											event: event.event,
+											id: event.id,
+											name: event.name,
+											time: event.time,
+											process: new Promise<
+												TraceProcess<'end'>
+											>((resolve) => {
+												endChild = resolve
+											})
+										} as TraceProcess<'begin'>)
+										break
+
+									case 'end':
+										endChild?.({
+											event: event.event,
+											id: event.id,
+											name: event.name,
+											time: event.time
+										} as TraceProcess<'end'>)
+										break
+								}
+							},
+							consume(event: TraceStream) {
+								switch (event.type) {
+									case 'begin':
+										const unitsProcess: Promise<
+											TraceProcess<'begin'>
+										>[] = []
+
+										const units = event.unit ?? 0
+										for (let i = 0; i < units; i++) {
+											let resolve:
+												| ((
+														stream: TraceProcess<'begin'>
+												  ) => void)
+												| undefined
+
+											unitsProcess.push(
+												new Promise<
+													TraceProcess<'begin'>
+												>((r) => {
+													resolve = r as any
+												})
+											)
+
+											children.push(resolve!)
+										}
+
 										resolveHandle({
 											event: event.event,
 											id: event.id,
 											name: event.name,
 											time: event.time,
-											process: handleEnd
+											process: handleEnd,
+											children: unitsProcess
 										} as TraceProcess<'begin'>)
 										break
 
@@ -610,7 +668,8 @@ export default class Elysia<
 										(resolve) => {
 											resolve(end)
 										}
-									)
+									),
+									children: []
 								}
 
 								end = {
@@ -644,16 +703,32 @@ export default class Elysia<
 									request.consume(event)
 									break
 
+								case 'request.unit':
+									request.consumeChild(event)
+									break
+
 								case 'parse':
 									parse.consume(event)
+									break
+
+								case 'parse.unit':
+									parse.consumeChild(event)
 									break
 
 								case 'transform':
 									transform.consume(event)
 									break
 
+								case 'transform.unit':
+									transform.consumeChild(event)
+									break
+
 								case 'beforeHandle':
 									beforeHandle.consume(event)
+									break
+
+								case 'beforeHandle.unit':
+									beforeHandle.consumeChild(event)
 									break
 
 								case 'handle':
@@ -662,6 +737,10 @@ export default class Elysia<
 
 								case 'afterHandle':
 									afterHandle.consume(event)
+									break
+
+								case 'afterHandle.unit':
+									afterHandle.consumeChild(event)
 									break
 
 								case 'response':
@@ -681,6 +760,11 @@ export default class Elysia<
 									} else this.reporter.off('event', reducer)
 
 									response.consume(event)
+									break
+
+								case 'response.unit':
+									response.consumeChild(event)
+									break
 							}
 					}
 
@@ -966,7 +1050,7 @@ export default class Elysia<
 				PluginDecorators,
 				PluginDefinitions,
 				PluginSchema,
-				Routes & NewElysia['schema']
+				Prettify<Routes & NewElysia['schema']>
 		  >
 		: this
 
@@ -1007,13 +1091,17 @@ export default class Elysia<
 	>
 		? Elysia<
 				BasePath,
-				Decorators & PluginDecorators,
+				Prettify<Decorators & PluginDecorators>,
 				{
-					type: Definitions['type'] & PluginDefinitions['type']
-					error: Definitions['error'] & PluginDefinitions['error']
+					type: Prettify<
+						Definitions['type'] & PluginDefinitions['type']
+					>
+					error: Prettify<
+						Definitions['error'] & PluginDefinitions['error']
+					>
 				},
-				ParentSchema & PluginSchema,
-				Routes & NewElysia['schema']
+				Prettify<ParentSchema & PluginSchema>,
+				Prettify<Routes & NewElysia['schema']>
 		  >
 		: this
 
@@ -1171,7 +1259,7 @@ export default class Elysia<
 				PluginDecorators,
 				PluginDefinitions,
 				PluginSchema,
-				Routes & NewElysia['schema']
+				Prettify<Routes & NewElysia['schema']>
 		  >
 		: this
 
@@ -1283,14 +1371,22 @@ export default class Elysia<
 		? Elysia<
 				BasePath,
 				{
-					request: Decorators['request'] & PluginDecorators['request']
-					store: Decorators['store'] & PluginDecorators['store']
+					request: Prettify<
+						Decorators['request'] & PluginDecorators['request']
+					>
+					store: Prettify<
+						Decorators['store'] & PluginDecorators['store']
+					>
 				},
 				{
-					type: Definitions['type'] & PluginDefinitions['type']
-					error: Definitions['error'] & PluginDefinitions['error']
+					type: Prettify<
+						Definitions['type'] & PluginDefinitions['type']
+					>
+					error: Prettify<
+						Definitions['error'] & PluginDefinitions['error']
+					>
 				},
-				MergeSchema<ParentSchema, PluginSchema>,
+				Prettify<MergeSchema<ParentSchema, PluginSchema>>,
 				Routes & NewElysia['schema']
 		  >
 		: this
@@ -1308,14 +1404,22 @@ export default class Elysia<
 		? Elysia<
 				BasePath,
 				{
-					request: Decorators['request'] & PluginDecorators['request']
-					store: Decorators['store'] & PluginDecorators['store']
+					request: Prettify<
+						Decorators['request'] & PluginDecorators['request']
+					>
+					store: Prettify<
+						Decorators['store'] & PluginDecorators['store']
+					>
 				},
 				{
-					type: Definitions['type'] & PluginDefinitions['type']
-					error: Definitions['error'] & PluginDefinitions['error']
+					type: Prettify<
+						Definitions['type'] & PluginDefinitions['type']
+					>
+					error: Prettify<
+						Definitions['error'] & PluginDefinitions['error']
+					>
 				},
-				MergeSchema<ParentSchema, PluginSchema>,
+				Prettify<MergeSchema<ParentSchema, PluginSchema>>,
 				BasePath extends ``
 					? Routes & NewElysia['schema']
 					: Routes & AddPrefix<BasePath, NewElysia['schema']>
