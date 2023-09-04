@@ -17,7 +17,9 @@ export type Context<
 	path: string
 
 	set: {
-		headers: Record<string, string>
+		headers: { [header: string]: string } & {
+			['Set-Cookie']: string | string[]
+		}
 		status?: number
 		redirect?: string
 	}
