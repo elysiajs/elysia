@@ -10,7 +10,6 @@ import type { Context } from './context'
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
-
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -71,7 +70,7 @@ import type {
 	AddPrefixCapitalize,
 	AddSuffixCapitalize,
 	TraceReporter,
-	TraceHandler,
+	TraceHandler
 } from './types'
 
 /**
@@ -1459,25 +1458,17 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					get: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					get: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
 			}
 		>
@@ -1533,25 +1524,17 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					post: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					post: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
 			}
 		>

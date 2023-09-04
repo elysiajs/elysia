@@ -1,5 +1,5 @@
-import type { Elysia } from "../src";
+import { Elysia } from '../src'
 
-export default function plugin(app: Elysia) {
-    return app.get('/from-plugin', () => 'hi')
-}
+new Elysia()
+	.decorate('echo', (word: string) => word)
+	.get('/', ({ echo }) => echo('hi'))
