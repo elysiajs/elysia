@@ -70,23 +70,23 @@ export type TransformMessageHandler<Message extends WSTypedSchema['body']> = (
 
 export type ElysiaWSContext<
 	Schema extends WSTypedSchema<any> = WSTypedSchema<never>,
-	Definitions extends ElysiaInstance['meta']['defs'] = {},
+	Instance extends ElysiaInstance = ElysiaInstance,
 	Path extends string = never
 > = ServerWebSocket<
 	Context<{
-		body: UnwrapSchema<Schema['body'], Definitions>
-		headers: UnwrapSchema<Schema['headers'], Definitions, Record<string, string>>
-		query: UnwrapSchema<Schema['query'], Definitions, Record<string, string>>
+		body: UnwrapSchema<Schema['body'], Instance['meta']['defs']>
+		headers: UnwrapSchema<Schema['headers'], Instance['meta']['defs'], Record<string, string>>
+		query: UnwrapSchema<Schema['query'], Instance['meta']['defs'], Record<string, string>>
 		params: ExtractPath<Path> extends infer Params extends string
 			? Record<Params, string>
-			: UnwrapSchema<Schema['params'], Definitions, Record<string, string>>
-		response: UnwrapSchema<Schema['response'], Definitions>
+			: UnwrapSchema<Schema['params'], Instance['meta']['defs'], Record<string, string>>
+		response: UnwrapSchema<Schema['response'], Instance['meta']['defs']>
 	}> & {
 		id: number
 		message: TypeCheck<any>
 		transformMessage: TransformMessageHandler<Schema['body']>[]
 		schema: TypedRoute
-	}
+	} & Instance["request"]
 >
 
 export type WebSocketHeaderHandler<
@@ -110,12 +110,12 @@ export type WebSocketHeaderHandler<
 export type ElysiaWSOptions<
 	Path extends string,
 	Schema extends WSTypedSchema<any>,
-	Definitions extends ElysiaInstance['meta']['defs']
+	Instance extends ElysiaInstance
 > = Omit<
 	Partial<WebSocketHandler<Context>>,
 	'open' | 'message' | 'close' | 'drain' | 'publish' | 'publishToSelf'
 > &
-	(ElysiaWS<ElysiaWSContext<Schema, Definitions, Path>> extends infer WS
+	(ElysiaWS<ElysiaWSContext<Schema, Instance, Path>> extends infer WS
 		? Partial<Schema> & {
 				beforeHandle?: WithArray<HookHandler<Schema>>
 				transform?: WithArray<
@@ -147,7 +147,7 @@ export type ElysiaWSOptions<
 				 */
 				message?: (
 					ws: WS,
-					message: UnwrapSchema<Schema['body'], Definitions>
+					message: UnwrapSchema<Schema['body'], Instance['meta']['defs']>
 				) => any
 
 				/**

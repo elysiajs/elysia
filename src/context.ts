@@ -18,7 +18,7 @@ export type Context<
 
 	set: {
 		headers: { [header: string]: string } & {
-			['Set-Cookie']: string | string[]
+			['Set-Cookie']?: string | string[]
 		}
 		status?: number
 		redirect?: string
