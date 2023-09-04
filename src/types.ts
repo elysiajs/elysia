@@ -355,8 +355,8 @@ export type TraceStream = {
 	id: number
 	event: TraceEvent
 	type: 'begin' | 'end'
-	name: string
 	time: number
+	name?: string
 	unit?: number
 }
 
@@ -364,19 +364,17 @@ export type TraceReporter = EventEmitter<{
 	event(stream: TraceStream): MaybePromise<void>
 }>
 
-export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> = Omit<
-	TraceStream,
-	'type' | 'process' | 'unit'
-> &
-	(Type extends 'begin'
-		? {
-				type: 'begin'
-				process: Promise<TraceProcess<'end'>>
-				children: Promise<TraceProcess<'begin'>>[]
-		  }
-		: {
-				type: 'end'
-		  })
+export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
+	Type extends 'begin'
+		? Prettify<
+				{
+					name: string
+					time: number
+					end: Promise<TraceProcess<'end'>>
+					children: Promise<TraceProcess<'begin'>>[]
+				}
+		  >
+		: number
 
 export type TraceHandler<
 	Route extends RouteSchema = {},
@@ -400,6 +398,8 @@ export type TraceHandler<
 				| 'handle'
 				| 'afterHandle'
 				| 'response']: Promise<TraceProcess<'begin'>>
+		} & {
+			store: Decorators['store']
 		}
 	>
 ) => MaybePromise<void>

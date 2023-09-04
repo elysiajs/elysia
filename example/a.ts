@@ -1,16 +1,17 @@
 import { Elysia } from '../src'
 
+const logs = []
+
 const app = new Elysia()
-	.trace(async ({ handle, set, beforeHandle }) => {
+	.trace(async ({ beforeHandle }) => {
 		const { children } = await beforeHandle
 		for (const child of children) {
-			const { time: start, process, name } = await child
-			const { time: end } = await process
+			const { time: start, end, name } = await child
 
-			console.log(name, 'took', end - start, 'ms')
+			console.log(name, 'took', (await end) - start, 'ms')
 		}
 	})
 	.get('/', () => 'Hi', {
-		beforeHandle: [function setup() {}, function work() {}]
+		beforeHandle: [function setup() {}]
 	})
 	.listen(3000)

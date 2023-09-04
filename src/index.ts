@@ -4,10 +4,12 @@ import { Memoirist } from 'memoirist'
 import EventEmitter from 'eventemitter3'
 import type { Static, TSchema } from '@sinclair/typebox'
 
+import { createTraceListener } from './trace'
 import type { Context } from './context'
 
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
+
 
 import {
 	composeHandler,
@@ -69,10 +71,7 @@ import type {
 	AddPrefixCapitalize,
 	AddSuffixCapitalize,
 	TraceReporter,
-	TraceStream,
 	TraceHandler,
-	TraceProcess,
-	TraceEvent
 } from './types'
 
 /**
@@ -536,258 +535,11 @@ export default class Elysia<
 	trace<Route extends RouteSchema = {}>(
 		handler: TraceHandler<Route, Decorators>
 	) {
-		if (!this.event.trace.length) {
-			this.reporter.on('event', (event: TraceStream) => {
-				const id = event.id
-
-				if (event.event === 'request' && event.type === 'begin') {
-					const createSignal = () => {
-						let resolveHandle: (
-							value: TraceProcess<'begin'>
-						) => void
-						let resolveHandleEnd: (
-							value: TraceProcess<'end'>
-						) => void
-
-						let resolved = false
-						const handle = new Promise<TraceProcess<'begin'>>(
-							(resolve) => {
-								resolveHandle = (a) => {
-									if (!resolved) resolved = true
-
-									resolve(a)
-								}
-							}
-						)
-
-						let resolvedEnd = false
-						const handleEnd = new Promise<TraceProcess<'end'>>(
-							(resolve) => {
-								resolveHandleEnd = (a) => {
-									if (!resolvedEnd) resolvedEnd = true
-
-									resolve(a)
-								}
-							}
-						)
-
-						const children: ((
-							stream: TraceProcess<'begin'>
-						) => void)[] = []
-						let endChild:
-							| ((stream: TraceProcess<'end'>) => void)
-							| undefined = undefined
-						let childIteration = 0
-
-						return {
-							signal: handle,
-							consumeChild(event: TraceStream) {
-								switch (event.type) {
-									case 'begin':
-										children[childIteration++]({
-											event: event.event,
-											id: event.id,
-											name: event.name,
-											time: event.time,
-											process: new Promise<
-												TraceProcess<'end'>
-											>((resolve) => {
-												endChild = resolve
-											})
-										} as TraceProcess<'begin'>)
-										break
-
-									case 'end':
-										endChild?.({
-											event: event.event,
-											id: event.id,
-											name: event.name,
-											time: event.time
-										} as TraceProcess<'end'>)
-										break
-								}
-							},
-							consume(event: TraceStream) {
-								switch (event.type) {
-									case 'begin':
-										const unitsProcess: Promise<
-											TraceProcess<'begin'>
-										>[] = []
-
-										const units = event.unit ?? 0
-										for (let i = 0; i < units; i++) {
-											let resolve:
-												| ((
-														stream: TraceProcess<'begin'>
-												  ) => void)
-												| undefined
-
-											unitsProcess.push(
-												new Promise<
-													TraceProcess<'begin'>
-												>((r) => {
-													resolve = r as any
-												})
-											)
-
-											children.push(resolve!)
-										}
-
-										resolveHandle({
-											event: event.event,
-											id: event.id,
-											name: event.name,
-											time: event.time,
-											process: handleEnd,
-											children: unitsProcess
-										} as TraceProcess<'begin'>)
-										break
-
-									case 'end':
-										resolveHandleEnd({
-											event: event.event,
-											id: event.id,
-											name: event.name,
-											time: event.time
-										} as TraceProcess<'end'>)
-										break
-								}
-							},
-							forceResolve(id: number, event: TraceEvent) {
-								if (resolved && resolvedEnd) return
-
-								// eslint-disable-next-line prefer-const
-								let end: TraceProcess<'end'>
-								const start: TraceProcess<'begin'> = {
-									event,
-									id,
-									name: 'anonymous',
-									time: performance.now(),
-									type: 'begin',
-									process: new Promise<TraceProcess<'end'>>(
-										(resolve) => {
-											resolve(end)
-										}
-									),
-									children: []
-								}
-
-								end = {
-									event,
-									id,
-									name: 'anonymous',
-									time: performance.now(),
-									type: 'end'
-								}
-
-								resolveHandle(start)
-								resolveHandleEnd(end)
-							}
-						}
-					}
-
-					const request = createSignal()
-					const parse = createSignal()
-					const transform = createSignal()
-					const beforeHandle = createSignal()
-					const handle = createSignal()
-					const afterHandle = createSignal()
-					const response = createSignal()
-
-					request.consume(event)
-
-					const reducer = (event: TraceStream) => {
-						if (event.id === id)
-							switch (event.event) {
-								case 'request':
-									request.consume(event)
-									break
-
-								case 'request.unit':
-									request.consumeChild(event)
-									break
-
-								case 'parse':
-									parse.consume(event)
-									break
-
-								case 'parse.unit':
-									parse.consumeChild(event)
-									break
-
-								case 'transform':
-									transform.consume(event)
-									break
-
-								case 'transform.unit':
-									transform.consumeChild(event)
-									break
-
-								case 'beforeHandle':
-									beforeHandle.consume(event)
-									break
-
-								case 'beforeHandle.unit':
-									beforeHandle.consumeChild(event)
-									break
-
-								case 'handle':
-									handle.consume(event)
-									break
-
-								case 'afterHandle':
-									afterHandle.consume(event)
-									break
-
-								case 'afterHandle.unit':
-									afterHandle.consumeChild(event)
-									break
-
-								case 'response':
-									if (event.type === 'begin') {
-										request.forceResolve(id, 'request')
-										parse.forceResolve(id, 'parse')
-										transform.forceResolve(id, 'transform')
-										beforeHandle.forceResolve(
-											id,
-											'beforeHandle'
-										)
-										handle.forceResolve(id, 'handle')
-										afterHandle.forceResolve(
-											id,
-											'afterHandle'
-										)
-									} else this.reporter.off('event', reducer)
-
-									response.consume(event)
-									break
-
-								case 'response.unit':
-									response.consumeChild(event)
-									break
-							}
-					}
-
-					this.reporter.on('event', reducer)
-
-					handler({
-						id: event.id,
-						// @ts-ignore
-						context: event.ctx,
-						// @ts-ignore
-						set: event.ctx.set,
-						time: event.time,
-						request: request.signal,
-						parse: parse.signal,
-						transform: parse.signal,
-						beforeHandle: beforeHandle.signal,
-						handle: handle.signal,
-						afterHandle: afterHandle.signal,
-						response: response.signal
-					})
-				}
-			})
-		}
+		if (!this.event.trace.length)
+			this.reporter.on(
+				'event',
+				createTraceListener(this.reporter, handler)
+			)
 
 		this.on('trace', handler)
 

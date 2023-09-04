@@ -33,10 +33,12 @@ const createReport = ({
 	hasTrace,
 	hasTraceSet = false,
 	addFn,
+	condition = {}
 }: {
 	hasTrace: boolean | number
 	hasTraceSet?: boolean
 	addFn(string: string): void
+	condition: Partial<Record<TraceEvent, boolean>>
 }) => {
 	if (hasTrace) {
 		return (
@@ -51,7 +53,19 @@ const createReport = ({
 				unit?: number
 			} = {}
 		) => {
-			const isGroup = event !== 'handle' && event.indexOf('.') === -1
+			const dotIndex = event.indexOf('.')
+			const isGroup = event !== 'handle' && dotIndex === -1
+
+			if (
+				event !== 'request' &&
+				event !== 'response' &&
+				!condition[
+					(isGroup
+						? event
+						: event.slice(0, dotIndex)) as keyof typeof condition
+				]
+			)
+				return () => {}
 
 			if (isGroup) name ||= event
 			else name ||= 'anonymous'
@@ -79,11 +93,10 @@ const createReport = ({
 				addFn(
 					'\n' +
 						`
-						reporter.emit('event', { 
+						reporter.emit('event', {
 							id,
 							event: '${event}',
 							type: 'end',
-							name: '${name}',
 							time: performance.now()
 						})`.replace(/(\t| |\n)/g, '') +
 						'\n'
@@ -334,8 +347,20 @@ export const composeHandler = ({
 				.join(';')}})();\n`
 		: ''
 
-	const hasTrace = hooks.trace.length
+	const traceLiteral = hooks.trace.map((x) => x.toString())
 
+	const traceConditions: Record<
+		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response'>,
+		boolean
+	> = {
+		parse: traceLiteral.some((x) => isFnUse('parse', x)),
+		transform: traceLiteral.some((x) => isFnUse('transform', x)),
+		handle: traceLiteral.some((x) => isFnUse('handle', x)),
+		beforeHandle: traceLiteral.some((x) => isFnUse('beforeHandle', x)),
+		afterHandle: traceLiteral.some((x) => isFnUse('afterHandle', x))
+	}
+
+	const hasTrace = hooks.trace.length
 	let fnLiteral = ''
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
@@ -398,6 +423,7 @@ export const composeHandler = ({
 	const report = createReport({
 		hasTrace,
 		hasTraceSet,
+		condition: traceConditions,
 		addFn: (word) => {
 			fnLiteral += word
 		}
@@ -681,7 +707,7 @@ export const composeHandler = ({
 	}
 
 	if (hooks?.beforeHandle) {
-		const endBeforeHandle = report('beforeHandle',{
+		const endBeforeHandle = report('beforeHandle', {
 			unit: hooks.beforeHandle.length
 		})
 
@@ -707,7 +733,7 @@ export const composeHandler = ({
 				endUnit()
 
 				fnLiteral += `if(${name} !== undefined) {\n`
-				const endAfterHandle = report('afterHandle',{
+				const endAfterHandle = report('afterHandle', {
 					unit: hooks.transform.length
 				})
 				if (hooks.afterHandle) {
@@ -764,7 +790,7 @@ export const composeHandler = ({
 
 		endHandle()
 
-		const endAfterHandle = report('afterHandle',{
+		const endAfterHandle = report('afterHandle', {
 			unit: hooks.afterHandle.length
 		})
 
@@ -841,7 +867,7 @@ export const composeHandler = ({
 			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
-			if (hasTrace) {
+			if (traceConditions.handle) {
 				fnLiteral += isAsync(handler)
 					? `let r = await handler(c);\n`
 					: `let r = handler(c);\n`
@@ -850,8 +876,7 @@ export const composeHandler = ({
 
 				report('afterHandle')()
 
-				if (hasSet)
-					fnLiteral += `return mapResponse(r, c.set)\n`
+				if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 				else fnLiteral += `return mapCompactResponse(r)\n`
 			} else {
 				endHandle()
@@ -901,7 +926,7 @@ export const composeHandler = ({
 		if (handleResponse || hasTrace) {
 			fnLiteral += ` finally { `
 
-			const endResponse = report('response',{
+			const endResponse = report('response', {
 				unit: hooks.onResponse.length
 			})
 
@@ -1053,8 +1078,12 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	return function(request) {
 	`
 
+	const traceLiteral = app.event.trace.map((x) => x.toString())
 	const report = createReport({
 		hasTrace,
+		condition: {
+			request: traceLiteral.some((x) => isFnUse('parse', x.toString()))
+		},
 		addFn: (word) => {
 			fnLiteral += word
 		}
@@ -1077,8 +1106,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		`
 
 		const endReport = report('request', {
-			attribute: 'ctx',
-			unit: app.event.request.length
+			attribute: 'ctx'
 		})
 
 		fnLiteral += `try {\n`
@@ -1141,7 +1169,12 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		}`
 
 		report('request', {
-			attribute: 'ctx'
+			attribute:
+				traceLiteral.some((x) => isFnUse('context', x)) ||
+				traceLiteral.some((x) => isFnUse('store', x)) ||
+				traceLiteral.some((x) => isFnUse('set', x))
+					? 'ctx'
+					: ''
 		})()
 	}
 
