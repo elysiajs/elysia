@@ -214,7 +214,7 @@ export interface LifeCycleStore {
 	request: PreHandler<any, any>[]
 	parse: BodyHandler<any, any>[]
 	transform: VoidHandler<any, any>[]
-	beforeHandle: Handler<any, any>[]
+	beforeHandle: OptionalHandler<any, any>[]
 	afterHandle: AfterHandler<any, any>[]
 	onResponse: VoidHandler<any, any>[]
 	trace: TraceHandler<any, any>[]
@@ -318,6 +318,18 @@ export type Handler<
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
 
+export type OptionalHandler<
+	Route extends RouteSchema = {},
+	Decorators extends DecoratorBase = {
+		request: {}
+		store: {}
+	}
+> = Handler<Route, Decorators> extends (
+	context: infer Context
+) => infer Returned
+	? (context: Context) => Returned | MaybePromise<void>
+	: never
+
 export type AfterHandler<
 	Route extends RouteSchema = {},
 	Decorators extends DecoratorBase = {
@@ -366,14 +378,12 @@ export type TraceReporter = EventEmitter<{
 
 export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
 	Type extends 'begin'
-		? Prettify<
-				{
-					name: string
-					time: number
-					end: Promise<TraceProcess<'end'>>
-					children: Promise<TraceProcess<'begin'>>[]
-				}
-		  >
+		? Prettify<{
+				name: string
+				time: number
+				end: Promise<TraceProcess<'end'>>
+				children: Promise<TraceProcess<'begin'>>[]
+		  }>
 		: number
 
 export type TraceHandler<
@@ -512,7 +522,7 @@ export type LocalHook<
 	/**
 	 * Execute before main handler
 	 */
-	beforeHandle?: MaybeArray<Handler<TypedRoute, Decorators>>
+	beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
 	/**
 	 * Execute after main handler
 	 */

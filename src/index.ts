@@ -59,6 +59,7 @@ import type {
 	VoidHandler,
 	PreHandler,
 	BodyHandler,
+	OptionalHandler,
 	AfterHandler,
 	ErrorHandler,
 	LifeCycleStore,
@@ -70,7 +71,7 @@ import type {
 	AddPrefixCapitalize,
 	AddSuffixCapitalize,
 	TraceReporter,
-	TraceHandler
+	TraceHandler,
 } from './types'
 
 /**
@@ -457,9 +458,9 @@ export default class Elysia<
 	 * ```
 	 */
 	onBeforeHandle<Schema extends RouteSchema = {}>(
-		handler: Handler<MergeSchema<Schema, ParentSchema>, Decorators>
+		handler: OptionalHandler<MergeSchema<Schema, ParentSchema>, Decorators>
 	) {
-		this.on('beforeHandle', handler)
+		this.on('beforeHandle', handler as any)
 
 		return this
 	}
@@ -1590,26 +1591,19 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					put: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					put: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
+
 			}
 		>
 	> {
@@ -1664,25 +1658,17 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					patch: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					patch: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
 			}
 		>
@@ -1738,25 +1724,17 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					delete: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					delete: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
 			}
 		>
@@ -1812,26 +1790,19 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					options: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					options: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
+
 			}
 		>
 	> {
@@ -1881,25 +1852,17 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					[x: string]: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					[method in string]: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
 			}
 		>
@@ -1955,26 +1918,19 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					head: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					head: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
+
 			}
 		>
 	> {
@@ -2029,25 +1985,17 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					connect: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					connect: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
 				}
 			}
 		>
@@ -2102,21 +2050,13 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					subscribe: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
+					subscribe: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: Route['response']
 					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: Response
-						  }
-						: never
 				}
 			}
 		>
@@ -3108,7 +3048,7 @@ export type {
 	VoidHandler,
 	PreHandler,
 	BodyHandler,
-	AfterHandler,
+	OptionalHandler,
 	ErrorHandler,
 	LifeCycleStore,
 	MaybePromise,

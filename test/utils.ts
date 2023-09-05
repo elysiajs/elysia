@@ -1,4 +1,4 @@
-export const req = (path: string) => new Request(`http://localhost${path}`)
+export const req = (path: string, options?: RequestInit) => new Request(`http://localhost${path}`, options)
 
 type MaybeArray<T> = T | T[]
 

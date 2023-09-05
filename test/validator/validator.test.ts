@@ -1,59 +1,9 @@
-import { Elysia, t } from '../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req, upload } from './utils'
+import { post, req, upload } from '../utils'
 
-describe('Schema', () => {
-	it('validate query', async () => {
-		const app = new Elysia().get('/', ({ query: { name } }) => name, {
-			query: t.Object({
-				name: t.String()
-			})
-		})
-		const res = await app.handle(req('/?name=sucrose'))
-
-		expect(await res.text()).toBe('sucrose')
-		expect(res.status).toBe(200)
-	})
-
-	it('validate params', async () => {
-		const app = new Elysia().get(
-			'/hi/:id/:name',
-			({ params: { name } }) => name,
-			{
-				params: t.Object({
-					id: t.String(),
-					name: t.String()
-				})
-			}
-		)
-		const res = await app.handle(req('/hi/1/sucrose'))
-
-		expect(await res.text()).toBe('sucrose')
-		expect(res.status).toBe(200)
-	})
-
-	it('validate headers', async () => {
-		const app = new Elysia().post('/', () => 'welcome back', {
-			headers: t.Object({
-				authorization: t.String()
-			})
-		})
-		const res = await app.handle(
-			new Request('http://localhost/', {
-				method: 'post',
-				headers: {
-					authorization: 'Bearer 123',
-					// optional header should be allowed
-					'x-forwarded-ip': '127.0.0.1'
-				}
-			})
-		)
-
-		expect(await res.text()).toBe('welcome back')
-		expect(res.status).toBe(200)
-	})
-
+describe('Validator Edge Case', () => {
 	it('validate body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Object({
@@ -143,9 +93,7 @@ describe('Schema', () => {
 	it('validate beforeHandle with afterHandle', async () => {
 		const app = new Elysia()
 			.get('/', () => 'Mutsuki need correction 💢💢💢', {
-				beforeHandle() {
-					// Not Empty
-				},
+				beforeHandle() {},
 				afterHandle() {
 					return 'Mutsuki need correction 💢💢💢'
 				},
@@ -356,28 +304,6 @@ describe('Schema', () => {
 		expect(r1).toBe(200)
 		expect(r2).toBe(200)
 		expect(r3).toBe(400)
-	})
-
-	it('parse numeric params', async () => {
-		const app = new Elysia().get(
-			'/test/:id/:id2/:id3',
-			({ params }) => params,
-			{
-				params: t.Object({
-					id: t.Numeric(),
-					id2: t.Optional(t.Numeric()),
-					id3: t.String()
-				})
-			}
-		)
-
-		const res = await app.handle(req('/test/1/2/3')).then((x) => x.json())
-
-		expect(res).toEqual({
-			id: 1,
-			id2: 2,
-			id3: '3'
-		})
 	})
 
 	it('convert File to Files automatically', async () => {

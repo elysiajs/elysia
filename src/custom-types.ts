@@ -2,7 +2,11 @@ import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
 	type SchemaOptions,
-	type NumericOptions
+	type NumericOptions,
+	type TNull,
+	type TUnion,
+	type TSchema,
+	type TUndefined
 } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
@@ -152,7 +156,11 @@ export const ElysiaType = {
 
 			return true
 		}
-	)
+	),
+	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
+		({ ...schema, nullable: true } as any),
+	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
+		Type.Union([Type.Undefined(), schema]) as any
 } as const
 
 declare module '@sinclair/typebox' {
@@ -161,6 +169,8 @@ declare module '@sinclair/typebox' {
 		Numeric: typeof ElysiaType.Numeric
 		File: typeof ElysiaType.File
 		Files: typeof ElysiaType.Files
+		Nullable: typeof ElysiaType.Nullable
+		MaybeEmpty: typeof ElysiaType.MaybeEmpty
 		URLEncoded: (typeof Type)['Object']
 	}
 
@@ -193,7 +203,7 @@ Type.URLEncoded = (property, options) =>
 		elysiaMeta: 'URLEncoded'
 	})
 
-Type.File = (arg?: ElysiaTypeOptions.File) =>
+Type.File = (arg = {}) =>
 	ElysiaType.File({
 		elysiaMeta: 'File',
 		default: 'File',
@@ -203,7 +213,7 @@ Type.File = (arg?: ElysiaTypeOptions.File) =>
 		format: 'binary'
 	})
 
-Type.Files = (arg?: ElysiaTypeOptions.Files) =>
+Type.Files = (arg = {}) =>
 	ElysiaType.Files({
 		...arg,
 		elysiaMeta: 'Files',
@@ -217,5 +227,8 @@ Type.Files = (arg?: ElysiaTypeOptions.Files) =>
 			format: 'binary'
 		}
 	})
+
+Type.Nullable = (schema) => ElysiaType.Nullable(schema)
+Type.MaybeEmpty = ElysiaType.MaybeEmpty
 
 export { Type as t }

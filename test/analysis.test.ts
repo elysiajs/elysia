@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'

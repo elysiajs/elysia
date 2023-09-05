@@ -628,7 +628,7 @@ export const composeHandler = ({
 			switch (typeof properties) {
 				case 'object':
 					for (const property of properties)
-						fnLiteral += `c.headers.${property} = +c.headers.${property};`
+						fnLiteral += `if(c.headers.${property}) c.headers.${property} = +c.headers.${property};`
 					break
 			}
 
@@ -648,7 +648,7 @@ export const composeHandler = ({
 
 				case 'object':
 					for (const property of numericProperties)
-						fnLiteral += `c.body.${property} = +c.body.${property};`
+						fnLiteral += `if(c.body?.${property}) c.body.${property} = +c.body.${property};`
 					break
 			}
 
