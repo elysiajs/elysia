@@ -1,17 +1,9 @@
-import { Elysia } from '../src'
+import Elysia from '../src'
 
-const logs = []
+new Elysia()
+	.get('/', ({ set }) => {
+		set.status = "I'm a teapot"
 
-const app = new Elysia()
-	.trace(async ({ beforeHandle }) => {
-		const { children } = await beforeHandle
-		for (const child of children) {
-			const { time: start, end, name } = await child
-
-			console.log(name, 'took', (await end) - start, 'ms')
-		}
-	})
-	.get('/', () => 'Hi', {
-		beforeHandle: [function setup() {}]
+		return Bun.file('example/teapot.webp')
 	})
 	.listen(3000)

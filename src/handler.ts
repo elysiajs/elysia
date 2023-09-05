@@ -1,4 +1,5 @@
-/* eslint-disable no-case-declarations */
+import { StatusMap } from './utils'
+
 import type { Context } from './context'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
@@ -24,6 +25,10 @@ const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 	return headers
 }
 
+type SetResponse = Omit<Context['set'], 'status'> & {
+	status: number
+}
+
 export const mapEarlyResponse = (
 	response: unknown,
 	set: Context['set']
@@ -44,19 +49,24 @@ export const mapEarlyResponse = (
 				set.headers['Set-Cookie']
 			)
 
+		if (typeof set.status === 'string') set.status = StatusMap[set.status]
+
 		switch (response?.constructor?.name) {
 			case 'String':
 			case 'Blob':
-				return new Response(response as string | Blob, set)
+				return new Response(
+					response as string | Blob,
+					set as SetResponse
+				)
 
 			case 'Object':
 			case 'Array':
-				return Response.json(response, set)
+				return Response.json(response, set as SetResponse)
 
 			case undefined:
 				if (!response) return
 
-				return Response.json(response, set)
+				return Response.json(response, set as SetResponse)
 
 			case 'Response':
 				const inherits = { ...set.headers }
@@ -97,7 +107,7 @@ export const mapEarlyResponse = (
 			case 'Boolean':
 				return new Response(
 					(response as number | boolean).toString(),
-					set
+					set as SetResponse
 				)
 
 			default:
@@ -108,10 +118,13 @@ export const mapEarlyResponse = (
 					if (!set.headers['Content-Type'])
 						set.headers['Content-Type'] = 'application/json'
 
-					return new Response(JSON.stringify(response), set) as any
+					return new Response(
+						JSON.stringify(response),
+						set as SetResponse
+					) as any
 				}
 
-				return new Response(r, set)
+				return new Response(r, set as SetResponse)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -194,6 +207,8 @@ export const mapResponse = (
 				set.headers['Set-Cookie']
 			)
 
+		if (typeof set.status === 'string') set.status = StatusMap[set.status]
+
 		switch (response?.constructor?.name) {
 			case 'String':
 			case 'Blob':
@@ -204,12 +219,12 @@ export const mapResponse = (
 
 			case 'Object':
 			case 'Array':
-				return Response.json(response, set)
+				return Response.json(response, set as SetResponse)
 
 			case undefined:
-				if (!response) return new Response('', set)
+				if (!response) return new Response('', set as SetResponse)
 
-				return Response.json(response, set)
+				return Response.json(response, set as SetResponse)
 
 			case 'Response':
 				const inherits = { ...set.headers }
@@ -241,7 +256,7 @@ export const mapResponse = (
 			case 'Boolean':
 				return new Response(
 					(response as number | boolean).toString(),
-					set
+					set as SetResponse
 				)
 
 			default:
@@ -252,10 +267,13 @@ export const mapResponse = (
 					if (!set.headers['Content-Type'])
 						set.headers['Content-Type'] = 'application/json'
 
-					return new Response(JSON.stringify(response), set) as any
+					return new Response(
+						JSON.stringify(response),
+						set as SetResponse
+					) as any
 				}
 
-				return new Response(r, set)
+				return new Response(r, set as SetResponse)
 		}
 	} else
 		switch (response?.constructor?.name) {

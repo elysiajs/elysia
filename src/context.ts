@@ -4,6 +4,7 @@ import type {
 	Prettify,
 	GetPathParameter
 } from './types'
+import { HTTPStatusName } from './utils'
 
 export type Context<
 	Route extends RouteSchema = RouteSchema,
@@ -29,7 +30,7 @@ export type Context<
 
 		set: {
 			headers: Record<string, string>
-			status?: number
+			status?: number | HTTPStatusName
 			redirect?: string
 		}
 
