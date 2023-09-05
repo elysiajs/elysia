@@ -1,4 +1,3 @@
-import { isFnUse } from './compose'
 import type {
 	TraceHandler,
 	TraceProcess,
@@ -6,40 +5,80 @@ import type {
 	TraceStream
 } from './types'
 
-export const createTraceListener =
-	(reporter: TraceReporter, handler: TraceHandler<any, any>) => (event: TraceStream) => {
+export const createTraceListener = (
+	reporter: TraceReporter,
+	handler: TraceHandler<any, any>
+) => {
+	return (event: TraceStream) => {
 		const id = event.id
 
 		if (event.event === 'request' && event.type === 'begin') {
 			const createSignal = () => {
 				let resolveHandle: (value: TraceProcess<'begin'>) => void
 				let resolveHandleEnd: (value: TraceProcess<'end'>) => void
-
-				let resolved = false
-				const handle = new Promise<TraceProcess<'begin'>>((resolve) => {
-					resolveHandle = (a) => {
-						if (!resolved) resolved = true
-
-						resolve(a)
-					}
-				})
-
-				let resolvedEnd = false
-				const handleEnd = new Promise<TraceProcess<'end'>>(
-					(resolve) => {
-						resolveHandleEnd = (a) => {
-							if (!resolvedEnd) resolvedEnd = true
-
-							resolve(a)
-						}
-					}
-				)
+				let rejectHandle: (value: void) => void
+				let rejectHandleEnd: (value: void) => void
 
 				const children: ((stream: TraceProcess<'begin'>) => void)[] = []
+				const childrenReject: (() => void)[] = []
 				let endChild:
 					| ((stream: TraceProcess<'end'>) => void)
 					| undefined = undefined
 				let childIteration = 0
+
+				let resolved = false
+				const handle = new Promise<TraceProcess<'begin'>>(
+					(resolve, reject) => {
+						rejectHandle = () => {
+							if (resolved) return
+							else resolved = true
+
+							for (
+								;
+								childIteration < childrenReject.length;
+								childIteration++
+							)
+								childrenReject[childIteration]()
+
+							reject()
+						}
+						resolveHandle = (a) => {
+							if (resolved) return
+							else resolved = true
+
+							resolve(a)
+						}
+					}
+				).catch((error) => {
+					throw error
+				})
+
+				let resolvedEnd = false
+				const handleEnd = new Promise<TraceProcess<'end'>>(
+					(resolve, reject) => {
+						rejectHandleEnd = () => {
+							if (resolvedEnd) return
+							else resolvedEnd = true
+
+							for (
+								;
+								childIteration < childrenReject.length;
+								childIteration++
+							)
+								childrenReject[childIteration]()
+
+							reject()
+						}
+						resolveHandleEnd = (a) => {
+							if (resolvedEnd) return
+							else resolvedEnd = true
+
+							resolve(a)
+						}
+					}
+				).catch((error) => {
+					throw error
+				})
 
 				return {
 					signal: handle,
@@ -71,28 +110,34 @@ export const createTraceListener =
 
 								const units = event.unit ?? 0
 								for (let i = 0; i < units; i++) {
-									let resolve:
+									let resolveChild:
 										| ((
 												stream: TraceProcess<'begin'>
 										  ) => void)
 										| undefined
 
+									let rejectChild: (() => void) | undefined
+
 									unitsProcess.push(
 										new Promise<TraceProcess<'begin'>>(
-											(r) => {
-												resolve = r as any
+											(resolve, reject) => {
+												resolveChild = resolve as any
+												rejectChild = reject
 											}
-										)
+										).catch((error) => {
+											throw error
+										}) as any
 									)
 
-									children.push(resolve!)
+									children.push(resolveChild!)
+									childrenReject.push(rejectChild!)
 								}
 
 								resolveHandle({
 									// Begin always have name
 									name: event.name!,
 									time: event.time,
-									end: handleEnd,
+									end: handleEnd as any,
 									children: unitsProcess
 								} satisfies TraceProcess<'begin'>)
 								break
@@ -104,24 +149,11 @@ export const createTraceListener =
 								break
 						}
 					},
-					forceResolve() {
+					reject() {
 						if (resolved && resolvedEnd) return
 
-						// eslint-disable-next-line prefer-const
-						let end: TraceProcess<'end'>
-						const start: TraceProcess<'begin'> = {
-							name: 'anonymous',
-							time: performance.now(),
-							end: new Promise<TraceProcess<'end'>>((resolve) => {
-								resolve(end)
-							}),
-							children: []
-						}
-
-						end = performance.now()
-
-						resolveHandle(start)
-						resolveHandleEnd(end)
+						rejectHandle()
+						rejectHandleEnd()
 					}
 				}
 			}
@@ -185,12 +217,12 @@ export const createTraceListener =
 
 						case 'response':
 							if (event.type === 'begin') {
-								request.forceResolve()
-								parse.forceResolve()
-								transform.forceResolve()
-								beforeHandle.forceResolve()
-								handle.forceResolve()
-								afterHandle.forceResolve()
+								request.reject()
+								parse.reject()
+								transform.reject()
+								beforeHandle.reject()
+								handle.reject()
+								afterHandle.reject()
 							} else reporter.off('event', reducer)
 
 							response.consume(event)
@@ -213,13 +245,14 @@ export const createTraceListener =
 				// @ts-ignore
 				store: event.ctx?.store,
 				time: event.time,
-				request: request.signal,
-				parse: parse.signal,
-				transform: parse.signal,
-				beforeHandle: beforeHandle.signal,
-				handle: handle.signal,
-				afterHandle: afterHandle.signal,
-				response: response.signal
+				request: request.signal as any,
+				parse: parse.signal as any,
+				transform: parse.signal as any,
+				beforeHandle: beforeHandle.signal as any,
+				handle: handle.signal as any,
+				afterHandle: afterHandle.signal as any,
+				response: response.signal as any
 			})
 		}
 	}
+}
