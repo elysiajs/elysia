@@ -69,9 +69,10 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as SetResponse)
 
 			case 'Response':
-				const inherits = { ...set.headers }
+				const inherits = Object.assign({}, set.headers)
 
 				if (hasHeaderShorthand)
+					// @ts-ignore
 					set.headers = (response as Response).headers.toJSON()
 				else
 					for (const [key, value] of (
@@ -227,9 +228,10 @@ export const mapResponse = (
 				return Response.json(response, set as SetResponse)
 
 			case 'Response':
-				const inherits = { ...set.headers }
+				const inherits = Object.assign({}, set.headers)
 
 				if (hasHeaderShorthand)
+					// @ts-ignore
 					set.headers = (response as Response).headers.toJSON()
 				else
 					for (const [key, value] of (

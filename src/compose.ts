@@ -638,17 +638,30 @@ export const composeHandler = ({
 
 	if (validator.body) {
 		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.body.schema)
+		const numericProperties = findElysiaMeta('Numeric', validator.body.schema)
 
-		if (properties) {
-			switch (typeof properties) {
+		if (numericProperties) {
+			switch (typeof numericProperties) {
 				case 'string':
 					fnLiteral += `c.body = +c.body;`
 					break
 
 				case 'object':
-					for (const property of properties)
+					for (const property of numericProperties)
 						fnLiteral += `c.body.${property} = +c.body.${property};`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
+
+		// @ts-ignore
+		const filesProperties = findElysiaMeta('Files', validator.body.schema)
+		if (filesProperties) {
+			switch (typeof filesProperties) {
+				case 'object':
+					for (const property of filesProperties)
+						fnLiteral += `if(!Array.isArray(c.body.${property})) c.body.${property} = [c.body.${property}];`
 					break
 			}
 

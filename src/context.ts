@@ -29,7 +29,9 @@ export type Context<
 			: Route['headers']
 
 		set: {
-			headers: Record<string, string>
+			headers: { [header: string]: string } & {
+				['Set-Cookie']?: string | string[]
+			}
 			status?: number | HTTPStatusName
 			redirect?: string
 		}
@@ -54,7 +56,9 @@ export type PreContext<
 			: Route['headers']
 
 		set: {
-			headers: Record<string, string>
+			headers: { [header: string]: string } & {
+				['Set-Cookie']?: string | string[]
+			}
 			status?: number
 			redirect?: string
 		}

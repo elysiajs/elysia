@@ -139,7 +139,7 @@ export const ElysiaType = {
 	Files: TypeSystem.Type<Blob[], ElysiaTypeOptions.Files>(
 		'Files',
 		(options, value) => {
-			if (!Array.isArray(value)) return false
+			if (!Array.isArray(value)) return validateFile(options, value)
 
 			if (options.minItems && value.length < options.minItems)
 				return false
@@ -187,12 +187,11 @@ Type.Numeric = (properties) => {
 	}) as any
 }
 
-Type.URLEncoded = (property, options) => {
-	return Type.Object(property, {
+Type.URLEncoded = (property, options) =>
+	Type.Object(property, {
 		...options,
 		elysiaMeta: 'URLEncoded'
-	}) as any
-}
+	})
 
 Type.File = (arg?: ElysiaTypeOptions.File) =>
 	ElysiaType.File({

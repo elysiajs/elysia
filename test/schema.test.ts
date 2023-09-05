@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from './utils'
+import { post, req, upload } from './utils'
 
 describe('Schema', () => {
 	it('validate query', async () => {
@@ -378,5 +378,37 @@ describe('Schema', () => {
 			id2: 2,
 			id3: '3'
 		})
+	})
+
+	it('convert File to Files automatically', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body: { files } }) => Array.isArray(files),
+			{
+				body: t.Object({
+					files: t.Files()
+				})
+			}
+		)
+
+		expect(
+			await app
+				.handle(
+					upload('/', {
+						files: 'aris-yuzu.jpg'
+					}).request
+				)
+				.then((x) => x.text())
+		).toEqual('true')
+
+		expect(
+			await app
+				.handle(
+					upload('/', {
+						files: ['aris-yuzu.jpg', 'midori.png']
+					}).request
+				)
+				.then((x) => x.text())
+		).toEqual('true')
 	})
 })

@@ -13,6 +13,14 @@ Breaking Change:
 
 Change:
 - Using single findDynamicRoute instead of inlining to static map
+# 0.6.18 - 5 Sep 2023
+Improvement:
+- Automatically parse File to `Files` if set
+
+# 0.6.17 - 4 Sep 2023
+Bug fix:
+- [#98](https://github.com/elysiajs/elysia/issues/98) Add context.set.cookie to accept array of string
+- [#92](https://github.com/elysiajs/elysia/pull/92) WebSocket beforeHandle unable to access plugins / state / derive's
 
 # 0.6.16 - 1 Sep 2023
 Bug fix:
