@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia } from '../src'
-import { req } from './utils'
+import { Elysia } from '../../src'
+import { req } from '../utils'
 
 const app = new Elysia()
 	.get('/single', ({ set }) => {
@@ -10,7 +10,6 @@ const app = new Elysia()
 	})
 	.get('/multiple', ({ set }) => {
 		set.headers = {
-			// @ts-ignore
 			'Set-Cookie': ['a=b', 'c=d']
 		}
 

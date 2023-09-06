@@ -1,10 +1,11 @@
+import { HTTPStatusName } from './utils'
+
 import type {
 	DecoratorBase,
 	RouteSchema,
 	Prettify,
 	GetPathParameter
 } from './types'
-import { HTTPStatusName } from './utils'
 
 export type Context<
 	Route extends RouteSchema = RouteSchema,

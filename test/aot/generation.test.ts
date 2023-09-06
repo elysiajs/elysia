@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from '../src'
-import { post, req } from './utils'
+import { Elysia, t } from '../../src'
+import { post, req } from '../utils'
 
 describe('code generation', () => {
 	it('fallback query if not presented', async () => {
@@ -55,17 +55,17 @@ describe('code generation', () => {
 					// not empty
 				}
 			})
+			.post('/9', ({ ...rest }) => rest.body)
 
 		const from = (number: number) =>
 			app.handle(post(`/${number}`, body)).then((r) => r.json())
 
-		expect(await from(1)).toEqual(body)
-		expect(await from(2)).toEqual(body)
-		expect(await from(3)).toEqual(body)
-		expect(await from(4)).toEqual(body)
-		expect(await from(5)).toEqual(body)
-		expect(await from(6)).toEqual(body)
-		expect(await from(7)).toEqual(body)
-		expect(await from(8)).toEqual(body)
+		const cases = Promise.all(
+			Array(9)
+				.fill(null)
+				.map((_, i) => from(i + 1))
+		)
+
+		for (const unit of await cases) expect(unit).toEqual(body)
 	})
 })

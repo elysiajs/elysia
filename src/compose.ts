@@ -661,7 +661,7 @@ export const composeHandler = ({
 			switch (typeof filesProperties) {
 				case 'object':
 					for (const property of filesProperties)
-						fnLiteral += `if(!Array.isArray(c.body.${property})) c.body.${property} = [c.body.${property}];`
+						fnLiteral += `if(!Array.isArray(c.body?.${property})) c.body.${property} = [c.body.${property}];`
 					break
 			}
 

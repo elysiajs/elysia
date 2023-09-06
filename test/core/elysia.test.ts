@@ -1,9 +1,9 @@
-import { Elysia } from '../src'
+import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { req } from '../utils'
 
-describe('Elysia', () => {
+describe('Edge Case', () => {
 	it('handle state', async () => {
 		const app = new Elysia()
 			.state('a', 'a')

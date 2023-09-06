@@ -1,59 +1,13 @@
 import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req, upload } from '../utils'
+import { post, req } from '../utils'
 
-describe('Validator Edge Case', () => {
-	it('validate body', async () => {
-		const app = new Elysia().post('/', ({ body }) => body, {
-			body: t.Object({
-				username: t.String(),
-				password: t.String()
-			})
-		})
-
-		const body = JSON.stringify({
-			username: 'ceobe',
-			password: '12345678'
-		})
-
-		const res = await app.handle(
-			new Request('http://localhost/', {
-				method: 'post',
-				body,
-				headers: {
-					'content-type': 'application/json'
-				}
-			})
-		)
-
-		expect(await res.text()).toBe(body)
-		expect(res.status).toBe(200)
-	})
-
-	it('validate response', async () => {
-		const app = new Elysia()
-			.get('/', () => 'Mutsuki need correction 💢💢💢', {
-				response: t.String()
-			})
-			.get('/invalid', () => 1 as any, {
-				response: t.String()
-			})
-		const res = await app.handle(req('/'))
-		const invalid = await app.handle(req('/invalid'))
-
-		expect(await res.text()).toBe('Mutsuki need correction 💢💢💢')
-		expect(res.status).toBe(200)
-
-		expect(invalid.status).toBe(400)
-	})
-
+describe('Validator Additional Case', () => {
 	it('validate beforeHandle', async () => {
 		const app = new Elysia()
 			.get('/', () => 'Mutsuki need correction 💢💢💢', {
-				beforeHandle() {
-					return 'Mutsuki need correction 💢💢💢'
-				},
+				beforeHandle: () => 'Mutsuki need correction 💢💢💢',
 				response: t.String()
 			})
 			.get('/invalid', () => 1 as any, {
@@ -114,58 +68,6 @@ describe('Validator Edge Case', () => {
 		expect(invalid.status).toBe(400)
 	})
 
-	it('validate response per status', async () => {
-		const app = new Elysia().post(
-			'/',
-			({ set, body: { status, response } }) => {
-				set.status = status
-
-				return response
-			},
-			{
-				body: t.Object({
-					status: t.Number(),
-					response: t.Any()
-				}),
-				response: {
-					200: t.String(),
-					201: t.Number()
-				}
-			}
-		)
-
-		const r200valid = await app.handle(
-			post('/', {
-				status: 200,
-				response: 'String'
-			})
-		)
-		const r200invalid = await app.handle(
-			post('/', {
-				status: 200,
-				response: 1
-			})
-		)
-
-		const r201valid = await app.handle(
-			post('/', {
-				status: 201,
-				response: 1
-			})
-		)
-		const r201invalid = await app.handle(
-			post('/', {
-				status: 201,
-				response: 'String'
-			})
-		)
-
-		expect(r200valid.status).toBe(200)
-		expect(r200invalid.status).toBe(400)
-		expect(r201valid.status).toBe(201)
-		expect(r201invalid.status).toBe(400)
-	})
-
 	it('handle guard hook', async () => {
 		const app = new Elysia().guard(
 			{
@@ -224,18 +126,18 @@ describe('Validator Edge Case', () => {
 
 		expect(invalidQuery.status).toBe(400)
 
-		// const invalidBody = await app.handle(
-		// 	new Request('http://localhost/user?name=salt', {
-		// 		method: 'POST',
-		// 		body: JSON.stringify({
-		// 			id: 6,
-		// 			username: '',
-		// 			profile: {}
-		// 		})
-		// 	})
-		// )
+		const invalidBody = await app.handle(
+			new Request('http://localhost/user?name=salt', {
+				method: 'POST',
+				body: JSON.stringify({
+					id: 6,
+					username: '',
+					profile: {}
+				})
+			})
+		)
 
-		// expect(invalidBody.status).toBe(400)
+		expect(invalidBody.status).toBe(400)
 	})
 
 	// https://github.com/elysiajs/elysia/issues/28
@@ -304,37 +206,5 @@ describe('Validator Edge Case', () => {
 		expect(r1).toBe(200)
 		expect(r2).toBe(200)
 		expect(r3).toBe(400)
-	})
-
-	it('convert File to Files automatically', async () => {
-		const app = new Elysia().post(
-			'/',
-			({ body: { files } }) => Array.isArray(files),
-			{
-				body: t.Object({
-					files: t.Files()
-				})
-			}
-		)
-
-		expect(
-			await app
-				.handle(
-					upload('/', {
-						files: 'aris-yuzu.jpg'
-					}).request
-				)
-				.then((x) => x.text())
-		).toEqual('true')
-
-		expect(
-			await app
-				.handle(
-					upload('/', {
-						files: ['aris-yuzu.jpg', 'midori.png']
-					}).request
-				)
-				.then((x) => x.text())
-		).toEqual('true')
 	})
 })

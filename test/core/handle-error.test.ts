@@ -1,7 +1,7 @@
-import { Elysia, InternalServerError, NotFoundError, t } from '../src'
+import { Elysia, InternalServerError, NotFoundError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { req } from '../utils'
 
 const request = new Request('http://localhost:8080')
 
@@ -9,6 +9,7 @@ describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
+			// @ts-ignore
 			.handleError(request, new NotFoundError(), {
 				headers: {}
 			})
@@ -20,6 +21,7 @@ describe('Handle Error', () => {
 	it('handle INTERNAL_SERVER_ERROR', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
+			// @ts-ignore
 			.handleError(request, new InternalServerError(), {
 				headers: {}
 			})

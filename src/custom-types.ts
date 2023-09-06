@@ -139,8 +139,8 @@ export const ElysiaType = {
 		'Numeric',
 		{} as any
 	),
-	File: TypeSystem.Type<Blob, ElysiaTypeOptions.File>('File', validateFile),
-	Files: TypeSystem.Type<Blob[], ElysiaTypeOptions.Files>(
+	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
+	Files: TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
 		'Files',
 		(options, value) => {
 			if (!Array.isArray(value)) return validateFile(options, value)
@@ -165,9 +165,10 @@ export const ElysiaType = {
 
 declare module '@sinclair/typebox' {
 	interface TypeBuilder {
-		// @ts-ignore
 		Numeric: typeof ElysiaType.Numeric
+		// @ts-ignore
 		File: typeof ElysiaType.File
+		// @ts-ignore
 		Files: typeof ElysiaType.Files
 		Nullable: typeof ElysiaType.Nullable
 		MaybeEmpty: typeof ElysiaType.MaybeEmpty

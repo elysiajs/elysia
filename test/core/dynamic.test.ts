@@ -1,7 +1,7 @@
-import { Elysia, NotFoundError, t } from '../src'
+import { Elysia, NotFoundError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from './utils'
+import { post, req } from '../utils'
 
 describe('Dynamic Mode', () => {
 	it('handle path', async () => {

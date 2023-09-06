@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, t } from '../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { post, req } from './utils'
-import { findElysiaMeta } from '../src/compose'
+import { post, req } from '../utils'
+import { findElysiaMeta } from '../../src/compose'
 
 const payload = { hello: 'world' }
 

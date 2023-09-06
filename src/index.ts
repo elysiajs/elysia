@@ -683,7 +683,7 @@ export default class Elysia<
 	onError(handler: ErrorHandler<Definitions['error']>) {
 		this.on('error', handler)
 
-		return this as any
+		return this
 	}
 
 	/**

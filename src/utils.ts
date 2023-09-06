@@ -168,10 +168,14 @@ export const getResponseSchemaValidator = (
 		return TypeCompiler.Compile(schema)
 	}
 
-	if (Kind in maybeSchemaOrRecord)
+	if (Kind in maybeSchemaOrRecord) {
+		if ('additionalProperties' in maybeSchemaOrRecord === false)
+			maybeSchemaOrRecord.additionalProperties = additionalProperties
+
 		return {
 			200: compile(maybeSchemaOrRecord)
 		}
+	}
 
 	const record: Record<number, TypeCheck<any>> = {}
 

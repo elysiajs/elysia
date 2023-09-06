@@ -1,9 +1,9 @@
-import { Elysia } from '../src'
+import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { req } from '../utils'
 const asyncPlugin = async (app: Elysia) => app.get('/async', () => 'async')
-const lazyPlugin = import('./modules')
+const lazyPlugin = import('../modules')
 const lazyNamed = lazyPlugin.then((x) => x.lazy)
 
 describe('Modules', () => {
@@ -30,7 +30,7 @@ describe('Modules', () => {
 	})
 
 	it('inline import', async () => {
-		const app = new Elysia().use(import('./modules'))
+		const app = new Elysia().use(import('../modules'))
 
 		await app.modules
 
@@ -60,7 +60,7 @@ describe('Modules', () => {
 	})
 
 	it('inline import non default', async () => {
-		const app = new Elysia().use(import('./modules'))
+		const app = new Elysia().use(import('../modules'))
 
 		await app.modules
 
@@ -71,7 +71,7 @@ describe('Modules', () => {
 
 	it('register async and lazy path', async () => {
 		const app = new Elysia()
-			.use(import('./modules'))
+			.use(import('../modules'))
 			.use(asyncPlugin)
 			.get('/', () => 'hi')
 
@@ -84,7 +84,7 @@ describe('Modules', () => {
 
 	it('Count lazy module correctly', async () => {
 		const app = new Elysia()
-			.use(import('./modules'))
+			.use(import('../modules'))
 			.use(asyncPlugin)
 			.get('/', () => 'hi')
 
@@ -94,7 +94,7 @@ describe('Modules', () => {
 	})
 
 	it('Handle other routes while lazy load', async () => {
-		const app = new Elysia().use(import('./timeout')).get('/', () => 'hi')
+		const app = new Elysia().use(import('../timeout')).get('/', () => 'hi')
 
 		const res = await app.handle(req('/')).then((r) => r.text())
 
@@ -102,7 +102,7 @@ describe('Modules', () => {
 	})
 
 	it('Handle deferred import', async () => {
-		const app = new Elysia().use(import('./modules'))
+		const app = new Elysia().use(import('../modules'))
 
 		await app.modules
 

@@ -1,12 +1,13 @@
-import { Elysia, t } from '../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { req } from '../utils'
 
 describe('Transform', () => {
 	it('Globally Transform', async () => {
 		const app = new Elysia()
 			.onTransform((request) => {
+				// @ts-ignore
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)

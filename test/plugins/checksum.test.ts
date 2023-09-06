@@ -1,7 +1,7 @@
-import { Elysia, t } from '../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { req } from '../utils'
 
 describe('Checksum', () => {
 	it('deduplicate plugin', async () => {

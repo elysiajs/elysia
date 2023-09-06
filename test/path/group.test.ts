@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from '../src'
-import { post, req } from './utils'
+import { Elysia, t } from '../../src'
+import { post, req } from '../utils'
 
 describe('group', () => {
 	it('delegate onRequest', async () => {

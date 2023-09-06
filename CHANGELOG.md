@@ -4,12 +4,20 @@ Feature:
 - Rewrite Web Socket
 - Add mapper method
 - Add affix, prefix, suffix
+- Trace
 
 Improvement:
 - Static Code Analysis now support rest parameter
+- Breakdown dynamic router into single pipeline instead of inlining to static router to reduce memory usage
 
 Breaking Change:
 - Remove `ws` plugin, migrate to core
+
+Bug fix:
+- Strictly validate response by default
+- `t.Numeric` not working on headers / query / params
+- `t.Optional(t.Object({ [name]: t.Numeric }))` causing error
+- Add null check before converting `Numeric`m
 
 Change:
 - Using single findDynamicRoute instead of inlining to static map

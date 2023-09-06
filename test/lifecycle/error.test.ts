@@ -1,6 +1,6 @@
-import { Elysia, t } from '../src'
+import { Elysia, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
-import { post, req } from './utils'
+import { post, req } from '../utils'
 
 describe('error', () => {
 	it('use custom 404', async () => {
