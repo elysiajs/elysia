@@ -29,10 +29,9 @@ export type Context<
 			? Record<string, string | null>
 			: Route['headers']
 
+		cookie: Record<string, string | string[]>
 		set: {
-			headers: { [header: string]: string } & {
-				['Set-Cookie']?: string | string[]
-			}
+			headers: Record<string, string>
 			status?: number | HTTPStatusName
 			redirect?: string
 		}

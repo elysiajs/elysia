@@ -71,7 +71,7 @@ import type {
 	AddPrefixCapitalize,
 	AddSuffixCapitalize,
 	TraceReporter,
-	TraceHandler,
+	TraceHandler
 } from './types'
 
 /**
@@ -546,7 +546,7 @@ export default class Elysia<
 		return this
 	}
 
-	addError<
+	error<
 		const Errors extends Record<
 			string,
 			{
@@ -561,7 +561,7 @@ export default class Elysia<
 		{
 			type: Definitions['type']
 			error: Definitions['error'] & {
-				[K in NonNullable<keyof Errors>]: Errors[K] extends {
+				[K in keyof Errors]: Errors[K] extends {
 					prototype: infer LiteralError extends Error
 				}
 					? LiteralError
@@ -572,7 +572,7 @@ export default class Elysia<
 		Routes
 	>
 
-	addError<
+	error<
 		Name extends string,
 		const CustomError extends {
 			prototype: Error
@@ -597,14 +597,25 @@ export default class Elysia<
 		Routes
 	>
 
-	addError<const NewError extends Record<string, Error>>(
-		mapper: (decorators: Definitions['error']) => NewError
+	error<
+		const NewErrors extends Record<
+			string,
+			Error
+		>
+	>(
+		mapper: (decorators: Definitions['error']) => NewErrors
 	): Elysia<
 		BasePath,
 		Decorators,
 		{
 			type: Definitions['type']
-			error: NewError
+			error: {
+				[K in keyof NewErrors]: NewErrors[K] extends {
+					prototype: infer LiteralError extends Error
+				}
+					? LiteralError
+					: never
+			}
 		},
 		ParentSchema,
 		Routes
@@ -623,7 +634,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	addError(
+	error(
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		name:
 			| string
@@ -660,7 +671,7 @@ export default class Elysia<
 			error.prototype[ERROR_CODE] = code
 
 			// @ts-ignore
-			this.definitions.error[name] = error
+			this.definitions.error[code] = error
 		}
 
 		return this
@@ -1294,7 +1305,9 @@ export default class Elysia<
 
 			if (!isScoped) {
 				this.decorators = mergeDeep(this.decorators, plugin.decorators)
+				this.state(plugin.store)
 				this.model(plugin.definitions.type)
+				this.error(plugin.definitions.error)
 			}
 
 			const {
@@ -1603,7 +1616,6 @@ export default class Elysia<
 							: Route['response']
 					}
 				}
-
 			}
 		>
 	> {
@@ -1802,7 +1814,6 @@ export default class Elysia<
 							: Route['response']
 					}
 				}
-
 			}
 		>
 	> {
@@ -1930,7 +1941,6 @@ export default class Elysia<
 							: Route['response']
 					}
 				}
-
 			}
 		>
 	> {

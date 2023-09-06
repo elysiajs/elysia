@@ -368,7 +368,7 @@ export const composeHandler = ({
 	fnLiteral += hasErrorHandler ? 'try {\n' : ''
 
 	const lifeCycleLiteral =
-		validator || method !== 'GET'
+		validator || (method !== 'GET' && method !== "HEAD")
 			? [
 					handler,
 					...hooks.transform,
@@ -379,6 +379,7 @@ export const composeHandler = ({
 
 	const hasBody =
 		method !== 'GET' &&
+		method !== 'HEAD' &&
 		hooks.type !== 'none' &&
 		(!!validator.body ||
 			!!hooks.type ||

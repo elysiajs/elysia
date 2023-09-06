@@ -74,13 +74,7 @@ describe('Path', () => {
 	it('Parse multiple params', async () => {
 		const app = new Elysia().get(
 			'/id/:id/:name',
-			({ params: { id, name } }) => `${id}/${name}`,
-			{
-				params: t.Object({
-					id: t.String(),
-					name: t.String()
-				})
-			}
+			({ params: { id, name } }) => `${id}/${name}`
 		)
 		const res = await app.handle(req('/id/fubuki/Elysia'))
 
@@ -324,26 +318,6 @@ describe('Path', () => {
 			c: 'd e'
 		})
 	})
-
-	// ? This is not used because fragment is strip out by default
-	// it('exclude fragment', async () => {
-	// 	const app = new Elysia().get('/', ({ query }) => query)
-
-	// 	const res = await app.handle(req('/#hi')).then((r) => r.json())
-
-	// 	expect(res).toEqual({})
-	// })
-
-	// ? This is not used because fragment is strip out by default
-	// it('exclude fragment on querystring', async () => {
-	// 	const app = new Elysia().get('/', ({ query }) => query)
-
-	// 	const res = await app.handle(req('/?a=b#a')).then((r) => r.json())
-
-	// 	expect(res).toEqual({
-	// 		a: 'b'
-	// 	})
-	// })
 
 	it('handle all method', async () => {
 		const app = new Elysia().all('/', () => 'Hi')

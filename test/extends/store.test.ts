@@ -2,17 +2,47 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 import { req } from '../utils'
 
-describe('store', () => {
-	it('work', async () => {
+describe('State', () => {
+	it('store primitive', async () => {
 		const app = new Elysia()
-			.state('hi', () => 'hi')
-			.get('/', ({ store: { hi } }) => hi())
+			.state('name', 'Ina')
+			.get('/', ({ store }) => store)
 
-		const res = await app.handle(req('/')).then((r) => r.text())
-		expect(res).toBe('hi')
+		const res = await app.handle(req('/')).then((r) => r.json())
+		expect(res).toEqual({
+			name: 'Ina'
+		})
 	})
 
-	it('inherits plugin', async () => {
+	it('store multiple', async () => {
+		const app = new Elysia()
+			.state('name', 'Ina')
+			.state('job', 'artist')
+			.get('/', ({ store }) => store)
+
+		const res = await app.handle(req('/')).then((r) => r.json())
+		expect(res).toEqual({
+			name: 'Ina',
+			job: 'artist'
+		})
+	})
+
+	it('store object', async () => {
+		const app = new Elysia()
+			.state({
+				name: 'Ina',
+				job: 'artist'
+			})
+			.get('/', ({ store }) => store)
+
+		const res = await app.handle(req('/')).then((r) => r.json())
+		expect(res).toEqual({
+			name: 'Ina',
+			job: 'artist'
+		})
+	})
+
+	it('inherits function plugin', async () => {
 		const plugin = () => (app: Elysia) => app.state('hi', () => 'hi')
 
 		const app = new Elysia()
@@ -23,6 +53,16 @@ describe('store', () => {
 		expect(res).toBe('hi')
 	})
 
+	it('inherits instance plugin', async () => {
+		const plugin = new Elysia().state('name', 'Ina')
+		const app = new Elysia().use(plugin).get('/', ({ store }) => store)
+
+		const res = await app.handle(req('/')).then((r) => r.json())
+		expect(res).toEqual({
+			name: 'Ina'
+		})
+	})
+
 	it('accepts any type', async () => {
 		const app = new Elysia()
 			.state('hi', {
@@ -31,18 +71,6 @@ describe('store', () => {
 				}
 			})
 			.get('/', ({ store: { hi } }) => hi.there.hello)
-
-		const res = await app.handle(req('/')).then((r) => r.text())
-		expect(res).toBe('world')
-	})
-
-	it('accepts multiple', async () => {
-		const app = new Elysia()
-			.state({
-				hello: 'world',
-				my: 'name'
-			})
-			.get('/', ({ store: { hello } }) => hello)
 
 		const res = await app.handle(req('/')).then((r) => r.text())
 		expect(res).toBe('world')

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Elysia, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
@@ -22,6 +23,28 @@ describe('error', () => {
 		expect(root).toBe('hello')
 		expect(notFound).toBe('UwU')
 	})
+
+	// it('handle parse error', async () => {
+	// 	const app = new Elysia()
+	// 		.onError(({ code }) => {
+	// 			if (code === 'PARSE') return 'Why you no proper type'
+	// 		})
+	// 		.post('/', ({ body }) => 'hello')
+
+	// 	const root = await app
+	// 		.handle(
+	// 			new Request('http://localhost/', {
+	// 				method: 'POST',
+	// 				body: 'A',
+	// 				headers: {
+	// 					'content-type': 'application/json'
+	// 				}
+	// 			})
+	// 		)
+	// 		.then((x) => x.text())
+
+	// 	expect(root).toBe('Why you no proper type')
+	// })
 
 	it('custom validation error', async () => {
 		const app = new Elysia()

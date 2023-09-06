@@ -534,7 +534,7 @@ export type LocalHook<
 	/**
 	 * Custom body parser
 	 */
-	// parse?: MaybeArray<BodyParser>
+	parse?: MaybeArray<BodyHandler<TypedRoute, Decorators>>
 	/**
 	 * Custom body parser
 	 */

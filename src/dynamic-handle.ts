@@ -1,12 +1,12 @@
 import type { Elysia } from '.'
 
+import { mapEarlyResponse, mapResponse } from './handler'
 import {
 	ElysiaErrors,
 	NotFoundError,
 	ValidationError,
 	ERROR_CODE
 } from './error'
-import { mapEarlyResponse, mapResponse } from './handler'
 
 import type { Context } from './context'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
@@ -40,12 +40,11 @@ export const createDynamicHandler =
 			context.set = set
 			context.store = app.store
 		} else {
-			// @ts-ignore
 			context = {
 				set,
 				store: app.store,
 				request
-			}
+			} as any
 		}
 
 		const url = request.url,
@@ -54,8 +53,6 @@ export const createDynamicHandler =
 			path = q === -1 ? url.substring(s) : url.substring(s, q)
 
 		try {
-			// @ts-ignore
-
 			for (let i = 0; i < app.event.request.length; i++) {
 				// @ts-ignore
 				const onRequest = app.event.request[i]
@@ -77,7 +74,7 @@ export const createDynamicHandler =
 			const { handle, hooks, validator, content } = handler.store
 
 			let body: string | Record<string, any> | undefined
-			if (request.method !== 'GET') {
+			if (request.method !== 'GET' && request.method !== 'HEAD') {
 				if (content) {
 					switch (content) {
 						case 'application/json':
@@ -118,7 +115,6 @@ export const createDynamicHandler =
 						if (index !== -1)
 							contentType = contentType.slice(0, index)
 
-						// @ts-ignore
 						for (let i = 0; i < app.event.parse.length; i++) {
 							// @ts-ignore
 							let temp = app.event.parse[i](context, contentType)
@@ -298,7 +294,6 @@ export const createDynamicErrorHandler =
 	) => {
 		// @ts-ignore
 		for (let i = 0; i < app.event.error.length; i++) {
-			// @ts-ignore
 			let response = app.event.error[i]({
 				request,
 				// @ts-ignore

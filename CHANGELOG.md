@@ -9,6 +9,7 @@ Feature:
 Improvement:
 - Static Code Analysis now support rest parameter
 - Breakdown dynamic router into single pipeline instead of inlining to static router to reduce memory usage
+- Set `t.File` and `t.Files` to `File` instead of `Blob`
 
 Breaking Change:
 - Remove `ws` plugin, migrate to core
@@ -17,10 +18,12 @@ Bug fix:
 - Strictly validate response by default
 - `t.Numeric` not working on headers / query / params
 - `t.Optional(t.Object({ [name]: t.Numeric }))` causing error
-- Add null check before converting `Numeric`m
+- Add null check before converting `Numeric`
+- Inherits store to instance plugin
 
 Change:
 - Using single findDynamicRoute instead of inlining to static map
+
 # 0.6.18 - 5 Sep 2023
 Improvement:
 - Automatically parse File to `Files` if set
