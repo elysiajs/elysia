@@ -1305,7 +1305,9 @@ export default class Elysia<
 
 			if (!isScoped) {
 				this.decorators = mergeDeep(this.decorators, plugin.decorators)
+				this.state(plugin.store)
 				this.model(plugin.meta.defs)
+				this.addError(plugin.error)
 			}
 
 			const {

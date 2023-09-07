@@ -1,3 +1,7 @@
+# 0.6.19 - 7 Sep 2023
+Bug fix:
+- Inherits state and error from plugin instance
+
 # 0.6.18 - 5 Sep 2023
 Improvement:
 - Automatically parse File to `Files` if set
