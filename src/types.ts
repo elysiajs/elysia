@@ -359,6 +359,7 @@ export type TraceEvent =
 	| 'transform'
 	| 'beforeHandle'
 	| 'afterHandle'
+	| 'error'
 	| 'response' extends infer Events extends string
 	? Events | `${Events}.unit` | 'handle'
 	: never
@@ -381,6 +382,7 @@ export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
 		? Prettify<{
 				name: string
 				time: number
+				skip: boolean
 				end: Promise<TraceProcess<'end'>>
 				children: Promise<TraceProcess<'begin'>>[]
 		  }>
@@ -407,6 +409,7 @@ export type TraceHandler<
 				| 'beforeHandle'
 				| 'handle'
 				| 'afterHandle'
+				| 'error'
 				| 'response']: Promise<TraceProcess<'begin'>>
 		} & {
 			store: Decorators['store']

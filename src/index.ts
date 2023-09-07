@@ -597,12 +597,7 @@ export default class Elysia<
 		Routes
 	>
 
-	error<
-		const NewErrors extends Record<
-			string,
-			Error
-		>
-	>(
+	error<const NewErrors extends Record<string, Error>>(
 		mapper: (decorators: Definitions['error']) => NewErrors
 	): Elysia<
 		BasePath,

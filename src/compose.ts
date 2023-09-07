@@ -357,7 +357,8 @@ export const composeHandler = ({
 		transform: traceLiteral.some((x) => isFnUse('transform', x)),
 		handle: traceLiteral.some((x) => isFnUse('handle', x)),
 		beforeHandle: traceLiteral.some((x) => isFnUse('beforeHandle', x)),
-		afterHandle: traceLiteral.some((x) => isFnUse('afterHandle', x))
+		afterHandle: traceLiteral.some((x) => isFnUse('afterHandle', x)),
+		error: hasErrorHandler || traceLiteral.some((x) => isFnUse('error', x))
 	}
 
 	const hasTrace = hooks.trace.length
@@ -368,7 +369,7 @@ export const composeHandler = ({
 	fnLiteral += hasErrorHandler ? 'try {\n' : ''
 
 	const lifeCycleLiteral =
-		validator || (method !== 'GET' && method !== "HEAD")
+		validator || (method !== 'GET' && method !== 'HEAD')
 			? [
 					handler,
 					...hooks.transform,
@@ -532,6 +533,10 @@ export const composeHandler = ({
 			if (hooks.parse.length) {
 				fnLiteral += `let used = false\n`
 
+				const endUnit = report('parse', {
+					unit: hooks.parse.length
+				})
+
 				for (let i = 0; i < hooks.parse.length; i++) {
 					const name = `bo${i}`
 
@@ -545,6 +550,8 @@ export const composeHandler = ({
 
 					if (i !== 0) fnLiteral += `}`
 				}
+
+				endUnit()
 
 				fnLiteral += `if (!used)`
 			}
@@ -638,8 +645,11 @@ export const composeHandler = ({
 	}
 
 	if (validator.body) {
-		// @ts-ignore
-		const numericProperties = findElysiaMeta('Numeric', validator.body.schema)
+		const numericProperties = findElysiaMeta(
+			'Numeric',
+			// @ts-ignore
+			validator.body.schema
+		)
 
 		if (numericProperties) {
 			switch (typeof numericProperties) {
@@ -910,32 +920,47 @@ export const composeHandler = ({
 
 	if (hasErrorHandler || handleResponse) {
 		fnLiteral += `
-} catch(error) {
-	${maybeAsync ? '' : 'return (async () => {'}
-		const set = c.set
+} catch(error) {`
+
+		if (!maybeAsync) fnLiteral += `return (async () => {`
+
+		fnLiteral += `const set = c.set
 
 		if (!set.status || set.status < 300) set.status = 500
+	`
 
-		${
-			hooks.error.length
-				? `for (let i = 0; i < handleErrors.length; i++) {
-				let handled = handleErrors[i]({
+		const endError = report('error', {
+			unit: hooks.error.length
+		})
+		if (hooks.error.length) {
+			fnLiteral += `for (let i = 0; i < handleErrors.length; i++) {\n`
+
+			const endUnit = report('error.unit')
+
+			fnLiteral += `\nlet handled = handleErrors[i]({
 					request: c.request,
 					error: error,
 					set,
 					code: error.code ?? error[ERROR_CODE] ?? "UNKNOWN"
 				})
-				if (handled instanceof Promise) handled = await handled
+				if (handled instanceof Promise) handled = await handled\n`
 
-				const response = mapEarlyResponse(handled, set)
-				if (response) return response
-			}`
-				: ''
+			endUnit()
+
+			fnLiteral += `const response = mapEarlyResponse(handled, set)\n`
+			fnLiteral += `if (response) {`
+			endError()
+			fnLiteral += `return response }\n`
+			fnLiteral += `}\n`
 		}
 
-		return handleError(c.request, error, set)
-	${maybeAsync ? '' : '})()'}
-}`
+		endError()
+
+		fnLiteral += `return handleError(c.request, error, set)`
+
+		if (!maybeAsync) fnLiteral += '})()'
+
+		fnLiteral += '}'
 
 		if (handleResponse || hasTrace) {
 			fnLiteral += ` finally { `
@@ -1089,7 +1114,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
 
-	return function(request) {
+	return function map(request) {
 	`
 
 	const traceLiteral = app.event.trace.map((x) => x.toString())
@@ -1142,7 +1167,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 				fnLiteral += `if(response) return response\n`
 			} else {
-				fnLiteral += `mapEarlyResponse(onRequest[${i}](ctx), ctx.set);`
+				fnLiteral += `onRequest[${i}](ctx)`
 				endUnit()
 			}
 		}

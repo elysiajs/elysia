@@ -1,15 +1,21 @@
 import { Elysia } from '../src'
 
-new Elysia().get('/', ({ cookie }) => {
-	// Get
-	cookie.name
-
-	// Set
-	cookie.name = 'Noa'
-
-	// Set Multiple
-	cookie.name = [...cookie.name, 'Noa']
-
-	// Remove Cookie
-	delete cookie.name
-})
+const app = new Elysia()
+	.trace(async ({ error }) => {
+	})
+	.get(
+		'/',
+		() => {
+			throw new Error('A')
+		},
+		{
+			error: [
+				function a({ set }) {
+					set.status = "I'm a teapot"
+					return 'B'
+				},
+				function b() {}
+			]
+		}
+	)
+	.listen(3000)

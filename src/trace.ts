@@ -16,88 +16,78 @@ export const createTraceListener = (
 			const createSignal = () => {
 				let resolveHandle: (value: TraceProcess<'begin'>) => void
 				let resolveHandleEnd: (value: TraceProcess<'end'>) => void
-				let rejectHandle: (value: void) => void
-				let rejectHandleEnd: (value: void) => void
 
-				const children: ((stream: TraceProcess<'begin'>) => void)[] = []
-				const childrenReject: (() => void)[] = []
-				let endChild:
-					| ((stream: TraceProcess<'end'>) => void)
-					| undefined = undefined
-				let childIteration = 0
+				let childIteration = -1
+				const children: ((value: TraceProcess<'begin'>) => void)[] = []
+				const endChildren: ((value: TraceProcess<'end'>) => void)[] = []
 
 				let resolved = false
-				const handle = new Promise<TraceProcess<'begin'>>(
-					(resolve, reject) => {
-						rejectHandle = () => {
-							if (resolved) return
-							else resolved = true
+				const handle = new Promise<TraceProcess<'begin'>>((resolve) => {
+					resolveHandle = (a) => {
+						if (resolved) return
+						else resolved = true
 
-							for (
-								;
-								childIteration < childrenReject.length;
-								childIteration++
-							)
-								childrenReject[childIteration]()
-
-							reject()
-						}
-						resolveHandle = (a) => {
-							if (resolved) return
-							else resolved = true
-
-							resolve(a)
-						}
+						resolve(a)
 					}
-				).catch((error) => {
-					throw error
 				})
 
 				let resolvedEnd = false
 				const handleEnd = new Promise<TraceProcess<'end'>>(
-					(resolve, reject) => {
-						rejectHandleEnd = () => {
-							if (resolvedEnd) return
-							else resolvedEnd = true
-
-							for (
-								;
-								childIteration < childrenReject.length;
-								childIteration++
-							)
-								childrenReject[childIteration]()
-
-							reject()
-						}
+					(resolve) => {
 						resolveHandleEnd = (a) => {
 							if (resolvedEnd) return
 							else resolvedEnd = true
 
+							if (childIteration === -1) childIteration = 0
+							for (
+								;
+								childIteration < endChildren.length;
+								childIteration++
+							) {
+								// eslint-disable-next-line prefer-const
+								let end: TraceProcess<'end'>
+								const start: TraceProcess<'begin'> = {
+									name: 'anonymous',
+									time: performance.now(),
+									skip: true,
+									end: new Promise<TraceProcess<'end'>>(
+										(resolve) => {
+											resolve(end)
+										}
+									),
+									children: []
+								}
+
+								end = performance.now()
+
+								children[childIteration + 1](start)
+							}
+
 							resolve(a)
 						}
 					}
-				).catch((error) => {
-					throw error
-				})
+				)
 
 				return {
 					signal: handle,
 					consumeChild(event: TraceStream) {
+						console.log(event)
+
 						switch (event.type) {
 							case 'begin':
-								children[childIteration++]({
+								children[++childIteration]({
 									name: event.name,
 									time: event.time,
 									end: new Promise<TraceProcess<'end'>>(
 										(resolve) => {
-											endChild = resolve
+											endChildren.push(resolve)
 										}
 									)
 								} as TraceProcess<'begin'>)
 								break
 
 							case 'end':
-								endChild?.(event.time)
+								endChildren[childIteration](event.time)
 								break
 						}
 					},
@@ -116,27 +106,22 @@ export const createTraceListener = (
 										  ) => void)
 										| undefined
 
-									let rejectChild: (() => void) | undefined
-
 									unitsProcess.push(
 										new Promise<TraceProcess<'begin'>>(
-											(resolve, reject) => {
+											(resolve) => {
 												resolveChild = resolve as any
-												rejectChild = reject
 											}
-										).catch((error) => {
-											throw error
-										}) as any
+										)
 									)
 
 									children.push(resolveChild!)
-									childrenReject.push(rejectChild!)
 								}
 
 								resolveHandle({
 									// Begin always have name
 									name: event.name!,
 									time: event.time,
+									skip: false,
 									end: handleEnd as any,
 									children: unitsProcess
 								} satisfies TraceProcess<'begin'>)
@@ -149,11 +134,25 @@ export const createTraceListener = (
 								break
 						}
 					},
-					reject() {
+					resolve() {
 						if (resolved && resolvedEnd) return
 
-						rejectHandle()
-						rejectHandleEnd()
+						// eslint-disable-next-line prefer-const
+						let end: TraceProcess<'end'>
+						const start: TraceProcess<'begin'> = {
+							name: 'anonymous',
+							time: performance.now(),
+							skip: true,
+							end: new Promise<TraceProcess<'end'>>((resolve) => {
+								resolve(end)
+							}),
+							children: []
+						}
+
+						end = performance.now()
+
+						resolveHandle(start)
+						resolveHandleEnd(end)
 					}
 				}
 			}
@@ -164,6 +163,7 @@ export const createTraceListener = (
 			const beforeHandle = createSignal()
 			const handle = createSignal()
 			const afterHandle = createSignal()
+			const error = createSignal()
 			const response = createSignal()
 
 			request.consume(event)
@@ -215,14 +215,23 @@ export const createTraceListener = (
 							afterHandle.consumeChild(event)
 							break
 
+						case 'error':
+							error.consume(event)
+							break
+
+						case 'error.unit':
+							error.consumeChild(event)
+							break
+
 						case 'response':
 							if (event.type === 'begin') {
-								request.reject()
-								parse.reject()
-								transform.reject()
-								beforeHandle.reject()
-								handle.reject()
-								afterHandle.reject()
+								request.resolve()
+								parse.resolve()
+								transform.resolve()
+								beforeHandle.resolve()
+								handle.resolve()
+								afterHandle.resolve()
+								error.resolve()
 							} else reporter.off('event', reducer)
 
 							response.consume(event)
@@ -251,6 +260,7 @@ export const createTraceListener = (
 				beforeHandle: beforeHandle.signal as any,
 				handle: handle.signal as any,
 				afterHandle: afterHandle.signal as any,
+				error: error.signal,
 				response: response.signal as any
 			})
 		}

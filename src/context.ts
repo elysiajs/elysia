@@ -34,6 +34,7 @@ export type Context<
 			headers: Record<string, string>
 			status?: number | HTTPStatusName
 			redirect?: string
+			cookie: Record<string, string>
 		}
 
 		path: string
