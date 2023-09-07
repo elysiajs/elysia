@@ -1,92 +1,159 @@
-import type { CookieSerializeOptions } from 'cookie'
 import type { MaybeArray } from './types'
+import type { CookieSerializeOptions } from 'cookie'
 
-type MutateCookie = CookieSerializeOptions & { value?: string } extends infer A
-	? A | ((previous: A) => A)
-	: never
-
-type Cookie = MaybeArray<string> & {
-	property?: CookieSerializeOptions
-	add?(option: MutateCookie): Cookie
-	set?(option: MutateCookie): Cookie
-}
+type MutateCookie<T extends MaybeArray<string> | undefined> =
+	CookieSerializeOptions & {
+		value?: T
+	} extends infer A
+		? A | ((previous: A) => A)
+		: never
 
 type CookieJar = Record<string, Cookie | null>
 
-const createCookie = (
-	store: CookieJar,
-	key: string,
-	initial: string | string[],
-	property: CookieSerializeOptions = {}
-): Cookie => {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	return Object.assign(initial as any, {
-		get property() {
-			return property
-		},
-		add(config: CookieSerializeOptions & { value?: string }) {
-			property = Object.assign(property, config)
+class Cookie<const T extends string | string[] = string | string[]>
+	implements Omit<CookieSerializeOptions, 'encode'>
+{
+	constructor(
+		public value: T,
+		public property: Omit<CookieSerializeOptions, 'encode'> = {}
+	) {}
 
-			return (store[key] = createCookie(
-				store,
-				key,
-				config.value ?? initial,
-				property
-			))
-		},
-		set(config: CookieSerializeOptions & { value?: string }) {
-			property = config
+	add<const T extends string>(config: MutateCookie<T>): Cookie<T> {
+		config = Object.assign(
+			this.property,
+			typeof config === 'function'
+				? config(Object.assign(this.property, this.value) as any)
+				: config
+		)
 
-			return (store[key] = createCookie(
-				store,
-				key,
-				config.value ?? initial,
-				config
-			))
-		}
-	})
+		if (config.value !== undefined) this.value = config.value as any
+		delete config.value
+
+		this.property = config
+
+		return this as any
+	}
+
+	push<const New extends string | string[]>(
+		value: New
+	): Cookie<
+		[...(T extends any[] ? T : [T]), ...(New extends any[] ? New : [New])]
+	> {
+		this.value = Array.isArray(this.value)
+			? ([...this.value, ...value] as any)
+			: ([this.value, ...value] as any)
+
+		return this as any
+	}
+
+	set<const T extends string>(config: MutateCookie<T>): Cookie<T> {
+		config =
+			typeof config === 'function'
+				? config(Object.assign(this.property, this.value) as any)
+				: config
+
+		if (config.value !== undefined) this.value = config.value as any
+		delete config.value
+
+		this.property = config
+
+		return this as any
+	}
+
+	get domain() {
+		return this.property.domain
+	}
+
+	set domain(value) {
+		this.property.domain = value
+	}
+
+	get expires() {
+		return this.property.expires
+	}
+
+	set expires(value) {
+		this.property.expires = value
+	}
+
+	get httpOnly() {
+		return this.property.httpOnly
+	}
+
+	set httpOnly(value) {
+		this.property.httpOnly = value
+	}
+
+	get maxAge() {
+		return this.property.maxAge
+	}
+
+	set maxAge(value) {
+		this.property.maxAge = value
+	}
+
+	get path() {
+		return this.property.path
+	}
+
+	set path(value) {
+		this.property.path = value
+	}
+
+	get priority() {
+		return this.property.priority
+	}
+
+	set priority(value) {
+		this.property.priority = value
+	}
+
+	get sameSite() {
+		return this.property.sameSite
+	}
+
+	set sameSite(value) {
+		this.property.sameSite = value
+	}
+
+	get secure() {
+		return this.property.secure
+	}
+
+	set secure(value) {
+		this.property.secure = value
+	}
+
+	toString() {
+		return this.value
+	}
 }
 
-const cookie = new Proxy({} as CookieJar, {
-	set(target, key, value) {
-		if (value !== undefined)
-			target[key as keyof typeof target] = createCookie(
-				target,
-				key as keyof typeof target,
-				value,
-				key in target
-					? target[key as keyof typeof target]?.property
-					: undefined
-			)
+export const createCookieJar = () =>
+	new Proxy({} as CookieJar, {
+		deleteProperty(target, key) {
+			if (key in target) delete target[key as keyof typeof target]
 
-		return true
-	},
-	deleteProperty(target, key) {
-		if (key in target) delete target[key as keyof typeof target]
+			return true
+		}
+	})
 
-		return true
-	}
-})
+const cookie = createCookieJar()
 
-const onlyAllowString = (a: string) => a
 
 // ? Create new cookie
-cookie.a = 'a'
-cookie.a.set!({ maxAge: 10 })
+cookie.session = new Cookie('Himari', { maxAge: 123 })
+	// ? Overwrite value
+	.set({ value: 'Rio', domain: 'millennium.sh' })
+	// ? Append value
+	.add({ httpOnly: true })
+	// ? Convert to multiple values
+	.push('Multiple')
 
-console.log(cookie.a)
+cookie.session.value // Rio
+cookie.session.value = 'Himari'
 
-// Set new cookie value (attribute is persists)
-cookie.a = 'first'
+console.log(cookie.session)
 
-// As multiple cookie value
-cookie.a = [cookie.a, 'second']
-cookie.a.add!({ httpOnly: true })
-
-console.log(cookie.a, cookie.a.property)
-
-// ? Unwrap null and Array and passing to string function
-if (cookie.a && !Array.isArray(cookie.a)) onlyAllowString(cookie.a)
-
-// Remove cookie
+// ! Remove cookie
 delete cookie.a
