@@ -115,8 +115,6 @@ export class Cookie<T = unknown>
 	}
 
 	set maxAge(value) {
-		console.log('SY')
-
 		// @ts-ignore
 		this.property.maxAge = value
 
