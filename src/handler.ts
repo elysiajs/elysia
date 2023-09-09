@@ -1,3 +1,4 @@
+// @ts-ignore
 import { serialize } from 'cookie'
 import { StatusMap } from './utils'
 

@@ -1,7 +1,6 @@
 import { HTTPStatusName } from './utils'
 
-import { Cookie } from './cookie'
-import type { CookieSerializeOptions } from 'cookie'
+import { Cookie, type CookieSerializeOptions } from './cookie'
 
 import type {
 	DecoratorBase,
