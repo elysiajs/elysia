@@ -11,18 +11,6 @@ export interface CookieSerializeOptions {
 	domain?: string | undefined
 
 	/**
-	 * Specifies a function that will be used to encode a cookie's value. Since
-	 * value of a cookie has a limited character set (and must be a simple
-	 * string), this function can be used to encode a value into a string suited
-	 * for a cookie's value.
-	 *
-	 * The default function is the global `encodeURIComponent`, which will
-	 * encode a JavaScript string into UTF-8 byte sequences and then URL-encode
-	 * any that fall outside of the cookie range.
-	 */
-	encode?(value: string): string
-
-	/**
 	 * Specifies the `Date` object to be the value for the {@link https://tools.ietf.org/html/rfc6265#section-5.2.1|`Expires` `Set-Cookie` attribute}. By default,
 	 * no expiration is set, and most clients will consider this a "non-persistent cookie" and will delete
 	 * it on a condition like exiting a web browser application.
@@ -101,7 +89,7 @@ export interface CookieSerializeOptions {
 	secure?: boolean | undefined
 }
 
-type MutateCookie<T = unknown> = Omit<CookieSerializeOptions, 'encode'> & {
+type MutateCookie<T = unknown> = CookieSerializeOptions & {
 	value?: T
 } extends infer A
 	? A | ((previous: A) => A)
@@ -110,14 +98,14 @@ type MutateCookie<T = unknown> = Omit<CookieSerializeOptions, 'encode'> & {
 type CookieJar = Record<string, Cookie>
 
 export class Cookie<T = unknown>
-	implements Omit<CookieSerializeOptions, 'encode'>
+	implements CookieSerializeOptions
 {
 	public name: string | undefined
 	private setter: Context['set'] | undefined
 
 	constructor(
 		private _value: T,
-		public property: Readonly<Omit<CookieSerializeOptions, 'encode'>> = {}
+		public property: Readonly<CookieSerializeOptions> = {}
 	) {}
 
 	get() {

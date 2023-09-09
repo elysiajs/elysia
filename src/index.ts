@@ -3057,5 +3057,6 @@ export type {
 	ErrorHandler,
 	LifeCycleStore,
 	MaybePromise,
-	ListenCallback
+	ListenCallback,
+	UnwrapSchema
 } from './types'
