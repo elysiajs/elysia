@@ -376,7 +376,7 @@ export type LocalHook<
 				/**
 				 * Catch error
 				 */
-				error?: WithArray<ErrorHandler>
+				error?: WithArray<ErrorHandler<Instance['error']>>
 				/**
 				 * Custom body parser
 				 */
