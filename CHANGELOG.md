@@ -1,3 +1,7 @@
+# 0.6.20 - 9 Sep 2023
+Bug fix:
+- [#107](https://github.com/elysiajs/elysia/issues/107) Elysia handler local hooks not recognizing registered errors on app instance
+
 # 0.6.19 - 7 Sep 2023
 Bug fix:
 - Inherits state and error from plugin instance
