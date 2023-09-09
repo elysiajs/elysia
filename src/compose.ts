@@ -23,6 +23,7 @@ import {
 	TraceEvent,
 	TraceReporter
 } from './types'
+import { parseCookie } from './cookie'
 
 const headersHasToJSON = new Headers().toJSON
 const findAliases = new RegExp(` (\\w+) = context`, 'g')
@@ -392,7 +393,10 @@ export const composeHandler = ({
 
 	const hasCookie =
 		validator.headers ||
-		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
+		lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
+
+	if (hasCookie)
+		fnLiteral += `\nc.cookie = parseCookie(c.set, c.request.headers.get('cookie'))\n`
 
 	if (hasHeaders) {
 		// This function is Bun specific
@@ -423,6 +427,7 @@ export const composeHandler = ({
 
 	const hasSet =
 		hasTraceSet ||
+		hasCookie ||
 		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
 		onRequest.some((fn) => isFnUse('set', fn.toString()))
 
@@ -1020,7 +1025,8 @@ export const composeHandler = ({
 		definitions,
 		ERROR_CODE,
 		reporter,
-		requestId
+		requestId,
+		parseCookie
 	} = hooks
 
 	${
@@ -1058,7 +1064,8 @@ export const composeHandler = ({
 		definitions,
 		ERROR_CODE,
 		reporter,
-		requestId
+		requestId,
+		parseCookie
 	})
 }
 

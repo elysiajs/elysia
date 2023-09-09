@@ -1,12 +1,14 @@
 import { HTTPStatusName } from './utils'
 
+import { Cookie } from './cookie'
+import type { CookieSerializeOptions } from 'cookie'
+
 import type {
 	DecoratorBase,
 	RouteSchema,
 	Prettify,
 	GetPathParameter
 } from './types'
-import { CookieSerializeOptions } from 'cookie'
 
 export type Context<
 	Route extends RouteSchema = RouteSchema,
@@ -30,7 +32,7 @@ export type Context<
 			? Record<string, string | null>
 			: Route['headers']
 
-		cookie: Record<string, string | string[]>
+		cookie: Record<string, Cookie<any>>
 		set: {
 			headers: Record<string, string> & {
 				'Set-Cookie'?: string | string[]
@@ -41,7 +43,7 @@ export type Context<
 				string,
 				Prettify<
 					{
-						value: string | string[]
+						value: string
 					} & CookieSerializeOptions
 				>
 			>

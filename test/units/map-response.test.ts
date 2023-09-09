@@ -290,7 +290,7 @@ describe('Map Response', () => {
 			},
 			cookie: {
 				name: {
-					value: ['hina', 'iori']
+					value: 'hina'
 				},
 				affiliation: {
 					value: 'gehenna'
@@ -301,7 +301,7 @@ describe('Map Response', () => {
 		expect(await response.text()).toEqual('Hina')
 		expect(response.headers.toJSON()).toEqual({
 			name: 'Sorasaki Hina',
-			'Set-Cookie': ['name=hina,name=iori,affiliation=gehenna']
+			'Set-Cookie': ['name=hina', 'affiliation=gehenna']
 		})
 	})
 })

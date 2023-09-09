@@ -2,6 +2,7 @@ import { serialize } from 'cookie'
 import { StatusMap } from './utils'
 
 import type { Context } from './context'
+import { Cookie } from './cookie'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -65,7 +66,12 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
+	if (
+		isNotEmpty(set.headers) ||
+		set.status !== 200 ||
+		set.redirect ||
+		set.cookie
+	) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
 			set.status = 302
@@ -80,8 +86,7 @@ export const mapResponse = (
 		)
 			set.headers = parseSetCookies(
 				new Headers(set.headers),
-				// @ts-ignore
-				set.headers['Cookie']
+				set.headers['Set-Cookie']
 			) as any
 
 		if (typeof set.status === 'string') set.status = StatusMap[set.status]
@@ -136,6 +141,12 @@ export const mapResponse = (
 					set as SetResponse
 				)
 
+			case 'Cookie':
+				if (response instanceof Cookie)
+					return new Response(response.value, set as SetResponse)
+
+				return new Response(response?.toString(), set as SetResponse)
+
 			default:
 				const r = JSON.stringify(response)
 				if (r.charCodeAt(0) === 123) {
@@ -177,7 +188,7 @@ export const mapResponse = (
 				return response as Response
 
 			case 'Error':
-				return mapResponse(errorToResponse(response as Error), set)
+				return errorToResponse(response as Error, set)
 
 			case 'Promise':
 				// @ts-ignore
@@ -196,6 +207,12 @@ export const mapResponse = (
 			case 'Number':
 			case 'Boolean':
 				return new Response((response as number | boolean).toString())
+
+			case 'Cookie':
+				if (response instanceof Cookie)
+					return new Response(response.value, set as SetResponse)
+
+				return new Response(response?.toString(), set as SetResponse)
 
 			default:
 				const r = JSON.stringify(response)
@@ -216,7 +233,12 @@ export const mapEarlyResponse = (
 ): Response | undefined => {
 	if (response === undefined || response === null) return
 
-	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
+	if (
+		isNotEmpty(set.headers) ||
+		set.status !== 200 ||
+		set.redirect ||
+		set.cookie
+	) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
 			set.status = 302
@@ -231,8 +253,7 @@ export const mapEarlyResponse = (
 		)
 			set.headers = parseSetCookies(
 				new Headers(set.headers),
-				// @ts-ignore
-				set.headers['Cookie']
+				set.headers['Set-Cookie']
 			) as any
 
 		if (typeof set.status === 'string') set.status = StatusMap[set.status]
@@ -297,6 +318,12 @@ export const mapEarlyResponse = (
 					set as SetResponse
 				)
 
+			case 'Cookie':
+				if (response instanceof Cookie)
+					return new Response(response.value, set as SetResponse)
+
+				return new Response(response?.toString(), set as SetResponse)
+
 			default:
 				const r = JSON.stringify(response)
 				if (r.charCodeAt(0) === 123) {
@@ -356,6 +383,12 @@ export const mapEarlyResponse = (
 			case 'Number':
 			case 'Boolean':
 				return new Response((response as number | boolean).toString())
+
+			case 'Cookie':
+				if (response instanceof Cookie)
+					return new Response(response.value, set as SetResponse)
+
+				return new Response(response?.toString(), set as SetResponse)
 
 			default:
 				const r = JSON.stringify(response)
@@ -438,7 +471,7 @@ export const errorToResponse = (error: Error, set?: Context['set']) =>
 			cause: error?.cause
 		}),
 		{
-			status: set?.status ? (set.status as number) : 500,
+			status: set?.status !== 200 ? (set?.status as number) ?? 500 : 500,
 			headers: set?.headers
 		}
 	)

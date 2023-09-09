@@ -8,7 +8,7 @@ const create = () => {
 		headers: {}
 	}
 
-	const cookie = createCookieJar(set)
+	const cookie = createCookieJar({}, set)
 
 	return {
 		cookie,
@@ -16,12 +16,12 @@ const create = () => {
 	}
 }
 
-describe('Create Cookie Jar', () => {
+describe('Explicit Cookie', () => {
 	it('create cookie', () => {
 		const { cookie, set } = create()
 		cookie.name = new Cookie('himari')
 
-		expect(set.cookie.name).toEqual({
+		expect(set.cookie?.name).toEqual({
 			value: 'himari'
 		})
 	})
@@ -34,7 +34,7 @@ describe('Create Cookie Jar', () => {
 			domain: 'millennium.sh'
 		})
 
-		expect(set.cookie.name).toEqual({
+		expect(set.cookie?.name).toEqual({
 			value: 'himari',
 			domain: 'millennium.sh'
 		})
@@ -49,7 +49,7 @@ describe('Create Cookie Jar', () => {
 			path: '/'
 		})
 
-		expect(set.cookie.name).toEqual({
+		expect(set.cookie?.name).toEqual({
 			value: 'himari',
 			domain: 'millennium.sh',
 			httpOnly: true,
@@ -68,7 +68,7 @@ describe('Create Cookie Jar', () => {
 			path: '/'
 		})
 
-		expect(set.cookie.name).toEqual({
+		expect(set.cookie?.name).toEqual({
 			value: 'himari',
 			httpOnly: true,
 			path: '/'
@@ -84,7 +84,7 @@ describe('Create Cookie Jar', () => {
 			domain: 'gehenna.sh'
 		})
 
-		expect(set.cookie.name).toEqual({
+		expect(set.cookie?.name).toEqual({
 			value: 'aru',
 			domain: 'gehenna.sh',
 			httpOnly: true
@@ -95,7 +95,7 @@ describe('Create Cookie Jar', () => {
 		const { cookie, set } = create()
 		cookie.name = new Cookie('')
 
-		expect(set.cookie.name).toEqual({ value: '' })
+		expect(set.cookie?.name).toEqual({ value: '' })
 	})
 
 	it('Overwrite existing cookie', () => {
@@ -103,16 +103,16 @@ describe('Create Cookie Jar', () => {
 		cookie.name = new Cookie('aru')
 		cookie.name = new Cookie('himari')
 
-		expect(set.cookie.name).toEqual({ value: 'himari' })
+		expect(set.cookie?.name).toEqual({ value: 'himari' })
 	})
 
-	it('Overwrite existing cookie', () => {
+	it('Remove cookie', () => {
 		const { cookie, set } = create()
+
 		cookie.name = new Cookie('himari')
+		cookie.name.remove()
 
-		delete cookie.name
-
-		expect(set.cookie.name.expires?.getTime()).toBeLessThanOrEqual(
+		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
 			Date.now()
 		)
 	})

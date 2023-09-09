@@ -1,79 +1,80 @@
 import type { Context } from './context'
 import { parse, type CookieSerializeOptions } from 'cookie'
 
-import type { MaybeArray } from './types'
+type MutateCookie<T = unknown> = Omit<CookieSerializeOptions, 'encode'> & {
+	value?: T
+} extends infer A
+	? A | ((previous: A) => A)
+	: never
 
-type MutateCookie<T extends MaybeArray<string> | undefined> =
-	CookieSerializeOptions & {
-		value?: T
-	} extends infer A
-		? A | ((previous: A) => A)
-		: never
+type CookieJar = Record<string, Cookie>
 
-type CookieJar = Record<string, Cookie | null>
-
-export class Cookie<const T extends string = string>
+export class Cookie<T = unknown>
 	implements Omit<CookieSerializeOptions, 'encode'>
 {
 	public name: string | undefined
 	private setter: Context['set'] | undefined
 
 	constructor(
-		public value: T,
+		private _value: T,
 		public property: Readonly<Omit<CookieSerializeOptions, 'encode'>> = {}
 	) {}
 
-	add<const T extends string>(config: MutateCookie<T>): Cookie<T> {
-		config = Object.assign(
+	get() {
+		return this._value
+	}
+
+	get value(): T {
+		return this._value as any
+	}
+
+	set value(value: string) {
+		if (this.value === value) return
+
+		this._value = value as any
+
+		this.sync()
+	}
+
+	add<T>(config: MutateCookie<T>): Cookie<T> {
+		const updated = Object.assign(
 			this.property,
 			typeof config === 'function'
 				? config(Object.assign(this.property, this.value) as any)
 				: config
 		)
 
-		if (config.value !== undefined) this.value = config.value as any
-		delete config.value
+		if ('value' in updated) {
+			this._value = updated.value as any
 
-		this.property = config
-
-		this.sync()
-
-		return this as any
-	}
-
-	push<const New extends string | string[]>(
-		value: New
-	): Cookie<
-		[...(T extends any[] ? T : [T]), ...(New extends any[] ? New : [New])]
-	> {
-		if (Array.isArray(this.value)) {
-			if (Array.isArray(value))
-				this.value = this.value.concat(value) as any
-			else this.value.push(value)
-		} else {
-			if (Array.isArray(value)) this.value = [this.value, ...value] as any
-			else this.value = [this.value, value] as any
+			delete updated.value
 		}
 
-		this.sync()
-
-		return this as any
+		this.property = updated
+		return this.sync() as any
 	}
 
-	set<const T extends string>(config: MutateCookie<T>): Cookie<T> {
-		config =
+	set<T>(config: MutateCookie): Cookie<T> {
+		const updated =
 			typeof config === 'function'
 				? config(Object.assign(this.property, this.value) as any)
 				: config
 
-		if (config.value !== undefined) this.value = config.value as any
-		delete config.value
+		if ('value' in updated) {
+			this._value = updated.value as any
 
-		this.property = config
+			delete updated.value
+		}
 
-		this.sync()
+		this.property = updated
+		return this.sync() as any
+	}
 
-		return this as any
+	remove() {
+		this.set({
+			value: '' as any,
+			expires: new Date()
+		})
 	}
 
 	get domain() {
@@ -114,6 +115,8 @@ export class Cookie<const T extends string = string>
 	}
 
 	set maxAge(value) {
+		console.log('SY')
+
 		// @ts-ignore
 		this.property.maxAge = value
 
@@ -165,22 +168,43 @@ export class Cookie<const T extends string = string>
 	}
 
 	toString() {
-		return this.value
+		return typeof this.value === 'object'
+			? JSON.stringify(this.value)
+			: this.value?.toString() ?? ''
 	}
 
 	private sync() {
 		if (!this.name || !this.setter) return this
 
-		this.setter.cookie![this.name] = Object.assign(this.property, {
-			value: this.value
-		})
+		if (!this.setter.cookie)
+			this.setter.cookie = {
+				[this.name]: Object.assign(this.property, {
+					value: this.toString()
+				})
+			}
+		else
+			this.setter.cookie[this.name] = Object.assign(this.property, {
+				value: this.toString()
+			})
 
 		return this
 	}
 }
 
-export const createCookieJar = (set: Context['set']) =>
-	new Proxy({} as CookieJar, {
+export const createCookieJar = (initial: CookieJar, set: Context['set']) =>
+	new Proxy(initial as CookieJar, {
+		get(target, key: string) {
+			if (key in target) return target[key]
+
+			// @ts-ignore
+			const cookie = new Cookie(undefined)
+			// @ts-ignore
+			cookie.setter = set
+			cookie.name = key
+
+			// @ts-ignore
+			return cookie
+		},
 		set(target, key: string, value) {
 			if (!(value instanceof Cookie)) return false
 
@@ -196,30 +220,24 @@ export const createCookieJar = (set: Context['set']) =>
 			target[key] = value
 
 			return true
-		},
-		deleteProperty(target, key) {
-			if (key in target) delete target[key as keyof typeof target]
-
-			if (set.cookie && key in set.cookie)
-				set.cookie[key as keyof typeof set.cookie] = {
-					value: '',
-					expires: new Date()
-				}
-
-			return true
 		}
 	})
 
-export const parseCookie = (headers: Headers) => {
-	const cookie = headers.get('cookie')
+export const parseCookie = (set: Context['set'], cookieString?: string) => {
+	if (!cookieString) return createCookieJar({}, set)
 
-	if (!cookie) return {}
+	const jar: CookieJar = {}
 
-	return parse(cookie)
+	for (const [key, value] of Object.entries(parse(cookieString))) {
+		const cookie = new Cookie(value)
+
+		// @ts-ignore
+		cookie.setter = set
+		// @ts-ignore
+		cookie.name = key
+
+		jar[key] = cookie
+	}
+
+	return createCookieJar(jar, set)
 }
-
-const a = parseCookie(new Headers({
-	"cookie": "a=b;a=c;c=d"
-}))
-
-console.log(a)
