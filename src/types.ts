@@ -340,8 +340,9 @@ export type AfterHandler<
 	context: infer Context
 ) => infer Returned
 	? (
-			context: Context,
-			response: Route['response']
+			context: Prettify<{
+				response: Route['response']
+			} & Context>
 	  ) => Returned | MaybePromise<void>
 	: never
 

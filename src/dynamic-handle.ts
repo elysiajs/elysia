@@ -25,6 +25,7 @@ export const createDynamicHandler =
 	(app: Elysia<any, any, any, any, any>) =>
 	async (request: Request): Promise<Response> => {
 		const set: Context['set'] = {
+			cookie: {},
 			status: 200,
 			headers: {}
 		}
@@ -219,10 +220,17 @@ export const createDynamicHandler =
 
 				// `false` is a falsey value, check for undefined instead
 				if (response !== undefined) {
+					;(
+						context as Context & {
+							response: unknown
+						}
+					).response = response
+
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						let newResponse = hooks.afterHandle[i](
-							context,
-							response
+							context as Context & {
+								response: unknown
+							}
 						)
 						if (newResponse instanceof Promise)
 							newResponse = await newResponse
@@ -247,9 +255,19 @@ export const createDynamicHandler =
 						responseValidator,
 						response
 					)
-			} else
+			} else {
+				;(
+					context as Context & {
+						response: unknown
+					}
+				).response = response
+
 				for (let i = 0; i < hooks.afterHandle.length; i++) {
-					let newResponse = hooks.afterHandle[i](context, response)
+					let newResponse = hooks.afterHandle[i](
+						context as Context & {
+							response: unknown
+						}
+					)
 					if (newResponse instanceof Promise)
 						newResponse = await newResponse
 
@@ -268,6 +286,7 @@ export const createDynamicHandler =
 						return result
 					}
 				}
+			}
 
 			return mapResponse(response, context.set)
 		} catch (error) {
@@ -289,6 +308,7 @@ export const createDynamicErrorHandler =
 		request: Request,
 		error: ElysiaErrors,
 		set: Context['set'] = {
+			cookie: {},
 			headers: {}
 		}
 	) => {

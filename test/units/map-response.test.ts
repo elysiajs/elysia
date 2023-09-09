@@ -254,13 +254,54 @@ describe('Map Response', () => {
 			cookie: {}
 		})
 		expect(response).toBeInstanceOf(Response)
+		expect(response.status).toBe(302)
 		expect(await response.text()).toEqual('Shiroko')
 		expect(response.headers.toJSON()).toEqual({
 			name: 'Sorasaki Hina',
 			location: 'https://cunny.school'
 		})
+	})
 
+	it('set cookie', async () => {
+		const response = mapResponse('Hina', {
+			status: 200,
+			headers: {
+				Name: 'Sorasaki Hina'
+			},
+			cookie: {
+				name: {
+					value: 'hina'
+				}
+			}
+		})
 		expect(response).toBeInstanceOf(Response)
-		expect(response.status).toBe(302)
+		expect(await response.text()).toEqual('Hina')
+		expect(response.headers.toJSON()).toEqual({
+			name: 'Sorasaki Hina',
+			'Set-Cookie': ['name=hina']
+		})
+	})
+
+	it('set multiple cookie', async () => {
+		const response = mapResponse('Hina', {
+			status: 200,
+			headers: {
+				Name: 'Sorasaki Hina'
+			},
+			cookie: {
+				name: {
+					value: ['hina', 'iori']
+				},
+				affiliation: {
+					value: 'gehenna'
+				}
+			}
+		})
+		expect(response).toBeInstanceOf(Response)
+		expect(await response.text()).toEqual('Hina')
+		expect(response.headers.toJSON()).toEqual({
+			name: 'Sorasaki Hina',
+			'Set-Cookie': ['name=hina,name=iori,affiliation=gehenna']
+		})
 	})
 })

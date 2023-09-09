@@ -1,8 +1,13 @@
+import { serialize } from 'cookie'
 import { StatusMap } from './utils'
 
 import type { Context } from './context'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
+
+type SetResponse = Omit<Context['set'], 'status'> & {
+	status: number
+}
 
 export const isNotEmpty = (obj: Object) => {
 	for (const x in obj) return true
@@ -10,22 +15,50 @@ export const isNotEmpty = (obj: Object) => {
 	return false
 }
 
-export const parseSetCookies = (
-	headers: Headers,
-	setCookie: NonNullable<Context['cookie']>
-) => {
-	for (const [cookie, value] of Object.entries(setCookie)) {
-		const values = Array.isArray(value) ? value : [value]
+export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
+	if (!headers || !Array.isArray(setCookie)) return headers
 
-		for (const data of values)
-			headers.append('Set-Cookie', `${cookie}=${data}`)
+	headers.delete('Set-Cookie')
+
+	for (let i = 0; i < setCookie.length; i++) {
+		const index = setCookie[i].indexOf('=')
+
+		headers.append(
+			'Set-Cookie',
+			`${setCookie[i].slice(0, index)}=${setCookie[i].slice(index + 1)}`
+		)
 	}
 
 	return headers
 }
 
-type SetResponse = Omit<Context['set'], 'status'> & {
-	status: number
+export const cookieToHeader = (cookies: Context['set']['cookie']) => {
+	if (!cookies || typeof cookies !== 'object' || !isNotEmpty(cookies))
+		return undefined
+
+	const set: string[] = []
+
+	for (const [key, property] of Object.entries(cookies)) {
+		if (!key || !property) continue
+
+		if (Array.isArray(property.value)) {
+			for (let i = 0; i < property.value.length; i++) {
+				const value = property.value[i]
+				if (value === undefined || value === null) continue
+
+				set.push(serialize(key, value, property))
+			}
+		} else {
+			const value = property.value
+			if (value === undefined || value === null) continue
+
+			set.push(serialize(key, property.value, property))
+		}
+	}
+
+	if (set.length === 0) return undefined
+
+	return set
 }
 
 export const mapResponse = (
@@ -38,7 +71,13 @@ export const mapResponse = (
 			set.status = 302
 		}
 
-		if (set.headers['Set-Cookie'])
+		if (set.cookie && isNotEmpty(set.cookie))
+			set.headers['Set-Cookie'] = cookieToHeader(set.cookie)
+
+		if (
+			set.headers['Set-Cookie'] &&
+			Array.isArray(set.headers['Set-Cookie'])
+		)
 			set.headers = parseSetCookies(
 				new Headers(set.headers),
 				// @ts-ignore
@@ -175,7 +214,7 @@ export const mapEarlyResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response | undefined => {
-	if(response === undefined || response === null) return
+	if (response === undefined || response === null) return
 
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
 		if (set.redirect) {
@@ -183,10 +222,17 @@ export const mapEarlyResponse = (
 			set.status = 302
 		}
 
-		if (set.headers['Set-Cookie'])
+		if (set.cookie && isNotEmpty(set.cookie))
+			set.headers['Set-Cookie'] = cookieToHeader(set.cookie)
+
+		if (
+			set.headers['Set-Cookie'] &&
+			Array.isArray(set.headers['Set-Cookie'])
+		)
 			set.headers = parseSetCookies(
 				new Headers(set.headers),
-				set.headers['Set-Cookie']
+				// @ts-ignore
+				set.headers['Cookie']
 			) as any
 
 		if (typeof set.status === 'string') set.status = StatusMap[set.status]

@@ -390,6 +390,10 @@ export const composeHandler = ({
 		validator.headers ||
 		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
 
+	const hasCookie =
+		validator.headers ||
+		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
+
 	if (hasHeaders) {
 		// This function is Bun specific
 		// @ts-ignore
@@ -771,6 +775,8 @@ export const composeHandler = ({
 							name: hooks.afterHandle[i].name
 						})
 
+						fnLiteral += `c.response = ${beName}\n`
+
 						if (!returning) {
 							fnLiteral += isAsync(hooks.afterHandle[i])
 								? `await afterHandle[${i}](c, ${beName});\n`
@@ -779,10 +785,10 @@ export const composeHandler = ({
 							const name = `af${i}`
 
 							fnLiteral += isAsync(hooks.afterHandle[i])
-								? `const ${name} = await afterHandle[${i}](c, ${beName});\n`
-								: `const ${name} = afterHandle[${i}](c, ${beName});\n`
+								? `const ${name} = await afterHandle[${i}](c);\n`
+								: `const ${name} = afterHandle[${i}](c);\n`
 
-							fnLiteral += `if(${name} !== undefined) { ${beName} = ${name} }\n`
+							fnLiteral += `if(${name} !== undefined) { c.response = ${beName} = ${name} }\n`
 						}
 
 						endUnit()
@@ -818,6 +824,8 @@ export const composeHandler = ({
 			unit: hooks.afterHandle.length
 		})
 
+		fnLiteral += `c.response = r\n`
+
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const name = `af${i}`
 			const returning = hasReturn(hooks.afterHandle[i].toString())
@@ -828,14 +836,14 @@ export const composeHandler = ({
 
 			if (!returning) {
 				fnLiteral += isAsync(hooks.afterHandle[i])
-					? `await afterHandle[${i}](c, r)\n`
-					: `afterHandle[${i}](c, r)\n`
+					? `await afterHandle[${i}](c)\n`
+					: `afterHandle[${i}](c)\n`
 
 				endUnit()
 			} else {
 				fnLiteral += isAsync(hooks.afterHandle[i])
-					? `let ${name} = await afterHandle[${i}](c, r)\n`
-					: `let ${name} = afterHandle[${i}](c, r)\n`
+					? `let ${name} = await afterHandle[${i}](c)\n`
+					: `let ${name} = afterHandle[${i}](c)\n`
 
 				endUnit()
 
@@ -1136,6 +1144,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 				request,
 				store,
 				set: {
+					cookie: {},
 					headers: {},
 					status: 200
 				}

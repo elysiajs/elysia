@@ -6,6 +6,7 @@ import type {
 	Prettify,
 	GetPathParameter
 } from './types'
+import { CookieSerializeOptions } from 'cookie'
 
 export type Context<
 	Route extends RouteSchema = RouteSchema,
@@ -31,10 +32,19 @@ export type Context<
 
 		cookie: Record<string, string | string[]>
 		set: {
-			headers: Record<string, string>
+			headers: Record<string, string> & {
+				'Set-Cookie'?: string | string[]
+			}
 			status?: number | HTTPStatusName
 			redirect?: string
-			cookie: Record<string, string>
+			cookie?: Record<
+				string,
+				Prettify<
+					{
+						value: string | string[]
+					} & CookieSerializeOptions
+				>
+			>
 		}
 
 		path: string

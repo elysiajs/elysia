@@ -1,5 +1,7 @@
+import type { Context } from './context'
+import { parse, type CookieSerializeOptions } from 'cookie'
+
 import type { MaybeArray } from './types'
-import type { CookieSerializeOptions } from 'cookie'
 
 type MutateCookie<T extends MaybeArray<string> | undefined> =
 	CookieSerializeOptions & {
@@ -10,12 +12,15 @@ type MutateCookie<T extends MaybeArray<string> | undefined> =
 
 type CookieJar = Record<string, Cookie | null>
 
-class Cookie<const T extends string | string[] = string | string[]>
+export class Cookie<const T extends string = string>
 	implements Omit<CookieSerializeOptions, 'encode'>
 {
+	public name: string | undefined
+	private setter: Context['set'] | undefined
+
 	constructor(
 		public value: T,
-		public property: Omit<CookieSerializeOptions, 'encode'> = {}
+		public property: Readonly<Omit<CookieSerializeOptions, 'encode'>> = {}
 	) {}
 
 	add<const T extends string>(config: MutateCookie<T>): Cookie<T> {
@@ -31,6 +36,8 @@ class Cookie<const T extends string | string[] = string | string[]>
 
 		this.property = config
 
+		this.sync()
+
 		return this as any
 	}
 
@@ -39,9 +46,16 @@ class Cookie<const T extends string | string[] = string | string[]>
 	): Cookie<
 		[...(T extends any[] ? T : [T]), ...(New extends any[] ? New : [New])]
 	> {
-		this.value = Array.isArray(this.value)
-			? ([...this.value, ...value] as any)
-			: ([this.value, ...value] as any)
+		if (Array.isArray(this.value)) {
+			if (Array.isArray(value))
+				this.value = this.value.concat(value) as any
+			else this.value.push(value)
+		} else {
+			if (Array.isArray(value)) this.value = [this.value, ...value] as any
+			else this.value = [this.value, value] as any
+		}
+
+		this.sync()
 
 		return this as any
 	}
@@ -57,6 +71,8 @@ class Cookie<const T extends string | string[] = string | string[]>
 
 		this.property = config
 
+		this.sync()
+
 		return this as any
 	}
 
@@ -65,7 +81,10 @@ class Cookie<const T extends string | string[] = string | string[]>
 	}
 
 	set domain(value) {
+		// @ts-ignore
 		this.property.domain = value
+
+		this.sync()
 	}
 
 	get expires() {
@@ -73,7 +92,10 @@ class Cookie<const T extends string | string[] = string | string[]>
 	}
 
 	set expires(value) {
+		// @ts-ignore
 		this.property.expires = value
+
+		this.sync()
 	}
 
 	get httpOnly() {
@@ -81,7 +103,10 @@ class Cookie<const T extends string | string[] = string | string[]>
 	}
 
 	set httpOnly(value) {
+		// @ts-ignore
 		this.property.httpOnly = value
+
+		this.sync()
 	}
 
 	get maxAge() {
@@ -89,7 +114,10 @@ class Cookie<const T extends string | string[] = string | string[]>
 	}
 
 	set maxAge(value) {
+		// @ts-ignore
 		this.property.maxAge = value
+
+		this.sync()
 	}
 
 	get path() {
@@ -97,7 +125,10 @@ class Cookie<const T extends string | string[] = string | string[]>
 	}
 
 	set path(value) {
+		// @ts-ignore
 		this.property.path = value
+
+		this.sync()
 	}
 
 	get priority() {
@@ -105,7 +136,10 @@ class Cookie<const T extends string | string[] = string | string[]>
 	}
 
 	set priority(value) {
+		// @ts-ignore
 		this.property.priority = value
+
+		this.sync()
 	}
 
 	get sameSite() {
@@ -113,7 +147,10 @@ class Cookie<const T extends string | string[] = string | string[]>
 	}
 
 	set sameSite(value) {
+		// @ts-ignore
 		this.property.sameSite = value
+
+		this.sync()
 	}
 
 	get secure() {
@@ -121,39 +158,68 @@ class Cookie<const T extends string | string[] = string | string[]>
 	}
 
 	set secure(value) {
+		// @ts-ignore
 		this.property.secure = value
+
+		this.sync()
 	}
 
 	toString() {
 		return this.value
 	}
+
+	private sync() {
+		if (!this.name || !this.setter) return this
+
+		this.setter.cookie![this.name] = Object.assign(this.property, {
+			value: this.value
+		})
+
+		return this
+	}
 }
 
-export const createCookieJar = () =>
+export const createCookieJar = (set: Context['set']) =>
 	new Proxy({} as CookieJar, {
+		set(target, key: string, value) {
+			if (!(value instanceof Cookie)) return false
+
+			if (!set.cookie) set.cookie = {}
+
+			// @ts-ignore
+			value.setter = set
+			value.name = key
+
+			// @ts-ignore
+			value.sync()
+
+			target[key] = value
+
+			return true
+		},
 		deleteProperty(target, key) {
 			if (key in target) delete target[key as keyof typeof target]
+
+			if (set.cookie && key in set.cookie)
+				set.cookie[key as keyof typeof set.cookie] = {
+					value: '',
+					expires: new Date()
+				}
 
 			return true
 		}
 	})
 
-const cookie = createCookieJar()
+export const parseCookie = (headers: Headers) => {
+	const cookie = headers.get('cookie')
 
+	if (!cookie) return {}
 
-// ? Create new cookie
-cookie.session = new Cookie('Himari', { maxAge: 123 })
-	// ? Overwrite value
-	.set({ value: 'Rio', domain: 'millennium.sh' })
-	// ? Append value
-	.add({ httpOnly: true })
-	// ? Convert to multiple values
-	.push('Multiple')
+	return parse(cookie)
+}
 
-cookie.session.value // Rio
-cookie.session.value = 'Himari'
+const a = parseCookie(new Headers({
+	"cookie": "a=b;a=c;c=d"
+}))
 
-console.log(cookie.session)
-
-// ! Remove cookie
-delete cookie.a
+console.log(a)

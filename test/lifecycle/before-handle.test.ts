@@ -189,8 +189,8 @@ describe('Before Handle', () => {
 			}>(({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			})
-			.onAfterHandle((context, response) => {
-				if (response === 'Cat') return 'Not cat'
+			.onAfterHandle((context) => {
+				if (context.response === 'Cat') return 'Not cat'
 			})
 			.get('/name/:name', ({ params: { name } }) => name)
 

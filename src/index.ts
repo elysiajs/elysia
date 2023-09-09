@@ -3016,7 +3016,7 @@ export { Elysia }
 
 export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
 export { t } from './custom-types'
-// export { ws } from './ws'
+export { Cookie } from './cookie'
 
 export {
 	getSchemaValidator,
