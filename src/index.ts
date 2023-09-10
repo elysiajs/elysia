@@ -1456,15 +1456,23 @@ export default class Elysia<
 	 * ```
 	 */
 	get<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -1482,7 +1490,10 @@ export default class Elysia<
 							Instance['schema']
 						> extends infer Typed extends TypedSchema
 							? {
-									[path in `${BasePath}${Path}`]: {
+									[path in `${BasePath}${Extract<
+										Paths,
+										string
+									>}`]: {
 										get: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -1521,7 +1532,12 @@ export default class Elysia<
 													? Result
 													: undefined
 												: Record<
-														ExtractPath<Path>,
+														ExtractPath<
+															Extract<
+																Paths,
+																string
+															>
+														>,
 														string
 												  >
 											response: Typed['response'] extends
@@ -1556,7 +1572,12 @@ export default class Elysia<
 			}
 		}
 	> {
-		this.add('GET', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add('GET', path, handler as any, hook as LocalHook<any, any>)
+		}
 
 		return this as any
 	}
@@ -1580,15 +1601,23 @@ export default class Elysia<
 	 * ```
 	 */
 	post<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -1607,7 +1636,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											post: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -1646,7 +1678,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -1681,7 +1718,12 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('POST', path, handler as any, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add('POST', path, handler as any, hook as LocalHook<any, any>)
+		}
 
 		return this as any
 	}
@@ -1705,15 +1747,23 @@ export default class Elysia<
 	 * ```
 	 */
 	put<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -1732,7 +1782,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											put: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -1771,7 +1824,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -1806,7 +1864,12 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('PUT', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add('PUT', path, handler as any, hook as LocalHook<any, any>)
+		}
 
 		return this as any
 	}
@@ -1830,15 +1893,23 @@ export default class Elysia<
 	 * ```
 	 */
 	patch<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -1857,7 +1928,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											patch: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -1896,7 +1970,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -1931,7 +2010,12 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('PATCH', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add('PATCH', path, handler as any, hook as LocalHook<any, any>)
+		}
 
 		return this as any
 	}
@@ -1955,15 +2039,23 @@ export default class Elysia<
 	 * ```
 	 */
 	delete<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -1982,7 +2074,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											delete: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2021,7 +2116,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -2056,7 +2156,17 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('DELETE', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add(
+				'DELETE',
+				path,
+				handler as any,
+				hook as LocalHook<any, any>
+			)
+		}
 
 		return this as any
 	}
@@ -2080,15 +2190,23 @@ export default class Elysia<
 	 * ```
 	 */
 	options<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -2107,7 +2225,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											options: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2146,7 +2267,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -2181,7 +2307,17 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('OPTIONS', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add(
+				'OPTIONS',
+				path,
+				handler as any,
+				hook as LocalHook<any, any>
+			)
+		}
 
 		return this as any
 	}
@@ -2200,15 +2336,23 @@ export default class Elysia<
 	 * ```
 	 */
 	all<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -2227,7 +2371,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											all: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2266,7 +2413,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -2301,7 +2453,12 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('ALL', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add('ALL', path, handler, hook as LocalHook<any, any>)
+		}
 
 		return this as any
 	}
@@ -2325,15 +2482,23 @@ export default class Elysia<
 	 * ```
 	 */
 	head<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -2352,7 +2517,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											head: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2391,7 +2559,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -2426,7 +2599,12 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('HEAD', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add('HEAD', path, handler, hook as LocalHook<any, any>)
+		}
 
 		return this as any
 	}
@@ -2450,15 +2628,23 @@ export default class Elysia<
 	 * ```
 	 */
 	trace<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -2477,7 +2663,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											trace: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2516,7 +2705,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -2551,7 +2745,12 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('TRACE', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add('TRACE', path, handler, hook as LocalHook<any, any>)
+		}
 
 		return this as any
 	}
@@ -2575,15 +2774,23 @@ export default class Elysia<
 	 * ```
 	 */
 	connect<
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>,
+		Paths extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>,
 		Schema extends TypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
 	>(
-		path: Path,
+		paths: Paths,
 		handler: Handler,
-		hook?: LocalHook<Schema, Instance, `${BasePath}${Path}`>
+		hook?: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Paths, string>}`
+		>
 	): Elysia<
 		BasePath,
 		{
@@ -2602,7 +2809,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 								? {
-										[path in `${BasePath}${Path}`]: {
+										[path in `${BasePath}${Extract<
+											Paths,
+											string
+										>}`]: {
 											connect: {
 												body: UnwrapSchema<
 													Typed['body'],
@@ -2641,7 +2851,12 @@ export default class Elysia<
 														? Result
 														: undefined
 													: Record<
-															ExtractPath<Path>,
+															ExtractPath<
+																Extract<
+																	Paths,
+																	string
+																>
+															>,
 															string
 													  >
 												response: Typed['response'] extends
@@ -2676,7 +2891,12 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add('CONNECT', path, handler, hook as LocalHook<any, any>)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.add('CONNECT', path, handler, hook as LocalHook<any, any>)
+		}
 
 		return this as any
 	}
@@ -2700,7 +2920,7 @@ export default class Elysia<
 	 * ```
 	 */
 	ws<
-		Path extends string,
+		Paths extends string | string[],
 		Schema extends WSTypedSchema<
 			Extract<keyof Instance['meta']['defs'], string>
 		>
@@ -2708,9 +2928,13 @@ export default class Elysia<
 		/**
 		 * Path to register websocket to
 		 */
-		path: Path,
+		paths: Paths,
 		options: this extends Elysia<any, infer Instance>
-			? ElysiaWSOptions<`${BasePath}${Path}`, Schema, Instance>
+			? ElysiaWSOptions<
+					`${BasePath}${Extract<Paths, string>}`,
+					Schema,
+					Instance
+			  >
 			: never
 	): Elysia<
 		BasePath,
@@ -2723,7 +2947,7 @@ export default class Elysia<
 				Record<
 					'schema',
 					Record<
-						`${BasePath}${Path}`,
+						`${BasePath}${Extract<Paths, string>}`,
 						MergeSchema<
 							Schema,
 							Instance['schema']
@@ -2732,7 +2956,7 @@ export default class Elysia<
 									subscribe: TypedWSRouteToEden<
 										Typed,
 										Instance['meta']['defs'],
-										`${BasePath}${Path}`
+										`${BasePath}${Extract<Paths, string>}`
 									>
 							  }
 							: {}
@@ -2745,49 +2969,54 @@ export default class Elysia<
 				"Can't find WebSocket. Please register WebSocket plugin first by importing 'elysia/ws'"
 			)
 
-		this.wsRouter.add('subscribe', path, options as any)
+		if (typeof paths === 'string') {
+			paths = [paths] as Paths
+		}
+		for (const path of paths) {
+			this.wsRouter.add('subscribe', path, options as any)
 
-		this.get(
-			path,
-			// @ts-ignore
-			(context) => {
-				if (
-					// @ts-ignore
-					this.server?.upgrade(context.request, {
-						headers:
-							typeof options.upgrade === 'function'
-								? options.upgrade(context as any)
-								: options.upgrade,
+			this.get(
+				path,
+				// @ts-ignore
+				(context) => {
+					if (
 						// @ts-ignore
-						data: {
-							...context,
-							id: Date.now(),
-							headers: context.request.headers.toJSON(),
-							message: getSchemaValidator(options?.body, {
-								models: this.meta.defs
-							}),
-							transformMessage: !options.transform
-								? []
-								: Array.isArray(options.transformMessage)
-								? options.transformMessage
-								: [options.transformMessage]
-						} as ElysiaWSContext<any>['data']
-					})
-				)
-					return
+						this.server?.upgrade(context.request, {
+							headers:
+								typeof options.upgrade === 'function'
+									? options.upgrade(context as any)
+									: options.upgrade,
+							// @ts-ignore
+							data: {
+								...context,
+								id: Date.now(),
+								headers: context.request.headers.toJSON(),
+								message: getSchemaValidator(options?.body, {
+									models: this.meta.defs
+								}),
+								transformMessage: !options.transform
+									? []
+									: Array.isArray(options.transformMessage)
+									? options.transformMessage
+									: [options.transformMessage]
+							} as ElysiaWSContext<any>['data']
+						})
+					)
+						return
 
-				context.set.status = 400
+					context.set.status = 400
 
-				return 'Expected a websocket connection'
-			},
-			{
-				beforeHandle: options.beforeHandle,
-				transform: options.transform,
-				headers: options?.headers,
-				params: options?.params,
-				query: options?.query
-			} as any
-		)
+					return 'Expected a websocket connection'
+				},
+				{
+					beforeHandle: options.beforeHandle,
+					transform: options.transform,
+					headers: options?.headers,
+					params: options?.params,
+					query: options?.query
+				} as any
+			)
+		}
 
 		return this as any
 	}
@@ -2815,8 +3044,12 @@ export default class Elysia<
 			Exclude<keyof Instance['meta']['defs'], number | symbol>
 		>,
 		Method extends HTTPMethod,
-		Path extends string,
-		Handler extends LocalHandler<Schema, Instance, `${BasePath}${Path}`>
+		Path extends string | string[],
+		Handler extends LocalHandler<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Path, string>}`
+		>
 	>(
 		method: Method,
 		path: Path,
@@ -2825,7 +3058,11 @@ export default class Elysia<
 		{
 			config,
 			...hook
-		}: LocalHook<Schema, Instance, `${BasePath}${Path}`> & {
+		}: LocalHook<
+			Schema,
+			Instance,
+			`${BasePath}${Extract<Path, string>}`
+		> & {
 			config: {
 				allowMeta?: boolean
 			}
@@ -2852,7 +3089,10 @@ export default class Elysia<
 								Instance['schema']
 							> extends infer Typed extends TypedSchema
 							? {
-									[path in `${BasePath}${Path}`]: {
+									[path in `${BasePath}${Extract<
+										Path,
+										string
+									>}`]: {
 										[method in Method]: {
 											body: UnwrapSchema<
 												Typed['body'],
@@ -2891,7 +3131,12 @@ export default class Elysia<
 													? Result
 													: undefined
 												: Record<
-														ExtractPath<Path>,
+														ExtractPath<
+															Extract<
+																Path,
+																string
+															>
+														>,
 														string
 												  >
 											response: Typed['response'] extends
@@ -2926,7 +3171,12 @@ export default class Elysia<
 				>
 		}
 	> {
-		this.add(method, path, handler, hook as LocalHook<any, any>, config)
+		if (typeof path === 'string') {
+			path = [path] as Path
+		}
+		for (const p of path) {
+			this.add(method, p, handler, hook as LocalHook<any, any>, config)
+		}
 
 		return this as any
 	}
