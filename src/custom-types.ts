@@ -160,7 +160,7 @@ export const ElysiaType = {
 	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
 		({ ...schema, nullable: true } as any),
 	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
-		Type.Union([Type.Undefined(), schema]) as any
+		Type.Union([Type.Undefined(), schema]) as any,
 } as const
 
 declare module '@sinclair/typebox' {

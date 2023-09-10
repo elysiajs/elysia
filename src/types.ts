@@ -6,6 +6,7 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { OpenAPIV3 } from 'openapi-types'
 import type { EventEmitter } from 'eventemitter3'
 
+import type { CookieOptions } from './cookie'
 import type { Context, PreContext } from './context'
 import type {
 	InternalServerError,
@@ -47,6 +48,7 @@ export type ElysiaConfig<T extends string = ''> = {
 		WebSocketHandler<any>,
 		'open' | 'close' | 'message' | 'drain'
 	>
+	cookie?: CookieOptions
 }
 
 export type MaybeArray<T> = T | T[]
@@ -125,6 +127,7 @@ export interface RouteSchema {
 	headers?: unknown
 	query?: unknown
 	params?: unknown
+	cookie?: unknown
 	response?: unknown
 }
 
@@ -164,6 +167,12 @@ export type UnwrapRoute<
 	> extends infer A extends Record<string, any>
 		? A
 		: undefined
+	cookie: UnwrapSchema<
+		Schema['cookie'],
+		Definitions
+	> extends infer A extends Record<string, any>
+		? A
+		: undefined
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
@@ -199,6 +208,12 @@ export type UnwrapGroupGuardRoute<
 		: Path extends `${string}/${':' | '*'}${string}`
 		? Record<GetPathParameter<Path>, string>
 		: never
+	cookie: UnwrapSchema<
+		Schema['cookie'],
+		Definitions
+	> extends infer A extends Record<string, unknown>
+		? A
+		: undefined
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
@@ -290,6 +305,7 @@ export interface InputSchema<Name extends string = string> {
 	headers?: TObject | Name
 	query?: TObject | Name
 	params?: TObject | Name
+	cookie?: TObject | Name
 	response?:
 		| TSchema
 		| Record<number, TSchema>
@@ -302,6 +318,7 @@ export type MergeSchema<A extends RouteSchema, B extends RouteSchema> = {
 	headers: undefined extends A['headers'] ? B['headers'] : A['headers']
 	query: undefined extends A['query'] ? B['query'] : A['query']
 	params: undefined extends A['params'] ? B['params'] : A['params']
+	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
 	response: undefined extends A['response'] ? B['response'] : A['response']
 }
 
@@ -340,9 +357,11 @@ export type AfterHandler<
 	context: infer Context
 ) => infer Returned
 	? (
-			context: Prettify<{
-				response: Route['response']
-			} & Context>
+			context: Prettify<
+				{
+					response: Route['response']
+				} & Context
+			>
 	  ) => Returned | MaybePromise<void>
 	: never
 
@@ -560,6 +579,7 @@ export type SchemaValidator = {
 	headers?: TypeCheck<any>
 	query?: TypeCheck<any>
 	params?: TypeCheck<any>
+	cookie?: TypeCheck<any>
 	response?: Record<number, TypeCheck<any>>
 }
 

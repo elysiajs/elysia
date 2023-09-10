@@ -15,7 +15,7 @@ describe('Cookie to Header', () => {
 			}
 		}
 		const result = cookieToHeader(cookies)
-		expect(result).toEqual(['cookie1=value1'])
+		expect(result).toEqual('cookie1=value1')
 	})
 
 	it('correctly serialize a multi-value cookie', () => {
@@ -24,6 +24,8 @@ describe('Cookie to Header', () => {
 				value: ['value1', 'value2']
 			}
 		}
+
+		// @ts-ignore
 		const result = cookieToHeader(cookies)
 		expect(result).toEqual(['cookie1=value1', 'cookie1=value2'])
 	})

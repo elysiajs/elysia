@@ -210,6 +210,19 @@ export const createDynamicHandler =
 						context.query
 					)
 
+				if (validator.cookie) {
+					const cookieValue: Record<string, unknown> = {}
+					for (const [key, value] of Object.entries(context.cookie))
+						cookieValue[key] = value.value
+
+					if (validator.cookie?.Check(cookieValue) === false)
+						throw new ValidationError(
+							'cookie',
+							validator.cookie,
+							cookieValue
+						)
+				}
+
 				if (validator.body?.Check(body) === false)
 					throw new ValidationError('body', validator.body, body)
 			}

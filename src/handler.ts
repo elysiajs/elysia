@@ -45,20 +45,25 @@ export const cookieToHeader = (cookies: Context['set']['cookie']) => {
 
 		if (Array.isArray(property.value)) {
 			for (let i = 0; i < property.value.length; i++) {
-				const value = property.value[i]
+				let value = property.value[i]
 				if (value === undefined || value === null) continue
+
+				if (typeof value === 'object') value = JSON.stringify(value)
 
 				set.push(serialize(key, value, property))
 			}
 		} else {
-			const value = property.value
+			let value = property.value
 			if (value === undefined || value === null) continue
+
+			if (typeof value === 'object') value = JSON.stringify(value)
 
 			set.push(serialize(key, property.value, property))
 		}
 	}
 
 	if (set.length === 0) return undefined
+	if (set.length === 1) return set[0]
 
 	return set
 }

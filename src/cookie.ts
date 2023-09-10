@@ -2,7 +2,7 @@
 import { parse } from 'cookie'
 import type { Context } from './context'
 
-export interface CookieSerializeOptions {
+export interface CookieOptions {
 	/**
 	 * Specifies the value for the {@link https://tools.ietf.org/html/rfc6265#section-5.2.3|Domain Set-Cookie attribute}. By default, no
 	 * domain is set, and most clients will consider the cookie to apply to only
@@ -87,9 +87,19 @@ export interface CookieSerializeOptions {
 	 * not have an HTTPS connection.
 	 */
 	secure?: boolean | undefined
+
+	/**
+	 * Secret key for signing cookie
+	 *
+	 * If array is passed, will use Key Rotation.
+	 *
+	 * Key rotation is when an encryption key is retired
+	 * and replaced by generating a new cryptographic key.
+	 */
+	secret?: string | string[]
 }
 
-type MutateCookie<T = unknown> = CookieSerializeOptions & {
+type MutateCookie<T = unknown> = CookieOptions & {
 	value?: T
 } extends infer A
 	? A | ((previous: A) => A)
@@ -97,15 +107,13 @@ type MutateCookie<T = unknown> = CookieSerializeOptions & {
 
 type CookieJar = Record<string, Cookie>
 
-export class Cookie<T = unknown>
-	implements CookieSerializeOptions
-{
+export class Cookie<T = unknown> implements CookieOptions {
 	public name: string | undefined
 	private setter: Context['set'] | undefined
 
 	constructor(
 		private _value: T,
-		public property: Readonly<CookieSerializeOptions> = {}
+		public property: Readonly<CookieOptions> = {}
 	) {}
 
 	get() {
@@ -116,8 +124,10 @@ export class Cookie<T = unknown>
 		return this._value as any
 	}
 
-	set value(value: string) {
-		if (this.value === value) return
+	set value(value: T) {
+		if (typeof value === 'object') {
+			if (JSON.stringify(this.value) === JSON.stringify(value)) return
+		} else if (this.value === value) return
 
 		this._value = value as any
 
@@ -159,6 +169,8 @@ export class Cookie<T = unknown>
 	}
 
 	remove() {
+		if (this.value === undefined) return
+
 		this.set({
 			value: '' as any,
 			expires: new Date()
@@ -314,7 +326,32 @@ export const parseCookie = (set: Context['set'], cookieString?: string) => {
 
 	const jar: CookieJar = {}
 
-	for (const [key, value] of Object.entries(parse(cookieString))) {
+	// eslint-disable-next-line prefer-const
+	for (let [key, value] of Object.entries(parse(cookieString))) {
+		const start = value.charCodeAt(0)
+		if (start === 123 || start === 91)
+			try {
+				const cookie = new Cookie(JSON.parse(value))
+
+				// @ts-ignore
+				cookie.setter = set
+				// @ts-ignore
+				cookie.name = key
+
+				jar[key] = cookie
+
+				continue
+			} catch {
+				// Not empty
+			}
+
+		// @ts-ignore
+		if (!Number.isNaN(+value)) value = +value
+		// @ts-ignore
+		else if (value === 'true') value = true
+		// @ts-ignore
+		else if (value === 'false') value = false
+
 		const cookie = new Cookie(value)
 
 		// @ts-ignore

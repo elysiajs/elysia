@@ -161,6 +161,7 @@ export default class Elysia<
 			aot: true,
 			strictPath: false,
 			scoped: false,
+			cookie: {},
 			...config,
 			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
@@ -238,13 +239,21 @@ export default class Elysia<
 					models
 				}
 			),
+			cookie: getSchemaValidator(
+				hook?.cookie ?? (this.validator?.cookie as any),
+				{
+					dynamic: !this.config.aot,
+					models,
+					additionalProperties: true
+				}
+			),
 			response: getResponseSchemaValidator(
 				hook?.response ?? (this.validator?.response as any),
 				{
 					dynamic: !this.config.aot,
 					models
 				}
-			)
+			),
 		} as any
 
 		const hooks = mergeHook(this.event, hook)
@@ -2971,7 +2980,7 @@ export default class Elysia<
 		if (callback) callback(this.server!)
 
 		Promise.all(this.lazyLoadModules).then(() => {
-			Bun?.gc(true)
+			Bun?.gc(false)
 		})
 
 		return this

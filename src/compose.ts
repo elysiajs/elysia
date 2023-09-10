@@ -212,10 +212,9 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 
 	const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
 
-	for (const [params] of fnLiteral.matchAll(destructuringRegex)) {
+	for (const [params] of fnLiteral.matchAll(destructuringRegex))
 		if (params.includes(`{ ${keyword}`) || params.includes(`, ${keyword}`))
 			return true
-	}
 
 	return false
 }
@@ -392,11 +391,7 @@ export const composeHandler = ({
 		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
 
 	const hasCookie =
-		validator.headers ||
-		lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
-
-	if (hasCookie)
-		fnLiteral += `\nc.cookie = parseCookie(c.set, c.request.headers.get('cookie'))\n`
+		validator.cookie || lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
 
 	if (hasHeaders) {
 		// This function is Bun specific
@@ -407,6 +402,13 @@ export const composeHandler = ({
                 for (const [key, value] of c.request.headers.entries())
 					c.headers[key] = value
 				`
+	}
+
+	if (hasCookie) {
+		if (hasHeaders)
+			fnLiteral += `\nc.cookie = parseCookie(c.set, c.headers.cookie)\n`
+		else
+			fnLiteral += `\nc.cookie = parseCookie(c.set, c.request.headers.get('cookie'))\n`
 	}
 
 	const hasQuery =
@@ -653,6 +655,22 @@ export const composeHandler = ({
 		}
 	}
 
+	if (validator.cookie) {
+		// @ts-ignore
+		const properties = findElysiaMeta('Numeric', validator.cookie.schema)
+
+		if (properties) {
+			switch (typeof properties) {
+				case 'object':
+					for (const property of properties)
+						fnLiteral += `if(c.cookie.${property}) c.cookie.${property} = +c.cookie.${property};`
+					break
+			}
+
+			fnLiteral += '\n'
+		}
+	}
+
 	if (validator.body) {
 		const numericProperties = findElysiaMeta(
 			'Numeric',
@@ -737,6 +755,18 @@ export const composeHandler = ({
 			fnLiteral += `if(body.Check(c.body) === false) { ${composeValidation(
 				'body'
 			)} }`
+
+		if (validator.cookie) {
+			fnLiteral += `
+			const cookieValue = {}
+			for(const [key, value] of Object.entries(c.cookie))
+				cookieValue[key] = value.value
+
+			if(cookie.Check(cookieValue) === false) { ${composeValidation(
+				'cookie',
+				'cookieValue'
+			)} }`
+		}
 	}
 
 	if (hooks?.beforeHandle) {
@@ -1008,7 +1038,8 @@ export const composeHandler = ({
 			headers,
 			params,
 			query,
-			response
+			response,
+			cookie
 		},
 		utils: {
 			mapResponse,
