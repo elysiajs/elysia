@@ -13,6 +13,7 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { OpenAPIV3 } from 'openapi-types'
 
 import type { Context, PreContext } from './context'
+import { WSTypedSchema } from './ws'
 
 export type WithArray<T> = T | T[]
 export type ObjectValues<T extends object> = T[keyof T]
@@ -734,3 +735,140 @@ export type Reconciliation<A extends Object, B extends Object> = {
 				}
 		  >
 	: never
+
+export type Route<
+	Paths extends string | string[],
+	Handler extends LocalHandler<
+		Schema,
+		Instance,
+		`${BasePath}${Extract<Paths, string>}`
+	>,
+	Schema extends TypedSchema<
+		| Extract<keyof Instance['meta']['defs'], string>
+		| Exclude<keyof Instance['meta']['defs'], number | symbol>
+	>,
+	Instance extends ElysiaInstance<{}>,
+	BasePath extends string
+> = Elysia<
+	BasePath,
+	{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		error: Instance['error']
+		meta: {
+			defs: Instance['meta']['defs']
+			exposed: Instance['meta']['exposed']
+			schema: Prettify<
+				Instance['meta']['schema'] &
+					(MergeSchema<
+						Schema,
+						Instance['schema']
+					> extends infer Typed extends TypedSchema
+						? {
+								[path in `${BasePath}${Extract<
+									Paths,
+									string
+								>}`]: {
+									get: {
+										body: UnwrapSchema<
+											Typed['body'],
+											Instance['meta']['defs']
+										>
+										headers: UnwrapSchema<
+											Typed['headers'],
+											Instance['meta']['defs']
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										query: UnwrapSchema<
+											Typed['query'],
+											Instance['meta']['defs']
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: undefined
+										params: UnwrapSchema<
+											Typed['params'],
+											Instance['meta']['defs']
+										> extends infer Result
+											? Result extends Record<string, any>
+												? Result
+												: undefined
+											: Record<
+													ExtractPath<
+														Extract<Paths, string>
+													>,
+													string
+											  >
+										response: Typed['response'] extends
+											| TSchema
+											| string
+											? {
+													'200': UnwrapSchema<
+														Typed['response'],
+														Instance['meta']['defs'],
+														ReturnType<Handler>
+													>
+											  }
+											: Typed['response'] extends Record<
+													string,
+													TSchema | string
+											  >
+											? {
+													[key in keyof Typed['response']]: UnwrapSchema<
+														Typed['response'][key],
+														Instance['meta']['defs'],
+														ReturnType<Handler>
+													>
+											  }
+											: {
+													'200': ReturnType<Handler>
+											  }
+									}
+								}
+						  }
+						: {})
+			>
+		}
+	}
+>
+
+export type WebSocketRoute<
+	Paths extends string | string[],
+	Schema extends WSTypedSchema<
+		Extract<keyof Instance['meta']['defs'], string>
+	>,
+	Instance extends ElysiaInstance<{}>,
+	BasePath extends string
+> = Elysia<
+	BasePath,
+	{
+		request: Instance['request']
+		store: Instance['store']
+		schema: Instance['schema']
+		error: Instance['error']
+		meta: Instance['meta'] &
+			Record<
+				'schema',
+				Record<
+					`${BasePath}${Extract<Paths, string>}`,
+					MergeSchema<
+						Schema,
+						Instance['schema']
+					> extends infer Typed extends TypedSchema
+						? {
+								subscribe: TypedWSRouteToEden<
+									Typed,
+									Instance['meta']['defs'],
+									`${BasePath}${Extract<Paths, string>}`
+								>
+						  }
+						: {}
+				>
+			>
+	}
+>
