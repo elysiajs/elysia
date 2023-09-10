@@ -1,3 +1,7 @@
+# 0.6.21 - 10 Sep 2023
+Feature:
+- [#112](https://github.com/elysiajs/elysia/issues/112) Route arrays
+
 # 0.6.20 - 9 Sep 2023
 Bug fix:
 - [#107](https://github.com/elysiajs/elysia/issues/107) Elysia handler local hooks not recognizing registered errors on app instance
