@@ -2323,7 +2323,7 @@ export default class Elysia<
 	}
 
 	/**
-	 * ### post
+	 * ### all
 	 * Register handler for path with any method
 	 *
 	 * ---
@@ -2902,8 +2902,8 @@ export default class Elysia<
 	}
 
 	/**
-	 * ### connect
-	 * Register handler for path with method [CONNECT]
+	 * ### ws
+	 * Register handler for websocket.
 	 *
 	 * ---
 	 * @example
@@ -2911,10 +2911,10 @@ export default class Elysia<
 	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
-	 *     .connect('/', () => 'hi')
-	 *     .connect('/with-hook', () => 'hi', {
-	 *         schema: {
-	 *             response: t.String()
+	 *     .use(ws())
+	 *     .ws('/ws', {
+	 *         message(ws, message) {
+	 *             ws.send(message)
 	 *         }
 	 *     })
 	 * ```
@@ -3383,40 +3383,6 @@ export default class Elysia<
 
 		return this.onTransform(transform as any) as any
 	}
-
-	/**
-	 * Derive new property for each request with access to `Context`.
-	 *
-	 * If error is thrown, the scope will skip to handling error instead.
-	 *
-	 * ---
-	 * @example
-	 * new Elysia()
-	 *     .state('counter', 1)
-	 *     .derive(({ store }) => ({
-	 *         increase() {
-	 *             store.counter++
-	 *         }
-	 *     }))
-	 */
-
-	// signal<Returned extends Object = Object>(
-	// 	createSignal: (
-	// 		getStore: () => Instance['store']
-	// 	) => MaybePromise<Returned> extends {} ? Returned : never
-	// ): Elysia<{
-	// 	store: Instance['store'] & Awaited<Returned>
-	// 	request: Instance['request']
-	// 	schema: Instance['schema']
-	// 	meta: Instance['meta']
-	// }> {
-	// 	Object.assign(
-	// 		this.store,
-	// 		createSignal(() => this.store)
-	// 	)
-
-	// 	return this as any
-	// }
 
 	/**
 	 * ### schema
