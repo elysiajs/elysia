@@ -2187,7 +2187,7 @@ export default class Elysia<
 	}
 
 	/**
-	 * ### post
+	 * ### all
 	 * Register handler for path with any method
 	 *
 	 * ---
@@ -2682,8 +2682,8 @@ export default class Elysia<
 	}
 
 	/**
-	 * ### connect
-	 * Register handler for path with method [CONNECT]
+	 * ### ws
+	 * Register handler for websocket.
 	 *
 	 * ---
 	 * @example
@@ -2691,10 +2691,10 @@ export default class Elysia<
 	 * import { Elysia, t } from 'elysia'
 	 *
 	 * new Elysia()
-	 *     .connect('/', () => 'hi')
-	 *     .connect('/with-hook', () => 'hi', {
-	 *         schema: {
-	 *             response: t.String()
+	 *     .use(ws())
+	 *     .ws('/ws', {
+	 *         message(ws, message) {
+	 *             ws.send(message)
 	 *         }
 	 *     })
 	 * ```
@@ -2710,11 +2710,7 @@ export default class Elysia<
 		 */
 		path: Path,
 		options: this extends Elysia<any, infer Instance>
-			? ElysiaWSOptions<
-					`${BasePath}${Path}`,
-					Schema,
-					Instance
-			  >
+			? ElysiaWSOptions<`${BasePath}${Path}`, Schema, Instance>
 			: never
 	): Elysia<
 		BasePath,
@@ -3139,40 +3135,6 @@ export default class Elysia<
 	}
 
 	/**
-	 * Derive new property for each request with access to `Context`.
-	 *
-	 * If error is thrown, the scope will skip to handling error instead.
-	 *
-	 * ---
-	 * @example
-	 * new Elysia()
-	 *     .state('counter', 1)
-	 *     .derive(({ store }) => ({
-	 *         increase() {
-	 *             store.counter++
-	 *         }
-	 *     }))
-	 */
-
-	// signal<Returned extends Object = Object>(
-	// 	createSignal: (
-	// 		getStore: () => Instance['store']
-	// 	) => MaybePromise<Returned> extends {} ? Returned : never
-	// ): Elysia<{
-	// 	store: Instance['store'] & Awaited<Returned>
-	// 	request: Instance['request']
-	// 	schema: Instance['schema']
-	// 	meta: Instance['meta']
-	// }> {
-	// 	Object.assign(
-	// 		this.store,
-	// 		createSignal(() => this.store)
-	// 	)
-
-	// 	return this as any
-	// }
-
-	/**
 	 * ### schema
 	 * Define type strict validation for request
 	 *
@@ -3307,20 +3269,20 @@ export default class Elysia<
 
 		const serve =
 			typeof options === 'object'
-				? {
+				? ({
 						development: !isProduction,
 						...this.config.serve,
 						...options,
 						fetch,
 						error: this.outerErrorHandler
-				  } as Serve
-				: {
+				  } as Serve)
+				: ({
 						development: !isProduction,
 						...this.config.serve,
 						port: options,
 						fetch,
 						error: this.outerErrorHandler
-				  } as Serve
+				  } as Serve)
 
 		if (typeof Bun === 'undefined')
 			throw new Error(
