@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Fast, and friendly Bun web framework",
-  "version": "0.6.21",
+  "version": "0.6.22",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",

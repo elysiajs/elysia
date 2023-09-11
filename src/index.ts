@@ -3301,7 +3301,7 @@ export default class Elysia<
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
-	decorate<const Decorators extends Record<string, unknown>>(
+	decorate<Decorators extends Record<string, unknown>>(
 		name: Decorators
 	): Elysia<
 		BasePath,
@@ -3310,7 +3310,7 @@ export default class Elysia<
 			error: Instance['error']
 			request: Reconciliation<
 				Instance['request'],
-				DeepWritable<Decorators>
+				Decorators
 			>
 			schema: Instance['schema']
 			meta: Instance['meta']

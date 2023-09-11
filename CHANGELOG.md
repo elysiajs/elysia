@@ -1,3 +1,7 @@
+# 0.6.22 - 11 Sep 2023
+Bug fix:
+- Remove `const` and `RemoveDeepWritable` from decorate to allow function call
+
 # 0.6.21 - 10 Sep 2023
 Feature:
 - [#112](https://github.com/elysiajs/elysia/issues/112) Route arrays
