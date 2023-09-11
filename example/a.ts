@@ -25,9 +25,14 @@ const app = new Elysia()
 		},
 		{
 			cookie: t.Object({
-				name: t.TemplateLiteral(
-					'seminar: ${Rio | Yuuka | Noa | Koyuki}'
-				)
+				name: t.TemplateLiteral([
+					t.Literal('seminar: '),
+					t.Union(
+						(['Rio', 'Yuuka', 'Noa', 'Koyuki'] as const).map((x) =>
+							t.Literal(x)
+						)
+					)
+				])
 			})
 		}
 	)
@@ -42,7 +47,7 @@ const app = new Elysia()
 				{
 					name: 'Momoka',
 					affilation: 'Transportation'
-				},
+				}
 			]),
 		{
 			cookie: t.Object({
@@ -61,3 +66,76 @@ const app = new Elysia()
 		return 'Deleted'
 	})
 	.listen(3000)
+
+console.log(app.routes.at(-1)?.composed?.toString())
+
+const a = <const T extends Readonly<string[]>>(a: T): T => a
+
+a(['a', 'b'])
+
+type Template =
+	| string
+	| number
+	| bigint
+	| boolean
+	| StringConstructor
+	| NumberConstructor
+	| undefined
+
+type Join<A> = A extends Readonly<[infer First, ...infer Rest]>
+	? (
+			First extends Readonly<Template[]>
+				? First[number]
+				: First extends StringConstructor
+				? string
+				: First extends NumberConstructor
+				? `${number}`
+				: First
+	  ) extends infer A
+		? Rest extends []
+			? A extends undefined
+				? NonNullable<A> | ''
+				: A
+			: // @ts-ignore
+			A extends undefined
+			? `${NonNullable<A>}${Join<Rest>}` | ''
+			: // @ts-ignore
+			  `${A}${Join<Rest>}`
+		: ''
+	: ''
+
+const template = <
+	const T extends Readonly<(Template | Readonly<Template[]>)[]>
+>(
+	...p: T
+): Join<T> => {
+	return a as any
+}
+
+const create =
+	<const T extends string>(t: T): ((t: T) => void) =>
+	(t) =>
+		t
+
+const optional = <
+	const T extends Readonly<(Template | Readonly<Template[]>)[]>
+>(
+	...p: T
+): T | undefined => {
+	return undefined
+}
+
+template.optional = optional
+
+const hi = create(
+	template(
+		['seminar', 'millennium'],
+		':',
+		['Rio', 'Yuuka', 'Noa', 'Koyuki'],
+		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki'])),
+		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki'])),
+		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki']))
+	)
+)
+
+hi(`seminar:Noa,Koyuki,Yuuka`)
