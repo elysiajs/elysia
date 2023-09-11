@@ -6,7 +6,10 @@ import {
 	type TNull,
 	type TUnion,
 	type TSchema,
-	type TUndefined
+	type TUndefined,
+	TProperties,
+	ObjectOptions,
+	TObject
 } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
@@ -161,7 +164,20 @@ export const ElysiaType = {
 		({ ...schema, nullable: true } as any),
 	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
 		Type.Union([Type.Undefined(), schema]) as any,
+	Cookie: <T extends TProperties>(
+		properties: T,
+		options?: ObjectOptions & {
+			secrets?: string | string[]
+			sign?: Readonly<(keyof T)[]>
+		}
+	): TObject<T> =>
+		Type.Object(properties, {
+			...options,
+			elysiaMeta: 'Cookie'
+		})
 } as const
+
+export type TCookie = (typeof ElysiaType)['Cookie']
 
 declare module '@sinclair/typebox' {
 	interface TypeBuilder {
@@ -173,6 +189,7 @@ declare module '@sinclair/typebox' {
 		Nullable: typeof ElysiaType.Nullable
 		MaybeEmpty: typeof ElysiaType.MaybeEmpty
 		URLEncoded: (typeof Type)['Object']
+		Cookie: typeof ElysiaType.Cookie
 	}
 
 	interface SchemaOptions {
@@ -232,4 +249,73 @@ Type.Files = (arg = {}) =>
 Type.Nullable = (schema) => ElysiaType.Nullable(schema)
 Type.MaybeEmpty = ElysiaType.MaybeEmpty
 
+Type.Cookie = ElysiaType.Cookie
+
 export { Type as t }
+
+// type Template =
+// 	| string
+// 	| number
+// 	| bigint
+// 	| boolean
+// 	| StringConstructor
+// 	| NumberConstructor
+// 	| undefined
+
+// type Join<A> = A extends Readonly<[infer First, ...infer Rest]>
+// 	? (
+// 			First extends Readonly<Template[]>
+// 				? First[number]
+// 				: First extends StringConstructor
+// 				? string
+// 				: First extends NumberConstructor
+// 				? `${number}`
+// 				: First
+// 	  ) extends infer A
+// 		? Rest extends []
+// 			? A extends undefined
+// 				? NonNullable<A> | ''
+// 				: A
+// 			: // @ts-ignore
+// 			A extends undefined
+// 			? `${NonNullable<A>}${Join<Rest>}` | ''
+// 			: // @ts-ignore
+// 			  `${A}${Join<Rest>}`
+// 		: ''
+// 	: ''
+
+// const template = <
+// 	const T extends Readonly<(Template | Readonly<Template[]>)[]>
+// >(
+// 	...p: T
+// ): Join<T> => {
+// 	return a as any
+// }
+
+// const create =
+// 	<const T extends string>(t: T): ((t: T) => void) =>
+// 	(t) =>
+// 		t
+
+// const optional = <
+// 	const T extends Readonly<(Template | Readonly<Template[]>)[]>
+// >(
+// 	...p: T
+// ): T | undefined => {
+// 	return undefined
+// }
+
+// template.optional = optional
+
+// const hi = create(
+// 	template(
+// 		['seminar', 'millennium'],
+// 		':',
+// 		['Rio', 'Yuuka', 'Noa', 'Koyuki'],
+// 		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki'])),
+// 		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki'])),
+// 		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki']))
+// 	)
+// )
+
+// hi(`seminar:Noa,Koyuki,Yuuka`)

@@ -60,7 +60,7 @@ export const createTraceListener = (
 
 								end = performance.now()
 
-								children[childIteration + 1](start)
+								children[childIteration](start)
 							}
 
 							resolve(a)
@@ -71,8 +71,6 @@ export const createTraceListener = (
 				return {
 					signal: handle,
 					consumeChild(event: TraceStream) {
-						console.log(event)
-
 						switch (event.type) {
 							case 'begin':
 								children[++childIteration]({

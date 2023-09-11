@@ -5,6 +5,8 @@ import type { TAnySchema } from '@sinclair/typebox'
 
 import { parse as parseQuery } from 'fast-querystring'
 
+import { sign as signCookie } from 'cookie-signature'
+
 import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
 import {
 	NotFoundError,
@@ -126,7 +128,14 @@ export const hasReturn = (fnLiteral: string) => {
 	return fnLiteral.includes('return')
 }
 
-const composeValidationFactory = (hasErrorHandler: boolean) => ({
+const composeValidationFactory = (
+	hasErrorHandler: boolean,
+	{
+		injectResponse = ''
+	}: {
+		injectResponse?: string
+	} = {}
+) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
 		hasErrorHandler
 			? `c.set.status = 400; throw new ValidationError(
@@ -139,18 +148,25 @@ ${value}
 	${type},
 	${value}
 ).toResponse(c.set.headers)`,
-	composeResponseValidation: (value = 'r') =>
-		hasErrorHandler
+	composeResponseValidation: (name = 'r') => {
+		const returnError = hasErrorHandler
 			? `throw new ValidationError(
 'response',
 response[c.set.status],
-${value}
+${name}
 )`
 			: `return new ValidationError(
 'response',
 response[c.set.status],
-${value}
+${name}
 ).toResponse(c.set.headers)`
+
+		return `\n${injectResponse}
+		if(response[c.set.status]?.Check(${name}) === false) { 
+	if(!(response instanceof Error))
+		${returnError}
+}\n`
+	}
 })
 
 export const isFnUse = (keyword: string, fnLiteral: string) => {
@@ -307,7 +323,7 @@ export const isAsync = (fn: Function) => {
 }
 
 export const composeHandler = ({
-	// path,
+	path,
 	method,
 	hooks,
 	validator,
@@ -337,9 +353,6 @@ export const composeHandler = ({
 		typeof Bun === 'undefined' ||
 		hooks.onResponse.length > 0 ||
 		!!hooks.trace.length
-
-	const { composeValidation, composeResponseValidation } =
-		composeValidationFactory(hasErrorHandler)
 
 	const handleResponse = hooks.onResponse.length
 		? `\n;(async () => {${hooks.onResponse
@@ -393,6 +406,52 @@ export const composeHandler = ({
 	const hasCookie =
 		validator.cookie || lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
 
+	// @ts-ignore
+	const cookieMeta = validator?.cookie?.schema as {
+		secrets?: string | string[]
+		sign: string[]
+		elysiaMeta?: 'Cookie' | (string & {})
+		properties: { [x: string]: Object }
+	}
+
+	let encodeCookie = ''
+
+	if (cookieMeta?.sign) {
+		if (!cookieMeta.secrets)
+			throw new Error(
+				`t.Cookie required secret which is not set in (${method}) ${path}.`
+			)
+
+		const secret = !cookieMeta.secrets
+			? undefined
+			: typeof cookieMeta.secrets === 'string'
+			? cookieMeta.secrets
+			: cookieMeta.secrets[0]
+
+		encodeCookie += `const _setCookie = c.set.cookie
+		if(_setCookie) {`
+
+		for (const name of cookieMeta.sign) {
+			// if (!(name in cookieMeta.properties)) continue
+
+			encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = signCookie(_setCookie['${name}'].value, '${secret}') }\n`
+		}
+
+		encodeCookie += '}\n'
+
+		encodeCookie += `\nconsole.log(c)\n`
+
+		encodeCookie += '\n'
+		// encodeCookie
+	}
+
+	// console.log({
+	// 	encodeCookie
+	// })
+
+	const { composeValidation, composeResponseValidation } =
+		composeValidationFactory(hasErrorHandler)
+
 	if (hasHeaders) {
 		// This function is Bun specific
 		// @ts-ignore
@@ -405,10 +464,32 @@ export const composeHandler = ({
 	}
 
 	if (hasCookie) {
+		const options = `{
+			secret: ${
+				cookieMeta.secrets !== undefined
+					? typeof cookieMeta.secrets === 'string'
+						? `'${cookieMeta.secrets}'`
+						: '[' +
+						  cookieMeta.secrets.reduce(
+								(a, b) => a + `'${b}',`,
+								''
+						  ) +
+						  ']'
+					: 'undefined'
+			},
+			sign: ${
+				cookieMeta.sign !== undefined
+					? '[' +
+					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
+					  ']'
+					: 'undefined'
+			}
+		}`
+
 		if (hasHeaders)
-			fnLiteral += `\nc.cookie = parseCookie(c.set, c.headers.cookie)\n`
+			fnLiteral += `\nc.cookie = parseCookie(c.set, c.headers.cookie, ${options})\n`
 		else
-			fnLiteral += `\nc.cookie = parseCookie(c.set, c.request.headers.get('cookie'))\n`
+			fnLiteral += `\nc.cookie = parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
 	}
 
 	const hasQuery =
@@ -832,11 +913,9 @@ export const composeHandler = ({
 				endAfterHandle()
 
 				if (validator.response)
-					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
-						if(!(response instanceof Error))
-							${composeResponseValidation(name)}
-					}\n`
+					fnLiteral += composeResponseValidation(name)
 
+				fnLiteral += encodeCookie
 				fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
 			}
 		}
@@ -884,10 +963,7 @@ export const composeHandler = ({
 
 				if (validator.response) {
 					fnLiteral += `if(${name} !== undefined) {`
-					fnLiteral += `if(response[c.set.status]?.Check(${name}) === false) { 
-						if(!(response instanceof Error))
-						${composeResponseValidation(name)}
-					}\n`
+					fnLiteral += composeResponseValidation(name)
 
 					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
 
@@ -904,12 +980,9 @@ export const composeHandler = ({
 
 		endAfterHandle()
 
-		if (validator.response)
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
-				if(!(response instanceof Error))
-					${composeResponseValidation()}
-			}\n`
+		if (validator.response) fnLiteral += composeResponseValidation()
 
+		fnLiteral += encodeCookie
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
@@ -924,17 +997,16 @@ export const composeHandler = ({
 
 			endHandle()
 
-			fnLiteral += `if(response[c.set.status]?.Check(r) === false) { 
-				if(!(response instanceof Error))
-					${composeResponseValidation()}
-			}\n`
+			fnLiteral += composeResponseValidation()
 
 			report('afterHandle')()
+
+			fnLiteral += encodeCookie
 
 			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
-			if (traceConditions.handle) {
+			if (traceConditions.handle || hasCookie) {
 				fnLiteral += isAsync(handler)
 					? `let r = await handler(c);\n`
 					: `let r = handler(c);\n`
@@ -942,6 +1014,8 @@ export const composeHandler = ({
 				endHandle()
 
 				report('afterHandle')()
+
+				fnLiteral += encodeCookie
 
 				if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 				else fnLiteral += `return mapCompactResponse(r)\n`
@@ -1057,7 +1131,8 @@ export const composeHandler = ({
 		ERROR_CODE,
 		reporter,
 		requestId,
-		parseCookie
+		parseCookie,
+		signCookie
 	} = hooks
 
 	${
@@ -1096,7 +1171,8 @@ export const composeHandler = ({
 		ERROR_CODE,
 		reporter,
 		requestId,
-		parseCookie
+		parseCookie,
+		signCookie
 	})
 }
 

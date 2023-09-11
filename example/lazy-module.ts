@@ -1,15 +1,14 @@
-import { Elysia, SCHEMA } from '../src'
+import { Elysia } from '../src'
 
 const plugin = (app: Elysia) => app.get('/plugin', () => 'Plugin')
 const asyncPlugin = async (app: Elysia) => app.get('/async', () => 'A')
 
 const app = new Elysia()
-	.decorate('a', () => 'hello')
+	// .decorate('a', () => 'hello')
 	.use(plugin)
-	.use(asyncPlugin)
 	.use(import('./lazy'))
-	.use((app) => app.get('/inline', () => 'inline'))
-	.get('/', ({ a }) => a())
+	.use((app) => app.get('/inline', ({ store: { a } }) => 'inline'))
+	// .get('/', ({ a }) => a())
 	.listen(3000)
 
 await app.modules

@@ -36,7 +36,9 @@ export type Context<
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<any>>
 			: Record<string, Cookie<any>> & {
-					[key in keyof Route['cookie']]: Cookie<Route['cookie'][key]>
+					[key in keyof Route['cookie']]: NonNullable<
+						Cookie<NonNullable<Route['cookie'][key]>>
+					>
 			  }
 
 		set: {

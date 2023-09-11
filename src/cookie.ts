@@ -2,6 +2,8 @@
 import { parse } from 'cookie'
 import type { Context } from './context'
 
+import { unsign as unsignCookie } from 'cookie-signature'
+
 export interface CookieOptions {
 	/**
 	 * Specifies the value for the {@link https://tools.ietf.org/html/rfc6265#section-5.2.3|Domain Set-Cookie attribute}. By default, no
@@ -321,14 +323,51 @@ export const createCookieJar = (initial: CookieJar, set: Context['set']) =>
 		}
 	})
 
-export const parseCookie = (set: Context['set'], cookieString?: string) => {
+export const parseCookie = (
+	set: Context['set'],
+	cookieString?: string,
+	{
+		secret,
+		sign
+	}: {
+		secret?: string | string[]
+		sign?: string[]
+	} = {}
+) => {
 	if (!cookieString) return createCookieJar({}, set)
 
 	const jar: CookieJar = {}
+	const isStringKey = typeof secret === 'string'
 
 	// eslint-disable-next-line prefer-const
 	for (let [key, value] of Object.entries(parse(cookieString))) {
-		const start = value.charCodeAt(0)
+		if (sign?.includes(key)) {
+			if (!secret)
+				throw new Error('No secret is provided to cookie plugin')
+
+			if (isStringKey) {
+				// @ts-ignore
+				value = unsignCookie(value as string, secret)
+
+				// @ts-ignore
+				if (value === false) throw new Error(`Fail to decode cookie: ${key}`)
+			} else {
+				let fail = true
+				for (let i = 0; i < secret.length; i++) {
+					const temp = unsignCookie(value as string, secret[i])
+
+					if (temp !== false) {
+						value = temp
+						fail = false
+						break
+					}
+				}
+
+				if (fail) throw new Error(`Fail to decode cookie: ${key}`)
+			}
+		}
+
+		const start = (value as string).charCodeAt(0)
 		if (start === 123 || start === 91)
 			try {
 				const cookie = new Cookie(JSON.parse(value))
