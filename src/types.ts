@@ -48,7 +48,9 @@ export type ElysiaConfig<T extends string = ''> = {
 		WebSocketHandler<any>,
 		'open' | 'close' | 'message' | 'drain'
 	>
-	cookie?: CookieOptions
+	cookie?: CookieOptions & {
+		sign?: string | string[]
+	}
 }
 
 export type MaybeArray<T> = T | T[]

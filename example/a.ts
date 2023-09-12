@@ -2,9 +2,20 @@ import { Elysia, t } from '../src'
 
 const app = new Elysia({
 	cookie: {
-		secret: ['A', 'B']
+		secret: 'Fischl von Luftschloss Narfidort',
+		sign: ['council']
 	}
 })
+	.get(
+		'/council',
+		({ cookie: { council } }) =>
+			(council.value = [
+				{
+					name: 'Rin',
+					affilation: 'Adminstration'
+				}
+			])
+	)
 	// .get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 	// .get(
 	// 	'/update',
@@ -33,43 +44,6 @@ const app = new Elysia({
 	// 		})
 	// 	}
 	// )
-	.model(
-		'council',
-		t.Cookie(
-			{
-				council: t.Array(
-					t.Object({
-						name: t.String(),
-						affilation: t.String()
-					})
-				)
-			},
-			{
-				secrets: ['e'],
-				sign: ['council']
-			}
-		)
-	)
-	.get(
-		'/council',
-		({ cookie: { council } }) => {
-			council.value = [
-				{
-					name: 'Rin',
-					affilation: 'Adminstration'
-				},
-				{
-					name: 'Momoka',
-					affilation: 'Transportation'
-				}
-			]
-
-			return 'ok'
-		},
-		{
-			cookie: 'council'
-		}
-	)
 	// .get('/remove', ({ cookie }) => {
 	// 	for (const self of Object.values(cookie)) self.remove()
 

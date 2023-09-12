@@ -168,7 +168,7 @@ export const ElysiaType = {
 		properties: T,
 		options?: ObjectOptions & {
 			secrets?: string | string[]
-			sign?: Readonly<(keyof T)[]>
+			sign?: Readonly<(keyof T | (string & {}))[]>
 		}
 	): TObject<T> =>
 		Type.Object(properties, {

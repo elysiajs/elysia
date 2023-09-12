@@ -464,7 +464,7 @@ export const composeHandler = ({
 	}
 
 	if (hasCookie) {
-		const options = `{
+		const options = cookieMeta ? `{
 			secret: ${
 				cookieMeta.secrets !== undefined
 					? typeof cookieMeta.secrets === 'string'
@@ -484,7 +484,7 @@ export const composeHandler = ({
 					  ']'
 					: 'undefined'
 			}
-		}`
+		}` : 'undefined'
 
 		if (hasHeaders)
 			fnLiteral += `\nc.cookie = parseCookie(c.set, c.headers.cookie, ${options})\n`
