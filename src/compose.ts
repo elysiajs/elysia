@@ -121,6 +121,10 @@ export const findElysiaMeta = (
 	parent = ''
 ) => {
 	if (schema.type === 'object') {
+		if (schema.elysiaMeta === 'JsonString' && type === 'JsonString') {
+			found.push(parent)
+		}
+
 		const properties = schema.properties as Record<string, TAnySchema>
 		for (const key in properties) {
 			const property = properties[key]
@@ -493,6 +497,21 @@ export const composeHandler = ({
 	if (validator.body) {
 		// @ts-ignore
 		const numericProperties = findElysiaMeta('Numeric', validator.body.schema)
+
+		// @ts-ignore
+		const jsonStringProperties = findElysiaMeta('JsonString', validator.body.schema)
+		if (jsonStringProperties) {
+			switch (typeof jsonStringProperties) {
+				case 'string':
+					fnLiteral += `try{c.body = JSON.parse(c.body)}catch(e){c.body = "Invalid Json"};`
+					break
+
+				case 'object':
+					for (const property of jsonStringProperties)
+						fnLiteral += `try{c.body.${property} = JSON.parse(c.body.${property});}catch(e){c.body.${property} = "Invalid Json"};`
+					break
+			}
+		}
 
 		if (numericProperties) {
 			switch (typeof numericProperties) {

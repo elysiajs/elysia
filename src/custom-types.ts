@@ -1,5 +1,7 @@
 import {
 	Type,
+	type TObject,
+	type TArray,
 	type SchemaOptions,
 	type NumericOptions
 } from '@sinclair/typebox'
@@ -157,7 +159,7 @@ export const ElysiaType = {
 
 declare module '@sinclair/typebox' {
 	interface TypeBuilder {
-		// @ts-ignore
+		JsonString: <Schema extends TObject | TArray>(schema: Schema) => Schema
 		Numeric: typeof ElysiaType.Numeric
 		File: typeof ElysiaType.File
 		Files: typeof ElysiaType.Files
@@ -185,6 +187,17 @@ Type.Numeric = (properties) => {
 		...properties,
 		elysiaMeta: 'Numeric'
 	}) as any
+}
+
+Type.JsonString = <Schema extends TObject | TArray>(schema: Schema) => {
+	if (schema.type === 'object')
+		return Type.Object(schema.properties, {
+			elysiaMeta: 'JsonString'
+		}) as Schema
+
+	return Type.Array(schema.items, {
+		elysiaMeta: 'JsonString'
+	}) as Schema
 }
 
 Type.URLEncoded = (property, options) =>

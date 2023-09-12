@@ -153,6 +153,37 @@ describe('Static code analysis', () => {
 		expect(findElysiaMeta('Numeric', schema)).toBeNull()
 	})
 
+	it('JsonString schema is findable', () => {
+		const schema = t.Object({
+			a: t.Object({
+				b: t.Object({
+					c: t.Number()
+				}),
+				d: t.String()
+			}),
+			b: t.JsonString(t.Object({ a: t.String() })),
+			c: t.JsonString(t.Array(t.Object({ a: t.String() }))),
+		})
+
+		expect(findElysiaMeta('JsonString', schema)).toEqual(['b', 'c'])
+	})
+
+	it('Custom types are findable inside JsonString', () => {
+		const schema = t.Object({
+			a: t.JsonString(t.Object({
+				b: t.Object({
+					c: t.Numeric(),
+					d: t.JsonString(t.Object({ e: t.Numeric() })),
+				}),
+				d: t.String()
+			})),
+			b: t.JsonString(t.Object({ a: t.Numeric() })),
+		})
+
+		expect(findElysiaMeta('JsonString', schema)).toEqual(['a', 'a.b.d', 'b'])
+		expect(findElysiaMeta('Numeric', schema)).toEqual(['a.b.c', 'a.b.d.e', 'b.a'])
+	})
+
 	it('restart server once analyze', async () => {
 		const plugin = async () => {
 			await new Promise((resolve) => setTimeout(resolve, 1))
