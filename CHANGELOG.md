@@ -1,3 +1,8 @@
+# 0.6.23 - 12 Sep 2023
+Bug fix:
+- Maximum callstack for duplicated deep class / object
+- [#121](https://github.com/elysiajs/elysia/issues/121) Cannot use PrismaClient in .decorate or .state
+
 # 0.6.22 - 11 Sep 2023
 Bug fix:
 - Remove `const` and `RemoveDeepWritable` from decorate to allow function call

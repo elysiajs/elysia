@@ -1,9 +1,12 @@
 import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
+
+// @ts-ignore
+import Mergician from 'mergician'
+
 import type {
 	ElysiaInstance,
-	DeepMergeTwoTypes,
 	LifeCycleStore,
 	LocalHook,
 	TypedSchema,
@@ -11,10 +14,9 @@ import type {
 	WithArray
 } from './types'
 
-// export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => [
-// 	...(Array.isArray(a) ? a : [a]),
-// 	...(Array.isArray(b) ? b : [b])
-// ]
+export const mergeDeep = Mergician({
+	appendArrays: true
+})
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 	const array = [...(Array.isArray(a) ? a : [a])]
@@ -80,33 +82,33 @@ export const mergeHook = (
 	}
 }
 
-const isObject = (item: any): item is Object =>
-	item && typeof item === 'object' && !Array.isArray(item)
+// const isObject = (item: any): item is Object =>
+// 	item && typeof item === 'object' && !Array.isArray(item)
 
 // https://stackoverflow.com/a/37164538
-export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
-	target: A,
-	source: B
-): DeepMergeTwoTypes<A, B> => {
-	const output: Partial<DeepMergeTwoTypes<A, B>> = Object.assign({}, target)
-	if (isObject(target) && isObject(source)) {
-		Object.keys(source).forEach((key) => {
-			// @ts-ignore
-			if (isObject(source[key])) {
-				if (!(key in target))
-					// @ts-ignore
-					Object.assign(output, { [key]: source[key] })
-				// @ts-ignore
-				else output[key] = mergeDeep(target[key], source[key])
-			} else {
-				// @ts-ignore
-				Object.assign(output, { [key]: source[key] })
-			}
-		})
-	}
+// export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
+// 	target: A,
+// 	source: B
+// ): DeepMergeTwoTypes<A, B> => {
+// 	const output: Partial<DeepMergeTwoTypes<A, B>> = Object.assign({}, target)
+// 	if (isObject(target) && isObject(source)) {
+// 		Object.keys(source).forEach((key) => {
+// 			// @ts-ignore
+// 			if (isObject(source[key])) {
+// 				if (!(key in target))
+// 					// @ts-ignore
+// 					Object.assign(output, { [key]: source[key] })
+// 				// @ts-ignore
+// 				else output[key] = mergeDeep(target[key], source[key])
+// 			} else {
+// 				// @ts-ignore
+// 				Object.assign(output, { [key]: source[key] })
+// 			}
+// 		})
+// 	}
 
-	return output as DeepMergeTwoTypes<A, B>
-}
+// 	return output as DeepMergeTwoTypes<A, B>
+// }
 
 export const getSchemaValidator = (
 	s: TSchema | string | undefined,

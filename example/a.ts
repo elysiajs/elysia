@@ -1,59 +1,33 @@
 import { Elysia, t } from '../src'
 
-declare module 'elysia' {
-	interface ElysiaInstance extends RawElysiaInstance {
-		store: {
-			counter: 0
-			anything: {
-				alright: 'done'
-			}
-		}
-		decorate: {
-			hello: 'world'
-			log(a: string): void
-		}
-		model: {
-			sign: {
-				username: string
-				password: string
-			}
-		}
-	}
-}
+import { prisma } from '../../../demo/24/src/auth'
 
-// setup.ts
-const setup = new Elysia({ name: 'setup' })
+const setup = new Elysia()
 	.state({
-		container: {
-			counter: 0,
-			anything: {
-				alright: 'done'
-			}
-		}
+		prisma
 	})
 	.decorate({
-		hello: 'world',
-		log(a: string) {
-			console.log(a)
-		}
-	})
-	.model({
-		sign: t.Object({
-			username: t.String(),
-			password: t.String()
-		})
+		prisma
 	})
 
-// index.ts
-const main = new Elysia().use(setup).get('/', ({ log }) => {
-	log('A')
-
-	return 'hi'
-})
-
-// another.ts
-const another = new Elysia()
+const app = new Elysia()
+	.decorate({
+		a: 'a'
+	})
+	.state({
+		a: 'a'
+	})
 	.use(setup)
-	.post('/', ({ store: { container } }) => container.counter++, {
-		body: 'sign'
+	.decorate({
+		b: 'b'
 	})
+	.state({
+		b: 'b'
+	})
+	.use(setup)
+	.get('/', async ({ prisma }) => {
+		const a = (await prisma.authKey.findFirst()) ?? 'Empty'
+
+		return a
+	})
+	.listen(8080)
