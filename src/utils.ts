@@ -20,6 +20,7 @@ export const mergeCookie = Mergician({
 })
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
+	// ! Must copy to remove side-effect
 	const array = [...(Array.isArray(a) ? a : [a])]
 	const checksums = []
 
