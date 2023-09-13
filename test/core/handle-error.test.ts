@@ -10,9 +10,15 @@ describe('Handle Error', () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
 			// @ts-ignore
-			.handleError(request, new NotFoundError(), {
-				headers: {}
-			})
+			.handleError(
+				{
+					request,
+					set: {
+						headers: {}
+					}
+				},
+				new NotFoundError()
+			)
 
 		expect(await res.text()).toBe('NOT_FOUND')
 		expect(res.status).toBe(404)
@@ -22,9 +28,15 @@ describe('Handle Error', () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
 			// @ts-ignore
-			.handleError(request, new InternalServerError(), {
-				headers: {}
-			})
+			.handleError(
+				{
+					request,
+					set: {
+						headers: {}
+					}
+				},
+				new InternalServerError()
+			)
 
 		expect(await res.text()).toBe('INTERNAL_SERVER_ERROR')
 		expect(res.status).toBe(500)

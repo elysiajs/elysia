@@ -1,11 +1,14 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.onBeforeHandle(() => {})
+	.decorate('A', 'B')
+	.onError((context) => {
+
+	})
 	.get(['/', '/b'], () => {})
-	// .post('/', ({ body: { file } }) => file.size, {
-	// 	body: t.Object({
-	// 		file: t.File()
-	// 	})
-	// })
+	.post('/', ({ A, body: { file } }) => file.size, {
+		body: t.Object({
+			file: t.File()
+		})
+	})
 	.listen(3000)

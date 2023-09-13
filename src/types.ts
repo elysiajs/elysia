@@ -235,7 +235,7 @@ export interface LifeCycleStore {
 	afterHandle: AfterHandler<any, any>[]
 	onResponse: VoidHandler<any, any>[]
 	trace: TraceHandler<any, any>[]
-	error: ErrorHandler<any>[]
+	error: ErrorHandler<any, any, any>[]
 	stop: VoidHandler<any, any>[]
 }
 
@@ -464,46 +464,57 @@ export type PreHandler<
 	context: Prettify<PreContext<Route, Decorators>>
 ) => MaybePromise<Route['response'] | void>
 
-export type ErrorHandler<T extends Record<string, Error> = {}> = (
-	params:
-		| {
-				request: Request
-				code: 'UNKNOWN'
-				error: Readonly<Error>
-				set: Context['set']
-		  }
-		| {
-				request: Request
-				code: 'VALIDATION'
-				error: Readonly<ValidationError>
-				set: Context['set']
-		  }
-		| {
-				request: Request
-				code: 'NOT_FOUND'
-				error: Readonly<NotFoundError>
-				set: Context['set']
-		  }
-		| {
-				request: Request
-				code: 'PARSE'
-				error: Readonly<ParseError>
-				set: Context['set']
-		  }
-		| {
-				request: Request
-				code: 'INTERNAL_SERVER_ERROR'
-				error: Readonly<InternalServerError>
-				set: Context['set']
-		  }
-		| {
-				[K in keyof T]: {
-					request: Request
-					code: K
-					error: Readonly<T[K]>
-					set: Context['set']
-				}
-		  }[keyof T]
+export type ErrorHandler<
+	T extends Record<string, Error> = {},
+	Route extends RouteSchema = {},
+	Decorators extends DecoratorBase = {
+		request: {}
+		store: {}
+	}
+> = (
+	context: Prettify<
+		Context<Route, Decorators> &
+			(
+				| {
+						request: Request
+						code: 'UNKNOWN'
+						error: Readonly<Error>
+						set: Context['set']
+				  }
+				| {
+						request: Request
+						code: 'VALIDATION'
+						error: Readonly<ValidationError>
+						set: Context['set']
+				  }
+				| {
+						request: Request
+						code: 'NOT_FOUND'
+						error: Readonly<NotFoundError>
+						set: Context['set']
+				  }
+				| {
+						request: Request
+						code: 'PARSE'
+						error: Readonly<ParseError>
+						set: Context['set']
+				  }
+				| {
+						request: Request
+						code: 'INTERNAL_SERVER_ERROR'
+						error: Readonly<InternalServerError>
+						set: Context['set']
+				  }
+				| {
+						[K in keyof T]: {
+							request: Request
+							code: K
+							error: Readonly<T[K]>
+							set: Context['set']
+						}
+				  }[keyof T]
+			)
+	>
 ) => any | Promise<any>
 
 export type Isolate<T> = {
@@ -555,7 +566,7 @@ export type LocalHook<
 	/**
 	 * Catch error
 	 */
-	error?: MaybeArray<ErrorHandler<Errors>>
+	error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
 	/**
 	 * Custom body parser
 	 */

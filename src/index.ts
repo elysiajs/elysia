@@ -732,8 +732,14 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onError(handler: ErrorHandler<Definitions['error']>) {
-		this.on('error', handler)
+	onError<Schema extends RouteSchema = {}>(
+		handler: ErrorHandler<
+			Definitions['error'],
+			MergeSchema<Schema, ParentSchema>,
+			Decorators
+		>
+	) {
+		this.on('error', handler as ErrorHandler<any, any, any>)
 
 		return this
 	}

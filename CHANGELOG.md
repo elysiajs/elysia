@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 0.7.0 - x Sep 2023
 Feature:
 - Rewrite type
@@ -10,7 +9,13 @@ Feature:
 - Rewrite Type.ElysiaMeta to use TypeBox.Transform
 - Strict body type parsing
 - New type:
+    - t.Cookie
     - t.ObjectString
+    - t.MaybeEmpty
+    - t.Nullable
+- Add `Context` to `onError`
+- Lifecycle hook now accept array function
+- Path now accept array string
 
 Improvement:
 - Static Code Analysis now support rest parameter
@@ -29,7 +34,7 @@ Bug fix:
 
 Change:
 - Using single findDynamicRoute instead of inlining to static map
-=======
+
 # 0.6.23 - 12 Sep 2023
 Bug fix:
 - Maximum callstack for duplicated deep class / object
@@ -50,7 +55,6 @@ Bug fix:
 # 0.6.19 - 7 Sep 2023
 Bug fix:
 - Inherits state and error from plugin instance
->>>>>>> main
 
 # 0.6.18 - 5 Sep 2023
 Improvement:

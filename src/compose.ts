@@ -1042,7 +1042,7 @@ export const composeHandler = ({
 
 		endError()
 
-		fnLiteral += `return handleError(c.request, error, set)`
+		fnLiteral += `return handleError(c, error)`
 
 		if (!maybeAsync) fnLiteral += '})()'
 
@@ -1165,11 +1165,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	if (route === null)
 		return ${
 			app.event.error.length
-				? `handleError(
-			request,
-			notFound,
-			ctx.set
-		)`
+				? `handleError(ctx, notFound)`
 				: `new Response(error404, {
 					status: 404
 				})`
@@ -1265,7 +1261,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		}
 
 		fnLiteral += `} catch (error) {
-			return handleError(request, error, ctx.set)
+			return handleError(ctx, error)
 		}`
 
 		endReport()
@@ -1347,7 +1343,9 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 
 	return ${
 		app.event.error.find(isAsync) ? 'async' : ''
-	} function(request, error, set) {`
+	} function(context, error) {
+		const { request, set } = context
+		`
 
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
