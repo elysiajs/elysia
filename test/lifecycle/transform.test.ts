@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('Transform', () => {
-	it('Globally Transform', async () => {
+	it('globally Transform', async () => {
 		const app = new Elysia()
 			.onTransform((request) => {
 				// @ts-ignore
@@ -17,7 +17,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('number')
 	})
 
-	it('Locally transform', async () => {
+	it('locally transform', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
 			({ params: { id } }) => typeof id,
@@ -36,7 +36,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('number')
 	})
 
-	it('Group transform', async () => {
+	it('group transform', async () => {
 		const app = new Elysia()
 			.group('/scoped', (app) =>
 				app
@@ -59,7 +59,7 @@ describe('Transform', () => {
 		expect(await scoped.text()).toBe('number')
 	})
 
-	it('Transform from plugin', async () => {
+	it('transform from plugin', async () => {
 		const transformId = (app: Elysia) =>
 			app.onTransform<{
 				params: {
@@ -78,7 +78,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('number')
 	})
 
-	it('Transform from on', async () => {
+	it('transform from on', async () => {
 		const app = new Elysia()
 			.on('transform', (request) => {
 				if (request.params?.id) request.params.id = +request.params.id
@@ -90,7 +90,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('number')
 	})
 
-	it('Transform in order', async () => {
+	it('transform in order', async () => {
 		const app = new Elysia()
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 			.onTransform<{
@@ -106,7 +106,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('string')
 	})
 
-	it('Globally and locally pre handle', async () => {
+	it('globally and locally pre handle', async () => {
 		const app = new Elysia()
 			.onTransform<{
 				params: {
@@ -133,7 +133,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('2')
 	})
 
-	it('Accept multiple transform', async () => {
+	it('accept multiple transform', async () => {
 		const app = new Elysia()
 			.onTransform<{
 				params: {
@@ -160,7 +160,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('2')
 	})
 
-	it('Transform async', async () => {
+	it('transform async', async () => {
 		const app = new Elysia().get(
 			'/id/:id',
 			({ params: { id } }) => typeof id,
@@ -185,7 +185,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('number')
 	})
 
-	it('Map returned value', async () => {
+	it('map returned value', async () => {
 		const app = new Elysia()
 			.onTransform<{
 				params: {

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('Before Handle', () => {
-	it('Globally skip main handler', async () => {
+	it('globally skip main handler', async () => {
 		const app = new Elysia()
 			.onBeforeHandle<{
 				params: {
@@ -20,7 +20,7 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Cat')
 	})
 
-	it('Locally skip main handler', async () => {
+	it('locally skip main handler', async () => {
 		const app = new Elysia().get(
 			'/name/:name',
 			({ params: { name } }) => name,
@@ -36,7 +36,7 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Cat')
 	})
 
-	it('Group before handler', async () => {
+	it('group before handler', async () => {
 		const app = new Elysia()
 			.group('/type', (app) =>
 				app
@@ -77,7 +77,7 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Cat')
 	})
 
-	it('Before handle in order', async () => {
+	it('before handle in order', async () => {
 		const app = new Elysia()
 			.get('/name/:name', ({ params: { name } }) => name)
 			.onBeforeHandle<{
@@ -93,7 +93,7 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('fubuki')
 	})
 
-	it('Globally and locally before handle', async () => {
+	it('globally and locally before handle', async () => {
 		const app = new Elysia()
 			.onBeforeHandle<{
 				params: {
@@ -115,7 +115,7 @@ describe('Before Handle', () => {
 		expect(await korone.text()).toBe('dog')
 	})
 
-	it('Accept multiple before handler', async () => {
+	it('accept multiple before handler', async () => {
 		const app = new Elysia()
 			.onBeforeHandle<{
 				params: {
@@ -140,7 +140,7 @@ describe('Before Handle', () => {
 		expect(await korone.text()).toBe('dog')
 	})
 
-	it('Handle async', async () => {
+	it('handle async', async () => {
 		const app = new Elysia().get(
 			'/name/:name',
 			({ params: { name } }) => name,
@@ -162,7 +162,7 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Warukunai yo ne')
 	})
 
-	it("Handle on('beforeHandle')", async () => {
+	it("handle on('beforeHandle')", async () => {
 		const app = new Elysia()
 			.on('beforeHandle', async ({ params: { name } }) => {
 				await new Promise<void>((resolve) =>

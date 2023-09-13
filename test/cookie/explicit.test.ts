@@ -98,7 +98,7 @@ describe('Explicit Cookie', () => {
 		expect(set.cookie?.name).toEqual({ value: '' })
 	})
 
-	it('Overwrite existing cookie', () => {
+	it('overwrite existing cookie', () => {
 		const { cookie, set } = create()
 		cookie.name = new Cookie('aru')
 		cookie.name = new Cookie('himari')
@@ -106,7 +106,7 @@ describe('Explicit Cookie', () => {
 		expect(set.cookie?.name).toEqual({ value: 'himari' })
 	})
 
-	it('Remove cookie', () => {
+	it('remove cookie', () => {
 		const { cookie, set } = create()
 
 		cookie.name = new Cookie('himari')

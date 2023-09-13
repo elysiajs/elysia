@@ -45,8 +45,6 @@ describe('affix', () => {
 			.prefix('decorator', 'p')
 			.prefix('error', 'p')
 
-		console.log(app)
-
 		// @ts-ignore
 		expect(app.decorators).toHaveProperty('pDecorate')
 

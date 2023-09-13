@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('On Request', () => {
-	it('Inject headers to response', async () => {
+	it('inject headers to response', async () => {
 		const app = new Elysia()
 			.onRequest(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'

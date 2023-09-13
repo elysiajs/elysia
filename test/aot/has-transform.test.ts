@@ -37,7 +37,7 @@ describe('Has Transform', () => {
 		expect(hasTransform(schema)).toBe(true)
 	})
 
-	it('Find in Optional', () => {
+	it('find in Optional', () => {
 		const schema = t.Optional(
 			t.Object({
 				prop1: t
@@ -50,7 +50,7 @@ describe('Has Transform', () => {
 		expect(hasTransform(schema)).toBe(true)
 	})
 
-	it('Find on multiple transform', () => {
+	it('find on multiple transform', () => {
 		const schema = t.Object({
 			id: t
 				.Transform(t.String())

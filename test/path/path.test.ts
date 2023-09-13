@@ -18,21 +18,21 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Ok')
 	})
 
-	it('Return boolean', async () => {
+	it('return boolean', async () => {
 		const app = new Elysia().get('/', () => true)
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('true')
 	})
 
-	it('Return number', async () => {
+	it('return number', async () => {
 		const app = new Elysia().get('/', () => 617)
 		const res = await app.handle(req('/'))
 
 		expect(await res.text()).toBe('617')
 	})
 
-	it('Return json', async () => {
+	it('return json', async () => {
 		const app = new Elysia().get('/', () => ({
 			name: 'takodachi'
 		}))
@@ -46,7 +46,7 @@ describe('Path', () => {
 		expect(res.headers.get('content-type')).toContain('application/json')
 	})
 
-	it('Return response', async () => {
+	it('return response', async () => {
 		const app = new Elysia().get(
 			'/',
 			() =>
@@ -64,14 +64,14 @@ describe('Path', () => {
 		expect(res.headers.get('duck')).toBe('shuba duck')
 	})
 
-	it('Parse single param', async () => {
+	it('parse single param', async () => {
 		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id)
 		const res = await app.handle(req('/id/123'))
 
 		expect(await res.text()).toBe('123')
 	})
 
-	it('Parse multiple params', async () => {
+	it('parse multiple params', async () => {
 		const app = new Elysia().get(
 			'/id/:id/:name',
 			({ params: { id, name } }) => `${id}/${name}`
@@ -81,7 +81,7 @@ describe('Path', () => {
 		expect(await res.text()).toBe('fubuki/Elysia')
 	})
 
-	it('Accept wildcard', async () => {
+	it('accept wildcard', async () => {
 		const app = new Elysia().get('/wildcard/*', () => 'Wildcard')
 
 		const res = await app.handle(req('/wildcard/okayu'))
@@ -89,7 +89,7 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Wildcard')
 	})
 
-	it('Custom error', async () => {
+	it('custom error', async () => {
 		const app = new Elysia().onError((error) => {
 			if (error.code === 'NOT_FOUND')
 				return new Response('Not Stonk :(', {
@@ -103,14 +103,14 @@ describe('Path', () => {
 		expect(res.status).toBe(404)
 	})
 
-	it('Parse a querystring', async () => {
+	it('parse a querystring', async () => {
 		const app = new Elysia().get('/', ({ query: { id } }) => id)
 		const res = await app.handle(req('/?id=123'))
 
 		expect(await res.text()).toBe('123')
 	})
 
-	it('Parse multiple querystrings', async () => {
+	it('parse multiple querystrings', async () => {
 		const app = new Elysia().get(
 			'/',
 			({ query: { first, last } }) => `${last} ${first}`,
@@ -147,7 +147,7 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Botan')
 	})
 
-	it('Parse JSON body', async () => {
+	it('parse JSON body', async () => {
 		const body = JSON.stringify({
 			name: 'Okayu'
 		})
@@ -171,7 +171,7 @@ describe('Path', () => {
 		expect(JSON.stringify(await res.json())).toBe(body)
 	})
 
-	it('Parse headers', async () => {
+	it('parse headers', async () => {
 		const app = new Elysia().post('/', ({ request }) =>
 			request.headers.get('x-powered-by')
 		)
@@ -263,7 +263,7 @@ describe('Path', () => {
 		expect(text).toBe('route 2')
 	})
 
-	it('Return file', async () => {
+	it('return file', async () => {
 		const app = new Elysia().get('/', ({ set }) => {
 			set.headers.server = 'Elysia'
 

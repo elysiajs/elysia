@@ -28,7 +28,7 @@ describe('Parse Cookie', () => {
 		})
 	})
 
-	it('Unsign cookie signature', () => {
+	it('unsign cookie signature', () => {
 		const set = {
 			headers: {},
 			cookie: {}
@@ -46,7 +46,7 @@ describe('Parse Cookie', () => {
 		expect(result.fischl.value).toEqual('fischl')
 	})
 
-	it('Unsign multiple signature', () => {
+	it('unsign multiple signature', () => {
 		const set = {
 			headers: {},
 			cookie: {}
