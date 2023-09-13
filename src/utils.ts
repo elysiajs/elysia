@@ -12,7 +12,12 @@ import type {
 // @ts-ignore
 import Mergician from 'mergician'
 
-export const mergeDeep = Mergician()
+export const mergeDeep = Mergician({})
+export const mergeCookie = Mergician({
+	appendArrays: true,
+	dedupArrays: true,
+	skipKeys: ['properties']
+})
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 	const array = [...(Array.isArray(a) ? a : [a])]

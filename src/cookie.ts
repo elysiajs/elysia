@@ -98,7 +98,7 @@ export interface CookieOptions {
 	 * Key rotation is when an encryption key is retired
 	 * and replaced by generating a new cryptographic key.
 	 */
-	secret?: string | string[]
+	secrets?: string | string[]
 }
 
 type MutateCookie<T = unknown> = CookieOptions & {
@@ -331,7 +331,7 @@ export const parseCookie = (
 		sign
 	}: {
 		secret?: string | string[]
-		sign?: string[]
+		sign?: true | string | string[]
 	} = {}
 ) => {
 	if (!cookieString) return createCookieJar({}, set)
@@ -339,12 +339,14 @@ export const parseCookie = (
 	const jar: CookieJar = {}
 	const isStringKey = typeof secret === 'string'
 
+	if (sign && sign !== true && !Array.isArray(sign)) sign = [sign]
+
 	const cookieKeys = Object.keys(parse(cookieString))
 	for (let i = 0; i < cookieKeys.length; i++) {
 		const key = cookieKeys[i]
 		let value = parse(cookieString)[key]
 
-		if (sign?.includes(key)) {
+		if (sign === true || sign?.includes(key)) {
 			if (!secret)
 				throw new Error('No secret is provided to cookie plugin')
 

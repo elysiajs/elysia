@@ -49,7 +49,7 @@ export type ElysiaConfig<T extends string = ''> = {
 		'open' | 'close' | 'message' | 'drain'
 	>
 	cookie?: CookieOptions & {
-		sign?: string | string[]
+		sign?: true | string | string[]
 	}
 }
 

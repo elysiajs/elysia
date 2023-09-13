@@ -221,10 +221,7 @@ describe('Checksum', () => {
 					)
 			)
 
-		const app = new Elysia()
-			.use(plugin)
-			.get('/', () => 'A')
-			.listen(8080)
+		const app = new Elysia().use(plugin).get('/', () => 'A')
 
 		await Promise.all(
 			['/v1', '/v1/v1', '/'].map((path) => app.handle(req(path)))
@@ -273,7 +270,6 @@ describe('Checksum', () => {
 			.get('/root', () => 'A')
 			.use(plugin)
 			.get('/all', () => 'A')
-			.listen(3000)
 
 		await Promise.all(
 			['/root', '/1', '/2', '/3', '/all'].map((path) =>

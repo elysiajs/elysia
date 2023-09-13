@@ -15,7 +15,9 @@ import {
 	ERROR_CODE
 } from './error'
 
-import {
+import { parseCookie } from './cookie'
+
+import type {
 	ComposedHandler,
 	ElysiaConfig,
 	Handler,
@@ -25,7 +27,6 @@ import {
 	TraceEvent,
 	TraceReporter
 } from './types'
-import { parseCookie } from './cookie'
 
 const headersHasToJSON = new Headers().toJSON
 const findAliases = new RegExp(` (\\w+) = context`, 'g')
@@ -436,7 +437,7 @@ export const composeHandler = ({
 	// @ts-ignore
 	const cookieMeta = validator?.cookie?.schema as {
 		secrets?: string | string[]
-		sign: string[]
+		sign: string[] | true
 		properties: { [x: string]: Object }
 	}
 
@@ -457,11 +458,17 @@ export const composeHandler = ({
 		encodeCookie += `const _setCookie = c.set.cookie
 		if(_setCookie) {`
 
-		for (const name of cookieMeta.sign) {
-			// if (!(name in cookieMeta.properties)) continue
+		if (cookieMeta.sign === true) {
+			// encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = signCookie(_setCookie['${name}'].value, '${secret}') }\n`
+			encodeCookie += `for(const [key, cookie] of Object.entries(_setCookie)) {
+				c.set.cookie[key].value = signCookie(cookie.value, '${secret}')
+			}`
+		} else
+			for (const name of cookieMeta.sign) {
+				// if (!(name in cookieMeta.properties)) continue
 
-			encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = signCookie(_setCookie['${name}'].value, '${secret}') }\n`
-		}
+				encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = signCookie(_setCookie['${name}'].value, '${secret}') }\n`
+			}
 
 		encodeCookie += '}\n'
 	}
@@ -496,7 +503,9 @@ export const composeHandler = ({
 					: 'undefined'
 			},
 			sign: ${
-				cookieMeta.sign !== undefined
+				cookieMeta.sign === true
+					? true
+					: cookieMeta.sign !== undefined
 					? '[' +
 					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
 					  ']'
@@ -806,7 +815,7 @@ export const composeHandler = ({
 
 			// @ts-ignore
 			if (hasTransform(validator.cookie.schema))
-				fnLiteral += `\nc.params = params.Decode(c.params)\n`
+				fnLiteral += `\nc.cookie = params.Decode(c.cookie)\n`
 		}
 	}
 

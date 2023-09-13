@@ -268,8 +268,8 @@ app.decorate('a', 'b')
 		}>().toEqualTypeOf<{
 			a: 'b'
 			b: 'c'
-			c: string
-			d: string
+			c: 'd'
+			d: 'e'
 		}>()
 	})
 

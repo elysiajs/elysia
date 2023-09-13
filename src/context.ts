@@ -2,6 +2,10 @@ import { HTTPStatusName } from './utils'
 
 import { Cookie, type CookieOptions } from './cookie'
 
+type WithoutNullableKeys<Type> = {
+	[Key in keyof Type]-?: NonNullable<Type[Key]>
+}
+
 import type {
 	DecoratorBase,
 	RouteSchema,
@@ -35,11 +39,12 @@ export type Context<
 
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<any>>
-			: Record<string, Cookie<any>> & {
-					[key in keyof Route['cookie']]: NonNullable<
-						Cookie<NonNullable<Route['cookie'][key]>>
-					>
-			  }
+			: Record<string, Cookie<any>> &
+					WithoutNullableKeys<{
+						[key in keyof Route['cookie']]: Cookie<
+							Route['cookie'][key]
+						>
+					}>
 
 		set: {
 			headers: Record<string, string> & {

@@ -20,6 +20,7 @@ import {
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	mergeDeep,
+	mergeCookie,
 	checksum,
 	mergeLifeCycle,
 	filterGlobalHook,
@@ -73,6 +74,7 @@ import type {
 	TraceReporter,
 	TraceHandler
 } from './types'
+import { isNotEmpty } from './handler'
 
 /**
  * ### Elysia Server
@@ -209,6 +211,28 @@ export default class Elysia<
 			}
 
 		const models = this.definitions.type as Record<string, TSchema>
+
+		const cookieValidator = getSchemaValidator(
+			hook?.cookie ?? (this.validator?.cookie as any),
+			{
+				dynamic: !this.config.aot,
+				models,
+				additionalProperties: true
+			}
+		)
+
+		if (cookieValidator && isNotEmpty(this.config.cookie ?? []))
+			// @ts-ignore
+			cookieValidator.schema = {
+				// @ts-ignore
+				...cookieValidator.schema,
+				...mergeCookie(
+					// @ts-ignore
+					cookieValidator.schema,
+					this.config.cookie
+				)
+			}
+
 		const validator = {
 			body: getSchemaValidator(
 				hook?.body ?? (this.validator?.body as any),
@@ -239,21 +263,14 @@ export default class Elysia<
 					models
 				}
 			),
-			cookie: getSchemaValidator(
-				hook?.cookie ?? (this.validator?.cookie as any),
-				{
-					dynamic: !this.config.aot,
-					models,
-					additionalProperties: true
-				}
-			),
+			cookie: cookieValidator,
 			response: getResponseSchemaValidator(
 				hook?.response ?? (this.validator?.response as any),
 				{
 					dynamic: !this.config.aot,
 					models
 				}
-			),
+			)
 		} as any
 
 		const hooks = mergeHook(this.event, hook)
@@ -2130,7 +2147,7 @@ export default class Elysia<
 					this.server?.upgrade<any>(context.request, {
 						headers:
 							typeof options.upgrade === 'function'
-								? options.upgrade(context as Context)
+								? options.upgrade(context as any as Context)
 								: options.upgrade,
 						data: {
 							validator: validateResponse,
