@@ -609,8 +609,8 @@ export const composeHandler = ({
 			}
 			if (hooks.parse.length) fnLiteral += '}}'
 		} else {
-			const injectAotParser = () => {
-				if (type && !Array.isArray(hooks.type)) {
+			const getAotParser = () => {
+				if (hooks.parse.length && type && !Array.isArray(hooks.type)) {
 					// @ts-ignore
 					const schema = validator?.body?.schema
 
@@ -620,7 +620,7 @@ export const composeHandler = ({
 								hasType('File', schema) ||
 								hasType('Files', schema)
 							)
-								fnLiteral += `c.body = {}
+								return `c.body = {}
 		
 								const form = await c.request.formData()
 								for (const key of form.keys()) {
@@ -632,23 +632,24 @@ export const composeHandler = ({
 										c.body[key] = value[0]
 									else c.body[key] = value
 								}`
-							else {
-								// Since it's an object an not accepting file
-								// we can infer that it's JSON
-								fnLiteral += `c.body = await c.request.json()\n`
-							}
+							// else {
+							// 	// Since it's an object an not accepting file
+							// 	// we can infer that it's JSON
+							// 	fnLiteral += `c.body = await c.request.json()\n`
+							// }
 							break
 
 						default:
-							fnLiteral += 'c.body = await c.request.text()\n'
+							// fnLiteral += defaultParser
 							break
 					}
 				}
 			}
 
-			if (!hooks.parse.length && type && !Array.isArray(hooks.type)) {
-				injectAotParser()
-			} else {
+			const aotParse = getAotParser()
+
+			if (aotParse) fnLiteral += aotParse
+			else {
 				fnLiteral += '\n'
 				fnLiteral += hasHeaders
 					? `let contentType = c.headers['content-type']`
@@ -681,49 +682,42 @@ export const composeHandler = ({
 					endUnit()
 				}
 
-				if (!type || Array.isArray(hooks.type)) {
-					if (hooks.parse.length) fnLiteral += `if (!used)`
+				if (hooks.parse.length) fnLiteral += `if (!used)`
 
-					fnLiteral += `switch (contentType) {
-				case 'application/json':
-					c.body = await c.request.json()
-					break
-
-				case 'text/plain':
-					c.body = await c.request.text()
-					break
-
-				case 'application/x-www-form-urlencoded':
-					c.body = parseQuery(await c.request.text())
-					break
-
-				case 'application/octet-stream':
-					c.body = await c.request.arrayBuffer();
-					break
-
-				case 'multipart/form-data':
-					c.body = {}
-
-					const form = await c.request.formData()
-					for (const key of form.keys()) {
-						if (c.body[key])
-							continue
-
-						const value = form.getAll(key)
-						if (value.length === 1)
-							c.body[key] = value[0]
-						else c.body[key] = value
-					}
-
-					break
-				}\n`
-				}
-
-				if (hooks.parse.length) {
-					fnLiteral += 'if(!used) {\n'
-					injectAotParser()
-					fnLiteral += '\n}'
-				}
+				fnLiteral += `
+				switch (contentType) {
+					case 'application/json':
+						c.body = await c.request.json()
+						break
+				
+					case 'text/plain':
+						c.body = await c.request.text()
+						break
+				
+					case 'application/x-www-form-urlencoded':
+						c.body = parseQuery(await c.request.text())
+						break
+				
+					case 'application/octet-stream':
+						c.body = await c.request.arrayBuffer();
+						break
+				
+					case 'multipart/form-data':
+						c.body = {}
+				
+						const form = await c.request.formData()
+						for (const key of form.keys()) {
+							if (c.body[key])
+								continue
+				
+							const value = form.getAll(key)
+							if (value.length === 1)
+								c.body[key] = value[0]
+							else c.body[key] = value
+						}
+				
+						break
+					}\n`
 
 				fnLiteral += '}\n'
 			}
@@ -1062,8 +1056,6 @@ export const composeHandler = ({
 			fnLiteral += `}`
 		}
 	}
-
-	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,

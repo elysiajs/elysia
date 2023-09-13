@@ -1330,84 +1330,6 @@ export default class Elysia<
 					) => MaybePromise<Elysia<any, any, any, any, any>>
 			  }>
 	): Elysia<any, any, any, any, any> {
-		const register = (
-			plugin:
-				| Elysia<any, any, any, any, any>
-				| ((
-						app: Elysia<any, any, any, any, any>
-				  ) => MaybePromise<Elysia<any, any, any, any, any>>)
-		) => {
-			if (typeof plugin === 'function') {
-				const instance = plugin(
-					this as unknown as any
-				) as unknown as any
-				if (instance instanceof Promise) {
-					this.lazyLoadModules.push(instance.then((x) => x.compile()))
-
-					return this as unknown as any
-				}
-
-				return instance
-			}
-
-			const isScoped = plugin.config.scoped
-
-			if (!isScoped) {
-				this.decorators = mergeDeep(this.decorators, plugin.decorators)
-				this.state(plugin.store)
-				this.model(plugin.definitions.type)
-				this.error(plugin.definitions.error)
-			}
-
-			const {
-				config: { name, seed }
-			} = plugin
-
-			Object.values(plugin.routes).forEach(
-				({ method, path, handler, hooks }) => {
-					this.add(
-						method,
-						path,
-						handler,
-						mergeHook(hooks as LocalHook<any, any, any, any>, {
-							error: plugin.event.error
-						})
-					)
-				}
-			)
-
-			if (!isScoped)
-				if (name) {
-					if (!(name in this.dependencies))
-						this.dependencies[name] = []
-
-					const current =
-						seed !== undefined
-							? checksum(name + JSON.stringify(seed))
-							: 0
-
-					if (
-						this.dependencies[name].some(
-							(checksum) => current === checksum
-						)
-					)
-						return this
-
-					this.dependencies[name].push(current)
-					this.event = mergeLifeCycle(
-						this.event,
-						filterGlobalHook(plugin.event),
-						current
-					)
-				} else
-					this.event = mergeLifeCycle(
-						this.event,
-						filterGlobalHook(plugin.event)
-					)
-
-			return this
-		}
-
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
 				plugin
@@ -1422,13 +1344,86 @@ export default class Elysia<
 								this as unknown as any
 							) as unknown as Elysia
 
-						return register(plugin.default)
+						return this._use(plugin.default)
 					})
 					.then((x) => x.compile())
 			)
 
 			return this as unknown as any
-		} else return register(plugin)
+		} else return this._use(plugin)
+
+		return this
+	}
+
+	private _use(
+		plugin:
+			| Elysia<any, any, any, any, any>
+			| ((
+					app: Elysia<any, any, any, any, any>
+			  ) => MaybePromise<Elysia<any, any, any, any, any>>)
+	) {
+		if (typeof plugin === 'function') {
+			const instance = plugin(this as unknown as any) as unknown as any
+			if (instance instanceof Promise) {
+				this.lazyLoadModules.push(instance.then((x) => x.compile()))
+
+				return this as unknown as any
+			}
+
+			return instance
+		}
+
+		const isScoped = plugin.config.scoped
+
+		if (!isScoped) {
+			this.decorate(plugin.decorators)
+			this.state(plugin.store)
+			this.model(plugin.definitions.type)
+			this.error(plugin.definitions.error)
+		}
+
+		const { name, seed } = plugin.config
+
+		Object.values(plugin.routes).forEach(
+			({ method, path, handler, hooks }) => {
+				this.add(
+					method,
+					path,
+					handler,
+					mergeHook(hooks as LocalHook<any, any, any, any>, {
+						error: plugin.event.error
+					})
+				)
+			}
+		)
+
+		if (!isScoped)
+			if (name) {
+				if (!(name in this.dependencies)) this.dependencies[name] = []
+
+				const current =
+					seed !== undefined
+						? checksum(name + JSON.stringify(seed))
+						: 0
+
+				if (
+					this.dependencies[name].some(
+						(checksum) => current === checksum
+					)
+				)
+					return this
+
+				this.dependencies[name].push(current)
+				this.event = mergeLifeCycle(
+					this.event,
+					filterGlobalHook(plugin.event),
+					current
+				)
+			} else
+				this.event = mergeLifeCycle(
+					this.event,
+					filterGlobalHook(plugin.event)
+				)
 
 		return this
 	}
