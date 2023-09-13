@@ -9,9 +9,10 @@ import {
 	type TUndefined,
 	TProperties,
 	ObjectOptions,
-	TObject
+	TObject,
+	TNumber
 } from '@sinclair/typebox'
-import type { TypeCheck } from '@sinclair/typebox/compiler'
+import { type TypeCheck } from '@sinclair/typebox/compiler'
 
 try {
 	TypeSystem.Format('email', (value) =>
@@ -136,30 +137,56 @@ const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 	return true
 }
 
+const Files = TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
+	'Files',
+	(options, value) => {
+		if (!Array.isArray(value)) return validateFile(options, value)
+
+		if (options.minItems && value.length < options.minItems) return false
+
+		if (options.maxItems && value.length > options.maxItems) return false
+
+		for (let i = 0; i < value.length; i++)
+			if (!validateFile(options, value[i])) return false
+
+		return true
+	}
+)
+
 export const ElysiaType = {
-	// Numeric type is for type reference only since it's aliased to t.Number
-	Numeric: TypeSystem.Type<number, NumericOptions<number>>(
-		'Numeric',
-		{} as any
-	),
+	Numeric: (property?: NumericOptions<number>) =>
+		Type.Transform(Type.Union([Type.String(), Type.Number(property)]))
+			.Decode((value) => {
+				const number = +value
+				if (isNaN(number)) return value
+
+				return number
+			})
+			.Encode((value) => value.toString()) as any as TNumber,
+	ObjectString: <T extends TProperties>(
+		properties: T,
+		options?: ObjectOptions
+	) =>
+		Type.Transform(Type.Union([Type.String(), Type.Object(properties, options)]))
+			.Decode((value) => {
+				if (typeof value === 'string')
+					try {
+						return JSON.parse(value as string)
+					} catch {
+						return value
+					}
+
+				return value
+			})
+			.Encode((value) => JSON.stringify(value)) as any as TObject<T>,
 	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
-	Files: TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
-		'Files',
-		(options, value) => {
-			if (!Array.isArray(value)) return validateFile(options, value)
-
-			if (options.minItems && value.length < options.minItems)
-				return false
-
-			if (options.maxItems && value.length > options.maxItems)
-				return false
-
-			for (let i = 0; i < value.length; i++)
-				if (!validateFile(options, value[i])) return false
-
-			return true
-		}
-	),
+	Files: (options: ElysiaTypeOptions.Files) =>
+		Type.Transform(Type.Union([Files(options)]))
+			.Decode((value) => {
+				if (Array.isArray(value)) return value
+				return [value]
+			})
+			.Encode((value) => value),
 	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
 		({ ...schema, nullable: true } as any),
 	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
@@ -170,17 +197,15 @@ export const ElysiaType = {
 			secrets?: string | string[]
 			sign?: Readonly<(keyof T | (string & {}))[]>
 		}
-	): TObject<T> =>
-		Type.Object(properties, {
-			...options,
-			elysiaMeta: 'Cookie'
-		})
+	): TObject<T> => Type.Object(properties, options)
 } as const
 
 export type TCookie = (typeof ElysiaType)['Cookie']
 
 declare module '@sinclair/typebox' {
 	interface TypeBuilder {
+		ObjectString: typeof ElysiaType.ObjectString
+		// @ts-ignore
 		Numeric: typeof ElysiaType.Numeric
 		// @ts-ignore
 		File: typeof ElysiaType.File
@@ -188,7 +213,6 @@ declare module '@sinclair/typebox' {
 		Files: typeof ElysiaType.Files
 		Nullable: typeof ElysiaType.Nullable
 		MaybeEmpty: typeof ElysiaType.MaybeEmpty
-		URLEncoded: (typeof Type)['Object']
 		Cookie: typeof ElysiaType.Cookie
 	}
 
@@ -203,27 +227,17 @@ declare module '@sinclair/typebox' {
 	}
 }
 
+Type.ObjectString = ElysiaType.ObjectString
+
 /**
  * A Numeric string
  *
  * Will be parse to Number
  */
-Type.Numeric = (properties) => {
-	return Type.Number({
-		...properties,
-		elysiaMeta: 'Numeric'
-	}) as any
-}
-
-Type.URLEncoded = (property, options) =>
-	Type.Object(property, {
-		...options,
-		elysiaMeta: 'URLEncoded'
-	})
+Type.Numeric = ElysiaType.Numeric
 
 Type.File = (arg = {}) =>
 	ElysiaType.File({
-		elysiaMeta: 'File',
 		default: 'File',
 		...arg,
 		extension: arg?.type,
@@ -319,3 +333,14 @@ export { Type as t }
 // )
 
 // hi(`seminar:Noa,Koyuki,Yuuka`)
+
+// const a = TypeCompiler.Compile(Type.String())
+
+// console.log(v.Decode.toString())
+
+// const T = Type.Transform(v.schema)
+// 	.Decode((value) => new Date(value)) // required: number to Date
+// 	.Encode((value) => value.getTime()) // required: Date to number
+
+// const decoded = Value.Decode(T, 0) // const decoded = Date(1970-01-01T00:00:00.000Z)
+// const encoded = Value.Encode(T, decoded)

@@ -5,6 +5,11 @@ Feature:
 - Add mapper method
 - Add affix, prefix, suffix
 - Trace
+- TypeBox.Transfom
+- Rewrite Type.ElysiaMeta to use TypeBox.Transform
+- Strict body type parsing
+- New type:
+    - t.ObjectString
 
 Improvement:
 - Static Code Analysis now support rest parameter

@@ -235,7 +235,8 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 	return false
 }
 
-export const findElysiaMeta = (
+const kind = Symbol.for('TypeBox.Kind')
+export const hasType = (
 	type: string,
 	schema: TAnySchema,
 	found: string[] = [],
@@ -249,29 +250,60 @@ export const findElysiaMeta = (
 			const accessor = !parent ? key : parent + '.' + key
 
 			if (property.type === 'object') {
-				findElysiaMeta(type, property, found, accessor)
+				hasType(type, property, found, accessor)
 				continue
 			} else if (property.anyOf) {
 				for (const prop of property.anyOf) {
-					findElysiaMeta(type, prop, found, accessor)
+					hasType(type, prop, found, accessor)
 				}
 
 				continue
 			}
 
-			if (property.elysiaMeta === type) found.push(accessor)
+			if (kind in property && property[kind] === type)
+				found.push(accessor)
 		}
 
 		if (found.length === 0) return null
 
 		return found
-	} else if (schema?.elysiaMeta === type) {
+	}
+
+	if (kind in schema && schema[kind] === type) {
 		if (parent) found.push(parent)
 
 		return 'root'
 	}
 
 	return null
+}
+
+const TransformSymbol = Symbol.for('TypeBox.Transform')
+
+export const hasTransform = (schema: TAnySchema, parent = '') => {
+	if (!schema) return
+
+	if (schema.type === 'object') {
+		const properties = schema.properties as Record<string, TAnySchema>
+		for (const key in properties) {
+			const property = properties[key]
+
+			const accessor = !parent ? key : parent + '.' + key
+
+			if (property.type === 'object') {
+				if (hasTransform(property, accessor)) return true
+			} else if (property.anyOf) {
+				for (const prop of property.anyOf)
+					if (hasTransform(property, prop)) return true
+			}
+
+			if (TransformSymbol in property) return true
+		}
+
+		return false
+	}
+
+	return schema.properties && TransformSymbol in schema.properties
 }
 
 /**
@@ -308,6 +340,9 @@ const getUnionedType = (validator: TypeCheck<any> | undefined) => {
 
 		if (!foundDifference) return type
 	}
+
+	// @ts-ignore
+	return validator.schema?.type
 }
 
 const matchFnReturn = /(?:return|=>) \S*\(/g
@@ -410,7 +445,6 @@ export const composeHandler = ({
 	const cookieMeta = validator?.cookie?.schema as {
 		secrets?: string | string[]
 		sign: string[]
-		elysiaMeta?: 'Cookie' | (string & {})
 		properties: { [x: string]: Object }
 	}
 
@@ -438,16 +472,7 @@ export const composeHandler = ({
 		}
 
 		encodeCookie += '}\n'
-
-		encodeCookie += `\nconsole.log(c)\n`
-
-		encodeCookie += '\n'
-		// encodeCookie
 	}
-
-	// console.log({
-	// 	encodeCookie
-	// })
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory(hasErrorHandler)
@@ -464,7 +489,8 @@ export const composeHandler = ({
 	}
 
 	if (hasCookie) {
-		const options = cookieMeta ? `{
+		const options = cookieMeta
+			? `{
 			secret: ${
 				cookieMeta.secrets !== undefined
 					? typeof cookieMeta.secrets === 'string'
@@ -484,7 +510,8 @@ export const composeHandler = ({
 					  ']'
 					: 'undefined'
 			}
-		}` : 'undefined'
+		}`
+			: 'undefined'
 
 		if (hasHeaders)
 			fnLiteral += `\nc.cookie = parseCookie(c.set, c.headers.cookie, ${options})\n`
@@ -539,27 +566,142 @@ export const composeHandler = ({
 	if (hasBody) {
 		const type = getUnionedType(validator?.body)
 
-		if (hooks.type || type) {
+		if (hooks.type && !Array.isArray(hooks.type)) {
 			if (hooks.type) {
 				switch (hooks.type) {
+					case 'json':
 					case 'application/json':
-						fnLiteral += `c.body = await c.request.json();`
+						fnLiteral += `c.body = await c.request.json()\n`
 						break
 
+					case 'text':
 					case 'text/plain':
-						fnLiteral += `c.body = await c.request.text();`
+						fnLiteral += `c.body = await c.request.text()\n`
 						break
 
+					case 'urlencoded':
 					case 'application/x-www-form-urlencoded':
-						fnLiteral += `c.body = parseQuery(await c.request.text());`
+						fnLiteral += `c.body = parseQuery(await c.request.text())\n`
 						break
 
+					case 'arrayBuffer':
 					case 'application/octet-stream':
-						fnLiteral += `c.body = await c.request.arrayBuffer();`
+						fnLiteral += `c.body = await c.request.arrayBuffer()\n`
 						break
 
+					case 'formdata':
 					case 'multipart/form-data':
 						fnLiteral += `c.body = {}
+
+						const form = await c.request.formData()
+						for (const key of form.keys()) {
+							if (c.body[key])
+								continue
+
+							const value = form.getAll(key)
+							if (value.length === 1)
+								c.body[key] = value[0]
+							else c.body[key] = value
+						}\n`
+						break
+				}
+			}
+			if (hooks.parse.length) fnLiteral += '}}'
+		} else {
+			const injectAotParser = () => {
+				if (type && !Array.isArray(hooks.type)) {
+					// @ts-ignore
+					const schema = validator?.body?.schema
+
+					switch (type) {
+						case 'object':
+							if (
+								hasType('File', schema) ||
+								hasType('Files', schema)
+							)
+								fnLiteral += `c.body = {}
+		
+								const form = await c.request.formData()
+								for (const key of form.keys()) {
+									if (c.body[key])
+										continue
+			
+									const value = form.getAll(key)
+									if (value.length === 1)
+										c.body[key] = value[0]
+									else c.body[key] = value
+								}`
+							else {
+								// Since it's an object an not accepting file
+								// we can infer that it's JSON
+								fnLiteral += `c.body = await c.request.json()\n`
+							}
+							break
+
+						default:
+							fnLiteral += 'c.body = await c.request.text()\n'
+							break
+					}
+				}
+			}
+
+			if (!hooks.parse.length) {
+				injectAotParser()
+			} else {
+				fnLiteral += '\n'
+				fnLiteral += hasHeaders
+					? `let contentType = c.headers['content-type']`
+					: `let contentType = c.request.headers.get('content-type')`
+
+				fnLiteral += `
+				if (contentType) {
+					const index = contentType.indexOf(';')
+					if (index !== -1) contentType = contentType.substring(0, index)\n`
+
+				if (hooks.parse.length) {
+					fnLiteral += `let used = false\n`
+
+					const endUnit = report('parse', {
+						unit: hooks.parse.length
+					})
+
+					for (let i = 0; i < hooks.parse.length; i++) {
+						const name = `bo${i}`
+
+						if (i !== 0) fnLiteral += `if(!used) {\n`
+
+						fnLiteral += `let ${name} = parse[${i}](c, contentType)\n`
+						fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}\n`
+						fnLiteral += `if(${name} !== undefined) { c.body = ${name}; used = true }\n`
+
+						if (i !== 0) fnLiteral += `}`
+					}
+
+					endUnit()
+				}
+
+				if (!type || Array.isArray(hooks.type)) {
+					if (hooks.parse.length) fnLiteral += `if (!used)`
+
+					fnLiteral += `switch (contentType) {
+				case 'application/json':
+					c.body = await c.request.json()
+					break
+
+				case 'text/plain':
+					c.body = await c.request.text()
+					break
+
+				case 'application/x-www-form-urlencoded':
+					c.body = parseQuery(await c.request.text())
+					break
+
+				case 'application/octet-stream':
+					c.body = await c.request.arrayBuffer();
+					break
+
+				case 'multipart/form-data':
+					c.body = {}
 
 					const form = await c.request.formData()
 					for (const key of form.keys()) {
@@ -570,223 +712,22 @@ export const composeHandler = ({
 						if (value.length === 1)
 							c.body[key] = value[0]
 						else c.body[key] = value
-					}`
-						break
+					}
+
+					break
+				}\n`
 				}
-			} else if (type) {
-				// @ts-ignore
-				const schema = validator?.body?.schema
 
-				switch (type) {
-					case 'object':
-						if (schema.elysiaMeta === 'URLEncoded') {
-							fnLiteral += `c.body = parseQuery(await c.request.text())`
-						} // Accept file which means it's formdata
-						else if (
-							validator.body!.Code().includes("custom('File")
-						)
-							fnLiteral += `c.body = {}
+				fnLiteral += '}\n'
 
-							const form = await c.request.formData()
-							for (const key of form.keys()) {
-								if (c.body[key])
-									continue
-		
-								const value = form.getAll(key)
-								if (value.length === 1)
-									c.body[key] = value[0]
-								else c.body[key] = value
-							}`
-						else {
-							// Since it's an object an not accepting file
-							// we can infer that it's JSON
-							fnLiteral += `c.body = JSON.parse(await c.request.text())`
-						}
-						break
-
-					default:
-						fnLiteral += 'c.body = await c.request.text()'
-						break
-				}
+				injectAotParser()
 			}
-
-			if (hooks.parse.length) fnLiteral += '}}'
-		} else {
-			fnLiteral += '\n'
-			fnLiteral += hasHeaders
-				? `let contentType = c.headers['content-type']`
-				: `let contentType = c.request.headers.get('content-type')`
-
-			fnLiteral += `
-            if (contentType) {
-				const index = contentType.indexOf(';')
-				if (index !== -1) contentType = contentType.substring(0, index)\n`
-
-			if (hooks.parse.length) {
-				fnLiteral += `let used = false\n`
-
-				const endUnit = report('parse', {
-					unit: hooks.parse.length
-				})
-
-				for (let i = 0; i < hooks.parse.length; i++) {
-					const name = `bo${i}`
-
-					if (i !== 0) fnLiteral += `if(!used) {\n`
-
-					fnLiteral += `let ${name} = parse[${i}](c, contentType);`
-					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name};`
-
-					fnLiteral += `
-						if(${name} !== undefined) { c.body = ${name}; used = true }\n`
-
-					if (i !== 0) fnLiteral += `}`
-				}
-
-				endUnit()
-
-				fnLiteral += `if (!used)`
-			}
-
-			fnLiteral += `switch (contentType) {
-			case 'application/json':
-				c.body = await c.request.json()
-				break
-
-			case 'text/plain':
-				c.body = await c.request.text()
-				break
-
-			case 'application/x-www-form-urlencoded':
-				c.body = parseQuery(await c.request.text())
-				break
-
-			case 'application/octet-stream':
-				c.body = await c.request.arrayBuffer();
-				break
-
-			case 'multipart/form-data':
-				c.body = {}
-
-				const form = await c.request.formData()
-				for (const key of form.keys()) {
-					if (c.body[key])
-						continue
-
-					const value = form.getAll(key)
-					if (value.length === 1)
-						c.body[key] = value[0]
-					else c.body[key] = value
-				}
-
-				break
-			}
-		}\n`
 		}
 
 		fnLiteral += '\n'
 	}
+
 	endParse()
-
-	if (validator.params) {
-		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.params.schema)
-
-		if (properties) {
-			switch (typeof properties) {
-				case 'object':
-					for (const property of properties)
-						fnLiteral += `if(c.params.${property}) c.params.${property} = +c.params.${property};`
-					break
-			}
-
-			fnLiteral += '\n'
-		}
-	}
-
-	if (validator.query) {
-		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.query.schema)
-
-		if (properties) {
-			switch (typeof properties) {
-				case 'object':
-					for (const property of properties)
-						fnLiteral += `if(c.query.${property}) c.query.${property} = +c.query.${property};`
-					break
-			}
-
-			fnLiteral += '\n'
-		}
-	}
-
-	if (validator.headers) {
-		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.headers.schema)
-
-		if (properties) {
-			switch (typeof properties) {
-				case 'object':
-					for (const property of properties)
-						fnLiteral += `if(c.headers.${property}) c.headers.${property} = +c.headers.${property};`
-					break
-			}
-
-			fnLiteral += '\n'
-		}
-	}
-
-	if (validator.cookie) {
-		// @ts-ignore
-		const properties = findElysiaMeta('Numeric', validator.cookie.schema)
-
-		if (properties) {
-			switch (typeof properties) {
-				case 'object':
-					for (const property of properties)
-						fnLiteral += `if(c.cookie.${property}) c.cookie.${property} = +c.cookie.${property};`
-					break
-			}
-
-			fnLiteral += '\n'
-		}
-	}
-
-	if (validator.body) {
-		const numericProperties = findElysiaMeta(
-			'Numeric',
-			// @ts-ignore
-			validator.body.schema
-		)
-
-		if (numericProperties) {
-			switch (typeof numericProperties) {
-				case 'string':
-					fnLiteral += `c.body = +c.body;`
-					break
-
-				case 'object':
-					for (const property of numericProperties)
-						fnLiteral += `if(c.body?.${property}) c.body.${property} = +c.body.${property};`
-					break
-			}
-
-			fnLiteral += '\n'
-		}
-
-		// @ts-ignore
-		const filesProperties = findElysiaMeta('Files', validator.body.schema)
-		if (filesProperties) {
-			switch (typeof filesProperties) {
-				case 'object':
-					for (const property of filesProperties)
-						fnLiteral += `if(!Array.isArray(c.body?.${property})) c.body.${property} = [c.body.${property}];`
-					break
-			}
-
-			fnLiteral += '\n'
-		}
-	}
 
 	if (hooks?.transform) {
 		const endTransform = report('transform', {
@@ -815,38 +756,60 @@ export const composeHandler = ({
 	}
 
 	if (validator) {
-		if (validator.headers)
-			fnLiteral += `
-                if (headers.Check(c.headers) === false) {
+		fnLiteral += '\n'
+
+		if (validator.headers) {
+			fnLiteral += `if(headers.Check(c.headers) === false) {
                     ${composeValidation('headers')}
-				}
-        `
+				}`
 
-		if (validator.params)
-			fnLiteral += `if(params.Check(c.params) === false) { ${composeValidation(
-				'params'
-			)} }`
+			// @ts-ignore
+			if (hasTransform(validator.headers.schema))
+				fnLiteral += `\nc.headers = headers.Decode(c.headers)\n`
+		}
 
-		if (validator.query)
+		if (validator.params) {
+			fnLiteral += `if(params.Check(c.params) === false) {
+				${composeValidation('params')}
+			}`
+
+			// @ts-ignore
+			if (hasTransform(validator.params.schema))
+				fnLiteral += `\nc.params = params.Decode(c.params)\n`
+		}
+
+		if (validator.query) {
 			fnLiteral += `if(query.Check(c.query) === false) { ${composeValidation(
 				'query'
 			)} }`
 
-		if (validator.body)
+			// @ts-ignore
+			if (hasTransform(validator.query.schema))
+				fnLiteral += `\nc.query = query.Decode(c.query)\n`
+		}
+
+		if (validator.body) {
 			fnLiteral += `if(body.Check(c.body) === false) { ${composeValidation(
 				'body'
 			)} }`
 
+			// @ts-ignore
+			if (hasTransform(validator.body.schema))
+				fnLiteral += `\nc.body = body.Decode(c.body)\n`
+		}
+
 		if (validator.cookie) {
-			fnLiteral += `
-			const cookieValue = {}
+			fnLiteral += `const cookieValue = {}
 			for(const [key, value] of Object.entries(c.cookie))
 				cookieValue[key] = value.value
 
-			if(cookie.Check(cookieValue) === false) { ${composeValidation(
-				'cookie',
-				'cookieValue'
-			)} }`
+			if(cookie.Check(cookieValue) === false) {
+				${composeValidation('cookie', 'cookieValue')}
+			}`
+
+			// @ts-ignore
+			if (hasTransform(validator.cookie.schema))
+				fnLiteral += `\nc.params = params.Decode(c.params)\n`
 		}
 	}
 

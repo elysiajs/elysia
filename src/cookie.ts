@@ -370,7 +370,7 @@ export const parseCookie = (
 		const start = (value as string).charCodeAt(0)
 		if (start === 123 || start === 91)
 			try {
-				const cookie = new Cookie(JSON.parse(value))
+				const cookie = new Cookie(JSON.parse(value as string))
 
 				// @ts-ignore
 				cookie.setter = set
