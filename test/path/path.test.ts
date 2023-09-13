@@ -327,4 +327,203 @@ describe('Path', () => {
 		expect(res1).toBe('Hi')
 		expect(res2).toBe('Hi')
 	})
+
+	it('handle array route - GET', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().get(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(req(path))
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - POST', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().post(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'POST'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - PUT', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().put(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'PUT'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - DELETE', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().delete(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'DELETE'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - PATCH', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().patch(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'PATCH'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - HEAD', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().head(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'HEAD'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - OPTIONS', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().options(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'OPTIONS'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - TRACE', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().trace(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'TRACE'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - CONNECT', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().connect(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'CONNECT'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - all', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().all(paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const getRes = await app.handle(req(path))
+			const postRes = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'POST'
+				})
+			)
+			const putRes = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'PUT'
+				})
+			)
+			const deleteRes = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'DELETE'
+				})
+			)
+			const patchRes = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'PATCH'
+				})
+			)
+			const headRes = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'HEAD'
+				})
+			)
+
+			expect(await getRes.text()).toBe(path)
+			expect(await postRes.text()).toBe(path)
+			expect(await putRes.text()).toBe(path)
+			expect(await deleteRes.text()).toBe(path)
+			expect(await patchRes.text()).toBe(path)
+			expect(await headRes.text()).toBe(path)
+		}
+	})
+
+	it('handle array route - custom method', async () => {
+		const paths = ['/', '/test', '/other/nested']
+		const app = new Elysia().route('NOTIFY', paths, ({ path }) => {
+			return path
+		})
+
+		for (const path of paths) {
+			const res = await app.handle(
+				new Request('http://localhost' + path, {
+					method: 'NOTIFY'
+				})
+			)
+			expect(await res.text()).toBe(path)
+		}
+	})
 })

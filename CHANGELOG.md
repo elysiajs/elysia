@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 0.7.0 - x Sep 2023
 Feature:
 - Rewrite type
@@ -28,6 +29,28 @@ Bug fix:
 
 Change:
 - Using single findDynamicRoute instead of inlining to static map
+=======
+# 0.6.23 - 12 Sep 2023
+Bug fix:
+- Maximum callstack for duplicated deep class / object
+- [#121](https://github.com/elysiajs/elysia/issues/121) Cannot use PrismaClient in .decorate or .state
+
+# 0.6.22 - 11 Sep 2023
+Bug fix:
+- Remove `const` and `RemoveDeepWritable` from decorate to allow function call
+
+# 0.6.21 - 10 Sep 2023
+Feature:
+- [#112](https://github.com/elysiajs/elysia/issues/112) Route arrays
+
+# 0.6.20 - 9 Sep 2023
+Bug fix:
+- [#107](https://github.com/elysiajs/elysia/issues/107) Elysia handler local hooks not recognizing registered errors on app instance
+
+# 0.6.19 - 7 Sep 2023
+Bug fix:
+- Inherits state and error from plugin instance
+>>>>>>> main
 
 # 0.6.18 - 5 Sep 2023
 Improvement:

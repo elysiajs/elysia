@@ -116,6 +116,7 @@
     "eventemitter3": "^5.0.1",
     "fast-querystring": "^1.1.2",
     "memoirist": "0.1.4",
+    "mergician": "^1.1.0",
     "openapi-types": "^12.1.3"
   },
   "devDependencies": {
@@ -142,9 +143,6 @@
     "typescript": ">= 5.0.0"
   },
   "peerDependenciesMeta": {
-    "@elysiajs/fn": {
-      "optional": true
-    },
     "@sinclair/typebox": {
       "optional": true
     },

@@ -9,6 +9,11 @@ import type {
 	InputSchema
 } from './types'
 
+// @ts-ignore
+import Mergician from 'mergician'
+
+export const mergeDeep = Mergician()
+
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 	const array = [...(Array.isArray(a) ? a : [a])]
 	const checksums = []
@@ -71,34 +76,6 @@ export const mergeHook = (
 		trace: mergeObjectArray(a?.trace ?? [], b?.trace ?? []) as any,
 		error: mergeObjectArray(a?.error ?? [], b?.error ?? [])
 	}
-}
-
-const isObject = (item: any): item is Object =>
-	item && typeof item === 'object' && !Array.isArray(item)
-
-// https://stackoverflow.com/a/37164538
-export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
-	target: A,
-	source: B
-): A & B => {
-	const output: A & B = Object.assign({}, target) as any
-	if (isObject(target) && isObject(source)) {
-		Object.keys(source).forEach((key) => {
-			// @ts-ignore
-			if (isObject(source[key])) {
-				if (!(key in target))
-					// @ts-ignore
-					Object.assign(output, { [key]: source[key] })
-				// @ts-ignore
-				else output[key] = mergeDeep(target[key], source[key])
-			} else {
-				// @ts-ignore
-				Object.assign(output, { [key]: source[key] })
-			}
-		})
-	}
-
-	return output
 }
 
 export const getSchemaValidator = (
