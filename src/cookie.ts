@@ -339,8 +339,11 @@ export const parseCookie = (
 	const jar: CookieJar = {}
 	const isStringKey = typeof secret === 'string'
 
-	// eslint-disable-next-line prefer-const
-	for (let [key, value] of Object.entries(parse(cookieString))) {
+	const cookieKeys = Object.keys(parse(cookieString))
+	for (let i = 0; i < cookieKeys.length; i++) {
+		const key = cookieKeys[i]
+		let value = parse(cookieString)[key]
+
 		if (sign?.includes(key)) {
 			if (!secret)
 				throw new Error('No secret is provided to cookie plugin')
@@ -350,7 +353,8 @@ export const parseCookie = (
 				value = unsignCookie(value as string, secret)
 
 				// @ts-ignore
-				if (value === false) throw new Error(`Fail to decode cookie: ${key}`)
+				if (value === false)
+					throw new Error(`Fail to decode cookie: ${key}`)
 			} else {
 				let fail = true
 				for (let i = 0; i < secret.length; i++) {
@@ -374,7 +378,6 @@ export const parseCookie = (
 
 				// @ts-ignore
 				cookie.setter = set
-				// @ts-ignore
 				cookie.name = key
 
 				jar[key] = cookie
@@ -395,7 +398,6 @@ export const parseCookie = (
 
 		// @ts-ignore
 		cookie.setter = set
-		// @ts-ignore
 		cookie.name = key
 
 		jar[key] = cookie

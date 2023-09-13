@@ -1,4 +1,4 @@
-import type { Elysia } from '.'
+import { type Elysia } from '.'
 
 import { TypeCheck } from '@sinclair/typebox/compiler'
 import type { TAnySchema } from '@sinclair/typebox'
@@ -237,21 +237,21 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 
 const KindSymbol = Symbol.for('TypeBox.Kind')
 
-export const hasType = (type: string, schema: TAnySchema, parent = '') => {
+export const hasType = (type: string, schema: TAnySchema) => {
 	if (!schema) return
+
+	if (KindSymbol in schema && schema[KindSymbol] === type) return true
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
 
-			const accessor = `${parent ? parent + '.' : ''}${key}`
-
 			if (property.type === 'object') {
-				if (hasTransform(property, accessor)) return true
+				if (hasType(type, property)) return true
 			} else if (property.anyOf) {
-				for (const prop of property.anyOf)
-					if (hasTransform(property, prop)) return true
+				for (let i = 0; i < property.anyOf.length; i++)
+					if (hasType(type, property.anyOf[i])) return true
 			}
 
 			if (KindSymbol in property && property[KindSymbol] === type)
@@ -270,7 +270,7 @@ export const hasType = (type: string, schema: TAnySchema, parent = '') => {
 
 const TransformSymbol = Symbol.for('TypeBox.Transform')
 
-export const hasTransform = (schema: TAnySchema, parent = '') => {
+export const hasTransform = (schema: TAnySchema) => {
 	if (!schema) return
 
 	if (schema.type === 'object') {
@@ -278,13 +278,11 @@ export const hasTransform = (schema: TAnySchema, parent = '') => {
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
 
-			const accessor = `${parent ? parent + '.' : ''}${key}`
-
 			if (property.type === 'object') {
-				if (hasTransform(property, accessor)) return true
+				if (hasTransform(property)) return true
 			} else if (property.anyOf) {
-				for (const prop of property.anyOf)
-					if (hasTransform(property, prop)) return true
+				for (let i = 0; i < property.anyOf.length; i++)
+					if (hasTransform(property.anyOf[i])) return true
 			}
 
 			const hasTransformSymbol = TransformSymbol in property
@@ -294,7 +292,10 @@ export const hasTransform = (schema: TAnySchema, parent = '') => {
 		return false
 	}
 
-	return schema.properties && TransformSymbol in schema.properties
+	return (
+		TransformSymbol in schema ||
+		(schema.properties && TransformSymbol in schema.properties)
+	)
 }
 
 /**

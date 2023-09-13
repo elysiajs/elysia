@@ -114,17 +114,17 @@ describe('Static code analysis', () => {
 		const schema = t.Object({
 			a: t.Object({
 				b: t.Object({
-					c: t.Numeric()
+					c: t.File()
 				}),
 				d: t.String()
 			}),
 			id: t.Numeric(),
 			b: t.Object({
-				c: t.Numeric()
+				c: t.File()
 			})
 		})
 
-		expect(hasType('Numeric', schema)).toBeTrue()
+		expect(hasType('File', schema)).toBeTrue()
 	})
 
 	it('find Elysia Schema on root', () => {
@@ -147,7 +147,7 @@ describe('Static code analysis', () => {
 			})
 		})
 
-		expect(hasType('Numeric', schema)).toBeFalse()
+		expect(hasType('File', schema)).toBeFalse()
 	})
 
 	it('restart server once analyze', async () => {
