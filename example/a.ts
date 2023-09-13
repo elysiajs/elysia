@@ -1,14 +1,15 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.decorate('A', 'B')
-	.onError((context) => {
+const a = new Elysia()
+	.decorate('decorate', 'decorate')
+	.state('state', 'state')
+	.model('model', t.String())
+	.error('error', Error)
 
-	})
-	.get(['/', '/b'], () => {})
-	.post('/', ({ A, body: { file } }) => file.size, {
-		body: t.Object({
-			file: t.File()
-		})
-	})
-	.listen(3000)
+const app = new Elysia().use(a).prefix('decorator', 'p').prefix('error', 'p')
+// .get(['/', '/b'], () => {})
+// .post('/', ({ A, body: { file } }) => file.size, {
+// 	body: t.Object({
+// 		file: t.File()
+// 	})
+// })

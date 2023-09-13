@@ -3279,6 +3279,8 @@ export default class Elysia<
 		ParentSchema,
 		Routes
 	> {
+		if (word === '') return this as any
+
 		const delimieter = ['_', '-', ' ']
 		const capitalize = (word: string) =>
 			word[0].toUpperCase() + word.slice(1)
@@ -3294,56 +3296,35 @@ export default class Elysia<
 				: (suffix: string, word: string) => word + capitalize(suffix)
 
 		const remap = (type: 'decorator' | 'state' | 'model' | 'error') => {
+			const store: Record<string, any> = {}
+
 			switch (type) {
 				case 'decorator':
-					for (const key in this.decorators) {
-						// @ts-ignore
-						this.decorators[joinKey(word, key)] =
-							this.decorators[key]
+					for (const key in this.decorators)
+						store[joinKey(word, key)] = this.decorators[key]
 
-						delete this.decorators[word]
-					}
+					this.decorators = store
 					break
 
 				case 'state':
-					for (const key in this.store) {
-						// @ts-ignore
-						this.store[joinKey(word, key)] = this.decorators[key]
+					for (const key in this.store)
+						store[joinKey(word, key)] = this.store[key]
 
-						delete this.store[word]
-					}
+					this.store = store
 					break
 
 				case 'model':
-					for (const key in this.definitions.type) {
-						if (base === 'prefix') {
-							// @ts-ignore
-							this.definitions.type[word + key] =
-								this.definitions.type[key]
-						} else {
-							// @ts-ignore
-							this.definitions.type[word + key] =
-								this.definitions.type[key]
-						}
+					for (const key in this.definitions.type)
+						store[joinKey(word, key)] = this.definitions.type[key]
 
-						delete this.definitions.type[word]
-					}
+					this.definitions.type = store
 					break
 
 				case 'error':
-					for (const key in this.definitions.error) {
-						if (base === 'prefix') {
-							// @ts-ignore
-							this.definitions.error[word + key] =
-								this.definitions.error[key]
-						} else {
-							// @ts-ignore
-							this.definitions.error[word + key] =
-								this.definitions.error[key]
-						}
+					for (const key in this.definitions.error)
+						store[joinKey(word, key)] = this.definitions.error[key]
 
-						delete this.definitions.error[word]
-					}
+					this.definitions.error = store
 					break
 			}
 		}
