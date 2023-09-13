@@ -3,7 +3,7 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
-import { findElysiaMeta } from '../../src/compose'
+import { hasType } from '../../src/compose'
 
 const payload = { hello: 'world' }
 
@@ -124,17 +124,13 @@ describe('Static code analysis', () => {
 			})
 		})
 
-		expect(findElysiaMeta('Numeric', schema)).toEqual([
-			'a.b.c',
-			'id',
-			'b.c'
-		])
+		expect(hasType('Numeric', schema)).toBeTrue()
 	})
 
 	it('find Elysia Schema on root', () => {
 		const schema = t.Numeric()
 
-		expect(findElysiaMeta('Numeric', schema)).toEqual('root')
+		expect(hasType('Numeric', schema)).toBeTrue
 	})
 
 	it('find return null if Elysia Schema is not found', () => {
@@ -151,7 +147,7 @@ describe('Static code analysis', () => {
 			})
 		})
 
-		expect(findElysiaMeta('Numeric', schema)).toBeNull()
+		expect(hasType('Numeric', schema)).toBeFalse()
 	})
 
 	it('restart server once analyze', async () => {

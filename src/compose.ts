@@ -235,47 +235,37 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 	return false
 }
 
-const kind = Symbol.for('TypeBox.Kind')
-export const hasType = (
-	type: string,
-	schema: TAnySchema,
-	found: string[] = [],
-	parent = ''
-) => {
+const KindSymbol = Symbol.for('TypeBox.Kind')
+
+export const hasType = (type: string, schema: TAnySchema, parent = '') => {
+	if (!schema) return
+
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
-		for (const key in properties) {
+		for (const key of Object.keys(properties)) {
 			const property = properties[key]
 
-			const accessor = !parent ? key : parent + '.' + key
+			const accessor = `${parent ? parent + '.' : ''}${key}`
 
 			if (property.type === 'object') {
-				hasType(type, property, found, accessor)
-				continue
+				if (hasTransform(property, accessor)) return true
 			} else if (property.anyOf) {
-				for (const prop of property.anyOf) {
-					hasType(type, prop, found, accessor)
-				}
-
-				continue
+				for (const prop of property.anyOf)
+					if (hasTransform(property, prop)) return true
 			}
 
-			if (kind in property && property[kind] === type)
-				found.push(accessor)
+			if (KindSymbol in property && property[KindSymbol] === type)
+				return true
 		}
 
-		if (found.length === 0) return null
-
-		return found
+		return false
 	}
 
-	if (kind in schema && schema[kind] === type) {
-		if (parent) found.push(parent)
-
-		return 'root'
-	}
-
-	return null
+	return (
+		schema.properties &&
+		KindSymbol in schema.properties &&
+		schema.properties[KindSymbol] === type
+	)
 }
 
 const TransformSymbol = Symbol.for('TypeBox.Transform')
@@ -285,10 +275,10 @@ export const hasTransform = (schema: TAnySchema, parent = '') => {
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
-		for (const key in properties) {
+		for (const key of Object.keys(properties)) {
 			const property = properties[key]
 
-			const accessor = !parent ? key : parent + '.' + key
+			const accessor = `${parent ? parent + '.' : ''}${key}`
 
 			if (property.type === 'object') {
 				if (hasTransform(property, accessor)) return true
@@ -297,7 +287,8 @@ export const hasTransform = (schema: TAnySchema, parent = '') => {
 					if (hasTransform(property, prop)) return true
 			}
 
-			if (TransformSymbol in property) return true
+			const hasTransformSymbol = TransformSymbol in property
+			if (hasTransformSymbol) return true
 		}
 
 		return false
@@ -645,7 +636,7 @@ export const composeHandler = ({
 				}
 			}
 
-			if (!hooks.parse.length) {
+			if (!hooks.parse.length && type && !Array.isArray(hooks.type)) {
 				injectAotParser()
 			} else {
 				fnLiteral += '\n'
@@ -718,9 +709,13 @@ export const composeHandler = ({
 				}\n`
 				}
 
-				fnLiteral += '}\n'
+				if (hooks.parse.length) {
+					fnLiteral += 'if(!used) {\n'
+					injectAotParser()
+					fnLiteral += '\n}'
+				}
 
-				injectAotParser()
+				fnLiteral += '}\n'
 			}
 		}
 
@@ -760,8 +755,8 @@ export const composeHandler = ({
 
 		if (validator.headers) {
 			fnLiteral += `if(headers.Check(c.headers) === false) {
-                    ${composeValidation('headers')}
-				}`
+				${composeValidation('headers')}
+			}`
 
 			// @ts-ignore
 			if (hasTransform(validator.headers.schema))
@@ -779,19 +774,20 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
-			fnLiteral += `if(query.Check(c.query) === false) { ${composeValidation(
-				'query'
-			)} }`
+			fnLiteral += `if(query.Check(c.query) === false) {
+				${composeValidation('query')} 
+			}`
 
 			// @ts-ignore
 			if (hasTransform(validator.query.schema))
-				fnLiteral += `\nc.query = query.Decode(c.query)\n`
+				// Decode doesn't work with Object.create(null)
+				fnLiteral += `\nc.query = query.Decode(Object.assign({}, c.query))\n`
 		}
 
 		if (validator.body) {
-			fnLiteral += `if(body.Check(c.body) === false) { ${composeValidation(
-				'body'
-			)} }`
+			fnLiteral += `if(body.Check(c.body) === false) { 
+				${composeValidation('body')}
+			}`
 
 			// @ts-ignore
 			if (hasTransform(validator.body.schema))

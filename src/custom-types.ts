@@ -162,7 +162,7 @@ export const ElysiaType = {
 
 				return number
 			})
-			.Encode((value) => value.toString()) as any as TNumber,
+			.Encode((value) => value) as any as TNumber,
 	ObjectString: <T extends TProperties>(
 		properties: T,
 		options?: ObjectOptions
