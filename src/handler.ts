@@ -31,7 +31,7 @@ export const mapEarlyResponse = (
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
-			set.status = 302
+			if (set.status === 200) set.status = 302
 		}
 
 		if (
@@ -182,7 +182,7 @@ export const mapResponse = (
 	if (isNotEmpty(set.headers) || set.status !== 200 || set.redirect) {
 		if (set.redirect) {
 			set.headers.Location = set.redirect
-			set.status = 302
+			if (set.status === 200) set.status = 302
 		}
 
 		if (
