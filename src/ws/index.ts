@@ -89,9 +89,9 @@ export class ElysiaWS<
 		this.raw.terminate()
 	}
 
-	isSubscribed(topic: string) {
+	isSubscribed(room: string) {
 		// get isSubscribed() { return this.raw.isSubscribed } -> Expected 'this' to be instanceof ServerWebSocket
-		return this.raw.isSubscribed(topic)
+		return this.raw.isSubscribed(room)
 	}
 
 	get remoteAddress() {
