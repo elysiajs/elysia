@@ -492,7 +492,10 @@ export const composeHandler = ({
 
 	if (validator.body) {
 		// @ts-ignore
-		const numericProperties = findElysiaMeta('Numeric', validator.body.schema)
+		const numericProperties = findElysiaMeta(
+			'Numeric',
+			validator.body.schema
+		)
 
 		if (numericProperties) {
 			switch (typeof numericProperties) {
@@ -636,11 +639,14 @@ export const composeHandler = ({
 						if(!(response instanceof Error))
 						${composeResponseValidation(name)}
 					}\n`
+				}
 
-					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+				fnLiteral += `${name} = mapEarlyResponse(${name}, c.set);\n`
+				fnLiteral += `if(${name}) return ${name};\n`
 
-					fnLiteral += `if(${name}) return ${name};\n}`
-				} else fnLiteral += `if(${name}) return ${name};\n`
+				if (validator.response) {
+					fnLiteral += '}'
+				}
 			}
 		}
 
