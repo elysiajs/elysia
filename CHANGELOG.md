@@ -22,9 +22,11 @@ Improvement:
 - Static Code Analysis now support rest parameter
 - Breakdown dynamic router into single pipeline instead of inlining to static router to reduce memory usage
 - Set `t.File` and `t.Files` to `File` instead of `Blob`
+- Skip class instance merging
 
 Breaking Change:
 - Remove `ws` plugin, migrate to core
+- Remove `mergician`
 
 Bug fix:
 - Strictly validate response by default
