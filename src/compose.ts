@@ -494,6 +494,7 @@ export const composeHandler = ({
 		// @ts-ignore
 		const numericProperties = findElysiaMeta(
 			'Numeric',
+			// @ts-ignore
 			validator.body.schema
 		)
 

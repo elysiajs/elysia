@@ -1,3 +1,15 @@
+# 0.6.24 - 18 Sep 2023
+Feature:
+- [#149](https://github.com/elysiajs/elysia/pulls/149) support additional status codes in redirects
+
+Improvement:
+- [#157](https://github.com/elysiajs/elysia/pulls/157) added unit tests and fixed example & api
+
+Bug fix:
+- [#167](https://github.com/elysiajs/elysia/pulls/167) mapEarlyResponse with aot on after handle
+- [#160](https://github.com/elysiajs/elysia/pulls/160) typo in test suite name
+- [#152](https://github.com/elysiajs/elysia/pulls/152) bad code in Internal server error class
+
 # 0.6.23 - 12 Sep 2023
 Bug fix:
 - Maximum callstack for duplicated deep class / object
