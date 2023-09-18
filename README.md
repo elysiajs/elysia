@@ -10,7 +10,7 @@
 </p>
 
 <h6 align=center>
-    Former known as <a href="https://github.com/saltyaom/kingworld">KingWorld</a>
+    Formerly known as <a href="https://github.com/saltyaom/kingworld">KingWorld</a>
 </h6>
 
 ## Philosophies

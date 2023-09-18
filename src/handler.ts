@@ -78,9 +78,12 @@ export const mapResponse = (
 		set.redirect ||
 		set.cookie
 	) {
+		if (typeof set.status === 'string') set.status = StatusMap[set.status]
+
 		if (set.redirect) {
 			set.headers.Location = set.redirect
-			set.status = 302
+			if (!set.status || set.status < 300 || set.status >= 400)
+				set.status = 302
 		}
 
 		if (set.cookie && isNotEmpty(set.cookie))
@@ -94,8 +97,6 @@ export const mapResponse = (
 				new Headers(set.headers),
 				set.headers['Set-Cookie']
 			) as any
-
-		if (typeof set.status === 'string') set.status = StatusMap[set.status]
 
 		switch (response?.constructor?.name) {
 			case 'String':
@@ -245,9 +246,13 @@ export const mapEarlyResponse = (
 		set.redirect ||
 		set.cookie
 	) {
+		if (typeof set.status === 'string') set.status = StatusMap[set.status]
+
 		if (set.redirect) {
 			set.headers.Location = set.redirect
-			set.status = 302
+
+			if (!set.status || set.status < 300 || set.status >= 400)
+				set.status = 302
 		}
 
 		if (set.cookie && isNotEmpty(set.cookie))
@@ -261,8 +266,6 @@ export const mapEarlyResponse = (
 				new Headers(set.headers),
 				set.headers['Set-Cookie']
 			) as any
-
-		if (typeof set.status === 'string') set.status = StatusMap[set.status]
 
 		switch (response?.constructor?.name) {
 			case 'String':

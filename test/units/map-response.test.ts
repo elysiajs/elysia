@@ -253,6 +253,7 @@ describe('Map Response', () => {
 			redirect: 'https://cunny.school',
 			cookie: {}
 		})
+
 		expect(response).toBeInstanceOf(Response)
 		expect(response.status).toBe(302)
 		expect(await response.text()).toEqual('Shiroko')

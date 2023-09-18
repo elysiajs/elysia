@@ -891,17 +891,20 @@ export const composeHandler = ({
 			name: handler.name
 		})
 
-		fnLiteral += isAsync(handler)
-			? `let r = await handler(c);\n`
-			: `let r = handler(c);\n`
+		if (hooks.afterHandle.length)
+			fnLiteral += isAsync(handler)
+				? `let r = c.response = await handler(c);\n`
+				: `let r = c.response = handler(c);\n`
+		else
+			fnLiteral += isAsync(handler)
+				? `let r = await handler(c);\n`
+				: `let r = handler(c);\n`
 
 		endHandle()
 
 		const endAfterHandle = report('afterHandle', {
 			unit: hooks.afterHandle.length
 		})
-
-		fnLiteral += `c.response = r\n`
 
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const name = `af${i}`
@@ -918,9 +921,14 @@ export const composeHandler = ({
 
 				endUnit()
 			} else {
-				fnLiteral += isAsync(hooks.afterHandle[i])
-					? `let ${name} = await afterHandle[${i}](c)\n`
-					: `let ${name} = afterHandle[${i}](c)\n`
+				if (validator.response)
+					fnLiteral += isAsync(hooks.afterHandle[i])
+						? `let ${name} = await afterHandle[${i}](c)\n`
+						: `let ${name} = afterHandle[${i}](c)\n`
+				else
+					fnLiteral += isAsync(hooks.afterHandle[i])
+						? `let ${name} = mapEarlyResponse(await afterHandle[${i}](c), c.set)\n`
+						: `let ${name} = mapEarlyResponse(afterHandle[${i}](c), c.set)\n`
 
 				endUnit()
 
@@ -936,12 +944,14 @@ export const composeHandler = ({
 				} else {
 					fnLiteral += `if(${name}) {`
 					endAfterHandle()
-					fnLiteral += `return ${name} }\n`
+					fnLiteral += `return ${name}}\n`
 				}
 			}
 		}
 
 		endAfterHandle()
+
+		fnLiteral += `r = c.response\n`
 
 		if (validator.response) fnLiteral += composeResponseValidation()
 
@@ -1056,6 +1066,8 @@ export const composeHandler = ({
 			fnLiteral += `}`
 		}
 	}
+
+	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,

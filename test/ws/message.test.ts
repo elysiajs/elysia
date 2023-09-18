@@ -49,7 +49,7 @@ describe('WebSocket message', () => {
 		const { type, data } = await message
 
 		expect(type).toBe('message')
-		expect(data).toBe('::ffff:127.0.0.1')
+		expect(data).toBe('::1')
 
 		await wsClosed(ws)
 		app.stop()
@@ -61,7 +61,7 @@ describe('WebSocket message', () => {
 				open(ws) {
 					ws.subscribe('asdf')
 				},
-				message(ws, message) {
+				message(ws) {
 					ws.publish('asdf', ws.isSubscribed('asdf'))
 				}
 			})

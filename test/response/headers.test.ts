@@ -3,7 +3,7 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-describe('Resposne Headers', () => {
+describe('Response Headers', () => {
 	it('add response headers', async () => {
 		const app = new Elysia().get('/', ({ set }) => {
 			set.headers['x-powered-by'] = 'Elysia'
