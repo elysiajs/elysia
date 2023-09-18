@@ -18,11 +18,6 @@ jobs:
               with:
                   bun-version: latest
 
-            - name: Setup node and restore cached dependencies
-              uses: actions/setup-node@v3
-              with:
-                node-version: '20'
-
             - name: Install packages
               run: bun install
 
