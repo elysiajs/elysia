@@ -1,0 +1,25 @@
+name: Code CI
+
+on:
+    push:
+    pull_request:
+
+jobs:
+    build:
+        name: Build and test code
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
+
+            - name: Install packages
+              run: bun install
+
+            - name: Test
+              run: bun test
