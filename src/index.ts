@@ -232,15 +232,11 @@ export default class Elysia<
 
 			if (cookieValidator && isNotEmpty(this.config.cookie ?? []))
 				// @ts-ignore
-				cookieValidator.schema = {
+				cookieValidator.schema = mergeCookie(
 					// @ts-ignore
-					...cookieValidator.schema,
-					...mergeCookie(
-						// @ts-ignore
-						cookieValidator.schema,
-						this.config.cookie
-					)
-				}
+					cookieValidator.schema,
+					this.config.cookie ?? {}
+				)
 
 			const validator = {
 				body: getSchemaValidator(

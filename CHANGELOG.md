@@ -31,6 +31,7 @@ Bug fix:
 - `t.Optional(t.Object({ [name]: t.Numeric }))` causing error
 - Add null check before converting `Numeric`
 - Inherits store to instance plugin
+- Handle class overlapping
 
 Change:
 - Using single findDynamicRoute instead of inlining to static map

@@ -9,15 +9,55 @@ import type {
 	InputSchema
 } from './types'
 
-// @ts-ignore
-import Mergician from 'mergician'
+const isObject = (item: any): item is Object =>
+	item && typeof item === 'object' && !Array.isArray(item)
 
-export const mergeDeep = Mergician({})
-export const mergeCookie = Mergician({
-	appendArrays: true,
-	dedupArrays: true,
-	skipKeys: ['properties']
-})
+const isClass = (v: Object) =>
+	typeof v === 'function' && /^\s*class\s+/.test(v.toString())
+
+export const mergeDeep = <const A extends Object, const B extends Object>(
+	target: A,
+	source: B,
+	{
+		skipKeys
+	}: {
+		skipKeys?: string[]
+	} = {}
+): A & B => {
+	const output: Record<any, any> = Object.assign({}, target)
+
+	if (isObject(target) && isObject(source))
+		for (const [key, value] of Object.entries(source)) {
+			if (skipKeys?.includes(key)) continue
+
+			if (!isObject(value)) {
+				output[key] = value
+				continue
+			}
+
+			if (!(key in target)) {
+				output[key] = value
+				continue
+			}
+
+			if (key in target && isClass(value)) {
+				output[key] = value
+				continue
+			}
+
+			output[key] = mergeDeep((target as any)[key] as any, value)
+		}
+
+	return output as A & B
+}
+
+export const mergeCookie = <const A extends Object, const B extends Object>(
+	target: A,
+	source: B
+): A & B =>
+	mergeDeep(target, source, {
+		skipKeys: ['properties']
+	})
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 	// ! Must copy to remove side-effect

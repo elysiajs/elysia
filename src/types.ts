@@ -57,7 +57,6 @@ export type MaybeArray<T> = T | T[]
 export type MaybePromise<T> = T | Promise<T>
 
 export type ObjectValues<T extends object> = T[keyof T]
-export type DeepWritable<T> = { -readonly [P in keyof T]: DeepWritable<T[P]> }
 
 /**
  * @link https://stackoverflow.com/a/49928360/1490091
