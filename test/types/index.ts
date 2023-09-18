@@ -854,3 +854,37 @@ app.group(
 				)
 	)
 }
+
+// ? Decorators are Read-Only in context
+{
+	const app = new Elysia()
+		.decorate('a', {
+			b: 'c',
+			d: 54
+		})
+		.decorate('pi', 3.14)
+
+	app.get('/', (ctx) => {
+		type OnlyDecorators = Omit<
+			typeof ctx,
+			| 'params'
+			| 'request'
+			| 'body'
+			| 'headers'
+			| 'query'
+			| 'cookie'
+			| 'set'
+			| 'path'
+			| 'r'
+			| 'store'
+		>
+
+		expectTypeOf<OnlyDecorators>().toEqualTypeOf<{
+			readonly a: {
+				readonly b: 'c'
+				readonly d: 54
+			}
+			readonly pi: 3.14
+		}>()
+	})
+}
