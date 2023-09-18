@@ -10,6 +10,7 @@ import type { Context } from './context'
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
+import { isNotEmpty } from './handler'
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -75,7 +76,6 @@ import type {
 	TraceHandler,
 	MaybeArray
 } from './types'
-import { isNotEmpty } from './handler'
 
 /**
  * ### Elysia Server
@@ -102,7 +102,8 @@ export default class Elysia<
 		error: {}
 	},
 	ParentSchema extends RouteSchema = {},
-	Routes extends RouteBase = {}
+	Routes extends RouteBase = {},
+	Scoped extends boolean = false
 > {
 	config: ElysiaConfig<BasePath>
 	private dependencies: Record<string, number[]> = {}
@@ -157,7 +158,7 @@ export default class Elysia<
 	private lazyLoadModules: Promise<Elysia<any, any>>[] = []
 	path: BasePath = '' as any
 
-	constructor(config?: Partial<ElysiaConfig<BasePath>>) {
+	constructor(config?: Partial<ElysiaConfig<BasePath, Scoped>>) {
 		this.config = {
 			forceErrorEncapsulation: false,
 			prefix: '',
@@ -611,7 +612,8 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	error<
@@ -636,7 +638,8 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	error<const NewErrors extends Record<string, Error>>(
@@ -655,7 +658,8 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	/**
@@ -686,7 +690,7 @@ export default class Elysia<
 		error?: {
 			prototype: Error
 		}
-	): Elysia<any, any, any, any, any> {
+	): Elysia<any, any, any, any, any, any> {
 		switch (typeof name) {
 			case 'string':
 				// @ts-ignore
@@ -833,7 +837,7 @@ export default class Elysia<
 	}
 
 	group<
-		const NewElysia extends Elysia<any, any, any, any, any>,
+		const NewElysia extends Elysia<any, any, any, any, any, any>,
 		const Prefix extends string
 	>(
 		prefix: Prefix,
@@ -866,7 +870,7 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any, any>,
+		const NewElysia extends Elysia<any, any, any, any, any, any>,
 		const Prefix extends string,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
@@ -932,11 +936,11 @@ export default class Elysia<
 		schemaOrRun:
 			| LocalHook<any, any, any, any>
 			| ((
-					group: Elysia<any, any, any, any, any>
-			  ) => Elysia<any, any, any, any, any>),
+					group: Elysia<any, any, any, any, any, any>
+			  ) => Elysia<any, any, any, any, any, any>),
 		run?: (
-			group: Elysia<any, any, any, any, any>
-		) => Elysia<any, any, any, any, any>
+			group: Elysia<any, any, any, any, any, any>
+		) => Elysia<any, any, any, any, any, any>
 	): this {
 		const instance = new Elysia({
 			...this.config,
@@ -1017,30 +1021,13 @@ export default class Elysia<
 			Definitions['error'],
 			BasePath
 		>
-	): Elysia<BasePath, Decorators, Definitions, Route, Routes>
-
-	// : Elysia<
-	// 	any,
-	// 	{
-	// 		error: Instance['error']
-	// 		request: Instance['request']
-	// 		store: Instance['store']
-	// 		schema: Instance['schema']
-	// 		meta: Instance['meta'] &
-	// 			Record<
-	// 				'schema',
-	// 				{
-	// 					[key in keyof Schema]: Schema[key]
-	// 				}
-	// 			>
-	// 	}
-	// >
+	): Elysia<BasePath, Decorators, Definitions, Route, Routes, Scoped>
 
 	guard<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any, any>,
+		const NewElysia extends Elysia<any, any, any, any, any, any>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
@@ -1053,7 +1040,7 @@ export default class Elysia<
 			Definitions['error']
 		>,
 		run: (
-			group: Elysia<BasePath, Decorators, Definitions, Schema, {}>
+			group: Elysia<BasePath, Decorators, Definitions, Schema, {}, Scoped>
 		) => NewElysia
 	): NewElysia extends Elysia<
 		any,
@@ -1097,9 +1084,9 @@ export default class Elysia<
 	guard(
 		hook: LocalHook<any, any, any, any>,
 		run?: (
-			group: Elysia<any, any, any, any, any>
-		) => Elysia<any, any, any, any, any>
-	): Elysia<any, any, any, any, any> {
+			group: Elysia<any, any, any, any, any, any>
+		) => Elysia<any, any, any, any, any, any>
+	): Elysia<any, any, any, any, any, any> {
 		if (!run) {
 			this.event = mergeLifeCycle(this.event, hook)
 			this.validator = {
@@ -1154,16 +1141,8 @@ export default class Elysia<
 		return this as any
 	}
 
-	// Elysia<
-	// 	BasePath,
-	// 	Decorators,
-	// 	Definitions,
-	// 	ParentSchema,
-	// 	Routes
-	// >
-
 	// Inline Fn
-	use<NewElysia extends Elysia<any, any, any, any, any>>(
+	use<NewElysia extends Elysia<any, any, any, any, any, any>>(
 		plugin: MaybePromise<
 			(
 				app: Elysia<BasePath, Decorators, Definitions, ParentSchema>
@@ -1195,50 +1174,55 @@ export default class Elysia<
 					>
 				},
 				Prettify<MergeSchema<ParentSchema, PluginSchema>>,
-				Routes & NewElysia['schema']
+				Routes & NewElysia['schema'],
+				Scoped
 		  >
 		: this
 
 	// Entire Instance
-	use<NewElysia extends Elysia<any, any, any, any, any>>(
+	use<NewElysia extends Elysia<any, any, any, any, any, any>>(
 		instance: NewElysia
 	): NewElysia extends Elysia<
 		any,
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
-		any
+		any,
+		infer IsScoped
 	>
-		? Elysia<
-				BasePath,
-				{
-					request: Prettify<
-						Decorators['request'] & PluginDecorators['request']
-					>
-					store: Prettify<
-						Decorators['store'] & PluginDecorators['store']
-					>
-				},
-				{
-					type: Prettify<
-						Definitions['type'] & PluginDefinitions['type']
-					>
-					error: Prettify<
-						Definitions['error'] & PluginDefinitions['error']
-					>
-				},
-				Prettify<MergeSchema<ParentSchema, PluginSchema>>,
-				BasePath extends ``
-					? Routes & NewElysia['schema']
-					: Routes & AddPrefix<BasePath, NewElysia['schema']>
-		  >
+		? IsScoped extends true
+			? this
+			: Elysia<
+					BasePath,
+					{
+						request: Prettify<
+							Decorators['request'] & PluginDecorators['request']
+						>
+						store: Prettify<
+							Decorators['store'] & PluginDecorators['store']
+						>
+					},
+					{
+						type: Prettify<
+							Definitions['type'] & PluginDefinitions['type']
+						>
+						error: Prettify<
+							Definitions['error'] & PluginDefinitions['error']
+						>
+					},
+					Prettify<MergeSchema<ParentSchema, PluginSchema>>,
+					BasePath extends ``
+						? Routes & NewElysia['schema']
+						: Routes & AddPrefix<BasePath, NewElysia['schema']>,
+					Scoped
+			  >
 		: this
 
 	// Import Fn
-	use<NewElysia extends Elysia<any, any, any, any, any>>(
+	use<NewElysia extends Elysia<any, any, any, any, any, any>>(
 		plugin: Promise<{
 			default: (
-				elysia: Elysia<any, any, any, any, any>
+				elysia: Elysia<any, any, any, any, any, any>
 			) => MaybePromise<NewElysia>
 		}>
 	): NewElysia extends Elysia<
@@ -1261,12 +1245,13 @@ export default class Elysia<
 				MergeSchema<ParentSchema, PluginSchema>,
 				BasePath extends ``
 					? Routes & NewElysia['schema']
-					: Routes & AddPrefix<BasePath, NewElysia['schema']>
+					: Routes & AddPrefix<BasePath, NewElysia['schema']>,
+				Scoped
 		  >
 		: this
 
 	// Import entire instance
-	use<LazyLoadElysia extends Elysia<any, any, any, any, any>>(
+	use<LazyLoadElysia extends Elysia<any, any, any, any, any, any>>(
 		plugin: Promise<{
 			default: LazyLoadElysia
 		}>
@@ -1311,21 +1296,21 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| Elysia<any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any>
 			| MaybePromise<
 					(
-						app: Elysia<any, any, any, any, any>
-					) => MaybePromise<Elysia<any, any, any, any, any>>
+						app: Elysia<any, any, any, any, any, any>
+					) => MaybePromise<Elysia<any, any, any, any, any, any>>
 			  >
 			| Promise<{
-					default: Elysia<any, any, any, any, any>
+					default: Elysia<any, any, any, any, any, any>
 			  }>
 			| Promise<{
 					default: (
-						elysia: Elysia<any, any, any, any, any>
-					) => MaybePromise<Elysia<any, any, any, any, any>>
+						elysia: Elysia<any, any, any, any, any, any>
+					) => MaybePromise<Elysia<any, any, any, any, any, any>>
 			  }>
-	): Elysia<any, any, any, any, any> {
+	): Elysia<any, any, any, any, any, any> {
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
 				plugin
@@ -1353,10 +1338,10 @@ export default class Elysia<
 
 	private _use(
 		plugin:
-			| Elysia<any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any>
 			| ((
-					app: Elysia<any, any, any, any, any>
-			  ) => MaybePromise<Elysia<any, any, any, any, any>>)
+					app: Elysia<any, any, any, any, any, any>
+			  ) => MaybePromise<Elysia<any, any, any, any, any, any>>)
 	) {
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
@@ -1370,28 +1355,38 @@ export default class Elysia<
 		}
 
 		const isScoped = plugin.config.scoped
+		if (isScoped) {
+			plugin.model(this.definitions.type as any)
+			plugin.error(this.definitions.error as any)
+			plugin.onRequest((context) => {
+				Object.assign(context, this.decorators)
+				Object.assign(context.store, this.store)
+			})
 
-		if (!isScoped) {
-			this.decorate(plugin.decorators)
-			this.state(plugin.store)
-			this.model(plugin.definitions.type)
-			this.error(plugin.definitions.error)
+			if (plugin.config.aot) plugin.compile()
+
+			return this.mount(plugin.fetch)
 		}
+
+		this.decorate(plugin.decorators)
+		this.state(plugin.store)
+		this.model(plugin.definitions.type)
+		this.error(plugin.definitions.error)
 
 		const { name, seed } = plugin.config
 
-		Object.values(plugin.routes).forEach(
-			({ method, path, handler, hooks }) => {
-				this.add(
-					method,
-					path,
-					handler,
-					mergeHook(hooks as LocalHook<any, any, any, any>, {
-						error: plugin.event.error
-					})
-				)
-			}
-		)
+		for (const { method, path, handler, hooks } of Object.values(
+			plugin.routes
+		)) {
+			this.add(
+				method,
+				path,
+				handler,
+				mergeHook(hooks as LocalHook<any, any, any, any, any, any>, {
+					error: plugin.event.error
+				})
+			)
+		}
 
 		if (!isScoped)
 			if (name) {
@@ -1507,7 +1502,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	get<
@@ -1555,7 +1551,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -1627,7 +1624,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	post<
@@ -1675,7 +1673,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -1747,7 +1746,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	put<
@@ -1795,7 +1795,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -1867,7 +1868,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	patch<
@@ -1915,7 +1917,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -1987,7 +1990,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	delete<
@@ -2035,7 +2039,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -2107,7 +2112,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	options<
@@ -2155,7 +2161,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -2227,7 +2234,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	all<
@@ -2275,7 +2283,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -2342,7 +2351,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	head<
@@ -2390,7 +2400,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -2462,7 +2473,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	connect<
@@ -2510,7 +2522,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -2593,7 +2606,8 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		Scoped
 	> {
 		const transform = options.transformMessage
 			? Array.isArray(options.transformMessage)
@@ -2767,7 +2781,8 @@ export default class Elysia<
 						: never
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	route<
@@ -2829,7 +2844,8 @@ export default class Elysia<
 						: never
 				}
 			}
-		>
+		>,
+		Scoped
 	>
 
 	/**
@@ -2900,19 +2916,9 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
-
-	// : Elysia<
-	// 	BasePath,
-	// 	{
-	// 		store: Reconciliation<Instance['store'], Record<Key, Value>>
-	// 		error: Instance['error']
-	// 		request: Instance['request']
-	// 		schema: Instance['schema']
-	// 		meta: Instance['meta']
-	// 	}
-	// >
 
 	/**
 	 * ### state
@@ -2936,7 +2942,8 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	state<const NewStore extends Record<string, unknown>>(
@@ -2949,7 +2956,8 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	/**
@@ -3016,19 +3024,9 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
-
-	// : Elysia<
-	// 	BasePath,
-	// 	{
-	// 		store: Instance['store']
-	// 		error: Instance['error']
-	// 		request: Reconciliation<Instance['request'], Record<Name, Value>>
-	// 		schema: Instance['schema']
-	// 		meta: Instance['meta']
-	// 	}
-	// >
 
 	/**
 	 * ### decorate
@@ -3052,7 +3050,8 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	decorate<const NewDecorators extends Record<string, unknown>>(
@@ -3065,7 +3064,8 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	/**
@@ -3131,7 +3131,8 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	> {
 		// @ts-ignore
 		transform.$elysia = 'derive'
@@ -3152,7 +3153,8 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	model<Recorder extends Record<string, TSchema>>(
@@ -3169,7 +3171,8 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	model<const NewType extends Record<string, unknown>>(
@@ -3182,7 +3185,8 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	>
 
 	model(name: string | Record<string, TSchema> | Function, model?: TSchema) {
@@ -3217,7 +3221,8 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	> {
 		// @ts-ignore
 		mapper.$elysia = 'derive'
@@ -3268,7 +3273,8 @@ export default class Elysia<
 				: Definitions['error']
 		},
 		ParentSchema,
-		Routes
+		Routes,
+		Scoped
 	> {
 		if (word === '') return this as any
 

@@ -1247,7 +1247,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 				fnLiteral += `if(response) return response\n`
 			} else {
-				fnLiteral += `onRequest[${i}](ctx)`
+				fnLiteral += `onRequest[${i}](ctx)\n`
 				endUnit()
 			}
 		}
@@ -1310,8 +1310,6 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 	// @ts-ignore
 	app.handleError = composeErrorHandler(app) as any
-
-	// console.log(fnLiteral)
 
 	return Function(
 		'data',

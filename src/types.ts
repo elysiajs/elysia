@@ -15,7 +15,7 @@ import type {
 	ValidationError
 } from './error'
 
-export type ElysiaConfig<T extends string = ''> = {
+export type ElysiaConfig<T extends string = '', Scoped extends boolean = false> = {
 	name?: string
 	seed?: unknown
 	serve?: Partial<Serve>
@@ -43,7 +43,7 @@ export type ElysiaConfig<T extends string = ''> = {
 	 *
 	 * @default false
 	 */
-	scoped?: boolean
+	scoped?: Scoped
 	websocket?: Omit<
 		WebSocketHandler<any>,
 		'open' | 'close' | 'message' | 'drain'
