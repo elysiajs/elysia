@@ -1,10 +1,9 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.onBeforeHandle(() => {
-		return 'a'
+	.onAfterHandle((context) => {
+		context.response = 'A'
 	})
-	.onAfterHandle(() => 'A')
 	.get('/', () => 'NOOP')
 	.listen(3000)
 

@@ -16,6 +16,7 @@ Feature:
 - Add `Context` to `onError`
 - Lifecycle hook now accept array function
 - Path now accept array string
+- True encapsulation scope
 
 Improvement:
 - Static Code Analysis now support rest parameter
