@@ -578,11 +578,7 @@ export default class Elysia<
 	trace<Route extends RouteSchema = {}>(
 		handler: TraceHandler<Route, Decorators>
 	) {
-		if (!this.event.trace.length)
-			this.reporter.on(
-				'event',
-				createTraceListener(this.reporter, handler)
-			)
+		this.reporter.on('event', createTraceListener(this.reporter, handler))
 
 		this.on('trace', handler)
 
@@ -1354,8 +1350,28 @@ export default class Elysia<
 			return instance
 		}
 
+		const { name, seed } = plugin.config
+
 		const isScoped = plugin.config.scoped
 		if (isScoped) {
+			if (name) {
+				if (!(name in this.dependencies)) this.dependencies[name] = []
+
+				const current =
+					seed !== undefined
+						? checksum(name + JSON.stringify(seed))
+						: 0
+
+				if (
+					this.dependencies[name].some(
+						(checksum) => current === checksum
+					)
+				)
+					return this
+
+				this.dependencies[name].push(current)
+			}
+
 			plugin.model(this.definitions.type as any)
 			plugin.error(this.definitions.error as any)
 			plugin.onRequest((context) => {
@@ -1372,8 +1388,6 @@ export default class Elysia<
 		this.state(plugin.store)
 		this.model(plugin.definitions.type)
 		this.error(plugin.definitions.error)
-
-		const { name, seed } = plugin.config
 
 		for (const { method, path, handler, hooks } of Object.values(
 			plugin.routes

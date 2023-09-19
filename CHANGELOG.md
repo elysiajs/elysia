@@ -27,10 +27,10 @@ Improvement:
 
 Breaking Change:
 - Remove `ws` plugin, migrate to core
-- Remove `mergician`
 
 Change:
 - Using single findDynamicRoute instead of inlining to static map
+- Remove `mergician`
 
 Bug fix:
 - Strictly validate response by default

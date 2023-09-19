@@ -36,15 +36,21 @@ const requestId = { value: 0 }
 const createReport = ({
 	hasTrace,
 	hasTraceSet = false,
+	hasTraceChildren = false,
 	addFn,
 	condition = {}
 }: {
 	hasTrace: boolean | number
+	hasTraceChildren: boolean
 	hasTraceSet?: boolean
 	addFn(string: string): void
 	condition: Partial<Record<TraceEvent, boolean>>
 }) => {
 	if (hasTrace) {
+		const microtask = hasTraceChildren
+			? '\nawait new Promise(r => {queueMicrotask(() => queueMicrotask(r))})\n'
+			: '\nawait new Promise(r => {queueMicrotask(r)})\n'
+
 		return (
 			event: TraceEvent,
 			{
@@ -58,7 +64,7 @@ const createReport = ({
 			} = {}
 		) => {
 			const dotIndex = event.indexOf('.')
-			const isGroup = event !== 'handle' && dotIndex === -1
+			const isGroup = dotIndex === -1
 
 			if (
 				event !== 'request' &&
@@ -69,7 +75,9 @@ const createReport = ({
 						: event.slice(0, dotIndex)) as keyof typeof condition
 				]
 			)
-				return () => {}
+				return () => {
+					if (hasTraceSet && event === 'afterHandle') addFn(microtask)
+				}
 
 			if (isGroup) name ||= event
 			else name ||= 'anonymous'
@@ -96,8 +104,7 @@ const createReport = ({
 				handled = true
 				addFn(
 					'\n' +
-						`
-						reporter.emit('event', {
+						`reporter.emit('event', {
 							id,
 							event: '${event}',
 							type: 'end',
@@ -106,8 +113,9 @@ const createReport = ({
 						'\n'
 				)
 
-				if (hasTraceSet && event === 'afterHandle')
-					addFn('\nawait new Promise(r => {queueMicrotask(r)})\n')
+				if (hasTraceSet && event === 'afterHandle') {
+					addFn(microtask)
+				}
 			}
 		}
 	} else {
@@ -401,11 +409,7 @@ const matchFnReturn = /(?:return|=>) \S*\(/g
 export const isAsync = (fn: Function) => {
 	if (fn.constructor.name === 'AsyncFunction') return true
 
-	const literal = fn.toString()
-
-	if (literal.match(matchFnReturn)) return true
-
-	return false
+	return fn.toString().match(matchFnReturn)
 }
 
 export const composeHandler = ({
@@ -491,7 +495,7 @@ export const composeHandler = ({
 		error: hasErrorHandler || traceLiteral.some((x) => isFnUse('error', x))
 	}
 
-	const hasTrace = hooks.trace.length
+	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
@@ -629,9 +633,17 @@ export const composeHandler = ({
 		`
 	}
 
-	const hasTraceSet =
-		hasUnknownContext ||
-		hooks.trace.some((fn) => isFnUse('set', fn.toString()))
+	const traceLiterals = hooks.trace.map((x) => x.toString())
+	const hasTraceSet = traceLiterals.some(
+		(fn) => isFnUse('set', fn) || isContextPassToFunction(fn)
+	)
+	const hasTraceChildren =
+		hasTraceSet &&
+		traceLiterals.some(
+			(fn) => fn.includes('children') || isContextPassToFunction(fn)
+		)
+
+	hasUnknownContext || hooks.trace.some((fn) => isFnUse('set', fn.toString()))
 
 	const hasSet =
 		hasTraceSet ||
@@ -642,6 +654,7 @@ export const composeHandler = ({
 	const report = createReport({
 		hasTrace,
 		hasTraceSet,
+		hasTraceChildren,
 		condition: traceConditions,
 		addFn: (word) => {
 			fnLiteral += word
@@ -760,11 +773,15 @@ export const composeHandler = ({
 				if (hooks.parse.length) {
 					fnLiteral += `let used = false\n`
 
-					const endUnit = report('parse', {
+					const endReport = report('parse', {
 						unit: hooks.parse.length
 					})
 
 					for (let i = 0; i < hooks.parse.length; i++) {
+						const endUnit = report('parse.unit', {
+							name: hooks.parse[i].name
+						})
+
 						const name = `bo${i}`
 
 						if (i !== 0) fnLiteral += `if(!used) {\n`
@@ -773,10 +790,12 @@ export const composeHandler = ({
 						fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}\n`
 						fnLiteral += `if(${name} !== undefined) { c.body = ${name}; used = true }\n`
 
+						endUnit()
+
 						if (i !== 0) fnLiteral += `}`
 					}
 
-					endUnit()
+					endReport()
 				}
 
 				if (hooks.parse.length) fnLiteral += `if (!used)`
@@ -833,7 +852,9 @@ export const composeHandler = ({
 		for (let i = 0; i < hooks.transform.length; i++) {
 			const transform = hooks.transform[i]
 
-			const endUnit = report('transform.unit')
+			const endUnit = report('transform.unit', {
+				name: transform.name
+			})
 
 			// @ts-ignore
 			if (transform.$elysia === 'derive')
@@ -1257,7 +1278,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	// @ts-ignore
 	const { router, staticRouter } = app
 
-	const hasTrace = app.event.trace.length
+	const hasTrace = app.event.trace.length > 0
 
 	const findDynamicRoute = `
 	const route = find(request.method, path) ${
@@ -1282,6 +1303,8 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 			all ?? `default: break map`
 		}}\n\n`
 
+	const maybeAsync = app.event.request.some(isAsync)
+
 	fnLiteral += `const {
 		app,
 		app: { store, router, staticRouter },
@@ -1302,14 +1325,21 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
 
-	return function map(request) {
+	return ${maybeAsync ? 'async' : ''} function map(request) {
 	`
 
 	const traceLiteral = app.event.trace.map((x) => x.toString())
 	const report = createReport({
 		hasTrace,
+		hasTraceChildren:
+			hasTrace &&
+			traceLiteral.some(
+				(x) => x.includes('children') || isContextPassToFunction(x)
+			),
 		condition: {
-			request: traceLiteral.some((x) => isFnUse('parse', x.toString()))
+			request: traceLiteral.some(
+				(x) => isFnUse('request', x) || isContextPassToFunction(x)
+			)
 		},
 		addFn: (word) => {
 			fnLiteral += word
@@ -1334,13 +1364,16 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		`
 
 		const endReport = report('request', {
-			attribute: 'ctx'
+			attribute: 'ctx',
+			unit: app.event.request.length
 		})
 
 		fnLiteral += `try {\n`
 
 		for (let i = 0; i < app.event.request.length; i++) {
-			const withReturn = hasReturn(app.event.request[i].toString())
+			const fn = app.event.request[i]
+			const withReturn = hasReturn(fn.toString())
+			const maybeAsync = isAsync(fn)
 
 			const endUnit = report('request.unit', {
 				name: app.event.request[i].name
@@ -1348,7 +1381,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 			if (withReturn) {
 				fnLiteral += `const response = mapEarlyResponse(
-					onRequest[${i}](ctx),
+					${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
 					ctx.set
 				)\n`
 
@@ -1356,7 +1389,9 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 				fnLiteral += `if(response) return response\n`
 			} else {
-				fnLiteral += `onRequest[${i}](ctx)\n`
+				fnLiteral += `${
+					maybeAsync ? 'await' : ''
+				} onRequest[${i}](ctx)\n`
 				endUnit()
 			}
 		}
@@ -1397,6 +1432,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		}`
 
 		report('request', {
+			unit: app.event.request.length,
 			attribute:
 				traceLiteral.some((x) => isFnUse('context', x)) ||
 				traceLiteral.some((x) => isFnUse('store', x)) ||

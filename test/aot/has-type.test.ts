@@ -31,7 +31,7 @@ describe('Has Transform', () => {
 		expect(hasType('File', schema)).toBe(true)
 	})
 
-	it('Find in Optional', () => {
+	it('find in Optional', () => {
 		const schema = t.Optional(
 			t.Object({
 				prop1: t.File()
@@ -41,7 +41,7 @@ describe('Has Transform', () => {
 		expect(hasType('File', schema)).toBe(true)
 	})
 
-	it('Find on multiple transform', () => {
+	it('find on multiple transform', () => {
 		const schema = t.Object({
 			id: t.File(),
 			name: t.File()
@@ -59,7 +59,7 @@ describe('Has Transform', () => {
 		expect(hasType('File', schema)).toBe(false)
 	})
 
-	it('Found on Union', () => {
+	it('found on Union', () => {
 		const schema = t.Object({
 			id: t.Number(),
 			liyue: t.Union([t.Number(), t.File()])

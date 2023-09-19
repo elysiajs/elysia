@@ -110,7 +110,7 @@
     "release:local": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.31.6",
+    "@sinclair/typebox": "^0.31.15",
     "cookie": "^0.5.0",
     "cookie-signature": "^1.2.1",
     "eventemitter3": "^5.0.1",

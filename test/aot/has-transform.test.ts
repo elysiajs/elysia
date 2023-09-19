@@ -74,7 +74,7 @@ describe('Has Transform', () => {
 		expect(hasTransform(schema)).toBe(false)
 	})
 
-	it('Found on Union', () => {
+	it('found on Union', () => {
 		const schema = t.Object({
 			id: t.Number(),
 			liyue: t.Union([

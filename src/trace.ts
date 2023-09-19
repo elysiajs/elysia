@@ -76,6 +76,7 @@ export const createTraceListener = (
 								children[++childIteration]({
 									name: event.name,
 									time: event.time,
+									skip: false,
 									end: new Promise<TraceProcess<'end'>>(
 										(resolve) => {
 											endChildren.push(resolve)
@@ -254,7 +255,7 @@ export const createTraceListener = (
 				time: event.time,
 				request: request.signal as any,
 				parse: parse.signal as any,
-				transform: parse.signal as any,
+				transform: transform.signal as any,
 				beforeHandle: beforeHandle.signal as any,
 				handle: handle.signal as any,
 				afterHandle: afterHandle.signal as any,

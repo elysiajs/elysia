@@ -6,8 +6,11 @@ import { req } from '../utils'
 describe('Transform', () => {
 	it('globally Transform', async () => {
 		const app = new Elysia()
-			.onTransform((request) => {
-				// @ts-ignore
+			.onTransform<{
+				params: {
+					id: number
+				} | null
+			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
@@ -42,8 +45,8 @@ describe('Transform', () => {
 				app
 					.onTransform<{
 						params: {
-							id?: number
-						}
+							id: number
+						} | null
 					}>((request) => {
 						if (request.params?.id)
 							request.params.id = +request.params.id
@@ -63,8 +66,8 @@ describe('Transform', () => {
 		const transformId = (app: Elysia) =>
 			app.onTransform<{
 				params: {
-					id?: number
-				}
+					id: number
+				} | null
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
@@ -95,8 +98,8 @@ describe('Transform', () => {
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 			.onTransform<{
 				params: {
-					id?: number
-				}
+					id: number
+				} | null
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
@@ -110,8 +113,8 @@ describe('Transform', () => {
 		const app = new Elysia()
 			.onTransform<{
 				params: {
-					id?: number
-				}
+					id: number
+				} | null
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
@@ -137,15 +140,15 @@ describe('Transform', () => {
 		const app = new Elysia()
 			.onTransform<{
 				params: {
-					id?: number
-				}
+					id: number
+				} | null
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 			.onTransform<{
 				params: {
-					id?: number
-				}
+					id: number
+				} | null
 			}>((request) => {
 				if (
 					request.params?.id &&
@@ -189,8 +192,8 @@ describe('Transform', () => {
 		const app = new Elysia()
 			.onTransform<{
 				params: {
-					id?: number
-				}
+					id: number
+				} | null
 			}>((request) => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
