@@ -127,6 +127,7 @@ describe('group', () => {
 				response: t.String()
 			},
 			(app) =>
+				// @ts-ignore
 				app
 					.get('/correct', () => 'Hello')
 					// @ts-ignore

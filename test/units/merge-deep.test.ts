@@ -3,12 +3,12 @@ import { describe, expect, it } from 'bun:test'
 import { mergeDeep } from '../../src'
 
 describe('mergeDeep', () => {
-	it('Merge empty object', () => {
+	it('merge empty object', () => {
 		const result = mergeDeep({}, {})
 		expect(result).toEqual({})
 	})
 
-	it('Merge non-overlapping key', () => {
+	it('merge non-overlapping key', () => {
 		const result = mergeDeep({ key1: 'value1' }, { key2: 'value2' })
 
 		expect(result).toEqual({ key1: 'value1', key2: 'value2' })

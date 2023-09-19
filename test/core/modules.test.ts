@@ -82,7 +82,7 @@ describe('Modules', () => {
 		expect(res.status).toEqual(200)
 	})
 
-	it('Count lazy module correctly', async () => {
+	it('count lazy module correctly', async () => {
 		const app = new Elysia()
 			.use(import('../modules'))
 			.use(asyncPlugin)
@@ -93,7 +93,7 @@ describe('Modules', () => {
 		expect(awaited.length).toBe(2)
 	})
 
-	it('Handle other routes while lazy load', async () => {
+	it('handle other routes while lazy load', async () => {
 		const app = new Elysia().use(import('../timeout')).get('/', () => 'hi')
 
 		const res = await app.handle(req('/')).then((r) => r.text())
@@ -101,7 +101,7 @@ describe('Modules', () => {
 		expect(res).toBe('hi')
 	})
 
-	it('Handle deferred import', async () => {
+	it('handle deferred import', async () => {
 		const app = new Elysia().use(import('../modules'))
 
 		await app.modules

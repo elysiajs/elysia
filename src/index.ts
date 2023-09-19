@@ -74,7 +74,8 @@ import type {
 	AddSuffixCapitalize,
 	TraceReporter,
 	TraceHandler,
-	MaybeArray
+	MaybeArray,
+	IsAny
 } from './types'
 
 /**
@@ -1141,7 +1142,11 @@ export default class Elysia<
 	use<NewElysia extends Elysia<any, any, any, any, any, any>>(
 		plugin: MaybePromise<
 			(
-				app: Elysia<BasePath, Decorators, Definitions, ParentSchema>
+				app: NewElysia extends Elysia<infer A, any, any, any, any, any>
+					? IsAny<A> extends true
+						? this
+						: NewElysia
+					: NewElysia
 			) => MaybePromise<NewElysia>
 		>
 	): NewElysia extends Elysia<

@@ -1141,25 +1141,28 @@ export const composeHandler = ({
 			unit: hooks.error.length
 		})
 		if (hooks.error.length) {
-			fnLiteral += `for (let i = 0; i < handleErrors.length; i++) {\n`
+			for (let i = 0; i < hooks.error.length; i++) {
+				const name = `er${i}`
+				const endUnit = report('error.unit', {
+					name: hooks.error[i].name
+				})
 
-			const endUnit = report('error.unit')
-
-			fnLiteral += `\nlet handled = handleErrors[i]({
+				fnLiteral += `\nlet ${name} = handleErrors[${i}]({
 					request: c.request,
 					error: error,
 					set,
 					code: error.code ?? error[ERROR_CODE] ?? "UNKNOWN"
-				})
-				if (handled instanceof Promise) handled = await handled\n`
+				})\n`
 
-			endUnit()
+				if (isAsync(hooks.error[i]))
+					fnLiteral += `if (${name} instanceof Promise) ${name} = await ${name}\n`
 
-			fnLiteral += `const response = mapEarlyResponse(handled, set)\n`
-			fnLiteral += `if (response) {`
-			endError()
-			fnLiteral += `return response }\n`
-			fnLiteral += `}\n`
+				endUnit()
+
+				fnLiteral += `${name} = mapEarlyResponse(${name}, set)\n`
+				fnLiteral += `if (${name}) {`
+				fnLiteral += `return ${name} }\n`
+			}
 		}
 
 		endError()
