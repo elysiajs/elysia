@@ -20,7 +20,7 @@ export type ElysiaErrors =
 	| ValidationError
 
 export class InternalServerError extends Error {
-	code = 'NOT_FOUND'
+	code = 'INTERNAL_SERVER_ERROR'
 	status = 500
 
 	constructor() {
