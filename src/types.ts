@@ -28,8 +28,6 @@ export type ElysiaConfig<T extends string = '', Scoped extends boolean = false> 
 	 * Disable Ahead of Time compliation
 	 *
 	 * Reduced performance but faster startup time
-	 *
-	 * @default !isCloudflareWorker (false if not Cloudflare worker)
 	 */
 	aot?: boolean
 	/**
@@ -49,6 +47,9 @@ export type ElysiaConfig<T extends string = '', Scoped extends boolean = false> 
 		'open' | 'close' | 'message' | 'drain'
 	>
 	cookie?: CookieOptions & {
+		/**
+		 * Specified cookie name to be signed globally
+		 */
 		sign?: true | string | string[]
 	}
 }

@@ -23,10 +23,14 @@ Improvement:
 - Breakdown dynamic router into single pipeline instead of inlining to static router to reduce memory usage
 - Set `t.File` and `t.Files` to `File` instead of `Blob`
 - Skip class instance merging
+- Handle `UnknownContextPassToFunction`
 
 Breaking Change:
 - Remove `ws` plugin, migrate to core
 - Remove `mergician`
+
+Change:
+- Using single findDynamicRoute instead of inlining to static map
 
 Bug fix:
 - Strictly validate response by default
@@ -36,8 +40,6 @@ Bug fix:
 - Inherits store to instance plugin
 - Handle class overlapping
 
-Change:
-- Using single findDynamicRoute instead of inlining to static map
 # 0.6.24 - 18 Sep 2023
 Feature:
 - [#149](https://github.com/elysiajs/elysia/pulls/149) support additional status codes in redirects

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from '../../src'
+import { Context, Elysia, t } from '../../src'
 import { post, req } from '../utils'
 
 describe('code generation', () => {
@@ -16,7 +16,7 @@ describe('code generation', () => {
 		expect(res).toBe('hi')
 	})
 
-	it('process body', async () => {
+	it('process isFnUse', async () => {
 		const body = { hello: 'Wanderschaffen' }
 
 		const app = new Elysia()
@@ -62,6 +62,51 @@ describe('code generation', () => {
 
 		const cases = Promise.all(
 			Array(9)
+				.fill(null)
+				.map((_, i) => from(i + 1))
+		)
+
+		for (const unit of await cases) expect(unit).toEqual(body)
+	})
+
+	it('process isContextPassToUnknown', async () => {
+		const body = { hello: 'Wanderschaffen' }
+
+		const handle = (context: Context<any, any>) => context.body
+
+		const app = new Elysia()
+			.post('/1', (context) => handle(context))
+			.post('/2', function (context) {
+				return handle(context)
+			})
+			.post('/3', (context) => {
+				const c = context
+
+				return handle(c)
+			})
+			.post('/4', (context) => {
+				const _ = context,
+					a = context
+
+				return handle(a)
+			})
+			.post('/5', () => '', {
+				beforeHandle(context) {
+					return handle(context)
+				}
+			})
+			.post('/6', () => body, {
+				afterHandle(context) {
+					return handle(context)
+				}
+			})
+			.post('/7', ({ ...rest }) => handle(rest))
+
+		const from = (number: number) =>
+			app.handle(post(`/${number}`, body)).then((r) => r.json())
+
+		const cases = Promise.all(
+			Array(7)
 				.fill(null)
 				.map((_, i) => from(i + 1))
 		)

@@ -167,7 +167,9 @@ export const ElysiaType = {
 		properties: T,
 		options?: ObjectOptions
 	) =>
-		Type.Transform(Type.Union([Type.String(), Type.Object(properties, options)]))
+		Type.Transform(
+			Type.Union([Type.String(), Type.Object(properties, options)])
+		)
 			.Decode((value) => {
 				if (typeof value === 'string')
 					try {
@@ -194,7 +196,18 @@ export const ElysiaType = {
 	Cookie: <T extends TProperties>(
 		properties: T,
 		options?: ObjectOptions & {
+			/**
+			 * Secret key for signing cookie
+			 *
+			 * If array is passed, will use Key Rotation.
+			 *
+			 * Key rotation is when an encryption key is retired
+			 * and replaced by generating a new cryptographic key.
+			 */
 			secrets?: string | string[]
+			/**
+			 * Specified cookie name to be signed globally
+			 */
 			sign?: Readonly<(keyof T | (string & {}))[]>
 		}
 	): TObject<T> => Type.Object(properties, options)

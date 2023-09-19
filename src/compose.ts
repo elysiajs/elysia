@@ -174,6 +174,9 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 	fnLiteral = fnLiteral.trimStart()
 	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
 
+	if (/^(\w+)\(/g.test(fnLiteral))
+		fnLiteral = fnLiteral.slice(fnLiteral.indexOf('('))
+
 	const argument =
 		// CharCode 40 is '('
 		fnLiteral.charCodeAt(0) === 40 || fnLiteral.startsWith('function')
@@ -231,6 +234,61 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 
 	for (const [params] of fnLiteral.matchAll(destructuringRegex))
 		if (params.includes(`{ ${keyword}`) || params.includes(`, ${keyword}`))
+			return true
+
+	return false
+}
+
+const isContextPassToFunction = (fnLiteral: string) => {
+	fnLiteral = fnLiteral.trimStart()
+	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
+
+	if (/^(\w+)\(/g.test(fnLiteral))
+		fnLiteral = fnLiteral.slice(fnLiteral.indexOf('('))
+
+	const argument =
+		// CharCode 40 is '('
+		fnLiteral.charCodeAt(0) === 40 || fnLiteral.startsWith('function')
+			? // Bun: (context) => {}
+			  fnLiteral.slice(
+					fnLiteral.indexOf('(') + 1,
+					fnLiteral.indexOf(')')
+			  )
+			: // Node: context => {}
+			  fnLiteral.slice(0, fnLiteral.indexOf('=') - 1)
+
+	// console.log(fnLiteral)
+
+	if (argument === '') return false
+
+	const restIndex =
+		argument.charCodeAt(0) === 123 ? argument.indexOf('...') : -1
+
+	const restAlias =
+		restIndex !== -1
+			? argument.slice(
+					restIndex + 3,
+					argument.indexOf(' ', restIndex + 3)
+			  )
+			: undefined
+
+	const aliases = [argument]
+	if (restAlias) aliases.push(restAlias)
+
+	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
+
+	for (const alias of aliases)
+		if (new RegExp(`\\b\\w+\\([^)]*\\b${alias}\\b[^)]*\\)`).test(fnLiteral))
+			return true
+
+	const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
+
+	for (const [renamed] of fnLiteral.matchAll(destructuringRegex))
+		if (
+			new RegExp(`\\b\\w+\\([^)]*\\b${renamed}\\b[^)]*\\)`).test(
+				fnLiteral
+			)
+		)
 			return true
 
 	return false
@@ -390,6 +448,37 @@ export const composeHandler = ({
 
 	const traceLiteral = hooks.trace.map((x) => x.toString())
 
+	let hasUnknownContext = false
+
+	if (isContextPassToFunction(handler.toString())) hasUnknownContext = true
+
+	if (!hasUnknownContext)
+		for (const [key, value] of Object.entries(hooks)) {
+			if (
+				!Array.isArray(value) ||
+				!value.length ||
+				![
+					'parse',
+					'transform',
+					'beforeHandle',
+					'afterHandle',
+					'onResponse'
+				].includes(key)
+			)
+				continue
+
+			for (const handle of value) {
+				if (typeof handle !== 'function') continue
+
+				if (isContextPassToFunction(handle.toString())) {
+					hasUnknownContext = true
+					break
+				}
+			}
+
+			if (hasUnknownContext) break
+		}
+
 	const traceConditions: Record<
 		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response'>,
 		boolean
@@ -420,19 +509,23 @@ export const composeHandler = ({
 			: []
 
 	const hasBody =
-		method !== 'GET' &&
-		method !== 'HEAD' &&
-		hooks.type !== 'none' &&
-		(!!validator.body ||
-			!!hooks.type ||
-			lifeCycleLiteral.some((fn) => isFnUse('body', fn)))
+		hasUnknownContext ||
+		(method !== 'GET' &&
+			method !== 'HEAD' &&
+			hooks.type !== 'none' &&
+			(!!validator.body ||
+				!!hooks.type ||
+				lifeCycleLiteral.some((fn) => isFnUse('body', fn))))
 
 	const hasHeaders =
+		hasUnknownContext ||
 		validator.headers ||
 		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
 
 	const hasCookie =
-		validator.cookie || lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
+		hasUnknownContext ||
+		validator.cookie ||
+		lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
 
 	// @ts-ignore
 	const cookieMeta = validator?.cookie?.schema as {
@@ -521,7 +614,9 @@ export const composeHandler = ({
 	}
 
 	const hasQuery =
-		validator.query || lifeCycleLiteral.some((fn) => isFnUse('query', fn))
+		hasUnknownContext ||
+		validator.query ||
+		lifeCycleLiteral.some((fn) => isFnUse('query', fn))
 
 	if (hasQuery) {
 		fnLiteral += `const url = c.request.url
@@ -534,7 +629,9 @@ export const composeHandler = ({
 		`
 	}
 
-	const hasTraceSet = hooks.trace.some((fn) => isFnUse('set', fn.toString()))
+	const hasTraceSet =
+		hasUnknownContext ||
+		hooks.trace.some((fn) => isFnUse('set', fn.toString()))
 
 	const hasSet =
 		hasTraceSet ||
