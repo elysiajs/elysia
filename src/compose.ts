@@ -1167,7 +1167,7 @@ export const composeHandler = ({
 
 		endError()
 
-		fnLiteral += `return handleError(c, error)\n\n`
+		fnLiteral += `return app.handleError(c, error)\n\n`
 
 		if (!maybeAsync) fnLiteral += '})()'
 
@@ -1290,7 +1290,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	if (route === null)
 		return ${
 			app.event.error.length
-				? `handleError(ctx, notFound)`
+				? `app.handleError(ctx, notFound)`
 				: `new Response(error404, {
 					status: 404
 				})`
@@ -1324,7 +1324,6 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	${staticRouter.variables}
 
 	const find = router.find.bind(router)
-	const handleError = app.handleError.bind(this)
 
 	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
 
@@ -1400,7 +1399,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		}
 
 		fnLiteral += `} catch (error) {
-			return handleError(ctx, error)
+			return app.handleError(ctx, error)
 		}`
 
 		endReport()
