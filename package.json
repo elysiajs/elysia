@@ -110,7 +110,7 @@
     "release:local": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.30.4",
+    "@sinclair/typebox": "^0.31.15",
     "fast-querystring": "^1.1.2",
     "memoirist": "0.1.4",
     "mergician": "^1.1.0",
