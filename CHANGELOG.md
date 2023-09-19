@@ -1,44 +1,45 @@
 # 0.7.0 - x Sep 2023
 Feature:
-- Rewrite type
-- Rewrite Web Socket
-- Add mapper method
-- Add affix, prefix, suffix
-- Trace
-- TypeBox.Transfom
-- Rewrite Type.ElysiaMeta to use TypeBox.Transform
-- Strict body type parsing
-- New type:
+- rewrite type
+- rewrite Web Socket
+- add mapper method
+- add affix, prefix, suffix
+- trace
+- typeBox.Transfom
+- rewrite Type.ElysiaMeta to use TypeBox.Transform
+- strict body type parsing
+- new type:
     - t.Cookie
     - t.ObjectString
     - t.MaybeEmpty
     - t.Nullable
-- Add `Context` to `onError`
-- Lifecycle hook now accept array function
-- Path now accept array string
-- True encapsulation scope
+- add `Context` to `onError`
+- lifecycle hook now accept array function
+- path now accept array string
+- true encapsulation scope
 
 Improvement:
-- Static Code Analysis now support rest parameter
-- Breakdown dynamic router into single pipeline instead of inlining to static router to reduce memory usage
-- Set `t.File` and `t.Files` to `File` instead of `Blob`
-- Skip class instance merging
-- Handle `UnknownContextPassToFunction`
+- static Code Analysis now support rest parameter
+- breakdown dynamic router into single pipeline instead of inlining to static router to reduce memory usage
+- set `t.File` and `t.Files` to `File` instead of `Blob`
+- skip class instance merging
+- handle `UnknownContextPassToFunction`
 
 Breaking Change:
-- Remove `ws` plugin, migrate to core
+- remove `ws` plugin, migrate to core
+- rename `addError` to `error`
 
 Change:
-- Using single findDynamicRoute instead of inlining to static map
-- Remove `mergician`
+- using single findDynamicRoute instead of inlining to static map
+- remove `mergician`
 
 Bug fix:
-- Strictly validate response by default
+- strictly validate response by default
 - `t.Numeric` not working on headers / query / params
 - `t.Optional(t.Object({ [name]: t.Numeric }))` causing error
-- Add null check before converting `Numeric`
-- Inherits store to instance plugin
-- Handle class overlapping
+- add null check before converting `Numeric`
+- inherits store to instance plugin
+- handle class overlapping
 
 # 0.6.24 - 18 Sep 2023
 Feature:

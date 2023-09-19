@@ -586,6 +586,128 @@ export default class Elysia<
 		return this
 	}
 
+	/**
+	 * @deprecated this method will be renamed to `error` on 0.8, consider using `.error` instead
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * class CustomError extends Error {
+	 *     constructor() {
+	 *         super()
+	 *     }
+	 * }
+	 *
+	 * new Elysia()
+	 *     .error('CUSTOM_ERROR', CustomError)
+	 * ```
+	 */
+	addError<
+		const Errors extends Record<
+			string,
+			{
+				prototype: Error
+			}
+		>
+	>(
+		errors: Errors
+	): Elysia<
+		BasePath,
+		Decorators,
+		{
+			type: Definitions['type']
+			error: Definitions['error'] & {
+				[K in keyof Errors]: Errors[K] extends {
+					prototype: infer LiteralError extends Error
+				}
+					? LiteralError
+					: Errors[K]
+			}
+		},
+		ParentSchema,
+		Routes,
+		Scoped
+	>
+
+	/**
+	 * @deprecated this method will be renamed to `error` on 0.8, consider using `.error` instead
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * class CustomError extends Error {
+	 *     constructor() {
+	 *         super()
+	 *     }
+	 * }
+	 *
+	 * new Elysia()
+	 *     .error({
+	 *         CUSTOM_ERROR: CustomError
+	 *     })
+	 * ```
+	 */
+	addError<
+		Name extends string,
+		const CustomError extends {
+			prototype: Error
+		}
+	>(
+		name: Name,
+		errors: CustomError
+	): Elysia<
+		BasePath,
+		Decorators,
+		{
+			type: Definitions['type']
+			error: Definitions['error'] & {
+				[name in Name]: CustomError extends {
+					prototype: infer LiteralError extends Error
+				}
+					? LiteralError
+					: CustomError
+			}
+		},
+		ParentSchema,
+		Routes,
+		Scoped
+	>
+
+	addError(
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		name:
+			| string
+			| Record<
+					string,
+					{
+						prototype: Error
+					}
+			  >
+			| Function,
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		error?: {
+			prototype: Error
+		}
+	): Elysia<any, any, any, any, any, any> {
+		return this.error(name as any, error as any)
+	}
+
+	/**
+	 * Register errors
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * class CustomError extends Error {
+	 *     constructor() {
+	 *         super()
+	 *     }
+	 * }
+	 *
+	 * new Elysia()
+	 *     .error('CUSTOM_ERROR', CustomError)
+	 * ```
+	 */
 	error<
 		const Errors extends Record<
 			string,
@@ -613,6 +735,24 @@ export default class Elysia<
 		Scoped
 	>
 
+	/**
+	 * Register errors
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * class CustomError extends Error {
+	 *     constructor() {
+	 *         super()
+	 *     }
+	 * }
+	 *
+	 * new Elysia()
+	 *     .error({
+	 *         CUSTOM_ERROR: CustomError
+	 *     })
+	 * ```
+	 */
 	error<
 		Name extends string,
 		const CustomError extends {
@@ -639,6 +779,22 @@ export default class Elysia<
 		Scoped
 	>
 
+	/**
+	 * Register errors
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * class CustomError extends Error {
+	 *     constructor() {
+	 *         super()
+	 *     }
+	 * }
+	 *
+	 * new Elysia()
+	 *     .error('CUSTOM_ERROR', CustomError)
+	 * ```
+	 */
 	error<const NewErrors extends Record<string, Error>>(
 		mapper: (decorators: Definitions['error']) => NewErrors
 	): Elysia<
@@ -659,19 +815,6 @@ export default class Elysia<
 		Scoped
 	>
 
-	/**
-	 * Register errors
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * new Elysia()
-	 *     .onError(({ code }) => {
-	 *         if(code === "NOT_FOUND")
-	 *             return "Path not found :("
-	 *     })
-	 * ```
-	 */
 	error(
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		name:
@@ -3410,7 +3553,7 @@ export default class Elysia<
 			: createDynamicErrorHandler(this))(request, error, set)
 
 	private outerErrorHandler = (error: Error) =>
-		new Response(error.message, {
+		new Response(error.message || error.name || 'Error', {
 			// @ts-ignore
 			status: error?.status ?? 500
 		})

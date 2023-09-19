@@ -1,13 +1,16 @@
 import { Elysia, t } from '../src'
-import { post } from '../test/utils'
+
+class CustomError extends Error {
+	constructor() {
+		super()
+	}
+}
 
 const app = new Elysia()
-.onError(() => {
-	
-})
-	.get('/', ({ body }) => body, {
-		parse: [function kindred() {}]
+	.error('CUSTOM_ERROR', CustomError)
+	.get('/', ({ body }) => {
+		throw new CustomError()
 	})
-	.compile()
+	.listen(3000)
 
-console.log(app.fetch.toString())
+console.log(app.routes[0].composed?.toString())

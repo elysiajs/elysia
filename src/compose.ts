@@ -1167,7 +1167,7 @@ export const composeHandler = ({
 
 		endError()
 
-		fnLiteral += `return handleError(c, error)`
+		fnLiteral += `return handleError(c, error)\n\n`
 
 		if (!maybeAsync) fnLiteral += '})()'
 
