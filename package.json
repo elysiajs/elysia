@@ -23,6 +23,13 @@
       "import": "./dist/ws/index.js",
       "default": "./dist/ws/index.js"
     },
+    "./compose": {
+      "bun": "./dist/compose.js",
+      "node": "./dist/cjs/compose.js",
+      "require": "./dist/cjs/compose.js",
+      "import": "./dist/compose.js",
+      "default": "./dist/compose.js"
+    },
     "./context": {
       "bun": "./dist/context.js",
       "node": "./dist/cjs/context.js",
@@ -30,12 +37,12 @@
       "import": "./dist/context.js",
       "default": "./dist/context.js"
     },
-    "./compose": {
-      "bun": "./dist/compose.js",
-      "node": "./dist/cjs/compose.js",
-      "require": "./dist/cjs/compose.js",
-      "import": "./dist/compose.js",
-      "default": "./dist/compose.js"
+    "./cookie": {
+      "bun": "./dist/cookie.js",
+      "node": "./dist/cjs/cookie.js",
+      "require": "./dist/cjs/cookie.js",
+      "import": "./dist/cookie.js",
+      "default": "./dist/cookie.js"
     },
     "./custom-types": {
       "bun": "./dist/custom-types.js",
@@ -65,6 +72,13 @@
       "import": "./dist/schema.js",
       "default": "./dist/schema.js"
     },
+    "./trace": {
+      "bun": "./dist/trace.js",
+      "node": "./dist/cjs/trace.js",
+      "require": "./dist/cjs/trace.js",
+      "import": "./dist/trace.js",
+      "default": "./dist/trace.js"
+    },
     "./types": {
       "bun": "./dist/types.js",
       "node": "./dist/cjs/types.js",
@@ -78,13 +92,6 @@
       "require": "./dist/cjs/utils.js",
       "import": "./dist/utils.js",
       "default": "./dist/utils.js"
-    },
-    "./trace": {
-      "bun": "./dist/trace.js",
-      "node": "./dist/cjs/trace.js",
-      "require": "./dist/cjs/trace.js",
-      "import": "./dist/trace.js",
-      "default": "./dist/trace.js"
     }
   },
   "types": "./dist/index.d.ts",
