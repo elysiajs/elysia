@@ -2961,7 +2961,7 @@ export default class Elysia<
 	>
 
 	state<const NewStore extends Record<string, unknown>>(
-		mapper: (decorators: Decorators['request']) => NewStore
+		mapper: (decorators: Decorators['store']) => NewStore
 	): Elysia<
 		BasePath,
 		{

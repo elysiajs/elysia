@@ -153,4 +153,23 @@ describe('Model', () => {
 
 		expect(wrong.status).toBe(400)
 	})
+
+	it('remap', async () => {
+		const app = new Elysia()
+			.model('string', t.String())
+			.model('number', t.Number())
+			.model(({ number, ...rest }) => ({
+				...rest,
+				numba: number
+			}))
+			// @ts-ignore
+			.route('GET', '/', (context) => Object.keys(context.defs), {
+				config: {
+					allowMeta: true
+				}
+			})
+
+		const res = await app.handle(req('/')).then((r) => r.json())
+		expect(res).toEqual(['string', 'numba'])
+	})
 })

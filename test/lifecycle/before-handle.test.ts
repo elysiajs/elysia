@@ -1,7 +1,7 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
+import { delay, req } from '../utils'
 
 describe('Before Handle', () => {
 	it('globally skip main handler', async () => {
@@ -146,11 +146,7 @@ describe('Before Handle', () => {
 			({ params: { name } }) => name,
 			{
 				beforeHandle: async ({ params: { name } }) => {
-					await new Promise<void>((resolve) =>
-						setTimeout(() => {
-							resolve()
-						}, 1)
-					)
+					await delay(5)
 
 					if (name === 'Watame') return 'Warukunai yo ne'
 				}

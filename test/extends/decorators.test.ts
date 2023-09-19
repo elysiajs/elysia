@@ -99,4 +99,18 @@ describe('Decorate', () => {
 		const res = await app.handle(req('/')).then((r) => r.text())
 		expect(res).toBe('world')
 	})
+
+	it('remap', async () => {
+		const app = new Elysia()
+			.decorate('job', 'artist')
+			.decorate('name', 'Ina')
+			.decorate(({ job, ...decorators }) => ({
+				...decorators,
+				job: 'vtuber'
+			}))
+			.get('/', ({ job }) => job)
+
+		const res = await app.handle(req('/')).then((r) => r.text())
+		expect(res).toBe('vtuber')
+	})
 })

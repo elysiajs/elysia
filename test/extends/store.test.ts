@@ -75,4 +75,19 @@ describe('State', () => {
 		const res = await app.handle(req('/')).then((r) => r.text())
 		expect(res).toBe('world')
 	})
+
+	it('remap', async () => {
+		const app = new Elysia()
+			.state('job', 'artist')
+			.state('name', 'Ina')
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			.state(({ job, ...state }) => ({
+				...state,
+				job: 'vtuber'
+			}))
+			.get('/', ({ store: { job } }) => job)
+
+		const res = await app.handle(req('/')).then((r) => r.text())
+		expect(res).toBe('vtuber')
+	})
 })
