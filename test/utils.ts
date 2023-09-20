@@ -1,4 +1,5 @@
-export const req = (path: string) => new Request(`http://localhost${path}`)
+export const req = (path: string, options?: RequestInit) =>
+	new Request(`http://localhost${path}`, options)
 
 type MaybeArray<T> = T | T[]
 
@@ -45,3 +46,6 @@ export const post = (path: string, body: Record<string, any>) =>
 		},
 		body: JSON.stringify(body)
 	})
+
+export const delay = (delay: number) =>
+	new Promise((resolve) => setTimeout(resolve, delay))

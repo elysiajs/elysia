@@ -1,172 +1,107 @@
 import type { ServerWebSocket, WebSocketHandler } from 'bun'
-import type { TObject, TSchema } from '@sinclair/typebox'
+
+import type { TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
-import type { Context } from '../context'
-import type {
-	ElysiaInstance,
-	UnwrapSchema,
-	ExtractPath,
-	WithArray,
-	NoReturnHandler,
-	HookHandler,
-	TypedRoute
-} from '../types'
 import type { ElysiaWS } from '.'
+import type { Context } from '../context'
 
-export interface WSTypedSchema<ModelName extends string = string> {
-	body?: TSchema | ModelName
-	headers?: TObject | ModelName
-	query?: TObject | ModelName
-	params?: TObject | ModelName
-	response?: TSchema | ModelName
+import type {
+	DecoratorBase,
+	Handler,
+	VoidHandler,
+	ErrorHandler,
+	InputSchema,
+	RouteSchema,
+	Isolate,
+	GetPathParameter,
+	MaybeArray
+} from '../types'
+
+export namespace WS {
+	export type Config = Omit<
+		WebSocketHandler,
+		'open' | 'message' | 'close' | 'drain'
+	>
+
+	export type LocalHook<
+		LocalSchema extends InputSchema = {},
+		Route extends RouteSchema = RouteSchema,
+		Decorators extends DecoratorBase = {
+			request: {}
+			store: {}
+		},
+		Errors extends Record<string, Error> = {},
+		Path extends string = '',
+		TypedRoute extends RouteSchema = Route extends {
+			params: Record<string, unknown>
+		}
+			? Route
+			: Route & {
+					params: Record<GetPathParameter<Path>, string>
+			  }
+	> = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
+		Omit<
+			Partial<WebSocketHandler<Context>>,
+			'open' | 'message' | 'close' | 'drain' | 'publish' | 'publishToSelf'
+		> &
+		(ElysiaWS<
+			ServerWebSocket<{
+				validator?: TypeCheck<TSchema>
+			}>,
+			Route
+		> extends infer WS
+			? {
+					transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+					transformMessage?: MaybeArray<
+						VoidHandler<TypedRoute, Decorators>
+					>
+					beforeHandle?: MaybeArray<Handler<TypedRoute, Decorators>>
+					/**
+					 * Catch error
+					 */
+					error?: MaybeArray<ErrorHandler<Errors>>
+
+					/**
+					 * Headers to register to websocket before `upgrade`
+					 */
+					upgrade?: HeadersInit | ((context: Context) => HeadersInit)
+
+					/**
+					 * The {@link ServerWebSocket} has been opened
+					 *
+					 * @param ws The {@link ServerWebSocket} that was opened
+					 */
+					open?: (ws: WS) => void | Promise<void>
+
+					/**
+					 * Handle an incoming message to a {@link ServerWebSocket}
+					 *
+					 * @param ws The {@link ServerWebSocket} that received the message
+					 * @param message The message received
+					 *
+					 * To change `message` to be an `ArrayBuffer` instead of a `Uint8Array`, set `ws.binaryType = "arraybuffer"`
+					 */
+					message?: (ws: WS, message: Route['body']) => any
+
+					/**
+					 * The {@link ServerWebSocket} is being closed
+					 * @param ws The {@link ServerWebSocket} that was closed
+					 * @param code The close code
+					 * @param message The close message
+					 */
+					close?: (
+						ws: WS,
+						code: number,
+						message: string
+					) => void | Promise<void>
+
+					/**
+					 * The {@link ServerWebSocket} is ready for more data
+					 *
+					 * @param ws The {@link ServerWebSocket} that is ready
+					 */
+					drain?: (ws: WS) => void | Promise<void>
+			  }
+			: {})
 }
-
-export type TypedWSSchemaToRoute<
-	Schema extends WSTypedSchema = WSTypedSchema,
-	Definitions extends ElysiaInstance['meta']['defs'] = {}
-> = {
-	body: UnwrapSchema<Schema['body'], Definitions>
-	headers: UnwrapSchema<
-		Schema['headers'],
-		Definitions
-	> extends infer Result extends Record<string, any>
-		? Result
-		: undefined
-	query: UnwrapSchema<
-		Schema['query'],
-		Definitions
-	> extends infer Result extends Record<string, any>
-		? Result
-		: undefined
-	params: UnwrapSchema<
-		Schema['params'],
-		Definitions
-	> extends infer Result extends Record<string, any>
-		? Result
-		: undefined
-	response: UnwrapSchema<
-		Schema['params'],
-		Definitions
-	> extends infer Result extends Record<string, any>
-		? Result
-		: undefined
-}
-
-export type WebSocketSchemaToRoute<
-	Schema extends WSTypedSchema,
-	Definitions extends ElysiaInstance['meta']['defs'] = {}
-> = {
-	body: UnwrapSchema<Schema['body'], Definitions, undefined>
-	headers: UnwrapSchema<Schema['headers'], Definitions, undefined>
-	query: UnwrapSchema<Schema['query'], Definitions, undefined>
-	params: UnwrapSchema<Schema['params'], Definitions, undefined>
-	response: UnwrapSchema<Schema['response'], Definitions, undefined>
-}
-
-export type TransformMessageHandler<Message extends WSTypedSchema['body']> = (
-	message: UnwrapSchema<Message>
-) => void | UnwrapSchema<Message>
-
-export type ElysiaWSContext<
-	Schema extends WSTypedSchema<any> = WSTypedSchema<never>,
-	Instance extends ElysiaInstance = ElysiaInstance,
-	Path extends string = never
-> = ServerWebSocket<
-	Context<{
-		body: UnwrapSchema<Schema['body'], Instance['meta']['defs']>
-		headers: UnwrapSchema<Schema['headers'], Instance['meta']['defs'], Record<string, string>>
-		query: UnwrapSchema<Schema['query'], Instance['meta']['defs'], Record<string, string>>
-		params: ExtractPath<Path> extends infer Params extends string
-			? Record<Params, string>
-			: UnwrapSchema<Schema['params'], Instance['meta']['defs'], Record<string, string>>
-		response: UnwrapSchema<Schema['response'], Instance['meta']['defs']>
-	}> & {
-		id: number
-		message: TypeCheck<any>
-		transformMessage: TransformMessageHandler<Schema['body']>[]
-		schema: TypedRoute
-	} & Instance["request"]
->
-
-export type WebSocketHeaderHandler<
-	Schema extends WSTypedSchema = WSTypedSchema,
-	Path extends string = string
-> = (
-	context: TypedWSSchemaToRoute<Schema>['params'] extends {}
-		? Omit<TypedWSSchemaToRoute<Schema>, 'response'> & {
-				response: void | TypedWSSchemaToRoute<Schema>['response']
-		  }
-		: Omit<
-				Omit<TypedWSSchemaToRoute<Schema>, 'response'> & {
-					response: void | TypedWSSchemaToRoute<Schema>['response']
-				},
-				'params'
-		  > & {
-				params: Record<ExtractPath<Path>, string>
-		  }
-) => HeadersInit
-
-export type ElysiaWSOptions<
-	Path extends string,
-	Schema extends WSTypedSchema<any>,
-	Instance extends ElysiaInstance
-> = Omit<
-	Partial<WebSocketHandler<Context>>,
-	'open' | 'message' | 'close' | 'drain' | 'publish' | 'publishToSelf'
-> &
-	(ElysiaWS<ElysiaWSContext<Schema, Instance, Path>> extends infer WS
-		? Partial<Schema> & {
-				beforeHandle?: WithArray<HookHandler<Schema>>
-				transform?: WithArray<
-					NoReturnHandler<TypedWSSchemaToRoute<Schema>>
-				>
-				transformMessage?: WithArray<
-					TransformMessageHandler<Schema['body']>
-				>
-
-				/**
-				 * Headers to register to websocket before `upgrade`
-				 */
-				upgrade?: HeadersInit | WebSocketHeaderHandler<Schema>
-
-				/**
-				 * The {@link ServerWebSocket} has been opened
-				 *
-				 * @param ws The {@link ServerWebSocket} that was opened
-				 */
-				open?: (ws: WS) => void | Promise<void>
-
-				/**
-				 * Handle an incoming message to a {@link ServerWebSocket}
-				 *
-				 * @param ws The {@link ServerWebSocket} that received the message
-				 * @param message The message received
-				 *
-				 * To change `message` to be an `ArrayBuffer` instead of a `Uint8Array`, set `ws.binaryType = "arraybuffer"`
-				 */
-				message?: (
-					ws: WS,
-					message: UnwrapSchema<Schema['body'], Instance['meta']['defs']>
-				) => any
-
-				/**
-				 * The {@link ServerWebSocket} is being closed
-				 * @param ws The {@link ServerWebSocket} that was closed
-				 * @param code The close code
-				 * @param message The close message
-				 */
-				close?: (
-					ws: WS,
-					code: number,
-					message: string
-				) => void | Promise<void>
-
-				/**
-				 * The {@link ServerWebSocket} is ready for more data
-				 *
-				 * @param ws The {@link ServerWebSocket} that is ready
-				 */
-				drain?: (ws: WS) => void | Promise<void>
-		  }
-		: never)

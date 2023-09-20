@@ -1,3 +1,49 @@
+# 0.7.0 - 20 Sep 2023
+Feature:
+- rewrite type
+- rewrite Web Socket
+- add mapper method
+- add affix, prefix, suffix
+- trace
+- typeBox.Transfom
+- rewrite Type.ElysiaMeta to use TypeBox.Transform
+- new type:
+    - t.Cookie
+    - t.ObjectString
+    - t.MaybeEmpty
+    - t.Nullable
+- add `Context` to `onError`
+- lifecycle hook now accept array function
+- true encapsulation scope
+
+Improvement:
+- static Code Analysis now support rest parameter
+- breakdown dynamic router into single pipeline instead of inlining to static router to reduce memory usage
+- set `t.File` and `t.Files` to `File` instead of `Blob`
+- skip class instance merging
+- handle `UnknownContextPassToFunction`
+- [#157](https://github.com/elysiajs/elysia/pull/179) WebSocket - added unit tests and fixed example & api by @bogeychan
+- [#179](https://github.com/elysiajs/elysia/pull/179) add github action to run bun test by @arthurfiorette
+
+Breaking Change:
+- remove `ws` plugin, migrate to core
+- rename `addError` to `error`
+
+Change:
+- using single findDynamicRoute instead of inlining to static map
+- remove `mergician`
+- remove array routes due to problem with TypeScript
+
+Bug fix:
+- strictly validate response by default
+- `t.Numeric` not working on headers / query / params
+- `t.Optional(t.Object({ [name]: t.Numeric }))` causing error
+- add null check before converting `Numeric`
+- inherits store to instance plugin
+- handle class overlapping
+- [#187](https://github.com/elysiajs/elysia/pull/187) InternalServerError message fixed to "INTERNAL_SERVER_ERROR" instead of "NOT_FOUND" by @bogeychan
+- [#167](https://github.com/elysiajs/elysia/pull/167) mapEarlyResponse with aot on after handle
+
 # 0.6.24 - 18 Sep 2023
 Feature:
 - [#149](https://github.com/elysiajs/elysia/pulls/149) support additional status codes in redirects

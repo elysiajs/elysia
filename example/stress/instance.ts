@@ -1,12 +1,18 @@
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 
 const total = 10_000
 
-const t = performance.now()
+const setup = new Elysia({ name: 'setup' })
+	.decorate('decorate', 'decorate')
+	.state('state', 'state')
+	.model('model', t.String())
+	.error('error', Error)
 
-for (let i = 0; i < total; i++) new Elysia()
+const t1 = performance.now()
 
-const took = performance.now() - t
+for (let i = 0; i < total; i++) new Elysia().use(setup)
+
+const took = performance.now() - t1
 
 console.log(
 	Intl.NumberFormat().format(total),

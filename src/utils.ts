@@ -2,23 +2,65 @@ import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
-// @ts-ignore
-import Mergician from 'mergician'
-
 import type {
-	ElysiaInstance,
 	LifeCycleStore,
 	LocalHook,
-	TypedSchema,
-	RegisteredHook,
-	WithArray
+	MaybeArray,
+	InputSchema
 } from './types'
 
-export const mergeDeep = Mergician({
-	appendArrays: true
-})
+const isObject = (item: any): item is Object =>
+	item && typeof item === 'object' && !Array.isArray(item)
+
+const isClass = (v: Object) =>
+	typeof v === 'function' && /^\s*class\s+/.test(v.toString())
+
+export const mergeDeep = <const A extends Object, const B extends Object>(
+	target: A,
+	source: B,
+	{
+		skipKeys
+	}: {
+		skipKeys?: string[]
+	} = {}
+): A & B => {
+	const output: Record<any, any> = Object.assign({}, target)
+
+	if (isObject(target) && isObject(source))
+		for (const [key, value] of Object.entries(source)) {
+			if (skipKeys?.includes(key)) continue
+
+			if (!isObject(value)) {
+				output[key] = value
+				continue
+			}
+
+			if (!(key in target)) {
+				output[key] = value
+				continue
+			}
+
+			if (key in target && isClass(value)) {
+				output[key] = value
+				continue
+			}
+
+			output[key] = mergeDeep((target as any)[key] as any, value)
+		}
+
+	return output as A & B
+}
+
+export const mergeCookie = <const A extends Object, const B extends Object>(
+	target: A,
+	source: B
+): A & B =>
+	mergeDeep(target, source, {
+		skipKeys: ['properties']
+	})
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
+	// ! Must copy to remove side-effect
 	const array = [...(Array.isArray(a) ? a : [a])]
 	const checksums = []
 
@@ -38,9 +80,9 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 }
 
 export const mergeHook = (
-	a: LocalHook<any, any> | LifeCycleStore<any>,
-	b: LocalHook<any, any>
-): RegisteredHook<any> => {
+	a?: LocalHook<any, any, any, any> | LifeCycleStore,
+	b?: LocalHook<any, any, any, any>
+): LifeCycleStore => {
 	return {
 		// Merge local hook first
 		// @ts-ignore
@@ -60,55 +102,27 @@ export const mergeHook = (
 			// @ts-ignore
 			a?.detail ?? {}
 		),
-		parse: mergeObjectArray((a.parse as any) ?? [], b?.parse ?? []),
+		parse: mergeObjectArray((a?.parse as any) ?? [], b?.parse ?? []),
 		transform: mergeObjectArray(
-			a.transform ?? [],
+			a?.transform ?? [],
 			b?.transform ?? []
 		) as any,
 		beforeHandle: mergeObjectArray(
-			a.beforeHandle ?? [],
+			a?.beforeHandle ?? [],
 			b?.beforeHandle ?? []
 		),
 		afterHandle: mergeObjectArray(
-			a.afterHandle ?? [],
+			a?.afterHandle ?? [],
 			b?.afterHandle ?? []
 		),
 		onResponse: mergeObjectArray(
-			a.onResponse ?? [],
+			a?.onResponse ?? [],
 			b?.onResponse ?? []
 		) as any,
-
-		error: mergeObjectArray(a.error ?? [], b?.error ?? [])
+		trace: mergeObjectArray(a?.trace ?? [], b?.trace ?? []) as any,
+		error: mergeObjectArray(a?.error ?? [], b?.error ?? [])
 	}
 }
-
-// const isObject = (item: any): item is Object =>
-// 	item && typeof item === 'object' && !Array.isArray(item)
-
-// https://stackoverflow.com/a/37164538
-// export const mergeDeep = <A extends Object = Object, B extends Object = Object>(
-// 	target: A,
-// 	source: B
-// ): DeepMergeTwoTypes<A, B> => {
-// 	const output: Partial<DeepMergeTwoTypes<A, B>> = Object.assign({}, target)
-// 	if (isObject(target) && isObject(source)) {
-// 		Object.keys(source).forEach((key) => {
-// 			// @ts-ignore
-// 			if (isObject(source[key])) {
-// 				if (!(key in target))
-// 					// @ts-ignore
-// 					Object.assign(output, { [key]: source[key] })
-// 				// @ts-ignore
-// 				else output[key] = mergeDeep(target[key], source[key])
-// 			} else {
-// 				// @ts-ignore
-// 				Object.assign(output, { [key]: source[key] })
-// 			}
-// 		})
-// 	}
-
-// 	return output as DeepMergeTwoTypes<A, B>
-// }
 
 export const getSchemaValidator = (
 	s: TSchema | string | undefined,
@@ -146,7 +160,7 @@ export const getSchemaValidator = (
 }
 
 export const getResponseSchemaValidator = (
-	s: TypedSchema['response'] | undefined,
+	s: InputSchema['response'] | undefined,
 	{
 		models = {},
 		additionalProperties = false,
@@ -177,15 +191,19 @@ export const getResponseSchemaValidator = (
 		return TypeCompiler.Compile(schema)
 	}
 
-	if (Kind in maybeSchemaOrRecord)
+	if (Kind in maybeSchemaOrRecord) {
+		if ('additionalProperties' in maybeSchemaOrRecord === false)
+			maybeSchemaOrRecord.additionalProperties = additionalProperties
+
 		return {
 			200: compile(maybeSchemaOrRecord)
 		}
+	}
 
 	const record: Record<number, TypeCheck<any>> = {}
 
 	Object.keys(maybeSchemaOrRecord).forEach((status): TSchema | undefined => {
-		const maybeNameOrSchema = maybeSchemaOrRecord[status]
+		const maybeNameOrSchema = maybeSchemaOrRecord[+status]
 
 		if (typeof maybeNameOrSchema === 'string') {
 			if (maybeNameOrSchema in models) {
@@ -225,14 +243,11 @@ export const checksum = (s: string) => {
 	return (h = h ^ (h >>> 9))
 }
 
-export const mergeLifeCycle = <
-	A extends ElysiaInstance,
-	B extends ElysiaInstance
->(
-	a: LifeCycleStore<A>,
-	b: LifeCycleStore<B> | LocalHook<{}, B>,
+export const mergeLifeCycle = (
+	a: LifeCycleStore,
+	b: LifeCycleStore | LocalHook,
 	checksum?: number
-): LifeCycleStore<A & B> => {
+): LifeCycleStore => {
 	const injectChecksum = <T>(x: T): T => {
 		if (checksum)
 			// @ts-ignore
@@ -244,15 +259,16 @@ export const mergeLifeCycle = <
 	return {
 		start: mergeObjectArray(
 			a.start as any,
-			('start' in b ? b.start : []).map(injectChecksum) as any
+			('start' in b ? b.start ?? [] : []).map(injectChecksum) as any
 		),
 		request: mergeObjectArray(
 			a.request as any,
-			('request' in b ? b.request : []).map(injectChecksum) as any
+			('request' in b ? b.request ?? [] : []).map(injectChecksum) as any
 		),
-		parse: mergeObjectArray(a.parse as any, b?.parse ?? ([] as any)).map(
-			injectChecksum
-		),
+		parse: mergeObjectArray(
+			a.parse as any,
+			'parse' in b ? b?.parse ?? [] : undefined ?? ([] as any)
+		).map(injectChecksum),
 		transform: mergeObjectArray(
 			a.transform as any,
 			(b?.transform ?? ([] as any)).map(injectChecksum)
@@ -269,21 +285,25 @@ export const mergeLifeCycle = <
 			a.onResponse as any,
 			(b?.onResponse ?? ([] as any)).map(injectChecksum)
 		),
+		trace: mergeObjectArray(
+			a.trace as any,
+			('trace' in b ? b.trace ?? [] : ([] as any)).map(injectChecksum)
+		),
 		error: mergeObjectArray(
 			a.error as any,
 			(b?.error ?? ([] as any)).map(injectChecksum)
 		),
 		stop: mergeObjectArray(
 			a.stop as any,
-			('stop' in b ? b.stop : ([] as any)).map(injectChecksum)
+			('stop' in b ? b.stop ?? [] : ([] as any)).map(injectChecksum)
 		)
 	}
 }
 
-export const asGlobalHook = <T extends LocalHook<any, any>>(
-	hook: T,
+export const asGlobalHook = (
+	hook: LocalHook<any, any>,
 	inject = true
-): T => {
+): LocalHook<any, any> => {
 	return {
 		// rest is validator
 		...hook,
@@ -295,10 +315,10 @@ export const asGlobalHook = <T extends LocalHook<any, any>>(
 		afterHandle: asGlobal(hook?.afterHandle, inject),
 		onResponse: asGlobal(hook?.onResponse, inject),
 		error: asGlobal(hook?.error, inject)
-	} as T
+	} as LocalHook<any, any>
 }
 
-export const asGlobal = <T extends WithArray<Function> | undefined>(
+export const asGlobal = <T extends MaybeArray<Function> | undefined>(
 	fn: T,
 	inject = true
 ): T => {
@@ -325,7 +345,7 @@ export const asGlobal = <T extends WithArray<Function> | undefined>(
 	}) as T
 }
 
-const filterGlobal = <T extends WithArray<Function> | undefined>(fn: T): T => {
+const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
 	if (!fn) return fn
 
 	if (typeof fn === 'function') {
@@ -337,7 +357,9 @@ const filterGlobal = <T extends WithArray<Function> | undefined>(fn: T): T => {
 	return fn.filter((x) => x.$elysiaHookType === 'global') as T
 }
 
-export const filterGlobalHook = <T extends LocalHook<any, any>>(hook: T): T => {
+export const filterGlobalHook = (
+	hook: LocalHook<any, any>
+): LocalHook<any, any> => {
 	return {
 		// rest is validator
 		...hook,
@@ -349,5 +371,70 @@ export const filterGlobalHook = <T extends LocalHook<any, any>>(hook: T): T => {
 		afterHandle: filterGlobal(hook?.afterHandle),
 		onResponse: filterGlobal(hook?.onResponse),
 		error: filterGlobal(hook?.error)
-	} as T
+	} as LocalHook<any, any>
 }
+
+export const StatusMap = {
+	Continue: 100,
+	'Switching Protocols': 101,
+	Processing: 102,
+	'Early Hints': 103,
+	OK: 200,
+	Created: 201,
+	Accepted: 202,
+	'Non-Authoritative Information': 203,
+	'No Content': 204,
+	'Reset Content': 205,
+	'Partial Content': 206,
+	'Multi-Status': 207,
+	'Already Reported': 208,
+	'Multiple Choices': 300,
+	'Moved Permanently': 301,
+	Found: 302,
+	'See Other': 303,
+	'Not Modified': 304,
+	'Temporary Redirect': 307,
+	'Permanent Redirect': 308,
+	'Bad Request': 400,
+	Unauthorized: 401,
+	'Payment Required': 402,
+	Forbidden: 403,
+	'Not Found': 404,
+	'Method Not Allowed': 405,
+	'Not Acceptable': 406,
+	'Proxy Authentication Required': 407,
+	'Request Timeout': 408,
+	Conflict: 409,
+	Gone: 410,
+	'Length Required': 411,
+	'Precondition Failed': 412,
+	'Payload Too Large': 413,
+	'URI Too Long': 414,
+	'Unsupported Media Type': 415,
+	'Range Not Satisfiable': 416,
+	'Expectation Failed': 417,
+	"I'm a teapot": 418,
+	'Misdirected Request': 421,
+	'Unprocessable Content': 422,
+	Locked: 423,
+	'Failed Dependency': 424,
+	'Too Early': 425,
+	'Upgrade Required': 426,
+	'Precondition Required': 428,
+	'Too Many Requests': 429,
+	'Request Header Fields Too Large': 431,
+	'Unavailable For Legal Reasons': 451,
+	'Internal Server Error': 500,
+	'Not Implemented': 501,
+	'Bad Gateway': 502,
+	'Service Unavailable': 503,
+	'Gateway Timeout': 504,
+	'HTTP Version Not Supported': 505,
+	'Variant Also Negotiates': 506,
+	'Insufficient Storage': 507,
+	'Loop Detected': 508,
+	'Not Extended': 510,
+	'Network Authentication Required': 511
+} as const
+
+export type HTTPStatusName = keyof typeof StatusMap

@@ -3,15 +3,11 @@
   <img width=480 src=https://user-images.githubusercontent.com/35027979/205498891-b75dc404-3232-4929-b216-823aa7373b71.png alt='Elysia label' />
 </p>
 
-<p align=center>Fast and friendly <a href=https://bun.sh>Bun</a> web framework.</p>
+<p align=center>Ergonomic Framework for Human</p>
 
 <p align=center>
     <a href=https://elysiajs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a>
 </p>
-
-<h6 align=center>
-    Formerly known as <a href="https://github.com/saltyaom/kingworld">KingWorld</a>
-</h6>
 
 ## Philosophies
 Building on top of 3 philosophies:

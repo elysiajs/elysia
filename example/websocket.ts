@@ -1,7 +1,6 @@
-import { Elysia, t, ws } from '../src'
+import { Elysia } from '../src'
 
 const app = new Elysia()
-	.use(ws())
 	.state('start', 'here')
 	.ws('/ws', {
 		open(ws) {
@@ -11,7 +10,7 @@ const app = new Elysia()
 			ws.publish('asdf', message)
 		}
 	})
-	.get('/publish/:publish', ({ publish, params: { publish: text } }) => {
+	.get('/publish/:publish', ({ params: { publish: text } }) => {
 		app.server!.publish('asdf', text)
 
 		return text

@@ -1,4 +1,4 @@
-import { Elysia, t, SCHEMA, DEFS } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
 	.model({

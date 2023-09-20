@@ -18,12 +18,12 @@ export type ElysiaErrors =
 	| NotFoundError
 	| ParseError
 	| ValidationError
+	| InvalidCookieSignature
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
 	status = 500
 
-	constructor(message: string)
 	constructor(message?: string) {
 		super(message ?? 'INTERNAL_SERVER_ERROR')
 	}
@@ -33,7 +33,6 @@ export class NotFoundError extends Error {
 	code = 'NOT_FOUND'
 	status = 404
 
-	constructor(message: string)
 	constructor(message?: string) {
 		super(message ?? 'NOT_FOUND')
 	}
@@ -43,9 +42,17 @@ export class ParseError extends Error {
 	code = 'PARSE'
 	status = 400
 
-	constructor(message: string)
 	constructor(message?: string) {
 		super(message ?? 'PARSE')
+	}
+}
+
+export class InvalidCookieSignature extends Error {
+	code = 'INVALID_COOKIE_SIGNATURE'
+	status = 400
+
+	constructor(public key: string, message?: string) {
+		super(message ?? `"${key}" has invalid cookie signature`)
 	}
 }
 

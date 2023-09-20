@@ -1,11 +1,31 @@
-import { Elysia } from '../src'
+import Elysia from '../src'
 
-const app = new Elysia({
-	serve: {
-		// can be string, BunFile, TypedArray, Buffer, or array thereof
-		key: Bun.file('./key.pem'),
-		cert: Bun.file('./cert.pem'),
-		// passphrase, only required if key is encrypted
-		passphrase: 'super-secret'
-	}
-}).listen(3000)
+const app = new Elysia()
+	.get('/', ({ set }) => {
+		set.status = "I'm a teapot"
+
+		return Bun.file('example/teapot.webp')
+	})
+	.trace(async ({ beforeHandle }) => {
+		try {
+			console.log('Start BeforeHandle')
+			const { end } = await beforeHandle
+
+			const a = await end
+		} catch {
+			console.log("A")
+		}
+	})
+	.get('/trace', () => 'a', {
+		beforeHandle: [
+			function setup() {},
+			function error() {
+				throw new Error('A')
+			},
+			function resume() {}
+		],
+		afterHandle() {
+			console.log('After')
+		}
+	})
+	.listen(3000)

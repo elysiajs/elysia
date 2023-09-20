@@ -1,5 +1,14 @@
-import type { Elysia } from "../src";
+import { Elysia, t } from '../src'
 
-export default function plugin(app: Elysia) {
-    return app.get('/from-plugin', () => 'hi')
-}
+const app = new Elysia()
+	.post('/0.6', ({ body }) => body, {
+		body: t.Union([
+			t.Undefined(),
+			t.Object({
+				name: t.String(),
+				job: t.String(),
+				trait: t.Optional(t.String())
+			})
+		])
+	})
+	.listen(3000)

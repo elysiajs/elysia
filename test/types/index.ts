@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { expect } from 'bun:test'
-import { t, Elysia, TypedSchema } from '../../src'
+import { t, Elysia, RouteSchema, Cookie } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -8,7 +8,7 @@ const app = new Elysia()
 // ? default value of context
 app.get('/', ({ headers, query, params, body, store }) => {
 	// ? default keyof params should be never
-	expectTypeOf<keyof typeof params>().toBeNever()
+	expectTypeOf<typeof params>().toBeNever()
 
 	// ? default headers should be Record<string, unknown>
 	expectTypeOf<typeof headers>().toEqualTypeOf<
@@ -16,7 +16,7 @@ app.get('/', ({ headers, query, params, body, store }) => {
 	>()
 
 	// ? default query should be Record<string, unknown>
-	expectTypeOf<typeof query>().toEqualTypeOf<Record<string, unknown>>()
+	expectTypeOf<typeof query>().toEqualTypeOf<Record<string, string | null>>()
 
 	// ? default body should be unknown
 	expectTypeOf<typeof body>().toBeUnknown()
@@ -32,7 +32,7 @@ app.model({
 	})
 }).get(
 	'/',
-	({ headers, query, params, body }) => {
+	({ headers, query, params, body, cookie }) => {
 		// ? unwrap body type
 		expectTypeOf<{
 			username: string
@@ -57,6 +57,14 @@ app.model({
 			password: string
 		}>().toEqualTypeOf<typeof headers>()
 
+		// ? unwrap cookie
+		expectTypeOf<
+			Record<string, Cookie<any>> & {
+				username: Cookie<string>
+				password: Cookie<string>
+			}
+		>().toEqualTypeOf<typeof cookie>()
+
 		return body
 	},
 	{
@@ -64,7 +72,8 @@ app.model({
 		params: 't',
 		query: 't',
 		headers: 't',
-		response: 't'
+		response: 't',
+		cookie: 't'
 	}
 )
 
@@ -97,7 +106,7 @@ app.get('/', () => '1', {
 })
 
 // ? support pre-defined schema
-app.schema({
+app.guard({
 	body: t.String()
 }).get('/', ({ body }) => {
 	expectTypeOf<typeof body>().not.toBeUnknown()
@@ -105,7 +114,7 @@ app.schema({
 })
 
 // ? override schema
-app.schema({
+app.guard({
 	body: t.String()
 }).get(
 	'/',
@@ -132,7 +141,7 @@ app.model({
 				expectTypeOf<typeof body>().not.toBeUnknown()
 				expectTypeOf<typeof body>().toBeString()
 			})
-			// ? override guard type
+			// // ? override guard type
 			.get(
 				'/',
 				({ body }) => {
@@ -268,8 +277,8 @@ app.decorate('a', 'b')
 		}>().toEqualTypeOf<{
 			a: 'b'
 			b: 'c'
-			c: string
-			d: string
+			c: 'd'
+			d: 'e'
 		}>()
 	})
 
@@ -282,7 +291,8 @@ const b = app
 			expectTypeOf<typeof body>().toEqualTypeOf<'a'>()
 		},
 		{
-			body: 'a'
+			body: 'a',
+			transform() {}
 		}
 	)
 	// ? Infer multiple model
@@ -431,28 +441,30 @@ app.use(plugin).group(
 
 // ? It inherits group type to Eden
 {
-	const server = app.group(
-		'/v1',
-		{
-			query: t.Object({
-				name: t.String()
-			})
-		},
-		(app) =>
-			app.guard(
-				{
-					headers: t.Object({
-						authorization: t.String()
-					})
-				},
-				(app) =>
-					app.get('/a', () => 1, {
-						body: t.String()
-					})
-			)
-	)
+	const server = app
+		.group(
+			'/v1',
+			{
+				query: t.Object({
+					name: t.String()
+				})
+			},
+			(app) =>
+				app.guard(
+					{
+						headers: t.Object({
+							authorization: t.String()
+						})
+					},
+					(app) =>
+						app.get('/a', () => 1, {
+							body: t.String()
+						})
+				)
+		)
+		.get('/', ({ params }) => params)
 
-	type App = (typeof server)['meta']['schema']
+	type App = (typeof server)['schema']
 	type Route = App['/v1/a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -463,9 +475,9 @@ app.use(plugin).group(
 		query: {
 			name: string
 		}
-		params: undefined
+		params: unknown
 		response: {
-			'200': number
+			200: number
 		}
 	}>()
 }
@@ -495,10 +507,8 @@ app.use(plugin).group(
 					})
 			)
 	)
-
-	type App = (typeof server)['meta']['schema']
+	type App = (typeof server)['schema']
 	type Route = App['/v1/a']['subscribe']
-
 	expectTypeOf<Route>().toEqualTypeOf<{
 		headers: {
 			authorization: string
@@ -507,7 +517,7 @@ app.use(plugin).group(
 		query: {
 			name: string
 		}
-		params: Record<never, string>
+		params: unknown
 		response: unknown
 	}>()
 }
@@ -516,16 +526,16 @@ app.use(plugin).group(
 {
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
-	type App = (typeof server)['meta']['schema']
+	type App = (typeof server)['schema']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
-		headers: undefined
-		query: undefined
-		params: undefined
+		headers: unknown
+		query: unknown
+		params: unknown
 		response: {
-			'200': string
+			200: string
 		}
 	}>()
 }
@@ -611,7 +621,7 @@ app.group(
 		query: t.Object({
 			user: t.String()
 		}),
-		beforeHandle({ body }) {
+		beforeHandle: ({ body }) => {
 			expectTypeOf<typeof body>().toEqualTypeOf<{
 				username: string
 			}>()
@@ -648,72 +658,72 @@ app.group(
 )
 
 // ? Reconcilation on state
-{
-	const a = app.state('a', 'a' as const)
-	const b = a.state('a', 'b' as const)
+// {
+// 	const a = app.state('a', 'a' as const)
+// 	const b = a.state('a', 'b' as const)
 
-	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
-		a: 'a'
-	}>()
+// 	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
+// 		a: 'a'
+// 	}>()
 
-	expectTypeOf<(typeof b)['store']>().toEqualTypeOf<{
-		a: 'b'
-	}>()
-}
+// 	expectTypeOf<(typeof b)['store']>().toEqualTypeOf<{
+// 		a: 'b'
+// 	}>()
+// }
 
-// ? Reconcilation on decorator
-{
-	const a = app.decorate('a', 'a' as const)
-	const b = a.decorate('a', 'b' as const)
+// // ? Reconcilation on decorator
+// {
+// 	const a = app.decorate('a', 'a' as const)
+// 	const b = a.decorate('a', 'b' as const)
 
-	expectTypeOf<(typeof a)['decorators']>().toEqualTypeOf<{
-		a: 'a'
-	}>()
+// 	expectTypeOf<(typeof a)['decorators']>().toEqualTypeOf<{
+// 		a: 'a'
+// 	}>()
 
-	expectTypeOf<(typeof b)['decorators']>().toEqualTypeOf<{
-		a: 'b'
-	}>()
-}
+// 	expectTypeOf<(typeof b)['decorators']>().toEqualTypeOf<{
+// 		a: 'b'
+// 	}>()
+// }
 
-// ? Reconcilation on model
-{
-	const a = app.model('a', t.String())
-	const b = a.model('a', t.Number())
+// // ? Reconcilation on model
+// {
+// 	const a = app.model('a', t.String())
+// 	const b = a.model('a', t.Number())
 
-	expectTypeOf<(typeof a)['meta']['defs']>().toEqualTypeOf<{
-		a: string
-	}>()
+// 	expectTypeOf<(typeof a)['definitions']['type']>().toEqualTypeOf<{
+// 		a: string
+// 	}>()
 
-	expectTypeOf<(typeof b)['meta']['defs']>().toEqualTypeOf<{
-		a: number
-	}>()
-}
+// 	expectTypeOf<(typeof b)['definitions']['type']>().toEqualTypeOf<{
+// 		a: number
+// 	}>()
+// }
 
-// ? Reconcilation on use
-{
-	const a = app
-		.state('a', 'a' as const)
-		.model('a', t.String())
-		.decorate('a', 'b' as const)
-		.use((app) =>
-			app
-				.state('a', 'b' as const)
-				.model('a', t.Number())
-				.decorate('a', 'b' as const)
-		)
+// // ? Reconcilation on use
+// {
+// 	const a = app
+// 		.state('a', 'a' as const)
+// 		.model('a', t.String())
+// 		.decorate('a', 'b' as const)
+// 		.use((app) =>
+// 			app
+// 				.state('a', 'b' as const)
+// 				.model('a', t.Number())
+// 				.decorate('a', 'b' as const)
+// 		)
 
-	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
-		a: 'b'
-	}>()
+// 	expectTypeOf<(typeof a)['store']>().toEqualTypeOf<{
+// 		a: 'b'
+// 	}>()
 
-	expectTypeOf<(typeof a)['decorators']>().toEqualTypeOf<{
-		a: 'b'
-	}>()
+// 	expectTypeOf<(typeof a)['decorators']>().toEqualTypeOf<{
+// 		a: 'b'
+// 	}>()
 
-	expectTypeOf<(typeof a)['meta']['defs']>().toEqualTypeOf<{
-		a: number
-	}>()
-}
+// 	expectTypeOf<(typeof a)['definitions']['type']>().toEqualTypeOf<{
+// 		a: number
+// 	}>()
+// }
 
 // ? Inherits plugin instance path
 {
@@ -721,16 +731,16 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['meta']['schema']
+	type App = (typeof server)['schema']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
-		headers: undefined
-		query: undefined
-		params: undefined
+		headers: unknown
+		query: unknown
+		params: unknown
 		response: {
-			'200': string
+			200: string
 		}
 	}>()
 }
@@ -748,7 +758,7 @@ app.group(
 		.get('/a', () => 'A')
 		.listen(3000)
 
-	type Routes = keyof (typeof app)['meta']['schema']
+	type Routes = keyof (typeof app)['schema']
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/api/a' | '/api/plugin/test-path'>()
 }
@@ -763,16 +773,16 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['meta']['schema']
+	type App = (typeof server)['schema']
 	type Route = App['/v1/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
-		headers: undefined
-		query: undefined
-		params: undefined
+		headers: unknown
+		query: unknown
+		params: unknown
 		response: {
-			'200': string
+			200: string
 		}
 	}>()
 }
@@ -788,8 +798,68 @@ app.group(
 
 	const app = new Elysia().use(test)
 
-	type App = (typeof app)['meta']['schema']
+	type App = (typeof app)['schema']
 	type Routes = keyof App
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/app/test'>()
+}
+
+// ? Merging identical plugin type
+{
+	const cookie = new Elysia({
+		name: 'cookie'
+	}).derive(() => {
+		return {
+			cookie: 'A'
+		}
+	})
+
+	const controller = new Elysia().use(cookie).get('/', () => 'A')
+
+	const app = new Elysia()
+		.use(cookie)
+		.use(controller)
+		.get('/', ({ cookie }) => {
+			expectTypeOf<typeof cookie>().toBeString()
+		})
+}
+
+// ? Prefer local schema over parent schema for nesting
+{
+	new Elysia().group(
+		'/id/:id',
+		{
+			params: t.Object({
+				id: t.Numeric()
+			}),
+			beforeHandle({ params }) {
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					id: number
+				}>()
+			}
+		},
+		(app) =>
+			app
+				.get('/awd', ({ params }) => {
+					expectTypeOf<typeof params>().toEqualTypeOf<{
+						id: number
+					}>()
+				})
+				.group(
+					'/name/:name',
+					{
+						params: t.Object({
+							id: t.Numeric(),
+							name: t.String()
+						})
+					},
+					(app) =>
+						app.get('/awd', ({ params }) => {
+							expectTypeOf<typeof params>().toEqualTypeOf<{
+								id: number
+								name: string
+							}>()
+						})
+				)
+	)
 }
