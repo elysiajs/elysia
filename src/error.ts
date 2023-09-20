@@ -23,8 +23,9 @@ export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
 	status = 500
 
-	constructor() {
-		super('INTERNAL_SERVER_ERROR')
+	constructor(message: string)
+	constructor(message?: string) {
+		super(message ?? 'INTERNAL_SERVER_ERROR')
 	}
 }
 
@@ -32,8 +33,9 @@ export class NotFoundError extends Error {
 	code = 'NOT_FOUND'
 	status = 404
 
-	constructor() {
-		super('NOT_FOUND')
+	constructor(message: string)
+	constructor(message?: string) {
+		super(message ?? 'NOT_FOUND')
 	}
 }
 
@@ -41,8 +43,9 @@ export class ParseError extends Error {
 	code = 'PARSE'
 	status = 400
 
-	constructor() {
-		super('PARSE')
+	constructor(message: string)
+	constructor(message?: string) {
+		super(message ?? 'PARSE')
 	}
 }
 
