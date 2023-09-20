@@ -133,7 +133,7 @@
     "openapi-types": "^12.1.3"
   },
   "devDependencies": {
-    "@elysiajs/cookie": "^0.6.1",
+    "@elysiajs/cookie": "^0.7.0",
     "@elysiajs/html": "^0.6.6",
     "@elysiajs/jwt": "^0.6.4",
     "@elysiajs/swagger": "^0.6.2",
