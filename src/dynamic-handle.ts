@@ -4,14 +4,13 @@ import { mapEarlyResponse, mapResponse } from './handler'
 import { ElysiaErrors, NotFoundError, ValidationError } from './error'
 
 import type { Context } from './context'
-import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 
 import { parse as parseQuery } from 'fast-querystring'
-import { TypeCheck } from '@sinclair/typebox/compiler'
-import { TObject } from '@sinclair/typebox'
 
 import { sign as signCookie } from 'cookie-signature'
 import { parseCookie } from './cookie'
+
+import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -204,33 +203,6 @@ export const createDynamicHandler =
 					  }
 					: undefined
 			)
-
-			if (body && validator?.body?.Decode)
-				context.body = (validator.body as TypeCheck<TObject>).Decode(
-					body
-				) as any
-
-			if (context.query && validator?.query?.Decode)
-				context.query = (validator.query as TypeCheck<TObject>).Decode(
-					context.query
-				) as any
-
-			if (context.params && validator?.params?.Decode)
-				// @ts-ignore
-				context.params = (
-					validator.params as TypeCheck<TObject>
-				).Decode(context.params) as any
-
-			if (context.cookie && validator?.cookie?.Decode)
-				// @ts-ignore
-				context.cookie = (
-					validator.cookie as TypeCheck<TObject>
-				).Decode(context.cookie) as any
-
-			if (context.headers && validator?.headers?.Decode)
-				context.headers = (
-					validator.headers as TypeCheck<TObject>
-				).Decode(context.headers) as any
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)
