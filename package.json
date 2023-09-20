@@ -147,7 +147,7 @@
     "bun-types": "^1.0.2",
     "eslint": "^8.49.0",
     "expect-type": "^0.16.0",
-    "rimraf": "4.4.1",
+    "rimraf": "5.0.1",
     "typescript": "^5.2.2"
   },
   "peerDependencies": {
