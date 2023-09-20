@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, t } from '../../src'
+import { Elysia, InternalServerError, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
@@ -70,5 +70,22 @@ describe('error', () => {
 
 		expect(data.length).toBe(4)
 		expect(res.status).toBe(400)
+	})
+
+	it('custom 500', async () => {
+		const app = new Elysia()
+			.onError(({ code }) => {
+				if (code === 'INTERNAL_SERVER_ERROR') {
+					return 'UwU'
+				}
+			})
+			.get('/', () => {
+				throw new InternalServerError()
+			})
+
+		const response = await app.handle(req('/'))
+
+		expect(await response.text()).toBe('UwU')
+		expect(response.status).toBe(500)
 	})
 })
