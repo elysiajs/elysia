@@ -1145,12 +1145,12 @@ export const composeHandler = ({
 					name: hooks.error[i].name
 				})
 
-				fnLiteral += `\nlet ${name} = handleErrors[${i}]({
-					request: c.request,
-					error: error,
-					set,
-					code: error.code ?? error[ERROR_CODE] ?? "UNKNOWN"
-				})\n`
+				fnLiteral += `\nlet ${name} = handleErrors[${i}](
+					Object.assign(c, {
+						error: error,
+						code: error.code ?? error[ERROR_CODE] ?? "UNKNOWN"
+					})
+				)\n`
 
 				if (isAsync(hooks.error[i]))
 					fnLiteral += `if (${name} instanceof Promise) ${name} = await ${name}\n`
@@ -1482,18 +1482,17 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 	return ${
 		app.event.error.find(isAsync) ? 'async' : ''
 	} function(context, error) {
-		const { request, set } = context
+		const { set } = context
 		`
-
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
 
-		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}]({
-			request,
-			code: error.code ?? error[ERROR_CODE] ?? 'UNKNOWN',
-			error,
-			set
-		})`
+		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}](
+			Object.assign(context, {
+				code: error.code ?? error[ERROR_CODE] ?? 'UNKNOWN',
+				error
+			})
+		)`
 
 		if (hasReturn(handler.toString()))
 			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) return mapResponse(r${i}, set)\n`

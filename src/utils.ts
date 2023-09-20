@@ -13,7 +13,9 @@ const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
 const isClass = (v: Object) =>
-	typeof v === 'function' && /^\s*class\s+/.test(v.toString())
+	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
+	// Handle import * as Sentry from '@sentry/bun'
+	v.toString() === '[object Module]'
 
 export const mergeDeep = <
 	const A extends Record<string, any>,
@@ -45,6 +47,8 @@ export const mergeDeep = <
 				target[key as keyof typeof target] = value
 				continue
 			}
+
+			console.log("B")
 
 			target[key as keyof typeof target] = mergeDeep(
 				(target as any)[key] as any,

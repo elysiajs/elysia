@@ -1,3 +1,9 @@
+# 0.7.2 - 20 Sep 2023
+Bug Fix:
+- Decorator and Store is resolved as `undefined` in `onError` hook
+- deepMerge with Module object
+- Retain comment in `.d.ts`
+
 # 0.7.1 - 20 Sep 2023
 Bug Fix:
 - Class property is removed when calling deepMerge
