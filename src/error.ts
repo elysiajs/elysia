@@ -18,6 +18,7 @@ export type ElysiaErrors =
 	| NotFoundError
 	| ParseError
 	| ValidationError
+	| InvalidCookieSignature
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -46,7 +47,7 @@ export class ParseError extends Error {
 	}
 }
 
-export class INVALID_COOKIE_SIGNATURE extends Error {
+export class InvalidCookieSignature extends Error {
 	code = 'INVALID_COOKIE_SIGNATURE'
 	status = 400
 

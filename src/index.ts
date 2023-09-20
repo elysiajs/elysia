@@ -74,8 +74,7 @@ import type {
 	AddSuffixCapitalize,
 	TraceReporter,
 	TraceHandler,
-	MaybeArray,
-	IsAny
+	MaybeArray
 } from './types'
 
 /**
@@ -1279,16 +1278,8 @@ export default class Elysia<
 	}
 
 	// Inline Fn
-	use<NewElysia extends Elysia<any, any, any, any, any, any>>(
-		plugin: MaybePromise<
-			(
-				app: NewElysia extends Elysia<infer A, any, any, any, any, any>
-					? IsAny<A> extends true
-						? this
-						: NewElysia
-					: NewElysia
-			) => MaybePromise<NewElysia>
-		>
+	use<NewElysia extends Elysia<any, any, any, any, any, any> = this>(
+		plugin: MaybePromise<(app: NewElysia) => MaybePromise<NewElysia>>
 	): NewElysia extends Elysia<
 		any,
 		infer PluginDecorators,
@@ -1620,100 +1611,6 @@ export default class Elysia<
 		return this
 	}
 
-	get<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
-	>(
-		path: Path,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Path}`]: {
-					get: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
-
-	get<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					get: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
-
 	/**
 	 * ### get
 	 * Register handler for path with method [GET]
@@ -1732,17 +1629,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	get(
-		paths: Readonly<MaybeArray<string>>,
-		handler: Function,
-		hook?: LocalHook<any, any, any, any, any, any>
-	) {
-		this.add('GET', paths, handler as any, hook)
-
-		return this as any
-	}
-
-	post<
+	get<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
 			keyof Definitions['type'] & string
@@ -1770,7 +1657,7 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					post: {
+					get: {
 						body: Route['body']
 						params: Route['params']
 						query: Route['query']
@@ -1785,56 +1672,11 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
+	> {
+		this.add('GET', path, handler as any, hook)
 
-	post<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					post: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
+		return this as any
+	}
 
 	/**
 	 * ### post
@@ -1854,17 +1696,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	post(
-		path: Readonly<MaybeArray<string>>,
-		handler: Function,
-		hook?: LocalHook<any, any, any, any, any>
-	) {
-		this.add('POST', path, handler as any, hook)
-
-		return this as any
-	}
-
-	put<
+	post<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
 			keyof Definitions['type'] & string
@@ -1892,7 +1724,7 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					put: {
+					post: {
 						body: Route['body']
 						params: Route['params']
 						query: Route['query']
@@ -1907,56 +1739,11 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
+	> {
+		this.add('POST', path, handler as any, hook)
 
-	put<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					put: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
+		return this as any
+	}
 
 	/**
 	 * ### put
@@ -1976,17 +1763,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	put(
-		path: Readonly<MaybeArray<string>>,
-		handler: Function,
-		hook?: LocalHook<any, any, any, any, any>
-	) {
-		this.add('PUT', path, handler as any, hook)
-
-		return this as any
-	}
-
-	patch<
+	put<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
 			keyof Definitions['type'] & string
@@ -2014,7 +1791,7 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					patch: {
+					put: {
 						body: Route['body']
 						params: Route['params']
 						query: Route['query']
@@ -2029,56 +1806,11 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
+	> {
+		this.add('PUT', path, handler as any, hook)
 
-	patch<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					patch: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
+		return this as any
+	}
 
 	/**
 	 * ### patch
@@ -2098,17 +1830,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	patch(
-		path: Readonly<MaybeArray<string>>,
-		handler: Function,
-		hook?: LocalHook<any, any, any, any, any>
-	) {
-		this.add('PATCH', path, handler as any, hook)
-
-		return this as any
-	}
-
-	delete<
+	patch<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
 			keyof Definitions['type'] & string
@@ -2136,7 +1858,7 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					delete: {
+					patch: {
 						body: Route['body']
 						params: Route['params']
 						query: Route['query']
@@ -2151,56 +1873,11 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
+	> {
+		this.add('PATCH', path, handler as any, hook)
 
-	delete<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					delete: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
+		return this as any
+	}
 
 	/**
 	 * ### delete
@@ -2220,17 +1897,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	delete(
-		path: Readonly<MaybeArray<string>>,
-		handler: Function,
-		hook?: LocalHook<any, any, any, any, any>
-	) {
-		this.add('DELETE', path, handler as any, hook)
-
-		return this as any
-	}
-
-	options<
+	delete<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
 			keyof Definitions['type'] & string
@@ -2258,7 +1925,7 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					options: {
+					delete: {
 						body: Route['body']
 						params: Route['params']
 						query: Route['query']
@@ -2273,56 +1940,11 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
+	> {
+		this.add('DELETE', path, handler as any, hook)
 
-	options<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					options: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
+		return this as any
+	}
 
 	/**
 	 * ### options
@@ -2342,17 +1964,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	options(
-		path: Readonly<MaybeArray<string>>,
-		handler: Function,
-		hook?: LocalHook<any, any, any, any, any>
-	) {
-		this.add('OPTIONS', path, handler as any, hook)
-
-		return this as any
-	}
-
-	all<
+	options<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
 			keyof Definitions['type'] & string
@@ -2380,7 +1992,7 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					[method in string]: {
+					options: {
 						body: Route['body']
 						params: Route['params']
 						query: Route['query']
@@ -2395,59 +2007,14 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
+	> {
+		this.add('OPTIONS', path, handler as any, hook)
 
-	all<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					[method in string]: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
+		return this as any
+	}
 
 	/**
-	 * ### post
+	 * ### all
 	 * Register handler for path with any method
 	 *
 	 * ---
@@ -2459,17 +2026,7 @@ export default class Elysia<
 	 *     .all('/', () => 'hi')
 	 * ```
 	 */
-	all(
-		path: Readonly<MaybeArray<string>>,
-		handler: Function,
-		hook?: LocalHook<any, any, any, any, any>
-	) {
-		this.add('ALL', path, handler as any, hook)
-
-		return this as any
-	}
-
-	head<
+	all<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
 			keyof Definitions['type'] & string
@@ -2497,7 +2054,7 @@ export default class Elysia<
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					head: {
+					[method in string]: {
 						body: Route['body']
 						params: Route['params']
 						query: Route['query']
@@ -2512,56 +2069,11 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
+	> {
+		this.add('ALL', path, handler as any, hook)
 
-	head<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					head: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
+		return this as any
+	}
 
 	/**
 	 * ### head
@@ -2581,16 +2093,73 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	head(
-		path: Readonly<MaybeArray<string>>,
+	head<
+		const Path extends string,
+		const LocalSchema extends InputSchema<
+			keyof Definitions['type'] & string
+		>,
+		const Route extends MergeSchema<
+			UnwrapRoute<LocalSchema, Definitions['type']>,
+			ParentSchema
+		>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+	>(
+		path: Path,
 		handler: Function,
-		hook?: LocalHook<any, any, any, any, any>
-	) {
+		hook?: LocalHook<
+			LocalSchema,
+			Route,
+			Decorators,
+			Definitions['error'],
+			`${BasePath}${Path}`
+		>
+	): Elysia<
+		BasePath,
+		Decorators,
+		Definitions,
+		ParentSchema,
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					head: {
+						body: Route['body']
+						params: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? {
+									200: ReturnType<Function>
+							  }
+							: Route['response']
+					}
+				}
+			}
+		>,
+		Scoped
+	> {
 		this.add('HEAD', path, handler as any, hook)
 
 		return this as any
 	}
 
+	/**
+	 * ### connect
+	 * Register handler for path with method [CONNECT]
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { Elysia, t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .connect('/', () => 'hi')
+	 *     .connect('/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 	connect<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
@@ -2634,80 +2203,7 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
-
-	connect<
-		const Paths extends Readonly<string[]>,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Paths[number]}`
-		>
-	>(
-		path: Paths,
-		handler: Function,
-		hook?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Paths[number]}`
-		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					connect: {
-						body: Route['body']
-						params: Route['params']
-						query: Route['query']
-						headers: Route['headers']
-						response: unknown extends Route['response']
-							? {
-									200: ReturnType<Function>
-							  }
-							: Route['response']
-					}
-				}
-			}
-		>,
-		Scoped
-	>
-
-	/**
-	 * ### connect
-	 * Register handler for path with method [CONNECT]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .connect('/', () => 'hi')
-	 *     .connect('/with-hook', () => 'hi', {
-	 *         schema: {
-	 *             response: t.String()
-	 *         }
-	 *     })
-	 * ```
-	 */
-	connect(
-		path: Readonly<MaybeArray<string>>,
-		handler: Function,
-		hook?: LocalHook<any, any, any, any, any>
-	) {
+	> {
 		this.add('CONNECT', path, handler as any, hook)
 
 		return this as any
@@ -2885,64 +2381,24 @@ export default class Elysia<
 		return this as any
 	}
 
-	route<
-		const Method extends HTTPMethod,
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
-		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
-		const Route extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			ParentSchema
-		>
-	>(
-		method: Method,
-		path: Path,
-		handler: Function,
-		options?: LocalHook<
-			LocalSchema,
-			Route,
-			Decorators,
-			Definitions['error'],
-			`${BasePath}${Path}`
-		> & {
-			config: {
-				allowMeta?: boolean
-			}
-		}
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		ParentSchema,
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Path}`]: {
-					[method in string]: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
-					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: ReturnType<Function>
-									  }
-									: Response
-						  }
-						: never
-				}
-			}
-		>,
-		Scoped
-	>
+	/**
+	 * ### route
+	 * Register handler for path with custom method
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { Elysia, t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .route('CUSTOM', '/', () => 'hi')
+	 *     .route('CUSTOM', '/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
 
 	route<
 		const Method extends HTTPMethod,
@@ -2963,7 +2419,10 @@ export default class Elysia<
 		method: Method,
 		path: Paths,
 		handler: Function,
-		options: LocalHook<
+		{
+			config,
+			...hook
+		}: LocalHook<
 			LocalSchema,
 			Route,
 			Decorators,
@@ -2973,7 +2432,11 @@ export default class Elysia<
 			config: {
 				allowMeta?: boolean
 			}
-		}
+		} = {
+			config: {
+				allowMeta: false
+			}
+		} as any
 	): Elysia<
 		BasePath,
 		Decorators,
@@ -3005,44 +2468,7 @@ export default class Elysia<
 			}
 		>,
 		Scoped
-	>
-
-	/**
-	 * ### route
-	 * Register handler for path with custom method
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .route('CUSTOM', '/', () => 'hi')
-	 *     .route('CUSTOM', '/with-hook', () => 'hi', {
-	 *         schema: {
-	 *             response: t.String()
-	 *         }
-	 *     })
-	 * ```
-	 */
-	route(
-		method: string,
-		path: Readonly<MaybeArray<string>>,
-		handler: Function,
-		// @ts-ignore
-		{
-			config,
-			...hook
-		}: LocalHook<any, any, any, any, any> & {
-			config: {
-				allowMeta?: boolean
-			}
-		} = {
-			config: {
-				allowMeta: false
-			}
-		}
-	) {
+	> {
 		this.add(method, path, handler as any, hook, config)
 
 		return this as any
@@ -3680,7 +3106,9 @@ export {
 	ParseError,
 	NotFoundError,
 	ValidationError,
-	InternalServerError
+	InternalServerError,
+	InvalidCookieSignature,
+	ElysiaErrors
 } from './error'
 
 export type { Context, PreContext } from './context'
@@ -3705,6 +3133,11 @@ export type {
 	BodyHandler,
 	OptionalHandler,
 	ErrorHandler,
+	AfterHandler,
+	TraceHandler,
+	TraceStream,
+	LifeCycleEvent,
+	TraceEvent,
 	LifeCycleStore,
 	MaybePromise,
 	ListenCallback,

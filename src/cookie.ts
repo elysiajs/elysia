@@ -3,7 +3,7 @@ import { parse } from 'cookie'
 import type { Context } from './context'
 
 import { unsign as unsignCookie } from 'cookie-signature'
-import { INVALID_COOKIE_SIGNATURE } from './error'
+import { InvalidCookieSignature } from './error'
 
 export interface CookieOptions {
 	/**
@@ -356,8 +356,7 @@ export const parseCookie = (
 				value = unsignCookie(value as string, secret)
 
 				// @ts-ignore
-				if (value === false)
-					throw new INVALID_COOKIE_SIGNATURE(key)
+				if (value === false) throw new InvalidCookieSignature(key)
 			} else {
 				let fail = true
 				for (let i = 0; i < secret.length; i++) {
@@ -370,7 +369,7 @@ export const parseCookie = (
 					}
 				}
 
-				if (fail) throw new Error(`Fail to decode cookie: ${key}`)
+				if (fail) throw new InvalidCookieSignature(key)
 			}
 		}
 

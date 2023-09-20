@@ -34,6 +34,7 @@ Breaking Change:
 Change:
 - using single findDynamicRoute instead of inlining to static map
 - remove `mergician`
+- remove array routes due to problem with TypeScript
 
 Bug fix:
 - strictly validate response by default

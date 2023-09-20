@@ -10,6 +10,7 @@ import type { CookieOptions } from './cookie'
 import type { Context, PreContext } from './context'
 import type {
 	InternalServerError,
+	InvalidCookieSignature,
 	NotFoundError,
 	ParseError,
 	ValidationError
@@ -62,7 +63,7 @@ export type ObjectValues<T extends object> = T[keyof T]
 /**
  * @link https://stackoverflow.com/a/49928360/1490091
  */
-export type IsAny<T> = 0 extends 1 & T ? true : false
+// export type IsAny<T> = 0 extends 1 & T ? true : false
 // export type IsNever<T> = [T] extends [never] ? true : false
 // export type IsUnknown<T> = IsAny<T> extends true
 // 	? false
@@ -505,6 +506,12 @@ export type ErrorHandler<
 						error: Readonly<InternalServerError>
 						set: Context['set']
 				  }
+				  | {
+					request: Request
+					code: 'INVALID_COOKIE_SIGNATURE'
+					error: Readonly<InvalidCookieSignature>
+					set: Context['set']
+			  }
 				| {
 						[K in keyof T]: {
 							request: Request
