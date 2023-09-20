@@ -265,8 +265,6 @@ const isContextPassToFunction = (fnLiteral: string) => {
 			: // Node: context => {}
 			  fnLiteral.slice(0, fnLiteral.indexOf('=') - 1)
 
-	// console.log(fnLiteral)
-
 	if (argument === '') return false
 
 	const restIndex =
@@ -1382,15 +1380,17 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 				name: app.event.request[i].name
 			})
 
+			const name = `re${i}`
+
 			if (withReturn) {
-				fnLiteral += `const response = mapEarlyResponse(
+				fnLiteral += `const ${name} = mapEarlyResponse(
 					${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
 					ctx.set
 				)\n`
 
 				endUnit()
 
-				fnLiteral += `if(response) return response\n`
+				fnLiteral += `if(${name}) return ${name}\n`
 			} else {
 				fnLiteral += `${
 					maybeAsync ? 'await' : ''

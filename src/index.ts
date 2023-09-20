@@ -3107,8 +3107,7 @@ export {
 	NotFoundError,
 	ValidationError,
 	InternalServerError,
-	InvalidCookieSignature,
-	ElysiaErrors
+	InvalidCookieSignature
 } from './error'
 
 export type { Context, PreContext } from './context'
