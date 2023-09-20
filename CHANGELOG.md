@@ -7,7 +7,6 @@ Feature:
 - trace
 - typeBox.Transfom
 - rewrite Type.ElysiaMeta to use TypeBox.Transform
-- strict body type parsing
 - new type:
     - t.Cookie
     - t.ObjectString
@@ -15,7 +14,6 @@ Feature:
     - t.Nullable
 - add `Context` to `onError`
 - lifecycle hook now accept array function
-- path now accept array string
 - true encapsulation scope
 
 Improvement:
