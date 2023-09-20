@@ -1,3 +1,7 @@
+# 0.7.1 - 20 Sep 2023
+Bug Fix:
+- Class property is removed when calling deepMerge
+
 # 0.7.0 - 20 Sep 2023
 Feature:
 - rewrite type

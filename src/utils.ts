@@ -15,7 +15,10 @@ const isObject = (item: any): item is Object =>
 const isClass = (v: Object) =>
 	typeof v === 'function' && /^\s*class\s+/.test(v.toString())
 
-export const mergeDeep = <const A extends Object, const B extends Object>(
+export const mergeDeep = <
+	const A extends Record<string, any>,
+	const B extends Record<string, any>
+>(
 	target: A,
 	source: B,
 	{
@@ -24,31 +27,32 @@ export const mergeDeep = <const A extends Object, const B extends Object>(
 		skipKeys?: string[]
 	} = {}
 ): A & B => {
-	const output: Record<any, any> = Object.assign({}, target)
-
 	if (isObject(target) && isObject(source))
 		for (const [key, value] of Object.entries(source)) {
 			if (skipKeys?.includes(key)) continue
 
 			if (!isObject(value)) {
-				output[key] = value
+				target[key as keyof typeof target] = value
 				continue
 			}
 
 			if (!(key in target)) {
-				output[key] = value
+				target[key as keyof typeof target] = value
 				continue
 			}
 
-			if (key in target && isClass(value)) {
-				output[key] = value
+			if (isClass(value)) {
+				target[key as keyof typeof target] = value
 				continue
 			}
 
-			output[key] = mergeDeep((target as any)[key] as any, value)
+			target[key as keyof typeof target] = mergeDeep(
+				(target as any)[key] as any,
+				value
+			)
 		}
 
-	return output as A & B
+	return target as A & B
 }
 
 export const mergeCookie = <const A extends Object, const B extends Object>(

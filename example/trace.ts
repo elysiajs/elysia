@@ -1,6 +1,7 @@
 import { Elysia } from '../src'
 
-const logs = []
+const sleep = (time = 1000) =>
+	new Promise((resolve) => setTimeout(resolve, time))
 
 const app = new Elysia()
 	.trace(async ({ beforeHandle, request, response }) => {
@@ -10,13 +11,14 @@ const app = new Elysia()
 
 			console.log(name, 'took', (await end) - start, 'ms')
 		}
+
 		console.log('beforeHandle took', (await end) - start)
 	})
 	.get('/', () => 'Hi', {
 		beforeHandle: [
 			function setup() {},
 			async function delay() {
-				await new Promise((resolve) => setTimeout(resolve, 1000))
+				await sleep()
 			}
 		]
 	})

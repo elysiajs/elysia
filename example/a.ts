@@ -1,12 +1,27 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
 
-const one = new Elysia({ name: 'one' }).onRequest(() => console.log('Hello, one!'))
-const two = new Elysia().use(one)
+class Test {
+	readonly name = 'test'
 
-const three = new Elysia()
-	.use(one)
-	.use(two)
-	.get('/hello', () => 'Hello, world!')
-	.listen(3000)
+	public foo() {
+		return this.name
+	}
+}
 
-// three.handle(new Request('http://localhost:3000/hello'))
+const test = new Test()
+
+console.log(test)
+
+export const ctx = new Elysia().decorate('test', test)
+
+const app = new Elysia()
+	.use(ctx)
+	.get('/', ({ test }) => {
+		console.log(test)
+		console.log(test.foo())
+	})
+	.listen(3002)
+
+console.log(`app is listening on ${app.server?.hostname}:${app.server?.port}`)
+
+app.handle(new Request('http://localhost:3002/'))
