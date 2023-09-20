@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { expect } from 'bun:test'
-import { t, Elysia, RouteSchema } from '../../src'
+import { t, Elysia, RouteSchema, Cookie } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -32,7 +32,7 @@ app.model({
 	})
 }).get(
 	'/',
-	({ headers, query, params, body }) => {
+	({ headers, query, params, body, cookie }) => {
 		// ? unwrap body type
 		expectTypeOf<{
 			username: string
@@ -57,6 +57,14 @@ app.model({
 			password: string
 		}>().toEqualTypeOf<typeof headers>()
 
+		// ? unwrap cookie
+		expectTypeOf<
+			Record<string, Cookie<any>> & {
+				username: Cookie<string>
+				password: Cookie<string>
+			}
+		>().toEqualTypeOf<typeof cookie>()
+
 		return body
 	},
 	{
@@ -64,7 +72,8 @@ app.model({
 		params: 't',
 		query: 't',
 		headers: 't',
-		response: 't'
+		response: 't',
+		cookie: 't'
 	}
 )
 
