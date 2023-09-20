@@ -1,4 +1,4 @@
-# 0.7.0 - x Sep 2023
+# 0.7.0 - 20 Sep 2023
 Feature:
 - rewrite type
 - rewrite Web Socket

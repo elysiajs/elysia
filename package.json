@@ -1,7 +1,7 @@
 {
   "name": "elysia",
-  "description": "Fast, and friendly Bun web framework",
-  "version": "0.7.0-beta.1",
+  "description": "Ergonomic Framework for Human",
+  "version": "0.7.0",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
