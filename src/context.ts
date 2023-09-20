@@ -34,9 +34,6 @@ export type Context<
 		headers: undefined extends Route['headers']
 			? Record<string, string | null>
 			: Route['headers']
-
-		r: Route
-
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<any>>
 			: Record<string, Cookie<any>> &
@@ -65,7 +62,7 @@ export type Context<
 		path: string
 		request: Request
 		store: Decorators['store']
-	} & Decorators['request']
+	} & Readonly<Decorators['request']>
 >
 
 // Use to mimic request before mapping route
@@ -92,5 +89,5 @@ export type PreContext<
 		path: string
 		request: Request
 		store: Decorators['store']
-	} & Decorators['request']
+	} & Readonly<Decorators['request']>
 >

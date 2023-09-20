@@ -307,7 +307,7 @@ export default class Elysia<
 					path,
 					composed: null,
 					handler,
-					hooks
+					hooks: hooks as any
 				})
 
 				return
@@ -332,7 +332,7 @@ export default class Elysia<
 				path,
 				composed: mainHandler,
 				handler,
-				hooks
+				hooks: hooks as any
 			})
 
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
@@ -526,10 +526,7 @@ export default class Elysia<
 			AfterHandler<MergeSchema<Schema, ParentSchema>, Decorators>
 		>
 	) {
-		this.on(
-			'afterHandle',
-			handler as AfterHandler<MergeSchema<Schema, ParentSchema>, any>
-		)
+		this.on('afterHandle', handler as AfterHandler<any, any>)
 
 		return this
 	}
@@ -1597,10 +1594,10 @@ export default class Elysia<
 			const handler: Handler<any, any> = async ({ request, path }) =>
 				run(new Request('http://a.cc' + path || '/', request))
 
-			this.all('/', handler, {
+			this.all('/', handler as any, {
 				type: 'none'
 			})
-			this.all('/*', handler, {
+			this.all('/*', handler as any, {
 				type: 'none'
 			})
 
@@ -1613,10 +1610,10 @@ export default class Elysia<
 				new Request('http://a.cc' + path.slice(length) || '/', request)
 			)
 
-		this.all(path, handler, {
+		this.all(path, handler as any, {
 			type: 'none'
 		})
-		this.all(path + (path.endsWith('/') ? '*' : '/*'), handler, {
+		this.all(path + (path.endsWith('/') ? '*' : '/*'), handler as any, {
 			type: 'none'
 		})
 
@@ -3539,18 +3536,17 @@ export default class Elysia<
 			: createDynamicHandler(this))(request)
 
 	private handleError = async (
-		request: Request,
+		context: Context,
 		error:
 			| Error
 			| ValidationError
 			| ParseError
 			| NotFoundError
-			| InternalServerError,
-		set: Context['set']
+			| InternalServerError
 	) =>
 		(this.handleError = this.config.aot
 			? composeErrorHandler(this)
-			: createDynamicErrorHandler(this))(request, error, set)
+			: createDynamicErrorHandler(this))(context, error)
 
 	private outerErrorHandler = (error: Error) =>
 		new Response(error.message || error.name || 'Error', {

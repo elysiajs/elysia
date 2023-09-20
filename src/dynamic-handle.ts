@@ -1,12 +1,7 @@
 import type { Elysia } from '.'
 
 import { mapEarlyResponse, mapResponse } from './handler'
-import {
-	ElysiaErrors,
-	NotFoundError,
-	ValidationError,
-	ERROR_CODE
-} from './error'
+import { ElysiaErrors, NotFoundError, ValidationError } from './error'
 
 import type { Context } from './context'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
@@ -45,7 +40,7 @@ export const createDynamicHandler =
 				set,
 				store: app.store,
 				request
-			} as any
+			} as any as Context
 		}
 
 		const url = request.url,
@@ -57,7 +52,7 @@ export const createDynamicHandler =
 			for (let i = 0; i < app.event.request.length; i++) {
 				// @ts-ignore
 				const onRequest = app.event.request[i]
-				let response = onRequest(context)
+				let response = onRequest(context as any)
 				if (response instanceof Promise) response = await response
 
 				response = mapEarlyResponse(response, set)
@@ -307,7 +302,7 @@ export const createDynamicHandler =
 				set.status = (error as ElysiaErrors).status
 
 			// @ts-ignore
-			return app.handleError(request, error as Error, set)
+			return app.handleError(context, error)
 		} finally {
 			// @ts-ignore
 			for (const onResponse of app.event.onResponse)
@@ -316,33 +311,23 @@ export const createDynamicHandler =
 	}
 
 export const createDynamicErrorHandler =
-	(app: Elysia<any, any>) =>
-	async (
-		request: Request,
-		error: ElysiaErrors,
-		set: Context['set'] = {
-			cookie: {},
-			headers: {}
-		}
-	) => {
+	(app: Elysia<any, any, any, any, any, any>) =>
+	async (context: Context, error: ElysiaErrors) => {
+		const errorContext = Object.assign(context, error)
+		errorContext.set = context.set
+
 		// @ts-ignore
 		for (let i = 0; i < app.event.error.length; i++) {
-			let response = app.event.error[i]({
-				request,
-				// @ts-ignore
-				code: error.code ?? error[ERROR_CODE] ?? 'UNKNOWN',
-				error,
-				set
-			})
+			let response = app.event.error[i](errorContext as any)
 			if (response instanceof Promise) response = await response
 			if (response !== undefined && response !== null)
-				return mapResponse(response, set)
+				return mapResponse(response, context.set)
 		}
 
 		return new Response(
 			typeof error.cause === 'string' ? error.cause : error.message,
 			{
-				headers: set.headers,
+				headers: context.set.headers,
 				status: error.status ?? 500
 			}
 		)

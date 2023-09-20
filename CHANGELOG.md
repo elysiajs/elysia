@@ -40,6 +40,7 @@ Bug fix:
 - add null check before converting `Numeric`
 - inherits store to instance plugin
 - handle class overlapping
+- InternalServerError message fixed to "INTERNAL_SERVER_ERROR" instead of "NOT_FOUND"
 
 # 0.6.24 - 18 Sep 2023
 Feature:
