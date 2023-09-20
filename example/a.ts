@@ -1,16 +1,29 @@
 import { Elysia, t } from '../src'
+import { post } from '../test/utils'
 
-class CustomError extends Error {
-	constructor() {
-		super()
-	}
-}
+const app = new Elysia({
+	aot: false
+})
+	.get(
+		'/update',
+		({ cookie: { name } }) => {
+			name.value = 'Himari'
 
-const app = new Elysia()
-	.error('CUSTOM_ERROR', CustomError)
-	.get('/', ({ body }) => {
-		throw new CustomError()
-	})
+			return name.value
+		},
+		{
+			cookie: t.Cookie(
+				{
+					name: t.Optional(t.String())
+				},
+				{
+					secrets: 'Fischl',
+					sign: ['name']
+				}
+			),
+			error() {
+				console.log("A")
+			}
+		}
+	)
 	.listen(3000)
-
-console.log(app.routes[0].composed?.toString())

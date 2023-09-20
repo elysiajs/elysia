@@ -62,7 +62,7 @@ export type Context<
 		path: string
 		request: Request
 		store: Decorators['store']
-	} & Readonly<Decorators['request']>
+	} & Decorators['request']
 >
 
 // Use to mimic request before mapping route
@@ -89,5 +89,5 @@ export type PreContext<
 		path: string
 		request: Request
 		store: Decorators['store']
-	} & Readonly<Decorators['request']>
+	} & Decorators['request']
 >

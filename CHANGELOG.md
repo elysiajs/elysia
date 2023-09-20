@@ -24,6 +24,8 @@ Improvement:
 - set `t.File` and `t.Files` to `File` instead of `Blob`
 - skip class instance merging
 - handle `UnknownContextPassToFunction`
+- [#157](https://github.com/elysiajs/elysia/pull/179) WebSocket - added unit tests and fixed example & api by @bogeychan
+- [#179](https://github.com/elysiajs/elysia/pull/179) add github action to run bun test by @arthurfiorette
 
 Breaking Change:
 - remove `ws` plugin, migrate to core
@@ -40,7 +42,8 @@ Bug fix:
 - add null check before converting `Numeric`
 - inherits store to instance plugin
 - handle class overlapping
-- InternalServerError message fixed to "INTERNAL_SERVER_ERROR" instead of "NOT_FOUND"
+- [#187](https://github.com/elysiajs/elysia/pull/187) InternalServerError message fixed to "INTERNAL_SERVER_ERROR" instead of "NOT_FOUND" by @bogeychan
+- [#167](https://github.com/elysiajs/elysia/pull/167) mapEarlyResponse with aot on after handle
 
 # 0.6.24 - 18 Sep 2023
 Feature:

@@ -7,6 +7,11 @@ import type { Context } from './context'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 
 import { parse as parseQuery } from 'fast-querystring'
+import { TypeCheck } from '@sinclair/typebox/compiler'
+import { TObject } from '@sinclair/typebox'
+
+import { sign as signCookie } from 'cookie-signature'
+import { parseCookie } from './cookie'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -166,6 +171,67 @@ export const createDynamicHandler =
 			context.params = handler?.params || undefined
 			context.query = q === -1 ? {} : parseQuery(url.substring(q + 1))
 
+			context.headers = {}
+			for (const [key, value] of request.headers.entries())
+				context.headers[key] = value
+
+			// @ts-ignore
+			const cookieMeta = validator?.cookie?.schema as {
+				secrets?: string | string[]
+				sign: string[] | true
+				properties: { [x: string]: Object }
+			}
+
+			context.cookie = parseCookie(
+				context.set,
+				context.headers.cookie,
+				cookieMeta
+					? {
+							secret:
+								cookieMeta.secrets !== undefined
+									? typeof cookieMeta.secrets === 'string'
+										? cookieMeta.secrets
+										: cookieMeta.secrets.join(',')
+									: undefined,
+							sign:
+								cookieMeta.sign === true
+									? true
+									: cookieMeta.sign !== undefined
+									? typeof cookieMeta.sign === 'string'
+										? cookieMeta.sign
+										: cookieMeta.sign.join(',')
+									: undefined
+					  }
+					: undefined
+			)
+
+			if (body && validator?.body?.Decode)
+				context.body = (validator.body as TypeCheck<TObject>).Decode(
+					body
+				) as any
+
+			if (context.query && validator?.query?.Decode)
+				context.query = (validator.query as TypeCheck<TObject>).Decode(
+					context.query
+				) as any
+
+			if (context.params && validator?.params?.Decode)
+				// @ts-ignore
+				context.params = (
+					validator.params as TypeCheck<TObject>
+				).Decode(context.params) as any
+
+			if (context.cookie && validator?.cookie?.Decode)
+				// @ts-ignore
+				context.cookie = (
+					validator.cookie as TypeCheck<TObject>
+				).Decode(context.cookie) as any
+
+			if (context.headers && validator?.headers?.Decode)
+				context.headers = (
+					validator.headers as TypeCheck<TObject>
+				).Decode(context.headers) as any
+
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)
 
@@ -294,6 +360,34 @@ export const createDynamicHandler =
 						return result
 					}
 				}
+			}
+
+			if (context.set.cookie && cookieMeta?.sign) {
+				const secret = !cookieMeta.secrets
+					? undefined
+					: typeof cookieMeta.secrets === 'string'
+					? cookieMeta.secrets
+					: cookieMeta.secrets[0]
+
+				if (cookieMeta.sign === true)
+					for (const [key, cookie] of Object.entries(
+						context.set.cookie
+					))
+						context.set.cookie[key].value = signCookie(
+							cookie.value,
+							'${secret}'
+						)
+				else
+					for (const name of cookieMeta.sign) {
+						if (!(name in cookieMeta.properties)) continue
+
+						if (context.set.cookie[name]?.value) {
+							context.set.cookie[name].value = signCookie(
+								context.set.cookie[name].value,
+								secret as any
+							)
+						}
+					}
 			}
 
 			return mapResponse(response, context.set)

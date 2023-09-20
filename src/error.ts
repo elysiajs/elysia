@@ -46,6 +46,15 @@ export class ParseError extends Error {
 	}
 }
 
+export class INVALID_COOKIE_SIGNATURE extends Error {
+	code = 'INVALID_COOKIE_SIGNATURE'
+	status = 400
+
+	constructor(public key: string, message?: string) {
+		super(message ?? `"${key}" has invalid cookie signature`)
+	}
+}
+
 export class ValidationError extends Error {
 	code = 'VALIDATION'
 	status = 400
