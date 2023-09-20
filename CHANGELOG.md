@@ -1,6 +1,10 @@
+# 0.7.3 - 21 Sep 2023
+Bug fix:
+- resolve 200 by default when type is not provided
+
 # 0.7.2 - 20 Sep 2023
-Bug Fix:
-- Decorator and Store is resolved as `undefined` in `onError` hook
+Bug fix:
+- decorator and store is resolved as `undefined` in `onError` hook
 - deepMerge with Module object
 - Retain comment in `.d.ts`
 

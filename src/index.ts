@@ -1666,7 +1666,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -1733,7 +1737,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -1800,7 +1808,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -1867,7 +1879,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -1934,7 +1950,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2001,7 +2021,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2063,7 +2087,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2130,7 +2158,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2197,7 +2229,11 @@ export default class Elysia<
 							? {
 									200: ReturnType<Function>
 							  }
-							: Route['response']
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2461,7 +2497,11 @@ export default class Elysia<
 									? {
 											200: ReturnType<Function>
 									  }
-									: Response
+									: Route['response'] extends { 200: any }
+									? Route['response']
+									: {
+											200: Route['response']
+									  }
 						  }
 						: never
 				}
