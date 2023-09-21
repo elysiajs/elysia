@@ -35,63 +35,74 @@ export class ElysiaWS<
 		this.validator = raw.data.validator
 	}
 
-	publish(
-		topic: string,
-		data: Route['response'] = undefined,
-		compress?: boolean
-	) {
-		if (this.validator?.Check(data) === false)
-			throw new ValidationError('message', this.validator, data)
+	get publish() {
+		return (
+			topic: string,
+			data: Route['response'] = undefined,
+			compress?: boolean
+		) => {
+			if (this.validator?.Check(data) === false)
+				throw new ValidationError('message', this.validator, data)
 
-		if (typeof data === 'object') data = JSON.stringify(data)
+			if (typeof data === 'object') data = JSON.stringify(data)
 
-		this.raw.publish(topic, data as unknown as string, compress)
+			this.raw.publish(topic, data as unknown as string, compress)
 
-		return this
+			return this
+		}
 	}
 
-	send(data: Route['response']) {
-		if (this.validator?.Check(data) === false)
-			throw new ValidationError('message', this.validator, data)
+	get send() {
+		return (data: Route['response']) => {
+			if (this.validator?.Check(data) === false)
+				throw new ValidationError('message', this.validator, data)
 
-		if (typeof data === 'object') data = JSON.stringify(data)
+			if (typeof data === 'object') data = JSON.stringify(data)
 
-		this.raw.send(data as unknown as string)
+			this.raw.send(data as unknown as string)
 
-		return this
+			return this
+		}
 	}
 
-	subscribe(room: string) {
-		this.raw.subscribe(room)
+	get subscribe() {
+		return (room: string) => {
+			this.raw.subscribe(room)
 
-		return this
+			return this
+		}
 	}
 
-	unsubscribe(room: string) {
-		this.raw.unsubscribe(room)
+	get unsubscribe() {
+		return (room: string) => {
+			this.raw.unsubscribe(room)
 
-		return this
+			return this
+		}
 	}
 
-	cork(callback: (ws: WS) => this) {
-		this.raw.cork(callback as any)
+	get cork() {
+		return (callback: (ws: WS) => this) => {
+			this.raw.cork(callback as any)
 
-		return this
+			return this
+		}
 	}
 
-	close() {
-		this.raw.close()
+	get close() {
+		return () => {
+			this.raw.close()
 
-		return this
+			return this
+		}
 	}
 
-	terminate() {
-		this.raw.terminate()
+	get terminate() {
+		return this.raw.terminate.bind(this.raw)
 	}
 
-	isSubscribed(room: string) {
-		// get isSubscribed() { return this.raw.isSubscribed } -> Expected 'this' to be instanceof ServerWebSocket
-		return this.raw.isSubscribed(room)
+	get isSubscribed() {
+		return this.raw.isSubscribed.bind(this.raw)
 	}
 
 	get remoteAddress() {

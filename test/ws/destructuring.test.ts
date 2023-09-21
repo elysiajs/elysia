@@ -1,0 +1,49 @@
+import { describe, it, expect } from 'bun:test'
+import { Elysia } from '../../src'
+import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
+
+describe('WebSocket destructuring', () => {
+	it('should destructure', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				async open(ws) {
+					const {
+						subscribe,
+						isSubscribed,
+						publish,
+						unsubscribe,
+						cork,
+						send,
+						close,
+						terminate
+					} = ws
+
+					subscribe('asdf')
+					const subscribed = isSubscribed('asdf')
+					publish('asdf', 'data')
+					unsubscribe('asdf')
+					cork(() => ws)
+					send('Hello!' + subscribed)
+					close()
+					terminate()
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send('Hello!')
+
+		const { type, data } = await message
+
+		expect(type).toBe('message')
+		expect(data).toBe('Hello!true')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+})
