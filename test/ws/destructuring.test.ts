@@ -32,11 +32,9 @@ describe('WebSocket destructuring', () => {
 
 		const ws = newWebsocket(app.server!)
 
-		await wsOpen(ws)
-
 		const message = wsMessage(ws)
 
-		ws.send('Hello!')
+		await wsOpen(ws)
 
 		const { type, data } = await message
 
