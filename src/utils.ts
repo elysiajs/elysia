@@ -2,6 +2,8 @@ import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
+import { isNotEmpty } from './handler'
+
 import type {
 	LifeCycleStore,
 	LocalHook,
@@ -15,7 +17,9 @@ const isObject = (item: any): item is Object =>
 const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
 	// Handle import * as Sentry from '@sentry/bun'
-	v.toString() === '[object Module]'
+	v.toString() === '[object Module]' ||
+	// If object prototype is not pure, then probably a class-like object
+	isNotEmpty(Object.getPrototypeOf(v))
 
 export const mergeDeep = <
 	const A extends Record<string, any>,
@@ -47,8 +51,6 @@ export const mergeDeep = <
 				target[key as keyof typeof target] = value
 				continue
 			}
-
-			console.log("B")
 
 			target[key as keyof typeof target] = mergeDeep(
 				(target as any)[key] as any,

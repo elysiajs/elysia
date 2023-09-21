@@ -1,3 +1,8 @@
+# 0.7.4 - 21 Sep 2023
+Bug fix:
+- check for class-like object
+- add `GraceHandler` to access both `app` and `context`
+
 # 0.7.3 - 21 Sep 2023
 Bug fix:
 - resolve 200 by default when type is not provided

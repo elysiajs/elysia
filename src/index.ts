@@ -74,7 +74,8 @@ import type {
 	AddSuffixCapitalize,
 	TraceReporter,
 	TraceHandler,
-	MaybeArray
+	MaybeArray,
+	GracefulHandler
 } from './types'
 
 /**
@@ -397,8 +398,8 @@ export default class Elysia<
 	 *     .listen(8080)
 	 * ```
 	 */
-	onStart(handler: MaybeArray<PreHandler<ParentSchema, Decorators>>) {
-		this.on('start', handler)
+	onStart(handler: MaybeArray<GracefulHandler<this, Decorators>>) {
+		this.on('start', handler as any)
 
 		return this
 	}
@@ -893,8 +894,8 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onStop(handler: VoidHandler<ParentSchema, Decorators>) {
-		this.on('stop', handler)
+	onStop(handler: MaybeArray<GracefulHandler<this, Decorators>>) {
+		this.on('stop', handler as any)
 
 		return this
 	}
@@ -3081,8 +3082,15 @@ export default class Elysia<
 
 		this.server = Bun?.serve(serve)
 
-		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i](this as any)
+		if (this.event.start.length) {
+			const context = Object.assign(this.decorators, {
+				store: this.store,
+				app: this
+			})
+
+			for (let i = 0; i < this.event.start.length; i++)
+				this.event.start[i](context)
+		}
 
 		if (callback) callback(this.server!)
 
@@ -3116,8 +3124,15 @@ export default class Elysia<
 
 		this.server.stop()
 
-		for (let i = 0; i < this.event.stop.length; i++)
-			await this.event.stop[i](this as any)
+		if (this.event.stop.length) {
+			const context = Object.assign(this.decorators, {
+				store: this.store,
+				app: this
+			})
+
+			for (let i = 0; i < this.event.stop.length; i++)
+				await this.event.stop[i](context)
+		}
 	}
 
 	/**
