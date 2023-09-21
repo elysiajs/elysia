@@ -1,3 +1,7 @@
+# 0.7.5 - 21 Sep 2023
+Bug fix:
+- inject derive to `GraceHandler`
+
 # 0.7.4 - 21 Sep 2023
 Bug fix:
 - check for class-like object

@@ -3083,13 +3083,26 @@ export default class Elysia<
 		this.server = Bun?.serve(serve)
 
 		if (this.event.start.length) {
-			const context = Object.assign(this.decorators, {
-				store: this.store,
-				app: this
-			})
+			;(async () => {
+				const context = Object.assign(this.decorators, {
+					store: this.store,
+					app: this
+				})
 
-			for (let i = 0; i < this.event.start.length; i++)
-				this.event.start[i](context)
+				for (let i = 0; i < this.event.transform.length; i++) {
+					const operation = this.event.transform[i](context)
+
+					// @ts-ignore
+					if (this.event.transform[i].$elysia === 'derive') {
+						if (operation instanceof Promise)
+							Object.assign(context, await operation)
+						else Object.assign(context, operation)
+					}
+				}
+
+				for (let i = 0; i < this.event.start.length; i++)
+					this.event.start[i](context)
+			})()
 		}
 
 		if (callback) callback(this.server!)
@@ -3125,13 +3138,26 @@ export default class Elysia<
 		this.server.stop()
 
 		if (this.event.stop.length) {
-			const context = Object.assign(this.decorators, {
-				store: this.store,
-				app: this
-			})
+			;(async () => {
+				const context = Object.assign(this.decorators, {
+					store: this.store,
+					app: this
+				})
 
-			for (let i = 0; i < this.event.stop.length; i++)
-				await this.event.stop[i](context)
+				for (let i = 0; i < this.event.transform.length; i++) {
+					const operation = this.event.transform[i](context)
+
+					// @ts-ignore
+					if (this.event.transform[i].$elysia === 'derive') {
+						if (operation instanceof Promise)
+							Object.assign(context, await operation)
+						else Object.assign(context, operation)
+					}
+				}
+
+				for (let i = 0; i < this.event.stop.length; i++)
+					this.event.stop[i](context)
+			})()
 		}
 	}
 
