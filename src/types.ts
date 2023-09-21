@@ -1,6 +1,6 @@
 import type { Serve, Server, WebSocketHandler } from 'bun'
 
-import type { TSchema, TObject, Static } from '@sinclair/typebox'
+import type { TSchema, TObject, Static, TAnySchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
@@ -183,9 +183,14 @@ export type UnwrapRoute<
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
-				[k in string]: TSchema | string
+				200: TAnySchema | string
 		  }
-		? UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
+		? {
+				[k in keyof Schema['response']]: UnwrapSchema<
+					Schema['response'][k],
+					Definitions
+				>
+		  } // UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
 		: unknown | void
 }
 

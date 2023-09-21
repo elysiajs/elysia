@@ -1,3 +1,7 @@
+# 0.7.6 - 21 Sep 2023
+Bug fix:
+- Separate return type by status
+
 # 0.7.5 - 21 Sep 2023
 Bug fix:
 - inject derive to `GraceHandler`

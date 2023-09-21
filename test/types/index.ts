@@ -462,7 +462,7 @@ app.use(plugin).group(
 						})
 				)
 		)
-		.get('/', ({ params }) => params)
+		.get('/', () => 1)
 
 	type App = (typeof server)['schema']
 	type Route = App['/v1/a']['get']
