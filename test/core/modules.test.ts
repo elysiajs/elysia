@@ -125,7 +125,7 @@ describe('Modules', () => {
 		expect(res).toBe('hi')
 	})
 
-	describe('handle async plugin', async () => {
+	it('handle async plugin', async () => {
 		const a = (config = {}) =>
 			new Elysia({
 				name: 'a',
