@@ -17,7 +17,9 @@ const isObject = (item: any): item is Object =>
 const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
 	// Handle import * as Sentry from '@sentry/bun'
-	v.toString() === '[object Module]' ||
+	// This also handle [object Date], [object Array]
+	// and FFI value like [object Prisma]
+	v.toString().startsWith('[object ') ||
 	// If object prototype is not pure, then probably a class-like object
 	isNotEmpty(Object.getPrototypeOf(v))
 

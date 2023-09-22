@@ -1461,7 +1461,8 @@ export default class Elysia<
 								this as unknown as any
 							) as unknown as Elysia
 
-						return this._use(plugin.default)
+						// @ts-ignore
+						return this._use(plugin)
 					})
 					.then((x) => x.compile())
 			)

@@ -1,4 +1,12 @@
-# 0.7.7 - 23 Sep 2023
+# 0.7.10 - 23 Sep 2023
+Bug fix:
+- handle FFI object in deepMerge, fix Prisma
+
+# 0.7.9 - 23 Sep 2023
+Bug fix:
+- async instance cause config to be undefined
+
+# 0.7.8 - 23 Sep 2023
 Bug fix:
 - async instance cause type conflict
 
