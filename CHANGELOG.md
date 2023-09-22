@@ -1,3 +1,7 @@
+# 0.7.7 - 23 Sep 2023
+Bug fix:
+- async instance cause type conflict
+
 # 0.7.7 - 22 Sep 2023
 Bug fix:
 - [#210](https://github.com/elysiajs/elysia/issues/210) `t.Numeric` allowing plain `String`

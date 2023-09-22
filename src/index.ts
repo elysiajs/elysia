@@ -1317,7 +1317,7 @@ export default class Elysia<
 
 	// Entire Instance
 	use<NewElysia extends Elysia<any, any, any, any, any, any>>(
-		instance: NewElysia
+		instance: MaybePromise<NewElysia>
 	): NewElysia extends Elysia<
 		any,
 		infer PluginDecorators,

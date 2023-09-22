@@ -12,3 +12,5 @@ export const baseElysia = new Elysia()
 		return `${count} users`
 	})
 	.listen(8000)
+
+export default baseElysia
