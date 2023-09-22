@@ -2,6 +2,8 @@ import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
+import { sleep } from 'bun'
+
 const asyncPlugin = async (app: Elysia) => app.get('/async', () => 'async')
 const lazyPlugin = import('../modules')
 const lazyNamed = lazyPlugin.then((x) => x.lazy)
@@ -125,17 +127,24 @@ describe('Modules', () => {
 		expect(res).toBe('hi')
 	})
 
-	describe('handle async plugin', async () => {
-		const a = (config = {}) =>
-			new Elysia({
-				name: 'a',
-				seed: config
-			}).get('/', () => 'a')
+	it('handle async plugin', async () => {
+		const a =
+			(config = {}) =>
+			async (app: Elysia) => {
+				await sleep(0)
+				return app.derive(() => ({
+					derived: 'async'
+				}))
+			}
 
-		const app = new Elysia().use(a()).compile()
+		const app = new Elysia().use(a()).get('/', ({ derived }) => derived)
+		// .get('/:with_param', ({ derived }) => derived)
 
 		await app.modules
 
-		expect(app.routes.length).toBe(1)
+		const resRoot = await app.handle(req('/')).then((r) => r.text())
+		// const resParam = await app.handle(req('/param')).then((r) => r.text())
+		expect(resRoot).toBe('async')
+		// expect(resParam).toBe('async')
 	})
 })
