@@ -247,4 +247,18 @@ describe('Cookie Response', () => {
 
 		expect(response.status).toBe(200)
 	})
+
+	it('set cookie property from constructor', async () => {
+		const app = new Elysia({
+			cookie: {
+				httpOnly: true
+			}
+		}).get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
+
+		const response = await app.handle(req('/create'))
+
+		expect(response.headers.getAll('Set-Cookie')).toEqual([
+			'name=Himari; HttpOnly'
+		])
+	})
 })

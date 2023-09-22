@@ -7,7 +7,7 @@ import { parse as parseQuery } from 'fast-querystring'
 
 import { sign as signCookie } from 'cookie-signature'
 
-import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
+import { mapEarlyResponse, mapResponse, mapCompactResponse, isNotEmpty } from './handler'
 import {
 	NotFoundError,
 	ValidationError,
@@ -15,7 +15,7 @@ import {
 	ERROR_CODE
 } from './error'
 
-import { parseCookie } from './cookie'
+import { CookieOptions, parseCookie } from './cookie'
 
 import type {
 	ComposedHandler,
@@ -583,6 +583,16 @@ export const composeHandler = ({
 	}
 
 	if (hasCookie) {
+		const get = (name: keyof CookieOptions) =>
+			name in cookieMeta
+				? // @ts-ignore
+				  typeof cookieMeta[name] === 'string'
+					? // @ts-ignore
+					  `${name}: '${cookieMeta[name]}',`
+					: // @ts-ignore
+					  `${name}: ${cookieMeta[name]},`
+				: ''
+
 		const options = cookieMeta
 			? `{
 			secret: ${
@@ -605,7 +615,15 @@ export const composeHandler = ({
 					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
 					  ']'
 					: 'undefined'
-			}
+			},
+			${get('domain')}
+			${get('expires')}
+			${get('httpOnly')}
+			${get('maxAge')}
+			${get('path')}
+			${get('priority')}
+			${get('sameSite')}
+			${get('secure')}
 		}`
 			: 'undefined'
 
@@ -914,7 +932,8 @@ export const composeHandler = ({
 				fnLiteral += `\nc.body = body.Decode(c.body)\n`
 		}
 
-		if (validator.cookie) {
+		// @ts-ignore
+		if (isNotEmpty(validator.cookie?.schema.properties ?? {})) {
 			fnLiteral += `const cookieValue = {}
 			for(const [key, value] of Object.entries(c.cookie))
 				cookieValue[key] = value.value

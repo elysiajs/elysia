@@ -1,3 +1,10 @@
+# 0.7.11 - 23 Sep 2023
+Improvement:
+- Skip cookie validation if schema is empty object
+
+Bug fix:
+- Accept cookie property from constructor when schema is not defined
+
 # 0.7.10 - 23 Sep 2023
 Bug fix:
 - handle FFI object in deepMerge, fix Prisma

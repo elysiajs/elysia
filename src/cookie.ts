@@ -186,6 +186,9 @@ export class Cookie<T = unknown> implements CookieOptions {
 
 	set domain(value) {
 		// @ts-ignore
+		if (this.property.domain === value) return
+
+		// @ts-ignore
 		this.property.domain = value
 
 		this.sync()
@@ -196,6 +199,9 @@ export class Cookie<T = unknown> implements CookieOptions {
 	}
 
 	set expires(value) {
+		// @ts-ignore
+		if (this.property.expires?.getTime() === value?.getTime()) return
+
 		// @ts-ignore
 		this.property.expires = value
 
@@ -208,6 +214,9 @@ export class Cookie<T = unknown> implements CookieOptions {
 
 	set httpOnly(value) {
 		// @ts-ignore
+		if (this.property.domain === value) return
+
+		// @ts-ignore
 		this.property.httpOnly = value
 
 		this.sync()
@@ -218,6 +227,9 @@ export class Cookie<T = unknown> implements CookieOptions {
 	}
 
 	set maxAge(value) {
+		// @ts-ignore
+		if (this.property.maxAge === value) return
+
 		// @ts-ignore
 		this.property.maxAge = value
 
@@ -230,6 +242,9 @@ export class Cookie<T = unknown> implements CookieOptions {
 
 	set path(value) {
 		// @ts-ignore
+		if (this.property.path === value) return
+
+		// @ts-ignore
 		this.property.path = value
 
 		this.sync()
@@ -240,6 +255,9 @@ export class Cookie<T = unknown> implements CookieOptions {
 	}
 
 	set priority(value) {
+		// @ts-ignore
+		if (this.property.priority === value) return
+
 		// @ts-ignore
 		this.property.priority = value
 
@@ -252,6 +270,9 @@ export class Cookie<T = unknown> implements CookieOptions {
 
 	set sameSite(value) {
 		// @ts-ignore
+		if (this.property.sameSite === value) return
+
+		// @ts-ignore
 		this.property.sameSite = value
 
 		this.sync()
@@ -262,6 +283,9 @@ export class Cookie<T = unknown> implements CookieOptions {
 	}
 
 	set secure(value) {
+		// @ts-ignore
+		if (this.property.secure === value) return
+
 		// @ts-ignore
 		this.property.secure = value
 
@@ -292,13 +316,20 @@ export class Cookie<T = unknown> implements CookieOptions {
 	}
 }
 
-export const createCookieJar = (initial: CookieJar, set: Context['set']) =>
+export const createCookieJar = (
+	initial: CookieJar,
+	set: Context['set'],
+	properties?: CookieOptions
+) =>
 	new Proxy(initial as CookieJar, {
 		get(target, key: string) {
 			if (key in target) return target[key]
 
 			// @ts-ignore
-			const cookie = new Cookie(undefined)
+			const cookie = new Cookie(
+				undefined,
+				properties ? { ...properties } : undefined
+			)
 			// @ts-ignore
 			cookie.setter = set
 			cookie.name = key
@@ -329,13 +360,14 @@ export const parseCookie = (
 	cookieString?: string | null,
 	{
 		secret,
-		sign
-	}: {
+		sign,
+		...properties
+	}: CookieOptions & {
 		secret?: string | string[]
 		sign?: true | string | string[]
 	} = {}
 ) => {
-	if (!cookieString) return createCookieJar({}, set)
+	if (!cookieString) return createCookieJar({}, set, properties)
 
 	const jar: CookieJar = {}
 	const isStringKey = typeof secret === 'string'
@@ -396,7 +428,7 @@ export const parseCookie = (
 		// @ts-ignore
 		else if (value === 'false') value = false
 
-		const cookie = new Cookie(value)
+		const cookie = new Cookie(value, properties)
 
 		// @ts-ignore
 		cookie.setter = set

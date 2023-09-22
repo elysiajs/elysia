@@ -77,6 +77,7 @@ import type {
 	MaybeArray,
 	GracefulHandler
 } from './types'
+import { t } from './custom-types'
 
 /**
  * ### Elysia Server
@@ -226,7 +227,7 @@ export default class Elysia<
 
 			const models = this.definitions.type as Record<string, TSchema>
 
-			const cookieValidator = getSchemaValidator(
+			let cookieValidator = getSchemaValidator(
 				hook?.cookie ?? (this.validator?.cookie as any),
 				{
 					dynamic: !this.config.aot,
@@ -235,13 +236,26 @@ export default class Elysia<
 				}
 			)
 
-			if (cookieValidator && isNotEmpty(this.config.cookie ?? []))
-				// @ts-ignore
-				cookieValidator.schema = mergeCookie(
+			if (isNotEmpty(this.config.cookie ?? {})) {
+				if (cookieValidator) {
 					// @ts-ignore
-					cookieValidator.schema,
-					this.config.cookie ?? {}
-				)
+					cookieValidator.schema = mergeCookie(
+						// @ts-ignore
+						cookieValidator.schema,
+						this.config.cookie ?? {}
+					)
+				} else {
+					cookieValidator = getSchemaValidator(
+						// @ts-ignore
+						t.Cookie({}, this.config.cookie),
+						{
+							dynamic: !this.config.aot,
+							models,
+							additionalProperties: true
+						}
+					)
+				}
+			}
 
 			const validator = {
 				body: getSchemaValidator(
@@ -2362,9 +2376,7 @@ export default class Elysia<
 						data: {
 							validator: validateResponse,
 							open(ws: ServerWebSocket<any>) {
-								options.open?.(
-									new ElysiaWS(ws, context as any)
-								)
+								options.open?.(new ElysiaWS(ws, context as any))
 							},
 							message: (ws: ServerWebSocket<any>, msg: any) => {
 								const message = parseMessage(msg)
