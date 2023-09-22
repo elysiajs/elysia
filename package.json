@@ -136,7 +136,7 @@
     "@elysiajs/cookie": "^0.6.1",
     "@elysiajs/html": "^0.6.6",
     "@elysiajs/jwt": "^0.6.4",
-    "@elysiajs/swagger": "^0.6.2",
+    "@elysiajs/swagger": "^0.7.2",
     "@swc/cli": "^0.1.62",
     "@types/cookie": "^0.5.2",
     "@types/cookie-signature": "^1.1.0",
