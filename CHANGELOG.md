@@ -1,3 +1,8 @@
+# 0.7.12 - 23 Sep 2023
+Bug fix:
+- Handle cookie expire time
+- Set default value of config.cookie.path to '/'
+
 # 0.7.11 - 23 Sep 2023
 Improvement:
 - Skip cookie validation if schema is empty object

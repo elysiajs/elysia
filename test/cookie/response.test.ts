@@ -16,7 +16,11 @@ const getCookies = (response: Response) =>
 		}
 	})
 
-const app = new Elysia()
+const app = new Elysia({
+	cookie: {
+		path: ''
+	}
+})
 	.get(
 		'/council',
 		({ cookie: { council } }) =>
@@ -251,7 +255,8 @@ describe('Cookie Response', () => {
 	it('set cookie property from constructor', async () => {
 		const app = new Elysia({
 			cookie: {
-				httpOnly: true
+				httpOnly: true,
+				path: ''
 			}
 		}).get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 

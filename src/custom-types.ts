@@ -198,7 +198,8 @@ export const ElysiaType = {
 		Type.Transform(
 			Type.Union([
 				Type.String({
-					format: 'ObjectString'
+					format: 'ObjectString',
+					default: ''
 				}),
 				Type.Object(properties, options)
 			])

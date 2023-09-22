@@ -7,7 +7,12 @@ import { parse as parseQuery } from 'fast-querystring'
 
 import { sign as signCookie } from 'cookie-signature'
 
-import { mapEarlyResponse, mapResponse, mapCompactResponse, isNotEmpty } from './handler'
+import {
+	mapEarlyResponse,
+	mapResponse,
+	mapCompactResponse,
+	isNotEmpty
+} from './handler'
 import {
 	NotFoundError,
 	ValidationError,
@@ -583,15 +588,16 @@ export const composeHandler = ({
 	}
 
 	if (hasCookie) {
-		const get = (name: keyof CookieOptions) =>
-			name in cookieMeta
-				? // @ts-ignore
-				  typeof cookieMeta[name] === 'string'
-					? // @ts-ignore
-					  `${name}: '${cookieMeta[name]}',`
-					: // @ts-ignore
-					  `${name}: ${cookieMeta[name]},`
-				: ''
+		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
+			// @ts-ignore
+			const value = cookieMeta?.[name] ?? defaultValue
+			if (!value) return ''
+
+			if (typeof value === 'string') return `${name}: '${value}',`
+			if (value instanceof Date) return `${name}: new Date(${value.getTime()}),`
+
+			return `${name}: ${value},`
+		}
 
 		const options = cookieMeta
 			? `{
@@ -620,7 +626,7 @@ export const composeHandler = ({
 			${get('expires')}
 			${get('httpOnly')}
 			${get('maxAge')}
-			${get('path')}
+			${get('path', '/')}
 			${get('priority')}
 			${get('sameSite')}
 			${get('secure')}
