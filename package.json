@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "0.7.3",
+  "version": "0.7.6",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -133,10 +133,10 @@
     "openapi-types": "^12.1.3"
   },
   "devDependencies": {
-    "@elysiajs/cookie": "^0.6.1",
-    "@elysiajs/html": "^0.6.6",
+    "@elysiajs/html": "^0.7.0",
     "@elysiajs/jwt": "^0.7.0",
-    "@elysiajs/swagger": "^0.6.2",
+    "@elysiajs/jwt": "^0.7.0",
+    "@elysiajs/swagger": "^0.7.2",
     "@swc/cli": "^0.1.62",
     "@types/cookie": "^0.5.2",
     "@types/cookie-signature": "^1.1.0",

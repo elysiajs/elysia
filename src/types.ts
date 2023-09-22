@@ -1,6 +1,6 @@
 import type { Serve, Server, WebSocketHandler } from 'bun'
 
-import type { TSchema, TObject, Static } from '@sinclair/typebox'
+import type { TSchema, TObject, Static, TAnySchema } from '@sinclair/typebox'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
@@ -15,8 +15,12 @@ import type {
 	ParseError,
 	ValidationError
 } from './error'
+import Elysia from '.'
 
-export type ElysiaConfig<T extends string = '', Scoped extends boolean = false> = {
+export type ElysiaConfig<
+	T extends string = '',
+	Scoped extends boolean = false
+> = {
 	name?: string
 	seed?: unknown
 	serve?: Partial<Serve>
@@ -179,9 +183,14 @@ export type UnwrapRoute<
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
-				[k in string]: TSchema | string
+				200: TAnySchema | string
 		  }
-		? UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
+		? {
+				[k in keyof Schema['response']]: UnwrapSchema<
+					Schema['response'][k],
+					Definitions
+				>
+		  } // UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
 		: unknown | void
 }
 
@@ -228,7 +237,7 @@ export type UnwrapGroupGuardRoute<
 
 export interface LifeCycleStore {
 	type?: ContentType
-	start: PreHandler<any, any>[]
+	start: GracefulHandler<any, any>[]
 	request: PreHandler<any, any>[]
 	parse: BodyHandler<any, any>[]
 	transform: VoidHandler<any, any>[]
@@ -237,7 +246,7 @@ export interface LifeCycleStore {
 	onResponse: VoidHandler<any, any>[]
 	trace: TraceHandler<any, any>[]
 	error: ErrorHandler<any, any, any>[]
-	stop: VoidHandler<any, any>[]
+	stop: GracefulHandler<any, any>[]
 }
 
 export type LifeCycleEvent =
@@ -465,6 +474,22 @@ export type PreHandler<
 	context: Prettify<PreContext<Route, Decorators>>
 ) => MaybePromise<Route['response'] | void>
 
+export type GracefulHandler<
+	Instance extends Elysia<any, any, any, any, any, any>,
+	Decorators extends DecoratorBase = {
+		request: {}
+		store: {}
+	}
+> = (
+	data: {
+		app: Instance
+	} & Prettify<
+		Decorators['request'] & {
+			store: Decorators['store']
+		}
+	>
+) => any
+
 export type ErrorHandler<
 	T extends Record<string, Error> = {},
 	Route extends RouteSchema = {},
@@ -506,12 +531,12 @@ export type ErrorHandler<
 						error: Readonly<InternalServerError>
 						set: Context['set']
 				  }
-				  | {
-					request: Request
-					code: 'INVALID_COOKIE_SIGNATURE'
-					error: Readonly<InvalidCookieSignature>
-					set: Context['set']
-			  }
+				| {
+						request: Request
+						code: 'INVALID_COOKIE_SIGNATURE'
+						error: Readonly<InvalidCookieSignature>
+						set: Context['set']
+				  }
 				| {
 						[K in keyof T]: {
 							request: Request

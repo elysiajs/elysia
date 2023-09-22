@@ -10,7 +10,8 @@ import {
 	TProperties,
 	ObjectOptions,
 	TObject,
-	TNumber
+	TNumber,
+	FormatRegistry
 } from '@sinclair/typebox'
 import { type TypeCheck } from '@sinclair/typebox/compiler'
 
@@ -153,9 +154,36 @@ const Files = TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
 	}
 )
 
+FormatRegistry.Set('numeric', (value) => !isNaN(+value))
+FormatRegistry.Set('ObjectString', (value) => {
+	let start = value.charCodeAt(0)
+
+	// If starts with ' ', '\t', '\n', then trim first
+	if (start === 9 || start === 10 || start === 32)
+		start = value.trimStart().charCodeAt(0)
+
+	if (start !== 123 && start !== 91) return false
+
+	try {
+		JSON.parse(value)
+
+		return true
+	} catch {
+		return false
+	}
+})
+
 export const ElysiaType = {
 	Numeric: (property?: NumericOptions<number>) =>
-		Type.Transform(Type.Union([Type.String(), Type.Number(property)]))
+		Type.Transform(
+			Type.Union([
+				Type.String({
+					format: 'numeric',
+					default: 0
+				}),
+				Type.Number(property)
+			])
+		)
 			.Decode((value) => {
 				const number = +value
 				if (isNaN(number)) return value
@@ -168,7 +196,12 @@ export const ElysiaType = {
 		options?: ObjectOptions
 	) =>
 		Type.Transform(
-			Type.Union([Type.String(), Type.Object(properties, options)])
+			Type.Union([
+				Type.String({
+					format: 'ObjectString'
+				}),
+				Type.Object(properties, options)
+			])
 		)
 			.Decode((value) => {
 				if (typeof value === 'string')
@@ -190,9 +223,12 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value),
 	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
-		({ ...schema, nullable: true } as any),
+		Type.Union([Type.Null(), schema]) as any,
+	/**
+	 * Allow Optional, Nullable and Undefined
+	 */
 	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
-		Type.Union([Type.Undefined(), schema]) as any,
+		Type.Union([Type.Null(), Type.Undefined(), schema]) as any,
 	Cookie: <T extends TProperties>(
 		properties: T,
 		options?: ObjectOptions & {

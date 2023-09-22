@@ -1,3 +1,23 @@
+# 0.7.7 - 22 Sep 2023
+Bug fix:
+- [#210](https://github.com/elysiajs/elysia/issues/210) `t.Numeric` allowing plain `String`
+- `t.ObjectString` allowing plain `String`
+- [#209](https://github.com/elysiajs/elysia/issues/209) `t.MaybeEmpty` tolerate `null` and `undefined`
+- [#205](https://github.com/elysiajs/elysia/issues/205) WebSocket routes not working in plugins
+
+# 0.7.6 - 21 Sep 2023
+Bug fix:
+- Separate return type by status
+
+# 0.7.5 - 21 Sep 2023
+Bug fix:
+- inject derive to `GraceHandler`
+
+# 0.7.4 - 21 Sep 2023
+Bug fix:
+- check for class-like object
+- add `GraceHandler` to access both `app` and `context`
+
 # 0.7.3 - 21 Sep 2023
 Bug fix:
 - resolve 200 by default when type is not provided

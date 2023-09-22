@@ -186,4 +186,30 @@ describe('WebSocket message', () => {
 		await wsClosed(ws)
 		app.stop()
 	})
+
+	it('should send from plugin', async () => {
+		const plugin = new Elysia().ws('/ws', {
+			message(ws, message) {
+				ws.send(message)
+			}
+		})
+
+		const app = new Elysia().use(plugin).listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send('Hello!')
+
+		const { type, data } = await message
+
+		expect(type).toBe('message')
+		expect(data).toBe('Hello!')
+
+		await wsClosed(ws)
+		app.stop()
+	})
 })

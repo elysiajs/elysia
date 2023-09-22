@@ -74,7 +74,8 @@ import type {
 	AddSuffixCapitalize,
 	TraceReporter,
 	TraceHandler,
-	MaybeArray
+	MaybeArray,
+	GracefulHandler
 } from './types'
 
 /**
@@ -136,6 +137,9 @@ export default class Elysia<
 	reporter: TraceReporter = new EventEmitter()
 
 	server: Server | null = null
+	private getServer() {
+		return this.server
+	}
 	private validator: SchemaValidator | null = null
 
 	private router = new Memoirist<ComposedHandler>()
@@ -397,8 +401,8 @@ export default class Elysia<
 	 *     .listen(8080)
 	 * ```
 	 */
-	onStart(handler: MaybeArray<PreHandler<ParentSchema, Decorators>>) {
-		this.on('start', handler)
+	onStart(handler: MaybeArray<GracefulHandler<this, Decorators>>) {
+		this.on('start', handler as any)
 
 		return this
 	}
@@ -893,8 +897,8 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onStop(handler: VoidHandler<ParentSchema, Decorators>) {
-		this.on('stop', handler)
+	onStop(handler: MaybeArray<GracefulHandler<this, Decorators>>) {
+		this.on('stop', handler as any)
 
 		return this
 	}
@@ -1487,6 +1491,8 @@ export default class Elysia<
 		}
 
 		const { name, seed } = plugin.config
+
+		plugin.getServer = () => this.getServer()
 
 		const isScoped = plugin.config.scoped
 		if (isScoped) {
@@ -2306,52 +2312,48 @@ export default class Elysia<
 				: [options.transformMessage]
 			: undefined
 
+		let server: Server | null = null
+
+		const validateMessage = getSchemaValidator(options?.body, {
+			models: this.definitions.type as Record<string, TSchema>
+		})
+
+		const validateResponse = getSchemaValidator(options?.response as any, {
+			models: this.definitions.type as Record<string, TSchema>
+		})
+
+		const parseMessage = (message: any) => {
+			const start = message.charCodeAt(0)
+
+			if (start === 47 || start === 123)
+				try {
+					message = JSON.parse(message)
+				} catch {
+					// Not empty
+				}
+			else if (!Number.isNaN(+message)) message = +message
+
+			if (transform?.length)
+				for (let i = 0; i < transform.length; i++) {
+					const temp = transform[i](message)
+
+					if (temp !== undefined) message = temp
+				}
+
+			return message
+		}
+
 		this.get(
 			path as any,
 			// @ts-ignore
 			(context) => {
 				// eslint-disable-next-line @typescript-eslint/no-unused-vars
-				const { set, path, qi, ...wsContext } = context
+				const { set, path, qi, headers, query, params } = context
 
-				// For Aot evaluation
-				context.headers
-				context.query
-				context.params
-
-				const validateMessage = getSchemaValidator(options?.body, {
-					models: this.definitions.type as Record<string, TSchema>
-				})
-
-				const validateResponse = getSchemaValidator(
-					options?.response as any,
-					{
-						models: this.definitions.type as Record<string, TSchema>
-					}
-				)
-
-				const parseMessage = (message: any) => {
-					const start = message.charCodeAt(0)
-
-					if (start === 47 || start === 123)
-						try {
-							message = JSON.parse(message)
-						} catch {
-							// Not empty
-						}
-					else if (!Number.isNaN(+message)) message = +message
-
-					if (transform?.length)
-						for (let i = 0; i < transform.length; i++) {
-							const temp = transform[i](message)
-
-							if (temp !== undefined) message = temp
-						}
-
-					return message
-				}
+				if (server === null) server = this.getServer()
 
 				if (
-					this.server?.upgrade<any>(context.request, {
+					server?.upgrade<any>(context.request, {
 						headers:
 							typeof options.upgrade === 'function'
 								? options.upgrade(context as any as Context)
@@ -2360,7 +2362,7 @@ export default class Elysia<
 							validator: validateResponse,
 							open(ws: ServerWebSocket<any>) {
 								options.open?.(
-									new ElysiaWS(ws, wsContext as any)
+									new ElysiaWS(ws, context as any)
 								)
 							},
 							message: (ws: ServerWebSocket<any>, msg: any) => {
@@ -2376,13 +2378,13 @@ export default class Elysia<
 									)
 
 								options.message?.(
-									new ElysiaWS(ws, wsContext as any),
+									new ElysiaWS(ws, context as any),
 									message
 								)
 							},
 							drain(ws: ServerWebSocket<any>) {
 								options.drain?.(
-									new ElysiaWS(ws, wsContext as any)
+									new ElysiaWS(ws, context as any)
 								)
 							},
 							close(
@@ -2391,7 +2393,7 @@ export default class Elysia<
 								reason: string
 							) {
 								options.close?.(
-									new ElysiaWS(ws, wsContext as any),
+									new ElysiaWS(ws, context as any),
 									code,
 									reason
 								)
@@ -3081,8 +3083,28 @@ export default class Elysia<
 
 		this.server = Bun?.serve(serve)
 
-		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i](this as any)
+		if (this.event.start.length) {
+			;(async () => {
+				const context = Object.assign(this.decorators, {
+					store: this.store,
+					app: this
+				})
+
+				for (let i = 0; i < this.event.transform.length; i++) {
+					const operation = this.event.transform[i](context)
+
+					// @ts-ignore
+					if (this.event.transform[i].$elysia === 'derive') {
+						if (operation instanceof Promise)
+							Object.assign(context, await operation)
+						else Object.assign(context, operation)
+					}
+				}
+
+				for (let i = 0; i < this.event.start.length; i++)
+					this.event.start[i](context)
+			})()
+		}
 
 		if (callback) callback(this.server!)
 
@@ -3116,8 +3138,28 @@ export default class Elysia<
 
 		this.server.stop()
 
-		for (let i = 0; i < this.event.stop.length; i++)
-			await this.event.stop[i](this as any)
+		if (this.event.stop.length) {
+			;(async () => {
+				const context = Object.assign(this.decorators, {
+					store: this.store,
+					app: this
+				})
+
+				for (let i = 0; i < this.event.transform.length; i++) {
+					const operation = this.event.transform[i](context)
+
+					// @ts-ignore
+					if (this.event.transform[i].$elysia === 'derive') {
+						if (operation instanceof Promise)
+							Object.assign(context, await operation)
+						else Object.assign(context, operation)
+					}
+				}
+
+				for (let i = 0; i < this.event.stop.length; i++)
+					this.event.stop[i](context)
+			})()
+		}
 	}
 
 	/**
