@@ -134,7 +134,7 @@
   },
   "devDependencies": {
     "@elysiajs/cookie": "^0.6.1",
-    "@elysiajs/html": "^0.6.6",
+    "@elysiajs/html": "^0.7.0",
     "@elysiajs/jwt": "^0.6.4",
     "@elysiajs/swagger": "^0.7.2",
     "@swc/cli": "^0.1.62",
