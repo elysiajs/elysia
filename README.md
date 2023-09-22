@@ -3,7 +3,7 @@
   <img width=480 src=https://user-images.githubusercontent.com/35027979/205498891-b75dc404-3232-4929-b216-823aa7373b71.png alt='Elysia label' />
 </p>
 
-<p align=center>Ergonomic Framework for Human</p>
+<p align=center>Ergonomic Framework for Humans</p>
 
 <p align=center>
     <a href=https://elysiajs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a>
