@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -134,7 +134,6 @@
   },
   "devDependencies": {
     "@elysiajs/html": "^0.7.0",
-    "@elysiajs/jwt": "^0.7.0",
     "@elysiajs/jwt": "^0.7.0",
     "@elysiajs/swagger": "^0.7.2",
     "@swc/cli": "^0.1.62",

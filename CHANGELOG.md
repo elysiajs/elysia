@@ -4,6 +4,7 @@ Bug fix:
 - `t.ObjectString` allowing plain `String`
 - [#209](https://github.com/elysiajs/elysia/issues/209) `t.MaybeEmpty` tolerate `null` and `undefined`
 - [#205](https://github.com/elysiajs/elysia/issues/205) WebSocket routes not working in plugins
+- [#195](https://github.com/elysiajs/elysia/pull/195), [#201](https://github.com/elysiajs/elysia/pull/201) allow WebSocket destructuring
 
 # 0.7.6 - 21 Sep 2023
 Bug fix:
