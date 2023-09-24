@@ -14,11 +14,14 @@ export const ERROR_CODE = Symbol('ErrorCode')
 export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
 
 export type ElysiaErrors =
+	| ConflictError
+	| ForbiddenError
 	| InternalServerError
+	| InvalidCookieSignature
 	| NotFoundError
 	| ParseError
+	| UnauthorizedError
 	| ValidationError
-	| InvalidCookieSignature
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -53,6 +56,33 @@ export class InvalidCookieSignature extends Error {
 
 	constructor(public key: string, message?: string) {
 		super(message ?? `"${key}" has invalid cookie signature`)
+	}
+}
+
+export class UnauthorizedError extends Error {
+	code = 'UNAUTHORIZED'
+	status = 401
+
+	constructor(message?: string) {
+		super(message ?? 'UNAUTHORIZED')
+	}
+}
+
+export class ForbiddenError extends Error {
+	code = 'FORBIDDEN'
+	status = 403
+
+	constructor(message?: string) {
+		super(message ?? 'FORBIDDEN')
+	}
+}
+
+export class ConflictError extends Error {
+	code = 'CONFLICT'
+	status = 409
+
+	constructor(message?: string) {
+		super(message ?? 'CONFLICT')
 	}
 }
 

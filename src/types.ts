@@ -9,10 +9,13 @@ import type { EventEmitter } from 'eventemitter3'
 import type { CookieOptions } from './cookie'
 import type { Context, PreContext } from './context'
 import type {
+	ConflictError,
+	ForbiddenError,
 	InternalServerError,
 	InvalidCookieSignature,
 	NotFoundError,
 	ParseError,
+	UnauthorizedError,
 	ValidationError
 } from './error'
 import Elysia from '.'
@@ -515,6 +518,18 @@ export type ErrorHandler<
 				  }
 				| {
 						request: Request
+						code: 'UNAUTHORIZED'
+						error: Readonly<UnauthorizedError>
+						set: Context['set']
+				  }
+				| {
+						request: Request
+						code: 'FORBIDDEN'
+						error: Readonly<ForbiddenError>
+						set: Context['set']
+				  }
+				| {
+						request: Request
 						code: 'NOT_FOUND'
 						error: Readonly<NotFoundError>
 						set: Context['set']
@@ -523,6 +538,12 @@ export type ErrorHandler<
 						request: Request
 						code: 'PARSE'
 						error: Readonly<ParseError>
+						set: Context['set']
+				  }
+				| {
+						request: Request
+						code: 'CONFLICT'
+						error: Readonly<ConflictError>
 						set: Context['set']
 				  }
 				| {

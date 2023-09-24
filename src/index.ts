@@ -38,9 +38,12 @@ import {
 	isProduction,
 	ERROR_CODE,
 	ValidationError,
-	type ParseError,
+	type ConflictError,
+	type ForbiddenError,
+	type InternalServerError,
 	type NotFoundError,
-	type InternalServerError
+	type ParseError,
+	type UnauthorizedError
 } from './error'
 
 import type {
@@ -3019,11 +3022,14 @@ export default class Elysia<
 	private handleError = async (
 		context: Context,
 		error:
+			| ConflictError
 			| Error
-			| ValidationError
-			| ParseError
-			| NotFoundError
+			| ForbiddenError
 			| InternalServerError
+			| NotFoundError
+			| ParseError
+			| UnauthorizedError
+			| ValidationError
 	) =>
 		(this.handleError = this.config.aot
 			? composeErrorHandler(this)
@@ -3190,50 +3196,53 @@ export { t } from './custom-types'
 export { Cookie } from './cookie'
 
 export {
+	getResponseSchemaValidator,
 	getSchemaValidator,
 	mergeDeep,
 	mergeHook,
-	mergeObjectArray,
-	getResponseSchemaValidator
+	mergeObjectArray
 } from './utils'
 
 export {
-	ParseError,
-	NotFoundError,
-	ValidationError,
+	ConflictError,
+	ForbiddenError,
 	InternalServerError,
-	InvalidCookieSignature
+	InvalidCookieSignature,
+	NotFoundError,
+	ParseError,
+	UnauthorizedError,
+	ValidationError
 } from './error'
 
 export type { Context, PreContext } from './context'
 
 export type {
-	ElysiaConfig,
+	AfterHandler,
+	BodyHandler,
+	ComposedHandler,
 	DecoratorBase,
 	DefinitionBase,
-	RouteBase,
-	Handler,
-	ComposedHandler,
-	InputSchema,
-	LocalHook,
-	MergeSchema,
-	RouteSchema,
-	UnwrapRoute,
-	InternalRoute,
-	HTTPMethod,
-	SchemaValidator,
-	VoidHandler,
-	PreHandler,
-	BodyHandler,
-	OptionalHandler,
+	ElysiaConfig,
 	ErrorHandler,
-	AfterHandler,
+	Handler,
+	HTTPMethod,
+	InputSchema,
+	InternalRoute,
+	LifeCycleEvent,
+	LifeCycleStore,
+	ListenCallback,
+	LocalHook,
+	MaybePromise,
+	MergeSchema,
+	OptionalHandler,
+	PreHandler,
+	RouteBase,
+	RouteSchema,
+	SchemaValidator,
+	TraceEvent,
 	TraceHandler,
 	TraceStream,
-	LifeCycleEvent,
-	TraceEvent,
-	LifeCycleStore,
-	MaybePromise,
-	ListenCallback,
-	UnwrapSchema
+	UnwrapRoute,
+	UnwrapSchema,
+	VoidHandler
 } from './types'
