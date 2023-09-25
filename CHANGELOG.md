@@ -1,3 +1,11 @@
+# 0.7.13 - 25 Sep 2023
+Improvement:
+- Using listener instead of microtick to handle `trace.set`
+- Set default cookie path to '/'
+
+Bug fix:
+- Duplicate group path when hook is provided
+
 # 0.7.12 - 23 Sep 2023
 Bug fix:
 - Handle cookie expire time

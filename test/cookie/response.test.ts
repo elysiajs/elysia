@@ -7,13 +7,9 @@ const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
 const getCookies = (response: Response) =>
 	response.headers.getAll('Set-Cookie').map((x) => {
-		const value = decodeURIComponent(x).split('=')
+		const value = decodeURIComponent(x)
 
-		try {
-			return [value[0], JSON.parse(value[1])]
-		} catch {
-			return value
-		}
+		return value
 	})
 
 const app = new Elysia({
@@ -67,15 +63,15 @@ describe('Cookie Response', () => {
 	it('set cookie', async () => {
 		const response = await app.handle(req('/create'))
 
-		expect(getCookies(response)).toEqual([['name', 'Himari']])
+		expect(getCookies(response)).toEqual(['name=Himari; Path=/'])
 	})
 
 	it('set multiple cookie', async () => {
 		const response = await app.handle(req('/multiple'))
 
 		expect(getCookies(response)).toEqual([
-			['name', 'Himari'],
-			['president', 'Rio']
+			'name=Himari; Path=/',
+			'president=Rio; Path=/'
 		])
 	})
 
@@ -83,15 +79,7 @@ describe('Cookie Response', () => {
 		const response = await app.handle(req('/council'))
 
 		expect(getCookies(response)).toEqual([
-			[
-				'council',
-				[
-					{
-						name: 'Rin',
-						affilation: 'Administration'
-					}
-				]
-			]
+			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
 		])
 	})
 
@@ -135,15 +123,7 @@ describe('Cookie Response', () => {
 		)
 
 		expect(getCookies(response)).toEqual([
-			[
-				'council',
-				[
-					{
-						name: 'Rin',
-						affilation: 'Administration'
-					}
-				]
-			]
+			'council=[{"name":"Rin","affilation":"Administration"}]'
 		])
 	})
 
@@ -165,16 +145,14 @@ describe('Cookie Response', () => {
 			})
 		)
 
-		expect(getCookies(response)).toEqual([
-			['council', '; Expires', expect.any(String)]
-		])
+		expect(getCookies(response)[0]).toInclude('council=; Expires=')
 	})
 
 	it('sign cookie', async () => {
 		const response = await app.handle(req('/update'))
 
 		expect(getCookies(response)).toEqual([
-			['name', sign('seminar: Himari', secrets)]
+			`name=${sign('seminar: Himari', secrets)}; Path=/`
 		])
 	})
 
@@ -263,7 +241,7 @@ describe('Cookie Response', () => {
 		const response = await app.handle(req('/create'))
 
 		expect(response.headers.getAll('Set-Cookie')).toEqual([
-			'name=Himari; HttpOnly'
+			'name=Himari; Path=/; HttpOnly'
 		])
 	})
 })

@@ -1,13 +1,27 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new Elysia({
-	cookie: {
-		httpOnly: true
-	}
-})
-	.get('/multiple', ({ cookie: { name, president } }) => {
-		name.value = 'Himari'
+const delay = () => new Promise((r) => setTimeout(r, 1000))
 
-		return 'ok'
+const a = new Elysia({ prefix: '/course' }).group(
+	'/id/:courseId',
+	{
+		params: t.Object({
+			courseId: t.Numeric()
+		})
+	},
+	(app) => app.get('/b', () => 'A')
+)
+
+console.log(a.routes.map((x) => x.path))
+
+const app = new Elysia()
+	.use(a)
+	.get('/', async () => {
+		await delay()
+
+		return 'a'
 	})
 	.listen(3000)
+
+console.log(app.routes.map((x) => x.path))
+// console.log(app.routes[1].composed?.toString())

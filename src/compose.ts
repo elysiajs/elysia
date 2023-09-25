@@ -41,21 +41,15 @@ const requestId = { value: 0 }
 const createReport = ({
 	hasTrace,
 	hasTraceSet = false,
-	hasTraceChildren = false,
 	addFn,
 	condition = {}
 }: {
 	hasTrace: boolean | number
-	hasTraceChildren: boolean
 	hasTraceSet?: boolean
 	addFn(string: string): void
 	condition: Partial<Record<TraceEvent, boolean>>
 }) => {
 	if (hasTrace) {
-		const microtask = hasTraceChildren
-			? '\nawait new Promise(r => {queueMicrotask(() => queueMicrotask(r))})\n'
-			: '\nawait new Promise(r => {queueMicrotask(r)})\n'
-
 		return (
 			event: TraceEvent,
 			{
@@ -81,7 +75,8 @@ const createReport = ({
 				]
 			)
 				return () => {
-					if (hasTraceSet && event === 'afterHandle') addFn(microtask)
+					if (hasTraceSet && event === 'afterHandle')
+						addFn('\nawait traceDone\n')
 				}
 
 			if (isGroup) name ||= event
@@ -118,9 +113,8 @@ const createReport = ({
 						'\n'
 				)
 
-				if (hasTraceSet && event === 'afterHandle') {
-					addFn(microtask)
-				}
+				if (hasTraceSet && event === 'afterHandle')
+					addFn('\nawait traceDone\n')
 			}
 		}
 	} else {
@@ -591,10 +585,14 @@ export const composeHandler = ({
 		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
 			// @ts-ignore
 			const value = cookieMeta?.[name] ?? defaultValue
-			if (!value) return ''
+			if (!value)
+				return typeof defaultValue === 'string'
+					? `${name}: "${defaultValue}",`
+					: `${name}: ${defaultValue},`
 
 			if (typeof value === 'string') return `${name}: '${value}',`
-			if (value instanceof Date) return `${name}: new Date(${value.getTime()}),`
+			if (value instanceof Date)
+				return `${name}: new Date(${value.getTime()}),`
 
 			return `${name}: ${value},`
 		}
@@ -659,11 +657,6 @@ export const composeHandler = ({
 	const hasTraceSet = traceLiterals.some(
 		(fn) => isFnUse('set', fn) || isContextPassToFunction(fn)
 	)
-	const hasTraceChildren =
-		hasTraceSet &&
-		traceLiterals.some(
-			(fn) => fn.includes('children') || isContextPassToFunction(fn)
-		)
 
 	hasUnknownContext || hooks.trace.some((fn) => isFnUse('set', fn.toString()))
 
@@ -676,12 +669,15 @@ export const composeHandler = ({
 	const report = createReport({
 		hasTrace,
 		hasTraceSet,
-		hasTraceChildren,
 		condition: traceConditions,
 		addFn: (word) => {
 			fnLiteral += word
 		}
 	})
+
+	if (hasTrace)
+		fnLiteral +=
+			'\nconst traceDone = new Promise(r => { reporter.once(`res${id}`, r) })\n'
 
 	const maybeAsync =
 		hasBody ||
@@ -1357,11 +1353,11 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	const traceLiteral = app.event.trace.map((x) => x.toString())
 	const report = createReport({
 		hasTrace,
-		hasTraceChildren:
-			hasTrace &&
-			traceLiteral.some(
-				(x) => x.includes('children') || isContextPassToFunction(x)
-			),
+		hasTraceSet: app.event.trace.some((fn) => {
+			const literal = fn.toString()
+
+			return isFnUse('set', literal) || isContextPassToFunction(literal)
+		}),
 		condition: {
 			request: traceLiteral.some(
 				(x) => isFnUse('request', x) || isContextPassToFunction(x)

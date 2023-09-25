@@ -1123,7 +1123,7 @@ export default class Elysia<
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
-				path = this.config.prefix + prefix + path
+				path = (isSchema ? '' : this.config.prefix) + prefix + path
 
 				if (isSchema) {
 					const hook = schemaOrRun
@@ -1531,14 +1531,20 @@ export default class Elysia<
 
 			plugin.model(this.definitions.type as any)
 			plugin.error(this.definitions.error as any)
+
 			plugin.onRequest((context) => {
 				Object.assign(context, this.decorators)
 				Object.assign(context.store, this.store)
 			})
 
+			plugin.event.trace = [...this.event.trace, ...plugin.event.trace]
+
 			if (plugin.config.aot) plugin.compile()
 
-			return this.mount(plugin.fetch)
+			const instance = this.mount(plugin.fetch)
+			this.routes = this.routes.concat(instance.routes)
+
+			return this
 		}
 
 		this.decorate(plugin.decorators)
