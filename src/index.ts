@@ -344,6 +344,15 @@ export default class Elysia<
 				reporter: this.reporter
 			})
 
+			const existingRouteIndex = this.routes.findIndex(
+				(route) => route.path === path && route.method === method
+			)
+
+			if (existingRouteIndex !== -1) {
+				// remove route previously defined
+				this.routes.splice(existingRouteIndex, 1)
+			}
+
 			this.routes.push({
 				method,
 				path,
@@ -370,7 +379,7 @@ export default class Elysia<
 				else
 					this.staticRouter.map[
 						path
-					].code += `case '${method}': return st${index}(ctx)\n`
+					].code = `case '${method}': return st${index}(ctx)\n${this.staticRouter.map[path].code}`
 
 				if (!this.config.strictPath) {
 					if (!this.staticRouter.map[loosePath])
@@ -385,7 +394,7 @@ export default class Elysia<
 					else
 						this.staticRouter.map[
 							loosePath
-						].code += `case '${method}': return st${index}(ctx)\n`
+						].code = `case '${method}': return st${index}(ctx)\n${this.staticRouter.map[loosePath].code}`
 				}
 			} else {
 				this.router.add(method, path, mainHandler)
@@ -1497,8 +1506,24 @@ export default class Elysia<
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
 			if (instance instanceof Promise) {
-				this.lazyLoadModules.push(instance.then((x) => x.compile()))
+				this.lazyLoadModules.push(
+					instance
+						.then((plugin) => {
+							if (typeof plugin === 'function')
+								return plugin(
+									this as unknown as any
+								) as unknown as Elysia
 
+							if (typeof plugin.default === 'function')
+								return plugin.default(
+									this as unknown as any
+								) as unknown as Elysia
+
+							// @ts-ignore
+							return this._use(plugin)
+						})
+						.then((x) => x.compile())
+				)
 				return this as unknown as any
 			}
 
