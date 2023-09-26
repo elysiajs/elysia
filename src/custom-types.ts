@@ -216,7 +216,7 @@ export const ElysiaType = {
 			})
 			.Encode((value) => JSON.stringify(value)) as any as TObject<T>,
 	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
-	Files: (options: ElysiaTypeOptions.Files) =>
+	Files: (options: ElysiaTypeOptions.Files = {}) =>
 		Type.Transform(Type.Union([Files(options)]))
 			.Decode((value) => {
 				if (Array.isArray(value)) return value

@@ -5,6 +5,6 @@ import cookie from '../src/index'
 new Elysia()
 	.get('/', ({ set }) => {
 		set.headers['x-powered-by'] = 'Elysia'
-		set.status = 400
+		set.status = 'Bad Request'
 	})
 	.listen(8080)

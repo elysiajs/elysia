@@ -1,17 +1,22 @@
-import { Elysia, getSchemaValidator, t } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	// .get(
-	// 	'/council',
-	// 	({ cookie: { council } }) =>
-	// 		(council.value = [
-	// 			{
-	// 				name: 'Rin',
-	// 				affilation: 'Administration'
-	// 			}
-	// 		])
-	// )
-	// .get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
+const app = new Elysia({
+	cookie: {
+		secrets: 'Fischl von Luftschloss Narfidort',
+		sign: ['name']
+	}
+})
+	.get(
+		'/council',
+		({ cookie: { council } }) =>
+			(council.value = [
+				{
+					name: 'Rin',
+					affilation: 'Administration'
+				}
+			])
+	)
+	.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 	.get(
 		'/update',
 		({ cookie: { name } }) => {
@@ -24,20 +29,9 @@ const app = new Elysia()
 			return name.value
 		},
 		{
-			cookie: t.Cookie(
-				{
-					name: t.Optional(t.String())
-				},
-				{
-					secrets: 'Fischl von Luftschloss Narfidort',
-					sign: ['name']
-				}
-			)
+			cookie: t.Cookie({
+				name: t.Optional(t.String())
+			})
 		}
 	)
-	// .get('/remove', ({ cookie }) => {
-	// 	for (const self of Object.values(cookie)) self.remove()
-
-	// 	return 'Deleted'
-	// })
 	.listen(3000)

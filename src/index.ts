@@ -2821,13 +2821,17 @@ export default class Elysia<
 		Scoped
 	>
 
-	model<const NewType extends Record<string, unknown>>(
-		mapper: (decorators: Definitions['type']) => NewType
+	model<const NewType extends Record<string, TSchema>>(
+		mapper: (decorators: {
+			[type in keyof Definitions['type']]: ReturnType<
+				typeof t.Unsafe<Definitions['type'][type]>
+			>
+		}) => NewType
 	): Elysia<
 		BasePath,
 		Decorators,
 		{
-			type: NewType
+			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
 		},
 		ParentSchema,

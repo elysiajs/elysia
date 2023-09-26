@@ -1,3 +1,8 @@
+# 0.7.14 - 26 Sep 2023
+Bug fix:
+- Make `t.Files` parameter optional
+- model remap now using `TSchema` instead of literal type for creating type abstraction
+
 # 0.7.13 - 25 Sep 2023
 Improvement:
 - Using listener instead of microtick to handle `trace.set`

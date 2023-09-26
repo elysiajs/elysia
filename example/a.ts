@@ -16,6 +16,8 @@ console.log(a.routes.map((x) => x.path))
 
 const app = new Elysia()
 	.use(a)
+	.model('a', t.String())
+	.model((x) => x)
 	.get('/', async () => {
 		await delay()
 
