@@ -77,6 +77,7 @@ import type {
 	MaybeArray,
 	GracefulHandler
 } from './types'
+import { t } from './custom-types'
 
 /**
  * ### Elysia Server
@@ -226,7 +227,7 @@ export default class Elysia<
 
 			const models = this.definitions.type as Record<string, TSchema>
 
-			const cookieValidator = getSchemaValidator(
+			let cookieValidator = getSchemaValidator(
 				hook?.cookie ?? (this.validator?.cookie as any),
 				{
 					dynamic: !this.config.aot,
@@ -235,13 +236,26 @@ export default class Elysia<
 				}
 			)
 
-			if (cookieValidator && isNotEmpty(this.config.cookie ?? []))
-				// @ts-ignore
-				cookieValidator.schema = mergeCookie(
+			if (isNotEmpty(this.config.cookie ?? {})) {
+				if (cookieValidator) {
 					// @ts-ignore
-					cookieValidator.schema,
-					this.config.cookie ?? {}
-				)
+					cookieValidator.schema = mergeCookie(
+						// @ts-ignore
+						cookieValidator.schema,
+						this.config.cookie ?? {}
+					)
+				} else {
+					cookieValidator = getSchemaValidator(
+						// @ts-ignore
+						t.Cookie({}, this.config.cookie),
+						{
+							dynamic: !this.config.aot,
+							models,
+							additionalProperties: true
+						}
+					)
+				}
+			}
 
 			const validator = {
 				body: getSchemaValidator(
@@ -1118,7 +1132,7 @@ export default class Elysia<
 
 		Object.values(instance.routes).forEach(
 			({ method, path, handler, hooks }) => {
-				path = this.config.prefix + prefix + path
+				path = (isSchema ? '' : this.config.prefix) + prefix + path
 
 				if (isSchema) {
 					const hook = schemaOrRun
@@ -1542,14 +1556,20 @@ export default class Elysia<
 
 			plugin.model(this.definitions.type as any)
 			plugin.error(this.definitions.error as any)
+
 			plugin.onRequest((context) => {
 				Object.assign(context, this.decorators)
 				Object.assign(context.store, this.store)
 			})
 
+			plugin.event.trace = [...this.event.trace, ...plugin.event.trace]
+
 			if (plugin.config.aot) plugin.compile()
 
-			return this.mount(plugin.fetch)
+			const instance = this.mount(plugin.fetch)
+			this.routes = this.routes.concat(instance.routes)
+
+			return this
 		}
 
 		this.decorate(plugin.decorators)
@@ -2387,9 +2407,7 @@ export default class Elysia<
 						data: {
 							validator: validateResponse,
 							open(ws: ServerWebSocket<any>) {
-								options.open?.(
-									new ElysiaWS(ws, context as any)
-								)
+								options.open?.(new ElysiaWS(ws, context as any))
 							},
 							message: (ws: ServerWebSocket<any>, msg: any) => {
 								const message = parseMessage(msg)
@@ -2828,13 +2846,17 @@ export default class Elysia<
 		Scoped
 	>
 
-	model<const NewType extends Record<string, unknown>>(
-		mapper: (decorators: Definitions['type']) => NewType
+	model<const NewType extends Record<string, TSchema>>(
+		mapper: (decorators: {
+			[type in keyof Definitions['type']]: ReturnType<
+				typeof t.Unsafe<Definitions['type'][type]>
+			>
+		}) => NewType
 	): Elysia<
 		BasePath,
 		Decorators,
 		{
-			type: NewType
+			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
 		},
 		ParentSchema,

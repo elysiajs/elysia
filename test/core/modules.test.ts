@@ -137,6 +137,12 @@ describe('Modules', () => {
 				}))
 			}
 
+    const a = (config = {}) =>
+			new Elysia({
+				name: 'a',
+				seed: config
+			}).get('/', () => 'a')
+
 		const app = new Elysia().use(a()).get('/', ({ derived }) => derived)
 		// .get('/:with_param', ({ derived }) => derived)
 

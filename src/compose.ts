@@ -7,7 +7,12 @@ import { parse as parseQuery } from 'fast-querystring'
 
 import { sign as signCookie } from 'cookie-signature'
 
-import { mapEarlyResponse, mapResponse, mapCompactResponse } from './handler'
+import {
+	mapEarlyResponse,
+	mapResponse,
+	mapCompactResponse,
+	isNotEmpty
+} from './handler'
 import {
 	NotFoundError,
 	ValidationError,
@@ -15,7 +20,7 @@ import {
 	ERROR_CODE
 } from './error'
 
-import { parseCookie } from './cookie'
+import { CookieOptions, parseCookie } from './cookie'
 
 import type {
 	ComposedHandler,
@@ -36,21 +41,15 @@ const requestId = { value: 0 }
 const createReport = ({
 	hasTrace,
 	hasTraceSet = false,
-	hasTraceChildren = false,
 	addFn,
 	condition = {}
 }: {
 	hasTrace: boolean | number
-	hasTraceChildren: boolean
 	hasTraceSet?: boolean
 	addFn(string: string): void
 	condition: Partial<Record<TraceEvent, boolean>>
 }) => {
 	if (hasTrace) {
-		const microtask = hasTraceChildren
-			? '\nawait new Promise(r => {queueMicrotask(() => queueMicrotask(r))})\n'
-			: '\nawait new Promise(r => {queueMicrotask(r)})\n'
-
 		return (
 			event: TraceEvent,
 			{
@@ -76,7 +75,8 @@ const createReport = ({
 				]
 			)
 				return () => {
-					if (hasTraceSet && event === 'afterHandle') addFn(microtask)
+					if (hasTraceSet && event === 'afterHandle')
+						addFn('\nawait traceDone\n')
 				}
 
 			if (isGroup) name ||= event
@@ -113,9 +113,8 @@ const createReport = ({
 						'\n'
 				)
 
-				if (hasTraceSet && event === 'afterHandle') {
-					addFn(microtask)
-				}
+				if (hasTraceSet && event === 'afterHandle')
+					addFn('\nawait traceDone\n')
 			}
 		}
 	} else {
@@ -583,6 +582,21 @@ export const composeHandler = ({
 	}
 
 	if (hasCookie) {
+		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
+			// @ts-ignore
+			const value = cookieMeta?.[name] ?? defaultValue
+			if (!value)
+				return typeof defaultValue === 'string'
+					? `${name}: "${defaultValue}",`
+					: `${name}: ${defaultValue},`
+
+			if (typeof value === 'string') return `${name}: '${value}',`
+			if (value instanceof Date)
+				return `${name}: new Date(${value.getTime()}),`
+
+			return `${name}: ${value},`
+		}
+
 		const options = cookieMeta
 			? `{
 			secret: ${
@@ -605,7 +619,15 @@ export const composeHandler = ({
 					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
 					  ']'
 					: 'undefined'
-			}
+			},
+			${get('domain')}
+			${get('expires')}
+			${get('httpOnly')}
+			${get('maxAge')}
+			${get('path', '/')}
+			${get('priority')}
+			${get('sameSite')}
+			${get('secure')}
 		}`
 			: 'undefined'
 
@@ -635,11 +657,6 @@ export const composeHandler = ({
 	const hasTraceSet = traceLiterals.some(
 		(fn) => isFnUse('set', fn) || isContextPassToFunction(fn)
 	)
-	const hasTraceChildren =
-		hasTraceSet &&
-		traceLiterals.some(
-			(fn) => fn.includes('children') || isContextPassToFunction(fn)
-		)
 
 	hasUnknownContext || hooks.trace.some((fn) => isFnUse('set', fn.toString()))
 
@@ -652,12 +669,15 @@ export const composeHandler = ({
 	const report = createReport({
 		hasTrace,
 		hasTraceSet,
-		hasTraceChildren,
 		condition: traceConditions,
 		addFn: (word) => {
 			fnLiteral += word
 		}
 	})
+
+	if (hasTrace)
+		fnLiteral +=
+			'\nconst traceDone = new Promise(r => { reporter.once(`res${id}`, r) })\n'
 
 	const maybeAsync =
 		hasBody ||
@@ -914,7 +934,8 @@ export const composeHandler = ({
 				fnLiteral += `\nc.body = body.Decode(c.body)\n`
 		}
 
-		if (validator.cookie) {
+		// @ts-ignore
+		if (isNotEmpty(validator.cookie?.schema.properties ?? {})) {
 			fnLiteral += `const cookieValue = {}
 			for(const [key, value] of Object.entries(c.cookie))
 				cookieValue[key] = value.value
@@ -1332,11 +1353,11 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	const traceLiteral = app.event.trace.map((x) => x.toString())
 	const report = createReport({
 		hasTrace,
-		hasTraceChildren:
-			hasTrace &&
-			traceLiteral.some(
-				(x) => x.includes('children') || isContextPassToFunction(x)
-			),
+		hasTraceSet: app.event.trace.some((fn) => {
+			const literal = fn.toString()
+
+			return isFnUse('set', literal) || isContextPassToFunction(literal)
+		}),
 		condition: {
 			request: traceLiteral.some(
 				(x) => isFnUse('request', x) || isContextPassToFunction(x)

@@ -7,16 +7,12 @@ const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
 const getCookies = (response: Response) =>
 	response.headers.getAll('Set-Cookie').map((x) => {
-		const value = decodeURIComponent(x).split('=')
-
-		try {
-			return [value[0], JSON.parse(value[1])]
-		} catch {
-			return value
-		}
+		return decodeURIComponent(x)
 	})
 
-const app = new Elysia({ aot: false })
+const app = new Elysia({
+	aot: false
+})
 	.get(
 		'/council',
 		({ cookie: { council } }) =>
@@ -63,31 +59,20 @@ describe('Dynamic Cookie Response', () => {
 	it('set cookie', async () => {
 		const response = await app.handle(req('/create'))
 
-		expect(getCookies(response)).toEqual([['name', 'Himari']])
+		expect(getCookies(response)).toEqual(['name=Himari'])
 	})
 
 	it('set multiple cookie', async () => {
 		const response = await app.handle(req('/multiple'))
 
-		expect(getCookies(response)).toEqual([
-			['name', 'Himari'],
-			['president', 'Rio']
-		])
+		expect(getCookies(response)).toEqual(['name=Himari', 'president=Rio'])
 	})
 
 	it('set JSON cookie', async () => {
 		const response = await app.handle(req('/council'))
 
 		expect(getCookies(response)).toEqual([
-			[
-				'council',
-				[
-					{
-						name: 'Rin',
-						affilation: 'Administration'
-					}
-				]
-			]
+			'council=[{"name":"Rin","affilation":"Administration"}]'
 		])
 	})
 
@@ -131,15 +116,7 @@ describe('Dynamic Cookie Response', () => {
 		)
 
 		expect(getCookies(response)).toEqual([
-			[
-				'council',
-				[
-					{
-						name: 'Rin',
-						affilation: 'Administration'
-					}
-				]
-			]
+			'council=[{"name":"Rin","affilation":"Administration"}]'
 		])
 	})
 
@@ -161,16 +138,14 @@ describe('Dynamic Cookie Response', () => {
 			})
 		)
 
-		expect(getCookies(response)).toEqual([
-			['council', '; Expires', expect.any(String)]
-		])
+		expect(getCookies(response)[0]).toInclude('council=; Expires=')
 	})
 
 	it('sign cookie', async () => {
 		const response = await app.handle(req('/update'))
 
 		expect(getCookies(response)).toEqual([
-			['name', sign('seminar: Himari', secrets)]
+			`name=${sign('seminar: Himari', secrets)}`
 		])
 	})
 

@@ -9,7 +9,7 @@ export const createTraceListener = (
 	reporter: TraceReporter,
 	handler: TraceHandler<any, any>
 ) => {
-	return (event: TraceStream) => {
+	return async function trace(event: TraceStream) {
 		const id = event.id
 
 		if (event.event === 'request' && event.type === 'begin') {
@@ -244,7 +244,7 @@ export const createTraceListener = (
 
 			reporter.on('event', reducer)
 
-			handler({
+			await handler({
 				id: event.id,
 				// @ts-ignore
 				context: event.ctx,
@@ -262,6 +262,8 @@ export const createTraceListener = (
 				error: error.signal,
 				response: response.signal as any
 			})
+
+			reporter.emit(`res${id}`, undefined)
 		}
 	}
 }

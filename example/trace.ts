@@ -4,7 +4,7 @@ const sleep = (time = 1000) =>
 	new Promise((resolve) => setTimeout(resolve, time))
 
 const app = new Elysia()
-	.trace(async ({ beforeHandle, request, response }) => {
+	.trace(async ({ beforeHandle, request, response, set }) => {
 		const { children, time: start, end } = await beforeHandle
 		for (const child of children) {
 			const { time: start, end, name } = await child
@@ -13,6 +13,8 @@ const app = new Elysia()
 		}
 
 		console.log('beforeHandle took', (await end) - start)
+
+		set.headers
 	})
 	.get('/', () => 'Hi', {
 		beforeHandle: [
@@ -23,3 +25,5 @@ const app = new Elysia()
 		]
 	})
 	.listen(3000)
+
+console.log(app.routes[0].composed?.toString())

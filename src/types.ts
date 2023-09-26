@@ -405,9 +405,13 @@ export type TraceStream = {
 	unit?: number
 }
 
-export type TraceReporter = EventEmitter<{
-	event(stream: TraceStream): MaybePromise<void>
-}>
+export type TraceReporter = EventEmitter<
+	{
+		[res in `res${number}`]: undefined
+	} & {
+		event(stream: TraceStream): MaybePromise<void>
+	}
+>
 
 export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
 	Type extends 'begin'

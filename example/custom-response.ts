@@ -1,16 +1,11 @@
 import { Elysia } from '../src'
 
-// This plugin will format JSON before return response
-const prettyJson = (app: Elysia) =>
-	// Custom
-	app.onAfterHandle((response, context) => {
-		if (response instanceof Object)
-			try {
-				return JSON.stringify(response, null, 4)
-			} catch (error) {
-				return
-			}
-	})
+const prettyJson = new Elysia().onAfterHandle(({ response }) => {
+	if (response instanceof Object)
+		try {
+			return JSON.stringify(response, null, 4)
+		} catch {}
+})
 
 new Elysia()
 	.use(prettyJson)

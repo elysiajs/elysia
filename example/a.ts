@@ -1,13 +1,29 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-const a = (config = {}) =>
-	new Elysia({
-		name: 'a',
-		seed: config
-	}).get('/', () => 'a')
+const delay = () => new Promise((r) => setTimeout(r, 1000))
 
-const app = new Elysia().use(a()).listen(3000)
+const a = new Elysia({ prefix: '/course' }).group(
+	'/id/:courseId',
+	{
+		params: t.Object({
+			courseId: t.Numeric()
+		})
+	},
+	(app) => app.get('/b', () => 'A')
+)
 
-await app.modules
+console.log(a.routes.map((x) => x.path))
 
-console.log(app.routes)
+const app = new Elysia()
+	.use(a)
+	.model('a', t.String())
+	.model((x) => x)
+	.get('/', async () => {
+		await delay()
+
+		return 'a'
+	})
+	.listen(3000)
+
+console.log(app.routes.map((x) => x.path))
+// console.log(app.routes[1].composed?.toString())

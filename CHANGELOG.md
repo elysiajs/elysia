@@ -1,3 +1,28 @@
+# 0.7.14 - 26 Sep 2023
+Bug fix:
+- Make `t.Files` parameter optional
+- model remap now using `TSchema` instead of literal type for creating type abstraction
+
+# 0.7.13 - 25 Sep 2023
+Improvement:
+- Using listener instead of microtick to handle `trace.set`
+- Set default cookie path to '/'
+
+Bug fix:
+- Duplicate group path when hook is provided
+
+# 0.7.12 - 23 Sep 2023
+Bug fix:
+- Handle cookie expire time
+- Set default value of config.cookie.path to '/'
+
+# 0.7.11 - 23 Sep 2023
+Improvement:
+- Skip cookie validation if schema is empty object
+
+Bug fix:
+- Accept cookie property from constructor when schema is not defined
+
 # 0.7.10 - 23 Sep 2023
 Bug fix:
 - handle FFI object in deepMerge, fix Prisma

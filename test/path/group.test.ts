@@ -181,4 +181,32 @@ describe('group', () => {
 			'/v1/course/id/:courseId/chapter/hello'
 		])
 	})
+
+	it("skip don't duplicate prefix on group with hooks", () => {
+		const a = new Elysia({ prefix: '/course' }).group(
+			'/id/:courseId',
+			{
+				params: t.Object({
+					courseId: t.Numeric()
+				})
+			},
+			(app) => app.get('/b', () => 'A')
+		)
+
+		const b = new Elysia({ prefix: '/test' }).group(
+			'/id/:courseId',
+			(app) => app.get('/b', () => 'A')
+		)
+
+		const app = new Elysia()
+			.use(a)
+			.use(b)
+			.get('/', () => 'a')
+
+		expect(app.routes.map((x) => x.path)).toEqual([
+			'/course/id/:courseId/b',
+			'/test/id/:courseId/b',
+			'/'
+		])
+	})
 })
