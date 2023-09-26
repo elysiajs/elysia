@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
@@ -137,14 +138,10 @@ describe('Modules', () => {
 				}))
 			}
 
-    const a = (config = {}) =>
-			new Elysia({
-				name: 'a',
-				seed: config
-			}).get('/', () => 'a')
-
-		const app = new Elysia().use(a()).get('/', ({ derived }) => derived)
-		// .get('/:with_param', ({ derived }) => derived)
+		const app = new Elysia()
+			.use(a())
+			.get('/', ({ derived }) => derived)
+			// .get('/:with_param', ({ derived }) => derived)
 
 		await app.modules
 
