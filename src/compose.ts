@@ -337,7 +337,7 @@ const TransformSymbol = Symbol.for('TypeBox.Transform')
 export const hasTransform = (schema: TAnySchema) => {
 	if (!schema) return
 
-	if (schema.type === 'object') {
+	if (schema.type === 'object' && schema.properties) {
 		const properties = schema.properties as Record<string, TAnySchema>
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
