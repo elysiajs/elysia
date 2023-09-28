@@ -1,3 +1,9 @@
+# 0.7.15 - 26 Sep 2023
+Change:
+- Update TypeBox to 0.31.17
+- [#218](https://github.com/elysiajs/elysia/pull/218) Fix [#213](https://github.com/elysiajs/elysia/pull/213) prepend async redefined routes (partial fix)
+- Using set `onRequest` doesn't set headers and status on empty error handler
+
 # 0.7.14 - 26 Sep 2023
 Bug fix:
 - Make `t.Files` parameter optional

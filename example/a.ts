@@ -12,13 +12,11 @@ const a = new Elysia({ prefix: '/course' }).group(
 	(app) => app.get('/b', () => 'A')
 )
 
-console.log(a.routes.map((x) => x.path))
-
 const app = new Elysia()
 	.use(a)
 	.model('a', t.String())
 	.model((x) => x)
-	.get('/', async () => {
+	.get('/', async ({ body }) => {
 		await delay()
 
 		return 'a'

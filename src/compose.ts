@@ -1311,7 +1311,8 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
 				: `new Response(error404, {
-					status: 404
+					status: ctx.set.status === 200 ? 404 : ctx.set.status,
+					headers: ctx.set.headers
 				})`
 		}
 
