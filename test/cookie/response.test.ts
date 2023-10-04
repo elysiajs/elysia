@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { req } from '../utils'
-import { sign } from 'cookie-signature'
+import { signCookie } from '../../src/utils'
 
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
@@ -152,7 +152,7 @@ describe('Cookie Response', () => {
 		const response = await app.handle(req('/update'))
 
 		expect(getCookies(response)).toEqual([
-			`name=${sign('seminar: Himari', secrets)}; Path=/`
+			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
 		])
 	})
 
@@ -160,7 +160,10 @@ describe('Cookie Response', () => {
 		const response = await app.handle(
 			req('/update', {
 				headers: {
-					cookie: `name=${sign('seminar: Himari', secrets)}`
+					cookie: `name=${await signCookie(
+						'seminar: Himari',
+						secrets
+					)}`
 				}
 			})
 		)
@@ -191,7 +194,10 @@ describe('Cookie Response', () => {
 		const response = await app.handle(
 			req('/update', {
 				headers: {
-					cookie: `name=${sign('seminar: Himari', secrets)}`
+					cookie: `name=${await signCookie(
+						'seminar: Himari',
+						secrets
+					)}`
 				}
 			})
 		)
@@ -222,7 +228,10 @@ describe('Cookie Response', () => {
 		const response = await app.handle(
 			req('/update', {
 				headers: {
-					cookie: `name=${sign('seminar: Himari', secrets)}`
+					cookie: `name=${await signCookie(
+						'seminar: Himari',
+						secrets
+					)}`
 				}
 			})
 		)

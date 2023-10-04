@@ -5,7 +5,7 @@ import type { TAnySchema } from '@sinclair/typebox'
 
 import { parse as parseQuery } from 'fast-querystring'
 
-import { sign as signCookie } from 'cookie-signature'
+import { signCookie } from './utils'
 
 import {
 	mapEarlyResponse,
@@ -553,15 +553,15 @@ export const composeHandler = ({
 		if(_setCookie) {`
 
 		if (cookieMeta.sign === true) {
-			// encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = signCookie(_setCookie['${name}'].value, '${secret}') }\n`
+			// encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = await signCookie(_setCookie['${name}'].value, '${secret}') }\n`
 			encodeCookie += `for(const [key, cookie] of Object.entries(_setCookie)) {
-				c.set.cookie[key].value = signCookie(cookie.value, '${secret}')
+				c.set.cookie[key].value = await signCookie(cookie.value, '${secret}')
 			}`
 		} else
 			for (const name of cookieMeta.sign) {
 				// if (!(name in cookieMeta.properties)) continue
 
-				encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = signCookie(_setCookie['${name}'].value, '${secret}') }\n`
+				encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = await signCookie(_setCookie['${name}'].value, '${secret}') }\n`
 			}
 
 		encodeCookie += '}\n'
@@ -632,9 +632,9 @@ export const composeHandler = ({
 			: 'undefined'
 
 		if (hasHeaders)
-			fnLiteral += `\nc.cookie = parseCookie(c.set, c.headers.cookie, ${options})\n`
+			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.headers.cookie, ${options})\n`
 		else
-			fnLiteral += `\nc.cookie = parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
+			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
 	}
 
 	const hasQuery =

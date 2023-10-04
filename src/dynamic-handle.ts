@@ -7,7 +7,7 @@ import type { Context } from './context'
 
 import { parse as parseQuery } from 'fast-querystring'
 
-import { sign as signCookie } from 'cookie-signature'
+import { signCookie } from './utils'
 import { parseCookie } from './cookie'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
@@ -181,7 +181,7 @@ export const createDynamicHandler =
 				properties: { [x: string]: Object }
 			}
 
-			context.cookie = parseCookie(
+			context.cookie = await parseCookie(
 				context.set,
 				context.headers.cookie,
 				cookieMeta
@@ -345,7 +345,7 @@ export const createDynamicHandler =
 					for (const [key, cookie] of Object.entries(
 						context.set.cookie
 					))
-						context.set.cookie[key].value = signCookie(
+						context.set.cookie[key].value = await signCookie(
 							cookie.value,
 							'${secret}'
 						)
@@ -354,7 +354,7 @@ export const createDynamicHandler =
 						if (!(name in cookieMeta.properties)) continue
 
 						if (context.set.cookie[name]?.value) {
-							context.set.cookie[name].value = signCookie(
+							context.set.cookie[name].value = await signCookie(
 								context.set.cookie[name].value,
 								secret as any
 							)
