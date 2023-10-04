@@ -14,6 +14,7 @@ import {
 	FormatRegistry
 } from '@sinclair/typebox'
 import { type TypeCheck } from '@sinclair/typebox/compiler'
+import { CookieOptions } from './cookie'
 
 try {
 	TypeSystem.Format('email', (value) =>
@@ -232,7 +233,7 @@ export const ElysiaType = {
 		Type.Union([Type.Null(), Type.Undefined(), schema]) as any,
 	Cookie: <T extends TProperties>(
 		properties: T,
-		options?: ObjectOptions & {
+		options?: ObjectOptions & CookieOptions & {
 			/**
 			 * Secret key for signing cookie
 			 *

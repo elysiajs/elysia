@@ -405,6 +405,8 @@ export const parseCookie = (
 			}
 		}
 
+		if(value === undefined) continue
+
 		const start = (value as string).charCodeAt(0)
 		if (start === 123 || start === 91)
 			try {

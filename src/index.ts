@@ -3222,7 +3222,7 @@ export { Elysia }
 
 export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
 export { t } from './custom-types'
-export { Cookie } from './cookie'
+export { Cookie, type CookieOptions } from './cookie'
 
 export {
 	getSchemaValidator,
