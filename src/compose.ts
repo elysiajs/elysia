@@ -680,6 +680,7 @@ export const composeHandler = ({
 			'\nconst traceDone = new Promise(r => { reporter.once(`res${id}`, r) })\n'
 
 	const maybeAsync =
+		hasCookie ||
 		hasBody ||
 		hasTraceSet ||
 		isAsync(handler) ||
