@@ -49,7 +49,8 @@ export namespace WS {
 			ServerWebSocket<{
 				validator?: TypeCheck<TSchema>
 			}>,
-			Route
+			Route,
+			Decorators
 		> extends infer WS
 			? {
 					transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>

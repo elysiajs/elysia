@@ -1,29 +1,16 @@
 import { Elysia, t } from '../src'
 
 const a = new Elysia()
-	.model({
-		sign: t.Object({
-			username: t.String(),
-			password: t.String()
-		})
-	})
-	.model(({ sign }) => ({
-		signWithPagination: t.Object({
-			results: sign,
-			page: t.Number()
-		})
-	}))
 
 const app = new Elysia()
-	.use(a)
-	.get('/', ({ set }) => {
-		if(true)
-			return set.status = 'Unauthorized'
-
-		return 'Do something'
-	})
-	.post('/sign-in', ({ body }) => body, {
-		body: 'signWithPagination'
+	.derive(x => ({
+		a: "A"
+	}))
+	.state("b", 'b')
+	.ws('/', {
+		message({ send, data: { a, store: { b } } }) {
+			send(a)
+		}
 	})
 	.listen(3000)
 

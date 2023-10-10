@@ -3272,3 +3272,5 @@ export type {
 	ListenCallback,
 	UnwrapSchema
 } from './types'
+
+export type { Static } from '@sinclair/typebox'

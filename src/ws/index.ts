@@ -6,7 +6,7 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import { ValidationError } from '../error'
 import type { Context } from '../context'
 
-import type { RouteSchema } from '../types'
+import type { DecoratorBase, RouteSchema } from '../types'
 
 export const websocket: WebSocketHandler<any> = {
 	open(ws) {
@@ -27,11 +27,15 @@ export class ElysiaWS<
 	WS extends ServerWebSocket<{
 		validator?: TypeCheck<TSchema>
 	}>,
-	Route extends RouteSchema = RouteSchema
+	Route extends RouteSchema = RouteSchema,
+	Decorators extends DecoratorBase = {
+		request: {}
+		store: {}
+	}
 > {
 	validator?: TypeCheck<TSchema>
 
-	constructor(public raw: WS, public data: Context<Route>) {
+	constructor(public raw: WS, public data: Context<Route, Decorators>) {
 		this.validator = raw.data.validator
 	}
 
