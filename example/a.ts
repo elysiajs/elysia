@@ -1,25 +1,29 @@
 import { Elysia, t } from '../src'
 
-const delay = () => new Promise((r) => setTimeout(r, 1000))
-
-const a = new Elysia({ prefix: '/course' }).group(
-	'/id/:courseId',
-	{
-		params: t.Object({
-			courseId: t.Numeric()
+const a = new Elysia()
+	.model({
+		sign: t.Object({
+			username: t.String(),
+			password: t.String()
 		})
-	},
-	(app) => app.get('/b', () => 'A')
-)
+	})
+	.model(({ sign }) => ({
+		signWithPagination: t.Object({
+			results: sign,
+			page: t.Number()
+		})
+	}))
 
 const app = new Elysia()
 	.use(a)
-	.model('a', t.String())
-	.model((x) => x)
-	.get('/', async ({ body }) => {
-		await delay()
+	.get('/', ({ set }) => {
+		if(true)
+			return set.status = 'Unauthorized'
 
-		return 'a'
+		return 'Do something'
+	})
+	.post('/sign-in', ({ body }) => body, {
+		body: 'signWithPagination'
 	})
 	.listen(3000)
 

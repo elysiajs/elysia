@@ -1,3 +1,7 @@
+# 0.7.16 - 
+Improvement:
+- `t.Cookie` cookie option type
+
 # 0.7.15 - 26 Sep 2023
 Change:
 - Update TypeBox to 0.31.17

@@ -2,7 +2,7 @@
 import { parse } from 'cookie'
 import type { Context } from './context'
 
-import { unsign as unsignCookie } from 'cookie-signature'
+import { unsignCookie } from './utils'
 import { InvalidCookieSignature } from './error'
 
 export interface CookieOptions {
@@ -355,7 +355,7 @@ export const createCookieJar = (
 		}
 	})
 
-export const parseCookie = (
+export const parseCookie = async (
 	set: Context['set'],
 	cookieString?: string | null,
 	{
@@ -385,14 +385,14 @@ export const parseCookie = (
 
 			if (isStringKey) {
 				// @ts-ignore
-				value = unsignCookie(value as string, secret)
+				value = await unsignCookie(value as string, secret)
 
 				// @ts-ignore
 				if (value === false) throw new InvalidCookieSignature(key)
 			} else {
 				let fail = true
 				for (let i = 0; i < secret.length; i++) {
-					const temp = unsignCookie(value as string, secret[i])
+					const temp = await unsignCookie(value as string, secret[i])
 
 					if (temp !== false) {
 						value = temp
@@ -404,6 +404,8 @@ export const parseCookie = (
 				if (fail) throw new InvalidCookieSignature(key)
 			}
 		}
+
+		if (value === undefined) continue
 
 		const start = (value as string).charCodeAt(0)
 		if (start === 123 || start === 91)

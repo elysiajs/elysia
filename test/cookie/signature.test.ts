@@ -1,26 +1,26 @@
 import { describe, expect, it } from 'bun:test'
 import { parseCookie, Cookie } from '../../src/cookie'
-import { sign } from 'cookie-signature'
+import { signCookie } from '../../src/utils'
 
 describe('Parse Cookie', () => {
-	it('handle empty cookie', () => {
+	it('handle empty cookie', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
 		}
 		const cookieString = ''
-		const result = parseCookie(set, cookieString)
+		const result = await parseCookie(set, cookieString)
 
 		expect(result).toEqual({})
 	})
 
-	it('create cookie jar from cookie string', () => {
+	it('create cookie jar from cookie string', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
 		}
 		const cookieString = 'fischl=Princess; eula=Noble; amber=Knight'
-		const result = parseCookie(set, cookieString)
+		const result = await parseCookie(set, cookieString)
 		expect(result).toEqual({
 			fischl: expect.any(Cookie),
 			eula: expect.any(Cookie),
@@ -28,7 +28,7 @@ describe('Parse Cookie', () => {
 		})
 	})
 
-	it('unsign cookie signature', () => {
+	it('unsign cookie signature', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
@@ -36,9 +36,9 @@ describe('Parse Cookie', () => {
 
 		const secret = 'Fischl von Luftschloss Narfidort'
 
-		const fischl = sign('fischl', secret)
+		const fischl = await signCookie('fischl', secret)
 		const cookieString = `fischl=${fischl}`
-		const result = parseCookie(set, cookieString, {
+		const result = await parseCookie(set, cookieString, {
 			secret,
 			sign: ['fischl']
 		})
@@ -46,7 +46,7 @@ describe('Parse Cookie', () => {
 		expect(result.fischl.value).toEqual('fischl')
 	})
 
-	it('unsign multiple signature', () => {
+	it('unsign multiple signature', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
@@ -54,11 +54,11 @@ describe('Parse Cookie', () => {
 
 		const secret = 'Fischl von Luftschloss Narfidort'
 
-		const fischl = sign('fischl', secret)
-		const eula = sign('eula', secret)
+		const fischl = await signCookie('fischl', secret)
+		const eula = await signCookie('eula', secret)
 
 		const cookieString = `fischl=${fischl}; eula=${eula}`
-		const result = parseCookie(set, cookieString, {
+		const result = await parseCookie(set, cookieString, {
 			secret,
 			sign: ['fischl', 'eula']
 		})
@@ -67,7 +67,7 @@ describe('Parse Cookie', () => {
 		expect(result.eula.value).toEqual('eula')
 	})
 
-	it('parse JSON value', () => {
+	it('parse JSON value', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
@@ -80,44 +80,44 @@ describe('Parse Cookie', () => {
 		const cookieString = `letter=${encodeURIComponent(
 			JSON.stringify(value)
 		)}`
-		const result = parseCookie(set, cookieString)
+		const result = await parseCookie(set, cookieString)
 		expect(result.letter.value).toEqual(value)
 	})
 
-	it('parse true', () => {
+	it('parse true', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
 		}
 
 		const cookieString = `letter=true`
-		const result = parseCookie(set, cookieString)
+		const result = await parseCookie(set, cookieString)
 		expect(result.letter.value).toEqual(true)
 	})
 
-	it('parse false', () => {
+	it('parse false', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
 		}
 
 		const cookieString = `letter=false`
-		const result = parseCookie(set, cookieString)
+		const result = await parseCookie(set, cookieString)
 		expect(result.letter.value).toEqual(false)
 	})
 
-	it('parse number', () => {
+	it('parse number', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
 		}
 
 		const cookieString = `letter=123`
-		const result = parseCookie(set, cookieString)
+		const result = await parseCookie(set, cookieString)
 		expect(result.letter.value).toEqual(123)
 	})
 
-	it('Unsign signature via secret rotation', () => {
+	it('Unsign signature via secret rotation', async () => {
 		const set = {
 			headers: {},
 			cookie: {}
@@ -125,9 +125,9 @@ describe('Parse Cookie', () => {
 
 		const secret = 'Fischl von Luftschloss Narfidort'
 
-		const fischl = sign('fischl', secret)
+		const fischl = await signCookie('fischl', secret)
 		const cookieString = `fischl=${fischl}`
-		const result = parseCookie(set, cookieString, {
+		const result = await parseCookie(set, cookieString, {
 			secret: ['New Secret', secret],
 			sign: ['fischl']
 		})
