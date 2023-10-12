@@ -864,26 +864,26 @@ export const composeHandler = ({
 	endParse()
 
 	if (hooks?.transform) {
+		const nonDeriveTransforms = hooks.transform.filter(
+			// @ts-ignore
+			(transform) => transform.$elysia !== 'derive'
+		)
+
 		const endTransform = report('transform', {
-			unit: hooks.transform.length
+			unit: nonDeriveTransforms.length,
+			name: 'nonDeriveTransforms'
 		})
 
-		for (let i = 0; i < hooks.transform.length; i++) {
-			const transform = hooks.transform[i]
+		for (let i = 0; i < nonDeriveTransforms.length; i++) {
+			const transform = nonDeriveTransforms[i]
 
 			const endUnit = report('transform.unit', {
 				name: transform.name
 			})
 
-			// @ts-ignore
-			if (transform.$elysia === 'derive')
-				fnLiteral += isAsync(hooks.transform[i])
-					? `Object.assign(c, await transform[${i}](c));`
-					: `Object.assign(c, transform[${i}](c));`
-			else
-				fnLiteral += isAsync(hooks.transform[i])
-					? `await transform[${i}](c);`
-					: `transform[${i}](c);`
+			fnLiteral += isAsync(transform)
+				? `await transform[${i}](c);`
+				: `transform[${i}](c);`
 
 			endUnit()
 		}
@@ -949,6 +949,34 @@ export const composeHandler = ({
 			if (hasTransform(validator.cookie.schema))
 				fnLiteral += `\nc.cookie = params.Decode(c.cookie)\n`
 		}
+	}
+
+	if (hooks?.transform) {
+		const deriveTransforms = hooks.transform.filter(
+			// @ts-ignore
+			(transform) => transform.$elysia === 'derive'
+		)
+
+		const endTransform = report('transform', {
+			unit: deriveTransforms.length,
+			name: 'deriveTransforms'
+		})
+
+		for (let i = 0; i < deriveTransforms.length; i++) {
+			const transform = deriveTransforms[i]
+
+			const endUnit = report('transform.unit', {
+				name: transform.name
+			})
+
+			fnLiteral += isAsync(transform)
+				? `Object.assign(c, await transform[${i}](c));`
+				: `Object.assign(c, transform[${i}](c));`
+
+			endUnit()
+		}
+
+		endTransform()
 	}
 
 	if (hooks?.beforeHandle) {

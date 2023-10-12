@@ -171,4 +171,27 @@ describe('guard', () => {
 		expect(correct.status).toBe(200)
 		expect(error.status).toBe(400)
 	})
+
+	it('apply derive after guard', async () => {
+		const app = new Elysia()
+			.guard({
+				headers: t.Object({
+					token: t.String()
+				})
+			})
+			.derive(({ headers: { token } }) => {
+				return { token: token.split(' ')[1] } //extract bearer token
+			})
+			.get('/token', ({ token }) => token)
+
+		const correct = await app.handle(
+			req('/token', {
+				headers: { token: 'Bearer 1234' }
+			})
+		)
+		const error = await app.handle(req('/token'))
+
+		expect(correct.status).toBe(200)
+		expect(error.status).toBe(400)
+	})
 })
