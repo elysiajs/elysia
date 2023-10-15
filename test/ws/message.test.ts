@@ -212,4 +212,30 @@ describe('WebSocket message', () => {
 		await wsClosed(ws)
 		app.stop()
 	})
+
+	it('should be able to receive binary data', async () => {
+		const plugin = new Elysia().ws('/ws', {
+			message(ws, message) {
+				ws.send(message)
+			}
+		})
+
+		const app = new Elysia().use(plugin).listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(new Uint8Array(3))
+
+		const { type, data } = await message
+
+		expect(type).toBe('message')
+		expect(data).toBe(new Uint8Array(3))
+
+		await wsClosed(ws)
+		app.stop()
+	})
 })
