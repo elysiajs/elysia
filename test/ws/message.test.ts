@@ -233,7 +233,7 @@ describe('WebSocket message', () => {
 		const { type, data } = await message
 
 		expect(type).toBe('message')
-		expect(data).toBe(new Uint8Array(3))
+		expect(data).toEqual(new Uint8Array(3))
 
 		await wsClosed(ws)
 		app.stop()

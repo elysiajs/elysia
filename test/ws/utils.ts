@@ -21,5 +21,6 @@ export const wsClosed = async (ws: WebSocket) => {
 
 export const wsMessage = (ws: WebSocket) =>
 	new Promise<MessageEvent<string | Buffer>>((resolve) => {
+		
 		ws.onmessage = resolve
 	})
