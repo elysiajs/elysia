@@ -1,4 +1,9 @@
-# 0.7.16 - 
+# 0.7.17 - 15 Oct 2023
+Improvement:
+- add ElyEden
+- re-add `id` to websocket
+
+# 0.7.16 - 10 Oct 2023
 Improvement:
 - `t.Cookie` cookie option type
 - [#253](https://github.com/elysiajs/elysia/pull/253) platform agnostic cookie

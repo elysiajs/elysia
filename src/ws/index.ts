@@ -33,10 +33,12 @@ export class ElysiaWS<
 		store: {}
 	}
 > {
+	id: number
 	validator?: TypeCheck<TSchema>
 
 	constructor(public raw: WS, public data: Context<Route, Decorators>) {
 		this.validator = raw.data.validator
+		this.id = Date.now()
 	}
 
 	get publish() {

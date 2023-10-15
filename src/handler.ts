@@ -73,6 +73,13 @@ export const mapResponse = (
 	set: Context['set']
 ): Response => {
 	if (
+		// @ts-ignore
+		response?.$elysia === 'ElyEden'
+	)
+		// @ts-ignore
+		response = response.value
+
+	if (
 		isNotEmpty(set.headers) ||
 		set.status !== 200 ||
 		set.redirect ||
@@ -239,6 +246,13 @@ export const mapEarlyResponse = (
 	set: Context['set']
 ): Response | undefined => {
 	if (response === undefined || response === null) return
+
+	if (
+		// @ts-ignore
+		response?.$elysia === 'ElyEden'
+	)
+		// @ts-ignore
+		response = response.value
 
 	if (
 		isNotEmpty(set.headers) ||

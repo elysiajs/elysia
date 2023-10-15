@@ -1,18 +1,28 @@
 import { Elysia, t } from '../src'
-
-const a = new Elysia()
+import { req } from '../test/utils'
 
 const app = new Elysia()
-	.derive(x => ({
-		a: "A"
-	}))
-	.state("b", 'b')
-	.ws('/', {
-		message({ send, data: { a, store: { b } } }) {
-			send(a)
-		}
+	.guard({
+		headers: t.Object({
+			token: t.String()
+		})
 	})
-	.listen(3000)
+	.derive(({ headers: { token } }) => {
+		return { token: token.split(' ')[1] }
+	})
+	.get('/token', ({ token }) => token)
 
-console.log(app.routes.map((x) => x.path))
-// console.log(app.routes[1].composed?.toString())
+console.log(app.routes[0].composed?.toString())
+
+const correct = await app
+	.handle(
+		req('/token', {
+			headers: { token: 'Bearer 1234' }
+		})
+	)
+	.then((x) => x.text())
+
+const error = await app.handle(req('/token')).then((x) => x.text())
+
+console.log(correct)
+console.log(error)

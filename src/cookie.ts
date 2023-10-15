@@ -176,7 +176,8 @@ export class Cookie<T = unknown> implements CookieOptions {
 
 		this.set({
 			value: '' as any,
-			expires: new Date()
+			expires: new Date(0),
+			maxAge: 0,
 		})
 	}
 
