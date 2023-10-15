@@ -2369,15 +2369,17 @@ export default class Elysia<
 		})
 
 		const parseMessage = (message: any) => {
-			const start = message.charCodeAt(0)
-
-			if (start === 47 || start === 123)
-				try {
-					message = JSON.parse(message)
-				} catch {
-					// Not empty
-				}
-			else if (!Number.isNaN(+message)) message = +message
+			if (typeof message === 'string') {
+				const start = message?.charCodeAt(0)
+	
+				if (start === 47 || start === 123)
+					try {
+						message = JSON.parse(message)
+					} catch {
+						// Not empty
+					}
+				else if (!Number.isNaN(+message)) message = +message
+			}
 
 			if (transform?.length)
 				for (let i = 0; i < transform.length; i++) {

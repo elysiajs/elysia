@@ -49,7 +49,7 @@ describe('WebSocket message', () => {
 		const { type, data } = await message
 
 		expect(type).toBe('message')
-		expect(data).toBe('::1')
+		expect(data === '::1' || data === '::ffff:127.0.0.1').toBeTruthy()
 
 		await wsClosed(ws)
 		app.stop()
@@ -208,6 +208,32 @@ describe('WebSocket message', () => {
 
 		expect(type).toBe('message')
 		expect(data).toBe('Hello!')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should be able to receive binary data', async () => {
+		const plugin = new Elysia().ws('/ws', {
+			message(ws, message) {
+				ws.send(message)
+			}
+		})
+
+		const app = new Elysia().use(plugin).listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(new Uint8Array(3))
+
+		const { type, data } = await message
+
+		expect(type).toBe('message')
+		expect(data).toEqual(new Uint8Array(3))
 
 		await wsClosed(ws)
 		app.stop()

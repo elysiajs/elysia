@@ -63,6 +63,12 @@ export class ElysiaWS<
 			if (this.validator?.Check(data) === false)
 				throw new ValidationError('message', this.validator, data)
 
+			if (Buffer.isBuffer(data)) {
+				this.raw.send(data as unknown as Buffer)
+
+				return this
+			}
+
 			if (typeof data === 'object') data = JSON.stringify(data)
 
 			this.raw.send(data as unknown as string)
