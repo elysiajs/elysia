@@ -337,7 +337,7 @@ const TransformSymbol = Symbol.for('TypeBox.Transform')
 export const hasTransform = (schema: TAnySchema) => {
 	if (!schema) return
 
-	if (schema.type === 'object') {
+	if (schema.type === 'object' && schema.properties) {
 		const properties = schema.properties as Record<string, TAnySchema>
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
@@ -1331,7 +1331,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 	fnLiteral += `const {
 		app,
-		app: { store, router, staticRouter },
+		app: { store, router, staticRouter, wsRouter },
 		mapEarlyResponse,
 		NotFoundError,
 		requestId,
@@ -1345,6 +1345,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	${staticRouter.variables}
 
 	const find = router.find.bind(router)
+	const findWs = wsRouter.find.bind(wsRouter)
 	const handleError = app.handleError.bind(this)
 
 	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
@@ -1466,6 +1467,42 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 					? 'ctx'
 					: ''
 		})()
+	}
+
+	// @ts-ignore
+	const wsPaths = app.wsPaths
+	// @ts-ignore
+	const wsRouter = app.wsRouter
+
+	if (Object.keys(wsPaths).length || wsRouter.history.length) {
+		fnLiteral += `
+			if(request.method === 'GET') {
+				switch(path) {`
+
+		for (const [path, index] of Object.entries(wsPaths)) {
+			fnLiteral += `
+					case '${path}':
+						if(request.headers.get('upgrade') === 'websocket')
+							return st${index}(ctx)
+							
+						break`
+		}
+
+		fnLiteral += `
+				default:
+					if(request.headers.get('upgrade') === 'websocket') {
+						const route = findWs('ws', path)
+
+						if(route) {
+							ctx.params = route.params
+
+							return route.store(ctx)
+						}
+					}
+
+					break
+			}
+		}\n`
 	}
 
 	fnLiteral += `

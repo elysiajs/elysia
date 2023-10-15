@@ -1,13 +1,19 @@
 # 0.7.17 - 15 Oct 2023
-Improvement:
+Feature:
 - add ElyEden
 - re-add `id` to websocket
+
+Bug fix:
+- [#255](https://github.com/elysiajs/elysia/issues/255) removeCookie sends HTTP-Header that is ignored by the Browser
+- [#263](https://github.com/elysiajs/elysia/issues/263) http and websocket on same route
+- [#269](https://github.com/elysiajs/elysia/pull/269) Correct handling of Buffer object
 
 # 0.7.16 - 10 Oct 2023
 Improvement:
 - `t.Cookie` cookie option type
 - [#253](https://github.com/elysiajs/elysia/pull/253) platform agnostic cookie
 - Decorator like `state`, `decorate` and `derive`, doesn't apply to WebSocket `data`
+- re-export `Static` from 
 
 # 0.7.15 - 26 Sep 2023
 Change:

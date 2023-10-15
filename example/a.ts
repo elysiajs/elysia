@@ -1,28 +1,19 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+
+const T = t.Union([t.Literal('order'), t.Literal('artists')])
 
 const app = new Elysia()
-	.guard({
-		headers: t.Object({
-			token: t.String()
-		})
+	.onBeforeHandle(({ headers }) => {
+		console.log(headers)
 	})
-	.derive(({ headers: { token } }) => {
-		return { token: token.split(' ')[1] }
+	.all('/v3/:id', (ctx) => {
+		return 'Hello from http'
 	})
-	.get('/token', ({ token }) => token)
+	.ws('/v3/:id', {
+		message(ws, message) {
+			ws.send('pong')
+		}
+	})
+	.listen(3000)
 
-console.log(app.routes[0].composed?.toString())
-
-const correct = await app
-	.handle(
-		req('/token', {
-			headers: { token: 'Bearer 1234' }
-		})
-	)
-	.then((x) => x.text())
-
-const error = await app.handle(req('/token')).then((x) => x.text())
-
-console.log(correct)
-console.log(error)
+console.log(app.fetch.toString())

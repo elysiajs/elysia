@@ -144,6 +144,7 @@ export default class Elysia<
 	private validator: SchemaValidator | null = null
 
 	private router = new Memoirist<ComposedHandler>()
+	private wsRouter = new Memoirist<ComposedHandler>()
 	routes: InternalRoute[] = []
 
 	private staticRouter = {
@@ -159,6 +160,7 @@ export default class Elysia<
 		all: ''
 	}
 
+	private wsPaths: Record<string, number> = {}
 	private dynamicRouter = new Memoirist<DynamicHandler>()
 	private lazyLoadModules: Promise<Elysia<any, any>>[] = []
 	path: BasePath = '' as any
@@ -360,6 +362,30 @@ export default class Elysia<
 				handler,
 				hooks: hooks as any
 			})
+
+			if (method === '$INTERNALWS') {
+				const loose = this.config.strictPath
+					? undefined
+					: path.endsWith('/')
+					? path.slice(0, path.length - 1)
+					: path + '/'
+
+				if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
+					const index = this.staticRouter.handlers.length
+					this.staticRouter.handlers.push(mainHandler)
+
+					this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+
+					this.wsPaths[path] = index
+					if (loose) this.wsPaths[loose] = index
+				} else {
+					this.wsRouter.add('ws', path, mainHandler)
+					if (loose)
+						this.wsRouter.add('ws', loose, mainHandler)
+				}
+
+				return
+			}
 
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 				const index = this.staticRouter.handlers.length
@@ -2371,7 +2397,7 @@ export default class Elysia<
 		const parseMessage = (message: any) => {
 			if (typeof message === 'string') {
 				const start = message?.charCodeAt(0)
-	
+
 				if (start === 47 || start === 123)
 					try {
 						message = JSON.parse(message)
@@ -2391,7 +2417,8 @@ export default class Elysia<
 			return message
 		}
 
-		this.get(
+		this.route(
+			'$INTERNALWS',
 			path as any,
 			// @ts-ignore
 			(context) => {

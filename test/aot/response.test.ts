@@ -138,7 +138,7 @@ describe('Dynamic Cookie Response', () => {
 			})
 		)
 
-		expect(getCookies(response)[0]).toInclude('council=; Expires=')
+		expect(getCookies(response)[0]).toInclude(`council=; Max-Age=0; Expires=${new Date(0).toUTCString()}`)
 	})
 
 	it('sign cookie', async () => {

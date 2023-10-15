@@ -218,4 +218,44 @@ describe('Body Validator', () => {
 		expect(res.status).toBe(200)
 		expect(await res.text()).toBe('')
 	})
+
+	it('validate record', async () => {
+		const app = new Elysia().post('/', ({ body: { name } }) => name, {
+			body: t.Record(t.String(), t.String())
+		})
+		const res = await app.handle(
+			post('/', {
+				name: 'sucrose'
+			})
+		)
+
+		expect(await res.text()).toBe('sucrose')
+		expect(res.status).toBe(200)
+	})
+
+	it('validate record inside object', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body: { name, friends } }) =>
+				`${name} ~ ${Object.keys(friends).join(' + ')}`,
+			{
+				body: t.Object({
+					name: t.String(),
+					friends: t.Record(t.String(), t.String())
+				})
+			}
+		)
+		const res = await app.handle(
+			post('/', {
+				name: 'sucrose',
+				friends: {
+					amber: 'wizard',
+					lisa: 'librarian'
+				}
+			})
+		)
+
+		expect(await res.text()).toBe('sucrose ~ amber + lisa')
+		expect(res.status).toBe(200)
+	})
 })
