@@ -146,7 +146,7 @@
     "bumpp": "^9.2.0",
     "bun-types": "^1.0.2",
     "eslint": "^8.49.0",
-    "expect-type": "^0.16.0",
+    "expect-type": "^0.17.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "rimraf": "4.4.1",
