@@ -171,13 +171,17 @@ export class Cookie<T = unknown> implements CookieOptions {
 		return this.sync() as any
 	}
 
-	remove() {
+	remove(options?: Pick<CookieOptions, "domain" | "path" | "sameSite" | "secure">) {
 		if (this.value === undefined) return
 
 		this.set({
-			value: '' as any,
+			domain: options?.domain,
 			expires: new Date(0),
 			maxAge: 0,
+			path: options?.path,
+			sameSite: options?.sameSite,
+			secure: options?.secure,
+			value: '' as any,
 		})
 	}
 
