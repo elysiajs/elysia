@@ -149,7 +149,7 @@
     "expect-type": "^0.16.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "rimraf": "4.4.1",
+    "rimraf": "5.0.5",
     "typescript": "^5.2.2"
   },
   "peerDependencies": {
