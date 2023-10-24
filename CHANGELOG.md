@@ -1,6 +1,17 @@
+# 0.7.18 - 24 Oct 2023
+Feature:
+- add map handler for `ReadableStream`
+- add `$passthrough` for custom property for response mapping
+
+Bug fix:
+- `.route` accept `string[]` instead of `string`
+
+Change:
+- remove `ElyEden`
+
 # 0.7.17 - 15 Oct 2023
 Feature:
-- add ElyEden
+- add `ElyEden`
 - re-add `id` to websocket
 
 Bug fix:

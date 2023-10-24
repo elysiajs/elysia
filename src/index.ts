@@ -380,8 +380,7 @@ export default class Elysia<
 					if (loose) this.wsPaths[loose] = index
 				} else {
 					this.wsRouter.add('ws', path, mainHandler)
-					if (loose)
-						this.wsRouter.add('ws', loose, mainHandler)
+					if (loose) this.wsRouter.add('ws', loose, mainHandler)
 				}
 
 				return
@@ -2513,14 +2512,14 @@ export default class Elysia<
 
 	route<
 		const Method extends HTTPMethod,
-		const Paths extends Readonly<string[]>,
+		const Path extends string,
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
 		const Function extends Handler<
 			Route,
 			Decorators,
-			`${BasePath}${Paths[number]}`
+			`${BasePath}${Path}`
 		>,
 		const Route extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
@@ -2528,7 +2527,7 @@ export default class Elysia<
 		>
 	>(
 		method: Method,
-		path: Paths,
+		path: Path,
 		handler: Function,
 		{
 			config,
@@ -2538,7 +2537,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			`${BasePath}${Paths[number]}`
+			`${BasePath}${Path}`
 		> & {
 			config: {
 				allowMeta?: boolean
@@ -2555,8 +2554,8 @@ export default class Elysia<
 		ParentSchema,
 		Prettify<
 			Routes & {
-				[path in `${BasePath}${Paths[number]}`]: {
-					[method in HTTPMethod]: Route extends {
+				[path in `${BasePath}${Path}`]: {
+					[method in Lowercase<Method>]: Route extends {
 						body: infer Body
 						params: infer Params
 						query: infer Query

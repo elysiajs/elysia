@@ -74,10 +74,10 @@ export const mapResponse = (
 ): Response => {
 	if (
 		// @ts-ignore
-		response?.$elysia === 'ElyEden'
+		response?.$passthrough
 	)
 		// @ts-ignore
-		response = response.value
+		response = response[response.$passthrough]
 
 	if (
 		isNotEmpty(set.headers) ||
@@ -249,10 +249,10 @@ export const mapEarlyResponse = (
 
 	if (
 		// @ts-ignore
-		response?.$elysia === 'ElyEden'
+		response?.$passthrough
 	)
 		// @ts-ignore
-		response = response.value
+		response = response[response.$passthrough]
 
 	if (
 		isNotEmpty(set.headers) ||
@@ -292,6 +292,20 @@ export const mapEarlyResponse = (
 			case 'Object':
 			case 'Array':
 				return Response.json(response, set as SetResponse)
+
+			case 'ReadableStream':
+				if (
+					!set.headers['content-type']?.startsWith(
+						'text/event-stream'
+					)
+				)
+					set.headers['content-type'] =
+						'text/event-stream; charset=utf-8'
+
+				return new Response(
+					response as ReadableStream,
+					set as SetResponse
+				)
 
 			case undefined:
 				if (!response) return
@@ -375,6 +389,13 @@ export const mapEarlyResponse = (
 					}
 				})
 
+			case 'ReadableStream':
+				return new Response(response as ReadableStream, {
+					headers: {
+						'Content-Type': 'text/event-stream; charset=utf-8'
+					}
+				})
+
 			case undefined:
 				if (!response) return new Response('')
 
@@ -437,6 +458,13 @@ export const mapCompactResponse = (response: unknown): Response => {
 			return new Response(JSON.stringify(response), {
 				headers: {
 					'content-type': 'application/json'
+				}
+			})
+
+		case 'ReadableStream':
+			return new Response(response as ReadableStream, {
+				headers: {
+					'Content-Type': 'text/event-stream; charset=utf-8'
 				}
 			})
 
