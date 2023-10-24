@@ -173,14 +173,19 @@ describe('Implicit Cookie', () => {
 		} = create()
 
 		name.value = 'himari'
-		name.remove({path: "/", domain: "elysiajs.com", sameSite: "lax", secure: true })
+		name.remove({
+			path: '/',
+			domain: 'elysiajs.com',
+			sameSite: 'lax',
+			secure: true
+		})
 
 		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
 			Date.now()
 		)
-		expect(set.cookie?.name.path).toBe("/")
-		expect(set.cookie?.name.domain).toBe("elysiajs.com")
-		expect(set.cookie?.name.sameSite).toBe("lax")
+		expect(set.cookie?.name.path).toBe('/')
+		expect(set.cookie?.name.domain).toBe('elysiajs.com')
+		expect(set.cookie?.name.sameSite).toBe('lax')
 		expect(set.cookie?.name.secure).toBeTrue()
 	})
 })
