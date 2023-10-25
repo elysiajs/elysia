@@ -1,3 +1,7 @@
+# 0.7.19 - 25 Oct 2023
+Bug fix:
+- add `$passthrough` for `mapCompactResponse`
+
 # 0.7.18 - 24 Oct 2023
 Feature:
 - add map handler for `ReadableStream`

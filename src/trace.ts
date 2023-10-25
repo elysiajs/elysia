@@ -6,13 +6,15 @@ import type {
 } from './types'
 
 export const createTraceListener = (
-	reporter: TraceReporter,
+	getReporter: () => TraceReporter,
 	handler: TraceHandler<any, any>
 ) => {
 	return async function trace(event: TraceStream) {
 		const id = event.id
 
 		if (event.event === 'request' && event.type === 'begin') {
+			const reporter = getReporter()
+
 			const createSignal = () => {
 				let resolveHandle: (value: TraceProcess<'begin'>) => void
 				let resolveHandleEnd: (value: TraceProcess<'end'>) => void

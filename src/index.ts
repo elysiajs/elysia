@@ -343,7 +343,7 @@ export default class Elysia<
 				config: this.config,
 				definitions: allowMeta ? this.definitions.type : undefined,
 				schema: allowMeta ? this.schema : undefined,
-				reporter: this.reporter
+				getReporter: () => this.reporter
 			})
 
 			const existingRouteIndex = this.routes.findIndex(
@@ -627,7 +627,10 @@ export default class Elysia<
 	trace<Route extends RouteSchema = {}>(
 		handler: TraceHandler<Route, Decorators>
 	) {
-		this.reporter.on('event', createTraceListener(this.reporter, handler))
+		this.reporter.on(
+			'event',
+			createTraceListener(() => this.reporter, handler)
+		)
 
 		this.on('trace', handler)
 
@@ -1595,6 +1598,8 @@ export default class Elysia<
 			this.routes = this.routes.concat(instance.routes)
 
 			return this
+		} else {
+			plugin.reporter = this.reporter
 		}
 
 		this.decorate(plugin.decorators)
@@ -2516,11 +2521,7 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<
-			Route,
-			Decorators,
-			`${BasePath}${Path}`
-		>,
+		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema

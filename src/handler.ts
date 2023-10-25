@@ -448,6 +448,13 @@ export const mapEarlyResponse = (
 }
 
 export const mapCompactResponse = (response: unknown): Response => {
+	if (
+		// @ts-ignore
+		response?.$passthrough
+	)
+		// @ts-ignore
+		response = response[response.$passthrough]
+
 	switch (response?.constructor?.name) {
 		case 'String':
 		case 'Blob':

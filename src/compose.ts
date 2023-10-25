@@ -49,6 +49,8 @@ const createReport = ({
 	addFn(string: string): void
 	condition: Partial<Record<TraceEvent, boolean>>
 }) => {
+	addFn(`\nconst reporter = getReporter()\n`)
+
 	if (hasTrace) {
 		return (
 			event: TraceEvent,
@@ -420,7 +422,7 @@ export const composeHandler = ({
 	schema,
 	onRequest,
 	config,
-	reporter
+	getReporter
 }: {
 	path: string
 	method: string
@@ -432,7 +434,7 @@ export const composeHandler = ({
 	schema?: Elysia['schema']
 	onRequest: PreHandler<any, any>[]
 	config: ElysiaConfig<any>
-	reporter: TraceReporter
+	getReporter: () => TraceReporter
 }): ComposedHandler => {
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
@@ -494,10 +496,6 @@ export const composeHandler = ({
 
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
-
-	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
-
-	fnLiteral += hasErrorHandler ? 'try {\n' : ''
 
 	const lifeCycleLiteral =
 		validator || (method !== 'GET' && method !== 'HEAD')
@@ -666,6 +664,8 @@ export const composeHandler = ({
 		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
 		onRequest.some((fn) => isFnUse('set', fn.toString()))
 
+	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
+	
 	const report = createReport({
 		hasTrace,
 		hasTraceSet,
@@ -674,6 +674,8 @@ export const composeHandler = ({
 			fnLiteral += word
 		}
 	})
+
+	fnLiteral += hasErrorHandler ? 'try {\n' : ''
 
 	if (hasTrace)
 		fnLiteral +=
@@ -1243,7 +1245,7 @@ export const composeHandler = ({
 		schema,
 		definitions,
 		ERROR_CODE,
-		reporter,
+		getReporter,
 		requestId,
 		parseCookie,
 		signCookie
@@ -1283,7 +1285,7 @@ export const composeHandler = ({
 		schema,
 		definitions,
 		ERROR_CODE,
-		reporter,
+		getReporter,
 		requestId,
 		parseCookie,
 		signCookie
@@ -1335,7 +1337,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		mapEarlyResponse,
 		NotFoundError,
 		requestId,
-		reporter
+		getReporter
 	} = data
 
 	const notFound = new NotFoundError()
@@ -1527,7 +1529,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		mapEarlyResponse,
 		NotFoundError,
 		// @ts-ignore
-		reporter: app.reporter,
+		getReporter: () => app.reporter,
 		requestId
 	})
 }

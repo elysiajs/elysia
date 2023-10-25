@@ -1,10 +1,24 @@
 import { Elysia } from '../src'
 
+const a = new Elysia()
+	.trace(async ({ set, request }) => {
+		console.log("A")
+		// await request
+		console.log("B")
+	})
+
 const app = new Elysia()
-	.get('/', ({ cookie: { access_token, refresh_token } }) => {
-		access_token.value = 'none'
-		refresh_token.value = 'none'
+	.use(a)
+	// .trace(async ({ set, request }) => {
+	// 	console.log("A")
+	// 	// await request
+	// 	console.log("B")
+	// })
+	.get('/', () => {
+		console.log("A")
 
 		return 'hi'
 	})
 	.listen(3000)
+
+console.log(app.routes[0].composed?.toString())
