@@ -1,3 +1,10 @@
+# 0.7.20 - 26 Oct 2023
+Bug fix:
+- `trace` is stuck when inherits to plugin
+
+Improvement:
+- add unit test for `mapCompactResponse`, `Passthrough`
+
 # 0.7.19 - 25 Oct 2023
 Bug fix:
 - add `$passthrough` for `mapCompactResponse`

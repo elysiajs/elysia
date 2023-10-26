@@ -1,7 +1,7 @@
-import { Elysia } from '../src'
+import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from './utils'
+import { req } from '../utils'
 
 describe('After Handle', () => {
 	it('ensure mapEarlyResponse is called', async () => {

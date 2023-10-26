@@ -1600,6 +1600,8 @@ export default class Elysia<
 			return this
 		} else {
 			plugin.reporter = this.reporter
+			for (const trace of plugin.event.trace)
+				this.trace(trace)
 		}
 
 		this.decorate(plugin.decorators)

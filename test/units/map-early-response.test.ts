@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { mapEarlyResponse } from '../../src/handler'
+import { Passthrough } from './utils'
 
 const defaultContext = {
 	headers: {},
@@ -277,4 +278,11 @@ describe('Map Early Response', () => {
 		})
 	})
 
+	it('map Passthrough', async () => {
+		const response = mapEarlyResponse(new Passthrough(), defaultContext)
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response?.text()).toEqual('hi')
+		expect(response?.status).toBe(200)
+	})
 })

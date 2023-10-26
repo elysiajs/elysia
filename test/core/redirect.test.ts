@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import Elysia from '../src'
-import { req } from './utils'
+import Elysia from '../../src'
+import { req } from '../utils'
 
 describe('Redirect', () => {
 	it('handles redirect without explicit status', async () => {

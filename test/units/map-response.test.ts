@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { mapResponse } from '../../src/handler'
+import { Passthrough } from './utils'
 
 const defaultContext = {
 	cookie: {},
@@ -304,5 +305,13 @@ describe('Map Response', () => {
 			name: 'Sorasaki Hina',
 			'Set-Cookie': ['name=hina', 'affiliation=gehenna']
 		})
+	})
+
+	it('map Passthrough', async () => {
+		const response = mapResponse(new Passthrough(), defaultContext)
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response.text()).toEqual('hi')
+		expect(response.status).toBe(200)
 	})
 })
