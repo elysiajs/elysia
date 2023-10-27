@@ -1,3 +1,8 @@
+# 0.8.0
+Feature:
+- header initialize function
+- inline response
+
 # 0.7.21 - 27 Oct 2023
 Bug fix:
 - [#281](https://github.com/elysiajs/elysia/pull/281) add cookie.remove options

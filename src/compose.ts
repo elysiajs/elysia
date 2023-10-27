@@ -49,9 +49,9 @@ const createReport = ({
 	addFn(string: string): void
 	condition: Partial<Record<TraceEvent, boolean>>
 }) => {
-	addFn(`\nconst reporter = getReporter()\n`)
-
 	if (hasTrace) {
+		addFn(`\nconst reporter = getReporter()\n`)
+
 		return (
 			event: TraceEvent,
 			{
@@ -180,6 +180,8 @@ ${name}
 })
 
 export const isFnUse = (keyword: string, fnLiteral: string) => {
+	if (fnLiteral.startsWith('[object Response')) return false
+
 	fnLiteral = fnLiteral.trimStart()
 	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
 
@@ -408,7 +410,10 @@ const matchFnReturn = /(?:return|=>) \S*\(/g
 export const isAsync = (fn: Function) => {
 	if (fn.constructor.name === 'AsyncFunction') return true
 
-	return fn.toString().match(matchFnReturn)
+	const literal = fn.toString()
+	if (literal.includes('=> response.clone(')) return false
+
+	return literal.match(matchFnReturn)
 }
 
 export const composeHandler = ({
@@ -422,19 +427,21 @@ export const composeHandler = ({
 	schema,
 	onRequest,
 	config,
-	getReporter
+	getReporter,
+	setHeader
 }: {
 	path: string
 	method: string
 	hooks: LifeCycleStore
 	validator: SchemaValidator
-	handler: Handler<any, any>
+	handler: unknown | Handler<any, any>
 	handleError: Elysia['handleError']
 	definitions?: Elysia['definitions']['type']
 	schema?: Elysia['schema']
 	onRequest: PreHandler<any, any>[]
 	config: ElysiaConfig<any>
 	getReporter: () => TraceReporter
+	setHeader: Object | undefined
 }): ComposedHandler => {
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
@@ -442,6 +449,9 @@ export const composeHandler = ({
 		typeof Bun === 'undefined' ||
 		hooks.onResponse.length > 0 ||
 		!!hooks.trace.length
+
+	const isHandleFn = typeof handler === 'function'
+	const handle = isHandleFn ? `handler(c)` : `handler`
 
 	const handleResponse = hooks.onResponse.length
 		? `\n;(async () => {${hooks.onResponse
@@ -453,7 +463,8 @@ export const composeHandler = ({
 
 	let hasUnknownContext = false
 
-	if (isContextPassToFunction(handler.toString())) hasUnknownContext = true
+	if (isHandleFn && isContextPassToFunction(handler.toString()))
+		hasUnknownContext = true
 
 	if (!hasUnknownContext)
 		for (const [key, value] of Object.entries(hooks)) {
@@ -504,7 +515,7 @@ export const composeHandler = ({
 					...hooks.transform,
 					...hooks.beforeHandle,
 					...hooks.afterHandle
-			  ].map((x) => x.toString())
+			  ].map((x) => (typeof x === 'function' ? x.toString() : `${x}`))
 			: []
 
 	const hasBody =
@@ -659,6 +670,7 @@ export const composeHandler = ({
 	hasUnknownContext || hooks.trace.some((fn) => isFnUse('set', fn.toString()))
 
 	const hasSet =
+		(setHeader && Object.keys(setHeader).length) ||
 		hasTraceSet ||
 		hasCookie ||
 		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
@@ -685,7 +697,7 @@ export const composeHandler = ({
 		hasCookie ||
 		hasBody ||
 		hasTraceSet ||
-		isAsync(handler) ||
+		(typeof handler === 'function' && isAsync(handler)) ||
 		hooks.parse.length > 0 ||
 		hooks.afterHandle.some(isAsync) ||
 		hooks.beforeHandle.some(isAsync) ||
@@ -1013,7 +1025,7 @@ export const composeHandler = ({
 						endUnit()
 					}
 				}
-		
+
 				endAfterHandle()
 
 				if (validator.response)
@@ -1029,17 +1041,17 @@ export const composeHandler = ({
 
 	if (hooks?.afterHandle.length) {
 		const endHandle = report('handle', {
-			name: handler.name
+			name: isHandleFn ? handler.name : undefined
 		})
 
 		if (hooks.afterHandle.length)
-			fnLiteral += isAsync(handler)
-				? `let r = c.response = await handler(c);\n`
-				: `let r = c.response = handler(c);\n`
+			fnLiteral += (isHandleFn ? isAsync(handler) : false)
+				? `let r = c.response = await ${handle};\n`
+				: `let r = c.response = ${handle};\n`
 		else
-			fnLiteral += isAsync(handler)
-				? `let r = await handler(c);\n`
-				: `let r = handler(c);\n`
+			fnLiteral += (isHandleFn ? isAsync(handler) : false)
+				? `let r = await ${handle};\n`
+				: `let r = ${handle};\n`
 
 		endHandle()
 
@@ -1110,13 +1122,13 @@ export const composeHandler = ({
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
 		const endHandle = report('handle', {
-			name: handler.name
+			name: isHandleFn ? handler.name : undefined
 		})
 
 		if (validator.response) {
-			fnLiteral += isAsync(handler)
-				? `const r = await handler(c);\n`
-				: `const r = handler(c);\n`
+			fnLiteral += (isHandleFn ? isAsync(handler) : false)
+				? `const r = await ${handle};\n`
+				: `const r = ${handle};\n`
 
 			endHandle()
 
@@ -1126,13 +1138,14 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+			if (handler instanceof Response) fnLiteral += `return ${handle}.clone()\n`
+			else if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
 			if (traceConditions.handle || hasCookie) {
-				fnLiteral += isAsync(handler)
-					? `let r = await handler(c);\n`
-					: `let r = handler(c);\n`
+				fnLiteral += (isHandleFn ? isAsync(handler) : false)
+					? `let r = await ${handle};\n`
+					: `let r = ${handle};\n`
 
 				endHandle()
 
@@ -1145,13 +1158,15 @@ export const composeHandler = ({
 			} else {
 				endHandle()
 
-				const handled = isAsync(handler)
-					? 'await handler(c) '
-					: 'handler(c)'
+				const handled = (isHandleFn ? isAsync(handler) : false)
+					? `await ${handle}`
+					: handle
 
 				report('afterHandle')()
 
-				if (hasSet)
+				if (handler instanceof Response)
+					fnLiteral += `return ${handle}.clone()\n`
+				else if (hasSet)
 					fnLiteral += `return mapResponse(${handled}, c.set)\n`
 				else fnLiteral += `return mapCompactResponse(${handled})\n`
 			}
@@ -1391,8 +1406,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 				request,
 				store,
 				set: {
-					cookie: {},
-					headers: {},
+					headers: app.setHeader ? Object.assign(app.setHeader) : {},
 					status: 200
 				}
 				${hasTrace ? ',$$requestId: +id' : ''}
@@ -1463,7 +1477,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 			qi,
 			path,
 			set: {
-				headers: {},
+				headers: app.setHeader ? Object.assign(app.setHeader) : {},
 				status: 200
 			}
 			${hasTrace ? ',$$requestId: id' : ''}

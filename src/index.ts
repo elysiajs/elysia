@@ -10,11 +10,12 @@ import type { Context } from './context'
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
-import { isNotEmpty } from './handler'
+import { isNotEmpty, mapCompactResponse, mapResponse } from './handler'
 import {
 	composeHandler,
 	composeGeneralHandler,
-	composeErrorHandler
+	composeErrorHandler,
+	isFnUse
 } from './compose'
 import {
 	mergeHook,
@@ -181,7 +182,7 @@ export default class Elysia<
 	private add(
 		method: HTTPMethod,
 		paths: string | Readonly<string[]>,
-		handler: Handler<any, any, any>,
+		handler: Handler<any, any, any> | unknown,
 		hook?: LocalHook<any, any, any, any>,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
@@ -304,12 +305,41 @@ export default class Elysia<
 				? path.slice(0, path.length - 1)
 				: path + '/'
 
+			const isFn = typeof handler === 'function'
+			let handle: Handler<any, any> = isFn ? handler : ((() => '') as any)
+			if (!isFn) {
+				const response = mapCompactResponse(handler)
+
+				handle = () => response.clone()
+
+				const lifeCycleLiteral =
+					validator || (method !== 'GET' && method !== 'HEAD')
+						? [
+								handler,
+								...hooks.onResponse,
+								...hooks.transform,
+								...hooks.beforeHandle,
+								...hooks.afterHandle
+						  ].map((x) =>
+								typeof x === 'function' ? x.toString() : `${x}`
+						  )
+						: []
+
+				if (!lifeCycleLiteral.some((fn) => isFnUse('set', fn)))
+					handler = this.setHeader
+						? mapResponse(handler, {
+								status: 200,
+								headers: this.setHeader as any
+						  })
+						: mapCompactResponse(handler)
+			}
+
 			if (this.config.aot === false) {
 				this.dynamicRouter.add(method, path, {
 					validator,
 					hooks,
 					content: hook?.type as string,
-					handle: handler
+					handle
 				})
 
 				if (this.config.strictPath === false) {
@@ -317,7 +347,7 @@ export default class Elysia<
 						validator,
 						hooks,
 						content: hook?.type as string,
-						handle: handler
+						handle
 					})
 				}
 
@@ -325,7 +355,7 @@ export default class Elysia<
 					method,
 					path,
 					composed: null,
-					handler,
+					handler: handle,
 					hooks: hooks as any
 				})
 
@@ -343,7 +373,8 @@ export default class Elysia<
 				config: this.config,
 				definitions: allowMeta ? this.definitions.type : undefined,
 				schema: allowMeta ? this.schema : undefined,
-				getReporter: () => this.reporter
+				getReporter: () => this.reporter,
+				setHeader: this.setHeader
 			})
 
 			const existingRouteIndex = this.routes.findIndex(
@@ -359,7 +390,7 @@ export default class Elysia<
 				method,
 				path,
 				composed: mainHandler,
-				handler,
+				handler: handle,
 				hooks: hooks as any
 			})
 
@@ -433,6 +464,17 @@ export default class Elysia<
 					)
 			}
 		}
+	}
+
+	private setHeader?: Context['set']['headers']
+	header(header: Context['set']['headers'] | undefined) {
+		if (!header) return this
+
+		if (!this.setHeader) this.setHeader = {}
+
+		this.setHeader = mergeDeep(this.setHeader, header)
+
+		return this
 	}
 
 	/**
@@ -1561,6 +1603,7 @@ export default class Elysia<
 		const { name, seed } = plugin.config
 
 		plugin.getServer = () => this.getServer()
+		plugin.header(this.setHeader)
 
 		const isScoped = plugin.config.scoped
 		if (isScoped) {
@@ -1600,8 +1643,7 @@ export default class Elysia<
 			return this
 		} else {
 			plugin.reporter = this.reporter
-			for (const trace of plugin.event.trace)
-				this.trace(trace)
+			for (const trace of plugin.event.trace) this.trace(trace)
 		}
 
 		this.decorate(plugin.decorators)
@@ -1722,7 +1764,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -1748,7 +1792,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -1793,7 +1839,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -1819,7 +1867,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -1864,7 +1914,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -1890,7 +1942,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -1935,7 +1989,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -1961,7 +2017,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -2006,7 +2064,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -2032,7 +2092,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -2077,7 +2139,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -2103,7 +2167,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -2143,7 +2209,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -2169,7 +2237,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -2214,7 +2284,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -2240,7 +2312,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -2285,7 +2359,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
 		handler: Function,
@@ -2311,7 +2387,9 @@ export default class Elysia<
 						headers: Route['headers']
 						response: unknown extends Route['response']
 							? {
-									200: ReturnType<Function>
+									200: Function extends () => infer Returned
+										? Returned
+										: Function
 							  }
 							: Route['response'] extends { 200: any }
 							? Route['response']
@@ -2523,7 +2601,9 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends Handler<Route, Decorators, `${BasePath}${Path}`>,
+		const Function extends
+			| Exclude<Route['response'], Function>
+			| Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
@@ -2572,7 +2652,9 @@ export default class Elysia<
 								headers: Headers
 								response: unknown extends Response
 									? {
-											200: ReturnType<Function>
+											200: Function extends () => infer Returned
+												? Returned
+												: Function
 									  }
 									: Route['response'] extends { 200: any }
 									? Route['response']

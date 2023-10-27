@@ -613,7 +613,9 @@ export type LocalHook<
 	onResponse?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
 }
 
-export type ComposedHandler = (context: Context) => MaybePromise<Response>
+export type ComposedHandler =
+	| Exclude<unknown, Function>
+	| ((context: Context) => MaybePromise<Response>)
 
 export interface InternalRoute {
 	method: HTTPMethod
