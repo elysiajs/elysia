@@ -106,7 +106,7 @@ describe('Explicit Cookie', () => {
 		expect(set.cookie?.name).toEqual({ value: 'himari' })
 	})
 
-	it('remove cookie', () => {
+	it('remove cookie without options', () => {
 		const { cookie, set } = create()
 
 		cookie.name = new Cookie('himari')
@@ -115,5 +115,25 @@ describe('Explicit Cookie', () => {
 		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
 			Date.now()
 		)
+	})
+
+	it('remove cookie with options', () => {
+		const { cookie, set } = create()
+
+		cookie.name = new Cookie('himari')
+		cookie.name.remove({
+			path: '/',
+			domain: 'elysiajs.com',
+			sameSite: 'lax',
+			secure: true
+		})
+
+		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
+			Date.now()
+		)
+		expect(set.cookie?.name.path).toBe('/')
+		expect(set.cookie?.name.domain).toBe('elysiajs.com')
+		expect(set.cookie?.name.sameSite).toBe('lax')
+		expect(set.cookie?.name.secure).toBeTrue()
 	})
 })
