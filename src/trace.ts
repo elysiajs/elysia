@@ -75,20 +75,28 @@ export const createTraceListener = (
 					consumeChild(event: TraceStream) {
 						switch (event.type) {
 							case 'begin':
-								children[++childIteration]({
-									name: event.name,
-									time: event.time,
-									skip: false,
-									end: new Promise<TraceProcess<'end'>>(
-										(resolve) => {
-											endChildren.push(resolve)
-										}
-									)
-								} as TraceProcess<'begin'>)
+								const child = children[++childIteration]
+
+								// Child may cause early return
+								if (child)
+									child({
+										name: event.name,
+										time: event.time,
+										skip: false,
+										end: new Promise<TraceProcess<'end'>>(
+											(resolve) => {
+												endChildren.push(resolve)
+											}
+										)
+									} as TraceProcess<'begin'>)
+								else {
+									this.resolve()
+									console.log("SKIP")
+								}
 								break
 
 							case 'end':
-								endChildren[childIteration](event.time)
+								endChildren[childIteration]?.(event.time)
 								break
 						}
 					},

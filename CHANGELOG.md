@@ -1,3 +1,8 @@
+# 0.7.21 - 27 Oct 2023
+Bug fix:
+- [#281](https://github.com/elysiajs/elysia/pull/281) add cookie.remove options
+- add `await traceDone` to early return
+
 # 0.7.20 - 26 Oct 2023
 Bug fix:
 - `trace` is stuck when inherits to plugin

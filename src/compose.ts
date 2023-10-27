@@ -665,7 +665,7 @@ export const composeHandler = ({
 		onRequest.some((fn) => isFnUse('set', fn.toString()))
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
-	
+
 	const report = createReport({
 		hasTrace,
 		hasTraceSet,
@@ -1013,6 +1013,7 @@ export const composeHandler = ({
 						endUnit()
 					}
 				}
+		
 				endAfterHandle()
 
 				if (validator.response)
@@ -1080,10 +1081,18 @@ export const composeHandler = ({
 
 					fnLiteral += `if(${name}) {`
 					endAfterHandle()
+
+					if (hasTraceSet)
+						fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+
 					fnLiteral += `return ${name} } }`
 				} else {
 					fnLiteral += `if(${name}) {`
 					endAfterHandle()
+
+					if (hasTraceSet)
+						fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+
 					fnLiteral += `return ${name}}\n`
 				}
 			}
@@ -1096,6 +1105,7 @@ export const composeHandler = ({
 		if (validator.response) fnLiteral += composeResponseValidation()
 
 		fnLiteral += encodeCookie
+
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
