@@ -180,7 +180,7 @@ ${name}
 })
 
 export const isFnUse = (keyword: string, fnLiteral: string) => {
-	if (fnLiteral.startsWith('[object Response')) return false
+	if (fnLiteral.startsWith('[object ')) return false
 
 	fnLiteral = fnLiteral.trimStart()
 	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
