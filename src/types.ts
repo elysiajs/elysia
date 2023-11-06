@@ -168,7 +168,9 @@ export type UnwrapRoute<
 	> extends infer A extends Record<string, any>
 		? A
 		: undefined
-	params: UnwrapSchema<
+	params: Schema['params'] extends true
+	?  Record<string, string>
+	: UnwrapSchema<
 		Schema['params'],
 		Definitions
 	> extends infer A extends Record<string, any>
@@ -316,7 +318,7 @@ export interface InputSchema<Name extends string = string> {
 	body?: TSchema | Name
 	headers?: TObject | Name
 	query?: TObject | Name
-	params?: TObject | Name
+	params?: TObject | Name | true
 	cookie?: TObject | Name
 	response?:
 		| TSchema
