@@ -629,7 +629,11 @@ export default class Elysia<
 	) {
 		this.reporter.on(
 			'event',
-			createTraceListener(() => this.reporter, handler)
+			createTraceListener(
+				() => this.reporter,
+				this.event.trace.length,
+				handler
+			)
 		)
 
 		this.on('trace', handler)
@@ -1600,8 +1604,7 @@ export default class Elysia<
 			return this
 		} else {
 			plugin.reporter = this.reporter
-			for (const trace of plugin.event.trace)
-				this.trace(trace)
+			for (const trace of plugin.event.trace) this.trace(trace)
 		}
 
 		this.decorate(plugin.decorators)
@@ -3294,14 +3297,16 @@ export type {
 	OptionalHandler,
 	ErrorHandler,
 	AfterHandler,
-	TraceHandler,
-	TraceStream,
 	LifeCycleEvent,
 	TraceEvent,
 	LifeCycleStore,
 	MaybePromise,
 	ListenCallback,
-	UnwrapSchema
+	UnwrapSchema,
+	TraceHandler,
+	TraceProcess,
+	TraceReporter,
+	TraceStream
 } from './types'
 
 export type { Static } from '@sinclair/typebox'

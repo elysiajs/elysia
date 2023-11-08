@@ -1,3 +1,11 @@
+# 0.7.22 - 8 Nov 2023
+Change:
+- Rewrite `trace`
+
+Bug fix:
+- trace not awaiting multiple trace process
+- trace hang on early `beforeHandle` return
+
 # 0.7.21 - 27 Oct 2023
 Bug fix:
 - [#281](https://github.com/elysiajs/elysia/pull/281) add cookie.remove options

@@ -77,8 +77,10 @@ const createReport = ({
 				]
 			)
 				return () => {
-					if (hasTraceSet && event === 'afterHandle')
-						addFn('\nawait traceDone\n')
+					if (hasTraceSet && event === 'afterHandle') {
+						addFn(`reporter.emit('event',{id,event:'exit',type:'begin',time:0})`)
+						addFn(`\nawait traceDone\n`)
+					}
 				}
 
 			if (isGroup) name ||= event
@@ -483,7 +485,7 @@ export const composeHandler = ({
 		}
 
 	const traceConditions: Record<
-		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response'>,
+		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response' | 'exit'>,
 		boolean
 	> = {
 		parse: traceLiteral.some((x) => isFnUse('parse', x)),
@@ -677,9 +679,14 @@ export const composeHandler = ({
 
 	fnLiteral += hasErrorHandler ? 'try {\n' : ''
 
-	if (hasTrace)
-		fnLiteral +=
-			'\nconst traceDone = new Promise(r => { reporter.once(`res${id}`, r) })\n'
+	if (hasTrace) {
+		// fnLiteral += `\nconst traceDone = new Promise(r => r())\n`
+		fnLiteral += `\nconst traceDone = Promise.all([`
+		for (let i = 0; i < hooks.trace.length; i++) {
+			fnLiteral += `new Promise(r => { reporter.once(\`res\${id}.${i}\`, r) }),`
+		}
+		fnLiteral += `])\n`
+	}
 
 	const maybeAsync =
 		hasCookie ||
@@ -1013,7 +1020,7 @@ export const composeHandler = ({
 						endUnit()
 					}
 				}
-		
+
 				endAfterHandle()
 
 				if (validator.response)
@@ -1089,9 +1096,6 @@ export const composeHandler = ({
 				} else {
 					fnLiteral += `if(${name}) {`
 					endAfterHandle()
-
-					if (hasTraceSet)
-						fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
 
 					fnLiteral += `return ${name}}\n`
 				}
@@ -1219,8 +1223,6 @@ export const composeHandler = ({
 			fnLiteral += `}`
 		}
 	}
-
-	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,

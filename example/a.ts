@@ -1,22 +1,28 @@
-import { Elysia } from '../src'
+import { Elysia } from '../dist'
 
-const a = new Elysia({ name: 'p' }).trace(async ({ set, request }) => {
-	await request
-	console.log('A')
-	// await request
-	console.log('B')
-})
-
-const b = new Elysia({ scoped: true }).get('/scoped', () => 'hi')
+const delay = (time = 1000) => new Promise((r) => setTimeout(r, time))
 
 const app = new Elysia()
-	.onRequest(async () => {
+    .trace(
+        ({
+            beforeHandle,
+            afterHandle,
+            set
+        }) => {
+            set.headers.a = 'a'
+        }
+    )
+    .get('/', () => 'A', {
+        beforeHandle: [
+            async function a() {
+                await delay(1)
+                return 'a'
+            }
+        ],
+        afterHandle: async () => {
+            await delay(1)
+        }
+    })
+    .listen(3000)
 
-	})
-	.use(a)
-	.use(b)
-	.get('/', () => 'hi')
-	.listen(3000)
-
-// console.log(app.event)
-// console.log(app.routes[0].composed?.toString())
+app.handle(new Request('http://localhost/'))
