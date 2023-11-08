@@ -1,3 +1,7 @@
+# 0.7.24 - 8 Nov 2023
+Bug fix:
+- add `ReadableStream` to response mapping to `mapResponse`
+
 # 0.7.23 - 8 Nov 2023
 Bug fix:
 - Send `exit` status on early return with trace set

@@ -117,6 +117,20 @@ export const mapResponse = (
 			case 'Array':
 				return Response.json(response, set as SetResponse)
 
+			case 'ReadableStream':
+				if (
+					!set.headers['content-type']?.startsWith(
+						'text/event-stream'
+					)
+				)
+					set.headers['content-type'] =
+						'text/event-stream; charset=utf-8'
+
+				return new Response(
+					response as ReadableStream,
+					set as SetResponse
+				)
+	
 			case undefined:
 				if (!response) return new Response('', set as SetResponse)
 
@@ -188,6 +202,13 @@ export const mapResponse = (
 						'content-type': 'application/json'
 					}
 				})
+
+			case 'ReadableStream':
+				return new Response(response as ReadableStream, {
+					headers: {
+						'Content-Type': 'text/event-stream; charset=utf-8'
+					}
+				})		
 
 			case undefined:
 				if (!response) return new Response('')
