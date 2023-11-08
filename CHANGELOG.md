@@ -5,6 +5,7 @@ Change:
 Bug fix:
 - trace not awaiting multiple trace process
 - trace hang on early `beforeHandle` return
+- `afterHandle` with `trace.afterHandle` AoT cause duplicate value header
 
 # 0.7.21 - 27 Oct 2023
 Bug fix:
