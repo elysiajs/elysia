@@ -117,8 +117,10 @@ const createReport = ({
 						'\n'
 				)
 
-				if (hasTraceSet && event === 'afterHandle')
+				if (hasTraceSet && event === 'afterHandle') {
+					addFn(`\nreporter.emit('event',{id,event:'exit',type:'begin',time:0})\n`)
 					addFn('\nawait traceDone\n')
+				}
 			}
 		}
 	} else {

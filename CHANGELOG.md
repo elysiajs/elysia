@@ -1,3 +1,7 @@
+# 0.7.23 - 8 Nov 2023
+Bug fix:
+- Send `exit` status on early return with trace set
+
 # 0.7.22 - 8 Nov 2023
 Change:
 - Rewrite `trace`
