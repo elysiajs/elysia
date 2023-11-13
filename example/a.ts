@@ -1,15 +1,14 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.get('/', 'hi')
+	// .get('/', 'hi')
 	.header({
 		'X-Powered-By': 'Elysia'
 	})
 	.get('/id/:id', ({ params: { id }, query: { a, b } }) => ({
-		id,
 		a,
 		b
 	}))
 	.listen(3000)
 
-console.log(app.routes[1].composed?.toString())
+console.log(app.routes[0].composed?.toString())

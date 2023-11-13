@@ -413,7 +413,7 @@ const getUnionedType = (validator: TypeCheck<any> | undefined) => {
 	return validator.schema?.type
 }
 
-const matchFnReturn = /(?:return|=>) \S*\(/g
+const matchFnReturn = /(?:return|=>) \S+\(/g
 
 export const isAsync = (fn: Function) => {
 	if (fn.constructor.name === 'AsyncFunction') return true
@@ -421,7 +421,7 @@ export const isAsync = (fn: Function) => {
 	const literal = fn.toString()
 	if (literal.includes('=> response.clone(')) return false
 
-	return literal.match(matchFnReturn)
+	return !!literal.match(matchFnReturn)
 }
 
 const getDestructureQuery = (fn: string) => {
@@ -676,20 +676,26 @@ export const composeHandler = ({
 		lifeCycleLiteral.some((fn) => isFnUse('query', fn))
 
 	if (hasQuery) {
-		const destructured = [] as string[]
+		let destructured = [] as string[]
 		let referenceFullQuery = false
 
-		for (const event of lifeCycleLiteral) {
-			const queries = getDestructureQuery(event)
+		// @ts-ignore
+		if (validator.query && validator.query.schema.type === 'object') {
+			// @ts-ignore
+			destructured = Object.keys(validator.query.schema.properties)
+		} else
+			for (const event of lifeCycleLiteral) {
+				const queries = getDestructureQuery(event)
 
-			if (!queries) {
-				referenceFullQuery = true
-				continue
+				if (!queries) {
+					referenceFullQuery = true
+					continue
+				}
+
+				for (const query of queries)
+					if (destructured.indexOf(query) === -1)
+						destructured.push(query)
 			}
-
-			for (const query of queries)
-				if (destructured.indexOf(query) === -1) destructured.push(query)
-		}
 
 		if (!referenceFullQuery && destructured.length) {
 			fnLiteral += `if(c.qi !== -1) {
@@ -701,11 +707,11 @@ export const composeHandler = ({
 						(name, index) => `
 						memory = url.indexOf('${name}=')
 					
-						const a${index} = memory === -1 ? undefined : decodeURIComponent(url.slice(memory + ${
+						const a${index} = memory === -1 ? undefined : url.slice(memory + ${
 							name.length + 1
 						}, (memory = url.indexOf('&', memory + ${
 							name.length + 1
-						})) === -1 ? undefined : memory))`
+						})) === -1 ? undefined : memory)`
 					)
 					.join('\n')}
 
@@ -713,7 +719,7 @@ export const composeHandler = ({
 					${destructured.map((name, index) => `${name}: a${index}`).join(', ')}
 				}
 			} else {
-				c.query ??= {}
+				c.query = {}
 			}`
 		} else {
 			fnLiteral += `c.query = c.qi !== -1 ? parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1))) : {}`
@@ -756,11 +762,13 @@ export const composeHandler = ({
 		fnLiteral += `])\n`
 	}
 
+	const isAsyncHandler = (typeof handler === 'function' && isAsync(handler))
+
 	const maybeAsync =
 		hasCookie ||
 		hasBody ||
 		hasTraceSet ||
-		(typeof handler === 'function' && isAsync(handler)) ||
+		isAsyncHandler ||
 		hooks.parse.length > 0 ||
 		hooks.afterHandle.some(isAsync) ||
 		hooks.beforeHandle.some(isAsync) ||
@@ -1108,11 +1116,11 @@ export const composeHandler = ({
 		})
 
 		if (hooks.afterHandle.length)
-			fnLiteral += (isHandleFn ? isAsync(handler) : false)
+			fnLiteral += isAsyncHandler
 				? `let r = c.response = await ${handle};\n`
 				: `let r = c.response = ${handle};\n`
 		else
-			fnLiteral += (isHandleFn ? isAsync(handler) : false)
+			fnLiteral += isAsyncHandler
 				? `let r = await ${handle};\n`
 				: `let r = ${handle};\n`
 
@@ -1186,7 +1194,7 @@ export const composeHandler = ({
 		})
 
 		if (validator.response) {
-			fnLiteral += (isHandleFn ? isAsync(handler) : false)
+			fnLiteral += isAsyncHandler
 				? `const r = await ${handle};\n`
 				: `const r = ${handle};\n`
 
@@ -1204,7 +1212,7 @@ export const composeHandler = ({
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
 			if (traceConditions.handle || hasCookie) {
-				fnLiteral += (isHandleFn ? isAsync(handler) : false)
+				fnLiteral += isAsyncHandler
 					? `let r = await ${handle};\n`
 					: `let r = ${handle};\n`
 
@@ -1219,7 +1227,7 @@ export const composeHandler = ({
 			} else {
 				endHandle()
 
-				const handled = (isHandleFn ? isAsync(handler) : false)
+				const handled = isAsyncHandler
 					? `await ${handle}`
 					: handle
 
