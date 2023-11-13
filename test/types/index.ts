@@ -16,7 +16,7 @@ app.get('/', ({ headers, query, params, body, store }) => {
 	>()
 
 	// ? default query should be Record<string, unknown>
-	expectTypeOf<typeof query>().toEqualTypeOf<Record<string, string | null>>()
+	expectTypeOf<typeof query>().toEqualTypeOf<Record<string, string | undefined>>()
 
 	// ? default body should be unknown
 	expectTypeOf<typeof body>().toBeUnknown()
