@@ -5,6 +5,9 @@ import type { TAnySchema } from '@sinclair/typebox'
 
 import { parse as parseQuery } from 'fast-querystring'
 
+// @ts-ignore
+import decodeURIComponent from 'fast-decode-uri-component'
+
 import { signCookie } from './utils'
 
 import {
@@ -762,7 +765,7 @@ export const composeHandler = ({
 		fnLiteral += `])\n`
 	}
 
-	const isAsyncHandler = (typeof handler === 'function' && isAsync(handler))
+	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 
 	const maybeAsync =
 		hasCookie ||
@@ -1227,9 +1230,7 @@ export const composeHandler = ({
 			} else {
 				endHandle()
 
-				const handled = isAsyncHandler
-					? `await ${handle}`
-					: handle
+				const handled = isAsyncHandler ? `await ${handle}` : handle
 
 				report('afterHandle')()
 
@@ -1340,7 +1341,8 @@ export const composeHandler = ({
 		getReporter,
 		requestId,
 		parseCookie,
-		signCookie
+		signCookie,
+		decodeURIComponent
 	} = hooks
 
 	${
@@ -1380,7 +1382,8 @@ export const composeHandler = ({
 		getReporter,
 		requestId,
 		parseCookie,
-		signCookie
+		signCookie,
+		decodeURIComponent
 	})
 }
 
@@ -1398,17 +1401,17 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	const hasTrace = app.event.trace.length > 0
 
 	const findDynamicRoute = `
-	const route = find(request.method, path) ${
-		router.root.ALL ? '?? find("ALL", path)' : ''
+	const route = router.find(request.method, path) ${
+		router.root.ALL ? '?? router.find("ALL", path)' : ''
 	}
 	if (route === null)
 		return ${
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
-				: `new Response(error404, {
+				: app.event.request.length ? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
-				})`
+				})` : `error404.clone()`
 		}
 
 	ctx.params = route.params
@@ -1429,20 +1432,18 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		mapEarlyResponse,
 		NotFoundError,
 		requestId,
-		getReporter
+		getReporter,
+		handleError
 	} = data
 
 	const notFound = new NotFoundError()
 
 	${app.event.request.length ? `const onRequest = app.event.request` : ''}
-
 	${staticRouter.variables}
-
-	const find = router.find.bind(router)
-	const findWs = wsRouter.find.bind(wsRouter)
-	const handleError = app.handleError.bind(this)
-
-	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
+	${app.event.error.length ? '' : `
+	const error404Message = notFound.message.toString()
+	const error404 = new Response(error404Message, { status: 404 });
+	`}
 
 	return ${maybeAsync ? 'async' : ''} function map(request) {
 	`
@@ -1473,7 +1474,12 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 				request,
 				store,
 				set: {
-					headers: app.setHeader ? Object.assign(app.setHeader) : {},
+					headers: ${
+						// @ts-ignore
+						Object.keys(app.setHeader ?? {}).length
+							? 'Object.assign(app.setHeader)'
+							: '{}'
+					},
 					status: 200
 				}
 				${hasTrace ? ',$$requestId: +id' : ''}
@@ -1523,28 +1529,29 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		endReport()
 
 		fnLiteral += `
-		const url = request.url,
-		s = url.indexOf('/', 11),
-		i = ctx.qi = url.indexOf('?', s + 1),
-		path = ctx.path = i === -1 ? url.substring(s) : url.substring(s, i);`
+		const url = request.url
+		const s = url.indexOf('/', 11)
+		const qi = url.indexOf('?', s + 1)
+		const path = url.substring(s, qi === -1 ? undefined : qi)`
 	} else {
 		fnLiteral += `
-		const url = request.url,
-			s = url.indexOf('/', 11),
-			qi = url.indexOf('?', s + 1),
-			path = qi === -1
-				? url.substring(s)
-				: url.substring(s, qi)
-
+		const url = request.url
+		const s = url.indexOf('/', 11)
+		const qi = url.indexOf('?', s + 1)
+		const path = url.substring(s, qi === -1 ? undefined : qi)
 		${hasTrace ? 'const id = +requestId.value++' : ''}
-
 		const ctx = {
 			request,
 			store,
 			qi,
 			path,
 			set: {
-				headers: app.setHeader ? Object.assign(app.setHeader) : {},
+				headers: ${
+					// @ts-ignore
+					Object.keys(app.setHeader ?? {}).length
+						? 'Object.assign(app.setHeader)'
+						: '{}'
+				},
 				status: 200
 			}
 			${hasTrace ? ',$$requestId: id' : ''}
@@ -1584,7 +1591,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		fnLiteral += `
 				default:
 					if(request.headers.get('upgrade') === 'websocket') {
-						const route = findWs('ws', path)
+						const route = wsRouter.find('ws', path)
 
 						if(route) {
 							ctx.params = route.params
@@ -1609,8 +1616,12 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		${findDynamicRoute}
 	}`
 
+	const handleError = composeErrorHandler(app) as any
+
 	// @ts-ignore
-	app.handleError = composeErrorHandler(app) as any
+	app.handleError = handleError
+
+	// console.log(fnLiteral)
 
 	return Function(
 		'data',
@@ -1621,7 +1632,8 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		NotFoundError,
 		// @ts-ignore
 		getReporter: () => app.reporter,
-		requestId
+		requestId,
+		handleError
 	})
 }
 
