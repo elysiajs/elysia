@@ -77,8 +77,12 @@ const createReport = ({
 				]
 			)
 				return () => {
-					if (hasTraceSet && event === 'afterHandle')
-						addFn('\nawait traceDone\n')
+					if (hasTraceSet && event === 'afterHandle') {
+						addFn(
+							`reporter.emit('event',{id,event:'exit',type:'begin',time:0})`
+						)
+						addFn(`\nawait traceDone\n`)
+					}
 				}
 
 			if (isGroup) name ||= event
@@ -115,8 +119,12 @@ const createReport = ({
 						'\n'
 				)
 
-				if (hasTraceSet && event === 'afterHandle')
+				if (hasTraceSet && event === 'afterHandle') {
+					addFn(
+						`\nreporter.emit('event',{id,event:'exit',type:'begin',time:0})\n`
+					)
 					addFn('\nawait traceDone\n')
+				}
 			}
 		}
 	} else {
@@ -416,6 +424,22 @@ export const isAsync = (fn: Function) => {
 	return literal.match(matchFnReturn)
 }
 
+const getDestructureQuery = (fn: string) => {
+	if (
+		!fn.includes('query: {') ||
+		fn.includes('query,') ||
+		fn.includes('query }')
+	)
+		return false
+
+	const start = fn.indexOf('query: {')
+
+	fn = fn.slice(start + 9)
+	fn = fn.slice(0, fn.indexOf('}'))
+
+	return fn.replaceAll(' ', '').split(',')
+}
+
 export const composeHandler = ({
 	path,
 	method,
@@ -494,7 +518,7 @@ export const composeHandler = ({
 		}
 
 	const traceConditions: Record<
-		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response'>,
+		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response' | 'exit'>,
 		boolean
 	> = {
 		parse: traceLiteral.some((x) => isFnUse('parse', x)),
@@ -652,14 +676,48 @@ export const composeHandler = ({
 		lifeCycleLiteral.some((fn) => isFnUse('query', fn))
 
 	if (hasQuery) {
-		fnLiteral += `const url = c.request.url
+		const destructured = [] as string[]
+		let referenceFullQuery = false
 
-		if(c.qi !== -1) {
-			c.query ??= parseQuery(url.substring(c.qi + 1))
-		} else {
-			c.query ??= {}
+		for (const event of lifeCycleLiteral) {
+			const queries = getDestructureQuery(event)
+
+			if (!queries) {
+				referenceFullQuery = true
+				continue
+			}
+
+			for (const query of queries)
+				if (destructured.indexOf(query) === -1) destructured.push(query)
 		}
-		`
+
+		if (!referenceFullQuery && destructured.length) {
+			fnLiteral += `if(c.qi !== -1) {
+				const url = decodeURIComponent(c.request.url.slice(c.qi + 1))
+				let memory = 0
+
+				${destructured
+					.map(
+						(name, index) => `
+						memory = url.indexOf('${name}=')
+					
+						const a${index} = memory === -1 ? undefined : decodeURIComponent(url.slice(memory + ${
+							name.length + 1
+						}, (memory = url.indexOf('&', memory + ${
+							name.length + 1
+						})) === -1 ? undefined : memory))`
+					)
+					.join('\n')}
+
+				c.query = {
+					${destructured.map((name, index) => `${name}: a${index}`).join(', ')}
+				}
+			} else {
+				c.query ??= {}
+			}`
+		} else {
+			fnLiteral += `c.query = c.qi !== -1 ? parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1))) : {}`
+		}
 	}
 
 	const traceLiterals = hooks.trace.map((x) => x.toString())
@@ -689,9 +747,14 @@ export const composeHandler = ({
 
 	fnLiteral += hasErrorHandler ? 'try {\n' : ''
 
-	if (hasTrace)
-		fnLiteral +=
-			'\nconst traceDone = new Promise(r => { reporter.once(`res${id}`, r) })\n'
+	if (hasTrace) {
+		// fnLiteral += `\nconst traceDone = new Promise(r => r())\n`
+		fnLiteral += `\nconst traceDone = Promise.all([`
+		for (let i = 0; i < hooks.trace.length; i++) {
+			fnLiteral += `new Promise(r => { reporter.once(\`res\${id}.${i}\`, r) }),`
+		}
+		fnLiteral += `])\n`
+	}
 
 	const maybeAsync =
 		hasCookie ||
@@ -1102,9 +1165,6 @@ export const composeHandler = ({
 					fnLiteral += `if(${name}) {`
 					endAfterHandle()
 
-					if (hasTraceSet)
-						fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
-
 					fnLiteral += `return ${name}}\n`
 				}
 			}
@@ -1138,7 +1198,8 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (handler instanceof Response) fnLiteral += `return ${handle}.clone()\n`
+			if (handler instanceof Response)
+				fnLiteral += `return ${handle}.clone()\n`
 			else if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
@@ -1234,8 +1295,6 @@ export const composeHandler = ({
 			fnLiteral += `}`
 		}
 	}
-
-	// console.log(fnLiteral)
 
 	fnLiteral = `const { 
 		handler,

@@ -24,7 +24,7 @@ export type Context<
 	{
 		body: Route['body']
 		query: undefined extends Route['query']
-			? Record<string, string | null>
+			? Record<string, string | undefined>
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
@@ -49,6 +49,11 @@ export type Context<
 			}
 			status?: number | HTTPStatusName
 			redirect?: string
+			/**
+			 * ! Internal Property
+			 * 
+			 * Use `Context.cookie` instead
+			 */
 			cookie?: Record<
 				string,
 				Prettify<

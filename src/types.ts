@@ -393,7 +393,7 @@ export type TraceEvent =
 	| 'afterHandle'
 	| 'error'
 	| 'response' extends infer Events extends string
-	? Events | `${Events}.unit` | 'handle'
+	? Events | `${Events}.unit` | 'handle' | 'exit'
 	: never
 
 export type TraceStream = {
@@ -407,7 +407,7 @@ export type TraceStream = {
 
 export type TraceReporter = EventEmitter<
 	{
-		[res in `res${number}`]: undefined
+		[res in `res${number}.${number}`]: undefined
 	} & {
 		event(stream: TraceStream): MaybePromise<void>
 	}

@@ -671,7 +671,11 @@ export default class Elysia<
 	) {
 		this.reporter.on(
 			'event',
-			createTraceListener(() => this.reporter, handler)
+			createTraceListener(
+				() => this.reporter,
+				this.event.trace.length,
+				handler
+			)
 		)
 
 		this.on('trace', handler)
@@ -3376,14 +3380,16 @@ export type {
 	OptionalHandler,
 	ErrorHandler,
 	AfterHandler,
-	TraceHandler,
-	TraceStream,
 	LifeCycleEvent,
 	TraceEvent,
 	LifeCycleStore,
 	MaybePromise,
 	ListenCallback,
-	UnwrapSchema
+	UnwrapSchema,
+	TraceHandler,
+	TraceProcess,
+	TraceReporter,
+	TraceStream
 } from './types'
 
 export type { Static } from '@sinclair/typebox'

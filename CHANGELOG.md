@@ -2,6 +2,24 @@
 Feature:
 - header initialize function
 - inline response
+- lazy query reference
+
+# 0.7.24 - 8 Nov 2023
+Bug fix:
+- add `ReadableStream` to response mapping to `mapResponse`
+
+# 0.7.23 - 8 Nov 2023
+Bug fix:
+- Send `exit` status on early return with trace set
+
+# 0.7.22 - 8 Nov 2023
+Change:
+- Rewrite `trace`
+
+Bug fix:
+- trace not awaiting multiple trace process
+- trace hang on early `beforeHandle` return
+- `afterHandle` with `trace.afterHandle` AoT cause duplicate value header
 
 # 0.7.21 - 27 Oct 2023
 Bug fix:

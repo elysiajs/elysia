@@ -297,10 +297,11 @@ export const mergeLifeCycle = (
 			a.onResponse as any,
 			(b?.onResponse ?? ([] as any)).map(injectChecksum)
 		),
-		trace: mergeObjectArray(
-			a.trace as any,
-			('trace' in b ? b.trace ?? [] : ([] as any)).map(injectChecksum)
-		),
+		trace: a.trace,
+		// trace: mergeObjectArray(
+		// 	a.trace as any,
+		// 	('trace' in b ? b.trace ?? [] : ([] as any)).map(injectChecksum)
+		// ),
 		error: mergeObjectArray(
 			a.error as any,
 			(b?.error ?? ([] as any)).map(injectChecksum)

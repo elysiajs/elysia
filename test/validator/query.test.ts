@@ -143,15 +143,4 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 		expect(await res.json()).toEqual({})
 	})
-
-	it('strictly validate by default', async () => {
-		const app = new Elysia().get('/', ({ query: { name } }) => name, {
-			query: t.Object({
-				name: t.String()
-			})
-		})
-		const res = await app.handle(req('/?name=sucrose&job=alchemist'))
-
-		expect(res.status).toBe(400)
-	})
 })
