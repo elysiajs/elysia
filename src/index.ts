@@ -131,6 +131,7 @@ export default class Elysia<
 		beforeHandle: [],
 		afterHandle: [],
 		onResponse: [],
+		mapResponse: [],
 		trace: [],
 		error: [],
 		stop: []

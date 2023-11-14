@@ -243,6 +243,7 @@ export interface LifeCycleStore {
 	transform: VoidHandler<any, any>[]
 	beforeHandle: OptionalHandler<any, any>[]
 	afterHandle: AfterHandler<any, any>[]
+	mapResponse: AfterHandler<any, any>[]
 	onResponse: VoidHandler<any, any>[]
 	trace: TraceHandler<any, any>[]
 	error: ErrorHandler<any, any, any>[]
@@ -256,6 +257,7 @@ export type LifeCycleEvent =
 	| 'transform'
 	| 'beforeHandle'
 	| 'afterHandle'
+	| 'mapResponse'
 	| 'response'
 	| 'error'
 	| 'stop'
@@ -588,6 +590,10 @@ export type LocalHook<
 	type?: ContentType
 	detail?: Partial<OpenAPIV3.OperationObject>
 	/**
+	 * Custom body parser
+	 */
+	parse?: MaybeArray<BodyHandler<TypedRoute, Decorators>>
+	/**
 	 * Transform context's value
 	 */
 	transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
@@ -600,13 +606,13 @@ export type LocalHook<
 	 */
 	afterHandle?: MaybeArray<AfterHandler<TypedRoute, Decorators>>
 	/**
+	 * Execute after main handler
+	 */
+	mapResponse?: MaybeArray<AfterHandler<TypedRoute, Decorators>>
+	/**
 	 * Catch error
 	 */
 	error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
-	/**
-	 * Custom body parser
-	 */
-	parse?: MaybeArray<BodyHandler<TypedRoute, Decorators>>
 	/**
 	 * Custom body parser
 	 */

@@ -127,6 +127,10 @@ export const mergeHook = (
 			a?.afterHandle ?? [],
 			b?.afterHandle ?? []
 		),
+		mapResponse: mergeObjectArray(
+			a?.mapResponse ?? [],
+			b?.mapResponse ?? []
+		),
 		onResponse: mergeObjectArray(
 			a?.onResponse ?? [],
 			b?.onResponse ?? []
@@ -293,15 +297,15 @@ export const mergeLifeCycle = (
 			a.afterHandle as any,
 			(b?.afterHandle ?? ([] as any)).map(injectChecksum)
 		),
+		mapResponse: mergeObjectArray(
+			a.mapResponse as any,
+			(b?.mapResponse ?? ([] as any)).map(injectChecksum)
+		),
 		onResponse: mergeObjectArray(
 			a.onResponse as any,
 			(b?.onResponse ?? ([] as any)).map(injectChecksum)
 		),
 		trace: a.trace,
-		// trace: mergeObjectArray(
-		// 	a.trace as any,
-		// 	('trace' in b ? b.trace ?? [] : ([] as any)).map(injectChecksum)
-		// ),
 		error: mergeObjectArray(
 			a.error as any,
 			(b?.error ?? ([] as any)).map(injectChecksum)
@@ -326,6 +330,7 @@ export const asGlobalHook = (
 		transform: asGlobal(hook?.transform, inject),
 		beforeHandle: asGlobal(hook?.beforeHandle, inject),
 		afterHandle: asGlobal(hook?.afterHandle, inject),
+		mapResponse: asGlobal(hook?.mapResponse, inject),
 		onResponse: asGlobal(hook?.onResponse, inject),
 		error: asGlobal(hook?.error, inject)
 	} as LocalHook<any, any>
@@ -382,6 +387,7 @@ export const filterGlobalHook = (
 		transform: filterGlobal(hook?.transform),
 		beforeHandle: filterGlobal(hook?.beforeHandle),
 		afterHandle: filterGlobal(hook?.afterHandle),
+		mapResponse: filterGlobal(hook?.mapResponse),
 		onResponse: filterGlobal(hook?.onResponse),
 		error: filterGlobal(hook?.error)
 	} as LocalHook<any, any>

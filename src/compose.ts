@@ -440,7 +440,13 @@ const getDestructureQuery = (fn: string) => {
 	fn = fn.slice(start + 9)
 	fn = fn.slice(0, fn.indexOf('}'))
 
-	return fn.replaceAll(' ', '').split(',')
+	return fn.split(',').map(x => {
+		const indexOf = x.indexOf(':')
+
+		if(indexOf === -1) return x.trim()
+
+		return x.slice(0, indexOf).trim()
+	})
 }
 
 export const composeHandler = ({
