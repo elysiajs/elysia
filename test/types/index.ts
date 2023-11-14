@@ -482,6 +482,33 @@ app.use(plugin).group(
 	}>()
 }
 
+// ? It doesn't exposed guard type to external route
+{
+	const server = app
+		.guard(
+			{
+				query: t.Object({
+					name: t.String()
+				})
+			},
+			(app) => app
+		)
+		.get('/', () => 1)
+
+	type App = (typeof server)['schema']
+	type Route = App['/']['get']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		body: unknown
+		params: unknown
+		query: unknown
+		headers: unknown
+		response: {
+			200: number
+		}
+	}>()
+}
+
 // ? Register websocket
 {
 	const server = app.group(

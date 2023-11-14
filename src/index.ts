@@ -1089,28 +1089,13 @@ export default class Elysia<
 				{}
 			>
 		) => NewElysia
-	): NewElysia extends Elysia<
-		any,
-		infer PluginDecorators,
-		infer PluginDefinitions,
-		infer PluginSchema,
-		any
+	): Elysia<
+		BasePath,
+		Decorators,
+		Definitions,
+		ParentSchema,
+		Prettify<Routes & NewElysia['schema']>
 	>
-		? Elysia<
-				BasePath,
-				Prettify<Decorators & PluginDecorators>,
-				{
-					type: Prettify<
-						Definitions['type'] & PluginDefinitions['type']
-					>
-					error: Prettify<
-						Definitions['error'] & PluginDefinitions['error']
-					>
-				},
-				Prettify<ParentSchema & PluginSchema>,
-				Prettify<Routes & NewElysia['schema']>
-		  >
-		: this
 
 	/**
 	 * ### group
@@ -1237,21 +1222,14 @@ export default class Elysia<
 		run: (
 			group: Elysia<BasePath, Decorators, Definitions, Schema, {}, Scoped>
 		) => NewElysia
-	): NewElysia extends Elysia<
-		any,
-		infer PluginDecorators,
-		infer PluginDefinitions,
-		infer PluginSchema,
-		any
+	): Elysia<
+		BasePath,
+		Decorators,
+		Definitions,
+		ParentSchema,
+		Prettify<Routes & NewElysia['schema']>,
+		Scoped
 	>
-		? Elysia<
-				BasePath,
-				PluginDecorators,
-				PluginDefinitions,
-				PluginSchema,
-				Prettify<Routes & NewElysia['schema']>
-		  >
-		: this
 
 	/**
 	 * ### guard

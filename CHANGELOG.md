@@ -1,3 +1,7 @@
+# 0.7.25 - 14 Nov 2023
+Bug fix:
+- Leaked type from `guard` callback and `group guard`
+
 # 0.7.24 - 8 Nov 2023
 Bug fix:
 - add `ReadableStream` to response mapping to `mapResponse`
