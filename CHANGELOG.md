@@ -1,3 +1,7 @@
+# 0.7.26 - 15 Nov 2023
+Bug fix:
+- duplicated lifecycle event if using function plugin async
+
 # 0.7.25 - 14 Nov 2023
 Bug fix:
 - Leaked type from `guard` callback and `group guard`

@@ -1484,10 +1484,11 @@ export default class Elysia<
 			this.lazyLoadModules.push(
 				plugin
 					.then((plugin) => {
-						if (typeof plugin === 'function')
+						if (typeof plugin === 'function') {
 							return plugin(
 								this as unknown as any
 							) as unknown as Elysia
+						}
 
 						if (typeof plugin.default === 'function')
 							return plugin.default(
@@ -1519,6 +1520,26 @@ export default class Elysia<
 				this.lazyLoadModules.push(
 					instance
 						.then((plugin) => {
+							if(plugin instanceof Elysia) {
+								this.compile()
+
+								// Recompile async plugin routes
+								for (const { method, path, handler, hooks } of Object.values(
+									plugin.routes
+								)) {
+									this.add(
+										method,
+										path,
+										handler,
+										mergeHook(hooks as LocalHook<any, any, any, any, any, any>, {
+											error: plugin.event.error
+										})
+									)
+								}
+						
+								return plugin
+							}
+
 							if (typeof plugin === 'function')
 								return plugin(
 									this as unknown as any

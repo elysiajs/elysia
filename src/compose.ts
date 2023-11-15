@@ -1535,6 +1535,9 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	// @ts-ignore
 	app.handleError = composeErrorHandler(app) as any
 
+	// console.log(fnLiteral)
+	// console.log(app.event)
+
 	return Function(
 		'data',
 		fnLiteral

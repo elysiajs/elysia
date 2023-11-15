@@ -1,28 +1,11 @@
-import { Elysia } from '../dist'
+import { Elysia } from '../src'
 
-const delay = (time = 1000) => new Promise((r) => setTimeout(r, time))
+const plugin = async (app: Elysia) => app.get('/', () => 'yay')
 
-const app = new Elysia()
-    .trace(
-        ({
-            beforeHandle,
-            afterHandle,
-            set
-        }) => {
-            set.headers.a = 'a'
-        }
-    )
-    .get('/', () => 'A', {
-        beforeHandle: [
-            async function a() {
-                await delay(1)
-                return 'a'
-            }
-        ],
-        afterHandle: async () => {
-            await delay(1)
-        }
-    })
-    .listen(3000)
+const app = new Elysia().use(plugin).onRequest(({ request }) => {
+	console.info('API Request:', request.method, request.url)
+})
 
-app.handle(new Request('http://localhost/'))
+await app.modules
+
+app.handle(new Request('http://localhost:3000/'))
