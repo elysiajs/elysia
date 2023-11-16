@@ -170,7 +170,7 @@ export const getSchemaValidator = (
 			Code: () => ''
 		} as unknown as TypeCheck<TSchema>
 
-	return TypeCompiler.Compile(schema)
+	return TypeCompiler.Compile(schema, Object.values(models))
 }
 
 export const getResponseSchemaValidator = (
@@ -190,7 +190,7 @@ export const getResponseSchemaValidator = (
 
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
-	const compile = (schema: TSchema) => {
+	const compile = (schema: TSchema, references?: TSchema[]) => {
 		if (dynamic)
 			return {
 				schema,
@@ -202,7 +202,7 @@ export const getResponseSchemaValidator = (
 				Code: () => ''
 			} as unknown as TypeCheck<TSchema>
 
-		return TypeCompiler.Compile(schema)
+		return TypeCompiler.Compile(schema, references)
 	}
 
 	if (Kind in maybeSchemaOrRecord) {
@@ -210,7 +210,7 @@ export const getResponseSchemaValidator = (
 			maybeSchemaOrRecord.additionalProperties = additionalProperties
 
 		return {
-			200: compile(maybeSchemaOrRecord)
+			200: compile(maybeSchemaOrRecord, Object.values(models))
 		}
 	}
 
@@ -226,7 +226,7 @@ export const getResponseSchemaValidator = (
 					'additionalProperties' in schema === false
 
 				// Inherits model maybe already compiled
-				record[+status] = Kind in schema ? compile(schema) : schema
+				record[+status] = Kind in schema ? compile(schema, Object.values(models)) : schema
 			}
 
 			return undefined
@@ -241,7 +241,7 @@ export const getResponseSchemaValidator = (
 		// Inherits model maybe already compiled
 		record[+status] =
 			Kind in maybeNameOrSchema
-				? compile(maybeNameOrSchema)
+				? compile(maybeNameOrSchema, Object.values(models))
 				: maybeNameOrSchema
 	})
 
