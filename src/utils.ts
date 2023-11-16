@@ -168,7 +168,7 @@ export const getSchemaValidator = (
 			Code: () => ''
 		} as unknown as TypeCheck<TSchema>
 
-	return TypeCompiler.Compile(schema)
+	return TypeCompiler.Compile(schema, Object.values(models))
 }
 
 export const getResponseSchemaValidator = (
