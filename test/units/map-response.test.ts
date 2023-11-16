@@ -278,10 +278,8 @@ describe('Map Response', () => {
 		})
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('Hina')
-		expect(response.headers.toJSON()).toEqual({
-			name: 'Sorasaki Hina',
-			'set-cookie': ['name=hina']
-		})
+		expect(response.headers.get('name')).toEqual('Sorasaki Hina')
+		expect(response.headers.getAll('set-cookie')).toEqual(['name=hina'])
 	})
 
 	it('set multiple cookie', async () => {
@@ -301,10 +299,8 @@ describe('Map Response', () => {
 		})
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('Hina')
-		expect(response.headers.toJSON()).toEqual({
-			name: 'Sorasaki Hina',
-			'set-cookie': ['name=hina', 'affiliation=gehenna']
-		})
+		expect(response.headers.get('name')).toEqual('Sorasaki Hina')
+		expect(response.headers.getAll('set-cookie')).toEqual(['name=hina', 'affiliation=gehenna'])
 	})
 
 	it('map Passthrough', async () => {

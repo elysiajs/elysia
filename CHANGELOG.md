@@ -1,3 +1,10 @@
+# 0.7.28 - 16 Nov 2023
+Chore:
+- Update `cookie` to `0.6.0`
+
+Bug fix:
+- [#314](https://github.com/elysiajs/elysia/pull/314) Unable to dereference schema with 'undefined' when using t.Ref
+
 # 0.7.27 - 16 Nov 2023
 Bug fix:
 - [#312](https://github.com/elysiajs/elysia/issues/312) default params type suggestion for WebSocket
