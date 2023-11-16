@@ -1,5 +1,6 @@
 import { Value } from '@sinclair/typebox/value'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
+import { TSchema } from '@sinclair/typebox'
 
 // ? Cloudflare worker support
 const env =
@@ -62,10 +63,15 @@ export class ValidationError extends Error {
 
 	constructor(
 		public type: string,
-		public validator: TypeCheck<any>,
+		public validator: TSchema | TypeCheck<any>,
 		public value: unknown
 	) {
-		const error = isProduction ? undefined : validator.Errors(value).First()
+		const error = isProduction
+			? undefined
+			: 'Errors' in validator
+			? validator.Errors(value).First()
+			: Value.Errors(validator, value).First()
+
 		const customError = error?.schema.error
 			? typeof error.schema.error === 'function'
 				? error.schema.error(type, validator, value)
@@ -82,7 +88,11 @@ export class ValidationError extends Error {
 					'\n\n' +
 					'Expected: ' +
 					// @ts-ignore
-					JSON.stringify(Value.Create(validator.schema), null, 2) +
+					JSON.stringify(
+						ValidationError.simplifyModel(validator),
+						null,
+						2
+					) +
 					'\n\n' +
 					'Found: ' +
 					JSON.stringify(value, null, 2)
@@ -102,9 +112,19 @@ export class ValidationError extends Error {
 		return [...this.validator.Errors(this.value)]
 	}
 
-	get model() {
+	static simplifyModel(validator: TSchema | TypeCheck<any>) {
 		// @ts-ignore
-		return Value.Create(this.validator.schema)
+		const model = 'schema' in validator ? validator.schema : validator
+
+		try {
+			return Value.Create(model)
+		} catch {
+			return model
+		}
+	}
+
+	get model() {
+		return ValidationError.simplifyModel(this.validator)
 	}
 
 	toResponse(headers?: Record<string, any>) {

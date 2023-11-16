@@ -198,8 +198,24 @@ describe('Transform', () => {
 				if (request.params?.id) request.params.id = +request.params.id
 			})
 			.get('/id/:id', ({ params: { id } }) => typeof id)
-		const res = await app.handle(req('/id/1'))
 
+		const res = await app.handle(req('/id/1'))
 		expect(await res.text()).toBe('number')
+	})
+
+	it('validate property', async () => {
+		const app = new Elysia()
+			.get('/id/:id', ({ params: { id } }) => id, {
+				params: t.Object({
+					id: t.Numeric({ minimum: 0 })
+				})
+			})
+			.listen(3000)
+
+		const correct = await app.handle(req('/id/1')).then((x) => x.status)
+		expect(correct).toBe(200)
+
+		const invalid = await app.handle(req('/id/-1')).then((x) => x.status)
+		expect(invalid).toBe(400)
 	})
 })

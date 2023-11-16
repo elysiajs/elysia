@@ -1,3 +1,19 @@
+# 0.7.27 - 16 Nov 2023
+Bug fix:
+- [#312](https://github.com/elysiajs/elysia/issues/312) default params type suggestion for WebSocket
+- [#310](https://github.com/elysiajs/elysia/issues/310) Preserve original hostname when using `.mount()`
+- [#309](https://github.com/elysiajs/elysia/issues/309) t.RegExp doesn't work due to requiring default value
+- [#308](https://github.com/elysiajs/elysia/issues/308) t.Numeric should not convert empty string to 0
+- [#305](https://github.com/elysiajs/elysia/issues/305) Elysia({ scoped: true }) should still expose defined routes on type level
+- [#304](https://github.com/elysiajs/elysia/issues/304) Using a hook/guard/schema with a handler function and request without body results in a "Unexpected end of JSON input"-error 
+- [#299](https://github.com/elysiajs/elysia/issues/299) Missing request.path parameter in .onRequest
+- [#289](https://github.com/elysiajs/elysia/issues/289) Ability to localize TypeBox errors
+- [#272](https://github.com/elysiajs/elysia/issues/272) onError handler has error property as undefined on Cloudflare Workers
+- [#210](https://github.com/elysiajs/elysia/issues/210) t.Numeric not validating properly
+- [#188](https://github.com/elysiajs/elysia/issues/188) Status codes of the error classes don't match the response through onError
+- [#140](https://github.com/elysiajs/elysia/issues/140) plugin hierarchy messes up derive function in child plugin
+- [#27](https://github.com/elysiajs/elysia/issues/27) Websocket definition in groups
+
 # 0.7.26 - 15 Nov 2023
 Bug fix:
 - duplicated lifecycle event if using function plugin async

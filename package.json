@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "0.7.26",
+  "version": "0.7.27",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -44,12 +44,12 @@
       "import": "./dist/cookie.js",
       "default": "./dist/cookie.js"
     },
-    "./custom-types": {
-      "bun": "./dist/custom-types.js",
-      "node": "./dist/cjs/custom-types.js",
-      "require": "./dist/cjs/custom-types.js",
-      "import": "./dist/custom-types.js",
-      "default": "./dist/custom-types.js"
+    "./type-system": {
+      "bun": "./dist/type-system.js",
+      "node": "./dist/cjs/type-system.js",
+      "require": "./dist/cjs/type-system.js",
+      "import": "./dist/type-system.js",
+      "default": "./dist/type-system.js"
     },
     "./error": {
       "bun": "./dist/error.js",

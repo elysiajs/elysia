@@ -890,3 +890,28 @@ app.group(
 				)
 	)
 }
+
+// ? Inherits route for scoped instance
+{
+	const child = new Elysia({ scoped: true })
+		.decorate('b', 'b')
+		.model('b', t.String())
+		.get('/child', () => 'Hello from child route')
+	const main = new Elysia().use(child)
+
+	type Schema = (typeof main)['schema']
+
+	expectTypeOf<keyof (typeof main)['schema']>().toEqualTypeOf<'/child'>()
+	expectTypeOf<keyof (typeof main)['decorators']>().not.toEqualTypeOf<{
+		request: {
+			b: 'b'
+		}
+		store: {}
+	}>()
+	expectTypeOf<keyof (typeof main)['definitions']>().not.toEqualTypeOf<{
+		type: {
+			b: string
+		}
+		error: {}
+	}>()
+}

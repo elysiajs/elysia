@@ -33,13 +33,11 @@ export namespace WS {
 		},
 		Errors extends Record<string, Error> = {},
 		Path extends string = '',
-		TypedRoute extends RouteSchema = Route extends {
-			params: Record<string, unknown>
-		}
-			? Route
-			: Route & {
+		TypedRoute extends RouteSchema = Path extends `${string}:${string}`
+			? Route & {
 					params: Record<GetPathParameter<Path>, string>
 			  }
+			: Route
 	> = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 		Omit<
 			Partial<WebSocketHandler<Context>>,
@@ -49,7 +47,7 @@ export namespace WS {
 			ServerWebSocket<{
 				validator?: TypeCheck<TSchema>
 			}>,
-			Route,
+			TypedRoute,
 			Decorators
 		> extends infer WS
 			? {

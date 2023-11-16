@@ -78,7 +78,9 @@ const createReport = ({
 			)
 				return () => {
 					if (hasTraceSet && event === 'afterHandle') {
-						addFn(`reporter.emit('event',{id,event:'exit',type:'begin',time:0})`)
+						addFn(
+							`reporter.emit('event',{id,event:'exit',type:'begin',time:0})`
+						)
 						addFn(`\nawait traceDone\n`)
 					}
 				}
@@ -118,7 +120,9 @@ const createReport = ({
 				)
 
 				if (hasTraceSet && event === 'afterHandle') {
-					addFn(`\nreporter.emit('event',{id,event:'exit',type:'begin',time:0})\n`)
+					addFn(
+						`\nreporter.emit('event',{id,event:'exit',type:'begin',time:0})\n`
+					)
 					addFn('\nawait traceDone\n')
 				}
 			}
@@ -512,13 +516,13 @@ export const composeHandler = ({
 			: []
 
 	const hasBody =
-		hasUnknownContext ||
-		(method !== 'GET' &&
-			method !== 'HEAD' &&
-			hooks.type !== 'none' &&
-			(!!validator.body ||
-				!!hooks.type ||
-				lifeCycleLiteral.some((fn) => isFnUse('body', fn))))
+		method !== 'GET' &&
+		method !== 'HEAD' &&
+		(hasUnknownContext ||
+			(hooks.type !== 'none' &&
+				(!!validator.body ||
+					!!hooks.type ||
+					lifeCycleLiteral.some((fn) => isFnUse('body', fn)))))
 
 	const hasHeaders =
 		hasUnknownContext ||
@@ -1574,11 +1578,14 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 		)`
 
 		if (hasReturn(handler.toString()))
-			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) return mapResponse(r${i}, set)\n`
+			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) {
+				if(set.status === 200) set.status = error.status
+				return mapResponse(r${i}, set)
+			}\n`
 		else fnLiteral += response + '\n'
 	}
 
-	fnLiteral += `if(error.constructor.name === "ValidationError") {
+	fnLiteral += `if(error.constructor.name === "ValidationError" || error.constructor.name === "TransformDecodeError") {
 		set.status = error.status ?? 400
 		return new Response(
 			error.message, 
