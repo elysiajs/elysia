@@ -18,7 +18,7 @@ The Elysia.js repo is using [bun](https://bun.sh). Make sure you have the [lates
 
 ### Unit Testing
 
-In Elysia.js, all of the test files are located inside the [`test/`](test/) directory. Unit testing are powered by [bun's wiptest](https://github.com/oven-sh/bun/tree/main/packages/bun-test).
+In Elysia.js, all of the test files are located inside the [`test/`](test/) directory. Unit testing are powered by [bun's test](https://github.com/oven-sh/bun/tree/main/packages/bun-internal-test).
 
 -   `bun test` to run all the test inside the [`test/`](test/) directory
 

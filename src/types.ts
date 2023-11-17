@@ -1,3 +1,4 @@
+import type { Elysia } from '.'
 import type { Serve, Server, WebSocketHandler } from 'bun'
 
 import type { TSchema, TObject, Static, TAnySchema } from '@sinclair/typebox'
@@ -15,7 +16,6 @@ import type {
 	ParseError,
 	ValidationError
 } from './error'
-import Elysia from '.'
 
 export type ElysiaConfig<
 	T extends string = '',

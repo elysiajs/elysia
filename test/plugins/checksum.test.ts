@@ -326,4 +326,25 @@ describe('Checksum', () => {
 
 		expect(i).toBe(1)
 	})
+
+	it('handle reference parent-child', async () => {
+		const parent = new Elysia({ name: 'parent' }).derive(() => ({
+			bye: () => 'bye'
+		}))
+
+		const child = new Elysia({ name: 'child' })
+			.use(parent)
+			.derive(({ bye }) => ({
+				hi: () => `hi + ${bye()}`
+			}))
+
+		const app = new Elysia()
+			.use(parent)
+			.use(child)
+			.get('/', ({ hi }) => hi())
+
+		const response = await app.handle(req('/')).then((res) => res.text())
+
+		expect(response).toBe('hi + bye')
+	})
 })

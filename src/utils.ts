@@ -14,6 +14,8 @@ import type {
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
+export const getHostname = (url: string) => url.slice(0, url.indexOf('/', 11))
+
 const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
 	// Handle import * as Sentry from '@sentry/bun'
@@ -261,7 +263,8 @@ export const mergeLifeCycle = (
 	checksum?: number
 ): LifeCycleStore => {
 	const injectChecksum = <T>(x: T): T => {
-		if (checksum)
+		// @ts-ignore
+		if (checksum && !x.$elysiaChecksum)
 			// @ts-ignore
 			x.$elysiaChecksum = checksum
 

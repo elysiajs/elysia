@@ -25,7 +25,8 @@ import {
 	checksum,
 	mergeLifeCycle,
 	filterGlobalHook,
-	asGlobal
+	asGlobal,
+	getHostname
 } from './utils'
 
 import {
@@ -77,7 +78,7 @@ import type {
 	MaybeArray,
 	GracefulHandler
 } from './types'
-import { t } from './custom-types'
+import { t } from './type-system'
 
 /**
  * ### Elysia Server
@@ -167,7 +168,7 @@ export default class Elysia<
 
 	constructor(config?: Partial<ElysiaConfig<BasePath, Scoped>>) {
 		this.config = {
-			forceErrorEncapsulation: false,
+			forceErrorEncapsulation: true,
 			prefix: '',
 			aot: true,
 			strictPath: false,
@@ -1127,11 +1128,13 @@ export default class Elysia<
 			prefix: ''
 		})
 		instance.store = this.store
+		instance.getServer = () => this.server
 
 		const isSchema = typeof schemaOrRun === 'object'
 
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
 		this.decorators = mergeDeep(this.decorators, instance.decorators)
+
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -1360,7 +1363,16 @@ export default class Elysia<
 		infer IsScoped
 	>
 		? IsScoped extends true
-			? this
+			? Elysia<
+					BasePath,
+					Decorators,
+					Definitions,
+					ParentSchema,
+					BasePath extends ``
+						? Routes & NewElysia['schema']
+						: Routes & AddPrefix<BasePath, NewElysia['schema']>,
+					Scoped
+			  >
 			: Elysia<
 					BasePath,
 					{
@@ -1520,23 +1532,36 @@ export default class Elysia<
 				this.lazyLoadModules.push(
 					instance
 						.then((plugin) => {
-							if(plugin instanceof Elysia) {
+							if (plugin instanceof Elysia) {
 								this.compile()
 
 								// Recompile async plugin routes
-								for (const { method, path, handler, hooks } of Object.values(
-									plugin.routes
-								)) {
+								for (const {
+									method,
+									path,
+									handler,
+									hooks
+								} of Object.values(plugin.routes)) {
 									this.add(
 										method,
 										path,
 										handler,
-										mergeHook(hooks as LocalHook<any, any, any, any, any, any>, {
-											error: plugin.event.error
-										})
+										mergeHook(
+											hooks as LocalHook<
+												any,
+												any,
+												any,
+												any,
+												any,
+												any
+											>,
+											{
+												error: plugin.event.error
+											}
+										)
 									)
 								}
-						
+
 								return plugin
 							}
 
@@ -1669,7 +1694,9 @@ export default class Elysia<
 			const run = typeof path === 'function' ? path : handle!
 
 			const handler: Handler<any, any> = async ({ request, path }) =>
-				run(new Request('http://a.cc' + path || '/', request))
+				run(
+					new Request(getHostname(request.url) + path || '/', request)
+				)
 
 			this.all('/', handler as any, {
 				type: 'none'
@@ -1684,7 +1711,10 @@ export default class Elysia<
 		const length = path.length
 		const handler: Handler<any, any> = async ({ request, path }) =>
 			handle!(
-				new Request('http://a.cc' + path.slice(length) || '/', request)
+				new Request(
+					getHostname(request.url) + path.slice(length) || '/',
+					request
+				)
 			)
 
 		this.all(path, handler as any, {
@@ -3254,7 +3284,7 @@ export default class Elysia<
 export { Elysia }
 
 export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
-export { t } from './custom-types'
+export { t } from './type-system'
 export { Cookie, type CookieOptions } from './cookie'
 
 export {

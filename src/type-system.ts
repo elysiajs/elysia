@@ -15,6 +15,8 @@ import {
 } from '@sinclair/typebox'
 import { type TypeCheck } from '@sinclair/typebox/compiler'
 import { CookieOptions } from './cookie'
+import { Value } from '@sinclair/typebox/value'
+import { ValidationError } from './error'
 
 try {
 	TypeSystem.Format('email', (value) =>
@@ -155,7 +157,7 @@ const Files = TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
 	}
 )
 
-FormatRegistry.Set('numeric', (value) => !isNaN(+value))
+FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
 FormatRegistry.Set('ObjectString', (value) => {
 	let start = value.charCodeAt(0)
 
@@ -175,23 +177,29 @@ FormatRegistry.Set('ObjectString', (value) => {
 })
 
 export const ElysiaType = {
-	Numeric: (property?: NumericOptions<number>) =>
-		Type.Transform(
+	Numeric: (property?: NumericOptions<number>) => {
+		const schema = Type.Number(property)
+
+		return Type.Transform(
 			Type.Union([
 				Type.String({
 					format: 'numeric',
 					default: 0
 				}),
-				Type.Number(property)
+				schema
 			])
 		)
 			.Decode((value) => {
 				const number = +value
 				if (isNaN(number)) return value
 
+				if (property && !Value.Check(schema, number))
+					throw new ValidationError('property', schema, number)
+
 				return number
 			})
-			.Encode((value) => value) as any as TNumber,
+			.Encode((value) => value) as any as TNumber
+	},
 	ObjectString: <T extends TProperties>(
 		properties: T,
 		options?: ObjectOptions
@@ -218,7 +226,7 @@ export const ElysiaType = {
 			.Encode((value) => JSON.stringify(value)) as any as TObject<T>,
 	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
-		Type.Transform(Type.Union([Files(options)]))
+		Type.Transform(Files(options))
 			.Decode((value) => {
 				if (Array.isArray(value)) return value
 				return [value]
@@ -233,21 +241,22 @@ export const ElysiaType = {
 		Type.Union([Type.Null(), Type.Undefined(), schema]) as any,
 	Cookie: <T extends TProperties>(
 		properties: T,
-		options?: ObjectOptions & CookieOptions & {
-			/**
-			 * Secret key for signing cookie
-			 *
-			 * If array is passed, will use Key Rotation.
-			 *
-			 * Key rotation is when an encryption key is retired
-			 * and replaced by generating a new cryptographic key.
-			 */
-			secrets?: string | string[]
-			/**
-			 * Specified cookie name to be signed globally
-			 */
-			sign?: Readonly<(keyof T | (string & {}))[]>
-		}
+		options?: ObjectOptions &
+			CookieOptions & {
+				/**
+				 * Secret key for signing cookie
+				 *
+				 * If array is passed, will use Key Rotation.
+				 *
+				 * Key rotation is when an encryption key is retired
+				 * and replaced by generating a new cryptographic key.
+				 */
+				secrets?: string | string[]
+				/**
+				 * Specified cookie name to be signed globally
+				 */
+				sign?: Readonly<(keyof T | (string & {}))[]>
+			}
 	): TObject<T> => Type.Object(properties, options)
 } as const
 
@@ -317,6 +326,9 @@ Type.MaybeEmpty = ElysiaType.MaybeEmpty
 Type.Cookie = ElysiaType.Cookie
 
 export { Type as t }
+
+export * from '@sinclair/typebox/system'
+export * from '@sinclair/typebox/compiler'
 
 // type Template =
 // 	| string

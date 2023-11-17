@@ -86,7 +86,6 @@ export type PreContext<
 			redirect?: string
 		}
 
-		path: string
 		request: Request
 		store: Decorators['store']
 	} & Decorators['request']

@@ -53,10 +53,9 @@ describe('Error', () => {
 	// })
 
 	it('inherits functional plugin', async () => {
-		const plugin = () => (app: Elysia) =>
-			app.error('CUSTOM_ERROR', CustomError)
+		const plugin = (app: Elysia) => app.error('CUSTOM_ERROR', CustomError)
 
-		const app = new Elysia().use(plugin())
+		const app = new Elysia().use(plugin)
 
 		expect(getErrors(app)).toEqual(['CUSTOM_ERROR'])
 	})
@@ -67,5 +66,16 @@ describe('Error', () => {
 		const app = new Elysia().use(plugin)
 
 		expect(getErrors(app)).toEqual(['CUSTOM_ERROR'])
+	})
+
+	it('preserve status code base on error if not set', async () => {
+		const app = new Elysia().onError(({ code }) => {
+			if (code === 'NOT_FOUND') return 'UwU'
+		})
+
+		const response = await app.handle(req('/not/found'))
+
+		expect(await response.text()).toBe('UwU')
+		expect(response.status).toBe(404)
 	})
 })
