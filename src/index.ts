@@ -3167,13 +3167,13 @@ export default class Elysia<
 				? ({
 						development: !isProduction,
 						...this.config.serve,
+						fetch,
+						error: this.outerErrorHandler,
 						...options,
 						websocket: {
 							...this.config.websocket,
 							...websocket
 						},
-						fetch,
-						error: this.outerErrorHandler
 				  } as Serve)
 				: ({
 						development: !isProduction,
