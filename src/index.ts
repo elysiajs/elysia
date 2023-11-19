@@ -1279,6 +1279,7 @@ export default class Elysia<
 
 		const instance = new Elysia<any>()
 		instance.store = this.store
+		instance.definitions = this.definitions
 
 		const sandbox = run(instance)
 		this.decorators = mergeDeep(this.decorators, instance.decorators)
