@@ -1,13 +1,26 @@
-import { Elysia, t } from '../src'
+import { Elysia, ParseError } from '../src'
 
 const app = new Elysia()
-	.derive((app) => ({ someKey: 'someValue' }))
-	.get('/', (ctx) => {
-		console.log(ctx.someKey, typeof ctx.someKey) // Output : someValue string
-	})
-	.ws('/ws', {
-		open(ws) {
-			console.log(ws.data.someKey, typeof ws.data.someKey) // Output : someValue string, but IDE complains
+	.onError(({ code, error }) => {
+		if (code === 'PARSE') {
+			console.log(error.status, 'uwu') // 400
+			return 'UwU'
 		}
 	})
-	.listen(3000)
+	.onParse(() => {
+		throw new ParseError()
+	})
+	.post('/', ({ body }) => body)
+
+const response = await app.handle(
+	new Request('http://localhost/', {
+		method: 'POST',
+		headers: {
+			'content-type': 'application/json'
+		},
+		body: JSON.stringify({})
+	})
+)
+
+console.log(await response.text()) // UwU
+console.log(response.status) // 500

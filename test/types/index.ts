@@ -915,3 +915,25 @@ app.group(
 		error: {}
 	}>()
 }
+
+// ? WebSocket infers params
+{
+	new Elysia()
+		.ws('/:id', {
+			open(ws) {
+				expectTypeOf<typeof ws.data.params>().toEqualTypeOf<{
+					id: string
+				}>()
+			}
+		})
+		.ws('/:id', {
+			params: t.Object({
+				id: t.Number()
+			}),
+			open(ws) {
+				expectTypeOf<typeof ws.data.params>().toEqualTypeOf<{
+					id: number
+				}>()
+			}
+		})
+}

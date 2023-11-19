@@ -33,10 +33,10 @@ export namespace WS {
 		},
 		Errors extends Record<string, Error> = {},
 		Path extends string = '',
-		TypedRoute extends RouteSchema = Path extends `${string}:${string}`
-			? Route & {
-					params: Record<GetPathParameter<Path>, string>
-			  }
+		TypedRoute extends RouteSchema = keyof Route['params'] extends never
+			? Route & { 
+				params: Record<GetPathParameter<Path>, string>
+			}
 			: Route
 	> = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 		Omit<

@@ -1,3 +1,8 @@
+# 0.7.29 - 19 Nov 2023
+Bug fix:
+- WebSocket params conflict with defined type
+- Inherits status code on custom error
+
 # 0.7.28 - 16 Nov 2023
 Chore:
 - Update `cookie` to `0.6.0`

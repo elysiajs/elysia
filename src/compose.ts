@@ -1176,25 +1176,25 @@ export const composeHandler = ({
 
 		fnLiteral += `const set = c.set
 
-		if (!set.status || set.status < 300) set.status = 500
+		if (!set.status || set.status < 300) set.status = error?.status || 500
 	`
 
 		const endError = report('error', {
 			unit: hooks.error.length
 		})
 		if (hooks.error.length) {
+			fnLiteral += `
+				c.error = error
+				c.code = error.code ?? error[ERROR_CODE] ?? "UNKNOWN"
+			`
+
 			for (let i = 0; i < hooks.error.length; i++) {
 				const name = `er${i}`
 				const endUnit = report('error.unit', {
 					name: hooks.error[i].name
 				})
 
-				fnLiteral += `\nlet ${name} = handleErrors[${i}](
-					Object.assign(c, {
-						error: error,
-						code: error.code ?? error[ERROR_CODE] ?? "UNKNOWN"
-					})
-				)\n`
+				fnLiteral += `\nlet ${name} = handleErrors[${i}](c)\n`
 
 				if (isAsync(hooks.error[i]))
 					fnLiteral += `if (${name} instanceof Promise) ${name} = await ${name}\n`
@@ -1566,16 +1566,14 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 		app.event.error.find(isAsync) ? 'async' : ''
 	} function(context, error) {
 		const { set } = context
+
+		context.code = error.code
+		context.error = error
 		`
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
 
-		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}](
-			Object.assign(context, {
-				code: error.code ?? error[ERROR_CODE] ?? 'UNKNOWN',
-				error
-			})
-		)`
+		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}](context)`
 
 		if (hasReturn(handler.toString()))
 			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) {
