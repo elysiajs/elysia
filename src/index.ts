@@ -26,7 +26,7 @@ import {
 	mergeLifeCycle,
 	filterGlobalHook,
 	asGlobal,
-	getHostname
+	replaceUrlPath
 } from './utils'
 
 import {
@@ -1695,7 +1695,10 @@ export default class Elysia<
 
 			const handler: Handler<any, any> = async ({ request, path }) =>
 				run(
-					new Request(getHostname(request.url) + path || '/', request)
+					new Request(
+						replaceUrlPath(request.url, path || '/'),
+						request
+					)
 				)
 
 			this.all('/', handler as any, {
@@ -1712,7 +1715,7 @@ export default class Elysia<
 		const handler: Handler<any, any> = async ({ request, path }) =>
 			handle!(
 				new Request(
-					getHostname(request.url) + path.slice(length) || '/',
+					replaceUrlPath(request.url, path.slice(length) || '/'),
 					request
 				)
 			)

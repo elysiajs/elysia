@@ -14,7 +14,11 @@ import type {
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
-export const getHostname = (url: string) => url.slice(0, url.indexOf('/', 11))
+export const replaceUrlPath = (url: string, pathname: string) => {
+	const urlObject = new URL(url)
+	urlObject.pathname = pathname
+	return urlObject.toString()
+}
 
 const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
