@@ -1276,7 +1276,10 @@ export default class Elysia<
 			return this
 		}
 
-		const instance = new Elysia<any>()
+		const instance = new Elysia<any>({
+			...this.config,
+			prefix: ''
+		})
 		instance.store = this.store
 
 		const sandbox = run(instance)
