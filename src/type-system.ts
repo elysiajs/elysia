@@ -92,6 +92,10 @@ export namespace ElysiaTypeOptions {
 			| 'application/ld+json'
 			| 'application/xml'
 			| 'application/zip'
+			| 'font/woff2'
+			| 'font/woff'
+			| 'font/ttf'
+			| 'font/otf'
 		>
 		minSize?: FileUnit
 		maxSize?: FileUnit
