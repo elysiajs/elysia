@@ -1,3 +1,7 @@
+# 0.7.30 - 5 Dec 2023
+Bug fix:
+- Emergency release override latest beta
+
 # 0.7.29 - 19 Nov 2023
 Bug fix:
 - WebSocket params conflict with defined type
