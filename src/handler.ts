@@ -107,11 +107,22 @@ export const mapResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
+				return new Response(response as string, set as SetResponse)
+
 			case 'Blob':
-				return new Response(response as string | Blob, {
-					status: set.status,
-					headers: set.headers
-				})
+				const size = (response as File).size
+				if (size)
+					return new Response(response as Blob, {
+						status: set.status,
+						headers: Object.assign(
+							{
+								'accept-ranges': 'bytes',
+								'content-range': `bytes 0-${size - 1}/${size}`
+							},
+							set.headers
+						)
+					})
+				else return new Response(response as Blob)
 
 			case 'Object':
 			case 'Array':
@@ -130,7 +141,7 @@ export const mapResponse = (
 					response as ReadableStream,
 					set as SetResponse
 				)
-	
+
 			case undefined:
 				if (!response) return new Response('', set as SetResponse)
 
@@ -192,8 +203,18 @@ export const mapResponse = (
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
+				return new Response(response as string)
+
 			case 'Blob':
-				return new Response(response as string | Blob)
+				const size = (response as File).size
+				if (size)
+					return new Response(response as Blob, {
+						headers: {
+							'accept-ranges': 'bytes',
+							'content-range': `bytes 0-${size - 1}/${size}`
+						}
+					})
+				else return new Response(response as Blob)
 
 			case 'Object':
 			case 'Array':
@@ -208,7 +229,7 @@ export const mapResponse = (
 					headers: {
 						'Content-Type': 'text/event-stream; charset=utf-8'
 					}
-				})		
+				})
 
 			case undefined:
 				if (!response) return new Response('')
@@ -304,11 +325,22 @@ export const mapEarlyResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
+				return new Response(response as string, set as SetResponse)
+
 			case 'Blob':
-				return new Response(
-					response as string | Blob,
-					set as SetResponse
-				)
+				const size = (response as File).size
+				if (size)
+					return new Response(response as Blob, {
+						status: set.status,
+						headers: Object.assign(
+							{
+								'accept-ranges': 'bytes',
+								'content-range': `bytes 0-${size - 1}/${size}`
+							},
+							set.headers
+						)
+					})
+				else return new Response(response as Blob)
 
 			case 'Object':
 			case 'Array':
@@ -399,8 +431,18 @@ export const mapEarlyResponse = (
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
+				return new Response(response as string)
+
 			case 'Blob':
-				return new Response(response as string | Blob)
+				const size = (response as File).size
+				if (size)
+					return new Response(response as Blob, {
+						headers: {
+							'accept-ranges': 'bytes',
+							'content-range': `bytes 0-${size - 1}/${size}`
+						}
+					})
+				else return new Response(response as Blob)
 
 			case 'Object':
 			case 'Array':
@@ -478,8 +520,18 @@ export const mapCompactResponse = (response: unknown): Response => {
 
 	switch (response?.constructor?.name) {
 		case 'String':
+			return new Response(response as string)
+
 		case 'Blob':
-			return new Response(response as string | Blob)
+			const size = (response as File).size
+			if (size)
+				return new Response(response as Blob, {
+					headers: {
+						'accept-ranges': 'bytes',
+						'content-range': `bytes 0-${size - 1}/${size}`
+					}
+				})
+			else return new Response(response as Blob)
 
 		case 'Object':
 		case 'Array':

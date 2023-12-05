@@ -197,8 +197,8 @@ export default class Elysia<
 				path === ''
 					? path
 					: path.charCodeAt(0) === 47
-					? path
-					: `/${path}`
+					  ? path
+					  : `/${path}`
 
 			if (this.config.prefix && !skipPrefix)
 				path = this.config.prefix + path
@@ -312,6 +312,8 @@ export default class Elysia<
 				const response = mapCompactResponse(handler)
 
 				handle = () => response.clone()
+				// @ts-ignore
+				handle.response = response
 
 				const lifeCycleLiteral =
 					validator || (method !== 'GET' && method !== 'HEAD')
@@ -378,6 +380,11 @@ export default class Elysia<
 				setHeader: this.setHeader
 			})
 
+			// @ts-ignore
+			if (handle.response)
+				// @ts-ignore
+				mainHandler.response = handle.response
+
 			const existingRouteIndex = this.routes.findIndex(
 				(route) => route.path === path && route.method === method
 			)
@@ -399,14 +406,18 @@ export default class Elysia<
 				const loose = this.config.strictPath
 					? undefined
 					: path.endsWith('/')
-					? path.slice(0, path.length - 1)
-					: path + '/'
+					  ? path.slice(0, path.length - 1)
+					  : path + '/'
 
 				if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 					const index = this.staticRouter.handlers.length
 					this.staticRouter.handlers.push(mainHandler)
 
-					this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+					// @ts-ignore
+					if (handle.response instanceof Response)
+						this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
+					else
+						this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
 
 					this.wsPaths[path] = index
 					if (loose) this.wsPaths[loose] = index
@@ -422,7 +433,11 @@ export default class Elysia<
 				const index = this.staticRouter.handlers.length
 				this.staticRouter.handlers.push(mainHandler)
 
-				this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+				// @ts-ignore
+				if (mainHandler.response instanceof Response)
+					this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
+				else
+					this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
 
 				if (!this.staticRouter.map[path])
 					this.staticRouter.map[path] = {
@@ -430,13 +445,17 @@ export default class Elysia<
 					}
 
 				if (method === 'ALL')
-					this.staticRouter.map[
-						path
-					].all = `default: return st${index}(ctx)\n`
-				else
-					this.staticRouter.map[
-						path
-					].code = `case '${method}': return st${index}(ctx)\n${this.staticRouter.map[path].code}`
+					this.staticRouter.map[path].all =
+						`default: return st${index}(ctx)\n`
+				else {
+					// @ts-ignore
+					if (handle.response instanceof Response)
+						this.staticRouter.map[path].code =
+							`case '${method}': return st${index}.clone()\n${this.staticRouter.map[path].code}`
+					else
+						this.staticRouter.map[path].code =
+							`case '${method}': return st${index}(ctx)\n${this.staticRouter.map[path].code}`
+				}
 
 				if (!this.config.strictPath) {
 					if (!this.staticRouter.map[loosePath])
@@ -445,13 +464,17 @@ export default class Elysia<
 						}
 
 					if (method === 'ALL')
-						this.staticRouter.map[
-							loosePath
-						].all = `default: return st${index}(ctx)\n`
-					else
-						this.staticRouter.map[
-							loosePath
-						].code = `case '${method}': return st${index}(ctx)\n${this.staticRouter.map[loosePath].code}`
+						this.staticRouter.map[loosePath].all =
+							`default: return st${index}(ctx)\n`
+					else {
+						// @ts-ignore
+						if (mainHandler.response instanceof Response)
+							this.staticRouter.map[loosePath].code =
+								`case '${method}': return st${index}.clone()\n${this.staticRouter.map[loosePath].code}`
+						else
+							this.staticRouter.map[loosePath].code =
+								`case '${method}': return st${index}(ctx)\n${this.staticRouter.map[loosePath].code}`
+					}
 				}
 			} else {
 				this.router.add(method, path, mainHandler)
@@ -1222,8 +1245,8 @@ export default class Elysia<
 							error: !localHook.error
 								? sandbox.event.error
 								: Array.isArray(localHook.error)
-								? [...localHook.error, ...sandbox.event.error]
-								: [localHook.error, ...sandbox.event.error]
+								  ? [...localHook.error, ...sandbox.event.error]
+								  : [localHook.error, ...sandbox.event.error]
 						})
 					)
 				} else {
@@ -1369,8 +1392,8 @@ export default class Elysia<
 						error: !localHook.error
 							? sandbox.event.error
 							: Array.isArray(localHook.error)
-							? [...localHook.error, ...sandbox.event.error]
-							: [localHook.error, ...sandbox.event.error]
+							  ? [...localHook.error, ...sandbox.event.error]
+							  : [localHook.error, ...sandbox.event.error]
 					})
 				)
 			}
@@ -1802,10 +1825,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -1877,10 +1900,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -1952,10 +1975,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -2027,10 +2050,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -2102,10 +2125,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -2177,10 +2200,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -2247,10 +2270,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -2322,10 +2345,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -2397,10 +2420,10 @@ export default class Elysia<
 										: Function
 							  }
 							: Route['response'] extends { 200: any }
-							? Route['response']
-							: {
-									200: Route['response']
-							  }
+							  ? Route['response']
+							  : {
+										200: Route['response']
+							    }
 					}
 				}
 			}
@@ -2662,10 +2685,10 @@ export default class Elysia<
 												: Function
 									  }
 									: Route['response'] extends { 200: any }
-									? Route['response']
-									: {
-											200: Route['response']
-									  }
+									  ? Route['response']
+									  : {
+												200: Route['response']
+									    }
 						  }
 						: never
 				}
@@ -3082,8 +3105,8 @@ export default class Elysia<
 							? prefix + word
 							: prefix + capitalize(word)
 				: delimieter.includes(word.at(-1) ?? '')
-				? (suffix: string, word: string) => word + suffix
-				: (suffix: string, word: string) => word + capitalize(suffix)
+				  ? (suffix: string, word: string) => word + suffix
+				  : (suffix: string, word: string) => word + capitalize(suffix)
 
 		const remap = (type: 'decorator' | 'state' | 'model' | 'error') => {
 			const store: Record<string, any> = {}

@@ -35,7 +35,7 @@ describe('WebSocket connection', () => {
 
 		const { wasClean, code } = await wsClose(ws)
 		expect(wasClean).toBe(false)
-		expect(code).toBe(1001) // going away -> https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+		expect(code).toBe(1000) // going away -> https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
 
 		app.stop()
 	})

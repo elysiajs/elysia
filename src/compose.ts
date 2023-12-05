@@ -1,5 +1,6 @@
 import { type Elysia } from '.'
 
+import { Value } from '@sinclair/typebox/value'
 import { TypeCheck } from '@sinclair/typebox/compiler'
 import type { TAnySchema } from '@sinclair/typebox'
 
@@ -93,7 +94,7 @@ const createReport = ({
 
 			addFn(
 				'\n' +
-					`reporter.emit('event', { 
+					`reporter.emit('event', {
 					id,
 					event: '${event}',
 					type: 'begin',
@@ -183,7 +184,7 @@ ${name}
 ).toResponse(c.set.headers)`
 
 		return `\n${injectResponse}
-		if(response[c.set.status]?.Check(${name}) === false) { 
+		if(response[c.set.status]?.Check(${name}) === false) {
 	if(!(response instanceof Error))
 		${returnError}
 }\n`
@@ -347,6 +348,35 @@ export const hasType = (type: string, schema: TAnySchema) => {
 	)
 }
 
+export const hasProperty = (expectedProperty: string, schema: TAnySchema) => {
+	if (!schema) return
+
+	if (schema.type === 'object') {
+		const properties = schema.properties as Record<string, TAnySchema>
+
+		if (!properties) return false
+
+		for (const key of Object.keys(properties)) {
+			const property = properties[key]
+
+			if (expectedProperty in property) return true
+
+			if (property.type === 'object') {
+				if (hasProperty(expectedProperty, property)) return true
+			} else if (property.anyOf) {
+				for (let i = 0; i < property.anyOf.length; i++) {
+					if (hasProperty(expectedProperty, property.anyOf[i]))
+						return true
+				}
+			}
+		}
+
+		return false
+	}
+
+	return expectedProperty in schema
+}
+
 const TransformSymbol = Symbol.for('TypeBox.Transform')
 
 export const hasTransform = (schema: TAnySchema) => {
@@ -440,10 +470,10 @@ const getDestructureQuery = (fn: string) => {
 	fn = fn.slice(start + 9)
 	fn = fn.slice(0, fn.indexOf('}'))
 
-	return fn.split(',').map(x => {
+	return fn.split(',').map((x) => {
 		const indexOf = x.indexOf(':')
 
-		if(indexOf === -1) return x.trim()
+		if (indexOf === -1) return x.trim()
 
 		return x.slice(0, indexOf).trim()
 	})
@@ -588,8 +618,8 @@ export const composeHandler = ({
 		const secret = !cookieMeta.secrets
 			? undefined
 			: typeof cookieMeta.secrets === 'string'
-			? cookieMeta.secrets
-			: cookieMeta.secrets[0]
+			  ? cookieMeta.secrets
+			  : cookieMeta.secrets[0]
 
 		encodeCookie += `const _setCookie = c.set.cookie
 		if(_setCookie) {`
@@ -657,10 +687,10 @@ export const composeHandler = ({
 				cookieMeta.sign === true
 					? true
 					: cookieMeta.sign !== undefined
-					? '[' +
-					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
-					  ']'
-					: 'undefined'
+					  ? '[' +
+					    cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
+					    ']'
+					  : 'undefined'
 			},
 			${get('domain')}
 			${get('expires')}
@@ -715,7 +745,7 @@ export const composeHandler = ({
 					.map(
 						(name, index) => `
 						memory = url.indexOf('${name}=')
-					
+
 						const a${index} = memory === -1 ? undefined : url.slice(memory + ${
 							name.length + 1
 						}, (memory = url.indexOf('&', memory + ${
@@ -844,12 +874,12 @@ export const composeHandler = ({
 								hasType('Files', schema)
 							)
 								return `c.body = {}
-		
+
 								const form = await c.request.formData()
 								for (const key of form.keys()) {
 									if (c.body[key])
 										continue
-			
+
 									const value = form.getAll(key)
 									if (value.length === 1)
 										c.body[key] = value[0]
@@ -918,33 +948,33 @@ export const composeHandler = ({
 					case 'application/json':
 						c.body = await c.request.json()
 						break
-				
+
 					case 'text/plain':
 						c.body = await c.request.text()
 						break
-				
+
 					case 'application/x-www-form-urlencoded':
 						c.body = parseQuery(await c.request.text())
 						break
-				
+
 					case 'application/octet-stream':
 						c.body = await c.request.arrayBuffer();
 						break
-				
+
 					case 'multipart/form-data':
 						c.body = {}
-				
+
 						const form = await c.request.formData()
 						for (const key of form.keys()) {
 							if (c.body[key])
 								continue
-				
+
 							const value = form.getAll(key)
 							if (value.length === 1)
 								c.body[key] = value[0]
 							else c.body[key] = value
 						}
-				
+
 						break
 					}\n`
 
@@ -989,6 +1019,22 @@ export const composeHandler = ({
 		fnLiteral += '\n'
 
 		if (validator.headers) {
+			// @ts-ignore
+			if (hasProperty('default', validator.headers.params))
+				for (const [key, value] of Object.entries(
+					Value.Default(
+						// @ts-ignore
+						validator.headers.schema,
+						{}
+					) as Object
+				)) {
+					fnLiteral += `c.headers['${key}'] ??= ${
+						typeof value === 'object'
+							? JSON.stringify(value)
+							: value
+					}\n`
+				}
+
 			fnLiteral += `if(headers.Check(c.headers) === false) {
 				${composeValidation('headers')}
 			}`
@@ -999,6 +1045,22 @@ export const composeHandler = ({
 		}
 
 		if (validator.params) {
+			// @ts-ignore
+			if (hasProperty('default', validator.params.schema))
+				for (const [key, value] of Object.entries(
+					Value.Default(
+						// @ts-ignore
+						validator.params.schema,
+						{}
+					) as Object
+				)) {
+					fnLiteral += `c.params['${key}'] ??= ${
+						typeof value === 'object'
+							? JSON.stringify(value)
+							: value
+					}\n`
+				}
+
 			fnLiteral += `if(params.Check(c.params) === false) {
 				${composeValidation('params')}
 			}`
@@ -1009,8 +1071,24 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
+			// @ts-ignore
+			if (hasProperty('default', validator.query.schema))
+				for (const [key, value] of Object.entries(
+					Value.Default(
+						// @ts-ignore
+						validator.query.schema,
+						{}
+					) as Object
+				)) {
+					fnLiteral += `c.query['${key}'] ??= ${
+						typeof value === 'object'
+							? JSON.stringify(value)
+							: value
+					}\n`
+				}
+
 			fnLiteral += `if(query.Check(c.query) === false) {
-				${composeValidation('query')} 
+				${composeValidation('query')}
 			}`
 
 			// @ts-ignore
@@ -1020,9 +1098,25 @@ export const composeHandler = ({
 		}
 
 		if (validator.body) {
-			fnLiteral += `if(body.Check(c.body) === false) { 
-				${composeValidation('body')}
-			}`
+			// @ts-ignore
+			if (hasProperty('default', validator.body.schema))
+				fnLiteral += `if(body.Check(c.body) === false) {
+    				c.body = Object.assign(${JSON.stringify(
+						Value.Default(
+							// @ts-ignore
+							validator.body.schema,
+							null
+						)
+					)}, c.body)
+
+    				if(body.Check(c.query) === false) {
+        				${composeValidation('body')}
+     			}
+            }`
+			else
+				fnLiteral += `if(body.Check(c.body) === false) {
+			${composeValidation('body')}
+		}`
 
 			// @ts-ignore
 			if (hasTransform(validator.body.schema))
@@ -1032,10 +1126,26 @@ export const composeHandler = ({
 		// @ts-ignore
 		if (isNotEmpty(validator.cookie?.schema.properties ?? {})) {
 			fnLiteral += `const cookieValue = {}
-			for(const [key, value] of Object.entries(c.cookie))
-				cookieValue[key] = value.value
+    			for(const [key, value] of Object.entries(c.cookie))
+    				cookieValue[key] = value.value\n`
 
-			if(cookie.Check(cookieValue) === false) {
+			// @ts-ignore
+			if (hasProperty('default', validator.cookie.schema))
+				for (const [key, value] of Object.entries(
+					Value.Default(
+						// @ts-ignore
+						validator.cookie.schema,
+						{}
+					) as Object
+				)) {
+					fnLiteral += `cookieValue['${key}'] = ${
+						typeof value === 'object'
+							? JSON.stringify(value)
+							: value
+					}\n`
+				}
+
+			fnLiteral += `if(cookie.Check(cookieValue) === false) {
 				${composeValidation('cookie', 'cookieValue')}
 			}`
 
@@ -1311,7 +1421,7 @@ export const composeHandler = ({
 		}
 	}
 
-	fnLiteral = `const { 
+	fnLiteral = `const {
 		handler,
 		handleError,
 		hooks: {
@@ -1359,7 +1469,7 @@ export const composeHandler = ({
 			: ''
 	}
 
-	return ${maybeAsync ? 'async' : ''} function(c) {
+	return ${maybeAsync ? 'async' : ''} function handle(c) {
 		${schema && definitions ? 'c.schema = schema; c.defs = definitions;' : ''}
 		${fnLiteral}
 	}`
@@ -1414,10 +1524,12 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		return ${
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
-				: app.event.request.length ? `new Response(error404Message, {
+				: app.event.request.length
+				  ? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
-				})` : `error404.clone()`
+				})`
+				  : `error404.clone()`
 		}
 
 	ctx.params = route.params
@@ -1446,10 +1558,14 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 	${app.event.request.length ? `const onRequest = app.event.request` : ''}
 	${staticRouter.variables}
-	${app.event.error.length ? '' : `
+	${
+		app.event.error.length
+			? ''
+			: `
 	const error404Message = notFound.message.toString()
 	const error404 = new Response(error404Message, { status: 404 });
-	`}
+	`
+	}
 
 	return ${maybeAsync ? 'async' : ''} function map(request) {
 	`
@@ -1590,7 +1706,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 					case '${path}':
 						if(request.headers.get('upgrade') === 'websocket')
 							return st${index}(ctx)
-							
+
 						break`
 		}
 
@@ -1673,7 +1789,7 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 	fnLiteral += `if(error.constructor.name === "ValidationError") {
 		set.status = error.status ?? 400
 		return new Response(
-			error.message, 
+			error.message,
 			{ headers: set.headers, status: set.status }
 		)
 	} else {

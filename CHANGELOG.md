@@ -1,8 +1,12 @@
 # 0.8.0
 Feature:
 - header initialize function
-- inline response
+- inline static resources
 - lazy query reference
+- add content-range header to `Blob` by default
+- change validation response to JSON
+- update TypeBox to 0.32
+- support default properties
 
 # 0.7.24 - 8 Nov 2023
 Bug fix:
@@ -63,7 +67,7 @@ Improvement:
 - `t.Cookie` cookie option type
 - [#253](https://github.com/elysiajs/elysia/pull/253) platform agnostic cookie
 - Decorator like `state`, `decorate` and `derive`, doesn't apply to WebSocket `data`
-- re-export `Static` from 
+- re-export `Static` from
 
 # 0.7.15 - 26 Sep 2023
 Change:
@@ -509,7 +513,7 @@ Improvement:
 - improve WebSocket type
 
 Bug fix:
-- Possible 
+- Possible
 
 Breaking Change:
 - Rename `innerHandle` to `fetch`
@@ -552,7 +556,7 @@ Improvement:
 
 # 0.5.0-beta.5 - 15 May 2023
 Bug fix:
-- Add support for ALL method for dynamic path 
+- Add support for ALL method for dynamic path
 - Add support for parser in pre-compiled body
 
 # 0.5.0-beta.4 - 15 May 2023
@@ -745,14 +749,14 @@ Fix:
 - group is not exportable because EXPOSED is a private property
 
 # 0.3.0-rc.4 - 9 Mar 2023
-Fix: 
+Fix:
 - console.log while using cookie
 
 # 0.3.0-rc.3 - 9 Mar 2023
 Breaking Change:
 - Rename `inject` to `derive`
 
-Fix: 
+Fix:
 - Multiple cookies doesn't set `content-type` to `application/json`
 - `EXPOSED` is not export when using `fn.permission`
 
@@ -1077,7 +1081,7 @@ Improvement:
 - Decorators is now lazily allocate
 - `.serve` now accept numberic string as port for convenient with `process.env`
 
-# 0.0.0-experimental.51 - 22 Nov 2022 
+# 0.0.0-experimental.51 - 22 Nov 2022
 [[Just Right Slow]](https://youtu.be/z7nN7ryqU28) introduce breaking major changes of KingWorld, specific on a plugin system.
 
 Previously, we define plugin by accepting 2 parameters, `KingWorld` and `Config` like this:
@@ -1131,7 +1135,7 @@ The first plugin to leverage this feature is [jwt](https://github.com/saltyaom/k
 Change:
 - new `decorators` property for assigning fast `Context`
 
-# 0.0.0-experimental.50 - 21 Nov 2022 
+# 0.0.0-experimental.50 - 21 Nov 2022
 Improvement:
 - Faster router.find performance
 - Faster query map performance
@@ -1141,29 +1145,29 @@ Improvement:
 Change:
 - Remove `storeFactory` from router
 
-# 0.0.0-experimental.49 - 19 Nov 2022 
+# 0.0.0-experimental.49 - 19 Nov 2022
 Bug fix:
 - Conditionally return header in response
 
-# 0.0.0-experimental.48 - 18 Nov 2022 
+# 0.0.0-experimental.48 - 18 Nov 2022
 Bug fix:
 - Import Context as non-default
 - TypeScript's type not infering Context
 
-# 0.0.0-experimental.47 - 18 Nov 2022 
+# 0.0.0-experimental.47 - 18 Nov 2022
 Bug fix:
 - Remove `export default Context` as it's a type
 - Import Context as non-default
 
-# 0.0.0-experimental.46 - 18 Nov 2022 
+# 0.0.0-experimental.46 - 18 Nov 2022
 Bug fix:
 - Add custom response to `Blob`
 
-# 0.0.0-experimental.45 - 18 Nov 2022 
+# 0.0.0-experimental.45 - 18 Nov 2022
 Bug fix:
 - Set default HTTP status to 200 (https://github.com/oven-sh/bun/issues/1523)
 
-# 0.0.0-experimental.44 - 18 Nov 2022 
+# 0.0.0-experimental.44 - 18 Nov 2022
 Improvement:
 - Faster object iteration for setting headers
 - `KingWorld` config now accept `Serve` including `SSL`
@@ -1171,15 +1175,15 @@ Improvement:
 Change:
 - Use direct comparison for falsey value
 
-# 0.0.0-experimental.42 - 13 Nov 2022 
+# 0.0.0-experimental.42 - 13 Nov 2022
 Bug fix:
 - Router doesn't handle part which start with the same letter
 
-# 0.0.0-experimental.41 - 9 Nov 2022 
+# 0.0.0-experimental.41 - 9 Nov 2022
 Change:
 - Internal schema now use correct OpenAPI type (KingWorld need CORRECTION 💢💢)
 
-# 0.0.0-experimental.40 - 9 Nov 2022 
+# 0.0.0-experimental.40 - 9 Nov 2022
 Breaking Change:
 - `Context` is now `interface` (non-constructable)
 - `responseHeaders`, `status`, `redirect` is now replaced with `set`
@@ -1206,7 +1210,7 @@ Improvement:
 - `.listen` now accept `Bun.Server` as a callback function
 - Response support for `FileBlob`
 
-# 0.0.0-experimental.39 - 8 Nov 2022 
+# 0.0.0-experimental.39 - 8 Nov 2022
 Breaking Change:
 - `method` is changed to `route`
 
@@ -1219,11 +1223,11 @@ Bug fix:
 - Correct type for `after handle`
 - Fix infinite cycling infer type for `Handler`
 
-# 0.0.0-experimental.38 - 7 Nov 2022 
+# 0.0.0-experimental.38 - 7 Nov 2022
 Bug fix:
 - Correct type for `afterHandle`
 
-# 0.0.0-experimental.37 - 6 Nov 2022 
+# 0.0.0-experimental.37 - 6 Nov 2022
 [[Sage]](https://youtu.be/rgM5VGYToQQ) is one of the major experimental releases and breaking changes of KingWorld.
 
 The major improvement of Sage is that it provides almost (if not) full support for TypeScript and type inference.
@@ -1244,7 +1248,7 @@ KingWorld's validator now replaced `zod`, and `ajv` with `@sinclair/typebox`.
 
 With the new validator, validation is now faster than the previous version by 188x if you're using zod, and 4.1x if you're using ajv adapter.
 
-With Edge Computing in mind, refactoring to new validate dropped the unused packages and reduced size by 181.2KB. 
+With Edge Computing in mind, refactoring to new validate dropped the unused packages and reduced size by 181.2KB.
 To give you an idea, KingWorld without a validator is around 10KB (non-gzipped).
 
 Memory usage is also reduced by almost half by changing the validator.
@@ -1265,7 +1269,7 @@ Improvement:
 Change:
 - `TypedSchema` is now replaced with `Instance['schema']`
 
-# 0.0.0-experimental.36 - 4 Nov 2022 
+# 0.0.0-experimental.36 - 4 Nov 2022
 Breaking Change:
 - `AfterRequestHandle` now accept (`Context`, `Response`) instead of `(Response, Context)`
 
@@ -1273,16 +1277,16 @@ Improvement:
 - `.guard` now combine global and local recursively
 - `.use` now inherits schema
 
-# 0.0.0-experimental.35 - 3 Nov 2022 
+# 0.0.0-experimental.35 - 3 Nov 2022
 Bug fix:
 - Remove `console.log` on failed validation
 
-# 0.0.0-experimental.34 - 3 Nov 2022 
+# 0.0.0-experimental.34 - 3 Nov 2022
 Improvement:
 - Add Ajv 8.11.0
 - Error log for validation is updated to `instancePath`
 
-# 0.0.0-experimental.33 - 3 Nov 2022 
+# 0.0.0-experimental.33 - 3 Nov 2022
 Feature:
 - `.schema` for global schema validation
 - `.start`, `.stop` and accept `KingWorld<Instance>` as first parameter
@@ -1297,7 +1301,7 @@ Bug fix:
 - Make `afterHandle` in `RegisterHook` optional
 - Internal type conversion between `Hook`, `LocalHook`
 
-# 0.0.0-experimental.32 - 2 Nov 2022 
+# 0.0.0-experimental.32 - 2 Nov 2022
 Feature:
 - add `afterHandle` hook
 
@@ -1412,7 +1416,7 @@ Improvement:
 - Switch from `@saltyaom/trek-router` to `@medley/router`
 - Using `clone` instead of flatten object
 - Refactor path fn for inline cache
-- Refactor `Context` to class 
+- Refactor `Context` to class
 
 Bug fix:
 - `.ref()` throw error when accept function
@@ -1429,7 +1433,7 @@ Breaking Change:
 - `ctx.body` is now a literal value instead of `Promise`
     - To migrate, simply remove `await`
 
-Change: 
+Change:
 - `default` now accept `Handler` instead of `EmptyHandler`
 
 Bug fix:

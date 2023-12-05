@@ -1,20 +1,17 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.get('/', 'hi')
-	.post('/', ({ body }) => body, {
-		type: 'json'
-	})
-	.get('/id/:id', ({ params: { id }, query: { a: c, b } }) => ({
-		c,
-		b
-	}))
+	.get('/', Bun.file('example/kyuukurarin.mp4'))
+	// .get('/', ({ query }) => query, {
+	// 	query: t.Object({
+	// 		id: t.Numeric({
+	// 			default: 0
+	// 		})
+	// 	})
+	// })
 	.listen(3000)
 
-console.log(
-	await app
-		.handle(new Request('http://localhost/id/1?a=abc&b=bcd'))
-		.then((x) => x.json())
-)
+// app.handle(new Request('http://localhost'))
 
-console.log(app.routes[1].composed?.toString())
+console.log(app.fetch.toString())
+console.log(app.routes[0].composed?.toString())
