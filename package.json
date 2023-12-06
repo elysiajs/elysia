@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "0.8.0-exp.6",
+	"version": "0.8.0-exp.7",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -140,7 +140,7 @@
 		"@typescript-eslint/eslint-plugin": "^6.7.2",
 		"@typescript-eslint/parser": "^6.7.2",
 		"bumpp": "^9.2.0",
-		"bun-types": "^1.0.2",
+		"bun-types": "^1.0.15",
 		"eslint": "^8.49.0",
 		"expect-type": "^0.16.0",
 		"react": "^18.2.0",

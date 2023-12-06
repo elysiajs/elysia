@@ -1,17 +1,23 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, error } from '../src'
+
+const models = new Elysia({ name: 'schema' }).model({
+	bearer: t.Object({
+		authorization: t.TemplateLiteral('Bearer ${string}')
+	})
+})
 
 const app = new Elysia()
-	.get('/', Bun.file('example/kyuukurarin.mp4'))
-	// .get('/', ({ query }) => query, {
-	// 	query: t.Object({
-	// 		id: t.Numeric({
-	// 			default: 0
-	// 		})
-	// 	})
-	// })
+	.use(models.prefix('model', 'h'))
+	.get(
+		'/id/:id',
+		(c) => (Math.random() > 0.5 ? error("I'm a teapot", 'Teapot') : 'Hi'),
+		{
+			query: t.Object({
+				id: t.String()
+			}),
+			headers: 'hBearer'
+		}
+	)
 	.listen(3000)
 
-// app.handle(new Request('http://localhost'))
-
-console.log(app.fetch.toString())
-console.log(app.routes[0].composed?.toString())
+type Res = (typeof app)['schema']['/id/:id']['get']

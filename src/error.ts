@@ -1,6 +1,8 @@
 import { Value } from '@sinclair/typebox/value'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
+import { StatusMap } from './utils'
+
 // ? Cloudflare worker support
 const env =
 	typeof Bun !== 'undefined'
@@ -19,6 +21,26 @@ export type ElysiaErrors =
 	| ParseError
 	| ValidationError
 	| InvalidCookieSignature
+
+export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
+
+export const error = <
+	const Code extends number | keyof typeof StatusMap,
+	const T
+>(
+	code: Code,
+	response: T
+): {
+	[ELYSIA_RESPONSE]: Code extends keyof typeof StatusMap
+		? (typeof StatusMap)[Code]
+		: Code
+	response: T
+} =>
+	({
+		// @ts-ignore
+		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
+		response
+	}) as const
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'

@@ -41,7 +41,8 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError
+	type InternalServerError,
+	ELYSIA_RESPONSE
 } from './error'
 
 import type {
@@ -76,7 +77,8 @@ import type {
 	TraceReporter,
 	TraceHandler,
 	MaybeArray,
-	GracefulHandler
+	GracefulHandler,
+	GetPathParameter
 } from './types'
 import { t } from './custom-types'
 
@@ -1792,12 +1794,12 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
@@ -1815,15 +1817,47 @@ export default class Elysia<
 				[path in `${BasePath}${Path}`]: {
 					get: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends
+												{
+													[ELYSIA_RESPONSE]: number
+													response: any
+												}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
 							  ? Route['response']
 							  : {
@@ -1867,12 +1901,12 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
@@ -1890,15 +1924,47 @@ export default class Elysia<
 				[path in `${BasePath}${Path}`]: {
 					post: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends
+												{
+													[ELYSIA_RESPONSE]: number
+													response: any
+												}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
 							  ? Route['response']
 							  : {
@@ -3244,6 +3310,7 @@ export default class Elysia<
 			typeof options === 'object'
 				? ({
 						development: !isProduction,
+						reusePort: true,
 						...this.config.serve,
 						...options,
 						websocket: {
@@ -3255,6 +3322,7 @@ export default class Elysia<
 				  } as Serve)
 				: ({
 						development: !isProduction,
+						reusePort: true,
 						...this.config.serve,
 						websocket: {
 							...this.config.websocket,
@@ -3374,6 +3442,7 @@ export {
 } from './utils'
 
 export {
+	error,
 	ParseError,
 	NotFoundError,
 	ValidationError,

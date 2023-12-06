@@ -4,6 +4,7 @@ import { StatusMap } from './utils'
 
 import type { Context } from './context'
 import { Cookie } from './cookie'
+import { ELYSIA_RESPONSE } from './error'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -72,12 +73,20 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	if (
-		// @ts-ignore
-		response?.$passthrough
-	)
+	console.log(response, set)
+
+	// @ts-ignore
+	if (response[response.$passthrough])
 		// @ts-ignore
 		response = response[response.$passthrough]
+
+	// @ts-ignore
+	if (response[ELYSIA_RESPONSE]) {
+		// @ts-ignore
+		set.status = response[ELYSIA_RESPONSE]
+		// @ts-ignore
+		response = response.response
+	}
 
 	if (
 		isNotEmpty(set.headers) ||
@@ -295,6 +304,14 @@ export const mapEarlyResponse = (
 	)
 		// @ts-ignore
 		response = response[response.$passthrough]
+
+	// @ts-ignore
+	if (response[ELYSIA_RESPONSE]) {
+		// @ts-ignore
+		set.status = response[ELYSIA_RESPONSE]
+		// @ts-ignore
+		response = response.response
+	}
 
 	if (
 		isNotEmpty(set.headers) ||
@@ -517,6 +534,15 @@ export const mapCompactResponse = (response: unknown): Response => {
 	)
 		// @ts-ignore
 		response = response[response.$passthrough]
+
+	// @ts-ignore
+	if (response[ELYSIA_RESPONSE])
+		// @ts-ignore
+		return mapResponse(response.response, {
+			// @ts-ignore
+			status: response[ELYSIA_RESPONSE],
+			headers: {}
+		})
 
 	switch (response?.constructor?.name) {
 		case 'String':
