@@ -461,6 +461,13 @@ export const composeHandler = ({
 
 	let hasUnknownContext = false
 
+	const removeCookie = `\n
+	console.log('remove cookie')
+	if(c.set.cookie == undefined) c.set.cookie = {};
+			cookieKeysBeforeHandler.filter(x => !(x in c.cookie)).forEach(x => {
+					c.set.cookie[x] = {value : '',maxAge: 0,expires: new Date(0)}
+	})\n`
+
 	if (isContextPassToFunction(handler.toString())) hasUnknownContext = true
 
 	if (!hasUnknownContext)
@@ -641,6 +648,9 @@ export const composeHandler = ({
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.headers.cookie, ${options})\n`
 		else
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
+		
+		fnLiteral += `\nconst cookieKeysBeforeHandler = Object.keys(c.cookie)\n`
+
 	}
 
 	const hasQuery =
@@ -1116,7 +1126,8 @@ export const composeHandler = ({
 
 		fnLiteral += encodeCookie
 
-		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+
+		if (hasSet) fnLiteral += removeCookie + `return mapResponse(r, c.set)\n`
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
 		const endHandle = report('handle', {
@@ -1136,7 +1147,7 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+			if (hasSet) fnLiteral += removeCookie + `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
 			if (traceConditions.handle || hasCookie) {
@@ -1150,7 +1161,7 @@ export const composeHandler = ({
 
 				fnLiteral += encodeCookie
 
-				if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+				if (hasSet) fnLiteral += removeCookie + `return mapResponse(r, c.set)\n`
 				else fnLiteral += `return mapCompactResponse(r)\n`
 			} else {
 				endHandle()
@@ -1162,7 +1173,7 @@ export const composeHandler = ({
 				report('afterHandle')()
 
 				if (hasSet)
-					fnLiteral += `return mapResponse(${handled}, c.set)\n`
+					fnLiteral += removeCookie + `return mapResponse(${handled}, c.set)\n`
 				else fnLiteral += `return mapCompactResponse(${handled})\n`
 			}
 		}
@@ -1576,10 +1587,10 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}](context)`
 
 		if (hasReturn(handler.toString()))
-			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) {
-				if(set.status === 200) set.status = error.status
-				return mapResponse(r${i}, set)
-			}\n`
+				fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) {
+					if(set.status === 200) set.status = error.status
+					return mapResponse(r${i}, set)
+				}\n`
 		else fnLiteral += response + '\n'
 	}
 
