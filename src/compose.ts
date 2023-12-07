@@ -461,6 +461,7 @@ export const composeHandler = ({
 
 	let hasUnknownContext = false
 
+	//console.log('method', method)
 	const removeCookie = `\n
 	console.log('remove cookie')
 	if(c.set.cookie == undefined) c.set.cookie = {};
@@ -726,7 +727,16 @@ export const composeHandler = ({
 				switch (hooks.type) {
 					case 'json':
 					case 'application/json':
-						fnLiteral += `c.body = await c.request.json()\n`
+						fnLiteral += `if(method === "ALL"){
+							try{
+								c.body = await c.request.json()
+							}catch(e){
+								c.body = undefined
+							}
+						}else{
+							c.body = await c.request.json()
+						}
+						\n`
 						break
 
 					case 'text':
@@ -843,11 +853,21 @@ export const composeHandler = ({
 				}
 
 				if (hooks.parse.length) fnLiteral += `if (!used)`
-
+				
 				fnLiteral += `
 				switch (contentType) {
 					case 'application/json':
-						c.body = await c.request.json()
+						
+						if(method === "ALL"){
+							try{
+								c.body = await c.request.json()
+							}catch(e){
+								c.body = undefined
+							}
+						}else{
+							c.body = await c.request.json()
+						}
+						
 						break
 				
 					case 'text/plain':
@@ -1242,6 +1262,7 @@ export const composeHandler = ({
 	}
 
 	fnLiteral = `const { 
+		method,
 		handler,
 		handleError,
 		hooks: {
@@ -1296,6 +1317,7 @@ export const composeHandler = ({
 	const createHandler = Function('hooks', fnLiteral)
 
 	return createHandler({
+		method,
 		handler,
 		hooks,
 		validator,
