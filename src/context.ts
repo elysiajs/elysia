@@ -18,6 +18,7 @@ export type Context<
 	Decorators extends DecoratorBase = {
 		request: {}
 		store: {}
+		derive: {}
 	},
 	Path extends string = ''
 > = Prettify<
@@ -32,7 +33,7 @@ export type Context<
 				: never
 			: Route['params']
 		headers: undefined extends Route['headers']
-			? Record<string, string | null>
+			? Record<string, string | undefined>
 			: Route['headers']
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<any>>
@@ -51,7 +52,7 @@ export type Context<
 			redirect?: string
 			/**
 			 * ! Internal Property
-			 * 
+			 *
 			 * Use `Context.cookie` instead
 			 */
 			cookie?: Record<
@@ -67,21 +68,20 @@ export type Context<
 		path: string
 		request: Request
 		store: Decorators['store']
-	} & Decorators['request']
+	} & Decorators['request'] & Decorators['derive'] 
 >
 
 // Use to mimic request before mapping route
 export type PreContext<
-	Route extends RouteSchema = RouteSchema,
 	Decorators extends DecoratorBase = {
 		request: {}
 		store: {}
+		derive: {}
 	}
 > = Prettify<
 	{
-		headers: undefined extends Route['headers']
-			? Record<string, string | null>
-			: Route['headers']
+		store: Decorators['store']
+		request: Request
 
 		set: {
 			headers: { [header: string]: string } & {
@@ -90,9 +90,5 @@ export type PreContext<
 			status?: number
 			redirect?: string
 		}
-
-		path: string
-		request: Request
-		store: Decorators['store']
 	} & Decorators['request']
 >

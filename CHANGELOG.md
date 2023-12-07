@@ -7,6 +7,12 @@ Feature:
 - change validation response to JSON
 - update TypeBox to 0.32
 - support default properties
+- add extension API
+- differentiate derive from `decorator['request']` as `decorator['derive']`
+
+Bug fix:
+- remove `headers`, `path` from `PreContext`
+- remove `derive` from `PreContext`
 
 # 0.7.24 - 8 Nov 2023
 Bug fix:

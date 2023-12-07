@@ -26,7 +26,8 @@ import {
 	checksum,
 	mergeLifeCycle,
 	filterGlobalHook,
-	asGlobal
+	asGlobal,
+	traceBackExtension
 } from './utils'
 
 import {
@@ -78,7 +79,10 @@ import type {
 	TraceHandler,
 	MaybeArray,
 	GracefulHandler,
-	GetPathParameter
+	GetPathParameter,
+	BaseExtension,
+	ExtensionToProperty,
+	ExtensionManager
 } from './types'
 import { t } from './custom-types'
 
@@ -101,12 +105,14 @@ export default class Elysia<
 	Decorators extends DecoratorBase = {
 		request: {}
 		store: {}
+		derive: {}
 	},
 	Definitions extends DefinitionBase = {
 		type: {}
 		error: {}
 	},
 	ParentSchema extends RouteSchema = {},
+	Extension extends Record<string, unknown> = {},
 	Routes extends RouteBase = {},
 	Scoped extends boolean = false
 > {
@@ -125,6 +131,9 @@ export default class Elysia<
 
 	schema = {} as Routes
 
+	extensions: ((manager: ExtensionManager<any, any, any>) => Extension)[] =
+		[] as any
+
 	event: LifeCycleStore = {
 		start: [],
 		request: [],
@@ -133,7 +142,6 @@ export default class Elysia<
 		beforeHandle: [],
 		afterHandle: [],
 		onResponse: [],
-		mapResponse: [],
 		trace: [],
 		error: [],
 		stop: []
@@ -186,7 +194,7 @@ export default class Elysia<
 		method: HTTPMethod,
 		paths: string | Readonly<string[]>,
 		handler: Handler<any, any, any> | unknown,
-		hook?: LocalHook<any, any, any, any>,
+		hook?: LocalHook<any, any, any, any, any>,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
 			skipPrefix: false as boolean | undefined
@@ -199,8 +207,8 @@ export default class Elysia<
 				path === ''
 					? path
 					: path.charCodeAt(0) === 47
-					  ? path
-					  : `/${path}`
+					? path
+					: `/${path}`
 
 			if (this.config.prefix && !skipPrefix)
 				path = this.config.prefix + path
@@ -308,6 +316,49 @@ export default class Elysia<
 				? path.slice(0, path.length - 1)
 				: path + '/'
 
+			if (this.extensions.length) {
+				const manager: ExtensionManager = {
+					events: hooks,
+					onParse(v) {
+						if (Array.isArray(v))
+							hooks.parse = hooks.parse.concat(v)
+						else hooks.parse.push(v)
+					},
+					onTransform(v) {
+						if (Array.isArray(v))
+							hooks.transform = hooks.transform.concat(v)
+						else hooks.transform.push(v)
+					},
+					onBeforeHandle(v) {
+						if (Array.isArray(v))
+							// @ts-ignore
+							hooks.beforeHandle = hooks.beforeHandle.concat(v)
+						// @ts-ignore
+						else hooks.beforeHandle.push(v)
+					},
+					onAfterHandle(v) {
+						if (Array.isArray(v))
+							// @ts-ignore
+							hooks.afterHandle = hooks.afterHandle.concat(v)
+						// @ts-ignore
+						else hooks.afterHandle.push(v)
+					},
+					onResponse(v) {
+						if (Array.isArray(v))
+							hooks.onResponse = hooks.onResponse.concat(v)
+						else hooks.onResponse.push(v)
+					},
+					onError(v) {
+						if (Array.isArray(v))
+							hooks.error = hooks.error.concat(v)
+						else hooks.error.push(v)
+					}
+				}
+
+				for (const extension of this.extensions)
+					traceBackExtension(extension(manager), hooks as any)
+			}
+
 			const isFn = typeof handler === 'function'
 			let handle: Handler<any, any> = isFn ? handler : ((() => '') as any)
 			if (!isFn) {
@@ -408,8 +459,8 @@ export default class Elysia<
 				const loose = this.config.strictPath
 					? undefined
 					: path.endsWith('/')
-					  ? path.slice(0, path.length - 1)
-					  : path + '/'
+					? path.slice(0, path.length - 1)
+					: path + '/'
 
 				if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 					const index = this.staticRouter.handlers.length
@@ -447,16 +498,19 @@ export default class Elysia<
 					}
 
 				if (method === 'ALL')
-					this.staticRouter.map[path].all =
-						`default: return st${index}(ctx)\n`
+					this.staticRouter.map[
+						path
+					].all = `default: return st${index}(ctx)\n`
 				else {
 					// @ts-ignore
 					if (handle.response instanceof Response)
-						this.staticRouter.map[path].code =
-							`case '${method}': return st${index}.clone()\n${this.staticRouter.map[path].code}`
+						this.staticRouter.map[
+							path
+						].code = `case '${method}': return st${index}.clone()\n${this.staticRouter.map[path].code}`
 					else
-						this.staticRouter.map[path].code =
-							`case '${method}': return st${index}(ctx)\n${this.staticRouter.map[path].code}`
+						this.staticRouter.map[
+							path
+						].code = `case '${method}': return st${index}(ctx)\n${this.staticRouter.map[path].code}`
 				}
 
 				if (!this.config.strictPath) {
@@ -466,16 +520,19 @@ export default class Elysia<
 						}
 
 					if (method === 'ALL')
-						this.staticRouter.map[loosePath].all =
-							`default: return st${index}(ctx)\n`
+						this.staticRouter.map[
+							loosePath
+						].all = `default: return st${index}(ctx)\n`
 					else {
 						// @ts-ignore
 						if (mainHandler.response instanceof Response)
-							this.staticRouter.map[loosePath].code =
-								`case '${method}': return st${index}.clone()\n${this.staticRouter.map[loosePath].code}`
+							this.staticRouter.map[
+								loosePath
+							].code = `case '${method}': return st${index}.clone()\n${this.staticRouter.map[loosePath].code}`
 						else
-							this.staticRouter.map[loosePath].code =
-								`case '${method}': return st${index}(ctx)\n${this.staticRouter.map[loosePath].code}`
+							this.staticRouter.map[
+								loosePath
+							].code = `case '${method}': return st${index}(ctx)\n${this.staticRouter.map[loosePath].code}`
 					}
 				}
 			} else {
@@ -710,112 +767,6 @@ export default class Elysia<
 	}
 
 	/**
-	 * @deprecated this method will be renamed to `error` on 0.8, consider using `.error` instead
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * class CustomError extends Error {
-	 *     constructor() {
-	 *         super()
-	 *     }
-	 * }
-	 *
-	 * new Elysia()
-	 *     .error('CUSTOM_ERROR', CustomError)
-	 * ```
-	 */
-	addError<
-		const Errors extends Record<
-			string,
-			{
-				prototype: Error
-			}
-		>
-	>(
-		errors: Errors
-	): Elysia<
-		BasePath,
-		Decorators,
-		{
-			type: Definitions['type']
-			error: Definitions['error'] & {
-				[K in keyof Errors]: Errors[K] extends {
-					prototype: infer LiteralError extends Error
-				}
-					? LiteralError
-					: Errors[K]
-			}
-		},
-		ParentSchema,
-		Routes,
-		Scoped
-	>
-
-	/**
-	 * @deprecated this method will be renamed to `error` on 0.8, consider using `.error` instead
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * class CustomError extends Error {
-	 *     constructor() {
-	 *         super()
-	 *     }
-	 * }
-	 *
-	 * new Elysia()
-	 *     .error({
-	 *         CUSTOM_ERROR: CustomError
-	 *     })
-	 * ```
-	 */
-	addError<
-		Name extends string,
-		const CustomError extends {
-			prototype: Error
-		}
-	>(
-		name: Name,
-		errors: CustomError
-	): Elysia<
-		BasePath,
-		Decorators,
-		{
-			type: Definitions['type']
-			error: Definitions['error'] & {
-				[name in Name]: CustomError extends {
-					prototype: infer LiteralError extends Error
-				}
-					? LiteralError
-					: CustomError
-			}
-		},
-		ParentSchema,
-		Routes,
-		Scoped
-	>
-
-	addError(
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		name:
-			| string
-			| Record<
-					string,
-					{
-						prototype: Error
-					}
-			  >
-			| Function,
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		error?: {
-			prototype: Error
-		}
-	): Elysia<any, any, any, any, any, any> {
-		return this.error(name as any, error as any)
-	}
-
-	/**
 	 * Register errors
 	 *
 	 * ---
@@ -854,6 +805,7 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -898,6 +850,7 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -934,6 +887,7 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -953,7 +907,7 @@ export default class Elysia<
 		error?: {
 			prototype: Error
 		}
-	): Elysia<any, any, any, any, any, any> {
+	): Elysia<any, any, any, any, any, any, any> {
 		switch (typeof name) {
 			case 'string':
 				// @ts-ignore
@@ -1100,7 +1054,7 @@ export default class Elysia<
 	}
 
 	group<
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
+		const NewElysia extends Elysia<any, any, any, any, any, any, any>,
 		const Prefix extends string
 	>(
 		prefix: Prefix,
@@ -1110,6 +1064,7 @@ export default class Elysia<
 				Decorators,
 				Definitions,
 				ParentSchema,
+				Extension,
 				{}
 			>
 		) => NewElysia
@@ -1118,6 +1073,7 @@ export default class Elysia<
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
+		any,
 		any
 	>
 		? Elysia<
@@ -1125,6 +1081,7 @@ export default class Elysia<
 				PluginDecorators,
 				PluginDefinitions,
 				PluginSchema,
+				Extension,
 				Prettify<Routes & NewElysia['schema']>
 		  >
 		: this
@@ -1133,7 +1090,7 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
+		const NewElysia extends Elysia<any, any, any, any, any, any, any>,
 		const Prefix extends string,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
@@ -1146,6 +1103,7 @@ export default class Elysia<
 			Schema,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Prefix}`
 		>,
 		run: (
@@ -1154,6 +1112,7 @@ export default class Elysia<
 				Decorators,
 				Definitions,
 				Schema,
+				Extension,
 				{}
 			>
 		) => NewElysia
@@ -1162,6 +1121,7 @@ export default class Elysia<
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
+		any,
 		any
 	>
 		? Elysia<
@@ -1176,6 +1136,7 @@ export default class Elysia<
 					>
 				},
 				Prettify<ParentSchema & PluginSchema>,
+				Extension,
 				Prettify<Routes & NewElysia['schema']>
 		  >
 		: this
@@ -1197,13 +1158,13 @@ export default class Elysia<
 	group(
 		prefix: string,
 		schemaOrRun:
-			| LocalHook<any, any, any, any>
+			| LocalHook<any, any, any, any, any>
 			| ((
-					group: Elysia<any, any, any, any, any, any>
-			  ) => Elysia<any, any, any, any, any, any>),
+					group: Elysia<any, any, any, any, any, any, any>
+			  ) => Elysia<any, any, any, any, any, any, any>),
 		run?: (
-			group: Elysia<any, any, any, any, any, any>
-		) => Elysia<any, any, any, any, any, any>
+			group: Elysia<any, any, any, any, any, any, any>
+		) => Elysia<any, any, any, any, any, any, any>
 	): this {
 		const instance = new Elysia({
 			...this.config,
@@ -1236,7 +1197,13 @@ export default class Elysia<
 
 				if (isSchema) {
 					const hook = schemaOrRun
-					const localHook = hooks as LocalHook<any, any, any, any>
+					const localHook = hooks as LocalHook<
+						any,
+						any,
+						any,
+						any,
+						any
+					>
 
 					this.add(
 						method,
@@ -1247,8 +1214,8 @@ export default class Elysia<
 							error: !localHook.error
 								? sandbox.event.error
 								: Array.isArray(localHook.error)
-								  ? [...localHook.error, ...sandbox.event.error]
-								  : [localHook.error, ...sandbox.event.error]
+								? [...localHook.error, ...sandbox.event.error]
+								: [localHook.error, ...sandbox.event.error]
 						})
 					)
 				} else {
@@ -1256,7 +1223,7 @@ export default class Elysia<
 						method,
 						path,
 						handler,
-						mergeHook(hooks as LocalHook<any, any, any, any>, {
+						mergeHook(hooks as LocalHook<any, any, any, any, any>, {
 							error: sandbox.event.error
 						}),
 						{
@@ -1282,15 +1249,24 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			BasePath
 		>
-	): Elysia<BasePath, Decorators, Definitions, Route, Routes, Scoped>
+	): Elysia<
+		BasePath,
+		Decorators,
+		Definitions,
+		Route,
+		Extension,
+		Routes,
+		Scoped
+	>
 
 	guard<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
+		const NewElysia extends Elysia<any, any, any, any, any, any, any>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
@@ -1300,16 +1276,26 @@ export default class Elysia<
 			LocalSchema,
 			Schema,
 			Decorators,
-			Definitions['error']
+			Definitions['error'],
+			Extension
 		>,
 		run: (
-			group: Elysia<BasePath, Decorators, Definitions, Schema, {}, Scoped>
+			group: Elysia<
+				BasePath,
+				Decorators,
+				Definitions,
+				Schema,
+				Extension,
+				{},
+				Scoped
+			>
 		) => NewElysia
 	): NewElysia extends Elysia<
 		any,
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
+		any,
 		any
 	>
 		? Elysia<
@@ -1317,6 +1303,7 @@ export default class Elysia<
 				PluginDecorators,
 				PluginDefinitions,
 				PluginSchema,
+				Extension,
 				Prettify<Routes & NewElysia['schema']>
 		  >
 		: this
@@ -1345,11 +1332,11 @@ export default class Elysia<
 	 * ```
 	 */
 	guard(
-		hook: LocalHook<any, any, any, any>,
+		hook: LocalHook<any, any, any, any, any>,
 		run?: (
-			group: Elysia<any, any, any, any, any, any>
-		) => Elysia<any, any, any, any, any, any>
-	): Elysia<any, any, any, any, any, any> {
+			group: Elysia<any, any, any, any, any, any, any>
+		) => Elysia<any, any, any, any, any, any, any>
+	): Elysia<any, any, any, any, any, any, any> {
 		if (!run) {
 			this.event = mergeLifeCycle(this.event, hook)
 			this.validator = {
@@ -1389,13 +1376,13 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any, any, any, any>, {
-						...(localHook as LocalHook<any, any, any, any>),
+					mergeHook(hook as LocalHook<any, any, any, any, any>, {
+						...(localHook as LocalHook<any, any, any, any, any>),
 						error: !localHook.error
 							? sandbox.event.error
 							: Array.isArray(localHook.error)
-							  ? [...localHook.error, ...sandbox.event.error]
-							  : [localHook.error, ...sandbox.event.error]
+							? [...localHook.error, ...sandbox.event.error]
+							: [localHook.error, ...sandbox.event.error]
 					})
 				)
 			}
@@ -1405,13 +1392,14 @@ export default class Elysia<
 	}
 
 	// Inline Fn
-	use<NewElysia extends Elysia<any, any, any, any, any, any> = this>(
+	use<NewElysia extends Elysia<any, any, any, any, any, any, any> = this>(
 		plugin: MaybePromise<(app: NewElysia) => MaybePromise<NewElysia>>
 	): NewElysia extends Elysia<
 		any,
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
+		infer PluginExtension,
 		any
 	>
 		? Elysia<
@@ -1423,6 +1411,9 @@ export default class Elysia<
 					store: Prettify<
 						Decorators['store'] & PluginDecorators['store']
 					>
+					derive: Prettify<
+						Decorators['derive'] & PluginDecorators['derive']
+					>
 				},
 				{
 					type: Prettify<
@@ -1433,19 +1424,21 @@ export default class Elysia<
 					>
 				},
 				Prettify<MergeSchema<ParentSchema, PluginSchema>>,
+				Prettify<Extension & PluginExtension>,
 				Routes & NewElysia['schema'],
 				Scoped
 		  >
 		: this
 
 	// Entire Instance
-	use<NewElysia extends Elysia<any, any, any, any, any, any>>(
+	use<NewElysia extends Elysia<any, any, any, any, any, any, any>>(
 		instance: MaybePromise<NewElysia>
 	): NewElysia extends Elysia<
 		any,
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
+		infer PluginExtension,
 		any,
 		infer IsScoped
 	>
@@ -1460,6 +1453,9 @@ export default class Elysia<
 						store: Prettify<
 							Decorators['store'] & PluginDecorators['store']
 						>
+						derive: Prettify<
+							Decorators['derive'] & PluginDecorators['derive']
+						>
 					},
 					{
 						type: Prettify<
@@ -1470,6 +1466,7 @@ export default class Elysia<
 						>
 					},
 					Prettify<MergeSchema<ParentSchema, PluginSchema>>,
+					Prettify<Extension & PluginExtension>,
 					BasePath extends ``
 						? Routes & NewElysia['schema']
 						: Routes & AddPrefix<BasePath, NewElysia['schema']>,
@@ -1478,10 +1475,10 @@ export default class Elysia<
 		: this
 
 	// Import Fn
-	use<NewElysia extends Elysia<any, any, any, any, any, any>>(
+	use<NewElysia extends Elysia<any, any, any, any, any, any, any>>(
 		plugin: Promise<{
 			default: (
-				elysia: Elysia<any, any, any, any, any, any>
+				elysia: Elysia<any, any, any, any, any, any, any>
 			) => MaybePromise<NewElysia>
 		}>
 	): NewElysia extends Elysia<
@@ -1489,6 +1486,7 @@ export default class Elysia<
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
+		infer PluginExtension,
 		any
 	>
 		? Elysia<
@@ -1496,12 +1494,14 @@ export default class Elysia<
 				{
 					request: Decorators['request'] & PluginDecorators['request']
 					store: Decorators['store'] & PluginDecorators['store']
+					derive: Decorators['derive'] & PluginDecorators['derive']
 				},
 				{
 					type: Definitions['type'] & PluginDefinitions['type']
 					error: Definitions['error'] & PluginDefinitions['error']
 				},
 				MergeSchema<ParentSchema, PluginSchema>,
+				Prettify<Extension & PluginExtension>,
 				BasePath extends ``
 					? Routes & NewElysia['schema']
 					: Routes & AddPrefix<BasePath, NewElysia['schema']>,
@@ -1510,7 +1510,7 @@ export default class Elysia<
 		: this
 
 	// Import entire instance
-	use<LazyLoadElysia extends Elysia<any, any, any, any, any, any>>(
+	use<LazyLoadElysia extends Elysia<any, any, any, any, any, any, any>>(
 		plugin: Promise<{
 			default: LazyLoadElysia
 		}>
@@ -1519,6 +1519,7 @@ export default class Elysia<
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
+		infer PluginExtension,
 		any
 	>
 		? Elysia<
@@ -1526,6 +1527,7 @@ export default class Elysia<
 				{
 					request: PluginDecorators['request'] & Decorators['request']
 					store: PluginDecorators['store'] & Decorators['store']
+					derive: Decorators['derive'] & PluginDecorators['derive']
 				},
 				{
 					type: PluginDefinitions['type'] & Definitions['type']
@@ -1533,6 +1535,7 @@ export default class Elysia<
 					error: PluginDefinitions['error'] & Definitions['error']
 				},
 				MergeSchema<PluginSchema, ParentSchema>,
+				Prettify<Extension & PluginExtension>,
 				BasePath extends ``
 					? Routes & LazyLoadElysia['schema']
 					: Routes & AddPrefix<BasePath, LazyLoadElysia['schema']>
@@ -1555,21 +1558,21 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| Elysia<any, any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any, any>
 			| MaybePromise<
 					(
-						app: Elysia<any, any, any, any, any, any>
-					) => MaybePromise<Elysia<any, any, any, any, any, any>>
+						app: Elysia<any, any, any, any, any, any, any>
+					) => MaybePromise<Elysia<any, any, any, any, any, any, any>>
 			  >
 			| Promise<{
-					default: Elysia<any, any, any, any, any, any>
+					default: Elysia<any, any, any, any, any, any, any>
 			  }>
 			| Promise<{
 					default: (
-						elysia: Elysia<any, any, any, any, any, any>
-					) => MaybePromise<Elysia<any, any, any, any, any, any>>
+						elysia: Elysia<any, any, any, any, any, any, any>
+					) => MaybePromise<Elysia<any, any, any, any, any, any, any>>
 			  }>
-	): Elysia<any, any, any, any, any, any> {
+	): Elysia<any, any, any, any, any, any, any> {
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
 				plugin
@@ -1598,10 +1601,10 @@ export default class Elysia<
 
 	private _use(
 		plugin:
-			| Elysia<any, any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any, any>
 			| ((
-					app: Elysia<any, any, any, any, any, any>
-			  ) => MaybePromise<Elysia<any, any, any, any, any, any>>)
+					app: Elysia<any, any, any, any, any, any, any>
+			  ) => MaybePromise<Elysia<any, any, any, any, any, any, any>>)
 	) {
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
@@ -1657,6 +1660,7 @@ export default class Elysia<
 
 			plugin.model(this.definitions.type as any)
 			plugin.error(this.definitions.error as any)
+			plugin.extensions = [...this.extensions, ...plugin.extensions]
 
 			plugin.onRequest((context) => {
 				Object.assign(context, this.decorators)
@@ -1688,9 +1692,12 @@ export default class Elysia<
 				method,
 				path,
 				handler,
-				mergeHook(hooks as LocalHook<any, any, any, any, any, any>, {
-					error: plugin.event.error
-				})
+				mergeHook(
+					hooks as LocalHook<any, any, any, any, any, any, any>,
+					{
+						error: plugin.event.error
+					}
+				)
 			)
 		}
 
@@ -1710,6 +1717,7 @@ export default class Elysia<
 				)
 					return this
 
+				this.extensions.push(...plugin.extensions)
 				this.dependencies[name].push(current)
 				this.event = mergeLifeCycle(
 					this.event,
@@ -1723,6 +1731,24 @@ export default class Elysia<
 				)
 
 		return this
+	}
+
+	extends<const NewExtension extends BaseExtension>(
+		extension: (
+			route: ExtensionManager<Routes, Decorators, Definitions['error']>
+		) => NewExtension
+	): Elysia<
+		BasePath,
+		Decorators,
+		Definitions,
+		ParentSchema,
+		Extension & Partial<ExtensionToProperty<NewExtension>>,
+		Routes,
+		Scoped
+	> {
+		this.extensions.push(extension as any)
+
+		return this as any
 	}
 
 	mount(handle: (request: Request) => MaybePromise<Response>): this
@@ -1741,12 +1767,20 @@ export default class Elysia<
 			const handler: Handler<any, any> = async ({ request, path }) =>
 				run(new Request('http://a.cc' + path || '/', request))
 
-			this.all('/', handler as any, {
-				type: 'none'
-			})
-			this.all('/*', handler as any, {
-				type: 'none'
-			})
+			this.all(
+				'/',
+				handler as any,
+				{
+					type: 'none'
+				} as any
+			)
+			this.all(
+				'/*',
+				handler as any,
+				{
+					type: 'none'
+				} as any
+			)
 
 			return this
 		}
@@ -1757,12 +1791,20 @@ export default class Elysia<
 				new Request('http://a.cc' + path.slice(length) || '/', request)
 			)
 
-		this.all(path, handler as any, {
-			type: 'none'
-		})
-		this.all(path + (path.endsWith('/') ? '*' : '/*'), handler as any, {
-			type: 'none'
-		})
+		this.all(
+			path,
+			handler as any,
+			{
+				type: 'none'
+			} as any
+		)
+		this.all(
+			path + (path.endsWith('/') ? '*' : '/*'),
+			handler as any,
+			{
+				type: 'none'
+			} as any
+		)
 
 		return this
 	}
@@ -1805,6 +1847,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -1812,6 +1855,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -1844,11 +1888,10 @@ export default class Elysia<
 												{
 													[ELYSIA_RESPONSE]: number
 												}
-											> extends infer ErrorResponse extends
-												{
-													[ELYSIA_RESPONSE]: number
-													response: any
-												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
 												? {
 														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
 												  }
@@ -1859,10 +1902,10 @@ export default class Elysia<
 									  }
 								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -1912,6 +1955,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -1919,6 +1963,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -1951,11 +1996,10 @@ export default class Elysia<
 												{
 													[ELYSIA_RESPONSE]: number
 												}
-											> extends infer ErrorResponse extends
-												{
-													[ELYSIA_RESPONSE]: number
-													response: any
-												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
 												? {
 														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
 												  }
@@ -1966,10 +2010,10 @@ export default class Elysia<
 									  }
 								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2008,17 +2052,18 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2026,25 +2071,57 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
 					put: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2083,17 +2160,18 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2101,25 +2179,57 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
 					patch: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2158,17 +2268,18 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2176,25 +2287,57 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
 					delete: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2233,17 +2376,18 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2251,25 +2395,57 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					options: {
+					get: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2303,17 +2479,18 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2321,25 +2498,57 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
 					[method in string]: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2378,17 +2587,18 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2396,25 +2606,57 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
 					head: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2453,17 +2695,18 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			ParentSchema
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>
 	>(
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2471,25 +2714,57 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
 					connect: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: unknown extends Route['response']
-							? {
-									200: Function extends () => infer Returned
+							? (
+									Handle extends (...a: any) => infer Returned
 										? Returned
-										: Function
-							  }
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
 							: Route['response'] extends { 200: any }
-							  ? Route['response']
-							  : {
-										200: Route['response']
-							    }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
 					}
 				}
 			}
@@ -2541,12 +2816,17 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
 					subscribe: {
 						body: Route['body']
-						params: Route['params']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
 						query: Route['query']
 						headers: Route['headers']
 						response: Route['response']
@@ -2695,8 +2975,8 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Function extends
-			| Exclude<Route['response'], Function>
+		const Handle extends
+			| Exclude<Route['response'], Handle>
 			| Handler<Route, Decorators, `${BasePath}${Path}`>,
 		const Route extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
@@ -2705,7 +2985,7 @@ export default class Elysia<
 	>(
 		method: Method,
 		path: Path,
-		handler: Function,
+		handler: Handle,
 		{
 			config,
 			...hook
@@ -2714,6 +2994,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
+			Extension,
 			`${BasePath}${Path}`
 		> & {
 			config: {
@@ -2729,34 +3010,58 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
+		Extension,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
-					[method in Lowercase<Method>]: Route extends {
-						body: infer Body
-						params: infer Params
-						query: infer Query
-						headers: infer Headers
-						response: infer Response
-					}
-						? {
-								body: Body
-								params: Params
-								query: Query
-								headers: Headers
-								response: unknown extends Response
-									? {
-											200: Function extends () => infer Returned
-												? Returned
-												: Function
+					[method in Lowercase<Method>]: {
+						body: Route['body']
+						params: undefined extends Route['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Route['params']
+						query: Route['query']
+						headers: Route['headers']
+						response: unknown extends Route['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
 									  }
-									: Route['response'] extends { 200: any }
-									  ? Route['response']
-									  : {
-												200: Route['response']
-									    }
-						  }
-						: never
+								: never
+							: Route['response'] extends { 200: any }
+							? Route['response']
+							: {
+									200: Route['response']
+							  }
+					}
 				}
 			}
 		>,
@@ -2791,9 +3096,11 @@ export default class Elysia<
 					[name in Name]: Value
 				}
 			>
+			derive: Decorators['derive']
 		},
 		Definitions,
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -2817,9 +3124,11 @@ export default class Elysia<
 		{
 			request: Decorators['request']
 			store: Prettify<Decorators['store'] & Store>
+			derive: Decorators['derive']
 		},
 		Definitions,
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -2831,9 +3140,11 @@ export default class Elysia<
 		{
 			request: Decorators['request']
 			store: NewStore
+			derive: Decorators['derive']
 		},
 		Definitions,
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -2899,9 +3210,11 @@ export default class Elysia<
 				}
 			>
 			store: Decorators['store']
+			derive: Decorators['derive']
 		},
 		Definitions,
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -2925,9 +3238,11 @@ export default class Elysia<
 		{
 			request: Prettify<Decorators['request'] & NewDecorators>
 			store: Decorators['store']
+			derive: Decorators['derive']
 		},
 		Definitions,
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -2939,9 +3254,11 @@ export default class Elysia<
 		{
 			request: NewDecorators
 			store: Decorators['store']
+			derive: Decorators['derive']
 		},
 		Definitions,
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -3004,11 +3321,13 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		{
-			request: Prettify<Decorators['request'] & Awaited<Derivative>>
+			request: Decorators['request']
 			store: Decorators['store']
+			derive: Prettify<Decorators['derive'] & Awaited<Derivative>>
 		},
 		Definitions,
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	> {
@@ -3031,6 +3350,7 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -3049,6 +3369,7 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -3067,6 +3388,7 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	>
@@ -3100,9 +3422,11 @@ export default class Elysia<
 		{
 			request: Decorators['request']
 			store: NewStore
+			derive: Decorators['derive']
 		},
 		Definitions,
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	> {
@@ -3137,6 +3461,13 @@ export default class Elysia<
 						: AddPrefixCapitalize<Word, Decorators['store']>
 					: AddSuffix<Word, Decorators['store']>
 				: Decorators['store']
+			derive: Type extends 'decorator' | 'all'
+				? 'prefix' extends Base
+					? Word extends `${string}${'_' | '-' | ' '}`
+						? AddPrefix<Word, Decorators['derive']>
+						: AddPrefixCapitalize<Word, Decorators['derive']>
+					: AddSuffixCapitalize<Word, Decorators['derive']>
+				: Decorators['request']
 		},
 		{
 			type: Type extends 'model' | 'all'
@@ -3155,6 +3486,7 @@ export default class Elysia<
 				: Definitions['error']
 		},
 		ParentSchema,
+		Extension,
 		Routes,
 		Scoped
 	> {
@@ -3171,8 +3503,8 @@ export default class Elysia<
 							? prefix + word
 							: prefix + capitalize(word)
 				: delimieter.includes(word.at(-1) ?? '')
-				  ? (suffix: string, word: string) => word + suffix
-				  : (suffix: string, word: string) => word + capitalize(suffix)
+				? (suffix: string, word: string) => word + suffix
+				: (suffix: string, word: string) => word + capitalize(suffix)
 
 		const remap = (type: 'decorator' | 'state' | 'model' | 'error') => {
 			const store: Record<string, any> = {}

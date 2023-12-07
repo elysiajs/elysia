@@ -1,23 +1,25 @@
-import { Elysia, t, error } from '../src'
+import { Elysia } from '../src'
 
-const models = new Elysia({ name: 'schema' }).model({
-	bearer: t.Object({
-		authorization: t.TemplateLiteral('Bearer ${string}')
-	})
-})
-
-const app = new Elysia()
-	.use(models.prefix('model', 'h'))
-	.get(
-		'/id/:id',
-		(c) => (Math.random() > 0.5 ? error("I'm a teapot", 'Teapot') : 'Hi'),
-		{
-			query: t.Object({
-				id: t.String()
-			}),
-			headers: 'hBearer'
+const auth = new Elysia({ name: 'auth' })
+	.derive(() => ({
+		user: {
+			name: 'saltyaom',
+			role: 'user'
 		}
+	}))
+	.extends(({ onBeforeHandle }) => ({
+		role(role: 'user' | 'admin' | 'system') {
+			onBeforeHandle(({ user, set }) => {
+				if (user.role !== role) return (set.status = 'Unauthorized')
+			})
+		}
+	}))
+
+new Elysia()
+	.use(auth)
+	.group('/admin', { role: 'admin' }, (app) =>
+		app
+			.get('/', ({ user }) => user.name)
+			.get('/dashboard', ({ user }) => user.name)
 	)
 	.listen(3000)
-
-type Res = (typeof app)['schema']['/id/:id']['get']

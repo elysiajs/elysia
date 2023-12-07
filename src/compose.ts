@@ -1503,7 +1503,7 @@ export const composeHandler = ({
 	})
 }
 
-export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
+export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any>) => {
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
@@ -1759,7 +1759,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	})
 }
 
-export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
+export const composeErrorHandler = (app: Elysia<any, any, any, any, any, any>) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,
