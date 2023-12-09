@@ -82,7 +82,8 @@ import type {
 	GetPathParameter,
 	BaseExtension,
 	ExtensionToProperty,
-	ExtensionManager
+	ExtensionManager,
+	MapResponse
 } from './types'
 import { t } from './custom-types'
 
@@ -139,8 +140,10 @@ export default class Elysia<
 		request: [],
 		parse: [],
 		transform: [],
+		resolve: [],
 		beforeHandle: [],
 		afterHandle: [],
+		mapResponse: [],
 		onResponse: [],
 		trace: [],
 		error: [],
@@ -194,7 +197,7 @@ export default class Elysia<
 		method: HTTPMethod,
 		paths: string | Readonly<string[]>,
 		handler: Handler<any, any, any> | unknown,
-		hook?: LocalHook<any, any, any, any, any>,
+		localHook?: LocalHook<any, any, any, any, any>,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
 			skipPrefix: false as boolean | undefined
@@ -213,26 +216,26 @@ export default class Elysia<
 			if (this.config.prefix && !skipPrefix)
 				path = this.config.prefix + path
 
-			if (hook?.type)
-				switch (hook.type) {
+			if (localHook?.type)
+				switch (localHook.type) {
 					case 'text':
-						hook.type = 'text/plain'
+						localHook.type = 'text/plain'
 						break
 
 					case 'json':
-						hook.type = 'application/json'
+						localHook.type = 'application/json'
 						break
 
 					case 'formdata':
-						hook.type = 'multipart/form-data'
+						localHook.type = 'multipart/form-data'
 						break
 
 					case 'urlencoded':
-						hook.type = 'application/x-www-form-urlencoded'
+						localHook.type = 'application/x-www-form-urlencoded'
 						break
 
 					case 'arrayBuffer':
-						hook.type = 'application/octet-stream'
+						localHook.type = 'application/octet-stream'
 						break
 
 					default:
@@ -242,7 +245,7 @@ export default class Elysia<
 			const models = this.definitions.type as Record<string, TSchema>
 
 			let cookieValidator = getSchemaValidator(
-				hook?.cookie ?? (this.validator?.cookie as any),
+				localHook?.cookie ?? (this.validator?.cookie as any),
 				{
 					dynamic: !this.config.aot,
 					models,
@@ -273,14 +276,14 @@ export default class Elysia<
 
 			const validator = {
 				body: getSchemaValidator(
-					hook?.body ?? (this.validator?.body as any),
+					localHook?.body ?? (this.validator?.body as any),
 					{
 						dynamic: !this.config.aot,
 						models
 					}
 				),
 				headers: getSchemaValidator(
-					hook?.headers ?? (this.validator?.headers as any),
+					localHook?.headers ?? (this.validator?.headers as any),
 					{
 						dynamic: !this.config.aot,
 						models,
@@ -288,14 +291,14 @@ export default class Elysia<
 					}
 				),
 				params: getSchemaValidator(
-					hook?.params ?? (this.validator?.params as any),
+					localHook?.params ?? (this.validator?.params as any),
 					{
 						dynamic: !this.config.aot,
 						models
 					}
 				),
 				query: getSchemaValidator(
-					hook?.query ?? (this.validator?.query as any),
+					localHook?.query ?? (this.validator?.query as any),
 					{
 						dynamic: !this.config.aot,
 						models
@@ -303,7 +306,7 @@ export default class Elysia<
 				),
 				cookie: cookieValidator,
 				response: getResponseSchemaValidator(
-					hook?.response ?? (this.validator?.response as any),
+					localHook?.response ?? (this.validator?.response as any),
 					{
 						dynamic: !this.config.aot,
 						models
@@ -311,53 +314,101 @@ export default class Elysia<
 				)
 			} as any
 
-			const hooks = mergeHook(this.event, hook)
+			const globalHook = Object.assign({}, this.event)
+			localHook = mergeHook({}, localHook)
+
 			const loosePath = path.endsWith('/')
 				? path.slice(0, path.length - 1)
 				: path + '/'
 
 			if (this.extensions.length) {
-				const manager: ExtensionManager = {
-					events: hooks,
-					onParse(v) {
-						if (Array.isArray(v))
-							hooks.parse = hooks.parse.concat(v)
-						else hooks.parse.push(v)
-					},
-					onTransform(v) {
-						if (Array.isArray(v))
-							hooks.transform = hooks.transform.concat(v)
-						else hooks.transform.push(v)
-					},
-					onBeforeHandle(v) {
-						if (Array.isArray(v))
-							// @ts-ignore
-							hooks.beforeHandle = hooks.beforeHandle.concat(v)
-						// @ts-ignore
-						else hooks.beforeHandle.push(v)
-					},
-					onAfterHandle(v) {
-						if (Array.isArray(v))
-							// @ts-ignore
-							hooks.afterHandle = hooks.afterHandle.concat(v)
-						// @ts-ignore
-						else hooks.afterHandle.push(v)
-					},
-					onResponse(v) {
-						if (Array.isArray(v))
-							hooks.onResponse = hooks.onResponse.concat(v)
-						else hooks.onResponse.push(v)
-					},
-					onError(v) {
-						if (Array.isArray(v))
-							hooks.error = hooks.error.concat(v)
-						else hooks.error.push(v)
+				const createManager =
+					(stackName: keyof LifeCycleStore) =>
+					(
+						type:
+							| {
+									insert?: 'before' | 'after'
+									stack?: 'global' | 'local'
+							  }
+							| MaybeArray<Function>,
+						fn?: MaybeArray<Function>
+					) => {
+						if (typeof type === 'function' || Array.isArray(type)) {
+							if (Array.isArray(type))
+								localHook[stackName] = (
+									localHook[stackName] as unknown[]
+								).concat(type) as any
+							else localHook[stackName].push(type)
+
+							return
+						}
+
+						const { insert = 'before', stack = 'local' } = type
+
+						if (stack === 'global') {
+							if (!Array.isArray(fn)) {
+								if (insert === 'before') {
+									;(globalHook[stackName] as any[]).unshift(
+										fn
+									)
+								} else {
+									;(globalHook[stackName] as any[]).push(fn)
+								}
+							} else {
+								if (insert === 'before') {
+									globalHook[stackName] = fn.concat(
+										globalHook[stackName] as any
+									) as any
+								} else {
+									globalHook[stackName] = (
+										globalHook[stackName] as any[]
+									).concat(fn)
+								}
+							}
+
+							return
+						} else {
+							if (!Array.isArray(fn)) {
+								if (insert === 'before') {
+									;(localHook[stackName] as any[]).unshift(
+										fn
+									)
+								} else {
+									;(localHook[stackName] as any[]).push(fn)
+								}
+							} else {
+								if (insert === 'before') {
+									localHook[stackName] = fn.concat(
+										localHook[stackName]
+									)
+								} else {
+									localHook[stackName] =
+										localHook[stackName].concat(fn)
+								}
+							}
+
+							return
+						}
 					}
+
+				const manager: ExtensionManager = {
+					events: {
+						global: globalHook,
+						local: localHook
+					},
+					onParse: createManager('parse'),
+					onTransform: createManager('transform'),
+					onBeforeHandle: createManager('beforeHandle'),
+					onAfterHandle: createManager('afterHandle'),
+					onResponse: createManager('onResponse'),
+					onError: createManager('error')
 				}
 
 				for (const extension of this.extensions)
-					traceBackExtension(extension(manager), hooks as any)
+					traceBackExtension(extension(manager), localHook as any)
 			}
+
+			const hooks = mergeLifeCycle(globalHook, localHook)
 
 			const isFn = typeof handler === 'function'
 			let handle: Handler<any, any> = isFn ? handler : ((() => '') as any)
@@ -394,7 +445,7 @@ export default class Elysia<
 				this.dynamicRouter.add(method, path, {
 					validator,
 					hooks,
-					content: hook?.type as string,
+					content: localHook?.type as string,
 					handle
 				})
 
@@ -402,7 +453,7 @@ export default class Elysia<
 					this.dynamicRouter.add(method, loosePath, {
 						validator,
 						hooks,
-						content: hook?.type as string,
+						content: localHook?.type as string,
 						handle
 					})
 				}
@@ -653,6 +704,57 @@ export default class Elysia<
 	}
 
 	/**
+	 * ### After Handle | Life cycle event
+	 * Intercept request **after** main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onAfterHandle((context, response) => {
+	 *         if(typeof response === "object")
+	 *             return JSON.stringify(response)
+	 *     })
+	 * ```
+	 */
+	/**
+	 * Derive new property for each request with access to `Context`.
+	 *
+	 * If error is thrown, the scope will skip to handling error instead.
+	 *
+	 * ---
+	 * @example
+	 * new Elysia()
+	 *     .state('counter', 1)
+	 *     .derive(({ store }) => ({
+	 *         increase() {
+	 *             store.counter++
+	 *         }
+	 *     }))
+	 */
+	resolve<Resolver extends Object>(
+		resolver: (
+			context: Prettify<Context<ParentSchema, Decorators>>
+		) => MaybePromise<Resolver> extends { store: any } ? never : Resolver
+	): Elysia<
+		BasePath,
+		{
+			request: Decorators['request']
+			store: Decorators['store']
+			derive: Prettify<Decorators['derive'] & Awaited<Resolver>>
+		},
+		Definitions,
+		ParentSchema,
+		Extension,
+		Routes,
+		Scoped
+	> {
+		return this.on('resolve', resolver as any) as any
+	}
+
+	/**
 	 * ### Before Handle | Life cycle event
 	 * Intercept request **before(()) main handler is called.
 	 *
@@ -697,12 +799,30 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onAfterHandle<Schema extends RouteSchema = {}>(
-		handler: MaybeArray<
-			AfterHandler<MergeSchema<Schema, ParentSchema>, Decorators>
-		>
-	) {
+	onAfterHandle(handler: MaybeArray<AfterHandler>) {
 		this.on('afterHandle', handler as AfterHandler<any, any>)
+
+		return this
+	}
+
+	/**
+	 * ### After Handle | Life cycle event
+	 * Intercept request **after** main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .mapResponse((context, response) => {
+	 *         if(typeof response === "object")
+	 *             return JSON.stringify(response)
+	 *     })
+	 * ```
+	 */
+	mapResponse(handler: MaybeArray<MapResponse>) {
+		this.on('mapResponse', handler as MapResponse<any, any>)
 
 		return this
 	}
@@ -1012,10 +1132,6 @@ export default class Elysia<
 					this.event.request.push(handler as any)
 					break
 
-				case 'response':
-					this.event.onResponse.push(handler as any)
-					break
-
 				case 'parse':
 					this.event.parse.splice(
 						this.event.parse.length - 1,
@@ -1028,12 +1144,24 @@ export default class Elysia<
 					this.event.transform.push(handler as any)
 					break
 
+				case 'resolve':
+					this.event.resolve.push(handler as any)
+					break
+
 				case 'beforeHandle':
 					this.event.beforeHandle.push(handler as any)
 					break
 
 				case 'afterHandle':
 					this.event.afterHandle.push(handler as any)
+					break
+
+				case 'mapResponse':
+					this.event.mapResponse.push(handler as any)
+					break
+
+				case 'response':
+					this.event.onResponse.push(handler as any)
 					break
 
 				case 'trace':
@@ -1678,6 +1806,22 @@ export default class Elysia<
 		} else {
 			plugin.reporter = this.reporter
 			for (const trace of plugin.event.trace) this.trace(trace)
+
+			if (name) {
+				if (!(name in this.dependencies)) this.dependencies[name] = []
+
+				const current =
+					seed !== undefined
+						? checksum(name + JSON.stringify(seed))
+						: 0
+
+				if (
+					!this.dependencies[name].some(
+						(checksum) => current === checksum
+					)
+				)
+					this.extensions.push(...plugin.extensions)
+			}
 		}
 
 		this.decorate(plugin.decorators)
@@ -1717,18 +1861,18 @@ export default class Elysia<
 				)
 					return this
 
-				this.extensions.push(...plugin.extensions)
 				this.dependencies[name].push(current)
 				this.event = mergeLifeCycle(
 					this.event,
 					filterGlobalHook(plugin.event),
 					current
 				)
-			} else
+			} else {
 				this.event = mergeLifeCycle(
 					this.event,
 					filterGlobalHook(plugin.event)
 				)
+			}
 
 		return this
 	}
@@ -2910,7 +3054,7 @@ export default class Elysia<
 
 								options.message?.(
 									new ElysiaWS(ws, context as any),
-									message
+									message as any
 								)
 							},
 							drain(ws: ServerWebSocket<any>) {

@@ -81,12 +81,8 @@ const createReport = ({
 				]
 			)
 				return () => {
-					if (hasTraceSet && event === 'afterHandle') {
-						addFn(
-							`reporter.emit('event',{id,event:'exit',type:'begin',time:0})`
-						)
+					if (hasTraceSet && event === 'afterHandle')
 						addFn(`\nawait traceDone\n`)
-					}
 				}
 
 			if (isGroup) name ||= event
@@ -123,12 +119,8 @@ const createReport = ({
 						'\n'
 				)
 
-				if (hasTraceSet && event === 'afterHandle') {
-					addFn(
-						`\nreporter.emit('event',{id,event:'exit',type:'begin',time:0})\n`
-					)
-					addFn('\nawait traceDone\n')
-				}
+				if (hasTraceSet && event === 'afterHandle')
+					addFn(`\nawait traceDone\n`)
 			}
 		}
 	} else {
@@ -184,7 +176,7 @@ ${name}
 ).toResponse(c.set.headers)`
 
 		return `\n${injectResponse}
-		if(response[c.set.status]?.Check(${name}) === false) {
+		if(!(${name} instanceof Response) && response[c.set.status]?.Check(${name}) === false) {
 	if(!(response instanceof Error))
 		${returnError}
 }\n`
@@ -565,6 +557,7 @@ export const composeHandler = ({
 		handle: traceLiteral.some((x) => isFnUse('handle', x)),
 		beforeHandle: traceLiteral.some((x) => isFnUse('beforeHandle', x)),
 		afterHandle: traceLiteral.some((x) => isFnUse('afterHandle', x)),
+		resolve: traceLiteral.some((x) => isFnUse('resolve', x)),
 		error: hasErrorHandler || traceLiteral.some((x) => isFnUse('error', x))
 	}
 
@@ -631,8 +624,6 @@ export const composeHandler = ({
 			}`
 		} else
 			for (const name of cookieMeta.sign) {
-				// if (!(name in cookieMeta.properties)) continue
-
 				encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = await signCookie(_setCookie['${name}'].value, '${secret}') }\n`
 			}
 
@@ -792,8 +783,7 @@ export const composeHandler = ({
 
 	fnLiteral += hasErrorHandler ? 'try {\n' : ''
 
-	if (hasTrace) {
-		// fnLiteral += `\nconst traceDone = new Promise(r => r())\n`
+	if (hasTraceSet) {
 		fnLiteral += `\nconst traceDone = Promise.all([`
 		for (let i = 0; i < hooks.trace.length; i++) {
 			fnLiteral += `new Promise(r => { reporter.once(\`res\${id}.${i}\`, r) }),`
@@ -1001,11 +991,11 @@ export const composeHandler = ({
 
 			// @ts-ignore
 			if (transform.$elysia === 'derive')
-				fnLiteral += isAsync(hooks.transform[i])
+				fnLiteral += isAsync(transform)
 					? `Object.assign(c, await transform[${i}](c));`
 					: `Object.assign(c, transform[${i}](c));`
 			else
-				fnLiteral += isAsync(hooks.transform[i])
+				fnLiteral += isAsync(transform)
 					? `await transform[${i}](c);`
 					: `transform[${i}](c);`
 
@@ -1155,6 +1145,28 @@ export const composeHandler = ({
 		}
 	}
 
+	if (hooks?.resolve) {
+		const endResolve = report('resolve', {
+			unit: hooks.resolve.length
+		})
+
+		for (let i = 0; i < hooks.resolve.length; i++) {
+			const resolver = hooks.resolve[i]
+
+			const endUnit = report('resolve.unit', {
+				name: resolver.name
+			})
+
+			fnLiteral += isAsync(resolver)
+				? `Object.assign(c, await resolve[${i}](c));`
+				: `Object.assign(c, resolve[${i}](c));`
+
+			endUnit()
+		}
+
+		endResolve()
+	}
+
 	if (hooks?.beforeHandle) {
 		const endBeforeHandle = report('beforeHandle', {
 			unit: hooks.beforeHandle.length
@@ -1165,28 +1177,27 @@ export const composeHandler = ({
 				name: hooks.beforeHandle[i].name
 			})
 
-			const name = `be${i}`
 			const returning = hasReturn(hooks.beforeHandle[i].toString())
 
 			if (!returning) {
 				fnLiteral += isAsync(hooks.beforeHandle[i])
 					? `await beforeHandle[${i}](c);\n`
 					: `beforeHandle[${i}](c);\n`
+				
 
 				endUnit()
 			} else {
 				fnLiteral += isAsync(hooks.beforeHandle[i])
-					? `let ${name} = await beforeHandle[${i}](c);\n`
-					: `let ${name} = beforeHandle[${i}](c);\n`
+					? `be = await beforeHandle[${i}](c);\n`
+					: `be = beforeHandle[${i}](c);\n`
 
 				endUnit()
 
-				fnLiteral += `if(${name} !== undefined) {\n`
+				fnLiteral += `if(be !== undefined) {\n`
 				const endAfterHandle = report('afterHandle', {
 					unit: hooks.transform.length
 				})
 				if (hooks.afterHandle) {
-					const beName = name
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						const returning = hasReturn(
 							hooks.afterHandle[i].toString()
@@ -1196,20 +1207,18 @@ export const composeHandler = ({
 							name: hooks.afterHandle[i].name
 						})
 
-						fnLiteral += `c.response = ${beName}\n`
+						fnLiteral += `c.response = be\n`
 
 						if (!returning) {
 							fnLiteral += isAsync(hooks.afterHandle[i])
-								? `await afterHandle[${i}](c, ${beName});\n`
-								: `afterHandle[${i}](c, ${beName});\n`
+								? `await afterHandle[${i}](c, be)\n`
+								: `afterHandle[${i}](c, be)\n`
 						} else {
-							const name = `af${i}`
-
 							fnLiteral += isAsync(hooks.afterHandle[i])
-								? `const ${name} = await afterHandle[${i}](c);\n`
-								: `const ${name} = afterHandle[${i}](c);\n`
+								? `af = await afterHandle[${i}](c)\n`
+								: `af = afterHandle[${i}](c)\n`
 
-							fnLiteral += `if(${name} !== undefined) { c.response = ${beName} = ${name} }\n`
+							fnLiteral += `if(af !== undefined) { c.response = be = af }\n`
 						}
 
 						endUnit()
@@ -1219,10 +1228,15 @@ export const composeHandler = ({
 				endAfterHandle()
 
 				if (validator.response)
-					fnLiteral += composeResponseValidation(name)
+					fnLiteral += composeResponseValidation('be')
+
+				for (let i = 0; i < hooks.mapResponse.length; i++) {
+					fnLiteral += `let mr = onMapResponse[${i}](be, c.set)\n
+					if(mr !== undefined) c.response = mr\n`
+				}
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
+				fnLiteral += `return mapEarlyResponse(be, c.set)}\n`
 			}
 		}
 
@@ -1250,7 +1264,6 @@ export const composeHandler = ({
 		})
 
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
-			const name = `af${i}`
 			const returning = hasReturn(hooks.afterHandle[i].toString())
 
 			const endUnit = report('afterHandle.unit', {
@@ -1264,40 +1277,34 @@ export const composeHandler = ({
 
 				endUnit()
 			} else {
-				if (validator.response)
-					fnLiteral += isAsync(hooks.afterHandle[i])
-						? `let ${name} = await afterHandle[${i}](c)\n`
-						: `let ${name} = afterHandle[${i}](c)\n`
-				else
-					fnLiteral += isAsync(hooks.afterHandle[i])
-						? `let ${name} = mapEarlyResponse(await afterHandle[${i}](c), c.set)\n`
-						: `let ${name} = mapEarlyResponse(afterHandle[${i}](c), c.set)\n`
+				fnLiteral += isAsync(hooks.afterHandle[i])
+					? `af = await afterHandle[${i}](c)\n`
+					: `af = afterHandle[${i}](c)\n`
 
 				endUnit()
 
 				if (validator.response) {
-					fnLiteral += `if(${name} !== undefined) {`
-					fnLiteral += composeResponseValidation(name)
-
-					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
-
-					fnLiteral += `if(${name}) {`
+					fnLiteral += `if(af !== undefined) {`
 					endAfterHandle()
 
-					if (hasTraceSet)
-						fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+					fnLiteral += composeResponseValidation('af')
 
-					fnLiteral += `return ${name} } }`
+					fnLiteral += `c.response = af }`
 				} else {
-					fnLiteral += `if(${name}) {`
+					fnLiteral += `if(af !== undefined) {`
 					endAfterHandle()
 
-					fnLiteral += `return ${name}}\n`
+					fnLiteral += `c.response = af}\n`
 				}
 			}
 		}
 
 		endAfterHandle()
+
+		for (let i = 0; i < hooks.mapResponse.length; i++) {
+			fnLiteral += `let mr = onMapResponse[${i}](be, c.set)\n
+			if(mr !== undefined) c.response = mr\n`
+		}
 
 		fnLiteral += `r = c.response\n`
 
@@ -1323,6 +1330,14 @@ export const composeHandler = ({
 
 			report('afterHandle')()
 
+			if (hooks.mapResponse.length) {
+				fnLiteral += 'c.response = r'
+				for (let i = 0; i < hooks.mapResponse.length; i++) {
+					fnLiteral += `let mr = onMapResponse[${i}](be, c.set)\n
+    				if(mr !== undefined) c.response = mr\n`
+				}
+			}
+
 			fnLiteral += encodeCookie
 
 			if (handler instanceof Response)
@@ -1332,12 +1347,20 @@ export const composeHandler = ({
 		} else {
 			if (traceConditions.handle || hasCookie) {
 				fnLiteral += isAsyncHandler
-					? `let r = await ${handle};\n`
-					: `let r = ${handle};\n`
+					? `const r = await ${handle};\n`
+					: `const r = ${handle};\n`
 
 				endHandle()
 
 				report('afterHandle')()
+
+				if (hooks.mapResponse.length) {
+					fnLiteral += 'c.response = r'
+					for (let i = 0; i < hooks.mapResponse.length; i++) {
+						fnLiteral += `let mr = onMapResponse[${i}](be, c.set)\n
+    				if(mr !== undefined) c.response = mr\n`
+					}
+				}
 
 				fnLiteral += encodeCookie
 
@@ -1421,13 +1444,17 @@ export const composeHandler = ({
 		}
 	}
 
+	// console.log(fnLiteral)
+
 	fnLiteral = `const {
 		handler,
 		handleError,
 		hooks: {
 			transform,
+			resolve,
 			beforeHandle,
 			afterHandle,
+			mapResponse: onMapResponse,
 			parse,
 			error: handleErrors,
 			onResponse
@@ -1470,9 +1497,14 @@ export const composeHandler = ({
 	}
 
 	return ${maybeAsync ? 'async' : ''} function handle(c) {
+		${hooks.beforeHandle.length ? 'let be' : ''}
+		${hooks.afterHandle.length ? 'let af' : ''}
+
 		${schema && definitions ? 'c.schema = schema; c.defs = definitions;' : ''}
 		${fnLiteral}
 	}`
+
+	// console.log(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 
@@ -1503,7 +1535,9 @@ export const composeHandler = ({
 	})
 }
 
-export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any>) => {
+export const composeGeneralHandler = (
+	app: Elysia<any, any, any, any, any, any>
+) => {
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
@@ -1635,7 +1669,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any>)
 
 				endUnit()
 
-				fnLiteral += `if(${name}) return ${name}\n`
+				// fnLiteral += `if(${name}) return ${name}\n`
 			} else {
 				fnLiteral += `${
 					maybeAsync ? 'await' : ''
@@ -1759,7 +1793,9 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any>)
 	})
 }
 
-export const composeErrorHandler = (app: Elysia<any, any, any, any, any, any>) => {
+export const composeErrorHandler = (
+	app: Elysia<any, any, any, any, any, any>
+) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,

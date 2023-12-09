@@ -245,8 +245,10 @@ export interface LifeCycleStore {
 	request: PreHandler<any, any>[]
 	parse: BodyHandler<any, any>[]
 	transform: VoidHandler<any, any>[]
+	resolve: VoidHandler<any, any>[]
 	beforeHandle: OptionalHandler<any, any>[]
 	afterHandle: AfterHandler<any, any>[]
+	mapResponse: MapResponse<any, any>[]
 	onResponse: VoidHandler<any, any>[]
 	trace: TraceHandler<any, any>[]
 	error: ErrorHandler<any, any, any>[]
@@ -384,6 +386,20 @@ export type AfterHandler<
 	  ) => Returned | MaybePromise<void>
 	: never
 
+export type MapResponse<
+	Route extends RouteSchema = {},
+	Decorators extends DecoratorBase = {
+		request: {}
+		store: {}
+		derive: {}
+	}
+> = Handler<
+	Omit<Route, 'response'> & {
+		response: MaybePromise<Response>
+	},
+	Decorators
+>
+
 export type VoidHandler<
 	Route extends RouteSchema = {},
 	Decorators extends DecoratorBase = {
@@ -397,6 +413,7 @@ export type TraceEvent =
 	| 'request'
 	| 'parse'
 	| 'transform'
+	| 'resolve'
 	| 'beforeHandle'
 	| 'afterHandle'
 	| 'error'
@@ -612,6 +629,10 @@ export type LocalHook<
 		 */
 		transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
 		/**
+		 * Execute after main handler
+		 */
+		resolve?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+		/**
 		 * Execute before main handler
 		 */
 		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
@@ -619,6 +640,10 @@ export type LocalHook<
 		 * Execute after main handler
 		 */
 		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Decorators>>
+		/**
+		 * Execute after main handler
+		 */
+		mapResponse?: MaybeArray<MapResponse<TypedRoute, Decorators>>
 		/**
 		 * Catch error
 		 */
@@ -629,14 +654,12 @@ export type LocalHook<
 		onResponse?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
 	}
 
-export type ComposedHandler =
-	| Exclude<unknown, Function>
-	| ((context: Context) => MaybePromise<Response>)
+export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
 export interface InternalRoute {
 	method: HTTPMethod
 	path: string
-	composed: ComposedHandler | null
+	composed: ComposedHandler | Response | null
 	handler: Handler
 	hooks: LocalHook
 }
@@ -691,15 +714,48 @@ export interface ExtensionManager<
 	},
 	Errors extends Record<string, Error> = {}
 > {
-	onParse(a: MaybeArray<BodyHandler<TypedRoute, Decorators>>): unknown
-	onTransform(a: MaybeArray<VoidHandler<TypedRoute, Decorators>>): unknown
+	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Decorators>>): unknown
+	onParse(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<BodyHandler<TypedRoute, Decorators>>
+	): unknown
+
+	onTransform(fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>): unknown
+	onTransform(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+	): unknown
+
 	onBeforeHandle(
-		a: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
 	): unknown
-	onAfterHandle(a: MaybeArray<AfterHandler<TypedRoute, Decorators>>): unknown
+	onBeforeHandle(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
+	): unknown
+
+	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Decorators>>): unknown
+	onAfterHandle(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<AfterHandler<TypedRoute, Decorators>>
+	): unknown
+
 	onError(
-		a: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
+		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
 	): unknown
-	onResponse(a: MaybeArray<VoidHandler<TypedRoute, Decorators>>): unknown
-	events: Prettify<LifeCycleStore & RouteSchema>
+	onError(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
+	): unknown
+
+	onResponse(fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>): unknown
+	onResponse(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+	): unknown
+
+	events: {
+		global: Prettify<LifeCycleStore & RouteSchema>
+		local: Prettify<LifeCycleStore & RouteSchema>
+	}
 }

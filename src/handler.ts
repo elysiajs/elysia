@@ -73,15 +73,13 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	console.log(response, set)
-
 	// @ts-ignore
-	if (response[response.$passthrough])
+	if (response?.[response.$passthrough])
 		// @ts-ignore
 		response = response[response.$passthrough]
 
 	// @ts-ignore
-	if (response[ELYSIA_RESPONSE]) {
+	if (response?.[ELYSIA_RESPONSE]) {
 		// @ts-ignore
 		set.status = response[ELYSIA_RESPONSE]
 		// @ts-ignore
@@ -306,7 +304,7 @@ export const mapEarlyResponse = (
 		response = response[response.$passthrough]
 
 	// @ts-ignore
-	if (response[ELYSIA_RESPONSE]) {
+	if (response?.[ELYSIA_RESPONSE]) {
 		// @ts-ignore
 		set.status = response[ELYSIA_RESPONSE]
 		// @ts-ignore
@@ -536,7 +534,7 @@ export const mapCompactResponse = (response: unknown): Response => {
 		response = response[response.$passthrough]
 
 	// @ts-ignore
-	if (response[ELYSIA_RESPONSE])
+	if (response?.[ELYSIA_RESPONSE])
 		// @ts-ignore
 		return mapResponse(response.response, {
 			// @ts-ignore

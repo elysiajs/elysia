@@ -1,25 +1,25 @@
 import { Elysia } from '../src'
 
-const auth = new Elysia({ name: 'auth' })
-	.derive(() => ({
-		user: {
-			name: 'saltyaom',
-			role: 'user'
-		}
-	}))
-	.extends(({ onBeforeHandle }) => ({
-		role(role: 'user' | 'admin' | 'system') {
-			onBeforeHandle(({ user, set }) => {
-				if (user.role !== role) return (set.status = 'Unauthorized')
-			})
-		}
-	}))
+type MaybeArray<T> = T | T[]
 
-new Elysia()
-	.use(auth)
-	.group('/admin', { role: 'admin' }, (app) =>
-		app
-			.get('/', ({ user }) => user.name)
-			.get('/dashboard', ({ user }) => user.name)
-	)
-	.listen(3000)
+const extension = new Elysia({ name: 'extension' }).extends(
+	({ onBeforeHandle, events }) => ({
+		beforeBeforeHandle(fn: MaybeArray<() => unknown>) {
+			onBeforeHandle({ insert: 'before' }, fn)
+		},
+		afterBeforeHandle(fn: MaybeArray<() => unknown>) {
+			onBeforeHandle({ insert: 'after' }, fn)
+		}
+	})
+)
+
+const app = new Elysia().use(extension).get('/', () => 'a', {
+	beforeBeforeHandle: [
+		() => console.log(1),
+		() => console.log(2)
+	],
+	beforeHandle: () => console.log(3),
+	afterBeforeHandle: () => console.log(4)
+})
+
+app.handle(new Request('http://localhost/'))

@@ -16,6 +16,7 @@ describe('Validator Additional Case', () => {
 				},
 				response: t.String()
 			})
+
 		const res = await app.handle(req('/'))
 		const invalid = await app.handle(req('/invalid'))
 
@@ -35,12 +36,13 @@ describe('Validator Additional Case', () => {
 				afterHandle: () => 1 as any,
 				response: t.String()
 			})
+
 		const res = await app.handle(req('/'))
 		const invalid = await app.handle(req('/invalid'))
 
 		expect(await res.text()).toBe('Mutsuki need correction 💢💢💢')
-		expect(res.status).toBe(200)
 
+		expect(res.status).toBe(200)
 		expect(invalid.status).toBe(400)
 	})
 

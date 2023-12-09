@@ -1,13 +1,24 @@
 # 0.8.0
 Feature:
-- header initialize function
+- `header` initialization function
 - inline static resources
+- support default properties
+- extension API
+- new life-cycle
+    - `resolve`: derive after validation
+    - `mapResponse`: custom response mapping
+
+Improvement:
 - lazy query reference
 - add content-range header to `Blob` by default
-- change validation response to JSON
 - update TypeBox to 0.32
-- support default properties
-- add extension API
+- override lifecycle response of `be` and `af`
+
+Breaking Change:
+- `afterHandle` no longer early return
+
+Change:
+- change validation response to JSON
 - differentiate derive from `decorator['request']` as `decorator['derive']`
 
 Bug fix:

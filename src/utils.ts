@@ -97,9 +97,11 @@ export const primitiveHooks = [
 	'request',
 	'parse',
 	'transform',
+	'resolve',
 	'beforeHandle',
 	'afterHandle',
 	'onResponse',
+	'mapResponse',
 	'trace',
 	'error',
 	'stop',
@@ -337,6 +339,10 @@ export const mergeLifeCycle = (
 			a.transform as any,
 			(b?.transform ?? ([] as any)).map(injectChecksum)
 		),
+		resolve: mergeObjectArray(
+			a.resolve as any,
+			(b?.resolve ?? ([] as any)).map(injectChecksum)
+		),
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle as any,
 			(b?.beforeHandle ?? ([] as any)).map(injectChecksum)
@@ -344,6 +350,10 @@ export const mergeLifeCycle = (
 		afterHandle: mergeObjectArray(
 			a.afterHandle as any,
 			(b?.afterHandle ?? ([] as any)).map(injectChecksum)
+		),
+		mapResponse: mergeObjectArray(
+			a.mapResponse as any,
+			(b?.mapResponse ?? ([] as any)).map(injectChecksum)
 		),
 		onResponse: mergeObjectArray(
 			a.onResponse as any,
