@@ -1128,6 +1128,7 @@ export default class Elysia<
 			prefix: ''
 		})
 		instance.store = this.store
+		instance.definitions = this.definitions
 		instance.getServer = () => this.server
 
 		const isSchema = typeof schemaOrRun === 'object'
@@ -1281,6 +1282,7 @@ export default class Elysia<
 			prefix: ''
 		})
 		instance.store = this.store
+		instance.definitions = this.definitions
 
 		const sandbox = run(instance)
 		this.decorators = mergeDeep(this.decorators, instance.decorators)
