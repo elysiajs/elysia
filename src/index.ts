@@ -28,7 +28,7 @@ import {
 	filterGlobalHook,
 	asGlobal,
 	traceBackExtension,
-	getHostname
+	replaceUrlPath
 } from './utils'
 
 import {
@@ -1296,6 +1296,7 @@ export default class Elysia<
 			prefix: ''
 		})
 		instance.store = this.store
+		instance.definitions = this.definitions
 		instance.getServer = () => this.server
 
 		const isSchema = typeof schemaOrRun === 'object'
@@ -1467,8 +1468,12 @@ export default class Elysia<
 			return this
 		}
 
-		const instance = new Elysia<any>()
+		const instance = new Elysia<any>({
+			...this.config,
+			prefix: ''
+		})
 		instance.store = this.store
+		instance.definitions = this.definitions
 
 		const sandbox = run(instance)
 		this.decorators = mergeDeep(this.decorators, instance.decorators)
@@ -1955,7 +1960,10 @@ export default class Elysia<
 
 			const handler: Handler<any, any> = async ({ request, path }) =>
 				run(
-					new Request(getHostname(request.url) + path || '/', request)
+					new Request(
+						replaceUrlPath(request.url, path || '/'),
+						request
+					)
 				)
 
 			this.all(
@@ -1980,7 +1988,7 @@ export default class Elysia<
 		const handler: Handler<any, any> = async ({ request, path }) =>
 			handle!(
 				new Request(
-					getHostname(request.url) + path.slice(length) || '/',
+					replaceUrlPath(request.url, path.slice(length) || '/'),
 					request
 				)
 			)
@@ -4011,4 +4019,4 @@ export type {
 	TraceStream
 } from './types'
 
-export type { Static } from '@sinclair/typebox'
+export type { Static, TSchema } from '@sinclair/typebox'

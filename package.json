@@ -101,7 +101,12 @@
 	},
 	"bugs": "https://github.com/elysiajs/elysia/issues",
 	"homepage": "https://github.com/elysiajs/elysia",
-	"keywords": ["bun", "http", "web", "server"],
+	"keywords": [
+		"bun",
+		"http",
+		"web",
+		"server"
+	],
 	"license": "MIT",
 	"scripts": {
 		"test": "npm run test:functionality && npm run test:types",
