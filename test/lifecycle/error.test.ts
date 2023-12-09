@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Elysia, InternalServerError, t } from '../../src'
+import {
+	Elysia,
+	InternalServerError,
+	ParseError,
+	ValidationError,
+	t
+} from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
@@ -24,27 +30,28 @@ describe('error', () => {
 		expect(notFound).toBe('UwU')
 	})
 
-	// it('handle parse error', async () => {
-	// 	const app = new Elysia()
-	// 		.onError(({ code }) => {
-	// 			if (code === 'PARSE') return 'Why you no proper type'
-	// 		})
-	// 		.post('/', ({ body }) => 'hello')
+	it('handle parse error', async () => {
+		const app = new Elysia()
+			.onError(({ code }) => {
+				if (code === 'PARSE') return 'Why you no proper type'
+			})
+			.post('/', () => {
+				throw new ParseError()
+			})
 
-	// 	const root = await app
-	// 		.handle(
-	// 			new Request('http://localhost/', {
-	// 				method: 'POST',
-	// 				body: 'A',
-	// 				headers: {
-	// 					'content-type': 'application/json'
-	// 				}
-	// 			})
-	// 		)
-	// 		.then((x) => x.text())
+		const root = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: 'A',
+				headers: {
+					'content-type': 'application/json'
+				}
+			})
+		)
 
-	// 	expect(root).toBe('Why you no proper type')
-	// })
+		expect(await root.text()).toBe('Why you no proper type')
+		expect(root.status).toBe(400)
+	})
 
 	it('custom validation error', async () => {
 		const app = new Elysia()

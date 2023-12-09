@@ -1,4 +1,4 @@
-import { NumberOptions, TypeRegistry } from '@sinclair/typebox'
+import { NumberOptions } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
@@ -15,6 +15,8 @@ import {
 } from '@sinclair/typebox'
 import { type TypeCheck } from '@sinclair/typebox/compiler'
 import { CookieOptions } from './cookie'
+import { Value } from '@sinclair/typebox/value'
+import { ValidationError } from './error'
 
 const t = Object.assign({}, Type)
 
@@ -157,7 +159,7 @@ const Files = TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
 	}
 )
 
-FormatRegistry.Set('numeric', (value) => !isNaN(+value))
+FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
 FormatRegistry.Set('ObjectString', (value) => {
 	let start = value.charCodeAt(0)
 
@@ -177,8 +179,10 @@ FormatRegistry.Set('ObjectString', (value) => {
 })
 
 export const ElysiaType = {
-	Numeric: (property?: NumberOptions) =>
-		t
+	Numeric: (property?: NumberOptions) => {
+		const schema = Type.Number(property)
+
+		return t
 			.Transform(
 				t.Union(
 					[
@@ -197,9 +201,13 @@ export const ElysiaType = {
 				const number = +value
 				if (isNaN(number)) return value
 
+				if (property && !Value.Check(schema, number))
+					throw new ValidationError('property', schema, number)
+
 				return number
 			})
-			.Encode((value) => value) as any as TNumber,
+			.Encode((value) => value) as any as TNumber
+	},
 	ObjectString: <T extends TProperties>(
 		properties: T,
 		options?: ObjectOptions
@@ -328,6 +336,9 @@ t.MaybeEmpty = ElysiaType.MaybeEmpty
 t.Cookie = ElysiaType.Cookie
 
 export { t }
+
+export * from '@sinclair/typebox/system'
+export * from '@sinclair/typebox/compiler'
 
 // type Template =
 // 	| string

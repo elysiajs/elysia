@@ -15,7 +15,6 @@ new Elysia()
 	}))
 	.get('/', ({ increase, store }) => {
 		increase()
-
 		const { counter, doubled, tripled } = store
 
 		return {

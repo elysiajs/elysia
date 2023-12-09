@@ -1,3 +1,4 @@
+import type { Elysia } from '.'
 import type { Serve, Server, WebSocketHandler } from 'bun'
 
 import type { TSchema, TObject, Static, TAnySchema } from '@sinclair/typebox'
@@ -5,8 +6,6 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
 import type { EventEmitter } from 'eventemitter3'
-
-import type Elysia from '.'
 
 import type { CookieOptions } from './cookie'
 import type { Context, PreContext } from './context'

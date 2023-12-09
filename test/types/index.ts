@@ -482,6 +482,33 @@ app.use(plugin).group(
 	}>()
 }
 
+// ? It doesn't exposed guard type to external route
+{
+	const server = app
+		.guard(
+			{
+				query: t.Object({
+					name: t.String()
+				})
+			},
+			(app) => app
+		)
+		.get('/', () => 1)
+
+	type App = (typeof server)['schema']
+	type Route = App['/']['get']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		body: unknown
+		params: unknown
+		query: unknown
+		headers: unknown
+		response: {
+			200: number
+		}
+	}>()
+}
+
 // ? Register websocket
 {
 	const server = app.group(
@@ -862,4 +889,51 @@ app.group(
 						})
 				)
 	)
+}
+
+// ? Inherits route for scoped instance
+{
+	const child = new Elysia({ scoped: true })
+		.decorate('b', 'b')
+		.model('b', t.String())
+		.get('/child', () => 'Hello from child route')
+	const main = new Elysia().use(child)
+
+	type Schema = (typeof main)['schema']
+
+	expectTypeOf<keyof (typeof main)['schema']>().toEqualTypeOf<'/child'>()
+	expectTypeOf<keyof (typeof main)['decorators']>().not.toEqualTypeOf<{
+		request: {
+			b: 'b'
+		}
+		store: {}
+	}>()
+	expectTypeOf<keyof (typeof main)['definitions']>().not.toEqualTypeOf<{
+		type: {
+			b: string
+		}
+		error: {}
+	}>()
+}
+
+// ? WebSocket infers params
+{
+	new Elysia()
+		.ws('/:id', {
+			open(ws) {
+				expectTypeOf<typeof ws.data.params>().toEqualTypeOf<{
+					id: string
+				}>()
+			}
+		})
+		.ws('/:id', {
+			params: t.Object({
+				id: t.Number()
+			}),
+			open(ws) {
+				expectTypeOf<typeof ws.data.params>().toEqualTypeOf<{
+					id: number
+				}>()
+			}
+		})
 }

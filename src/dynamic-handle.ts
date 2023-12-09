@@ -379,7 +379,7 @@ export const createDynamicHandler =
 export const createDynamicErrorHandler =
 	(app: Elysia<any, any, any, any, any, any>) =>
 	async (context: Context, error: ElysiaErrors) => {
-		const errorContext = Object.assign(context, error)
+		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
 		// @ts-ignore

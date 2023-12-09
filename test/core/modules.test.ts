@@ -138,16 +138,47 @@ describe('Modules', () => {
 				}))
 			}
 
-		const app = new Elysia()
-			.use(a())
-			.get('/', ({ derived }) => derived)
-			// .get('/:with_param', ({ derived }) => derived)
+		const app = new Elysia().use(a()).get('/', ({ derived }) => derived)
 
 		await app.modules
 
 		const resRoot = await app.handle(req('/')).then((r) => r.text())
-		// const resParam = await app.handle(req('/param')).then((r) => r.text())
 		expect(resRoot).toBe('async')
-		// expect(resParam).toBe('async')
+	})
+
+	it('do not duplicate functional async plugin lifecycle', async () => {
+		const plugin = async (app: Elysia) => app.get('/', () => 'yay')
+
+		let fired = 0
+
+		const app = new Elysia()
+			.use(plugin)
+			.onRequest(() => {
+				fired++
+			})
+			.compile()
+
+		await app.modules
+		await app.handle(req('/'))
+
+		expect(fired).toBe(1)
+	})
+
+	it('do not duplicate instance async plugin lifecycle', async () => {
+		const plugin = async () => new Elysia().get('/', () => 'yay')
+
+		let fired = 0
+
+		const app = new Elysia()
+			.use(plugin())
+			.onRequest(() => {
+				fired++
+			})
+			.compile()
+
+		await app.modules
+		await app.handle(req('/'))
+
+		expect(fired).toBe(1)
 	})
 })

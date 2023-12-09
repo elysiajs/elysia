@@ -54,7 +54,7 @@ describe('Map Response', () => {
 		const response = mapResponse(body, defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		expect(await response.json<any>()).toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -103,7 +103,7 @@ describe('Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		expect(await response.json<any>()).toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -111,7 +111,7 @@ describe('Map Response', () => {
 		const response = mapResponse(new Error('Hello'), defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		expect(await response.json<any>()).toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -130,7 +130,7 @@ describe('Map Response', () => {
 		const response = mapResponse(new Student('Himari'), defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		expect(await response.json<any>()).toEqual({
 			name: 'Himari'
 		})
 		expect(response.status).toBe(200)
@@ -185,7 +185,7 @@ describe('Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		expect(await response.json<any>()).toEqual(body)
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers,
 			'content-type': 'application/json;charset=utf-8'
@@ -197,7 +197,7 @@ describe('Map Response', () => {
 		const response = mapResponse(new Error('Hello'), context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		expect(await response.json<any>()).toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -278,10 +278,8 @@ describe('Map Response', () => {
 		})
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('Hina')
-		expect(response.headers.toJSON()).toEqual({
-			name: 'Sorasaki Hina',
-			'set-cookie': ['name=hina']
-		})
+		expect(response.headers.get('name')).toEqual('Sorasaki Hina')
+		expect(response.headers.getAll('set-cookie')).toEqual(['name=hina'])
 	})
 
 	it('set multiple cookie', async () => {
@@ -301,10 +299,8 @@ describe('Map Response', () => {
 		})
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('Hina')
-		expect(response.headers.toJSON()).toEqual({
-			name: 'Sorasaki Hina',
-			'set-cookie': ['name=hina', 'affiliation=gehenna']
-		})
+		expect(response.headers.get('name')).toEqual('Sorasaki Hina')
+		expect(response.headers.getAll('set-cookie')).toEqual(['name=hina', 'affiliation=gehenna'])
 	})
 
 	it('map Passthrough', async () => {

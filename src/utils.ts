@@ -15,6 +15,8 @@ import type {
 const isObject = (item: any): item is Object =>
 	item && typeof item === 'object' && !Array.isArray(item)
 
+export const getHostname = (url: string) => url.slice(0, url.indexOf('/', 11))
+
 const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
 	// Handle import * as Sentry from '@sentry/bun'
@@ -222,7 +224,7 @@ export const getSchemaValidator = (
 			Code: () => ''
 		} as unknown as TypeCheck<TSchema>
 
-	return TypeCompiler.Compile(schema)
+	return TypeCompiler.Compile(schema, Object.values(models))
 }
 
 export const getResponseSchemaValidator = (
@@ -242,7 +244,7 @@ export const getResponseSchemaValidator = (
 
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
-	const compile = (schema: TSchema) => {
+	const compile = (schema: TSchema, references?: TSchema[]) => {
 		if (dynamic)
 			return {
 				schema,
@@ -254,7 +256,7 @@ export const getResponseSchemaValidator = (
 				Code: () => ''
 			} as unknown as TypeCheck<TSchema>
 
-		return TypeCompiler.Compile(schema)
+		return TypeCompiler.Compile(schema, references)
 	}
 
 	if (Kind in maybeSchemaOrRecord) {
@@ -262,7 +264,7 @@ export const getResponseSchemaValidator = (
 			maybeSchemaOrRecord.additionalProperties = additionalProperties
 
 		return {
-			200: compile(maybeSchemaOrRecord)
+			200: compile(maybeSchemaOrRecord, Object.values(models))
 		}
 	}
 
@@ -278,7 +280,7 @@ export const getResponseSchemaValidator = (
 					'additionalProperties' in schema === false
 
 				// Inherits model maybe already compiled
-				record[+status] = Kind in schema ? compile(schema) : schema
+				record[+status] = Kind in schema ? compile(schema, Object.values(models)) : schema
 			}
 
 			return undefined
@@ -293,7 +295,7 @@ export const getResponseSchemaValidator = (
 		// Inherits model maybe already compiled
 		record[+status] =
 			Kind in maybeNameOrSchema
-				? compile(maybeNameOrSchema)
+				? compile(maybeNameOrSchema, Object.values(models))
 				: maybeNameOrSchema
 	})
 
@@ -314,8 +316,9 @@ export const mergeLifeCycle = (
 	b: LifeCycleStore | LocalHook,
 	checksum?: number
 ): LifeCycleStore => {
-	const injectChecksum = <T,>(x: T): T => {
-		if (checksum)
+	const injectChecksum = <T>(x: T): T => {
+		// @ts-ignore
+		if (checksum && !x.$elysiaChecksum)
 			// @ts-ignore
 			x.$elysiaChecksum = checksum
 
