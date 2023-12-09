@@ -4,6 +4,7 @@ Feature:
 - inline static resources
 - support default properties
 - extension API
+- error function
 - new life-cycle
     - `resolve`: derive after validation
     - `mapResponse`: custom response mapping
@@ -24,6 +25,7 @@ Change:
 Bug fix:
 - remove `headers`, `path` from `PreContext`
 - remove `derive` from `PreContext`
+
 # 0.7.30 - 5 Dec 2023
 Bug fix:
 - Emergency release override latest beta

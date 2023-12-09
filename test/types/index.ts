@@ -500,7 +500,7 @@ app.use(plugin).group(
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
-		params: unknown
+		params: never
 		query: unknown
 		headers: unknown
 		response: {
