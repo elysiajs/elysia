@@ -3344,4 +3344,4 @@ export type {
 	TraceStream
 } from './types'
 
-export type { Static } from '@sinclair/typebox'
+export type { Static, TSchema } from '@sinclair/typebox'
