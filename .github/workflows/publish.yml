@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     tags:
-      - 'v*'
+      - 'v.*'
 
 defaults:
   run:
@@ -54,7 +54,7 @@ jobs:
 
       - name: Test
         run: bun run test
-        
+
       # publish script will automatically run the `prepublishOnly` script
       - name: 'Publish'
         env:
