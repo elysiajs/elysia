@@ -315,7 +315,7 @@ export default class Elysia<
 			} as any
 
 			const globalHook = Object.assign({}, this.event)
-			localHook = mergeHook({}, localHook)
+			localHook = Object.assign({}, localHook)
 
 			const loosePath = path.endsWith('/')
 				? path.slice(0, path.length - 1)
@@ -408,7 +408,7 @@ export default class Elysia<
 					traceBackExtension(extension(manager), localHook as any)
 			}
 
-			const hooks = mergeLifeCycle(globalHook, localHook)
+			const hooks = mergeHook(globalHook, localHook)
 
 			const isFn = typeof handler === 'function'
 			let handle: Handler<any, any> = isFn ? handler : ((() => '') as any)

@@ -323,6 +323,8 @@ export const mergeLifeCycle = (
 	}
 
 	return {
+		...a,
+		...b,
 		start: mergeObjectArray(
 			a.start as any,
 			('start' in b ? b.start ?? [] : []).map(injectChecksum) as any
