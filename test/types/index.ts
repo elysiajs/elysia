@@ -12,7 +12,7 @@ app.get('/', ({ headers, query, params, body, store }) => {
 
 	// ? default headers should be Record<string, unknown>
 	expectTypeOf<typeof headers>().toEqualTypeOf<
-		Record<string, string | null>
+		Record<string, string | undefined>
 	>()
 
 	// ? default query should be Record<string, unknown>
@@ -475,7 +475,7 @@ app.use(plugin).group(
 		query: {
 			name: string
 		}
-		params: unknown
+		params: never
 		response: {
 			200: number
 		}
@@ -517,7 +517,7 @@ app.use(plugin).group(
 		query: {
 			name: string
 		}
-		params: unknown
+		params: never
 		response: unknown
 	}>()
 }
@@ -533,7 +533,7 @@ app.use(plugin).group(
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: unknown
+		params: never
 		response: {
 			200: string
 		}
@@ -738,7 +738,7 @@ app.group(
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: unknown
+		params: never
 		response: {
 			200: string
 		}
@@ -780,7 +780,7 @@ app.group(
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: unknown
+		params: never
 		response: {
 			200: string
 		}
