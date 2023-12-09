@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     tags:
-      - 'v*'
+      - 'exp*'
 
 defaults:
   run:
@@ -46,19 +46,13 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install packages
-        run: bun install
+      - name: 'Install Dependencies'
+        run: npm install
 
-      - name: Build code
-        run: bun run build
-
-      - name: Test
-        run: bun run test
-        
       # publish script will automatically run the `prepublishOnly` script
       - name: 'Publish'
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm publish --access=public --registry=https://registry.npmjs.org --no-git-checks
+          npm publish --tag=experimental --access=public --registry=https://registry.npmjs.org --no-git-checks

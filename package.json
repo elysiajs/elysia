@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "0.8.0-exp.7",
+	"version": "0.8.0-exp.8",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -113,9 +113,6 @@
 		"build:bun": "bun build.ts",
 		"build:esm": "swc src -d dist && tsc --project tsconfig.esm.json",
 		"build:cjs": "tsc --project tsconfig.cjs.json",
-		"release": "npm run release:test && npm run release:github",
-		"release:test": "npm run build && npm run test",
-		"release:github": "bumpp package.json --commit --push --tag",
 		"release:local": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {
