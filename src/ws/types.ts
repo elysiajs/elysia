@@ -30,6 +30,7 @@ export namespace WS {
 		Decorators extends DecoratorBase = {
 			request: {}
 			store: {}
+			derive: {}
 		},
 		Errors extends Record<string, Error> = {},
 		Path extends string = '',

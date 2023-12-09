@@ -31,6 +31,7 @@ export class ElysiaWS<
 	Decorators extends DecoratorBase = {
 		request: {}
 		store: {}
+		derive: {}
 	}
 > {
 	id: number
