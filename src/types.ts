@@ -696,6 +696,14 @@ export type BaseExtension = Record<
 	BaseExtension | ((a: any) => unknown)
 >
 
+export type Checksum = {
+	name?: string
+	seed?: unknown
+	checksum: number
+	stack?: string
+	dependencies?: Record<string, Checksum[]>
+}
+
 export type ExtensionToProperty<T extends BaseExtension> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any

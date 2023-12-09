@@ -84,7 +84,8 @@ import type {
 	BaseExtension,
 	ExtensionToProperty,
 	ExtensionManager,
-	MapResponse
+	MapResponse,
+	Checksum
 } from './types'
 import { t } from './type-system'
 
@@ -119,7 +120,7 @@ export default class Elysia<
 	Scoped extends boolean = false
 > {
 	config: ElysiaConfig<BasePath>
-	private dependencies: Record<string, number[]> = {}
+	private dependencies: Record<string, Checksum[]> = {}
 
 	store: Decorators['store'] = {}
 	private decorators = {} as Decorators['request']
@@ -180,6 +181,7 @@ export default class Elysia<
 	private dynamicRouter = new Memoirist<DynamicHandler>()
 	private lazyLoadModules: Promise<Elysia<any, any>>[] = []
 	path: BasePath = '' as any
+	stack: string | undefined = undefined
 
 	constructor(config?: Partial<ElysiaConfig<BasePath, Scoped>>) {
 		this.config = {
@@ -192,6 +194,9 @@ export default class Elysia<
 			...config,
 			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
+
+		if (config?.name || config?.seed !== undefined)
+			this.stack = new Error().stack
 	}
 
 	private add(
@@ -315,8 +320,7 @@ export default class Elysia<
 				)
 			} as any
 
-			const globalHook = Object.assign({}, this.event)
-			localHook = Object.assign({}, localHook)
+			const globalHook = this.event
 
 			const loosePath = path.endsWith('/')
 				? path.slice(0, path.length - 1)
@@ -335,6 +339,8 @@ export default class Elysia<
 						fn?: MaybeArray<Function>
 					) => {
 						if (typeof type === 'function' || Array.isArray(type)) {
+							if (!localHook[stackName]) localHook[stackName] = []
+
 							if (Array.isArray(type))
 								localHook[stackName] = (
 									localHook[stackName] as unknown[]
@@ -369,11 +375,11 @@ export default class Elysia<
 
 							return
 						} else {
+							if (!localHook[stackName]) localHook[stackName] = []
+
 							if (!Array.isArray(fn)) {
 								if (insert === 'before') {
-									;(localHook[stackName] as any[]).unshift(
-										fn
-									)
+									;(localHook[stackName] as any[]).unshift(fn)
 								} else {
 									;(localHook[stackName] as any[]).push(fn)
 								}
@@ -406,7 +412,13 @@ export default class Elysia<
 				}
 
 				for (const extension of this.extensions)
-					traceBackExtension(extension(manager), localHook as any)
+					traceBackExtension(
+						extension(manager),
+						localHook as any,
+						checksum(
+							this.config.name + JSON.stringify(this.config.seed)
+						)
+					)
 			}
 
 			const hooks = mergeHook(globalHook, localHook)
@@ -1246,13 +1258,13 @@ export default class Elysia<
 			>
 		) => NewElysia
 	): Elysia<
-				BasePath,
-				Decorators,
-				Definitions,
-			ParentSchema,
-				Extension,
-				Prettify<Routes & NewElysia['schema']>
-		  >
+		BasePath,
+		Decorators,
+		Definitions,
+		ParentSchema,
+		Extension,
+		Prettify<Routes & NewElysia['schema']>
+	>
 
 	/**
 	 * ### group
@@ -1290,7 +1302,6 @@ export default class Elysia<
 
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
 		this.decorators = mergeDeep(this.decorators, instance.decorators)
-
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -1406,13 +1417,13 @@ export default class Elysia<
 			>
 		) => NewElysia
 	): Elysia<
-	BasePath,
-	Decorators,
-	Definitions,
-	ParentSchema,
-	Extension,
-	Prettify<Routes & NewElysia['schema']>
->
+		BasePath,
+		Decorators,
+		Definitions,
+		ParentSchema,
+		Extension,
+		Prettify<Routes & NewElysia['schema']>
+	>
 
 	/**
 	 * ### guard
@@ -1800,12 +1811,18 @@ export default class Elysia<
 
 				if (
 					this.dependencies[name].some(
-						(checksum) => current === checksum
+						({ checksum }) => current === checksum
 					)
 				)
 					return this
 
-				this.dependencies[name].push(current)
+				this.dependencies[name].push({
+					name: plugin.config.name,
+					seed: plugin.config.seed,
+					checksum: current,
+					stack: plugin.stack,
+					dependencies: plugin.dependencies
+				})
 			}
 
 			plugin.model(this.definitions.type as any)
@@ -1839,7 +1856,7 @@ export default class Elysia<
 
 				if (
 					!this.dependencies[name].some(
-						(checksum) => current === checksum
+						({ checksum }) => current === checksum
 					)
 				)
 					this.extensions.push(...plugin.extensions)
@@ -1878,12 +1895,18 @@ export default class Elysia<
 
 				if (
 					this.dependencies[name].some(
-						(checksum) => current === checksum
+						({ checksum }) => current === checksum
 					)
 				)
 					return this
 
-				this.dependencies[name].push(current)
+				this.dependencies[name].push({
+					name: plugin.config.name,
+					seed: plugin.config.seed,
+					checksum: current,
+					stack: plugin.stack,
+					dependencies: plugin.dependencies
+				})
 				this.event = mergeLifeCycle(
 					this.event,
 					filterGlobalHook(plugin.event),

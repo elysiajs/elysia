@@ -74,7 +74,7 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 		skipKeys: ['properties']
 	})
 
-export const mergeObjectArray = <T,>(a: T | T[], b: T | T[]): T[] => {
+export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 	// ! Must copy to remove side-effect
 	const array = [...(Array.isArray(a) ? a : [a])]
 	const checksums = []
@@ -280,7 +280,10 @@ export const getResponseSchemaValidator = (
 					'additionalProperties' in schema === false
 
 				// Inherits model maybe already compiled
-				record[+status] = Kind in schema ? compile(schema, Object.values(models)) : schema
+				record[+status] =
+					Kind in schema
+						? compile(schema, Object.values(models))
+						: schema
 			}
 
 			return undefined
@@ -555,13 +558,21 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 export const traceBackExtension = (
 	extension: BaseExtension,
 	property: Record<string, unknown>,
+	checksum: number | undefined,
 	hooks = property
 ) => {
 	for (const [key, value] of Object.entries(property)) {
 		if (primitiveHooks.includes(key as any) || !(key in extension)) continue
 
-		if (typeof extension[key] === 'function') extension[key](value)
-		else if (typeof extension[key] === 'object')
-			traceBackExtension(extension[key], value as any, hooks)
+		if (typeof extension[key] === 'function') {
+			// Property is reference to the original object
+			// @ts-ignore
+			if (!property[key]?.$elysiaChecksum) {
+				// @ts-ignore
+				property[key].$elysiaChecksum = checksum
+				extension[key](value)
+			}
+		} else if (typeof extension[key] === 'object')
+			traceBackExtension(extension[key], value as any, checksum, hooks)
 	}
 }

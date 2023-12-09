@@ -8,6 +8,7 @@ Feature:
 - new life-cycle
     - `resolve`: derive after validation
     - `mapResponse`: custom response mapping
+- add stack trace to plugin checksum
 
 Improvement:
 - lazy query reference
