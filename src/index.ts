@@ -10,12 +10,11 @@ import type { Context } from './context'
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
-import { isNotEmpty, mapCompactResponse, mapResponse } from './handler'
+import { isNotEmpty, mapEarlyResponse } from './handler'
 import {
 	composeHandler,
 	composeGeneralHandler,
-	composeErrorHandler,
-	isFnUse
+	composeErrorHandler
 } from './compose'
 import {
 	mergeHook,
@@ -203,7 +202,7 @@ export default class Elysia<
 	private add(
 		method: HTTPMethod,
 		paths: string | Readonly<string[]>,
-		handler: Handler<any, any, any> | unknown,
+		handle: Handler<any, any, any> | any,
 		localHook?: LocalHook<any, any, any, any, any>,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
@@ -445,36 +444,7 @@ export default class Elysia<
 
 			const hooks = mergeHook(globalHook, localHook)
 
-			const isFn = typeof handler === 'function'
-			let handle: Handler<any, any> = isFn ? handler : ((() => '') as any)
-			if (!isFn) {
-				const response = mapCompactResponse(handler)
-
-				handle = () => response.clone()
-				// @ts-ignore
-				handle.response = response
-
-				const lifeCycleLiteral =
-					validator || (method !== 'GET' && method !== 'HEAD')
-						? [
-								handler,
-								...hooks.onResponse,
-								...hooks.transform,
-								...hooks.beforeHandle,
-								...hooks.afterHandle
-						  ].map((x) =>
-								typeof x === 'function' ? x.toString() : `${x}`
-						  )
-						: []
-
-				if (!lifeCycleLiteral.some((fn) => isFnUse('set', fn)))
-					handler = this.setHeader
-						? mapResponse(handler, {
-								status: 200,
-								headers: this.setHeader as any
-						  })
-						: mapCompactResponse(handler)
-			}
+			const isFn = typeof handle === 'function'
 
 			if (this.config.aot === false) {
 				this.dynamicRouter.add(method, path, {
@@ -509,20 +479,68 @@ export default class Elysia<
 				method,
 				hooks,
 				validator,
-				handler,
+				handler: handle,
 				handleError: this.handleError,
 				onRequest: this.event.request,
 				config: this.config,
 				definitions: allowMeta ? this.definitions.type : undefined,
 				schema: allowMeta ? this.schema : undefined,
 				getReporter: () => this.reporter,
-				setHeader: this.setHeader
+				setHeader: this.setHeaders
 			})
 
 			// @ts-ignore
-			if (handle.response)
+			if (!isFn) {
+				const context = Object.assign(
+					{
+						headers: {},
+						query: {},
+						params: {} as never,
+						body: undefined,
+						request: new Request(`http://localhost${path}`),
+						store: this.store,
+						path: path,
+						set: {
+							headers: this.setHeaders ?? {},
+							status: 200
+						}
+					},
+					this.decorators as any
+				)
+
+				let response
+
+				for (const onRequest of Object.values(hooks.request)) {
+					try {
+						const inner = mapEarlyResponse(
+							onRequest(context),
+							context.set
+						)
+						if (inner !== undefined) {
+							response = inner
+							break
+						}
+					} catch (error) {
+						response = this.handleError(context, error as Error)
+						break
+					}
+				}
+
 				// @ts-ignore
-				mainHandler.response = handle.response
+				if (response) mainHandler.response = response
+				else {
+					try {
+						// @ts-ignore
+						mainHandler.response = mainHandler(context)
+					} catch (error) {
+						// @ts-ignore
+						mainHandler.response = this.handleError(
+							context,
+							error as Error
+						)
+					}
+				}
+			}
 
 			const existingRouteIndex = this.routes.findIndex(
 				(route) => route.path === path && route.method === method
@@ -553,7 +571,7 @@ export default class Elysia<
 					this.staticRouter.handlers.push(mainHandler)
 
 					// @ts-ignore
-					if (handle.response instanceof Response)
+					if (mainHandler.response instanceof Response)
 						this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
 					else
 						this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
@@ -589,7 +607,7 @@ export default class Elysia<
 					].all = `default: return st${index}(ctx)\n`
 				else {
 					// @ts-ignore
-					if (handle.response instanceof Response)
+					if (mainHandler.response instanceof Response)
 						this.staticRouter.map[
 							path
 						].code = `case '${method}': return st${index}.clone()\n${this.staticRouter.map[path].code}`
@@ -635,13 +653,13 @@ export default class Elysia<
 		}
 	}
 
-	private setHeader?: Context['set']['headers']
-	header(header: Context['set']['headers'] | undefined) {
+	private setHeaders?: Context['set']['headers']
+	headers(header: Context['set']['headers'] | undefined) {
 		if (!header) return this
 
-		if (!this.setHeader) this.setHeader = {}
+		if (!this.setHeaders) this.setHeaders = {}
 
-		this.setHeader = mergeDeep(this.setHeader, header)
+		this.setHeaders = mergeDeep(this.setHeaders, header)
 
 		return this
 	}
@@ -1824,7 +1842,7 @@ export default class Elysia<
 		const { name, seed } = plugin.config
 
 		plugin.getServer = () => this.getServer()
-		plugin.header(this.setHeader)
+		plugin.headers(this.setHeaders)
 
 		const isScoped = plugin.config.scoped
 		if (isScoped) {

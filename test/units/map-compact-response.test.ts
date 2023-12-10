@@ -2,15 +2,6 @@ import { describe, it, expect } from 'bun:test'
 import { mapCompactResponse } from '../../src/handler'
 import { Passthrough } from './utils'
 
-const context = {
-	cookie: {},
-	headers: {
-		'x-powered-by': 'Elysia',
-		'coffee-scheme': 'Coffee'
-	},
-	status: 418
-}
-
 class Student {
 	constructor(public name: string) {}
 }
@@ -48,7 +39,7 @@ describe('Map Compact Response', () => {
 		const response = mapCompactResponse(body)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		expect(await response.json<any>()).toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -96,7 +87,7 @@ describe('Map Compact Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual(body)
+		expect(await response.json<any>()).toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -104,7 +95,7 @@ describe('Map Compact Response', () => {
 		const response = mapCompactResponse(new Error('Hello'))
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		expect(await response.json<any>()).toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -123,7 +114,7 @@ describe('Map Compact Response', () => {
 		const response = mapCompactResponse(new Student('Himari'))
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json()).toEqual({
+		expect(await response.json<any>()).toEqual({
 			name: 'Himari'
 		})
 		expect(response.status).toBe(200)
@@ -152,6 +143,19 @@ describe('Map Compact Response', () => {
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('hi')
+		expect(response.status).toBe(200)
+	})
+
+	it('map video content-range', async () => {
+		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
+
+		const response = mapCompactResponse(kyuukararin)
+
+		expect(response).toBeInstanceOf(Response)
+		expect(response.headers.get('accept-ranges')).toEqual('bytes')
+		expect(response.headers.get('content-range')).toEqual(
+			`bytes 0-${kyuukararin.size - 1}/${kyuukararin.size}`
+		)
 		expect(response.status).toBe(200)
 	})
 })

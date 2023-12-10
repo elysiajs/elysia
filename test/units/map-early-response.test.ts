@@ -284,4 +284,18 @@ describe('Map Early Response', () => {
 		expect(await response?.text()).toEqual('hi')
 		expect(response?.status).toBe(200)
 	})
+
+	it('map video content-range', async () => {
+		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
+
+		const response = mapEarlyResponse(kyuukararin, defaultContext)
+
+		expect(response).toBeInstanceOf(Response)
+		expect(response?.headers.get('accept-ranges')).toEqual('bytes')
+		expect(response?.headers.get('content-range')).toEqual(
+			`bytes 0-${kyuukararin.size - 1}/${kyuukararin.size}`
+		)
+		expect(response?.status).toBe(200)
+	})
+
 })

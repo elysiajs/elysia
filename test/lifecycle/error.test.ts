@@ -4,6 +4,7 @@ import {
 	InternalServerError,
 	ParseError,
 	ValidationError,
+	error,
 	t
 } from '../../src'
 import { describe, expect, it } from 'bun:test'
@@ -94,5 +95,21 @@ describe('error', () => {
 
 		expect(await response.text()).toBe('UwU')
 		expect(response.status).toBe(500)
+	})
+
+	it('error function status', async () => {
+		const app = new Elysia().get('/', () => error(418, 'I am a teapot'))
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(418)
+	})
+
+	it('error function name', async () => {
+		const app = new Elysia().get('/', () => error("I'm a teapot", 'I am a teapot'))
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(418)
 	})
 })

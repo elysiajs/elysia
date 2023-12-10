@@ -1,14 +1,14 @@
 # 0.8.0
 Feature:
-- `header` initialization function
+- `headers` initialization function
 - inline static resources
 - support default properties
 - extension API
 - error function
+- add stack trace to plugin checksum
 - new life-cycle
     - `resolve`: derive after validation
     - `mapResponse`: custom response mapping
-- add stack trace to plugin checksum
 
 Improvement:
 - lazy query reference

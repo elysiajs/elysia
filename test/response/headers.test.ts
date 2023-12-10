@@ -61,4 +61,16 @@ describe('Response Headers', () => {
 		expect(await res.text()).toBe('Hi')
 		expect(res.status).toBe(401)
 	})
+
+	it('create static header', async () => {
+		const app = new Elysia()
+			.headers({
+				'x-powered-by': 'Elysia'
+			})
+			.get('/', () => 'hi')
+
+		const headers = await app.handle(req('/')).then(x => x.headers)
+
+		expect(headers.get('x-powered-by')).toBe('Elysia')
+	})
 })

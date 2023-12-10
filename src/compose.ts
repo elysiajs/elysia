@@ -588,7 +588,8 @@ export const composeHandler = ({
 	const hasHeaders =
 		hasUnknownContext ||
 		validator.headers ||
-		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
+		lifeCycleLiteral.some((fn) => isFnUse('headers', fn)) ||
+		(setHeader && Object.keys(setHeader).length)
 
 	const hasCookie =
 		hasUnknownContext ||
@@ -613,8 +614,8 @@ export const composeHandler = ({
 		const secret = !cookieMeta.secrets
 			? undefined
 			: typeof cookieMeta.secrets === 'string'
-			  ? cookieMeta.secrets
-			  : cookieMeta.secrets[0]
+			? cookieMeta.secrets
+			: cookieMeta.secrets[0]
 
 		encodeCookie += `const _setCookie = c.set.cookie
 		if(_setCookie) {`
@@ -680,10 +681,10 @@ export const composeHandler = ({
 				cookieMeta.sign === true
 					? true
 					: cookieMeta.sign !== undefined
-					  ? '[' +
-					    cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
-					    ']'
-					  : 'undefined'
+					? '[' +
+					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
+					  ']'
+					: 'undefined'
 			},
 			${get('domain')}
 			${get('expires')}
@@ -1185,7 +1186,6 @@ export const composeHandler = ({
 				fnLiteral += isAsync(hooks.beforeHandle[i])
 					? `await beforeHandle[${i}](c);\n`
 					: `beforeHandle[${i}](c);\n`
-				
 
 				endUnit()
 			} else {
@@ -1337,8 +1337,7 @@ export const composeHandler = ({
 
 			endHandle()
 
-			if(validator.response)
-			fnLiteral += composeResponseValidation()
+			if (validator.response) fnLiteral += composeResponseValidation()
 
 			report('afterHandle')()
 
@@ -1583,11 +1582,11 @@ export const composeGeneralHandler = (
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
 				: app.event.request.length
-				  ? `new Response(error404Message, {
+				? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
 				})`
-				  : `error404.clone()`
+				: `error404.clone()`
 		}
 
 	ctx.params = route.params
@@ -1656,8 +1655,8 @@ export const composeGeneralHandler = (
 				set: {
 					headers: ${
 						// @ts-ignore
-						Object.keys(app.setHeader ?? {}).length
-							? 'Object.assign(app.setHeader)'
+						Object.keys(app.setHeaders ?? {}).length
+							? 'Object.assign(app.setHeaders)'
 							: '{}'
 					},
 					status: 200
@@ -1728,8 +1727,8 @@ export const composeGeneralHandler = (
 			set: {
 				headers: ${
 					// @ts-ignore
-					Object.keys(app.setHeader ?? {}).length
-						? 'Object.assign(app.setHeader)'
+					Object.keys(app.setHeaders ?? {}).length
+						? 'Object.assign(app.setHeaders)'
 						: '{}'
 				},
 				status: 200
@@ -1837,7 +1836,9 @@ export const composeErrorHandler = (
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
 
-		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}](context)`
+		const response = `${
+			isAsync(handler) ? 'await ' : ''
+		}onError[${i}](context)`
 
 		if (hasReturn(handler.toString()))
 			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) {
