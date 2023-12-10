@@ -28,7 +28,8 @@ import {
 	filterGlobalHook,
 	asGlobal,
 	traceBackExtension,
-	replaceUrlPath
+	replaceUrlPath,
+	primitiveHooks
 } from './utils'
 
 import {
@@ -340,6 +341,8 @@ export default class Elysia<
 					) => {
 						if (typeof type === 'function' || Array.isArray(type)) {
 							if (!localHook[stackName]) localHook[stackName] = []
+							if (typeof localHook[stackName] === 'function')
+								localHook[stackName] = [localHook[stackName]]
 
 							if (Array.isArray(type))
 								localHook[stackName] = (
@@ -350,7 +353,7 @@ export default class Elysia<
 							return
 						}
 
-						const { insert = 'before', stack = 'local' } = type
+						const { insert = 'after', stack = 'local' } = type
 
 						if (stack === 'global') {
 							if (!Array.isArray(fn)) {
@@ -376,6 +379,8 @@ export default class Elysia<
 							return
 						} else {
 							if (!localHook[stackName]) localHook[stackName] = []
+							if (typeof localHook[stackName] === 'function')
+								localHook[stackName] = [localHook[stackName]]
 
 							if (!Array.isArray(fn)) {
 								if (insert === 'before') {
@@ -411,14 +416,31 @@ export default class Elysia<
 					onError: createManager('error')
 				}
 
-				for (const extension of this.extensions)
-					traceBackExtension(
-						extension(manager),
-						localHook as any,
-						checksum(
-							this.config.name + JSON.stringify(this.config.seed)
-						)
+				for (const extension of this.extensions) {
+					const customHookValues: Record<string, unknown> = {}
+					for (const [key, value] of Object.entries(localHook)) {
+						if (primitiveHooks.includes(key as any)) continue
+
+						customHookValues[key] = value
+					}
+
+					// @ts-ignore
+					if (!extension.$elysiaChecksum)
+						// @ts-ignore
+						extension.$elysiaChecksum = []
+
+					const hash = checksum(JSON.stringify(customHookValues))
+
+					// @ts-ignore
+					if (extension.$elysiaChecksum.includes(hash)) continue
+
+					// @ts-ignore
+					extension.$elysiaChecksum.push(
+						checksum(JSON.stringify(customHookValues))
 					)
+
+					traceBackExtension(extension(manager), localHook as any)
+				}
 			}
 
 			const hooks = mergeHook(globalHook, localHook)

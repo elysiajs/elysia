@@ -562,21 +562,14 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 export const traceBackExtension = (
 	extension: BaseExtension,
 	property: Record<string, unknown>,
-	checksum: number | undefined,
 	hooks = property
 ) => {
 	for (const [key, value] of Object.entries(property)) {
 		if (primitiveHooks.includes(key as any) || !(key in extension)) continue
 
 		if (typeof extension[key] === 'function') {
-			// Property is reference to the original object
-			// @ts-ignore
-			if (!property[key]?.$elysiaChecksum) {
-				// @ts-ignore
-				property[key].$elysiaChecksum = checksum
-				extension[key](value)
-			}
+			extension[key](value)
 		} else if (typeof extension[key] === 'object')
-			traceBackExtension(extension[key], value as any, checksum, hooks)
+			traceBackExtension(extension[key], value as any, hooks)
 	}
 }
