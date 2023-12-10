@@ -394,9 +394,13 @@ export type MapResponse<
 	}
 > = Handler<
 	Omit<Route, 'response'> & {
-		response: MaybePromise<Response>
+		response: MaybePromise<Response | undefined | void>
 	},
-	Decorators
+	Decorators & {
+		derive: {
+			response: Route['response']
+		}
+	}
 >
 
 export type VoidHandler<

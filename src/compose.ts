@@ -554,10 +554,10 @@ export const composeHandler = ({
 	> = {
 		parse: traceLiteral.some((x) => isFnUse('parse', x)),
 		transform: traceLiteral.some((x) => isFnUse('transform', x)),
+		resolve: traceLiteral.some((x) => isFnUse('resolve', x)),
 		handle: traceLiteral.some((x) => isFnUse('handle', x)),
 		beforeHandle: traceLiteral.some((x) => isFnUse('beforeHandle', x)),
 		afterHandle: traceLiteral.some((x) => isFnUse('afterHandle', x)),
-		resolve: traceLiteral.some((x) => isFnUse('resolve', x)),
 		error: hasErrorHandler || traceLiteral.some((x) => isFnUse('error', x))
 	}
 
@@ -569,8 +569,10 @@ export const composeHandler = ({
 			? [
 					handler,
 					...hooks.transform,
+					...hooks.resolve,
 					...hooks.beforeHandle,
-					...hooks.afterHandle
+					...hooks.afterHandle,
+					...hooks.mapResponse
 			  ].map((x) => (typeof x === 'function' ? x.toString() : `${x}`))
 			: []
 
@@ -1231,8 +1233,10 @@ export const composeHandler = ({
 					fnLiteral += composeResponseValidation('be')
 
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
-					fnLiteral += `let mr = onMapResponse[${i}](be, c.set)\n
-					if(mr !== undefined) c.response = mr\n`
+					fnLiteral += `\nif(mr === undefined) {
+						mr = onMapResponse[${i}](be, c.set)
+						if(mr !== undefined) c.response = mr
+					}\n`
 				}
 
 				fnLiteral += encodeCookie
@@ -1302,8 +1306,10 @@ export const composeHandler = ({
 		endAfterHandle()
 
 		for (let i = 0; i < hooks.mapResponse.length; i++) {
-			fnLiteral += `let mr = onMapResponse[${i}](be, c.set)\n
-			if(mr !== undefined) c.response = mr\n`
+			fnLiteral += `\nif(mr === undefined) {
+				mr = onMapResponse[${i}](be, c.set)
+				if(mr !== undefined) c.response = mr
+			}\n`
 		}
 
 		fnLiteral += `r = c.response\n`
@@ -1312,6 +1318,11 @@ export const composeHandler = ({
 
 		fnLiteral += encodeCookie
 
+		for (let i = 0; i < hooks.mapResponse.length; i++) {
+			fnLiteral += `\nmr = onMapResponse[${i}](, c.set)\n
+			if(mr !== undefined) c.response = mr\n`
+		}
+
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
@@ -1319,13 +1330,14 @@ export const composeHandler = ({
 			name: isHandleFn ? handler.name : undefined
 		})
 
-		if (validator.response) {
+		if (validator.response || hooks.mapResponse.length) {
 			fnLiteral += isAsyncHandler
-				? `const r = await ${handle};\n`
-				: `const r = ${handle};\n`
+				? `let r = await ${handle};\n`
+				: `let r = ${handle};\n`
 
 			endHandle()
 
+			if(validator.response)
 			fnLiteral += composeResponseValidation()
 
 			report('afterHandle')()
@@ -1333,8 +1345,10 @@ export const composeHandler = ({
 			if (hooks.mapResponse.length) {
 				fnLiteral += 'c.response = r'
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
-					fnLiteral += `let mr = onMapResponse[${i}](be, c.set)\n
-    				if(mr !== undefined) c.response = mr\n`
+					fnLiteral += `\nif(mr === undefined) { 
+						mr = onMapResponse[${i}](r, c.set)
+    					if(mr !== undefined) r = c.response = mr
+					}\n`
 				}
 			}
 
@@ -1347,8 +1361,8 @@ export const composeHandler = ({
 		} else {
 			if (traceConditions.handle || hasCookie) {
 				fnLiteral += isAsyncHandler
-					? `const r = await ${handle};\n`
-					: `const r = ${handle};\n`
+					? `let r = await ${handle};\n`
+					: `let r = ${handle};\n`
 
 				endHandle()
 
@@ -1357,12 +1371,21 @@ export const composeHandler = ({
 				if (hooks.mapResponse.length) {
 					fnLiteral += 'c.response = r'
 					for (let i = 0; i < hooks.mapResponse.length; i++) {
-						fnLiteral += `let mr = onMapResponse[${i}](be, c.set)\n
-    				if(mr !== undefined) c.response = mr\n`
+						fnLiteral += `\nif(mr === undefined) {
+							mr = onMapResponse[${i}](be, c.set)
+    						if(mr !== undefined) r= c.response = mr
+						}\n`
 					}
 				}
 
 				fnLiteral += encodeCookie
+
+				for (let i = 0; i < hooks.mapResponse.length; i++) {
+					fnLiteral += `\nif(mr === undefined) {
+						mr = onMapResponse[${i}](r, c.set)
+						if(mr !== undefined) r = mr
+					}`
+				}
 
 				if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 				else fnLiteral += `return mapCompactResponse(r)\n`
@@ -1499,6 +1522,7 @@ export const composeHandler = ({
 	return ${maybeAsync ? 'async' : ''} function handle(c) {
 		${hooks.beforeHandle.length ? 'let be' : ''}
 		${hooks.afterHandle.length ? 'let af' : ''}
+		${hooks.mapResponse.length ? 'let mr' : ''}
 
 		${schema && definitions ? 'c.schema = schema; c.defs = definitions;' : ''}
 		${fnLiteral}

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import Elysia from '../../src'
 import { req } from '../utils'
@@ -187,7 +188,7 @@ describe('Extension API', () => {
 		expect(orders).toEqual([1, 2, 3])
 	})
 
-    it('appends onParse', async () => {
+	it('appends onParse', async () => {
 		const app = new Elysia()
 			.extends(({ onParse }) => ({
 				hi(fn: () => any) {
@@ -269,5 +270,33 @@ describe('Extension API', () => {
 			})
 
 		expect(app.routes[0].hooks.onResponse?.length).toEqual(1)
+	})
+
+	it('handle deduplication', async () => {
+		let call = 0
+
+		const a = new Elysia({ name: 'a', seed: 'awdawd' }).extends(
+			({ onBeforeHandle }) => ({
+				a(_: string) {
+					onBeforeHandle(() => {
+						call++
+					})
+				}
+			})
+		)
+		const b = new Elysia({ name: 'b', seed: 'add' })
+			.use(a)
+			.decorate('b', 'b')
+
+		const app = new Elysia()
+			.use(a)
+			.use(b)
+			.get('/', () => 'Hello World', {
+				a: 'a'
+			})
+
+		await app.handle(req('/'))
+
+		expect(call).toBe(1)
 	})
 })

@@ -191,6 +191,10 @@ export const mergeHook = (
 			a?.onResponse ?? [],
 			b?.onResponse ?? []
 		) as any,
+		mapResponse: mergeObjectArray(
+			a?.mapResponse ?? [],
+			b?.mapResponse ?? []
+		) as any,
 		trace: mergeObjectArray(a?.trace ?? [], b?.trace ?? []) as any,
 		error: mergeObjectArray(a?.error ?? [], b?.error ?? [])
 	}
