@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     tags:
-      - 'v*'
+      - 'e*'
 
 defaults:
   run:
@@ -61,4 +61,4 @@ jobs:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm publish --access=public --registry=https://registry.npmjs.org --no-git-checks
+          npm publish --access=public --registry=https://registry.npmjs.org --no-git-checks --tag experimental
