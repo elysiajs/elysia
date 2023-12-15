@@ -1,8 +1,12 @@
-name: Publish
+name: Publish Experimental
 
 on:
   release:
+<<<<<<< HEAD
     types: [published]
+=======
+    types: [released]
+>>>>>>> main
 
 defaults:
   run:
@@ -57,7 +61,6 @@ jobs:
       # publish script will automatically run the `prepublishOnly` script
       - name: 'Publish'
         env:
-          NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm publish --access=public --registry=https://registry.npmjs.org --no-git-checks
+          npm publish --access=public
