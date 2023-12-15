@@ -2,11 +2,7 @@ name: Publish Experimental
 
 on:
   release:
-<<<<<<< HEAD
     types: [published]
-=======
-    types: [released]
->>>>>>> main
 
 defaults:
   run:
@@ -58,7 +54,6 @@ jobs:
       - name: Test
         run: bun run test
 
-      # publish script will automatically run the `prepublishOnly` script
       - name: 'Publish'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
