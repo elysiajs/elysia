@@ -68,4 +68,35 @@ describe('Map Response', () => {
 
 		expect(res).toBe('A')
 	})
+
+	it('inherit response', async () => {
+		const app = new Elysia().get('/', () => 'Hu', {
+			mapResponse({ response }) {
+				if (typeof response === 'string') return new Response(response + 'tao')
+			}
+		})
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toBe('Hutao')
+	})
+
+	it('inherit set', async () => {
+		const app = new Elysia().get('/', () => 'Hu', {
+			mapResponse({ response, set }) {
+				set.headers['X-Powered-By'] = 'Elysia'
+
+				if (typeof response === 'string') return new Response(response + 'tao', {
+					headers: {
+						'X-Series': 'Genshin'
+					}
+				})
+			}
+		})
+
+		const res = await app.handle(req('/')).then(x => x.headers)
+
+		expect(res.get('X-Powered-By')).toBe('Elysia')
+		expect(res.get('X-Series')).toBe('Genshin')
+	})
 })

@@ -1232,11 +1232,15 @@ export const composeHandler = ({
 				if (validator.response)
 					fnLiteral += composeResponseValidation('be')
 
-				for (let i = 0; i < hooks.mapResponse.length; i++) {
-					fnLiteral += `\nif(mr === undefined) {
-						mr = onMapResponse[${i}](be, c.set)
-						if(mr !== undefined) c.response = mr
-					}\n`
+				if (hooks.mapResponse.length) {
+					fnLiteral += `c.response = be`
+
+					for (let i = 0; i < hooks.mapResponse.length; i++) {
+						fnLiteral += `\nif(mr === undefined) {
+							mr = onMapResponse[${i}](c)
+							if(mr !== undefined) c.response = mr
+						}\n`
+					}
 				}
 
 				fnLiteral += encodeCookie
@@ -1305,22 +1309,19 @@ export const composeHandler = ({
 
 		endAfterHandle()
 
-		for (let i = 0; i < hooks.mapResponse.length; i++) {
-			fnLiteral += `\nif(mr === undefined) {
-				mr = onMapResponse[${i}](be, c.set)
-				if(mr !== undefined) c.response = mr
-			}\n`
-		}
-
 		fnLiteral += `r = c.response\n`
 
 		if (validator.response) fnLiteral += composeResponseValidation()
 
 		fnLiteral += encodeCookie
 
-		for (let i = 0; i < hooks.mapResponse.length; i++) {
-			fnLiteral += `\nmr = onMapResponse[${i}](, c.set)\n
-			if(mr !== undefined) c.response = mr\n`
+		if (hooks.mapResponse.length) {
+			fnLiteral += `c.response = be`
+
+			for (let i = 0; i < hooks.mapResponse.length; i++) {
+				fnLiteral += `\nmr = onMapResponse[${i}](c)\n
+				if(mr !== undefined) c.response = mr\n`
+			}
 		}
 
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
@@ -1345,7 +1346,7 @@ export const composeHandler = ({
 				fnLiteral += 'c.response = r'
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					fnLiteral += `\nif(mr === undefined) { 
-						mr = onMapResponse[${i}](r, c.set)
+						mr = onMapResponse[${i}](c)
     					if(mr !== undefined) r = c.response = mr
 					}\n`
 				}
@@ -1371,20 +1372,13 @@ export const composeHandler = ({
 					fnLiteral += 'c.response = r'
 					for (let i = 0; i < hooks.mapResponse.length; i++) {
 						fnLiteral += `\nif(mr === undefined) {
-							mr = onMapResponse[${i}](be, c.set)
-    						if(mr !== undefined) r= c.response = mr
+							mr = onMapResponse[${i}](c)
+    						if(mr !== undefined) r = c.response = mr
 						}\n`
 					}
 				}
 
 				fnLiteral += encodeCookie
-
-				for (let i = 0; i < hooks.mapResponse.length; i++) {
-					fnLiteral += `\nif(mr === undefined) {
-						mr = onMapResponse[${i}](r, c.set)
-						if(mr !== undefined) r = mr
-					}`
-				}
 
 				if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 				else fnLiteral += `return mapCompactResponse(r)\n`
