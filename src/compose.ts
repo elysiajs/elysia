@@ -593,7 +593,7 @@ export const composeHandler = ({
 
 	const hasCookie =
 		hasUnknownContext ||
-		validator.cookie ||
+		!!validator.cookie ||
 		lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
 
 	// @ts-ignore
@@ -801,6 +801,7 @@ export const composeHandler = ({
 		hasBody ||
 		hasTraceSet ||
 		isAsyncHandler ||
+		!!hooks.mapResponse.length ||
 		hooks.parse.length > 0 ||
 		hooks.afterHandle.some(isAsync) ||
 		hooks.beforeHandle.some(isAsync) ||
@@ -1238,6 +1239,7 @@ export const composeHandler = ({
 					for (let i = 0; i < hooks.mapResponse.length; i++) {
 						fnLiteral += `\nif(mr === undefined) {
 							mr = onMapResponse[${i}](c)
+							if(mr instanceof Promise) mr = await mr
 							if(mr !== undefined) c.response = mr
 						}\n`
 					}
@@ -1319,7 +1321,8 @@ export const composeHandler = ({
 			fnLiteral += `c.response = be`
 
 			for (let i = 0; i < hooks.mapResponse.length; i++) {
-				fnLiteral += `\nmr = onMapResponse[${i}](c)\n
+				fnLiteral += `\nmr = onMapResponse[${i}](c)
+				if(mr instanceof Promise) mr = await mr
 				if(mr !== undefined) c.response = mr\n`
 			}
 		}
@@ -1347,6 +1350,7 @@ export const composeHandler = ({
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					fnLiteral += `\nif(mr === undefined) { 
 						mr = onMapResponse[${i}](c)
+						if(mr instanceof Promise) mr = await mr
     					if(mr !== undefined) r = c.response = mr
 					}\n`
 				}
@@ -1373,6 +1377,7 @@ export const composeHandler = ({
 					for (let i = 0; i < hooks.mapResponse.length; i++) {
 						fnLiteral += `\nif(mr === undefined) {
 							mr = onMapResponse[${i}](c)
+							if(mr instanceof Promise) mr = await mr
     						if(mr !== undefined) r = c.response = mr
 						}\n`
 					}

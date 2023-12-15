@@ -7,7 +7,7 @@ describe('Map Response', () => {
 	it('work global', async () => {
 		const app = new Elysia()
 			.mapResponse(() => new Response('A'))
-			.get('/', () => 'NOOP')
+			.get('/', () => 'Hutao')
 
 		const res = await app.handle(req('/')).then((x) => x.text())
 
@@ -15,7 +15,7 @@ describe('Map Response', () => {
 	})
 
 	it('work local', async () => {
-		const app = new Elysia().get('/', () => 'NOOP', {
+		const app = new Elysia().get('/', () => 'Hutao', {
 			mapResponse() {
 				return new Response('A')
 			}
@@ -52,7 +52,7 @@ describe('Map Response', () => {
 	})
 
 	it('map response only once', async () => {
-		const app = new Elysia().get('/', () => 'NOOP', {
+		const app = new Elysia().get('/', () => 'Hutao', {
 			mapResponse: [
 				() => {},
 				() => {
@@ -72,7 +72,8 @@ describe('Map Response', () => {
 	it('inherit response', async () => {
 		const app = new Elysia().get('/', () => 'Hu', {
 			mapResponse({ response }) {
-				if (typeof response === 'string') return new Response(response + 'tao')
+				if (typeof response === 'string')
+					return new Response(response + 'tao')
 			}
 		})
 
@@ -86,17 +87,38 @@ describe('Map Response', () => {
 			mapResponse({ response, set }) {
 				set.headers['X-Powered-By'] = 'Elysia'
 
-				if (typeof response === 'string') return new Response(response + 'tao', {
-					headers: {
-						'X-Series': 'Genshin'
-					}
-				})
+				if (typeof response === 'string')
+					return new Response(response + 'tao', {
+						headers: {
+							'X-Series': 'Genshin'
+						}
+					})
 			}
 		})
 
-		const res = await app.handle(req('/')).then(x => x.headers)
+		const res = await app.handle(req('/')).then((x) => x.headers)
 
 		expect(res.get('X-Powered-By')).toBe('Elysia')
 		expect(res.get('X-Series')).toBe('Genshin')
+	})
+
+	it('return async', async () => {
+		const app = new Elysia()
+			.mapResponse(async () => new Response('A'))
+			.get('/', () => 'Hutao')
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toBe('A')
+	})
+
+	it('skip async', async () => {
+		const app = new Elysia()
+			.mapResponse(async () => {})
+			.get('/', () => 'Hutao')
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toBe('Hutao')
 	})
 })
