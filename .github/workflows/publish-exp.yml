@@ -1,9 +1,8 @@
-name: Publish
+name: Publish Experimental
 
 on:
-  push:
-    tags:
-      - 'e*'
+  release:
+    types: [prereleased]
 
 defaults:
   run:
