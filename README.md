@@ -9,19 +9,11 @@
     <a href=https://elysiajs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a>
 </p>
 
-## Philosophies
-Building on top of 3 philosophies:
+TypeScript framework supercharged by Bun with End-to-End Type Safety, unified type system and outstanding developer experience
 
-- Performance
-    - You shall not worry about the underlying performance
-- Simplicity
-    - Simple building blocks to create an abstraction, not repeating yourself
-- Flexibility
-    - You shall be able to customize most of the library to fit your needs
-
-Designed with TypeScript in mind, you don't need to understand TypeScript to gain the benefit of TypeScript with Elysia. The library understands what you want and automatically infers the type from your code.
-
-⚡️ Elysia is [one of the fastest Bun web frameworks](https://github.com/SaltyAom/bun-http-framework-benchmark)
+```bash
+bun create elysia app
+```
 
 ## Documentation
 The documentation is available on [elysiajs.com](https://elysiajs.com).
