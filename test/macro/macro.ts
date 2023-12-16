@@ -3,12 +3,12 @@ import { describe, it, expect } from 'bun:test'
 import Elysia from '../../src'
 import { req } from '../utils'
 
-describe('Extension API', () => {
+describe('Macro', () => {
 	it('work', async () => {
 		let answer: string | undefined
 
 		const app = new Elysia()
-			.extends(() => ({
+			.macro(() => ({
 				hi(config: string) {
 					answer = config
 				}
@@ -26,7 +26,7 @@ describe('Extension API', () => {
 		let answer: string | undefined
 
 		const app = new Elysia()
-			.extends(() => ({
+			.macro(() => ({
 				hi(fn: () => any) {
 					fn()
 				}
@@ -44,7 +44,7 @@ describe('Extension API', () => {
 
 	it('create custom life-cycle', async () => {
 		const app = new Elysia()
-			.extends(({ onBeforeHandle }) => ({
+			.macro(({ onBeforeHandle }) => ({
 				hi(fn: () => any) {
 					onBeforeHandle(fn)
 				}
@@ -62,7 +62,7 @@ describe('Extension API', () => {
 		const orders: number[] = []
 
 		const app = new Elysia()
-			.extends(({ onBeforeHandle }) => ({
+			.macro(({ onBeforeHandle }) => ({
 				hi(fn: () => any) {
 					onBeforeHandle(fn)
 				}
@@ -88,7 +88,7 @@ describe('Extension API', () => {
 		const orders: number[] = []
 
 		const app = new Elysia()
-			.extends(({ onBeforeHandle }) => ({
+			.macro(({ onBeforeHandle }) => ({
 				hi(fn: () => any) {
 					onBeforeHandle({ insert: 'after', stack: 'local' }, fn)
 				}
@@ -114,7 +114,7 @@ describe('Extension API', () => {
 		const orders: number[] = []
 
 		const app = new Elysia()
-			.extends(({ onBeforeHandle }) => ({
+			.macro(({ onBeforeHandle }) => ({
 				hi(fn: () => any) {
 					onBeforeHandle({ insert: 'before', stack: 'local' }, fn)
 				}
@@ -140,7 +140,7 @@ describe('Extension API', () => {
 		const orders: number[] = []
 
 		const app = new Elysia()
-			.extends(({ onBeforeHandle }) => ({
+			.macro(({ onBeforeHandle }) => ({
 				hi(fn: () => any) {
 					onBeforeHandle({ insert: 'after', stack: 'global' }, fn)
 				}
@@ -166,7 +166,7 @@ describe('Extension API', () => {
 		const orders: number[] = []
 
 		const app = new Elysia()
-			.extends(({ onBeforeHandle }) => ({
+			.macro(({ onBeforeHandle }) => ({
 				hi(fn: () => any) {
 					onBeforeHandle({ insert: 'before', stack: 'global' }, fn)
 				}
@@ -190,7 +190,7 @@ describe('Extension API', () => {
 
 	it('appends onParse', async () => {
 		const app = new Elysia()
-			.extends(({ onParse }) => ({
+			.macro(({ onParse }) => ({
 				hi(fn: () => any) {
 					onParse(fn)
 				}
@@ -204,7 +204,7 @@ describe('Extension API', () => {
 
 	it('appends onTransform', async () => {
 		const app = new Elysia()
-			.extends(({ onTransform }) => ({
+			.macro(({ onTransform }) => ({
 				hi(fn: () => any) {
 					onTransform(fn)
 				}
@@ -218,7 +218,7 @@ describe('Extension API', () => {
 
 	it('appends onBeforeHandle', async () => {
 		const app = new Elysia()
-			.extends(({ onBeforeHandle }) => ({
+			.macro(({ onBeforeHandle }) => ({
 				hi(fn: () => any) {
 					onBeforeHandle(fn)
 				}
@@ -232,7 +232,7 @@ describe('Extension API', () => {
 
 	it('appends onAfterHandle', async () => {
 		const app = new Elysia()
-			.extends(({ onAfterHandle }) => ({
+			.macro(({ onAfterHandle }) => ({
 				hi(fn: () => any) {
 					onAfterHandle(fn)
 				}
@@ -246,7 +246,7 @@ describe('Extension API', () => {
 
 	it('appends onError', async () => {
 		const app = new Elysia()
-			.extends(({ onError }) => ({
+			.macro(({ onError }) => ({
 				hi(fn: () => any) {
 					onError(fn)
 				}
@@ -260,7 +260,7 @@ describe('Extension API', () => {
 
 	it('appends onResponse', async () => {
 		const app = new Elysia()
-			.extends(({ onResponse }) => ({
+			.macro(({ onResponse }) => ({
 				hi(fn: () => any) {
 					onResponse(fn)
 				}
@@ -275,7 +275,7 @@ describe('Extension API', () => {
 	it('handle deduplication', async () => {
 		let call = 0
 
-		const a = new Elysia({ name: 'a', seed: 'awdawd' }).extends(
+		const a = new Elysia({ name: 'a', seed: 'awdawd' }).macro(
 			({ onBeforeHandle }) => ({
 				a(_: string) {
 					onBeforeHandle(() => {

@@ -26,7 +26,7 @@ import {
 	mergeLifeCycle,
 	filterGlobalHook,
 	asGlobal,
-	traceBackExtension,
+	traceBackMacro,
 	replaceUrlPath,
 	primitiveHooks
 } from './utils'
@@ -81,11 +81,11 @@ import type {
 	MaybeArray,
 	GracefulHandler,
 	GetPathParameter,
-	BaseExtension,
-	ExtensionToProperty,
-	ExtensionManager,
 	MapResponse,
-	Checksum
+	Checksum,
+	MacroManager,
+	BaseMacro,
+	MacroToProperty
 } from './types'
 import { t } from './type-system'
 
@@ -115,7 +115,7 @@ export default class Elysia<
 		error: {}
 	},
 	ParentSchema extends RouteSchema = {},
-	Extension extends Record<string, unknown> = {},
+	Macro extends Record<string, unknown> = {},
 	Routes extends RouteBase = {},
 	Scoped extends boolean = false
 > {
@@ -134,7 +134,7 @@ export default class Elysia<
 
 	schema = {} as Routes
 
-	extensions: ((manager: ExtensionManager<any, any, any>) => Extension)[] =
+	private macros: ((manager: MacroManager<any, any, any>) => Macro)[] =
 		[] as any
 
 	event: LifeCycleStore = {
@@ -326,7 +326,7 @@ export default class Elysia<
 				? path.slice(0, path.length - 1)
 				: path + '/'
 
-			if (this.extensions.length) {
+			if (this.macros.length) {
 				const createManager =
 					(stackName: keyof LifeCycleStore) =>
 					(
@@ -402,7 +402,7 @@ export default class Elysia<
 						}
 					}
 
-				const manager: ExtensionManager = {
+				const manager: MacroManager = {
 					events: {
 						global: globalHook,
 						local: localHook
@@ -415,7 +415,7 @@ export default class Elysia<
 					onError: createManager('error')
 				}
 
-				for (const extension of this.extensions) {
+				for (const macro of this.macros) {
 					const customHookValues: Record<string, unknown> = {}
 					for (const [key, value] of Object.entries(localHook)) {
 						if (primitiveHooks.includes(key as any)) continue
@@ -424,21 +424,21 @@ export default class Elysia<
 					}
 
 					// @ts-ignore
-					if (!extension.$elysiaChecksum)
+					if (!macro.$elysiaChecksum)
 						// @ts-ignore
-						extension.$elysiaChecksum = []
+						macro.$elysiaChecksum = []
 
 					const hash = checksum(JSON.stringify(customHookValues))
 
 					// @ts-ignore
-					if (extension.$elysiaChecksum.includes(hash)) continue
+					if (macro.$elysiaChecksum.includes(hash)) continue
 
 					// @ts-ignore
 					extension.$elysiaChecksum.push(
 						checksum(JSON.stringify(customHookValues))
 					)
 
-					traceBackExtension(extension(manager), localHook as any)
+					traceBackMacro(macro(manager), localHook as any)
 				}
 			}
 
@@ -800,7 +800,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	> {
@@ -978,7 +978,7 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -1023,7 +1023,7 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -1060,7 +1060,7 @@ export default class Elysia<
 			}
 		},
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -1245,7 +1245,7 @@ export default class Elysia<
 				Decorators,
 				Definitions,
 				ParentSchema,
-				Extension,
+				Macro,
 				{}
 			>
 		) => NewElysia
@@ -1262,7 +1262,7 @@ export default class Elysia<
 				PluginDecorators,
 				PluginDefinitions,
 				PluginSchema,
-				Extension,
+				Macro,
 				Prettify<Routes & NewElysia['schema']>
 		  >
 		: this
@@ -1284,7 +1284,7 @@ export default class Elysia<
 			Schema,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Prefix}`
 		>,
 		run: (
@@ -1293,7 +1293,7 @@ export default class Elysia<
 				Decorators,
 				Definitions,
 				Schema,
-				Extension,
+				Macro,
 				{}
 			>
 		) => NewElysia
@@ -1302,7 +1302,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<Routes & NewElysia['schema']>
 	>
 
@@ -1416,7 +1416,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			BasePath
 		>
 	): Elysia<
@@ -1424,7 +1424,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		Route,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -1444,7 +1444,7 @@ export default class Elysia<
 			Schema,
 			Decorators,
 			Definitions['error'],
-			Extension
+			Macro
 		>,
 		run: (
 			group: Elysia<
@@ -1452,7 +1452,7 @@ export default class Elysia<
 				Decorators,
 				Definitions,
 				Schema,
-				Extension,
+				Macro,
 				{},
 				Scoped
 			>
@@ -1462,7 +1462,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<Routes & NewElysia['schema']>
 	>
 
@@ -1561,7 +1561,7 @@ export default class Elysia<
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
-		infer PluginExtension,
+		infer PluginMacro,
 		any
 	>
 		? Elysia<
@@ -1586,7 +1586,7 @@ export default class Elysia<
 					>
 				},
 				Prettify<MergeSchema<ParentSchema, PluginSchema>>,
-				Prettify<Extension & PluginExtension>,
+				Prettify<Macro & PluginMacro>,
 				Routes & NewElysia['schema'],
 				Scoped
 		  >
@@ -1600,7 +1600,7 @@ export default class Elysia<
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
-		infer PluginExtension,
+		infer PluginMacro,
 		any,
 		infer IsScoped
 	>
@@ -1610,7 +1610,7 @@ export default class Elysia<
 					Decorators,
 					Definitions,
 					ParentSchema,
-					Extension,
+					Macro,
 					BasePath extends ``
 						? Routes & NewElysia['schema']
 						: Routes & AddPrefix<BasePath, NewElysia['schema']>,
@@ -1638,7 +1638,7 @@ export default class Elysia<
 						>
 					},
 					Prettify<MergeSchema<ParentSchema, PluginSchema>>,
-					Prettify<Extension & PluginExtension>,
+					Prettify<Macro & PluginMacro>,
 					BasePath extends ``
 						? Routes & NewElysia['schema']
 						: Routes & AddPrefix<BasePath, NewElysia['schema']>,
@@ -1658,7 +1658,7 @@ export default class Elysia<
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
-		infer PluginExtension,
+		infer PluginMacro,
 		any
 	>
 		? Elysia<
@@ -1673,7 +1673,7 @@ export default class Elysia<
 					error: Definitions['error'] & PluginDefinitions['error']
 				},
 				MergeSchema<ParentSchema, PluginSchema>,
-				Prettify<Extension & PluginExtension>,
+				Prettify<Macro & PluginMacro>,
 				BasePath extends ``
 					? Routes & NewElysia['schema']
 					: Routes & AddPrefix<BasePath, NewElysia['schema']>,
@@ -1691,7 +1691,7 @@ export default class Elysia<
 		infer PluginDecorators,
 		infer PluginDefinitions,
 		infer PluginSchema,
-		infer PluginExtension,
+		infer PluginMacro,
 		any
 	>
 		? Elysia<
@@ -1707,7 +1707,7 @@ export default class Elysia<
 					error: PluginDefinitions['error'] & Definitions['error']
 				},
 				MergeSchema<PluginSchema, ParentSchema>,
-				Prettify<Extension & PluginExtension>,
+				Prettify<Macro & PluginMacro>,
 				BasePath extends ``
 					? Routes & LazyLoadElysia['schema']
 					: Routes & AddPrefix<BasePath, LazyLoadElysia['schema']>
@@ -1872,7 +1872,7 @@ export default class Elysia<
 
 			plugin.model(this.definitions.type as any)
 			plugin.error(this.definitions.error as any)
-			plugin.extensions = [...this.extensions, ...plugin.extensions]
+			plugin.macros = [...this.macros, ...plugin.macros]
 
 			plugin.onRequest((context) => {
 				Object.assign(context, this.decorators)
@@ -1904,7 +1904,7 @@ export default class Elysia<
 						({ checksum }) => current === checksum
 					)
 				)
-					this.extensions.push(...plugin.extensions)
+					this.macros.push(...plugin.macros)
 			}
 		}
 
@@ -1967,20 +1967,20 @@ export default class Elysia<
 		return this
 	}
 
-	extends<const NewExtension extends BaseExtension>(
-		extension: (
-			route: ExtensionManager<Routes, Decorators, Definitions['error']>
-		) => NewExtension
+	macro<const NewMacro extends BaseMacro>(
+		macro: (
+			route: MacroManager<Routes, Decorators, Definitions['error']>
+		) => NewMacro
 	): Elysia<
 		BasePath,
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension & Partial<ExtensionToProperty<NewExtension>>,
+		Macro & Partial<MacroToProperty<NewMacro>>,
 		Routes,
 		Scoped
 	> {
-		this.extensions.push(extension as any)
+		this.macros.push(macro as any)
 
 		return this as any
 	}
@@ -2089,7 +2089,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2097,7 +2097,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -2197,7 +2197,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2205,7 +2205,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -2305,7 +2305,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2313,7 +2313,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -2413,7 +2413,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2421,7 +2421,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -2521,7 +2521,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2529,7 +2529,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -2629,7 +2629,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2637,7 +2637,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -2732,7 +2732,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2740,7 +2740,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -2840,7 +2840,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2848,7 +2848,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -2948,7 +2948,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2956,7 +2956,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -3058,7 +3058,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -3236,7 +3236,7 @@ export default class Elysia<
 			Route,
 			Decorators,
 			Definitions['error'],
-			Extension,
+			Macro,
 			`${BasePath}${Path}`
 		> & {
 			config: {
@@ -3252,7 +3252,7 @@ export default class Elysia<
 		Decorators,
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Prettify<
 			Routes & {
 				[path in `${BasePath}${Path}`]: {
@@ -3342,7 +3342,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3370,7 +3370,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3386,7 +3386,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3456,7 +3456,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3484,7 +3484,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3500,7 +3500,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3569,7 +3569,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	> {
@@ -3592,7 +3592,7 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3611,7 +3611,7 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3630,7 +3630,7 @@ export default class Elysia<
 			error: Definitions['error']
 		},
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	>
@@ -3668,7 +3668,7 @@ export default class Elysia<
 		},
 		Definitions,
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	> {
@@ -3728,7 +3728,7 @@ export default class Elysia<
 				: Definitions['error']
 		},
 		ParentSchema,
-		Extension,
+		Macro,
 		Routes,
 		Scoped
 	> {

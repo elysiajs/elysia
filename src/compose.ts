@@ -1201,6 +1201,10 @@ export const composeHandler = ({
 					unit: hooks.transform.length
 				})
 				if (hooks.afterHandle) {
+					report('handle', {
+						name: isHandleFn ? handler.name : undefined
+					})()
+
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						const returning = hasReturn(
 							hooks.afterHandle[i].toString()

@@ -1,9 +1,9 @@
 # 0.8.0
 Feature:
 - `headers` initialization function
-- inline static resources
-- support default properties
-- extension API
+- macro
+- static content
+- default property
 - error function
 - add stack trace to plugin checksum
 - new life-cycle

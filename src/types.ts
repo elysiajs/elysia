@@ -694,12 +694,6 @@ export type AddSuffixCapitalize<Suffix extends string, T> = {
 	[K in keyof T as `${K & string}${Capitalize<Suffix>}`]: T[K]
 }
 
-// @ts-ignore
-export type BaseExtension = Record<
-	string,
-	BaseExtension | ((a: any) => unknown)
->
-
 export type Checksum = {
 	name?: string
 	seed?: unknown
@@ -708,15 +702,21 @@ export type Checksum = {
 	dependencies?: Record<string, Checksum[]>
 }
 
-export type ExtensionToProperty<T extends BaseExtension> = Prettify<{
+// @ts-ignore
+export type BaseMacro = Record<
+	string,
+	BaseMacro | ((a: any) => unknown)
+>
+
+export type MacroToProperty<T extends BaseMacro> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
 			? Params | undefined
 			: T[K]
-		: ExtensionToProperty<T[K]>
+		: MacroToProperty<T[K]>
 }>
 
-export interface ExtensionManager<
+export interface MacroManager<
 	TypedRoute extends RouteSchema = {},
 	Decorators extends DecoratorBase = {
 		request: {}

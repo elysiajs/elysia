@@ -9,7 +9,7 @@ import type {
 	LocalHook,
 	MaybeArray,
 	InputSchema,
-	BaseExtension
+	BaseMacro
 } from './types'
 
 const isObject = (item: any): item is Object =>
@@ -563,8 +563,8 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 	return expectedInput === input ? tentativeValue : false
 }
 
-export const traceBackExtension = (
-	extension: BaseExtension,
+export const traceBackMacro = (
+	extension: BaseMacro,
 	property: Record<string, unknown>,
 	hooks = property
 ) => {
@@ -574,6 +574,6 @@ export const traceBackExtension = (
 		if (typeof extension[key] === 'function') {
 			extension[key](value)
 		} else if (typeof extension[key] === 'object')
-			traceBackExtension(extension[key], value as any, hooks)
+			traceBackMacro(extension[key], value as any, hooks)
 	}
 }
