@@ -85,7 +85,8 @@ import type {
 	Checksum,
 	MacroManager,
 	BaseMacro,
-	MacroToProperty
+	MacroToProperty,
+	TransformHandler
 } from './types'
 import { t } from './type-system'
 
@@ -109,6 +110,7 @@ export default class Elysia<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	},
 	Definitions extends DefinitionBase = {
 		type: {}
@@ -747,7 +749,7 @@ export default class Elysia<
 	 */
 	onTransform<Schema extends RouteSchema = {}>(
 		handler: MaybeArray<
-			VoidHandler<MergeSchema<Schema, ParentSchema>, Decorators>
+			TransformHandler<MergeSchema<Schema, ParentSchema>, Decorators>
 		>
 	) {
 		this.on('transform', handler)
@@ -795,7 +797,8 @@ export default class Elysia<
 		{
 			request: Decorators['request']
 			store: Decorators['store']
-			derive: Prettify<Decorators['derive'] & Awaited<Resolver>>
+			derive: Decorators['resolve']
+			resolve: Prettify<Decorators['resolve'] & Awaited<Resolver>>
 		},
 		Definitions,
 		ParentSchema,
@@ -1566,6 +1569,9 @@ export default class Elysia<
 					derive: Prettify<
 						Decorators['derive'] & PluginDecorators['derive']
 					>
+					resolve: Prettify<
+						Decorators['resolve'] & PluginDecorators['resolve']
+					>
 				},
 				{
 					type: Prettify<
@@ -1618,6 +1624,9 @@ export default class Elysia<
 						derive: Prettify<
 							Decorators['derive'] & PluginDecorators['derive']
 						>
+						resolve: Prettify<
+							Decorators['resolve'] & PluginDecorators['resolve']
+						>
 					},
 					{
 						type: Prettify<
@@ -1657,6 +1666,7 @@ export default class Elysia<
 					request: Decorators['request'] & PluginDecorators['request']
 					store: Decorators['store'] & PluginDecorators['store']
 					derive: Decorators['derive'] & PluginDecorators['derive']
+					resolve: Decorators['resolve'] & PluginDecorators['resolve']
 				},
 				{
 					type: Definitions['type'] & PluginDefinitions['type']
@@ -1690,6 +1700,7 @@ export default class Elysia<
 					request: PluginDecorators['request'] & Decorators['request']
 					store: PluginDecorators['store'] & Decorators['store']
 					derive: Decorators['derive'] & PluginDecorators['derive']
+					resolve: Decorators['resolve'] & PluginDecorators['resolve']
 				},
 				{
 					type: PluginDefinitions['type'] & Definitions['type']
@@ -3329,6 +3340,7 @@ export default class Elysia<
 				}
 			>
 			derive: Decorators['derive']
+			resolve: Decorators['resolve']
 		},
 		Definitions,
 		ParentSchema,
@@ -3357,6 +3369,7 @@ export default class Elysia<
 			request: Decorators['request']
 			store: Prettify<Decorators['store'] & Store>
 			derive: Decorators['derive']
+			resolve: Decorators['resolve']
 		},
 		Definitions,
 		ParentSchema,
@@ -3373,6 +3386,7 @@ export default class Elysia<
 			request: Decorators['request']
 			store: NewStore
 			derive: Decorators['derive']
+			resolve: Decorators['resolve']
 		},
 		Definitions,
 		ParentSchema,
@@ -3443,6 +3457,7 @@ export default class Elysia<
 			>
 			store: Decorators['store']
 			derive: Decorators['derive']
+			resolve: Decorators['resolve']
 		},
 		Definitions,
 		ParentSchema,
@@ -3471,6 +3486,7 @@ export default class Elysia<
 			request: Prettify<Decorators['request'] & NewDecorators>
 			store: Decorators['store']
 			derive: Decorators['derive']
+			resolve: Decorators['resolve']
 		},
 		Definitions,
 		ParentSchema,
@@ -3487,6 +3503,7 @@ export default class Elysia<
 			request: NewDecorators
 			store: Decorators['store']
 			derive: Decorators['derive']
+			resolve: Decorators['resolve']
 		},
 		Definitions,
 		ParentSchema,
@@ -3556,6 +3573,7 @@ export default class Elysia<
 			request: Decorators['request']
 			store: Decorators['store']
 			derive: Prettify<Decorators['derive'] & Awaited<Derivative>>
+			resolve: Decorators['resolve']
 		},
 		Definitions,
 		ParentSchema,
@@ -3655,6 +3673,7 @@ export default class Elysia<
 			request: Decorators['request']
 			store: NewStore
 			derive: Decorators['derive']
+			resolve: Decorators['resolve']
 		},
 		Definitions,
 		ParentSchema,
@@ -3699,7 +3718,14 @@ export default class Elysia<
 						? AddPrefix<Word, Decorators['derive']>
 						: AddPrefixCapitalize<Word, Decorators['derive']>
 					: AddSuffixCapitalize<Word, Decorators['derive']>
-				: Decorators['request']
+				: Decorators['derive']
+			resolve: Type extends 'decorator' | 'all'
+				? 'prefix' extends Base
+					? Word extends `${string}${'_' | '-' | ' '}`
+						? AddPrefix<Word, Decorators['resolve']>
+						: AddPrefixCapitalize<Word, Decorators['resolve']>
+					: AddSuffixCapitalize<Word, Decorators['resolve']>
+				: Decorators['resolve']
 		},
 		{
 			type: Type extends 'model' | 'all'

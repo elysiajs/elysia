@@ -19,6 +19,7 @@ export type Context<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	},
 	Path extends string = ''
 > = Prettify<
@@ -68,7 +69,9 @@ export type Context<
 		path: string
 		request: Request
 		store: Decorators['store']
-	} & Decorators['request'] & Decorators['derive'] 
+	} & Decorators['request'] &
+		Decorators['derive'] &
+		Decorators['resolve']
 >
 
 // Use to mimic request before mapping route
@@ -77,6 +80,7 @@ export type PreContext<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = Prettify<
 	{

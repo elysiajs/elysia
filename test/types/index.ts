@@ -16,7 +16,9 @@ app.get('/', ({ headers, query, params, body, store }) => {
 	>()
 
 	// ? default query should be Record<string, unknown>
-	expectTypeOf<typeof query>().toEqualTypeOf<Record<string, string | undefined>>()
+	expectTypeOf<typeof query>().toEqualTypeOf<
+		Record<string, string | undefined>
+	>()
 
 	// ? default body should be unknown
 	expectTypeOf<typeof body>().toBeUnknown()
@@ -333,6 +335,18 @@ app.derive(({ headers }) => {
 		expectTypeOf<typeof a>().toBeString()
 		// ? derive from context
 		expectTypeOf<typeof b>().toBeString()
+	})
+	// ? Resolve should not include in onRequest
+	.onRequest((context) => {
+		expectTypeOf<
+			'b' extends keyof typeof context ? true : false
+		>().toEqualTypeOf<false>()
+	})
+	// ? Resolve should not include in onTransform
+	.onTransform((context) => {
+		expectTypeOf<
+			'b' extends keyof typeof context ? true : false
+		>().toEqualTypeOf<true>()
 	})
 
 const plugin = (app: Elysia) =>
@@ -937,3 +951,76 @@ app.group(
 			}
 		})
 }
+
+app.resolve(({ headers }) => {
+	return {
+		authorization: headers.authorization as string
+	}
+})
+	.get('/', ({ authorization }) => {
+		// ? infers derive type
+		expectTypeOf<typeof authorization>().toBeString()
+	})
+	.decorate('a', 'b')
+	.resolve(({ a }) => {
+		// ? derive from current context
+		expectTypeOf<typeof a>().toBeString()
+
+		return {
+			b: a
+		}
+	})
+	.get('/', ({ a, b }) => {
+		// ? save previous derivation
+		expectTypeOf<typeof a>().toBeString()
+		// ? derive from context
+		expectTypeOf<typeof b>().toBeString()
+	})
+	// ? Resolve should not include in onTransform
+	.onTransform((context) => {
+		expectTypeOf<
+			'b' extends keyof typeof context ? true : false
+		>().toEqualTypeOf<false>()
+	})
+	// ? Resolve should not include in onBeforeHandle
+	.onBeforeHandle((context) => {
+		expectTypeOf<
+			'b' extends keyof typeof context ? true : false
+		>().toEqualTypeOf<true>()
+	})
+
+app.macro(() => {
+	return {
+		a(a: string) {}
+	}
+})
+	.get('/', () => {}, {
+		// ? Should contains macro
+		a: 'a'
+	})
+	.get('/', () => {}, {
+		// ? Should have error
+		// @ts-expect-error
+		a: 1
+	})
+	.macro(() => {
+		return {
+			b(a: number) {}
+		}
+	})
+	.get('/', () => {}, {
+		// ? Should merge macro
+		a: 'a',
+		b: 2
+	})
+	.guard({
+		// ? Should contains macro
+		a: 'a',
+		b: 2
+	}, (app) =>
+		app.get('/', () => {}, {
+			// ? Should contains macro
+			a: 'a',
+			b: 2
+		})
+	)

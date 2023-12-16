@@ -115,6 +115,9 @@ export type DecoratorBase = {
 	derive: {
 		[x: string]: unknown
 	}
+	resolve: {
+		[x: string]: unknown
+	}
 }
 
 export type DefinitionBase = {
@@ -243,7 +246,7 @@ export interface LifeCycleStore {
 	start: GracefulHandler<any, any>[]
 	request: PreHandler<any, any>[]
 	parse: BodyHandler<any, any>[]
-	transform: VoidHandler<any, any>[]
+	transform: TransformHandler<any, any>[]
 	beforeHandle: OptionalHandler<any, any>[]
 	afterHandle: AfterHandler<any, any>[]
 	mapResponse: MapResponse<any, any>[]
@@ -344,6 +347,7 @@ export type Handler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	},
 	Path extends string = ''
 > = (
@@ -358,6 +362,7 @@ export type OptionalHandler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = Handler<Route, Decorators> extends (
 	context: infer Context
@@ -371,6 +376,7 @@ export type AfterHandler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = Handler<Route, Decorators> extends (
 	context: infer Context
@@ -390,6 +396,7 @@ export type MapResponse<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = Handler<
 	Omit<Route, 'response'> & {
@@ -408,8 +415,28 @@ export type VoidHandler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = (context: Prettify<Context<Route, Decorators>>) => MaybePromise<void>
+
+export type TransformHandler<
+	Route extends RouteSchema = {},
+	Decorators extends DecoratorBase = {
+		request: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	}
+> = (
+	context: Prettify<
+		Context<
+			Route,
+			Omit<Decorators, 'resolve'> & {
+				resolve: {}
+			}
+		>
+	>
+) => MaybePromise<void>
 
 export type TraceEvent =
 	| 'request'
@@ -456,6 +483,7 @@ export type TraceHandler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = (
 	lifecycle: Prettify<
@@ -490,6 +518,7 @@ export type BodyHandler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = (
 	context: Prettify<Context<Route, Decorators>>,
@@ -502,6 +531,7 @@ export type PreHandler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = (
 	context: Prettify<PreContext<Decorators>>
@@ -513,6 +543,7 @@ export type GracefulHandler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = (
 	data: {
@@ -531,6 +562,7 @@ export type ErrorHandler<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > = (
 	context: Prettify<
@@ -595,6 +627,7 @@ export type LocalHook<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	},
 	Errors extends Record<string, Error> = {},
 	Extension extends BaseMacro = {},
@@ -628,7 +661,7 @@ export type LocalHook<
 		/**
 		 * Transform context's value
 		 */
-		transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+		transform?: MaybeArray<TransformHandler<TypedRoute, Decorators>>
 		/**
 		 * Execute before main handler
 		 */
@@ -697,10 +730,7 @@ export type Checksum = {
 }
 
 // @ts-ignore
-export type BaseMacro = Record<
-	string,
-	BaseMacro | ((a: any) => unknown)
->
+export type BaseMacro = Record<string, BaseMacro | ((a: any) => unknown)>
 
 export type MacroToProperty<T extends BaseMacro> = Prettify<{
 	[K in keyof T]: T[K] extends Function
@@ -716,6 +746,7 @@ export interface MacroManager<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	},
 	Errors extends Record<string, Error> = {}
 > {
