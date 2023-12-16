@@ -599,7 +599,7 @@ export type LocalHook<
 		derive: {}
 	},
 	Errors extends Record<string, Error> = {},
-	Extension extends BaseExtension = {},
+	Extension extends BaseMacro = {},
 	Path extends string = '',
 	TypedRoute extends RouteSchema = Route extends {
 		params: Record<string, unknown>
