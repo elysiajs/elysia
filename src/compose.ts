@@ -554,7 +554,6 @@ export const composeHandler = ({
 	> = {
 		parse: traceLiteral.some((x) => isFnUse('parse', x)),
 		transform: traceLiteral.some((x) => isFnUse('transform', x)),
-		resolve: traceLiteral.some((x) => isFnUse('resolve', x)),
 		handle: traceLiteral.some((x) => isFnUse('handle', x)),
 		beforeHandle: traceLiteral.some((x) => isFnUse('beforeHandle', x)),
 		afterHandle: traceLiteral.some((x) => isFnUse('afterHandle', x)),
@@ -569,7 +568,6 @@ export const composeHandler = ({
 			? [
 					handler,
 					...hooks.transform,
-					...hooks.resolve,
 					...hooks.beforeHandle,
 					...hooks.afterHandle,
 					...hooks.mapResponse
@@ -1149,48 +1147,33 @@ export const composeHandler = ({
 		}
 	}
 
-	if (hooks?.resolve) {
-		const endResolve = report('resolve', {
-			unit: hooks.resolve.length
-		})
-
-		for (let i = 0; i < hooks.resolve.length; i++) {
-			const resolver = hooks.resolve[i]
-
-			const endUnit = report('resolve.unit', {
-				name: resolver.name
-			})
-
-			fnLiteral += isAsync(resolver)
-				? `Object.assign(c, await resolve[${i}](c));`
-				: `Object.assign(c, resolve[${i}](c));`
-
-			endUnit()
-		}
-
-		endResolve()
-	}
-
 	if (hooks?.beforeHandle) {
 		const endBeforeHandle = report('beforeHandle', {
 			unit: hooks.beforeHandle.length
 		})
 
 		for (let i = 0; i < hooks.beforeHandle.length; i++) {
+			const beforeHandle = hooks.beforeHandle[i]
+
 			const endUnit = report('beforeHandle.unit', {
-				name: hooks.beforeHandle[i].name
+				name: beforeHandle.name
 			})
 
-			const returning = hasReturn(hooks.beforeHandle[i].toString())
+			const returning = hasReturn(beforeHandle.toString())
 
-			if (!returning) {
-				fnLiteral += isAsync(hooks.beforeHandle[i])
+			// @ts-ignore
+			if (beforeHandle.$elysia === 'resolve') {
+				fnLiteral += isAsync(beforeHandle)
+					? `Object.assign(c, await beforeHandle[${i}](c));`
+					: `Object.assign(c, beforeHandle[${i}](c));`
+			} else if (!returning) {
+				fnLiteral += isAsync(beforeHandle)
 					? `await beforeHandle[${i}](c);\n`
 					: `beforeHandle[${i}](c);\n`
 
 				endUnit()
 			} else {
-				fnLiteral += isAsync(hooks.beforeHandle[i])
+				fnLiteral += isAsync(beforeHandle)
 					? `be = await beforeHandle[${i}](c);\n`
 					: `be = beforeHandle[${i}](c);\n`
 

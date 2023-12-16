@@ -244,7 +244,6 @@ export interface LifeCycleStore {
 	request: PreHandler<any, any>[]
 	parse: BodyHandler<any, any>[]
 	transform: VoidHandler<any, any>[]
-	resolve: VoidHandler<any, any>[]
 	beforeHandle: OptionalHandler<any, any>[]
 	afterHandle: AfterHandler<any, any>[]
 	mapResponse: MapResponse<any, any>[]
@@ -416,7 +415,6 @@ export type TraceEvent =
 	| 'request'
 	| 'parse'
 	| 'transform'
-	| 'resolve'
 	| 'beforeHandle'
 	| 'afterHandle'
 	| 'error'
@@ -631,10 +629,6 @@ export type LocalHook<
 		 * Transform context's value
 		 */
 		transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
-		/**
-		 * Execute after main handler
-		 */
-		resolve?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
 		/**
 		 * Execute before main handler
 		 */

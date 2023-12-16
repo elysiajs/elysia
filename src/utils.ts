@@ -79,6 +79,8 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 	})
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
+	if (!a) return []
+
 	// ! Must copy to remove side-effect
 	const array = [...(Array.isArray(a) ? a : [a])]
 	const checksums = []
@@ -92,7 +94,9 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 
 	for (const item of Array.isArray(b) ? b : [b]) {
 		// @ts-ignore
-		if (!checksums.includes(item?.$elysiaChecksum)) array.push(item)
+		if (!checksums.includes(item?.$elysiaChecksum)) {
+			array.push(item)
+		}
 	}
 
 	return array
@@ -354,10 +358,6 @@ export const mergeLifeCycle = (
 		transform: mergeObjectArray(
 			a.transform as any,
 			(b?.transform ?? ([] as any)).map(injectChecksum)
-		),
-		resolve: mergeObjectArray(
-			a.resolve as any,
-			(b?.resolve ?? ([] as any)).map(injectChecksum)
 		),
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle as any,

@@ -62,4 +62,33 @@ describe('resolve', () => {
 
 		expect(res).toBe('Elysia')
 	})
+
+	it('store in the same stack as before handle', async () => {
+		const stack: number[] = []
+
+		const app = new Elysia()
+			.onBeforeHandle(() => {
+				stack.push(1)
+			})
+			.resolve(() => {
+				stack.push(2)
+
+				return { name: 'Ina' }
+			})
+			.get('/', ({ name }) => name, {
+				beforeHandle() {
+					stack.push(3)
+				}
+			})
+
+		await app.handle(
+			new Request('http://localhost/', {
+				headers: {
+					name: 'Elysia'
+				}
+			})
+		)
+
+		expect(stack).toEqual([1, 2, 3])
+	})
 })

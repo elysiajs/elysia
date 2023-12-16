@@ -142,7 +142,6 @@ export default class Elysia<
 		request: [],
 		parse: [],
 		transform: [],
-		resolve: [],
 		beforeHandle: [],
 		afterHandle: [],
 		mapResponse: [],
@@ -804,7 +803,10 @@ export default class Elysia<
 		Routes,
 		Scoped
 	> {
-		return this.on('resolve', resolver as any) as any
+		// @ts-ignore
+		resolver.$elysia = 'resolve'
+
+		return this.onBeforeHandle(resolver as any) as any
 	}
 
 	/**
@@ -1197,10 +1199,6 @@ export default class Elysia<
 					this.event.transform.push(handler as any)
 					break
 
-				case 'resolve':
-					this.event.resolve.push(handler as any)
-					break
-
 				case 'beforeHandle':
 					this.event.beforeHandle.push(handler as any)
 					break
@@ -1419,15 +1417,7 @@ export default class Elysia<
 			Macro,
 			BasePath
 		>
-	): Elysia<
-		BasePath,
-		Decorators,
-		Definitions,
-		Route,
-		Macro,
-		Routes,
-		Scoped
-	>
+	): Elysia<BasePath, Decorators, Definitions, Route, Macro, Routes, Scoped>
 
 	guard<
 		const LocalSchema extends InputSchema<
