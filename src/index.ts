@@ -435,7 +435,7 @@ export default class Elysia<
 					if (macro.$elysiaChecksum.includes(hash)) continue
 
 					// @ts-ignore
-					extension.$elysiaChecksum.push(
+					macro.$elysiaChecksum.push(
 						checksum(JSON.stringify(customHookValues))
 					)
 

@@ -32,6 +32,7 @@ export class ElysiaWS<
 		request: {}
 		store: {}
 		derive: {}
+		resolve: {}
 	}
 > {
 	id: number

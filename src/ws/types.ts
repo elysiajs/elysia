@@ -31,6 +31,7 @@ export namespace WS {
 			request: {}
 			store: {}
 			derive: {}
+			resolve: {}
 		},
 		Errors extends Record<string, Error> = {},
 		Path extends string = '',
