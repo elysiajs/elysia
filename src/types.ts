@@ -726,7 +726,20 @@ export type Checksum = {
 	seed?: unknown
 	checksum: number
 	stack?: string
+	routes: InternalRoute[]
+	decorators: DecoratorBase['request']
+	store: DecoratorBase['store']
+	type: DefinitionBase['type']
+	error: DefinitionBase['error']
 	dependencies?: Record<string, Checksum[]>
+	derive: {
+		fn: string
+		stack: string
+	}[]
+	resolve: {
+		fn: string
+		stack: string
+	}[]
 }
 
 // @ts-ignore
@@ -795,3 +808,12 @@ export interface MacroManager<
 		local: Prettify<LifeCycleStore & RouteSchema>
 	}
 }
+
+// Route extends RouteSchema = {},
+// Decorators extends DecoratorBase = {
+// 	request: {}
+// 	store: {}
+// 	derive: {}
+// 	resolve: {}
+// },
+// Path extends string = ''

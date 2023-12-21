@@ -26,6 +26,7 @@ Change:
 Bug fix:
 - remove `headers`, `path` from `PreContext`
 - remove `derive` from `PreContext`
+- Custom type doesn't output custom `error`
 
 # 0.7.31 - 9 Dec 2023
 Improvement:

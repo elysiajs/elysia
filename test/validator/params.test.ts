@@ -37,7 +37,7 @@ describe('Params Validator', () => {
 		)
 		const res = await app.handle(req('/id/617/name/Ga1ahad'))
 
-		expect(await res.json()).toEqual({
+		expect(await res.json<any>()).toEqual({
 			id: '617',
 			name: 'Ga1ahad'
 		})
@@ -63,7 +63,7 @@ describe('Params Validator', () => {
 		})
 		const res = await app.handle(req('/id/617'))
 
-		expect(await res.json()).toEqual({
+		expect(await res.json<any>()).toEqual({
 			id: 617
 		})
 		expect(res.status).toBe(200)
@@ -82,7 +82,7 @@ describe('Params Validator', () => {
 		)
 		const res = await app.handle(req('/id/617/chapter/12'))
 
-		expect(await res.json()).toEqual({
+		expect(await res.json<any>()).toEqual({
 			id: 617,
 			chapterId: 12
 		})

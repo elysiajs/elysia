@@ -197,9 +197,7 @@ export const ElysiaType = {
 						}),
 						t.Number(property)
 					],
-					{
-						default: property?.default
-					}
+					property
 				)
 			)
 			.Decode((value) => {
@@ -225,7 +223,7 @@ export const ElysiaType = {
 						default: ''
 					}),
 					t.Object(properties, options)
-				])
+				], options)
 			)
 			.Decode((value) => {
 				if (typeof value === 'string')

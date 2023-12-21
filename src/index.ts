@@ -1867,7 +1867,26 @@ export default class Elysia<
 					seed: plugin.config.seed,
 					checksum: current,
 					stack: plugin.stack,
-					dependencies: plugin.dependencies
+					dependencies: plugin.dependencies,
+					routes: plugin.routes,
+					decorators: plugin.decorators,
+					store: plugin.store,
+					type: plugin.definitions.type,
+					error: plugin.definitions.error,
+					derive: plugin.event.transform
+						// @ts-expect-error
+						.filter((x) => (x.$elysia = 'derive'))
+						.map((x) => ({
+							fn: x.toString(),
+							stack: new Error().stack ?? ''
+						})),
+					resolve: plugin.event.transform
+						// @ts-expect-error
+						.filter((x) => (x.$elysia = 'derive'))
+						.map((x) => ({
+							fn: x.toString(),
+							stack: new Error().stack ?? ''
+						}))
 				})
 			}
 
@@ -1951,7 +1970,26 @@ export default class Elysia<
 					seed: plugin.config.seed,
 					checksum: current,
 					stack: plugin.stack,
-					dependencies: plugin.dependencies
+					dependencies: plugin.dependencies,
+					routes: plugin.routes,
+					decorators: plugin.decorators,
+					store: plugin.store,
+					type: plugin.definitions.type,
+					error: plugin.definitions.error,
+					derive: plugin.event.transform
+						// @ts-expect-error
+						.filter((x) => (x.$elysia = 'derive'))
+						.map((x) => ({
+							fn: x.toString(),
+							stack: new Error().stack ?? ''
+						})),
+					resolve: plugin.event.transform
+						// @ts-expect-error
+						.filter((x) => (x.$elysia = 'derive'))
+						.map((x) => ({
+							fn: x.toString(),
+							stack: new Error().stack ?? ''
+						}))
 				})
 				this.event = mergeLifeCycle(
 					this.event,
@@ -1986,18 +2024,41 @@ export default class Elysia<
 		return this as any
 	}
 
-	mount(handle: (request: Request) => MaybePromise<Response>): this
+	mount(
+		handle:
+			| ((request: Request) => MaybePromise<Response>)
+			| Elysia<any, any, any, any, any, any, any>
+	): this
 	mount(
 		path: string,
-		handle: (request: Request) => MaybePromise<Response>
+		handle:
+			| ((request: Request) => MaybePromise<Response>)
+			| Elysia<any, any, any, any, any, any, any>
 	): this
 
 	mount(
-		path: string | ((request: Request) => MaybePromise<Response>),
-		handle?: (request: Request) => MaybePromise<Response>
+		path:
+			| string
+			| ((request: Request) => MaybePromise<Response>)
+			| Elysia<any, any, any, any, any, any, any>,
+		handle?:
+			| ((request: Request) => MaybePromise<Response>)
+			| Elysia<any, any, any, any, any, any, any>
 	) {
-		if (typeof path === 'function' || path.length === 0 || path === '/') {
-			const run = typeof path === 'function' ? path : handle!
+		if (
+			path instanceof Elysia ||
+			typeof path === 'function' ||
+			path.length === 0 ||
+			path === '/'
+		) {
+			const run =
+				typeof path === 'function'
+					? path
+					: path instanceof Elysia
+					? path.compile().fetch
+					: handle instanceof Elysia
+					? handle.compile().fetch
+					: handle!
 
 			const handler: Handler<any, any> = async ({ request, path }) =>
 				run(
@@ -2026,8 +2087,11 @@ export default class Elysia<
 		}
 
 		const length = path.length
+
+		if (handle instanceof Elysia) handle = handle.compile().fetch
+
 		const handler: Handler<any, any> = async ({ request, path }) =>
-			handle!(
+			(handle as Function)!(
 				new Request(
 					replaceUrlPath(request.url, path.slice(length) || '/'),
 					request
@@ -2041,6 +2105,7 @@ export default class Elysia<
 				type: 'none'
 			} as any
 		)
+
 		this.all(
 			path + (path.endsWith('/') ? '*' : '/*'),
 			handler as any,
@@ -3839,14 +3904,20 @@ export default class Elysia<
 	handle = async (request: Request) => this.fetch(request)
 
 	/**
-	 * Handle can be either sync or async to save performance.
+	 * Use handle can be either sync or async to save performance.
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	fetch = (request: Request): MaybePromise<Response> =>
-		(this.fetch = this.config.aot
+	fetch = (request: Request): MaybePromise<Response> => {
+		if(process.env.NODE_ENV === "production")
+			console.warn(
+				"Performance degradation found. Please call Elysia.compile() before using 'fetch'"
+			)
+
+		return (this.fetch = this.config.aot
 			? composeGeneralHandler(this)
 			: createDynamicHandler(this))(request)
+	}
 
 	private handleError = async (
 		context: Context,
@@ -4072,7 +4143,8 @@ export type {
 	TraceHandler,
 	TraceProcess,
 	TraceReporter,
-	TraceStream
+	TraceStream,
+	Checksum
 } from './types'
 
 export type { Static, TSchema } from '@sinclair/typebox'

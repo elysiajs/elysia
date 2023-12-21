@@ -58,7 +58,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({ name: 'sucrose' })
+		expect(await res.json<any>()).toEqual({ name: 'sucrose' })
 		expect(res.status).toBe(200)
 	})
 
@@ -80,7 +80,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({
+		expect(await res.json<any>()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -126,7 +126,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json()).toEqual({
+		expect(await res.json<any>()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})

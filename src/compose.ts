@@ -738,11 +738,9 @@ export const composeHandler = ({
 						(name, index) => `
 						memory = url.indexOf('${name}=')
 
-						const a${index} = memory === -1 ? undefined : url.slice(memory + ${
+						const a${index} = memory === -1 ? undefined : url.slice(memory = memory + ${
 							name.length + 1
-						}, (memory = url.indexOf('&', memory + ${
-							name.length + 1
-						})) === -1 ? undefined : memory)`
+						}, (memory = url.indexOf('&', memory)) === -1 ? undefined : memory)`
 					)
 					.join('\n')}
 
@@ -1020,11 +1018,12 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					fnLiteral += `c.headers['${key}'] ??= ${
-						typeof value === 'object'
+					const parsed = typeof value === 'object'
 							? JSON.stringify(value)
-							: value
-					}\n`
+							: `'${value}'`
+
+					if(parsed)
+						fnLiteral += `c.headers['${key}'] ??= ${parsed}\n`
 				}
 
 			fnLiteral += `if(headers.Check(c.headers) === false) {
@@ -1046,11 +1045,12 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					fnLiteral += `c.params['${key}'] ??= ${
-						typeof value === 'object'
+					const parsed = typeof value === 'object'
 							? JSON.stringify(value)
-							: value
-					}\n`
+							: `'${value}'`
+
+					if(parsed)
+						fnLiteral += `c.params['${key}'] ??= ${parsed}\n`
 				}
 
 			fnLiteral += `if(params.Check(c.params) === false) {
@@ -1072,11 +1072,12 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					fnLiteral += `c.query['${key}'] ??= ${
-						typeof value === 'object'
+					const parsed = typeof value === 'object'
 							? JSON.stringify(value)
-							: value
-					}\n`
+							: `'${value}'`
+
+					if(parsed)
+						fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
 				}
 
 			fnLiteral += `if(query.Check(c.query) === false) {
