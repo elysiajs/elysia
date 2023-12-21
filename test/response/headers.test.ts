@@ -69,7 +69,19 @@ describe('Response Headers', () => {
 			})
 			.get('/', () => 'hi')
 
-		const headers = await app.handle(req('/')).then(x => x.headers)
+		const headers = await app.handle(req('/')).then((x) => x.headers)
+
+		expect(headers.get('x-powered-by')).toBe('Elysia')
+	})
+
+	it('accept header from plugin', async () => {
+		const plugin = new Elysia().headers({
+			'x-powered-by': 'Elysia'
+		})
+
+		const app = new Elysia().use(plugin).get('/', () => 'hi')
+
+		const headers = await app.handle(req('/')).then((x) => x.headers)
 
 		expect(headers.get('x-powered-by')).toBe('Elysia')
 	})

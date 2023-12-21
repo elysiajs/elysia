@@ -1843,7 +1843,7 @@ export default class Elysia<
 		const { name, seed } = plugin.config
 
 		plugin.getServer = () => this.getServer()
-		plugin.headers(this.setHeaders)
+		this.headers(plugin.setHeaders)
 
 		const isScoped = plugin.config.scoped
 		if (isScoped) {
@@ -3909,7 +3909,7 @@ export default class Elysia<
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
 	fetch = (request: Request): MaybePromise<Response> => {
-		if(process.env.NODE_ENV === "production")
+		if (process.env.NODE_ENV === 'production')
 			console.warn(
 				"Performance degradation found. Please call Elysia.compile() before using 'fetch'"
 			)
