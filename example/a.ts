@@ -5,21 +5,14 @@ import { Type } from '@sinclair/typebox'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
 
 const app = new Elysia()
-	.get('/play', () => {
-
-	}, {
-		query: t.Partial(
-			t.Object({
-				username: t.String(),
-				firstName: t.String(),
-				lastName: t.String(),
-				email: t.String({
-					format: 'email',
-					default: ''
-				}),
-				phone: t.String()
-			})
-		)
+	.get('/play', () => {}, {
+		query: t.Object({
+			email: t.String({
+				format: 'email',
+				default: 'eden@elysiajs.com'
+			}),
+			password: t.String()
+		})
 	})
 	.listen(3000)
 

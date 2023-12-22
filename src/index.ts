@@ -192,11 +192,12 @@ export default class Elysia<
 			strictPath: false,
 			scoped: false,
 			cookie: {},
+			analytic: false,
 			...config,
 			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
 
-		if (config?.name || config?.seed !== undefined)
+		if (config?.analytic && (config?.name || config?.seed !== undefined))
 			this.stack = new Error().stack
 	}
 
@@ -1862,32 +1863,41 @@ export default class Elysia<
 				)
 					return this
 
-				this.dependencies[name].push({
-					name: plugin.config.name,
-					seed: plugin.config.seed,
-					checksum: current,
-					stack: plugin.stack,
-					dependencies: plugin.dependencies,
-					routes: plugin.routes,
-					decorators: plugin.decorators,
-					store: plugin.store,
-					type: plugin.definitions.type,
-					error: plugin.definitions.error,
-					derive: plugin.event.transform
-						// @ts-expect-error
-						.filter((x) => (x.$elysia = 'derive'))
-						.map((x) => ({
-							fn: x.toString(),
-							stack: new Error().stack ?? ''
-						})),
-					resolve: plugin.event.transform
-						// @ts-expect-error
-						.filter((x) => (x.$elysia = 'derive'))
-						.map((x) => ({
-							fn: x.toString(),
-							stack: new Error().stack ?? ''
-						}))
-				})
+				this.dependencies[name].push(
+					!this.config?.analytic
+						? {
+								name: plugin.config.name,
+								seed: plugin.config.seed,
+								checksum: current,
+								dependencies: plugin.dependencies
+						  }
+						: {
+								name: plugin.config.name,
+								seed: plugin.config.seed,
+								checksum: current,
+								dependencies: plugin.dependencies,
+								stack: plugin.stack,
+								routes: plugin.routes,
+								decorators: plugin.decorators,
+								store: plugin.store,
+								type: plugin.definitions.type,
+								error: plugin.definitions.error,
+								derive: plugin.event.transform
+									// @ts-expect-error
+									.filter((x) => x.$elysia === 'derive')
+									.map((x) => ({
+										fn: x.toString(),
+										stack: new Error().stack ?? ''
+									})),
+								resolve: plugin.event.transform
+									// @ts-expect-error
+									.filter((x) => x.$elysia === 'derive')
+									.map((x) => ({
+										fn: x.toString(),
+										stack: new Error().stack ?? ''
+									}))
+						  }
+				)
 			}
 
 			plugin.model(this.definitions.type as any)
@@ -1965,32 +1975,41 @@ export default class Elysia<
 				)
 					return this
 
-				this.dependencies[name].push({
-					name: plugin.config.name,
-					seed: plugin.config.seed,
-					checksum: current,
-					stack: plugin.stack,
-					dependencies: plugin.dependencies,
-					routes: plugin.routes,
-					decorators: plugin.decorators,
-					store: plugin.store,
-					type: plugin.definitions.type,
-					error: plugin.definitions.error,
-					derive: plugin.event.transform
-						// @ts-expect-error
-						.filter((x) => (x.$elysia = 'derive'))
-						.map((x) => ({
-							fn: x.toString(),
-							stack: new Error().stack ?? ''
-						})),
-					resolve: plugin.event.transform
-						// @ts-expect-error
-						.filter((x) => (x.$elysia = 'derive'))
-						.map((x) => ({
-							fn: x.toString(),
-							stack: new Error().stack ?? ''
-						}))
-				})
+				this.dependencies[name].push(
+					!this.config?.analytic
+						? {
+								name: plugin.config.name,
+								seed: plugin.config.seed,
+								checksum: current,
+								dependencies: plugin.dependencies
+						  }
+						: {
+								name: plugin.config.name,
+								seed: plugin.config.seed,
+								checksum: current,
+								dependencies: plugin.dependencies,
+								stack: plugin.stack,
+								routes: plugin.routes,
+								decorators: plugin.decorators,
+								store: plugin.store,
+								type: plugin.definitions.type,
+								error: plugin.definitions.error,
+								derive: plugin.event.transform
+									// @ts-expect-error
+									.filter((x) => x?.$elysia === 'derive')
+									.map((x) => ({
+										fn: x.toString(),
+										stack: new Error().stack ?? ''
+									})),
+								resolve: plugin.event.transform
+									// @ts-expect-error
+									.filter((x) => x?.$elysia === 'resolve')
+									.map((x) => ({
+										fn: x.toString(),
+										stack: new Error().stack ?? ''
+									}))
+						  }
+				)
 				this.event = mergeLifeCycle(
 					this.event,
 					filterGlobalHook(plugin.event),

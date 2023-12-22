@@ -5,7 +5,7 @@ Feature:
 - static content
 - default property
 - error function
-- add stack trace to plugin checksum
+- add stack trace to plugin checksum configurable by `config.analytic` (default to false)
 - new life-cycle
     - `resolve`: derive after validation
     - `mapResponse`: custom response mapping
@@ -22,11 +22,13 @@ Breaking Change:
 Change:
 - change validation response to JSON
 - differentiate derive from `decorator['request']` as `decorator['derive']`
+- `derive` now don't show infer type in onRequest
 
 Bug fix:
 - remove `headers`, `path` from `PreContext`
 - remove `derive` from `PreContext`
-- Custom type doesn't output custom `error`
+- Elysia type doesn't output custom `error`
+- 
 
 # 0.7.31 - 9 Dec 2023
 Improvement:

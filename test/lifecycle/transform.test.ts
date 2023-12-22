@@ -210,7 +210,6 @@ describe('Transform', () => {
 					id: t.Numeric({ minimum: 0 })
 				})
 			})
-			.listen(3000)
 
 		const correct = await app.handle(req('/id/1')).then((x) => x.status)
 		expect(correct).toBe(200)

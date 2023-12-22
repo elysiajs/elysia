@@ -57,6 +57,10 @@ export type ElysiaConfig<
 		 */
 		sign?: true | string | string[]
 	}
+	/**
+	 * Capture more detail information for each dependencies
+	 */
+	analytic?: boolean
 }
 
 export type MaybeArray<T> = T | T[]
@@ -726,17 +730,17 @@ export type Checksum = {
 	seed?: unknown
 	checksum: number
 	stack?: string
-	routes: InternalRoute[]
-	decorators: DecoratorBase['request']
-	store: DecoratorBase['store']
-	type: DefinitionBase['type']
-	error: DefinitionBase['error']
+	routes?: InternalRoute[]
+	decorators?: DecoratorBase['request']
+	store?: DecoratorBase['store']
+	type?: DefinitionBase['type']
+	error?: DefinitionBase['error']
 	dependencies?: Record<string, Checksum[]>
-	derive: {
+	derive?: {
 		fn: string
 		stack: string
 	}[]
-	resolve: {
+	resolve?: {
 		fn: string
 		stack: string
 	}[]
