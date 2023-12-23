@@ -1643,7 +1643,7 @@ export const composeGeneralHandler = (
 					headers: ${
 						// @ts-ignore
 						Object.keys(app.setHeaders ?? {}).length
-							? 'Object.assign(app.setHeaders)'
+							? 'Object.assign({}, app.setHeaders)'
 							: '{}'
 					},
 					status: 200
@@ -1715,7 +1715,7 @@ export const composeGeneralHandler = (
 				headers: ${
 					// @ts-ignore
 					Object.keys(app.setHeaders ?? {}).length
-						? 'Object.assign(app.setHeaders)'
+						? 'Object.assign({}, app.setHeaders)'
 						: '{}'
 				},
 				status: 200

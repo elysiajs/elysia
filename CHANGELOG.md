@@ -28,7 +28,7 @@ Bug fix:
 - remove `headers`, `path` from `PreContext`
 - remove `derive` from `PreContext`
 - Elysia type doesn't output custom `error`
-- 
+- `onStart` doesn't reflect server
 
 # 0.7.31 - 9 Dec 2023
 Improvement:

@@ -680,7 +680,7 @@ export default class Elysia<
 	 *     .listen(8080)
 	 * ```
 	 */
-	onStart(handler: MaybeArray<GracefulHandler<this, Decorators>>) {
+	onStart(handler: MaybeArray<GracefulHandler<this>>) {
 		this.on('start', handler as any)
 
 		return this
@@ -1153,7 +1153,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onStop(handler: MaybeArray<GracefulHandler<this, Decorators>>) {
+	onStop(handler: MaybeArray<GracefulHandler<this>>) {
 		this.on('stop', handler as any)
 
 		return this
@@ -4020,30 +4020,16 @@ export default class Elysia<
 
 		this.server = Bun?.serve(serve)
 
-		if (this.event.start.length) {
-			;(async () => {
-				const context = Object.assign(this.decorators, {
-					store: this.store,
-					app: this
-				})
-
-				for (let i = 0; i < this.event.transform.length; i++) {
-					const operation = this.event.transform[i](context)
-
-					// @ts-ignore
-					if (this.event.transform[i].$elysia === 'derive') {
-						if (operation instanceof Promise)
-							Object.assign(context, await operation)
-						else Object.assign(context, operation)
-					}
-				}
-
-				for (let i = 0; i < this.event.start.length; i++)
-					this.event.start[i](context)
-			})()
-		}
+		if (this.event.start.length)
+			for (let i = 0; i < this.event.start.length; i++)
+				this.event.start[i](this)
 
 		if (callback) callback(this.server!)
+
+		process.on('beforeExit', () => {
+			for (let i = 0; i < this.event.stop.length; i++)
+				this.event.stop[i](this)
+		})
 
 		Promise.all(this.lazyLoadModules).then(() => {
 			Bun?.gc(false)
@@ -4075,28 +4061,9 @@ export default class Elysia<
 
 		this.server.stop()
 
-		if (this.event.stop.length) {
-			;(async () => {
-				const context = Object.assign(this.decorators, {
-					store: this.store,
-					app: this
-				})
-
-				for (let i = 0; i < this.event.transform.length; i++) {
-					const operation = this.event.transform[i](context)
-
-					// @ts-ignore
-					if (this.event.transform[i].$elysia === 'derive') {
-						if (operation instanceof Promise)
-							Object.assign(context, await operation)
-						else Object.assign(context, operation)
-					}
-				}
-
-				for (let i = 0; i < this.event.stop.length; i++)
-					this.event.stop[i](context)
-			})()
-		}
+		if (this.event.stop.length)
+			for (let i = 0; i < this.event.stop.length; i++)
+				this.event.stop[i](this)
 	}
 
 	/**

@@ -247,7 +247,7 @@ export type UnwrapGroupGuardRoute<
 
 export interface LifeCycleStore {
 	type?: ContentType
-	start: GracefulHandler<any, any>[]
+	start: GracefulHandler<any>[]
 	request: PreHandler<any, any>[]
 	parse: BodyHandler<any, any>[]
 	transform: TransformHandler<any, any>[]
@@ -257,7 +257,7 @@ export interface LifeCycleStore {
 	onResponse: VoidHandler<any, any>[]
 	trace: TraceHandler<any, any>[]
 	error: ErrorHandler<any, any, any>[]
-	stop: GracefulHandler<any, any>[]
+	stop: GracefulHandler<any>[]
 }
 
 export type LifeCycleEvent =
@@ -542,22 +542,8 @@ export type PreHandler<
 ) => MaybePromise<Route['response'] | void>
 
 export type GracefulHandler<
-	Instance extends Elysia<any, any, any, any, any, any, any>,
-	Decorators extends DecoratorBase = {
-		request: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
-> = (
-	data: {
-		app: Instance
-	} & Prettify<
-		Decorators['request'] & {
-			store: Decorators['store']
-		}
-	>
-) => any
+	Instance extends Elysia<any, any, any, any, any, any, any>
+> = (data: Instance) => any
 
 export type ErrorHandler<
 	T extends Record<string, Error> = {},
