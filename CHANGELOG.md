@@ -1,3 +1,7 @@
+# 0.8.3. - 23 Dec 2023
+Bug fix:
+- add early return on `isContextPassToFunction` for static content to prevent invalid regex
+
 # 0.8.2 - 23 Dec 2023
 Bug fix:
 - `ctx.path` and `ctx.qi` is missing when using `onRequest`

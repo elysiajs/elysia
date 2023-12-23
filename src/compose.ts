@@ -256,6 +256,9 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 
 const isContextPassToFunction = (fnLiteral: string) => {
 	fnLiteral = fnLiteral.trimStart()
+
+	if(fnLiteral.startsWith("[object")) return false
+
 	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
 
 	if (/^(\w+)\(/g.test(fnLiteral))
