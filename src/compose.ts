@@ -1306,8 +1306,6 @@ export const composeHandler = ({
 		fnLiteral += encodeCookie
 
 		if (hooks.mapResponse.length) {
-			fnLiteral += `c.response = be`
-
 			for (let i = 0; i < hooks.mapResponse.length; i++) {
 				fnLiteral += `\nmr = onMapResponse[${i}](c)
 				if(mr instanceof Promise) mr = await mr
