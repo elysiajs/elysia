@@ -327,7 +327,7 @@ describe('Map Response', () => {
 		expect(response.status).toBe(200)
 	})
 
-	it('map video on not modified', async () => {
+	it('skip content-range on not modified', async () => {
 		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
 
 		const response = mapResponse(kyuukararin, {
