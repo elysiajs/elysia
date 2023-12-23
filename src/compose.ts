@@ -1,9 +1,13 @@
 import { type Elysia } from '.'
 
+import { Value } from '@sinclair/typebox/value'
 import { TypeCheck } from '@sinclair/typebox/compiler'
 import type { TAnySchema } from '@sinclair/typebox'
 
 import { parse as parseQuery } from 'fast-querystring'
+
+// @ts-ignore
+import decodeURIComponent from 'fast-decode-uri-component'
 
 import { signCookie } from './utils'
 
@@ -49,9 +53,9 @@ const createReport = ({
 	addFn(string: string): void
 	condition: Partial<Record<TraceEvent, boolean>>
 }) => {
-	addFn(`\nconst reporter = getReporter()\n`)
-
 	if (hasTrace) {
+		addFn(`\nconst reporter = getReporter()\n`)
+
 		return (
 			event: TraceEvent,
 			{
@@ -77,12 +81,8 @@ const createReport = ({
 				]
 			)
 				return () => {
-					if (hasTraceSet && event === 'afterHandle') {
-						addFn(
-							`reporter.emit('event',{id,event:'exit',type:'begin',time:0})`
-						)
+					if (hasTraceSet && event === 'afterHandle')
 						addFn(`\nawait traceDone\n`)
-					}
 				}
 
 			if (isGroup) name ||= event
@@ -90,7 +90,7 @@ const createReport = ({
 
 			addFn(
 				'\n' +
-					`reporter.emit('event', { 
+					`reporter.emit('event', {
 					id,
 					event: '${event}',
 					type: 'begin',
@@ -119,12 +119,8 @@ const createReport = ({
 						'\n'
 				)
 
-				if (hasTraceSet && event === 'afterHandle') {
-					addFn(
-						`\nreporter.emit('event',{id,event:'exit',type:'begin',time:0})\n`
-					)
-					addFn('\nawait traceDone\n')
-				}
+				if (hasTraceSet && event === 'afterHandle')
+					addFn(`\nawait traceDone\n`)
 			}
 		}
 	} else {
@@ -180,7 +176,7 @@ ${name}
 ).toResponse(c.set.headers)`
 
 		return `\n${injectResponse}
-		if(response[c.set.status]?.Check(${name}) === false) { 
+		if(!(${name} instanceof Response) && response[c.set.status]?.Check(${name}) === false) {
 	if(!(response instanceof Error))
 		${returnError}
 }\n`
@@ -188,6 +184,8 @@ ${name}
 })
 
 export const isFnUse = (keyword: string, fnLiteral: string) => {
+	if (fnLiteral.startsWith('[object ')) return false
+
 	fnLiteral = fnLiteral.trimStart()
 	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
 
@@ -342,6 +340,35 @@ export const hasType = (type: string, schema: TAnySchema) => {
 	)
 }
 
+export const hasProperty = (expectedProperty: string, schema: TAnySchema) => {
+	if (!schema) return
+
+	if (schema.type === 'object') {
+		const properties = schema.properties as Record<string, TAnySchema>
+
+		if (!properties) return false
+
+		for (const key of Object.keys(properties)) {
+			const property = properties[key]
+
+			if (expectedProperty in property) return true
+
+			if (property.type === 'object') {
+				if (hasProperty(expectedProperty, property)) return true
+			} else if (property.anyOf) {
+				for (let i = 0; i < property.anyOf.length; i++) {
+					if (hasProperty(expectedProperty, property.anyOf[i]))
+						return true
+				}
+			}
+		}
+
+		return false
+	}
+
+	return expectedProperty in schema
+}
+
 const TransformSymbol = Symbol.for('TypeBox.Transform')
 
 export const hasTransform = (schema: TAnySchema) => {
@@ -411,12 +438,37 @@ const getUnionedType = (validator: TypeCheck<any> | undefined) => {
 	return validator.schema?.type
 }
 
-const matchFnReturn = /(?:return|=>) \S*\(/g
+const matchFnReturn = /(?:return|=>) \S+\(/g
 
 export const isAsync = (fn: Function) => {
 	if (fn.constructor.name === 'AsyncFunction') return true
 
-	return fn.toString().match(matchFnReturn)
+	const literal = fn.toString()
+	if (literal.includes('=> response.clone(')) return false
+
+	return !!literal.match(matchFnReturn)
+}
+
+const getDestructureQuery = (fn: string) => {
+	if (
+		!fn.includes('query: {') ||
+		fn.includes('query,') ||
+		fn.includes('query }')
+	)
+		return false
+
+	const start = fn.indexOf('query: {')
+
+	fn = fn.slice(start + 9)
+	fn = fn.slice(0, fn.indexOf('}'))
+
+	return fn.split(',').map((x) => {
+		const indexOf = x.indexOf(':')
+
+		if (indexOf === -1) return x.trim()
+
+		return x.slice(0, indexOf).trim()
+	})
 }
 
 export const composeHandler = ({
@@ -430,19 +482,21 @@ export const composeHandler = ({
 	schema,
 	onRequest,
 	config,
-	getReporter
+	getReporter,
+	setHeader
 }: {
 	path: string
 	method: string
 	hooks: LifeCycleStore
 	validator: SchemaValidator
-	handler: Handler<any, any>
+	handler: unknown | Handler<any, any>
 	handleError: Elysia['handleError']
 	definitions?: Elysia['definitions']['type']
 	schema?: Elysia['schema']
 	onRequest: PreHandler<any, any>[]
 	config: ElysiaConfig<any>
 	getReporter: () => TraceReporter
+	setHeader: Object | undefined
 }): ComposedHandler => {
 	const hasErrorHandler =
 		config.forceErrorEncapsulation ||
@@ -450,6 +504,9 @@ export const composeHandler = ({
 		typeof Bun === 'undefined' ||
 		hooks.onResponse.length > 0 ||
 		!!hooks.trace.length
+
+	const isHandleFn = typeof handler === 'function'
+	const handle = isHandleFn ? `handler(c)` : `handler`
 
 	const handleResponse = hooks.onResponse.length
 		? `\n;(async () => {${hooks.onResponse
@@ -461,7 +518,8 @@ export const composeHandler = ({
 
 	let hasUnknownContext = false
 
-	if (isContextPassToFunction(handler.toString())) hasUnknownContext = true
+	if (isHandleFn && isContextPassToFunction(handler.toString()))
+		hasUnknownContext = true
 
 	if (!hasUnknownContext)
 		for (const [key, value] of Object.entries(hooks)) {
@@ -511,8 +569,9 @@ export const composeHandler = ({
 					handler,
 					...hooks.transform,
 					...hooks.beforeHandle,
-					...hooks.afterHandle
-			  ].map((x) => x.toString())
+					...hooks.afterHandle,
+					...hooks.mapResponse
+			  ].map((x) => (typeof x === 'function' ? x.toString() : `${x}`))
 			: []
 
 	const hasBody =
@@ -527,11 +586,12 @@ export const composeHandler = ({
 	const hasHeaders =
 		hasUnknownContext ||
 		validator.headers ||
-		lifeCycleLiteral.some((fn) => isFnUse('headers', fn))
+		lifeCycleLiteral.some((fn) => isFnUse('headers', fn)) ||
+		(setHeader && Object.keys(setHeader).length)
 
 	const hasCookie =
 		hasUnknownContext ||
-		validator.cookie ||
+		!!validator.cookie ||
 		lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
 
 	// @ts-ignore
@@ -565,8 +625,6 @@ export const composeHandler = ({
 			}`
 		} else
 			for (const name of cookieMeta.sign) {
-				// if (!(name in cookieMeta.properties)) continue
-
 				encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = await signCookie(_setCookie['${name}'].value, '${secret}') }\n`
 			}
 
@@ -649,14 +707,52 @@ export const composeHandler = ({
 		lifeCycleLiteral.some((fn) => isFnUse('query', fn))
 
 	if (hasQuery) {
-		fnLiteral += `const url = c.request.url
+		let destructured = [] as string[]
+		let referenceFullQuery = false
 
-		if(c.qi !== -1) {
-			c.query ??= parseQuery(url.substring(c.qi + 1))
+		// @ts-ignore
+		if (validator.query && validator.query.schema.type === 'object') {
+			// @ts-ignore
+			destructured = Object.keys(validator.query.schema.properties)
+		} else
+			for (const event of lifeCycleLiteral) {
+				const queries = getDestructureQuery(event)
+
+				if (!queries) {
+					referenceFullQuery = true
+					continue
+				}
+
+				for (const query of queries)
+					if (destructured.indexOf(query) === -1)
+						destructured.push(query)
+			}
+
+		if (!referenceFullQuery && destructured.length) {
+			fnLiteral += `if(c.qi !== -1) {
+				const url = decodeURIComponent(c.request.url.slice(c.qi + 1))
+				let memory = 0
+
+				${destructured
+					.map(
+						(name, index) => `
+						memory = url.indexOf('${name}=')
+
+						const a${index} = memory === -1 ? undefined : url.slice(memory = memory + ${
+							name.length + 1
+						}, (memory = url.indexOf('&', memory)) === -1 ? undefined : memory)`
+					)
+					.join('\n')}
+
+				c.query = {
+					${destructured.map((name, index) => `${name}: a${index}`).join(', ')}
+				}
+			} else {
+				c.query = {}
+			}`
 		} else {
-			c.query ??= {}
+			fnLiteral += `c.query = c.qi !== -1 ? parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1))) : {}`
 		}
-		`
 	}
 
 	const traceLiterals = hooks.trace.map((x) => x.toString())
@@ -667,6 +763,7 @@ export const composeHandler = ({
 	hasUnknownContext || hooks.trace.some((fn) => isFnUse('set', fn.toString()))
 
 	const hasSet =
+		(setHeader && Object.keys(setHeader).length) ||
 		hasTraceSet ||
 		hasCookie ||
 		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
@@ -683,10 +780,9 @@ export const composeHandler = ({
 		}
 	})
 
-	fnLiteral += hasErrorHandler ? 'try {\n' : ''
+	fnLiteral += hasErrorHandler ? '\n try {\n' : ''
 
-	if (hasTrace) {
-		// fnLiteral += `\nconst traceDone = new Promise(r => r())\n`
+	if (hasTraceSet) {
 		fnLiteral += `\nconst traceDone = Promise.all([`
 		for (let i = 0; i < hooks.trace.length; i++) {
 			fnLiteral += `new Promise(r => { reporter.once(\`res\${id}.${i}\`, r) }),`
@@ -694,11 +790,14 @@ export const composeHandler = ({
 		fnLiteral += `])\n`
 	}
 
+	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
+
 	const maybeAsync =
 		hasCookie ||
 		hasBody ||
 		hasTraceSet ||
-		isAsync(handler) ||
+		isAsyncHandler ||
+		!!hooks.mapResponse.length ||
 		hooks.parse.length > 0 ||
 		hooks.afterHandle.some(isAsync) ||
 		hooks.beforeHandle.some(isAsync) ||
@@ -765,12 +864,12 @@ export const composeHandler = ({
 								hasType('Files', schema)
 							)
 								return `c.body = {}
-		
+
 								const form = await c.request.formData()
 								for (const key of form.keys()) {
 									if (c.body[key])
 										continue
-			
+
 									const value = form.getAll(key)
 									if (value.length === 1)
 										c.body[key] = value[0]
@@ -839,33 +938,33 @@ export const composeHandler = ({
 					case 'application/json':
 						c.body = await c.request.json()
 						break
-				
+
 					case 'text/plain':
 						c.body = await c.request.text()
 						break
-				
+
 					case 'application/x-www-form-urlencoded':
 						c.body = parseQuery(await c.request.text())
 						break
-				
+
 					case 'application/octet-stream':
 						c.body = await c.request.arrayBuffer();
 						break
-				
+
 					case 'multipart/form-data':
 						c.body = {}
-				
+
 						const form = await c.request.formData()
 						for (const key of form.keys()) {
 							if (c.body[key])
 								continue
-				
+
 							const value = form.getAll(key)
 							if (value.length === 1)
 								c.body[key] = value[0]
 							else c.body[key] = value
 						}
-				
+
 						break
 					}\n`
 
@@ -892,11 +991,11 @@ export const composeHandler = ({
 
 			// @ts-ignore
 			if (transform.$elysia === 'derive')
-				fnLiteral += isAsync(hooks.transform[i])
+				fnLiteral += isAsync(transform)
 					? `Object.assign(c, await transform[${i}](c));`
 					: `Object.assign(c, transform[${i}](c));`
 			else
-				fnLiteral += isAsync(hooks.transform[i])
+				fnLiteral += isAsync(transform)
 					? `await transform[${i}](c);`
 					: `transform[${i}](c);`
 
@@ -910,6 +1009,23 @@ export const composeHandler = ({
 		fnLiteral += '\n'
 
 		if (validator.headers) {
+			// @ts-ignore
+			if (hasProperty('default', validator.headers.params))
+				for (const [key, value] of Object.entries(
+					Value.Default(
+						// @ts-ignore
+						validator.headers.schema,
+						{}
+					) as Object
+				)) {
+					const parsed = typeof value === 'object'
+							? JSON.stringify(value)
+							: `'${value}'`
+
+					if(parsed)
+						fnLiteral += `c.headers['${key}'] ??= ${parsed}\n`
+				}
+
 			fnLiteral += `if(headers.Check(c.headers) === false) {
 				${composeValidation('headers')}
 			}`
@@ -920,6 +1036,23 @@ export const composeHandler = ({
 		}
 
 		if (validator.params) {
+			// @ts-ignore
+			if (hasProperty('default', validator.params.schema))
+				for (const [key, value] of Object.entries(
+					Value.Default(
+						// @ts-ignore
+						validator.params.schema,
+						{}
+					) as Object
+				)) {
+					const parsed = typeof value === 'object'
+							? JSON.stringify(value)
+							: `'${value}'`
+
+					if(parsed)
+						fnLiteral += `c.params['${key}'] ??= ${parsed}\n`
+				}
+
 			fnLiteral += `if(params.Check(c.params) === false) {
 				${composeValidation('params')}
 			}`
@@ -930,8 +1063,25 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
+			// @ts-ignore
+			if (hasProperty('default', validator.query.schema))
+				for (const [key, value] of Object.entries(
+					Value.Default(
+						// @ts-ignore
+						validator.query.schema,
+						{}
+					) as Object
+				)) {
+					const parsed = typeof value === 'object'
+							? JSON.stringify(value)
+							: `'${value}'`
+
+					if(parsed)
+						fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
+				}
+
 			fnLiteral += `if(query.Check(c.query) === false) {
-				${composeValidation('query')} 
+				${composeValidation('query')}
 			}`
 
 			// @ts-ignore
@@ -941,9 +1091,25 @@ export const composeHandler = ({
 		}
 
 		if (validator.body) {
-			fnLiteral += `if(body.Check(c.body) === false) { 
-				${composeValidation('body')}
-			}`
+			// @ts-ignore
+			if (hasProperty('default', validator.body.schema))
+				fnLiteral += `if(body.Check(c.body) === false) {
+    				c.body = Object.assign(${JSON.stringify(
+						Value.Default(
+							// @ts-ignore
+							validator.body.schema,
+							null
+						)
+					)}, c.body)
+
+    				if(body.Check(c.query) === false) {
+        				${composeValidation('body')}
+     			}
+            }`
+			else
+				fnLiteral += `if(body.Check(c.body) === false) {
+			${composeValidation('body')}
+		}`
 
 			// @ts-ignore
 			if (hasTransform(validator.body.schema))
@@ -953,10 +1119,26 @@ export const composeHandler = ({
 		// @ts-ignore
 		if (isNotEmpty(validator.cookie?.schema.properties ?? {})) {
 			fnLiteral += `const cookieValue = {}
-			for(const [key, value] of Object.entries(c.cookie))
-				cookieValue[key] = value.value
+    			for(const [key, value] of Object.entries(c.cookie))
+    				cookieValue[key] = value.value\n`
 
-			if(cookie.Check(cookieValue) === false) {
+			// @ts-ignore
+			if (hasProperty('default', validator.cookie.schema))
+				for (const [key, value] of Object.entries(
+					Value.Default(
+						// @ts-ignore
+						validator.cookie.schema,
+						{}
+					) as Object
+				)) {
+					fnLiteral += `cookieValue['${key}'] = ${
+						typeof value === 'object'
+							? JSON.stringify(value)
+							: value
+					}\n`
+				}
+
+			fnLiteral += `if(cookie.Check(cookieValue) === false) {
 				${composeValidation('cookie', 'cookieValue')}
 			}`
 
@@ -972,32 +1154,41 @@ export const composeHandler = ({
 		})
 
 		for (let i = 0; i < hooks.beforeHandle.length; i++) {
+			const beforeHandle = hooks.beforeHandle[i]
+
 			const endUnit = report('beforeHandle.unit', {
-				name: hooks.beforeHandle[i].name
+				name: beforeHandle.name
 			})
 
-			const name = `be${i}`
-			const returning = hasReturn(hooks.beforeHandle[i].toString())
+			const returning = hasReturn(beforeHandle.toString())
 
-			if (!returning) {
-				fnLiteral += isAsync(hooks.beforeHandle[i])
+			// @ts-ignore
+			if (beforeHandle.$elysia === 'resolve') {
+				fnLiteral += isAsync(beforeHandle)
+					? `Object.assign(c, await beforeHandle[${i}](c));`
+					: `Object.assign(c, beforeHandle[${i}](c));`
+			} else if (!returning) {
+				fnLiteral += isAsync(beforeHandle)
 					? `await beforeHandle[${i}](c);\n`
 					: `beforeHandle[${i}](c);\n`
 
 				endUnit()
 			} else {
-				fnLiteral += isAsync(hooks.beforeHandle[i])
-					? `let ${name} = await beforeHandle[${i}](c);\n`
-					: `let ${name} = beforeHandle[${i}](c);\n`
+				fnLiteral += isAsync(beforeHandle)
+					? `be = await beforeHandle[${i}](c);\n`
+					: `be = beforeHandle[${i}](c);\n`
 
 				endUnit()
 
-				fnLiteral += `if(${name} !== undefined) {\n`
+				fnLiteral += `if(be !== undefined) {\n`
 				const endAfterHandle = report('afterHandle', {
 					unit: hooks.transform.length
 				})
 				if (hooks.afterHandle) {
-					const beName = name
+					report('handle', {
+						name: isHandleFn ? handler.name : undefined
+					})()
+
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						const returning = hasReturn(
 							hooks.afterHandle[i].toString()
@@ -1007,20 +1198,18 @@ export const composeHandler = ({
 							name: hooks.afterHandle[i].name
 						})
 
-						fnLiteral += `c.response = ${beName}\n`
+						fnLiteral += `c.response = be\n`
 
 						if (!returning) {
 							fnLiteral += isAsync(hooks.afterHandle[i])
-								? `await afterHandle[${i}](c, ${beName});\n`
-								: `afterHandle[${i}](c, ${beName});\n`
+								? `await afterHandle[${i}](c, be)\n`
+								: `afterHandle[${i}](c, be)\n`
 						} else {
-							const name = `af${i}`
-
 							fnLiteral += isAsync(hooks.afterHandle[i])
-								? `const ${name} = await afterHandle[${i}](c);\n`
-								: `const ${name} = afterHandle[${i}](c);\n`
+								? `af = await afterHandle[${i}](c)\n`
+								: `af = afterHandle[${i}](c)\n`
 
-							fnLiteral += `if(${name} !== undefined) { c.response = ${beName} = ${name} }\n`
+							fnLiteral += `if(af !== undefined) { c.response = be = af }\n`
 						}
 
 						endUnit()
@@ -1030,10 +1219,22 @@ export const composeHandler = ({
 				endAfterHandle()
 
 				if (validator.response)
-					fnLiteral += composeResponseValidation(name)
+					fnLiteral += composeResponseValidation('be')
+
+				if (hooks.mapResponse.length) {
+					fnLiteral += `c.response = be`
+
+					for (let i = 0; i < hooks.mapResponse.length; i++) {
+						fnLiteral += `\nif(mr === undefined) {
+							mr = onMapResponse[${i}](c)
+							if(mr instanceof Promise) mr = await mr
+							if(mr !== undefined) c.response = mr
+						}\n`
+					}
+				}
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(${name}, c.set)}\n`
+				fnLiteral += `return mapEarlyResponse(be, c.set)}\n`
 			}
 		}
 
@@ -1042,17 +1243,17 @@ export const composeHandler = ({
 
 	if (hooks?.afterHandle.length) {
 		const endHandle = report('handle', {
-			name: handler.name
+			name: isHandleFn ? handler.name : undefined
 		})
 
 		if (hooks.afterHandle.length)
-			fnLiteral += isAsync(handler)
-				? `let r = c.response = await handler(c);\n`
-				: `let r = c.response = handler(c);\n`
+			fnLiteral += isAsyncHandler
+				? `let r = c.response = await ${handle};\n`
+				: `let r = c.response = ${handle};\n`
 		else
-			fnLiteral += isAsync(handler)
-				? `let r = await handler(c);\n`
-				: `let r = handler(c);\n`
+			fnLiteral += isAsyncHandler
+				? `let r = await ${handle};\n`
+				: `let r = ${handle};\n`
 
 		endHandle()
 
@@ -1061,7 +1262,6 @@ export const composeHandler = ({
 		})
 
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
-			const name = `af${i}`
 			const returning = hasReturn(hooks.afterHandle[i].toString())
 
 			const endUnit = report('afterHandle.unit', {
@@ -1075,35 +1275,24 @@ export const composeHandler = ({
 
 				endUnit()
 			} else {
-				if (validator.response)
-					fnLiteral += isAsync(hooks.afterHandle[i])
-						? `let ${name} = await afterHandle[${i}](c)\n`
-						: `let ${name} = afterHandle[${i}](c)\n`
-				else
-					fnLiteral += isAsync(hooks.afterHandle[i])
-						? `let ${name} = mapEarlyResponse(await afterHandle[${i}](c), c.set)\n`
-						: `let ${name} = mapEarlyResponse(afterHandle[${i}](c), c.set)\n`
+				fnLiteral += isAsync(hooks.afterHandle[i])
+					? `af = await afterHandle[${i}](c)\n`
+					: `af = afterHandle[${i}](c)\n`
 
 				endUnit()
 
 				if (validator.response) {
-					fnLiteral += `if(${name} !== undefined) {`
-					fnLiteral += composeResponseValidation(name)
-
-					fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
-
-					fnLiteral += `if(${name}) {`
+					fnLiteral += `if(af !== undefined) {`
 					endAfterHandle()
 
-					if (hasTraceSet)
-						fnLiteral += `${name} = mapEarlyResponse(${name}, c.set)\n`
+					fnLiteral += composeResponseValidation('af')
 
-					fnLiteral += `return ${name} } }`
+					fnLiteral += `c.response = af }`
 				} else {
-					fnLiteral += `if(${name}) {`
+					fnLiteral += `if(af !== undefined) {`
 					endAfterHandle()
 
-					fnLiteral += `return ${name}}\n`
+					fnLiteral += `c.response = af}\n`
 				}
 			}
 		}
@@ -1116,37 +1305,71 @@ export const composeHandler = ({
 
 		fnLiteral += encodeCookie
 
+		if (hooks.mapResponse.length) {
+			fnLiteral += `c.response = be`
+
+			for (let i = 0; i < hooks.mapResponse.length; i++) {
+				fnLiteral += `\nmr = onMapResponse[${i}](c)
+				if(mr instanceof Promise) mr = await mr
+				if(mr !== undefined) c.response = mr\n`
+			}
+		}
+
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
 		const endHandle = report('handle', {
-			name: handler.name
+			name: isHandleFn ? handler.name : undefined
 		})
 
-		if (validator.response) {
-			fnLiteral += isAsync(handler)
-				? `const r = await handler(c);\n`
-				: `const r = handler(c);\n`
+		if (validator.response || hooks.mapResponse.length) {
+			fnLiteral += isAsyncHandler
+				? `let r = await ${handle};\n`
+				: `let r = ${handle};\n`
 
 			endHandle()
 
-			fnLiteral += composeResponseValidation()
+			if (validator.response) fnLiteral += composeResponseValidation()
 
 			report('afterHandle')()
 
+			if (hooks.mapResponse.length) {
+				fnLiteral += 'c.response = r'
+				for (let i = 0; i < hooks.mapResponse.length; i++) {
+					fnLiteral += `\nif(mr === undefined) { 
+						mr = onMapResponse[${i}](c)
+						if(mr instanceof Promise) mr = await mr
+    					if(mr !== undefined) r = c.response = mr
+					}\n`
+				}
+			}
+
 			fnLiteral += encodeCookie
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+			if (handler instanceof Response)
+				fnLiteral += `return ${handle}.clone()\n`
+			else if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
 			if (traceConditions.handle || hasCookie) {
-				fnLiteral += isAsync(handler)
-					? `let r = await handler(c);\n`
-					: `let r = handler(c);\n`
+				fnLiteral += isAsyncHandler
+					? `let r = await ${handle};\n`
+					: `let r = ${handle};\n`
 
 				endHandle()
 
 				report('afterHandle')()
+
+				if (hooks.mapResponse.length) {
+					fnLiteral += 'c.response = r'
+					for (let i = 0; i < hooks.mapResponse.length; i++) {
+						fnLiteral += `\nif(mr === undefined) {
+							mr = onMapResponse[${i}](c)
+							if(mr instanceof Promise) mr = await mr
+    						if(mr !== undefined) r = c.response = mr
+						}\n`
+					}
+				}
 
 				fnLiteral += encodeCookie
 
@@ -1155,13 +1378,13 @@ export const composeHandler = ({
 			} else {
 				endHandle()
 
-				const handled = isAsync(handler)
-					? 'await handler(c) '
-					: 'handler(c)'
+				const handled = isAsyncHandler ? `await ${handle}` : handle
 
 				report('afterHandle')()
 
-				if (hasSet)
+				if (handler instanceof Response)
+					fnLiteral += `return ${handle}.clone()\n`
+				else if (hasSet)
 					fnLiteral += `return mapResponse(${handled}, c.set)\n`
 				else fnLiteral += `return mapCompactResponse(${handled})\n`
 			}
@@ -1230,13 +1453,17 @@ export const composeHandler = ({
 		}
 	}
 
-	fnLiteral = `const { 
+	// console.log(fnLiteral)
+
+	fnLiteral = `const {
 		handler,
 		handleError,
 		hooks: {
 			transform,
+			resolve,
 			beforeHandle,
 			afterHandle,
+			mapResponse: onMapResponse,
 			parse,
 			error: handleErrors,
 			onResponse
@@ -1266,7 +1493,8 @@ export const composeHandler = ({
 		getReporter,
 		requestId,
 		parseCookie,
-		signCookie
+		signCookie,
+		decodeURIComponent
 	} = hooks
 
 	${
@@ -1277,10 +1505,16 @@ export const composeHandler = ({
 			: ''
 	}
 
-	return ${maybeAsync ? 'async' : ''} function(c) {
+	return ${maybeAsync ? 'async' : ''} function handle(c) {
+		${hooks.beforeHandle.length ? 'let be' : ''}
+		${hooks.afterHandle.length ? 'let af' : ''}
+		${hooks.mapResponse.length ? 'let mr' : ''}
+
 		${schema && definitions ? 'c.schema = schema; c.defs = definitions;' : ''}
 		${fnLiteral}
 	}`
+
+	// console.log(fnLiteral)
 
 	const createHandler = Function('hooks', fnLiteral)
 
@@ -1306,11 +1540,14 @@ export const composeHandler = ({
 		getReporter,
 		requestId,
 		parseCookie,
-		signCookie
+		signCookie,
+		decodeURIComponent
 	})
 }
 
-export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
+export const composeGeneralHandler = (
+	app: Elysia<any, any, any, any, any, any>
+) => {
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
@@ -1324,17 +1561,19 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	const hasTrace = app.event.trace.length > 0
 
 	const findDynamicRoute = `
-	const route = find(request.method, path) ${
-		router.root.ALL ? '?? find("ALL", path)' : ''
+	const route = router.find(request.method, path) ${
+		router.root.ALL ? '?? router.find("ALL", path)' : ''
 	}
 	if (route === null)
 		return ${
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
-				: `new Response(error404, {
+				: app.event.request.length
+				? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
 				})`
+				: `error404.clone()`
 		}
 
 	ctx.params = route.params
@@ -1355,20 +1594,22 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		mapEarlyResponse,
 		NotFoundError,
 		requestId,
-		getReporter
+		getReporter,
+		handleError
 	} = data
 
 	const notFound = new NotFoundError()
 
 	${app.event.request.length ? `const onRequest = app.event.request` : ''}
-
 	${staticRouter.variables}
-
-	const find = router.find.bind(router)
-	const findWs = wsRouter.find.bind(wsRouter)
-	const handleError = app.handleError.bind(this)
-
-	${app.event.error.length ? '' : `const error404 = notFound.message.toString()`}
+	${
+		app.event.error.length
+			? ''
+			: `
+	const error404Message = notFound.message.toString()
+	const error404 = new Response(error404Message, { status: 404 });
+	`
+	}
 
 	return ${maybeAsync ? 'async' : ''} function map(request) {
 	`
@@ -1399,8 +1640,12 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 				request,
 				store,
 				set: {
-					cookie: {},
-					headers: {},
+					headers: ${
+						// @ts-ignore
+						Object.keys(app.setHeaders ?? {}).length
+							? 'Object.assign({}, app.setHeaders)'
+							: '{}'
+					},
 					status: 200
 				}
 				${hasTrace ? ',$$requestId: +id' : ''}
@@ -1413,7 +1658,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 			unit: app.event.request.length
 		})
 
-		fnLiteral += `try {\n`
+		fnLiteral += `\n try {\n`
 
 		for (let i = 0; i < app.event.request.length; i++) {
 			const fn = app.event.request[i]
@@ -1434,7 +1679,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 
 				endUnit()
 
-				fnLiteral += `if(${name}) return ${name}\n`
+				// fnLiteral += `if(${name}) return ${name}\n`
 			} else {
 				fnLiteral += `${
 					maybeAsync ? 'await' : ''
@@ -1450,28 +1695,29 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		endReport()
 
 		fnLiteral += `
-		const url = request.url,
-		s = url.indexOf('/', 11),
-		i = ctx.qi = url.indexOf('?', s + 1),
-		path = ctx.path = i === -1 ? url.substring(s) : url.substring(s, i);`
+		const url = request.url
+		const s = url.indexOf('/', 11)
+		const qi = url.indexOf('?', s + 1)
+		const path = url.substring(s, qi === -1 ? undefined : qi)`
 	} else {
 		fnLiteral += `
-		const url = request.url,
-			s = url.indexOf('/', 11),
-			qi = url.indexOf('?', s + 1),
-			path = qi === -1
-				? url.substring(s)
-				: url.substring(s, qi)
-
+		const url = request.url
+		const s = url.indexOf('/', 11)
+		const qi = url.indexOf('?', s + 1)
+		const path = url.substring(s, qi === -1 ? undefined : qi)
 		${hasTrace ? 'const id = +requestId.value++' : ''}
-
 		const ctx = {
 			request,
 			store,
 			qi,
 			path,
 			set: {
-				headers: {},
+				headers: ${
+					// @ts-ignore
+					Object.keys(app.setHeaders ?? {}).length
+						? 'Object.assign({}, app.setHeaders)'
+						: '{}'
+				},
 				status: 200
 			}
 			${hasTrace ? ',$$requestId: id' : ''}
@@ -1504,14 +1750,14 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 					case '${path}':
 						if(request.headers.get('upgrade') === 'websocket')
 							return st${index}(ctx)
-							
+
 						break`
 		}
 
 		fnLiteral += `
 				default:
 					if(request.headers.get('upgrade') === 'websocket') {
-						const route = findWs('ws', path)
+						const route = wsRouter.find('ws', path)
 
 						if(route) {
 							ctx.params = route.params
@@ -1536,11 +1782,12 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		${findDynamicRoute}
 	}`
 
+	const handleError = composeErrorHandler(app) as any
+
 	// @ts-ignore
-	app.handleError = composeErrorHandler(app) as any
+	app.handleError = handleError
 
 	// console.log(fnLiteral)
-	// console.log(app.event)
 
 	return Function(
 		'data',
@@ -1551,11 +1798,14 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		NotFoundError,
 		// @ts-ignore
 		getReporter: () => app.reporter,
-		requestId
+		requestId,
+		handleError
 	})
 }
 
-export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
+export const composeErrorHandler = (
+	app: Elysia<any, any, any, any, any, any>
+) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,
@@ -1573,7 +1823,9 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
 
-		const response = `${isAsync(handler) ? 'await ' : ''}onError[${i}](context)`
+		const response = `${
+			isAsync(handler) ? 'await ' : ''
+		}onError[${i}](context)`
 
 		if (hasReturn(handler.toString()))
 			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) {
@@ -1586,7 +1838,7 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 	fnLiteral += `if(error.constructor.name === "ValidationError" || error.constructor.name === "TransformDecodeError") {
 		set.status = error.status ?? 400
 		return new Response(
-			error.message, 
+			error.message,
 			{ headers: set.headers, status: set.status }
 		)
 	} else {

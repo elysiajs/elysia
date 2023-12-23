@@ -2,13 +2,15 @@ import { Value } from '@sinclair/typebox/value'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 import { TSchema } from '@sinclair/typebox'
 
+import { StatusMap } from './utils'
+
 // ? Cloudflare worker support
 const env =
 	typeof Bun !== 'undefined'
 		? Bun.env
 		: typeof process !== 'undefined'
-		? process?.env
-		: undefined
+		  ? process?.env
+		  : undefined
 
 export const ERROR_CODE = Symbol('ErrorCode')
 
@@ -20,6 +22,26 @@ export type ElysiaErrors =
 	| ParseError
 	| ValidationError
 	| InvalidCookieSignature
+
+export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
+
+export const error = <
+	const Code extends number | keyof typeof StatusMap,
+	const T
+>(
+	code: Code,
+	response: T
+): {
+	[ELYSIA_RESPONSE]: Code extends keyof typeof StatusMap
+		? (typeof StatusMap)[Code]
+		: Code
+	response: T
+} =>
+	({
+		// @ts-ignore
+		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
+		response
+	}) as const
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -52,7 +74,10 @@ export class InvalidCookieSignature extends Error {
 	code = 'INVALID_COOKIE_SIGNATURE'
 	status = 400
 
-	constructor(public key: string, message?: string) {
+	constructor(
+		public key: string,
+		message?: string
+	) {
 		super(message ?? `"${key}" has invalid cookie signature`)
 	}
 }
@@ -78,30 +103,36 @@ export class ValidationError extends Error {
 				: error.schema.error
 			: undefined
 
-		const message = isProduction
-			? customError ??
-			  `Invalid ${type ?? error?.schema.error ?? error?.message}`
-			: customError ??
-			  `Invalid ${type}, '${error?.path?.slice(1) || 'type'}': ${
-					error?.message
-			  }` +
-					'\n\n' +
-					'Expected: ' +
-					// @ts-ignore
-					JSON.stringify(
-						ValidationError.simplifyModel(validator),
-						null,
-						2
-					) +
-					'\n\n' +
-					'Found: ' +
-					JSON.stringify(value, null, 2)
-		// +
-		// '\n\n' +
-		// 'Schema: ' +
-		// // @ts-ignore
-		// JSON.stringify(validator.schema, null, 2) +
-		// '\n'
+		const accessor = error?.path?.slice(1) || 'root'
+		let message = ''
+
+		if (customError) {
+			message =
+				typeof customError === 'object'
+					? JSON.stringify(customError)
+					: customError + ''
+		} else if (isProduction) {
+			message = JSON.stringify({
+				type,
+				message: error?.message
+			})
+		} else {
+			message = JSON.stringify(
+				{
+					type,
+					at: accessor,
+					message: error?.message,
+					expected: Value.Create(
+						// @ts-ignore private field
+						validator.schema
+					),
+					found: value,
+					errors: [...validator.Errors(value)]
+				},
+				null,
+				2
+			)
+		}
 
 		super(message)
 

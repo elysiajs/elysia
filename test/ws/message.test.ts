@@ -181,7 +181,7 @@ describe('WebSocket message', () => {
 		const { type, data } = await message
 
 		expect(type).toBe('message')
-		expect(data).toStartWith('Invalid message')
+		expect(data).toInclude('Expected')
 
 		await wsClosed(ws)
 		app.stop()

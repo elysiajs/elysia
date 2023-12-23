@@ -1,8 +1,8 @@
+import { NumberOptions } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
 	type SchemaOptions,
-	type NumericOptions,
 	type TNull,
 	type TUnion,
 	type TSchema,
@@ -17,6 +17,8 @@ import { type TypeCheck } from '@sinclair/typebox/compiler'
 import { CookieOptions } from './cookie'
 import { Value } from '@sinclair/typebox/value'
 import { ValidationError } from './error'
+
+const t = Object.assign({}, Type)
 
 try {
 	TypeSystem.Format('email', (value) =>
@@ -47,7 +49,7 @@ try {
 type MaybeArray<T> = T | T[]
 
 export namespace ElysiaTypeOptions {
-	export type Numeric = NumericOptions<number>
+	export type Numeric = NumberOptions
 
 	export type FileUnit = number | `${number}${'k' | 'm'}`
 
@@ -182,18 +184,22 @@ FormatRegistry.Set('ObjectString', (value) => {
 })
 
 export const ElysiaType = {
-	Numeric: (property?: NumericOptions<number>) => {
+	Numeric: (property?: NumberOptions) => {
 		const schema = Type.Number(property)
 
-		return Type.Transform(
-			Type.Union([
-				Type.String({
-					format: 'numeric',
-					default: 0
-				}),
-				schema
-			])
-		)
+		return t
+			.Transform(
+				t.Union(
+					[
+						t.String({
+							format: 'numeric',
+							default: 0
+						}),
+						t.Number(property)
+					],
+					property
+				)
+			)
 			.Decode((value) => {
 				const number = +value
 				if (isNaN(number)) return value
@@ -209,15 +215,16 @@ export const ElysiaType = {
 		properties: T,
 		options?: ObjectOptions
 	) =>
-		Type.Transform(
-			Type.Union([
-				Type.String({
-					format: 'ObjectString',
-					default: ''
-				}),
-				Type.Object(properties, options)
-			])
-		)
+		t
+			.Transform(
+				t.Union([
+					t.String({
+						format: 'ObjectString',
+						default: ''
+					}),
+					t.Object(properties, options)
+				], options)
+			)
 			.Decode((value) => {
 				if (typeof value === 'string')
 					try {
@@ -231,19 +238,20 @@ export const ElysiaType = {
 			.Encode((value) => JSON.stringify(value)) as any as TObject<T>,
 	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
-		Type.Transform(Files(options))
+		t
+			.Transform(t.Union([Files(options)]))
 			.Decode((value) => {
 				if (Array.isArray(value)) return value
 				return [value]
 			})
 			.Encode((value) => value),
 	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
-		Type.Union([Type.Null(), schema]) as any,
+		t.Union([t.Null(), schema]) as any,
 	/**
 	 * Allow Optional, Nullable and Undefined
 	 */
 	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
-		Type.Union([Type.Null(), Type.Undefined(), schema]) as any,
+		t.Union([t.Null(), t.Undefined(), schema]) as any,
 	Cookie: <T extends TProperties>(
 		properties: T,
 		options?: ObjectOptions &
@@ -262,13 +270,13 @@ export const ElysiaType = {
 				 */
 				sign?: Readonly<(keyof T | (string & {}))[]>
 			}
-	): TObject<T> => Type.Object(properties, options)
+	): TObject<T> => t.Object(properties, options)
 } as const
 
 export type TCookie = (typeof ElysiaType)['Cookie']
 
 declare module '@sinclair/typebox' {
-	interface TypeBuilder {
+	interface JavaScriptTypeBuilder {
 		ObjectString: typeof ElysiaType.ObjectString
 		// @ts-ignore
 		Numeric: typeof ElysiaType.Numeric
@@ -292,16 +300,16 @@ declare module '@sinclair/typebox' {
 	}
 }
 
-Type.ObjectString = ElysiaType.ObjectString
+t.ObjectString = ElysiaType.ObjectString
 
 /**
  * A Numeric string
  *
  * Will be parse to Number
  */
-Type.Numeric = ElysiaType.Numeric
+t.Numeric = ElysiaType.Numeric
 
-Type.File = (arg = {}) =>
+t.File = (arg = {}) =>
 	ElysiaType.File({
 		default: 'File',
 		...arg,
@@ -310,7 +318,7 @@ Type.File = (arg = {}) =>
 		format: 'binary'
 	})
 
-Type.Files = (arg = {}) =>
+t.Files = (arg = {}) =>
 	ElysiaType.Files({
 		...arg,
 		elysiaMeta: 'Files',
@@ -325,12 +333,12 @@ Type.Files = (arg = {}) =>
 		}
 	})
 
-Type.Nullable = (schema) => ElysiaType.Nullable(schema)
-Type.MaybeEmpty = ElysiaType.MaybeEmpty
+t.Nullable = (schema) => ElysiaType.Nullable(schema)
+t.MaybeEmpty = ElysiaType.MaybeEmpty
 
-Type.Cookie = ElysiaType.Cookie
+t.Cookie = ElysiaType.Cookie
 
-export { Type as t }
+export { t }
 
 export * from '@sinclair/typebox/system'
 export * from '@sinclair/typebox/compiler'
@@ -402,11 +410,11 @@ export * from '@sinclair/typebox/compiler'
 
 // hi(`seminar:Noa,Koyuki,Yuuka`)
 
-// const a = TypeCompiler.Compile(Type.String())
+// const a = TypeCompiler.Compile(t.String())
 
 // console.log(v.Decode.toString())
 
-// const T = Type.Transform(v.schema)
+// const T = t.Transform(v.schema)
 // 	.Decode((value) => new Date(value)) // required: number to Date
 // 	.Encode((value) => value.getTime()) // required: Date to number
 

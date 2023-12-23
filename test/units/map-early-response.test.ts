@@ -54,7 +54,7 @@ describe('Map Early Response', () => {
 		const response = mapEarlyResponse(body, defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json()).toEqual(body)
+		expect(await response?.json<any>()).toEqual(body)
 		expect(response?.status).toBe(200)
 	})
 
@@ -87,7 +87,7 @@ describe('Map Early Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json()).toEqual(body)
+		expect(await response?.json<any>()).toEqual(body)
 		expect(response?.status).toBe(200)
 	})
 
@@ -106,7 +106,7 @@ describe('Map Early Response', () => {
 		const response = mapEarlyResponse(new Student('Himari'), defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json()).toEqual({
+		expect(await response?.json<any>()).toEqual({
 			name: 'Himari'
 		})
 		expect(response?.status).toBe(200)
@@ -143,7 +143,7 @@ describe('Map Early Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json()).toEqual(body)
+		expect(await response?.json<any>()).toEqual(body)
 		expect(response?.headers.toJSON()).toEqual({
 			...context.headers,
 			'content-type': 'application/json;charset=utf-8'
@@ -155,7 +155,7 @@ describe('Map Early Response', () => {
 		const response = mapEarlyResponse(new Error('Hello'), context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json()).toEqual({
+		expect(await response?.json<any>()).toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -169,7 +169,7 @@ describe('Map Early Response', () => {
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response?.text()).toEqual('Shiroko')
-		expect(response?.headers.toJSON()).toEqual(headers)
+		expect(response?.headers.toJSON()).toEqual(headers as any)
 	})
 
 	it('map Response and merge Headers', async () => {
@@ -271,7 +271,10 @@ describe('Map Early Response', () => {
 		expect(response).toBeInstanceOf(Response)
 		expect(await response?.text()).toEqual('Hina')
 		expect(response?.headers.get('name')).toEqual('Sorasaki Hina')
-		expect(response?.headers.getAll('set-cookie')).toEqual(['name=hina', 'affiliation=gehenna'])
+		expect(response?.headers.getAll('set-cookie')).toEqual([
+			'name=hina',
+			'affiliation=gehenna'
+		])
 	})
 
 	it('map Passthrough', async () => {
@@ -279,6 +282,33 @@ describe('Map Early Response', () => {
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response?.text()).toEqual('hi')
+		expect(response?.status).toBe(200)
+	})
+
+	it('map video content-range', async () => {
+		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
+
+		const response = mapEarlyResponse(kyuukararin, defaultContext)
+
+		expect(response).toBeInstanceOf(Response)
+		expect(response?.headers.get('accept-ranges')).toEqual('bytes')
+		expect(response?.headers.get('content-range')).toEqual(
+			`bytes 0-${kyuukararin.size - 1}/${kyuukararin.size}`
+		)
+		expect(response?.status).toBe(200)
+	})
+
+	it('skip content-range on not modified', async () => {
+		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
+
+		const response = mapEarlyResponse(kyuukararin, {
+			...defaultContext,
+			status: 304,
+		})
+
+		expect(response).toBeInstanceOf(Response)
+		expect(response?.headers.get('accept-ranges')).toBeNull()
+		expect(response?.headers.get('content-range')).toBeNull()
 		expect(response?.status).toBe(200)
 	})
 })

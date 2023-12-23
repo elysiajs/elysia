@@ -9,23 +9,23 @@ const app = new Elysia()
 		}
 	})
 	.post('/', ({ body: { username } }) => `Hi ${username}`, {
-			body: t.Object({
-				id: t.Number(),
-				username: t.String()
-			})
+		body: t.Object({
+			id: t.Number(),
+			username: t.String()
+		})
 	})
 	// Increase id by 1 from body before main handler
 	.post('/transform', ({ body }) => body, {
 		transform: ({ body }) => {
 			body.id = body.id + 1
 		},
-			body: t.Object({
-				id: t.Number(),
-				username: t.String()
-			}),
-			detail: {
-				summary: 'A'
-			}
+		body: t.Object({
+			id: t.Number(),
+			username: t.String()
+		}),
+		detail: {
+			summary: 'A'
+		}
 	})
 	.post('/mirror', ({ body }) => body)
 	.listen(8080)

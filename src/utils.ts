@@ -8,7 +8,8 @@ import type {
 	LifeCycleStore,
 	LocalHook,
 	MaybeArray,
-	InputSchema
+	InputSchema,
+	BaseMacro
 } from './types'
 
 const isObject = (item: any): item is Object =>
@@ -78,6 +79,8 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 	})
 
 export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
+	if (!a) return []
+
 	// ! Must copy to remove side-effect
 	const array = [...(Array.isArray(a) ? a : [a])]
 	const checksums = []
@@ -91,17 +94,72 @@ export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
 
 	for (const item of Array.isArray(b) ? b : [b]) {
 		// @ts-ignore
-		if (!checksums.includes(item?.$elysiaChecksum)) array.push(item)
+		if (!checksums.includes(item?.$elysiaChecksum)) {
+			array.push(item)
+		}
 	}
 
 	return array
 }
 
+export const primitiveHooks = [
+	'start',
+	'request',
+	'parse',
+	'transform',
+	'resolve',
+	'beforeHandle',
+	'afterHandle',
+	'onResponse',
+	'mapResponse',
+	'trace',
+	'error',
+	'stop',
+	'body',
+	'headers',
+	'params',
+	'query',
+	'response',
+	'type',
+	'detail'
+] as const
+
 export const mergeHook = (
 	a?: LocalHook<any, any, any, any> | LifeCycleStore,
 	b?: LocalHook<any, any, any, any>
 ): LifeCycleStore => {
+	// In case if merging union is need
+	// const customAStore: Record<string, unknown> = {}
+	// const customBStore: Record<string, unknown> = {}
+
+	// for (const [key, value] of Object.entries(a)) {
+	// 	if (primitiveHooks.includes(key as any)) continue
+
+	// 	customAStore[key] = value
+	// }
+
+	// for (const [key, value] of Object.entries(b)) {
+	// 	if (primitiveHooks.includes(key as any)) continue
+
+	// 	customBStore[key] = value
+	// }
+
+	// const unioned = Object.keys(customAStore).filter((x) =>
+	// 	Object.keys(customBStore).includes(x)
+	// )
+
+	// // Must provide empty object to prevent reference side-effect
+	// const customStore = Object.assign({}, customAStore, customBStore)
+
+	// for (const union of unioned)
+	// 	customStore[union] = mergeObjectArray(
+	// 		customAStore[union],
+	// 		customBStore[union]
+	// 	)
+
 	return {
+		...a,
+		...b,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -136,6 +194,10 @@ export const mergeHook = (
 		onResponse: mergeObjectArray(
 			a?.onResponse ?? [],
 			b?.onResponse ?? []
+		) as any,
+		mapResponse: mergeObjectArray(
+			a?.mapResponse ?? [],
+			b?.mapResponse ?? []
 		) as any,
 		trace: mergeObjectArray(a?.trace ?? [], b?.trace ?? []) as any,
 		error: mergeObjectArray(a?.error ?? [], b?.error ?? [])
@@ -230,7 +292,10 @@ export const getResponseSchemaValidator = (
 					'additionalProperties' in schema === false
 
 				// Inherits model maybe already compiled
-				record[+status] = Kind in schema ? compile(schema, Object.values(models)) : schema
+				record[+status] =
+					Kind in schema
+						? compile(schema, Object.values(models))
+						: schema
 			}
 
 			return undefined
@@ -252,8 +317,13 @@ export const getResponseSchemaValidator = (
 	return record
 }
 
+const isBun = typeof Bun !== 'undefined'
+const hasHash = isBun && typeof Bun.hash === 'function'
+
 // https://stackoverflow.com/a/52171480
 export const checksum = (s: string) => {
+	if (hasHash) return Bun.hash(s) as number
+
 	let h = 9
 
 	for (let i = 0; i < s.length; ) h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
@@ -276,6 +346,8 @@ export const mergeLifeCycle = (
 	}
 
 	return {
+		...a,
+		...b,
 		start: mergeObjectArray(
 			a.start as any,
 			('start' in b ? b.start ?? [] : []).map(injectChecksum) as any
@@ -300,15 +372,15 @@ export const mergeLifeCycle = (
 			a.afterHandle as any,
 			(b?.afterHandle ?? ([] as any)).map(injectChecksum)
 		),
+		mapResponse: mergeObjectArray(
+			a.mapResponse as any,
+			(b?.mapResponse ?? ([] as any)).map(injectChecksum)
+		),
 		onResponse: mergeObjectArray(
 			a.onResponse as any,
 			(b?.onResponse ?? ([] as any)).map(injectChecksum)
 		),
 		trace: a.trace,
-		// trace: mergeObjectArray(
-		// 	a.trace as any,
-		// 	('trace' in b ? b.trace ?? [] : ([] as any)).map(injectChecksum)
-		// ),
 		error: mergeObjectArray(
 			a.error as any,
 			(b?.error ?? ([] as any)).map(injectChecksum)
@@ -494,4 +566,19 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 	const expectedInput = await signCookie(tentativeValue, secret)
 
 	return expectedInput === input ? tentativeValue : false
+}
+
+export const traceBackMacro = (
+	extension: BaseMacro,
+	property: Record<string, unknown>,
+	hooks = property
+) => {
+	for (const [key, value] of Object.entries(property)) {
+		if (primitiveHooks.includes(key as any) || !(key in extension)) continue
+
+		if (typeof extension[key] === 'function') {
+			extension[key](value)
+		} else if (typeof extension[key] === 'object')
+			traceBackMacro(extension[key], value as any, hooks)
+	}
 }

@@ -21,7 +21,7 @@ export type DynamicHandler = {
 }
 
 export const createDynamicHandler =
-	(app: Elysia<any, any, any, any, any>) =>
+	(app: Elysia<any, any, any, any, any, any>) =>
 	async (request: Request): Promise<Response> => {
 		const set: Context['set'] = {
 			cookie: {},

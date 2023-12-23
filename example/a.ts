@@ -1,26 +1,8 @@
-import { Elysia, ParseError } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.onError(({ code, error }) => {
-		if (code === 'PARSE') {
-			console.log(error.status, 'uwu') // 400
-			return 'UwU'
-		}
+	.get('/', ({ query: { name } }) => name)
+	.onStart((app) => {
+		console.log("App started", app.server?.hostname)
 	})
-	.onParse(() => {
-		throw new ParseError()
-	})
-	.post('/', ({ body }) => body)
-
-const response = await app.handle(
-	new Request('http://localhost/', {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json'
-		},
-		body: JSON.stringify({})
-	})
-)
-
-console.log(await response.text()) // UwU
-console.log(response.status) // 500
+	.listen(3000)

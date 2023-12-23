@@ -4,6 +4,7 @@ import { StatusMap } from './utils'
 
 import type { Context } from './context'
 import { Cookie } from './cookie'
+import { ELYSIA_RESPONSE } from './error'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -15,6 +16,40 @@ export const isNotEmpty = (obj: Object) => {
 	for (const x in obj) return true
 
 	return false
+}
+
+const handleFile = (response: File | Blob, set?: Context['set']) => {
+	const size = response.size
+	if (
+		(size &&
+			set &&
+			set.status !== 206 &&
+			set.status !== 304 &&
+			set.status !== 412 &&
+			set.status !== 416) ||
+		(!set && size)
+	) {
+		if (set)
+			return new Response(response as Blob, {
+				status: set.status as number,
+				headers: Object.assign(
+					{
+						'accept-ranges': 'bytes',
+						'content-range': `bytes 0-${size - 1}/${size}`
+					},
+					set.headers
+				)
+			})
+
+		return new Response(response as Blob, {
+			headers: {
+				'accept-ranges': 'bytes',
+				'content-range': `bytes 0-${size - 1}/${size}`
+			}
+		})
+	}
+
+	return new Response(response as Blob)
 }
 
 export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
@@ -72,12 +107,18 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set']
 ): Response => {
-	if (
-		// @ts-ignore
-		response?.$passthrough
-	)
+	// @ts-ignore
+	if (response?.[response.$passthrough])
 		// @ts-ignore
 		response = response[response.$passthrough]
+
+	// @ts-ignore
+	if (response?.[ELYSIA_RESPONSE]) {
+		// @ts-ignore
+		set.status = response[ELYSIA_RESPONSE]
+		// @ts-ignore
+		response = response.response
+	}
 
 	if (
 		isNotEmpty(set.headers) ||
@@ -107,11 +148,10 @@ export const mapResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
+				return new Response(response as string, set as SetResponse)
+
 			case 'Blob':
-				return new Response(response as string | Blob, {
-					status: set.status,
-					headers: set.headers
-				})
+				return handleFile(response as File | Blob, set)
 
 			case 'Object':
 			case 'Array':
@@ -130,7 +170,7 @@ export const mapResponse = (
 					response as ReadableStream,
 					set as SetResponse
 				)
-	
+
 			case undefined:
 				if (!response) return new Response('', set as SetResponse)
 
@@ -192,8 +232,10 @@ export const mapResponse = (
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
+				return new Response(response as string)
+
 			case 'Blob':
-				return new Response(response as string | Blob)
+				return handleFile(response as File | Blob, set)
 
 			case 'Object':
 			case 'Array':
@@ -208,7 +250,7 @@ export const mapResponse = (
 					headers: {
 						'Content-Type': 'text/event-stream; charset=utf-8'
 					}
-				})		
+				})
 
 			case undefined:
 				if (!response) return new Response('')
@@ -275,6 +317,14 @@ export const mapEarlyResponse = (
 		// @ts-ignore
 		response = response[response.$passthrough]
 
+	// @ts-ignore
+	if (response?.[ELYSIA_RESPONSE]) {
+		// @ts-ignore
+		set.status = response[ELYSIA_RESPONSE]
+		// @ts-ignore
+		response = response.response
+	}
+
 	if (
 		isNotEmpty(set.headers) ||
 		set.status !== 200 ||
@@ -304,11 +354,10 @@ export const mapEarlyResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
+				return new Response(response as string, set as SetResponse)
+
 			case 'Blob':
-				return new Response(
-					response as string | Blob,
-					set as SetResponse
-				)
+				return handleFile(response as File | Blob, set)
 
 			case 'Object':
 			case 'Array':
@@ -399,8 +448,10 @@ export const mapEarlyResponse = (
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
+				return new Response(response as string)
+
 			case 'Blob':
-				return new Response(response as string | Blob)
+				return handleFile(response as File | Blob, set)
 
 			case 'Object':
 			case 'Array':
@@ -476,10 +527,21 @@ export const mapCompactResponse = (response: unknown): Response => {
 		// @ts-ignore
 		response = response[response.$passthrough]
 
+	// @ts-ignore
+	if (response?.[ELYSIA_RESPONSE])
+		// @ts-ignore
+		return mapResponse(response.response, {
+			// @ts-ignore
+			status: response[ELYSIA_RESPONSE],
+			headers: {}
+		})
+
 	switch (response?.constructor?.name) {
 		case 'String':
+			return new Response(response as string)
+
 		case 'Blob':
-			return new Response(response as string | Blob)
+			return handleFile(response as File | Blob)
 
 		case 'Object':
 		case 'Array':
