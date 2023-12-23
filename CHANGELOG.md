@@ -1,4 +1,4 @@
-# 0.8.0
+# 0.8.0 - 23 Dec 2023
 Feature:
 - `headers` initialization function
 - macro
@@ -12,7 +12,7 @@ Feature:
 
 Improvement:
 - lazy query reference
-- add content-range header to `Blob` by default
+- add content-range header to `File` and `Blob` by default if etag is not used
 - update TypeBox to 0.32
 - override lifecycle response of `be` and `af`
 

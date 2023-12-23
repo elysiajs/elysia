@@ -326,4 +326,18 @@ describe('Map Response', () => {
 		)
 		expect(response.status).toBe(200)
 	})
+
+	it('map video on not modified', async () => {
+		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
+
+		const response = mapResponse(kyuukararin, {
+			...defaultContext,
+			status: 304,
+		})
+
+		expect(response).toBeInstanceOf(Response)
+		expect(response.headers.get('accept-ranges')).toBeNull()
+		expect(response.headers.get('content-range')).toBeNull()
+		expect(response.status).toBe(200)
+	})
 })

@@ -18,6 +18,40 @@ export const isNotEmpty = (obj: Object) => {
 	return false
 }
 
+const handleFile = (response: File | Blob, set?: Context['set']) => {
+	const size = response.size
+	if (
+		(size &&
+			set &&
+			set.status !== 206 &&
+			set.status !== 304 &&
+			set.status !== 412 &&
+			set.status !== 416) ||
+		(!set && size)
+	) {
+		if (set)
+			return new Response(response as Blob, {
+				status: set.status as number,
+				headers: Object.assign(
+					{
+						'accept-ranges': 'bytes',
+						'content-range': `bytes 0-${size - 1}/${size}`
+					},
+					set.headers
+				)
+			})
+
+		return new Response(response as Blob, {
+			headers: {
+				'accept-ranges': 'bytes',
+				'content-range': `bytes 0-${size - 1}/${size}`
+			}
+		})
+	}
+
+	return new Response(response as Blob)
+}
+
 export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 	if (!headers || !Array.isArray(setCookie)) return headers
 
@@ -117,19 +151,7 @@ export const mapResponse = (
 				return new Response(response as string, set as SetResponse)
 
 			case 'Blob':
-				const size = (response as File).size
-				if (size)
-					return new Response(response as Blob, {
-						status: set.status,
-						headers: Object.assign(
-							{
-								'accept-ranges': 'bytes',
-								'content-range': `bytes 0-${size - 1}/${size}`
-							},
-							set.headers
-						)
-					})
-				else return new Response(response as Blob)
+				return handleFile(response as File | Blob, set)
 
 			case 'Object':
 			case 'Array':
@@ -213,15 +235,7 @@ export const mapResponse = (
 				return new Response(response as string)
 
 			case 'Blob':
-				const size = (response as File).size
-				if (size)
-					return new Response(response as Blob, {
-						headers: {
-							'accept-ranges': 'bytes',
-							'content-range': `bytes 0-${size - 1}/${size}`
-						}
-					})
-				else return new Response(response as Blob)
+				return handleFile(response as File | Blob, set)
 
 			case 'Object':
 			case 'Array':
@@ -343,19 +357,7 @@ export const mapEarlyResponse = (
 				return new Response(response as string, set as SetResponse)
 
 			case 'Blob':
-				const size = (response as File).size
-				if (size)
-					return new Response(response as Blob, {
-						status: set.status,
-						headers: Object.assign(
-							{
-								'accept-ranges': 'bytes',
-								'content-range': `bytes 0-${size - 1}/${size}`
-							},
-							set.headers
-						)
-					})
-				else return new Response(response as Blob)
+				return handleFile(response as File | Blob, set)
 
 			case 'Object':
 			case 'Array':
@@ -449,15 +451,7 @@ export const mapEarlyResponse = (
 				return new Response(response as string)
 
 			case 'Blob':
-				const size = (response as File).size
-				if (size)
-					return new Response(response as Blob, {
-						headers: {
-							'accept-ranges': 'bytes',
-							'content-range': `bytes 0-${size - 1}/${size}`
-						}
-					})
-				else return new Response(response as Blob)
+				return handleFile(response as File | Blob, set)
 
 			case 'Object':
 			case 'Array':
@@ -547,15 +541,7 @@ export const mapCompactResponse = (response: unknown): Response => {
 			return new Response(response as string)
 
 		case 'Blob':
-			const size = (response as File).size
-			if (size)
-				return new Response(response as Blob, {
-					headers: {
-						'accept-ranges': 'bytes',
-						'content-range': `bytes 0-${size - 1}/${size}`
-					}
-				})
-			else return new Response(response as Blob)
+			return handleFile(response as File | Blob)
 
 		case 'Object':
 		case 'Array':
