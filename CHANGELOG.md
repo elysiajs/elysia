@@ -1,3 +1,7 @@
+# 0.8.2 - 23 Dec 2023
+Bug fix:
+- `ctx.path` and `ctx.qi` is missing when using `onRequest`
+
 # 0.8.1 - 23 Dec 2023
 Bug fix:
 - `be` is undefined when using `afterResponse` with `mapResponse`

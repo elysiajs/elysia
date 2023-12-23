@@ -328,6 +328,19 @@ describe('Path', () => {
 		expect(res2).toBe('Hi')
 	})
 
+	it('add path if onRequest is used', async () => {
+		const app = new Elysia()
+			.onRequest(() => {})
+			.onAfterHandle(({ path }) => {
+				return path
+			})
+			.get('/', () => 'Hi')
+
+		const res = await app.handle(req('/')).then((res) => res.text())
+
+		expect(res).toBe('/')
+	})
+
 	// it('handle array route - GET', async () => {
 	// 	const paths = ['/', '/test', '/other/nested']
 	// 	const app = new Elysia().get(paths, ({ path }) => {

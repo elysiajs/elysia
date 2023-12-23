@@ -1,4 +1,5 @@
 import { Elysia, t } from '../src'
+import { cors } from '@elysiajs/cors'
 
 export const cache = () =>
 	new Elysia({ name: 'cache' }).mapResponse(({ response }) => {
@@ -9,8 +10,8 @@ export default cache
 
 const app = new Elysia()
 	.use(cache)
-	.get('/', ({ query: { name } }) => name)
-	.onStart((app) => {
-		console.log('App started', app.server?.hostname)
+	.onAfterHandle(({ path }) => {
+		console.log(path)
 	})
+	.get('/', () => 'A')
 	.listen(3000)

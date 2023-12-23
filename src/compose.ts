@@ -1695,8 +1695,8 @@ export const composeGeneralHandler = (
 		fnLiteral += `
 		const url = request.url
 		const s = url.indexOf('/', 11)
-		const qi = url.indexOf('?', s + 1)
-		const path = url.substring(s, qi === -1 ? undefined : qi)`
+		const qi = ctx.qi = url.indexOf('?', s + 1)
+		const path = ctx.path = url.substring(s, qi === -1 ? undefined : qi)`
 	} else {
 		fnLiteral += `
 		const url = request.url
