@@ -137,7 +137,7 @@
     "@typescript-eslint/parser": "^6.7.2",
     "bun-types": "1.0.18",
     "eslint": "^8.49.0",
-    "expect-type": "^0.16.0",
+    "expect-type": "^0.17.3",
     "rimraf": "4.4.1",
     "typescript": "5.3.3"
   },
