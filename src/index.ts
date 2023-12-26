@@ -3973,7 +3973,10 @@ export default class Elysia<
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback
 	) => {
-		if (!Bun) throw new Error('Bun to run')
+		if (typeof Bun === 'undefined')
+			throw new Error(
+				'.listen() is designed to run on Bun only. If you are running Elysia in other environment please use a dedicated plugin or export the handler via Elysia.fetch'
+			)
 
 		this.compile()
 
@@ -4012,11 +4015,6 @@ export default class Elysia<
 						fetch,
 						error: this.outerErrorHandler
 				  } as Serve)
-
-		if (typeof Bun === 'undefined')
-			throw new Error(
-				'.listen() is designed to run on Bun only. If you are running Elysia in other environment please use a dedicated plugin or export the handler via Elysia.fetch'
-			)
 
 		this.server = Bun?.serve(serve)
 
