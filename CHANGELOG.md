@@ -4,7 +4,7 @@ Bug fix:
 
 # 0.8.4. - 27 Dec 2023
 Bug fix:
-- add early return on `isContextPassToFunction` for static content to prevent invalid regex
+- macro caused an Object.entries cannot be undefined
 - `mapResponse` and `afterHandle` missing decorators
 
 # 0.8.3. - 23 Dec 2023
