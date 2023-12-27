@@ -419,7 +419,9 @@ export default class Elysia<
 
 				for (const macro of this.macros) {
 					const customHookValues: Record<string, unknown> = {}
-					for (const [key, value] of Object.entries(localHook)) {
+					for (const [key, value] of Object.entries(
+						localHook ?? {}
+					)) {
 						if (primitiveHooks.includes(key as any)) continue
 
 						customHookValues[key] = value
@@ -858,7 +860,11 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onAfterHandle(handler: MaybeArray<AfterHandler>) {
+	onAfterHandle<Schema extends RouteSchema = {}>(
+		handler: MaybeArray<
+			AfterHandler<MergeSchema<Schema, ParentSchema>, Decorators>
+		>
+	) {
 		this.on('afterHandle', handler as AfterHandler<any, any>)
 
 		return this
@@ -880,7 +886,11 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	mapResponse(handler: MaybeArray<MapResponse>) {
+	mapResponse<Schema extends RouteSchema = {}>(
+		handler: MaybeArray<
+			MapResponse<MergeSchema<Schema, ParentSchema>, Decorators>
+		>
+	) {
 		this.on('mapResponse', handler as MapResponse<any, any>)
 
 		return this

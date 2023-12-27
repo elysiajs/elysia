@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -10,7 +10,7 @@
   "main": "./dist/index.js",
   "exports": {
     ".": {
-      "bun": "./dist/bun/index.js",
+      "bun": "./src/index.ts",
       "node": "./dist/cjs/index.js",
       "require": "./dist/cjs/index.js",
       "import": "./dist/index.js",
