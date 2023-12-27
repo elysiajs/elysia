@@ -1,3 +1,7 @@
+# 0.8.5. - 27 Dec 2023
+Bug fix:
+- Bun entry point
+
 # 0.8.4. - 27 Dec 2023
 Bug fix:
 - add early return on `isContextPassToFunction` for static content to prevent invalid regex
