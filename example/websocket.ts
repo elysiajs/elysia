@@ -5,6 +5,10 @@ const app = new Elysia()
 	.ws('/ws', {
 		open(ws) {
 			ws.subscribe('asdf')
+			console.log('Open Connection:', ws.id)
+		},
+		close(ws) {
+			console.log('Closed Connection:', ws.id)
 		},
 		message(ws, message) {
 			ws.publish('asdf', message)
