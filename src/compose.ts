@@ -1102,7 +1102,7 @@ export const composeHandler = ({
 							// @ts-ignore
 							validator.body.schema,
 							null
-						)
+						) ?? {}
 					)}, c.body)
 
     				if(body.Check(c.query) === false) {

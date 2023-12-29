@@ -1,3 +1,7 @@
+# 0.8.6. - 29 Dec 2023
+Bug fix:
+- body without default value thrown Object.assign error
+
 # 0.8.5. - 27 Dec 2023
 Bug fix:
 - Bun entry point
