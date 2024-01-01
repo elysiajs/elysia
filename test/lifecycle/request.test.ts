@@ -28,4 +28,20 @@ describe('On Request', () => {
 
 		expect(res.headers.get('name')).toBe('llama')
 	})
+
+	it('early return', async () => {
+		const app = new Elysia()
+			.onRequest(({ set }) => {
+				set.status = 401
+				return 'Unauthorized'
+			})
+			.get('/', () => {
+				console.log("This shouldn't be run")
+				return "You shouldn't see this"
+			})
+
+		const res = await app.handle(req('/'))
+		expect(await res.text()).toBe('Unauthorized')
+		expect(res.status).toBe(401)
+	})
 })

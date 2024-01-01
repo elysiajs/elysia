@@ -21,7 +21,8 @@ import {
 	NotFoundError,
 	ValidationError,
 	InternalServerError,
-	ERROR_CODE
+	ERROR_CODE,
+	ELYSIA_RESPONSE
 } from './error'
 
 import { CookieOptions, parseCookie } from './cookie'
@@ -1612,8 +1613,11 @@ export const composeGeneralHandler = (
 	`
 	}
 
-	return ${maybeAsync ? 'async' : ''} function map(request) {
-	`
+	return ${maybeAsync ? 'async' : ''} function map(request) {\n`
+
+	if(app.event.request.length)
+		fnLiteral += `let re`
+
 
 	const traceLiteral = app.event.trace.map((x) => x.toString())
 	const report = createReport({
@@ -1670,17 +1674,16 @@ export const composeGeneralHandler = (
 				name: app.event.request[i].name
 			})
 
-			const name = `re${i}`
-
 			if (withReturn) {
-				fnLiteral += `const ${name} = mapEarlyResponse(
+				fnLiteral += `re = mapEarlyResponse(
 					${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
 					ctx.set
 				)\n`
 
 				endUnit()
 
-				// fnLiteral += `if(${name}) return ${name}\n`
+				if(withReturn)
+					fnLiteral += `if(re !== undefined) return re\n`
 			} else {
 				fnLiteral += `${
 					maybeAsync ? 'await' : ''
@@ -1810,17 +1813,25 @@ export const composeErrorHandler = (
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,
-		ERROR_CODE
+		ERROR_CODE,
+		ELYSIA_RESPONSE
 	} = inject
 
 	return ${
 		app.event.error.find(isAsync) ? 'async' : ''
 	} function(context, error) {
+		let r
+
 		const { set } = context
 
 		context.code = error.code
 		context.error = error
-		`
+
+		if(error[ELYSIA_RESPONSE]) {
+			error.status = error[ELYSIA_RESPONSE]
+			error.message = error.response
+		}
+`
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
 
@@ -1829,9 +1840,16 @@ export const composeErrorHandler = (
 		}onError[${i}](context)`
 
 		if (hasReturn(handler.toString()))
-			fnLiteral += `const r${i} = ${response}; if(r${i} !== undefined) {
+			fnLiteral += `r = ${response}; if(r !== undefined) {
+				if(r instanceof Response) return r
+
+				if(r[ELYSIA_RESPONSE]) {
+					error.status = error[ELYSIA_RESPONSE]
+					error.message = error.response
+				}
+		
 				if(set.status === 200) set.status = error.status
-				return mapResponse(r${i}, set)
+				return mapResponse(r, set)
 			}\n`
 		else fnLiteral += response + '\n'
 	}
@@ -1843,7 +1861,13 @@ export const composeErrorHandler = (
 			{ headers: set.headers, status: set.status }
 		)
 	} else {
-		return new Response(error.message, { headers: set.headers, status: error.status ?? 500 })
+		if(error.code && typeof error.status === "number")
+			return new Response(
+				error.message,
+				{ headers: set.headers, status: error.status }
+			)
+
+		return mapResponse(error, set)
 	}
 }`
 
@@ -1853,6 +1877,7 @@ export const composeErrorHandler = (
 	)({
 		app,
 		mapResponse,
-		ERROR_CODE
+		ERROR_CODE,
+		ELYSIA_RESPONSE
 	})
 }

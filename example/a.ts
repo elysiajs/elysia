@@ -1,14 +1,20 @@
-import { Elysia, t } from '../src'
-import { cors } from '@elysiajs/cors'
+import { Elysia, error, t } from '../src'
+import { req } from '../test/utils'
 
-export const cache = () =>
-	new Elysia({ name: 'cache' }).mapResponse(({ response }) => {
-		return new Response('hello world')
+const app = new Elysia().group('inbox', (app) =>
+	app.ws('join', {
+		body: t.Object({
+			inboxId: t.String()
+		}),
+		message(ws, { inboxId }) {
+			ws.send(inboxId)
+		}
 	})
+).listen(3000)
 
-export default cache
+// const response = await app.handle(req('/a')).then((x) => x.text())
+// console.log(response)
 
-const app = new Elysia()
-	.use(cache)
-	.get('/', () => 'A')
-	.listen(3000)
+console.log(
+	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+)

@@ -105,4 +105,23 @@ describe('Edge Case', () => {
 		expect(await strict.handle(req('/a')).then((x) => x.status)).toBe(404)
 		expect(await strict.handle(req('/a/')).then((x) => x.status)).toBe(200)
 	})
+
+	it('return cookie with file', async () => {
+		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
+
+		const app = new Elysia().get('/', ({ cookie: { name } }) => {
+			name.set({
+				value: 'Rikuhachima Aru',
+				maxAge: new Date().setFullYear(new Date().getFullYear() + 1),
+				httpOnly: true
+			})
+
+			return kyuukararin
+		})
+
+		const response = await app.handle(req('/')).then((x) => x.headers.toJSON())
+
+		expect(response['set-cookie']).toHaveLength(1)
+		expect(response['content-type']).toBe('video/mp4')
+	})
 })

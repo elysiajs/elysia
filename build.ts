@@ -5,7 +5,8 @@ await Bun.build({
 	outdir: './dist/bun',
 	minify: true,
 	target: 'bun',
-	sourcemap: 'external'
+	sourcemap: 'external',
+	'external': ['@sinclair/typebox']
 })
 
 copyFileSync('dist/index.d.ts', 'dist/bun/index.d.ts')

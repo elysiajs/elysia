@@ -20,6 +20,7 @@ export const isNotEmpty = (obj: Object) => {
 
 const handleFile = (response: File | Blob, set?: Context['set']) => {
 	const size = response.size
+
 	if (
 		(size &&
 			set &&
@@ -29,7 +30,13 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 			set.status !== 416) ||
 		(!set && size)
 	) {
-		if (set)
+		if (set) {
+			if (set.headers instanceof Headers)
+				if (hasHeaderShorthand) set.headers = set.headers.toJSON()
+				else
+					for (const [key, value] of set.headers.entries())
+						if (key in set.headers) set.headers[key] = value
+
 			return new Response(response as Blob, {
 				status: set.status as number,
 				headers: Object.assign(
@@ -40,6 +47,7 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 					set.headers
 				)
 			})
+		}
 
 		return new Response(response as Blob, {
 			headers: {

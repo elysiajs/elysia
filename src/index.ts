@@ -28,7 +28,8 @@ import {
 	asGlobal,
 	traceBackMacro,
 	replaceUrlPath,
-	primitiveHooks
+	primitiveHooks,
+	isNumericString
 } from './utils'
 
 import {
@@ -40,11 +41,11 @@ import {
 import {
 	isProduction,
 	ERROR_CODE,
+	ELYSIA_RESPONSE,
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
 	type InternalServerError,
-	ELYSIA_RESPONSE
 } from './error'
 
 import type {
@@ -3199,7 +3200,7 @@ export default class Elysia<
 					} catch {
 						// Not empty
 					}
-				else if (!Number.isNaN(+message)) message = +message
+				else if (isNumericString(message)) message = +message
 			}
 
 			if (transform?.length)

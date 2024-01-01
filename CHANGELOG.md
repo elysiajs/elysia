@@ -1,3 +1,14 @@
+# 0.8.7. - 29 Dec 2023
+Improvement:
+- [#385](https://github.com/elysiajs/elysia/issues/385) If error is instanceof Response, respond with it
+
+Bug fix:
+- onRequest doesn't early return
+- handle thrown error function
+- [#373](https://github.com/elysiajs/elysia/issues/373) cookie is not set when File is return
+- [#379](https://github.com/elysiajs/elysia/issues/379) WebSocket: Sending a space character ' ' receives 0
+- [#317](https://github.com/elysiajs/elysia/issues/317) Exclude TypeBox from bundling
+
 # 0.8.6. - 29 Dec 2023
 Bug fix:
 - body without default value thrown Object.assign error

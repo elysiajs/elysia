@@ -1,4 +1,4 @@
-import { Elysia, InternalServerError, NotFoundError, t } from '../../src'
+import { Elysia, InternalServerError, NotFoundError, error, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -145,5 +145,27 @@ describe('Handle Error', () => {
 
 		expect(await response.text()).toEqual('handled')
 		expect(response.status).toEqual(418)
+	})
+
+	it('handle thrown error function', async () => {
+		const app = new Elysia().get('/', () => {
+			throw error(404, 'Not Found :(')
+		})
+
+		const response = await app.handle(req('/'))
+
+		expect(await response.text()).toEqual('Not Found :(')
+		expect(response.status).toEqual(404)
+	})
+
+	it('handle thrown Response', async () => {
+		const app = new Elysia().get('/', () => {
+			throw error(404, 'Not Found :(')
+		})
+
+		const response = await app.handle(req('/'))
+
+		expect(await response.text()).toEqual('Not Found :(')
+		expect(response.status).toEqual(404)
 	})
 })

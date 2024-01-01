@@ -582,3 +582,6 @@ export const traceBackMacro = (
 			traceBackMacro(extension[key], value as any, hooks)
 	}
 }
+
+export const isNumericString = (message: string) =>
+	!Number.isNaN(parseInt(message))

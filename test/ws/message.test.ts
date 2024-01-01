@@ -233,8 +233,28 @@ describe('WebSocket message', () => {
 		const { type, data } = await message
 
 		expect(type).toBe('message')
+		// @ts-ignore
 		expect(data).toEqual(new Uint8Array(3))
 
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should send & receive', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, message) {
+					ws.send(message)
+				}
+			})
+			.listen(0)
+		const ws = newWebsocket(app.server!)
+		await wsOpen(ws)
+		const message = wsMessage(ws)
+		ws.send(' ')
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toBe(' ')
 		await wsClosed(ws)
 		app.stop()
 	})

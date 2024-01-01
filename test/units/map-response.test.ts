@@ -332,7 +332,7 @@ describe('Map Response', () => {
 
 		const response = mapResponse(kyuukararin, {
 			...defaultContext,
-			status: 304,
+			status: 304
 		})
 
 		expect(response).toBeInstanceOf(Response)

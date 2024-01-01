@@ -12,7 +12,8 @@ const env =
 		  ? process?.env
 		  : undefined
 
-export const ERROR_CODE = Symbol('ErrorCode')
+export const ERROR_CODE = Symbol('ElysiaErrorCode')
+export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
 
 export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
 
@@ -23,7 +24,6 @@ export type ElysiaErrors =
 	| ValidationError
 	| InvalidCookieSignature
 
-export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
 
 export const error = <
 	const Code extends number | keyof typeof StatusMap,
