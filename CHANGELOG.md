@@ -1,4 +1,8 @@
-# 0.8.7. - 29 Dec 2023
+# 0.8.8. - 2 Jan 2024
+Bug fix:
+- Add TypeBox back to Bun bundle
+
+# 0.8.7 - 1 Jan 2024
 Improvement:
 - [#385](https://github.com/elysiajs/elysia/issues/385) If error is instanceof Response, respond with it
 
