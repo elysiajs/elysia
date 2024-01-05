@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/no-duplicate-string */
 // @ts-ignore
 import { serialize } from 'cookie'
 import { StatusMap } from './utils'
@@ -414,10 +415,7 @@ export const mapEarlyResponse = (
 				// @ts-ignore
 				return (response as Promise<unknown>).then((x) => {
 					const r = mapEarlyResponse(x, set)
-
 					if (r !== undefined) return r
-
-					return
 				})
 
 			case 'Error':
@@ -492,10 +490,7 @@ export const mapEarlyResponse = (
 				// @ts-ignore
 				return (response as Promise<unknown>).then((x) => {
 					const r = mapEarlyResponse(x, set)
-
 					if (r !== undefined) return r
-
-					return
 				})
 
 			case 'Error':

@@ -531,13 +531,22 @@ export const StatusMap = {
 
 export type HTTPStatusName = keyof typeof StatusMap
 
+function removeTrailingEquals(digest: string): string {
+	let trimmedDigest = digest
+	while (trimmedDigest.endsWith('=')) {
+		trimmedDigest = trimmedDigest.slice(0, -1)
+	}
+	return trimmedDigest
+}
+
+const encoder = new TextEncoder()
+
 export const signCookie = async (val: string, secret: string | null) => {
 	if (typeof val !== 'string')
 		throw new TypeError('Cookie value must be provided as a string.')
 
 	if (secret === null) throw new TypeError('Secret key must be provided.')
 
-	const encoder = new TextEncoder()
 	const secretKey = await crypto.subtle.importKey(
 		'raw',
 		encoder.encode(secret),
@@ -552,8 +561,9 @@ export const signCookie = async (val: string, secret: string | null) => {
 	)
 
 	const hmacArray = Array.from(new Uint8Array(hmacBuffer))
+
 	const digest = btoa(String.fromCharCode(...hmacArray))
-	return `${val}.${digest.replace(/=+$/, '')}`
+	return `${val}.${removeTrailingEquals(digest)}`
 }
 
 export const unsignCookie = async (input: string, secret: string | null) => {

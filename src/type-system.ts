@@ -13,16 +13,18 @@ import {
 	TNumber,
 	FormatRegistry
 } from '@sinclair/typebox'
+
 import { type TypeCheck } from '@sinclair/typebox/compiler'
-import { CookieOptions } from './cookie'
 import { Value } from '@sinclair/typebox/value'
+
+import { CookieOptions } from './cookie'
 import { ValidationError } from './error'
 
 const t = Object.assign({}, Type)
 
 try {
 	TypeSystem.Format('email', (value) =>
-		/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(
+	/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(
 			value
 		)
 	)

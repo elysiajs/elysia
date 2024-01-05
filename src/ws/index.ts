@@ -96,7 +96,7 @@ export class ElysiaWS<
 	}
 
 	get cork() {
-		return (callback: (ws: WS) => this) => {
+		return (callback: () => this) => {
 			this.raw.cork(callback as any)
 
 			return this

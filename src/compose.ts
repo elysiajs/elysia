@@ -258,7 +258,7 @@ export const isFnUse = (keyword: string, fnLiteral: string) => {
 const isContextPassToFunction = (fnLiteral: string) => {
 	fnLiteral = fnLiteral.trimStart()
 
-	if(fnLiteral.startsWith("[object")) return false
+	if (fnLiteral.startsWith('[object')) return false
 
 	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
 
@@ -623,7 +623,6 @@ export const composeHandler = ({
 		if(_setCookie) {`
 
 		if (cookieMeta.sign === true) {
-			// encodeCookie += `if(_setCookie['${name}']?.value) { c.set.cookie['${name}'].value = await signCookie(_setCookie['${name}'].value, '${secret}') }\n`
 			encodeCookie += `for(const [key, cookie] of Object.entries(_setCookie)) {
 				c.set.cookie[key].value = await signCookie(cookie.value, '${secret}')
 			}`
@@ -861,13 +860,11 @@ export const composeHandler = ({
 					// @ts-ignore
 					const schema = validator?.body?.schema
 
-					switch (type) {
-						case 'object':
-							if (
-								hasType('File', schema) ||
-								hasType('Files', schema)
-							)
-								return `c.body = {}
+					if (
+						typeof schema === 'object' &&
+						(hasType('File', schema) || hasType('Files', schema))
+					)
+						return `c.body = {}
 
 								const form = await c.request.formData()
 								for (const key of form.keys()) {
@@ -879,17 +876,6 @@ export const composeHandler = ({
 										c.body[key] = value[0]
 									else c.body[key] = value
 								}`
-							// else {
-							// 	// Since it's an object an not accepting file
-							// 	// we can infer that it's JSON
-							// 	fnLiteral += `c.body = await c.request.json()\n`
-							// }
-							break
-
-						default:
-							// fnLiteral += defaultParser
-							break
-					}
 				}
 			}
 
@@ -1022,11 +1008,12 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed = typeof value === 'object'
+					const parsed =
+						typeof value === 'object'
 							? JSON.stringify(value)
 							: `'${value}'`
 
-					if(parsed)
+					if (parsed)
 						fnLiteral += `c.headers['${key}'] ??= ${parsed}\n`
 				}
 
@@ -1049,11 +1036,12 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed = typeof value === 'object'
+					const parsed =
+						typeof value === 'object'
 							? JSON.stringify(value)
 							: `'${value}'`
 
-					if(parsed)
+					if (parsed)
 						fnLiteral += `c.params['${key}'] ??= ${parsed}\n`
 				}
 
@@ -1076,12 +1064,12 @@ export const composeHandler = ({
 						{}
 					) as Object
 				)) {
-					const parsed = typeof value === 'object'
+					const parsed =
+						typeof value === 'object'
 							? JSON.stringify(value)
 							: `'${value}'`
 
-					if(parsed)
-						fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
+					if (parsed) fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
 				}
 
 			fnLiteral += `if(query.Check(c.query) === false) {
@@ -1352,44 +1340,42 @@ export const composeHandler = ({
 				fnLiteral += `return ${handle}.clone()\n`
 			else if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
-		} else {
-			if (traceConditions.handle || hasCookie) {
-				fnLiteral += isAsyncHandler
-					? `let r = await ${handle};\n`
-					: `let r = ${handle};\n`
+		} else if (traceConditions.handle || hasCookie) {
+			fnLiteral += isAsyncHandler
+				? `let r = await ${handle};\n`
+				: `let r = ${handle};\n`
 
-				endHandle()
+			endHandle()
 
-				report('afterHandle')()
+			report('afterHandle')()
 
-				if (hooks.mapResponse.length) {
-					fnLiteral += 'c.response = r'
-					for (let i = 0; i < hooks.mapResponse.length; i++) {
-						fnLiteral += `\nif(mr === undefined) {
+			if (hooks.mapResponse.length) {
+				fnLiteral += 'c.response = r'
+				for (let i = 0; i < hooks.mapResponse.length; i++) {
+					fnLiteral += `\nif(mr === undefined) {
 							mr = onMapResponse[${i}](c)
 							if(mr instanceof Promise) mr = await mr
     						if(mr !== undefined) r = c.response = mr
 						}\n`
-					}
 				}
-
-				fnLiteral += encodeCookie
-
-				if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-				else fnLiteral += `return mapCompactResponse(r)\n`
-			} else {
-				endHandle()
-
-				const handled = isAsyncHandler ? `await ${handle}` : handle
-
-				report('afterHandle')()
-
-				if (handler instanceof Response)
-					fnLiteral += `return ${handle}.clone()\n`
-				else if (hasSet)
-					fnLiteral += `return mapResponse(${handled}, c.set)\n`
-				else fnLiteral += `return mapCompactResponse(${handled})\n`
 			}
+
+			fnLiteral += encodeCookie
+
+			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+			else fnLiteral += `return mapCompactResponse(r)\n`
+		} else {
+			endHandle()
+
+			const handled = isAsyncHandler ? `await ${handle}` : handle
+
+			report('afterHandle')()
+
+			if (handler instanceof Response)
+				fnLiteral += `return ${handle}.clone()\n`
+			else if (hasSet)
+				fnLiteral += `return mapResponse(${handled}, c.set)\n`
+			else fnLiteral += `return mapCompactResponse(${handled})\n`
 		}
 	}
 
@@ -1615,9 +1601,7 @@ export const composeGeneralHandler = (
 
 	return ${maybeAsync ? 'async' : ''} function map(request) {\n`
 
-	if(app.event.request.length)
-		fnLiteral += `let re`
-
+	if (app.event.request.length) fnLiteral += `let re`
 
 	const traceLiteral = app.event.trace.map((x) => x.toString())
 	const report = createReport({
@@ -1682,8 +1666,7 @@ export const composeGeneralHandler = (
 
 				endUnit()
 
-				if(withReturn)
-					fnLiteral += `if(re !== undefined) return re\n`
+				fnLiteral += `if(re !== undefined) return re\n`
 			} else {
 				fnLiteral += `${
 					maybeAsync ? 'await' : ''
