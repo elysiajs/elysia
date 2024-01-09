@@ -1,3 +1,14 @@
+# 0.7.31 - 9 Dec 2023
+Improvement:
+- [#345](https://github.com/elysiajs/elysia/pull/345) add font to `SchemaOptions`
+- Update `@types/cookie` to `^0.6.0`
+
+Bug fix:
+- [#338](https://github.com/elysiajs/elysia/pull/338) guard sandbox did not inherit global config.
+- [#330](https://github.com/elysiajs/elysia/pull/330) preserve query params for mounted handler
+- [#332](https://github.com/elysiajs/elysia/pull/332) reexport TSchema from typebox
+- [#319](https://github.com/elysiajs/elysia/pull/319) TypeBox Ref error when using Elysia.group()
+
 # 0.7.30 - 5 Dec 2023
 Bug fix:
 - Emergency release override latest beta
