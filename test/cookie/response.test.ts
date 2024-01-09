@@ -94,27 +94,6 @@ describe('Cookie Response', () => {
 		])
 	})
 
-	it('skip duplicate cookie value', async () => {
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
-
-		expect(getCookies(response)).toEqual([])
-	})
-
 	it('write cookie on difference value', async () => {
 		const response = await app.handle(
 			req('/council', {
@@ -134,7 +113,7 @@ describe('Cookie Response', () => {
 		)
 
 		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]'
+			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
 		])
 	})
 

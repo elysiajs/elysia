@@ -1,9 +1,13 @@
-// @ts-ignore
 import { parse } from 'cookie'
-import type { Context } from './context'
 
-import { isNumericString, unsignCookie } from './utils'
+// @ts-ignore
+import decodeURIComponent from 'fast-decode-uri-component'
+
+import { unsignCookie, isNumericString } from './utils'
 import { InvalidCookieSignature } from './error'
+
+import type { Context } from './context'
+import type { Prettify } from './types'
 
 export interface CookieOptions {
 	/**
@@ -102,73 +106,129 @@ export interface CookieOptions {
 	secrets?: string | string[]
 }
 
-type MutateCookie<T = unknown> = CookieOptions & {
-	value?: T
-} extends infer A
-	? A | ((previous: A) => A)
-	: never
+export type ElysiaCookie = Prettify<
+	CookieOptions & {
+		value?: unknown
+	}
+>
 
-type CookieJar = Record<string, Cookie>
+type Updater<T> = T | ((value: T) => T)
 
-export class Cookie<T = unknown> implements CookieOptions {
-	public name: string | undefined
-	private setter: Context['set'] | undefined
-
+export class Cookie<T> implements ElysiaCookie {
 	constructor(
-		private _value: T,
-		public property: Readonly<CookieOptions> = {}
+		private name: string,
+		private jar: Record<string, ElysiaCookie>,
+		private initial: Partial<ElysiaCookie> = {}
 	) {}
 
-	get() {
-		return this._value
+	get cookie() {
+		if (!(this.name in this.jar)) return this.initial
+
+		return this.jar[this.name]
+	}
+
+	set cookie(jar: ElysiaCookie) {
+		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
+
+		this.jar[this.name] = jar
 	}
 
 	get value(): T {
-		return this._value as any
+		return this.cookie.value as T
 	}
 
 	set value(value: T) {
-		if (typeof value === 'object') {
-			if (JSON.stringify(this.value) === JSON.stringify(value)) return
-		} else if (this.value === value) return
+		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
 
-		this._value = value as any
-
-		this.sync()
+		this.jar[this.name].value = value
 	}
 
-	add<T>(config: MutateCookie<T>): Cookie<T> {
-		const updated = Object.assign(
-			this.property,
-			typeof config === 'function'
-				? config(Object.assign(this.property, this.value) as any)
-				: config
+	get expires() {
+		return this.cookie.expires
+	}
+
+	set expires(expires) {
+		this.cookie.expires = expires
+	}
+
+	get maxAge() {
+		return this.cookie.maxAge
+	}
+
+	set maxAge(maxAge) {
+		this.cookie.maxAge = maxAge
+	}
+
+	get domain() {
+		return this.cookie.domain
+	}
+
+	set domain(domain) {
+		this.cookie.domain = domain
+	}
+
+	get path() {
+		return this.cookie.path
+	}
+
+	set path(path) {
+		this.cookie.path = path
+	}
+
+	get secure() {
+		return this.cookie.secure
+	}
+
+	set secure(secure) {
+		this.cookie.secure = secure
+	}
+
+	get httpOnly() {
+		return this.cookie.httpOnly
+	}
+
+	set httpOnly(httpOnly) {
+		this.cookie.httpOnly = httpOnly
+	}
+
+	get sameSite() {
+		return this.cookie.sameSite
+	}
+
+	set sameSite(sameSite) {
+		this.cookie.sameSite = sameSite
+	}
+
+	get priority() {
+		return this.cookie.priority
+	}
+
+	set priority(priority) {
+		this.cookie.priority = priority
+	}
+
+	get secrets() {
+		return this.cookie.secrets
+	}
+
+	set secrets(secrets) {
+		this.cookie.secrets = secrets
+	}
+
+	update(config: Updater<Partial<ElysiaCookie>>) {
+		this.cookie = Object.assign(
+			this.cookie,
+			typeof config === 'function' ? config(this.cookie) : config
 		)
 
-		if ('value' in updated) {
-			this._value = updated.value as any
-
-			delete updated.value
-		}
-
-		this.property = updated
-		return this.sync() as any
+		return this
 	}
 
-	set<T>(config: MutateCookie): Cookie<T> {
-		const updated =
-			typeof config === 'function'
-				? config(Object.assign(this.property, this.value) as any)
-				: config
+	set(config: Updater<Partial<ElysiaCookie>>) {
+		this.cookie =
+			typeof config === 'function' ? config(this.cookie) : config
 
-		if ('value' in updated) {
-			this._value = updated.value as any
-
-			delete updated.value
-		}
-
-		this.property = updated
-		return this.sync() as any
+		return this
 	}
 
 	remove(
@@ -183,120 +243,10 @@ export class Cookie<T = unknown> implements CookieOptions {
 			path: options?.path,
 			sameSite: options?.sameSite,
 			secure: options?.secure,
-			value: '' as any
+			value: ''
 		})
-	}
 
-	get domain() {
-		return this.property.domain
-	}
-
-	set domain(value) {
-		// @ts-ignore
-		if (this.property.domain === value) return
-
-		// @ts-ignore
-		this.property.domain = value
-
-		this.sync()
-	}
-
-	get expires() {
-		return this.property.expires
-	}
-
-	set expires(value) {
-		// @ts-ignore
-		if (this.property.expires?.getTime() === value?.getTime()) return
-
-		// @ts-ignore
-		this.property.expires = value
-
-		this.sync()
-	}
-
-	get httpOnly() {
-		return this.property.httpOnly
-	}
-
-	set httpOnly(value) {
-		// @ts-ignore
-		if (this.property.domain === value) return
-
-		// @ts-ignore
-		this.property.httpOnly = value
-
-		this.sync()
-	}
-
-	get maxAge() {
-		return this.property.maxAge
-	}
-
-	set maxAge(value) {
-		// @ts-ignore
-		if (this.property.maxAge === value) return
-
-		// @ts-ignore
-		this.property.maxAge = value
-
-		this.sync()
-	}
-
-	get path() {
-		return this.property.path
-	}
-
-	set path(value) {
-		// @ts-ignore
-		if (this.property.path === value) return
-
-		// @ts-ignore
-		this.property.path = value
-
-		this.sync()
-	}
-
-	get priority() {
-		return this.property.priority
-	}
-
-	set priority(value) {
-		// @ts-ignore
-		if (this.property.priority === value) return
-
-		// @ts-ignore
-		this.property.priority = value
-
-		this.sync()
-	}
-
-	get sameSite() {
-		return this.property.sameSite
-	}
-
-	set sameSite(value) {
-		// @ts-ignore
-		if (this.property.sameSite === value) return
-
-		// @ts-ignore
-		this.property.sameSite = value
-
-		this.sync()
-	}
-
-	get secure() {
-		return this.property.secure
-	}
-
-	set secure(value) {
-		// @ts-ignore
-		if (this.property.secure === value) return
-
-		// @ts-ignore
-		this.property.secure = value
-
-		this.sync()
+		return this
 	}
 
 	toString() {
@@ -304,63 +254,32 @@ export class Cookie<T = unknown> implements CookieOptions {
 			? JSON.stringify(this.value)
 			: this.value?.toString() ?? ''
 	}
-
-	private sync() {
-		if (!this.name || !this.setter) return this
-
-		if (!this.setter.cookie)
-			this.setter.cookie = {
-				[this.name]: Object.assign(this.property, {
-					value: this.toString()
-				})
-			}
-		else
-			this.setter.cookie[this.name] = Object.assign(this.property, {
-				value: this.toString()
-			})
-
-		return this
-	}
 }
 
 export const createCookieJar = (
-	initial: CookieJar,
 	set: Context['set'],
-	properties?: CookieOptions
-) =>
-	new Proxy(initial as CookieJar, {
-		get(target, key: string) {
-			if (key in target) return target[key]
+	store: Record<string, ElysiaCookie>,
+	initial?: Partial<ElysiaCookie>
+): Record<string, Cookie<unknown>> => {
+	if (!set.cookie) set.cookie = {}
 
-			// @ts-ignore
-			const cookie = new Cookie(
-				undefined,
-				properties ? { ...properties } : undefined
+	return new Proxy(store, {
+		get(_, key: string) {
+			if (key in store)
+				return new Cookie(
+					key,
+					set.cookie as Record<string, ElysiaCookie>,
+					Object.assign({}, initial ?? {}, store[key])
+				)
+
+			return new Cookie(
+				key,
+				set.cookie as Record<string, ElysiaCookie>,
+				Object.assign({}, initial)
 			)
-			// @ts-ignore
-			cookie.setter = set
-			cookie.name = key
-
-			// @ts-ignore
-			return cookie
-		},
-		set(target, key: string, value) {
-			if (!(value instanceof Cookie)) return false
-
-			if (!set.cookie) set.cookie = {}
-
-			// @ts-ignore
-			value.setter = set
-			value.name = key
-
-			// @ts-ignore
-			value.sync()
-
-			target[key] = value
-
-			return true
 		}
-	})
+	}) as Record<string, Cookie<unknown>>
+}
 
 export const parseCookie = async (
 	set: Context['set'],
@@ -368,83 +287,88 @@ export const parseCookie = async (
 	{
 		secret,
 		sign,
-		...properties
+		...initial
 	}: CookieOptions & {
 		secret?: string | string[]
 		sign?: true | string | string[]
 	} = {}
 ) => {
-	if (!cookieString) return createCookieJar({}, set, properties)
+	if (!cookieString) return createCookieJar(set, {}, initial)
 
-	const jar: CookieJar = {}
 	const isStringKey = typeof secret === 'string'
-
 	if (sign && sign !== true && !Array.isArray(sign)) sign = [sign]
 
-	const cookieKeys = Object.keys(parse(cookieString))
-	for (let i = 0; i < cookieKeys.length; i++) {
-		const key = cookieKeys[i]
-		let value = parse(cookieString)[key]
+	const jar: Record<string, ElysiaCookie> = {}
 
-		if (sign === true || sign?.includes(key)) {
+	const cookies = parse(cookieString)
+	for (const [name, v] of Object.entries(cookies)) {
+		let value = decodeURIComponent(v)
+
+		if (sign === true || sign?.includes(name)) {
 			if (!secret)
 				throw new Error('No secret is provided to cookie plugin')
 
 			if (isStringKey) {
-				// @ts-ignore
-				value = await unsignCookie(value as string, secret)
+				const temp = await unsignCookie(value as string, secret)
+				if (temp === false) throw new InvalidCookieSignature(name)
 
-				// @ts-ignore
-				if (value === false) throw new InvalidCookieSignature(key)
+				value = temp
 			} else {
-				let fail = true
+				let decoded = true
 				for (let i = 0; i < secret.length; i++) {
 					const temp = await unsignCookie(value as string, secret[i])
 
 					if (temp !== false) {
+						decoded = true
 						value = temp
-						fail = false
 						break
 					}
 				}
 
-				if (fail) throw new InvalidCookieSignature(key)
+				if (!decoded) throw new InvalidCookieSignature(name)
 			}
 		}
 
-		if (value === undefined) continue
-
-		const start = (value as string).charCodeAt(0)
+		const start = value.charCodeAt(0)
 		if (start === 123 || start === 91)
 			try {
-				const cookie = new Cookie(JSON.parse(value as string))
-
-				// @ts-ignore
-				cookie.setter = set
-				cookie.name = key
-
-				jar[key] = cookie
+				jar[name] = {
+					value: JSON.parse(value)
+				}
 
 				continue
 			} catch {
-				// Not empty
+				// ignore
 			}
 
-		// @ts-ignore
-		if (isNumericString(value)) value = +value
-		// @ts-ignore
-		else if (value === 'true') value = true
-		// @ts-ignore
-		else if (value === 'false') value = false
+		if (isNumericString(value)) {
+			jar[name] = {
+				value: parseInt(value)
+			}
 
-		const cookie = new Cookie(value, properties)
+			continue
+		}
 
-		// @ts-ignore
-		cookie.setter = set
-		cookie.name = key
+		if (value === 'true') {
+			jar[name] = {
+				value: true
+			}
 
-		jar[key] = cookie
+			continue
+		}
+
+		if (value === 'false') {
+			jar[name] = {
+				value: false
+			}
+
+			continue
+		}
+
+		jar[name] = {
+			value
+		}
 	}
 
-	return createCookieJar(jar, set)
+	return createCookieJar(set, jar, initial)
 }

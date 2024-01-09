@@ -8,7 +8,7 @@ const create = () => {
 		headers: {}
 	}
 
-	const cookie = createCookieJar({}, set)
+	const cookie = createCookieJar(set, {})
 
 	return {
 		cookie,
@@ -19,7 +19,7 @@ const create = () => {
 describe('Explicit Cookie', () => {
 	it('create cookie', () => {
 		const { cookie, set } = create()
-		cookie.name = new Cookie('himari')
+		cookie.name.value = 'himari'
 
 		expect(set.cookie?.name).toEqual({
 			value: 'himari'
@@ -28,9 +28,9 @@ describe('Explicit Cookie', () => {
 
 	it('add cookie attribute', () => {
 		const { cookie, set } = create()
-		cookie.name = new Cookie('himari')
+		cookie.name.value = 'himari'
 
-		cookie.name.add({
+		cookie.name.update({
 			domain: 'millennium.sh'
 		})
 
@@ -42,9 +42,10 @@ describe('Explicit Cookie', () => {
 
 	it('add cookie attribute without overwrite entire property', () => {
 		const { cookie, set } = create()
-		cookie.name = new Cookie('himari', {
-			domain: 'millennium.sh'
-		}).add({
+		cookie.name.value = 'himari'
+		cookie.name.domain = 'millennium.sh'
+
+		cookie.name.update({
 			httpOnly: true,
 			path: '/'
 		})
@@ -59,9 +60,8 @@ describe('Explicit Cookie', () => {
 
 	it('set cookie attribute', () => {
 		const { cookie, set } = create()
-		cookie.name = new Cookie('himari', {
-			domain: 'millennium.sh'
-		})
+		cookie.name.value = 'himari'
+		cookie.name.domain = 'millennium.sh'
 
 		cookie.name.set({
 			httpOnly: true,
@@ -69,7 +69,6 @@ describe('Explicit Cookie', () => {
 		})
 
 		expect(set.cookie?.name).toEqual({
-			value: 'himari',
 			httpOnly: true,
 			path: '/'
 		})
@@ -77,10 +76,13 @@ describe('Explicit Cookie', () => {
 
 	it('add cookie overwrite attribute if duplicated', () => {
 		const { cookie, set } = create()
-		cookie.name = new Cookie('aru', {
+		cookie.name.set({
+			value: 'aru',
 			domain: 'millennium.sh',
 			httpOnly: true
-		}).add({
+		})
+
+		cookie.name.update({
 			domain: 'gehenna.sh'
 		})
 
@@ -91,25 +93,24 @@ describe('Explicit Cookie', () => {
 		})
 	})
 
-	it('create cookie with empty string', () => {
+	it('default undefined cookie with undefined', () => {
 		const { cookie, set } = create()
-		cookie.name = new Cookie('')
+		cookie.name
 
-		expect(set.cookie?.name).toEqual({ value: '' })
+		expect(cookie?.name?.value).toEqual(undefined)
 	})
 
 	it('overwrite existing cookie', () => {
 		const { cookie, set } = create()
-		cookie.name = new Cookie('aru')
-		cookie.name = new Cookie('himari')
+		cookie.name.value = 'aru'
+		cookie.name.value = 'himari'
 
 		expect(set.cookie?.name).toEqual({ value: 'himari' })
 	})
 
 	it('remove cookie without options', () => {
 		const { cookie, set } = create()
-
-		cookie.name = new Cookie('himari')
+		cookie.name.value = 'himari'
 		cookie.name.remove()
 
 		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
@@ -120,7 +121,7 @@ describe('Explicit Cookie', () => {
 	it('remove cookie with options', () => {
 		const { cookie, set } = create()
 
-		cookie.name = new Cookie('himari')
+		cookie.name.value = 'himari'
 		cookie.name.remove({
 			path: '/',
 			domain: 'elysiajs.com',

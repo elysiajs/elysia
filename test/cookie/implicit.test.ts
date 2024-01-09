@@ -8,7 +8,7 @@ const create = () => {
 		headers: {}
 	}
 
-	const cookie = createCookieJar({}, set)
+	const cookie = createCookieJar(set, {})
 
 	return {
 		cookie,
@@ -67,7 +67,7 @@ describe('Implicit Cookie', () => {
 		} = create()
 
 		name.value = 'himari'
-		name.add({
+		name.update({
 			domain: 'millennium.sh'
 		})
 
@@ -86,7 +86,7 @@ describe('Implicit Cookie', () => {
 		name.set({
 			value: 'himari',
 			domain: 'millennium.sh'
-		}).add({
+		}).update({
 			httpOnly: true,
 			path: '/'
 		})
@@ -114,7 +114,6 @@ describe('Implicit Cookie', () => {
 		})
 
 		expect(set.cookie?.name).toEqual({
-			value: 'himari',
 			httpOnly: true,
 			path: '/'
 		})
@@ -130,7 +129,7 @@ describe('Implicit Cookie', () => {
 			value: 'aru',
 			domain: 'millennium.sh',
 			httpOnly: true
-		}).add({
+		}).update({
 			domain: 'gehenna.sh'
 		})
 

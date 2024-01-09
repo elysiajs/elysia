@@ -1,6 +1,5 @@
-import { HTTPStatusName } from './utils'
-
-import { Cookie, type CookieOptions } from './cookie'
+import type { HTTPStatusName } from './utils'
+import type { Cookie, CookieOptions, ElysiaCookie } from './cookie'
 
 type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>
@@ -56,14 +55,7 @@ export type Context<
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<
-				string,
-				Prettify<
-					{
-						value: string
-					} & CookieOptions
-				>
-			>
+			cookie?: Record<string, ElysiaCookie>
 		}
 
 		path: string

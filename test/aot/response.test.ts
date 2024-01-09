@@ -76,27 +76,6 @@ describe('Dynamic Cookie Response', () => {
 		])
 	})
 
-	it('skip duplicate cookie value', async () => {
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
-
-		expect(getCookies(response)).toEqual([])
-	})
-
 	it('write cookie on difference value', async () => {
 		const response = await app.handle(
 			req('/council', {

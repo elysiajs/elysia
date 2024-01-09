@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import { cookieToHeader } from '../../src/handler'
+import { serializeCookie } from '../../src/handler'
 
 describe('Cookie to Header', () => {
 	it('return undefined on empty object', () => {
 		const cookies = {}
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
@@ -14,7 +14,7 @@ describe('Cookie to Header', () => {
 				value: 'value1'
 			}
 		}
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toEqual('cookie1=value1')
 	})
 
@@ -26,40 +26,40 @@ describe('Cookie to Header', () => {
 		}
 
 		// @ts-ignore
-		const result = cookieToHeader(cookies)
-		expect(result).toEqual(['cookie1=value1', 'cookie1=value2'])
+		const result = serializeCookie(cookies)
+		expect(result).toEqual('cookie1=%5B%22value1%22%2C%22value2%22%5D')
 	})
 
 	it('return undefined when the input is undefined', () => {
 		const cookies = undefined
 		// @ts-ignore
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is null', () => {
 		const cookies = null
 		// @ts-ignore
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is not an object', () => {
 		const cookies = 'invalid'
 		// @ts-ignore
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is an empty object', () => {
 		const cookies = {}
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is an empty object', () => {
 		const cookies = {}
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
@@ -70,13 +70,13 @@ describe('Cookie to Header', () => {
 		}
 
 		// @ts-ignore
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is an empty object', () => {
 		const cookies = {}
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
@@ -88,32 +88,32 @@ describe('Cookie to Header', () => {
 			key4: [1, 2, 3]
 		}
 		// @ts-ignore
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is an empty object', () => {
 		const cookies = {}
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is an empty object', () => {
 		const cookies = {}
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is an empty object', () => {
 		const cookies = {}
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 
 	it('return undefined when the input is an object with non-string keys', () => {
 		const cookies = { 1: 'value1', 2: 'value2' }
 		// @ts-ignore
-		const result = cookieToHeader(cookies)
+		const result = serializeCookie(cookies)
 		expect(result).toBeUndefined()
 	})
 })

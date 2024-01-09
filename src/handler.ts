@@ -1,11 +1,11 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-// @ts-ignore
 import { serialize } from 'cookie'
 import { StatusMap } from './utils'
 
-import type { Context } from './context'
 import { Cookie } from './cookie'
 import { ELYSIA_RESPONSE } from './error'
+
+import type { Context } from './context'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -18,6 +18,7 @@ export const isNotEmpty = (obj: Object) => {
 
 	return false
 }
+/** */
 
 const handleFile = (response: File | Blob, set?: Context['set']) => {
 	const size = response.size
@@ -62,7 +63,7 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 }
 
 export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
-	if (!headers || !Array.isArray(setCookie)) return headers
+	if (!headers) return headers
 
 	headers.delete('Set-Cookie')
 
@@ -78,32 +79,24 @@ export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 	return headers
 }
 
-export const cookieToHeader = (cookies: Context['set']['cookie']) => {
-	if (!cookies || typeof cookies !== 'object' || !isNotEmpty(cookies))
-		return undefined
+export const serializeCookie = (cookies: Context['set']['cookie']) => {
+	if (!cookies || !isNotEmpty(cookies)) return undefined
 
 	const set: string[] = []
 
 	for (const [key, property] of Object.entries(cookies)) {
 		if (!key || !property) continue
 
-		if (Array.isArray(property.value)) {
-			for (let i = 0; i < property.value.length; i++) {
-				let value = property.value[i]
-				if (value === undefined || value === null) continue
+		const value = property.value
+		if (value === undefined || value === null) continue
 
-				if (typeof value === 'object') value = JSON.stringify(value)
-
-				set.push(serialize(key, value, property))
-			}
-		} else {
-			let value = property.value
-			if (value === undefined || value === null) continue
-
-			if (typeof value === 'object') value = JSON.stringify(value)
-
-			set.push(serialize(key, property.value, property))
-		}
+		set.push(
+			serialize(
+				key,
+				typeof value === 'object' ? JSON.stringify(value) : value + '',
+				property
+			)
+		)
 	}
 
 	if (set.length === 0) return undefined
@@ -144,7 +137,7 @@ export const mapResponse = (
 		}
 
 		if (set.cookie && isNotEmpty(set.cookie))
-			set.headers['Set-Cookie'] = cookieToHeader(set.cookie)
+			set.headers['Set-Cookie'] = serializeCookie(set.cookie)
 
 		if (
 			set.headers['Set-Cookie'] &&
@@ -350,7 +343,7 @@ export const mapEarlyResponse = (
 		}
 
 		if (set.cookie && isNotEmpty(set.cookie))
-			set.headers['Set-Cookie'] = cookieToHeader(set.cookie)
+			set.headers['Set-Cookie'] = serializeCookie(set.cookie)
 
 		if (
 			set.headers['Set-Cookie'] &&

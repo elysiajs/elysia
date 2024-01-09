@@ -377,8 +377,6 @@ export default class Elysia<
 									).concat(fn)
 								}
 							}
-
-							return
 						} else {
 							if (!localHook[stackName]) localHook[stackName] = []
 							if (typeof localHook[stackName] === 'function')
@@ -400,8 +398,6 @@ export default class Elysia<
 										localHook[stackName].concat(fn)
 								}
 							}
-
-							return
 						}
 					}
 
