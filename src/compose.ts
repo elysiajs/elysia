@@ -702,6 +702,7 @@ export const composeHandler = ({
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.headers.cookie, ${options})\n`
 		else
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
+		
 	}
 
 	const hasQuery =
@@ -1134,9 +1135,9 @@ export const composeHandler = ({
 				${composeValidation('cookie', 'cookieValue')}
 			}`
 
-			// @ts-ignore
-			if (hasTransform(validator.cookie.schema))
-				fnLiteral += `\nc.cookie = params.Decode(c.cookie)\n`
+			// // @ts-ignore
+			// if (hasTransform(validator.cookie.schema))
+			// 	fnLiteral += `\nc.cookie = params.Decode(c.cookie)\n`
 		}
 	}
 
