@@ -573,7 +573,7 @@ export const traceBackMacro = (
 	property: Record<string, unknown>,
 	hooks = property
 ) => {
-	for (const [key, value] of Object.entries(property)) {
+	for (const [key, value] of Object.entries(property ?? {})) {
 		if (primitiveHooks.includes(key as any) || !(key in extension)) continue
 
 		if (typeof extension[key] === 'function') {

@@ -1,20 +1,26 @@
-import { Elysia, error, t } from '../src'
+import { Elysia, t } from '../src'
+import { parseCookie } from '../src/cookie'
 import { req } from '../test/utils'
 
-const app = new Elysia().group('inbox', (app) =>
-	app.ws('join', {
-		body: t.Object({
-			inboxId: t.String()
-		}),
-		message(ws, { inboxId }) {
-			ws.send(inboxId)
+const app = new Elysia({ name: 'macro' })
+	.macro(({ onBeforeHandle }) => {
+		return {
+			user: (type?: 'signed-in' | 'signed-out') => {
+				onBeforeHandle(() => {
+					return ':)'
+				})
+			}
 		}
 	})
-).listen(3000)
+	.get(
+		'/',
+		() => {
+			return 'I fail at runtime but not static checks'
+		},
+		{
+			user: 'signed-in'
+		}
+	)
+	.listen(3000)
 
-// const response = await app.handle(req('/a')).then((x) => x.text())
-// console.log(response)
-
-console.log(
-	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-)
+// console.log(app.routes[0].composed?.toString())
