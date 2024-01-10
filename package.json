@@ -135,7 +135,7 @@
     "@types/cookie": "^0.6.0",
     "@typescript-eslint/eslint-plugin": "^6.7.2",
     "@typescript-eslint/parser": "^6.7.2",
-    "bun-types": "1.0.18",
+    "bun-types": "1.0.22",
     "eslint": "^8.49.0",
     "expect-type": "^0.16.0",
     "rimraf": "4.4.1",
