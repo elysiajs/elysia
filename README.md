@@ -6,7 +6,7 @@
 <p align=center>Ergonomic Framework for Humans</p>
 
 <p align=center>
-    <a href=https://elysiajs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a> | <a href=[https://github.com/saltyaom/sponsor](https://github.com/sponsors/SaltyAom)>Sponsors</a>
+    <a href=https://elysiajs.com>Documentation</a> | <a href=https://discord.gg/eaFJ2KDJck>Discord</a> | <a href=https://github.com/sponsors/SaltyAom>Sponsors</a>
 </p>
 
 TypeScript framework supercharged by Bun with End-to-End Type Safety, unified type system, and outstanding developer experience
