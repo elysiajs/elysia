@@ -45,7 +45,7 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError,
+	type InternalServerError
 } from './error'
 
 import type {
@@ -90,6 +90,7 @@ import type {
 	TransformHandler
 } from './types'
 import { t } from './type-system'
+import { createManager } from './ely'
 
 /**
  * ### Elysia Server
@@ -118,7 +119,7 @@ export default class Elysia<
 		error: {}
 	},
 	ParentSchema extends RouteSchema = {},
-	Macro extends Record<string, unknown> = {},
+	Macro extends BaseMacro = {},
 	Routes extends RouteBase = {},
 	Scoped extends boolean = false
 > {
@@ -137,7 +138,7 @@ export default class Elysia<
 
 	schema = {} as Routes
 
-	private macros: ((manager: MacroManager<any, any, any>) => Macro)[] =
+	private macros: ((manager: MacroManager<any, any, any>) => unknown)[] =
 		[] as any
 
 	event: LifeCycleStore = {
@@ -215,12 +216,8 @@ export default class Elysia<
 		if (typeof paths === 'string') paths = [paths]
 
 		for (let path of paths) {
-			path =
-				path === ''
-					? path
-					: path.charCodeAt(0) === 47
-					? path
-					: `/${path}`
+			if (path !== '' && path.charCodeAt(0) !== 47)
+				path = '/' + path
 
 			if (this.config.prefix && !skipPrefix)
 				path = this.config.prefix + path
@@ -323,95 +320,24 @@ export default class Elysia<
 				)
 			} as any
 
-			const globalHook = this.event
-
 			const loosePath = path.endsWith('/')
 				? path.slice(0, path.length - 1)
 				: path + '/'
 
 			if (this.macros.length) {
-				const createManager =
-					(stackName: keyof LifeCycleStore) =>
-					(
-						type:
-							| {
-									insert?: 'before' | 'after'
-									stack?: 'global' | 'local'
-							  }
-							| MaybeArray<Function>,
-						fn?: MaybeArray<Function>
-					) => {
-						if (typeof type === 'function' || Array.isArray(type)) {
-							if (!localHook[stackName]) localHook[stackName] = []
-							if (typeof localHook[stackName] === 'function')
-								localHook[stackName] = [localHook[stackName]]
-
-							if (Array.isArray(type))
-								localHook[stackName] = (
-									localHook[stackName] as unknown[]
-								).concat(type) as any
-							else localHook[stackName].push(type)
-
-							return
-						}
-
-						const { insert = 'after', stack = 'local' } = type
-
-						if (stack === 'global') {
-							if (!Array.isArray(fn)) {
-								if (insert === 'before') {
-									;(globalHook[stackName] as any[]).unshift(
-										fn
-									)
-								} else {
-									;(globalHook[stackName] as any[]).push(fn)
-								}
-							} else {
-								if (insert === 'before') {
-									globalHook[stackName] = fn.concat(
-										globalHook[stackName] as any
-									) as any
-								} else {
-									globalHook[stackName] = (
-										globalHook[stackName] as any[]
-									).concat(fn)
-								}
-							}
-						} else {
-							if (!localHook[stackName]) localHook[stackName] = []
-							if (typeof localHook[stackName] === 'function')
-								localHook[stackName] = [localHook[stackName]]
-
-							if (!Array.isArray(fn)) {
-								if (insert === 'before') {
-									;(localHook[stackName] as any[]).unshift(fn)
-								} else {
-									;(localHook[stackName] as any[]).push(fn)
-								}
-							} else {
-								if (insert === 'before') {
-									localHook[stackName] = fn.concat(
-										localHook[stackName]
-									)
-								} else {
-									localHook[stackName] =
-										localHook[stackName].concat(fn)
-								}
-							}
-						}
-					}
+				const manage = createManager({ globalHook: this.event, localHook })
 
 				const manager: MacroManager = {
 					events: {
-						global: globalHook,
+						global: this.event,
 						local: localHook
 					},
-					onParse: createManager('parse'),
-					onTransform: createManager('transform'),
-					onBeforeHandle: createManager('beforeHandle'),
-					onAfterHandle: createManager('afterHandle'),
-					onResponse: createManager('onResponse'),
-					onError: createManager('error')
+					onParse: manage('parse'),
+					onTransform: manage('transform'),
+					onBeforeHandle: manage('beforeHandle'),
+					onAfterHandle: manage('afterHandle'),
+					onResponse: manage('onResponse'),
+					onError: manage('error')
 				}
 
 				for (const macro of this.macros) {
@@ -443,8 +369,7 @@ export default class Elysia<
 				}
 			}
 
-			const hooks = mergeHook(globalHook, localHook)
-
+			const hooks = mergeHook(this.event, localHook)
 			const isFn = typeof handle === 'function'
 
 			if (this.config.aot === false) {
@@ -490,7 +415,6 @@ export default class Elysia<
 				setHeader: this.setHeaders
 			})
 
-			// @ts-ignore
 			if (!isFn) {
 				const context = Object.assign(
 					{

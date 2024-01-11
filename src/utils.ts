@@ -579,17 +579,21 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 }
 
 export const traceBackMacro = (
-	extension: BaseMacro,
+	extension: unknown,
 	property: Record<string, unknown>,
 	hooks = property
 ) => {
-	for (const [key, value] of Object.entries(property ?? {})) {
+	if(!extension || typeof extension !== "object") return
+
+	for (const [key, value] of Object.entries(property)) {
 		if (primitiveHooks.includes(key as any) || !(key in extension)) continue
 
-		if (typeof extension[key] === 'function') {
-			extension[key](value)
-		} else if (typeof extension[key] === 'object')
-			traceBackMacro(extension[key], value as any, hooks)
+		const v = extension[key as unknown as keyof typeof extension] as BaseMacro[string]
+
+		if (typeof v === 'function') {
+			v(value)
+		} else if (typeof v === 'object')
+			traceBackMacro(v as BaseMacro, value as any, hooks)
 	}
 }
 

@@ -732,15 +732,16 @@ export type Checksum = {
 	}[]
 }
 
-// @ts-ignore
-export type BaseMacro = Record<string, BaseMacro | ((a: any) => unknown)>
+export type BaseMacro = Record<string, Record<string, unknown> | ((a: unknown) => unknown)>
 
 export type MacroToProperty<T extends BaseMacro> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
 			? Params | undefined
 			: T[K]
-		: MacroToProperty<T[K]>
+		: T[K] extends BaseMacro
+		? MacroToProperty<T[K]>
+		: never
 }>
 
 export interface MacroManager<

@@ -39,7 +39,7 @@ describe('Analyzer: separateFunction', () => {
 
 		expect(separateFunction(fnParam.toString())).toEqual([
 			'{ sucrose, amber }',
-			'{\n  return "sucrose";\n}'
+			'{\n      return "sucrose";\n    }'
 		])
 	})
 
@@ -50,7 +50,7 @@ describe('Analyzer: separateFunction', () => {
 
 		expect(separateFunction(fnNoParam.toString())).toEqual([
 			'',
-			'{\n  return "sucrose";\n}'
+			'{\n      return "sucrose";\n    }'
 		])
 	})
 
@@ -61,7 +61,7 @@ describe('Analyzer: separateFunction', () => {
 
 		expect(separateFunction(fnAsync.toString())).toEqual([
 			'sucrose',
-			'{\n  return "sucrose";\n}'
+			'{\n      return "sucrose";\n    }'
 		])
 	})
 })
