@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { separateFunction } from '../../src/analyzer'
+import { separateFunction } from '../../src/sucrose'
 
 describe('Analyzer: separateFunction', () => {
 	it('separate arrowParam', () => {

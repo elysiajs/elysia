@@ -7,6 +7,8 @@ import type { Static, TSchema } from '@sinclair/typebox'
 import { createTraceListener } from './trace'
 import type { Context } from './context'
 
+import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
+
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
@@ -203,6 +205,33 @@ export default class Elysia<
 			this.stack = new Error().stack
 	}
 
+	inference = {
+		cache: {},
+		event: {
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: [],
+			query: false,
+			set: false
+		},
+		trace: {
+			request: false,
+			parse: false,
+			transform: false,
+			handle: false,
+			beforeHandle: false,
+			afterHandle: false,
+			error: false,
+			context: false,
+			store: false,
+			set: false
+		}
+	} as {
+		event: Sucrose.Inference
+		trace: Sucrose.TraceInference
+	}
+
 	private add(
 		method: HTTPMethod,
 		paths: string | Readonly<string[]>,
@@ -216,8 +245,7 @@ export default class Elysia<
 		if (typeof paths === 'string') paths = [paths]
 
 		for (let path of paths) {
-			if (path !== '' && path.charCodeAt(0) !== 47)
-				path = '/' + path
+			if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
 			if (this.config.prefix && !skipPrefix)
 				path = this.config.prefix + path
@@ -325,7 +353,10 @@ export default class Elysia<
 				: path + '/'
 
 			if (this.macros.length) {
-				const manage = createManager({ globalHook: this.event, localHook })
+				const manage = createManager({
+					globalHook: this.event,
+					localHook
+				})
 
 				const manager: MacroManager = {
 					events: {
@@ -401,18 +432,21 @@ export default class Elysia<
 			}
 
 			const mainHandler = composeHandler({
+				app: this,
 				path,
 				method,
+				localHook: mergeHook({}, localHook),
 				hooks,
 				validator,
 				handler: handle,
-				handleError: this.handleError,
-				onRequest: this.event.request,
-				config: this.config,
-				definitions: allowMeta ? this.definitions.type : undefined,
-				schema: allowMeta ? this.schema : undefined,
-				getReporter: () => this.reporter,
-				setHeader: this.setHeaders
+				allowMeta: true
+				// handleError: this.handleError,
+				// onRequest: this.event.request,
+				// config: this.config,
+				// definitions: allowMeta ? this.definitions.type : undefined,
+				// schema: allowMeta ? this.schema : undefined,
+				// getReporter: () => this.reporter,
+				// setHeader: this.setHeaders
 			})
 
 			if (!isFn) {
@@ -1110,6 +1144,22 @@ export default class Elysia<
 		type: Exclude<Event, 'onResponse'> | 'response',
 		handlers: MaybeArray<Extract<LifeCycleStore[Event], Function[]>[0]>
 	) {
+		if (type === 'response')
+			// @ts-ignore
+			type = 'onResponse'
+
+		if (!Array.isArray(handlers)) handlers = [handlers]
+
+		if (type === 'trace')
+			sucroseTrace(handlers as TraceHandler[], this.inference.trace)
+		else
+			sucrose(
+				{
+					[type]: handlers
+				},
+				this.inference.event
+			)
+
 		for (let handler of Array.isArray(handlers) ? handlers : [handlers]) {
 			handler = asGlobal(handler)
 
@@ -1146,7 +1196,7 @@ export default class Elysia<
 					this.event.mapResponse.push(handler as any)
 					break
 
-				case 'response':
+				case 'onResponse':
 					this.event.onResponse.push(handler as any)
 					break
 
@@ -3912,10 +3962,10 @@ export default class Elysia<
 		this.compile()
 
 		if (typeof options === 'string') {
-			options = +options.trim()
-
-			if (Number.isNaN(options))
+			if(!isNumericString(options)) 
 				throw new Error('Port must be a numeric value')
+
+			options = parseInt(options)
 		}
 
 		const fetch = this.fetch

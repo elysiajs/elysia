@@ -29,15 +29,12 @@ import { CookieOptions, parseCookie } from './cookie'
 
 import type {
 	ComposedHandler,
-	ElysiaConfig,
 	Handler,
 	LifeCycleStore,
-	PreHandler,
 	SchemaValidator,
-	TraceEvent,
-	TraceReporter
+	TraceEvent
 } from './types'
-import { sucrose, sucroseTrace } from './analyzer'
+import { sucrose } from './sucrose'
 
 const headersHasToJSON = new Headers().toJSON
 const requestId = { value: 0 }
@@ -326,70 +323,55 @@ export const isAsync = (fn: Function) => {
 }
 
 export const composeHandler = ({
+	app,
 	path,
 	method,
+	localHook,
 	hooks,
 	validator,
 	handler,
-	handleError,
-	definitions,
-	schema,
-	onRequest,
-	config,
-	getReporter,
-	setHeader
+	allowMeta = false
 }: {
+	app: Elysia<any, any, any, any, any, any, any>
 	path: string
 	method: string
 	hooks: LifeCycleStore
+	localHook: LifeCycleStore
 	validator: SchemaValidator
 	handler: unknown | Handler<any, any>
-	handleError: Elysia['handleError']
-	definitions?: Elysia['definitions']['type']
-	schema?: Elysia['schema']
-	onRequest: PreHandler<any, any>[]
-	config: ElysiaConfig<any>
-	getReporter: () => TraceReporter
-	setHeader: Object | undefined
+	allowMeta?: boolean
 }): ComposedHandler => {
 	const hasErrorHandler =
-		config.forceErrorEncapsulation ||
+		app.config.forceErrorEncapsulation ||
 		hooks.error.length > 0 ||
+		app.event.error.length > 0 ||
 		typeof Bun === 'undefined' ||
+		app.onResponse.length > 0 ||
 		hooks.onResponse.length > 0 ||
 		!!hooks.trace.length
 
 	const isHandleFn = typeof handler === 'function'
 	const handle = isHandleFn ? `handler(c)` : `handler`
-
 	const handleResponse = hooks.onResponse.length
 		? `\n;(async () => {${hooks.onResponse
 				.map((_, i) => `await res${i}(c)`)
 				.join(';')}})();\n`
 		: ''
 
-	const traceInference = sucroseTrace(hooks.trace)
-
 	const traceConditions: Record<
 		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response' | 'exit'>,
 		boolean
-	> = {
-		parse: traceInference.parse,
-		transform: traceInference.transform,
-		handle: traceInference.handle,
-		beforeHandle: traceInference.beforeHandle,
-		afterHandle: traceInference.afterHandle,
-		error: traceInference.error
-	}
+	> = app.inference.trace
 
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
 
-	const inference = sucrose({
-		handler: handler as any,
-		...hooks,
-		request: onRequest
-	})
+	const inference = sucrose(
+		Object.assign(localHook, {
+			handler: handler as any
+		}),
+		app.inference.event
+	)
 
 	const hasQuery = inference.query || !!validator.query
 
@@ -399,10 +381,13 @@ export const composeHandler = ({
 		hooks.type !== 'none' &&
 		(inference.body || !!validator.body)
 
+	// @ts-ignore private
+	const setHeaders = app.setHeaders
+
 	const hasHeaders =
 		inference.headers ||
 		validator.headers ||
-		(setHeader && !!Object.keys(setHeader).length)
+		(setHeaders && !!Object.keys(setHeaders).length)
 
 	const hasCookie = inference.cookie || !!validator.cookie
 
@@ -550,8 +535,9 @@ export const composeHandler = ({
 		}
 	}
 
-	const hasTraceSet = traceInference.set
-	const hasSet = inference.cookie || inference.set || hasTraceSet || hasHeaders
+	const hasTraceSet = app.inference.trace.set
+	const hasSet =
+		inference.cookie || inference.set || hasTraceSet || hasHeaders
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
@@ -1279,7 +1265,7 @@ export const composeHandler = ({
 		${hooks.afterHandle.length ? 'let af' : ''}
 		${hooks.mapResponse.length ? 'let mr' : ''}
 
-		${schema && definitions ? 'c.schema = schema; c.defs = definitions;' : ''}
+		${allowMeta ? 'c.schema = schema; c.defs = definitions' : ''}
 		${fnLiteral}
 	}`
 
@@ -1291,7 +1277,8 @@ export const composeHandler = ({
 		handler,
 		hooks,
 		validator,
-		handleError,
+		// @ts-ignore
+		handleError: app.handleError,
 		utils: {
 			mapResponse,
 			mapCompactResponse,
@@ -1303,10 +1290,11 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		schema,
-		definitions,
+		schema: app.schema,
+		// @ts-ignore
+		definitions: app.definitions.type,
 		ERROR_CODE,
-		getReporter,
+		getReporter: () => app.reporter,
 		requestId,
 		parseCookie,
 		signCookie,
@@ -1317,7 +1305,9 @@ export const composeHandler = ({
 export const composeGeneralHandler = (
 	app: Elysia<any, any, any, any, any, any>
 ) => {
-	const inference = sucroseTrace(app.event.trace)
+	const t1 = performance.now()
+
+	const inference = app.inference.trace
 
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
@@ -1549,7 +1539,6 @@ export const composeGeneralHandler = (
 	app.handleError = handleError
 
 	// console.log(fnLiteral)
-
 	return Function(
 		'data',
 		fnLiteral

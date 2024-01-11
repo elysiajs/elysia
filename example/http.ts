@@ -2,7 +2,7 @@ import { Elysia, t } from '../src'
 
 const t1 = performance.now()
 const loggerPlugin = new Elysia()
-	.get('/hi', () => 'Hi')
+	// .get('/hi', () => 'Hi')
 	.decorate('log', () => 'A')
 	.decorate('date', () => new Date())
 	.state('fromPlugin', 'From Logger')
