@@ -37,10 +37,9 @@ import type {
 	TraceEvent,
 	TraceReporter
 } from './types'
+import { sucrose, sucroseTrace } from './analyzer'
 
 const headersHasToJSON = new Headers().toJSON
-const findAliases = new RegExp(` (\\w+) = context`, 'g')
-
 const requestId = { value: 0 }
 
 const createReport = ({
@@ -184,133 +183,6 @@ ${name}
 	}
 })
 
-export const isFnUse = (keyword: string, fnLiteral: string) => {
-	if (fnLiteral.startsWith('[object ')) return false
-
-	fnLiteral = fnLiteral.trimStart()
-	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
-
-	if (/^(\w+)\(/g.test(fnLiteral))
-		fnLiteral = fnLiteral.slice(fnLiteral.indexOf('('))
-
-	const argument =
-		// CharCode 40 is '('
-		fnLiteral.charCodeAt(0) === 40 || fnLiteral.startsWith('function')
-			? // Bun: (context) => {}
-			  fnLiteral.slice(
-					fnLiteral.indexOf('(') + 1,
-					fnLiteral.indexOf(')')
-			  )
-			: // Node: context => {}
-			  fnLiteral.slice(0, fnLiteral.indexOf('=') - 1)
-
-	if (argument === '') return false
-
-	const restIndex =
-		argument.charCodeAt(0) === 123 ? argument.indexOf('...') : -1
-
-	// Using object destructuring
-	if (argument.charCodeAt(0) === 123) {
-		// Since Function already format the code, styling is enforced
-		if (argument.includes(keyword)) return true
-
-		if (restIndex === -1) return false
-	}
-
-	// Match dot notation and named access
-	if (
-		fnLiteral.match(
-			new RegExp(`${argument}(.${keyword}|\\["${keyword}"\\])`)
-		)
-	) {
-		return true
-	}
-
-	const restAlias =
-		restIndex !== -1
-			? argument.slice(
-					restIndex + 3,
-					argument.indexOf(' ', restIndex + 3)
-			  )
-			: undefined
-
-	if (
-		fnLiteral.match(
-			new RegExp(`${restAlias}(.${keyword}|\\["${keyword}"\\])`)
-		)
-	)
-		return true
-
-	const aliases = [argument]
-	if (restAlias) aliases.push(restAlias)
-
-	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
-
-	const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
-
-	for (const [params] of fnLiteral.matchAll(destructuringRegex))
-		if (params.includes(`{ ${keyword}`) || params.includes(`, ${keyword}`))
-			return true
-
-	return false
-}
-
-const isContextPassToFunction = (fnLiteral: string) => {
-	fnLiteral = fnLiteral.trimStart()
-
-	if (fnLiteral.startsWith('[object')) return false
-
-	fnLiteral = fnLiteral.replaceAll(/^async /g, '')
-
-	if (/^(\w+)\(/g.test(fnLiteral))
-		fnLiteral = fnLiteral.slice(fnLiteral.indexOf('('))
-
-	const argument =
-		// CharCode 40 is '('
-		fnLiteral.charCodeAt(0) === 40 || fnLiteral.startsWith('function')
-			? // Bun: (context) => {}
-			  fnLiteral.slice(
-					fnLiteral.indexOf('(') + 1,
-					fnLiteral.indexOf(')')
-			  )
-			: // Node: context => {}
-			  fnLiteral.slice(0, fnLiteral.indexOf('=') - 1)
-
-	if (argument === '') return false
-
-	const restIndex =
-		argument.charCodeAt(0) === 123 ? argument.indexOf('...') : -1
-
-	const restAlias =
-		restIndex !== -1
-			? argument.slice(
-					restIndex + 3,
-					argument.indexOf(' ', restIndex + 3)
-			  )
-			: undefined
-
-	const aliases = [argument]
-	if (restAlias) aliases.push(restAlias)
-
-	for (const found of fnLiteral.matchAll(findAliases)) aliases.push(found[1])
-
-	for (const alias of aliases)
-		if (new RegExp(`\\b\\w+\\([^)]*\\b${alias}\\b[^)]*\\)`).test(fnLiteral))
-			return true
-
-	const destructuringRegex = new RegExp(`{.*?} = (${aliases.join('|')})`, 'g')
-
-	for (const [renamed] of fnLiteral.matchAll(destructuringRegex))
-		if (
-			new RegExp(`\\b\\w+\\([^)]*\\b${renamed}\\b[^)]*\\)`).test(
-				fnLiteral
-			)
-		)
-			return true
-
-	return false
-}
-
 const KindSymbol = Symbol.for('TypeBox.Kind')
 
 export const hasType = (type: string, schema: TAnySchema) => {
@@ -453,28 +325,6 @@ export const isAsync = (fn: Function) => {
 	return !!literal.match(matchFnReturn)
 }
 
-const getDestructureQuery = (fn: string) => {
-	if (
-		!fn.includes('query: {') ||
-		fn.includes('query,') ||
-		fn.includes('query }')
-	)
-		return false
-
-	const start = fn.indexOf('query: {')
-
-	fn = fn.slice(start + 9)
-	fn = fn.slice(0, fn.indexOf('}'))
-
-	return fn.split(',').map((x) => {
-		const indexOf = x.indexOf(':')
-
-		if (indexOf === -1) return x.trim()
-
-		return x.slice(0, indexOf).trim()
-	})
-}
-
 export const composeHandler = ({
 	path,
 	method,
@@ -518,87 +368,45 @@ export const composeHandler = ({
 				.join(';')}})();\n`
 		: ''
 
-	const traceLiteral = hooks.trace.map((x) => x.toString())
-
-	let hasUnknownContext = false
-
-	if (isHandleFn && isContextPassToFunction(handler.toString()))
-		hasUnknownContext = true
-
-	if (!hasUnknownContext)
-		for (const [key, value] of Object.entries(hooks)) {
-			if (
-				!Array.isArray(value) ||
-				!value.length ||
-				![
-					'parse',
-					'transform',
-					'beforeHandle',
-					'afterHandle',
-					'onResponse'
-				].includes(key)
-			)
-				continue
-
-			for (const handle of value) {
-				if (typeof handle !== 'function') continue
-
-				if (isContextPassToFunction(handle.toString())) {
-					hasUnknownContext = true
-					break
-				}
-			}
-
-			if (hasUnknownContext) break
-		}
+	const traceInference = sucroseTrace(hooks.trace)
 
 	const traceConditions: Record<
 		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response' | 'exit'>,
 		boolean
 	> = {
-		parse: traceLiteral.some((x) => isFnUse('parse', x)),
-		transform: traceLiteral.some((x) => isFnUse('transform', x)),
-		handle: traceLiteral.some((x) => isFnUse('handle', x)),
-		beforeHandle: traceLiteral.some((x) => isFnUse('beforeHandle', x)),
-		afterHandle: traceLiteral.some((x) => isFnUse('afterHandle', x)),
-		error: hasErrorHandler || traceLiteral.some((x) => isFnUse('error', x))
+		parse: traceInference.parse,
+		transform: traceInference.transform,
+		handle: traceInference.handle,
+		beforeHandle: traceInference.beforeHandle,
+		afterHandle: traceInference.afterHandle,
+		error: traceInference.error
 	}
 
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
 
-	const lifeCycleLiteral =
-		validator || (method !== 'GET' && method !== 'HEAD')
-			? [
-					handler,
-					...hooks.transform,
-					...hooks.beforeHandle,
-					...hooks.afterHandle,
-					...hooks.mapResponse
-			  ].map((x) => (typeof x === 'function' ? x.toString() : `${x}`))
-			: []
+	const inference = sucrose({
+		handler: handler as any,
+		...hooks,
+		request: onRequest
+	})
+
+	const hasQuery = inference.query || !!validator.query
 
 	const hasBody =
 		method !== 'GET' &&
 		method !== 'HEAD' &&
-		(hasUnknownContext ||
-			(hooks.type !== 'none' &&
-				(!!validator.body ||
-					!!hooks.type ||
-					lifeCycleLiteral.some((fn) => isFnUse('body', fn)))))
+		hooks.type !== 'none' &&
+		(inference.body || !!validator.body)
 
 	const hasHeaders =
-		hasUnknownContext ||
+		inference.headers ||
 		validator.headers ||
-		lifeCycleLiteral.some((fn) => isFnUse('headers', fn)) ||
-		(setHeader && Object.keys(setHeader).length)
+		(setHeader && !!Object.keys(setHeader).length)
 
-	const hasCookie =
-		hasUnknownContext ||
-		!!validator.cookie ||
-		lifeCycleLiteral.some((fn) => isFnUse('cookie', fn))
+	const hasCookie = inference.cookie || !!validator.cookie
 
-	// @ts-ignore
+	// @ts-ignore private property
 	const cookieMeta = validator?.cookie?.schema as {
 		secrets?: string | string[]
 		sign: string[] | true
@@ -702,37 +510,20 @@ export const composeHandler = ({
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.headers.cookie, ${options})\n`
 		else
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
-		
 	}
-
-	const hasQuery =
-		hasUnknownContext ||
-		validator.query ||
-		lifeCycleLiteral.some((fn) => isFnUse('query', fn))
 
 	if (hasQuery) {
 		let destructured = [] as string[]
-		let referenceFullQuery = false
 
 		// @ts-ignore
 		if (validator.query && validator.query.schema.type === 'object') {
 			// @ts-ignore
 			destructured = Object.keys(validator.query.schema.properties)
 		} else
-			for (const event of lifeCycleLiteral) {
-				const queries = getDestructureQuery(event)
+			for (const query of inference.queries)
+				if (destructured.indexOf(query) === -1) destructured.push(query)
 
-				if (!queries) {
-					referenceFullQuery = true
-					continue
-				}
-
-				for (const query of queries)
-					if (destructured.indexOf(query) === -1)
-						destructured.push(query)
-			}
-
-		if (!referenceFullQuery && destructured.length) {
+		if (!inference.queries.length && destructured.length) {
 			fnLiteral += `if(c.qi !== -1) {
 				const url = decodeURIComponent(c.request.url.slice(c.qi + 1))
 				let memory = 0
@@ -759,19 +550,8 @@ export const composeHandler = ({
 		}
 	}
 
-	const traceLiterals = hooks.trace.map((x) => x.toString())
-	const hasTraceSet = traceLiterals.some(
-		(fn) => isFnUse('set', fn) || isContextPassToFunction(fn)
-	)
-
-	hasUnknownContext || hooks.trace.some((fn) => isFnUse('set', fn.toString()))
-
-	const hasSet =
-		(setHeader && Object.keys(setHeader).length) ||
-		hasTraceSet ||
-		hasCookie ||
-		lifeCycleLiteral.some((fn) => isFnUse('set', fn)) ||
-		onRequest.some((fn) => isFnUse('set', fn.toString()))
+	const hasTraceSet = traceInference.set
+	const hasSet = inference.cookie || inference.set || hasTraceSet || hasHeaders
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
@@ -1537,6 +1317,8 @@ export const composeHandler = ({
 export const composeGeneralHandler = (
 	app: Elysia<any, any, any, any, any, any>
 ) => {
+	const inference = sucroseTrace(app.event.trace)
+
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
@@ -1604,18 +1386,11 @@ export const composeGeneralHandler = (
 
 	if (app.event.request.length) fnLiteral += `let re`
 
-	const traceLiteral = app.event.trace.map((x) => x.toString())
 	const report = createReport({
 		hasTrace,
-		hasTraceSet: app.event.trace.some((fn) => {
-			const literal = fn.toString()
-
-			return isFnUse('set', literal) || isContextPassToFunction(literal)
-		}),
+		hasTraceSet: inference.set,
 		condition: {
-			request: traceLiteral.some(
-				(x) => isFnUse('request', x) || isContextPassToFunction(x)
-			)
+			request: inference.request
 		},
 		addFn: (word) => {
 			fnLiteral += word
@@ -1715,9 +1490,7 @@ export const composeGeneralHandler = (
 		report('request', {
 			unit: app.event.request.length,
 			attribute:
-				traceLiteral.some((x) => isFnUse('context', x)) ||
-				traceLiteral.some((x) => isFnUse('store', x)) ||
-				traceLiteral.some((x) => isFnUse('set', x))
+				inference.context || inference.store || inference.set
 					? 'ctx'
 					: ''
 		})()

@@ -2,17 +2,13 @@ import { Elysia, t } from '../src'
 import { parseCookie } from '../src/cookie'
 import { req } from '../test/utils'
 
-const app = new Elysia({ name: 'macro' })
-	.macro(() => {
-		return {
-			user: (type?: 'signed-in' | 'signed-out') => {
-				return ':)'
-			}
-		}
+const app = new Elysia()
+	.onTransform(({ set }) => {
+		set.headers['x-powered-by'] = 'Elysia'
 	})
-	.get('/', () => {
-		return 'I fail at runtime but not static checks'
-	})
-	.listen(3000)
+	.get('/', () => 'Hi')
 
+const headers = await app.handle(req('/')).then((x) => x.headers.toJSON())
+
+// console.log(headers)
 // console.log(app.routes[0].composed?.toString())

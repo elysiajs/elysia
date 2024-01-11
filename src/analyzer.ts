@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import type { Handler, LifeCycleStore } from './types'
+import type { Handler, LifeCycleStore, TraceHandler } from './types'
 
 namespace Sucrose {
 	export interface Reference {
+		queries: string[]
 		query: boolean
 		headers: boolean
 		body: boolean
@@ -13,6 +14,19 @@ namespace Sucrose {
 
 	export interface LifeCycle extends LifeCycleStore {
 		handler: Handler
+	}
+
+	export interface TraceInference {
+		request: boolean
+		parse: boolean
+		transform: boolean
+		handle: boolean
+		beforeHandle: boolean
+		afterHandle: boolean
+		error: boolean
+		context: boolean
+		store: boolean
+		set: boolean
 	}
 }
 
@@ -48,8 +62,18 @@ export const separateFunction = (code: string): [string, string] => {
 		return [code.slice(index + 1, end), code.slice(end + 2)]
 	}
 
+	// Probably Declare as method
+	const start = code.indexOf("(")
+
+	if (start !== -1) {
+		const [parameter, body] = code.split("\n", 2)
+		const end = parameter.lastIndexOf(")") + 1
+
+		return [parameter.slice(start, end), "{" + body]
+	}
+
 	// Unknown case
-	return code.split('\n', 1) as [string, string]
+	return code.split('\n', 2) as [string, string]
 }
 
 /**
@@ -78,7 +102,7 @@ const bracketPairRange = (parameter: string): [number, number] => {
 		if (deep === 0) break
 	}
 
-	return [start, end]
+	return [start, end + 1]
 }
 
 /**
@@ -151,6 +175,34 @@ export const findParameterReference = (
 	if (!reference.headers && root.includes('headers')) reference.headers = true
 	if (!reference.body && root.includes('body')) reference.body = true
 	if (!reference.cookie && root.includes('cookie')) reference.cookie = true
+	if (!reference.set && root.includes('set')) reference.set = true
+
+	return root
+}
+
+/**
+ * Find reference from parameter
+ *
+ * @param parameter stringified parameter
+ */
+export const findTraceParameterReference = (
+	parameter: string,
+	reference: Sucrose.TraceInference
+) => {
+	const root = retrieveRootParamters(parameter)
+
+	if (!reference.request && root.includes('request')) reference.request = true
+	if (!reference.parse && root.includes('parse')) reference.parse = true
+	if (!reference.transform && root.includes('transform'))
+		reference.transform = true
+	if (!reference.handle && root.includes('handle')) reference.handle = true
+	if (!reference.beforeHandle && root.includes('beforeHandle'))
+		reference.beforeHandle = true
+	if (!reference.afterHandle && root.includes('afterHandle'))
+		reference.afterHandle = true
+	if (!reference.error && root.includes('error')) reference.error = true
+	if (!reference.context && root.includes('context')) reference.context = true
+	if (!reference.store && root.includes('store')) reference.store = true
 	if (!reference.set && root.includes('set')) reference.set = true
 
 	return root
@@ -239,24 +291,26 @@ export const inferBodyReference = (
 	reference: Sucrose.Reference
 ) => {
 	const access = (type: string, alias: string) =>
-		code.includes(type + '.' + alias) ||
-		code.includes(type + '["' + alias + '"]') ||
-		code.includes(type + "['" + alias + "']")
+		code.includes(alias + '.' + type) ||
+		code.includes(alias + '["' + type + '"]') ||
+		code.includes(alias + "['" + type + "']")
 
-	for (const alias of aliases) {
+	for (let alias of aliases) {
 		if (alias.charCodeAt(0) === 123) {
-			if (!reference.query && access('query', alias))
+			alias = retrieveRootParamters(alias)
+
+			if (!reference.query && alias.includes('query'))
 				reference.query = true
 
-			if (!reference.headers && access('headers', alias))
+			if (!reference.headers && alias.includes('headers'))
 				reference.headers = true
 
-			if (!reference.body && access('body', alias)) reference.body = true
+			if (!reference.body && alias.includes('body')) reference.body = true
 
-			if (!reference.cookie && access('cookie', alias))
+			if (!reference.cookie && alias.includes('cookie'))
 				reference.cookie = true
 
-			if (!reference.set && access('set', alias)) reference.set = true
+			if (!reference.set && alias.includes('set')) reference.set = true
 
 			continue
 		}
@@ -272,17 +326,17 @@ export const inferBodyReference = (
 			break
 		}
 
-		if (!reference.query && access(alias, 'query')) reference.query = true
+		if (!reference.query && access('query', alias)) reference.query = true
 
-		if (!reference.headers && access(alias, 'headers'))
+		if (!reference.headers && access('headers', alias))
 			reference.headers = true
 
-		if (!reference.body && access(alias, 'body')) reference.body = true
+		if (!reference.body && access('body', alias)) reference.body = true
 
-		if (!reference.cookie && access(alias, 'cookie'))
+		if (!reference.cookie && access('cookie', alias))
 			reference.cookie = true
 
-		if (!reference.set && access(alias, 'set')) reference.set = true
+		if (!reference.set && access('set', alias)) reference.set = true
 
 		if (
 			reference.query &&
@@ -297,9 +351,134 @@ export const inferBodyReference = (
 	return aliases
 }
 
+export const removeDefaultParameter = (parameter: string) => {
+	while (true) {
+		const index = parameter.indexOf('=')
+		if (index === -1) break
+
+		const commaIndex = parameter.indexOf(',', index)
+		const bracketIndex = parameter.indexOf('}', index)
+
+		const end = commaIndex < bracketIndex ? commaIndex : bracketIndex
+
+		parameter = parameter.slice(0, index - 1) + parameter.slice(end)
+	}
+
+	return parameter
+}
+
+/**
+ * Analyze if context is mentioned in body
+ */
+export const inferTraceBodyReference = (
+	code: string,
+	aliases: string[],
+	reference: Sucrose.TraceInference
+) => {
+	const access = (type: string, alias: string) =>
+		code.includes(type + '.' + alias) ||
+		code.includes(type + '["' + alias + '"]') ||
+		code.includes(type + "['" + alias + "']")
+
+	for (let alias of aliases) {
+		if (alias.charCodeAt(0) === 123) {
+			alias = retrieveRootParamters(alias)
+
+			if (!reference.request && alias.includes('request'))
+			reference.request = true
+
+			if (!reference.parse && alias.includes('parse'))
+				reference.parse = true
+
+			if (!reference.transform && alias.includes('transform'))
+				reference.transform = true
+
+			if (!reference.handle && alias.includes('handle'))
+				reference.handle = true
+
+			if (!reference.beforeHandle && alias.includes('beforeHandle'))
+				reference.beforeHandle = true
+
+			if (!reference.afterHandle && alias.includes('afterHandle'))
+				reference.afterHandle = true
+
+			if (!reference.error && alias.includes('error'))
+				reference.error = true
+
+			if (!reference.context && alias.includes('context'))
+				reference.context = true
+
+			if (!reference.store && alias.includes('store'))
+				reference.store = true
+
+			if (!reference.set && alias.includes('set')) reference.set = true
+
+			continue
+		}
+
+		// ! Function is passed to another function, assume as all is accessed
+		if (code.includes('(' + alias + ')')) {
+			reference.request = true
+			reference.parse = true
+			reference.transform = true
+			reference.handle = true
+			reference.beforeHandle = true
+			reference.afterHandle = true
+			reference.error = true
+			reference.context = true
+			reference.store = true
+			reference.set = true
+
+			break
+		}
+
+		if (!reference.request && access('request', alias)) reference.request = true
+
+		if (!reference.parse && access('parse', alias)) reference.parse = true
+
+		if (!reference.transform && access('transform', alias))
+			reference.transform = true
+
+		if (!reference.handle && access('handle', alias))
+			reference.handle = true
+
+		if (!reference.beforeHandle && access('beforeHandle', alias))
+			reference.beforeHandle = true
+
+		if (!reference.afterHandle && access('afterHandle', alias))
+			reference.afterHandle = true
+
+		if (!reference.error && access('error', alias)) reference.error = true
+
+		if (!reference.context && access('context', alias))
+			reference.context = true
+
+		if (!reference.store && access('store', alias)) reference.store = true
+
+		if (!reference.set && access('set', alias)) reference.set = true
+
+		if (
+			reference.request &&
+			reference.parse &&
+			reference.transform &&
+			reference.handle &&
+			reference.beforeHandle &&
+			reference.afterHandle &&
+			reference.error &&
+			reference.context &&
+			reference.store &&
+			reference.set
+		)
+			break
+	}
+
+	return aliases
+}
+
 export const sucrose = (
 	lifeCycle: Sucrose.LifeCycle,
 	reference: Sucrose.Reference = {
+		queries: [],
 		query: false,
 		headers: false,
 		body: false,
@@ -308,15 +487,18 @@ export const sucrose = (
 	}
 ): Sucrose.Reference => {
 	const events = [
-		[lifeCycle.handler],
 		lifeCycle.beforeHandle,
 		lifeCycle.parse,
 		lifeCycle.error,
+		lifeCycle.transform,
 		lifeCycle.afterHandle,
 		lifeCycle.mapResponse,
 		lifeCycle.request,
 		lifeCycle.onResponse
 	]
+
+	if (typeof lifeCycle.handler === 'function')
+		events.splice(0, -1, [lifeCycle.handler as any])
 
 	analyze: for (const lifecycle of events) {
 		for (const handler of lifecycle) {
@@ -330,8 +512,22 @@ export const sucrose = (
 				aliases.splice(0, -1, mainParameter)
 
 				inferBodyReference(body, aliases, reference)
+			}
 
-				continue
+			if (reference.query) {
+				const queryIndex = parameter.indexOf('query: {')
+
+				if (queryIndex !== -1) {
+					const part = parameter.slice(queryIndex + 7)
+					const [start, end] = bracketPairRange(part)
+
+					const queryBracket = removeDefaultParameter(
+						part.slice(start, end)
+					)
+
+					for(const query of queryBracket.slice(1, -1).split(','))
+						reference.queries.push(query.trim())
+				}
 			}
 
 			if (
@@ -348,66 +544,73 @@ export const sucrose = (
 	return reference
 }
 
-import { Suite } from 'benchmark'
+/**
+ * Analyze if context is mentioned in body in a trace
+ */
+export const sucroseTrace = (traces: TraceHandler[]) => {
+	const reference: Sucrose.TraceInference = {
+		request: false,
+		parse: false,
+		transform: false,
+		handle: false,
+		beforeHandle: false,
+		afterHandle: false,
+		error: false,
+		context: false,
+		store: false,
+		set: false
+	}
 
-export const run = (suite: Suite) => {
-	suite
-		// @ts-ignore
-		.on('cycle', function (event) {
-			console.log(String(event.target))
-		})
-		.on('complete', function () {
-			// @ts-ignore
-			console.log('Fastest is ' + this.filter('fastest').map('name'))
-		})
-		// run async
-		.run()
+	for (const handler of traces) {
+		const [parameter, body] = separateFunction(handler.toString())
+
+		const rootParameters = findTraceParameterReference(parameter, reference)
+		const mainParameter = extractMainParameter(rootParameters)
+
+		if (mainParameter) {
+			const aliases = findAlias(mainParameter, body)
+			aliases.splice(0, -1, mainParameter)
+
+			inferTraceBodyReference(body, aliases, reference)
+
+			continue
+		}
+
+		if (
+			reference.request &&
+			reference.parse &&
+			reference.transform &&
+			reference.handle &&
+			reference.beforeHandle &&
+			reference.afterHandle &&
+			reference.error &&
+			reference.context &&
+			reference.store &&
+			reference.set
+		)
+			break
+	}
+
+	return reference
 }
 
-run(
-	new Suite('sucrose').add('analyze', () => {
-		sucrose({
-			handler: function ({ set }) {},
-			afterHandle: [],
-			beforeHandle: [],
-			error: [
-				function a({ headers: { hello }, ...rest }) {
-					const keyword = 'cook' + 'ie'
+// const a = sucrose({
+// 	handler: function ({ query: { a = 'a', h } }) {},
+// 	afterHandle: [],
+// 	beforeHandle: [],
+// 	error: [
+// 		function a({ headers: { hello }, ...rest }) {
+// 			// const { cookie } = rest
+// 		}
+// 	],
+// 	mapResponse: [],
+// 	onResponse: [],
+// 	parse: [],
+// 	request: [],
+// 	start: [],
+// 	stop: [],
+// 	trace: [],
+// 	transform: []
+// })
 
-					rest[keyword]
-				}
-			],
-			mapResponse: [],
-			onResponse: [],
-			parse: [],
-			request: [],
-			start: [],
-			stop: [],
-			trace: [],
-			transform: []
-		})
-	})
-)
-
-const a = sucrose({
-	handler: function ({ set }) {},
-	afterHandle: [],
-	beforeHandle: [],
-	error: [
-		function a({ headers: { hello }, ...rest }) {
-			const keyword = 'cook' + 'ie'
-
-			rest[keyword]
-		}
-	],
-	mapResponse: [],
-	onResponse: [],
-	parse: [],
-	request: [],
-	start: [],
-	stop: [],
-	trace: [],
-	transform: []
-})
-
-console.log(a)
+// console.log(a)
