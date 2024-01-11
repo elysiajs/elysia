@@ -1,3 +1,7 @@
+# 0.8.9 - 11 Jan 2024
+Bug fix:
+- macro panic
+
 # 0.8.8. - 2 Jan 2024
 Bug fix:
 - Add TypeBox back to Bun bundle
