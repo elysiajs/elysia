@@ -121,7 +121,7 @@
     "release:local": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.32.0",
+    "@sinclair/typebox": "^0.32.8",
     "cookie": "^0.6.0",
     "eventemitter3": "^5.0.1",
     "fast-decode-uri-component": "^1.0.1",
@@ -151,9 +151,6 @@
     "typescript": ">= 5.0.0"
   },
   "peerDependenciesMeta": {
-    "@sinclair/typebox": {
-      "optional": true
-    },
     "openapi-types": {
       "optional": true
     },

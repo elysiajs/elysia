@@ -476,7 +476,6 @@ export const inferTraceBodyReference = (
 	return aliases
 }
 
-let i = 0
 export const sucrose = (
 	lifeCycle: Sucrose.LifeCycle,
 	inference: Sucrose.Inference = {

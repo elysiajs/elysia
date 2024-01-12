@@ -1,8 +1,9 @@
 import { Elysia, t } from '../src'
 
 const t1 = performance.now()
+
 const loggerPlugin = new Elysia()
-	// .get('/hi', () => 'Hi')
+	.get('/hi', () => 'Hi')
 	.decorate('log', () => 'A')
 	.decorate('date', () => new Date())
 	.state('fromPlugin', 'From Logger')
@@ -28,7 +29,7 @@ const app = new Elysia()
 	})
 	.get('/wildcard/*', () => 'Hi Wildcard')
 	.get('/query', () => 'Elysia', {
-		beforeHandle: ({ query, log }) => {
+		beforeHandle: ({ query }) => {
 			console.log('Name:', query?.name)
 
 			if (query?.name === 'aom') return 'Hi saltyaom'
@@ -72,8 +73,8 @@ const app = new Elysia()
 		})
 	})
 	.get('/trailing-slash', () => 'A')
-	.group('/group', (app) => {
-		return app
+	.group('/group', (app) =>
+		app
 			.onBeforeHandle<{
 				query: {
 					name: string
@@ -85,7 +86,7 @@ const app = new Elysia()
 			.get('/hi', () => 'HI GROUP')
 			.get('/elysia', () => 'Welcome to Elysian Realm')
 			.get('/fbk', () => 'FuBuKing')
-	})
+	)
 	.get('/response-header', ({ set }) => {
 		set.status = 404
 		set.headers['a'] = 'b'

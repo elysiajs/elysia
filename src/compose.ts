@@ -25,7 +25,8 @@ import {
 	ELYSIA_RESPONSE
 } from './error'
 
-import { CookieOptions, parseCookie } from './cookie'
+import { sucrose } from './sucrose'
+import { parseCookie, type CookieOptions } from './cookie'
 
 import type {
 	ComposedHandler,
@@ -34,7 +35,6 @@ import type {
 	SchemaValidator,
 	TraceEvent
 } from './types'
-import { sucrose } from './sucrose'
 
 const headersHasToJSON = new Headers().toJSON
 const requestId = { value: 0 }

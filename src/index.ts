@@ -206,7 +206,6 @@ export default class Elysia<
 	}
 
 	inference = {
-		cache: {},
 		event: {
 			body: false,
 			cookie: false,
@@ -439,14 +438,7 @@ export default class Elysia<
 				hooks,
 				validator,
 				handler: handle,
-				allowMeta: true
-				// handleError: this.handleError,
-				// onRequest: this.event.request,
-				// config: this.config,
-				// definitions: allowMeta ? this.definitions.type : undefined,
-				// schema: allowMeta ? this.schema : undefined,
-				// getReporter: () => this.reporter,
-				// setHeader: this.setHeaders
+				allowMeta
 			})
 
 			if (!isFn) {
@@ -2220,7 +2212,9 @@ export default class Elysia<
 		>,
 		Scoped
 	> {
+		const t1 = performance.now()
 		this.add('GET', path, handler as any, hook)
+		console.log(performance.now() - t1, path)
 
 		return this as any
 	}
@@ -3962,7 +3956,7 @@ export default class Elysia<
 		this.compile()
 
 		if (typeof options === 'string') {
-			if(!isNumericString(options)) 
+			if (!isNumericString(options))
 				throw new Error('Port must be a numeric value')
 
 			options = parseInt(options)
@@ -3973,35 +3967,34 @@ export default class Elysia<
 		const serve =
 			typeof options === 'object'
 				? ({
-						development: !isProduction,
-						reusePort: true,
-						...this.config.serve,
-						...options,
-						websocket: {
-							...this.config.websocket,
-							...websocket
-						},
-						fetch,
-						error: this.outerErrorHandler
+						// development: !isProduction,
+						// reusePort: true,
+						// ...this.config.serve,
+						// ...options,
+						// websocket: {
+						// 	...this.config.websocket,
+						// 	...websocket
+						// },
+						fetch
+						// error: this.outerErrorHandler
 				  } as Serve)
 				: ({
-						development: !isProduction,
-						reusePort: true,
-						...this.config.serve,
-						websocket: {
-							...this.config.websocket,
-							...websocket
-						},
+						// development: !isProduction,
+						// reusePort: true,
+						// ...this.config.serve,
+						// websocket: {
+						// ...this.config.websocket,
+						// ...websocket
+						// },
 						port: options,
-						fetch,
-						error: this.outerErrorHandler
+						fetch
+						// error: this.outerErrorHandler
 				  } as Serve)
 
 		this.server = Bun?.serve(serve)
 
-		if (this.event.start.length)
-			for (let i = 0; i < this.event.start.length; i++)
-				this.event.start[i](this)
+		for (let i = 0; i < this.event.start.length; i++)
+			this.event.start[i](this)
 
 		if (callback) callback(this.server!)
 
