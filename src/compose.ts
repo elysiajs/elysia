@@ -1305,8 +1305,6 @@ export const composeHandler = ({
 export const composeGeneralHandler = (
 	app: Elysia<any, any, any, any, any, any>
 ) => {
-	const t1 = performance.now()
-
 	const inference = app.inference.trace
 
 	let decoratorsLiteral = ''

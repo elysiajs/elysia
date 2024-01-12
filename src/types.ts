@@ -17,51 +17,47 @@ import type {
 	ValidationError
 } from './error'
 
-export type ElysiaConfig<
-	T extends string = '',
-	Scoped extends boolean = false
-> = {
-	name?: string
-	seed?: unknown
-	serve?: Partial<Serve>
-	prefix?: T
-	/**
-	 * Disable `new Error` thrown marked as Error on Bun 0.6
-	 */
-	forceErrorEncapsulation?: boolean
-	/**
-	 * Disable Ahead of Time compliation
-	 *
-	 * Reduced performance but faster startup time
-	 */
-	aot?: boolean
-	/**
-	 * Whether should Elysia tolerate suffix '/' or vice-versa
-	 *
-	 * @default false
-	 */
-	strictPath?: boolean
-	/**
-	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
-	 *
-	 * @default false
-	 */
-	scoped?: Scoped
-	websocket?: Omit<
-		WebSocketHandler<any>,
-		'open' | 'close' | 'message' | 'drain'
-	>
-	cookie?: CookieOptions & {
+export type ElysiaConfig<Configuration extends ConfigurationBase> =
+	Partial<Configuration> & {
+		name?: string
+		seed?: unknown
+		serve?: Partial<Serve>
 		/**
-		 * Specified cookie name to be signed globally
+		 * Disable `new Error` thrown marked as Error on Bun 0.6
 		 */
-		sign?: true | string | string[]
+		forceErrorEncapsulation?: boolean
+		/**
+		 * Disable Ahead of Time compliation
+		 *
+		 * Reduced performance but faster startup time
+		 */
+		aot?: boolean
+		/**
+		 * Whether should Elysia tolerate suffix '/' or vice-versa
+		 *
+		 * @default false
+		 */
+		strictPath?: boolean
+		/**
+		 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
+		 *
+		 * @default false
+		 */
+		websocket?: Omit<
+			WebSocketHandler<any>,
+			'open' | 'close' | 'message' | 'drain'
+		>
+		cookie?: CookieOptions & {
+			/**
+			 * Specified cookie name to be signed globally
+			 */
+			sign?: true | string | string[]
+		}
+		/**
+		 * Capture more detail information for each dependencies
+		 */
+		analytic?: boolean
 	}
-	/**
-	 * Capture more detail information for each dependencies
-	 */
-	analytic?: boolean
-}
 
 export type MaybeArray<T> = T | T[]
 export type MaybePromise<T> = T | Promise<T>
@@ -109,7 +105,7 @@ export type Reconcile<A extends Object, B extends Object> = {
 		  >
 	: never
 
-export type DecoratorBase = {
+export interface DecoratorBase {
 	request: {
 		[x: string]: unknown
 	}
@@ -124,7 +120,7 @@ export type DecoratorBase = {
 	}
 }
 
-export type DefinitionBase = {
+export interface DefinitionBase {
 	type: {
 		[x: string]: unknown
 	}
@@ -133,10 +129,21 @@ export type DefinitionBase = {
 	}
 }
 
-export type RouteBase = {
+export interface RouteBase {
 	[path: string]: {
 		[method: string]: RouteSchema
 	}
+}
+
+export interface MetadataBase {
+	schema: RouteSchema
+	macro: BaseMacro
+	routes: RouteBase
+}
+
+export interface ConfigurationBase {
+	prefix: string
+	scoped: boolean
 }
 
 export interface RouteSchema {
@@ -541,9 +548,9 @@ export type PreHandler<
 	context: Prettify<PreContext<Decorators>>
 ) => MaybePromise<Route['response'] | void>
 
-export type GracefulHandler<
-	Instance extends Elysia<any, any, any, any, any, any, any>
-> = (data: Instance) => any
+export type GracefulHandler<Instance extends Elysia<any, any, any, any>> = (
+	data: Instance
+) => any
 
 export type ErrorHandler<
 	T extends Record<string, Error> = {},
@@ -612,7 +619,7 @@ export type Isolate<T> = {
 
 export type LocalHook<
 	LocalSchema extends InputSchema = {},
-	Route extends RouteSchema = RouteSchema,
+	Schema extends RouteSchema = RouteSchema,
 	Decorators extends DecoratorBase = {
 		request: {}
 		store: {}
@@ -622,11 +629,11 @@ export type LocalHook<
 	Errors extends Record<string, Error> = {},
 	Extension extends BaseMacro = {},
 	Path extends string = '',
-	TypedRoute extends RouteSchema = Route extends {
+	TypedRoute extends RouteSchema = Schema extends {
 		params: Record<string, unknown>
 	}
-		? Route
-		: Route & {
+		? Schema
+		: Schema & {
 				params: Record<GetPathParameter<Path>, string>
 		  }
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
@@ -732,7 +739,10 @@ export type Checksum = {
 	}[]
 }
 
-export type BaseMacro = Record<string, Record<string, unknown> | ((a: unknown) => unknown)>
+export type BaseMacro = Record<
+	string,
+	Record<string, unknown> | ((a: unknown) => unknown)
+>
 
 export type MacroToProperty<T extends BaseMacro> = Prettify<{
 	[K in keyof T]: T[K] extends Function
