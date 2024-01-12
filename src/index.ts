@@ -29,7 +29,7 @@ import {
 	traceBackMacro,
 	replaceUrlPath,
 	primitiveHooks,
-	isNumericString
+	isParseableNumericString
 } from './utils'
 
 import {
@@ -3200,7 +3200,7 @@ export default class Elysia<
 					} catch {
 						// Not empty
 					}
-				else if (isNumericString(message)) message = +message
+				else if (isParseableNumericString(message)) message = +message
 			}
 
 			if (transform?.length)

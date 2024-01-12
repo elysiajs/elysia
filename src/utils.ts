@@ -585,3 +585,8 @@ export const traceBackMacro = (
 
 export const isNumericString = (message: string) =>
 	!Number.isNaN(parseInt(message))
+
+export const isParseableNumericString = (message: string) => {
+	if (!isNumericString(message)) return false
+	return (+message).toString() === message
+}

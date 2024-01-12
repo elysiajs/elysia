@@ -2,7 +2,7 @@
 import { parse } from 'cookie'
 import type { Context } from './context'
 
-import { isNumericString, unsignCookie } from './utils'
+import { isParseableNumericString, unsignCookie } from './utils';
 import { InvalidCookieSignature } from './error'
 
 export interface CookieOptions {
@@ -431,7 +431,7 @@ export const parseCookie = async (
 			}
 
 		// @ts-ignore
-		if (isNumericString(value)) value = +value
+		if (isParseableNumericString(value)) value = +value
 		// @ts-ignore
 		else if (value === 'true') value = true
 		// @ts-ignore
