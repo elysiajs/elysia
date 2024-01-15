@@ -154,18 +154,33 @@ export const mapResponse = (
 				set.headers['Set-Cookie']
 			) as any
 
-		switch (response?.constructor?.name) {
-			case 'String':
-				return new Response(response as string, set as SetResponse)
+		switch (response?.constructor) {
+			case undefined:
+				if (!response) return new Response('', set as SetResponse)
 
-			case 'Blob':
-				return handleFile(response as File | Blob, set)
-
-			case 'Object':
-			case 'Array':
 				return Response.json(response, set as SetResponse)
 
-			case 'ReadableStream':
+			case Boolean:
+			case Number:
+				return new Response(
+					(response as number | boolean).toString(),
+					set as SetResponse
+				)
+				
+			case String:
+				return new Response(response as string, set as SetResponse)
+
+			case Object:
+			case Array:
+				return Response.json(response, set as SetResponse)
+
+			case Function:
+				return mapResponse((response as Function)(), set)
+	
+			case Blob:
+				return handleFile(response as File | Blob, set)
+
+			case ReadableStream:
 				if (
 					!set.headers['content-type']?.startsWith(
 						'text/event-stream'
@@ -179,51 +194,40 @@ export const mapResponse = (
 					set as SetResponse
 				)
 
-			case undefined:
-				if (!response) return new Response('', set as SetResponse)
-
-				return Response.json(response, set as SetResponse)
-
-			case 'Response':
-				const inherits = { ...set.headers }
-
-				if (hasHeaderShorthand)
-					set.headers = (response as Response).headers.toJSON()
-				else
-					for (const [key, value] of (
-						response as Response
-					).headers.entries())
-						if (key in set.headers) set.headers[key] = value
-
-				for (const key in inherits)
-					(response as Response).headers.append(key, inherits[key])
-
-				return response as Response
-
-			case 'Error':
-				return errorToResponse(response as Error, set)
-
-			case 'Promise':
+			case Promise:
 				// @ts-ignore
 				return response.then((x) => mapResponse(x, set))
 
-			case 'Function':
-				return mapResponse((response as Function)(), set)
-
-			case 'Number':
-			case 'Boolean':
-				return new Response(
-					(response as number | boolean).toString(),
-					set as SetResponse
-				)
-
-			case 'Cookie':
+			case Cookie:
 				if (response instanceof Cookie)
 					return new Response(response.value, set as SetResponse)
 
 				return new Response(response?.toString(), set as SetResponse)
-
+			
+			case Response:
+			case Error:
 			default:
+				if (response instanceof Response) {
+					const inherits = { ...set.headers }
+
+					if (hasHeaderShorthand)
+						set.headers = (response).headers.toJSON()
+					else
+						for (const [key, value] of (
+							response
+						).headers.entries())
+							if (key in set.headers) set.headers[key] = value
+	
+					for (const key in inherits)
+						(response).headers.append(key, inherits[key])
+	
+					return response
+				}
+
+				if (response instanceof Error){
+					return errorToResponse(response, set)
+				}
+
 				const r = JSON.stringify(response)
 				if (r.charCodeAt(0) === 123) {
 					if (!set.headers['Content-Type'])
@@ -238,28 +242,7 @@ export const mapResponse = (
 				return new Response(r, set as SetResponse)
 		}
 	} else
-		switch (response?.constructor?.name) {
-			case 'String':
-				return new Response(response as string)
-
-			case 'Blob':
-				return handleFile(response as File | Blob, set)
-
-			case 'Object':
-			case 'Array':
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
-					}
-				})
-
-			case 'ReadableStream':
-				return new Response(response as ReadableStream, {
-					headers: {
-						'Content-Type': 'text/event-stream; charset=utf-8'
-					}
-				})
-
+		switch (response?.constructor) {
 			case undefined:
 				if (!response) return new Response('')
 
@@ -269,13 +252,36 @@ export const mapResponse = (
 					}
 				})
 
-			case 'Response':
-				return response as Response
 
-			case 'Error':
-				return errorToResponse(response as Error, set)
+			case Boolean:
+			case Number:
+				return new Response((response as number | boolean).toString())
+			
+			case String:
+				return new Response(response as string)
 
-			case 'Promise':
+			case Object:
+			case Array:
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
+							// ? Maybe response or Blob
+			case Function:
+				return mapCompactResponse((response as Function)())
+
+			case Blob:
+				return handleFile(response as File | Blob, set)
+
+			case ReadableStream:
+				return new Response(response as ReadableStream, {
+					headers: {
+						'Content-Type': 'text/event-stream; charset=utf-8'
+					}
+				})
+
+			case Promise:
 				// @ts-ignore
 				return (response as any as Promise<unknown>).then((x) => {
 					const r = mapCompactResponse(x)
@@ -285,21 +291,23 @@ export const mapResponse = (
 					return new Response('')
 				})
 
-			// ? Maybe response or Blob
-			case 'Function':
-				return mapCompactResponse((response as Function)())
-
-			case 'Number':
-			case 'Boolean':
-				return new Response((response as number | boolean).toString())
-
-			case 'Cookie':
+			case Cookie:
 				if (response instanceof Cookie)
 					return new Response(response.value, set as SetResponse)
 
 				return new Response(response?.toString(), set as SetResponse)
-
+			
+			case Response:
+			case Error:
 			default:
+				if (response instanceof Response) {
+					return response
+				}
+
+				if (response instanceof Error){
+					return errorToResponse(response, set)
+				}
+				
 				const r = JSON.stringify(response)
 				if (r.charCodeAt(0) === 123)
 					return new Response(JSON.stringify(response), {
@@ -360,18 +368,33 @@ export const mapEarlyResponse = (
 				set.headers['Set-Cookie']
 			) as any
 
-		switch (response?.constructor?.name) {
-			case 'String':
+		switch (response?.constructor) {
+			case undefined:
+				if (!response) return
+
+				return Response.json(response, set as SetResponse)
+			
+			case Boolean:
+			case Number:
+				return new Response(
+					(response as number | boolean).toString(),
+					set as SetResponse
+				)
+
+			case String:
 				return new Response(response as string, set as SetResponse)
 
-			case 'Blob':
-				return handleFile(response as File | Blob, set)
-
-			case 'Object':
-			case 'Array':
+			case Object:
+			case Array:
 				return Response.json(response, set as SetResponse)
 
-			case 'ReadableStream':
+			case Function:
+				return mapEarlyResponse((response as Function)(), set)
+	
+			case Blob:
+				return handleFile(response as File | Blob, set)
+
+			case ReadableStream:
 				if (
 					!set.headers['content-type']?.startsWith(
 						'text/event-stream'
@@ -385,32 +408,8 @@ export const mapEarlyResponse = (
 					set as SetResponse
 				)
 
-			case undefined:
-				if (!response) return
 
-				return Response.json(response, set as SetResponse)
-
-			case 'Response':
-				const inherits = Object.assign({}, set.headers)
-
-				if (hasHeaderShorthand)
-					// @ts-ignore
-					set.headers = (response as Response).headers.toJSON()
-				else
-					for (const [key, value] of (
-						response as Response
-					).headers.entries())
-						if (!(key in set.headers)) set.headers[key] = value
-
-				for (const key in inherits)
-					(response as Response).headers.append(key, inherits[key])
-
-				if ((response as Response).status !== set.status)
-					set.status = (response as Response).status
-
-				return response as Response
-
-			case 'Promise':
+			case Promise:
 				// @ts-ignore
 				return (response as Promise<unknown>).then((x) => {
 					const r = mapEarlyResponse(x, set)
@@ -420,26 +419,40 @@ export const mapEarlyResponse = (
 					return
 				})
 
-			case 'Error':
-				return errorToResponse(response as Error, set)
-
-			case 'Function':
-				return mapEarlyResponse((response as Function)(), set)
-
-			case 'Number':
-			case 'Boolean':
-				return new Response(
-					(response as number | boolean).toString(),
-					set as SetResponse
-				)
-
-			case 'Cookie':
+			case Cookie:
 				if (response instanceof Cookie)
 					return new Response(response.value, set as SetResponse)
 
 				return new Response(response?.toString(), set as SetResponse)
 
+			case Response:
+			case Error:
 			default:
+				if (response instanceof Response) {
+					const inherits = Object.assign({}, set.headers)
+
+					if (hasHeaderShorthand)
+						// @ts-ignore
+						set.headers = (response).headers.toJSON()
+					else
+						for (const [key, value] of (
+							response
+						).headers.entries())
+							if (!(key in set.headers)) set.headers[key] = value
+	
+					for (const key in inherits)
+						(response).headers.append(key, inherits[key])
+	
+					if ((response).status !== set.status)
+						set.status = (response).status
+	
+					return response
+				}
+
+				if (response instanceof Error){
+					return errorToResponse(response, set)
+				}
+
 				const r = JSON.stringify(response)
 				if (r.charCodeAt(0) === 123) {
 					if (!set.headers['Content-Type'])
@@ -454,28 +467,7 @@ export const mapEarlyResponse = (
 				return new Response(r, set as SetResponse)
 		}
 	} else
-		switch (response?.constructor?.name) {
-			case 'String':
-				return new Response(response as string)
-
-			case 'Blob':
-				return handleFile(response as File | Blob, set)
-
-			case 'Object':
-			case 'Array':
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
-					}
-				})
-
-			case 'ReadableStream':
-				return new Response(response as ReadableStream, {
-					headers: {
-						'Content-Type': 'text/event-stream; charset=utf-8'
-					}
-				})
-
+		switch (response?.constructor) {
 			case undefined:
 				if (!response) return new Response('')
 
@@ -484,11 +476,36 @@ export const mapEarlyResponse = (
 						'content-type': 'application/json'
 					}
 				})
+				
+			case Boolean:
+			case Number:
+				return new Response((response as number | boolean).toString())
 
-			case 'Response':
-				return response as Response
+			case String:
+				return new Response(response as string)
+			
+			case Object:
+			case Array:
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
 
-			case 'Promise':
+			case Function:
+				return mapCompactResponse((response as Function)())
+				
+			case Blob:
+				return handleFile(response as File | Blob, set)
+
+			case ReadableStream:
+				return new Response(response as ReadableStream, {
+					headers: {
+						'Content-Type': 'text/event-stream; charset=utf-8'
+					}
+				})
+
+			case Promise:
 				// @ts-ignore
 				return (response as Promise<unknown>).then((x) => {
 					const r = mapEarlyResponse(x, set)
@@ -498,23 +515,23 @@ export const mapEarlyResponse = (
 					return
 				})
 
-			case 'Error':
-				return errorToResponse(response as Error, set)
-
-			case 'Function':
-				return mapCompactResponse((response as Function)())
-
-			case 'Number':
-			case 'Boolean':
-				return new Response((response as number | boolean).toString())
-
-			case 'Cookie':
+			case Cookie:
 				if (response instanceof Cookie)
 					return new Response(response.value, set as SetResponse)
 
 				return new Response(response?.toString(), set as SetResponse)
-
+			
+			case Response:
+			case Error:
 			default:
+				if (response instanceof Response) {
+					return response
+				}
+
+				if (response instanceof Error){
+					return errorToResponse(response, set)
+				}
+
 				const r = JSON.stringify(response)
 				if (r.charCodeAt(0) === 123)
 					return new Response(JSON.stringify(response), {
@@ -544,28 +561,7 @@ export const mapCompactResponse = (response: unknown): Response => {
 			headers: {}
 		})
 
-	switch (response?.constructor?.name) {
-		case 'String':
-			return new Response(response as string)
-
-		case 'Blob':
-			return handleFile(response as File | Blob)
-
-		case 'Object':
-		case 'Array':
-			return new Response(JSON.stringify(response), {
-				headers: {
-					'content-type': 'application/json'
-				}
-			})
-
-		case 'ReadableStream':
-			return new Response(response as ReadableStream, {
-				headers: {
-					'Content-Type': 'text/event-stream; charset=utf-8'
-				}
-			})
-
+	switch (response?.constructor) {
 		case undefined:
 			if (!response) return new Response('')
 
@@ -575,13 +571,36 @@ export const mapCompactResponse = (response: unknown): Response => {
 				}
 			})
 
-		case 'Response':
-			return response as Response
+		case Boolean:
+		case Number:
+			return new Response((response as number | boolean).toString())
 
-		case 'Error':
-			return errorToResponse(response as Error)
+		case String:
+			return new Response(response as string)
+		
+		case Object:
+		case Array:
+			return new Response(JSON.stringify(response), {
+				headers: {
+					'content-type': 'application/json'
+				}
+			})
 
-		case 'Promise':
+		// ? Maybe response or Blob
+		case Function:
+			return mapCompactResponse((response as Function)())
+		
+		case Blob:
+			return handleFile(response as File | Blob)
+
+		case ReadableStream:
+			return new Response(response as ReadableStream, {
+				headers: {
+					'Content-Type': 'text/event-stream; charset=utf-8'
+				}
+			})
+
+		case Promise:
 			// @ts-ignore
 			return (response as any as Promise<unknown>).then((x) => {
 				const r = mapCompactResponse(x)
@@ -591,15 +610,17 @@ export const mapCompactResponse = (response: unknown): Response => {
 				return new Response('')
 			})
 
-		// ? Maybe response or Blob
-		case 'Function':
-			return mapCompactResponse((response as Function)())
-
-		case 'Number':
-		case 'Boolean':
-			return new Response((response as number | boolean).toString())
-
+		case Response:
+		case Error:
 		default:
+			if (response instanceof Response) {
+				return response
+			}
+
+			if (response instanceof Error) {
+				return errorToResponse(response)
+			}
+
 			const r = JSON.stringify(response)
 			if (r.charCodeAt(0) === 123)
 				return new Response(JSON.stringify(response), {
