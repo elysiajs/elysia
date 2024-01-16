@@ -125,8 +125,6 @@ export default class Elysia<
 		error: {}
 	},
 	const Metadata extends MetadataBase = {
-		prefix: string
-		scoped: boolean
 		schema: {}
 		macro: {}
 		routes: {}
@@ -137,6 +135,13 @@ export default class Elysia<
 	server: Server | null = null
 	private dependencies: Record<string, Checksum[]> = {}
 	private reporter: TraceReporter = new EventEmitter()
+
+	_types: {
+		Configuration: Configuration
+		Singleton: Singleton
+		Definitions: Definitions
+		Metadata: Metadata
+	} = {} as any
 
 	protected singleton = {
 		decorator: {},
@@ -1242,25 +1247,18 @@ export default class Elysia<
 				Metadata
 			>
 		) => NewElysia
-	): NewElysia extends Elysia<
-		any,
-		infer PluginSingleton,
-		infer PluginDefinitions,
-		infer PluginMetadata
+	): Elysia<
+		NewElysia['config'],
+		NewElysia['_types']['Singleton'],
+		NewElysia['_types']['Definitions'],
+		{
+			schema: Metadata['schema']
+			macro: Metadata['macro']
+			routes: Prettify<
+				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
+			>
+		}
 	>
-		? Elysia<
-				Configuration,
-				PluginSingleton,
-				PluginDefinitions,
-				{
-					schema: Metadata['schema']
-					macro: Metadata['macro']
-					routes: Prettify<
-						Metadata['routes'] & PluginMetadata['routes']
-					>
-				}
-		  >
-		: this
 
 	group<
 		const LocalSchema extends InputSchema<
@@ -1283,7 +1281,19 @@ export default class Elysia<
 			Configuration['prefix']
 		>,
 		run: (
-			group: Elysia<Configuration, Singleton, Definitions, Metadata>
+			group: Elysia<
+				{
+					prefix: `${Configuration['prefix']}${Prefix}`
+					scoped: true
+				},
+				Singleton,
+				Definitions,
+				{
+					schema: MergeSchema<Schema, Metadata['schema']>
+					macro: Metadata['macro']
+					routes: {}
+				}
+			>
 		) => NewElysia
 	): NewElysia extends Elysia<any, any, any, infer PluginMetadata>
 		? Elysia<
@@ -1446,26 +1456,24 @@ export default class Elysia<
 				Singleton,
 				Definitions,
 				{
-					schema: Metadata['schema']
+					schema: MergeSchema<Schema, Metadata['schema']>
 					macro: Metadata['macro']
 					routes: {}
 				}
 			>
 		) => NewElysia
-	): NewElysia extends Elysia<any, any, any, infer PluginMetadata>
-		? Elysia<
-				Configuration,
-				Singleton,
-				Definitions,
-				{
-					schema: Schema
-					macro: Metadata['macro']
-					routes: Prettify<
-						Metadata['routes'] & PluginMetadata['routes']
-					>
-				}
-		  >
-		: this
+	): Elysia<
+		Configuration,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			macro: Metadata['macro']
+			routes: Prettify<
+				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
+			>
+		}
+	>
 
 	/**
 	 * ### guard
@@ -1553,7 +1561,7 @@ export default class Elysia<
 	}
 
 	// Inline Fn
-	use<NewElysia extends Elysia<any, any, any, any> = this>(
+	use<NewElysia extends Elysia<any, any, any, any>>(
 		plugin: MaybePromise<(app: NewElysia) => MaybePromise<NewElysia>>
 	): NewElysia extends Elysia<
 		any,
@@ -1593,82 +1601,102 @@ export default class Elysia<
 						>
 					>
 					macro: Prettify<Metadata['macro'] & PluginMetadata['macro']>
-					routes: Metadata['routes'] & PluginMetadata['routes']
+					routes: Prettify<
+						Metadata['routes'] & PluginMetadata['routes']
+					>
 				}
 		  >
 		: this
 
-	// Entire Instance
-	use<NewElysia extends Elysia<any, any, any, any>>(
+	// Entire Instance where scoped is true
+	use<
+		NewElysia extends Elysia<
+			{
+				prefix: any
+				scoped: true
+			},
+			any,
+			any,
+			any
+		>
+	>(
 		instance: MaybePromise<NewElysia>
-	): NewElysia extends Elysia<
-		infer PluginConfiguration,
-		infer PluginSingleton,
-		infer PluginDefinitions,
-		infer PluginMetadata
+	): Elysia<
+		NewElysia['config'],
+		NewElysia['_types']['Singleton'],
+		Definitions,
+		{
+			routes: Configuration['prefix'] extends ``
+				? Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
+				: Metadata['routes'] &
+						AddPrefix<
+							Configuration['prefix'],
+							NewElysia['_types']['Metadata']['routes']
+						>
+			macro: Metadata['macro']
+			schema: Metadata['schema']
+		}
 	>
-		? PluginConfiguration['scoped'] extends true
-			? Elysia<
-					Configuration,
-					Singleton,
-					Definitions,
-					{
-						routes: Configuration['prefix'] extends ``
-							? Metadata['routes'] & PluginMetadata['routes']
-							: Metadata['routes'] &
-									AddPrefix<
-										Configuration['prefix'],
-										PluginMetadata['routes']
-									>
-						macro: Metadata['macro']
-						schema: Metadata['schema']
-					}
-			  >
-			: Elysia<
-					Configuration,
-					{
-						decorator: Prettify<
-							Singleton['decorator'] &
-								PluginSingleton['decorator']
+
+	// Entire Instance where scoped is false
+	use<
+		NewElysia extends Elysia<
+			{
+				prefix: any
+				scoped: false
+			},
+			any,
+			any,
+			any
+		>
+	>(
+		instance: MaybePromise<NewElysia>
+	): Elysia<
+		Configuration,
+		{
+			decorator: Prettify<
+				Singleton['decorator'] &
+					NewElysia['_types']['Singleton']['decorator']
+			>
+			store: Prettify<
+				Singleton['store'] & NewElysia['_types']['Singleton']['store']
+			>
+			derive: Prettify<
+				Singleton['derive'] & NewElysia['_types']['Singleton']['derive']
+			>
+			resolve: Prettify<
+				Singleton['resolve'] &
+					NewElysia['_types']['Singleton']['resolve']
+			>
+		},
+		{
+			type: Prettify<
+				Definitions['type'] & NewElysia['_types']['Definitions']['type']
+			>
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
+			>
+		},
+		{
+			schema: Prettify<
+				MergeSchema<
+					Metadata['schema'],
+					NewElysia['_types']['Metadata']['schema']
+				>
+			>
+			macro: Prettify<
+				Metadata['macro'] & NewElysia['_types']['Metadata']['macro']
+			>
+			routes: Configuration['prefix'] extends ``
+				? Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
+				: Metadata['routes'] &
+						AddPrefix<
+							Configuration['prefix'],
+							NewElysia['_types']['Metadata']['routes']
 						>
-						store: Prettify<
-							Singleton['store'] & PluginSingleton['store']
-						>
-						derive: Prettify<
-							Singleton['derive'] & PluginSingleton['derive']
-						>
-						resolve: Prettify<
-							Singleton['resolve'] & PluginSingleton['resolve']
-						>
-					},
-					{
-						type: Prettify<
-							Definitions['type'] & PluginDefinitions['type']
-						>
-						error: Prettify<
-							Definitions['error'] & PluginDefinitions['error']
-						>
-					},
-					{
-						schema: Prettify<
-							MergeSchema<
-								Metadata['schema'],
-								PluginMetadata['schema']
-							>
-						>
-						macro: Prettify<
-							Metadata['macro'] & PluginMetadata['macro']
-						>
-						routes: Configuration['prefix'] extends ``
-							? Metadata['routes'] & PluginMetadata['routes']
-							: Metadata['routes'] &
-									AddPrefix<
-										Configuration['prefix'],
-										PluginMetadata['routes']
-									>
-					}
-			  >
-		: this
+		}
+	>
 
 	// Import Fn
 	use<NewElysia extends Elysia<any, any, any, any>>(
@@ -4042,8 +4070,8 @@ export default class Elysia<
 						reusePort: true,
 						...this.config.serve,
 						websocket: {
-						...this.config.websocket,
-						...websocket
+							...this.config.websocket,
+							...websocket
 						},
 						port: options,
 						fetch,
@@ -4109,7 +4137,7 @@ export { Elysia }
 
 export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
 export { t } from './type-system'
-export { Cookie, type CookieOptions } from './cookie'
+export { Cookie, type CookieOptions } from './cookies'
 
 export {
 	getSchemaValidator,

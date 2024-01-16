@@ -1,16 +1,11 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia()
-	.onError(({ error }) => {
-		console.log(error)
-	})
-	.ws('/ws', {
-		message(ws, message) {
-			ws.send(message)
-		}
-	})
-	.listen(8080)
+const c = new Elysia().get('/c', 'c').listen(8080)
+
+const app = new Elysia().get('/a', 'a').get('/b', 'b').use(c).listen(8080)
+
+app._types.Metadata.routes
 
 // console.log(app.router.static.http)
 

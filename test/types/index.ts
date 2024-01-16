@@ -478,7 +478,7 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['schema']
+	type App = (typeof server)['_types']['Metadata']['routes']
 	type Route = App['/v1/a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -509,7 +509,7 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['schema']
+		type App = (typeof server)['_types']['Metadata']['routes']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -548,7 +548,7 @@ app.use(plugin).group(
 					})
 			)
 	)
-	type App = (typeof server)['schema']
+	type App = (typeof server)['_types']['Metadata']['routes']
 	type Route = App['/v1/a']['subscribe']
 	expectTypeOf<Route>().toEqualTypeOf<{
 		headers: {
@@ -567,7 +567,7 @@ app.use(plugin).group(
 {
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
-	type App = (typeof server)['schema']
+	type App = (typeof server)['_types']['Metadata']['routes']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -772,7 +772,7 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['schema']
+	type App = (typeof server)['_types']['Metadata']['routes']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -789,17 +789,19 @@ app.group(
 // ? Inherits plugin prefix path
 {
 	const plugin = new Elysia({
-		prefix: '/plugin'
+		prefix: '/plugin',
+		scoped: false
 	}).get('/test-path', () => 'Test')
 
 	const app = new Elysia({
-		prefix: '/api'
+		prefix: '/api',
+		scoped: false
 	})
 		.use(plugin)
 		.get('/a', () => 'A')
 		.listen(3000)
 
-	type Routes = keyof (typeof app)['schema']
+	type App = (typeof app)['_types']['Metadata']['routes']
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/api/a' | '/api/plugin/test-path'>()
 }
@@ -807,14 +809,13 @@ app.group(
 // ? Inherits plugin instance prefix
 {
 	const plugin = new Elysia({
-		prefix: '/v1'
+		prefix: '/v1',
+		scoped: false
 	}).get('/', () => 'hello')
-
-	plugin.config.prefix
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['schema']
+	type App = (typeof server)['_types']['Metadata']['routes']
 	type Route = App['/v1/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -839,7 +840,7 @@ app.group(
 
 	const app = new Elysia().use(test)
 
-	type App = (typeof app)['schema']
+	type App = (typeof server)['_types']['Metadata']['routes']
 	type Routes = keyof App
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/app/test'>()
@@ -848,7 +849,7 @@ app.group(
 // ? Merging identical plugin type
 {
 	const cookie = new Elysia({
-		name: 'cookie'
+		name: 'cookie',
 	}).derive(() => {
 		return {
 			cookie: 'A'
@@ -907,13 +908,13 @@ app.group(
 
 // ? Inherits route for scoped instance
 {
-	const child = new Elysia({ scoped: true })
+	const child = new Elysia({ scoped: true, prefix: '', })
 		.decorate('b', 'b')
 		.model('b', t.String())
 		.get('/child', () => 'Hello from child route')
 	const main = new Elysia().use(child)
 
-	type Schema = (typeof main)['schema']
+	type App = (typeof main)['_types']['Metadata']['routes']
 
 	expectTypeOf<keyof (typeof main)['schema']>().toEqualTypeOf<'/child'>()
 	expectTypeOf<keyof (typeof main)['decorators']>().not.toEqualTypeOf<{
@@ -1013,14 +1014,16 @@ app.macro(() => {
 		a: 'a',
 		b: 2
 	})
-	.guard({
-		// ? Should contains macro
-		a: 'a',
-		b: 2
-	}, (app) =>
-		app.get('/', () => {}, {
+	.guard(
+		{
 			// ? Should contains macro
 			a: 'a',
 			b: 2
-		})
+		},
+		(app) =>
+			app.get('/', () => {}, {
+				// ? Should contains macro
+				a: 'a',
+				b: 2
+			})
 	)

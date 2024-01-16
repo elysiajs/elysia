@@ -7,7 +7,7 @@ import type { ElysiaWS } from '.'
 import type { Context } from '../context'
 
 import type {
-	DecoratorBase,
+	SingletonBase,
 	Handler,
 	VoidHandler,
 	ErrorHandler,
@@ -27,8 +27,8 @@ export namespace WS {
 	export type LocalHook<
 		LocalSchema extends InputSchema = {},
 		Route extends RouteSchema = RouteSchema,
-		Decorators extends DecoratorBase = {
-			request: {}
+		Singleton extends SingletonBase = {
+			decorator: {}
 			store: {}
 			derive: {}
 			resolve: {}
@@ -50,14 +50,14 @@ export namespace WS {
 				validator?: TypeCheck<TSchema>
 			}>,
 			TypedRoute,
-			Decorators
+			Singleton
 		> extends infer WS
 			? {
-					transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+					transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 					transformMessage?: MaybeArray<
-						VoidHandler<TypedRoute, Decorators>
+						VoidHandler<TypedRoute, Singleton>
 					>
-					beforeHandle?: MaybeArray<Handler<TypedRoute, Decorators>>
+					beforeHandle?: MaybeArray<Handler<TypedRoute, Singleton>>
 					/**
 					 * Catch error
 					 */

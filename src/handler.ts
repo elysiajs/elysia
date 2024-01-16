@@ -2,7 +2,7 @@
 import { serialize } from 'cookie'
 import { StatusMap } from './utils'
 
-import { Cookie } from './cookie'
+import { Cookie } from './cookies'
 import { ELYSIA_RESPONSE } from './error'
 
 import type { Context } from './context'

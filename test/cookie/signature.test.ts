@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { parseCookie, Cookie } from '../../src/cookie'
+import { parseCookie, Cookie } from '../../src/cookies'
 import { signCookie } from '../../src/utils'
 
 describe('Parse Cookie', () => {

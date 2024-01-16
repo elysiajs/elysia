@@ -1,5 +1,5 @@
 import type { HTTPStatusName } from './utils'
-import type { Cookie, ElysiaCookie } from './cookie'
+import type { Cookie, ElysiaCookie } from './cookies'
 
 type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>

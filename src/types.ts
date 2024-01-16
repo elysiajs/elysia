@@ -7,7 +7,7 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { OpenAPIV3 } from 'openapi-types'
 import type { EventEmitter } from 'eventemitter3'
 
-import type { CookieOptions } from './cookie'
+import type { CookieOptions } from './cookies'
 import type { Context, PreContext } from './context'
 import type {
 	InternalServerError,
@@ -628,13 +628,13 @@ export type LocalHook<
 	},
 	Errors extends Record<string, Error> = {},
 	Extension extends BaseMacro = {},
-	Path extends string = '',
+	Path extends string | undefined = '',
 	TypedRoute extends RouteSchema = Schema extends {
 		params: Record<string, unknown>
 	}
 		? Schema
 		: Schema & {
-				params: Record<GetPathParameter<Path>, string>
+				params: Record<GetPathParameter<Path extends string ? Path : ''>, string>
 		  }
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
@@ -724,7 +724,7 @@ export type Checksum = {
 	checksum: number
 	stack?: string
 	routes?: InternalRoute[]
-	decorators?: SingletonBase['request']
+	decorators?: SingletonBase['decorator']
 	store?: SingletonBase['store']
 	type?: DefinitionBase['type']
 	error?: DefinitionBase['error']
@@ -741,7 +741,7 @@ export type Checksum = {
 
 export type BaseMacro = Record<
 	string,
-	Record<string, unknown> | ((a: unknown) => unknown)
+	Record<string, unknown> | ((...a: any) => unknown)
 >
 
 export type MacroToProperty<T extends BaseMacro> = Prettify<{

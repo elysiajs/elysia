@@ -26,7 +26,7 @@ import {
 } from './error'
 
 import { sucrose } from './sucrose'
-import { parseCookie, type CookieOptions } from './cookie'
+import { parseCookie, type CookieOptions } from './cookies'
 
 import type {
 	ComposedHandler,

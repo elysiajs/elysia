@@ -17,7 +17,7 @@ import {
 import { type TypeCheck } from '@sinclair/typebox/compiler'
 import { Value } from '@sinclair/typebox/value'
 
-import { CookieOptions } from './cookie'
+import { CookieOptions } from './cookies'
 import { ValidationError } from './error'
 
 const t = Object.assign({}, Type)

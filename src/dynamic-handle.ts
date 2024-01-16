@@ -8,7 +8,7 @@ import type { Context } from './context'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { signCookie } from './utils'
-import { parseCookie } from './cookie'
+import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 
@@ -341,7 +341,7 @@ export const createDynamicHandler =
 						context.set.cookie
 					))
 						context.set.cookie[key].value = await signCookie(
-							cookie.value,
+							cookie.value as any,
 							'${secret}'
 						)
 				else
@@ -350,7 +350,7 @@ export const createDynamicHandler =
 
 						if (context.set.cookie[name]?.value) {
 							context.set.cookie[name].value = await signCookie(
-								context.set.cookie[name].value,
+								context.set.cookie[name].value as any,
 								secret as any
 							)
 						}
