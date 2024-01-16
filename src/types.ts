@@ -105,8 +105,8 @@ export type Reconcile<A extends Object, B extends Object> = {
 		  >
 	: never
 
-export interface DecoratorBase {
-	request: {
+export interface SingletonBase {
+	decorator: {
 		[x: string]: unknown
 	}
 	store: {
@@ -354,28 +354,28 @@ export type MergeSchema<A extends RouteSchema, B extends RouteSchema> = {
 
 export type Handler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	},
 	Path extends string = ''
 > = (
-	context: Prettify<Context<Route, Decorators, Path>>
+	context: Prettify<Context<Route, Singleton, Path>>
 ) => Route['response'] extends { 200: unknown }
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
 
 export type OptionalHandler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = Handler<Route, Decorators> extends (
+> = Handler<Route, Singleton> extends (
 	context: infer Context
 ) => infer Returned
 	? (context: Context) => Returned | MaybePromise<void>
@@ -383,13 +383,13 @@ export type OptionalHandler<
 
 export type AfterHandler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = Handler<Route, Decorators> extends (
+> = Handler<Route, Singleton> extends (
 	context: infer Context
 ) => infer Returned
 	? (
@@ -403,8 +403,8 @@ export type AfterHandler<
 
 export type MapResponse<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -413,7 +413,7 @@ export type MapResponse<
 	Omit<Route, 'response'> & {
 		response: MaybePromise<Response | undefined | void>
 	},
-	Decorators & {
+	Singleton & {
 		derive: {
 			response: Route['response']
 		}
@@ -422,18 +422,18 @@ export type MapResponse<
 
 export type VoidHandler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = (context: Prettify<Context<Route, Decorators>>) => MaybePromise<void>
+> = (context: Prettify<Context<Route, Singleton>>) => MaybePromise<void>
 
 export type TransformHandler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -442,7 +442,7 @@ export type TransformHandler<
 	context: Prettify<
 		Context<
 			Route,
-			Omit<Decorators, 'resolve'> & {
+			Omit<Singleton, 'resolve'> & {
 				resolve: {}
 			}
 		>
@@ -490,8 +490,8 @@ export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
 
 export type TraceHandler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -499,7 +499,7 @@ export type TraceHandler<
 > = (
 	lifecycle: Prettify<
 		{
-			context: Context<Route, Decorators>
+			context: Context<Route, Singleton>
 			set: Context['set']
 			id: number
 			time: number
@@ -514,7 +514,7 @@ export type TraceHandler<
 				| 'error'
 				| 'response']: Promise<TraceProcess<'begin'>>
 		} & {
-			store: Decorators['store']
+			store: Singleton['store']
 		}
 	>
 ) => MaybePromise<void>
@@ -525,27 +525,27 @@ export type TraceListener = EventEmitter<{
 
 export type BodyHandler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
 > = (
-	context: Prettify<Context<Route, Decorators>>,
+	context: Prettify<Context<Route, Singleton>>,
 	contentType: string
 ) => MaybePromise<any>
 
 export type PreHandler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
 > = (
-	context: Prettify<PreContext<Decorators>>
+	context: Prettify<PreContext<Singleton>>
 ) => MaybePromise<Route['response'] | void>
 
 export type GracefulHandler<Instance extends Elysia<any, any, any, any>> = (
@@ -555,15 +555,15 @@ export type GracefulHandler<Instance extends Elysia<any, any, any, any>> = (
 export type ErrorHandler<
 	T extends Record<string, Error> = {},
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
 > = (
 	context: Prettify<
-		Context<Route, Decorators> &
+		Context<Route, Singleton> &
 			(
 				| {
 						request: Request
@@ -620,8 +620,8 @@ export type Isolate<T> = {
 export type LocalHook<
 	LocalSchema extends InputSchema = {},
 	Schema extends RouteSchema = RouteSchema,
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -654,31 +654,31 @@ export type LocalHook<
 		/**
 		 * Custom body parser
 		 */
-		parse?: MaybeArray<BodyHandler<TypedRoute, Decorators>>
+		parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 		/**
 		 * Transform context's value
 		 */
-		transform?: MaybeArray<TransformHandler<TypedRoute, Decorators>>
+		transform?: MaybeArray<TransformHandler<TypedRoute, Singleton>>
 		/**
 		 * Execute before main handler
 		 */
-		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
+		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 		/**
 		 * Execute after main handler
 		 */
-		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Decorators>>
+		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 		/**
 		 * Execute after main handler
 		 */
-		mapResponse?: MaybeArray<MapResponse<TypedRoute, Decorators>>
+		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 		/**
 		 * Catch error
 		 */
-		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
+		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 		/**
 		 * Custom body parser
 		 */
-		onResponse?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+		onResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	}
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
@@ -724,8 +724,8 @@ export type Checksum = {
 	checksum: number
 	stack?: string
 	routes?: InternalRoute[]
-	decorators?: DecoratorBase['request']
-	store?: DecoratorBase['store']
+	decorators?: SingletonBase['request']
+	store?: SingletonBase['store']
 	type?: DefinitionBase['type']
 	error?: DefinitionBase['error']
 	dependencies?: Record<string, Checksum[]>
@@ -756,52 +756,52 @@ export type MacroToProperty<T extends BaseMacro> = Prettify<{
 
 export interface MacroManager<
 	TypedRoute extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	},
 	Errors extends Record<string, Error> = {}
 > {
-	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Decorators>>): unknown
+	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
 	onParse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<BodyHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 	): unknown
 
-	onTransform(fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>): unknown
+	onTransform(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
 	onTransform(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onBeforeHandle(
-		fn: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 	onBeforeHandle(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 
-	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Decorators>>): unknown
+	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>): unknown
 	onAfterHandle(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<AfterHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onError(
-		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
+		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 	onError(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
+		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 
-	onResponse(fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>): unknown
+	onResponse(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
 	onResponse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
 	events: {
@@ -812,7 +812,7 @@ export interface MacroManager<
 
 // Route extends RouteSchema = {},
 // Decorators extends DecoratorBase = {
-// 	request: {}
+// 	decorator: {}
 // 	store: {}
 // 	derive: {}
 // 	resolve: {}

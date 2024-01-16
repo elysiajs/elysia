@@ -175,7 +175,7 @@ describe('group', () => {
 
 		const app = new Elysia().use(plugin)
 
-		expect(app.routes.map((x) => x.path)).toEqual([
+		expect(app.router.history.map((x) => x.path)).toEqual([
 			'/v1/course',
 			'/v1/course/new',
 			'/v1/course/id/:courseId/chapter/hello'
@@ -203,7 +203,7 @@ describe('group', () => {
 			.use(b)
 			.get('/', () => 'a')
 
-		expect(app.routes.map((x) => x.path)).toEqual([
+		expect(app.router.history.map((x) => x.path)).toEqual([
 			'/course/id/:courseId/b',
 			'/test/id/:courseId/b',
 			'/'

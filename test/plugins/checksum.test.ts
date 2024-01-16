@@ -18,8 +18,7 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		// @ts-ignore
-		const [a, b] = app.routes
+		const [a, b] = app.router.history
 
 		expect(a.hooks.transform!.length).toBe(1)
 		expect(b.hooks.transform!.length).toBe(1)
@@ -39,8 +38,7 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		// @ts-ignore
-		const [a, b] = app.routes
+		const [a, b] = app.router.history
 
 		expect(a.hooks.transform!.length).toBe(1)
 		expect(b.hooks.transform!.length).toBe(1)
@@ -64,8 +62,7 @@ describe('Checksum', () => {
 			)
 			.get('/cookie', () => 'Hi')
 
-		// @ts-ignore
-		const [a, b] = app.routes
+		const [a, b] = app.router.history
 
 		expect(
 			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)
@@ -86,8 +83,7 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		// @ts-ignore
-		const [a, b] = app.routes
+		const [a, b] = app.router.history
 
 		expect(
 			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)
@@ -110,8 +106,7 @@ describe('Checksum', () => {
 			.use(group)
 			.get('/cookie', () => 'Hi')
 
-		// @ts-ignore
-		const [a, b] = app.routes
+		const [a, b] = app.router.history
 
 		expect(
 			Math.abs(a.hooks.transform!.length - b.hooks.transform!.length)

@@ -26,4 +26,4 @@ const app = new Elysia()
 	})
 	.listen(3000)
 
-console.log(app.routes[0].composed?.toString())
+console.log(app.router.history[0].composed?.toString())

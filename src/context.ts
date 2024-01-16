@@ -1,21 +1,21 @@
 import type { HTTPStatusName } from './utils'
-import type { Cookie, CookieOptions, ElysiaCookie } from './cookie'
+import type { Cookie, ElysiaCookie } from './cookie'
 
 type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>
 }
 
 import type {
-	DecoratorBase,
 	RouteSchema,
 	Prettify,
-	GetPathParameter
+	GetPathParameter,
+	SingletonBase
 } from './types'
 
 export type Context<
 	Route extends RouteSchema = RouteSchema,
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -60,23 +60,23 @@ export type Context<
 
 		path: string
 		request: Request
-		store: Decorators['store']
-	} & Decorators['request'] &
-		Decorators['derive'] &
-		Decorators['resolve']
+		store: Singleton['store']
+	} & Singleton['decorator'] &
+		Singleton['derive'] &
+		Singleton['resolve']
 >
 
 // Use to mimic request before mapping route
 export type PreContext<
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
 > = Prettify<
 	{
-		store: Decorators['store']
+		store: Singleton['store']
 		request: Request
 
 		set: {
@@ -86,5 +86,5 @@ export type PreContext<
 			status?: number
 			redirect?: string
 		}
-	} & Decorators['request']
+	} & Singleton['decorator']
 >

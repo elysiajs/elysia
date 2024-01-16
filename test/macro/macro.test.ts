@@ -199,7 +199,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.parse?.length).toEqual(1)
+		expect(app.router.history[0].hooks.parse?.length).toEqual(1)
 	})
 
 	it('appends onTransform', async () => {
@@ -213,7 +213,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.transform?.length).toEqual(1)
+		expect(app.router.history[0].hooks.transform?.length).toEqual(1)
 	})
 
 	it('appends onBeforeHandle', async () => {
@@ -227,7 +227,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.beforeHandle?.length).toEqual(1)
+		expect(app.router.history[0].hooks.beforeHandle?.length).toEqual(1)
 	})
 
 	it('appends onAfterHandle', async () => {
@@ -241,7 +241,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.afterHandle?.length).toEqual(1)
+		expect(app.router.history[0].hooks.afterHandle?.length).toEqual(1)
 	})
 
 	it('appends onError', async () => {
@@ -255,7 +255,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.error?.length).toEqual(1)
+		expect(app.router.history[0].hooks.error?.length).toEqual(1)
 	})
 
 	it('appends onResponse', async () => {
@@ -269,7 +269,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.onResponse?.length).toEqual(1)
+		expect(app.router.history[0].hooks.onResponse?.length).toEqual(1)
 	})
 
 	it('handle deduplication', async () => {

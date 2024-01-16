@@ -10,9 +10,7 @@ const getCookies = (response: Response) =>
 		return decodeURIComponent(x)
 	})
 
-const app = new Elysia({
-	aot: false
-})
+const app = new Elysia()
 	.get(
 		'/council',
 		({ cookie: { council } }) =>
@@ -124,7 +122,7 @@ describe('Dynamic Cookie Response', () => {
 		const response = await app.handle(req('/update'))
 
 		expect(getCookies(response)).toEqual([
-			`name=${await signCookie('seminar: Himari', secrets)}`
+			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
 		])
 	})
 

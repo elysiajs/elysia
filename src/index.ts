@@ -9,7 +9,7 @@ import type { Context } from './context'
 
 import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
 
-import { ElysiaWS } from './ws'
+import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
 import { isNotEmpty, mapEarlyResponse } from './handler'
@@ -35,9 +35,9 @@ import {
 } from './utils'
 
 import {
+	DynamicHandler,
 	createDynamicErrorHandler,
-	createDynamicHandler,
-	type DynamicHandler
+	createDynamicHandler
 } from './dynamic-handle'
 
 import {
@@ -46,12 +46,13 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError
+	type InternalServerError,
+	isProduction
 } from './error'
 
 import type {
 	ElysiaConfig,
-	DecoratorBase,
+	SingletonBase,
 	DefinitionBase,
 	Handler,
 	ComposedHandler,
@@ -113,8 +114,8 @@ export default class Elysia<
 		prefix: ''
 		scoped: false
 	},
-	const Decorators extends DecoratorBase = {
-		request: {}
+	const Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -132,22 +133,33 @@ export default class Elysia<
 	}
 > {
 	config: ElysiaConfig<Configuration>
-	private dependencies: Record<string, Checksum[]> = {}
 
-	store: Decorators['store'] = {}
-	private decorators = {} as Decorators['request']
-	private definitions = {
+	server: Server | null = null
+	private dependencies: Record<string, Checksum[]> = {}
+	private reporter: TraceReporter = new EventEmitter()
+
+	protected singleton = {
+		decorator: {},
+		store: {},
+		derive: {},
+		resolve: {}
+	} as Singleton
+
+	definitions: {
+		type: Record<string, TSchema>
+		error: Record<string, Error>
+	} = {
 		type: {},
 		error: {}
-	} as {
-		type: Definitions['type']
-		error: Definitions['error']
 	}
 
-	schema = {} as Metadata['routes']
+	protected extender: {
+		macros: ((manager: MacroManager<any, any, any>) => unknown)[]
+	} = {
+		macros: []
+	}
 
-	private macros: ((manager: MacroManager<any, any, any>) => unknown)[] =
-		[] as any
+	protected validator: SchemaValidator | null = null
 
 	event: LifeCycleStore = {
 		start: [],
@@ -163,52 +175,32 @@ export default class Elysia<
 		stop: []
 	}
 
-	reporter: TraceReporter = new EventEmitter()
-
-	server: Server | null = null
-	private getServer() {
-		return this.server
-	}
-	private validator: SchemaValidator | null = null
-
-	private router = new Memoirist<ComposedHandler>()
-	private wsRouter = new Memoirist<ComposedHandler>()
-	routes: InternalRoute[] = []
-
-	private staticRouter = {
-		handlers: [] as ComposedHandler[],
-		variables: '',
-		map: {} as Record<
-			string,
-			{
-				code: string
-				all?: string
-			}
-		>,
-		all: ''
+	telemetry = {
+		stack: undefined as string | undefined
 	}
 
-	private wsPaths: Record<string, number> = {}
-	private dynamicRouter = new Memoirist<DynamicHandler>()
-	private lazyLoadModules: Promise<Elysia<any, any>>[] = []
-	path: Configuration['prefix'] = '' as any
-	stack: string | undefined = undefined
-
-	constructor(config: ElysiaConfig<Configuration>) {
-		this.config = {
-			forceErrorEncapsulation: true,
-			prefix: '',
-			aot: true,
-			strictPath: false,
-			scoped: false,
-			cookie: {},
-			analytic: false,
-			...config,
-			seed: config?.seed === undefined ? '' : config?.seed
-		} as any
-
-		if (config?.analytic && (config?.name || config?.seed !== undefined))
-			this.stack = new Error().stack
+	router = {
+		http: new Memoirist<ComposedHandler>(),
+		ws: new Memoirist<ComposedHandler>(),
+		// Use in non-AOT mode
+		dynamic: new Memoirist<DynamicHandler>(),
+		static: {
+			http: {
+				handlers: [] as ComposedHandler[],
+				variables: '',
+				map: {} as Record<
+					string,
+					{
+						code: string
+						all?: string
+					}
+				>,
+				all: ''
+			},
+			// Static WS Router is consists of pathname and websocket handler index to compose
+			ws: {} as Record<string, number>
+		},
+		history: [] as InternalRoute[]
 	}
 
 	inference = {
@@ -235,6 +227,37 @@ export default class Elysia<
 	} as {
 		event: Sucrose.Inference
 		trace: Sucrose.TraceInference
+	}
+
+	private lazyLoadModules: Promise<Elysia<any, any>>[] = []
+
+	constructor(config?: ElysiaConfig<Configuration>) {
+		this.config = {
+			forceErrorEncapsulation: true,
+			prefix: '',
+			aot: true,
+			strictPath: false,
+			scoped: false,
+			cookie: {},
+			analytic: false,
+			...config,
+			seed: config?.seed === undefined ? '' : config?.seed
+		} as any
+
+		if (config?.analytic && (config?.name || config?.seed !== undefined))
+			this.telemetry.stack = new Error().stack
+	}
+
+	private getServer() {
+		return this.server
+	}
+
+	get store() {
+		return this.singleton.store
+	}
+
+	get decorator() {
+		return this.singleton.decorator
 	}
 
 	private add(
@@ -281,7 +304,7 @@ export default class Elysia<
 						break
 				}
 
-			const models = this.definitions.type as Record<string, TSchema>
+			const models = this.definitions.type
 
 			let cookieValidator = getSchemaValidator(
 				localHook?.cookie ?? (this.validator?.cookie as any),
@@ -302,8 +325,7 @@ export default class Elysia<
 					)
 				} else {
 					cookieValidator = getSchemaValidator(
-						// @ts-ignore
-						t.Cookie({}, this.config.cookie),
+						t.Cookie({}, this.config.cookie as any),
 						{
 							dynamic: !this.config.aot,
 							models,
@@ -357,7 +379,7 @@ export default class Elysia<
 				? path.slice(0, path.length - 1)
 				: path + '/'
 
-			if (this.macros.length) {
+			if (this.extender.macros.length) {
 				const manage = createManager({
 					globalHook: this.event,
 					localHook
@@ -376,7 +398,7 @@ export default class Elysia<
 					onError: manage('error')
 				}
 
-				for (const macro of this.macros) {
+				for (const macro of this.extender.macros) {
 					const customHookValues: Record<string, unknown> = {}
 					for (const [key, value] of Object.entries(
 						localHook ?? {}
@@ -409,7 +431,7 @@ export default class Elysia<
 			const isFn = typeof handle === 'function'
 
 			if (this.config.aot === false) {
-				this.dynamicRouter.add(method, path, {
+				this.router.dynamic.add(method, path, {
 					validator,
 					hooks,
 					content: localHook?.type as string,
@@ -417,7 +439,7 @@ export default class Elysia<
 				})
 
 				if (this.config.strictPath === false) {
-					this.dynamicRouter.add(method, loosePath, {
+					this.router.dynamic.add(method, loosePath, {
 						validator,
 						hooks,
 						content: localHook?.type as string,
@@ -425,7 +447,7 @@ export default class Elysia<
 					})
 				}
 
-				this.routes.push({
+				this.router.history.push({
 					method,
 					path,
 					composed: null,
@@ -455,14 +477,14 @@ export default class Elysia<
 						params: {} as never,
 						body: undefined,
 						request: new Request(`http://localhost${path}`),
-						store: this.store,
+						store: this.singleton.store,
 						path: path,
 						set: {
 							headers: this.setHeaders ?? {},
 							status: 200
 						}
 					},
-					this.decorators as any
+					this.singleton as any
 				)
 
 				let response
@@ -499,22 +521,24 @@ export default class Elysia<
 				}
 			}
 
-			const existingRouteIndex = this.routes.findIndex(
+			const existingRouteIndex = this.router.history.findIndex(
 				(route) => route.path === path && route.method === method
 			)
 
 			if (existingRouteIndex !== -1) {
 				// remove route previously defined
-				this.routes.splice(existingRouteIndex, 1)
+				this.router.history.splice(existingRouteIndex, 1)
 			}
 
-			this.routes.push({
+			this.router.history.push({
 				method,
 				path,
 				composed: mainHandler,
 				handler: handle,
 				hooks: hooks as any
 			})
+
+			const staticRouter = this.router.static.http
 
 			if (method === '$INTERNALWS') {
 				const loose = this.config.strictPath
@@ -524,82 +548,82 @@ export default class Elysia<
 					: path + '/'
 
 				if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-					const index = this.staticRouter.handlers.length
-					this.staticRouter.handlers.push(mainHandler)
+					const index = staticRouter.handlers.length
+					staticRouter.handlers.push(mainHandler)
 
 					// @ts-ignore
 					if (mainHandler.response instanceof Response)
-						this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
+						staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
 					else
-						this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+						staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
 
-					this.wsPaths[path] = index
-					if (loose) this.wsPaths[loose] = index
+					this.router.static.ws[path] = index
+					if (loose) this.router.static.ws[loose] = index
 				} else {
-					this.wsRouter.add('ws', path, mainHandler)
-					if (loose) this.wsRouter.add('ws', loose, mainHandler)
+					this.router.ws.add('ws', path, mainHandler)
+					if (loose) this.router.ws.add('ws', loose, mainHandler)
 				}
 
 				return
 			}
 
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-				const index = this.staticRouter.handlers.length
-				this.staticRouter.handlers.push(mainHandler)
+				const index = staticRouter.handlers.length
+				staticRouter.handlers.push(mainHandler)
 
 				// @ts-ignore
 				if (mainHandler.response instanceof Response)
-					this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
+					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
 				else
-					this.staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
 
-				if (!this.staticRouter.map[path])
-					this.staticRouter.map[path] = {
+				if (!staticRouter.map[path])
+					staticRouter.map[path] = {
 						code: ''
 					}
 
 				if (method === 'ALL')
-					this.staticRouter.map[
+					staticRouter.map[
 						path
 					].all = `default: return st${index}(ctx)\n`
 				else {
 					// @ts-ignore
 					if (mainHandler.response instanceof Response)
-						this.staticRouter.map[
+						staticRouter.map[
 							path
-						].code = `case '${method}': return st${index}.clone()\n${this.staticRouter.map[path].code}`
+						].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[path].code}`
 					else
-						this.staticRouter.map[
+						staticRouter.map[
 							path
-						].code = `case '${method}': return st${index}(ctx)\n${this.staticRouter.map[path].code}`
+						].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[path].code}`
 				}
 
 				if (!this.config.strictPath) {
-					if (!this.staticRouter.map[loosePath])
-						this.staticRouter.map[loosePath] = {
+					if (!staticRouter.map[loosePath])
+						staticRouter.map[loosePath] = {
 							code: ''
 						}
 
 					if (method === 'ALL')
-						this.staticRouter.map[
+						staticRouter.map[
 							loosePath
 						].all = `default: return st${index}(ctx)\n`
 					else {
 						// @ts-ignore
 						if (mainHandler.response instanceof Response)
-							this.staticRouter.map[
+							staticRouter.map[
 								loosePath
-							].code = `case '${method}': return st${index}.clone()\n${this.staticRouter.map[loosePath].code}`
+							].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[loosePath].code}`
 						else
-							this.staticRouter.map[
+							staticRouter.map[
 								loosePath
-							].code = `case '${method}': return st${index}(ctx)\n${this.staticRouter.map[loosePath].code}`
+							].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[loosePath].code}`
 					}
 				}
 			} else {
-				this.router.add(method, path, mainHandler)
+				this.router.http.add(method, path, mainHandler)
 				if (!this.config.strictPath)
-					this.router.add(
+					this.router.http.add(
 						method,
 						path.endsWith('/')
 							? path.slice(0, path.length - 1)
@@ -656,7 +680,7 @@ export default class Elysia<
 	 */
 	onRequest<Schema extends RouteSchema = {}>(
 		handler: MaybeArray<
-			PreHandler<MergeSchema<Schema, Metadata['schema']>, Decorators>
+			PreHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
 	) {
 		this.on('request', handler)
@@ -683,7 +707,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onParse(parser: MaybeArray<BodyHandler<Metadata['schema'], Decorators>>) {
+	onParse(parser: MaybeArray<BodyHandler<Metadata['schema'], Singleton>>) {
 		this.on('parse', parser)
 
 		return this
@@ -705,10 +729,7 @@ export default class Elysia<
 	 */
 	onTransform<Schema extends RouteSchema = {}>(
 		handler: MaybeArray<
-			TransformHandler<
-				MergeSchema<Schema, Metadata['schema']>,
-				Decorators
-			>
+			TransformHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
 	) {
 		this.on('transform', handler)
@@ -749,15 +770,15 @@ export default class Elysia<
 	 */
 	resolve<Resolver extends Object>(
 		resolver: (
-			context: Prettify<Context<Metadata['schema'], Decorators>>
+			context: Prettify<Context<Metadata['schema'], Singleton>>
 		) => MaybePromise<Resolver> extends { store: any } ? never : Resolver
 	): Elysia<
 		Configuration,
 		{
-			request: Decorators['request']
-			store: Decorators['store']
-			derive: Decorators['resolve']
-			resolve: Prettify<Decorators['resolve'] & Awaited<Resolver>>
+			decorator: Singleton['decorator']
+			store: Singleton['store']
+			derive: Singleton['resolve']
+			resolve: Prettify<Singleton['resolve'] & Awaited<Resolver>>
 		},
 		Definitions,
 		Metadata
@@ -789,7 +810,7 @@ export default class Elysia<
 	 */
 	onBeforeHandle<Schema extends RouteSchema = {}>(
 		handler: MaybeArray<
-			OptionalHandler<MergeSchema<Schema, Metadata['schema']>, Decorators>
+			OptionalHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
 	) {
 		this.on('beforeHandle', handler as any)
@@ -815,7 +836,7 @@ export default class Elysia<
 	 */
 	onAfterHandle<Schema extends RouteSchema = {}>(
 		handler: MaybeArray<
-			AfterHandler<MergeSchema<Schema, Metadata['schema']>, Decorators>
+			AfterHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
 	) {
 		this.on('afterHandle', handler as AfterHandler<any, any>)
@@ -841,7 +862,7 @@ export default class Elysia<
 	 */
 	mapResponse<Schema extends RouteSchema = {}>(
 		handler: MaybeArray<
-			MapResponse<MergeSchema<Schema, Metadata['schema']>, Decorators>
+			MapResponse<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
 	) {
 		this.on('mapResponse', handler as MapResponse<any, any>)
@@ -867,7 +888,7 @@ export default class Elysia<
 
 	onResponse<Schema extends RouteSchema = {}>(
 		handler: MaybeArray<
-			VoidHandler<MergeSchema<Schema, Metadata['schema']>, Decorators>
+			VoidHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
 	) {
 		this.on('response', handler)
@@ -892,7 +913,7 @@ export default class Elysia<
 	 * ```
 	 */
 	trace<Schema extends RouteSchema = {}>(
-		handler: TraceHandler<Schema, Decorators>
+		handler: TraceHandler<Schema, Singleton>
 	) {
 		this.reporter.on(
 			'event',
@@ -935,7 +956,7 @@ export default class Elysia<
 		errors: Errors
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		{
 			type: Definitions['type']
 			error: Definitions['error'] & {
@@ -977,7 +998,7 @@ export default class Elysia<
 		errors: CustomError
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		{
 			type: Definitions['type']
 			error: Definitions['error'] & {
@@ -1011,7 +1032,7 @@ export default class Elysia<
 		mapper: (decorators: Definitions['error']) => NewErrors
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		{
 			type: Definitions['type']
 			error: {
@@ -1059,10 +1080,9 @@ export default class Elysia<
 
 		for (const [code, error] of Object.entries(name)) {
 			// @ts-ignore
-			error.prototype[ERROR_CODE] = code
+			error.prototype[ERROR_CODE] = code as any
 
-			// @ts-ignore
-			this.definitions.error[code] = error
+			this.definitions.error[code] = error as any
 		}
 
 		return this
@@ -1086,7 +1106,7 @@ export default class Elysia<
 		handler: ErrorHandler<
 			Definitions['error'],
 			MergeSchema<Schema, Metadata['schema']>,
-			Decorators
+			Singleton
 		>
 	) {
 		this.on('error', handler as ErrorHandler<any, any, any>)
@@ -1217,26 +1237,26 @@ export default class Elysia<
 					prefix: `${Configuration['prefix']}${Prefix}`
 					scoped: true
 				},
-				Decorators,
+				Singleton,
 				Definitions,
 				Metadata
 			>
 		) => NewElysia
 	): NewElysia extends Elysia<
 		any,
-		infer PluginDecorators,
+		infer PluginSingleton,
 		infer PluginDefinitions,
 		infer PluginMetadata
 	>
 		? Elysia<
 				Configuration,
-				PluginDecorators,
+				PluginSingleton,
 				PluginDefinitions,
 				{
 					schema: Metadata['schema']
 					macro: Metadata['macro']
 					routes: Prettify<
-						PluginMetadata['schema'] & NewElysia['schema']
+						Metadata['routes'] & PluginMetadata['routes']
 					>
 				}
 		  >
@@ -1257,24 +1277,28 @@ export default class Elysia<
 		schema: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			Configuration['prefix']
 		>,
 		run: (
-			group: Elysia<Configuration, Decorators, Definitions, Metadata>
+			group: Elysia<Configuration, Singleton, Definitions, Metadata>
 		) => NewElysia
-	): Elysia<
-		Configuration,
-		Decorators,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-			routes: Prettify<Metadata['routes'] & NewElysia['schema']>
-		}
-	>
+	): NewElysia extends Elysia<any, any, any, infer PluginMetadata>
+		? Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					macro: Metadata['macro']
+					routes: Prettify<
+						Metadata['routes'] & PluginMetadata['routes']
+					>
+				}
+		  >
+		: this
 
 	/**
 	 * ### group
@@ -1303,14 +1327,15 @@ export default class Elysia<
 			...this.config,
 			prefix: ''
 		})
-		instance.store = this.store
+
+		instance.singleton.store = this.singleton.store
 		instance.definitions = this.definitions
 		instance.getServer = () => this.server
 
 		const isSchema = typeof schemaOrRun === 'object'
 
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
-		this.decorators = mergeDeep(this.decorators, instance.decorators)
+		this.singleton = mergeDeep(this.singleton, instance.singleton)
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -1326,7 +1351,7 @@ export default class Elysia<
 
 		this.model(sandbox.definitions.type)
 
-		Object.values(instance.routes).forEach(
+		Object.values(instance.router.history).forEach(
 			({ method, path, handler, hooks }) => {
 				path = (isSchema ? '' : this.config.prefix) + prefix + path
 
@@ -1382,14 +1407,14 @@ export default class Elysia<
 		hook: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			Configuration['prefix']
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Schema
@@ -1411,14 +1436,14 @@ export default class Elysia<
 		schema: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro']
 		>,
 		run: (
 			group: Elysia<
 				Configuration,
-				Decorators,
+				Singleton,
 				Definitions,
 				{
 					schema: Metadata['schema']
@@ -1427,16 +1452,20 @@ export default class Elysia<
 				}
 			>
 		) => NewElysia
-	): Elysia<
-		Configuration,
-		Decorators,
-		Definitions,
-		{
-			schema: Schema
-			macro: Metadata['macro']
-			routes: Prettify<Metadata['routes'] & NewElysia['schema']>
-		}
-	>
+	): NewElysia extends Elysia<any, any, any, infer PluginMetadata>
+		? Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Schema
+					macro: Metadata['macro']
+					routes: Prettify<
+						Metadata['routes'] & PluginMetadata['routes']
+					>
+				}
+		  >
+		: this
 
 	/**
 	 * ### guard
@@ -1482,11 +1511,11 @@ export default class Elysia<
 			...this.config,
 			prefix: ''
 		})
-		instance.store = this.store
+		instance.singleton.store = this.singleton.store
 		instance.definitions = this.definitions
 
 		const sandbox = run(instance)
-		this.decorators = mergeDeep(this.decorators, instance.decorators)
+		this.singleton = mergeDeep(this.singleton, instance.singleton)
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -1502,7 +1531,7 @@ export default class Elysia<
 
 		this.model(sandbox.definitions.type)
 
-		Object.values(instance.routes).forEach(
+		Object.values(instance.router.history).forEach(
 			({ method, path, handler, hooks: localHook }) => {
 				this.add(
 					method,
@@ -1528,24 +1557,24 @@ export default class Elysia<
 		plugin: MaybePromise<(app: NewElysia) => MaybePromise<NewElysia>>
 	): NewElysia extends Elysia<
 		any,
-		infer PluginDecorators,
+		infer PluginSingleton,
 		infer PluginDefinitions,
 		infer PluginMetadata
 	>
 		? Elysia<
 				Configuration,
 				{
-					request: Prettify<
-						Decorators['request'] & PluginDecorators['request']
+					decorator: Prettify<
+						Singleton['decorator'] & PluginSingleton['decorator']
 					>
 					store: Prettify<
-						Decorators['store'] & PluginDecorators['store']
+						Singleton['store'] & PluginSingleton['store']
 					>
 					derive: Prettify<
-						Decorators['derive'] & PluginDecorators['derive']
+						Singleton['derive'] & PluginSingleton['derive']
 					>
 					resolve: Prettify<
-						Decorators['resolve'] & PluginDecorators['resolve']
+						Singleton['resolve'] & PluginSingleton['resolve']
 					>
 				},
 				{
@@ -1574,22 +1603,22 @@ export default class Elysia<
 		instance: MaybePromise<NewElysia>
 	): NewElysia extends Elysia<
 		infer PluginConfiguration,
-		infer PluginDecorators,
+		infer PluginSingleton,
 		infer PluginDefinitions,
 		infer PluginMetadata
 	>
 		? PluginConfiguration['scoped'] extends true
 			? Elysia<
 					Configuration,
-					Decorators,
+					Singleton,
 					Definitions,
 					{
 						routes: Configuration['prefix'] extends ``
-							? Metadata['routes'] & NewElysia['schema']
+							? Metadata['routes'] & PluginMetadata['routes']
 							: Metadata['routes'] &
 									AddPrefix<
 										Configuration['prefix'],
-										NewElysia['schema']
+										PluginMetadata['routes']
 									>
 						macro: Metadata['macro']
 						schema: Metadata['schema']
@@ -1598,17 +1627,18 @@ export default class Elysia<
 			: Elysia<
 					Configuration,
 					{
-						request: Prettify<
-							Decorators['request'] & PluginDecorators['request']
+						decorator: Prettify<
+							Singleton['decorator'] &
+								PluginSingleton['decorator']
 						>
 						store: Prettify<
-							Decorators['store'] & PluginDecorators['store']
+							Singleton['store'] & PluginSingleton['store']
 						>
 						derive: Prettify<
-							Decorators['derive'] & PluginDecorators['derive']
+							Singleton['derive'] & PluginSingleton['derive']
 						>
 						resolve: Prettify<
-							Decorators['resolve'] & PluginDecorators['resolve']
+							Singleton['resolve'] & PluginSingleton['resolve']
 						>
 					},
 					{
@@ -1630,11 +1660,11 @@ export default class Elysia<
 							Metadata['macro'] & PluginMetadata['macro']
 						>
 						routes: Configuration['prefix'] extends ``
-							? Metadata['routes'] & NewElysia['schema']
+							? Metadata['routes'] & PluginMetadata['routes']
 							: Metadata['routes'] &
 									AddPrefix<
 										Configuration['prefix'],
-										NewElysia['schema']
+										PluginMetadata['routes']
 									>
 					}
 			  >
@@ -1649,17 +1679,18 @@ export default class Elysia<
 		}>
 	): NewElysia extends Elysia<
 		any,
-		infer PluginDecorators,
+		infer PluginSingleton,
 		infer PluginDefinitions,
 		infer PluginMetadata
 	>
 		? Elysia<
 				Configuration,
 				{
-					request: Decorators['request'] & PluginDecorators['request']
-					store: Decorators['store'] & PluginDecorators['store']
-					derive: Decorators['derive'] & PluginDecorators['derive']
-					resolve: Decorators['resolve'] & PluginDecorators['resolve']
+					decorator: Singleton['decorator'] &
+						PluginSingleton['decorator']
+					store: Singleton['store'] & PluginSingleton['store']
+					derive: Singleton['derive'] & PluginSingleton['derive']
+					resolve: Singleton['resolve'] & PluginSingleton['resolve']
 				},
 				{
 					type: Definitions['type'] & PluginDefinitions['type']
@@ -1672,11 +1703,11 @@ export default class Elysia<
 					>
 					macro: Prettify<Metadata['macro'] & PluginMetadata['macro']>
 					routes: Configuration['prefix'] extends ``
-						? Metadata['routes'] & NewElysia['schema']
+						? Metadata['routes'] & PluginMetadata['routes']
 						: Metadata['routes'] &
 								AddPrefix<
 									Configuration['prefix'],
-									NewElysia['schema']
+									PluginMetadata['routes']
 								>
 				}
 		  >
@@ -1689,17 +1720,18 @@ export default class Elysia<
 		}>
 	): LazyLoadElysia extends Elysia<
 		any,
-		infer PluginDecorators,
+		infer PluginSingleton,
 		infer PluginDefinitions,
 		infer PluginMetadata
 	>
 		? Elysia<
 				Configuration,
 				{
-					request: PluginDecorators['request'] & Decorators['request']
-					store: PluginDecorators['store'] & Decorators['store']
-					derive: Decorators['derive'] & PluginDecorators['derive']
-					resolve: Decorators['resolve'] & PluginDecorators['resolve']
+					decorator: Singleton['decorator'] &
+						PluginSingleton['decorator']
+					store: Singleton['store'] & PluginSingleton['store']
+					derive: Singleton['derive'] & PluginSingleton['derive']
+					resolve: Singleton['resolve'] & PluginSingleton['resolve']
 				},
 				{
 					type: PluginDefinitions['type'] & Definitions['type']
@@ -1712,11 +1744,11 @@ export default class Elysia<
 					>
 					macro: Prettify<PluginMetadata['macro'] & Metadata['macro']>
 					routes: Configuration['prefix'] extends ``
-						? PluginMetadata['routes'] & LazyLoadElysia['schema']
+						? PluginMetadata['routes'] & PluginMetadata['routes']
 						: PluginMetadata['routes'] &
 								AddPrefix<
 									Configuration['prefix'],
-									LazyLoadElysia['schema']
+									PluginMetadata['routes']
 								>
 				}
 		  >
@@ -1768,8 +1800,7 @@ export default class Elysia<
 								this as unknown as any
 							) as unknown as Elysia
 
-						// @ts-ignore
-						return this._use(plugin)
+						return this._use(plugin as any)
 					})
 					.then((x) => x.compile())
 			)
@@ -1802,7 +1833,7 @@ export default class Elysia<
 									path,
 									handler,
 									hooks
-								} of Object.values(plugin.routes)) {
+								} of Object.values(plugin.router.history)) {
 									this.add(
 										method,
 										path,
@@ -1882,10 +1913,10 @@ export default class Elysia<
 								seed: plugin.config.seed,
 								checksum: current,
 								dependencies: plugin.dependencies,
-								stack: plugin.stack,
-								routes: plugin.routes,
-								decorators: plugin.decorators,
-								store: plugin.store,
+								stack: plugin.telemetry.stack,
+								routes: plugin.router.history,
+								decorators: plugin.singleton.decorator,
+								store: plugin.singleton.store,
 								type: plugin.definitions.type,
 								error: plugin.definitions.error,
 								derive: plugin.event.transform
@@ -1908,19 +1939,19 @@ export default class Elysia<
 
 			plugin.model(this.definitions.type as any)
 			plugin.error(this.definitions.error as any)
-			plugin.macros = [...this.macros, ...plugin.macros]
+			plugin.extender.macros = [
+				...this.extender.macros,
+				...plugin.extender.macros
+			]
 
 			plugin.onRequest((context) => {
-				Object.assign(context, this.decorators)
-				Object.assign(context.store, this.store)
+				Object.assign(context, this.singleton.decorator)
+				Object.assign(context.store, this.singleton.store)
 			})
 
-			plugin.event.trace = [...this.event.trace, ...plugin.event.trace]
+			plugin.event.trace = this.event.trace.concat(plugin.event.trace)
 
-			if (plugin.config.aot) plugin.compile()
-
-			const instance = this.mount(plugin.fetch)
-			this.routes = this.routes.concat(instance.routes)
+			this.mount(plugin.fetch)
 
 			return this
 		} else {
@@ -1940,17 +1971,17 @@ export default class Elysia<
 						({ checksum }) => current === checksum
 					)
 				)
-					this.macros.push(...plugin.macros)
+					this.extender.macros.push(...plugin.extender.macros)
 			}
 		}
 
-		this.decorate(plugin.decorators)
-		this.state(plugin.store)
+		this.decorate(plugin.singleton.decorator)
+		this.state(plugin.singleton.store)
 		this.model(plugin.definitions.type)
-		this.error(plugin.definitions.error)
+		this.error(plugin.definitions.error as any)
 
 		for (const { method, path, handler, hooks } of Object.values(
-			plugin.routes
+			plugin.router.history
 		)) {
 			this.add(
 				method,
@@ -1994,10 +2025,10 @@ export default class Elysia<
 								seed: plugin.config.seed,
 								checksum: current,
 								dependencies: plugin.dependencies,
-								stack: plugin.stack,
-								routes: plugin.routes,
-								decorators: plugin.decorators,
-								store: plugin.store,
+								stack: plugin.telemetry.stack,
+								routes: plugin.router.history,
+								decorators: plugin.singleton,
+								store: plugin.singleton.store,
 								type: plugin.definitions.type,
 								error: plugin.definitions.error,
 								derive: plugin.event.transform
@@ -2035,13 +2066,13 @@ export default class Elysia<
 		macro: (
 			route: MacroManager<
 				Metadata['schema'],
-				Decorators,
+				Singleton,
 				Definitions['error']
 			>
 		) => NewMacro
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -2049,7 +2080,7 @@ export default class Elysia<
 			routes: Metadata['routes']
 		}
 	> {
-		this.macros.push(macro as any)
+		this.extender.macros.push(macro as any)
 
 		return this as any
 	}
@@ -2098,13 +2129,6 @@ export default class Elysia<
 					)
 				)
 
-			this.all(
-				'/',
-				handler as any,
-				{
-					type: 'none'
-				} as any
-			)
 			this.all(
 				'/*',
 				handler as any,
@@ -2176,21 +2200,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -2287,21 +2311,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -2398,21 +2422,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -2509,21 +2533,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -2620,21 +2644,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -2731,21 +2755,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -2837,21 +2861,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -2948,21 +2972,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -3059,21 +3083,21 @@ export default class Elysia<
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			Metadata['macro'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -3142,6 +3166,127 @@ export default class Elysia<
 	}
 
 	/**
+	 * ### route
+	 * Register handler for path with custom method
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { Elysia, t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .route('CUSTOM', '/', () => 'hi')
+	 *     .route('CUSTOM', '/with-hook', () => 'hi', {
+	 *         schema: {
+	 *             response: t.String()
+	 *         }
+	 *     })
+	 * ```
+	 */
+	route<
+		const Method extends HTTPMethod,
+		const Path extends string,
+		const LocalSchema extends InputSchema<
+			keyof Definitions['type'] & string
+		>,
+		const Schema extends MergeSchema<
+			UnwrapRoute<LocalSchema, Definitions['type']>,
+			Metadata['schema']
+		>,
+		const Handle extends
+			| Exclude<Schema['response'], Handle>
+			| Handler<Schema, Singleton, `${Configuration['prefix']}${Path}`>
+	>(
+		method: Method,
+		path: Path,
+		handler: Handle,
+		hook: LocalHook<
+			LocalSchema,
+			Schema,
+			Singleton,
+			Definitions['error'],
+			Metadata['macro'],
+			`${Configuration['prefix']}${Path}`
+		> & {
+			config: {
+				allowMeta?: boolean
+			}
+		} = {
+			config: {
+				allowMeta: false
+			}
+		} as any
+	): Elysia<
+		Configuration,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			macro: Metadata['macro']
+			routes: Prettify<
+				Metadata['routes'] & {
+					[path in `${Configuration['prefix']}${Path}`]: {
+						[method in Method]: {
+							body: Schema['body']
+							params: undefined extends Schema['params']
+								? Path extends `${string}/${':' | '*'}${string}`
+									? Record<GetPathParameter<Path>, string>
+									: never
+								: Schema['params']
+							query: Schema['query']
+							headers: Schema['headers']
+							response: unknown extends Schema['response']
+								? (
+										Handle extends (
+											...a: any
+										) => infer Returned
+											? Returned
+											: Handle
+								  ) extends infer Res
+									? keyof Res extends typeof ELYSIA_RESPONSE
+										? Prettify<
+												{
+													200: Exclude<
+														Res,
+														{
+															[ELYSIA_RESPONSE]: number
+														}
+													>
+												} & (Extract<
+													Res,
+													{
+														[ELYSIA_RESPONSE]: number
+													}
+												> extends infer ErrorResponse extends {
+													[ELYSIA_RESPONSE]: number
+													response: any
+												}
+													? {
+															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+													  }
+													: {})
+										  >
+										: {
+												200: Res
+										  }
+									: never
+								: Schema['response'] extends { 200: any }
+								? Schema['response']
+								: {
+										200: Schema['response']
+								  }
+						}
+					}
+				}
+			>
+		}
+	> {
+		this.add(method, path, handler, hook, hook.config)
+
+		return this as any
+	}
+
+	/**
 	 * ### ws
 	 * Register handler for path with method [ws]
 	 *
@@ -3172,13 +3317,13 @@ export default class Elysia<
 		options: WS.LocalHook<
 			LocalSchema,
 			Schema,
-			Decorators,
+			Singleton,
 			Definitions['error'],
 			`${Configuration['prefix']}${Path}`
 		>
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
@@ -3317,128 +3462,6 @@ export default class Elysia<
 	}
 
 	/**
-	 * ### route
-	 * Register handler for path with custom method
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .route('CUSTOM', '/', () => 'hi')
-	 *     .route('CUSTOM', '/with-hook', () => 'hi', {
-	 *         schema: {
-	 *             response: t.String()
-	 *         }
-	 *     })
-	 * ```
-	 */
-
-	route<
-		const Method extends HTTPMethod,
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema']
-		>,
-		const Handle extends
-			| Exclude<Schema['response'], Handle>
-			| Handler<Schema, Decorators, `${Configuration['prefix']}${Path}`>
-	>(
-		method: Method,
-		path: Path,
-		handler: Handle,
-		hook: LocalHook<
-			LocalSchema,
-			Schema,
-			Decorators,
-			Definitions['error'],
-			Metadata['macro'],
-			`${Configuration['prefix']}${Path}`
-		> & {
-			config: {
-				allowMeta?: boolean
-			}
-		} = {
-			config: {
-				allowMeta: false
-			}
-		} as any
-	): Elysia<
-		Configuration,
-		Decorators,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${Configuration['prefix']}${Path}`]: {
-						[method in Method]: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
-													Res,
-													{
-														[ELYSIA_RESPONSE]: number
-													}
-												> extends infer ErrorResponse extends {
-													[ELYSIA_RESPONSE]: number
-													response: any
-												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
-					}
-				}
-			>
-		}
-	> {
-		this.add(method, path, handler, hook, hook.config)
-
-		return this as any
-	}
-
-	/**
 	 * ### state
 	 * Assign global mutatable state accessible for all handler
 	 *
@@ -3456,14 +3479,14 @@ export default class Elysia<
 	): Elysia<
 		Configuration,
 		{
-			request: Decorators['request']
+			decorator: Singleton['decorator']
 			store: Prettify<
-				Decorators['store'] & {
+				Singleton['store'] & {
 					[name in Name]: Value
 				}
 			>
-			derive: Decorators['derive']
-			resolve: Decorators['resolve']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
 		},
 		Definitions,
 		Metadata
@@ -3486,24 +3509,24 @@ export default class Elysia<
 	): Elysia<
 		Configuration,
 		{
-			request: Decorators['request']
-			store: Prettify<Decorators['store'] & Store>
-			derive: Decorators['derive']
-			resolve: Decorators['resolve']
+			decorator: Singleton['decorator']
+			store: Prettify<Singleton['store'] & Store>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
 		},
 		Definitions,
 		Metadata
 	>
 
 	state<const NewStore extends Record<string, unknown>>(
-		mapper: (decorators: Decorators['store']) => NewStore
+		mapper: (decorators: Singleton['store']) => NewStore
 	): Elysia<
 		Configuration,
 		{
-			request: Decorators['request']
+			decorator: Singleton['decorator']
 			store: NewStore
-			derive: Decorators['derive']
-			resolve: Decorators['resolve']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
 		},
 		Definitions,
 		Metadata
@@ -3527,20 +3550,24 @@ export default class Elysia<
 	) {
 		switch (typeof name) {
 			case 'object':
-				this.store = mergeDeep(this.store, name)
+				this.singleton.store = mergeDeep(this.singleton.store, name)
 
 				return this as any
 
 			case 'function':
-				this.store = name(this.store)
+				this.singleton.store = name(this.singleton.store)
 
 				return this as any
 		}
 
-		if (!(name in this.store)) {
+		if (!(name in this.singleton.store)) {
 			// eslint-disable-next-line no-extra-semi
-			;(this.store as Record<string | number | symbol, unknown>)[name] =
-				value
+			;(
+				this.singleton.store as Record<
+					string | number | symbol,
+					unknown
+				>
+			)[name] = value
 		}
 
 		return this as any
@@ -3564,14 +3591,14 @@ export default class Elysia<
 	): Elysia<
 		Configuration,
 		{
-			request: Prettify<
-				Decorators['request'] & {
+			decorator: Prettify<
+				Singleton['decorator'] & {
 					[name in Name]: Value
 				}
 			>
-			store: Decorators['store']
-			derive: Decorators['derive']
-			resolve: Decorators['resolve']
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
 		},
 		Definitions,
 		Metadata
@@ -3594,24 +3621,24 @@ export default class Elysia<
 	): Elysia<
 		Configuration,
 		{
-			request: Prettify<Decorators['request'] & NewDecorators>
-			store: Decorators['store']
-			derive: Decorators['derive']
-			resolve: Decorators['resolve']
+			decorator: Prettify<Singleton['decorator'] & NewDecorators>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
 		},
 		Definitions,
 		Metadata
 	>
 
 	decorate<const NewDecorators extends Record<string, unknown>>(
-		mapper: (decorators: Decorators['request']) => NewDecorators
+		mapper: (decorators: Singleton['decorator']) => NewDecorators
 	): Elysia<
 		Configuration,
 		{
-			request: NewDecorators
-			store: Decorators['store']
-			derive: Decorators['derive']
-			resolve: Decorators['resolve']
+			decorator: NewDecorators
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
 		},
 		Definitions,
 		Metadata
@@ -3635,18 +3662,21 @@ export default class Elysia<
 	) {
 		switch (typeof name) {
 			case 'object':
-				this.decorators = mergeDeep(this.decorators, name)
+				this.singleton.decorator = mergeDeep(
+					this.singleton.decorator,
+					name
+				)
 
 				return this as any
 
 			case 'function':
-				this.decorators = name(this.decorators)
+				this.singleton.decorator = name(this.singleton.decorator)
 
 				return this as any
 		}
 
-		// @ts-ignore
-		if (!(name in this.decorators)) this.decorators[name] = value
+		if (!(name in this.singleton.decorator))
+			this.singleton.decorator[name] = value
 
 		return this as any
 	}
@@ -3668,17 +3698,17 @@ export default class Elysia<
 	 */
 	derive<Derivative extends Object>(
 		transform: (
-			context: Prettify<Context<Metadata['schema'], Decorators>>
+			context: Prettify<Context<Metadata['schema'], Singleton>>
 		) => MaybePromise<Derivative> extends { store: any }
 			? never
 			: Derivative
 	): Elysia<
 		Configuration,
 		{
-			request: Decorators['request']
-			store: Decorators['store']
-			derive: Prettify<Decorators['derive'] & Awaited<Derivative>>
-			resolve: Decorators['resolve']
+			decorator: Singleton['decorator']
+			store: Singleton['store']
+			derive: Prettify<Singleton['derive'] & Awaited<Derivative>>
+			resolve: Singleton['resolve']
 		},
 		Definitions,
 		Metadata
@@ -3694,7 +3724,7 @@ export default class Elysia<
 		model: Model
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		{
 			type: Prettify<
 				Definitions['type'] & { [name in Name]: Static<Model> }
@@ -3708,7 +3738,7 @@ export default class Elysia<
 		record: Recorder
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		{
 			type: Prettify<
 				Definitions['type'] & {
@@ -3728,7 +3758,7 @@ export default class Elysia<
 		}) => NewType
 	): Elysia<
 		Configuration,
-		Decorators,
+		Singleton,
 		{
 			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
@@ -3741,7 +3771,6 @@ export default class Elysia<
 			case 'object':
 				Object.entries(name).forEach(([key, value]) => {
 					if (!(key in this.definitions.type))
-						// @ts-ignore
 						this.definitions.type[key] = value as TSchema
 				})
 
@@ -3759,14 +3788,14 @@ export default class Elysia<
 	}
 
 	mapDerive<const NewStore extends Record<string, unknown>>(
-		mapper: (decorators: Decorators['request']) => MaybePromise<NewStore>
+		mapper: (decorators: Singleton['decorator']) => MaybePromise<NewStore>
 	): Elysia<
 		Configuration,
 		{
-			request: Decorators['request']
+			decorator: Singleton['decorator']
 			store: NewStore
-			derive: Decorators['derive']
-			resolve: Decorators['resolve']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
 		},
 		Definitions,
 		Metadata
@@ -3788,34 +3817,34 @@ export default class Elysia<
 	): Elysia<
 		Configuration,
 		{
-			request: Type extends 'decorator' | 'all'
+			decorator: Type extends 'decorator' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`
-						? AddPrefix<Word, Decorators['request']>
-						: AddPrefixCapitalize<Word, Decorators['request']>
-					: AddSuffixCapitalize<Word, Decorators['request']>
-				: Decorators['request']
+						? AddPrefix<Word, Singleton['decorator']>
+						: AddPrefixCapitalize<Word, Singleton['decorator']>
+					: AddSuffixCapitalize<Word, Singleton['decorator']>
+				: Singleton['decorator']
 			store: Type extends 'state' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`
-						? AddPrefix<Word, Decorators['store']>
-						: AddPrefixCapitalize<Word, Decorators['store']>
-					: AddSuffix<Word, Decorators['store']>
-				: Decorators['store']
+						? AddPrefix<Word, Singleton['store']>
+						: AddPrefixCapitalize<Word, Singleton['store']>
+					: AddSuffix<Word, Singleton['store']>
+				: Singleton['store']
 			derive: Type extends 'decorator' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`
-						? AddPrefix<Word, Decorators['derive']>
-						: AddPrefixCapitalize<Word, Decorators['derive']>
-					: AddSuffixCapitalize<Word, Decorators['derive']>
-				: Decorators['derive']
+						? AddPrefix<Word, Singleton['derive']>
+						: AddPrefixCapitalize<Word, Singleton['derive']>
+					: AddSuffixCapitalize<Word, Singleton['derive']>
+				: Singleton['derive']
 			resolve: Type extends 'decorator' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`
-						? AddPrefix<Word, Decorators['resolve']>
-						: AddPrefixCapitalize<Word, Decorators['resolve']>
-					: AddSuffixCapitalize<Word, Decorators['resolve']>
-				: Decorators['resolve']
+						? AddPrefix<Word, Singleton['resolve']>
+						: AddPrefixCapitalize<Word, Singleton['resolve']>
+					: AddSuffixCapitalize<Word, Singleton['resolve']>
+				: Singleton['resolve']
 		},
 		{
 			type: Type extends 'model' | 'all'
@@ -3856,17 +3885,19 @@ export default class Elysia<
 
 			switch (type) {
 				case 'decorator':
-					for (const key in this.decorators)
-						store[joinKey(word, key)] = this.decorators[key]
+					for (const key in this.singleton.decorator) {
+						store[joinKey(word, key)] =
+							this.singleton.decorator[key]
+					}
 
-					this.decorators = store
+					this.singleton.decorator = store
 					break
 
 				case 'state':
-					for (const key in this.store)
-						store[joinKey(word, key)] = this.store[key]
+					for (const key in this.singleton.store)
+						store[joinKey(word, key)] = this.singleton.store[key]
 
-					this.store = store
+					this.singleton.store = store
 					break
 
 				case 'model':
@@ -3995,28 +4026,28 @@ export default class Elysia<
 		const serve =
 			typeof options === 'object'
 				? ({
-						// development: !isProduction,
-						// reusePort: true,
-						// ...this.config.serve,
-						// ...options,
-						// websocket: {
-						// 	...this.config.websocket,
-						// 	...websocket
-						// },
-						fetch
-						// error: this.outerErrorHandler
+						development: !isProduction,
+						reusePort: true,
+						...this.config.serve,
+						...options,
+						websocket: {
+							...this.config.websocket,
+							...websocket
+						},
+						fetch,
+						error: this.outerErrorHandler
 				  } as Serve)
 				: ({
-						// development: !isProduction,
-						// reusePort: true,
-						// ...this.config.serve,
-						// websocket: {
-						// ...this.config.websocket,
-						// ...websocket
-						// },
+						development: !isProduction,
+						reusePort: true,
+						...this.config.serve,
+						websocket: {
+						...this.config.websocket,
+						...websocket
+						},
 						port: options,
-						fetch
-						// error: this.outerErrorHandler
+						fetch,
+						error: this.outerErrorHandler
 				  } as Serve)
 
 		this.server = Bun?.serve(serve)
@@ -4101,7 +4132,7 @@ export type { Context, PreContext } from './context'
 
 export type {
 	ElysiaConfig,
-	DecoratorBase,
+	SingletonBase,
 	DefinitionBase,
 	RouteBase,
 	Handler,

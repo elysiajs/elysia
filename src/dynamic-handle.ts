@@ -21,7 +21,7 @@ export type DynamicHandler = {
 }
 
 export const createDynamicHandler =
-	(app: Elysia<any, any, any, any, any, any>) =>
+	(app: Elysia<any, any, any, any>) =>
 	async (request: Request): Promise<Response> => {
 		const set: Context['set'] = {
 			cookie: {},
@@ -31,10 +31,8 @@ export const createDynamicHandler =
 
 		let context: Context
 
-		// @ts-ignore
-		if (app.decorators) {
-			// @ts-ignore
-			context = app.decorators as any as Context
+		if (app.decorator) {
+			context = app.decorator as any
 
 			context.request = request
 			context.set = set
@@ -64,10 +62,8 @@ export const createDynamicHandler =
 			}
 
 			const handler =
-				// @ts-ignore
-				app.dynamicRouter.find(request.method, path) ??
-				// @ts-ignore
-				app.dynamicRouter.find('ALL', path)
+				app.router.dynamic.find(request.method, path) ??
+				app.router.dynamic.find('ALL', path)
 
 			if (!handler) throw new NotFoundError()
 
@@ -116,7 +112,6 @@ export const createDynamicHandler =
 							contentType = contentType.slice(0, index)
 
 						for (let i = 0; i < app.event.parse.length; i++) {
-							// @ts-ignore
 							let temp = app.event.parse[i](context, contentType)
 							if (temp instanceof Promise) temp = await temp
 
@@ -377,7 +372,7 @@ export const createDynamicHandler =
 	}
 
 export const createDynamicErrorHandler =
-	(app: Elysia<any, any, any, any, any, any>) =>
+	(app: Elysia<any, any, any, any>) =>
 	async (context: Context, error: ElysiaErrors) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set

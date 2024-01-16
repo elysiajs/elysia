@@ -332,7 +332,7 @@ export const composeHandler = ({
 	handler,
 	allowMeta = false
 }: {
-	app: Elysia<any, any, any, any, any, any, any>
+	app: Elysia<any, any, any, any>
 	path: string
 	method: string
 	hooks: LifeCycleStore
@@ -376,6 +376,7 @@ export const composeHandler = ({
 	const hasQuery = inference.query || !!validator.query
 
 	const hasBody =
+		method !== '$INTERNALWS' &&
 		method !== 'GET' &&
 		method !== 'HEAD' &&
 		hooks.type !== 'none' &&
@@ -1208,8 +1209,6 @@ export const composeHandler = ({
 		}
 	}
 
-	// console.log(fnLiteral)
-
 	fnLiteral = `const {
 		handler,
 		handleError,
@@ -1290,10 +1289,11 @@ export const composeHandler = ({
 			ValidationError,
 			InternalServerError
 		},
-		schema: app.schema,
+		schema: app.router.history,
 		// @ts-ignore
 		definitions: app.definitions.type,
 		ERROR_CODE,
+		// @ts-ignore
 		getReporter: () => app.reporter,
 		requestId,
 		parseCookie,
@@ -1302,26 +1302,22 @@ export const composeHandler = ({
 	})
 }
 
-export const composeGeneralHandler = (
-	app: Elysia<any, any, any, any, any, any>
-) => {
+export const composeGeneralHandler = (app: Elysia<any, any, any, any>) => {
 	const inference = app.inference.trace
 
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
 	// @ts-ignore
-	for (const key of Object.keys(app.decorators))
-		decoratorsLiteral += `,${key}: app.decorators.${key}`
+	for (const key of Object.keys(app.singleton.decorator))
+		decoratorsLiteral += `,${key}: app.singleton.decorator.${key}`
 
-	// @ts-ignore
-	const { router, staticRouter } = app
-
+	const router = app.router
 	const hasTrace = app.event.trace.length > 0
 
 	const findDynamicRoute = `
 	const route = router.find(request.method, path) ${
-		router.root.ALL ? '?? router.find("ALL", path)' : ''
+		router.http.root.ALL ? '?? router.find("ALL", path)' : ''
 	}
 	if (route === null)
 		return ${
@@ -1340,7 +1336,7 @@ export const composeGeneralHandler = (
 	return route.store(ctx)`
 
 	let switchMap = ``
-	for (const [path, { code, all }] of Object.entries(staticRouter.map))
+	for (const [path, { code, all }] of Object.entries(router.static.http.map))
 		switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
 			all ?? `default: break map`
 		}}\n\n`
@@ -1349,7 +1345,6 @@ export const composeGeneralHandler = (
 
 	fnLiteral += `const {
 		app,
-		app: { store, router, staticRouter, wsRouter },
 		mapEarlyResponse,
 		NotFoundError,
 		requestId,
@@ -1357,10 +1352,15 @@ export const composeGeneralHandler = (
 		handleError
 	} = data
 
+	const store = app.singleton.store
+	const staticRouter = app.router.static.http
+	const wsRouter = app.router.static.ws
+	const router = app.router.http
+
 	const notFound = new NotFoundError()
 
 	${app.event.request.length ? `const onRequest = app.event.request` : ''}
-	${staticRouter.variables}
+	${router.static.http.variables}
 	${
 		app.event.error.length
 			? ''
@@ -1484,10 +1484,8 @@ export const composeGeneralHandler = (
 		})()
 	}
 
-	// @ts-ignore
-	const wsPaths = app.wsPaths
-	// @ts-ignore
-	const wsRouter = app.wsRouter
+	const wsPaths = app.router.static.ws
+	const wsRouter = app.router.ws
 
 	if (Object.keys(wsPaths).length || wsRouter.history.length) {
 		fnLiteral += `
@@ -1536,7 +1534,6 @@ export const composeGeneralHandler = (
 	// @ts-ignore
 	app.handleError = handleError
 
-	// console.log(fnLiteral)
 	return Function(
 		'data',
 		fnLiteral
@@ -1551,9 +1548,7 @@ export const composeGeneralHandler = (
 	})
 }
 
-export const composeErrorHandler = (
-	app: Elysia<any, any, any, any, any, any>
-) => {
+export const composeErrorHandler = (app: Elysia<any, any, any, any>) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,
