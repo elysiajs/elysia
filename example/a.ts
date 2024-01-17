@@ -10,7 +10,7 @@ const c = new Elysia()
 
 // c.handle(req('/id/1?name=bun')).then(x => x.text()).then(console.log)
 
-// console.log(c.router.history[0].composed?.toString())
+console.log(c.router.history[0].composed?.toString())
 
 // const app = new Elysia().get('/a', 'a').get('/b', 'b').use(c).listen(8080)
 

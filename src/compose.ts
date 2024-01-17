@@ -385,10 +385,7 @@ export const composeHandler = ({
 	// @ts-ignore private
 	const setHeaders = app.setHeaders
 
-	const hasHeaders =
-		inference.headers ||
-		validator.headers ||
-		(setHeaders && !!Object.keys(setHeaders).length)
+	const hasHeaders = inference.headers || validator.headers
 
 	const hasCookie = inference.cookie || !!validator.cookie
 
@@ -492,7 +489,7 @@ export const composeHandler = ({
 		}`
 			: 'undefined'
 
-		if (hasHeaders)
+		if (hasHeaders || (setHeaders && !!Object.keys(setHeaders).length))
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.headers.cookie, ${options})\n`
 		else
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
@@ -538,7 +535,11 @@ export const composeHandler = ({
 
 	const hasTraceSet = app.inference.trace.set
 	const hasSet =
-		inference.cookie || inference.set || hasTraceSet || hasHeaders
+		inference.cookie ||
+		inference.set ||
+		hasTraceSet ||
+		hasHeaders ||
+		(setHeaders && !!Object.keys(setHeaders).length)
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
