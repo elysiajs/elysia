@@ -614,7 +614,7 @@ export type MergeRouteSchema<
 >
 
 export type LocalHook2<
-	Input extends InputSchema<keyof V['Definitions']['type'] & string>,
+	Input extends InputSchema<any>,
 	Schema extends RouteSchema,
 	V extends {
 		Singleton: SingletonBase

@@ -19,8 +19,6 @@ const c = new Elysia()
 	)
 	.listen(8080)
 
-c._types.Metadata.routes
-
 // const app = new Elysia().get('/a', 'a').get('/b', 'b').use(c).listen(8080)
 
 // console.log(app.router.static.http)

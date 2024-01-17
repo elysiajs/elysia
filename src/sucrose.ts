@@ -224,6 +224,7 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 	let content = body
 
 	while (true) {
+		// Remove all spaces
 		let index = content.indexOf(' = ' + type + '\n')
 		if (index === -1) index = content.indexOf(' = ' + type + ',')
 		if (index === -1) index = content.indexOf(' = ' + type + ' ')
@@ -299,8 +300,9 @@ export const inferBodyReference = (
 		if (alias.charCodeAt(0) === 123) {
 			alias = retrieveRootParamters(alias)
 
-			if (!inference.query && alias.includes('query'))
+			if (!inference.query && alias.includes('query')) {
 				inference.query = true
+			}
 
 			if (!inference.headers && alias.includes('headers'))
 				inference.headers = true
@@ -327,6 +329,42 @@ export const inferBodyReference = (
 		}
 
 		if (!inference.query && access('query', alias)) inference.query = true
+
+		if (inference.query) {
+			let start = code.indexOf(alias + '.')
+			if (start === -1) start = code.indexOf(alias + '[')
+
+			if (start !== -1) {
+				let query = code
+					.slice(start + alias.length + 1, code.indexOf(' ', start))
+					.trimEnd()
+
+				// Remove nested dot
+				while(start !== -1) {
+					start = query.indexOf('.')
+
+					if(start !== -1)
+						query = query.slice(start + 1)
+				}
+
+				// Remove semi-colon
+				if (query.charCodeAt(query.length - 1) === 59)
+					query = query.slice(0, -1)
+
+				// Remove comma
+				if (query.charCodeAt(query.length - 1) === 44)
+					query = query.slice(0, -1)
+
+				// Remove closing square bracket
+				if (query.charCodeAt(query.length - 1) === 93) query = query.slice(0, -1)
+
+				// Remove closing bracket
+				if (query.charCodeAt(query.length - 1) === 41) query = query.slice(0, -1)
+
+				if (query && !inference.queries.includes(query))
+					inference.queries.push(query)
+			}
+		}
 
 		if (!inference.headers && access('headers', alias))
 			inference.headers = true
@@ -489,7 +527,8 @@ export const sucrose = (
 ): Sucrose.Inference => {
 	const events = []
 
-	if (lifeCycle.handler && typeof lifeCycle.handler === "function") events.push(lifeCycle.handler)
+	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
+		events.push(lifeCycle.handler)
 	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
 	if (lifeCycle.parse?.length) events.push(...lifeCycle.parse)
 	if (lifeCycle.error?.length) events.push(...lifeCycle.error)
@@ -509,6 +548,8 @@ export const sucrose = (
 			const aliases = findAlias(mainParameter, body)
 			aliases.splice(0, -1, mainParameter)
 
+			if(rootParameters.includes('query')) aliases.push('query')
+
 			inferBodyReference(body, aliases, inference)
 		}
 
@@ -523,8 +564,17 @@ export const sucrose = (
 					part.slice(start, end)
 				)
 
-				for (const query of queryBracket.slice(1, -1).split(','))
-					inference.queries.push(query.trim())
+				for (let query of queryBracket.slice(1, -1).split(',')) {
+					const index = query.indexOf(':')
+
+					// Remove variable name casting: { a: b } should be b
+					if (index !== -1) query = query.slice(0, index)
+
+					query = query.trim()
+
+					if (query && !inference.queries.includes(query))
+						inference.queries.push(query.trim())
+				}
 			}
 		}
 
@@ -592,23 +642,29 @@ export const sucroseTrace = (
 	return inference
 }
 
-// const a = sucrose({
-// 	handler: function ({ query: { a = 'a', h } }) {},
-// 	afterHandle: [],
-// 	beforeHandle: [],
-// 	error: [
-// 		function a({ headers: { hello }, ...rest }) {
-// 			// const { cookie } = rest
-// 		}
-// 	],
-// 	mapResponse: [],
-// 	onResponse: [],
-// 	parse: [],
-// 	request: [],
-// 	start: [],
-// 	stop: [],
-// 	trace: [],
-// 	transform: []
-// })
+const a = sucrose({
+	handler: function ({ query }) {
+		query.a
+	},
+	afterHandle: [],
+	beforeHandle: [],
+	error: [
+		function a({ query, query: { a, c: d }, headers: { hello }, ...rest }) {
+			query.b;
+			rest.query.e;
+		},
+		({ query: { f } }) => {
 
-// console.log(a)
+		}
+	],
+	mapResponse: [],
+	onResponse: [],
+	parse: [],
+	request: [],
+	start: [],
+	stop: [],
+	trace: [],
+	transform: []
+})
+
+console.log(a)
