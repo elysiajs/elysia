@@ -1248,7 +1248,7 @@ export default class Elysia<
 			>
 		) => NewElysia
 	): Elysia<
-		NewElysia['config'],
+		NewElysia['_types']['Configuration'],
 		NewElysia['_types']['Singleton'],
 		NewElysia['_types']['Definitions'],
 		{
@@ -1622,7 +1622,7 @@ export default class Elysia<
 	>(
 		instance: MaybePromise<NewElysia>
 	): Elysia<
-		NewElysia['config'],
+		NewElysia['_types']['Configuration'],
 		NewElysia['_types']['Singleton'],
 		Definitions,
 		{
