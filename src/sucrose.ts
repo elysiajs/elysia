@@ -340,11 +340,10 @@ export const inferBodyReference = (
 					.trimEnd()
 
 				// Remove nested dot
-				while(start !== -1) {
+				while (start !== -1) {
 					start = query.indexOf('.')
 
-					if(start !== -1)
-						query = query.slice(start + 1)
+					if (start !== -1) query = query.slice(start + 1)
 				}
 
 				// Remove semi-colon
@@ -356,10 +355,12 @@ export const inferBodyReference = (
 					query = query.slice(0, -1)
 
 				// Remove closing square bracket
-				if (query.charCodeAt(query.length - 1) === 93) query = query.slice(0, -1)
+				if (query.charCodeAt(query.length - 1) === 93)
+					query = query.slice(0, -1)
 
 				// Remove closing bracket
-				if (query.charCodeAt(query.length - 1) === 41) query = query.slice(0, -1)
+				if (query.charCodeAt(query.length - 1) === 41)
+					query = query.slice(0, -1)
 
 				if (query && !inference.queries.includes(query))
 					inference.queries.push(query)
@@ -548,7 +549,7 @@ export const sucrose = (
 			const aliases = findAlias(mainParameter, body)
 			aliases.splice(0, -1, mainParameter)
 
-			if(rootParameters.includes('query')) aliases.push('query')
+			if (rootParameters.includes('query')) aliases.push('query')
 
 			inferBodyReference(body, aliases, inference)
 		}
@@ -642,29 +643,21 @@ export const sucroseTrace = (
 	return inference
 }
 
-const a = sucrose({
-	handler: function ({ query }) {
-		query.a
-	},
-	afterHandle: [],
-	beforeHandle: [],
-	error: [
-		function a({ query, query: { a, c: d }, headers: { hello }, ...rest }) {
-			query.b;
-			rest.query.e;
-		},
-		({ query: { f } }) => {
+// const a = sucrose({
+// 	handler: function ({ params: { id }, query: { name } }) {
+// 		return id + ' ' + name
+// 	},
+// 	afterHandle: [],
+// 	beforeHandle: [],
+// 	error: [],
+// 	mapResponse: [],
+// 	onResponse: [],
+// 	parse: [],
+// 	request: [],
+// 	start: [],
+// 	stop: [],
+// 	trace: [],
+// 	transform: []
+// })
 
-		}
-	],
-	mapResponse: [],
-	onResponse: [],
-	parse: [],
-	request: [],
-	start: [],
-	stop: [],
-	trace: [],
-	transform: []
-})
-
-console.log(a)
+// console.log(a)

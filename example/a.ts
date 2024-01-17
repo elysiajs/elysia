@@ -2,22 +2,12 @@ import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
 const c = new Elysia()
-	.get(
-		'/',
-		(a) => {
-			a.query
-            a.headers
-
-			return 'A'
-		},
-		{
-            beforeHandle() {},
-			query: t.Object({
-				name: t.String()
-			})
-		}
-	)
+	.get('/id/:id', ({ params: { id }, query: { name } }) => {
+		return 'A'
+	})
 	.listen(8080)
+
+console.log(c.router.history[0].composed?.toString())
 
 // const app = new Elysia().get('/a', 'a').get('/b', 'b').use(c).listen(8080)
 

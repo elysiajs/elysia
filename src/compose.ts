@@ -509,7 +509,7 @@ export const composeHandler = ({
 			for (const query of inference.queries)
 				if (destructured.indexOf(query) === -1) destructured.push(query)
 
-		if (!inference.queries.length && destructured.length) {
+		if (destructured.length) {
 			fnLiteral += `if(c.qi !== -1) {
 				const url = decodeURIComponent(c.request.url.slice(c.qi + 1))
 				let memory = 0
