@@ -331,12 +331,18 @@ export const inferBodyReference = (
 		if (!inference.query && access('query', alias)) inference.query = true
 
 		if (inference.query) {
-			let start = code.indexOf(alias + '.')
+			let keyword = alias + '.'
+			if(code.includes(keyword + 'query')) keyword = alias + '.query'
+
+			let start = code.indexOf(keyword)
 			if (start === -1) start = code.indexOf(alias + '[')
 
 			if (start !== -1) {
+				let end: number | undefined = code.indexOf(' ', start)
+				if(end === -1) end = undefined
+
 				let query = code
-					.slice(start + alias.length + 1, code.indexOf(' ', start))
+					.slice(start + alias.length + 1, end)
 					.trimEnd()
 
 				// Remove nested dot
@@ -644,12 +650,20 @@ export const sucroseTrace = (
 }
 
 // const a = sucrose({
-// 	handler: function ({ params: { id }, query: { name } }) {
-// 		return id + ' ' + name
+// 	handler: function ({ query }) {
+// 		query.a
 // 	},
 // 	afterHandle: [],
 // 	beforeHandle: [],
-// 	error: [],
+// 	error: [
+// 		function a({ query, query: { a, c: d }, headers: { hello }, ...rest }) {
+// 			query.b;
+// 			rest.query.e;
+// 		},
+// 		({ query: { f } }) => {
+
+// 		}
+// 	],
 // 	mapResponse: [],
 // 	onResponse: [],
 // 	parse: [],
