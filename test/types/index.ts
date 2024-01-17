@@ -509,7 +509,7 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-		type App = (typeof server)['_types']['Metadata']['routes']
+	type App = (typeof server)['_types']['Metadata']['routes']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -543,6 +543,8 @@ app.use(plugin).group(
 					app.ws('/a', {
 						message(ws, message) {
 							message
+
+							ws.data.params
 						},
 						body: t.String()
 					})
@@ -801,7 +803,7 @@ app.group(
 		.get('/a', () => 'A')
 		.listen(3000)
 
-	type App = (typeof app)['_types']['Metadata']['routes']
+	type Routes = keyof (typeof app)['_types']['Metadata']['routes']
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/api/a' | '/api/plugin/test-path'>()
 }
@@ -832,15 +834,11 @@ app.group(
 // ? Inlining function callback don't repeat prefix
 {
 	const test = (app: Elysia) =>
-		app.group('/app', (group) =>
-			group.get('/test', async () => {
-				return 'Test'
-			})
-		)
+		app.group('/app', (group) => group.get('/test', () => 'test'))
 
 	const app = new Elysia().use(test)
 
-	type App = (typeof server)['_types']['Metadata']['routes']
+	type App = (typeof app)['_types']['Metadata']['routes']
 	type Routes = keyof App
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/app/test'>()
@@ -849,7 +847,7 @@ app.group(
 // ? Merging identical plugin type
 {
 	const cookie = new Elysia({
-		name: 'cookie',
+		prefix: '/'
 	}).derive(() => {
 		return {
 			cookie: 'A'
@@ -908,7 +906,7 @@ app.group(
 
 // ? Inherits route for scoped instance
 {
-	const child = new Elysia({ scoped: true, prefix: '', })
+	const child = new Elysia({ scoped: true, prefix: '' })
 		.decorate('b', 'b')
 		.model('b', t.String())
 		.get('/child', () => 'Hello from child route')
@@ -916,8 +914,12 @@ app.group(
 
 	type App = (typeof main)['_types']['Metadata']['routes']
 
-	expectTypeOf<keyof (typeof main)['schema']>().toEqualTypeOf<'/child'>()
-	expectTypeOf<keyof (typeof main)['decorators']>().not.toEqualTypeOf<{
+	expectTypeOf<
+		keyof (typeof main)['_types']['Metadata']['routes']
+	>().toEqualTypeOf<'/child'>()
+	expectTypeOf<
+		keyof (typeof main)['_types']['Singleton']['decorator']
+	>().not.toEqualTypeOf<{
 		request: {
 			b: 'b'
 		}

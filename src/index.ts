@@ -90,7 +90,9 @@ import type {
 	MacroToProperty,
 	TransformHandler,
 	MetadataBase,
-	ConfigurationBase
+	ConfigurationBase,
+	LocalHook2,
+	MergeRouteSchema
 } from './types'
 import { t } from './type-system'
 import { createManager } from './ely'
@@ -111,8 +113,8 @@ import { createManager } from './ely'
  */
 export default class Elysia<
 	const Configuration extends ConfigurationBase = {
-		prefix: ''
-		scoped: false
+		prefix?: '' | undefined
+		scoped?: false | undefined
 	},
 	const Singleton extends SingletonBase = {
 		decorator: {}
@@ -1232,25 +1234,29 @@ export default class Elysia<
 	}
 
 	group<
-		const NewElysia extends Elysia<any, any, any, any>,
-		const Prefix extends string
+		const Prefix extends string,
+		const NewElysia extends Elysia<any, any, any, any>
 	>(
 		prefix: Prefix,
 		run: (
 			group: Elysia<
 				{
-					prefix: `${Configuration['prefix']}${Prefix}`
-					scoped: true
+					prefix: `${NonNullable<Configuration['prefix']>}${Prefix}`
+					scoped: false
 				},
 				Singleton,
 				Definitions,
-				Metadata
+				{
+					schema: Metadata['schema']
+					macro: Metadata['macro']
+					routes: {}
+				}
 			>
 		) => NewElysia
 	): Elysia<
-		NewElysia['_types']['Configuration'],
-		NewElysia['_types']['Singleton'],
-		NewElysia['_types']['Definitions'],
+		Configuration,
+		Singleton,
+		Definitions,
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
@@ -1261,54 +1267,57 @@ export default class Elysia<
 	>
 
 	group<
-		const LocalSchema extends InputSchema<
+		const Prefix extends string,
+		const NewElysia extends Elysia<any, any, any, any>,
+		const Input extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any>,
-		const Prefix extends string,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<Input, Definitions['type']>,
 			Metadata['schema']
 		>
 	>(
 		prefix: Prefix,
-		schema: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
-			Configuration['prefix']
+		schema: LocalHook2<
+			Input,
+			MergeRouteSchema<
+				UnwrapRoute<Input, Definitions['type']>,
+				Metadata['schema'],
+				`${Configuration['prefix']}${Prefix}`
+			>,
+			{
+				Singleton: Singleton
+				Metadata: Metadata
+				Definitions: Definitions
+			}
 		>,
 		run: (
 			group: Elysia<
 				{
-					prefix: `${Configuration['prefix']}${Prefix}`
-					scoped: true
+					prefix: `${NonNullable<Configuration['prefix']>}${Prefix}`
+					scoped: false
 				},
 				Singleton,
 				Definitions,
 				{
-					schema: MergeSchema<Schema, Metadata['schema']>
+					schema: Schema
 					macro: Metadata['macro']
 					routes: {}
 				}
 			>
 		) => NewElysia
-	): NewElysia extends Elysia<any, any, any, infer PluginMetadata>
-		? Elysia<
-				Configuration,
-				Singleton,
-				Definitions,
-				{
-					schema: Metadata['schema']
-					macro: Metadata['macro']
-					routes: Prettify<
-						Metadata['routes'] & PluginMetadata['routes']
-					>
-				}
-		  >
-		: this
+	): Elysia<
+		Configuration,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			macro: Metadata['macro']
+			routes: Prettify<
+				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
+			>
+		}
+	>
 
 	/**
 	 * ### group
@@ -1427,7 +1436,7 @@ export default class Elysia<
 		Singleton,
 		Definitions,
 		{
-			schema: Schema
+			schema: Prettify<Schema>
 			macro: Metadata['macro']
 			routes: Metadata['routes']
 		}
@@ -1456,7 +1465,7 @@ export default class Elysia<
 				Singleton,
 				Definitions,
 				{
-					schema: MergeSchema<Schema, Metadata['schema']>
+					schema: Prettify<Schema>
 					macro: Metadata['macro']
 					routes: {}
 				}
@@ -1561,59 +1570,60 @@ export default class Elysia<
 	}
 
 	// Inline Fn
-	use<NewElysia extends Elysia<any, any, any, any>>(
-		plugin: MaybePromise<(app: NewElysia) => MaybePromise<NewElysia>>
-	): NewElysia extends Elysia<
-		any,
-		infer PluginSingleton,
-		infer PluginDefinitions,
-		infer PluginMetadata
+	use<
+		NewElysia extends Elysia<any, any, any, any>,
+		Param extends Elysia<any, any, any, any> = this
+	>(
+		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>
+	): Elysia<
+		Configuration,
+		{
+			decorator: Prettify<
+				Singleton['decorator'] &
+					NewElysia['_types']['Singleton']['decorator']
+			>
+			store: Prettify<
+				Singleton['store'] & NewElysia['_types']['Singleton']['store']
+			>
+			derive: Prettify<
+				Singleton['derive'] & NewElysia['_types']['Singleton']['derive']
+			>
+			resolve: Prettify<
+				Singleton['resolve'] &
+					NewElysia['_types']['Singleton']['resolve']
+			>
+		},
+		{
+			type: Prettify<
+				Definitions['type'] & NewElysia['_types']['Definitions']['type']
+			>
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
+			>
+		},
+		{
+			schema: Prettify<
+				MergeSchema<
+					Metadata['schema'],
+					NewElysia['_types']['Metadata']['schema']
+				>
+			>
+			macro: Prettify<
+				Metadata['macro'] & NewElysia['_types']['Metadata']['macro']
+			>
+			routes: Prettify<
+				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
+			>
+		}
 	>
-		? Elysia<
-				Configuration,
-				{
-					decorator: Prettify<
-						Singleton['decorator'] & PluginSingleton['decorator']
-					>
-					store: Prettify<
-						Singleton['store'] & PluginSingleton['store']
-					>
-					derive: Prettify<
-						Singleton['derive'] & PluginSingleton['derive']
-					>
-					resolve: Prettify<
-						Singleton['resolve'] & PluginSingleton['resolve']
-					>
-				},
-				{
-					type: Prettify<
-						Definitions['type'] & PluginDefinitions['type']
-					>
-					error: Prettify<
-						Definitions['error'] & PluginDefinitions['error']
-					>
-				},
-				{
-					schema: Prettify<
-						MergeSchema<
-							Metadata['schema'],
-							PluginMetadata['schema']
-						>
-					>
-					macro: Prettify<Metadata['macro'] & PluginMetadata['macro']>
-					routes: Prettify<
-						Metadata['routes'] & PluginMetadata['routes']
-					>
-				}
-		  >
-		: this
 
 	// Entire Instance where scoped is true
 	use<
 		NewElysia extends Elysia<
 			{
-				prefix: any
-				scoped: true
+				prefix?: any
+				scoped?: true
 			},
 			any,
 			any,
@@ -1642,8 +1652,8 @@ export default class Elysia<
 	use<
 		NewElysia extends Elysia<
 			{
-				prefix: any
-				scoped: false
+				prefix?: any
+				scoped?: false
 			},
 			any,
 			any,
@@ -1705,41 +1715,41 @@ export default class Elysia<
 				elysia: Elysia<any, any, any, any>
 			) => MaybePromise<NewElysia>
 		}>
-	): NewElysia extends Elysia<
-		any,
-		infer PluginSingleton,
-		infer PluginDefinitions,
-		infer PluginMetadata
+	): Elysia<
+		Configuration,
+		{
+			decorator: Singleton['decorator'] &
+				NewElysia['_types']['Singleton']['decorator']
+			store: Singleton['store'] &
+				NewElysia['_types']['Singleton']['store']
+			derive: Singleton['derive'] &
+				NewElysia['_types']['Singleton']['derive']
+			resolve: Singleton['resolve'] &
+				NewElysia['_types']['Singleton']['resolve']
+		},
+		{
+			type: Definitions['type'] &
+				NewElysia['_types']['Definitions']['type']
+			error: Definitions['error'] &
+				NewElysia['_types']['Definitions']['error']
+		},
+		{
+			schema: MergeSchema<
+				Metadata['schema'],
+				NewElysia['_types']['Metadata']['schema']
+			>
+			macro: Prettify<
+				Metadata['macro'] & NewElysia['_types']['Metadata']['macro']
+			>
+			routes: Configuration['prefix'] extends ``
+				? Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
+				: Metadata['routes'] &
+						AddPrefix<
+							Configuration['prefix'],
+							NewElysia['_types']['Metadata']['routes']
+						>
+		}
 	>
-		? Elysia<
-				Configuration,
-				{
-					decorator: Singleton['decorator'] &
-						PluginSingleton['decorator']
-					store: Singleton['store'] & PluginSingleton['store']
-					derive: Singleton['derive'] & PluginSingleton['derive']
-					resolve: Singleton['resolve'] & PluginSingleton['resolve']
-				},
-				{
-					type: Definitions['type'] & PluginDefinitions['type']
-					error: Definitions['error'] & PluginDefinitions['error']
-				},
-				{
-					schema: MergeSchema<
-						Metadata['schema'],
-						PluginMetadata['schema']
-					>
-					macro: Prettify<Metadata['macro'] & PluginMetadata['macro']>
-					routes: Configuration['prefix'] extends ``
-						? Metadata['routes'] & PluginMetadata['routes']
-						: Metadata['routes'] &
-								AddPrefix<
-									Configuration['prefix'],
-									PluginMetadata['routes']
-								>
-				}
-		  >
-		: this
 
 	// Import entire instance
 	use<LazyLoadElysia extends Elysia<any, any, any, any>>(
@@ -2219,12 +2229,11 @@ export default class Elysia<
 	 */
 	get<
 		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema']
+		const Input extends InputSchema<keyof Definitions['type'] & string>,
+		const Schema extends MergeRouteSchema<
+			UnwrapRoute<Input, Definitions['type']>,
+			Metadata['schema'],
+			`${Configuration['prefix']}${Path}`
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
@@ -2232,13 +2241,14 @@ export default class Elysia<
 	>(
 		path: Path,
 		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
+		hook?: LocalHook2<
+			Input,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
-			`${Configuration['prefix']}${Path}`
+			{
+				Singleton: Singleton
+				Metadata: Metadata
+				Definitions: Definitions
+			}
 		>
 	): Elysia<
 		Configuration,
@@ -2252,11 +2262,7 @@ export default class Elysia<
 					[path in `${Configuration['prefix']}${Path}`]: {
 						get: {
 							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
+							params: Schema['params']
 							query: Schema['query']
 							headers: Schema['headers']
 							response: unknown extends Schema['response']
@@ -3338,7 +3344,7 @@ export default class Elysia<
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['routes']
+			Metadata['schema']
 		>
 	>(
 		path: Path,

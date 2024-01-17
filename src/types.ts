@@ -18,7 +18,7 @@ import type {
 } from './error'
 
 export type ElysiaConfig<Configuration extends ConfigurationBase> =
-	Partial<Configuration> & {
+	Isolate<Configuration> & {
 		name?: string
 		seed?: unknown
 		serve?: Partial<Serve>
@@ -142,8 +142,8 @@ export interface MetadataBase {
 }
 
 export interface ConfigurationBase {
-	prefix: string
-	scoped: boolean
+	prefix?: string
+	scoped?: boolean
 }
 
 export interface RouteSchema {
@@ -173,30 +173,10 @@ export type UnwrapRoute<
 	Definitions extends DefinitionBase['type'] = {}
 > = {
 	body: UnwrapSchema<Schema['body'], Definitions>
-	headers: UnwrapSchema<
-		Schema['headers'],
-		Definitions
-	> extends infer A extends Record<string, any>
-		? A
-		: undefined
-	query: UnwrapSchema<
-		Schema['query'],
-		Definitions
-	> extends infer A extends Record<string, any>
-		? A
-		: undefined
-	params: UnwrapSchema<
-		Schema['params'],
-		Definitions
-	> extends infer A extends Record<string, any>
-		? A
-		: undefined
-	cookie: UnwrapSchema<
-		Schema['cookie'],
-		Definitions
-	> extends infer A extends Record<string, any>
-		? A
-		: undefined
+	headers: UnwrapSchema<Schema['headers'], Definitions>
+	query: UnwrapSchema<Schema['query'], Definitions>
+	params: UnwrapSchema<Schema['params'], Definitions>
+	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
@@ -375,9 +355,7 @@ export type OptionalHandler<
 		derive: {}
 		resolve: {}
 	}
-> = Handler<Route, Singleton> extends (
-	context: infer Context
-) => infer Returned
+> = Handler<Route, Singleton> extends (context: infer Context) => infer Returned
 	? (context: Context) => Returned | MaybePromise<void>
 	: never
 
@@ -389,9 +367,7 @@ export type AfterHandler<
 		derive: {}
 		resolve: {}
 	}
-> = Handler<Route, Singleton> extends (
-	context: infer Context
-) => infer Returned
+> = Handler<Route, Singleton> extends (context: infer Context) => infer Returned
 	? (
 			context: Prettify<
 				{
@@ -617,6 +593,81 @@ export type Isolate<T> = {
 	[P in keyof T]: T[P]
 }
 
+type LocalHookDetail = Partial<OpenAPIV3.OperationObject>
+
+export type MergeRouteSchema<
+	A extends RouteSchema,
+	B extends RouteSchema,
+	Path extends string
+> = Prettify<
+	MergeSchema<A, B> extends infer Schema
+		? Schema extends {
+				params: Record<string, unknown>
+		  }
+			? Schema
+			: Omit<Schema, 'params'> & {
+					params: Path extends `${string}/${':' | '*'}${string}`
+						? Record<GetPathParameter<Path>, string>
+						: never
+			  }
+		: never
+>
+
+export type LocalHook2<
+	Input extends InputSchema<keyof V['Definitions']['type'] & string>,
+	Schema extends RouteSchema,
+	V extends {
+		Singleton: SingletonBase
+		Metadata: MetadataBase
+		Definitions: DefinitionBase
+	}
+> = (Input extends {} ? Input : Isolate<Input>) &
+	V['Metadata']['macro'] & {
+		/**
+		 * Short for 'Content-Type'
+		 *
+		 * Available:
+		 * - 'none': do not parse body
+		 * - 'text' / 'text/plain': parse body as string
+		 * - 'json' / 'application/json': parse body as json
+		 * - 'formdata' / 'multipart/form-data': parse body as form-data
+		 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+		 * - 'arraybuffer': parse body as readable stream
+		 */
+		type?: ContentType
+		detail?: LocalHookDetail
+		/**
+		 * Custom body parser
+		 */
+		parse?: MaybeArray<BodyHandler<Schema, V['Singleton']>>
+		/**
+		 * Transform context's value
+		 */
+		transform?: MaybeArray<TransformHandler<Schema, V['Singleton']>>
+		/**
+		 * Execute before main handler
+		 */
+		beforeHandle?: MaybeArray<OptionalHandler<Schema, V['Singleton']>>
+		/**
+		 * Execute after main handler
+		 */
+		afterHandle?: MaybeArray<AfterHandler<Schema, V['Singleton']>>
+		/**
+		 * Execute after main handler
+		 */
+		mapResponse?: MaybeArray<MapResponse<Schema, V['Singleton']>>
+		/**
+		 * Catch error
+		 */
+		error?: MaybeArray<
+			ErrorHandler<V['Definitions']['error'], Schema, V['Singleton']>
+		>
+		/**
+		 * Custom body parser
+		 */
+		onResponse?: MaybeArray<VoidHandler<Schema, V['Singleton']>>
+	}
+
 export type LocalHook<
 	LocalSchema extends InputSchema = {},
 	Schema extends RouteSchema = RouteSchema,
@@ -634,7 +685,10 @@ export type LocalHook<
 	}
 		? Schema
 		: Schema & {
-				params: Record<GetPathParameter<Path extends string ? Path : ''>, string>
+				params: Record<
+					GetPathParameter<Path extends string ? Path : ''>,
+					string
+				>
 		  }
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
@@ -650,7 +704,7 @@ export type LocalHook<
 		 * - 'arraybuffer': parse body as readable stream
 		 */
 		type?: ContentType
-		detail?: Partial<OpenAPIV3.OperationObject>
+		detail?: LocalHookDetail
 		/**
 		 * Custom body parser
 		 */
@@ -702,8 +756,8 @@ export type SchemaValidator = {
 
 export type ListenCallback = (server: Server) => MaybePromise<void>
 
-export type AddPrefix<Prefix extends string, T> = {
-	[K in keyof T as `${Prefix}${K & string}`]: T[K]
+export type AddPrefix<Prefix extends string | undefined, T> = {
+	[K in keyof T as Prefix extends string ? `${Prefix}${K & string}` : K]: T[K]
 }
 
 export type AddPrefixCapitalize<Prefix extends string, T> = {

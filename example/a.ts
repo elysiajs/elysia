@@ -1,11 +1,27 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const c = new Elysia().get('/c', 'c').listen(8080)
+const c = new Elysia()
+	.get(
+		'/',
+		(a) => {
+			a.query
+            a.headers
 
-const app = new Elysia().get('/a', 'a').get('/b', 'b').use(c).listen(8080)
+			return 'A'
+		},
+		{
+            beforeHandle() {},
+			query: t.Object({
+				name: t.String()
+			})
+		}
+	)
+	.listen(8080)
 
-app._types.Metadata.routes
+c._types.Metadata.routes
+
+// const app = new Elysia().get('/a', 'a').get('/b', 'b').use(c).listen(8080)
 
 // console.log(app.router.static.http)
 
