@@ -7,6 +7,8 @@ import type { Static, TSchema } from '@sinclair/typebox'
 import { createTraceListener } from './trace'
 import type { Context } from './context'
 
+import { t } from './type-system'
+import { createManager } from './ely'
 import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
 
 import { ElysiaWS, websocket } from './ws'
@@ -94,8 +96,6 @@ import type {
 	LocalHook2,
 	MergeRouteSchema
 } from './types'
-import { t } from './type-system'
-import { createManager } from './ely'
 
 /**
  * ### Elysia Server
@@ -1431,14 +1431,40 @@ export default class Elysia<
 			Metadata['macro'],
 			Configuration['prefix']
 		>
+	): Elysia<Configuration, Singleton, Definitions, Metadata>
+
+	guard<
+		const LocalSchema extends InputSchema<
+			Extract<keyof Definitions['type'], string>
+		>,
+		const NewElysia extends Elysia<any, any, any, any>,
+		const Schema extends MergeSchema<
+			UnwrapRoute<LocalSchema, Definitions['type']>,
+			Metadata['schema']
+		>
+	>(
+		run: (
+			group: Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Prettify<Schema>
+					macro: Metadata['macro']
+					routes: {}
+				}
+			>
+		) => NewElysia
 	): Elysia<
 		Configuration,
 		Singleton,
 		Definitions,
 		{
-			schema: Prettify<Schema>
+			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Metadata['routes']
+			routes: Prettify<
+				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
+			>
 		}
 	>
 
@@ -1508,20 +1534,31 @@ export default class Elysia<
 	 * ```
 	 */
 	guard(
-		hook: LocalHook<any, any, any, any, any>,
+		hook:
+			| LocalHook<any, any, any, any, any>
+			| ((
+					group: Elysia<any, any, any, any>
+			  ) => Elysia<any, any, any, any>),
 		run?: (group: Elysia<any, any, any, any>) => Elysia<any, any, any, any>
 	): Elysia<any, any, any, any> {
 		if (!run) {
-			this.event = mergeLifeCycle(this.event, hook)
-			this.validator = {
-				body: hook.body,
-				headers: hook.headers,
-				params: hook.params,
-				query: hook.query,
-				response: hook.response
+			if (typeof hook === 'object') {
+				this.event = mergeLifeCycle(
+					this.event,
+					mergeLifeCycle(hook, {})
+				)
+				this.validator = {
+					body: hook.body ?? this.validator?.body,
+					headers: hook.headers ?? this.validator?.headers,
+					params: hook.params ?? this.validator?.params,
+					query: hook.query ?? this.validator?.query,
+					response: hook.response ?? this.validator?.response
+				}
+
+				return this
 			}
 
-			return this
+			return this.guard({}, hook)
 		}
 
 		const instance = new Elysia<any>({
@@ -1569,56 +1606,236 @@ export default class Elysia<
 		return this as any
 	}
 
-	// Inline Fn
+	/**
+	 * Inline fn
+	 */
 	use<
 		NewElysia extends Elysia<any, any, any, any>,
-		Param extends Elysia<any, any, any, any> = this
+		Param extends Elysia<any, any, any, any> = this,
+		Scoped extends boolean = false
 	>(
-		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>
-	): Elysia<
-		Configuration,
-		{
-			decorator: Prettify<
-				Singleton['decorator'] &
-					NewElysia['_types']['Singleton']['decorator']
-			>
-			store: Prettify<
-				Singleton['store'] & NewElysia['_types']['Singleton']['store']
-			>
-			derive: Prettify<
-				Singleton['derive'] & NewElysia['_types']['Singleton']['derive']
-			>
-			resolve: Prettify<
-				Singleton['resolve'] &
-					NewElysia['_types']['Singleton']['resolve']
-			>
-		},
-		{
-			type: Prettify<
-				Definitions['type'] & NewElysia['_types']['Definitions']['type']
-			>
-			error: Prettify<
-				Definitions['error'] &
-					NewElysia['_types']['Definitions']['error']
-			>
-		},
-		{
-			schema: Prettify<
-				MergeSchema<
-					Metadata['schema'],
-					NewElysia['_types']['Metadata']['schema']
-				>
-			>
-			macro: Prettify<
-				Metadata['macro'] & NewElysia['_types']['Metadata']['macro']
-			>
-			routes: Prettify<
-				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
-			>
-		}
-	>
+		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>,
+		options?: { scoped?: Scoped }
+	): Scoped extends true
+		? Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					macro: Metadata['macro']
+					routes: Prettify<
+						Metadata['routes'] &
+							NewElysia['_types']['Metadata']['routes']
+					>
+				}
+		  >
+		: Elysia<
+				Configuration,
+				{
+					decorator: Prettify<
+						Singleton['decorator'] &
+							NewElysia['_types']['Singleton']['decorator']
+					>
+					store: Prettify<
+						Singleton['store'] &
+							NewElysia['_types']['Singleton']['store']
+					>
+					derive: Prettify<
+						Singleton['derive'] &
+							NewElysia['_types']['Singleton']['derive']
+					>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							NewElysia['_types']['Singleton']['resolve']
+					>
+				},
+				{
+					type: Prettify<
+						Definitions['type'] &
+							NewElysia['_types']['Definitions']['type']
+					>
+					error: Prettify<
+						Definitions['error'] &
+							NewElysia['_types']['Definitions']['error']
+					>
+				},
+				{
+					schema: Prettify<
+						MergeSchema<
+							Metadata['schema'],
+							NewElysia['_types']['Metadata']['schema']
+						>
+					>
+					macro: Prettify<
+						Metadata['macro'] &
+							NewElysia['_types']['Metadata']['macro']
+					>
+					routes: Prettify<
+						Metadata['routes'] &
+							NewElysia['_types']['Metadata']['routes']
+					>
+				}
+		  >
 
-	// Entire Instance where scoped is true
+	/**
+	 * Inline Fn with scoped
+	 **/
+	use<
+		NewElysia extends Elysia<any, any, any, any>,
+		Params extends Elysia<any, any, any, any> = this,
+		Scoped extends boolean = false
+	>(
+		plugin: MaybePromise<(app: Params) => MaybePromise<NewElysia>>,
+		options?: { scoped?: Scoped }
+	): Scoped extends true
+		? Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					macro: Metadata['macro']
+					routes: Prettify<
+						Metadata['routes'] &
+							NewElysia['_types']['Metadata']['routes']
+					>
+				}
+		  >
+		: Elysia<
+				Configuration,
+				{
+					decorator: Prettify<
+						Singleton['decorator'] &
+							NewElysia['_types']['Singleton']['decorator']
+					>
+					store: Prettify<
+						Singleton['store'] &
+							NewElysia['_types']['Singleton']['store']
+					>
+					derive: Prettify<
+						Singleton['derive'] &
+							NewElysia['_types']['Singleton']['derive']
+					>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							NewElysia['_types']['Singleton']['resolve']
+					>
+				},
+				{
+					type: Prettify<
+						Definitions['type'] &
+							NewElysia['_types']['Definitions']['type']
+					>
+					error: Prettify<
+						Definitions['error'] &
+							NewElysia['_types']['Definitions']['error']
+					>
+				},
+				{
+					schema: Prettify<
+						MergeSchema<
+							Metadata['schema'],
+							NewElysia['_types']['Metadata']['schema']
+						>
+					>
+					macro: Prettify<
+						Metadata['macro'] &
+							NewElysia['_types']['Metadata']['macro']
+					>
+					routes: Prettify<
+						Metadata['routes'] &
+							NewElysia['_types']['Metadata']['routes']
+					>
+				}
+		  >
+
+	/**
+	 * Entire instance
+	 */
+	use<
+		NewElysia extends Elysia<
+			{
+				prefix?: any
+				scoped?: false
+			},
+			any,
+			any,
+			any
+		>,
+		Scoped extends boolean = false
+	>(
+		instance: MaybePromise<NewElysia>,
+		options?: { scoped?: Scoped }
+	): Scoped extends true
+		? Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					macro: Metadata['macro']
+					routes: Prettify<
+						Metadata['routes'] &
+							NewElysia['_types']['Metadata']['routes']
+					>
+				}
+		  >
+		: Elysia<
+				Configuration,
+				{
+					decorator: Prettify<
+						Singleton['decorator'] &
+							NewElysia['_types']['Singleton']['decorator']
+					>
+					store: Prettify<
+						Singleton['store'] &
+							NewElysia['_types']['Singleton']['store']
+					>
+					derive: Prettify<
+						Singleton['derive'] &
+							NewElysia['_types']['Singleton']['derive']
+					>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							NewElysia['_types']['Singleton']['resolve']
+					>
+				},
+				{
+					type: Prettify<
+						Definitions['type'] &
+							NewElysia['_types']['Definitions']['type']
+					>
+					error: Prettify<
+						Definitions['error'] &
+							NewElysia['_types']['Definitions']['error']
+					>
+				},
+				{
+					schema: Prettify<
+						MergeSchema<
+							Metadata['schema'],
+							NewElysia['_types']['Metadata']['schema']
+						>
+					>
+					macro: Prettify<
+						Metadata['macro'] &
+							NewElysia['_types']['Metadata']['macro']
+					>
+					routes: Configuration['prefix'] extends ``
+						? Metadata['routes'] &
+								NewElysia['_types']['Metadata']['routes']
+						: Metadata['routes'] &
+								AddPrefix<
+									Configuration['prefix'],
+									NewElysia['_types']['Metadata']['routes']
+								>
+				}
+		  >
+
+	/**
+	 * Entire Instance where scoped is true
+	 **/
 	use<
 		NewElysia extends Elysia<
 			{
@@ -1630,7 +1847,8 @@ export default class Elysia<
 			any
 		>
 	>(
-		instance: MaybePromise<NewElysia>
+		instance: MaybePromise<NewElysia>,
+		scoped?: { scoped?: boolean }
 	): Elysia<
 		NewElysia['_types']['Configuration'],
 		NewElysia['_types']['Singleton'],
@@ -1648,7 +1866,10 @@ export default class Elysia<
 		}
 	>
 
-	// Entire Instance where scoped is false
+	/**
+	 * Entire Instance where scoped is false
+	 * ? where scoped is true
+	 **/
 	use<
 		NewElysia extends Elysia<
 			{
@@ -1658,139 +1879,218 @@ export default class Elysia<
 			any,
 			any,
 			any
-		>
+		>,
+		Scoped extends boolean = false
 	>(
-		instance: MaybePromise<NewElysia>
-	): Elysia<
-		Configuration,
-		{
-			decorator: Prettify<
-				Singleton['decorator'] &
-					NewElysia['_types']['Singleton']['decorator']
-			>
-			store: Prettify<
-				Singleton['store'] & NewElysia['_types']['Singleton']['store']
-			>
-			derive: Prettify<
-				Singleton['derive'] & NewElysia['_types']['Singleton']['derive']
-			>
-			resolve: Prettify<
-				Singleton['resolve'] &
-					NewElysia['_types']['Singleton']['resolve']
-			>
-		},
-		{
-			type: Prettify<
-				Definitions['type'] & NewElysia['_types']['Definitions']['type']
-			>
-			error: Prettify<
-				Definitions['error'] &
-					NewElysia['_types']['Definitions']['error']
-			>
-		},
-		{
-			schema: Prettify<
-				MergeSchema<
-					Metadata['schema'],
-					NewElysia['_types']['Metadata']['schema']
-				>
-			>
-			macro: Prettify<
-				Metadata['macro'] & NewElysia['_types']['Metadata']['macro']
-			>
-			routes: Configuration['prefix'] extends ``
-				? Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
-				: Metadata['routes'] &
-						AddPrefix<
-							Configuration['prefix'],
+		instance: MaybePromise<NewElysia>,
+		options?: { scoped?: Scoped }
+	): Scoped extends true
+		? Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					macro: Metadata['macro']
+					routes: Prettify<
+						Metadata['routes'] &
 							NewElysia['_types']['Metadata']['routes']
+					>
+				}
+		  >
+		: Elysia<
+				Configuration,
+				{
+					decorator: Prettify<
+						Singleton['decorator'] &
+							NewElysia['_types']['Singleton']['decorator']
+					>
+					store: Prettify<
+						Singleton['store'] &
+							NewElysia['_types']['Singleton']['store']
+					>
+					derive: Prettify<
+						Singleton['derive'] &
+							NewElysia['_types']['Singleton']['derive']
+					>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							NewElysia['_types']['Singleton']['resolve']
+					>
+				},
+				{
+					type: Prettify<
+						Definitions['type'] &
+							NewElysia['_types']['Definitions']['type']
+					>
+					error: Prettify<
+						Definitions['error'] &
+							NewElysia['_types']['Definitions']['error']
+					>
+				},
+				{
+					schema: Prettify<
+						MergeSchema<
+							Metadata['schema'],
+							NewElysia['_types']['Metadata']['schema']
 						>
-		}
-	>
+					>
+					macro: Prettify<
+						Metadata['macro'] &
+							NewElysia['_types']['Metadata']['macro']
+					>
+					routes: Configuration['prefix'] extends ``
+						? Metadata['routes'] &
+								NewElysia['_types']['Metadata']['routes']
+						: Metadata['routes'] &
+								AddPrefix<
+									Configuration['prefix'],
+									NewElysia['_types']['Metadata']['routes']
+								>
+				}
+		  >
 
-	// Import Fn
-	use<NewElysia extends Elysia<any, any, any, any>>(
+	/**
+	 * Import fn
+	 */
+	use<
+		NewElysia extends Elysia<any, any, any, any>,
+		Scoped extends boolean = false
+	>(
 		plugin: Promise<{
 			default: (
 				elysia: Elysia<any, any, any, any>
 			) => MaybePromise<NewElysia>
-		}>
-	): Elysia<
-		Configuration,
-		{
-			decorator: Singleton['decorator'] &
-				NewElysia['_types']['Singleton']['decorator']
-			store: Singleton['store'] &
-				NewElysia['_types']['Singleton']['store']
-			derive: Singleton['derive'] &
-				NewElysia['_types']['Singleton']['derive']
-			resolve: Singleton['resolve'] &
-				NewElysia['_types']['Singleton']['resolve']
-		},
-		{
-			type: Definitions['type'] &
-				NewElysia['_types']['Definitions']['type']
-			error: Definitions['error'] &
-				NewElysia['_types']['Definitions']['error']
-		},
-		{
-			schema: MergeSchema<
-				Metadata['schema'],
-				NewElysia['_types']['Metadata']['schema']
-			>
-			macro: Prettify<
-				Metadata['macro'] & NewElysia['_types']['Metadata']['macro']
-			>
-			routes: Configuration['prefix'] extends ``
-				? Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
-				: Metadata['routes'] &
-						AddPrefix<
-							Configuration['prefix'],
-							NewElysia['_types']['Metadata']['routes']
-						>
-		}
-	>
-
-	// Import entire instance
-	use<LazyLoadElysia extends Elysia<any, any, any, any>>(
-		plugin: Promise<{
-			default: LazyLoadElysia
-		}>
-	): LazyLoadElysia extends Elysia<
-		any,
-		infer PluginSingleton,
-		infer PluginDefinitions,
-		infer PluginMetadata
-	>
+		}>,
+		options?: { scoped?: Scoped }
+	): Scoped extends true
 		? Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					macro: Metadata['macro']
+					routes: Prettify<
+						Metadata['routes'] &
+							NewElysia['_types']['Metadata']['routes']
+					>
+				}
+		  >
+		: Elysia<
 				Configuration,
 				{
 					decorator: Singleton['decorator'] &
-						PluginSingleton['decorator']
-					store: Singleton['store'] & PluginSingleton['store']
-					derive: Singleton['derive'] & PluginSingleton['derive']
-					resolve: Singleton['resolve'] & PluginSingleton['resolve']
+						NewElysia['_types']['Singleton']['decorator']
+					store: Singleton['store'] &
+						NewElysia['_types']['Singleton']['store']
+					derive: Singleton['derive'] &
+						NewElysia['_types']['Singleton']['derive']
+					resolve: Singleton['resolve'] &
+						NewElysia['_types']['Singleton']['resolve']
 				},
 				{
-					type: PluginDefinitions['type'] & Definitions['type']
-					error: PluginDefinitions['error'] & Definitions['error']
+					type: Definitions['type'] &
+						NewElysia['_types']['Definitions']['type']
+					error: Definitions['error'] &
+						NewElysia['_types']['Definitions']['error']
 				},
 				{
 					schema: MergeSchema<
-						PluginMetadata['schema'],
-						Metadata['schema']
+						Metadata['schema'],
+						NewElysia['_types']['Metadata']['schema']
 					>
-					macro: Prettify<PluginMetadata['macro'] & Metadata['macro']>
+					macro: Prettify<
+						Metadata['macro'] &
+							NewElysia['_types']['Metadata']['macro']
+					>
 					routes: Configuration['prefix'] extends ``
-						? PluginMetadata['routes'] & PluginMetadata['routes']
-						: PluginMetadata['routes'] &
+						? Metadata['routes'] &
+								NewElysia['_types']['Metadata']['routes']
+						: Metadata['routes'] &
 								AddPrefix<
 									Configuration['prefix'],
-									PluginMetadata['routes']
+									NewElysia['_types']['Metadata']['routes']
 								>
 				}
 		  >
-		: this
+
+	/**
+	 * Import entire instance
+	 */
+	use<
+		LazyLoadElysia extends Elysia<any, any, any, any>,
+		Scoped extends boolean = false
+	>(
+		plugin: Promise<{
+			default: LazyLoadElysia
+		}>,
+		options?: { scoped?: Scoped }
+	): Scoped extends true
+		? Elysia<
+				Configuration,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					macro: Metadata['macro']
+					routes: Prettify<
+						Metadata['routes'] &
+							LazyLoadElysia['_types']['Metadata']['routes']
+					>
+				}
+		  >
+		: Elysia<
+				Configuration,
+				{
+					decorator: Prettify<
+						Singleton['decorator'] &
+							LazyLoadElysia['_types']['Singleton']['decorator']
+					>
+					store: Prettify<
+						Singleton['store'] &
+							LazyLoadElysia['_types']['Singleton']['store']
+					>
+					derive: Prettify<
+						Singleton['derive'] &
+							LazyLoadElysia['_types']['Singleton']['derive']
+					>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							LazyLoadElysia['_types']['Singleton']['resolve']
+					>
+				},
+				{
+					type: Prettify<
+						Definitions['type'] &
+							LazyLoadElysia['_types']['Definitions']['type']
+					>
+					error: Prettify<
+						Definitions['error'] &
+							LazyLoadElysia['_types']['Definitions']['error']
+					>
+				},
+				{
+					schema: Prettify<
+						MergeSchema<
+							Metadata['schema'],
+							LazyLoadElysia['_types']['Metadata']['schema']
+						>
+					>
+					macro: Prettify<
+						Metadata['macro'] &
+							LazyLoadElysia['_types']['Metadata']['macro']
+					>
+					routes: Configuration['prefix'] extends ``
+						? Metadata['routes'] &
+								LazyLoadElysia['_types']['Metadata']['routes']
+						: Metadata['routes'] &
+								AddPrefix<
+									Configuration['prefix'],
+									LazyLoadElysia['_types']['Metadata']['routes']
+								>
+				}
+		  >
 
 	/**
 	 * ### use
@@ -1821,8 +2121,12 @@ export default class Elysia<
 					default: (
 						elysia: Elysia<any, any, any, any>
 					) => MaybePromise<Elysia<any, any, any, any>>
-			  }>
+			  }>,
+		options?: { scoped?: boolean }
 	): Elysia<any, any, any, any> {
+		if (options?.scoped)
+			return this.guard({}, (app) => app.use(plugin as any))
+
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
 				plugin
