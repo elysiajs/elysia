@@ -17,8 +17,10 @@ import type {
 	ValidationError
 } from './error'
 
-export type ElysiaConfig<Configuration extends ConfigurationBase> =
-	Isolate<Configuration> & {
+export type ElysiaConfig<Prefix extends string, Scoped extends boolean> =
+	{
+		prefix?: Prefix
+		scoped?: Scoped
 		name?: string
 		seed?: unknown
 		serve?: Partial<Serve>
@@ -139,11 +141,6 @@ export interface MetadataBase {
 	schema: RouteSchema
 	macro: BaseMacro
 	routes: RouteBase
-}
-
-export interface ConfigurationBase {
-	prefix?: string
-	scoped?: boolean
 }
 
 export interface RouteSchema {
@@ -524,7 +521,7 @@ export type PreHandler<
 	context: Prettify<PreContext<Singleton>>
 ) => MaybePromise<Route['response'] | void>
 
-export type GracefulHandler<Instance extends Elysia<any, any, any, any>> = (
+export type GracefulHandler<Instance extends Elysia<any, any, any, any, any>> = (
 	data: Instance
 ) => any
 
@@ -756,7 +753,7 @@ export type SchemaValidator = {
 
 export type ListenCallback = (server: Server) => MaybePromise<void>
 
-export type AddPrefix<Prefix extends string | undefined, T> = {
+export type AddPrefix<Prefix extends string, T> = {
 	[K in keyof T as Prefix extends string ? `${Prefix}${K & string}` : K]: T[K]
 }
 
@@ -872,3 +869,19 @@ export interface MacroManager<
 // 	resolve: {}
 // },
 // Path extends string = ''
+
+type _CreateEden<
+	Path extends string,
+	Property extends Object = {}
+> = Path extends `${infer Start}/${infer Rest}`
+	? {
+			[x in Start]: CreateEden<Rest, Property>
+	  }
+	: {
+			[x in Path]: Property
+	  }
+
+export type CreateEden<
+	Path extends string,
+	Property extends Object = {}
+> = Path extends `/${infer Rest}` ? _CreateEden<Rest, Property> : _CreateEden<Path, Property>
