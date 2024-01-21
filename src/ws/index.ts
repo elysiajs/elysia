@@ -7,7 +7,6 @@ import { ValidationError } from '../error'
 import type { Context } from '../context'
 
 import type { DecoratorBase, RouteSchema } from '../types'
-import { randomInt } from 'crypto'
 
 export const websocket: WebSocketHandler<any> = {
 	open(ws) {
@@ -47,7 +46,13 @@ export class ElysiaWS<
 
 	constructor(public raw: WS, public data: Context<Route, Decorators>) {
 		this.validator = raw.data.validator
-		this.id = raw.data.id ?? randomInt(Number.MAX_SAFE_INTEGER)
+		if(raw.data.id) {
+			this.id = raw.data.id
+		} else {
+			const array = new Uint32Array(1);
+			crypto.getRandomValues(array);
+			this.id = array[0];
+		}
 	}
 
 	get publish() {
