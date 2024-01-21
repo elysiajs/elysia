@@ -17,49 +17,48 @@ import type {
 	ValidationError
 } from './error'
 
-export type ElysiaConfig<Prefix extends string, Scoped extends boolean> =
-	{
-		prefix?: Prefix
-		scoped?: Scoped
-		name?: string
-		seed?: unknown
-		serve?: Partial<Serve>
+export type ElysiaConfig<Prefix extends string, Scoped extends boolean> = {
+	prefix?: Prefix
+	scoped?: Scoped
+	name?: string
+	seed?: unknown
+	serve?: Partial<Serve>
+	/**
+	 * Disable `new Error` thrown marked as Error on Bun 0.6
+	 */
+	forceErrorEncapsulation?: boolean
+	/**
+	 * Disable Ahead of Time compliation
+	 *
+	 * Reduced performance but faster startup time
+	 */
+	aot?: boolean
+	/**
+	 * Whether should Elysia tolerate suffix '/' or vice-versa
+	 *
+	 * @default false
+	 */
+	strictPath?: boolean
+	/**
+	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
+	 *
+	 * @default false
+	 */
+	websocket?: Omit<
+		WebSocketHandler<any>,
+		'open' | 'close' | 'message' | 'drain'
+	>
+	cookie?: CookieOptions & {
 		/**
-		 * Disable `new Error` thrown marked as Error on Bun 0.6
+		 * Specified cookie name to be signed globally
 		 */
-		forceErrorEncapsulation?: boolean
-		/**
-		 * Disable Ahead of Time compliation
-		 *
-		 * Reduced performance but faster startup time
-		 */
-		aot?: boolean
-		/**
-		 * Whether should Elysia tolerate suffix '/' or vice-versa
-		 *
-		 * @default false
-		 */
-		strictPath?: boolean
-		/**
-		 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
-		 *
-		 * @default false
-		 */
-		websocket?: Omit<
-			WebSocketHandler<any>,
-			'open' | 'close' | 'message' | 'drain'
-		>
-		cookie?: CookieOptions & {
-			/**
-			 * Specified cookie name to be signed globally
-			 */
-			sign?: true | string | string[]
-		}
-		/**
-		 * Capture more detail information for each dependencies
-		 */
-		analytic?: boolean
+		sign?: true | string | string[]
 	}
+	/**
+	 * Capture more detail information for each dependencies
+	 */
+	analytic?: boolean
+}
 
 export type MaybeArray<T> = T | T[]
 export type MaybePromise<T> = T | Promise<T>
@@ -140,7 +139,6 @@ export interface RouteBase {
 export interface MetadataBase {
 	schema: RouteSchema
 	macro: BaseMacro
-	routes: RouteBase
 }
 
 export interface RouteSchema {
@@ -521,9 +519,8 @@ export type PreHandler<
 	context: Prettify<PreContext<Singleton>>
 ) => MaybePromise<Route['response'] | void>
 
-export type GracefulHandler<Instance extends Elysia<any, any, any, any, any>> = (
-	data: Instance
-) => any
+export type GracefulHandler<Instance extends Elysia<any, any, any, any, any>> =
+	(data: Instance) => any
 
 export type ErrorHandler<
 	T extends Record<string, Error> = {},
@@ -610,60 +607,60 @@ export type MergeRouteSchema<
 		: never
 >
 
-export type LocalHook2<
-	Input extends InputSchema<any>,
-	Schema extends RouteSchema,
-	V extends {
-		Singleton: SingletonBase
-		Metadata: MetadataBase
-		Definitions: DefinitionBase
-	}
-> = (Input extends {} ? Input : Isolate<Input>) &
-	V['Metadata']['macro'] & {
-		/**
-		 * Short for 'Content-Type'
-		 *
-		 * Available:
-		 * - 'none': do not parse body
-		 * - 'text' / 'text/plain': parse body as string
-		 * - 'json' / 'application/json': parse body as json
-		 * - 'formdata' / 'multipart/form-data': parse body as form-data
-		 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-		 * - 'arraybuffer': parse body as readable stream
-		 */
-		type?: ContentType
-		detail?: LocalHookDetail
-		/**
-		 * Custom body parser
-		 */
-		parse?: MaybeArray<BodyHandler<Schema, V['Singleton']>>
-		/**
-		 * Transform context's value
-		 */
-		transform?: MaybeArray<TransformHandler<Schema, V['Singleton']>>
-		/**
-		 * Execute before main handler
-		 */
-		beforeHandle?: MaybeArray<OptionalHandler<Schema, V['Singleton']>>
-		/**
-		 * Execute after main handler
-		 */
-		afterHandle?: MaybeArray<AfterHandler<Schema, V['Singleton']>>
-		/**
-		 * Execute after main handler
-		 */
-		mapResponse?: MaybeArray<MapResponse<Schema, V['Singleton']>>
-		/**
-		 * Catch error
-		 */
-		error?: MaybeArray<
-			ErrorHandler<V['Definitions']['error'], Schema, V['Singleton']>
-		>
-		/**
-		 * Custom body parser
-		 */
-		onResponse?: MaybeArray<VoidHandler<Schema, V['Singleton']>>
-	}
+// export type LocalHook2<
+// 	Input extends InputSchema<any>,
+// 	Schema extends RouteSchema,
+// 	V extends {
+// 		Singleton: SingletonBase
+// 		Metadata: MetadataBase
+// 		Definitions: DefinitionBase
+// 	}
+// > = (Input extends {} ? Input : Isolate<Input>) &
+// 	V['Metadata']['macro'] & {
+// 		/**
+// 		 * Short for 'Content-Type'
+// 		 *
+// 		 * Available:
+// 		 * - 'none': do not parse body
+// 		 * - 'text' / 'text/plain': parse body as string
+// 		 * - 'json' / 'application/json': parse body as json
+// 		 * - 'formdata' / 'multipart/form-data': parse body as form-data
+// 		 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+// 		 * - 'arraybuffer': parse body as readable stream
+// 		 */
+// 		type?: ContentType
+// 		detail?: LocalHookDetail
+// 		/**
+// 		 * Custom body parser
+// 		 */
+// 		parse?: MaybeArray<BodyHandler<Schema, V['Singleton']>>
+// 		/**
+// 		 * Transform context's value
+// 		 */
+// 		transform?: MaybeArray<TransformHandler<Schema, V['Singleton']>>
+// 		/**
+// 		 * Execute before main handler
+// 		 */
+// 		beforeHandle?: MaybeArray<OptionalHandler<Schema, V['Singleton']>>
+// 		/**
+// 		 * Execute after main handler
+// 		 */
+// 		afterHandle?: MaybeArray<AfterHandler<Schema, V['Singleton']>>
+// 		/**
+// 		 * Execute after main handler
+// 		 */
+// 		mapResponse?: MaybeArray<MapResponse<Schema, V['Singleton']>>
+// 		/**
+// 		 * Catch error
+// 		 */
+// 		error?: MaybeArray<
+// 			ErrorHandler<V['Definitions']['error'], Schema, V['Singleton']>
+// 		>
+// 		/**
+// 		 * Custom body parser
+// 		 */
+// 		onResponse?: MaybeArray<VoidHandler<Schema, V['Singleton']>>
+// 	}
 
 export type LocalHook<
 	LocalSchema extends InputSchema = {},
@@ -884,4 +881,6 @@ type _CreateEden<
 export type CreateEden<
 	Path extends string,
 	Property extends Object = {}
-> = Path extends `/${infer Rest}` ? _CreateEden<Rest, Property> : _CreateEden<Path, Property>
+> = Path extends `/${infer Rest}`
+	? _CreateEden<Rest, Property>
+	: _CreateEden<Path, Property>

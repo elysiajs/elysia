@@ -92,8 +92,8 @@ import type {
 	MacroToProperty,
 	TransformHandler,
 	MetadataBase,
-	MergeRouteSchema,
-	CreateEden
+	RouteBase,
+	MergeRouteSchema
 } from './types'
 
 /**
@@ -113,27 +113,29 @@ import type {
 export default class Elysia<
 	const BasePath extends string = '',
 	const Scoped extends boolean = false,
-	Singleton extends SingletonBase = {
+	const Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	},
-	Definitions extends DefinitionBase = {
+	const Definitions extends DefinitionBase = {
 		type: {}
 		error: {}
 	},
 	const Metadata extends MetadataBase = {
 		schema: {}
 		macro: {}
-		routes: {}
-	}
+	},
+	const Routes extends RouteBase = {}
 > {
 	config: ElysiaConfig<BasePath, Scoped>
 
 	server: Server | null = null
 	private dependencies: Record<string, Checksum[]> = {}
 	private reporter: TraceReporter = new EventEmitter()
+
+	_routes: Routes = {} as any
 
 	_types: {
 		Prefix: BasePath
@@ -269,7 +271,7 @@ export default class Elysia<
 		method: HTTPMethod,
 		paths: string | Readonly<string[]>,
 		handle: Handler<any, any, any> | any,
-		localHook?: LocalHook<any, any, any, any, any>,
+		localHook?: LocalHook<any, any, any, any, any, any>,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
 			skipPrefix: false as boolean | undefined
@@ -1242,7 +1244,7 @@ export default class Elysia<
 		prefix: Prefix,
 		run: (
 			group: Elysia<
-				Prefix,
+				`${BasePath}${Prefix}`,
 				Scoped,
 				Singleton,
 				Definitions,
@@ -1258,13 +1260,8 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
-			>
-		}
+		Metadata,
+		Prettify<Routes & NewElysia['_routes']>
 	>
 
 	group<
@@ -1273,9 +1270,10 @@ export default class Elysia<
 		const Input extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const Schema extends MergeSchema<
+		const Schema extends MergeRouteSchema<
 			UnwrapRoute<Input, Definitions['type']>,
-			Metadata['schema']
+			Metadata['schema'],
+			`${BasePath}${Prefix}`
 		>
 	>(
 		prefix: Prefix,
@@ -1293,7 +1291,10 @@ export default class Elysia<
 				Singleton,
 				Definitions,
 				{
-					schema: Schema
+					schema: MergeSchema<
+						UnwrapRoute<Input, Definitions['type']>,
+						Metadata['schema']
+					>
 					macro: Metadata['macro']
 					routes: {}
 				}
@@ -1304,13 +1305,8 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
-			>
-		}
+		Metadata,
+		Routes & NewElysia['_routes']
 	>
 
 	/**
@@ -1330,7 +1326,7 @@ export default class Elysia<
 	group(
 		prefix: string,
 		schemaOrRun:
-			| LocalHook<any, any, any, any, any>
+			| LocalHook<any, any, any, any, any, any>
 			| ((
 					group: Elysia<any, any, any, any, any>
 			  ) => Elysia<any, any, any, any, any>),
@@ -1398,7 +1394,7 @@ export default class Elysia<
 						method,
 						path,
 						handler,
-						mergeHook(hooks as LocalHook<any, any, any, any, any>, {
+						mergeHook(hooks as LocalHook<any, any, any, any, any, any>, {
 							error: sandbox.event.error
 						}),
 						{
@@ -1427,7 +1423,17 @@ export default class Elysia<
 			Metadata['macro'],
 			BasePath
 		>
-	): Elysia<BasePath, Scoped, Singleton, Definitions, Metadata>
+	): Elysia<
+		BasePath,
+		Scoped,
+		Singleton,
+		Definitions,
+		{
+			schema: Schema
+			macro: Metadata['macro']
+		},
+		Routes
+	>
 
 	guard<
 		const LocalSchema extends InputSchema<
@@ -1460,10 +1466,8 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
-			>
-		}
+		},
+		Prettify<Routes & NewElysia['_routes']>
 	>
 
 	guard<
@@ -1504,10 +1508,8 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
-			>
-		}
+		},
+		Prettify<Routes & NewElysia['_routes']>
 	>
 
 	/**
@@ -1535,7 +1537,7 @@ export default class Elysia<
 	 */
 	guard(
 		hook:
-			| LocalHook<any, any, any, any, any>
+			| LocalHook<any, any, any, any, any, any>
 			| ((
 					group: Elysia<any, any, any, any, any>
 			  ) => Elysia<any, any, any, any, any>),
@@ -1593,8 +1595,8 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any, any, any, any, any>, {
-						...(localHook as LocalHook<any, any, any, any, any>),
+					mergeHook(hook as LocalHook<any, any, any, any, any, any>, {
+						...(localHook as LocalHook<any, any, any, any, any, any>),
 						error: !localHook.error
 							? sandbox.event.error
 							: Array.isArray(localHook.error)
@@ -1627,11 +1629,8 @@ export default class Elysia<
 				{
 					schema: Metadata['schema']
 					macro: Metadata['macro']
-					routes: Prettify<
-						Metadata['routes'] &
-							NewElysia['_types']['Metadata']['routes']
-					>
-				}
+				},
+				Prettify<Routes & NewElysia['_routes']>
 		  >
 		: Elysia<
 				BasePath,
@@ -1675,11 +1674,8 @@ export default class Elysia<
 						Metadata['macro'] &
 							NewElysia['_types']['Metadata']['macro']
 					>
-					routes: Prettify<
-						Metadata['routes'] &
-							NewElysia['_types']['Metadata']['routes']
-					>
-				}
+				},
+				Prettify<Routes & NewElysia['_routes']>
 		  >
 
 	/**
@@ -1701,11 +1697,8 @@ export default class Elysia<
 				{
 					schema: Metadata['schema']
 					macro: Metadata['macro']
-					routes: Prettify<
-						Metadata['routes'] &
-							NewElysia['_types']['Metadata']['routes']
-					>
-				}
+				},
+				Prettify<Routes & NewElysia['_routes']>
 		  >
 		: Elysia<
 				BasePath,
@@ -1749,11 +1742,8 @@ export default class Elysia<
 						Metadata['macro'] &
 							NewElysia['_types']['Metadata']['macro']
 					>
-					routes: Prettify<
-						Metadata['routes'] &
-							NewElysia['_types']['Metadata']['routes']
-					>
-				}
+				},
+				Routes & NewElysia['_routes']
 		  >
 
 	// /**
@@ -1776,7 +1766,7 @@ export default class Elysia<
 	// 				macro: Metadata['macro']
 	// 				routes: Prettify<
 	// 					Metadata['routes'] &
-	// 						NewElysia['_types']['Metadata']['routes']
+	// 						NewElysia['_routes']
 	// 				>
 	// 			}
 	// 	  >
@@ -1824,11 +1814,11 @@ export default class Elysia<
 	// 				>
 	// 				routes: BasePath extends ``
 	// 					? Metadata['routes'] &
-	// 							NewElysia['_types']['Metadata']['routes']
+	// 							NewElysia['_routes']
 	// 					: Metadata['routes'] &
 	// 							AddPrefix<
 	// 								BasePath,
-	// 								NewElysia['_types']['Metadata']['routes']
+	// 								NewElysia['_routes']
 	// 							>
 	// 			}
 	// 	  >
@@ -1845,16 +1835,16 @@ export default class Elysia<
 		NewElysia['_types']['Singleton'],
 		Definitions,
 		{
-			routes: BasePath extends ``
-				? Metadata['routes'] & NewElysia['_types']['Metadata']['routes']
-				: Metadata['routes'] &
-						AddPrefix<
-							BasePath,
-							NewElysia['_types']['Metadata']['routes']
-						>
 			macro: Metadata['macro']
 			schema: Metadata['schema']
-		}
+		},
+		Routes extends ``
+			? Routes & NewElysia['_routes']
+			: Routes &
+					AddPrefix<
+						BasePath,
+						NewElysia['_routes']
+					>
 	>
 
 	/**
@@ -1875,11 +1865,8 @@ export default class Elysia<
 				{
 					schema: Metadata['schema']
 					macro: Metadata['macro']
-					routes: Prettify<
-						Metadata['routes'] &
-							NewElysia['_types']['Metadata']['routes']
-					>
-				}
+				},
+				Prettify<Routes & NewElysia['_routes']>
 		  >
 		: Elysia<
 				BasePath,
@@ -1923,15 +1910,14 @@ export default class Elysia<
 						Metadata['macro'] &
 							NewElysia['_types']['Metadata']['macro']
 					>
-					routes: BasePath extends ``
-						? Metadata['routes'] &
-								NewElysia['_types']['Metadata']['routes']
-						: Metadata['routes'] &
-								AddPrefix<
-									BasePath,
-									NewElysia['_types']['Metadata']['routes']
-								>
-				}
+				},
+				BasePath extends ``
+					? Routes & NewElysia['_routes']
+					: Routes &
+							AddPrefix<
+								BasePath,
+								NewElysia['_routes']
+							>
 		  >
 
 	/**
@@ -1956,11 +1942,8 @@ export default class Elysia<
 				{
 					schema: Metadata['schema']
 					macro: Metadata['macro']
-					routes: Prettify<
-						Metadata['routes'] &
-							NewElysia['_types']['Metadata']['routes']
-					>
-				}
+				},
+				Prettify<Routes & NewElysia['_routes']>
 		  >
 		: Elysia<
 				BasePath,
@@ -1990,15 +1973,14 @@ export default class Elysia<
 						Metadata['macro'] &
 							NewElysia['_types']['Metadata']['macro']
 					>
-					routes: BasePath extends ``
-						? Metadata['routes'] &
-								NewElysia['_types']['Metadata']['routes']
-						: Metadata['routes'] &
-								AddPrefix<
-									BasePath,
-									NewElysia['_types']['Metadata']['routes']
-								>
-				}
+				},
+				BasePath extends ``
+					? Routes & NewElysia['_routes']
+					: Routes &
+							AddPrefix<
+								BasePath,
+								NewElysia['_routes']
+							>
 		  >
 
 	/**
@@ -2021,11 +2003,10 @@ export default class Elysia<
 				{
 					schema: Metadata['schema']
 					macro: Metadata['macro']
-					routes: Prettify<
-						Metadata['routes'] &
-							LazyLoadElysia['_types']['Metadata']['routes']
-					>
-				}
+				},
+				Prettify<
+					Routes & LazyLoadElysia['_types']['Metadata']['routes']
+				>
 		  >
 		: Elysia<
 				BasePath,
@@ -2069,15 +2050,14 @@ export default class Elysia<
 						Metadata['macro'] &
 							LazyLoadElysia['_types']['Metadata']['macro']
 					>
-					routes: BasePath extends ``
-						? Metadata['routes'] &
+				},
+				BasePath extends ``
+					? Routes & LazyLoadElysia['_types']['Metadata']['routes']
+					: Routes &
+							AddPrefix<
+								BasePath,
 								LazyLoadElysia['_types']['Metadata']['routes']
-						: Metadata['routes'] &
-								AddPrefix<
-									BasePath,
-									LazyLoadElysia['_types']['Metadata']['routes']
-								>
-				}
+							>
 		  >
 
 	/**
@@ -2408,8 +2388,8 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
-			routes: Metadata['routes']
-		}
+		},
+		Routes
 	> {
 		this.extender.macros.push(macro as any)
 
@@ -2525,10 +2505,9 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			keyof Definitions['type'] & string
 		>,
-		const Schema extends MergeRouteSchema<
+		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'],
-			`${BasePath}${Path}`
+			Metadata['schema']
 		>,
 		const Handle extends
 			| Exclude<Schema['response'], Handle>
@@ -2552,61 +2531,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] &
-					CreateEden<
-						`${BasePath & string}${Path}`,
-						{
-							get: {
-								body: Schema['body']
-								params: Schema['params']
-								query: Schema['query']
-								headers: Schema['headers']
-								response: unknown extends Schema['response']
-									? (
-											Handle extends (
-												...a: any
-											) => infer Returned
-												? Returned
-												: Handle
-									  ) extends infer Res
-										? keyof Res extends typeof ELYSIA_RESPONSE
-											? Prettify<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath & string}${Path}`]: {
+					get: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
+													Res,
 													{
-														200: Exclude<
-															Res,
-															{
-																[ELYSIA_RESPONSE]: number
-															}
-														>
-													} & (Extract<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													> extends infer ErrorResponse extends {
 														[ELYSIA_RESPONSE]: number
-														response: any
 													}
-														? {
-																[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-														  }
-														: {})
-											  >
-											: {
-													200: Res
-											  }
-										: never
-									: Schema['response'] extends { 200: any }
-									? Schema['response']
+												>
+											} & (Extract<
+												Res,
+												{
+													[ELYSIA_RESPONSE]: number
+												}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
 									: {
-											200: Schema['response']
+											200: Res
 									  }
-							}
-						}
-					>
-			>
-		}
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
+					}
+				}
+			}
+		>
 	> {
 		this.add('GET', path, handler as any, hook)
 
@@ -2662,63 +2641,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath & string}${Path}`]: {
-						post: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath & string}${Path}`]: {
+					post: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add('POST', path, handler as any, hook)
 
@@ -2774,63 +2751,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						put: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					put: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add('PUT', path, handler as any, hook)
 
@@ -2886,63 +2861,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						patch: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					patch: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add('PATCH', path, handler as any, hook)
 
@@ -2998,63 +2971,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						delete: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					delete: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add('DELETE', path, handler as any, hook)
 
@@ -3110,63 +3081,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						options: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					options: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add('OPTIONS', path, handler as any, hook)
 
@@ -3217,63 +3186,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						[method in string]: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					[method in string]: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add('ALL', path, handler as any, hook)
 
@@ -3329,63 +3296,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						head: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					head: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add('HEAD', path, handler as any, hook)
 
@@ -3441,63 +3406,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						connect: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					connect: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add('CONNECT', path, handler as any, hook)
 
@@ -3563,63 +3526,61 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						[method in Method]: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: unknown extends Schema['response']
-								? (
-										Handle extends (
-											...a: any
-										) => infer Returned
-											? Returned
-											: Handle
-								  ) extends infer Res
-									? keyof Res extends typeof ELYSIA_RESPONSE
-										? Prettify<
-												{
-													200: Exclude<
-														Res,
-														{
-															[ELYSIA_RESPONSE]: number
-														}
-													>
-												} & (Extract<
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					[method in Method]: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: unknown extends Schema['response']
+							? (
+									Handle extends (...a: any) => infer Returned
+										? Returned
+										: Handle
+							  ) extends infer Res
+								? keyof Res extends typeof ELYSIA_RESPONSE
+									? Prettify<
+											{
+												200: Exclude<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												> extends infer ErrorResponse extends {
+												>
+											} & (Extract<
+												Res,
+												{
 													[ELYSIA_RESPONSE]: number
-													response: any
 												}
-													? {
-															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-													  }
-													: {})
-										  >
-										: {
-												200: Res
-										  }
-									: never
-								: Schema['response'] extends { 200: any }
-								? Schema['response']
-								: {
-										200: Schema['response']
-								  }
-						}
+											> extends infer ErrorResponse extends {
+												[ELYSIA_RESPONSE]: number
+												response: any
+											}
+												? {
+														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+												  }
+												: {})
+									  >
+									: {
+											200: Res
+									  }
+								: never
+							: Schema['response'] extends { 200: any }
+							? Schema['response']
+							: {
+									200: Schema['response']
+							  }
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		this.add(method, path, handler, hook, hook.config)
 
@@ -3669,24 +3630,24 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro']
-			routes: Prettify<
-				Metadata['routes'] & {
-					[path in `${BasePath}${Path}`]: {
-						subscribe: {
-							body: Schema['body']
-							params: undefined extends Schema['params']
-								? Path extends `${string}/${':' | '*'}${string}`
-									? Record<GetPathParameter<Path>, string>
-									: never
-								: Schema['params']
-							query: Schema['query']
-							headers: Schema['headers']
-							response: Schema['response']
-						}
+		},
+		Prettify<
+			Routes & {
+				[path in `${BasePath}${Path}`]: {
+					subscribe: {
+						body: Schema['body']
+						params: undefined extends Schema['params']
+							? Path extends `${string}/${':' | '*'}${string}`
+								? Record<GetPathParameter<Path>, string>
+								: never
+							: Schema['params']
+						query: Schema['query']
+						headers: Schema['headers']
+						response: Schema['response']
 					}
 				}
-			>
-		}
+			}
+		>
 	> {
 		const transform = options.transformMessage
 			? Array.isArray(options.transformMessage)
