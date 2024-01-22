@@ -93,7 +93,8 @@ import type {
 	TransformHandler,
 	MetadataBase,
 	RouteBase,
-	MergeRouteSchema
+	MergeRouteSchema,
+	CreateEden
 } from './types'
 
 /**
@@ -1394,9 +1395,12 @@ export default class Elysia<
 						method,
 						path,
 						handler,
-						mergeHook(hooks as LocalHook<any, any, any, any, any, any>, {
-							error: sandbox.event.error
-						}),
+						mergeHook(
+							hooks as LocalHook<any, any, any, any, any, any>,
+							{
+								error: sandbox.event.error
+							}
+						),
 						{
 							skipPrefix: true
 						}
@@ -1596,7 +1600,14 @@ export default class Elysia<
 					path,
 					handler,
 					mergeHook(hook as LocalHook<any, any, any, any, any, any>, {
-						...(localHook as LocalHook<any, any, any, any, any, any>),
+						...(localHook as LocalHook<
+							any,
+							any,
+							any,
+							any,
+							any,
+							any
+						>),
 						error: !localHook.error
 							? sandbox.event.error
 							: Array.isArray(localHook.error)
@@ -1840,11 +1851,7 @@ export default class Elysia<
 		},
 		Routes extends ``
 			? Routes & NewElysia['_routes']
-			: Routes &
-					AddPrefix<
-						BasePath,
-						NewElysia['_routes']
-					>
+			: Routes & AddPrefix<BasePath, NewElysia['_routes']>
 	>
 
 	/**
@@ -1913,11 +1920,7 @@ export default class Elysia<
 				},
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
-					: Routes &
-							AddPrefix<
-								BasePath,
-								NewElysia['_routes']
-							>
+					: Routes & AddPrefix<BasePath, NewElysia['_routes']>
 		  >
 
 	/**
@@ -1976,11 +1979,7 @@ export default class Elysia<
 				},
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
-					: Routes &
-							AddPrefix<
-								BasePath,
-								NewElysia['_routes']
-							>
+					: Routes & AddPrefix<BasePath, NewElysia['_routes']>
 		  >
 
 	/**
@@ -2550,7 +2549,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -2642,9 +2643,10 @@ export default class Elysia<
 			schema: Metadata['schema']
 			macro: Metadata['macro']
 		},
-		Prettify<
-			Routes & {
-				[path in `${BasePath & string}${Path}`]: {
+		Routes &
+			CreateEden<
+				`${BasePath & string}${Path}`,
+				{
 					post: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
@@ -2660,7 +2662,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -2694,8 +2698,7 @@ export default class Elysia<
 							  }
 					}
 				}
-			}
-		>
+			>
 	> {
 		this.add('POST', path, handler as any, hook)
 
@@ -2770,7 +2773,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -2880,7 +2885,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -2990,7 +2997,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -3100,7 +3109,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -3205,7 +3216,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -3315,7 +3328,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -3425,7 +3440,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<
@@ -3545,7 +3562,9 @@ export default class Elysia<
 										? Returned
 										: Handle
 							  ) extends infer Res
-								? keyof Res extends typeof ELYSIA_RESPONSE
+								? Res extends {
+										[status in typeof ELYSIA_RESPONSE]: number
+								  }
 									? Prettify<
 											{
 												200: Exclude<

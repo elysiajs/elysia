@@ -478,7 +478,7 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['_types']['Metadata']['routes']
+	type App = (typeof server)['_routes']
 	type Route = App['/v1/a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -509,7 +509,7 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['_types']['Metadata']['routes']
+	type App = (typeof server)['_routes']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -550,7 +550,7 @@ app.use(plugin).group(
 					})
 			)
 	)
-	type App = (typeof server)['_types']['Metadata']['routes']
+	type App = (typeof server)['_routes']
 	type Route = App['/v1/a']['subscribe']
 	expectTypeOf<Route>().toEqualTypeOf<{
 		headers: {
@@ -569,7 +569,7 @@ app.use(plugin).group(
 {
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
-	type App = (typeof server)['_types']['Metadata']['routes']
+	type App = (typeof server)['_routes']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -774,7 +774,7 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['_types']['Metadata']['routes']
+	type App = (typeof server)['_routes']
 	type Route = App['/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -803,7 +803,7 @@ app.group(
 		.get('/a', () => 'A')
 		.listen(3000)
 
-	type Routes = keyof (typeof app)['_types']['Metadata']['routes']
+	type Routes = keyof (typeof app)['_routes']
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/api/a' | '/api/plugin/test-path'>()
 }
@@ -817,7 +817,7 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['_types']['Metadata']['routes']
+	type App = (typeof server)['_routes']
 	type Route = App['/v1/']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -838,7 +838,7 @@ app.group(
 
 	const app = new Elysia().use(test)
 
-	type App = (typeof app)['_types']['Metadata']['routes']
+	type App = (typeof app)['_routes']
 	type Routes = keyof App
 
 	expectTypeOf<Routes>().toEqualTypeOf<'/app/test'>()
@@ -912,10 +912,10 @@ app.group(
 		.get('/child', () => 'Hello from child route')
 	const main = new Elysia().use(child)
 
-	type App = (typeof main)['_types']['Metadata']['routes']
+	type App = (typeof main)['_routes']
 
 	expectTypeOf<
-		keyof (typeof main)['_types']['Metadata']['routes']
+		keyof (typeof main)['_routes']
 	>().toEqualTypeOf<'/child'>()
 	expectTypeOf<
 		keyof (typeof main)['_types']['Singleton']['decorator']
