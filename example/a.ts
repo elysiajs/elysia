@@ -1,10 +1,6 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia } from '../src'
 
-const app = new Elysia()
-	.get('/group/with/skadi/and/stuff', 'ai')
+const app = new Elysia().get('/', 'a').post('/', 'a').get('/id/:id', 'a')
+type app = typeof app
 
-app._types.Metadata.routes
-
-app.handle(req('/inner'))
-app.handle(req('/outer'))
+app._routes

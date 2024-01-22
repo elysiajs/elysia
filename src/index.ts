@@ -2532,60 +2532,64 @@ export default class Elysia<
 			macro: Metadata['macro']
 		},
 		Prettify<
-			Routes & {
-				[path in `${BasePath & string}${Path}`]: {
-					get: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Path extends `${string}/${':' | '*'}${string}`
-								? Record<GetPathParameter<Path>, string>
-								: never
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: unknown extends Schema['response']
-							? (
-									Handle extends (...a: any) => infer Returned
-										? Returned
-										: Handle
-							  ) extends infer Res
-								? Res extends {
-										[status in typeof ELYSIA_RESPONSE]: number
-								  }
-									? Prettify<
-											{
-												200: Exclude<
+			Routes &
+				CreateEden<
+					`${BasePath & string}${Path}`,
+					{
+						get: {
+							body: Schema['body']
+							params: undefined extends Schema['params']
+								? Path extends `${string}/${':' | '*'}${string}`
+									? Record<GetPathParameter<Path>, string>
+									: never
+								: Schema['params']
+							query: Schema['query']
+							headers: Schema['headers']
+							response: unknown extends Schema['response']
+								? (
+										Handle extends (
+											...a: any
+										) => infer Returned
+											? Returned
+											: Handle
+								  ) extends infer Res
+									? Res extends {
+											[status in typeof ELYSIA_RESPONSE]: number
+									  }
+										? Prettify<
+												{
+													200: Exclude<
+														Res,
+														{
+															[ELYSIA_RESPONSE]: number
+														}
+													>
+												} & (Extract<
 													Res,
 													{
 														[ELYSIA_RESPONSE]: number
 													}
-												>
-											} & (Extract<
-												Res,
-												{
+												> extends infer ErrorResponse extends {
 													[ELYSIA_RESPONSE]: number
+													response: any
 												}
-											> extends infer ErrorResponse extends {
-												[ELYSIA_RESPONSE]: number
-												response: any
-											}
-												? {
-														[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
-												  }
-												: {})
-									  >
-									: {
-											200: Res
-									  }
-								: never
-							: Schema['response'] extends { 200: any }
-							? Schema['response']
-							: {
-									200: Schema['response']
-							  }
+													? {
+															[status in ErrorResponse[typeof ELYSIA_RESPONSE]]: ErrorResponse['response']
+													  }
+													: {})
+										  >
+										: {
+												200: Res
+										  }
+									: never
+								: Schema['response'] extends { 200: any }
+								? Schema['response']
+								: {
+										200: Schema['response']
+								  }
+						}
 					}
-				}
-			}
+				>
 		>
 	> {
 		this.add('GET', path, handler as any, hook)
