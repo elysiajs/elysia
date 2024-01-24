@@ -126,6 +126,13 @@ describe('Path', () => {
 		expect(await res.text()).toBe('Shirakami Fubuki')
 	})
 
+	it('parse a querystring with a space', async () => {
+		const app = new Elysia().get('/', ({ query: { id } }) => id)
+		const res = await app.handle(req('/?id=test+123%2B'))
+
+		expect(await res.text()).toBe('test 123+')
+	})
+
 	it('handle body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.String()
