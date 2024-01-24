@@ -733,8 +733,11 @@ export const composeHandler = ({
 			}
 
 		if (!referenceFullQuery && destructured.length) {
-			fnLiteral += `if(c.qi !== -1) {
-				const requestUrl = c.request.url.slice(c.qi + 1).replaceAll('+', ' ')
+			fnLiteral += `
+			let requestUrl = c.request.url.slice(c.qi + 1)
+			if(requestUrl.includes('+')) requestUrl = requestUrl.replaceAll('+', ' ')
+
+			if(c.qi !== -1) {	
 				const url = decodeURIComponent(requestUrl)
 				let memory = 0
 

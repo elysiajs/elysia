@@ -1,3 +1,9 @@
+# 0.8.10 - 24 Jan 2024
+Bug fix:
+- [#440](https://github.com/elysiajs/elysia/pull/440) query params with + sign did not get converted
+- [#433](https://github.com/elysiajs/elysia/pull/433) remove crypto, unblock vite bundling, cloudflare worker support
+- [#422](https://github.com/elysiajs/elysia/pull/422) add check for instanceof if constructor.name doesn't match
+
 # 0.8.9 - 11 Jan 2024
 Bug fix:
 - macro panic

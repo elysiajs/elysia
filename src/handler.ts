@@ -204,8 +204,9 @@ export const mapResponse = (
 				return errorToResponse(response as Error, set)
 
 			case 'Promise':
-				// @ts-ignore
-				return response.then((x) => mapResponse(x, set))
+				return (response as Promise<any>).then((x) =>
+					mapResponse(x, set)
+				) as any
 
 			case 'Function':
 				return mapResponse((response as Function)(), set)
@@ -224,7 +225,34 @@ export const mapResponse = (
 				return new Response(response?.toString(), set as SetResponse)
 
 			default:
+				if (response instanceof Response) {
+					const inherits = { ...set.headers }
+
+					if (hasHeaderShorthand)
+						set.headers = (response as Response).headers.toJSON()
+					else
+						for (const [key, value] of (
+							response as Response
+						).headers.entries())
+							if (key in set.headers) set.headers[key] = value
+
+					for (const key in inherits)
+						(response as Response).headers.append(
+							key,
+							inherits[key]
+						)
+
+					return response as Response
+				}
+
+				if (response instanceof Promise)
+					return response.then((x) => mapResponse(x, set)) as any
+
+				if (response instanceof Error)
+					return errorToResponse(response as Error, set)
+
 				const r = JSON.stringify(response)
+
 				if (r.charCodeAt(0) === 123) {
 					if (!set.headers['Content-Type'])
 						set.headers['Content-Type'] = 'application/json'
@@ -300,7 +328,21 @@ export const mapResponse = (
 				return new Response(response?.toString(), set as SetResponse)
 
 			default:
+				if (response instanceof Response)
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'content-type': 'application/json'
+						}
+					})
+
+				if (response instanceof Promise)
+					return response.then((x) => mapResponse(x, set)) as any
+
+				if (response instanceof Error)
+					return errorToResponse(response as Error, set)
+
 				const r = JSON.stringify(response)
+
 				if (r.charCodeAt(0) === 123)
 					return new Response(JSON.stringify(response), {
 						headers: {
@@ -440,6 +482,32 @@ export const mapEarlyResponse = (
 				return new Response(response?.toString(), set as SetResponse)
 
 			default:
+				if (response instanceof Response) {
+					const inherits = { ...set.headers }
+
+					if (hasHeaderShorthand)
+						set.headers = (response as Response).headers.toJSON()
+					else
+						for (const [key, value] of (
+							response as Response
+						).headers.entries())
+							if (key in set.headers) set.headers[key] = value
+
+					for (const key in inherits)
+						(response as Response).headers.append(
+							key,
+							inherits[key]
+						)
+
+					return response as Response
+				}
+
+				if (response instanceof Promise)
+					return response.then((x) => mapEarlyResponse(x, set)) as any
+
+				if (response instanceof Error)
+					return errorToResponse(response as Error, set)
+
 				const r = JSON.stringify(response)
 				if (r.charCodeAt(0) === 123) {
 					if (!set.headers['Content-Type'])
@@ -515,6 +583,19 @@ export const mapEarlyResponse = (
 				return new Response(response?.toString(), set as SetResponse)
 
 			default:
+				if (response instanceof Response)
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'content-type': 'application/json'
+						}
+					})
+
+				if (response instanceof Promise)
+					return response.then((x) => mapEarlyResponse(x, set)) as any
+
+				if (response instanceof Error)
+					return errorToResponse(response as Error, set)
+
 				const r = JSON.stringify(response)
 				if (r.charCodeAt(0) === 123)
 					return new Response(JSON.stringify(response), {
@@ -583,13 +664,7 @@ export const mapCompactResponse = (response: unknown): Response => {
 
 		case 'Promise':
 			// @ts-ignore
-			return (response as any as Promise<unknown>).then((x) => {
-				const r = mapCompactResponse(x)
-
-				if (r !== undefined) return r
-
-				return new Response('')
-			})
+			return (response as any as Promise<unknown>).then(mapCompactResponse)
 
 		// ? Maybe response or Blob
 		case 'Function':
@@ -600,6 +675,19 @@ export const mapCompactResponse = (response: unknown): Response => {
 			return new Response((response as number | boolean).toString())
 
 		default:
+			if (response instanceof Response)
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
+
+			if (response instanceof Promise)
+				return response.then(mapCompactResponse) as any
+
+			if (response instanceof Error)
+				return errorToResponse(response as Error)
+
 			const r = JSON.stringify(response)
 			if (r.charCodeAt(0) === 123)
 				return new Response(JSON.stringify(response), {
