@@ -31,8 +31,8 @@ const isClass = (v: Object) =>
 	isNotEmpty(Object.getPrototypeOf(v))
 
 export const mergeDeep = <
-	const A extends Record<string, any>,
-	const B extends Record<string, any>
+	A extends Record<string, any>,
+	B extends Record<string, any>
 >(
 	target: A,
 	source: B,
@@ -125,8 +125,8 @@ export const primitiveHooks = [
 ] as const
 
 export const mergeHook = (
-	a?: LocalHook<any, any, any, any> | LifeCycleStore,
-	b?: LocalHook<any, any, any, any>
+	a?: LocalHook<any, any, any, any, any, any, any> | LifeCycleStore,
+	b?: LocalHook<any, any, any, any, any, any, any>
 ): LifeCycleStore => {
 	// In case if merging union is need
 	// const customAStore: Record<string, unknown> = {}
@@ -333,7 +333,7 @@ export const checksum = (s: string) => {
 
 export const mergeLifeCycle = (
 	a: LifeCycleStore,
-	b: LifeCycleStore | LocalHook,
+	b: LifeCycleStore | LocalHook<any, any, any, any, any, any, any>,
 	checksum?: number
 ): LifeCycleStore => {
 	const injectChecksum = <T>(x: T): T => {
@@ -393,9 +393,9 @@ export const mergeLifeCycle = (
 }
 
 export const asGlobalHook = (
-	hook: LocalHook<any, any>,
+	hook: LocalHook<any, any, any, any, any, any, any>,
 	inject = true
-): LocalHook<any, any> => {
+): LocalHook<any, any, any, any, any, any, any> => {
 	return {
 		// rest is validator
 		...hook,
@@ -407,7 +407,7 @@ export const asGlobalHook = (
 		afterHandle: asGlobal(hook?.afterHandle, inject),
 		onResponse: asGlobal(hook?.onResponse, inject),
 		error: asGlobal(hook?.error, inject)
-	} as LocalHook<any, any>
+	} as LocalHook<any, any, any, any, any, any, any>
 }
 
 export const asGlobal = <T extends MaybeArray<Function> | undefined>(
@@ -450,8 +450,8 @@ const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
 }
 
 export const filterGlobalHook = (
-	hook: LocalHook<any, any>
-): LocalHook<any, any> => {
+	hook: LocalHook<any, any, any, any, any, any, any>
+): LocalHook<any, any, any, any, any, any, any> => {
 	return {
 		// rest is validator
 		...hook,
@@ -463,7 +463,7 @@ export const filterGlobalHook = (
 		afterHandle: filterGlobal(hook?.afterHandle),
 		onResponse: filterGlobal(hook?.onResponse),
 		error: filterGlobal(hook?.error)
-	} as LocalHook<any, any>
+	} as LocalHook<any, any, any, any, any, any, any>
 }
 
 export const StatusMap = {
@@ -583,12 +583,14 @@ export const traceBackMacro = (
 	property: Record<string, unknown>,
 	hooks = property
 ) => {
-	if(!extension || typeof extension !== "object") return
+	if (!extension || typeof extension !== 'object') return
 
 	for (const [key, value] of Object.entries(property)) {
 		if (primitiveHooks.includes(key as any) || !(key in extension)) continue
 
-		const v = extension[key as unknown as keyof typeof extension] as BaseMacro[string]
+		const v = extension[
+			key as unknown as keyof typeof extension
+		] as BaseMacro[string]
 
 		if (typeof v === 'function') {
 			v(value)

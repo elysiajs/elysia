@@ -10,6 +10,7 @@ import type { EventEmitter } from 'eventemitter3'
 import type { CookieOptions } from './cookies'
 import type { Context, PreContext } from './context'
 import type {
+	ELYSIA_RESPONSE,
 	InternalServerError,
 	InvalidCookieSignature,
 	NotFoundError,
@@ -607,74 +608,23 @@ export type MergeRouteSchema<
 		: never
 >
 
-// export type LocalHook2<
-// 	Input extends InputSchema<any>,
-// 	Schema extends RouteSchema,
-// 	V extends {
-// 		Singleton: SingletonBase
-// 		Metadata: MetadataBase
-// 		Definitions: DefinitionBase
-// 	}
-// > = (Input extends {} ? Input : Isolate<Input>) &
-// 	V['Metadata']['macro'] & {
-// 		/**
-// 		 * Short for 'Content-Type'
-// 		 *
-// 		 * Available:
-// 		 * - 'none': do not parse body
-// 		 * - 'text' / 'text/plain': parse body as string
-// 		 * - 'json' / 'application/json': parse body as json
-// 		 * - 'formdata' / 'multipart/form-data': parse body as form-data
-// 		 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-// 		 * - 'arraybuffer': parse body as readable stream
-// 		 */
-// 		type?: ContentType
-// 		detail?: LocalHookDetail
-// 		/**
-// 		 * Custom body parser
-// 		 */
-// 		parse?: MaybeArray<BodyHandler<Schema, V['Singleton']>>
-// 		/**
-// 		 * Transform context's value
-// 		 */
-// 		transform?: MaybeArray<TransformHandler<Schema, V['Singleton']>>
-// 		/**
-// 		 * Execute before main handler
-// 		 */
-// 		beforeHandle?: MaybeArray<OptionalHandler<Schema, V['Singleton']>>
-// 		/**
-// 		 * Execute after main handler
-// 		 */
-// 		afterHandle?: MaybeArray<AfterHandler<Schema, V['Singleton']>>
-// 		/**
-// 		 * Execute after main handler
-// 		 */
-// 		mapResponse?: MaybeArray<MapResponse<Schema, V['Singleton']>>
-// 		/**
-// 		 * Catch error
-// 		 */
-// 		error?: MaybeArray<
-// 			ErrorHandler<V['Definitions']['error'], Schema, V['Singleton']>
-// 		>
-// 		/**
-// 		 * Custom body parser
-// 		 */
-// 		onResponse?: MaybeArray<VoidHandler<Schema, V['Singleton']>>
-// 	}
-
 export type LocalHook<
-	LocalSchema extends InputSchema = {},
-	Schema extends RouteSchema = RouteSchema,
-	Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
-	Errors extends Record<string, Error> = {},
-	Extension extends BaseMacro = {},
-	Path extends string | undefined = '',
-	TypedRoute extends RouteSchema = Schema extends {
+	LocalSchema extends InputSchema,
+	Schema extends RouteSchema,
+	Singleton extends SingletonBase,
+	Errors extends Record<string, Error>,
+	Extension extends BaseMacro,
+	Path extends string,
+	TypedRoute extends Schema extends {
+		params: Record<string, unknown>
+	}
+		? Schema
+		: Schema & {
+				params: Record<
+					GetPathParameter<Path extends string ? Path : ''>,
+					string
+				>
+		  } = Schema extends {
 		params: Record<string, unknown>
 	}
 		? Schema
@@ -736,7 +686,7 @@ export interface InternalRoute {
 	path: string
 	composed: ComposedHandler | Response | null
 	handler: Handler
-	hooks: LocalHook
+	hooks: LocalHook<any, any, any, any, any, any, any>
 }
 
 export type SchemaValidator = {
@@ -858,15 +808,6 @@ export interface MacroManager<
 	}
 }
 
-// Route extends RouteSchema = {},
-// Decorators extends DecoratorBase = {
-// 	decorator: {}
-// 	store: {}
-// 	derive: {}
-// 	resolve: {}
-// },
-// Path extends string = ''
-
 type _CreateEden<
 	Path extends string,
 	Property extends Object = {}
@@ -884,3 +825,30 @@ export type CreateEden<
 > = Path extends `/${infer Rest}`
 	? _CreateEden<Rest, Property>
 	: _CreateEden<Path, Property>
+
+export type UnionToIntersection<U> = (
+	U extends any ? (x: U) => void : never
+) extends (x: infer I) => void
+	? I
+	: never
+
+export type ComposeElysiaResponse<Response, Handle> = Prettify<
+	UnionToIntersection<
+		unknown extends Response
+			? Handle extends {
+					[ELYSIA_RESPONSE]: number
+					response: unknown
+			  }
+				? {
+						[status in Handle[ELYSIA_RESPONSE]]: Handle['response']
+				  }
+				: {
+						200: Handle
+				  }
+			: Response extends { 200: unknown }
+			? Response
+			: {
+					200: Response
+			  }
+	>
+>

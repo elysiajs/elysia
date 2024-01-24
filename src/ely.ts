@@ -6,7 +6,7 @@ export const createManager =
 		localHook
 	}: {
 		globalHook: LifeCycleStore
-		localHook: LocalHook<any, any, any, any>
+		localHook: LocalHook<any, any, any, any, any, any, any>
 	}) =>
 	(stackName: keyof LifeCycleStore) =>
 	(
