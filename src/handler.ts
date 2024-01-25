@@ -329,9 +329,9 @@ export const mapResponse = (
 
 			default:
 				if (response instanceof Response)
-					return new Response(JSON.stringify(response), {
+					return new Response(response.body, {
 						headers: {
-							'content-type': 'application/json'
+							'Content-Type': 'application/json'
 						}
 					})
 
@@ -584,9 +584,9 @@ export const mapEarlyResponse = (
 
 			default:
 				if (response instanceof Response)
-					return new Response(JSON.stringify(response), {
+					return new Response(response.body, {
 						headers: {
-							'content-type': 'application/json'
+							'Content-Type': 'application/json'
 						}
 					})
 
@@ -676,9 +676,9 @@ export const mapCompactResponse = (response: unknown): Response => {
 
 		default:
 			if (response instanceof Response)
-				return new Response(JSON.stringify(response), {
+				return new Response(response.body, {
 					headers: {
-						'content-type': 'application/json'
+						'Content-Type': 'application/json'
 					}
 				})
 
