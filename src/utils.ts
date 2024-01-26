@@ -599,9 +599,6 @@ export const traceBackMacro = (
 	}
 }
 
-export const isNumericString = (message: string) =>
-	!Number.isNaN(parseInt(message))
-
 export const createMacroManager =
 	({
 		globalHook,
@@ -674,3 +671,4 @@ export const createMacroManager =
 			}
 		}
 	}
+export const isNumericString = (message: string) => message.trim().length !== 0 && !Number.isNaN(Number(message))

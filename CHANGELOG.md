@@ -1,3 +1,22 @@
+# 0.8.12 - 26 Jan 2024
+Change:
+- using .mjs for es module
+
+# 0.8.11 - 26 Jan 2024
+Change:
+- using tsup instead of swc
+- [#441](https://github.com/elysiajs/elysia/issues/441) remove nanoid, using web crypto randomInt instead
+
+Bug fix:
+- [#446](https://github.com/elysiajs/elysia/pull/446) numeric string check to use Number instead of parseInt
+- [#445](https://github.com/elysiajs/elysia/pull/445) empty body custom response when set.headers is empty
+
+# 0.8.10 - 24 Jan 2024
+Bug fix:
+- [#440](https://github.com/elysiajs/elysia/pull/440) query params with + sign did not get converted
+- [#433](https://github.com/elysiajs/elysia/pull/433) remove crypto, unblock vite bundling, cloudflare worker support
+- [#422](https://github.com/elysiajs/elysia/pull/422) add check for instanceof if constructor.name doesn't match
+
 # 0.8.9 - 11 Jan 2024
 Bug fix:
 - macro panic

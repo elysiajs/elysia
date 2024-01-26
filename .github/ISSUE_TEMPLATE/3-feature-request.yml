@@ -1,0 +1,24 @@
+name: 🚀 Feature Request
+description: Suggest an idea, feature, or enhancement
+labels: [enhancement]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Thank you for submitting an idea. It helps make Elysia.JS better.
+
+              If you want to discuss Elysia.JS, or learn how others are using Elysia.JS, please
+              head to our [Discord](https://discord.com/invite/y7kH46ZE) server, where you can chat among the community.
+    - type: textarea
+      attributes:
+          label: What is the problem this feature would solve?
+      validations:
+          required: true
+    - type: textarea
+      attributes:
+          label: What is the feature you are proposing to solve the problem?
+      validations:
+          required: true
+    - type: textarea
+      attributes:
+          label: What alternatives have you considered?

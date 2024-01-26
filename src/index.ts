@@ -3686,9 +3686,9 @@ export default class Elysia<
 				if (
 					server?.upgrade<any>(context.request, {
 						headers:
-							typeof options.upgrade === 'function'
+							(typeof options.upgrade === 'function'
 								? options.upgrade(context as any as Context)
-								: options.upgrade,
+								: options.upgrade) as Bun.HeadersInit,
 						data: {
 							validator: validateResponse,
 							open(ws: ServerWebSocket<any>) {

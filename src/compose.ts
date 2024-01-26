@@ -36,7 +36,7 @@ import type {
 	TraceEvent
 } from './types'
 
-const headersHasToJSON = new Headers().toJSON
+const headersHasToJSON = (new Headers() as Headers).toJSON
 const requestId = { value: 0 }
 
 const createReport = ({
@@ -508,7 +508,12 @@ export const composeHandler = ({
 
 		if (destructured.length) {
 			fnLiteral += `if(c.qi !== -1) {
-				const url = decodeURIComponent(c.request.url.slice(c.qi + 1))
+				let url = c.request.url.slice(c.qi + 1)
+				// remove uri whitespace (+), eg. /?id=test+123%2B
+				// %2B is +, normalized + is whitespace
+				if(url.includes('+')) url = url.replaceAll('+', ' ')
+				url = decodeURIComponent(url)
+	
 				let memory = 0
 
 				${destructured
