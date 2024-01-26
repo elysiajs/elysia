@@ -6,6 +6,8 @@ class Student {
 	constructor(public name: string) {}
 }
 
+class CustomResponse extends Response {}
+
 describe('Map Compact Response', () => {
 	it('map string', async () => {
 		const response = mapCompactResponse('Shiroko')
@@ -104,6 +106,14 @@ describe('Map Compact Response', () => {
 
 	it('map Response', async () => {
 		const response = mapCompactResponse(new Response('Shiroko'))
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response.text()).toEqual('Shiroko')
+		expect(response.status).toBe(200)
+	})
+
+	it('map custom Response', async () => {
+		const response = mapCompactResponse(new CustomResponse('Shiroko'))
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('Shiroko')
