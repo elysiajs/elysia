@@ -7,6 +7,7 @@
 		"url": "https://github.com/SaltyAom",
 		"email": "saltyaom@gmail.com"
 	},
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"bun": "./dist/bun/index.js",
@@ -110,12 +111,9 @@
 		"test": "npm run test:functionality && npm run test:types",
 		"test:functionality": "bun test && npm run test:node",
 		"test:types": "tsc --project tsconfig.test.json",
-		"test:node": "npm install --prefix ./test/node/cjs/ && npm install --prefix ./test/node/esm/ && node ./test/node/cjs/index.js && node ./test/node/esm/index.js",
+		"test:node": "npm install --prefix ./test/node/cjs/ && npm install --prefix ./test/node/esm/ && node ./test/node/cjs/index.js && node ./test/node/esm/index.js && bun dist/bun/index.js",
 		"dev": "bun run --watch example/http.ts",
-		"build": "rimraf dist && npm run build:esm && npm run build:bun && npm run build:cjs",
-		"build:bun": "bun build.ts",
-		"build:esm": "swc src -d dist && tsc --project tsconfig.esm.json",
-		"build:cjs": "tsc --project tsconfig.cjs.json",
+		"build": "rimraf dist && bun build.ts",
 		"release:local": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {

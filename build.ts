@@ -42,8 +42,6 @@ await Bun.build({
 	external: ['@sinclair/typebox']
 })
 
-await Bun.sleep(2000)
-
 await Promise.all([
 	$`cp dist/cjs/*.d.ts dist/`,
 	$`cp dist/cjs/ws/*.d.ts dist/ws/`
