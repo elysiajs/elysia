@@ -1,12 +1,13 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "0.8.12",
+	"version": "0.8.13",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
 		"email": "saltyaom@gmail.com"
 	},
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"bun": "./dist/bun/index.js",
@@ -86,7 +87,7 @@
 		"test": "npm run test:functionality && npm run test:types",
 		"test:functionality": "bun test && npm run test:node",
 		"test:types": "tsc --project tsconfig.test.json",
-		"test:node": "npm install --prefix ./test/node/cjs/ && npm install --prefix ./test/node/esm/ && node ./test/node/cjs/index.js && node ./test/node/esm/index.js",
+		"test:node": "npm install --prefix ./test/node/cjs/ && npm install --prefix ./test/node/esm/ && node ./test/node/cjs/index.js && node ./test/node/esm/index.js && bun dist/bun/index.js",
 		"dev": "bun run --watch example/http.ts",
 		"build": "bun build.ts",
 		"build:bun": "bun build.ts",
@@ -97,9 +98,10 @@
 	"dependencies": {
 		"@sinclair/typebox": "^0.32.0",
 		"cookie": "^0.6.0",
+		"eventemitter3": "^5.0.1",
 		"fast-decode-uri-component": "^1.0.1",
 		"fast-querystring": "^1.1.2",
-		"eventemitter3": "^5.0.1",
+		"memoirist": "0.1.10",
 		"openapi-types": "^12.1.3"
 	},
 	"devDependencies": {
@@ -109,7 +111,6 @@
 		"@typescript-eslint/parser": "^6.7.2",
 		"eslint": "^8.49.0",
 		"expect-type": "^0.16.0",
-		"memoirist": "0.1.6",
 		"tsup": "^8.0.1",
 		"typescript": "5.3.3"
 	},
