@@ -32,7 +32,8 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 	) {
 		if (set) {
 			if (set.headers instanceof Headers)
-				if (hasHeaderShorthand) set.headers = set.headers.toJSON()
+				if (hasHeaderShorthand)
+					set.headers = (set.headers as unknown as Headers).toJSON()
 				else
 					for (const [key, value] of set.headers.entries())
 						if (key in set.headers) set.headers[key] = value
@@ -150,7 +151,7 @@ export const mapResponse = (
 			Array.isArray(set.headers['Set-Cookie'])
 		)
 			set.headers = parseSetCookies(
-				new Headers(set.headers),
+				new Headers(set.headers) as Headers,
 				set.headers['Set-Cookie']
 			) as any
 
@@ -188,7 +189,9 @@ export const mapResponse = (
 				const inherits = { ...set.headers }
 
 				if (hasHeaderShorthand)
-					set.headers = (response as Response).headers.toJSON()
+					set.headers = (
+						(response as Response).headers as Headers
+					).toJSON()
 				else
 					for (const [key, value] of (
 						response as Response
@@ -229,7 +232,7 @@ export const mapResponse = (
 					const inherits = { ...set.headers }
 
 					if (hasHeaderShorthand)
-						set.headers = (response as Response).headers.toJSON()
+						set.headers = ((response as Response).headers as Headers).toJSON()
 					else
 						for (const [key, value] of (
 							response as Response
@@ -398,7 +401,7 @@ export const mapEarlyResponse = (
 			Array.isArray(set.headers['Set-Cookie'])
 		)
 			set.headers = parseSetCookies(
-				new Headers(set.headers),
+				(new Headers(set.headers)) as Headers,
 				set.headers['Set-Cookie']
 			) as any
 
@@ -486,7 +489,7 @@ export const mapEarlyResponse = (
 					const inherits = { ...set.headers }
 
 					if (hasHeaderShorthand)
-						set.headers = (response as Response).headers.toJSON()
+						set.headers = ((response as Response).headers as Headers).toJSON()
 					else
 						for (const [key, value] of (
 							response as Response
@@ -664,7 +667,9 @@ export const mapCompactResponse = (response: unknown): Response => {
 
 		case 'Promise':
 			// @ts-ignore
-			return (response as any as Promise<unknown>).then(mapCompactResponse)
+			return (response as any as Promise<unknown>).then(
+				mapCompactResponse
+			)
 
 		// ? Maybe response or Blob
 		case 'Function':

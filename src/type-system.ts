@@ -42,7 +42,7 @@ try {
 		'date-time',
 		(value) => !Number.isNaN(new Date(value).getTime())
 	)
-} catch (error) {
+} catch {
 	// Not empty
 }
 
@@ -217,13 +217,16 @@ export const ElysiaType = {
 	) =>
 		t
 			.Transform(
-				t.Union([
-					t.String({
-						format: 'ObjectString',
-						default: ''
-					}),
-					t.Object(properties, options)
-				], options)
+				t.Union(
+					[
+						t.String({
+							format: 'ObjectString',
+							default: ''
+						}),
+						t.Object(properties, options)
+					],
+					options
+				)
 			)
 			.Decode((value) => {
 				if (typeof value === 'string')

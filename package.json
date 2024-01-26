@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "0.8.10",
+  "version": "0.8.11",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -11,86 +11,86 @@
   "exports": {
     ".": {
       "bun": "./dist/bun/index.js",
-      "node": "./dist/cjs/index.js",
-      "require": "./dist/cjs/index.js",
       "import": "./dist/index.js",
+      "require": "./dist/cjs/index.js",
+      "node": "./dist/cjs/index.js",
       "default": "./dist/index.js"
     },
     "./ws": {
       "bun": "./dist/ws/index.js",
-      "node": "./dist/cjs/ws/index.js",
-      "require": "./dist/cjs/ws/index.js",
       "import": "./dist/ws/index.js",
+      "require": "./dist/cjs/ws/index.js",
+      "node": "./dist/cjs/ws/index.js",
       "default": "./dist/ws/index.js"
     },
     "./compose": {
       "bun": "./dist/compose.js",
-      "node": "./dist/cjs/compose.js",
-      "require": "./dist/cjs/compose.js",
       "import": "./dist/compose.js",
+      "require": "./dist/cjs/compose.js",
+      "node": "./dist/cjs/compose.js",
       "default": "./dist/compose.js"
     },
     "./context": {
       "bun": "./dist/context.js",
-      "node": "./dist/cjs/context.js",
-      "require": "./dist/cjs/context.js",
       "import": "./dist/context.js",
+      "require": "./dist/cjs/context.js",
+      "node": "./dist/cjs/context.js",
       "default": "./dist/context.js"
     },
     "./cookie": {
       "bun": "./dist/cookie.js",
-      "node": "./dist/cjs/cookie.js",
-      "require": "./dist/cjs/cookie.js",
       "import": "./dist/cookie.js",
+      "require": "./dist/cjs/cookie.js",
+      "node": "./dist/cjs/cookie.js",
       "default": "./dist/cookie.js"
     },
     "./custom-types": {
       "bun": "./dist/custom-types.js",
-      "node": "./dist/cjs/custom-types.js",
-      "require": "./dist/cjs/custom-types.js",
       "import": "./dist/custom-types.js",
+      "require": "./dist/cjs/custom-types.js",
+      "node": "./dist/cjs/custom-types.js",
       "default": "./dist/custom-types.js"
     },
     "./error": {
       "bun": "./dist/error.js",
-      "node": "./dist/cjs/error.js",
-      "require": "./dist/cjs/error.js",
       "import": "./dist/error.js",
+      "require": "./dist/cjs/error.js",
+      "node": "./dist/cjs/error.js",
       "default": "./dist/error.js"
     },
     "./handler": {
       "bun": "./dist/handler.js",
-      "node": "./dist/cjs/handler.js",
-      "require": "./dist/cjs/handler.js",
       "import": "./dist/handler.js",
+      "require": "./dist/cjs/handler.js",
+      "node": "./dist/cjs/handler.js",
       "default": "./dist/handler.js"
     },
     "./schema": {
       "bun": "./dist/schema.js",
-      "node": "./dist/cjs/schema.js",
-      "require": "./dist/cjs/schema.js",
       "import": "./dist/schema.js",
+      "require": "./dist/cjs/schema.js",
+      "node": "./dist/cjs/schema.js",
       "default": "./dist/schema.js"
     },
     "./trace": {
       "bun": "./dist/trace.js",
-      "node": "./dist/cjs/trace.js",
-      "require": "./dist/cjs/trace.js",
       "import": "./dist/trace.js",
+      "require": "./dist/cjs/trace.js",
+      "node": "./dist/cjs/trace.js",
       "default": "./dist/trace.js"
     },
     "./types": {
       "bun": "./dist/types.js",
-      "node": "./dist/cjs/types.js",
-      "require": "./dist/cjs/types.js",
       "import": "./dist/types.js",
+      "require": "./dist/cjs/types.js",
+      "node": "./dist/cjs/types.js",
       "default": "./dist/types.js"
     },
     "./utils": {
       "bun": "./dist/utils.js",
-      "node": "./dist/cjs/utils.js",
-      "require": "./dist/cjs/utils.js",
       "import": "./dist/utils.js",
+      "require": "./dist/cjs/utils.js",
+      "node": "./dist/cjs/utils.js",
       "default": "./dist/utils.js"
     }
   },
@@ -114,7 +114,7 @@
     "test:types": "tsc --project tsconfig.test.json",
     "test:node": "npm install --prefix ./test/node/cjs/ && npm install --prefix ./test/node/esm/ && node ./test/node/cjs/index.js && node ./test/node/esm/index.js",
     "dev": "bun run --watch example/http.ts",
-    "build": "rimraf dist && npm run build:esm && npm run build:bun && npm run build:cjs",
+    "build": "bun build.ts",
     "build:bun": "bun build.ts",
     "build:esm": "swc src -d dist && tsc --project tsconfig.esm.json",
     "build:cjs": "tsc --project tsconfig.cjs.json",
@@ -127,19 +127,16 @@
     "fast-decode-uri-component": "^1.0.1",
     "fast-querystring": "^1.1.2",
     "memoirist": "0.1.4",
-    "nanoid": "^5.0.4",
     "openapi-types": "^12.1.3"
   },
   "devDependencies": {
-    "@swc/cli": "^0.1.62",
-    "@swc/core": "^1.3.86",
+    "@types/bun": "^1.0.4",
     "@types/cookie": "^0.6.0",
     "@typescript-eslint/eslint-plugin": "^6.7.2",
     "@typescript-eslint/parser": "^6.7.2",
-    "bun-types": "1.0.18",
     "eslint": "^8.49.0",
     "expect-type": "^0.16.0",
-    "rimraf": "4.4.1",
+    "tsup": "^8.0.1",
     "typescript": "5.3.3"
   },
   "peerDependencies": {

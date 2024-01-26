@@ -15,7 +15,8 @@ import type {
 	RouteSchema,
 	Isolate,
 	GetPathParameter,
-	MaybeArray
+	MaybeArray,
+	HeadersInit
 } from '../types'
 
 export namespace WS {

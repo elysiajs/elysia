@@ -17,6 +17,11 @@ import type {
 	ValidationError
 } from './error'
 
+export type HeadersInit =
+	| string[][]
+	| Record<string, string | ReadonlyArray<string>>
+	| Headers
+
 export type ElysiaConfig<
 	T extends string = '',
 	Scoped extends boolean = false

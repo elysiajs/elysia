@@ -6,8 +6,6 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import { ValidationError } from '../error'
 import type { Context } from '../context'
 
-import { nanoid } from 'nanoid'
-
 import type { DecoratorBase, RouteSchema } from '../types'
 
 export const websocket: WebSocketHandler<any> = {
@@ -42,7 +40,13 @@ export class ElysiaWS<
 
 	constructor(public raw: WS, public data: Context<Route, Decorators>) {
 		this.validator = raw.data.validator
-		this.id = raw.data.id ?? nanoid()
+		if (raw.data.id) {
+			this.id = raw.data.id
+		} else {
+			const array = new Uint32Array(1)
+			crypto.getRandomValues(array)
+			this.id = array[0].toString()
+		}
 	}
 
 	get id() {

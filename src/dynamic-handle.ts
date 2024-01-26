@@ -78,7 +78,7 @@ export const createDynamicHandler =
 				if (content) {
 					switch (content) {
 						case 'application/json':
-							body = await request.json()
+							body = await request.json() as any
 							break
 
 						case 'text/plain':
@@ -130,7 +130,7 @@ export const createDynamicHandler =
 						if (body === undefined) {
 							switch (contentType) {
 								case 'application/json':
-									body = await request.json()
+									body = await request.json() as any
 									break
 
 								case 'text/plain':

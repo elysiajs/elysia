@@ -38,7 +38,7 @@ import type {
 	TraceReporter
 } from './types'
 
-const headersHasToJSON = new Headers().toJSON
+const headersHasToJSON = (new Headers() as Headers).toJSON
 const findAliases = new RegExp(` (\\w+) = context`, 'g')
 
 const requestId = { value: 0 }
