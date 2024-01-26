@@ -1,3 +1,8 @@
+# 0.8.14 - 26 Jan 2024
+Bug fix:
+- types are missing in `exports.*`
+- [#441](https://github.com/elysiajs/elysia/issues/441) Vite doesn't get bundle without main
+
 # 0.8.13 - 26 Jan 2024
 Bug fix:
 - types is not import
