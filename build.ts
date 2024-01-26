@@ -6,12 +6,12 @@ const tsupConfig: Options = {
 	splitting: false,
 	sourcemap: false,
 	clean: true,
-	bundle: true,
-	outExtension() {
-		return {
-			js: '.js'
-		}
-	}
+	bundle: true
+	// outExtension() {
+	// 	return {
+	// 		js: '.js'
+	// 	}
+	// }
 } satisfies Options
 
 await Promise.all([
@@ -19,14 +19,15 @@ await Promise.all([
 	build({
 		outDir: 'dist',
 		format: 'esm',
-		target: 'node21',
+		target: 'node20',
+		cjsInterop: false,
 		...tsupConfig
 	}),
 	// ? tsup cjs
 	build({
 		outDir: 'dist/cjs',
 		format: 'cjs',
-		target: 'node21',
+		target: 'node20',
 		dts: true,
 		...tsupConfig
 	})
@@ -40,6 +41,8 @@ await Bun.build({
 	sourcemap: 'external',
 	external: ['@sinclair/typebox']
 })
+
+await Bun.sleep(2000)
 
 await Promise.all([
 	$`cp dist/cjs/*.d.ts dist/`,

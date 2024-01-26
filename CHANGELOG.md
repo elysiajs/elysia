@@ -1,3 +1,7 @@
+# 0.8.12 - 26 Jan 2024
+Change:
+- using .mjs for es module
+
 # 0.8.11 - 26 Jan 2024
 Change:
 - using tsup instead of swc
