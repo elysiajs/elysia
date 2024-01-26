@@ -15,8 +15,7 @@ import type {
 	RouteSchema,
 	Isolate,
 	GetPathParameter,
-	MaybeArray,
-	HeadersInit
+	MaybeArray
 } from '../types'
 
 export namespace WS {
@@ -67,7 +66,7 @@ export namespace WS {
 					/**
 					 * Headers to register to websocket before `upgrade`
 					 */
-					upgrade?: HeadersInit | ((context: Context) => HeadersInit)
+					upgrade?: Bun.HeadersInit | ((context: Context) => Bun.HeadersInit)
 
 					/**
 					 * The {@link ServerWebSocket} has been opened

@@ -1,3 +1,9 @@
+# 0.8.13 - 26 Jan 2024
+Bug fix:
+- types is not import
+- bun build regression on export * from '@sinclair/typebox/system'
+- update memoirist to use mjs
+
 # 0.8.12 - 26 Jan 2024
 Change:
 - using .mjs for es module

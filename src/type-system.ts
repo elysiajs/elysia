@@ -345,8 +345,13 @@ t.Cookie = ElysiaType.Cookie
 
 export { t }
 
-export * from '@sinclair/typebox/system'
-export * from '@sinclair/typebox/compiler'
+export {
+	TypeSystemPolicy,
+	TypeSystem,
+	TypeSystemDuplicateFormat,
+	TypeSystemDuplicateTypeKind
+} from '@sinclair/typebox/system'
+export { TypeCompiler, TypeCheck } from '@sinclair/typebox/compiler'
 
 // type Template =
 // 	| string
