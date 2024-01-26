@@ -583,4 +583,4 @@ export const traceBackMacro = (
 	}
 }
 
-export const isNumericString = (message: string) => !Number.isNaN(Number(message))
+export const isNumericString = (message: string) => message.trim().length !== 0 && !Number.isNaN(Number(message))

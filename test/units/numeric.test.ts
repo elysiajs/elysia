@@ -14,4 +14,10 @@ describe('Numeric string', () => {
 		expect(isNumericString('0O093281')).toBe(false)
 		expect(isNumericString(crypto.randomUUID())).toBe(false)
 	})
+
+	it('invalid on empty', async () => {
+		expect(isNumericString('')).toBe(false)
+		expect(isNumericString(' ')).toBe(false)
+		expect(isNumericString('    ')).toBe(false)
+	})
 })
