@@ -8,7 +8,6 @@ import { createTraceListener } from './trace'
 import type { Context } from './context'
 
 import { t } from './type-system'
-import { createManager } from './ely'
 import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
 
 import { ElysiaWS, websocket } from './ws'
@@ -33,7 +32,8 @@ import {
 	traceBackMacro,
 	replaceUrlPath,
 	primitiveHooks,
-	isNumericString
+	isNumericString,
+	createMacroManager
 } from './utils'
 
 import {
@@ -389,7 +389,7 @@ export default class Elysia<
 				: path + '/'
 
 			if (this.extender.macros.length) {
-				const manage = createManager({
+				const manage = createMacroManager({
 					globalHook: this.event,
 					localHook
 				})
