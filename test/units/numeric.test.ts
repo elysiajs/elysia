@@ -20,4 +20,8 @@ describe('Numeric string', () => {
 		expect(isNumericString(' ')).toBe(false)
 		expect(isNumericString('    ')).toBe(false)
 	})
+
+	it('start with number', async () => {
+		expect(isNumericString('6AAAA')).toBe(false)
+	})
 })
