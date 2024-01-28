@@ -11,6 +11,7 @@ import {
 	ObjectOptions,
 	TObject,
 	TNumber,
+	TBoolean,
 	FormatRegistry
 } from '@sinclair/typebox'
 import { type TypeCheck } from '@sinclair/typebox/compiler'
@@ -165,6 +166,7 @@ const Files = TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
 )
 
 FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
+FormatRegistry.Set('boolean', (value) => value === 'true' || value === 'false')
 FormatRegistry.Set('ObjectString', (value) => {
 	let start = value.charCodeAt(0)
 
@@ -210,6 +212,32 @@ export const ElysiaType = {
 				return number
 			})
 			.Encode((value) => value) as any as TNumber
+	},
+	BooleanString: (property?: SchemaOptions) => {
+		const schema = Type.Boolean(property)
+
+		return t
+			.Transform(
+				t.Union(
+					[
+						t.String({
+							format: 'boolean',
+							default: false
+						}),
+						t.Boolean(property)
+					],
+					property
+				)
+			)
+			.Decode((value) => {
+				if (typeof value === 'string') return value === 'true'
+
+				if (property && !Value.Check(schema, value))
+					throw new ValidationError('property', schema, value)
+
+				return value
+			})
+			.Encode((value) => value) as any as TBoolean
 	},
 	ObjectString: <T extends TProperties>(
 		properties: T,
@@ -280,6 +308,7 @@ export type TCookie = (typeof ElysiaType)['Cookie']
 
 declare module '@sinclair/typebox' {
 	interface JavaScriptTypeBuilder {
+		BooleanString: typeof ElysiaType.BooleanString
 		ObjectString: typeof ElysiaType.ObjectString
 		// @ts-ignore
 		Numeric: typeof ElysiaType.Numeric
@@ -302,6 +331,13 @@ declare module '@sinclair/typebox' {
 			  ) => string | void)
 	}
 }
+
+/**
+ * A Boolean string
+ *
+ * Will be parse to Boolean
+ */
+t.BooleanString = ElysiaType.BooleanString
 
 t.ObjectString = ElysiaType.ObjectString
 
