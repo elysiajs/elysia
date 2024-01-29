@@ -1,4 +1,4 @@
-import { Elysia, NotFoundError, t } from '../../src'
+import { Elysia, ElysiaConfig, NotFoundError, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
@@ -156,12 +156,11 @@ describe('Dynamic Mode', () => {
 	})
 
 	it('handle non query fallback', async () => {
-		const app = new Elysia({ aot: false })
-			.get('/', () => 'hi', {
-				query: t.Object({
-					redirect_uri: t.Optional(t.String())
-				})
+		const app = new Elysia({ aot: false }).get('/', () => 'hi', {
+			query: t.Object({
+				redirect_uri: t.Optional(t.String())
 			})
+		})
 
 		const res1 = await app.handle(req('/'))
 		const res2 = await app.handle(req('/?'))
@@ -170,5 +169,24 @@ describe('Dynamic Mode', () => {
 		expect(res1.status).toBe(200)
 		expect(res2.status).toBe(200)
 		expect(res3.status).toBe(200)
+	})
+
+	describe('handle local parse event', async () => {
+		const app = new Elysia({ aot: false }).post('/', (ctx) => ctx.body, {
+			parse: (ctx, contentType) => {
+				return contentType
+			},
+			body: t.String()
+		})
+
+		const res = await app.handle(
+			new Request('http://localhost', {
+				method: 'POST',
+				body: 'yay',
+				headers: { 'content-type': 'text/plain' }
+			})
+		)
+
+		expect(await res.text()).toBe('text/plain')
 	})
 })

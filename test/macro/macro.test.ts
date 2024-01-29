@@ -284,6 +284,7 @@ describe('Macro', () => {
 				}
 			})
 		)
+
 		const b = new Elysia({ name: 'b', seed: 'add' })
 			.use(a)
 			.decorate('b', 'b')
@@ -298,5 +299,40 @@ describe('Macro', () => {
 		await app.handle(req('/'))
 
 		expect(call).toBe(1)
+	})
+
+	it('propagation macro without inaccurate deduplication in guard', async () => {
+		let call = 0
+
+		const base = new Elysia({ name: 'base' }).macro(
+			({ onBeforeHandle }) => ({
+				auth: (role: 'teacher' | 'student' | 'admin' | 'noLogin') => {
+					onBeforeHandle(() => {
+						call++
+					})
+				}
+			})
+		)
+
+		const app = new Elysia()
+			// ? Deduplication check
+			.use(base)
+			.use(base)
+			.use(base)
+			.use(base)
+			.guard({ auth: 'admin' }, (route) =>
+				route
+					.get('/test1', () => 'test1')
+					.get('/test2', () => 'test2')
+					.get('/test3', () => 'hello test3')
+			)
+			.get('/hello', () => 'hello', { auth: 'teacher' })
+			.listen(3000)
+
+		await Promise.all(
+			['/test1', '/test2', '/test3'].map((x) => app.handle(req(x)))
+		)
+
+		expect(call).toBe(3)
 	})
 })

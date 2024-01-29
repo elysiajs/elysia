@@ -405,33 +405,8 @@ export default class Elysia<
 					onError: manage('error')
 				}
 
-				for (const macro of this.extender.macros) {
-					const customHookValues: Record<string, unknown> = {}
-					for (const [key, value] of Object.entries(
-						localHook ?? {}
-					)) {
-						if (primitiveHooks.includes(key as any)) continue
-
-						customHookValues[key] = value
-					}
-
-					// @ts-ignore
-					if (!macro.$elysiaChecksum)
-						// @ts-ignore
-						macro.$elysiaChecksum = []
-
-					const hash = checksum(JSON.stringify(customHookValues))
-
-					// @ts-ignore
-					if (macro.$elysiaChecksum.includes(hash)) continue
-
-					// @ts-ignore
-					macro.$elysiaChecksum.push(
-						checksum(JSON.stringify(customHookValues))
-					)
-
+				for (const macro of this.extender.macros)
 					traceBackMacro(macro(manager), localHook as any)
-				}
 			}
 
 			const hooks = mergeHook(this.event, localHook)
@@ -2207,6 +2182,21 @@ export default class Elysia<
 					)
 				)
 					this.extender.macros.push(...plugin.extender.macros)
+
+				const macroHashes: string[] = []
+
+				for (let i = 0; i < this.extender.macros.length; i++) {
+					const macro = this.extender.macros[i]
+
+					// @ts-ignore
+					if (macroHashes.includes(macro.$elysiaChecksum)) {
+						this.extender.macros.splice(i, 1)
+						i--
+					}
+
+					// @ts-ignore
+					macroHashes.push(macro.$elysiaChecksum)
+				}
 			}
 		}
 
@@ -2316,6 +2306,15 @@ export default class Elysia<
 		},
 		Routes
 	> {
+		// @ts-ignore
+		macro.$elysiaChecksum = checksum(
+			JSON.stringify({
+				name: this.config.name,
+				seed: this.config.seed,
+				content: macro.toString()
+			})
+		)
+
 		this.extender.macros.push(macro as any)
 
 		return this as any

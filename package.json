@@ -7,91 +7,81 @@
 		"url": "https://github.com/SaltyAom",
 		"email": "saltyaom@gmail.com"
 	},
+	"main": "./dist/cjs/index.js",
+	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"bun": "./dist/bun/index.js",
-			"node": "./dist/cjs/index.js",
+			"import": "./dist/index.mjs",
 			"require": "./dist/cjs/index.js",
-			"import": "./dist/index.js",
-			"default": "./dist/index.js"
+			"types": "./dist/index.d.ts"
 		},
 		"./ws": {
 			"bun": "./dist/ws/index.js",
-			"node": "./dist/cjs/ws/index.js",
+			"import": "./dist/ws/index.mjs",
 			"require": "./dist/cjs/ws/index.js",
-			"import": "./dist/ws/index.js",
-			"default": "./dist/ws/index.js"
+			"types": "./dist/ws/index.d.ts"
 		},
 		"./compose": {
 			"bun": "./dist/compose.js",
-			"node": "./dist/cjs/compose.js",
+			"import": "./dist/compose.mjs",
 			"require": "./dist/cjs/compose.js",
-			"import": "./dist/compose.js",
-			"default": "./dist/compose.js"
+			"types": "./dist/compose.d.ts"
 		},
 		"./context": {
 			"bun": "./dist/context.js",
-			"node": "./dist/cjs/context.js",
+			"import": "./dist/context.mjs",
 			"require": "./dist/cjs/context.js",
-			"import": "./dist/context.js",
-			"default": "./dist/context.js"
+			"types": "./dist/context.d.ts"
 		},
 		"./cookie": {
 			"bun": "./dist/cookie.js",
-			"node": "./dist/cjs/cookie.js",
+			"import": "./dist/cookie.mjs",
 			"require": "./dist/cjs/cookie.js",
-			"import": "./dist/cookie.js",
-			"default": "./dist/cookie.js"
-		},
-		"./custom-types": {
-			"bun": "./dist/custom-types.js",
-			"node": "./dist/cjs/custom-types.js",
-			"require": "./dist/cjs/custom-types.js",
-			"import": "./dist/custom-types.js",
-			"default": "./dist/custom-types.js"
+			"types": "./dist/cookie.d.ts"
 		},
 		"./error": {
 			"bun": "./dist/error.js",
-			"node": "./dist/cjs/error.js",
+			"import": "./dist/error.mjs",
 			"require": "./dist/cjs/error.js",
-			"import": "./dist/error.js",
-			"default": "./dist/error.js"
+			"types": "./dist/error.d.ts"
 		},
 		"./handler": {
 			"bun": "./dist/handler.js",
-			"node": "./dist/cjs/handler.js",
+			"import": "./dist/handler.mjs",
 			"require": "./dist/cjs/handler.js",
-			"import": "./dist/handler.js",
-			"default": "./dist/handler.js"
+			"types": "./dist/handler.d.ts"	
 		},
 		"./schema": {
 			"bun": "./dist/schema.js",
-			"node": "./dist/cjs/schema.js",
+			"import": "./dist/schema.mjs",
 			"require": "./dist/cjs/schema.js",
-			"import": "./dist/schema.js",
-			"default": "./dist/schema.js"
+			"types": "./dist/schema.d.ts"
 		},
 		"./trace": {
 			"bun": "./dist/trace.js",
-			"node": "./dist/cjs/trace.js",
+			"import": "./dist/trace.mjs",
 			"require": "./dist/cjs/trace.js",
-			"import": "./dist/trace.js",
-			"default": "./dist/trace.js"
+			"types": "./dist/trace.d.ts"
+		},
+		"./type-system": {
+			"bun": "./dist/type-system.js",
+			"import": "./dist/type-system.mjs",
+			"require": "./dist/cjs/type-system.js",
+			"types": "./dist/type-system.d.ts"
 		},
 		"./types": {
 			"bun": "./dist/types.js",
-			"node": "./dist/cjs/types.js",
+			"import": "./dist/types.mjs",
 			"require": "./dist/cjs/types.js",
-			"import": "./dist/types.js",
-			"default": "./dist/types.js"
+			"types": "./dist/types.d.ts"
 		},
 		"./utils": {
 			"bun": "./dist/utils.js",
-			"node": "./dist/cjs/utils.js",
+			"import": "./dist/utils.mjs",
 			"require": "./dist/cjs/utils.js",
-			"import": "./dist/utils.js",
-			"default": "./dist/utils.js"
+			"types": "./dist/utils.d.ts"
 		}
 	},
 	"repository": {
