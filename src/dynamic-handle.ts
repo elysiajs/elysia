@@ -115,9 +115,8 @@ export const createDynamicHandler =
 						if (index !== -1)
 							contentType = contentType.slice(0, index)
 
-						for (let i = 0; i < app.event.parse.length; i++) {
-							// @ts-ignore
-							let temp = app.event.parse[i](context, contentType)
+						for (let i = 0; i < hooks.parse.length; i++) {
+							let temp = hooks.parse[i](context, contentType)
 							if (temp instanceof Promise) temp = await temp
 
 							if (temp) {

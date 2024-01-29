@@ -1,26 +1,17 @@
 import { Elysia, t } from '../src'
-import { parseCookie } from '../src/cookie'
 import { req } from '../test/utils'
 
-const app = new Elysia({ name: 'macro' })
-	.macro(({ onBeforeHandle }) => {
-		return {
-			user: (type?: 'signed-in' | 'signed-out') => {
-				onBeforeHandle(() => {
-					return ':)'
-				})
-			}
-		}
-	})
-	.get(
-		'/',
-		() => {
-			return 'I fail at runtime but not static checks'
-		},
-		{
-			user: 'signed-in'
-		}
-	)
-	.listen(3000)
+const app = new Elysia({ aot: false }).post('/', (ctx) => ctx.body, {
+    parse: (ctx, contentType) => {
+      return contentType;
+    },
+    body: t.String()
+  });
 
-// console.log(app.routes[0].composed?.toString())
+  const res = await app.handle(
+    new Request('http://localhost', {
+      method: 'POST',
+      body: 'yay',
+      headers: { 'content-type': 'text/plain' }
+    })
+  ).then(x => x.text())

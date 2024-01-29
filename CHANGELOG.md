@@ -1,3 +1,8 @@
+# 0.8.15 - 30 Jan 2024
+Bug fix:
+- [#451](https://github.com/elysiajs/elysia/issues/451) macro does not run when it should (macro deduplication)
+- [#450](https://github.com/elysiajs/elysia/issues/450) Local hook parse doesn't get executed with `aot: false`
+
 # 0.8.14 - 26 Jan 2024
 Bug fix:
 - types are missing in `exports.*`

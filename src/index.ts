@@ -28,7 +28,6 @@ import {
 	asGlobal,
 	traceBackMacro,
 	replaceUrlPath,
-	primitiveHooks,
 	isNumericString
 } from './utils'
 
@@ -45,7 +44,7 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError,
+	type InternalServerError
 } from './error'
 
 import type {
@@ -418,37 +417,11 @@ export default class Elysia<
 					onError: createManager('error')
 				}
 
-				for (const macro of this.macros) {
-					const customHookValues: Record<string, unknown> = {}
-					for (const [key, value] of Object.entries(
-						localHook ?? {}
-					)) {
-						if (primitiveHooks.includes(key as any)) continue
-
-						customHookValues[key] = value
-					}
-
-					// @ts-ignore
-					if (!macro.$elysiaChecksum)
-						// @ts-ignore
-						macro.$elysiaChecksum = []
-
-					const hash = checksum(JSON.stringify(customHookValues))
-
-					// @ts-ignore
-					if (macro.$elysiaChecksum.includes(hash)) continue
-
-					// @ts-ignore
-					macro.$elysiaChecksum.push(
-						checksum(JSON.stringify(customHookValues))
-					)
-
+				for (const macro of this.macros)
 					traceBackMacro(macro(manager), localHook as any)
-				}
 			}
 
 			const hooks = mergeHook(globalHook, localHook)
-
 			const isFn = typeof handle === 'function'
 
 			if (this.config.aot === false) {
@@ -1773,8 +1746,7 @@ export default class Elysia<
 								this as unknown as any
 							) as unknown as Elysia
 
-						// @ts-ignore
-						return this._use(plugin)
+						return this._use(plugin as any)
 					})
 					.then((x) => x.compile())
 			)
@@ -1946,6 +1918,21 @@ export default class Elysia<
 					)
 				)
 					this.macros.push(...plugin.macros)
+
+				const macroHashes: string[] = []
+
+				for (let i = 0; i < this.macros.length; i++) {
+					const macro = this.macros[i]
+
+					// @ts-ignore
+					if (macroHashes.includes(macro.$elysiaChecksum)) {
+						this.macros.splice(i, 1)
+						i--
+					}
+
+					// @ts-ignore
+					macroHashes.push(macro.$elysiaChecksum)
+				}
 			}
 		}
 
@@ -2049,6 +2036,15 @@ export default class Elysia<
 		Routes,
 		Scoped
 	> {
+		// @ts-ignore
+		macro.$elysiaChecksum = checksum(
+			JSON.stringify({
+				name: this.config.name,
+				seed: this.config.seed,
+				content: macro.toString()
+			})
+		)
+
 		this.macros.push(macro as any)
 
 		return this as any
@@ -3225,10 +3221,9 @@ export default class Elysia<
 
 				if (
 					server?.upgrade<any>(context.request, {
-						headers:
-							(typeof options.upgrade === 'function'
-								? options.upgrade(context as any as Context)
-								: options.upgrade) as Bun.HeadersInit,
+						headers: (typeof options.upgrade === 'function'
+							? options.upgrade(context as any as Context)
+							: options.upgrade) as Bun.HeadersInit,
 						data: {
 							validator: validateResponse,
 							open(ws: ServerWebSocket<any>) {
