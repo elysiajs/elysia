@@ -4001,13 +4001,13 @@ export default class Elysia<
 						development: !isProduction,
 						reusePort: true,
 						...this.config.serve,
+						fetch,
+						error: this.outerErrorHandler,
 						...options,
 						websocket: {
 							...this.config.websocket,
 							...websocket
 						},
-						fetch,
-						error: this.outerErrorHandler
 				  } as Serve)
 				: ({
 						development: !isProduction,
