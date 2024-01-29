@@ -37,19 +37,17 @@ import {
 } from './utils'
 
 import {
-	DynamicHandler,
 	createDynamicErrorHandler,
-	createDynamicHandler
+	createDynamicHandler,
+	type DynamicHandler
 } from './dynamic-handle'
 
 import {
-	ERROR_CODE,
-	ELYSIA_RESPONSE,
+	isProduction,
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError,
-	isProduction
+	type InternalServerError
 } from './error'
 
 import type {
@@ -2322,7 +2320,6 @@ export default class Elysia<
 
 		return this as any
 	}
-
 	mount(
 		handle:
 			| ((request: Request) => MaybePromise<Response>)
@@ -3818,7 +3815,6 @@ export default class Elysia<
 
 		return this as any
 	}
-	
 
 	/**
 	 * ### route

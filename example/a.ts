@@ -1,38 +1,12 @@
-import { Elysia, error, t } from '../src'
+type NoInfer<T> = [T][T extends any ? 0 : never]
 
-const app = new Elysia()
-	.get('/', 'a')
-	.post('/', ({ body }) => 'a', {
-		response: t.String(),
-		body: t.Object({
-			username: t.String(),
-			password: t.String()
-		})
-	})
-	.get('/id/:id', 'a')
+const a = <T>(a: (a: NoInfer<T>) => T) => {
+	return a
+}
 
-const b = new Elysia()    .post(
-	'/prefix/:id',
-	() => {
-		if (Math.random() > 0.5) return error(400, 'hello')
-
-		return 'a'
-	},
-	{
-		body: t.Object({
-			username: t.String()
-		}),
-		headers: t.Object({
-			a: t.String()
-		})
+a((a) => {
+	return {
+		a: 1,
+		b: 2
 	}
-)
-
-
-type b = typeof b
-
-type B = b['_routes']['prefix'][':id']['post']['response']
-
-type app = typeof app
-
-app._routes
+})
