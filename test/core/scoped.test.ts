@@ -68,4 +68,22 @@ describe('Scoped', () => {
 
 		expect(count).toBe(1)
 	})
+
+	it('multible scoped events', async () => {
+
+		const first = new Elysia({ scoped: true }).get("/first", () => "first");
+		const second = new Elysia({ scoped: true }).get("/second", () => "second");
+
+		const app = new Elysia().use(first).use(second).listen(3000);
+
+		const firstResponse = await app.handle(req("/first"))
+		const secondResponse = await app.handle(req("/second"))
+
+		const firstText = await firstResponse.text()
+		const secondText = await secondResponse.text()
+
+		expect(firstText).toBe("first")
+		expect(secondText).toBe("second")
+	})
+
 })
