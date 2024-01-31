@@ -71,8 +71,8 @@ describe('Scoped', () => {
 
 	it('multible scoped events', async () => {
 
-		const first = new Elysia({ scoped: true }).get("/first", () => "first");
-		const second = new Elysia({ scoped: true }).get("/second", () => "second");
+		const first = new Elysia({ name: "first", scoped: true }).get("/first", () => "first");
+		const second = new Elysia({name: "second", scoped: true }).get("/second", () => "second");
 
 		const app = new Elysia().use(first).use(second);
 
