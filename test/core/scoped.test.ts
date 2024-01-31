@@ -74,13 +74,13 @@ describe('Scoped', () => {
 		const first = new Elysia({ scoped: true }).get("/first", () => "first");
 		const second = new Elysia({ scoped: true }).get("/second", () => "second");
 
-		const app = new Elysia().use(first).use(second).listen(3000);
+		const app = new Elysia().use(first).use(second);
 
-		const firstResponse = await app.handle(req("/first"))
-		const secondResponse = await app.handle(req("/second"))
+		const firstResponse = await app.handle(req("/first"));
+		const secondResponse = await app.handle(req("/second"));
 
-		const firstText = await firstResponse.text()
-		const secondText = await secondResponse.text()
+		const firstText = await firstResponse.text();
+		const secondText = await secondResponse.text();
 
 		expect(firstText).toBe("first")
 		expect(secondText).toBe("second")
