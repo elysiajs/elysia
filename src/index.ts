@@ -524,7 +524,7 @@ export default class Elysia<
 			const mainHandler =
 				this.config.precompile === true ||
 				(typeof this.config.precompile === 'object' &&
-					this.config.precompile.schema === true)
+					this.config.precompile.compose === true)
 					? composeHandler({
 							app: this,
 							path,

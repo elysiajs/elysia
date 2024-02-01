@@ -9,7 +9,7 @@ const loggerPlugin = new Elysia()
 	.state('fromPlugin', 'From Logger')
 	.use((app) => app.state('abc', 'abc'))
 
-const app = new Elysia({ precompile: true })
+const app = new Elysia()
 	.onRequest(({ set }) => {
 		set.headers = {
 			'Access-Control-Allow-Origin': '*'
