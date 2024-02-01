@@ -489,7 +489,7 @@ app.use(plugin).group(
 		query: {
 			name: string
 		}
-		params: never
+		params: Record<never, string>
 		response: {
 			200: number
 		}
@@ -514,7 +514,7 @@ app.use(plugin).group(
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
-		params: never
+		params: Record<never, string>
 		query: unknown
 		headers: unknown
 		response: {
@@ -576,7 +576,7 @@ app.use(plugin).group(
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: never
+		params: Record<never, string>
 		response: {
 			200: string
 		}
@@ -781,7 +781,7 @@ app.group(
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: never
+		params: Record<never, string>
 		response: {
 			200: string
 		}
@@ -823,7 +823,7 @@ app.group(
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: never
+		params: Record<never, string>
 		response: {
 			200: string
 		}

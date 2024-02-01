@@ -25,6 +25,33 @@ export type ElysiaConfig<Prefix extends string, Scoped extends boolean> = {
 	seed?: unknown
 	serve?: Partial<Serve>
 	/**
+	 * Warm up Elysia before starting the server
+	 * 
+	 * This will perform Ahead of Time compilation and generate code for route handlers
+	 * 
+	 * If set to false, Elysia will perform Just in Time compilation
+	 * 
+	 * Only required for root instance (instance which use listen) to effect
+	 * 
+	 * ! If performing a benchmark, it's recommended to set this to `true`
+	 * 
+	 * @default false
+	 */
+	precompile?: boolean | {
+		/**
+		 * Perform dynamic code generation for route handlers before starting the server
+		 * 
+		 * @default false
+		 */
+		compose?: boolean
+		/**
+		 * Perform Ahead of Time compilation for schema before starting the server
+		 * 
+		 * @default false
+		 */
+		schema?: boolean
+	}
+	/**
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */
 	forceErrorEncapsulation?: boolean
@@ -131,11 +158,7 @@ export interface DefinitionBase {
 	}
 }
 
-export interface RouteBase {
-	[path: string]: {
-		[method: string]: RouteSchema
-	}
-}
+export type RouteBase = Record<string, unknown>
 
 export interface MetadataBase {
 	schema: RouteSchema

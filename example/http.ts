@@ -9,7 +9,7 @@ const loggerPlugin = new Elysia()
 	.state('fromPlugin', 'From Logger')
 	.use((app) => app.state('abc', 'abc'))
 
-const app = new Elysia()
+const app = new Elysia({ precompile: true })
 	.onRequest(({ set }) => {
 		set.headers = {
 			'Access-Control-Allow-Origin': '*'
@@ -116,9 +116,9 @@ const app = new Elysia()
 			return 'Not Found :('
 		}
 	})
-	.listen(8080, ({ hostname, port }) => {
-		console.log(`🦊 Elysia is running at http://${hostname}:${port}`)
-	})
+	// .listen(8080, ({ hostname, port }) => {
+	// 	console.log(`🦊 Elysia is running at http://${hostname}:${port}`)
+	// })
 
 const t2 = performance.now()
 

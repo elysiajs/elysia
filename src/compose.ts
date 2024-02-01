@@ -1274,8 +1274,6 @@ export const composeHandler = ({
 		${fnLiteral}
 	}`
 
-	// console.log(fnLiteral)
-
 	const createHandler = Function('hooks', fnLiteral)
 
 	return createHandler({

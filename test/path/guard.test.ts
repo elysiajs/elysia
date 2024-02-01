@@ -143,9 +143,9 @@ describe('guard', () => {
 				response: t.String()
 			},
 			(app) =>
+				// @ts-ignore
 				app
 					.get('/correct', () => 'Hello')
-					// @ts-ignore
 					.get('/error', () => 1)
 		)
 
@@ -157,12 +157,12 @@ describe('guard', () => {
 	})
 
 	it('apply guard globally', async () => {
-		const app = new Elysia()
+		// @ts-ignore
+		const app = new Elysia({ precompile: false })
 			.guard({
 				response: t.String()
 			})
 			.get('/correct', () => 'Hello')
-			// @ts-ignore
 			.get('/error', () => 1)
 
 		const error = await app.handle(req('/error'))

@@ -2,12 +2,12 @@ import type { Serve, Server, ServerWebSocket } from 'bun'
 
 import { Memoirist } from 'memoirist'
 import EventEmitter from 'eventemitter3'
-import type { Static, TSchema } from '@sinclair/typebox'
+import { type Static, type TSchema } from '@sinclair/typebox'
 
 import { createTraceListener } from './trace'
 import type { Context } from './context'
 
-import { t } from './type-system'
+import { t, TypeCheck } from './type-system'
 import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
 
 import { ElysiaWS, websocket } from './ws'
@@ -31,7 +31,6 @@ import {
 	asGlobal,
 	traceBackMacro,
 	replaceUrlPath,
-	primitiveHooks,
 	isNumericString,
 	createMacroManager
 } from './utils'
@@ -43,6 +42,7 @@ import {
 } from './dynamic-handle'
 
 import {
+	ERROR_CODE,
 	isProduction,
 	ValidationError,
 	type ParseError,
@@ -247,6 +247,7 @@ export default class Elysia<
 			scoped: false,
 			cookie: {},
 			analytic: false,
+			precompile: false,
 			...config,
 			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
@@ -313,74 +314,150 @@ export default class Elysia<
 
 			const models = this.definitions.type
 
-			let cookieValidator = getSchemaValidator(
-				localHook?.cookie ?? (this.validator?.cookie as any),
-				{
-					dynamic: !this.config.aot,
-					models,
-					additionalProperties: true
-				}
-			)
+			let _body: TypeCheck<any> | undefined,
+				_headers: TypeCheck<any> | undefined,
+				_params: TypeCheck<any> | undefined,
+				_query: TypeCheck<any> | undefined,
+				_cookie: TypeCheck<any> | undefined,
+				_response:
+					| TypeCheck<any>
+					| Record<string, TypeCheck<any>>
+					| undefined
 
-			if (isNotEmpty(this.config.cookie ?? {})) {
-				if (cookieValidator) {
-					// @ts-ignore
-					cookieValidator.schema = mergeCookie(
-						// @ts-ignore
-						cookieValidator.schema,
-						this.config.cookie ?? {}
-					)
-				} else {
-					cookieValidator = getSchemaValidator(
-						t.Cookie({}, this.config.cookie as any),
-						{
-							dynamic: !this.config.aot,
-							models,
-							additionalProperties: true
-						}
-					)
-				}
+			// ? Clone is need because of JIT, so the context doesn't switch between instance
+			const dynamic = !this.config.aot
+			const cookieConfig = { ...this.config.cookie } ?? {}
+
+			const cloned = {
+				body: localHook?.body ?? this.validator?.body as any,
+				headers: localHook?.headers ?? this.validator?.headers as any,
+				params: localHook?.params ?? this.validator?.params as any,
+				query: localHook?.query ?? this.validator?.query as any,
+				cookie: localHook?.cookie ?? this.validator?.cookie as any,
+				response: localHook?.response ?? this.validator?.response as any
 			}
 
-			const validator = {
-				body: getSchemaValidator(
-					localHook?.body ?? (this.validator?.body as any),
-					{
-						dynamic: !this.config.aot,
-						models
+			const getCookieValidator = () => {
+				let cookieValidator = getSchemaValidator(cloned.cookie, {
+					dynamic,
+					models,
+					additionalProperties: true
+				})
+
+				if (isNotEmpty(this.config.cookie ?? {})) {
+					if (cookieValidator) {
+						// @ts-ignore
+						cookieValidator.schema = mergeCookie(
+							// @ts-ignore
+							cookieValidator.schema,
+							cookieConfig
+						)
+					} else {
+						cookieValidator = getSchemaValidator(
+							t.Cookie({}, this.config.cookie as any),
+							{
+								dynamic: !this.config.aot,
+								models,
+								additionalProperties: true
+							}
+						)
 					}
-				),
-				headers: getSchemaValidator(
-					localHook?.headers ?? (this.validator?.headers as any),
-					{
-						dynamic: !this.config.aot,
-						models,
-						additionalProperties: true
-					}
-				),
-				params: getSchemaValidator(
-					localHook?.params ?? (this.validator?.params as any),
-					{
-						dynamic: !this.config.aot,
-						models
-					}
-				),
-				query: getSchemaValidator(
-					localHook?.query ?? (this.validator?.query as any),
-					{
-						dynamic: !this.config.aot,
-						models
-					}
-				),
-				cookie: cookieValidator,
-				response: getResponseSchemaValidator(
-					localHook?.response ?? (this.validator?.response as any),
-					{
-						dynamic: !this.config.aot,
-						models
-					}
-				)
-			} as any
+				}
+
+				return cookieValidator
+			}
+
+			const validator =
+				this.config.precompile === true ||
+				(typeof this.config.precompile === 'object' &&
+					this.config.precompile.schema === true)
+					? {
+							body: getSchemaValidator(cloned.body, {
+								dynamic,
+								models
+							}),
+							headers: getSchemaValidator(cloned.headers, {
+								dynamic,
+								models,
+								additionalProperties: true
+							}),
+							params: getSchemaValidator(cloned.params, {
+								dynamic,
+								models
+							}),
+							query: getSchemaValidator(cloned.query, {
+								dynamic,
+								models
+							}),
+							cookie: getCookieValidator(),
+							response: getResponseSchemaValidator(
+								cloned.response,
+								{
+									dynamic,
+									models
+								}
+							)
+					  }
+					: ({
+							get body() {
+								if (_body) return _body
+
+								return (_body = getSchemaValidator(
+									cloned.body,
+									{
+										dynamic,
+										models
+									}
+								))
+							},
+							get headers() {
+								if (_headers) return _headers
+
+								return getSchemaValidator(cloned.headers, {
+									dynamic,
+									models,
+									additionalProperties: true
+								})
+							},
+							get params() {
+								if (_params) return _params
+
+								return (_params = getSchemaValidator(
+									cloned.params,
+									{
+										dynamic,
+										models
+									}
+								))
+							},
+							get query() {
+								if (_query) return _query
+
+								return (_query = getSchemaValidator(
+									cloned.query,
+									{
+										dynamic,
+										models
+									}
+								))
+							},
+							get cookie() {
+								if (_cookie) return _cookie
+
+								return (_cookie = getCookieValidator())
+							},
+							get response() {
+								if (_response) return _response
+
+								return (_response = getResponseSchemaValidator(
+									cloned.response,
+									{
+										dynamic,
+										models
+									}
+								))
+							}
+					  } as any)
 
 			const loosePath = path.endsWith('/')
 				? path.slice(0, path.length - 1)
@@ -440,16 +517,38 @@ export default class Elysia<
 				return
 			}
 
-			const mainHandler = composeHandler({
-				app: this,
-				path,
-				method,
-				localHook: mergeHook({}, localHook),
-				hooks,
-				validator,
-				handler: handle,
-				allowMeta
-			})
+			let composed:
+				| ((context: Context<any, any, any>) => MaybePromise<Response>)
+				| undefined = undefined
+
+			const mainHandler =
+				this.config.precompile === true ||
+				(typeof this.config.precompile === 'object' &&
+					this.config.precompile.schema === true)
+					? composeHandler({
+							app: this,
+							path,
+							method,
+							localHook: mergeHook({}, localHook),
+							hooks,
+							validator,
+							handler: handle,
+							allowMeta
+					  })
+					: (context: Context) => {
+							if (composed) return composed(context)
+
+							return (composed = composeHandler({
+								app: this,
+								path,
+								method,
+								localHook: mergeHook({}, localHook),
+								hooks,
+								validator,
+								handler: handle,
+								allowMeta
+							}) as any)(context)
+					  }
 
 			if (!isFn) {
 				const context = Object.assign(
@@ -1603,9 +1702,9 @@ export default class Elysia<
 	 * Inline fn
 	 */
 	use<
-		NewElysia extends Elysia<any, any, any, any, any>,
-		Param extends Elysia<any, any, any, any, any> = this,
-		Scoped extends boolean = false
+		const NewElysia extends Elysia<any, any, any, any, any>,
+		const Param extends Elysia<any, any, any, any, any> = this,
+		const Scoped extends boolean = false
 	>(
 		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>,
 		options?: { scoped?: Scoped }
@@ -1671,9 +1770,9 @@ export default class Elysia<
 	 * Inline Fn with scoped
 	 **/
 	use<
-		NewElysia extends Elysia<any, any, any, any, any>,
-		Params extends Elysia<any, any, any, any, any> = this,
-		Scoped extends boolean = false
+		const NewElysia extends Elysia<any, any, any, any, any>,
+		const Params extends Elysia<any, any, any, any, any> = this,
+		const Scoped extends boolean = false
 	>(
 		plugin: MaybePromise<(app: Params) => MaybePromise<NewElysia>>,
 		options?: { scoped?: Scoped }
@@ -1738,7 +1837,7 @@ export default class Elysia<
 	/**
 	 * Entire Instance where scoped is true
 	 **/
-	use<NewElysia extends Elysia<any, true, any, any, any>>(
+	use<const NewElysia extends Elysia<any, true, any, any, any>>(
 		instance: MaybePromise<NewElysia>,
 		scoped?: { scoped?: boolean }
 	): Elysia<
@@ -1759,8 +1858,8 @@ export default class Elysia<
 	 * Entire Instance where scoped is false
 	 **/
 	use<
-		NewElysia extends Elysia<any, false, any, any, any>,
-		Scoped extends boolean = false
+		const NewElysia extends Elysia<any, false, any, any, any>,
+		const Scoped extends boolean = false
 	>(
 		instance: MaybePromise<NewElysia>,
 		options?: { scoped?: Scoped }
@@ -1828,8 +1927,8 @@ export default class Elysia<
 	 * Import fn
 	 */
 	use<
-		NewElysia extends Elysia<any, any, any, any, any>,
-		Scoped extends boolean = false
+		const NewElysia extends Elysia<any, any, any, any, any>,
+		const Scoped extends boolean = false
 	>(
 		plugin: Promise<{
 			default: (
@@ -1887,8 +1986,8 @@ export default class Elysia<
 	 * Import entire instance
 	 */
 	use<
-		LazyLoadElysia extends Elysia<any, any, any, any, any>,
-		Scoped extends boolean = false
+		const LazyLoadElysia extends Elysia<any, any, any, any, any>,
+		const Scoped extends boolean = false
 	>(
 		plugin: Promise<{
 			default: LazyLoadElysia
@@ -3973,7 +4072,7 @@ export default class Elysia<
 			}
 		} as any
 	) {
-		this.add(method.toUpperCase(), path, handler as any, hook)
+		this.add(method.toUpperCase(), path, handler as any, hook, hook.config)
 
 		return this as any
 	}
