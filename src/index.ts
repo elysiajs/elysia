@@ -221,7 +221,7 @@ export default class Elysia<
 					? path
 					: `/${path}`
 
-			if (this.config.prefix && !skipPrefix)
+			if (this.config.prefix && !skipPrefix && !this.config.scoped)
 				path = this.config.prefix + path
 
 			if (localHook?.type)
@@ -1896,7 +1896,20 @@ export default class Elysia<
 
 			if (plugin.config.aot) plugin.compile()
 
-			const instance = this.mount(plugin.fetch)
+			if (isScoped && !plugin.config.prefix) {
+				console.warn(
+					'When using scoped plugins it is recommended to use a prefix, else routing may not work correctly for the second scoped instance'
+				)
+			}
+
+			let instance
+
+			if (isScoped && plugin.config.prefix) {
+				instance = this.mount(plugin.config.prefix + '/', plugin.fetch)
+			} else {
+				instance = this.mount(plugin.fetch)
+			}
+
 			this.routes = this.routes.concat(instance.routes)
 
 			return this
