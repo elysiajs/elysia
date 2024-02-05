@@ -1000,7 +1000,7 @@ export const composeHandler = ({
 				}
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(be, c.set)}\n`
+				fnLiteral += `return mapEarlyResponse(be, c.set, c.request)}\n`
 			}
 		}
 
@@ -1079,8 +1079,8 @@ export const composeHandler = ({
 			}
 		}
 
-		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-		else fnLiteral += `return mapCompactResponse(r)\n`
+		if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
+		else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 	} else {
 		const endHandle = report('handle', {
 			name: isHandleFn ? handler.name : undefined
@@ -1112,8 +1112,9 @@ export const composeHandler = ({
 
 			if (handler instanceof Response)
 				fnLiteral += `return ${handle}.clone()\n`
-			else if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(r)\n`
+			else if (hasSet)
+				fnLiteral += `return mapResponse(r, c.set, c.request)\n`
+			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 		} else if (traceConditions.handle || hasCookie) {
 			fnLiteral += isAsyncHandler
 				? `let r = await ${handle};\n`
@@ -1136,8 +1137,8 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(r)\n`
+			if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
+			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 		} else {
 			endHandle()
 
@@ -1148,8 +1149,9 @@ export const composeHandler = ({
 			if (handler instanceof Response)
 				fnLiteral += `return ${handle}.clone()\n`
 			else if (hasSet)
-				fnLiteral += `return mapResponse(${handled}, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(${handled})\n`
+				fnLiteral += `return mapResponse(${handled}, c.set, c.request)\n`
+			else
+				fnLiteral += `return mapCompactResponse(${handled}, c.request)\n`
 		}
 	}
 
@@ -1186,7 +1188,7 @@ export const composeHandler = ({
 
 				endUnit()
 
-				fnLiteral += `${name} = mapEarlyResponse(${name}, set)\n`
+				fnLiteral += `${name} = mapEarlyResponse(${name}, set, c.request)\n`
 				fnLiteral += `if (${name}) {`
 				fnLiteral += `return ${name} }\n`
 			}
@@ -1319,10 +1321,11 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 	const router = app.router
 	const hasTrace = app.event.trace.length > 0
 
-	const findDynamicRoute = `
+	let findDynamicRoute = `
 	const route = router.find(request.method, path) ${
 		router.http.root.ALL ? '?? router.find("ALL", path)' : ''
 	}
+	
 	if (route === null)
 		return ${
 			app.event.error.length
@@ -1336,8 +1339,21 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 		}
 
 	ctx.params = route.params
+	`
 
-	return route.store(ctx)`
+	const shouldPrecompile =
+		app.config.precompile === true ||
+		(typeof app.config.precompile === 'object' &&
+			app.config.precompile.compose === true)
+
+	if (!shouldPrecompile)
+		findDynamicRoute += `
+			if(route.store.composed)
+				return route.store.composed(ctx)
+
+			if(route.store.compose)
+				return (route.store.compose())(ctx)`
+	else findDynamicRoute += `return route.store(ctx)`
 
 	let switchMap = ``
 	for (const [path, { code, all }] of Object.entries(router.static.http.map))
@@ -1429,7 +1445,8 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 			if (withReturn) {
 				fnLiteral += `re = mapEarlyResponse(
 					${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
-					ctx.set
+					ctx.set,
+					c.request
 				)\n`
 
 				endUnit()
@@ -1592,7 +1609,7 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 				}
 		
 				if(set.status === 200) set.status = error.status
-				return mapResponse(r, set)
+				return mapResponse(r, set, c.request, c.request)
 			}\n`
 		else fnLiteral += response + '\n'
 	}
@@ -1610,7 +1627,7 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 				{ headers: set.headers, status: error.status }
 			)
 
-		return mapResponse(error, set)
+		return mapResponse(error, set, c.request)
 	}
 }`
 

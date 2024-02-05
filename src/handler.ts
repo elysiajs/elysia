@@ -108,7 +108,8 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 
 export const mapResponse = (
 	response: unknown,
-	set: Context['set']
+	set: Context['set'],
+	request?: Request
 ): Response => {
 	// @ts-ignore
 	if (response?.[response.$passthrough])
@@ -169,6 +170,18 @@ export const mapResponse = (
 					set.headers['content-type'] =
 						'text/event-stream; charset=utf-8'
 
+				request?.signal.addEventListener(
+					'abort',
+					{
+						handleEvent() {
+							;(response as ReadableStream).cancel(request)
+						}
+					},
+					{
+						once: true
+					}
+				)
+
 				return new Response(
 					response as ReadableStream,
 					set as SetResponse
@@ -226,7 +239,9 @@ export const mapResponse = (
 					const inherits = { ...set.headers }
 
 					if (hasHeaderShorthand)
-						set.headers = ((response as Response).headers as Headers).toJSON()
+						set.headers = (
+							(response as Response).headers as Headers
+						).toJSON()
 					else
 						for (const [key, value] of (
 							response as Response
@@ -279,6 +294,18 @@ export const mapResponse = (
 				})
 
 			case 'ReadableStream':
+				request?.signal.addEventListener(
+					'abort',
+					{
+						handleEvent() {
+							;(response as ReadableStream).cancel(request)
+						}
+					},
+					{
+						once: true
+					}
+				)
+
 				return new Response(response as ReadableStream, {
 					headers: {
 						'Content-Type': 'text/event-stream; charset=utf-8'
@@ -353,7 +380,8 @@ export const mapResponse = (
 
 export const mapEarlyResponse = (
 	response: unknown,
-	set: Context['set']
+	set: Context['set'],
+	request?: Request
 ): Response | undefined => {
 	if (response === undefined || response === null) return
 
@@ -395,7 +423,7 @@ export const mapEarlyResponse = (
 			Array.isArray(set.headers['Set-Cookie'])
 		)
 			set.headers = parseSetCookies(
-				(new Headers(set.headers)) as Headers,
+				new Headers(set.headers) as Headers,
 				set.headers['Set-Cookie']
 			) as any
 
@@ -418,6 +446,18 @@ export const mapEarlyResponse = (
 				)
 					set.headers['content-type'] =
 						'text/event-stream; charset=utf-8'
+
+				request?.signal.addEventListener(
+					'abort',
+					{
+						handleEvent() {
+							;(response as ReadableStream).cancel(request)
+						}
+					},
+					{
+						once: true
+					}
+				)
 
 				return new Response(
 					response as ReadableStream,
@@ -480,7 +520,9 @@ export const mapEarlyResponse = (
 					const inherits = { ...set.headers }
 
 					if (hasHeaderShorthand)
-						set.headers = ((response as Response).headers as Headers).toJSON()
+						set.headers = (
+							(response as Response).headers as Headers
+						).toJSON()
 					else
 						for (const [key, value] of (
 							response as Response
@@ -532,6 +574,18 @@ export const mapEarlyResponse = (
 				})
 
 			case 'ReadableStream':
+				request?.signal.addEventListener(
+					'abort',
+					{
+						handleEvent() {
+							;(response as ReadableStream).cancel(request)
+						}
+					},
+					{
+						once: true
+					}
+				)
+
 				return new Response(response as ReadableStream, {
 					headers: {
 						'Content-Type': 'text/event-stream; charset=utf-8'
@@ -599,7 +653,10 @@ export const mapEarlyResponse = (
 		}
 }
 
-export const mapCompactResponse = (response: unknown): Response => {
+export const mapCompactResponse = (
+	response: unknown,
+	request?: Request
+): Response => {
 	if (
 		// @ts-ignore
 		response?.$passthrough
@@ -632,6 +689,18 @@ export const mapCompactResponse = (response: unknown): Response => {
 			})
 
 		case 'ReadableStream':
+			request?.signal.addEventListener(
+				'abort',
+				{
+					handleEvent() {
+						;(response as ReadableStream).cancel(request)
+					}
+				},
+				{
+					once: true
+				}
+			)
+
 			return new Response(response as ReadableStream, {
 				headers: {
 					'Content-Type': 'text/event-stream; charset=utf-8'

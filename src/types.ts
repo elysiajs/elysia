@@ -26,31 +26,33 @@ export type ElysiaConfig<Prefix extends string, Scoped extends boolean> = {
 	serve?: Partial<Serve>
 	/**
 	 * Warm up Elysia before starting the server
-	 * 
+	 *
 	 * This will perform Ahead of Time compilation and generate code for route handlers
-	 * 
+	 *
 	 * If set to false, Elysia will perform Just in Time compilation
-	 * 
+	 *
 	 * Only required for root instance (instance which use listen) to effect
-	 * 
+	 *
 	 * ! If performing a benchmark, it's recommended to set this to `true`
-	 * 
+	 *
 	 * @default false
 	 */
-	precompile?: boolean | {
-		/**
-		 * Perform dynamic code generation for route handlers before starting the server
-		 * 
-		 * @default false
-		 */
-		compose?: boolean
-		/**
-		 * Perform Ahead of Time compilation for schema before starting the server
-		 * 
-		 * @default false
-		 */
-		schema?: boolean
-	}
+	precompile?:
+		| boolean
+		| {
+				/**
+				 * Perform dynamic code generation for route handlers before starting the server
+				 *
+				 * @default false
+				 */
+				compose?: boolean
+				/**
+				 * Perform Ahead of Time compilation for schema before starting the server
+				 *
+				 * @default false
+				 */
+				schema?: boolean
+		  }
 	/**
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */
@@ -875,3 +877,65 @@ export type ComposeElysiaResponse<Response, Handle> = Prettify<
 			  }
 	>
 >
+
+export type MergeElysiaInstances<
+	Instances extends Elysia<any, any, any, any, any, any>[] = [],
+	Prefix extends string = '',
+	Scoped extends boolean = false,
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Definitions extends DefinitionBase = {
+		type: {}
+		error: {}
+	},
+	Metadata extends MetadataBase = {
+		schema: {}
+		macro: {}
+	},
+	Routes extends RouteBase = {}
+> = Instances extends [
+	infer Current extends Elysia<any, any, any, any, any, any>,
+	...infer Rest extends Elysia<any, any, any, any, any, any>[]
+]
+	? Current['_types']['Scoped'] extends true
+		? MergeElysiaInstances<
+				Rest,
+				Prefix,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes
+		  >
+		: MergeElysiaInstances<
+				Rest,
+				Prefix,
+				Scoped,
+				Singleton & Current['_types']['Singleton'],
+				Definitions & Current['_types']['Definitions'],
+				Metadata & Current['_types']['Metadata'],
+				Routes & Current['_routes']
+		  >
+	: Elysia<
+			Prefix,
+			Scoped,
+			{
+				decorator: Prettify<Singleton['decorator']>
+				store: Prettify<Singleton['store']>
+				derive: Prettify<Singleton['derive']>
+				resolve: Prettify<Singleton['resolve']>
+			},
+			{
+				type: Prettify<Definitions['type']>
+				error: Prettify<Definitions['error']>
+			},
+			{
+				schema: Prettify<Metadata['schema']>
+				macro: Prettify<Metadata['macro']>
+			},
+			Routes
+	  >

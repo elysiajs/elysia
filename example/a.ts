@@ -1,8 +1,10 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
-const app = new Elysia().get('', 'a').listen(3000)
+const a1 = new Elysia().state('a', 'a').get('a', 'a')
+const a2 = new Elysia().state('b', 'b').get('b', 'b')
 
-app.handle(req('/'))
-	.then((x) => x.text())
-	.then(console.log)
+const app = new Elysia()
+	.use([a1, a2])
+	.get('', ({ store: { a, b } }) => a + b)
+	.get('/id/:id', ({ params: { id } }) => id)
+	.listen(3000)

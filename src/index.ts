@@ -93,7 +93,8 @@ import type {
 	RouteBase,
 	MergeRouteSchema,
 	CreateEden,
-	ComposeElysiaResponse
+	ComposeElysiaResponse,
+	MergeElysiaInstances
 } from './types'
 
 /**
@@ -152,7 +153,7 @@ export default class Elysia<
 		resolve: {}
 	} as Singleton
 
-	definitions: {
+	protected definitions: {
 		type: Record<string, TSchema>
 		error: Record<string, Error>
 	} = {
@@ -329,12 +330,13 @@ export default class Elysia<
 			const cookieConfig = { ...this.config.cookie } ?? {}
 
 			const cloned = {
-				body: localHook?.body ?? this.validator?.body as any,
-				headers: localHook?.headers ?? this.validator?.headers as any,
-				params: localHook?.params ?? this.validator?.params as any,
-				query: localHook?.query ?? this.validator?.query as any,
-				cookie: localHook?.cookie ?? this.validator?.cookie as any,
-				response: localHook?.response ?? this.validator?.response as any
+				body: localHook?.body ?? (this.validator?.body as any),
+				headers: localHook?.headers ?? (this.validator?.headers as any),
+				params: localHook?.params ?? (this.validator?.params as any),
+				query: localHook?.query ?? (this.validator?.query as any),
+				cookie: localHook?.cookie ?? (this.validator?.cookie as any),
+				response:
+					localHook?.response ?? (this.validator?.response as any)
 			}
 
 			const getCookieValidator = () => {
@@ -521,11 +523,26 @@ export default class Elysia<
 				| ((context: Context<any, any, any>) => MaybePromise<Response>)
 				| undefined = undefined
 
-			const mainHandler =
+			const shouldPrecompile =
 				this.config.precompile === true ||
 				(typeof this.config.precompile === 'object' &&
 					this.config.precompile.compose === true)
-					? composeHandler({
+
+			const mainHandler = shouldPrecompile
+				? composeHandler({
+						app: this,
+						path,
+						method,
+						localHook: mergeHook({}, localHook),
+						hooks,
+						validator,
+						handler: handle,
+						allowMeta
+				  })
+				: (context: Context) => {
+						if (composed) return composed(context)
+
+						return (composed = composeHandler({
 							app: this,
 							path,
 							method,
@@ -534,21 +551,24 @@ export default class Elysia<
 							validator,
 							handler: handle,
 							allowMeta
-					  })
-					: (context: Context) => {
-							if (composed) return composed(context)
+						}) as any)(context)
+				  }
 
-							return (composed = composeHandler({
-								app: this,
-								path,
-								method,
-								localHook: mergeHook({}, localHook),
-								hooks,
-								validator,
-								handler: handle,
-								allowMeta
-							}) as any)(context)
-					  }
+			if (!shouldPrecompile)
+				// @ts-expect-error
+				mainHandler.compose = () => {
+					// @ts-expect-error
+					return (mainHandler.composed = composeHandler({
+						app: this,
+						path,
+						method,
+						localHook: mergeHook({}, localHook),
+						hooks,
+						validator,
+						handler: handle,
+						allowMeta
+					}) as any)
+				}
 
 			if (!isFn) {
 				const context = Object.assign(
@@ -632,7 +652,7 @@ export default class Elysia<
 					const index = staticRouter.handlers.length
 					staticRouter.handlers.push(mainHandler)
 
-					// @ts-ignore
+					// @ts-expect-error
 					if (mainHandler.response instanceof Response)
 						staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
 					else
@@ -648,6 +668,9 @@ export default class Elysia<
 				return
 			}
 
+			const jitRoute = (index: number) =>
+				`st${index}.compose ? (st${index} = st${index}?.compose())(ctx) : st${index}(ctx)`
+
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 				const index = staticRouter.handlers.length
 				staticRouter.handlers.push(mainHandler)
@@ -655,28 +678,46 @@ export default class Elysia<
 				// @ts-ignore
 				if (mainHandler.response instanceof Response)
 					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
-				else
-					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+				else {
+					if (shouldPrecompile)
+						staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+					else
+						staticRouter.variables += `let st${index} = staticRouter.handlers[${index}]\n`
+				}
 
 				if (!staticRouter.map[path])
 					staticRouter.map[path] = {
 						code: ''
 					}
 
-				if (method === 'ALL')
-					staticRouter.map[
-						path
-					].all = `default: return st${index}(ctx)\n`
-				else {
-					// @ts-ignore
+				if (method === 'ALL') {
+					if (shouldPrecompile)
+						staticRouter.map[
+							path
+						].all = `default: return st${index}(ctx)\n`
+					else {
+						staticRouter.map[
+							path
+						].all = `default: return ${jitRoute(index)}\n`
+					}
+				} else {
+					// @ts-expect-error
 					if (mainHandler.response instanceof Response)
 						staticRouter.map[
 							path
 						].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[path].code}`
-					else
-						staticRouter.map[
-							path
-						].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[path].code}`
+					else {
+						if (shouldPrecompile)
+							staticRouter.map[
+								path
+							].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[path].code}`
+						else
+							staticRouter.map[
+								path
+							].code = `case '${method}': return ${jitRoute(
+								index
+							)}\n${staticRouter.map[path].code}`
+					}
 				}
 
 				if (!this.config.strictPath) {
@@ -686,23 +727,37 @@ export default class Elysia<
 						}
 
 					if (method === 'ALL')
-						staticRouter.map[
-							loosePath
-						].all = `default: return st${index}(ctx)\n`
+						if (shouldPrecompile)
+							staticRouter.map[
+								loosePath
+							].all = `default: return st${index}(ctx)\n`
+						else
+							staticRouter.map[
+								loosePath
+							].all = `default: return ${jitRoute(index)}\n`
 					else {
 						// @ts-ignore
 						if (mainHandler.response instanceof Response)
 							staticRouter.map[
 								loosePath
 							].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[loosePath].code}`
-						else
-							staticRouter.map[
-								loosePath
-							].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[loosePath].code}`
+						else {
+							if (shouldPrecompile)
+								staticRouter.map[
+									loosePath
+								].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[loosePath].code}`
+							else
+								staticRouter.map[
+									loosePath
+								].code = `case '${method}': return ${jitRoute(
+									index
+								)}\n${staticRouter.map[loosePath].code}`
+						}
 					}
 				}
 			} else {
 				this.router.http.add(method, path, mainHandler)
+
 				if (!this.config.strictPath)
 					this.router.http.add(
 						method,
@@ -1924,6 +1979,42 @@ export default class Elysia<
 		  >
 
 	/**
+	 * Entire Instance where scoped is false
+	 **/
+	use<
+		const NewElysias extends Elysia<any, false, any, any, any>[],
+		const Scoped extends boolean = false
+	>(
+		instance: NewElysias,
+		options?: { scoped?: Scoped }
+	): Scoped extends true
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				MergeElysiaInstances<
+					NewElysias,
+					BasePath,
+					Scoped,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes
+				>['_routes']
+		  >
+		: MergeElysiaInstances<
+				NewElysias,
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes
+		  >
+
+	/**
 	 * Import fn
 	 */
 	use<
@@ -2076,6 +2167,7 @@ export default class Elysia<
 	use(
 		plugin:
 			| Elysia<any, any, any, any, any>
+			| Elysia<any, any, any, any, any>[]
 			| MaybePromise<
 					(
 						app: Elysia<any, any, any, any, any>
@@ -2093,6 +2185,15 @@ export default class Elysia<
 	): Elysia<any, any, any, any, any> {
 		if (options?.scoped)
 			return this.guard({}, (app) => app.use(plugin as any))
+
+		if (Array.isArray(plugin)) {
+			// eslint-disable-next-line @typescript-eslint/no-this-alias
+			let current = this
+
+			for (const p of plugin) current = this.use(p) as any
+
+			return current
+		}
 
 		if (plugin instanceof Promise) {
 			this.lazyLoadModules.push(
