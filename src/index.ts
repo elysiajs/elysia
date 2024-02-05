@@ -1891,7 +1891,7 @@ export default class Elysia<
 	/**
 	 * Entire Instance where scoped is true
 	 **/
-	use<const NewElysia extends Elysia<any, true, any, any, any>>(
+	use<const NewElysia extends Elysia<any, true, any, any, any, any>>(
 		instance: MaybePromise<NewElysia>,
 		scoped?: { scoped?: boolean }
 	): Elysia<
@@ -1912,7 +1912,7 @@ export default class Elysia<
 	 * Entire Instance where scoped is false
 	 **/
 	use<
-		const NewElysia extends Elysia<any, false, any, any, any>,
+		const NewElysia extends Elysia<any, false, any, any, any, any>,
 		const Scoped extends boolean = false
 	>(
 		instance: MaybePromise<NewElysia>,
@@ -1981,7 +1981,7 @@ export default class Elysia<
 	 * Entire Instance where scoped is false
 	 **/
 	use<
-		const NewElysias extends Elysia<any, false, any, any, any>[],
+		const NewElysias extends Elysia<any, false, any, any, any, any>[],
 		const Scoped extends boolean = false
 	>(
 		instance: NewElysias,

@@ -191,10 +191,10 @@ export type UnwrapSchema<
 		: Definitions
 	: unknown
 
-export type UnwrapRoute<
-	Schema extends InputSchema<any>,
-	Definitions extends DefinitionBase['type'] = {}
-> = {
+export interface UnwrapRoute<
+	in out Schema extends InputSchema<any>,
+	in out Definitions extends DefinitionBase['type'] = {}
+> {
 	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<Schema['headers'], Definitions>
 	query: UnwrapSchema<Schema['query'], Definitions>
@@ -346,7 +346,10 @@ export interface InputSchema<Name extends string = string> {
 		| Record<number, Name | TSchema>
 }
 
-export type MergeSchema<A extends RouteSchema, B extends RouteSchema> = Prettify<{
+export type MergeSchema<
+	A extends RouteSchema,
+	B extends RouteSchema
+> = Prettify<{
 	body: undefined extends A['body'] ? B['body'] : A['body']
 	headers: undefined extends A['headers'] ? B['headers'] : A['headers']
 	query: undefined extends A['query'] ? B['query'] : A['query']
@@ -545,8 +548,9 @@ export type PreHandler<
 	}
 > = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
 
-export type GracefulHandler<Instance extends Elysia<any, any, any, any, any, any>> =
-	(data: Instance) => any
+export type GracefulHandler<
+	Instance extends Elysia<any, any, any, any, any, any>
+> = (data: Instance) => any
 
 export type ErrorHandler<
 	T extends Record<string, Error> = {},
