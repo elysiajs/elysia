@@ -1355,6 +1355,8 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 				return (route.store.compose())(ctx)`
 	else findDynamicRoute += `return route.store(ctx)`
 
+	findDynamicRoute += '\n'
+
 	let switchMap = ``
 	for (const [path, { code, all }] of Object.entries(router.static.http.map))
 		switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
@@ -1446,7 +1448,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any>) => {
 				fnLiteral += `re = mapEarlyResponse(
 					${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
 					ctx.set,
-					c.request
+					request
 				)\n`
 
 				endUnit()
@@ -1609,7 +1611,7 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 				}
 		
 				if(set.status === 200) set.status = error.status
-				return mapResponse(r, set, c.request, c.request)
+				return mapResponse(r, set, context.request)
 			}\n`
 		else fnLiteral += response + '\n'
 	}
@@ -1627,7 +1629,7 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any>) => {
 				{ headers: set.headers, status: error.status }
 			)
 
-		return mapResponse(error, set, c.request)
+		return mapResponse(error, set, context.request)
 	}
 }`
 
