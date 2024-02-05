@@ -1,11 +1,9 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { post, req } from '../test/utils'
 
-const app = new Elysia()
-	// .onError(() => 'handled')
-	.onRequest(() => {
-		throw new Error('error')
-	})
-	.get('/', 'Static Content')
+const a = new Elysia().get('a', 'a')
+const b = new Elysia().get('b', 'b')
 
-const response = await app.handle(req('/')).then((x) => x.text())
+const app = new Elysia().use(a)
+
+app._routes

@@ -21,7 +21,7 @@ export type DynamicHandler = {
 }
 
 export const createDynamicHandler =
-	(app: Elysia<any, any, any, any, any>) =>
+	(app: Elysia<any, any, any, any, any, any>) =>
 	async (request: Request): Promise<Response> => {
 		const set: Context['set'] = {
 			cookie: {},
@@ -372,7 +372,7 @@ export const createDynamicHandler =
 	}
 
 export const createDynamicErrorHandler =
-	(app: Elysia<any, any, any, any, any>) =>
+	(app: Elysia<any, any, any, any, any, any>) =>
 	async (context: Context, error: ElysiaErrors) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set

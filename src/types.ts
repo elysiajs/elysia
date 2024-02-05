@@ -160,7 +160,9 @@ export interface DefinitionBase {
 	}
 }
 
-export type RouteBase = Record<string, unknown>
+export interface RouteBase {
+	[x: string]: unknown
+}
 
 export interface MetadataBase {
 	schema: RouteSchema
@@ -344,14 +346,14 @@ export interface InputSchema<Name extends string = string> {
 		| Record<number, Name | TSchema>
 }
 
-export type MergeSchema<A extends RouteSchema, B extends RouteSchema> = {
+export type MergeSchema<A extends RouteSchema, B extends RouteSchema> = Prettify<{
 	body: undefined extends A['body'] ? B['body'] : A['body']
 	headers: undefined extends A['headers'] ? B['headers'] : A['headers']
 	query: undefined extends A['query'] ? B['query'] : A['query']
 	params: undefined extends A['params'] ? B['params'] : A['params']
 	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
 	response: undefined extends A['response'] ? B['response'] : A['response']
-}
+}>
 
 export type Handler<
 	Route extends RouteSchema = {},
@@ -363,7 +365,7 @@ export type Handler<
 	},
 	Path extends string = ''
 > = (
-	context: Prettify<Context<Route, Singleton, Path>>
+	context: Context<Route, Singleton, Path>
 ) => Route['response'] extends { 200: unknown }
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
@@ -425,7 +427,7 @@ export type VoidHandler<
 		derive: {}
 		resolve: {}
 	}
-> = (context: Prettify<Context<Route, Singleton>>) => MaybePromise<void>
+> = (context: Context<Route, Singleton>) => MaybePromise<void>
 
 export type TransformHandler<
 	Route extends RouteSchema = {},
@@ -529,7 +531,7 @@ export type BodyHandler<
 		resolve: {}
 	}
 > = (
-	context: Prettify<Context<Route, Singleton>>,
+	context: Context<Route, Singleton>,
 	contentType: string
 ) => MaybePromise<any>
 
@@ -541,11 +543,9 @@ export type PreHandler<
 		derive: {}
 		resolve: {}
 	}
-> = (
-	context: Prettify<PreContext<Singleton>>
-) => MaybePromise<Route['response'] | void>
+> = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
 
-export type GracefulHandler<Instance extends Elysia<any, any, any, any, any>> =
+export type GracefulHandler<Instance extends Elysia<any, any, any, any, any, any>> =
 	(data: Instance) => any
 
 export type ErrorHandler<
@@ -615,23 +615,7 @@ export type Isolate<T> = {
 
 type LocalHookDetail = Partial<OpenAPIV3.OperationObject>
 
-export type MergeRouteSchema<
-	A extends RouteSchema,
-	B extends RouteSchema,
-	Path extends string
-> = Prettify<
-	MergeSchema<A, B> extends infer Schema
-		? Schema extends {
-				params: Record<string, unknown>
-		  }
-			? Schema
-			: Omit<Schema, 'params'> & {
-					params: Path extends `${string}/${':' | '*'}${string}`
-						? Record<GetPathParameter<Path>, string>
-						: never
-			  }
-		: never
->
+export type NoInfer<T> = [T][T extends any ? 0 : never]
 
 export type LocalHook<
 	LocalSchema extends InputSchema,
@@ -640,25 +624,18 @@ export type LocalHook<
 	Errors extends Record<string, Error>,
 	Extension extends BaseMacro,
 	Path extends string,
-	TypedRoute extends Schema extends {
-		params: Record<string, unknown>
-	}
-		? Schema
-		: Schema & {
-				params: Record<
-					GetPathParameter<Path extends string ? Path : ''>,
-					string
-				>
-		  } = Schema extends {
-		params: Record<string, unknown>
-	}
-		? Schema
-		: Schema & {
-				params: Record<
-					GetPathParameter<Path extends string ? Path : ''>,
-					string
-				>
-		  }
+	TypedRoute extends RouteSchema = NoInfer<
+		Schema extends {
+			params: Record<string, unknown>
+		}
+			? Schema
+			: Schema & {
+					params: Record<
+						GetPathParameter<Path extends string ? Path : ''>,
+						string
+					>
+			  }
+	>
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**
@@ -835,7 +812,7 @@ export interface MacroManager<
 
 type _CreateEden<
 	Path extends string,
-	Property extends Object = {}
+	Property extends Record<string, unknown> = {}
 > = Path extends `${infer Start}/${infer Rest}`
 	? {
 			[x in Start]: CreateEden<Rest, Property>
@@ -846,7 +823,7 @@ type _CreateEden<
 
 export type CreateEden<
 	Path extends string,
-	Property extends Object = {}
+	Property extends Record<string, unknown> = {}
 > = Path extends `/${infer Rest}`
 	? _CreateEden<Rest, Property>
 	: _CreateEden<Path, Property>
