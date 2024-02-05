@@ -13,8 +13,8 @@ import type {
 } from './types'
 
 export type Context<
-	Route extends RouteSchema = RouteSchema,
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}

@@ -1927,7 +1927,7 @@ export default class Elysia<
 					schema: Metadata['schema']
 					macro: Metadata['macro']
 				},
-				Prettify<Routes & NewElysia['_routes']>
+				Routes & NewElysia['_routes']
 		  >
 		: Elysia<
 				BasePath,

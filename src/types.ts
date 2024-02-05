@@ -18,12 +18,14 @@ import type {
 	ValidationError
 } from './error'
 
+type PartialServe = Partial<Serve>
+
 export type ElysiaConfig<Prefix extends string, Scoped extends boolean> = {
 	prefix?: Prefix
 	scoped?: Scoped
 	name?: string
 	seed?: unknown
-	serve?: Partial<Serve>
+	serve?: PartialServe
 	/**
 	 * Warm up Elysia before starting the server
 	 *
@@ -95,17 +97,6 @@ export type MaybePromise<T> = T | Promise<T>
 
 export type ObjectValues<T extends object> = T[keyof T]
 
-/**
- * @link https://stackoverflow.com/a/49928360/1490091
- */
-// export type IsAny<T> = 0 extends 1 & T ? true : false
-// export type IsNever<T> = [T] extends [never] ? true : false
-// export type IsUnknown<T> = IsAny<T> extends true
-// 	? false
-// 	: unknown extends T
-// 	? true
-// 	: false
-
 type IsPathParameter<Part extends string> = Part extends `:${infer Parameter}`
 	? Parameter
 	: Part extends `*`
@@ -137,32 +128,18 @@ export type Reconcile<A extends Object, B extends Object> = {
 	: never
 
 export interface SingletonBase {
-	decorator: {
-		[x: string]: unknown
-	}
-	store: {
-		[x: string]: unknown
-	}
-	derive: {
-		[x: string]: unknown
-	}
-	resolve: {
-		[x: string]: unknown
-	}
+	decorator: Record<string, unknown>
+	store: Record<string, unknown>
+	derive: Record<string, unknown>
+	resolve: Record<string, unknown>
 }
 
 export interface DefinitionBase {
-	type: {
-		[x: string]: unknown
-	}
-	error: {
-		[x: string]: Error
-	}
+	type: Record<string, unknown>
+	error: Record<string, Error>
 }
 
-export interface RouteBase {
-	[x: string]: unknown
-}
+export type RouteBase = Record<string, unknown>
 
 export interface MetadataBase {
 	schema: RouteSchema
@@ -180,8 +157,8 @@ export interface RouteSchema {
 
 export type UnwrapSchema<
 	Schema extends TSchema | string | undefined,
-	Definitions extends DefinitionBase['type'] = {}
-> = Schema extends undefined
+	Definitions extends Record<string, unknown> = {}
+> = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
 	? Static<NonNullable<Schema>>
@@ -214,11 +191,11 @@ export interface UnwrapRoute<
 		: unknown | void
 }
 
-export type UnwrapGroupGuardRoute<
-	Schema extends InputSchema<any>,
-	Definitions extends DefinitionBase['type'] = {},
+export interface UnwrapGroupGuardRoute<
+	in out Schema extends InputSchema<any>,
+	in out Definitions extends Record<string, unknown> = {},
 	Path extends string = ''
-> = {
+> {
 	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
 		Schema['headers'],
@@ -346,17 +323,17 @@ export interface InputSchema<Name extends string = string> {
 		| Record<number, Name | TSchema>
 }
 
-export type MergeSchema<
-	A extends RouteSchema,
-	B extends RouteSchema
-> = Prettify<{
+export interface MergeSchema<
+	in out A extends RouteSchema,
+	in out B extends RouteSchema
+> {
 	body: undefined extends A['body'] ? B['body'] : A['body']
 	headers: undefined extends A['headers'] ? B['headers'] : A['headers']
 	query: undefined extends A['query'] ? B['query'] : A['query']
 	params: undefined extends A['params'] ? B['params'] : A['params']
 	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
 	response: undefined extends A['response'] ? B['response'] : A['response']
-}>
+}
 
 export type Handler<
 	Route extends RouteSchema = {},
@@ -748,7 +725,7 @@ export type BaseMacro = Record<
 	Record<string, unknown> | ((...a: any) => unknown)
 >
 
-export type MacroToProperty<T extends BaseMacro> = Prettify<{
+export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
 			? Params | undefined
@@ -759,14 +736,14 @@ export type MacroToProperty<T extends BaseMacro> = Prettify<{
 }>
 
 export interface MacroManager<
-	TypedRoute extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out TypedRoute extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	},
-	Errors extends Record<string, Error> = {}
+	in out Errors extends Record<string, Error> = {}
 > {
 	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
 	onParse(
@@ -819,7 +796,7 @@ type _CreateEden<
 	Property extends Record<string, unknown> = {}
 > = Path extends `${infer Start}/${infer Rest}`
 	? {
-			[x in Start]: CreateEden<Rest, Property>
+			[x in Start]: _CreateEden<Rest, Property>
 	  }
 	: {
 			[x in Path]: Property
@@ -899,7 +876,10 @@ export type MergeElysiaInstances<
 				Singleton & Current['_types']['Singleton'],
 				Definitions & Current['_types']['Definitions'],
 				Metadata & Current['_types']['Metadata'],
-				Routes & Current['_routes']
+				Routes &
+					(Prefix extends ``
+						? Current['_routes']
+						: AddPrefix<Prefix, Current['_routes']>)
 		  >
 	: Elysia<
 			Prefix,
