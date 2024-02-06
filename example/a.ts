@@ -1,10 +1,16 @@
 import { Elysia, error, t } from '../src'
 import { post, req } from '../test/utils'
 
-const app = new Elysia().get('/', () => {
-    if(Math.random() > 0.5) return error(418, 'a')
+const app = new Elysia({ precompile: true }).get(
+	'/id/:id',
+	({ set, params: { id }, query: { name } }) => {
+		set.headers['x-powered-by'] = 'Elysia'
 
-    return false
-})
+		return id + ' ' + name
+	}
+)
 
-app._routes[''].get.response
+app.compile()
+
+console.log(app.fetch.toString())
+// console.log(app.router.history[0].composed?.toString())

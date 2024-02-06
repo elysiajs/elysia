@@ -3,6 +3,7 @@
 .github
 .prettierrc
 .eslintrc.js
+.eslint.json
 .swc.cjs.swcrc
 .swc.esm.swcrc
 .swcrc
