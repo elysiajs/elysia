@@ -2239,6 +2239,58 @@ export default class Elysia<
 					macroHashes.push(macro.$elysiaChecksum)
 				}
 			}
+
+			this.inference = {
+				event: {
+					body:
+						this.inference.event.body ||
+						plugin.inference.event.body,
+					cookie:
+						this.inference.event.cookie ||
+						plugin.inference.event.cookie,
+					headers:
+						this.inference.event.headers ||
+						plugin.inference.event.headers,
+					queries: [
+						...this.inference.event.queries,
+						...plugin.inference.event.queries
+					],
+					query:
+						this.inference.event.query ||
+						plugin.inference.event.query,
+					set: this.inference.event.set || plugin.inference.event.set
+				},
+				trace: {
+					request:
+						this.inference.trace.request ||
+						plugin.inference.trace.request,
+					parse:
+						this.inference.trace.parse ||
+						plugin.inference.trace.parse,
+					transform:
+						this.inference.trace.transform ||
+						plugin.inference.trace.transform,
+					handle:
+						this.inference.trace.handle ||
+						plugin.inference.trace.handle,
+					beforeHandle:
+						this.inference.trace.beforeHandle ||
+						plugin.inference.trace.beforeHandle,
+					afterHandle:
+						this.inference.trace.afterHandle ||
+						plugin.inference.trace.afterHandle,
+					error:
+						this.inference.trace.error ||
+						plugin.inference.trace.error,
+					context:
+						this.inference.trace.context ||
+						plugin.inference.trace.context,
+					store:
+						this.inference.trace.store ||
+						plugin.inference.trace.store,
+					set: this.inference.trace.set || plugin.inference.trace.set
+				}
+			}
 		}
 
 		this.decorate(plugin.singleton.decorator)

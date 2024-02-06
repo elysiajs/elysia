@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { separateFunction } from '../../src/sucrose'
 
-describe('Analyzer: separateFunction', () => {
+describe('Sucrose: separateFunction', () => {
 	it('separate arrowParam', () => {
 		const arrowParam = ({ sucrose, amber }: any) => {
 			return 'sucrose'
