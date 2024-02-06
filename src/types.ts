@@ -113,6 +113,10 @@ export type Prettify<T> = {
 	[K in keyof T]: T[K]
 } & {}
 
+export type Prettify2<T> = {
+	[K in keyof T]: Prettify<T[K]>
+} & {}
+
 export type Reconcile<A extends Object, B extends Object> = {
 	[key in keyof A as key extends keyof B ? never : key]: A[key]
 } extends infer Collision
@@ -228,7 +232,7 @@ export interface UnwrapGroupGuardRoute<
 		: Schema['response'] extends {
 				[k in string]: TSchema | string
 		  }
-		? UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
+		? UnwrapSchema<Schema['response'][keyof Schema['response']], Definitions>
 		: unknown | void
 }
 
@@ -336,8 +340,8 @@ export interface MergeSchema<
 }
 
 export type Handler<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -351,8 +355,8 @@ export type Handler<
 	: Response | MaybePromise<Route['response']>
 
 export type OptionalHandler<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -363,8 +367,8 @@ export type OptionalHandler<
 	: never
 
 export type AfterHandler<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -381,8 +385,8 @@ export type AfterHandler<
 	: never
 
 export type MapResponse<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -400,8 +404,8 @@ export type MapResponse<
 >
 
 export type VoidHandler<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -410,8 +414,8 @@ export type VoidHandler<
 > = (context: Context<Route, Singleton>) => MaybePromise<void>
 
 export type TransformHandler<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -468,8 +472,8 @@ export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
 		: number
 
 export type TraceHandler<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -503,8 +507,8 @@ export type TraceListener = EventEmitter<{
 }>
 
 export type BodyHandler<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -516,8 +520,8 @@ export type BodyHandler<
 ) => MaybePromise<any>
 
 export type PreHandler<
-	Route extends RouteSchema = {},
-	Singleton extends SingletonBase = {
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
@@ -526,7 +530,7 @@ export type PreHandler<
 > = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
 
 export type GracefulHandler<
-	Instance extends Elysia<any, any, any, any, any, any>
+	in Instance extends Elysia<any, any, any, any, any, any>
 > = (data: Instance) => any
 
 export type ErrorHandler<
@@ -604,7 +608,7 @@ export type LocalHook<
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
 	Extension extends BaseMacro,
-	Path extends string,
+	Path extends string = '',
 	TypedRoute extends RouteSchema = NoInfer<
 		Schema extends {
 			params: Record<string, unknown>

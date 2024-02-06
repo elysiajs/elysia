@@ -73,6 +73,7 @@ import type {
 	LifeCycleStore,
 	MaybePromise,
 	Prettify,
+	Prettify2,
 	ListenCallback,
 	AddPrefix,
 	AddSuffix,
@@ -137,13 +138,13 @@ export default class Elysia<
 
 	_routes: Routes = {} as any
 
-	_types: {
-		Prefix: BasePath
-		Scoped: Scoped
-		Singleton: Singleton
-		Definitions: Definitions
-		Metadata: Metadata
-	} = {} as any
+	_types = {
+		Prefix: '' as BasePath,
+		Scoped: false as Scoped,
+		Singleton: {} as Singleton,
+		Definitions: {} as Definitions,
+		Metadata: {} as Metadata
+	}
 
 	protected singleton = {
 		decorator: {},
@@ -1932,46 +1933,10 @@ export default class Elysia<
 		: Elysia<
 				BasePath,
 				Scoped,
-				{
-					decorator: Prettify<
-						Singleton['decorator'] &
-							NewElysia['_types']['Singleton']['decorator']
-					>
-					store: Prettify<
-						Singleton['store'] &
-							NewElysia['_types']['Singleton']['store']
-					>
-					derive: Prettify<
-						Singleton['derive'] &
-							NewElysia['_types']['Singleton']['derive']
-					>
-					resolve: Prettify<
-						Singleton['resolve'] &
-							NewElysia['_types']['Singleton']['resolve']
-					>
-				},
-				{
-					type: Prettify<
-						Definitions['type'] &
-							NewElysia['_types']['Definitions']['type']
-					>
-					error: Prettify<
-						Definitions['error'] &
-							NewElysia['_types']['Definitions']['error']
-					>
-				},
-				{
-					schema: Prettify<
-						MergeSchema<
-							Metadata['schema'],
-							NewElysia['_types']['Metadata']['schema']
-						>
-					>
-					macro: Prettify<
-						Metadata['macro'] &
-							NewElysia['_types']['Metadata']['macro']
-					>
-				},
+				// @ts-expect-error
+				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
 					: Routes & AddPrefix<BasePath, NewElysia['_routes']>
@@ -2788,10 +2753,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -2854,10 +2816,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -4593,7 +4552,7 @@ export default class Elysia<
 	 *         }
 	 *     }))
 	 */
-	derive<Derivative extends Object>(
+	derive<const Derivative extends Record<string, unknown>>(
 		transform: (
 			context: Prettify<Context<Metadata['schema'], Singleton>>
 		) => MaybePromise<Derivative> extends { store: any }
@@ -4617,7 +4576,7 @@ export default class Elysia<
 		return this.onTransform(transform as any) as any
 	}
 
-	model<Name extends string, Model extends TSchema>(
+	model<const Name extends string, const Model extends TSchema>(
 		name: Name,
 		model: Model
 	): Elysia<
@@ -4633,7 +4592,7 @@ export default class Elysia<
 		Metadata
 	>
 
-	model<Recorder extends Record<string, TSchema>>(
+	model<const Recorder extends Record<string, TSchema>>(
 		record: Recorder
 	): Elysia<
 		BasePath,

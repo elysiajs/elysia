@@ -68,7 +68,7 @@ export type Context<
 
 // Use to mimic request before mapping route
 export type PreContext<
-	Singleton extends SingletonBase = {
+	in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
