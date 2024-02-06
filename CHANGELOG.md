@@ -1,3 +1,13 @@
+# 0.8.16 - 6 Feb 2024
+Feature:
+- [#448](https://github.com/elysiajs/elysia/pull/448) BooleanString - @bogeychan
+
+Bug fix:
+- [#451](https://github.com/elysiajs/elysia/pull/464) handle spread operator use on possible null or undefined
+- [#460](https://github.com/elysiajs/elysia/pull/460) 
+    - [#457](https://github.com/elysiajs/elysia/pull/457) scoped plugin instances now respect the prefix property
+    - [#458](https://github.com/elysiajs/elysia/pull/458) adding a second scoped plugin does not unmount the route handler of a previously added scoped instance anymore.
+
 # 0.8.15 - 30 Jan 2024
 Bug fix:
 - [#451](https://github.com/elysiajs/elysia/issues/451) macro does not run when it should (macro deduplication)

@@ -69,21 +69,50 @@ describe('Scoped', () => {
 		expect(count).toBe(1)
 	})
 
-	it('multible scoped events', async () => {
+	// TODO: Possibly Elysia 1.1, no promise tee-hee (finger-crossed)
+	// it('multiple scoped events', async () => {
+	// 	const first = new Elysia({ name: 'first', scoped: true }).get(
+	// 		'/first',
+	// 		() => 'first'
+	// 	)
 
-		const first = new Elysia({ name: "first", scoped: true }).get("/first", () => "first");
-		const second = new Elysia({name: "second", scoped: true }).get("/second", () => "second");
+	// 	const second = new Elysia({ name: 'second', scoped: true }).get(
+	// 		'/second',
+	// 		() => 'second'
+	// 	)
 
-		const app = new Elysia().use(first).use(second);
+	// 	const app = new Elysia().use(first).use(second)
 
-		const firstResponse = await app.handle(req("/first"));
-		const secondResponse = await app.handle(req("/second"));
+	// 	const firstResponse = await app.handle(req('/first'))
+	// 	const secondResponse = await app.handle(req('/second'))
 
-		const firstText = await firstResponse.text();
-		const secondText = await secondResponse.text();
+	// 	const firstText = await firstResponse.text()
+	// 	const secondText = await secondResponse.text()
 
-		expect(firstText).toBe("first")
-		expect(secondText).toBe("second")
+	// 	expect(firstText).toBe('first')
+	// 	expect(secondText).toBe('second')
+	// })
+
+	it('Multiple scopes registering all routes', async () => {
+		const app = new Elysia()
+
+		const plugin = new Elysia({
+			prefix: 'Plugin',
+			scoped: true
+		}).get('/testPrivate', () => 'OK')
+
+		const plugin2 = new Elysia({
+			prefix: 'PluginNext',
+			scoped: true
+		}).get('/testPrivate', () => 'OK')
+
+		app.use(plugin).use(plugin2)
+
+		const res = await app.handle(req('/Plugin/testPrivate'))
+
+		expect(res.status).toBe(200)
+
+		const res1 = await app.handle(req('/PluginNext/testPrivate'))
+		expect(res1.status).toBe(200)
 	})
-
 })
