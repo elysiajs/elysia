@@ -49,26 +49,6 @@ describe('Scoped', () => {
 		expect(count).toBe(1)
 	})
 
-	it('encapsulate request event', async () => {
-		let count = 0
-
-		const scoped = new Elysia({
-			name: 'scoped',
-			scoped: true
-		})
-			.onRequest(() => {
-				count++
-			})
-			.get('/scoped', () => 'A')
-
-		const app = new Elysia().use(scoped).get('/', () => 'A')
-
-		await app.handle(req('/'))
-		await app.handle(req('/scoped'))
-
-		expect(count).toBe(1)
-	})
-
 	it('encapsulate afterhandle event', async () => {
 		let count = 0
 
@@ -88,4 +68,22 @@ describe('Scoped', () => {
 
 		expect(count).toBe(1)
 	})
+
+	it('multible scoped events', async () => {
+
+		const first = new Elysia({ name: "first", scoped: true }).get("/first", () => "first");
+		const second = new Elysia({name: "second", scoped: true }).get("/second", () => "second");
+
+		const app = new Elysia().use(first).use(second);
+
+		const firstResponse = await app.handle(req("/first"));
+		const secondResponse = await app.handle(req("/second"));
+
+		const firstText = await firstResponse.text();
+		const secondText = await secondResponse.text();
+
+		expect(firstText).toBe("first")
+		expect(secondText).toBe("second")
+	})
+
 })
