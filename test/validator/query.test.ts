@@ -143,4 +143,28 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 		expect(await res.json<any>()).toEqual({})
 	})
+
+	it('parse boolean string', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				param1: t.BooleanString()
+			})
+		})
+		const res = await app.handle(req('/?param1=true'))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ param1: true })
+	})
+
+	it('parse optional boolean string', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				param1: t.Optional(t.BooleanString({ default: true }))
+			})
+		})
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ param1: true })
+	})
 })
