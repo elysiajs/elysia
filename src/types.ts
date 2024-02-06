@@ -232,7 +232,10 @@ export interface UnwrapGroupGuardRoute<
 		: Schema['response'] extends {
 				[k in string]: TSchema | string
 		  }
-		? UnwrapSchema<Schema['response'][keyof Schema['response']], Definitions>
+		? UnwrapSchema<
+				Schema['response'][keyof Schema['response']],
+				Definitions
+		  >
 		: unknown | void
 }
 
@@ -813,31 +816,20 @@ export type CreateEden<
 	? _CreateEden<Rest, Property>
 	: _CreateEden<Path, Property>
 
-export type UnionToIntersection<U> = (
-	U extends any ? (x: U) => void : never
-) extends (x: infer I) => void
-	? I
-	: never
-
 export type ComposeElysiaResponse<Response, Handle> = Prettify<
-	UnionToIntersection<
-		unknown extends Response
-			? Handle extends {
-					[ELYSIA_RESPONSE]: number
-					response: unknown
-			  }
-				? {
-						[status in Handle[ELYSIA_RESPONSE]]: Handle['response']
-				  }
-				: {
-						200: Handle
-				  }
-			: Response extends { 200: unknown }
-			? Response
-			: {
-					200: Response
-			  }
-	>
+	unknown extends Response
+		? {
+				200: Exclude<Handle, { [ELYSIA_RESPONSE]: any }>
+		  } & (Extract<Handle, { [ELYSIA_RESPONSE]: any }> extends {
+				_type: infer A
+		  }
+				? A
+				: {})
+		: Response extends { 200: unknown }
+		? Response
+		: {
+				200: Response
+		  }
 >
 
 export type MergeElysiaInstances<

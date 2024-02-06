@@ -9,8 +9,8 @@ const env =
 	typeof Bun !== 'undefined'
 		? Bun.env
 		: typeof process !== 'undefined'
-		  ? process?.env
-		  : undefined
+		? process?.env
+		: undefined
 
 export const ERROR_CODE = Symbol('ElysiaErrorCode')
 export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
@@ -25,7 +25,6 @@ export type ElysiaErrors =
 	| ValidationError
 	| InvalidCookieSignature
 
-
 export const error = <
 	const Code extends number | keyof typeof StatusMap,
 	const T
@@ -37,12 +36,18 @@ export const error = <
 		? (typeof StatusMap)[Code]
 		: Code
 	response: T
+	_type: {
+		[ERROR_CODE in Code extends keyof typeof StatusMap
+			? (typeof StatusMap)[Code]
+			: Code]: T
+	}
 } =>
 	({
-		// @ts-ignore
+		// @ts-expect-error
 		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
-		response
-	}) as const
+		response,
+		_type: undefined as any
+	} as const)
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -75,10 +80,7 @@ export class InvalidCookieSignature extends Error {
 	code = 'INVALID_COOKIE_SIGNATURE'
 	status = 400
 
-	constructor(
-		public key: string,
-		message?: string
-	) {
+	constructor(public key: string, message?: string) {
 		super(message ?? `"${key}" has invalid cookie signature`)
 	}
 }

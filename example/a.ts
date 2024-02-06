@@ -1,10 +1,10 @@
-import { Elysia, t } from '../src'
+import { Elysia, error, t } from '../src'
 import { post, req } from '../test/utils'
 
-const a = new Elysia().get('a', 'a')
-const b = new Elysia().get('b', 'b')
+const app = new Elysia().get('/', () => {
+    if(Math.random() > 0.5) return error(418, 'a')
 
+    return false
+})
 
-const app = new Elysia().guard({})
-
-app._routes
+app._routes[''].get.response
