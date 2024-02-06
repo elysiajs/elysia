@@ -94,7 +94,8 @@ import type {
 	RouteBase,
 	CreateEden,
 	ComposeElysiaResponse,
-	MergeElysiaInstances
+	MergeElysiaInstances,
+	NoInfer
 } from './types'
 
 /**
@@ -112,23 +113,23 @@ import type {
  * ```
  */
 export default class Elysia<
-	in out const BasePath extends string = '',
-	in out const Scoped extends boolean = false,
-	in out const Singleton extends SingletonBase = {
+	const in out BasePath extends string = '',
+	const in out Scoped extends boolean = false,
+	const in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	},
-	in out const Definitions extends DefinitionBase = {
+	const in out Definitions extends DefinitionBase = {
 		type: {}
 		error: {}
 	},
-	in out const Metadata extends MetadataBase = {
+	const in out Metadata extends MetadataBase = {
 		schema: {}
 		macro: {}
 	},
-	out const Routes extends RouteBase = {}
+	const out Routes extends RouteBase = {}
 > {
 	config: ElysiaConfig<BasePath, Scoped>
 
@@ -700,9 +701,9 @@ export default class Elysia<
 							path
 						].all = `default: return st${index}(ctx)\n`
 					else {
-						staticRouter.map[
-							path
-						].all = `default: ${jitRoute(index)}\n`
+						staticRouter.map[path].all = `default: ${jitRoute(
+							index
+						)}\n`
 					}
 				} else {
 					// @ts-expect-error
@@ -718,9 +719,9 @@ export default class Elysia<
 						else
 							staticRouter.map[
 								path
-							].code = `case '${method}': ${jitRoute(
-								index
-							)}\n${staticRouter.map[path].code}`
+							].code = `case '${method}': ${jitRoute(index)}\n${
+								staticRouter.map[path].code
+							}`
 					}
 				}
 
@@ -1384,7 +1385,6 @@ export default class Elysia<
 				{
 					schema: Metadata['schema']
 					macro: Metadata['macro']
-					routes: {}
 				}
 			>
 		) => NewElysia
@@ -1426,7 +1426,6 @@ export default class Elysia<
 				{
 					schema: Schema
 					macro: Metadata['macro']
-					routes: {}
 				}
 			>
 		) => NewElysia
@@ -1589,7 +1588,6 @@ export default class Elysia<
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
-					routes: {}
 				}
 			>
 		) => NewElysia
@@ -1632,7 +1630,6 @@ export default class Elysia<
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
-					routes: {}
 				}
 			>
 		) => NewElysia
@@ -1769,56 +1766,17 @@ export default class Elysia<
 				Scoped,
 				Singleton,
 				Definitions,
-				{
-					schema: Metadata['schema']
-					macro: Metadata['macro']
-				},
-				Prettify<Routes & NewElysia['_routes']>
+				Metadata,
+				Routes & NewElysia['_routes']
 		  >
 		: Elysia<
 				BasePath,
 				Scoped,
-				{
-					decorator: Prettify<
-						Singleton['decorator'] &
-							NewElysia['_types']['Singleton']['decorator']
-					>
-					store: Prettify<
-						Singleton['store'] &
-							NewElysia['_types']['Singleton']['store']
-					>
-					derive: Prettify<
-						Singleton['derive'] &
-							NewElysia['_types']['Singleton']['derive']
-					>
-					resolve: Prettify<
-						Singleton['resolve'] &
-							NewElysia['_types']['Singleton']['resolve']
-					>
-				},
-				{
-					type: Prettify<
-						Definitions['type'] &
-							NewElysia['_types']['Definitions']['type']
-					>
-					error: Prettify<
-						Definitions['error'] &
-							NewElysia['_types']['Definitions']['error']
-					>
-				},
-				{
-					schema: Prettify<
-						MergeSchema<
-							Metadata['schema'],
-							NewElysia['_types']['Metadata']['schema']
-						>
-					>
-					macro: Prettify<
-						Metadata['macro'] &
-							NewElysia['_types']['Metadata']['macro']
-					>
-				},
-				Prettify<Routes & NewElysia['_routes']>
+				// @ts-expect-error - This is truly ideal
+				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
+				Routes & NewElysia['_routes']
 		  >
 
 	/**
@@ -1837,55 +1795,16 @@ export default class Elysia<
 				Scoped,
 				Singleton,
 				Definitions,
-				{
-					schema: Metadata['schema']
-					macro: Metadata['macro']
-				},
-				Prettify<Routes & NewElysia['_routes']>
+				Metadata,
+				Routes & NewElysia['_routes']
 		  >
 		: Elysia<
 				BasePath,
 				Scoped,
-				{
-					decorator: Prettify<
-						Singleton['decorator'] &
-							NewElysia['_types']['Singleton']['decorator']
-					>
-					store: Prettify<
-						Singleton['store'] &
-							NewElysia['_types']['Singleton']['store']
-					>
-					derive: Prettify<
-						Singleton['derive'] &
-							NewElysia['_types']['Singleton']['derive']
-					>
-					resolve: Prettify<
-						Singleton['resolve'] &
-							NewElysia['_types']['Singleton']['resolve']
-					>
-				},
-				{
-					type: Prettify<
-						Definitions['type'] &
-							NewElysia['_types']['Definitions']['type']
-					>
-					error: Prettify<
-						Definitions['error'] &
-							NewElysia['_types']['Definitions']['error']
-					>
-				},
-				{
-					schema: Prettify<
-						MergeSchema<
-							Metadata['schema'],
-							NewElysia['_types']['Metadata']['schema']
-						>
-					>
-					macro: Prettify<
-						Metadata['macro'] &
-							NewElysia['_types']['Metadata']['macro']
-					>
-				},
+				// @ts-expect-error - This is truly ideal
+				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 				Routes & NewElysia['_routes']
 		  >
 
@@ -1900,10 +1819,7 @@ export default class Elysia<
 		true,
 		NewElysia['_types']['Singleton'],
 		Definitions,
-		{
-			macro: Metadata['macro']
-			schema: Metadata['schema']
-		},
+		Metadata,
 		Routes extends ``
 			? Routes & NewElysia['_routes']
 			: Routes & AddPrefix<BasePath, NewElysia['_routes']>
@@ -1924,16 +1840,13 @@ export default class Elysia<
 				Scoped,
 				Singleton,
 				Definitions,
-				{
-					schema: Metadata['schema']
-					macro: Metadata['macro']
-				},
+				Metadata,
 				Routes & NewElysia['_routes']
 		  >
 		: Elysia<
 				BasePath,
 				Scoped,
-				// @ts-expect-error
+				// @ts-expect-error - This is truly ideal
 				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
 				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
 				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
@@ -1997,41 +1910,16 @@ export default class Elysia<
 				Scoped,
 				Singleton,
 				Definitions,
-				{
-					schema: Metadata['schema']
-					macro: Metadata['macro']
-				},
-				Prettify<Routes & NewElysia['_routes']>
+				Metadata,
+				Routes & NewElysia['_routes']
 		  >
 		: Elysia<
 				BasePath,
 				Scoped,
-				{
-					decorator: Singleton['decorator'] &
-						NewElysia['_types']['Singleton']['decorator']
-					store: Singleton['store'] &
-						NewElysia['_types']['Singleton']['store']
-					derive: Singleton['derive'] &
-						NewElysia['_types']['Singleton']['derive']
-					resolve: Singleton['resolve'] &
-						NewElysia['_types']['Singleton']['resolve']
-				},
-				{
-					type: Definitions['type'] &
-						NewElysia['_types']['Definitions']['type']
-					error: Definitions['error'] &
-						NewElysia['_types']['Definitions']['error']
-				},
-				{
-					schema: MergeSchema<
-						Metadata['schema'],
-						NewElysia['_types']['Metadata']['schema']
-					>
-					macro: Prettify<
-						Metadata['macro'] &
-							NewElysia['_types']['Metadata']['macro']
-					>
-				},
+				// @ts-expect-error - This is truly ideal
+				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
 					: Routes & AddPrefix<BasePath, NewElysia['_routes']>
@@ -2054,10 +1942,7 @@ export default class Elysia<
 				Scoped,
 				Singleton,
 				Definitions,
-				{
-					schema: Metadata['schema']
-					macro: Metadata['macro']
-				},
+				Metadata,
 				Prettify<
 					Routes & LazyLoadElysia['_types']['Metadata']['routes']
 				>
@@ -2065,46 +1950,10 @@ export default class Elysia<
 		: Elysia<
 				BasePath,
 				Scoped,
-				{
-					decorator: Prettify<
-						Singleton['decorator'] &
-							LazyLoadElysia['_types']['Singleton']['decorator']
-					>
-					store: Prettify<
-						Singleton['store'] &
-							LazyLoadElysia['_types']['Singleton']['store']
-					>
-					derive: Prettify<
-						Singleton['derive'] &
-							LazyLoadElysia['_types']['Singleton']['derive']
-					>
-					resolve: Prettify<
-						Singleton['resolve'] &
-							LazyLoadElysia['_types']['Singleton']['resolve']
-					>
-				},
-				{
-					type: Prettify<
-						Definitions['type'] &
-							LazyLoadElysia['_types']['Definitions']['type']
-					>
-					error: Prettify<
-						Definitions['error'] &
-							LazyLoadElysia['_types']['Definitions']['error']
-					>
-				},
-				{
-					schema: Prettify<
-						MergeSchema<
-							Metadata['schema'],
-							LazyLoadElysia['_types']['Metadata']['schema']
-						>
-					>
-					macro: Prettify<
-						Metadata['macro'] &
-							LazyLoadElysia['_types']['Metadata']['macro']
-					>
-				},
+				// @ts-expect-error - This is truly ideal
+				Prettify2<Singleton & LazyLoadElysia['_types']['Singleton']>,
+				Prettify2<Definitions & LazyLoadElysia['_types']['Definitions']>,
+				Prettify2<Metadata & LazyLoadElysia['_types']['Metadata']>,
 				BasePath extends ``
 					? Routes & LazyLoadElysia['_types']['Metadata']['routes']
 					: Routes &
@@ -2483,6 +2332,8 @@ export default class Elysia<
 
 		return this as any
 	}
+
+
 	mount(
 		handle:
 			| ((request: Request) => MaybePromise<Response>)
