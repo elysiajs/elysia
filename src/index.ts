@@ -94,8 +94,7 @@ import type {
 	RouteBase,
 	CreateEden,
 	ComposeElysiaResponse,
-	MergeElysiaInstances,
-	NoInfer
+	MergeElysiaInstances
 } from './types'
 
 /**
