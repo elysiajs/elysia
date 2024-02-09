@@ -46,7 +46,5 @@ describe('sucrose integration', () => {
 			trace: [],
 			transform: []
 		})
-
-		console.log(a)
 	})
 })
