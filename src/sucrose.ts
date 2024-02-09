@@ -84,7 +84,7 @@ export const separateFunction = (code: string): [string, string] => {
  * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
  * ```
  */
-const bracketPairRange = (parameter: string): [number, number] => {
+export const bracketPairRange = (parameter: string): [number, number] => {
 	const start = parameter.indexOf('{')
 	if (start === -1) return [-1, 0]
 
@@ -102,6 +102,8 @@ const bracketPairRange = (parameter: string): [number, number] => {
 		if (deep === 0) break
 	}
 
+	if (deep !== 0) return [0, parameter.length]
+
 	return [start, end + 1]
 }
 
@@ -114,8 +116,9 @@ const bracketPairRange = (parameter: string): [number, number] => {
  * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
  * ```
  */
-
-const bracketPairRangeReverse = (parameter: string): [number, number] => {
+export const bracketPairRangeReverse = (
+	parameter: string
+): [number, number] => {
 	const end = parameter.lastIndexOf('}')
 	if (end === -1) return [-1, 0]
 
@@ -133,6 +136,8 @@ const bracketPairRangeReverse = (parameter: string): [number, number] => {
 		if (deep === 0) break
 	}
 
+	if (deep !== 0) return [-1, 0]
+
 	return [start, end + 1]
 }
 
@@ -141,7 +146,7 @@ const bracketPairRangeReverse = (parameter: string): [number, number] => {
  *
  * @example
  * ```typescript
- * retrieveRootParameters('({ hello: { world: { a } }, elysia })') // => ['hello', 'elysia']
+ * retrieveRootParameters('({ hello: { world: { a } }, elysia })') // => 'hello elysia'
  * ```
  */
 export const retrieveRootParamters = (parameter: string) => {
@@ -157,7 +162,7 @@ export const retrieveRootParamters = (parameter: string) => {
 		parameter = parameter.slice(0, start - 2) + parameter.slice(end + 1)
 	}
 
-	return parameter
+	return parameter.replace(/:/g, '').trim()
 }
 
 /**
@@ -225,24 +230,58 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 
 	while (true) {
 		// Remove all spaces
-		let index = content.indexOf(' = ' + type + '\n')
-		if (index === -1) index = content.indexOf(' = ' + type + ',')
-		if (index === -1) index = content.indexOf(' = ' + type + ' ')
-		if (index === -1) index = content.indexOf(' = ' + type + ';')
+		const newLineIndex = content.indexOf(' = ' + type + '\n')
+		const commaIndex = content.indexOf(' = ' + type + ',')
+		const semicolonIndex = content.indexOf(' = ' + type + ';')
+		const emptyIndex = content.indexOf(' = ' + type + ' ')
 
-		if (index === -1) break
+		// Pick the smallest index that is not -1 or 0
+		let index =
+			[newLineIndex, commaIndex, semicolonIndex, emptyIndex]
+				.filter((i) => i > 0)
+				.sort((a, b) => a - b)[0] || -1
+
+		if (index === -1) {
+			/**
+			 * Check if pattern is at the end of the string
+			 *
+			 * @example
+			 * ```typescript
+			 * 'const a = body' // true
+			 * ```
+			 **/
+			const lastIndex = content.indexOf(' = ' + type)
+
+			if (lastIndex + 3 + type.length !== content.length) break
+
+			index = lastIndex
+		}
 
 		const part = content.slice(0, index)
-		const variable = part.slice(part.lastIndexOf(' ') + 1)
+		/**
+		 * aliased variable last character
+		 *
+		 * @example
+		 * ```typescript
+		 * const { hello } = body // } is the last character
+		 * ```
+		 **/
+		let variable = part.slice(part.lastIndexOf(' ') + 1)
 
 		// Variable is using object destructuring, find the bracket pair
 		if (variable === '}') {
 			const [start, end] = bracketPairRangeReverse(part)
+
 			aliases.push(content.slice(start, end))
 
 			content = content.slice(index + 3 + type.length)
+
 			continue
 		}
+
+		// Remove comma
+		while (variable.charCodeAt(0) === 44) variable = variable.slice(1)
+		while (variable.charCodeAt(0) === 9) variable = variable.slice(1)
 
 		aliases.push(variable)
 		content = content.slice(index + 3 + type.length)
@@ -259,6 +298,8 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 }
 
 export const extractMainParameter = (parameter: string) => {
+	if (!parameter) return
+
 	const hasComma = parameter.includes(',')
 	if (!hasComma) {
 		// This happens when spread operator is used as the only parameter
@@ -274,14 +315,6 @@ export const extractMainParameter = (parameter: string) => {
 	// Spread parameter is always the last parameter, no need for further checking
 	return parameter.slice(spreadIndex + 3).trimEnd()
 }
-
-const b = findAlias(
-	'body',
-	`{ const a = body, { hello } = a
-
-return 'hi'
-}`
-)
 
 /**
  * Analyze if context is mentioned in body
@@ -332,18 +365,16 @@ export const inferBodyReference = (
 
 		if (inference.query) {
 			let keyword = alias + '.'
-			if(code.includes(keyword + 'query')) keyword = alias + '.query'
+			if (code.includes(keyword + 'query')) keyword = alias + '.query'
 
 			let start = code.indexOf(keyword)
 			if (start === -1) start = code.indexOf(alias + '[')
 
 			if (start !== -1) {
 				let end: number | undefined = code.indexOf(' ', start)
-				if(end === -1) end = undefined
+				if (end === -1) end = undefined
 
-				let query = code
-					.slice(start + alias.length + 1, end)
-					.trimEnd()
+				let query = code.slice(start + alias.length + 1, end).trimEnd()
 
 				// Remove nested dot
 				while (start !== -1) {
@@ -404,12 +435,21 @@ export const removeDefaultParameter = (parameter: string) => {
 		const commaIndex = parameter.indexOf(',', index)
 		const bracketIndex = parameter.indexOf('}', index)
 
-		const end = commaIndex < bracketIndex ? commaIndex : bracketIndex
+		const end =
+			[commaIndex, bracketIndex]
+				.filter((i) => i > 0)
+				.sort((a, b) => a - b)[0] || -1
 
-		parameter = parameter.slice(0, index - 1) + parameter.slice(end)
+		if (end === -1) {
+			parameter = parameter.slice(0, index)
+
+			break
+		}
+
+		parameter = parameter.slice(0, index) + parameter.slice(end)
 	}
 
-	return parameter
+	return parameter.split(',').map((i) => i.trim()).join(', ')
 }
 
 /**
@@ -649,29 +689,29 @@ export const sucroseTrace = (
 	return inference
 }
 
-// const a = sucrose({
-// 	handler: function ({ query }) {
-// 		query.a
-// 	},
-// 	afterHandle: [],
-// 	beforeHandle: [],
-// 	error: [
-// 		function a({ query, query: { a, c: d }, headers: { hello }, ...rest }) {
-// 			query.b;
-// 			rest.query.e;
-// 		},
-// 		({ query: { f } }) => {
+const a = sucrose({
+	handler: function ({ query }) {
+		query.a
+	},
+	afterHandle: [],
+	beforeHandle: [],
+	error: [
+		function a({ query, query: { a, c: d }, headers: { hello }, ...rest }) {
+			query.b;
+			rest.query.e;
+		},
+		({ query: { f } }) => {
 
-// 		}
-// 	],
-// 	mapResponse: [],
-// 	onResponse: [],
-// 	parse: [],
-// 	request: [],
-// 	start: [],
-// 	stop: [],
-// 	trace: [],
-// 	transform: []
-// })
+		}
+	],
+	mapResponse: [],
+	onResponse: [],
+	parse: [],
+	request: [],
+	start: [],
+	stop: [],
+	trace: [],
+	transform: []
+})
 
-// console.log(a)
+console.log(a)

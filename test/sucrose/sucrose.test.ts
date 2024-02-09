@@ -1,22 +1,45 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
-import { separateFunction } from '../../src/sucrose'
+import { separateFunction, sucrose } from '../../src/sucrose'
 
-describe('Sucrose: Main', () => {
-	it('inherits inference from plugin', () => {
-		const plugin = new Elysia()
-			.derive(({ headers: { authorization } }) => {
-				return {
-					get auth() {
-						return authorization
-					}
-				}
+describe('sucrose', () => {
+	it('common 1', () => {
+		expect(
+			sucrose({
+				handler: function ({ query }) {
+					query.a
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [
+					function a({
+						query,
+						query: { a, c: d },
+						headers: { hello },
+						...rest
+					}) {
+						query.b
+						rest.query.e
+					},
+					({ query: { f } }) => {}
+				],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
 			})
-
-		const main = new Elysia()
-			.use(plugin)
-
-		expect(main.inference.event.headers).toBe(true)
+		).toEqual({
+			queries: ['a', 'e', 'b', 'c', 'f'],
+			query: true,
+			headers: true,
+			body: false,
+			cookie: false,
+			set: false
+		})
 	})
 })
