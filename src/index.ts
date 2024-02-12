@@ -1907,54 +1907,38 @@ export default class Elysia<
 				Object.assign(context.store, this.store)
 			})
 
-			plugin.event.trace = [
-				...(this.event.trace || []),
-				...(plugin.event.trace || [])
-			]
-
-			
+			if (plugin.event.trace.length)
+				plugin.event.trace.push(...plugin.event.trace)
 
 			if (isScoped && !plugin.config.prefix)
 				console.warn(
 					'When using scoped plugins it is recommended to use a prefix, else routing may not work correctly for the second scoped instance'
-					)
+				)
 
-		    /* Run global error handlers after the error handlers of the plugin are done executing.
-			 TODO
-			   - should this really be handled here or is there some kind of merging failing?
-			   - should this also be applicable for other handlers? 
-			 It seems like this only affects scoped changes. so it could be moved inside the below if block */
-			
-			plugin.event.error.push(...this.event.error);
-			
+			if (plugin.event.error.length)
+				plugin.event.error.push(...this.event.error)
+
 			if (plugin.config.aot) plugin.compile()
 
 			let instance
 
 			if (isScoped && plugin.config.prefix) {
-			
 				instance = this.mount(plugin.config.prefix + '/', plugin.fetch)
 
-				//Ensure that when using plugins routes are correctly showing up in the .routes property. Else plugins e.g. swagger will not correctly work.
-				//This also avoids adding routes multiple times.
-				
-				plugin.routes.forEach((r) => {
+				// Ensure that when using plugins routes are correctly showing up in the .routes property. Else plugins e.g. swagger will not correctly work.
+				// This also avoids adding routes multiple times.
+				for (const route of plugin.routes)
 					this.routes.push({
-						...r,
-						path: `${plugin.config.prefix}${r.path}`,
-						//This probably has no effect as the routes object itself is not used to execute these handlers? The plugin is taking care of it.
-						hooks: mergeHook(
-							r.hooks,
-							{
-								error: this.event.error
-							}
-						)
+						...route,
+						path: `${plugin.config.prefix}${route.path}`,
+						hooks: mergeHook(route.hooks, {
+							error: this.event.error
+						})
 					})
-				})
 			} else {
-
 				instance = this.mount(plugin.fetch)
-				this.routes = this.routes.concat(instance.routes)
+
+				if (instance.routes.length) this.routes.push(...instance.routes)
 			}
 
 			return this
