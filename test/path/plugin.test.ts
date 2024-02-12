@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
-describe.only('plugin', () => {
+describe('plugin', () => {
 	it('scoped plugin routes are visible in app.routes', () => {
 		const plugin = new Elysia({ prefix: '/v1', scoped: true })
 			.get('', () => '')
