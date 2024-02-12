@@ -20,7 +20,7 @@ import type {
 
 type PartialServe = Partial<Serve>
 
-export type ElysiaConfig<Prefix extends string, Scoped extends boolean> = {
+export type ElysiaConfig<Prefix extends string | undefined, Scoped extends boolean | undefined> = {
 	prefix?: Prefix
 	scoped?: Scoped
 	name?: string

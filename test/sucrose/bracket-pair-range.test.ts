@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test'
-import { Elysia } from '../../src'
 
 import { bracketPairRange } from '../../src/sucrose'
 

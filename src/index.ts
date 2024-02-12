@@ -1828,7 +1828,7 @@ export default class Elysia<
 		Metadata,
 		Routes extends ``
 			? Routes & NewElysia['_routes']
-			: Routes & AddPrefix<BasePath, NewElysia['_routes']>
+			: Routes & CreateEden<BasePath, NewElysia['_routes']>
 	>
 
 	/**
@@ -1858,7 +1858,7 @@ export default class Elysia<
 				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
-					: Routes & AddPrefix<BasePath, NewElysia['_routes']>
+					: Routes & CreateEden<BasePath, NewElysia['_routes']>
 		  >
 
 	/**
@@ -1928,7 +1928,7 @@ export default class Elysia<
 				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
-					: Routes & AddPrefix<BasePath, NewElysia['_routes']>
+					: Routes & CreateEden<BasePath, NewElysia['_routes']>
 		  >
 
 	/**
@@ -1965,7 +1965,7 @@ export default class Elysia<
 				BasePath extends ``
 					? Routes & LazyLoadElysia['_types']['Metadata']['routes']
 					: Routes &
-							AddPrefix<
+							CreateEden<
 								BasePath,
 								LazyLoadElysia['_types']['Metadata']['routes']
 							>
@@ -4850,8 +4850,13 @@ export default class Elysia<
 		if (callback) callback(this.server!)
 
 		process.on('beforeExit', () => {
-			for (let i = 0; i < this.event.stop.length; i++)
-				this.event.stop[i](this)
+			if(this.server) {
+				this.server.stop()
+				this.server = null
+
+				for (let i = 0; i < this.event.stop.length; i++)
+					this.event.stop[i](this)
+			}
 		})
 
 		Promise.all(this.lazyLoadModules).then(() => {
@@ -4882,11 +4887,14 @@ export default class Elysia<
 				"Elysia isn't running. Call `app.listen` to start the server."
 			)
 
-		this.server.stop()
+		if(this.server) {
+			this.server.stop()
+			this.server = null
 
-		if (this.event.stop.length)
-			for (let i = 0; i < this.event.stop.length; i++)
-				this.event.stop[i](this)
+			if (this.event.stop.length)
+				for (let i = 0; i < this.event.stop.length; i++)
+					this.event.stop[i](this)
+		}
 	}
 
 	/**

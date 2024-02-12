@@ -1,31 +1,14 @@
 import { Elysia, error, t } from '../src'
-import { findAlias, inferBodyReference, removeDefaultParameter } from '../src/sucrose'
-import { post, req } from '../test/utils'
 
-const parameter = 'a = 1, b = 2, c = 3'
-const result = removeDefaultParameter(parameter)
-console.log(result)
+const app = new Elysia()
+	.onStart((ctx) =>
+		console.log(`Api listening on port ${ctx.server?.port} - ${Date.now()}`)
+	)
+	.onStop((ctx) =>
+		console.log(`Api stopped on port ${ctx.server?.port} - ${Date.now()}`)
+	)
+	.listen(3000)
 
-// const plugin = new Elysia()
-// .macro((app) => {
-//     return {
-//         auth() {
-//             return {
+setTimeout(() => app.stop(), 1000)
 
-//             }
-//         }
-//     }
-// })
-
-const app = new Elysia({ precompile: true })
-	.get('/id/:id', ({ set, params: { id }, query: { name } }) => {
-		set.headers['x-powered-by'] = 'Elysia'
-
-		return id + ' ' + name
-	})
-	.compile()
-
-// app.compile()
-
-// console.log(app.fetch.toString())
-// console.log(app.router.history[0].composed?.toString())
+// console.log(app.server)

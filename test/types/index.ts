@@ -905,7 +905,7 @@ app.group(
 
 // ? Inherits route for scoped instance
 {
-	const child = new Elysia({ scoped: true, prefix: '' })
+	const child = new Elysia()
 		.decorate('b', 'b')
 		.model('b', t.String())
 		.get('/child', () => 'Hello from child route')
@@ -913,9 +913,7 @@ app.group(
 
 	type App = (typeof main)['_routes']
 
-	expectTypeOf<
-		keyof (typeof main)['_routes']
-	>().toEqualTypeOf<'child'>()
+	expectTypeOf<keyof (typeof main)['_routes']>().toEqualTypeOf<'child'>()
 	expectTypeOf<
 		keyof (typeof main)['_types']['Singleton']['decorator']
 	>().not.toEqualTypeOf<{
@@ -1028,3 +1026,35 @@ app.macro(() => {
 				b: 2
 			})
 	)
+
+// ? Join Eden path correctly
+{
+	const testController = new Elysia({
+		name: 'testController',
+		prefix: '/test'
+	}).get('/could-be-error/right', () => ({ couldBeError: true }))
+
+	const app = new Elysia().group('/api', (app) => app.use(testController))
+
+	expectTypeOf<(typeof app)['_routes']>().toEqualTypeOf<{
+		api: {
+			test: {
+				'could-be-error': {
+					right: {
+						get: {
+							body: unknown
+							params: Record<never, string>
+							query: unknown
+							headers: unknown
+							response: {
+								200: {
+									couldBeError: boolean
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}>()
+}

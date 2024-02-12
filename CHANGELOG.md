@@ -1,3 +1,8 @@
+# 1.0.0 - 10 Feb 2024
+Bug fix:
+- [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`
+- onStop callback called twice when calling .stop
+
 # 0.8.16 - 6 Feb 2024
 Feature:
 - [#448](https://github.com/elysiajs/elysia/pull/448) BooleanString - @bogeychan
