@@ -6,6 +6,7 @@ describe('Numeric string', () => {
 		expect(isNumericString('69')).toBe(true)
 		expect(isNumericString('69.420')).toBe(true)
 		expect(isNumericString('00093281')).toBe(true)
+		expect(isNumericString(Number.MAX_SAFE_INTEGER.toString())).toBe(true)
 	})
 
 	it('invalid string', async () => {
@@ -13,6 +14,9 @@ describe('Numeric string', () => {
 		expect(isNumericString('69,420')).toBe(false)
 		expect(isNumericString('0O093281')).toBe(false)
 		expect(isNumericString(crypto.randomUUID())).toBe(false)
+		expect(isNumericString('9007199254740995')).toBe(false)
+		expect(isNumericString('123456789012345678')).toBe(false)
+		expect(isNumericString('123123.999999999999')).toBe(false)
 	})
 
 	it('invalid on empty', async () => {

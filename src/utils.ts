@@ -671,4 +671,17 @@ export const createMacroManager =
 			}
 		}
 	}
-export const isNumericString = (message: string) => message.trim().length !== 0 && !Number.isNaN(Number(message))
+
+export const isNumericString = (message: string): boolean => {
+	if (message.length < 16)
+		return message.trim().length !== 0 && !Number.isNaN(Number(message))
+
+	// if 16 digit but less then 9,007,199,254,740,991 then can be parsed
+	if (message.length === 16) {
+		const numVal = Number(message)
+		if (numVal.toString() === message)
+			return message.trim().length !== 0 && !Number.isNaN(numVal)
+	}
+
+	return false
+}

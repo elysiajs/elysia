@@ -2180,27 +2180,39 @@ export default class Elysia<
 				Object.assign(context.store, this.singleton.store)
 			})
 
-			plugin.event.trace = [
-				...(this.event.trace || []),
-				...(plugin.event.trace || [])
-			]
-
-			if (plugin.config.aot) plugin.compile()
+			if (plugin.event.trace.length)
+				plugin.event.trace.push(...plugin.event.trace)
 
 			if (!plugin.config.prefix)
 				console.warn(
 					"It's recommended to use scoped instance with a prefix to prevent collision routing with other instance."
 				)
 
+			if (plugin.event.error.length)
+				plugin.event.error.push(...this.event.error)
+
+			if (plugin.config.aot) plugin.compile()
+
 			let instance
 
-			if (plugin.config.prefix)
+			if (isScoped === true && plugin.config.prefix) {
 				instance = this.mount(plugin.config.prefix + '/', plugin.fetch)
-			else instance = this.mount(plugin.fetch)
 
-			this.router.history = this.router.history.concat(
-				instance.router.history
-			)
+				// Ensure that when using plugins routes are correctly showing up in the .routes property. Else plugins e.g. swagger will not correctly work.
+				// This also avoids adding routes multiple times.
+				for (const route of plugin.router.history)
+					this.router.history.push({
+						...route,
+						path: `${plugin.config.prefix}${route.path}`,
+						hooks: mergeHook(route.hooks, {
+							error: this.event.error
+						})
+					})
+			} else {
+				instance = this.mount(plugin.fetch)
+
+				if (instance.router.history.length) this.router.history.push(...instance.router.history)
+			}
 
 			return this
 		} else {

@@ -3,6 +3,17 @@ Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`
 - onStop callback called twice when calling .stop
 
+# 0.8.17 - 12 Feb 2024
+Feature:
+- [#474](https://github.com/elysiajs/elysia/pull/474) Numeric Cookie with length >= 16 cant be parsed to number
+- [#476](https://github.com/elysiajs/elysia/pull/476) Using a query key that contains a hyphen or a dot raises a SyntaxError
+- [#460](https://github.com/elysiajs/elysia/pull/460) 
+    - [#458](https://github.com/elysiajs/elysia/pull/458) Multiple scoped plugins do not register routes
+    - [#457](https://github.com/elysiajs/elysia/pull/457) Elysia arguments scoped and prefix do not work at the same time
+
+Change:
+- [#472](https://github.com/elysiajs/elysia/pull/472) Move documentation issue template to documentation repository
+
 # 0.8.16 - 6 Feb 2024
 Feature:
 - [#448](https://github.com/elysiajs/elysia/pull/448) BooleanString - @bogeychan
