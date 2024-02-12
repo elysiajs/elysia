@@ -16,6 +16,38 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('validate with hyphen in key', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query }) => query['character-name'],
+			{
+				query: t.Object({
+					'character-name': t.String()
+				})
+			}
+		)
+		const res = await app.handle(req('/?character-name=sucrose'))
+
+		expect(await res.text()).toBe('sucrose')
+		expect(res.status).toBe(200)
+	})
+
+	it('validate with dot in key', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query }) => query['character.name'],
+			{
+				query: t.Object({
+					'character.name': t.String()
+				})
+			}
+		)
+		const res = await app.handle(req('/?character.name=sucrose'))
+
+		expect(await res.text()).toBe('sucrose')
+		expect(res.status).toBe(200)
+	})
+
 	it('validate multiple', async () => {
 		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Object({

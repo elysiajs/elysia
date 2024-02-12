@@ -753,7 +753,7 @@ export const composeHandler = ({
 					.join('\n')}
 
 				c.query = {
-					${destructured.map((name, index) => `${name}: a${index}`).join(', ')}
+					${destructured.map((name, index) => `'${name}': a${index}`).join(', ')}
 				}
 			} else {
 				c.query = {}
