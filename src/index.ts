@@ -4497,9 +4497,7 @@ export default class Elysia<
 	derive<const Derivative extends Record<string, unknown>>(
 		transform: (
 			context: Prettify<Context<Metadata['schema'], Singleton>>
-		) => MaybePromise<Derivative> extends { store: any }
-			? never
-			: Derivative
+		) => MaybePromise<Derivative>
 	): Elysia<
 		BasePath,
 		Scoped,
