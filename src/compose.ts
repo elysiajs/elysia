@@ -332,7 +332,7 @@ export const composeHandler = ({
 	handler,
 	allowMeta = false
 }: {
-	app: Elysia<any, any, any, any, any, any>
+	app: Elysia<any, any, any, any, any, any, any, any, any>
 	path: string
 	method: string
 	hooks: LifeCycleStore
@@ -1307,7 +1307,7 @@ export const composeHandler = ({
 	})
 }
 
-export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any>) => {
+export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any, any, any, any>) => {
 	const inference = app.inference.trace
 
 	let decoratorsLiteral = ''
@@ -1570,7 +1570,7 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any>)
 	})
 }
 
-export const composeErrorHandler = (app: Elysia<any, any, any, any, any, any>) => {
+export const composeErrorHandler = (app: Elysia<any, any, any, any, any, any, any, any, any>) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,

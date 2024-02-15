@@ -93,8 +93,7 @@ import type {
 	MetadataBase,
 	RouteBase,
 	CreateEden,
-	ComposeElysiaResponse,
-	MergeElysiaInstances
+	ComposeElysiaResponse
 } from './types'
 
 /**
@@ -128,7 +127,21 @@ export default class Elysia<
 		schema: {}
 		macro: {}
 	},
-	const out Routes extends RouteBase = {}
+	const out Routes extends RouteBase = {},
+	const in out EphemeralSingleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	const in out EphemeralDefintion extends DefinitionBase = {
+		type: {}
+		error: {}
+	},
+	const out EphemeralMetadata extends MetadataBase = {
+		schema: {}
+		macro: {}
+	}
 > {
 	config: ElysiaConfig<BasePath, Scoped>
 
@@ -144,6 +157,12 @@ export default class Elysia<
 		Singleton: {} as Singleton,
 		Definitions: {} as Definitions,
 		Metadata: {} as Metadata
+	}
+
+	_ephemeral = {
+		Singleton: {} as EphemeralSingleton,
+		Definitions: {} as EphemeralDefintion,
+		Metadata: {} as EphemeralMetadata
 	}
 
 	protected singleton = {
@@ -892,6 +911,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
+
 	/**
 	 * Derive new property for each request with access to `Context`.
 	 *
@@ -907,7 +927,11 @@ export default class Elysia<
 	 *         }
 	 *     }))
 	 */
-	resolve<Resolver extends Object>(
+	resolve<
+		const Resolver extends Record<string, unknown>,
+		const Scoped extends boolean = false
+	>(
+		options: { scoped?: Scoped },
 		resolver: (
 			context: Prettify<Context<Metadata['schema'], Singleton>>
 		) => MaybePromise<Resolver> extends { store: any } ? never : Resolver
@@ -921,12 +945,63 @@ export default class Elysia<
 			resolve: Prettify<Singleton['resolve'] & Awaited<Resolver>>
 		},
 		Definitions,
-		Metadata
-	> {
-		// @ts-ignore
-		resolver.$elysia = 'resolve'
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
+	>
 
-		return this.onBeforeHandle(resolver as any) as any
+	/**
+	 * Derive new property for each request with access to `Context`.
+	 *
+	 * If error is thrown, the scope will skip to handling error instead.
+	 *
+	 * ---
+	 * @example
+	 * new Elysia()
+	 *     .state('counter', 1)
+	 *     .derive(({ store }) => ({
+	 *         increase() {
+	 *             store.counter++
+	 *         }
+	 *     }))
+	 */
+	resolve<const Resolver extends Record<string, unknown>>(
+		resolver: (
+			context: Prettify<Context<Metadata['schema'], Singleton>>
+		) => MaybePromise<Resolver> extends { store: any } ? never : Resolver
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Singleton['decorator']
+			store: Singleton['store']
+			derive: Singleton['resolve']
+			resolve: Prettify<Singleton['resolve'] & Awaited<Resolver>>
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
+	>
+
+	resolve(
+		optionsOrResolve: { scoped?: boolean } | Function,
+		resolve?: Function
+	) {
+		if (typeof optionsOrResolve === 'object') {
+			if (optionsOrResolve.scoped)
+				// @ts-ignore
+				resolve.$elysiaScoped = true
+		} else resolve = optionsOrResolve
+
+		// @ts-ignore
+		resolve.$elysia = 'resolve'
+
+		return this.onBeforeHandle(resolve as any) as any
 	}
 
 	/**
@@ -1108,7 +1183,11 @@ export default class Elysia<
 					: Errors[K]
 			}
 		},
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -1151,7 +1230,11 @@ export default class Elysia<
 					: CustomError
 			}
 		},
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -1186,7 +1269,11 @@ export default class Elysia<
 					: never
 			}
 		},
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	error(
@@ -1204,7 +1291,7 @@ export default class Elysia<
 		error?: {
 			prototype: Error
 		}
-	): Elysia<any, any, any, any, any, any> {
+	): Elysia<any, any, any, any, any, any, any, any, any> {
 		switch (typeof name) {
 			case 'string':
 				// @ts-ignore
@@ -1371,7 +1458,17 @@ export default class Elysia<
 
 	group<
 		const Prefix extends string,
-		const NewElysia extends Elysia<any, any, any, any, any, any>
+		const NewElysia extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>
 	>(
 		prefix: Prefix,
 		run: (
@@ -1392,12 +1489,25 @@ export default class Elysia<
 		Singleton,
 		Definitions,
 		Metadata,
-		Prettify<Routes & NewElysia['_routes']>
+		Prettify<Routes & NewElysia['_routes']>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	group<
 		const Prefix extends string,
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
+		const NewElysia extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>,
 		const Input extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
@@ -1410,9 +1520,9 @@ export default class Elysia<
 		schema: LocalHook<
 			Input,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Prefix}`
 		>,
 		run: (
@@ -1424,7 +1534,11 @@ export default class Elysia<
 				{
 					schema: Schema
 					macro: Metadata['macro']
-				}
+				},
+				{},
+				EphemeralSingleton,
+				EphemeralDefintion,
+				EphemeralMetadata
 			>
 		) => NewElysia
 	): Elysia<
@@ -1433,7 +1547,10 @@ export default class Elysia<
 		Singleton,
 		Definitions,
 		Metadata,
-		Routes & NewElysia['_routes']
+		Routes & NewElysia['_routes'],
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -1455,12 +1572,12 @@ export default class Elysia<
 		schemaOrRun:
 			| LocalHook<any, any, any, any, any, any>
 			| ((
-					group: Elysia<any, any, any, any, any, any>
-			  ) => Elysia<any, any, any, any, any, any>),
+					group: Elysia<any, any, any, any, any, any, any, any, any>
+			  ) => Elysia<any, any, any, any, any, any, any, any, any>),
 		run?: (
-			group: Elysia<any, any, any, any, any, any>
-		) => Elysia<any, any, any, any, any, any>
-	): Elysia<any, any, any, any, any, any> {
+			group: Elysia<any, any, any, any, any, any, any, any, any>
+		) => Elysia<any, any, any, any, any, any, any, any, any>
+	): Elysia<any, any, any, any, any, any, any, any, any> {
 		const instance = new Elysia({
 			...(this.config || {}),
 			prefix: ''
@@ -1556,9 +1673,9 @@ export default class Elysia<
 		hook: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			BasePath
 		>
 	): Elysia<
@@ -1570,14 +1687,27 @@ export default class Elysia<
 			schema: Schema
 			macro: Metadata['macro']
 		},
-		Routes
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	guard<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
+		const NewElysia extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema']
@@ -1592,7 +1722,11 @@ export default class Elysia<
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
-				}
+				},
+				{},
+				EphemeralSingleton,
+				EphemeralDefintion,
+				EphemeralMetadata
 			>
 		) => NewElysia
 	): Elysia<
@@ -1604,14 +1738,27 @@ export default class Elysia<
 			schema: Metadata['schema']
 			macro: Metadata['macro']
 		},
-		Prettify<Routes & NewElysia['_routes']>
+		Prettify<Routes & NewElysia['_routes']>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	guard<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
+		const NewElysia extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema']
@@ -1620,9 +1767,9 @@ export default class Elysia<
 		schema: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			''
 		>,
 		run: (
@@ -1634,7 +1781,11 @@ export default class Elysia<
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
-				}
+				},
+				{},
+				EphemeralSingleton,
+				EphemeralDefintion,
+				EphemeralMetadata
 			>
 		) => NewElysia
 	): Elysia<
@@ -1646,7 +1797,10 @@ export default class Elysia<
 			schema: Metadata['schema']
 			macro: Metadata['macro']
 		},
-		Prettify<Routes & NewElysia['_routes']>
+		Prettify<Routes & NewElysia['_routes']>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -1676,12 +1830,12 @@ export default class Elysia<
 		hook:
 			| LocalHook<any, any, any, any, any, any, any>
 			| ((
-					group: Elysia<any, any, any, any, any, any>
-			  ) => Elysia<any, any, any, any, any, any>),
+					group: Elysia<any, any, any, any, any, any, any, any, any>
+			  ) => Elysia<any, any, any, any, any, any, any, any, any>),
 		run?: (
-			group: Elysia<any, any, any, any, any, any>
-		) => Elysia<any, any, any, any, any, any>
-	): Elysia<any, any, any, any, any, any> {
+			group: Elysia<any, any, any, any, any, any, any, any, any>
+		) => Elysia<any, any, any, any, any, any, any, any, any>
+	): Elysia<any, any, any, any, any, any, any, any, any> {
 		if (!run) {
 			if (typeof hook === 'object') {
 				this.event = mergeLifeCycle(
@@ -1760,8 +1914,28 @@ export default class Elysia<
 	 * Inline fn
 	 */
 	use<
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
-		const Param extends Elysia<any, any, any, any, any, any> = this,
+		const NewElysia extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>,
+		const Param extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		> = this,
 		const Scoped extends boolean = false
 	>(
 		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>,
@@ -1789,8 +1963,28 @@ export default class Elysia<
 	 * Inline Fn with scoped
 	 **/
 	use<
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
-		const Params extends Elysia<any, any, any, any, any, any> = this,
+		const NewElysia extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>,
+		const Params extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		> = this,
 		const Scoped extends boolean = false
 	>(
 		plugin: MaybePromise<(app: Params) => MaybePromise<NewElysia>>,
@@ -1817,7 +2011,19 @@ export default class Elysia<
 	/**
 	 * Entire Instance where scoped is true
 	 **/
-	use<const NewElysia extends Elysia<any, true, any, any, any, any>>(
+	use<
+		const NewElysia extends Elysia<
+			any,
+			true,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>
+	>(
 		instance: MaybePromise<NewElysia>,
 		scoped?: { scoped?: boolean }
 	): Elysia<
@@ -1835,7 +2041,17 @@ export default class Elysia<
 	 * Entire Instance where scoped is false
 	 **/
 	use<
-		const NewElysia extends Elysia<any, false, any, any, any, any>,
+		const NewElysia extends Elysia<
+			any,
+			false,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>,
 		const Scoped extends boolean = false
 	>(
 		instance: MaybePromise<NewElysia>,
@@ -1862,51 +2078,25 @@ export default class Elysia<
 		  >
 
 	/**
-	 * Entire Instance where scoped is false
-	 **/
-	use<
-		const NewElysias extends Elysia<any, false, any, any, any, any>[],
-		const Scoped extends boolean = false
-	>(
-		instance: NewElysias,
-		options?: { scoped?: Scoped }
-	): Scoped extends true
-		? Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				MergeElysiaInstances<
-					NewElysias,
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes
-				>['_routes']
-		  >
-		: MergeElysiaInstances<
-				NewElysias,
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				Routes
-		  >
-
-	/**
 	 * Import fn
 	 */
 	use<
-		const NewElysia extends Elysia<any, any, any, any, any, any>,
+		const NewElysia extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>,
 		const Scoped extends boolean = false
 	>(
 		plugin: Promise<{
 			default: (
-				elysia: Elysia<any, any, any, any, any, any>
+				elysia: Elysia<any, any, any, any, any, any, any, any, any>
 			) => MaybePromise<NewElysia>
 		}>,
 		options?: { scoped?: Scoped }
@@ -1935,7 +2125,17 @@ export default class Elysia<
 	 * Import entire instance
 	 */
 	use<
-		const LazyLoadElysia extends Elysia<any, any, any, any, any, any>,
+		const LazyLoadElysia extends Elysia<
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any,
+			any
+		>,
 		const Scoped extends boolean = false
 	>(
 		plugin: Promise<{
@@ -1949,9 +2149,7 @@ export default class Elysia<
 				Singleton,
 				Definitions,
 				Metadata,
-				Prettify<
-					Routes & LazyLoadElysia['_types']['Metadata']['routes']
-				>
+				Prettify<Routes & LazyLoadElysia['_routes']>
 		  >
 		: Elysia<
 				BasePath,
@@ -1963,12 +2161,8 @@ export default class Elysia<
 				>,
 				Prettify2<Metadata & LazyLoadElysia['_types']['Metadata']>,
 				BasePath extends ``
-					? Routes & LazyLoadElysia['_types']['Metadata']['routes']
-					: Routes &
-							CreateEden<
-								BasePath,
-								LazyLoadElysia['_types']['Metadata']['routes']
-							>
+					? Routes & LazyLoadElysia['_routes']
+					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>
 		  >
 
 	/**
@@ -1987,23 +2181,37 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| Elysia<any, any, any, any, any, any>
-			| Elysia<any, any, any, any, any, any>[]
+			| Elysia<any, any, any, any, any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any, any, any, any>[]
 			| MaybePromise<
 					(
-						app: Elysia<any, any, any, any, any, any>
-					) => MaybePromise<Elysia<any, any, any, any, any, any>>
+						app: Elysia<any, any, any, any, any, any, any, any, any>
+					) => MaybePromise<
+						Elysia<any, any, any, any, any, any, any, any, any>
+					>
 			  >
 			| Promise<{
-					default: Elysia<any, any, any, any, any, any>
+					default: Elysia<any, any, any, any, any, any, any, any, any>
 			  }>
 			| Promise<{
 					default: (
-						elysia: Elysia<any, any, any, any, any, any>
-					) => MaybePromise<Elysia<any, any, any, any, any, any>>
+						elysia: Elysia<
+							any,
+							any,
+							any,
+							any,
+							any,
+							any,
+							any,
+							any,
+							any
+						>
+					) => MaybePromise<
+						Elysia<any, any, any, any, any, any, any, any, any>
+					>
 			  }>,
 		options?: { scoped?: boolean }
-	): Elysia<any, any, any, any, any, any> {
+	): Elysia<any, any, any, any, any, any, any, any, any> {
 		if (options?.scoped)
 			return this.guard({}, (app) => app.use(plugin as any))
 
@@ -2044,10 +2252,12 @@ export default class Elysia<
 
 	private _use(
 		plugin:
-			| Elysia<any, any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any, any, any, any>
 			| ((
-					app: Elysia<any, any, any, any, any, any>
-			  ) => MaybePromise<Elysia<any, any, any, any, any, any>>)
+					app: Elysia<any, any, any, any, any, any, any, any, any>
+			  ) => MaybePromise<
+					Elysia<any, any, any, any, any, any, any, any, any>
+			  >)
 	) {
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
@@ -2211,7 +2421,8 @@ export default class Elysia<
 			} else {
 				instance = this.mount(plugin.fetch)
 
-				if (instance.router.history.length) this.router.history.push(...instance.router.history)
+				if (instance.router.history.length)
+					this.router.history.push(...instance.router.history)
 			}
 
 			return this
@@ -2377,15 +2588,32 @@ export default class Elysia<
 									}))
 						  }
 				)
+
 				this.event = mergeLifeCycle(
 					this.event,
-					filterGlobalHook(plugin.event),
+					filterGlobalHook({
+						...plugin.event,
+						transform: plugin.event.transform.filter(
+							(x: any) => x.$elysiaScoped !== true
+						),
+						beforeHandle: plugin.event.beforeHandle.filter(
+							(x: any) => x.$elysiaScoped !== true
+						)
+					}),
 					current
 				)
 			} else {
 				this.event = mergeLifeCycle(
 					this.event,
-					filterGlobalHook(plugin.event)
+					filterGlobalHook({
+						...plugin.event,
+						transform: plugin.event.transform.filter(
+							(x: any) => x.$elysiaScoped !== true
+						),
+						beforeHandle: plugin.event.beforeHandle.filter(
+							(x: any) => x.$elysiaScoped !== true
+						)
+					})
 				)
 			}
 
@@ -2409,7 +2637,10 @@ export default class Elysia<
 			schema: Metadata['schema']
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
 		},
-		Routes
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	> {
 		// @ts-ignore
 		macro.$elysiaChecksum = checksum(
@@ -2428,23 +2659,23 @@ export default class Elysia<
 	mount(
 		handle:
 			| ((request: Request) => MaybePromise<Response>)
-			| Elysia<any, any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any, any, any, any>
 	): this
 	mount(
 		path: string,
 		handle:
 			| ((request: Request) => MaybePromise<Response>)
-			| Elysia<any, any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any, any, any, any>
 	): this
 
 	mount(
 		path:
 			| string
 			| ((request: Request) => MaybePromise<Response>)
-			| Elysia<any, any, any, any, any, any>,
+			| Elysia<any, any, any, any, any, any, any, any, any>,
 		handle?:
 			| ((request: Request) => MaybePromise<Response>)
-			| Elysia<any, any, any, any, any, any>
+			| Elysia<any, any, any, any, any, any, any, any, any>
 	) {
 		if (
 			path instanceof Elysia ||
@@ -2530,22 +2761,30 @@ export default class Elysia<
 	get<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2574,7 +2813,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -2596,10 +2838,14 @@ export default class Elysia<
 	get<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -2609,9 +2855,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2640,7 +2886,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	get(
@@ -2672,22 +2921,30 @@ export default class Elysia<
 	post<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2713,7 +2970,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -2735,10 +2995,14 @@ export default class Elysia<
 	post<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -2748,9 +3012,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2776,7 +3040,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	post(
@@ -2808,22 +3075,30 @@ export default class Elysia<
 	put<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2852,7 +3127,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -2874,10 +3152,14 @@ export default class Elysia<
 	put<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -2887,9 +3169,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2918,7 +3200,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	put(
@@ -2950,22 +3235,30 @@ export default class Elysia<
 	patch<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -2994,7 +3287,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -3016,10 +3312,14 @@ export default class Elysia<
 	patch<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -3029,9 +3329,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3060,7 +3360,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	patch(
@@ -3092,22 +3395,30 @@ export default class Elysia<
 	delete<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3136,7 +3447,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -3158,10 +3472,14 @@ export default class Elysia<
 	delete<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -3171,9 +3489,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3202,7 +3520,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	delete(
@@ -3234,22 +3555,30 @@ export default class Elysia<
 	options<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3278,7 +3607,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -3300,10 +3632,14 @@ export default class Elysia<
 	options<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -3313,9 +3649,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3344,7 +3680,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -3366,22 +3705,30 @@ export default class Elysia<
 	options<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3410,7 +3757,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -3432,10 +3782,14 @@ export default class Elysia<
 	options<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -3445,9 +3799,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3476,7 +3830,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	options(
@@ -3508,22 +3865,30 @@ export default class Elysia<
 	all<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3552,7 +3917,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -3574,10 +3942,14 @@ export default class Elysia<
 	all<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -3587,9 +3959,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3618,7 +3990,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	all(
@@ -3650,22 +4025,30 @@ export default class Elysia<
 	head<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3694,7 +4077,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -3716,10 +4102,14 @@ export default class Elysia<
 	head<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -3729,9 +4119,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3760,7 +4150,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	head(
@@ -3792,22 +4185,30 @@ export default class Elysia<
 	connect<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3836,7 +4237,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -3858,10 +4262,14 @@ export default class Elysia<
 	connect<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -3871,9 +4279,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -3902,7 +4310,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	connect(
@@ -3935,13 +4346,21 @@ export default class Elysia<
 		const Method extends HTTPMethod,
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
-		const Handle extends Handler<Schema, Singleton, `${BasePath}${Path}`>
+		const Handle extends Handler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		method: Method,
 		path: Path,
@@ -3949,9 +4368,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		> & {
 			config: {
@@ -3984,7 +4403,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -4007,10 +4429,14 @@ export default class Elysia<
 		const Method extends HTTPMethod,
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			(keyof Definitions['type'] | keyof EphemeralDefintion['type']) &
+				string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['type'] & EphemeralDefintion['type']
+			>,
 			Metadata['schema']
 		>,
 		const Handle extends Schema['response']
@@ -4021,9 +4447,9 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
+			Metadata['macro'] & EphemeralMetadata['macro'],
 			`${BasePath}${Path}`
 		> & {
 			config: {
@@ -4056,7 +4482,10 @@ export default class Elysia<
 						>
 					}
 				}
-			>
+			>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	route(
@@ -4109,8 +4538,8 @@ export default class Elysia<
 		options: WS.LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton,
-			Definitions['error'],
+			Singleton & EphemeralSingleton,
+			Definitions['error'] & EphemeralDefintion['error'],
 			`${BasePath}${Path}`
 		>
 	): Elysia<
@@ -4138,7 +4567,10 @@ export default class Elysia<
 					}
 				}
 			}
-		>
+		>,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	> {
 		const transform = options.transformMessage
 			? Array.isArray(options.transformMessage)
@@ -4282,7 +4714,11 @@ export default class Elysia<
 			resolve: Singleton['resolve']
 		},
 		Definitions,
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -4309,7 +4745,11 @@ export default class Elysia<
 			resolve: Singleton['resolve']
 		},
 		Definitions,
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	state<const NewStore extends Record<string, unknown>>(
@@ -4324,7 +4764,11 @@ export default class Elysia<
 			resolve: Singleton['resolve']
 		},
 		Definitions,
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -4397,7 +4841,11 @@ export default class Elysia<
 			resolve: Singleton['resolve']
 		},
 		Definitions,
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -4424,7 +4872,11 @@ export default class Elysia<
 			resolve: Singleton['resolve']
 		},
 		Definitions,
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	decorate<const NewDecorators extends Record<string, unknown>>(
@@ -4439,7 +4891,11 @@ export default class Elysia<
 			resolve: Singleton['resolve']
 		},
 		Definitions,
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	/**
@@ -4510,8 +4966,84 @@ export default class Elysia<
 			resolve: Singleton['resolve']
 		},
 		Definitions,
-		Metadata
-	> {
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
+	>
+
+	/**
+	 * Derive new property for each request with access to `Context`.
+	 *
+	 * If error is thrown, the scope will skip to handling error instead.
+	 *
+	 * ---
+	 * @example
+	 * new Elysia()
+	 *     .state('counter', 1)
+	 *     .derive(({ store }) => ({
+	 *         increase() {
+	 *             store.counter++
+	 *         }
+	 *     }))
+	 */
+	derive<
+		const Derivative extends Record<string, unknown>,
+		const Scoped extends boolean = false
+	>(
+		options: { scoped?: Scoped },
+		transform: (
+			context: Prettify<Context<Metadata['schema'], Singleton>>
+		) => MaybePromise<Derivative> extends { store: any }
+			? never
+			: Derivative
+	): Scoped extends true
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					decorator: EphemeralSingleton['decorator']
+					store: EphemeralSingleton['store']
+					derive: Prettify<
+						EphemeralSingleton['derive'] & Awaited<Derivative>
+					>
+					resolve: EphemeralSingleton['resolve']
+				},
+				EphemeralDefintion,
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Prettify<Singleton['derive'] & Awaited<Derivative>>
+					resolve: Singleton['resolve']
+				},
+				Definitions,
+				Metadata,
+				Routes,
+				EphemeralSingleton,
+				EphemeralDefintion,
+				EphemeralMetadata
+		  >
+
+	derive(
+		optionsOrTransform: { scoped?: boolean } | Function,
+		transform?: Function
+	) {
+		if (typeof optionsOrTransform === 'object') {
+			if (optionsOrTransform.scoped)
+				// @ts-ignore
+				transform.$elysiaScoped = true
+		} else transform = optionsOrTransform
+
 		// @ts-ignore
 		transform.$elysia = 'derive'
 
@@ -4531,7 +5063,11 @@ export default class Elysia<
 			>
 			error: Definitions['error']
 		},
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	model<const Recorder extends Record<string, TSchema>>(
@@ -4548,7 +5084,11 @@ export default class Elysia<
 			>
 			error: Definitions['error']
 		},
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	model<const NewType extends Record<string, TSchema>>(
@@ -4565,7 +5105,11 @@ export default class Elysia<
 			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
 		},
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	>
 
 	model(name: string | Record<string, TSchema> | Function, model?: TSchema) {
@@ -4601,7 +5145,11 @@ export default class Elysia<
 			resolve: Singleton['resolve']
 		},
 		Definitions,
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	> {
 		// @ts-ignore
 		mapper.$elysia = 'derive'
@@ -4666,7 +5214,11 @@ export default class Elysia<
 					: AddSuffixCapitalize<Word, Definitions['error']>
 				: Definitions['error']
 		},
-		Metadata
+		Metadata,
+		Routes,
+		EphemeralSingleton,
+		EphemeralDefintion,
+		EphemeralMetadata
 	> {
 		if (word === '') return this as any
 
@@ -4862,7 +5414,7 @@ export default class Elysia<
 		if (callback) callback(this.server!)
 
 		process.on('beforeExit', () => {
-			if(this.server) {
+			if (this.server) {
 				this.server.stop()
 				this.server = null
 
@@ -4899,7 +5451,7 @@ export default class Elysia<
 				"Elysia isn't running. Call `app.listen` to start the server."
 			)
 
-		if(this.server) {
+		if (this.server) {
 			this.server.stop()
 			this.server = null
 

@@ -20,7 +20,10 @@ import type {
 
 type PartialServe = Partial<Serve>
 
-export type ElysiaConfig<Prefix extends string | undefined, Scoped extends boolean | undefined> = {
+export type ElysiaConfig<
+	Prefix extends string | undefined,
+	Scoped extends boolean | undefined
+> = {
 	prefix?: Prefix
 	scoped?: Scoped
 	name?: string
@@ -533,7 +536,7 @@ export type PreHandler<
 > = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
 
 export type GracefulHandler<
-	in Instance extends Elysia<any, any, any, any, any, any>
+	in Instance extends Elysia<any, any, any, any, any, any, any, any, any>
 > = (data: Instance) => any
 
 export type ErrorHandler<

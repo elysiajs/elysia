@@ -179,10 +179,7 @@ export const mergeHook = (
 			a?.detail ?? {}
 		),
 		parse: mergeObjectArray((a?.parse as any) ?? [], b?.parse ?? []),
-		transform: mergeObjectArray(
-			a?.transform ?? [],
-			b?.transform ?? []
-		) as any,
+		transform: mergeObjectArray(a?.transform ?? [], b?.transform ?? []),
 		beforeHandle: mergeObjectArray(
 			a?.beforeHandle ?? [],
 			b?.beforeHandle ?? []
@@ -441,7 +438,7 @@ const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
 	if (!fn) return fn
 
 	if (typeof fn === 'function') {
-		// @ts-ignore
+		// @ts-expect-error
 		return fn.$elysiaHookType === 'global' ? fn : undefined
 	}
 
