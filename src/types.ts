@@ -536,7 +536,7 @@ export type PreHandler<
 > = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
 
 export type GracefulHandler<
-	in Instance extends Elysia<any, any, any, any, any, any, any, any, any>
+	in Instance extends Elysia<any, any, any, any, any, any, any, any>
 > = (data: Instance) => any
 
 export type ErrorHandler<

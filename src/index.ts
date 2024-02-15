@@ -914,6 +914,8 @@ export default class Elysia<
 		options: { scoped?: boolean } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
+		if (!handler) return this.on('transform', options as any)
+
 		return this.on(options as any, 'transform', handler as any)
 	}
 
@@ -995,7 +997,11 @@ export default class Elysia<
 		optionsOrResolve: { scoped?: boolean } | Function,
 		resolve?: Function
 	) {
-		if (!resolve) resolve = optionsOrResolve as any
+		if (!resolve) { 
+			resolve = optionsOrResolve as any
+			optionsOrResolve = { scoped: false }
+		}
+
 
 		// @ts-ignore
 		resolve.$elysia = 'resolve'
@@ -1089,6 +1095,8 @@ export default class Elysia<
 		options: { scoped?: boolean } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
+		if (!handler) return this.on('beforeHandle', options as any)
+
 		return this.on(options as any, 'beforeHandle', handler as any)
 	}
 
@@ -1144,6 +1152,8 @@ export default class Elysia<
 		options: { scoped?: boolean } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
+		if (!handler) return this.on('afterHandle', options as any)
+
 		return this.on(options as any, 'afterHandle', handler as any)
 	}
 
@@ -1199,6 +1209,8 @@ export default class Elysia<
 		options: { scoped?: boolean } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
+		if (!handler) return this.on('mapResponse', options as any)
+
 		return this.on(options as any, 'mapResponse', handler as any)
 	}
 
@@ -1254,6 +1266,8 @@ export default class Elysia<
 		options: { scoped?: boolean } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
+		if (!handler) return this.on('response', options as any)
+
 		return this.on(options as any, 'response', handler as any)
 	}
 
@@ -4693,7 +4707,7 @@ export default class Elysia<
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
 	 */
-	state<const Store extends Record<string, unknown>>(
+	state<Store extends Record<string, unknown>>(
 		store: Store
 	): Elysia<
 		BasePath,
@@ -4711,7 +4725,7 @@ export default class Elysia<
 		EphemeralMetadata
 	>
 
-	state<const NewStore extends Record<string, unknown>>(
+	state<NewStore extends Record<string, unknown>>(
 		mapper: (decorators: Singleton['store']) => NewStore
 	): Elysia<
 		BasePath,
@@ -4990,7 +5004,10 @@ export default class Elysia<
 		optionsOrTransform: { scoped?: boolean } | Function,
 		transform?: Function
 	) {
-		if (!transform) transform = optionsOrTransform as any
+		if (!transform) { 
+			transform = optionsOrTransform as any
+			optionsOrTransform = { scoped: false }
+		}
 
 		// @ts-expect-error
 		transform.$elysia = 'derive'
