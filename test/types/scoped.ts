@@ -8,21 +8,29 @@ const app = new Elysia()
 // ? Scoped derive
 {
 	const plugin = new Elysia()
+		.derive(() => ({
+			global: 'world'
+		}))
 		.derive({ scoped: true }, () => ({
 			hello: 'world'
 		}))
 		.get('/', (context) => {
 			expectTypeOf<typeof context>().toHaveProperty('hello')
+			expectTypeOf<typeof context>().toHaveProperty('global')
 		})
 
 	app.use(plugin).get('/', (context) => {
 		expectTypeOf<typeof context>().not.toHaveProperty('hello')
+		expectTypeOf<typeof context>().toHaveProperty('global')
 	})
 }
 
 // ? Scoped resolve
 {
 	const plugin = new Elysia()
+		.resolve(() => ({
+			global: 'world'
+		}))
 		.resolve({ scoped: true }, () => ({
 			hello: 'world'
 		}))
@@ -31,7 +39,7 @@ const app = new Elysia()
 		})
 
 	app.use(plugin).get('/', (context) => {
-		expectTypeOf<typeof context>().not.toHaveProperty('hello')
+		expectTypeOf<typeof context>().toHaveProperty('global')
 	})
 }
 
