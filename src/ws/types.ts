@@ -15,7 +15,8 @@ import type {
 	RouteSchema,
 	Isolate,
 	GetPathParameter,
-	MaybeArray
+	MaybeArray,
+	BaseMacro
 } from '../types'
 
 export namespace WS {
@@ -25,22 +26,19 @@ export namespace WS {
 	>
 
 	export type LocalHook<
-		LocalSchema extends InputSchema = {},
-		Route extends RouteSchema = RouteSchema,
-		Singleton extends SingletonBase = {
-			decorator: {}
-			store: {}
-			derive: {}
-			resolve: {}
-		},
-		Errors extends Record<string, Error> = {},
+		LocalSchema extends InputSchema,
+		Route extends RouteSchema,
+		Singleton extends SingletonBase,
+		Errors extends Record<string, Error>,
+		Extension extends BaseMacro,
 		Path extends string = '',
 		TypedRoute extends RouteSchema = keyof Route['params'] extends never
-			? Route & { 
-				params: Record<GetPathParameter<Path>, string>
-			}
+			? Route & {
+					params: Record<GetPathParameter<Path>, string>
+			  }
 			: Route
 	> = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
+		Extension &
 		Omit<
 			Partial<WebSocketHandler<Context>>,
 			'open' | 'message' | 'close' | 'drain' | 'publish' | 'publishToSelf'
@@ -66,7 +64,9 @@ export namespace WS {
 					/**
 					 * Headers to register to websocket before `upgrade`
 					 */
-					upgrade?: Bun.HeadersInit | ((context: Context) => Bun.HeadersInit)
+					upgrade?:
+						| Bun.HeadersInit
+						| ((context: Context) => Bun.HeadersInit)
 
 					/**
 					 * The {@link ServerWebSocket} has been opened

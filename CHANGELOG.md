@@ -1,7 +1,13 @@
 # 1.0.0 - 10 Feb 2024
+Improvement:
+- Add macro support to websocket
+- Add mapResolve
+- add `{ scoped: true }` to lifecycle event
+
 Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`
 - onStop callback called twice when calling .stop
+- mapDerive now resolve to `Singleton['derive']` instead of `Singleton['store']`
 
 # 0.8.17 - 12 Feb 2024
 Feature:

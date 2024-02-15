@@ -1,22 +1,15 @@
-import { Elysia } from '../src'
+import { Elysia, error, t } from '../src'
+import { req } from '../test/utils'
 
-// ! ⚠️ 0.8: Need to use `guard` to encapsulate lifecycle
-const plugin08 = new Elysia({ name: '0.8' })
-	.guard(app => app
-		.derive({ scoped: true }, () => ({
-			hello: () => 'world'
-		}))
-		.get('/ephemeral', ({ hello }) => hello())
-	)
-
-// ? ✅ 1.0: { scoped: true } to encapsulate lifecycle, no nesting need
-const plugin10 = new Elysia({ name: '1.0' })
-	.derive({ scoped: true }, () => ({
-		hello: () => 'world'
-	}))
-	.get('/ephemeral', ({ hello }) => hello())
+const plugin = new Elysia()
+	.onAfterHandle({ scoped: true }, ({ path }) => {
+		console.log('HI', path)
+	})
+	.get('/inner', () => 'inner')
 
 const app = new Elysia()
-	.use(plugin08)
-	.use(plugin10)
-	.get('/static', ({ hello }) => hello() ?? "Ain't no hello")
+	.use(plugin)
+	.get('/outer', () => 'outer')
+
+app.handle(req('/outer')).then(x => x.text()).then(console.log)
+app.handle(req('/inner')).then(x => x.text()).then(console.log)

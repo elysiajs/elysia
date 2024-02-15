@@ -439,11 +439,15 @@ const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
 
 	if (typeof fn === 'function') {
 		// @ts-expect-error
-		return fn.$elysiaHookType === 'global' ? fn : undefined
+		return fn.$elysiaHookType === 'global' && x.$elysiaScoped !== true
+			? fn
+			: undefined
 	}
 
-	// @ts-ignore
-	return fn.filter((x) => x.$elysiaHookType === 'global') as T
+	return fn.filter(
+		// @ts-expect-error
+		(x) => x.$elysiaHookType === 'global' && x.$elysiaScoped !== true
+	) as T
 }
 
 export const filterGlobalHook = (
