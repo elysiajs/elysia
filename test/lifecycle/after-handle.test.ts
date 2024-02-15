@@ -35,4 +35,61 @@ describe('After Handle', () => {
 
 		expect(res).toBe('NOOP')
 	})
+
+	it('scoped true', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onAfterHandle({ scoped: true }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	it('scoped false', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onAfterHandle({ scoped: false }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('support array', async () => {
+		let total = 0
+
+		const app = new Elysia()
+			.onAfterHandle([
+				() => {
+					total++
+				},
+				() => {
+					total++
+				}
+			])
+			.get('/', () => 'NOOP')
+
+		const res = await app.handle(req('/'))
+
+		expect(total).toEqual(2)
+	})
 })

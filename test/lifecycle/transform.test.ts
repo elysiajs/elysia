@@ -204,17 +204,73 @@ describe('Transform', () => {
 	})
 
 	it('validate property', async () => {
-		const app = new Elysia()
-			.get('/id/:id', ({ params: { id } }) => id, {
-				params: t.Object({
-					id: t.Numeric({ minimum: 0 })
-				})
+		const app = new Elysia().get('/id/:id', ({ params: { id } }) => id, {
+			params: t.Object({
+				id: t.Numeric({ minimum: 0 })
 			})
+		})
 
 		const correct = await app.handle(req('/id/1')).then((x) => x.status)
 		expect(correct).toBe(200)
 
 		const invalid = await app.handle(req('/id/-1')).then((x) => x.status)
 		expect(invalid).toBe(400)
+	})
+
+	it('scoped true', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onTransform({ scoped: true }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	it('scoped false', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onTransform({ scoped: false }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('support array', async () => {
+		let total = 0
+
+		const app = new Elysia()
+			.onTransform([
+				() => {
+					total++
+				},
+				() => {
+					total++
+				}
+			])
+			.get('/', () => 'NOOP')
+
+		const res = await app.handle(req('/'))
+
+		expect(total).toEqual(2)
 	})
 })

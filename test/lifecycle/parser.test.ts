@@ -1,6 +1,7 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
+import { post } from '../utils'
 
 describe('Parser', () => {
 	it('handle onParse', async () => {
@@ -137,5 +138,62 @@ describe('Parser', () => {
 			.then((x) => x.text())
 
 		expect(res).toBe('hi')
+	})
+
+	it('scoped true', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onParse({ scoped: true }, ({ path }) => {
+				called.push(path)
+			})
+			.post('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(post('/inner', {})),
+			app.handle(post('/outer', {}))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	it('scoped false', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onParse({ scoped: false }, ({ path }) => {
+				called.push(path)
+			})
+			.post('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(post('/inner', {})),
+			app.handle(post('/outer', {}))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('support array', async () => {
+		let total = 0
+
+		const app = new Elysia()
+			.onParse([
+				() => {
+					total++
+				},
+				() => {
+					total++
+				}
+			])
+			.post('/', ({ body }) => 'NOOP')
+
+		const res = await app.handle(post('/', {}))
+
+		expect(total).toEqual(2)
 	})
 })

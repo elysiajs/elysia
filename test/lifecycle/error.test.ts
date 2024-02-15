@@ -74,8 +74,9 @@ describe('error', () => {
 			})
 
 		const res = await app.handle(post('/login', {}))
-		const data = await res.json<any[]>()
+		const data = await res.json()
 
+		// @ts-ignore
 		expect(data.length).toBe(4)
 		expect(res.status).toBe(400)
 	})
@@ -106,10 +107,82 @@ describe('error', () => {
 	})
 
 	it('error function name', async () => {
-		const app = new Elysia().get('/', () => error("I'm a teapot", 'I am a teapot'))
+		const app = new Elysia().get('/', () =>
+			error("I'm a teapot", 'I am a teapot')
+		)
 
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
 	})
+
+	it('scoped true', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onError({ scoped: true }, ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => {
+				throw new Error('A')
+			})
+
+		const app = new Elysia().use(plugin).get('/outer', () => {
+			throw new Error('A')
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	it('scoped false', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onError({ scoped: false }, ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => {
+				throw new Error('A')
+			})
+
+		const app = new Elysia().use(plugin).get('/outer', () => {
+			throw new Error('A')
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('support array', async () => {
+		let total = 0
+
+		const app = new Elysia()
+			.onAfterHandle([
+				() => {
+					total++
+				},
+				() => {
+					total++
+				}
+			])
+			.get('/', () => 'NOOP')
+
+		const res = await app.handle(req('/'))
+
+		expect(total).toEqual(2)
+	})
+
 })

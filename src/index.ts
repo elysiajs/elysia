@@ -860,10 +860,41 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onParse(parser: MaybeArray<BodyHandler<Metadata['schema'], Singleton>>) {
-		this.on('parse', parser)
+	onParse(
+		parser: MaybeArray<BodyHandler<Metadata['schema'], Singleton>>
+	): this
 
-		return this
+	/**
+	 * ### parse | Life cycle event
+	 * Callback function to handle body parsing
+	 *
+	 * If truthy value is returned, will be assigned to `context.body`
+	 * Otherwise will skip the callback and look for the next one.
+	 *
+	 * Equivalent to Express's body parser
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onParse((request, contentType) => {
+	 *         if(contentType === "application/json")
+	 *             return request.json()
+	 *     })
+	 * ```
+	 */
+	onParse(
+		options: { scoped?: boolean },
+		parser: MaybeArray<BodyHandler<Metadata['schema'], Singleton>>
+	): this
+
+	onParse(
+		options: { scoped?: boolean } | MaybeArray<Function>,
+		handler?: MaybeArray<Function>
+	) {
+		if (!handler) return this.on('parse', options as any)
+
+		return this.on(options as { scoped?: boolean }, 'parse', handler as any)
 	}
 
 	/**
@@ -880,7 +911,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onTransform<const Schema extends RouteSchema = {}>(
+	onTransform<const Schema extends RouteSchema>(
 		handler: MaybeArray<
 			TransformHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
@@ -900,11 +931,8 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onTransform<
-		const Schema extends RouteSchema = {},
-		const Scoped extends boolean = false
-	>(
-		options: { scoped?: Scoped },
+	onTransform<const Schema extends RouteSchema>(
+		options: { scoped?: boolean },
 		handler: MaybeArray<
 			TransformHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
@@ -916,7 +944,11 @@ export default class Elysia<
 	) {
 		if (!handler) return this.on('transform', options as any)
 
-		return this.on(options as any, 'transform', handler as any)
+		return this.on(
+			options as { scoped?: boolean },
+			'transform',
+			handler as any
+		)
 	}
 
 	/**
@@ -940,21 +972,23 @@ export default class Elysia<
 	>(
 		options: { scoped?: Scoped },
 		resolver: (
-			context: Prettify<Context<Metadata['schema'], Singleton>>
+			context: Prettify<
+				Context<Metadata['schema'], Singleton & EphemeralSingleton>
+			>
 		) => MaybePromise<Resolver> extends { store: any } ? never : Resolver
 	): Elysia<
 		BasePath,
 		Scoped,
-		{
-			decorator: Singleton['decorator']
-			store: Singleton['store']
-			derive: Singleton['resolve']
-			resolve: Prettify<Singleton['resolve'] & Awaited<Resolver>>
-		},
+		Singleton,
 		Definitions,
 		Metadata,
 		Routes,
-		EphemeralSingleton,
+		{
+			decorator: EphemeralSingleton['decorator']
+			store: EphemeralSingleton['store']
+			derive: EphemeralSingleton['resolve']
+			resolve: Prettify<EphemeralSingleton['resolve'] & Awaited<Resolver>>
+		},
 		EphemeralMetadata
 	>
 
@@ -975,7 +1009,9 @@ export default class Elysia<
 	 */
 	resolve<const Resolver extends Record<string, unknown>>(
 		resolver: (
-			context: Prettify<Context<Metadata['schema'], Singleton>>
+			context: Prettify<
+				Context<Metadata['schema'], Singleton & EphemeralSingleton>
+			>
 		) => MaybePromise<Resolver> extends { store: any } ? never : Resolver
 	): Elysia<
 		BasePath,
@@ -983,7 +1019,7 @@ export default class Elysia<
 		{
 			decorator: Singleton['decorator']
 			store: Singleton['store']
-			derive: Singleton['resolve']
+			derive: Singleton['derive']
 			resolve: Prettify<Singleton['resolve'] & Awaited<Resolver>>
 		},
 		Definitions,
@@ -997,11 +1033,10 @@ export default class Elysia<
 		optionsOrResolve: { scoped?: boolean } | Function,
 		resolve?: Function
 	) {
-		if (!resolve) { 
+		if (!resolve) {
 			resolve = optionsOrResolve as any
 			optionsOrResolve = { scoped: false }
 		}
-
 
 		// @ts-ignore
 		resolve.$elysia = 'resolve'
@@ -1014,7 +1049,11 @@ export default class Elysia<
 
 	mapResolve<const NewResolver extends Record<string, unknown>>(
 		mapper: (
-			context: Context<Metadata['schema'], Singleton, BasePath>
+			context: Context<
+				Metadata['schema'],
+				Singleton & EphemeralSingleton,
+				BasePath
+			>
 		) => MaybePromise<NewResolver>
 	): Elysia<
 		BasePath,
@@ -1097,7 +1136,11 @@ export default class Elysia<
 	) {
 		if (!handler) return this.on('beforeHandle', options as any)
 
-		return this.on(options as any, 'beforeHandle', handler as any)
+		return this.on(
+			options as { scoped?: boolean },
+			'beforeHandle',
+			handler as any
+		)
 	}
 
 	/**
@@ -1138,11 +1181,8 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onAfterHandle<
-		const Schema extends RouteSchema,
-		const Scoped extends boolean = false
-	>(
-		options: { scoped?: Scoped },
+	onAfterHandle<const Schema extends RouteSchema>(
+		options: { scoped?: boolean },
 		handler: MaybeArray<
 			AfterHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
@@ -1154,7 +1194,11 @@ export default class Elysia<
 	) {
 		if (!handler) return this.on('afterHandle', options as any)
 
-		return this.on(options as any, 'afterHandle', handler as any)
+		return this.on(
+			options as { scoped?: boolean },
+			'afterHandle',
+			handler as any
+		)
 	}
 
 	/**
@@ -1195,11 +1239,8 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	mapResponse<
-		const Schema extends RouteSchema,
-		const Scoped extends boolean = false
-	>(
-		options: { scoped?: Scoped },
+	mapResponse<const Schema extends RouteSchema>(
+		options: { scoped?: boolean },
 		handler: MaybeArray<
 			MapResponse<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
@@ -1211,7 +1252,11 @@ export default class Elysia<
 	) {
 		if (!handler) return this.on('mapResponse', options as any)
 
-		return this.on(options as any, 'mapResponse', handler as any)
+		return this.on(
+			options as { scoped?: boolean },
+			'mapResponse',
+			handler as any
+		)
 	}
 
 	/**
@@ -1252,11 +1297,8 @@ export default class Elysia<
 	 * ```
 	 */
 
-	onResponse<
-		const Schema extends RouteSchema,
-		const Scoped extends boolean = false
-	>(
-		options: { scoped?: Scoped },
+	onResponse<const Schema extends RouteSchema>(
+		options: { scoped?: boolean },
 		handler: MaybeArray<
 			VoidHandler<MergeSchema<Schema, Metadata['schema']>, Singleton>
 		>
@@ -1268,7 +1310,11 @@ export default class Elysia<
 	) {
 		if (!handler) return this.on('response', options as any)
 
-		return this.on(options as any, 'response', handler as any)
+		return this.on(
+			options as { scoped?: boolean },
+			'response',
+			handler as any
+		)
 	}
 
 	/**
@@ -1287,19 +1333,69 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	trace<Schema extends RouteSchema = {}>(
-		handler: TraceHandler<Schema, Singleton>
-	) {
-		this.reporter.on(
-			'event',
-			createTraceListener(
-				() => this.reporter,
-				this.event.trace.length,
-				handler
-			)
-		)
+	trace<const Schema extends RouteSchema>(
+		handler: MaybeArray<TraceHandler<Schema, Singleton>>
+	): this
 
-		this.on('trace', handler)
+	/**
+	 * ### After Handle | Life cycle event
+	 * Intercept request **after** main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onAfterHandle((context, response) => {
+	 *         if(typeof response === "object")
+	 *             return JSON.stringify(response)
+	 *     })
+	 * ```
+	 */
+	trace<const Schema extends RouteSchema>(
+		options: { scoped?: boolean },
+		handler: MaybeArray<TraceHandler<Schema, Singleton>>
+	): this
+
+	/**
+	 * ### After Handle | Life cycle event
+	 * Intercept request **after** main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onAfterHandle((context, response) => {
+	 *         if(typeof response === "object")
+	 *             return JSON.stringify(response)
+	 *     })
+	 * ```
+	 */
+	trace(
+		options: { scoped?: boolean } | MaybeArray<Function>,
+		handler?: MaybeArray<Function>
+	) {
+		if (!handler) {
+			handler = options as MaybeArray<Function>
+			options = { scoped: false }
+		}
+
+		if (!Array.isArray(handler)) handler = [handler] as Function[]
+
+		for (const fn of handler)
+			this.reporter.on(
+				'event',
+				createTraceListener(
+					() => this.reporter,
+					this.event.trace.length,
+					fn as any
+				)
+			)
+
+		this.on(options as { scoped?: boolean }, 'trace', handler as any)
 
 		return this
 	}
@@ -1489,16 +1585,58 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onError<Schema extends RouteSchema = {}>(
+	onError<const Schema extends RouteSchema>(
 		handler: ErrorHandler<
 			Definitions['error'],
 			MergeSchema<Schema, Metadata['schema']>,
 			Singleton
 		>
-	) {
-		this.on('error', handler as ErrorHandler<any, any, any>)
+	): this
 
-		return this
+	/**
+	 * ### Error | Life cycle event
+	 * Called when error is thrown during processing request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onError(({ code }) => {
+	 *         if(code === "NOT_FOUND")
+	 *             return "Path not found :("
+	 *     })
+	 * ```
+	 */
+	onError<const Schema extends RouteSchema>(
+		options: { scoped?: boolean },
+		handler: ErrorHandler<
+			Definitions['error'],
+			MergeSchema<Schema, Metadata['schema']>,
+			Singleton
+		>
+	): this
+
+	/**
+	 * ### Error | Life cycle event
+	 * Called when error is thrown during processing request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onError(({ code }) => {
+	 *         if(code === "NOT_FOUND")
+	 *             return "Path not found :("
+	 *     })
+	 * ```
+	 */
+	onError(
+		options: { scoped?: boolean } | MaybeArray<Function>,
+		handler?: MaybeArray<Function>
+	) {
+		if (!handler) return this.on('error', options as any)
+
+		return this.on(options as { scoped?: boolean }, 'error', handler as any)
 	}
 
 	/**
@@ -2155,7 +2293,8 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		true,
-		NewElysia['_types']['Singleton'],
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
 		Definitions,
 		Metadata,
 		Routes extends ``
@@ -2424,7 +2563,12 @@ export default class Elysia<
 		const { name, seed } = plugin.config
 
 		plugin.getServer = () => this.getServer()
-		this.headers(plugin.setHeaders)
+
+		/**
+		 * Model and error is required for Swagger generation
+		 */
+		plugin.model(this.definitions.type as any)
+		plugin.error(this.definitions.error as any)
 
 		const isScoped = plugin.config.scoped as boolean
 		if (isScoped) {
@@ -2480,8 +2624,6 @@ export default class Elysia<
 				)
 			}
 
-			plugin.model(this.definitions.type as any)
-			plugin.error(this.definitions.error as any)
 			plugin.extender.macros = [
 				...this.extender.macros,
 				...plugin.extender.macros
@@ -2529,8 +2671,13 @@ export default class Elysia<
 
 			return this
 		} else {
+			this.headers(plugin.setHeaders)
+
 			plugin.reporter = this.reporter
-			for (const trace of plugin.event.trace) this.trace(trace)
+			for (const trace of plugin.event.trace) {
+				// @ts-expect-error
+				if (trace.$elysiaScoped !== true) this.trace(trace)
+			}
 
 			if (name) {
 				if (!(name in this.dependencies)) this.dependencies[name] = []
@@ -4675,25 +4822,45 @@ export default class Elysia<
 	state<const Name extends string | number | symbol, Value>(
 		name: Name,
 		value: Value
-	): Elysia<
-		BasePath,
-		Scoped,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<
-				Singleton['store'] & {
-					[name in Name]: Value
-				}
-			>
-			derive: Singleton['derive']
-			resolve: Singleton['resolve']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
+	): Scoped extends true
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					decorator: EphemeralSingleton['decorator']
+					store: Prettify<
+						EphemeralSingleton['store'] & {
+							[name in Name]: Value
+						}
+					>
+					derive: EphemeralSingleton['derive']
+					resolve: EphemeralSingleton['resolve']
+				},
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				{
+					decorator: Singleton['decorator']
+					store: Prettify<
+						Singleton['store'] & {
+							[name in Name]: Value
+						}
+					>
+					derive: Singleton['derive']
+					resolve: Singleton['resolve']
+				},
+				Definitions,
+				Metadata,
+				Routes,
+				EphemeralSingleton,
+				EphemeralMetadata
+		  >
 
 	/**
 	 * ### state
@@ -4709,39 +4876,73 @@ export default class Elysia<
 	 */
 	state<Store extends Record<string, unknown>>(
 		store: Store
-	): Elysia<
-		BasePath,
-		Scoped,
-		{
-			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & Store>
-			derive: Singleton['derive']
-			resolve: Singleton['resolve']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
+	): Scoped extends true
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					decorator: EphemeralSingleton['decorator']
+					store: Prettify<EphemeralSingleton['store'] & Store>
+					derive: EphemeralSingleton['derive']
+					resolve: EphemeralSingleton['resolve']
+				},
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				{
+					decorator: Singleton['decorator']
+					store: Prettify<Singleton['store'] & Store>
+					derive: Singleton['derive']
+					resolve: Singleton['resolve']
+				},
+				Definitions,
+				Metadata,
+				Routes,
+				EphemeralSingleton,
+				EphemeralMetadata
+		  >
 
 	state<NewStore extends Record<string, unknown>>(
-		mapper: (decorators: Singleton['store']) => NewStore
-	): Elysia<
-		BasePath,
-		Scoped,
-		{
-			decorator: Singleton['decorator']
-			store: NewStore
-			derive: Singleton['derive']
-			resolve: Singleton['resolve']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
+		mapper: (
+			decorators: Singleton['store'] & EphemeralSingleton['store']
+		) => NewStore
+	): Scoped extends true
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					decorator: EphemeralSingleton['decorator']
+					store: NewStore
+					derive: EphemeralSingleton['derive']
+					resolve: EphemeralSingleton['resolve']
+				},
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				{
+					decorator: Singleton['decorator']
+					store: NewStore
+					derive: Singleton['derive']
+					resolve: Singleton['resolve']
+				},
+				Definitions,
+				Metadata,
+				Routes,
+				EphemeralSingleton,
+				EphemeralMetadata
+		  >
 
 	/**
 	 * ### state
@@ -4799,25 +5000,45 @@ export default class Elysia<
 	decorate<const Name extends string, const Value>(
 		name: Name,
 		value: Value
-	): Elysia<
-		BasePath,
-		Scoped,
-		{
-			decorator: Prettify<
-				Singleton['decorator'] & {
-					[name in Name]: Value
-				}
-			>
-			store: Singleton['store']
-			derive: Singleton['derive']
-			resolve: Singleton['resolve']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
+	): Scoped extends true
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					decorator: Prettify<
+						EphemeralSingleton['decorator'] & {
+							[name in Name]: Value
+						}
+					>
+					store: EphemeralSingleton['store']
+					derive: EphemeralSingleton['derive']
+					resolve: EphemeralSingleton['resolve']
+				},
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				{
+					decorator: Prettify<
+						Singleton['decorator'] & {
+							[name in Name]: Value
+						}
+					>
+					store: Singleton['store']
+					derive: Singleton['derive']
+					resolve: Singleton['resolve']
+				},
+				Definitions,
+				Metadata,
+				Routes,
+				EphemeralSingleton,
+				EphemeralMetadata
+		  >
 
 	/**
 	 * ### decorate
@@ -4833,39 +5054,75 @@ export default class Elysia<
 	 */
 	decorate<const NewDecorators extends Record<string, unknown>>(
 		decorators: NewDecorators
-	): Elysia<
-		BasePath,
-		Scoped,
-		{
-			decorator: Prettify<Singleton['decorator'] & NewDecorators>
-			store: Singleton['store']
-			derive: Singleton['derive']
-			resolve: Singleton['resolve']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
+	): Scoped extends true
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					decorator: Prettify<
+						EphemeralSingleton['decorator'] & NewDecorators
+					>
+					store: EphemeralSingleton['store']
+					derive: EphemeralSingleton['derive']
+					resolve: EphemeralSingleton['resolve']
+				},
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				{
+					decorator: Prettify<Singleton['decorator'] & NewDecorators>
+					store: Singleton['store']
+					derive: Singleton['derive']
+					resolve: Singleton['resolve']
+				},
+				Definitions,
+				Metadata,
+				Routes,
+				EphemeralSingleton,
+				EphemeralMetadata
+		  >
 
 	decorate<const NewDecorators extends Record<string, unknown>>(
-		mapper: (decorators: Singleton['decorator']) => NewDecorators
-	): Elysia<
-		BasePath,
-		Scoped,
-		{
-			decorator: NewDecorators
-			store: Singleton['store']
-			derive: Singleton['derive']
-			resolve: Singleton['resolve']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
+		mapper: (
+			decorators: Singleton['decorator'] & EphemeralSingleton['decorator']
+		) => NewDecorators
+	): Scoped extends true
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					decorator: NewDecorators
+					store: EphemeralSingleton['store']
+					derive: EphemeralSingleton['derive']
+					resolve: EphemeralSingleton['resolve']
+				},
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				{
+					decorator: NewDecorators
+					store: Singleton['store']
+					derive: Singleton['derive']
+					resolve: Singleton['resolve']
+				},
+				Definitions,
+				Metadata,
+				Routes,
+				EphemeralSingleton,
+				EphemeralMetadata
+		  >
 
 	/**
 	 * ### decorate
@@ -4921,7 +5178,9 @@ export default class Elysia<
 	 */
 	derive<const Derivative extends Record<string, unknown>>(
 		transform: (
-			context: Prettify<Context<Metadata['schema'], Singleton>>
+			context: Prettify<
+				Context<Metadata['schema'], Singleton & EphemeralSingleton>
+			>
 		) => MaybePromise<Derivative> extends { store: any }
 			? never
 			: Derivative
@@ -4962,7 +5221,9 @@ export default class Elysia<
 	>(
 		options: { scoped?: Scoped },
 		transform: (
-			context: Prettify<Context<Metadata['schema'], Singleton>>
+			context: Prettify<
+				Context<Metadata['schema'], Singleton & EphemeralSingleton>
+			>
 		) => MaybePromise<Derivative> extends { store: any }
 			? never
 			: Derivative
@@ -5004,7 +5265,7 @@ export default class Elysia<
 		optionsOrTransform: { scoped?: boolean } | Function,
 		transform?: Function
 	) {
-		if (!transform) { 
+		if (!transform) {
 			transform = optionsOrTransform as any
 			optionsOrTransform = { scoped: false }
 		}
@@ -5100,7 +5361,11 @@ export default class Elysia<
 
 	mapDerive<const NewDerivative extends Record<string, unknown>>(
 		mapper: (
-			context: Context<Metadata['schema'], Singleton, BasePath>
+			context: Context<
+				Metadata['schema'],
+				Singleton & EphemeralSingleton,
+				BasePath
+			>
 		) => MaybePromise<NewDerivative>
 	): Elysia<
 		BasePath,

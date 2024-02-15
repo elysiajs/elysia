@@ -403,7 +403,8 @@ export const asGlobalHook = (
 		beforeHandle: asGlobal(hook?.beforeHandle, inject),
 		afterHandle: asGlobal(hook?.afterHandle, inject),
 		onResponse: asGlobal(hook?.onResponse, inject),
-		error: asGlobal(hook?.error, inject)
+		error: asGlobal(hook?.error, inject),
+		mapResponse: asGlobal(hook?.mapResponse, inject)
 	} as LocalHook<any, any, any, any, any, any, any>
 }
 
@@ -463,7 +464,8 @@ export const filterGlobalHook = (
 		beforeHandle: filterGlobal(hook?.beforeHandle),
 		afterHandle: filterGlobal(hook?.afterHandle),
 		onResponse: filterGlobal(hook?.onResponse),
-		error: filterGlobal(hook?.error)
+		error: filterGlobal(hook?.error),
+		mapResponse: filterGlobal(hook?.mapResponse)
 	} as LocalHook<any, any, any, any, any, any, any>
 }
 
