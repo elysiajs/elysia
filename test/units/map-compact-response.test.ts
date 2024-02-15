@@ -41,7 +41,7 @@ describe('Map Compact Response', () => {
 		const response = mapCompactResponse(body)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual(body)
+		expect(await response.json()).toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -89,7 +89,7 @@ describe('Map Compact Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual(body)
+		expect(await response.json()).toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -97,7 +97,7 @@ describe('Map Compact Response', () => {
 		const response = mapCompactResponse(new Error('Hello'))
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual({
+		expect(await response.json()).toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -124,7 +124,7 @@ describe('Map Compact Response', () => {
 		const response = mapCompactResponse(new Student('Himari'))
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual({
+		expect(await response.json()).toEqual({
 			name: 'Himari'
 		})
 		expect(response.status).toBe(200)

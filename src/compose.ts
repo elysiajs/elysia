@@ -149,34 +149,27 @@ const composeValidationFactory = (
 ) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
 		hasErrorHandler
-			? `c.set.status = 400; throw new ValidationError(
-'${type}',
-${type},
-${value}
-)`
-			: `c.set.status = 400; return new ValidationError(
-	'${type}',
-	${type},
-	${value}
-).toResponse(c.set.headers)`,
+			? `c.set.status = 400; throw new ValidationError('${type}', ${type}, ${value})`
+			: `c.set.status = 400; return new ValidationError('${type}', ${type}, ${value}).toResponse(c.set.headers)`,
 	composeResponseValidation: (name = 'r') => {
 		const returnError = hasErrorHandler
-			? `throw new ValidationError(
-'response',
-response[c.set.status],
-${name}
-)`
-			: `return new ValidationError(
-'response',
-response[c.set.status],
-${name}
-).toResponse(c.set.headers)`
+			? `throw new ValidationError('response', response[c.set.status], ${name})`
+			: `return new ValidationError('response', response[c.set.status], ${name}).toResponse(c.set.headers)`
 
 		return `\n${injectResponse}
-		if(!(${name} instanceof Response) && response[c.set.status]?.Check(${name}) === false) {
-	if(!(response instanceof Error))
-		${returnError}
-}\n`
+
+			if(typeof ${name} === "object" && ELYSIA_RESPONSE in ${name}) {
+				if(!(${name} instanceof Response) && response[${name}[ELYSIA_RESPONSE]]?.Check(${name}.response) === false) {
+					if(!(response instanceof Error)) {
+						c.set.status = ${name}[ELYSIA_RESPONSE]
+
+						${returnError}
+					}
+				}
+			} else if(!(${name} instanceof Response) && response[c.set.status]?.Check(${name}) === false) {
+				if(!(response instanceof Error))
+					${returnError}
+			}\n`
 	}
 })
 
@@ -1255,7 +1248,8 @@ export const composeHandler = ({
 		requestId,
 		parseCookie,
 		signCookie,
-		decodeURIComponent
+		decodeURIComponent,
+		ELYSIA_RESPONSE
 	} = hooks
 
 	${
@@ -1303,11 +1297,14 @@ export const composeHandler = ({
 		requestId,
 		parseCookie,
 		signCookie,
-		decodeURIComponent
+		decodeURIComponent,
+		ELYSIA_RESPONSE
 	})
 }
 
-export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any, any, any>) => {
+export const composeGeneralHandler = (
+	app: Elysia<any, any, any, any, any, any, any, any>
+) => {
 	const inference = app.inference.trace
 
 	let decoratorsLiteral = ''
@@ -1570,7 +1567,9 @@ export const composeGeneralHandler = (app: Elysia<any, any, any, any, any, any, 
 	})
 }
 
-export const composeErrorHandler = (app: Elysia<any, any, any, any, any, any, any, any>) => {
+export const composeErrorHandler = (
+	app: Elysia<any, any, any, any, any, any, any, any>
+) => {
 	let fnLiteral = `const {
 		app: { event: { error: onError, onResponse: res } },
 		mapResponse,
@@ -1619,7 +1618,13 @@ export const composeErrorHandler = (app: Elysia<any, any, any, any, any, any, an
 		set.status = error.status ?? 400
 		return new Response(
 			error.message,
-			{ headers: set.headers, status: set.status }
+			{ 
+				headers: Object.assign(
+					{ 'content-type': 'application/json'}, 
+					set.headers
+				), 
+				status: set.status
+			}
 		)
 	} else {
 		if(error.code && typeof error.status === "number")

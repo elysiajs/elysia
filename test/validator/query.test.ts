@@ -60,7 +60,7 @@ describe('Query Validator', () => {
 			req('/?name=sucrose&job=alchemist&trait=dog')
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -93,7 +93,7 @@ describe('Query Validator', () => {
 		})
 		const res = await app.handle(req('/?name=sucrose&job=alchemist'))
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})
@@ -111,7 +111,7 @@ describe('Query Validator', () => {
 		})
 		const res = await app.handle(req('/?name=sucrose&job=alchemist&age=16'))
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16
@@ -133,7 +133,7 @@ describe('Query Validator', () => {
 			req('/?name=sucrose&job=alchemist&age=16&rank=4')
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16,
@@ -155,7 +155,7 @@ describe('Query Validator', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(200)
-		expect(await res.json<any>()).toEqual({})
+		expect(await res.json()).toEqual({})
 	})
 
 	it('parse numeric with partial', async () => {
@@ -173,7 +173,7 @@ describe('Query Validator', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(200)
-		expect(await res.json<any>()).toEqual({})
+		expect(await res.json()).toEqual({})
 	})
 
 	it('parse boolean string', async () => {

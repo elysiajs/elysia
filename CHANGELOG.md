@@ -8,6 +8,8 @@ Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`
 - onStop callback called twice when calling .stop
 - mapDerive now resolve to `Singleton['derive']` instead of `Singleton['store']`
+- ValidationError doesn't return `content-type` as `application/json`
+- `error(status, value)` doesn't validate per status
 
 # 0.8.17 - 12 Feb 2024
 Feature:

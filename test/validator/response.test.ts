@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, error, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req, upload } from '../utils'
@@ -58,7 +58,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json<any>()).toEqual({ name: 'sucrose' })
+		expect(await res.json()).toEqual({ name: 'sucrose' })
 		expect(res.status).toBe(200)
 	})
 
@@ -80,7 +80,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -126,7 +126,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})
@@ -288,5 +288,21 @@ describe('Response Validator', () => {
 		expect(r200invalid.status).toBe(400)
 		expect(r201valid.status).toBe(201)
 		expect(r201invalid.status).toBe(400)
+	})
+
+	it('validate response per status with error()', async () => {
+		const app = new Elysia().get(
+			'/',
+			// @ts-ignore
+			() => {
+				return error(418, 'I am a teapot')
+			},
+			{
+				response: {
+					200: t.String(),
+					418: t.String()
+				}
+			}
+		)
 	})
 })

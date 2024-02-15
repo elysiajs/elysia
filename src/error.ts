@@ -94,6 +94,9 @@ export class ValidationError extends Error {
 		public validator: TSchema | TypeCheck<any>,
 		public value: unknown
 	) {
+		// @ts-expect-error
+		if (typeof value === "object" && ELYSIA_RESPONSE in value) value = value.response
+
 		const error = isProduction
 			? undefined
 			: 'Errors' in validator
@@ -164,7 +167,10 @@ export class ValidationError extends Error {
 	toResponse(headers?: Record<string, any>) {
 		return new Response(this.message, {
 			status: 400,
-			headers
+			headers: {
+				...headers,
+				'content-type': 'application/json',
+			}
 		})
 	}
 }
