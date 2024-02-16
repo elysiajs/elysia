@@ -1,11 +1,20 @@
 import { Elysia, t } from '../src'
-import { post } from '../test/utils'
+import { inferBodyReference } from '../src/sucrose'
+import { post, req } from '../test/utils'
 
-const app = new Elysia()
-	.get('/', () => true)
-	.get('/true', () => true)
-	.get('/true', () => true)
-    .get('/false', () => false)
-    .post('/mirror', ({ body }) => body)
+const app = new Elysia({ precompile: true }).get('/', ({ set, query }) => {
+	console.log(
+		{ a: query.quack },
+		{
+			b: query.duck
+		}
+	)
 
-type A = typeof app._routes.true.get.response
+	const b = query.quack
+
+	return 'a'
+})
+
+console.log(app.router.history[0].composed.toString())
+
+app.handle(req('/?quack=a&duck=ducker'))

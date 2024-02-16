@@ -333,9 +333,8 @@ export const inferBodyReference = (
 		if (alias.charCodeAt(0) === 123) {
 			alias = retrieveRootParamters(alias)
 
-			if (!inference.query && alias.includes('query')) {
+			if (!inference.query && alias.includes('query'))
 				inference.query = true
-			}
 
 			if (!inference.headers && alias.includes('headers'))
 				inference.headers = true
@@ -363,46 +362,53 @@ export const inferBodyReference = (
 
 		if (!inference.query && access('query', alias)) inference.query = true
 
-		if (inference.query) {
-			let keyword = alias + '.'
-			if (code.includes(keyword + 'query')) keyword = alias + '.query'
+		if (inference.query)
+			while (true) {
+				let keyword = alias + '.'
+				if (code.includes(keyword + 'query')) keyword = alias + '.query'
 
-			let start = code.indexOf(keyword)
-			if (start === -1) start = code.indexOf(alias + '[')
+				let start = code.indexOf(keyword)
+				if (start === -1) start = code.indexOf(alias + '[')
 
-			if (start !== -1) {
-				let end: number | undefined = code.indexOf(' ', start)
-				if (end === -1) end = undefined
+				if (start !== -1) {
+					let end: number | undefined = code.indexOf(' ', start)
+					if (end === -1) end = undefined
 
-				let query = code.slice(start + alias.length + 1, end).trimEnd()
+					const index = start + alias.length + 1
+					code = code.slice(start + alias.length + 1)
+					let query = code.slice(0, end ? end - index : end).trimEnd()
 
-				// Remove nested dot
-				while (start !== -1) {
-					start = query.indexOf('.')
+					// Remove nested dot
+					while (start !== -1) {
+						start = query.indexOf('.')
 
-					if (start !== -1) query = query.slice(start + 1)
+						if (start !== -1) query = query.slice(start + 1)
+					}
+
+					// Remove semi-colon
+					if (query.charCodeAt(query.length - 1) === 59)
+						query = query.slice(0, -1)
+
+					// Remove comma
+					if (query.charCodeAt(query.length - 1) === 44)
+						query = query.slice(0, -1)
+
+					// Remove closing square bracket
+					if (query.charCodeAt(query.length - 1) === 93)
+						query = query.slice(0, -1)
+
+					// Remove closing bracket
+					if (query.charCodeAt(query.length - 1) === 41)
+						query = query.slice(0, -1)
+
+					if (query && !inference.queries.includes(query)) {
+						inference.queries.push(query)
+						continue
+					}
 				}
 
-				// Remove semi-colon
-				if (query.charCodeAt(query.length - 1) === 59)
-					query = query.slice(0, -1)
-
-				// Remove comma
-				if (query.charCodeAt(query.length - 1) === 44)
-					query = query.slice(0, -1)
-
-				// Remove closing square bracket
-				if (query.charCodeAt(query.length - 1) === 93)
-					query = query.slice(0, -1)
-
-				// Remove closing bracket
-				if (query.charCodeAt(query.length - 1) === 41)
-					query = query.slice(0, -1)
-
-				if (query && !inference.queries.includes(query))
-					inference.queries.push(query)
+				break
 			}
-		}
 
 		if (!inference.headers && access('headers', alias))
 			inference.headers = true
@@ -449,7 +455,10 @@ export const removeDefaultParameter = (parameter: string) => {
 		parameter = parameter.slice(0, index) + parameter.slice(end)
 	}
 
-	return parameter.split(',').map((i) => i.trim()).join(', ')
+	return parameter
+		.split(',')
+		.map((i) => i.trim())
+		.join(', ')
 }
 
 /**
@@ -576,6 +585,7 @@ export const sucrose = (
 
 	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
 		events.push(lifeCycle.handler)
+
 	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
 	if (lifeCycle.parse?.length) events.push(...lifeCycle.parse)
 	if (lifeCycle.error?.length) events.push(...lifeCycle.error)
@@ -595,12 +605,12 @@ export const sucrose = (
 			const aliases = findAlias(mainParameter, body)
 			aliases.splice(0, -1, mainParameter)
 
-			if (rootParameters.includes('query')) aliases.push('query')
-
 			inferBodyReference(body, aliases, inference)
 		}
 
 		if (inference.query) {
+			inferBodyReference(body, ['query'], inference)
+
 			const queryIndex = parameter.indexOf('query: {')
 
 			if (queryIndex !== -1) {

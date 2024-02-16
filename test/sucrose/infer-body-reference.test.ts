@@ -36,7 +36,7 @@ describe('infer body reference', () => {
 		expect(inference.body).toBe(true)
 	})
 
-    it('infer all inferences if passed to function', () => {
+	it('infer all inferences if passed to function', () => {
 		const code = 'a(context)'
 		const aliases = ['context']
 		const inference = {
@@ -51,12 +51,43 @@ describe('infer body reference', () => {
 		inferBodyReference(code, aliases, inference)
 
 		expect(inference).toEqual({
-            queries: [],
-            query: true,
-            headers: true,
-            body: true,
-            cookie: true,
-            set: true
-        })
+			queries: [],
+			query: true,
+			headers: true,
+			body: true,
+			cookie: true,
+			set: true
+		})
+	})
+
+	it('infer multiple query', () => {
+		const code = `{
+  console.log({ a: query.quack }, {
+    b: query.duck
+  });
+  const b = query.quack;
+  return "a";
+}`
+
+		const aliases = ['query']
+		const inference = {
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: ['quack', 'duck'],
+			query: true,
+			set: true
+		}
+
+		inferBodyReference(code, aliases, inference)
+
+		expect(inference).toEqual({
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: ['quack', 'duck'],
+			query: true,
+			set: true
+		})
 	})
 })
