@@ -1,12 +1,11 @@
 import { Elysia, t } from '../src'
-
+import { post } from '../test/utils'
 
 const app = new Elysia()
-	.get('/', ({ error }) => {
-		return error(418, 'ヒッフッ↑　ヒ↓フ→ミッ↑')
-	}, {
-		response: {
-			200: t.Number(),
-			418: t.Literal('ヒッフッ↑　ヒ↓フ→ミッ↑')
-		}
-	})
+	.get('/', () => true)
+	.get('/true', () => true)
+	.get('/true', () => true)
+    .get('/false', () => false)
+    .post('/mirror', ({ body }) => body)
+
+type A = typeof app._routes.true.get.response

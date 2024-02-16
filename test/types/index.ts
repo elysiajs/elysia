@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { expect } from 'bun:test'
-import { t, Elysia, RouteSchema, Cookie } from '../../src'
+import { t, Elysia, RouteSchema, Cookie, error } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -1077,4 +1077,43 @@ app.resolve(({ headers }) => {
 				418: t.Literal('a')
 			}
 		})
+}
+
+// ? Get response type correctly
+{
+	const app = new Elysia()
+		.get('', () => 'a')
+		.get('/true', () => true)
+		.get('/error', ({ error }) => error("I'm a teapot", 'a'))
+		.post('/mirror', ({ body }) => body)
+		.get('/immutable', '1')
+		.get('/immutable-error', error("I'm a teapot", 'a'))
+
+	type app = typeof app._routes
+
+	expectTypeOf<app['index']['get']['response']>().toEqualTypeOf<{
+		200: string
+	}>
+
+	expectTypeOf<app['true']['get']['response']>().toEqualTypeOf<{
+		200: boolean
+	}>
+
+	expectTypeOf<app['error']['get']['response']>().toEqualTypeOf<{
+		200: never
+		418: 'a'
+	}>
+
+	expectTypeOf<app['mirror']['post']['response']>().toEqualTypeOf<{
+		200: unknown
+	}>
+
+	expectTypeOf<app['immutable']['get']['response']>().toEqualTypeOf<{
+		200: '1'
+	}>
+
+	expectTypeOf<app['immutable-error']['get']['response']>().toEqualTypeOf<{
+		200: never
+		418: 'a'
+	}>
 }

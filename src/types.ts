@@ -851,12 +851,14 @@ export type CreateEden<
 	Property extends Record<string, unknown> = {}
 > = Path extends `/${infer Rest}`
 	? _CreateEden<Rest, Property>
+	: Path extends ''
+	? _CreateEden<'index', Property>
 	: _CreateEden<Path, Property>
 
 export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 	...a: any[]
 ) => infer A
-	? _ComposeElysiaResponse<A, Handle>
+	? _ComposeElysiaResponse<Response, A>
 	: _ComposeElysiaResponse<Response, Handle>
 
 type _ComposeElysiaResponse<Response, Handle> = Prettify<
