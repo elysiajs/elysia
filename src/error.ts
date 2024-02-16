@@ -26,19 +26,19 @@ export type ElysiaErrors =
 	| InvalidCookieSignature
 
 export const error = <
-	const Code extends number | keyof typeof StatusMap,
+	const Code extends number | keyof StatusMap,
 	const T
 >(
 	code: Code,
 	response: T
 ): {
-	[ELYSIA_RESPONSE]: Code extends keyof typeof StatusMap
-		? (typeof StatusMap)[Code]
+	[ELYSIA_RESPONSE]: Code extends keyof StatusMap
+		? StatusMap[Code]
 		: Code
 	response: T
 	_type: {
-		[ERROR_CODE in Code extends keyof typeof StatusMap
-			? (typeof StatusMap)[Code]
+		[ERROR_CODE in Code extends keyof StatusMap
+			? StatusMap[Code]
 			: Code]: T
 	}
 } =>

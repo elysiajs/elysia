@@ -360,6 +360,40 @@ export type Handler<
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
 
+export type InlineHandler<
+	Route extends RouteSchema = {},
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Path extends string = ''
+> =
+	| ((context: Context<Route, Singleton, Path>) => Route['response'] extends {
+			200: unknown
+	  }
+			?
+					| Response
+					| MaybePromise<
+							| Route['response'][keyof Route['response']]
+							| {
+									[Status in keyof Route['response']]: {
+										_type: Record<
+											Status,
+											Route['response'][Status]
+										>
+										[ELYSIA_RESPONSE]: Status
+									}
+							  }[keyof Route['response']]
+					  >
+			: Response | MaybePromise<Route['response']>)
+	| (unknown extends Route['response']
+			? string | number | Object
+			: Route['response'] extends { 200: unknown }
+			? Route['response'][keyof Route['response']]
+			: Route['response'])
+
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -550,7 +584,7 @@ export type ErrorHandler<
 	}
 > = (
 	context: Prettify<
-		Context<Route, Singleton> &
+		Omit<Context<Route, Singleton>, 'error'> &
 			(
 				| {
 						request: Request
@@ -819,7 +853,13 @@ export type CreateEden<
 	? _CreateEden<Rest, Property>
 	: _CreateEden<Path, Property>
 
-export type ComposeElysiaResponse<Response, Handle> = Prettify<
+export type ComposeElysiaResponse<Response, Handle> = Handle extends (
+	...a: any[]
+) => infer A
+	? _ComposeElysiaResponse<A, Handle>
+	: _ComposeElysiaResponse<Response, Handle>
+
+type _ComposeElysiaResponse<Response, Handle> = Prettify<
 	unknown extends Response
 		? {
 				200: Exclude<Handle, { [ELYSIA_RESPONSE]: any }>

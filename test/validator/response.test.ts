@@ -291,12 +291,18 @@ describe('Response Validator', () => {
 	})
 
 	it('validate response per status with error()', async () => {
+		const app = new Elysia().get('/', () => error(418, 'I am a teapot'), {
+			response: {
+				200: t.String(),
+				418: t.String()
+			}
+		})
+	})
+
+	it('use inline error from handler', async () => {
 		const app = new Elysia().get(
 			'/',
-			// @ts-ignore
-			() => {
-				return error(418, 'I am a teapot')
-			},
+			({ error }) => error(418, 'I am a teapot'),
 			{
 				response: {
 					200: t.String(),

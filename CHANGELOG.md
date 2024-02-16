@@ -1,15 +1,19 @@
 # 1.0.0 - 10 Feb 2024
 Improvement:
-- Add macro support to websocket
-- Add mapResolve
+- macro support for websocket
+- add `mapResolve`
 - add `{ scoped: true }` to lifecycle event
+- add ephemeral type
+- add `error` to handler
+- `error` now has auto-completion and type checking based on status code
+- handler now check return type of `error` based on status code
 
 Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`
 - onStop callback called twice when calling .stop
 - mapDerive now resolve to `Singleton['derive']` instead of `Singleton['store']`
-- ValidationError doesn't return `content-type` as `application/json`
-- `error(status, value)` doesn't validate per status
+- `ValidationError` doesn't return `content-type` as `application/json`
+- validate `error(status, value)` validate per status
 
 # 0.8.17 - 12 Feb 2024
 Feature:

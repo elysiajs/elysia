@@ -20,12 +20,12 @@ import { Value } from '@sinclair/typebox/value'
 
 import { CookieOptions } from './cookies'
 import { ValidationError } from './error'
-
-const t = Object.assign({}, Type)
+import { BunFile } from 'bun'
+import { MaybeArray } from './types'
 
 try {
 	TypeSystem.Format('email', (value) =>
-	/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(
+		/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(
 			value
 		)
 	)
@@ -49,7 +49,7 @@ try {
 	// Not empty
 }
 
-type MaybeArray<T> = T | T[]
+const t = Object.assign({}, Type)
 
 export namespace ElysiaTypeOptions {
 	export type Numeric = NumberOptions
@@ -167,25 +167,33 @@ const Files = TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
 	}
 )
 
-FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
-FormatRegistry.Set('boolean', (value) => value === 'true' || value === 'false')
-FormatRegistry.Set('ObjectString', (value) => {
-	let start = value.charCodeAt(0)
+if (!FormatRegistry.Get('numeric'))
+	FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
 
-	// If starts with ' ', '\t', '\n', then trim first
-	if (start === 9 || start === 10 || start === 32)
-		start = value.trimStart().charCodeAt(0)
+if (!FormatRegistry.Get('boolean'))
+	FormatRegistry.Set(
+		'boolean',
+		(value) => value === 'true' || value === 'false'
+	)
 
-	if (start !== 123 && start !== 91) return false
+if (!FormatRegistry.Get('ObjectString'))
+	FormatRegistry.Set('ObjectString', (value) => {
+		let start = value.charCodeAt(0)
 
-	try {
-		JSON.parse(value)
+		// If starts with ' ', '\t', '\n', then trim first
+		if (start === 9 || start === 10 || start === 32)
+			start = value.trimStart().charCodeAt(0)
 
-		return true
-	} catch {
-		return false
-	}
-})
+		if (start !== 123 && start !== 91) return false
+
+		try {
+			JSON.parse(value)
+
+			return true
+		} catch {
+			return false
+		}
+	})
 
 export const ElysiaType = {
 	Numeric: (property?: NumberOptions) => {
@@ -269,7 +277,10 @@ export const ElysiaType = {
 				return value
 			})
 			.Encode((value) => JSON.stringify(value)) as any as TObject<T>,
-	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
+	File: TypeSystem.Type<
+		File | (unknown extends BunFile ? {} : BunFile),
+		ElysiaTypeOptions.File
+	>('File', validateFile),
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
 		t
 			.Transform(t.Union([Files(options)]))

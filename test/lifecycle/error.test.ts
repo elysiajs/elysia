@@ -184,5 +184,4 @@ describe('error', () => {
 
 		expect(total).toEqual(2)
 	})
-
 })

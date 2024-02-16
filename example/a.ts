@@ -1,11 +1,12 @@
-import { Elysia, error, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
 
-// @ts-expect-error
-const app = new Elysia().get('/', () => '1', {
-    response: t.Number()
-})
 
-const response = await app.handle(req('/'))
-
-console.log(response.headers.toJSON())
+const app = new Elysia()
+	.get('/', ({ error }) => {
+		return error(418, 'ヒッフッ↑　ヒ↓フ→ミッ↑')
+	}, {
+		response: {
+			200: t.Number(),
+			418: t.Literal('ヒッフッ↑　ヒ↓フ→ミッ↑')
+		}
+	})

@@ -532,6 +532,8 @@ export const StatusMap = {
 	'Network Authentication Required': 511
 } as const
 
+export type StatusMap = typeof StatusMap
+
 export type HTTPStatusName = keyof typeof StatusMap
 
 function removeTrailingEquals(digest: string): string {

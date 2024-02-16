@@ -93,7 +93,8 @@ import type {
 	MetadataBase,
 	RouteBase,
 	CreateEden,
-	ComposeElysiaResponse
+	ComposeElysiaResponse,
+	InlineHandler
 } from './types'
 
 /**
@@ -2999,79 +3000,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					get: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### get
-	 * Register handler for path with method [GET]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .get('/', () => 'hi')
-	 *     .get('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	get<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		path: Path,
 		handler: Handle,
@@ -3112,13 +3045,7 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	get(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('GET', path, handler as any, hook)
 
 		return this as any
@@ -3149,76 +3076,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					post: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### post
-	 * Register handler for path with method [POST]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .post('/', () => 'hi')
-	 *     .post('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	post<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		path: Path,
 		handler: Handle,
@@ -3256,13 +3118,7 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	post(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('POST', path, handler as any, hook)
 
 		return this as any
@@ -3293,79 +3149,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					put: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### put
-	 * Register handler for path with method [PUT]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .put('/', () => 'hi')
-	 *     .put('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	put<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		path: Path,
 		handler: Handle,
@@ -3406,13 +3194,7 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	put(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('PUT', path, handler as any, hook)
 
 		return this as any
@@ -3443,79 +3225,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					patch: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### patch
-	 * Register handler for path with method [PATCH]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .patch('/', () => 'hi')
-	 *     .patch('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	patch<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		path: Path,
 		handler: Handle,
@@ -3556,13 +3270,7 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	patch(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('PATCH', path, handler as any, hook)
 
 		return this as any
@@ -3593,79 +3301,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					delete: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### delete
-	 * Register handler for path with method [DELETE]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .delete('/', () => 'hi')
-	 *     .delete('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	delete<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		path: Path,
 		handler: Handle,
@@ -3706,13 +3346,7 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	delete(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('DELETE', path, handler as any, hook)
 
 		return this as any
@@ -3743,79 +3377,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					options: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### options
-	 * Register handler for path with method [POST]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .options('/', () => 'hi')
-	 *     .options('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	options<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		path: Path,
 		handler: Handle,
@@ -3856,229 +3422,11 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	/**
-	 * ### options
-	 * Register handler for path with method [OPTIONS]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .options('/', () => 'hi')
-	 *     .options('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	options<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Handler<
-			Schema,
-			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
-		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					options: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### options
-	 * Register handler for path with method [OPTIONS]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .options('/', () => 'hi')
-	 *     .options('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	options<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					options: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	options(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('OPTIONS', path, handler as any, hook)
 
 		return this as any
 	}
-
-	/**
-	 * ### all
-	 * Register handler for path for any method
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .all('/', () => 'hi')
-	 *     .all('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	all<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Handler<
-			Schema,
-			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
-		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					[method in string]: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
 
 	/**
 	 * ### all
@@ -4105,7 +3453,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Schema['response']
+		const Handle extends InlineHandler<
+			Schema,
+			Singleton & EphemeralSingleton,
+			`${BasePath}${Path}`
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -4146,13 +3498,7 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	all(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('ALL', path, handler as any, hook)
 
 		return this as any
@@ -4183,79 +3529,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					head: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### head
-	 * Register handler for path with method [HEAD]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .head('/', () => 'hi')
-	 *     .head('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	head<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		path: Path,
 		handler: Handle,
@@ -4296,13 +3574,7 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	head(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('HEAD', path, handler as any, hook)
 
 		return this as any
@@ -4333,79 +3605,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		>
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					connect: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### connect
-	 * Register handler for path with method [CONNECT]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .connect('/', () => 'hi')
-	 *     .connect('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	connect<
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		path: Path,
 		handler: Handle,
@@ -4446,13 +3650,7 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	connect(
-		path: string,
-		handler: any,
-		hook?: LocalHook<any, any, any, any, any, any, any>
-	) {
+	> {
 		this.add('CONNECT', path, handler as any, hook)
 
 		return this as any
@@ -4484,85 +3682,11 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & EphemeralMetadata['schema']
 		>,
-		const Handle extends Handler<
+		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
 			`${BasePath}${Path}`
 		>
-	>(
-		method: Method,
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			LocalSchema,
-			Schema,
-			Singleton & EphemeralSingleton,
-			Definitions['error'],
-			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
-		> & {
-			config: {
-				allowMeta?: boolean
-			}
-		}
-	): Elysia<
-		BasePath,
-		Scoped,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Routes &
-			CreateEden<
-				`${BasePath & string}${Path}`,
-				{
-					[method in Method]: {
-						body: Schema['body']
-						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							ReturnType<Handle>
-						>
-					}
-				}
-			>,
-		EphemeralSingleton,
-		EphemeralMetadata
-	>
-
-	/**
-	 * ### route
-	 * Register handler for path with method [ROUTE]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .route('/', () => 'hi')
-	 *     .route('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	route<
-		const Method extends HTTPMethod,
-		const Path extends string,
-		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
-		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema'] & EphemeralMetadata['schema']
-		>,
-		const Handle extends Schema['response']
 	>(
 		method: Method,
 		path: Path,
@@ -4608,23 +3732,8 @@ export default class Elysia<
 			>,
 		EphemeralSingleton,
 		EphemeralMetadata
-	>
-
-	route(
-		method: string,
-		path: string,
-		handler: any,
-		hook: LocalHook<any, any, any, any, any, any, any> & {
-			config: {
-				allowMeta?: boolean
-			}
-		} = {
-			config: {
-				allowMeta: false
-			}
-		} as any
-	) {
-		this.add(method.toUpperCase(), path, handler as any, hook, hook.config)
+	> {
+		this.add(method.toUpperCase(), path, handler as any, hook, hook?.config)
 
 		return this as any
 	}

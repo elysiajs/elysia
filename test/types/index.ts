@@ -989,43 +989,45 @@ app.resolve(({ headers }) => {
 		>().toEqualTypeOf<true>()
 	})
 
-app.macro(() => {
-	return {
-		a(a: string) {}
-	}
-})
-	.get('/', () => {}, {
-		// ? Should contains macro
-		a: 'a'
-	})
-	.get('/', () => {}, {
-		// ? Should have error
-		// @ts-expect-error
-		a: 1
-	})
-	.macro(() => {
+{
+	app.macro(() => {
 		return {
-			b(a: number) {}
+			a(a: string) {}
 		}
 	})
-	.get('/', () => {}, {
-		// ? Should merge macro
-		a: 'a',
-		b: 2
-	})
-	.guard(
-		{
+		.get('/', () => {}, {
 			// ? Should contains macro
+			a: 'a'
+		})
+		.get('/', () => {}, {
+			// ? Should have error
+			// @ts-expect-error
+			a: 1
+		})
+		.macro(() => {
+			return {
+				b(a: number) {}
+			}
+		})
+		.get('/', () => {}, {
+			// ? Should merge macro
 			a: 'a',
 			b: 2
-		},
-		(app) =>
-			app.get('/', () => {}, {
+		})
+		.guard(
+			{
 				// ? Should contains macro
 				a: 'a',
 				b: 2
-			})
-	)
+			},
+			(app) =>
+				app.get('/', () => {}, {
+					// ? Should contains macro
+					a: 'a',
+					b: 2
+				})
+		)
+}
 
 // ? Join Eden path correctly
 {
@@ -1057,4 +1059,22 @@ app.macro(() => {
 			}
 		}
 	}>()
+}
+
+// ? Handle error status
+{
+	const a = new Elysia()
+		.get('/', ({ error }) => error(418, 'a'), {
+			response: {
+				200: t.String(),
+				418: t.Literal('a')
+			}
+		})
+		// @ts-expect-error
+		.get('/', ({ error }) => error(418, 'b'), {
+			response: {
+				200: t.String(),
+				418: t.Literal('a')
+			}
+		})
 }

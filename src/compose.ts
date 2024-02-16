@@ -6,10 +6,11 @@ import type { TAnySchema } from '@sinclair/typebox'
 
 import { parse as parseQuery } from 'fast-querystring'
 
-// @ts-ignore
+// @ts-expect-error
 import decodeURIComponent from 'fast-decode-uri-component'
 
 import { signCookie } from './utils'
+import { error } from './error'
 
 import {
 	mapEarlyResponse,
@@ -1367,7 +1368,8 @@ export const composeGeneralHandler = (
 		NotFoundError,
 		requestId,
 		getReporter,
-		handleError
+		handleError,
+		error
 	} = data
 
 	const store = app.singleton.store
@@ -1418,7 +1420,8 @@ export const composeGeneralHandler = (
 							: '{}'
 					},
 					status: 200
-				}
+				},
+				error
 				${hasTrace ? ',$$requestId: +id' : ''}
 				${decoratorsLiteral}
 			}
@@ -1489,7 +1492,8 @@ export const composeGeneralHandler = (
 						: '{}'
 				},
 				status: 200
-			}
+			},
+			error
 			${hasTrace ? ',$$requestId: id' : ''}
 			${decoratorsLiteral}
 		}`
@@ -1563,7 +1567,8 @@ export const composeGeneralHandler = (
 		// @ts-ignore
 		getReporter: () => app.reporter,
 		requestId,
-		handleError
+		handleError,
+		error
 	})
 }
 

@@ -1,9 +1,5 @@
-import type { HTTPStatusName } from './utils'
+import type { HTTPStatusName, StatusMap } from './utils'
 import type { Cookie, ElysiaCookie } from './cookies'
-
-type WithoutNullableKeys<Type> = {
-	[Key in keyof Type]-?: NonNullable<Type[Key]>
-}
 
 import type {
 	RouteSchema,
@@ -11,6 +7,14 @@ import type {
 	GetPathParameter,
 	SingletonBase
 } from './types'
+import { error, type ELYSIA_RESPONSE } from './error'
+
+type InvertedStatusMap = { [K in keyof StatusMap as StatusMap[K]]: K }
+type InvertedStatusMapKey = keyof InvertedStatusMap
+
+type WithoutNullableKeys<Type> = {
+	[Key in keyof Type]-?: NonNullable<Type[Key]>
+}
 
 export type Context<
 	in out Route extends RouteSchema = {},
@@ -61,7 +65,40 @@ export type Context<
 		path: string
 		request: Request
 		store: Singleton['store']
-	} & Singleton['decorator'] &
+	} & (Route['response'] extends { 200: unknown }
+		? {
+				error: <
+					const Code extends
+						| keyof Route['response']
+						| InvertedStatusMap[Extract<
+								InvertedStatusMapKey,
+								keyof Route['response']
+						  >],
+					const T extends Code extends keyof Route['response']
+						? Route['response'][Code]
+						: Code extends keyof StatusMap
+						? // @ts-ignore StatusMap[Code] always valid because Code generic check
+						  Route['response'][StatusMap[Code]]
+						: never
+				>(
+					code: Code,
+					response: T
+				) => {
+					[ELYSIA_RESPONSE]: Code extends keyof StatusMap
+						? StatusMap[Code]
+						: Code
+					response: T
+					_type: {
+						[ERROR_CODE in Code extends keyof StatusMap
+							? StatusMap[Code]
+							: Code]: T
+					}
+				}
+		  }
+		: {
+				error: typeof error
+		  }) &
+		Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']
 >
@@ -86,5 +123,7 @@ export type PreContext<
 			status?: number
 			redirect?: string
 		}
+
+		error: typeof error
 	} & Singleton['decorator']
 >
