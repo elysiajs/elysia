@@ -26,7 +26,7 @@ import {
 	ELYSIA_RESPONSE
 } from './error'
 
-import { sucrose } from './sucrose'
+import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 
 import type {
@@ -324,7 +324,8 @@ export const composeHandler = ({
 	hooks,
 	validator,
 	handler,
-	allowMeta = false
+	allowMeta = false,
+	appInference: { event: eventInference, trace: traceInference }
 }: {
 	app: Elysia<any, any, any, any, any, any, any, any>
 	path: string
@@ -334,6 +335,10 @@ export const composeHandler = ({
 	validator: SchemaValidator
 	handler: unknown | Handler<any, any>
 	allowMeta?: boolean
+	appInference: {
+		event: Sucrose.Inference
+		trace: Sucrose.TraceInference
+	}
 }): ComposedHandler => {
 	const hasErrorHandler =
 		app.config.forceErrorEncapsulation ||
@@ -355,7 +360,7 @@ export const composeHandler = ({
 	const traceConditions: Record<
 		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response' | 'exit'>,
 		boolean
-	> = app.inference.trace
+	> = traceInference
 
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
@@ -364,7 +369,7 @@ export const composeHandler = ({
 		Object.assign(localHook, {
 			handler: handler as any
 		}),
-		app.inference.event
+		eventInference
 	)
 
 	const hasQuery = inference.query || !!validator.query
@@ -535,7 +540,7 @@ export const composeHandler = ({
 		}
 	}
 
-	const hasTraceSet = app.inference.trace.set
+	const hasTraceSet = traceInference.set
 	const hasSet =
 		inference.cookie ||
 		inference.set ||
@@ -1310,7 +1315,16 @@ export const composeHandler = ({
 export const composeGeneralHandler = (
 	app: Elysia<any, any, any, any, any, any, any, any>
 ) => {
-	const inference = app.inference.trace
+	const inference = {
+		event: {
+			// @ts-expect-error
+			...app.inference.event,
+			// @ts-expect-error
+			queries: [...app.inference.event.queries]
+		},
+		// @ts-expect-error
+		trace: { ...app.inference.trace }
+	}
 
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
@@ -1400,9 +1414,9 @@ export const composeGeneralHandler = (
 
 	const report = createReport({
 		hasTrace,
-		hasTraceSet: inference.set,
+		hasTraceSet: inference.trace.set,
 		condition: {
-			request: inference.request
+			request: inference.trace.request
 		},
 		addFn: (word) => {
 			fnLiteral += word
@@ -1505,7 +1519,9 @@ export const composeGeneralHandler = (
 		report('request', {
 			unit: app.event.request.length,
 			attribute:
-				inference.context || inference.store || inference.set
+				inference.trace.context ||
+				inference.trace.store ||
+				inference.trace.set
 					? 'ctx'
 					: ''
 		})()

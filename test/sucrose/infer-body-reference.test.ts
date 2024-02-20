@@ -11,7 +11,8 @@ describe('infer body reference', () => {
 			headers: false,
 			body: false,
 			cookie: false,
-			set: false
+			set: false,
+			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)

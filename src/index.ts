@@ -226,7 +226,7 @@ export default class Elysia<
 		history: [] as InternalRoute[]
 	}
 
-	inference = {
+	protected inference = {
 		event: {
 			body: false,
 			cookie: false,
@@ -556,7 +556,14 @@ export default class Elysia<
 						hooks,
 						validator,
 						handler: handle,
-						allowMeta
+						allowMeta,
+						appInference: {
+							event: {
+								...this.inference.event,
+								queries: [...this.inference.event.queries]
+							},
+							trace: { ...this.inference.trace }
+						}
 				  })
 				: (context: Context) => {
 						if (composed) return composed(context)
@@ -569,7 +576,16 @@ export default class Elysia<
 							hooks,
 							validator,
 							handler: handle,
-							allowMeta
+							allowMeta,
+							appInference: {
+								event: {
+									...this.inference.event,
+									queries: [...this.inference.event.queries]
+								},
+								trace: {
+									...this.inference.trace
+								}
+							}
 						}) as any)(context)
 				  }
 
@@ -585,7 +601,8 @@ export default class Elysia<
 						hooks,
 						validator,
 						handler: handle,
-						allowMeta
+						allowMeta,
+						appInference: Object.assign({}, this.inference)
 					}) as any)
 				}
 

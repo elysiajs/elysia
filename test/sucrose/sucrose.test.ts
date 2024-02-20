@@ -68,4 +68,54 @@ describe('sucrose', () => {
 			expect(result).toBe('a')
 		})
 	})
+
+	it("don't link object inference", () => {
+		const app = new Elysia({ precompile: true })
+			.get('/', 'Hi')
+			.get('/id/:id', ({ set, params: { id }, query: { name } }) => {
+				set.headers['x-powered-by'] = 'benchmark'
+
+				return id + ' ' + name
+			})
+
+		// @ts-expect-error
+		expect(app.inference).toEqual({
+			event: {
+				body: false,
+				cookie: false,
+				headers: false,
+				queries: [],
+				query: false,
+				set: false,
+				unknownQueries: false
+			},
+			trace: {
+				request: false,
+				parse: false,
+				transform: false,
+				handle: false,
+				beforeHandle: false,
+				afterHandle: false,
+				error: false,
+				context: false,
+				store: false,
+				set: false
+			}
+		})
+	})
+
+	it('inherits inference from plugin', () => {
+		const plugin = new Elysia().derive(({ headers: { authorization } }) => {
+			return {
+				get auth() {
+					return authorization
+				}
+			}
+		})
+
+		const main = new Elysia().use(plugin)
+
+		// @ts-expect-error
+		expect(main.inference.event.headers).toBe(true)
+	})
 })
