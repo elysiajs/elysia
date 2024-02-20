@@ -4285,7 +4285,7 @@ export default class Elysia<
 			>
 		) => MaybePromise<Derivative> extends { store: any }
 			? never
-			: Derivative
+			: MaybePromise<Derivative>
 	): Elysia<
 		BasePath,
 		Scoped,
@@ -4328,7 +4328,7 @@ export default class Elysia<
 			>
 		) => MaybePromise<Derivative> extends { store: any }
 			? never
-			: Derivative
+			: MaybePromise<Derivative>
 	): Scoped extends true
 		? Elysia<
 				BasePath,
