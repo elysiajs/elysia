@@ -1809,10 +1809,7 @@ export default class Elysia<
 				Scoped,
 				Singleton,
 				Definitions,
-				{
-					schema: Metadata['schema']
-					macro: Metadata['macro']
-				}
+				Metadata
 			>
 		) => NewElysia
 	): Elysia<
@@ -3779,27 +3776,22 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
-		Prettify<
-			Routes & {
-				[path in `${BasePath}${Path}`]: {
+		Metadata,
+		Routes &
+			CreateEden<
+				`${BasePath}${Path}`,
+				{
 					subscribe: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Path extends `${string}/${':' | '*'}${string}`
-								? Record<GetPathParameter<Path>, string>
-								: never
+							? Record<GetPathParameter<Path>, string>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
 						response: Schema['response']
 					}
 				}
-			}
-		>,
+			>,
 		EphemeralSingleton,
 		EphemeralMetadata
 	> {

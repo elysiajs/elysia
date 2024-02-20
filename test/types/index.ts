@@ -551,16 +551,16 @@ app.use(plugin).group(
 			)
 	)
 	type App = (typeof server)['_routes']
-	type Route = App['/v1/a']['subscribe']
+	type Route = App['v1']['a']['subscribe']
 	expectTypeOf<Route>().toEqualTypeOf<{
-		headers: {
-			authorization: string
-		}
 		body: string
+		params: Record<never, string>
 		query: {
 			name: string
 		}
-		params: never
+		headers: {
+			authorization: string
+		}
 		response: unknown
 	}>()
 }
@@ -1034,7 +1034,11 @@ app.resolve(({ headers }) => {
 	const testController = new Elysia({
 		name: 'testController',
 		prefix: '/test'
-	}).get('/could-be-error/right', () => ({ couldBeError: true }))
+	})
+		.get('/could-be-error/right', () => ({ couldBeError: true }))
+		.ws('/deep/ws', {
+			message() {}
+		})
 
 	const app = new Elysia().group('/api', (app) => app.use(testController))
 
@@ -1053,6 +1057,20 @@ app.resolve(({ headers }) => {
 									couldBeError: boolean
 								}
 							}
+						}
+					}
+				}
+			}
+		} & {
+			test: {
+				deep: {
+					ws: {
+						subscribe: {
+							body: unknown
+							params: Record<never, string>
+							query: unknown
+							headers: unknown
+							response: unknown
 						}
 					}
 				}

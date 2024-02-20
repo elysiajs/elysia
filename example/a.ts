@@ -2,11 +2,14 @@ import { Elysia, t } from '../src'
 import { inferBodyReference } from '../src/sucrose'
 import { post, req } from '../test/utils'
 
+const a = 'awd'
+
 const app = new Elysia({ precompile: true }).get('/', ({ set, query }) => {
 	console.log(
 		{ a: query.quack },
 		{
-			b: query.duck
+
+			b: query[a]
 		}
 	)
 
@@ -17,4 +20,4 @@ const app = new Elysia({ precompile: true }).get('/', ({ set, query }) => {
 
 console.log(app.router.history[0].composed.toString())
 
-app.handle(req('/?quack=a&duck=ducker'))
+app.handle(req('/?quack=a&duck=ducker&awd=awd'))
