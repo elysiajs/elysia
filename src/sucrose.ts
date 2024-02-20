@@ -213,6 +213,42 @@ export const findTraceParameterReference = (
 	return root
 }
 
+const findEndIndex = (
+	type: string,
+	content: string,
+	index?: number | undefined
+) => {
+	const newLineIndex = content.indexOf(type + '\n', index)
+	const newTabIndex = content.indexOf(type + '\t', index)
+	const commaIndex = content.indexOf(type + ',', index)
+	const semicolonIndex = content.indexOf(type + ';', index)
+	const emptyIndex = content.indexOf(type + ' ', index)
+
+	// Pick the smallest index that is not -1 or 0
+	return (
+		[newLineIndex, newTabIndex, commaIndex, semicolonIndex, emptyIndex]
+			.filter((i) => i > 0)
+			.sort((a, b) => a - b)[0] || -1
+	)
+}
+
+const findEndQueryBracketIndex = (
+	type: string,
+	content: string,
+	index?: number | undefined
+) => {
+	const bracketEndIndex = content.indexOf(type + ']', index)
+	const singleQuoteIndex = content.indexOf(type + "'", index)
+	const doubleQuoteIndex = content.indexOf(type + '"', index)
+
+	// Pick the smallest index that is not -1 or 0
+	return (
+		[bracketEndIndex, singleQuoteIndex, doubleQuoteIndex]
+			.filter((i) => i > 0)
+			.sort((a, b) => a - b)[0] || -1
+	)
+}
+
 /**
  * Find alias of variable from function body
  *
@@ -229,17 +265,7 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 	let content = body
 
 	while (true) {
-		// Remove all spaces
-		const newLineIndex = content.indexOf(' = ' + type + '\n')
-		const commaIndex = content.indexOf(' = ' + type + ',')
-		const semicolonIndex = content.indexOf(' = ' + type + ';')
-		const emptyIndex = content.indexOf(' = ' + type + ' ')
-
-		// Pick the smallest index that is not -1 or 0
-		let index =
-			[newLineIndex, commaIndex, semicolonIndex, emptyIndex]
-				.filter((i) => i > 0)
-				.sort((a, b) => a - b)[0] || -1
+		let index = findEndIndex(' = ' + type, content)
 
 		if (index === -1) {
 			/**
@@ -367,11 +393,35 @@ export const inferBodyReference = (
 				let keyword = alias + '.'
 				if (code.includes(keyword + 'query')) keyword = alias + '.query'
 
+				let isBracket = false
+
 				let start = code.indexOf(keyword)
-				if (start === -1) start = code.indexOf(alias + '[')
+				if (start === -1) {
+					isBracket = true
+					start = code.indexOf(alias + '["')
+				}
+
+				if (start === -1) {
+					isBracket = true
+					start = code.indexOf(alias + "['")
+				}
+
+				if (start === -1 && code.indexOf(alias + '[') !== -1) {
+					// ! Query is accessed using dynamic key, skip static parsing
+					inference.queries = []
+
+					break
+				}
 
 				if (start !== -1) {
-					let end: number | undefined = code.indexOf(' ', start)
+					let end: number | undefined = isBracket
+						? findEndQueryBracketIndex(
+								'',
+								code,
+								start + keyword.length + 1
+						  )
+						: findEndIndex('', code, start + keyword.length + 1)
+
 					if (end === -1) end = undefined
 
 					const index = start + alias.length + 1
@@ -400,6 +450,8 @@ export const inferBodyReference = (
 					// Remove closing bracket
 					if (query.charCodeAt(query.length - 1) === 41)
 						query = query.slice(0, -1)
+
+					if (isBracket) query = query.replaceAll(/("|')/g, '')
 
 					if (query && !inference.queries.includes(query)) {
 						inference.queries.push(query)
@@ -459,6 +511,18 @@ export const removeDefaultParameter = (parameter: string) => {
 		.split(',')
 		.map((i) => i.trim())
 		.join(', ')
+}
+
+export const validateInferencedQueries = (queries: string[]) => {
+	for (const query of queries) {
+		if (query.charCodeAt(0) === 123) return false
+		if (query.indexOf("'") !== -1) return false
+		if (query.indexOf('"') !== -1) return false
+		if (query.indexOf('\n') !== -1) return false
+		if (query.indexOf('\t') !== -1) return false
+	}
+
+	return true
 }
 
 /**
@@ -644,6 +708,8 @@ export const sucrose = (
 		)
 			break
 	}
+
+	if (!validateInferencedQueries(inference.queries)) inference.queries = []
 
 	return inference
 }

@@ -63,6 +63,10 @@ export type ElysiaConfig<
 	 */
 	forceErrorEncapsulation?: boolean
 	/**
+	 * Disable sucrose dynamic query inference
+	 */
+	forceDynamicQuery?: boolean
+	/**
 	 * Disable Ahead of Time compliation
 	 *
 	 * Reduced performance but faster startup time

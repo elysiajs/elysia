@@ -1,23 +1,33 @@
 import { Elysia, t } from '../src'
-import { inferBodyReference } from '../src/sucrose'
+import { inferBodyReference, sucrose } from '../src/sucrose'
 import { post, req } from '../test/utils'
 
-const a = 'awd'
+// const a = 'a'
 
-const app = new Elysia({ precompile: true }).get('/', ({ set, query }) => {
-	console.log(
-		{ a: query.quack },
-		{
+// const app = new Elysia({ precompile: true }).get('/headers', ({ query }) => {
+// 	return query.a
+// })
 
-			b: query[a]
-		}
-	)
+// app.handle(new Request('http://localhost/headers?a=1', { method: 'GET' }))
+// 	.then((res) => res.text())
+// 	.then(console.log)
 
-	const b = query.quack
+// app.handle(req('/?quack=a&duck=ducker&awd=awd'))
+const code = `{
+		const b = query["quack"];
+		return "a";
+	}`
 
-	return 'a'
-})
+const aliases = ['query']
+const inference = {
+	body: false,
+	cookie: false,
+	headers: false,
+	queries: <string[]>[],
+	query: true,
+	set: true
+}
 
-console.log(app.router.history[0].composed.toString())
+inferBodyReference(code, aliases, inference)
 
-app.handle(req('/?quack=a&duck=ducker&awd=awd'))
+console.log(inference)

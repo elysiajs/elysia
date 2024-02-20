@@ -62,19 +62,19 @@ describe('infer body reference', () => {
 
 	it('infer multiple query', () => {
 		const code = `{
-  console.log({ a: query.quack }, {
-    b: query.duck
-  });
-  const b = query.quack;
-  return "a";
-}`
+			console.log({ a: query.quack }, {
+				b: query.duck
+			});
+			const b = query.bark;
+			return "a";
+		}`
 
 		const aliases = ['query']
 		const inference = {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: ['quack', 'duck'],
+			queries: <string[]>[],
 			query: true,
 			set: true
 		}
@@ -85,7 +85,91 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: ['quack', 'duck'],
+			queries: ['quack', 'duck', 'bark'],
+			query: true,
+			set: true
+		})
+	})
+
+	it('infer single quote query', () => {
+		const code = `{
+			const b = query['quack'];
+			return "a";
+		}`
+
+		const aliases = ['query']
+		const inference = {
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: <string[]>[],
+			query: true,
+			set: true
+		}
+
+		inferBodyReference(code, aliases, inference)
+
+		expect(inference).toEqual({
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: ['quack'],
+			query: true,
+			set: true
+		})
+	})
+
+	it('infer double quote query', () => {
+		const code = `{
+			const b = query["quack"];
+			return "a";
+		}`
+
+		const aliases = ['query']
+		const inference = {
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: <string[]>[],
+			query: true,
+			set: true
+		}
+
+		inferBodyReference(code, aliases, inference)
+
+		expect(inference).toEqual({
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: ['quack'],
+			query: true,
+			set: true
+		})
+	})
+
+	it('skip dynamic quote query', () => {
+		const code = `{
+			const b = query[quack];
+			return "a";
+		}`
+
+		const aliases = ['query']
+		const inference = {
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: <string[]>[],
+			query: true,
+			set: true
+		}
+
+		inferBodyReference(code, aliases, inference)
+
+		expect(inference).toEqual({
+			body: false,
+			cookie: false,
+			headers: false,
+			queries: [],
 			query: true,
 			set: true
 		})
