@@ -233,7 +233,8 @@ export default class Elysia<
 			headers: false,
 			queries: [],
 			query: false,
-			set: false
+			set: false,
+			unknownQueries: false
 		},
 		trace: {
 			request: false,

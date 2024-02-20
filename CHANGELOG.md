@@ -1,4 +1,4 @@
-# 1.0.0 - 10 Feb 2024
+# 1.0.0 - 20 Feb 2024
 Improvement:
 - macro support for websocket
 - add `mapResolve`
@@ -7,6 +7,13 @@ Improvement:
 - add `error` to handler
 - `error` now has auto-completion and type checking based on status code
 - handler now check return type of `error` based on status code
+- utility `Elysia._types` for types inference
+
+Change:
+- group private API property
+- move `Elysia.routes` to `Elysia.router.history`
+- detect possible json before return
+- unknown response now return as-is
 
 Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`

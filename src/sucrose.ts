@@ -5,6 +5,7 @@ import type { Handler, LifeCycleStore, TraceHandler } from './types'
 export namespace Sucrose {
 	export interface Inference {
 		queries: string[]
+		unknownQueries: boolean
 		query: boolean
 		headers: boolean
 		body: boolean
@@ -382,6 +383,8 @@ export const inferBodyReference = (
 			inference.body = true
 			inference.cookie = true
 			inference.set = true
+			inference.queries = []
+			inference.unknownQueries = true
 
 			break
 		}
@@ -409,6 +412,7 @@ export const inferBodyReference = (
 				if (start === -1 && code.indexOf(alias + '[') !== -1) {
 					// ! Query is accessed using dynamic key, skip static parsing
 					inference.queries = []
+					inference.unknownQueries = true
 
 					break
 				}
@@ -642,7 +646,8 @@ export const sucrose = (
 		headers: false,
 		body: false,
 		cookie: false,
-		set: false
+		set: false,
+		unknownQueries: false
 	}
 ): Sucrose.Inference => {
 	const events = []
@@ -709,7 +714,10 @@ export const sucrose = (
 			break
 	}
 
-	if (!validateInferencedQueries(inference.queries)) inference.queries = []
+	if (!validateInferencedQueries(inference.queries)) {
+		inference.unknownQueries = true
+		inference.queries = []
+	}
 
 	return inference
 }

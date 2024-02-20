@@ -236,7 +236,7 @@ export const mapResponse = (
 
 			default:
 				if (response instanceof Response) {
-					const inherits = { ...set.headers }
+					const inherits = Object.assign({}, set.headers)
 
 					if (hasHeaderShorthand)
 						set.headers = (
@@ -263,19 +263,21 @@ export const mapResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				const r = JSON.stringify(response)
+				if ('charCodeAt' in (response as any)) {
+					const code = (response as any).charCodeAt(0)
 
-				if (r.charCodeAt(0) === 123) {
-					if (!set.headers['Content-Type'])
-						set.headers['Content-Type'] = 'application/json'
+					if (code === 123 || code === 91) {
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
 
-					return new Response(
-						JSON.stringify(response),
-						set as SetResponse
-					) as any
+						return new Response(
+							JSON.stringify(response),
+							set as SetResponse
+						) as any
+					}
 				}
 
-				return new Response(r, set as SetResponse)
+				return new Response(response as any, set as SetResponse)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -365,16 +367,21 @@ export const mapResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				const r = JSON.stringify(response)
+				if ('charCodeAt' in (response as any)) {
+					const code = (response as any).charCodeAt(0)
 
-				if (r.charCodeAt(0) === 123)
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+					if (code === 123 || code === 91) {
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
 
-				return new Response(r)
+						return new Response(
+							JSON.stringify(response),
+							set as SetResponse
+						) as any
+					}
+				}
+
+				return new Response(response as any)
 		}
 }
 
@@ -544,18 +551,21 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				const r = JSON.stringify(response)
-				if (r.charCodeAt(0) === 123) {
-					if (!set.headers['Content-Type'])
-						set.headers['Content-Type'] = 'application/json'
+				if ('charCodeAt' in (response as any)) {
+					const code = (response as any).charCodeAt(0)
 
-					return new Response(
-						JSON.stringify(response),
-						set as SetResponse
-					) as any
+					if (code === 123 || code === 91) {
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
+
+						return new Response(
+							JSON.stringify(response),
+							set as SetResponse
+						) as any
+					}
 				}
 
-				return new Response(r, set as SetResponse)
+				return new Response(response as any, set as SetResponse)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -641,15 +651,21 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				const r = JSON.stringify(response)
-				if (r.charCodeAt(0) === 123)
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+				if ('charCodeAt' in (response as any)) {
+					const code = (response as any).charCodeAt(0)
 
-				return new Response(r)
+					if (code === 123 || code === 91) {
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
+
+						return new Response(
+							JSON.stringify(response),
+							set as SetResponse
+						) as any
+					}
+				}
+
+				return new Response(response as any)
 		}
 }
 

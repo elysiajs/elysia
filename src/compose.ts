@@ -500,7 +500,13 @@ export const composeHandler = ({
 			for (const query of inference.queries)
 				if (destructured.indexOf(query) === -1) destructured.push(query)
 
-		if (app.config.forceDynamicQuery !== true && destructured.length) {
+		if (
+			app.config.forceDynamicQuery === true ||
+			inference.unknownQueries === true ||
+			!destructured.length
+		) {
+			fnLiteral += `c.query = c.qi !== -1 ? parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1))) : {}`
+		} else {
 			fnLiteral += `if(c.qi !== -1) {
 				let url = decodeURIComponent(
 					c.request.url.slice(c.qi + 1)
@@ -526,8 +532,6 @@ export const composeHandler = ({
 			} else {
 				c.query = {}
 			}`
-		} else {
-			fnLiteral += `c.query = c.qi !== -1 ? parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1))) : {}`
 		}
 	}
 

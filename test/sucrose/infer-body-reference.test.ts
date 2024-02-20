@@ -28,7 +28,8 @@ describe('infer body reference', () => {
 			headers: false,
 			body: false,
 			cookie: false,
-			set: false
+			set: false,
+			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -45,7 +46,8 @@ describe('infer body reference', () => {
 			headers: false,
 			body: false,
 			cookie: false,
-			set: false
+			set: false,
+			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -56,7 +58,8 @@ describe('infer body reference', () => {
 			headers: true,
 			body: true,
 			cookie: true,
-			set: true
+			set: true,
+			unknownQueries: true
 		})
 	})
 
@@ -76,7 +79,8 @@ describe('infer body reference', () => {
 			headers: false,
 			queries: <string[]>[],
 			query: true,
-			set: true
+			set: true,
+			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -87,7 +91,8 @@ describe('infer body reference', () => {
 			headers: false,
 			queries: ['quack', 'duck', 'bark'],
 			query: true,
-			set: true
+			set: true,
+			unknownQueries: false
 		})
 	})
 
@@ -104,7 +109,8 @@ describe('infer body reference', () => {
 			headers: false,
 			queries: <string[]>[],
 			query: true,
-			set: true
+			set: true,
+			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -115,7 +121,8 @@ describe('infer body reference', () => {
 			headers: false,
 			queries: ['quack'],
 			query: true,
-			set: true
+			set: true,
+			unknownQueries: false
 		})
 	})
 
@@ -132,7 +139,8 @@ describe('infer body reference', () => {
 			headers: false,
 			queries: <string[]>[],
 			query: true,
-			set: true
+			set: true,
+			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -143,7 +151,8 @@ describe('infer body reference', () => {
 			headers: false,
 			queries: ['quack'],
 			query: true,
-			set: true
+			set: true,
+			unknownQueries: false
 		})
 	})
 
@@ -160,7 +169,8 @@ describe('infer body reference', () => {
 			headers: false,
 			queries: <string[]>[],
 			query: true,
-			set: true
+			set: true,
+			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -171,7 +181,8 @@ describe('infer body reference', () => {
 			headers: false,
 			queries: [],
 			query: true,
-			set: true
+			set: true,
+			unknownQueries: true
 		})
 	})
 })
