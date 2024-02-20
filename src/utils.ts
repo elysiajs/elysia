@@ -424,6 +424,9 @@ export const asGlobal = <T extends MaybeArray<Function> | undefined>(
 		return fn
 	}
 
+	// @ts-expect-error
+	if (!Array.isArray(fn)) fn = [fn]
+
 	return fn.map((x) => {
 		if (inject)
 			// @ts-ignore

@@ -19,6 +19,12 @@ const context = {
 
 class Student {
 	constructor(public name: string) {}
+
+	toString() {
+		return JSON.stringify({
+			name: this.name
+		})
+	}
 }
 
 describe('Map Early Response', () => {
@@ -303,7 +309,7 @@ describe('Map Early Response', () => {
 
 		const response = mapEarlyResponse(kyuukararin, {
 			...defaultContext,
-			status: 304,
+			status: 304
 		})
 
 		expect(response).toBeInstanceOf(Response)

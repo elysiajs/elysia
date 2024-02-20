@@ -1,13 +1,19 @@
 import { Elysia } from '../src'
+import { req } from '../test/utils'
 
-new Elysia()
-	// ✅ easy to perform inference
-	.get('/1', ({ query: { a } }) => a)
-	// ❌ hard to perform inference
-	.get('/2', ({ query }) => query.a)
-	// ❌ hard to perform inference
-	.get('/3', (c) => c.query.a)
+const app = new Elysia()
+	.resolve(() => ({
+		hi: () => 'hi'
+	}))
+	.mapResolve((resolvers) => ({
+		...resolvers,
+		hi2: () => 'hi'
+	}))
+	.get('/', ({ hi }) => hi())
+	.get('/h2', ({ hi2 }) => hi2())
 
-addEventListener('fetch', (request) => {
-	console.log(request)
-})
+const res = await app.handle(req('/')).then((t) => t.text())
+const res2 = await app.handle(req('/h2')).then((t) => t.text())
+
+console.log(res)
+console.log(res2)
