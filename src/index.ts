@@ -2701,10 +2701,24 @@ export default class Elysia<
 				)
 			}
 
-			plugin.extender.macros = [
-				...this.extender.macros,
-				...plugin.extender.macros
-			]
+			plugin.extender.macros = this.extender.macros.concat(
+				plugin.extender.macros
+			)
+
+			const macroHashes: string[] = []
+
+			for (let i = 0; i < plugin.extender.macros.length; i++) {
+				const macro = this.extender.macros[i]
+
+				// @ts-ignore
+				if (macroHashes.includes(macro.$elysiaChecksum)) {
+					plugin.extender.macros.splice(i, 1)
+					i--
+				}
+
+				// @ts-ignore
+				macroHashes.push(macro.$elysiaChecksum)
+			}
 
 			plugin.onRequest((context) => {
 				Object.assign(context, this.singleton.decorator)
@@ -2772,21 +2786,25 @@ export default class Elysia<
 					this.extender.macros = this.extender.macros.concat(
 						plugin.extender.macros
 					)
+			} else {
+				this.extender.macros = this.extender.macros.concat(
+					plugin.extender.macros
+				)
+			}
 
-				const macroHashes: string[] = []
+			const macroHashes: string[] = []
 
-				for (let i = 0; i < this.extender.macros.length; i++) {
-					const macro = this.extender.macros[i]
+			for (let i = 0; i < this.extender.macros.length; i++) {
+				const macro = this.extender.macros[i]
 
-					// @ts-ignore
-					if (macroHashes.includes(macro.$elysiaChecksum)) {
-						this.extender.macros.splice(i, 1)
-						i--
-					}
-
-					// @ts-ignore
-					macroHashes.push(macro.$elysiaChecksum)
+				// @ts-ignore
+				if (macroHashes.includes(macro.$elysiaChecksum)) {
+					this.extender.macros.splice(i, 1)
+					i--
 				}
+
+				// @ts-ignore
+				macroHashes.push(macro.$elysiaChecksum)
 			}
 
 			this.inference = {

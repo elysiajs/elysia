@@ -1,21 +1,30 @@
-import { Elysia } from '../src'
+import { Elysia, error } from '../src'
 import { post, req } from '../test/utils'
 
-const app = new Elysia()
-	.trace(async ({ handle, set }) => {
-		const { time, skip, end } = await handle
+let called = 0
 
-		set.headers.time = ((await end) - time).toString()
-		set.headers.skip = `${skip}`
-	})
+const a = new Elysia().macro(({ onBeforeHandle }) => ({
+	requiredUser(value: boolean) {
+		onBeforeHandle(async () => {
+			called++
 
-console.log(app.inference)
+			return error(401, {
+				code: 'S000002',
+				message: 'Unauthorized'
+			})
+		})
+	}
+}))
 
-	app.get('/', async () => {
-		return 'a'
-	})
+const app = new Elysia().use(a).use(a).get('/', () => 'a', {
+	'requiredUser': true
+})
 
-const { headers } = await app.handle(req('/'))
+app.handle(req('/'))
+	.then((x) => x.text())
+	.then(console.log)
+
+console.log(called)
 
 // expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
 // expect(headers.get('skip')).toBe('false')

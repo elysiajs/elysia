@@ -335,4 +335,26 @@ describe('Macro', () => {
 
 		expect(call).toBe(3)
 	})
+
+	it('inherits macro from plugin without name', async () => {
+		let called = 0
+
+		const plugin = new Elysia().macro(() => ({
+			hi(config: string) {
+				called++
+			}
+		}))
+
+		const app = new Elysia()
+			.use(plugin)
+			.use(plugin)
+			.use(plugin)
+			.get('/', () => 'Hello World', {
+				hi: 'Hello World'
+			})
+
+		await app.handle(req('/'))
+
+		expect(called).toBe(1)
+	})
 })
