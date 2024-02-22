@@ -504,7 +504,7 @@ export default class Elysia<
 				}
 
 				for (const macro of this.extender.macros)
-					traceBackMacro(macro(manager), localHook as any)
+					traceBackMacro(macro(manager), mergeHook(localHook) as any)
 			}
 
 			const hooks = mergeHook(this.event, localHook)

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import Elysia from '../../src'
+import Elysia, { error } from '../../src'
 import { req } from '../utils'
 
 describe('Macro', () => {
@@ -356,5 +356,38 @@ describe('Macro', () => {
 		await app.handle(req('/'))
 
 		expect(called).toBe(1)
+	})
+
+	it('handle nested macro', async () => {
+		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+			requiredUser(value: boolean) {
+				onBeforeHandle(async () => {
+					if (value)
+						return error(401, {
+							code: 'S000002',
+							message: 'Unauthorized'
+						})
+				})
+			}
+		}))
+
+		const testRoute = new Elysia({
+			prefix: '/test',
+			name: 'testRoute'
+		})
+			.use(authGuard)
+			.guard({
+				requiredUser: true
+			})
+			.get('/', () => 'Ely')
+
+		const app = new Elysia().use(testRoute).get('/', () => 'Ely')
+
+		const ok = await app.handle(req('/')).then((t) => t.text())
+		const err = await app.handle(req('/test')).then((t) => t.text())
+
+		expect(ok).toBe('Ely')
+		expect(err).not.toBe('Ely')
+		expect(err).not.toBe('NOT_FOUND')
 	})
 })

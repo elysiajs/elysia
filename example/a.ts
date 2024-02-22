@@ -1,45 +1,35 @@
 import { Elysia, error } from '../src'
 import { post, req } from '../test/utils'
 
-let called = 0
-
-const a = new Elysia().macro(({ onBeforeHandle }) => ({
+export const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
 	requiredUser(value: boolean) {
 		onBeforeHandle(async () => {
-			called++
-
-			return error(401, {
-				code: 'S000002',
-				message: 'Unauthorized'
-			})
+			if (value) {
+				return error(401, {
+					code: 'S000002',
+					message: 'Unauthorized'
+				})
+			}
 		})
 	}
 }))
 
-const app = new Elysia().use(a).use(a).get('/', () => 'a', {
-	'requiredUser': true
+export const testRoute = new Elysia({
+	prefix: '/test',
+	name: 'testRoute'
 })
+	.use(authGuard)
+	.guard({
+		requiredUser: true
+	})
+	.get('', () => 'Hello Elysia test')
+
+const app = new Elysia().use(testRoute).get('/', () => 'Hello Elysia')
 
 app.handle(req('/'))
-	.then((x) => x.text())
+	.then((t) => t.text())
 	.then(console.log)
 
-console.log(called)
-
-// expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-// expect(headers.get('skip')).toBe('false')
-// const res = await app
-// 	.handle(
-// 		post('/json', {
-// 			username: 'saltyaom',
-// 			password: '12345678'
-// 		})
-// 	)
-// 	.then((t) => t.text())
-
-// console.log({ res })
-
-// const res = await app.handle(req('/')).then((t) => t.text())
-// const res2 = await app.handle(req('/h2')).then((t) => t.text())
-
-// console.log(res)
+app.handle(req('/test'))
+	.then((t) => t.text())
+	.then(console.log)
