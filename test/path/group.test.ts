@@ -209,4 +209,42 @@ describe('group', () => {
 			'/'
 		])
 	})
+
+	it('inherits singleton / definitions and re-meregd on main', async () => {
+		const app = new Elysia()
+			.decorate({ a: 'a' })
+			.state({ a: 'a' })
+			.model('a', t.String())
+			.error('a', Error)
+			.group('/posts', (app) => {
+				// @ts-expect-error
+				expect(Object.keys(app.singleton.decorator)).toEqual(['a'])
+				// @ts-expect-error
+				expect(Object.keys(app.singleton.store)).toEqual(['a'])
+				// @ts-expect-error
+				expect(Object.keys(app.definitions.type)).toEqual(['a'])
+				// @ts-expect-error
+				expect(Object.keys(app.definitions.error)).toEqual(['a'])
+
+				return app
+					.decorate({ b: 'b' })
+					.state({ b: 'b' })
+					.model('b', t.String())
+					.error('b', Error)
+					.get('/', ({ a }) => a ?? 'Aint no response')
+			})
+
+		// @ts-expect-error
+		expect(Object.keys(app.singleton.decorator)).toEqual(['a', 'b'])
+		// @ts-expect-error
+		expect(Object.keys(app.singleton.store)).toEqual(['a', 'b'])
+		// @ts-expect-error
+		expect(Object.keys(app.definitions.type)).toEqual(['a', 'b'])
+		// @ts-expect-error
+		expect(Object.keys(app.definitions.error)).toEqual(['a', 'b'])
+
+		const response = await app.handle(req('/posts')).then((x) => x.text())
+
+		expect(response).toEqual('a')
+	})
 })

@@ -13,7 +13,9 @@ import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
-import { isNotEmpty, mapEarlyResponse } from './handler'
+import deepMerge from 'deepmerge'
+
+import { mapEarlyResponse } from './handler'
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -24,8 +26,6 @@ import {
 	mergeHook,
 	getSchemaValidator,
 	getResponseSchemaValidator,
-	mergeDeep,
-	mergeCookie,
 	checksum,
 	mergeLifeCycle,
 	filterGlobalHook,
@@ -791,7 +791,7 @@ export default class Elysia<
 
 		if (!this.setHeaders) this.setHeaders = {}
 
-		this.setHeaders = mergeDeep(this.setHeaders, header)
+		this.setHeaders = deepMerge(this.setHeaders, header)
 
 		return this
 	}
@@ -1953,14 +1953,14 @@ export default class Elysia<
 			prefix: ''
 		})
 
-		instance.singleton.store = this.singleton.store
-		instance.definitions = this.definitions
+		instance.singleton = { ...this.singleton }
+		instance.definitions = { ...this.definitions }
 		instance.getServer = () => this.server
 
 		const isSchema = typeof schemaOrRun === 'object'
-
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
-		this.singleton = mergeDeep(this.singleton, instance.singleton)
+		this.singleton = deepMerge(this.singleton, instance.singleton) as any
+		this.definitions = deepMerge(this.definitions, instance.definitions)
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -2198,15 +2198,16 @@ export default class Elysia<
 			return this.guard({}, hook)
 		}
 
-		const instance = new Elysia<any, any>({
+		const instance = new Elysia<any, any, any, any, any, any, any, any>({
 			...this.config,
 			prefix: ''
 		})
-		instance.singleton.store = this.singleton.store
-		instance.definitions = this.definitions
+		instance.singleton = {...this.singleton }
+		instance.definitions = { ...this.definitions }
 
 		const sandbox = run(instance)
-		this.singleton = mergeDeep(this.singleton, instance.singleton)
+		this.singleton = deepMerge(this.singleton, instance.singleton) as any
+		this.definitions = deepMerge(this.definitions, instance.definitions)
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -4105,7 +4106,7 @@ export default class Elysia<
 	) {
 		switch (typeof name) {
 			case 'object':
-				this.singleton.store = mergeDeep(this.singleton.store, name)
+				this.singleton.store = deepMerge(this.singleton.store, name)
 
 				return this as any
 
@@ -4285,7 +4286,7 @@ export default class Elysia<
 	) {
 		switch (typeof name) {
 			case 'object':
-				this.singleton.decorator = mergeDeep(
+				this.singleton.decorator = deepMerge(
 					this.singleton.decorator,
 					name
 				)
@@ -4900,7 +4901,6 @@ export { Cookie, type CookieOptions } from './cookies'
 
 export {
 	getSchemaValidator,
-	mergeDeep,
 	mergeHook,
 	mergeObjectArray,
 	getResponseSchemaValidator
