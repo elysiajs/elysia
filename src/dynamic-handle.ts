@@ -36,10 +36,12 @@ export const createDynamicHandler =
 
 		const context = Object.assign(
 			{},
-			app.decorator,
+			// @ts-expect-error
+			app.singleton.decorator,
 			{
 				set,
-				store: app.store,
+				// @ts-expect-error
+				store: app.singleton.store,
 				request,
 				path,
 				qi

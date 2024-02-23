@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Elysia, t } from '../../src'
 import { describe, it, expect } from 'bun:test'
 
@@ -11,8 +12,8 @@ describe('affix', () => {
 	it('should add prefix to all decorators, states, models, and errors', () => {
 		const app = new Elysia().use(setup).affix('prefix', 'all', 'p')
 
-		expect(app.decorator).toHaveProperty('pDecorate')
-		expect(app.store).toHaveProperty('pState')
+		expect(app.singleton.decorator).toHaveProperty('pDecorate')
+		expect(app.singleton.store).toHaveProperty('pState')
 
 		expect(app.definitions.type).toHaveProperty('pModel')
 
@@ -22,9 +23,9 @@ describe('affix', () => {
 	it('should add suffix to all decorators, states, models, and errors', () => {
 		const app = new Elysia().use(setup).affix('suffix', 'all', 'p')
 
-		expect(app.decorator).toHaveProperty('decorateP')
+		expect(app.singleton.decorator).toHaveProperty('decorateP')
 
-		expect(app.store).toHaveProperty('stateP')
+		expect(app.singleton.store).toHaveProperty('stateP')
 
 		expect(app.definitions.type).toHaveProperty('modelP')
 
@@ -34,7 +35,7 @@ describe('affix', () => {
 	it('should add suffix to all states', () => {
 		const app = new Elysia().use(setup).suffix('state', 'p')
 
-		expect(app.store).toHaveProperty('stateP')
+		expect(app.singleton.store).toHaveProperty('stateP')
 	})
 
 	it('should add prefix to all decorators and errors', () => {
@@ -43,7 +44,7 @@ describe('affix', () => {
 			.prefix('decorator', 'p')
 			.prefix('error', 'p')
 
-		expect(app.decorator).toHaveProperty('pDecorate')
+		expect(app.singleton.decorator).toHaveProperty('pDecorate')
 
 		expect(app.definitions.error).toHaveProperty('pError')
 	})
@@ -54,7 +55,7 @@ describe('affix', () => {
 			.suffix('decorator', 'p')
 			.suffix('error', 'p')
 
-		expect(app.decorator).toHaveProperty('decorateP')
+		expect(app.singleton.decorator).toHaveProperty('decorateP')
 
 		expect(app.definitions.error).toHaveProperty('errorP')
 	})
@@ -74,8 +75,8 @@ describe('affix', () => {
 	it('should skip on empty', () => {
 		const app = new Elysia().use(setup).suffix('all', '')
 
-		expect(app.decorator).toHaveProperty('decorate')
-		expect(app.store).toHaveProperty('state')
+		expect(app.singleton.decorator).toHaveProperty('decorate')
+		expect(app.singleton.store).toHaveProperty('state')
 
 		expect(app.definitions.type).toHaveProperty('model')
 

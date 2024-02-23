@@ -250,12 +250,14 @@ export default class Elysia<
 			store: false,
 			set: false
 		}
-	} as {
+	} as const satisfies {
 		event: Sucrose.Inference
 		trace: Sucrose.TraceInference
 	}
 
-	private lazyLoadModules: Promise<Elysia<any, any>>[] = []
+	private lazyLoadModules: Promise<
+		Elysia<any, any, any, any, any, any, any, any>
+	>[] = []
 
 	constructor(config?: ElysiaConfig<BasePath, Scoped>) {
 		this.config = {
@@ -279,15 +281,7 @@ export default class Elysia<
 		return this.server
 	}
 
-	get store() {
-		return this.singleton.store
-	}
-
-	get decorator() {
-		return this.singleton.decorator
-	}
-
-	get routes() {
+	get routes(): InternalRoute[] {
 		return this.router.history
 	}
 
