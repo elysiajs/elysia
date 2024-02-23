@@ -291,7 +291,7 @@ export default class Elysia<
 		return this.router.history
 	}
 
-	protected routeTree: Record<string, number> = {}
+	protected routeTree = new Map<string, number>()
 
 	private add(
 		method: HTTPMethod,
@@ -631,27 +631,24 @@ export default class Elysia<
 
 		let routeIndex = this.router.history.length
 
-		if (method + path in this.routeTree) {
+		if (this.routeTree.has(method + path)) {
 			routeIndex = this.router.history.findIndex(
 				(route) => route.path === path && route.method === method
 			)
 
 			if (routeIndex !== -1) {
 				// remove route previously defined
-				const removed = this.router.history.splice(
-					this.router.history.findIndex(
-						(route) =>
-							route.path === path && route.method === method
-					),
-					1
-				)[0]
+				const removed = this.router.history.splice(routeIndex, 1)[0]
 
-				if (removed && this.routeTree[removed.method + removed.path])
-					delete this.routeTree[removed.method + removed.path]
+				if (
+					removed &&
+					this.routeTree.has(removed?.method + removed?.path)
+				)
+					this.routeTree.delete(removed.method + removed.path)
 			}
 		}
 
-		this.routeTree[method + path] = routeIndex
+		this.routeTree.set(method + path, routeIndex)
 		this.router.history.push({
 			method,
 			path,
@@ -2202,7 +2199,7 @@ export default class Elysia<
 			...this.config,
 			prefix: ''
 		})
-		instance.singleton = {...this.singleton }
+		instance.singleton = { ...this.singleton }
 		instance.definitions = { ...this.definitions }
 
 		const sandbox = run(instance)

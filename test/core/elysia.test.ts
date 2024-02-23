@@ -119,9 +119,25 @@ describe('Edge Case', () => {
 			return kyuukararin
 		})
 
-		const response = await app.handle(req('/')).then((x) => x.headers.toJSON())
+		const response = await app
+			.handle(req('/'))
+			.then((x) => x.headers.toJSON())
 
 		expect(response['set-cookie']).toHaveLength(1)
 		expect(response['content-type']).toBe('video/mp4')
+	})
+
+	it('preserve correct index order of routes if duplicated', () => {
+		const app = new Elysia()
+			.get('/0', () => '0')
+			.get('/1', () => '1')
+			.get('/2', () => '2')
+			.get('/3', () => '3')
+			.get('/1', () => '-')
+			.get('/4', () => '4')
+
+		// @ts-expect-error
+		expect(app.routeTree.get('GET/0')).toEqual(0)
+		expect(app.routeTree.get('GET/4')).toEqual(4)
 	})
 })
