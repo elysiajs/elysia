@@ -265,6 +265,7 @@ export default class Elysia<
 			cookie: {},
 			analytic: false,
 			...config,
+			experimental: config?.experimental ?? { transpiler: false },
 			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
 

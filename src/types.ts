@@ -97,6 +97,10 @@ export type ElysiaConfig<
 	 * Capture more detail information for each dependencies
 	 */
 	analytic?: boolean
+	/**
+	 * Enable experimental features
+	 */
+	experimental?: {}
 }
 
 export type MaybeArray<T> = T | T[]

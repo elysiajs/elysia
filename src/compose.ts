@@ -510,7 +510,9 @@ export const composeHandler = ({
 			inference.unknownQueries === true ||
 			!destructured.length
 		) {
-			fnLiteral += `c.query = c.qi !== -1 ? parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1))) : {}`
+			fnLiteral += `if(c.qi !== -1) {
+				c.query = parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1)).replace(/\\+/g, ' '))
+			} else c.query = {}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
 				let url = decodeURIComponent(
@@ -518,16 +520,19 @@ export const composeHandler = ({
 						.replace(/\\+/g, ' ')
 					)
 
-				let memory = 0
-
 				${destructured
 					.map(
 						(name, index) => `
-						memory = url.indexOf('${name}=')
+						${index === 0 ? 'let' : ''} memory = url.indexOf('${name}=')
+						let a${index}
+						
+						if(memory !== -1) {
+							const start = memory + ${name.length + 1}
+							memory = url.indexOf('&', start)
 
-						const a${index} = memory === -1 ? undefined : url.slice(memory = memory + ${
-							name.length + 1
-						}, (memory = url.indexOf('&', memory)) === -1 ? undefined : memory)`
+							if(memory === -1) a${index} = url.slice(start)
+							else a${index} = url.slice(start, memory)
+						}`
 					)
 					.join('\n')}
 
@@ -1285,7 +1290,7 @@ export const composeHandler = ({
 		handler,
 		hooks,
 		validator,
-		// @ts-ignore
+		// @ts-expect-error
 		handleError: app.handleError,
 		utils: {
 			mapResponse,
@@ -1299,10 +1304,10 @@ export const composeHandler = ({
 			InternalServerError
 		},
 		schema: app.router.history,
-		// @ts-ignore
+		// @ts-expect-error
 		definitions: app.definitions.type,
 		ERROR_CODE,
-		// @ts-ignore
+		// @ts-expect-error
 		getReporter: () => app.reporter,
 		requestId,
 		parseCookie,
