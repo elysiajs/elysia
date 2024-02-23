@@ -2705,14 +2705,17 @@ export default class Elysia<
 
 			if (plugin.config.aot) plugin.compile()
 
-			let instance
-
 			if (isScoped === true && plugin.config.prefix) {
-				instance = this.mount(plugin.config.prefix + '/', plugin.fetch)
+				this.mount(plugin.config.prefix + '/', plugin.fetch)
 
 				// Ensure that when using plugins routes are correctly showing up in the .routes property. Else plugins e.g. swagger will not correctly work.
 				// This also avoids adding routes multiple times.
-				for (const route of plugin.router.history)
+				for (const route of plugin.router.history) {
+					this.routeTree.set(
+						route.method + `${plugin.config.prefix}${route.path}`,
+						this.router.history.length
+					)
+
 					this.router.history.push({
 						...route,
 						path: `${plugin.config.prefix}${route.path}`,
@@ -2720,11 +2723,24 @@ export default class Elysia<
 							error: this.event.error
 						})
 					})
+				}
 			} else {
-				instance = this.mount(plugin.fetch)
+				this.mount(plugin.fetch)
 
-				if (instance.router.history.length)
-					this.router.history.push(...instance.router.history)
+				for (const route of plugin.router.history) {
+					this.routeTree.set(
+						route.method + `${plugin.config.prefix}${route.path}`,
+						this.router.history.length
+					)
+
+					this.router.history.push({
+						...route,
+						path: `${plugin.config.prefix}${route.path}`,
+						hooks: mergeHook(route.hooks, {
+							error: this.event.error
+						})
+					})
+				}
 			}
 
 			return this
