@@ -17,7 +17,8 @@ import { isNotEmpty, mapEarlyResponse } from './handler'
 import {
 	composeHandler,
 	composeGeneralHandler,
-	composeErrorHandler
+	composeErrorHandler,
+	jitRoute
 } from './compose'
 import {
 	mergeHook,
@@ -32,7 +33,8 @@ import {
 	traceBackMacro,
 	replaceUrlPath,
 	isNumericString,
-	createMacroManager
+	createMacroManager,
+	getCookieValidator
 } from './utils'
 
 import {
@@ -289,9 +291,11 @@ export default class Elysia<
 		return this.router.history
 	}
 
+	protected routeTree: Record<string, number> = {}
+
 	private add(
 		method: HTTPMethod,
-		paths: string | readonly string[],
+		path: string,
 		handle: Handler<any, any, any> | any,
 		localHook?: LocalHook<any, any, any, any, any, any>,
 		{ allowMeta = false, skipPrefix = false } = {
@@ -299,261 +303,247 @@ export default class Elysia<
 			skipPrefix: false as boolean | undefined
 		}
 	) {
-		if (typeof paths === 'string') paths = [paths]
+		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
-		for (let path of paths) {
-			if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
+		if (this.config.prefix && !skipPrefix && !this.config.scoped)
+			path = this.config.prefix + path
 
-			if (this.config.prefix && !skipPrefix && !this.config.scoped)
-				path = this.config.prefix + path
+		if (localHook?.type)
+			switch (localHook.type) {
+				case 'text':
+					localHook.type = 'text/plain'
+					break
 
-			if (localHook?.type)
-				switch (localHook.type) {
-					case 'text':
-						localHook.type = 'text/plain'
-						break
+				case 'json':
+					localHook.type = 'application/json'
+					break
 
-					case 'json':
-						localHook.type = 'application/json'
-						break
+				case 'formdata':
+					localHook.type = 'multipart/form-data'
+					break
 
-					case 'formdata':
-						localHook.type = 'multipart/form-data'
-						break
+				case 'urlencoded':
+					localHook.type = 'application/x-www-form-urlencoded'
+					break
 
-					case 'urlencoded':
-						localHook.type = 'application/x-www-form-urlencoded'
-						break
+				case 'arrayBuffer':
+					localHook.type = 'application/octet-stream'
+					break
 
-					case 'arrayBuffer':
-						localHook.type = 'application/octet-stream'
-						break
-
-					default:
-						break
-				}
-
-			const models = this.definitions.type
-
-			let _body: TypeCheck<any> | undefined,
-				_headers: TypeCheck<any> | undefined,
-				_params: TypeCheck<any> | undefined,
-				_query: TypeCheck<any> | undefined,
-				_cookie: TypeCheck<any> | undefined,
-				_response:
-					| TypeCheck<any>
-					| Record<string, TypeCheck<any>>
-					| undefined
-
-			// ? Clone is need because of JIT, so the context doesn't switch between instance
-			const dynamic = !this.config.aot
-			const cookieConfig = { ...this.config.cookie }
-
-			const cloned = {
-				body: localHook?.body ?? (this.validator?.body as any),
-				headers: localHook?.headers ?? (this.validator?.headers as any),
-				params: localHook?.params ?? (this.validator?.params as any),
-				query: localHook?.query ?? (this.validator?.query as any),
-				cookie: localHook?.cookie ?? (this.validator?.cookie as any),
-				response:
-					localHook?.response ?? (this.validator?.response as any)
+				default:
+					break
 			}
 
-			const getCookieValidator = () => {
-				let cookieValidator = getSchemaValidator(cloned.cookie, {
-					dynamic,
-					models,
-					additionalProperties: true
-				})
+		const models = this.definitions.type
 
-				if (isNotEmpty(this.config.cookie ?? {})) {
-					if (cookieValidator) {
-						// @ts-ignore
-						cookieValidator.schema = mergeCookie(
-							// @ts-ignore
-							cookieValidator.schema,
-							cookieConfig
-						)
-					} else {
-						cookieValidator = getSchemaValidator(
-							t.Cookie({}, this.config.cookie as any),
-							{
-								dynamic: !this.config.aot,
+		let _body: TypeCheck<any> | undefined,
+			_headers: TypeCheck<any> | undefined,
+			_params: TypeCheck<any> | undefined,
+			_query: TypeCheck<any> | undefined,
+			_cookie: TypeCheck<any> | undefined,
+			_response:
+				| TypeCheck<any>
+				| Record<string, TypeCheck<any>>
+				| undefined
+
+		// ? Clone is need because of JIT, so the context doesn't switch between instance
+		const dynamic = !this.config.aot
+		const cookieConfig = Object.assign({}, this.config.cookie)
+
+		const cloned = {
+			body: localHook?.body ?? (this.validator?.body as any),
+			headers: localHook?.headers ?? (this.validator?.headers as any),
+			params: localHook?.params ?? (this.validator?.params as any),
+			query: localHook?.query ?? (this.validator?.query as any),
+			cookie: localHook?.cookie ?? (this.validator?.cookie as any),
+			response: localHook?.response ?? (this.validator?.response as any)
+		}
+
+		const cookieValidator = () =>
+			getCookieValidator({
+				validator: cloned.cookie,
+				defaultConfig: this.config.cookie,
+				config: cookieConfig,
+				dynamic,
+				models
+			})
+
+		const validator =
+			this.config.precompile === true ||
+			(typeof this.config.precompile === 'object' &&
+				this.config.precompile.schema === true)
+				? {
+						body: getSchemaValidator(cloned.body, {
+							dynamic,
+							models
+						}),
+						headers: getSchemaValidator(cloned.headers, {
+							dynamic,
+							models,
+							additionalProperties: true
+						}),
+						params: getSchemaValidator(cloned.params, {
+							dynamic,
+							models
+						}),
+						query: getSchemaValidator(cloned.query, {
+							dynamic,
+							models
+						}),
+						cookie: cookieValidator(),
+						response: getResponseSchemaValidator(cloned.response, {
+							dynamic,
+							models
+						})
+				  }
+				: ({
+						get body() {
+							if (_body) return _body
+
+							return (_body = getSchemaValidator(cloned.body, {
+								dynamic,
+								models
+							}))
+						},
+						get headers() {
+							if (_headers) return _headers
+
+							return getSchemaValidator(cloned.headers, {
+								dynamic,
 								models,
 								additionalProperties: true
-							}
-						)
-					}
-				}
+							})
+						},
+						get params() {
+							if (_params) return _params
 
-				return cookieValidator
-			}
+							return (_params = getSchemaValidator(
+								cloned.params,
+								{
+									dynamic,
+									models
+								}
+							))
+						},
+						get query() {
+							if (_query) return _query
 
-			const validator =
-				this.config.precompile === true ||
-				(typeof this.config.precompile === 'object' &&
-					this.config.precompile.schema === true)
-					? {
-							body: getSchemaValidator(cloned.body, {
+							return (_query = getSchemaValidator(cloned.query, {
 								dynamic,
 								models
-							}),
-							headers: getSchemaValidator(cloned.headers, {
-								dynamic,
-								models,
-								additionalProperties: true
-							}),
-							params: getSchemaValidator(cloned.params, {
-								dynamic,
-								models
-							}),
-							query: getSchemaValidator(cloned.query, {
-								dynamic,
-								models
-							}),
-							cookie: getCookieValidator(),
-							response: getResponseSchemaValidator(
+							}))
+						},
+						get cookie() {
+							if (_cookie) return _cookie
+
+							return (_cookie = cookieValidator())
+						},
+						get response() {
+							if (_response) return _response
+
+							return (_response = getResponseSchemaValidator(
 								cloned.response,
 								{
 									dynamic,
 									models
 								}
-							)
-					  }
-					: ({
-							get body() {
-								if (_body) return _body
+							))
+						}
+				  } as any)
 
-								return (_body = getSchemaValidator(
-									cloned.body,
-									{
-										dynamic,
-										models
-									}
-								))
-							},
-							get headers() {
-								if (_headers) return _headers
+		const loosePath = path.endsWith('/')
+			? path.slice(0, path.length - 1)
+			: path + '/'
 
-								return getSchemaValidator(cloned.headers, {
-									dynamic,
-									models,
-									additionalProperties: true
-								})
-							},
-							get params() {
-								if (_params) return _params
+		if (this.extender.macros.length) {
+			const manage = createMacroManager({
+				globalHook: this.event,
+				localHook
+			})
 
-								return (_params = getSchemaValidator(
-									cloned.params,
-									{
-										dynamic,
-										models
-									}
-								))
-							},
-							get query() {
-								if (_query) return _query
-
-								return (_query = getSchemaValidator(
-									cloned.query,
-									{
-										dynamic,
-										models
-									}
-								))
-							},
-							get cookie() {
-								if (_cookie) return _cookie
-
-								return (_cookie = getCookieValidator())
-							},
-							get response() {
-								if (_response) return _response
-
-								return (_response = getResponseSchemaValidator(
-									cloned.response,
-									{
-										dynamic,
-										models
-									}
-								))
-							}
-					  } as any)
-
-			const loosePath = path.endsWith('/')
-				? path.slice(0, path.length - 1)
-				: path + '/'
-
-			if (this.extender.macros.length) {
-				const manage = createMacroManager({
-					globalHook: this.event,
-					localHook
-				})
-
-				const manager: MacroManager = {
-					events: {
-						global: this.event,
-						local: localHook
-					},
-					onParse: manage('parse'),
-					onTransform: manage('transform'),
-					onBeforeHandle: manage('beforeHandle'),
-					onAfterHandle: manage('afterHandle'),
-					onResponse: manage('onResponse'),
-					onError: manage('error')
-				}
-
-				for (const macro of this.extender.macros)
-					traceBackMacro(macro(manager), mergeHook(localHook) as any)
+			const manager: MacroManager = {
+				events: {
+					global: this.event,
+					local: localHook
+				},
+				onParse: manage('parse'),
+				onTransform: manage('transform'),
+				onBeforeHandle: manage('beforeHandle'),
+				onAfterHandle: manage('afterHandle'),
+				onResponse: manage('onResponse'),
+				onError: manage('error')
 			}
 
-			const hooks = mergeHook(this.event, localHook)
-			const isFn = typeof handle === 'function'
+			for (const macro of this.extender.macros)
+				traceBackMacro(macro(manager), mergeHook(localHook) as any)
+		}
 
-			if (this.config.aot === false) {
-				this.router.dynamic.add(method, path, {
+		const hooks = mergeHook(this.event, localHook)
+		const isFn = typeof handle === 'function'
+
+		if (this.config.aot === false) {
+			this.router.dynamic.add(method, path, {
+				validator,
+				hooks,
+				content: localHook?.type as string,
+				handle
+			})
+
+			if (this.config.strictPath === false) {
+				this.router.dynamic.add(method, loosePath, {
 					validator,
 					hooks,
 					content: localHook?.type as string,
 					handle
 				})
-
-				if (this.config.strictPath === false) {
-					this.router.dynamic.add(method, loosePath, {
-						validator,
-						hooks,
-						content: localHook?.type as string,
-						handle
-					})
-				}
-
-				this.router.history.push({
-					method,
-					path,
-					composed: null,
-					handler: handle,
-					hooks: hooks as any
-				})
-
-				return
 			}
 
-			let composed:
-				| ((context: Context<any, any, any>) => MaybePromise<Response>)
-				| undefined = undefined
+			this.router.history.push({
+				method,
+				path,
+				composed: null,
+				handler: handle,
+				hooks: hooks as any
+			})
 
-			const shouldPrecompile =
-				this.config.precompile === true ||
-				(typeof this.config.precompile === 'object' &&
-					this.config.precompile.compose === true)
+			return
+		}
 
-			const mainHandler = shouldPrecompile
-				? composeHandler({
+		let composed:
+			| ((context: Context<any, any, any>) => MaybePromise<Response>)
+			| undefined = undefined
+
+		const shouldPrecompile =
+			this.config.precompile === true ||
+			(typeof this.config.precompile === 'object' &&
+				this.config.precompile.compose === true)
+
+		const mainHandler = shouldPrecompile
+			? composeHandler({
+					app: this,
+					path,
+					method,
+					localHook: mergeHook(localHook),
+					hooks,
+					validator,
+					handler: handle,
+					allowMeta,
+					appInference: {
+						event: {
+							...this.inference.event,
+							queries: [...this.inference.event.queries]
+						},
+						trace: { ...this.inference.trace }
+					}
+			  })
+			: (context: Context) => {
+					if (composed) return composed(context)
+
+					return (composed = composeHandler({
 						app: this,
 						path,
 						method,
-						localHook: mergeHook({}, localHook),
+						localHook: mergeHook(localHook),
 						hooks,
 						validator,
 						handler: handle,
@@ -563,251 +553,235 @@ export default class Elysia<
 								...this.inference.event,
 								queries: [...this.inference.event.queries]
 							},
-							trace: { ...this.inference.trace }
-						}
-				  })
-				: (context: Context) => {
-						if (composed) return composed(context)
-
-						return (composed = composeHandler({
-							app: this,
-							path,
-							method,
-							localHook: mergeHook({}, localHook),
-							hooks,
-							validator,
-							handler: handle,
-							allowMeta,
-							appInference: {
-								event: {
-									...this.inference.event,
-									queries: [...this.inference.event.queries]
-								},
-								trace: {
-									...this.inference.trace
-								}
+							trace: {
+								...this.inference.trace
 							}
-						}) as any)(context)
-				  }
+						}
+					}) as any)(context)
+			  }
 
-			if (!shouldPrecompile)
+		if (!shouldPrecompile)
+			// @ts-expect-error
+			mainHandler.compose = () => {
 				// @ts-expect-error
-				mainHandler.compose = () => {
-					// @ts-expect-error
-					return (mainHandler.composed = composeHandler({
-						app: this,
-						path,
-						method,
-						localHook: mergeHook({}, localHook),
-						hooks,
-						validator,
-						handler: handle,
-						allowMeta,
-						appInference: Object.assign({}, this.inference)
-					}) as any)
-				}
+				return (mainHandler.composed = composeHandler({
+					app: this,
+					path,
+					method,
+					localHook: mergeHook(localHook),
+					hooks,
+					validator,
+					handler: handle,
+					allowMeta,
+					appInference: Object.assign({}, this.inference)
+				}) as any)
+			}
 
-			if (!isFn) {
-				const context = Object.assign(
-					{
-						headers: {},
-						query: {},
-						params: {} as never,
-						body: undefined,
-						request: new Request(`http://localhost${path}`),
-						store: this.singleton.store,
-						path: path,
-						set: {
-							headers: this.setHeaders ?? {},
-							status: 200
-						}
-					},
-					this.singleton as any
-				)
+		if (!isFn) {
+			const context = Object.assign(
+				{
+					headers: {},
+					query: {},
+					params: {} as never,
+					body: undefined,
+					request: new Request(`http://localhost${path}`),
+					store: this.singleton.store,
+					path: path,
+					set: {
+						headers: this.setHeaders ?? {},
+						status: 200
+					}
+				},
+				this.singleton as any
+			)
 
-				let response
+			let response
 
-				for (const onRequest of Object.values(hooks.request)) {
-					try {
-						const inner = mapEarlyResponse(
-							onRequest(context),
-							context.set
-						)
-						if (inner !== undefined) {
-							response = inner
-							break
-						}
-					} catch (error) {
-						response = this.handleError(context, error as Error)
+			for (const onRequest of Object.values(hooks.request)) {
+				try {
+					const inner = mapEarlyResponse(
+						onRequest(context),
+						context.set
+					)
+					if (inner !== undefined) {
+						response = inner
 						break
 					}
-				}
-
-				// @ts-ignore
-				if (response) mainHandler.response = response
-				else {
-					try {
-						// @ts-ignore
-						mainHandler.response = mainHandler(context)
-					} catch (error) {
-						// @ts-ignore
-						mainHandler.response = this.handleError(
-							context,
-							error as Error
-						)
-					}
+				} catch (error) {
+					response = this.handleError(context, error as Error)
+					break
 				}
 			}
 
-			const existingRouteIndex = this.router.history.findIndex(
+			// @ts-ignore
+			if (response) mainHandler.response = response
+			else {
+				try {
+					// @ts-ignore
+					mainHandler.response = mainHandler(context)
+				} catch (error) {
+					// @ts-ignore
+					mainHandler.response = this.handleError(
+						context,
+						error as Error
+					)
+				}
+			}
+		}
+
+		let routeIndex = this.router.history.length
+
+		if (method + path in this.routeTree) {
+			routeIndex = this.router.history.findIndex(
 				(route) => route.path === path && route.method === method
 			)
 
-			if (existingRouteIndex !== -1) {
+			if (routeIndex !== -1) {
 				// remove route previously defined
-				this.router.history.splice(existingRouteIndex, 1)
+				const removed = this.router.history.splice(
+					this.router.history.findIndex(
+						(route) =>
+							route.path === path && route.method === method
+					),
+					1
+				)[0]
+
+				if (removed && this.routeTree[removed.method + removed.path])
+					delete this.routeTree[removed.method + removed.path]
 			}
+		}
 
-			this.router.history.push({
-				method,
-				path,
-				composed: mainHandler,
-				handler: handle,
-				hooks: hooks as any
-			})
+		this.routeTree[method + path] = routeIndex
+		this.router.history.push({
+			method,
+			path,
+			composed: mainHandler,
+			handler: handle,
+			hooks: hooks as any
+		})
 
-			const staticRouter = this.router.static.http
+		const staticRouter = this.router.static.http
 
-			if (method === '$INTERNALWS') {
-				const loose = this.config.strictPath
-					? undefined
-					: path.endsWith('/')
-					? path.slice(0, path.length - 1)
-					: path + '/'
-
-				if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-					const index = staticRouter.handlers.length
-					staticRouter.handlers.push(mainHandler)
-
-					// @ts-expect-error
-					if (mainHandler.response instanceof Response)
-						staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
-					else
-						staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
-
-					this.router.static.ws[path] = index
-					if (loose) this.router.static.ws[loose] = index
-				} else {
-					this.router.ws.add('ws', path, mainHandler)
-					if (loose) this.router.ws.add('ws', loose, mainHandler)
-				}
-
-				return
-			}
-
-			const jitRoute = (index: number) =>
-				`if(stc${index}) return stc${index}(ctx)\n
-				
-				if(st${index}.compose) return (st${index} = st${index}?.compose())(ctx)
-
-				return st${index}(ctx)`
+		if (method === '$INTERNALWS') {
+			const loose = this.config.strictPath
+				? undefined
+				: path.endsWith('/')
+				? path.slice(0, path.length - 1)
+				: path + '/'
 
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 				const index = staticRouter.handlers.length
 				staticRouter.handlers.push(mainHandler)
 
-				// @ts-ignore
+				// @ts-expect-error
 				if (mainHandler.response instanceof Response)
 					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
-				else {
-					if (shouldPrecompile)
-						staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
-					else
-						staticRouter.variables += `let st${index} = staticRouter.handlers[${index}]\nlet stc${index}\n`
+				else
+					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+
+				this.router.static.ws[path] = index
+				if (loose) this.router.static.ws[loose] = index
+			} else {
+				this.router.ws.add('ws', path, mainHandler)
+				if (loose) this.router.ws.add('ws', loose, mainHandler)
+			}
+
+			return
+		}
+
+		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
+			const index = staticRouter.handlers.length
+			staticRouter.handlers.push(mainHandler)
+
+			// @ts-ignore
+			if (mainHandler.response instanceof Response)
+				staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
+			else {
+				if (shouldPrecompile)
+					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+				else
+					staticRouter.variables += `let st${index} = staticRouter.handlers[${index}]\nlet stc${index}\n`
+			}
+
+			if (!staticRouter.map[path])
+				staticRouter.map[path] = {
+					code: ''
 				}
 
-				if (!staticRouter.map[path])
-					staticRouter.map[path] = {
+			if (method === 'ALL') {
+				if (shouldPrecompile)
+					staticRouter.map[
+						path
+					].all = `default: return st${index}(ctx)\n`
+				else {
+					staticRouter.map[path].all = `default: ${jitRoute(index)}\n`
+				}
+			} else {
+				// @ts-expect-error
+				if (mainHandler.response instanceof Response)
+					staticRouter.map[
+						path
+					].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[path].code}`
+				else {
+					if (shouldPrecompile)
+						staticRouter.map[
+							path
+						].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[path].code}`
+					else
+						staticRouter.map[
+							path
+						].code = `case '${method}': ${jitRoute(index)}\n${
+							staticRouter.map[path].code
+						}`
+				}
+			}
+
+			if (!this.config.strictPath) {
+				if (!staticRouter.map[loosePath])
+					staticRouter.map[loosePath] = {
 						code: ''
 					}
 
-				if (method === 'ALL') {
+				if (method === 'ALL')
 					if (shouldPrecompile)
 						staticRouter.map[
-							path
+							loosePath
 						].all = `default: return st${index}(ctx)\n`
-					else {
-						staticRouter.map[path].all = `default: ${jitRoute(
+					else
+						staticRouter.map[loosePath].all = `default: ${jitRoute(
 							index
 						)}\n`
-					}
-				} else {
-					// @ts-expect-error
+				else {
+					// @ts-ignore
 					if (mainHandler.response instanceof Response)
 						staticRouter.map[
-							path
-						].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[path].code}`
+							loosePath
+						].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[loosePath].code}`
 					else {
 						if (shouldPrecompile)
 							staticRouter.map[
-								path
-							].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[path].code}`
+								loosePath
+							].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[loosePath].code}`
 						else
 							staticRouter.map[
-								path
+								loosePath
 							].code = `case '${method}': ${jitRoute(index)}\n${
-								staticRouter.map[path].code
+								staticRouter.map[loosePath].code
 							}`
 					}
 				}
-
-				if (!this.config.strictPath) {
-					if (!staticRouter.map[loosePath])
-						staticRouter.map[loosePath] = {
-							code: ''
-						}
-
-					if (method === 'ALL')
-						if (shouldPrecompile)
-							staticRouter.map[
-								loosePath
-							].all = `default: return st${index}(ctx)\n`
-						else
-							staticRouter.map[
-								loosePath
-							].all = `default: ${jitRoute(index)}\n`
-					else {
-						// @ts-ignore
-						if (mainHandler.response instanceof Response)
-							staticRouter.map[
-								loosePath
-							].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[loosePath].code}`
-						else {
-							if (shouldPrecompile)
-								staticRouter.map[
-									loosePath
-								].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[loosePath].code}`
-							else
-								staticRouter.map[
-									loosePath
-								].code = `case '${method}': ${jitRoute(
-									index
-								)}\n${staticRouter.map[loosePath].code}`
-						}
-					}
-				}
-			} else {
-				this.router.http.add(method, path, mainHandler)
-
-				if (!this.config.strictPath)
-					this.router.http.add(
-						method,
-						path.endsWith('/')
-							? path.slice(0, path.length - 1)
-							: path + '/',
-						mainHandler
-					)
 			}
+		} else {
+			this.router.http.add(method, path, mainHandler)
+
+			if (!this.config.strictPath)
+				this.router.http.add(
+					method,
+					path.endsWith('/')
+						? path.slice(0, path.length - 1)
+						: path + '/',
+					mainHandler
+				)
 		}
 	}
 
@@ -2121,10 +2095,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Prettify<Routes & NewElysia['_routes']>,
 		EphemeralSingleton,
 		EphemeralMetadata
@@ -2168,10 +2139,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Prettify<Routes & NewElysia['_routes']>,
 		EphemeralSingleton,
 		EphemeralMetadata
@@ -3119,10 +3087,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -3268,10 +3233,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -3344,10 +3306,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -3420,10 +3379,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -3496,10 +3452,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -3572,10 +3525,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -3648,10 +3598,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -3724,10 +3671,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,
@@ -3806,10 +3750,7 @@ export default class Elysia<
 		Scoped,
 		Singleton,
 		Definitions,
-		{
-			schema: Metadata['schema']
-			macro: Metadata['macro']
-		},
+		Metadata,
 		Routes &
 			CreateEden<
 				`${BasePath & string}${Path}`,

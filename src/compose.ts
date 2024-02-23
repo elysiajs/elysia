@@ -1677,3 +1677,11 @@ export const composeErrorHandler = (
 		ELYSIA_RESPONSE
 	})
 }
+
+export const jitRoute = (
+	index: number
+) => `if(stc${index}) return stc${index}(ctx)\n
+				
+if(st${index}.compose) return (st${index} = st${index}?.compose())(ctx)
+
+return st${index}(ctx)`

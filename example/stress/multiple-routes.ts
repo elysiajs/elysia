@@ -1,8 +1,8 @@
 import { Elysia } from '../../src'
 
-const app = new Elysia({ precompile: true })
-const total = 1000
+const app = new Elysia()
 
+const total = 1000
 const t = performance.now()
 
 for (let i = 0; i < total; i++) app.get(`/id/${i}`, () => 'hello')
