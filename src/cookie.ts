@@ -176,6 +176,13 @@ export class Cookie<T = unknown> implements CookieOptions {
 	) {
 		if (this.value === undefined) return
 
+		options ??= {
+			domain: this.domain,
+			path: this.path,
+			sameSite: this.sameSite,
+			secure: this.secure
+		}
+
 		this.set({
 			domain: options?.domain,
 			expires: new Date(0),
