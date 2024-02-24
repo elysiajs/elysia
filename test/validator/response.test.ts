@@ -289,4 +289,44 @@ describe('Response Validator', () => {
 		expect(r201valid.status).toBe(201)
 		expect(r201invalid.status).toBe(400)
 	})
+
+	it('merge response from parent scope', async () => {
+		const app = new Elysia()
+		.guard({
+			query: t.Object({
+				foo: t.String()
+			}),
+			beforeHandle: [(({query: {foo}, set}) => {
+				if (foo === 'bar') {
+					set.status = 401;
+					return "Unauthorized"
+				}
+			})],
+			response: {
+				401: t.String()
+			}
+		})
+		.get(
+			'/',
+			({set}) => {
+				set.status = 418;
+				return "I'm a teapot"
+			},
+			{
+				response: {
+					418: t.String()
+				}
+			}
+		)
+
+		const res1 = await app.handle(req('/?foo=bar'))
+		expect(res1.status).toBe(401)
+
+		const res2 = await app.handle(req('/?foo=baz'))
+		expect(res2.status).toBe(418)
+
+		expect(Object.keys(app.routes.find(x => x.path === '/')?.hooks.response))
+		.toEqual(['401', '418']);
+	})
+
 })

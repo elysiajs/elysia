@@ -124,6 +124,21 @@ export const primitiveHooks = [
 	'detail'
 ] as const
 
+function mergeResponses(a: InputSchema['response'], b: InputSchema['response']) {
+	
+	// If both are Record<number, ...> then merge them,
+	// giving preference to b.
+	type RecordNumber = Record<number, any>
+	const isRecordNumber = (x: typeof a | typeof b): x is RecordNumber =>
+		typeof x === 'object' && Object.keys(x).every(isNumericString)
+
+	if (isRecordNumber(a) && isRecordNumber(b)) {
+		return { ...(a as RecordNumber), ...(b as RecordNumber) }
+	}
+
+	return b ?? a;
+}
+
 export const mergeHook = (
 	a?: LocalHook<any, any, any, any> | LifeCycleStore,
 	b?: LocalHook<any, any, any, any>
@@ -170,7 +185,7 @@ export const mergeHook = (
 		// @ts-ignore
 		query: b?.query ?? a?.query,
 		// @ts-ignore
-		response: b?.response ?? a?.response,
+		response: mergeResponses(a?.response, b?.response),
 		type: a?.type || b?.type,
 		detail: mergeDeep(
 			// @ts-ignore
