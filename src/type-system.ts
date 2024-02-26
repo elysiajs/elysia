@@ -249,41 +249,60 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as any as TBoolean
 	},
-	ObjectString: <T extends TProperties>(
-		properties: T,
+	ObjectString: <T extends TProperties = {}>(
+		properties: T = {} as T,
 		options?: ObjectOptions
-	) =>
-		t
+	) => {
+		const schema = t.Object(properties, options)
+		const defaultValue = JSON.stringify(Value.Create(schema))
+
+		return t
 			.Transform(
-				t.Union(
-					[
-						t.String({
-							format: 'ObjectString',
-							default: ''
-						}),
-						t.Object(properties, options)
-					],
-					options
-				)
+				t.Union([
+					t.String({
+						format: 'ObjectString',
+						default: defaultValue
+					}),
+					schema
+				])
 			)
 			.Decode((value) => {
-				if (typeof value === 'string')
+				if (typeof value === 'string') {
 					try {
-						return JSON.parse(value as string)
+						value = JSON.parse(value as string)
 					} catch {
-						return value
+						throw new ValidationError('property', schema, value)
 					}
+
+					if (!Value.Check(schema, value))
+						throw new ValidationError('property', schema, value)
+
+					return value
+				}
 
 				return value
 			})
-			.Encode((value) => JSON.stringify(value)) as any as TObject<T>,
+			.Encode((value) => {
+				if (typeof value === 'string')
+					try {
+						value = JSON.parse(value as string)
+					} catch {
+						throw new ValidationError('property', schema, value)
+					}
+
+				if (!Value.Check(schema, value))
+					throw new ValidationError('property', schema, value)
+
+				return JSON.stringify(value)
+			}) as any as TObject<T>
+	},
 	File: TypeSystem.Type<
 		File | (unknown extends BunFile ? {} : BunFile),
 		ElysiaTypeOptions.File
 	>('File', validateFile),
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
 		t
-			.Transform(t.Union([Files(options)]))
+			.Transform(Files(options))
 			.Decode((value) => {
 				if (Array.isArray(value)) return value
 				return [value]

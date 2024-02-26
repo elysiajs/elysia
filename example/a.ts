@@ -1,15 +1,22 @@
-import { Elysia, error, t } from '../src'
-import { post, req } from '../test/utils'
-
-const plugin = new Elysia()
-	.get('/3', () => '3')
-	.get('/1', () => '4')
-	.get('/5', () => '5')
+import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
 const app = new Elysia()
-	.get('/0', () => '0')
-	.get('/1', () => '1')
-	.get('/2', () => '2')
-	.use(plugin)
+	.get('/:id/test', ({ params: { id } }) => id, {
+		params: t.Object({
+			id: t.Numeric({ minimum: 0 })
+		}),
+		error(err) {
+			if (err.code === 'VALIDATION') {
+				const idErr = err.error.all.find((err) => err.path === '/id')!
+				console.error(idErr)
+				return 'id must be a non-negative number'
+			}
+			console.error(err.code)
+		}
+	})
 
-console.log(app.routes, app.routeTree)
+app
+	.handle(req('/-1/test'))
+	.then((x) => x.text())
+	.then(console.log)

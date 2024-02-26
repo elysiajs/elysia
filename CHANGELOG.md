@@ -1,4 +1,4 @@
-# 1.0.0 - 20 Feb 2024
+# 1.0.0 - 26 Feb 2024
 Improvement:
 - macro support for websocket
 - add `mapResolve`
@@ -8,6 +8,7 @@ Improvement:
 - `error` now has auto-completion and type checking based on status code
 - handler now check return type of `error` based on status code
 - utility `Elysia._types` for types inference
+- [#495](https://github.com/elysiajs/elysia/issues/495) Provide user friendly error for failed parse
 
 Change:
 - group private API property
@@ -17,10 +18,13 @@ Change:
 
 Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`
+- [#505](https://github.com/elysiajs/elysia/issues/505) Empty ObjectString missing validation inside query schema
+- [#503](https://github.com/elysiajs/elysia/issues/503) Beta: undefined class when using decorate and derive
 - onStop callback called twice when calling .stop
 - mapDerive now resolve to `Singleton['derive']` instead of `Singleton['store']`
 - `ValidationError` doesn't return `content-type` as `application/json`
 - validate `error(status, value)` validate per status
+-
 
 # 0.8.17 - 12 Feb 2024
 Feature:

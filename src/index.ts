@@ -13,7 +13,7 @@ import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
-import deepMerge from 'deepmerge'
+import { mergeDeep } from './utils'
 
 import { mapEarlyResponse } from './handler'
 import {
@@ -782,7 +782,7 @@ export default class Elysia<
 
 		if (!this.setHeaders) this.setHeaders = {}
 
-		this.setHeaders = deepMerge(this.setHeaders, header)
+		this.setHeaders = mergeDeep(this.setHeaders, header)
 
 		return this
 	}
@@ -1950,8 +1950,8 @@ export default class Elysia<
 
 		const isSchema = typeof schemaOrRun === 'object'
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
-		this.singleton = deepMerge(this.singleton, instance.singleton) as any
-		this.definitions = deepMerge(this.definitions, instance.definitions)
+		this.singleton = mergeDeep(this.singleton, instance.singleton) as any
+		this.definitions = mergeDeep(this.definitions, instance.definitions)
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -2197,8 +2197,8 @@ export default class Elysia<
 		instance.definitions = { ...this.definitions }
 
 		const sandbox = run(instance)
-		this.singleton = deepMerge(this.singleton, instance.singleton) as any
-		this.definitions = deepMerge(this.definitions, instance.definitions)
+		this.singleton = mergeDeep(this.singleton, instance.singleton) as any
+		this.definitions = mergeDeep(this.definitions, instance.definitions)
 
 		if (sandbox.event.request.length)
 			this.event.request = [
@@ -4113,7 +4113,7 @@ export default class Elysia<
 	) {
 		switch (typeof name) {
 			case 'object':
-				this.singleton.store = deepMerge(this.singleton.store, name)
+				this.singleton.store = mergeDeep(this.singleton.store, name)
 
 				return this as any
 
@@ -4293,7 +4293,7 @@ export default class Elysia<
 	) {
 		switch (typeof name) {
 			case 'object':
-				this.singleton.decorator = deepMerge(
+				this.singleton.decorator = mergeDeep(
 					this.singleton.decorator,
 					name
 				)

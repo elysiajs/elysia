@@ -1,7 +1,6 @@
 import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
-import deepMerge from 'deepmerge'
 
 import { t } from '.'
 import { isNotEmpty } from './handler'
@@ -21,6 +20,47 @@ export const replaceUrlPath = (url: string, pathname: string) => {
 	return urlObject.toString()
 }
 
+const isClass = (v: Object) =>
+	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
+	// Handle import * as Sentry from '@sentry/bun'
+	// This also handle [object Date], [object Array]
+	// and FFI value like [object Prisma]
+	v.toString().startsWith('[object ') ||
+	// If object prototype is not pure, then probably a class-like object
+	isNotEmpty(Object.getPrototypeOf(v))
+
+const isObject = (item: any): item is Object =>
+	item && typeof item === 'object' && !Array.isArray(item)
+
+export const mergeDeep = <
+	A extends Record<string, any>,
+	B extends Record<string, any>
+>(
+	target: A,
+	source: B,
+	{
+		skipKeys
+	}: {
+		skipKeys?: string[]
+	} = {}
+): A & B => {
+	if (isObject(target) && isObject(source))
+		for (const [key, value] of Object.entries(source)) {
+			if (skipKeys?.includes(key)) continue
+
+			if (!isObject(value) || !(key in target) || isClass(value)) {
+				target[key as keyof typeof target] = value
+				continue
+			}
+
+			target[key as keyof typeof target] = mergeDeep(
+				(target as any)[key] as any,
+				value
+			)
+		}
+
+	return target as A & B
+}
 export const mergeCookie = <const A extends Object, const B extends Object>(
 	a: A,
 	b: B
@@ -33,8 +73,7 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	const { properties: __, ...source } = b ?? {}
 
-	// @ts-ignore
-	return deepMerge(target, source) as any
+	return mergeDeep(target, source) as A & B
 }
 
 export const mergeObjectArray = <T>(a: T | T[] = [], b: T | T[] = []): T[] => {
@@ -139,7 +178,7 @@ export const mergeHook = (
 		// @ts-ignore
 		response: b?.response ?? a?.response,
 		type: a?.type || b?.type,
-		detail: deepMerge(
+		detail: mergeDeep(
 			// @ts-ignore
 			b?.detail ?? {},
 			// @ts-ignore

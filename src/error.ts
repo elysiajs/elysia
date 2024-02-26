@@ -25,21 +25,14 @@ export type ElysiaErrors =
 	| ValidationError
 	| InvalidCookieSignature
 
-export const error = <
-	const Code extends number | keyof StatusMap,
-	const T
->(
+export const error = <const Code extends number | keyof StatusMap, const T>(
 	code: Code,
 	response: T
 ): {
-	[ELYSIA_RESPONSE]: Code extends keyof StatusMap
-		? StatusMap[Code]
-		: Code
+	[ELYSIA_RESPONSE]: Code extends keyof StatusMap ? StatusMap[Code] : Code
 	response: T
 	_type: {
-		[ERROR_CODE in Code extends keyof StatusMap
-			? StatusMap[Code]
-			: Code]: T
+		[ERROR_CODE in Code extends keyof StatusMap ? StatusMap[Code] : Code]: T
 	}
 } =>
 	({
@@ -71,7 +64,7 @@ export class ParseError extends Error {
 	code = 'PARSE'
 	status = 400
 
-	constructor(message?: string) {
+	constructor(message?: string, public body?: unknown) {
 		super(message ?? 'PARSE')
 	}
 }
@@ -95,7 +88,9 @@ export class ValidationError extends Error {
 		public value: unknown
 	) {
 		// @ts-expect-error
-		if (typeof value === "object" && ELYSIA_RESPONSE in value) value = value.response
+		if (typeof value === 'object' && ELYSIA_RESPONSE in value)
+			// @ts-expect-error
+			value = value.response
 
 		const error = isProduction
 			? undefined
@@ -123,17 +118,21 @@ export class ValidationError extends Error {
 				message: error?.message
 			})
 		} else {
+			// @ts-ignore private field
+			const schema = validator?.schema ?? validator
+			const errors =
+				'Errors' in validator
+					? [...validator.Errors(value)]
+					: [...Value.Errors(validator, value)]
+
 			message = JSON.stringify(
 				{
 					type,
 					at: accessor,
 					message: error?.message,
-					expected: Value.Create(
-						// @ts-ignore private field
-						validator.schema
-					),
+					expected: Value.Create(schema),
 					found: value,
-					errors: [...validator.Errors(value)]
+					errors
 				},
 				null,
 				2
@@ -169,7 +168,7 @@ export class ValidationError extends Error {
 			status: 400,
 			headers: {
 				...headers,
-				'content-type': 'application/json',
+				'content-type': 'application/json'
 			}
 		})
 	}

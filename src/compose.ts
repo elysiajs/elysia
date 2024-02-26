@@ -10,7 +10,7 @@ import { parse as parseQuery } from 'fast-querystring'
 import decodeURIComponent from 'fast-decode-uri-component'
 
 import { signCookie } from './utils'
-import { error } from './error'
+import { ParseError, error } from './error'
 
 import {
 	mapEarlyResponse,
@@ -516,18 +516,19 @@ export const composeHandler = ({
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
 				let url = decodeURIComponent(
-					c.request.url.slice(c.qi + 1)
+					c.request.url.slice(c.qi)
 						.replace(/\\+/g, ' ')
 					)
 
 				${destructured
 					.map(
 						(name, index) => `
-						${index === 0 ? 'let' : ''} memory = url.indexOf('${name}=')
+						${index === 0 ? 'let' : ''} memory = url.indexOf('&${name}=')
+						if(memory === -1) memory = url.indexOf('?${name}=')
 						let a${index}
-						
+
 						if(memory !== -1) {
-							const start = memory + ${name.length + 1}
+							const start = memory + ${name.length + 2}
 							memory = url.indexOf('&', start)
 
 							if(memory === -1) a${index} = url.slice(start)
@@ -599,7 +600,15 @@ export const composeHandler = ({
 				switch (hooks.type) {
 					case 'json':
 					case 'application/json':
-						fnLiteral += `c.body = await c.request.json()\n`
+						if (hasErrorHandler)
+							fnLiteral += `const body = await c.request.text()
+							
+							try {
+								c.body = JSON.parse(body)
+							} catch {
+								throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
+							}`
+						else fnLiteral += `c.body = await c.request.json()`
 						break
 
 					case 'text':
@@ -707,7 +716,19 @@ export const composeHandler = ({
 				fnLiteral += `
 				switch (contentType) {
 					case 'application/json':
-						c.body = await c.request.json()
+						${
+							hasErrorHandler
+								? `
+						const body = await c.request.text()
+						
+						try {
+							c.body = JSON.parse(body)
+						} catch {
+							throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
+						}
+						`
+								: `c.body = await c.request.json()\n`
+						}
 						break
 
 					case 'text/plain':
@@ -1163,19 +1184,15 @@ export const composeHandler = ({
 	}
 
 	if (hasErrorHandler || handleResponse) {
-		fnLiteral += `
-} catch(error) {`
-
+		fnLiteral += `\n} catch(error) {`
 		if (!maybeAsync) fnLiteral += `return (async () => {`
 
-		fnLiteral += `const set = c.set
-
-		if (!set.status || set.status < 300) set.status = error?.status || 500
-	`
+		fnLiteral += `const set = c.set\nif (!set.status || set.status < 300) set.status = error?.status || 500\n`
 
 		const endError = report('error', {
 			unit: hooks.error.length
 		})
+
 		if (hooks.error.length) {
 			fnLiteral += `
 				c.error = error
@@ -1254,7 +1271,8 @@ export const composeHandler = ({
 		error: {
 			NotFoundError,
 			ValidationError,
-			InternalServerError
+			InternalServerError,
+			ParseError
 		},
 		schema,
 		definitions,
@@ -1301,7 +1319,8 @@ export const composeHandler = ({
 		error: {
 			NotFoundError,
 			ValidationError,
-			InternalServerError
+			InternalServerError,
+			ParseError
 		},
 		schema: app.router.history,
 		// @ts-expect-error
