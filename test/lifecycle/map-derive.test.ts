@@ -44,6 +44,25 @@ describe('map derive', () => {
 		expect(res2).toBe('hi')
 	})
 
+	it('not inherits plugin on local', async () => {
+		const plugin = new Elysia()
+			.derive(() => ({
+				hi: () => 'hi'
+			}))
+			.mapDerive((derivatives) => ({
+				...derivatives,
+				hi2: () => 'hi'
+			}))
+
+		const app = new Elysia()
+			.use(plugin)
+			// @ts-expect-error
+			.get('/', ({ hi2 }) => typeof hi2 === 'undefined')
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('true')
+	})
+
 	it('can mutate store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
@@ -107,6 +126,25 @@ describe('map derive', () => {
 		)
 
 		expect(stack).toEqual([1, 2, 3])
+	})
+
+	it('map derive in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.mapDerive(() => {
+				order.push('A')
+				return {}
+			})
+			.mapDerive(() => {
+				order.push('B')
+				return {}
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
 	})
 
 	it('as local', async () => {

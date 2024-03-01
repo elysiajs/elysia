@@ -93,19 +93,20 @@ describe('Transform', () => {
 	})
 
 	it('transform in order', async () => {
+		let order = <string[]>[]
+
 		const app = new Elysia()
-			.get('/id/:id', ({ params: { id } }) => typeof id)
-			.onTransform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
+			.onTransform(() => {
+				order.push('A')
 			})
+			.onTransform(() => {
+				order.push('B')
+			})
+			.get('/', () => '')
 
-		const res = await app.handle(req('/id/1'))
+		await app.handle(req('/'))
 
-		expect(await res.text()).toBe('string')
+		expect(order).toEqual(['A', 'B'])
 	})
 
 	it('globally and locally pre handle', async () => {
@@ -214,6 +215,42 @@ describe('Transform', () => {
 
 		const invalid = await app.handle(req('/id/-1')).then((x) => x.status)
 		expect(invalid).toBe(400)
+	})
+
+	it('inherits from plugin', async () => {
+		const transformId = new Elysia().onTransform<{
+			params: {
+				name: string
+			} | null
+		}>({ as: 'global' }, ({ params }) => {
+			if (params?.name === 'Fubuki') params.name = 'Cat'
+		})
+
+		const app = new Elysia()
+			.use(transformId)
+			.get('/name/:name', ({ params: { name } }) => name)
+
+		const res = await app.handle(req('/name/Fubuki'))
+
+		expect(await res.text()).toBe('Cat')
+	})
+
+	it('not inherits from plugin on local', async () => {
+		const transformId = new Elysia().onTransform<{
+			params: {
+				name: string
+			} | null
+		}>(({ params }) => {
+			if (params?.name === 'Fubuki') params.name = 'Cat'
+		})
+
+		const app = new Elysia()
+			.use(transformId)
+			.get('/name/:name', ({ params: { name } }) => name)
+
+		const res = await app.handle(req('/name/Fubuki'))
+
+		expect(await res.text()).toBe('Fubuki')
 	})
 
 	it('global true', async () => {

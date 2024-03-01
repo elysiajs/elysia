@@ -26,6 +26,39 @@ describe('derive', () => {
 		expect(res).toBe('hi')
 	})
 
+	it('inherits plugin on local', async () => {
+		const plugin = new Elysia().derive(() => ({
+			hi: () => 'hi'
+		}))
+
+		const app = new Elysia()
+			.use(plugin)
+			// @ts-expect-error
+			.get('/', ({ hi }) => typeof hi === 'undefined')
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('true')
+	})
+
+	it('derive in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.derive(() => {
+				order.push('A')
+				return {}
+			})
+			.derive(() => {
+				order.push('B')
+				return {}
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
+	})
+
 	it('can mutate store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)

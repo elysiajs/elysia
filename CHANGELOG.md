@@ -10,6 +10,9 @@ Improvement:
 - utility `Elysia._types` for types inference
 - [#495](https://github.com/elysiajs/elysia/issues/495) Provide user friendly error for failed parse
 
+Breaking Change:
+- Lifecycle is now local first
+
 Change:
 - group private API property
 - move `Elysia.routes` to `Elysia.router.history`
@@ -24,7 +27,8 @@ Bug fix:
 - mapDerive now resolve to `Singleton['derive']` instead of `Singleton['store']`
 - `ValidationError` doesn't return `content-type` as `application/json`
 - validate `error(status, value)` validate per status
--
+- derive/resolve always scoped to Global
+
 
 # 0.8.17 - 12 Feb 2024
 Feature:

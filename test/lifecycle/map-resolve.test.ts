@@ -35,13 +35,56 @@ describe('map resolve', () => {
 			.get('/', ({ hi }) => hi())
 			.get('/h2', ({ hi2 }) => hi2())
 
-		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
+		const app = new Elysia().use(plugin).get('/', ({ hi2 }) => hi2())
 
 		const res = await app.handle(req('/')).then((t) => t.text())
 		const res2 = await app.handle(req('/h2')).then((t) => t.text())
 
 		expect(res).toBe('hi')
 		expect(res2).toBe('hi')
+	})
+
+	it('not inherits plugin', async () => {
+		const plugin = new Elysia()
+			.resolve(() => ({
+				hi: () => 'hi'
+			}))
+			.mapResolve((resolvers) => ({
+				...resolvers,
+				hi2: () => 'hi'
+			}))
+			.get('/', ({ hi }) => hi())
+			.get('/h2', ({ hi2 }) => hi2())
+
+		const app = new Elysia()
+			.use(plugin)
+			// @ts-expect-error
+			.get('/', ({ hi2 }) => typeof hi2 === "undefined")
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		const res2 = await app.handle(req('/h2')).then((t) => t.text())
+
+		expect(res).toBe('true')
+		expect(res2).toBe('hi')
+	})
+
+	it('map resolve in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.mapResolve(() => {
+				order.push('A')
+				return {}
+			})
+			.mapResolve(() => {
+				order.push('B')
+				return {}
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
 	})
 
 	it('can mutate store', async () => {
@@ -134,7 +177,7 @@ describe('map resolve', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResolve({ as: 'local' },  ({ path }) => {
+			.mapResolve({ as: 'local' }, ({ path }) => {
 				called.push(path)
 
 				return {}

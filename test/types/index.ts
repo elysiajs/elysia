@@ -847,9 +847,9 @@ app.group(
 {
 	const cookie = new Elysia({
 		prefix: '/'
-	}).derive(() => {
+	}).derive({ as: 'global' }, () => {
 		return {
-			cookie: 'A'
+			customCookie: 'A'
 		}
 	})
 
@@ -858,8 +858,8 @@ app.group(
 	const app = new Elysia()
 		.use(cookie)
 		.use(controller)
-		.get('/', ({ cookie }) => {
-			expectTypeOf<typeof cookie>().toBeString()
+		.get('/', ({ customCookie }) => {
+			expectTypeOf<typeof customCookie>().toBeString()
 		})
 }
 

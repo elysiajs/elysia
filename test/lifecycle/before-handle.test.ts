@@ -75,20 +75,37 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Cat')
 	})
 
-	it('before handle in order', async () => {
+	it('not inherits from plugin on local', async () => {
+		const transformId = new Elysia().onBeforeHandle(
+			({ params: { name } }) => {
+				if (name === 'Fubuki') return 'Cat'
+			}
+		)
+
 		const app = new Elysia()
+			.use(transformId)
 			.get('/name/:name', ({ params: { name } }) => name)
-			.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
-				if (name === 'fubuki') return 'cat'
+
+		const res = await app.handle(req('/name/Fubuki'))
+
+		expect(await res.text()).toBe('Fubuki')
+	})
+
+	it('before handle in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onBeforeHandle(() => {
+				order.push('A')
 			})
+			.onBeforeHandle(() => {
+				order.push('B')
+			})
+			.get('/', () => '')
 
-		const res = await app.handle(req('/name/fubuki'))
+		await app.handle(req('/'))
 
-		expect(await res.text()).toBe('fubuki')
+		expect(order).toEqual(['A', 'B'])
 	})
 
 	it('globally and locally before handle', async () => {

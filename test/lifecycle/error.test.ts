@@ -81,6 +81,28 @@ describe('error', () => {
 		expect(res.status).toBe(400)
 	})
 
+	it('inherits plugin', async () => {
+		const plugin = new Elysia().onError({ as: 'global' }, () => 'hi')
+
+		const app = new Elysia().use(plugin).get('/', () => {
+			throw new Error('')
+		})
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('hi')
+	})
+
+	it('not inherits plugin on local', async () => {
+		const plugin = new Elysia().onError(() => 'hi')
+
+		const app = new Elysia().use(plugin).get('/', () => {
+			throw new Error('')
+		})
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).not.toBe('hi')
+	})
+
 	it('custom 500', async () => {
 		const app = new Elysia()
 			.onError(({ code }) => {
@@ -116,6 +138,25 @@ describe('error', () => {
 		expect(response.status).toBe(418)
 	})
 
+	it('handle error in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onError(() => {
+				order.push('A')
+			})
+			.onError(() => {
+				order.push('B')
+			})
+			.get('/', () => {
+				throw new Error('A')
+			})
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
+	})
+
 	it('as global', async () => {
 		const called = <string[]>[]
 
@@ -145,7 +186,7 @@ describe('error', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onError({ as: 'local' },  ({ path }) => {
+			.onError({ as: 'local' }, ({ path }) => {
 				called.push(path)
 
 				return {}

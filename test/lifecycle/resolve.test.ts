@@ -26,6 +26,20 @@ describe('resolve', () => {
 		expect(res).toBe('hi')
 	})
 
+	it('not inherits plugin on local', async () => {
+		const plugin = new Elysia().resolve(() => ({
+			hi: () => 'hi'
+		}))
+
+		const app = new Elysia()
+			.use(plugin)
+			// @ts-expect-error
+			.get('/', ({ hi }) => typeof hi === 'undefined')
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('true')
+	})
+
 	it('can mutate store', async () => {
 		const app = new Elysia()
 			.state('counter', 1)
@@ -89,6 +103,25 @@ describe('resolve', () => {
 		)
 
 		expect(stack).toEqual([1, 2, 3])
+	})
+
+	it('resolve in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.resolve(() => {
+				order.push('A')
+				return {}
+			})
+			.resolve(() => {
+				order.push('B')
+				return {}
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
 	})
 
 	it('as global', async () => {

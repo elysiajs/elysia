@@ -981,7 +981,7 @@ export default class Elysia<
 	 */
 	resolve<
 		const Resolver extends Record<string, unknown>,
-		const Type extends LifeCycleType = 'local'
+		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },
 		resolver: (
@@ -1047,16 +1047,16 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		Scoped,
-		{
-			decorator: Singleton['decorator']
-			store: Singleton['store']
-			derive: Singleton['derive']
-			resolve: Prettify<Singleton['resolve'] & Awaited<Resolver>>
-		},
+		Singleton,
 		Definitions,
 		Metadata,
 		Routes,
-		EphemeralSingleton,
+		{
+			decorator: EphemeralSingleton['decorator']
+			store: EphemeralSingleton['store']
+			derive: EphemeralSingleton['derive']
+			resolve: Prettify<EphemeralSingleton['resolve'] & Awaited<Resolver>>
+		},
 		EphemeralMetadata
 	>
 
@@ -1089,22 +1089,22 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		Scoped,
-		{
-			decorator: Singleton['decorator']
-			store: Singleton['store']
-			derive: Singleton['derive']
-			resolve: NewResolver
-		},
+		Singleton,
 		Definitions,
 		Metadata,
 		Routes,
-		EphemeralSingleton,
+		{
+			decorator: EphemeralSingleton['decorator']
+			store: EphemeralSingleton['store']
+			derive: EphemeralSingleton['derive']
+			resolve: NewResolver
+		},
 		EphemeralMetadata
 	>
 
 	mapResolve<
 		const NewResolver extends Record<string, unknown>,
-		const Type extends LifeCycleType = 'local'
+		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },
 		mapper: (
@@ -1896,11 +1896,7 @@ export default class Elysia<
 					break
 
 				case 'parse':
-					this.event.parse.splice(
-						this.event.parse.length - 1,
-						0,
-						handler as any
-					)
+					this.event.parse.push(handler)
 					break
 
 				case 'transform':
@@ -2346,6 +2342,7 @@ export default class Elysia<
 	 */
 	use<
 		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>,
+		const Scoped extends boolean = false,
 		const Param extends Elysia<
 			any,
 			any,
@@ -2355,13 +2352,20 @@ export default class Elysia<
 			any,
 			any,
 			any
-		> = this,
-		const Type extends LifeCycleType = 'global'
+		> = this
 	>(
 		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>,
-		options?: { as?: Type }
-	): Type extends 'global'
+		options?: { scoped?: Scoped }
+	): Scoped extends true
 		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes & NewElysia['_routes']
+		  >
+		: Elysia<
 				BasePath,
 				Scoped,
 				// @ts-expect-error - This is truly ideal
@@ -2370,20 +2374,13 @@ export default class Elysia<
 				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 				Routes & NewElysia['_routes']
 		  >
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				Routes & NewElysia['_routes']
-		  >
 
 	/**
 	 * Inline Fn with scoped
 	 **/
 	use<
 		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>,
+		const Scoped extends boolean = false,
 		const Params extends Elysia<
 			any,
 			any,
@@ -2393,27 +2390,26 @@ export default class Elysia<
 			any,
 			any,
 			any
-		> = this,
-		const Type extends LifeCycleType = 'global'
+		> = this
 	>(
 		plugin: MaybePromise<(app: Params) => MaybePromise<NewElysia>>,
-		options?: { as?: Type }
-	): Type extends 'global'
+		options?: { scoped?: Scoped }
+	): Scoped extends true
 		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes & NewElysia['_routes']
+		  >
+		: Elysia<
 				BasePath,
 				Scoped,
 				// @ts-expect-error - This is truly ideal
 				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
 				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
 				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
-				Routes & NewElysia['_routes']
-		  >
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
 				Routes & NewElysia['_routes']
 		  >
 
@@ -2424,7 +2420,7 @@ export default class Elysia<
 		const NewElysia extends Elysia<any, true, any, any, any, any, any, any>
 	>(
 		instance: MaybePromise<NewElysia>,
-		global?: { as?: LifeCycleType }
+		options?: { scoped?: boolean }
 	): Elysia<
 		BasePath,
 		true,
@@ -2451,12 +2447,20 @@ export default class Elysia<
 			any,
 			any
 		>,
-		const Type extends LifeCycleType = 'global'
+		const Scoped extends boolean = false
 	>(
 		instance: MaybePromise<NewElysia>,
-		options?: { as?: Type }
-	): Type extends 'global'
+		options?: { scoped?: Scoped }
+	): Scoped extends true
 		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes & NewElysia['_routes']
+		  >
+		: Elysia<
 				BasePath,
 				Scoped,
 				// @ts-expect-error - This is truly ideal
@@ -2466,14 +2470,6 @@ export default class Elysia<
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>
-		  >
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				Routes & NewElysia['_routes']
 		  >
 
 	/**
@@ -2481,16 +2477,24 @@ export default class Elysia<
 	 */
 	use<
 		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>,
-		const Type extends LifeCycleType = 'global'
+		const Scoped extends boolean = false
 	>(
 		plugin: Promise<{
 			default: (
 				elysia: Elysia<any, any, any, any, any, any, any, any>
 			) => MaybePromise<NewElysia>
 		}>,
-		options?: { as?: Type }
-	): Type extends 'global'
+		options?: { scoped?: Scoped }
+	): Scoped extends true
 		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes & NewElysia['_routes']
+		  >
+		: Elysia<
 				BasePath,
 				Scoped,
 				// @ts-expect-error - This is truly ideal
@@ -2500,14 +2504,6 @@ export default class Elysia<
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>
-		  >
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				Routes & NewElysia['_routes']
 		  >
 
 	/**
@@ -2524,12 +2520,12 @@ export default class Elysia<
 			any,
 			any
 		>,
-		const Type extends LifeCycleType = 'global'
+		const Type extends LifeCycleType
 	>(
 		plugin: Promise<{
 			default: LazyLoadElysia
 		}>,
-		options?: { as?: Type }
+		options?: { scoped?: boolean }
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
@@ -2588,9 +2584,9 @@ export default class Elysia<
 						Elysia<any, any, any, any, any, any, any, any>
 					>
 			  }>,
-		options: { as?: LifeCycleType } = { as: 'global' }
+		options?: { scoped?: boolean }
 	): Elysia<any, any, any, any, any, any, any, any> {
-		if (options.as === 'local')
+		if (options?.scoped)
 			return this.guard({}, (app) => app.use(plugin as any))
 
 		if (Array.isArray(plugin)) {
@@ -4069,27 +4065,8 @@ export default class Elysia<
 	state<const Name extends string | number | symbol, Value>(
 		name: Name,
 		value: Value
-	): Scoped extends false
+	): Scoped extends true
 		? Elysia<
-				BasePath,
-				Scoped,
-				{
-					decorator: Singleton['decorator']
-					store: Prettify<
-						Singleton['store'] & {
-							[name in Name]: Value
-						}
-					>
-					derive: Singleton['derive']
-					resolve: Singleton['resolve']
-				},
-				Definitions,
-				Metadata,
-				Routes,
-				EphemeralSingleton,
-				EphemeralMetadata
-		  >
-		: Elysia<
 				BasePath,
 				Scoped,
 				Singleton,
@@ -4106,6 +4083,25 @@ export default class Elysia<
 					derive: EphemeralSingleton['derive']
 					resolve: EphemeralSingleton['resolve']
 				},
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				{
+					decorator: Singleton['decorator']
+					store: Prettify<
+						Singleton['store'] & {
+							[name in Name]: Value
+						}
+					>
+					derive: Singleton['derive']
+					resolve: Singleton['resolve']
+				},
+				Definitions,
+				Metadata,
+				Routes,
+				EphemeralSingleton,
 				EphemeralMetadata
 		  >
 
@@ -4432,16 +4428,16 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		Scoped,
-		{
-			decorator: Singleton['decorator']
-			store: Singleton['store']
-			derive: Prettify<Singleton['derive'] & Awaited<Derivative>>
-			resolve: Singleton['resolve']
-		},
+		Singleton,
 		Definitions,
 		Metadata,
 		Routes,
-		EphemeralSingleton,
+		{
+			decorator: EphemeralSingleton['decorator']
+			store: EphemeralSingleton['store']
+			derive: Prettify<EphemeralSingleton['derive'] & Awaited<Derivative>>
+			resolve: EphemeralSingleton['resolve']
+		},
 		EphemeralMetadata
 	>
 
@@ -4462,7 +4458,7 @@ export default class Elysia<
 	 */
 	derive<
 		const Derivative extends Record<string, unknown>,
-		const Type extends LifeCycleType = 'local'
+		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },
 		transform: (
@@ -4613,22 +4609,22 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		Scoped,
-		{
-			decorator: Singleton['decorator']
-			store: Singleton['store']
-			derive: NewDerivative
-			resolve: Singleton['resolve']
-		},
+		Singleton,
 		Definitions,
 		Metadata,
 		Routes,
-		EphemeralSingleton,
+		{
+			decorator: EphemeralSingleton['decorator']
+			store: EphemeralSingleton['store']
+			derive: NewDerivative
+			resolve: EphemeralSingleton['resolve']
+		},
 		EphemeralMetadata
 	>
 
 	mapDerive<
 		const NewDerivative extends Record<string, unknown>,
-		const Type extends LifeCycleType = 'local'
+		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },
 		mapper: (

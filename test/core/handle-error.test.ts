@@ -87,16 +87,14 @@ describe('Handle Error', () => {
 	})
 
 	it('transform any to error', async () => {
-		const app = new Elysia({
-			forceErrorEncapsulation: true
-		})
-			.get('/', () => {
-				throw new NotFoundError()
-			})
+		const app = new Elysia()
 			.onError(async ({ set }) => {
 				set.status = 418
 
 				return 'aw man'
+			})
+			.get('/', () => {
+				throw new NotFoundError()
 			})
 
 		const res = await app.handle(req('/'))

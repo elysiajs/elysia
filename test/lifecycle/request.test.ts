@@ -63,4 +63,21 @@ describe('On Request', () => {
 
 		expect(total).toEqual(2)
 	})
+
+	it('request in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onRequest(() => {
+				order.push('A')
+			})
+			.onRequest(() => {
+				order.push('B')
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
+	})
 })

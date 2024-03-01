@@ -1220,7 +1220,7 @@ export const composeHandler = ({
 
 		endError()
 
-		fnLiteral += `return handleError(c, error)\n\n`
+		fnLiteral += `return handleError(c, error, true)\n\n`
 
 		if (!maybeAsync) fnLiteral += '})()'
 
@@ -1628,7 +1628,7 @@ export const composeErrorHandler = (
 
 	return ${
 		app.event.error.find(isAsync) ? 'async' : ''
-	} function(context, error) {
+	} function(context, error, skipGlobal) {
 		let r
 
 		const { set } = context
@@ -1639,14 +1639,16 @@ export const composeErrorHandler = (
 		if(error[ELYSIA_RESPONSE]) {
 			error.status = error[ELYSIA_RESPONSE]
 			error.message = error.response
-		}
-`
+		}\n`
+
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
 
 		const response = `${
 			isAsync(handler) ? 'await ' : ''
 		}onError[${i}](context)`
+
+		fnLiteral += '\nif(skipGlobal !== true) {\n'
 
 		if (hasReturn(handler.toString()))
 			fnLiteral += `r = ${response}; if(r !== undefined) {
@@ -1661,6 +1663,8 @@ export const composeErrorHandler = (
 				return mapResponse(r, set, context.request)
 			}\n`
 		else fnLiteral += response + '\n'
+
+		fnLiteral += '\n}\n'
 	}
 
 	fnLiteral += `if(error.constructor.name === "ValidationError" || error.constructor.name === "TransformDecodeError") {

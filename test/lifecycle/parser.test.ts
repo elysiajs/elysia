@@ -28,7 +28,7 @@ describe('Parser', () => {
 		expect(await res.text()).toBe('A')
 	})
 
-	it("handle .on('parse')", async () => {
+	it('register using on', async () => {
 		const app = new Elysia()
 			.on('parse', (context, contentType) => {
 				switch (contentType) {
@@ -140,6 +140,44 @@ describe('Parser', () => {
 		expect(res).toBe('hi')
 	})
 
+	it('map parser in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onParse({ as: 'global' }, ({ path }) => {
+				order.push('A')
+			})
+			.onParse({ as: 'global' }, ({ path }) => {
+				order.push('B')
+			})
+			.post('/', ({ body }) => 'NOOP')
+
+		const res = await app.handle(post('/', {}))
+
+		expect(order).toEqual(['A', 'B'])
+	})
+
+	it('inherits plugin', async () => {
+		const plugin = new Elysia().onParse({ as: 'global' }, () => 'Kozeki Ui')
+
+		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
+
+		const res = await app.handle(post('/', {})).then((t) => t.text())
+		expect(res).toBe('Kozeki Ui')
+	})
+
+	it('not inherits plugin on local', async () => {
+		const plugin = new Elysia().onParse(() => 'Kozeki Ui')
+
+		const app = new Elysia().use(plugin).post('/', ({ body }) => body)
+
+		const res = await app
+			.handle(post('/', { name: 'Kozeki Ui' }))
+			.then((t) => t.json())
+
+		expect(res).toEqual({ name: 'Kozeki Ui' })
+	})
+
 	it('as global', async () => {
 		const called = <string[]>[]
 
@@ -163,7 +201,7 @@ describe('Parser', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onParse({ as: 'local' },  ({ path }) => {
+			.onParse({ as: 'local' }, ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')

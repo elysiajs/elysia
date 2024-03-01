@@ -1,8 +1,12 @@
 import { Elysia, t } from '../src'
+import { post, req } from '../test/utils'
 
-// ? Local first
-const plugin1 = new Elysia()
+const app = new Elysia({ precompile: true })
+	.onResponse((context) => {
+		console.log(context)
+	})
+	.get('/', ({ body }) => {
+		return 'a'
+	})
 
-const main1 = new Elysia()
-	.use(plugin1)
-	.get('/no-hi', () => '') // Should not log hi
+app.handle(req('/'))

@@ -24,6 +24,66 @@ describe('After Handle', () => {
 		expect(res).toBe('A')
 	})
 
+	it('inherits from plugin', async () => {
+		const transformType = new Elysia().onAfterHandle(
+			{ as: 'global' },
+			({ response }) => {
+				if (response === 'string') return 'number'
+			}
+		)
+
+		const app = new Elysia()
+			.use(transformType)
+			.get('/id/:id', ({ params: { id } }) => typeof id)
+
+		const res = await app.handle(req('/id/1'))
+
+		expect(await res.text()).toBe('number')
+	})
+
+	it('not inherits from plugin on local', async () => {
+		const transformType = new Elysia().onAfterHandle(({ response }) => {
+			if (response === 'string') return 'number'
+		})
+
+		const app = new Elysia()
+			.use(transformType)
+			.get('/id/:id', ({ params: { id } }) => typeof id)
+
+		const res = await app.handle(req('/id/1'))
+
+		expect(await res.text()).toBe('string')
+	})
+
+	it('register using on', async () => {
+		const app = new Elysia()
+			.on('transform', (request) => {
+				if (request.params?.id) request.params.id = +request.params.id
+			})
+			.get('/id/:id', ({ params: { id } }) => typeof id)
+
+		const res = await app.handle(req('/id/1'))
+
+		expect(await res.text()).toBe('number')
+	})
+
+	it('after handle in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onAfterHandle(() => {
+				order.push('A')
+			})
+			.onAfterHandle(() => {
+				order.push('B')
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
+	})
+
 	it('accept response', async () => {
 		const app = new Elysia().get('/', () => 'NOOP', {
 			afterHandle({ response }) {

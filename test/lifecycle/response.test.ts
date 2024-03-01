@@ -21,6 +21,40 @@ describe('On Response', () => {
 		await app.handle(req('/'))
 	})
 
+	it('response in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onResponse(() => {
+				order.push('A')
+			})
+			.onResponse(() => {
+				order.push('B')
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
+	})
+
+	// it('inherits from plugin', async () => {
+	// 	const transformType = new Elysia().onResponse(
+	// 		{ as: 'global' },
+	// 		({ response }) => {
+	// 			if (response === 'string') return 'number'
+	// 		}
+	// 	)
+
+	// 	const app = new Elysia()
+	// 		.use(transformType)
+	// 		.get('/id/:id', ({ params: { id } }) => typeof id)
+
+	// 	const res = await app.handle(req('/id/1'))
+
+	// 	expect(await res.text()).toBe('number')
+	// })
+
 	it('as global', async () => {
 		const called = <string[]>[]
 
@@ -44,7 +78,7 @@ describe('On Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onResponse({ as: 'local' },  ({ path }) => {
+			.onResponse({ as: 'local' }, ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')

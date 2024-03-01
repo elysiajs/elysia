@@ -29,17 +29,19 @@ const app = new Elysia()
 {
 	const plugin = new Elysia()
 		.resolve(() => ({
-			global: 'world'
+			local: 'world'
 		}))
 		.resolve({ as: 'global' }, () => ({
 			hello: 'world'
 		}))
 		.get('/', (context) => {
+			expectTypeOf<typeof context>().toHaveProperty('local')
 			expectTypeOf<typeof context>().toHaveProperty('hello')
 		})
 
 	app.use(plugin).get('/', (context) => {
-		expectTypeOf<typeof context>().toHaveProperty('global')
+		expectTypeOf<typeof context>().not.toHaveProperty('local')
+		expectTypeOf<typeof context>().toHaveProperty('hello')
 	})
 }
 
@@ -117,9 +119,10 @@ const app = new Elysia()
 		.derive(() => ({ b: 'b' }))
 		.resolve(() => ({ b: 'b' }))
 		.macro(() => ({ b: (b: string) => b }))
-		.use(plugin)._types
+		.use(plugin)
 
-	type types = typeof types
+	type types = typeof types._types
+	type ephemeral = typeof types._ephemeral
 
 	expectTypeOf<types['Singleton']>().toEqualTypeOf<{
 		decorator: {
@@ -128,13 +131,18 @@ const app = new Elysia()
 		store: {
 			b: string
 		}
+		derive: {}
+		resolve: {}
+	}>()
+
+	expectTypeOf<ephemeral['Singleton']>().toEqualTypeOf<{
 		derive: {
 			readonly b: 'b'
 		}
 		resolve: {
 			readonly b: 'b'
 		}
-	}>()
+	}>
 
 	expectTypeOf<types['Metadata']>().toEqualTypeOf<{
 		schema: {}
