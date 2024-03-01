@@ -16,12 +16,11 @@ describe('resolve', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = () => (app: Elysia) =>
-			app.resolve(() => ({
-				hi: () => 'hi'
-			}))
+		const plugin = new Elysia().resolve({ as: 'global' }, () => ({
+			hi: () => 'hi'
+		}))
 
-		const app = new Elysia().use(plugin()).get('/', ({ hi }) => hi())
+		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
 		const res = await app.handle(req('/')).then((t) => t.text())
 		expect(res).toBe('hi')
@@ -92,32 +91,11 @@ describe('resolve', () => {
 		expect(stack).toEqual([1, 2, 3])
 	})
 
-	it('scoped true', async () => {
+	it('as global', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.resolve({ scoped: true }, ({ path }) => {
-				called.push(path)
-
-				return {}
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	it('scoped false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.resolve({ scoped: false }, ({ path }) => {
+			.resolve({ as: 'global' }, ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -132,6 +110,27 @@ describe('resolve', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.resolve({ as: 'local' }, ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
 	})
 
 	it('support array', async () => {

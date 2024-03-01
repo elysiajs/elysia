@@ -46,12 +46,12 @@ describe('Dynamic Mode', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = () => (app: Elysia) => app.decorate('hi', () => 'hi')
+		const plugin = new Elysia().decorate('hi', () => 'hi')
 
 		const app = new Elysia({
 			aot: false
 		})
-			.use(plugin())
+			.use(plugin)
 			.get('/', ({ hi }) => hi())
 
 		const res = await app.handle(req('/')).then((r) => r.text())

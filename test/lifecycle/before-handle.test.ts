@@ -58,15 +58,13 @@ describe('Before Handle', () => {
 		expect(await scoped.text()).toBe('cat')
 	})
 
-	it('before handle from plugin', async () => {
-		const transformId = (app: Elysia) =>
-			app.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+	it('inherits from plugin', async () => {
+		const transformId = new Elysia().onBeforeHandle(
+			{ as: 'global' },
+			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
-			})
+			}
+		)
 
 		const app = new Elysia()
 			.use(transformId)
@@ -195,30 +193,11 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Not cat')
 	})
 
-	it('scoped true', async () => {
+	it('as global', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onBeforeHandle({ scoped: true }, ({ path }) => {
-				called.push(path)
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	it('scoped false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.onBeforeHandle({ scoped: false }, ({ path }) => {
+			.onBeforeHandle({ as: 'global' }, ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -231,6 +210,25 @@ describe('Before Handle', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onBeforeHandle({ as: 'local' }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
 	})
 
 	it('support array', async () => {
@@ -251,5 +249,4 @@ describe('Before Handle', () => {
 
 		expect(total).toEqual(2)
 	})
-
 })

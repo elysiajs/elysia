@@ -16,12 +16,11 @@ describe('derive', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = () => (app: Elysia) =>
-			app.derive(() => ({
-				hi: () => 'hi'
-			}))
+		const plugin = new Elysia().derive({ as: 'global' }, () => ({
+			hi: () => 'hi'
+		}))
 
-		const app = new Elysia().use(plugin()).get('/', ({ hi }) => hi())
+		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
 		const res = await app.handle(req('/')).then((t) => t.text())
 		expect(res).toBe('hi')
@@ -63,32 +62,11 @@ describe('derive', () => {
 		expect(res).toBe('Elysia')
 	})
 
-	it('scoped true', async () => {
+	it('as global', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.derive({ scoped: true }, ({ path }) => {
-				called.push(path)
-
-				return {}
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	it('scoped false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.derive({ scoped: false }, ({ path }) => {
+			.derive({ as: 'global' }, ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -103,6 +81,27 @@ describe('derive', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.derive({ as: 'local' }, ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
 	})
 
 	it('support array', async () => {
@@ -123,5 +122,4 @@ describe('derive', () => {
 
 		expect(total).toEqual(2)
 	})
-
 })

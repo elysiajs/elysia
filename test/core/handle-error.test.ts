@@ -9,7 +9,7 @@ describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			// @ts-ignore
+			// @ts-expect-error private
 			.handleError(
 				{
 					request,
@@ -27,7 +27,7 @@ describe('Handle Error', () => {
 	it('handle INTERNAL_SERVER_ERROR', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			// @ts-ignore
+			// @ts-expect-error private
 			.handleError(
 				{
 					request,
@@ -106,16 +106,15 @@ describe('Handle Error', () => {
 	})
 
 	it('handle error in group', async () => {
-		const authenticate = (app: Elysia) =>
-			app.group('/group', (group) =>
-				group
-					.get('/inner', () => {
-						throw new Error('A')
-					})
-					.onError(() => {
-						return 'handled'
-					})
-			)
+		const authenticate = new Elysia().group('/group', (group) =>
+			group
+				.get('/inner', () => {
+					throw new Error('A')
+				})
+				.onError(() => {
+					return 'handled'
+				})
+		)
 
 		const app = new Elysia().use(authenticate)
 
@@ -126,18 +125,17 @@ describe('Handle Error', () => {
 	})
 
 	it('handle error status in group', async () => {
-		const authenticate = (app: Elysia) =>
-			app.group('/group', (group) =>
-				group
-					.get('/inner', ({ set }) => {
-						set.status = 418
+		const authenticate = new Elysia().group('/group', (group) =>
+			group
+				.get('/inner', ({ set }) => {
+					set.status = 418
 
-						throw new Error('A')
-					})
-					.onError(() => {
-						return 'handled'
-					})
-			)
+					throw new Error('A')
+				})
+				.onError(() => {
+					return 'handled'
+				})
+		)
 
 		const app = new Elysia().use(authenticate)
 

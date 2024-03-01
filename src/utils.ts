@@ -10,7 +10,8 @@ import type {
 	LocalHook,
 	MaybeArray,
 	InputSchema,
-	BaseMacro
+	BaseMacro,
+	ElysiaFn
 } from './types'
 import type { CookieOptions } from './cookies'
 
@@ -474,30 +475,29 @@ export const asGlobal = <T extends MaybeArray<Function> | undefined>(
 	return fn
 }
 
-const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
+const filterGlobal = <T extends MaybeArray<ElysiaFn> | undefined>(fn: T): T => {
 	if (!fn) return fn
 
 	if (typeof fn === 'function') {
 		// @ts-expect-error
-		return fn.$elysiaHookType === 'global' && x.$elysiaScoped !== true
+		return fn.$elysiaHookType === 'global' && x.$elysiaGlobal === true
 			? fn
 			: undefined
 	}
 
 	const array = <unknown[]>[]
 
-	// @ts-ignore
 	if (!Array.isArray(fn)) {
-		// @ts-ignore
-		if (fn.$elysiaHookType === 'global' && fn.$elysiaScoped !== true)
+		const f = fn as ElysiaFn
+
+		if (f.$elysiaHookType === 'global' && f.$elysiaGlobal === true)
 			return fn
 
 		return <any>[]
 	}
 
-	// @ts-ignore
 	for (const x of fn)
-		if (x.$elysiaHookType === 'global' && x.$elysiaScoped !== true)
+		if (x.$elysiaHookType === 'global' && x.$elysiaGlobal === true)
 			array.push(x)
 
 	return array as T

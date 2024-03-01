@@ -527,28 +527,32 @@ export type TraceHandler<
 		derive: {}
 		resolve: {}
 	}
-> = (
-	lifecycle: Prettify<
-		{
-			context: Context<Route, Singleton>
-			set: Context['set']
-			id: number
-			time: number
-		} & {
-			[x in
-				| 'request'
-				| 'parse'
-				| 'transform'
-				| 'beforeHandle'
-				| 'handle'
-				| 'afterHandle'
-				| 'error'
-				| 'response']: Promise<TraceProcess<'begin'>>
-		} & {
-			store: Singleton['store']
-		}
-	>
-) => MaybePromise<void>
+> = {
+	(
+		lifecycle: Prettify<
+			{
+				context: Context<Route, Singleton>
+				set: Context['set']
+				id: number
+				time: number
+			} & {
+				[x in
+					| 'request'
+					| 'parse'
+					| 'transform'
+					| 'beforeHandle'
+					| 'handle'
+					| 'afterHandle'
+					| 'error'
+					| 'response']: Promise<TraceProcess<'begin'>>
+			} & {
+				store: Singleton['store']
+			}
+		>
+	): MaybePromise<void>
+	$elysiaGlobal?: boolean
+	$elysiaHookType?: 'global' | 'local'
+}
 
 export type TraceListener = EventEmitter<{
 	[event in TraceEvent | 'all']: (trace: TraceProcess) => MaybePromise<void>
@@ -787,6 +791,12 @@ export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
 		: never
 }>
 
+export type ElysiaFn = {
+	(...a: unknown[]): unknown
+	$elysiaGlobal?: boolean
+	$elysiaHookType?: 'global' | 'local'
+}
+
 export interface MacroManager<
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -949,3 +959,5 @@ export type MergeElysiaInstances<
 			},
 			Routes
 	  >
+
+export type LifeCycleType = 'global' | 'local'

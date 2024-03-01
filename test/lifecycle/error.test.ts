@@ -116,36 +116,11 @@ describe('error', () => {
 		expect(response.status).toBe(418)
 	})
 
-	it('scoped true', async () => {
+	it('as global', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onError({ scoped: true }, ({ path }) => {
-				called.push(path)
-
-				return {}
-			})
-			.get('/inner', () => {
-				throw new Error('A')
-			})
-
-		const app = new Elysia().use(plugin).get('/outer', () => {
-			throw new Error('A')
-		})
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	it('scoped false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.onError({ scoped: false }, ({ path }) => {
+			.onError({ as: 'global' }, ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -164,6 +139,31 @@ describe('error', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onError({ as: 'local' },  ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => {
+				throw new Error('A')
+			})
+
+		const app = new Elysia().use(plugin).get('/outer', () => {
+			throw new Error('A')
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
 	})
 
 	it('support array', async () => {

@@ -122,30 +122,11 @@ describe('Map Response', () => {
 		expect(res).toBe('Hutao')
 	})
 
-	it('scoped true', async () => {
+	it('as global', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResponse({ scoped: true }, ({ path }) => {
-				called.push(path)
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	it('scoped false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.mapResponse({ scoped: false }, ({ path }) => {
+			.mapResponse({ as: 'global' }, ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -158,6 +139,25 @@ describe('Map Response', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.mapResponse({ as: 'local' }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
 	})
 
 	it('support array', async () => {

@@ -8,10 +8,10 @@ const app = new Elysia()
 // ? Scoped derive
 {
 	const plugin = new Elysia()
-		.derive(() => ({
+		.derive({ as: 'global' }, () => ({
 			global: 'world'
 		}))
-		.derive({ scoped: true }, () => ({
+		.derive({ as: 'local' }, () => ({
 			hello: 'world'
 		}))
 		.get('/', (context) => {
@@ -31,7 +31,7 @@ const app = new Elysia()
 		.resolve(() => ({
 			global: 'world'
 		}))
-		.resolve({ scoped: true }, () => ({
+		.resolve({ as: 'global' }, () => ({
 			hello: 'world'
 		}))
 		.get('/', (context) => {

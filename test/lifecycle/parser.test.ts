@@ -140,30 +140,11 @@ describe('Parser', () => {
 		expect(res).toBe('hi')
 	})
 
-	it('scoped true', async () => {
+	it('as global', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onParse({ scoped: true }, ({ path }) => {
-				called.push(path)
-			})
-			.post('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(post('/inner', {})),
-			app.handle(post('/outer', {}))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	it('scoped false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.onParse({ scoped: false }, ({ path }) => {
+			.onParse({ as: 'global' }, ({ path }) => {
 				called.push(path)
 			})
 			.post('/inner', () => 'NOOP')
@@ -176,6 +157,25 @@ describe('Parser', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onParse({ as: 'local' },  ({ path }) => {
+				called.push(path)
+			})
+			.post('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(post('/inner', {})),
+			app.handle(post('/outer', {}))
+		])
+
+		expect(called).toEqual(['/inner'])
 	})
 
 	it('support array', async () => {

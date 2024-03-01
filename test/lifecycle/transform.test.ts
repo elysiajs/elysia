@@ -63,14 +63,13 @@ describe('Transform', () => {
 	})
 
 	it('transform from plugin', async () => {
-		const transformId = (app: Elysia) =>
-			app.onTransform<{
-				params: {
-					id: number
-				} | null
-			}>((request) => {
-				if (request.params?.id) request.params.id = +request.params.id
-			})
+		const transformId = new Elysia().onTransform<{
+			params: {
+				id: number
+			} | null
+		}>({ as: 'global' }, (request) => {
+			if (request.params?.id) request.params.id = +request.params.id
+		})
 
 		const app = new Elysia()
 			.use(transformId)
@@ -217,30 +216,11 @@ describe('Transform', () => {
 		expect(invalid).toBe(400)
 	})
 
-	it('scoped true', async () => {
+	it('global true', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onTransform({ scoped: true }, ({ path }) => {
-				called.push(path)
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	it('scoped false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.onTransform({ scoped: false }, ({ path }) => {
+			.onTransform({ as: 'global' }, ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -253,6 +233,25 @@ describe('Transform', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('global false', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onTransform({ as: 'local' }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
 	})
 
 	it('support array', async () => {

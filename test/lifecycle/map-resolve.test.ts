@@ -25,10 +25,10 @@ describe('map resolve', () => {
 
 	it('inherits plugin', async () => {
 		const plugin = new Elysia()
-			.resolve(() => ({
+			.resolve({ as: 'global' }, () => ({
 				hi: () => 'hi'
 			}))
-			.mapResolve((resolvers) => ({
+			.mapResolve({ as: 'global' }, (resolvers) => ({
 				...resolvers,
 				hi2: () => 'hi'
 			}))
@@ -109,32 +109,11 @@ describe('map resolve', () => {
 		expect(stack).toEqual([1, 2, 3])
 	})
 
-	it('scoped true', async () => {
+	it('as global', async () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.mapResolve({ scoped: true }, ({ path }) => {
-				called.push(path)
-
-				return {}
-			})
-			.get('/inner', () => 'NOOP')
-
-		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
-
-		const res = await Promise.all([
-			app.handle(req('/inner')),
-			app.handle(req('/outer'))
-		])
-
-		expect(called).toEqual(['/inner'])
-	})
-
-	it('scoped false', async () => {
-		const called = <string[]>[]
-
-		const plugin = new Elysia()
-			.mapResolve({ scoped: false }, ({ path }) => {
+			.mapResolve({ as: 'global' }, ({ path }) => {
 				called.push(path)
 
 				return {}
@@ -149,5 +128,26 @@ describe('map resolve', () => {
 		])
 
 		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.mapResolve({ as: 'local' },  ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
 	})
 })

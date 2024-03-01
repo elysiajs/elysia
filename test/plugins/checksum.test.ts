@@ -9,7 +9,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform(() => {})
+			}).onTransform({ as: 'global' }, () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -29,7 +29,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform(() => {})
+			}).onTransform({ as: 'global' }, () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -49,7 +49,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform(() => {})
+			}).onTransform({ as: 'global' }, () => {})
 
 		const group = new Elysia().use(cookie({})).get('/a', () => 'Hi')
 
@@ -74,7 +74,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform(() => {})
+			}).onTransform({ as: 'global' }, () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi')
 
@@ -95,7 +95,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform(() => {})
+			}).onTransform({ as: 'global' }, () => {})
 
 		const group = new Elysia().use(cookie()).get('/a', () => 'Hi', {
 			transform() {}
@@ -120,11 +120,11 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).onTransform(() => {})
+			}).onTransform({ as: 'global' }, () => {})
 
 		const group = new Elysia()
 			.use(cookie())
-			.onTransform(() => {
+			.onTransform({ as: 'global' }, () => {
 				count++
 			})
 			.get('/a', () => 'Hi')
@@ -162,7 +162,7 @@ describe('Checksum', () => {
 			new Elysia({
 				name: '@elysiajs/cookie',
 				seed: options
-			}).derive(() => {
+			}).derive({ as: 'global' }, () => {
 				return {
 					cookie: 'mock'
 				}
@@ -198,7 +198,7 @@ describe('Checksum', () => {
 		let b = 0
 
 		const plugin = new Elysia()
-			.onBeforeHandle(() => {
+			.onBeforeHandle({ as: 'global' }, () => {
 				x++
 			})
 			.group('/v1', (app) =>
@@ -235,7 +235,7 @@ describe('Checksum', () => {
 		const plugin = new Elysia()
 			.use(
 				new Elysia()
-					.derive(() => {
+					.derive({ as: 'global' }, () => {
 						a++
 
 						return {}
@@ -244,7 +244,7 @@ describe('Checksum', () => {
 			)
 			.use(
 				new Elysia()
-					.derive(() => {
+					.derive({ as: 'global' }, () => {
 						b++
 
 						return { test: 'test' }
@@ -252,7 +252,7 @@ describe('Checksum', () => {
 					.get('/2', ({ test }) => test)
 					.use(
 						new Elysia()
-							.derive(() => {
+							.derive({ as: 'global' }, () => {
 								c++
 
 								return { test: 'test' }
@@ -284,7 +284,7 @@ describe('Checksum', () => {
 			.use(new Elysia({ prefix: '/not-call' }).get('/', () => 'asdf'))
 			.use(
 				new Elysia({ prefix: '/call' })
-					.derive(() => {
+					.derive({ as: 'global' }, () => {
 						i++ // <-- should not be called, when requesting /asdf
 						return { test: 'test' }
 					})
@@ -323,13 +323,13 @@ describe('Checksum', () => {
 	})
 
 	it('handle reference parent-child', async () => {
-		const parent = new Elysia({ name: 'parent' }).derive(() => ({
+		const parent = new Elysia({ name: 'parent' }).derive({ as: 'global' }, () => ({
 			bye: () => 'bye'
 		}))
 
 		const child = new Elysia({ name: 'child' })
 			.use(parent)
-			.derive(({ bye }) => ({
+			.derive({ as: 'global' }, ({ bye }) => ({
 				hi: () => `hi + ${bye()}`
 			}))
 
