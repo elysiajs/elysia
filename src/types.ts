@@ -128,6 +128,10 @@ export type Prettify2<T> = {
 	[K in keyof T]: Prettify<T[K]>
 } & {}
 
+export type Partial2<T> = {
+	[K in keyof T]?: Partial<T[K]>
+}
+
 export type Reconcile<A extends Object, B extends Object> = {
 	[key in keyof A as key extends keyof B ? never : key]: A[key]
 } extends infer Collision

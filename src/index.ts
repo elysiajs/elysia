@@ -98,7 +98,8 @@ import type {
 	ComposeElysiaResponse,
 	InlineHandler,
 	ElysiaFn,
-	LifeCycleType
+	LifeCycleType,
+	Partial2
 } from './types'
 
 /**
@@ -1214,15 +1215,21 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onBeforeHandle<const Schema extends RouteSchema>(
-		options: { as?: LifeCycleType },
+	onBeforeHandle<
+		const Schema extends RouteSchema,
+		const Type extends LifeCycleType
+	>(
+		options: { as?: Type },
 		handler: MaybeArray<
 			OptionalHandler<
 				MergeSchema<
 					Schema,
 					Metadata['schema'] & EphemeralMetadata['schema']
 				>,
-				Singleton & EphemeralSingleton
+				Singleton &
+					('global' extends Type
+						? Partial2<EphemeralSingleton>
+						: EphemeralSingleton)
 			>
 		>
 	): this

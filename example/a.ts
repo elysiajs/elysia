@@ -1,12 +1,23 @@
-import { Elysia, t } from '../src'
-import { post, req } from '../test/utils'
+import { Elysia } from '../src'
 
-const app = new Elysia({ precompile: true })
-	.onResponse((context) => {
-		console.log(context)
-	})
-	.get('/', ({ body }) => {
-		return 'a'
-	})
+const auth = new Elysia({ prefix: '/auth' })
+	.derive({ as: 'global' }, ({ cookie: { auth } }) => ({
+		session: {
+			kind: 'logged-in' as string,
+			user: 'saltyaom' as string | null
+		}
+	}))
+	.onBeforeHandle(({ error, session: { kind, user } }) => {
+		if (kind !== 'logged-in') 
+			return error(401, 'Unauthorized')
 
-app.handle(req('/'))
+		return user
+	})
+	.derive(({ session }) => ({ user: session.user! }))
+	.get('/user', ({ user }) => user)
+
+const app = new Elysia()
+	.use(auth)
+	// ? Will not have auth check
+	.get('/', () => 'hai')
+	.listen(3000)
