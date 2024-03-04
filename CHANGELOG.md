@@ -28,7 +28,7 @@ Bug fix:
 - `ValidationError` doesn't return `content-type` as `application/json`
 - validate `error(status, value)` validate per status
 - derive/resolve always scoped to Global
-
+- duplicated onError call if not handled
 
 # 0.8.17 - 12 Feb 2024
 Feature:

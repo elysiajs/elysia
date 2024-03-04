@@ -7,14 +7,6 @@ const auth = new Elysia({ prefix: '/auth' })
 			user: 'saltyaom' as string | null
 		}
 	}))
-	.onBeforeHandle(({ error, session: { kind, user } }) => {
-		if (kind !== 'logged-in') 
-			return error(401, 'Unauthorized')
-
-		return user
-	})
-	.derive(({ session }) => ({ user: session.user! }))
-	.get('/user', ({ user }) => user)
 
 const app = new Elysia()
 	.use(auth)
