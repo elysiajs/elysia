@@ -29,6 +29,7 @@ Bug fix:
 - validate `error(status, value)` validate per status
 - derive/resolve always scoped to Global
 - duplicated onError call if not handled
+- [#516](https://github.com/elysiajs/elysia/issues/516) server timing breaks beforeHandle guards
 
 # 0.8.17 - 12 Feb 2024
 Feature:

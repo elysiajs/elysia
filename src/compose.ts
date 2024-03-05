@@ -1010,6 +1010,7 @@ export const composeHandler = ({
 					}
 				}
 
+				endBeforeHandle()
 				endAfterHandle()
 
 				if (validator.response)
