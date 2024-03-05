@@ -75,15 +75,15 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Cat')
 	})
 
-	it('not inherits from plugin on local', async () => {
-		const transformId = new Elysia().onBeforeHandle(
+	it('not inherits plugin on local', async () => {
+		const beforeHandle = new Elysia().onBeforeHandle(
 			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
 			}
 		)
 
 		const app = new Elysia()
-			.use(transformId)
+			.use(beforeHandle)
 			.get('/name/:name', ({ params: { name } }) => name)
 
 		const res = await app.handle(req('/name/Fubuki'))

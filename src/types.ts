@@ -473,16 +473,20 @@ export type TransformHandler<
 		derive: {}
 		resolve: {}
 	}
-> = (
-	context: Prettify<
-		Context<
-			Route,
-			Omit<Singleton, 'resolve'> & {
-				resolve: {}
-			}
+> = {
+	(
+		context: Prettify<
+			Context<
+				Route,
+				Omit<Singleton, 'resolve'> & {
+					resolve: {}
+				}
+			>
 		>
-	>
-) => MaybePromise<void>
+	): MaybePromise<void>
+	$elysiaHookType?: LifeCycleType
+	$elysiaChecksum?: number
+}
 
 export type TraceEvent =
 	| 'request'
@@ -554,8 +558,8 @@ export type TraceHandler<
 			}
 		>
 	): MaybePromise<void>
-	$elysiaGlobal?: boolean
-	$elysiaHookType?: 'global' | 'local'
+	$elysiaHookType?: LifeCycleType
+	$elysiaChecksum?: number
 }
 
 export type TraceListener = EventEmitter<{
@@ -796,9 +800,9 @@ export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
 }>
 
 export type ElysiaFn = {
-	(...a: unknown[]): unknown
-	$elysiaGlobal?: boolean
-	$elysiaHookType?: 'global' | 'local'
+	(...a: any[]): any
+	$elysiaHookType?: LifeCycleType
+	$elysiaChecksum?: number
 }
 
 export interface MacroManager<
@@ -856,6 +860,11 @@ export interface MacroManager<
 		local: Prettify<LifeCycleStore & RouteSchema>
 	}
 }
+
+export type MacroQueue = {
+	(manager: MacroManager<any, any, any>): unknown
+	$elysiaChecksum?: number
+}[]
 
 type _CreateEden<
 	Path extends string,
@@ -964,4 +973,4 @@ export type MergeElysiaInstances<
 			Routes
 	  >
 
-export type LifeCycleType = 'global' | 'local'
+export type LifeCycleType = 'global' | 'local' | 'scoped'

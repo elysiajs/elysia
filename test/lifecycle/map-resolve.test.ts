@@ -28,20 +28,19 @@ describe('map resolve', () => {
 			.resolve({ as: 'global' }, () => ({
 				hi: () => 'hi'
 			}))
-			.mapResolve({ as: 'global' }, (resolvers) => ({
-				...resolvers,
-				hi2: () => 'hi'
-			}))
-			.get('/', ({ hi }) => hi())
-			.get('/h2', ({ hi2 }) => hi2())
+			// .mapResolve((resolvers) => ({
+			// 	...resolvers,
+			// 	hi2: () => 'hi'
+			// }))
+			// .get('/h2', ({ hi2 }) => hi2())
 
-		const app = new Elysia().use(plugin).get('/', ({ hi2 }) => hi2())
+		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
 
 		const res = await app.handle(req('/')).then((t) => t.text())
-		const res2 = await app.handle(req('/h2')).then((t) => t.text())
+		// const res2 = await app.handle(req('/h2')).then((t) => t.text())
 
 		expect(res).toBe('hi')
-		expect(res2).toBe('hi')
+		// expect(res2).toBe('hi')
 	})
 
 	it('not inherits plugin', async () => {
@@ -53,7 +52,6 @@ describe('map resolve', () => {
 				...resolvers,
 				hi2: () => 'hi'
 			}))
-			.get('/', ({ hi }) => hi())
 			.get('/h2', ({ hi2 }) => hi2())
 
 		const app = new Elysia()

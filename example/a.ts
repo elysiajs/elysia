@@ -1,15 +1,11 @@
 import { Elysia } from '../src'
 
-const auth = new Elysia({ prefix: '/auth' })
-	.derive({ as: 'global' }, ({ cookie: { auth } }) => ({
-		session: {
-			kind: 'logged-in' as string,
-			user: 'saltyaom' as string | null
-		}
+const plugin = new Elysia()
+	.derive({ as: 'global' }, () => ({
+		a: 'hello'
 	}))
 
-const app = new Elysia()
-	.use(auth)
-	// ? Will not have auth check
-	.get('/', () => 'hai')
+const main = new Elysia()
+	.use(plugin)
+	.get('/sub', ({ a }) => a)
 	.listen(3000)

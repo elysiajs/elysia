@@ -29,7 +29,7 @@ import {
 	checksum,
 	mergeLifeCycle,
 	filterGlobalHook,
-	asGlobal,
+	asHookType,
 	traceBackMacro,
 	replaceUrlPath,
 	isNumericString,
@@ -99,7 +99,8 @@ import type {
 	InlineHandler,
 	ElysiaFn,
 	LifeCycleType,
-	Partial2
+	Partial2,
+	MacroQueue
 } from './types'
 
 /**
@@ -173,18 +174,13 @@ export default class Elysia<
 		resolve: {}
 	} as Singleton
 
-	protected definitions: {
-		type: Record<string, TSchema>
-		error: Record<string, Error>
-	} = {
-		type: {},
-		error: {}
+	protected definitions = {
+		type: {} as Record<string, TSchema>,
+		error: {} as Record<string, Error>
 	}
 
-	protected extender: {
-		macros: ((manager: MacroManager<any, any, any>) => unknown)[]
-	} = {
-		macros: []
+	protected extender = {
+		macros: <MacroQueue>[]
 	}
 
 	protected validator: SchemaValidator | null = null
@@ -982,7 +978,7 @@ export default class Elysia<
 	 */
 	resolve<
 		const Resolver extends Record<string, unknown>,
-		const Type extends LifeCycleType
+		const Type extends Exclude<LifeCycleType, 'scoped'>
 	>(
 		options: { as?: Type },
 		resolver: (
@@ -1105,7 +1101,7 @@ export default class Elysia<
 
 	mapResolve<
 		const NewResolver extends Record<string, unknown>,
-		const Type extends LifeCycleType
+		const Type extends Exclude<LifeCycleType, 'scoped'>
 	>(
 		options: { as?: Type },
 		mapper: (
@@ -1115,23 +1111,8 @@ export default class Elysia<
 				BasePath
 			>
 		) => MaybePromise<NewResolver>
-	): Global extends false
+	): Type extends 'global'
 		? Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				Routes,
-				{
-					decorator: EphemeralSingleton['decorator']
-					store: EphemeralSingleton['store']
-					derive: EphemeralSingleton['derive']
-					resolve: NewResolver
-				},
-				EphemeralMetadata
-		  >
-		: Elysia<
 				BasePath,
 				Scoped,
 				{
@@ -1144,6 +1125,21 @@ export default class Elysia<
 				Metadata,
 				Routes,
 				EphemeralSingleton,
+				EphemeralMetadata
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					decorator: EphemeralSingleton['decorator']
+					store: EphemeralSingleton['store']
+					derive: EphemeralSingleton['derive']
+					resolve: NewResolver
+				},
 				EphemeralMetadata
 		  >
 
@@ -1862,23 +1858,24 @@ export default class Elysia<
 			case 'string':
 				type = optionsOrType as any
 				handlers = typeOrHandlers as any
+
 				break
 
 			case 'object':
-				if (optionsOrType?.as === 'global' && handlers) {
-					if (Array.isArray(handlers))
-						for (const handler of handlers)
-							handler.$elysiaGlobal = true
-					else handlers.$elysiaGlobal = true
-				}
-
 				type = typeOrHandlers as any
+				break
 		}
 
 		// @ts-expect-error possible user error, leave it on
 		if (type === 'response') type = 'onResponse'
 
 		if (!Array.isArray(handlers)) handlers = [handlers!]
+
+		for (const handler of handlers)
+			handler.$elysiaHookType =
+				typeof optionsOrType === 'string'
+					? 'local'
+					: optionsOrType?.as ?? 'local'
 
 		if (type === 'trace')
 			sucroseTrace(handlers as TraceHandler[], this.inference.trace)
@@ -1890,8 +1887,8 @@ export default class Elysia<
 				this.inference.event
 			)
 
-		for (let handler of Array.isArray(handlers) ? handlers : [handlers]) {
-			handler = asGlobal(handler)
+		for (let handler of handlers) {
+			handler = asHookType(handler, 'global', { skipIfHasType: true })
 
 			switch (type) {
 				case 'start':
@@ -2766,18 +2763,16 @@ export default class Elysia<
 				plugin.extender.macros
 			)
 
-			const macroHashes: string[] = []
+			const macroHashes = <(number | undefined)[]>[]
 
 			for (let i = 0; i < plugin.extender.macros.length; i++) {
 				const macro = this.extender.macros[i]
 
-				// @ts-ignore
 				if (macroHashes.includes(macro.$elysiaChecksum)) {
 					plugin.extender.macros.splice(i, 1)
 					i--
 				}
 
-				// @ts-ignore
 				macroHashes.push(macro.$elysiaChecksum)
 			}
 
@@ -2842,9 +2837,9 @@ export default class Elysia<
 			this.headers(plugin.setHeaders)
 
 			plugin.reporter = this.reporter
-			for (const trace of plugin.event.trace) {
-				if (trace.$elysiaGlobal !== false) this.trace(trace)
-			}
+			for (const trace of plugin.event.trace)
+				if (trace.$elysiaHookType && trace.$elysiaHookType !== 'local')
+					this.trace(trace)
 
 			if (name) {
 				if (!(name in this.dependencies)) this.dependencies[name] = []
@@ -4465,7 +4460,7 @@ export default class Elysia<
 	 */
 	derive<
 		const Derivative extends Record<string, unknown>,
-		const Type extends LifeCycleType
+		const Type extends Exclude<LifeCycleType, 'scoped'>
 	>(
 		options: { as?: Type },
 		transform: (
@@ -4631,7 +4626,7 @@ export default class Elysia<
 
 	mapDerive<
 		const NewDerivative extends Record<string, unknown>,
-		const Type extends LifeCycleType
+		const Type extends Exclude<LifeCycleType, 'scoped'>
 	>(
 		options: { as?: Type },
 		mapper: (

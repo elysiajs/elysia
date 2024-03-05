@@ -11,7 +11,8 @@ import type {
 	MaybeArray,
 	InputSchema,
 	BaseMacro,
-	ElysiaFn
+	ElysiaFn,
+	LifeCycleType
 } from './types'
 import type { CookieOptions } from './cookies'
 
@@ -77,12 +78,15 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 	return mergeDeep(target, source) as A & B
 }
 
-export const mergeObjectArray = <T>(a: T | T[] = [], b: T | T[] = []): T[] => {
+export const mergeObjectArray = <T extends ElysiaFn>(
+	a: T | T[] = [],
+	b: T | T[] = []
+): T[] => {
 	if (!a) return []
 
 	// ! Must copy to remove side-effect
 	const array = <T[]>[]
-	const checksums = []
+	const checksums = <(number | undefined)[]>[]
 
 	if (!Array.isArray(a)) a = [a]
 	if (!Array.isArray(b)) b = [b]
@@ -90,16 +94,11 @@ export const mergeObjectArray = <T>(a: T | T[] = [], b: T | T[] = []): T[] => {
 	for (const item of a) {
 		array.push(item)
 
-		// @ts-ignore
-		if (item.$elysiaChecksum)
-			// @ts-ignore
-			checksums.push(item.$elysiaChecksum)
+		if (item.$elysiaChecksum) checksums.push(item.$elysiaChecksum)
 	}
 
-	for (const item of b) {
-		// @ts-expect-error
+	for (const item of b)
 		if (!checksums.includes(item?.$elysiaChecksum)) array.push(item)
-	}
 
 	return array
 }
@@ -367,26 +366,29 @@ export const mergeLifeCycle = (
 	b: LifeCycleStore | LocalHook<any, any, any, any, any, any, any>,
 	checksum?: number
 ): LifeCycleStore => {
-	const injectChecksum = (x: unknown) => {
+	const injectChecksum = (x: MaybeArray<ElysiaFn> | undefined) => {
 		if (!x) return
 
 		if (!Array.isArray(x)) {
-			// @ts-ignore
-			if (checksum && !x.$elysiaChecksum)
-				// @ts-ignore
-				item.$elysiaChecksum = checksum
+			// ? clone fn is required to prevent side-effect from changing hookType
+			const fn = x
 
-			return x
+			if (checksum && !fn.$elysiaChecksum) fn.$elysiaChecksum = checksum
+			if (fn.$elysiaHookType === 'scoped') fn.$elysiaHookType = 'local'
+
+			return fn
 		}
 
-		for (const item of x as unknown[]) {
-			// @ts-ignore
-			if (checksum && !item.$elysiaChecksum)
-				// @ts-ignore
-				item.$elysiaChecksum = checksum
+		// ? clone fns is required to prevent side-effect from changing hookType
+		const fns = [...x]
+
+		for (const fn of fns) {
+			if (checksum && !fn.$elysiaChecksum) fn.$elysiaChecksum = checksum
+
+			if (fn.$elysiaHookType === 'scoped') fn.$elysiaHookType = 'local'
 		}
 
-		return x
+		return fns
 	}
 
 	return {
@@ -419,86 +421,55 @@ export const mergeLifeCycle = (
 	}
 }
 
-export const asGlobalHook = (
-	hook: LocalHook<any, any, any, any, any, any, any>,
-	inject = true
-): LocalHook<any, any, any, any, any, any, any> => {
-	return {
-		// rest is validator
-		...hook,
-		type: hook?.type,
-		detail: hook?.detail,
-		parse: asGlobal(hook?.parse, inject),
-		transform: asGlobal(hook?.transform, inject),
-		beforeHandle: asGlobal(hook?.beforeHandle, inject),
-		afterHandle: asGlobal(hook?.afterHandle, inject),
-		onResponse: asGlobal(hook?.onResponse, inject),
-		error: asGlobal(hook?.error, inject),
-		mapResponse: asGlobal(hook?.mapResponse, inject)
-	} as LocalHook<any, any, any, any, any, any, any>
-}
-
-export const asGlobal = <T extends MaybeArray<Function> | undefined>(
+export const asHookType = <T extends MaybeArray<ElysiaFn> | undefined>(
 	fn: T,
-	inject = true
+	inject: LifeCycleType,
+	{ skipIfHasType = false }: { skipIfHasType?: boolean } = {}
 ): T => {
 	if (!fn) return fn
 
 	if (typeof fn === 'function') {
-		if (inject)
-			// @ts-ignore
-			fn.$elysiaHookType = 'global'
-		// @ts-ignore
-		else fn.$elysiaHookType = undefined
+		if (skipIfHasType) fn.$elysiaHookType ??= inject
+		else fn.$elysiaHookType = inject
 
 		return fn
 	}
 
-	if (!Array.isArray(fn)) {
-		if (inject)
-			// @ts-ignore
-			fn.$elysiaHookType = 'global'
-		// @ts-ignore
-		else fn.$elysiaHookType = undefined
+	if (!Array.isArray(fn)) return fn
 
-		return fn
-	}
-
-	for (const x of fn) {
-		if (inject)
-			// @ts-ignore
-			x.$elysiaHookType = 'global'
-		// @ts-ignore
-		else x.$elysiaHookType = undefined
-	}
+	for (const x of fn)
+		if (skipIfHasType) x.$elysiaHookType ??= inject
+		else x.$elysiaHookType = inject
 
 	return fn
 }
 
-const filterGlobal = <T extends MaybeArray<ElysiaFn> | undefined>(fn: T): T => {
+const filterGlobal = <T extends MaybeArray<ElysiaFn> | undefined>(
+	fn: T
+): T | undefined => {
 	if (!fn) return fn
 
-	if (typeof fn === 'function') {
-		// @ts-expect-error
-		return fn.$elysiaHookType === 'global' && x.$elysiaGlobal === true
-			? fn
-			: undefined
-	}
+	if (typeof fn === 'function')
+		switch (fn.$elysiaHookType) {
+			case 'global':
+			case 'scoped':
+				return fn
 
-	const array = <unknown[]>[]
+			default:
+				return undefined
+		}
 
-	if (!Array.isArray(fn)) {
-		const f = fn as ElysiaFn
+	if (!Array.isArray(fn)) return <any>[]
 
-		if (f.$elysiaHookType === 'global' && f.$elysiaGlobal === true)
-			return fn
-
-		return <any>[]
-	}
+	const array = <any>[]
 
 	for (const x of fn)
-		if (x.$elysiaHookType === 'global' && x.$elysiaGlobal === true)
-			array.push(x)
+		switch (x.$elysiaHookType) {
+			case 'global':
+			case 'scoped':
+				array.push(x)
+				break
+		}
 
 	return array as T
 }

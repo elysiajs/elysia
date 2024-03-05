@@ -41,7 +41,7 @@ describe('After Handle', () => {
 		expect(await res.text()).toBe('number')
 	})
 
-	it('not inherits from plugin on local', async () => {
+	it('not inherits plugin on local', async () => {
 		const transformType = new Elysia().onAfterHandle(({ response }) => {
 			if (response === 'string') return 'number'
 		})

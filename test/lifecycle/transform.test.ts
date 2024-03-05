@@ -235,7 +235,7 @@ describe('Transform', () => {
 		expect(await res.text()).toBe('Cat')
 	})
 
-	it('not inherits from plugin on local', async () => {
+	it('not inherits plugin on local', async () => {
 		const transformId = new Elysia().onTransform<{
 			params: {
 				name: string

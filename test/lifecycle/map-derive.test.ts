@@ -32,7 +32,6 @@ describe('map derive', () => {
 				...derivatives,
 				hi2: () => 'hi'
 			}))
-			.get('/', ({ hi }) => hi())
 			.get('/h2', ({ hi2 }) => hi2())
 
 		const app = new Elysia().use(plugin).get('/', ({ hi }) => hi())
