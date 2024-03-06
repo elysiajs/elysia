@@ -1,4 +1,4 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const sessionName = 'user'
 
@@ -7,8 +7,17 @@ const app = new Elysia({
 		path: '/'
 	}
 })
+	.model({
+		a: t.String()
+	})
+	.guard({
+		body: 'a',
+		response: {
+			401: 'a'
+		}
+	})
 	.get('/a', ({ cookie: { session } }) => {
-		return session.value = 'abc'
+		return (session.value = 'abc')
 	})
 	.get('/b', ({ cookie: { session }, set }) => {
 		const value = session.value

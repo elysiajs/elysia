@@ -2138,7 +2138,9 @@ export default class Elysia<
 	}
 
 	guard<
-		const LocalSchema extends InputSchema,
+		const LocalSchema extends InputSchema<
+			Extract<keyof Definitions['type'], string>
+		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema']
