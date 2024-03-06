@@ -126,7 +126,7 @@
 		"eslint": "^8.49.0",
 		"expect-type": "^0.16.0",
 		"tsup": "^8.0.1",
-		"typescript": "5.3.3"
+		"typescript": "5.4.2"
 	},
 	"peerDependencies": {
 		"@sinclair/typebox": ">= 0.31.0",
