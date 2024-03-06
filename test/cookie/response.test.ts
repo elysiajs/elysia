@@ -6,6 +6,7 @@ import { signCookie } from '../../src/utils'
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
 const getCookies = (response: Response) =>
+	// @ts-ignore
 	response.headers.getAll('Set-Cookie').map((x) => {
 		const value = decodeURIComponent(x)
 
@@ -68,6 +69,12 @@ const app = new Elysia({
 			})
 
 		return 'Deleted'
+	})
+	.get('/set', ({ cookie: { session } }) => {
+		session.value = 'rin'
+		session.set({
+			path: '/'
+		})
 	})
 
 describe('Cookie Response', () => {
@@ -268,6 +275,14 @@ describe('Cookie Response', () => {
 
 		expect(response.headers.getAll('Set-Cookie')).toEqual([
 			'name=Himari; Path=/; HttpOnly'
+		])
+	})
+
+	it('retain cookie value when using set if not provided', async () => {
+		const response = await app.handle(req('/set'))
+
+		expect(response.headers.getAll('Set-Cookie')).toEqual([
+			'session=rin; Path=/'
 		])
 	})
 })

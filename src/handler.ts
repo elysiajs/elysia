@@ -73,7 +73,7 @@ export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 
 		headers.append(
 			'Set-Cookie',
-			`${setCookie[i].slice(0, index)}=${setCookie[i].slice(index + 1)}`
+			`${setCookie[i].slice(0, index)}=${setCookie[i].slice(index + 1) || ''}`
 		)
 	}
 

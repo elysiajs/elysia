@@ -225,8 +225,12 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set(config: Updater<Partial<ElysiaCookie>>) {
-		this.cookie =
+		this.cookie = Object.assign(
+			{
+				value: this.value
+			},
 			typeof config === 'function' ? config(this.cookie) : config
+		)
 
 		return this
 	}

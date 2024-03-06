@@ -115,7 +115,8 @@ describe('Implicit Cookie', () => {
 
 		expect(set.cookie?.name).toEqual({
 			httpOnly: true,
-			path: '/'
+			path: '/',
+			value: 'himari',
 		})
 	})
 
