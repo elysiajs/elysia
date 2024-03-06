@@ -15,7 +15,7 @@ const getCookies = (response: Response) =>
 
 const app = new Elysia({
 	cookie: {
-		path: ''
+		path: '/'
 	}
 })
 	.get(
@@ -56,6 +56,12 @@ const app = new Elysia({
 	)
 	.get('/remove', ({ cookie }) => {
 		for (const self of Object.values(cookie)) self.remove()
+
+		return 'Deleted'
+	})
+	.get('/remove-with-options', ({ cookie }) => {
+		for (const self of Object.values(cookie))
+			self.remove()
 
 		return 'Deleted'
 	})
@@ -132,7 +138,7 @@ describe('Cookie Response', () => {
 		)
 
 		expect(getCookies(response)[0]).toInclude(
-			`council=; Max-Age=0; Expires=${new Date(0).toUTCString()}`
+			`council=; Max-Age=0; Path=/; Expires=${new Date(0).toUTCString()}`
 		)
 	})
 
