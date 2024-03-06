@@ -138,6 +138,8 @@ export const mapResponse = (
 				set.status = 302
 		}
 
+		console.log(set.cookie)
+
 		if (set.cookie && isNotEmpty(set.cookie))
 			set.headers['Set-Cookie'] = serializeCookie(set.cookie)
 
