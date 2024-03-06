@@ -235,18 +235,12 @@ export class Cookie<T> implements ElysiaCookie {
 		return this
 	}
 
-	remove(
-		options?: Pick<CookieOptions, 'domain' | 'path' | 'sameSite' | 'secure'>
-	) {
+	remove() {
 		if (this.value === undefined) return
 
 		this.set({
-			domain: options?.domain,
 			expires: new Date(0),
 			maxAge: 0,
-			path: options?.path,
-			sameSite: options?.sameSite,
-			secure: options?.secure,
 			value: ''
 		})
 

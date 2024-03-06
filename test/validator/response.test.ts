@@ -166,7 +166,7 @@ describe('Response Validator', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(res.status).toBe(400)
+		expect(res.status).toBe(422)
 	})
 
 	it('strictly validate by default', async () => {
@@ -185,7 +185,7 @@ describe('Response Validator', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(res.status).toBe(400)
+		expect(res.status).toBe(422)
 	})
 
 	it('handle File', async () => {
@@ -285,9 +285,9 @@ describe('Response Validator', () => {
 		)
 
 		expect(r200valid.status).toBe(200)
-		expect(r200invalid.status).toBe(400)
+		expect(r200invalid.status).toBe(422)
 		expect(r201valid.status).toBe(201)
-		expect(r201invalid.status).toBe(400)
+		expect(r201invalid.status).toBe(422)
 	})
 
 	it('validate response per status with error()', async () => {

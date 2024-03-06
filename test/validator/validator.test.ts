@@ -23,7 +23,7 @@ describe('Validator Additional Case', () => {
 		expect(await res.text()).toBe('Mutsuki need correction 💢💢💢')
 		expect(res.status).toBe(200)
 
-		expect(invalid.status).toBe(400)
+		expect(invalid.status).toBe(422)
 	})
 
 	it('validate afterHandle', async () => {
@@ -43,7 +43,7 @@ describe('Validator Additional Case', () => {
 		expect(await res.text()).toBe('Mutsuki need correction 💢💢💢')
 
 		expect(res.status).toBe(200)
-		expect(invalid.status).toBe(400)
+		expect(invalid.status).toBe(422)
 	})
 
 	it('validate beforeHandle with afterHandle', async () => {
@@ -67,7 +67,7 @@ describe('Validator Additional Case', () => {
 		expect(await res.text()).toBe('Mutsuki need correction 💢💢💢')
 		expect(res.status).toBe(200)
 
-		expect(invalid.status).toBe(400)
+		expect(invalid.status).toBe(422)
 	})
 
 	it('handle guard hook', async () => {
@@ -125,7 +125,7 @@ describe('Validator Additional Case', () => {
 			})
 		)
 
-		expect(invalidQuery.status).toBe(400)
+		expect(invalidQuery.status).toBe(422)
 
 		const invalidBody = await app.handle(
 			new Request('http://localhost/user?name=salt', {
@@ -141,6 +141,6 @@ describe('Validator Additional Case', () => {
 			})
 		)
 
-		expect(invalidBody.status).toBe(400)
+		expect(invalidBody.status).toBe(422)
 	})
 })

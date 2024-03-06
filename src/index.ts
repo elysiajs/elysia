@@ -855,7 +855,12 @@ export default class Elysia<
 	 * ```
 	 */
 	onParse(
-		parser: MaybeArray<BodyHandler<Metadata['schema'], Singleton>>
+		parser: MaybeArray<
+			BodyHandler<
+				Metadata['schema'] & EphemeralMetadata['schema'],
+				Singleton
+			>
+		>
 	): this
 
 	/**
@@ -879,7 +884,12 @@ export default class Elysia<
 	 */
 	onParse(
 		options: { as?: LifeCycleType },
-		parser: MaybeArray<BodyHandler<Metadata['schema'], Singleton>>
+		parser: MaybeArray<
+			BodyHandler<
+				Metadata['schema'] & EphemeralMetadata['schema'],
+				Singleton & EphemeralSingleton
+			>
+		>
 	): this
 
 	onParse(
@@ -983,7 +993,10 @@ export default class Elysia<
 		options: { as?: Type },
 		resolver: (
 			context: Prettify<
-				Context<Metadata['schema'], Singleton & EphemeralSingleton>
+				Context<
+					Metadata['schema'] & EphemeralMetadata['schema'],
+					Singleton & EphemeralSingleton
+				>
 			>
 		) => MaybePromise<Resolver>
 	): Type extends 'global'
@@ -1038,7 +1051,10 @@ export default class Elysia<
 	resolve<const Resolver extends Record<string, unknown>>(
 		resolver: (
 			context: Prettify<
-				Context<Metadata['schema'], Singleton & EphemeralSingleton>
+				Context<
+					Metadata['schema'] & EphemeralMetadata['schema'],
+					Singleton & EphemeralSingleton
+				>
 			>
 		) => MaybePromise<Resolver>
 	): Elysia<
@@ -1078,7 +1094,7 @@ export default class Elysia<
 	mapResolve<const NewResolver extends Record<string, unknown>>(
 		mapper: (
 			context: Context<
-				Metadata['schema'],
+				Metadata['schema'] & EphemeralMetadata['schema'],
 				Singleton & EphemeralSingleton,
 				BasePath
 			>
@@ -1106,7 +1122,7 @@ export default class Elysia<
 		options: { as?: Type },
 		mapper: (
 			context: Context<
-				Metadata['schema'],
+				Metadata['schema'] & EphemeralMetadata['schema'],
 				Singleton & EphemeralSingleton,
 				BasePath
 			>
@@ -3025,8 +3041,8 @@ export default class Elysia<
 	macro<const NewMacro extends BaseMacro>(
 		macro: (
 			route: MacroManager<
-				Metadata['schema'],
-				Singleton,
+				Metadata['schema'] & EphemeralMetadata['schema'],
+				Singleton & EphemeralSingleton,
 				Definitions['error']
 			>
 		) => NewMacro
@@ -4424,7 +4440,10 @@ export default class Elysia<
 	derive<const Derivative extends Record<string, unknown>>(
 		transform: (
 			context: Prettify<
-				Context<Metadata['schema'], Singleton & EphemeralSingleton>
+				Context<
+					Metadata['schema'] & EphemeralMetadata['schema'],
+					Singleton & EphemeralSingleton
+				>
 			>
 		) => MaybePromise<Derivative>
 	): Elysia<
@@ -4465,7 +4484,10 @@ export default class Elysia<
 		options: { as?: Type },
 		transform: (
 			context: Prettify<
-				Context<Metadata['schema'], Singleton & EphemeralSingleton>
+				Context<
+					Metadata['schema'] & EphemeralMetadata['schema'],
+					Singleton & EphemeralSingleton
+				>
 			>
 		) => MaybePromise<Derivative>
 	): Type extends 'global'
@@ -4603,7 +4625,7 @@ export default class Elysia<
 	mapDerive<const NewDerivative extends Record<string, unknown>>(
 		mapper: (
 			context: Context<
-				Metadata['schema'],
+				Metadata['schema'] & EphemeralMetadata['schema'],
 				Singleton & EphemeralSingleton,
 				BasePath
 			>
@@ -4631,7 +4653,7 @@ export default class Elysia<
 		options: { as?: Type },
 		mapper: (
 			context: Context<
-				Metadata['schema'],
+				Metadata['schema'] & EphemeralMetadata['schema'],
 				Singleton & EphemeralSingleton,
 				BasePath
 			>
@@ -4854,7 +4876,15 @@ export default class Elysia<
 	}
 
 	private handleError = async (
-		context: Partial<Context<Metadata['schema'], Singleton, BasePath>> & {
+		context: Partial<
+			Context<
+				Metadata['schema'] &
+					EphemeralMetadata['schema'] &
+					EphemeralMetadata['schema'],
+				Singleton & EphemeralSingleton,
+				BasePath
+			>
+		> & {
 			request: Request
 		},
 		error:

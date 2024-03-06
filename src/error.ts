@@ -80,7 +80,7 @@ export class InvalidCookieSignature extends Error {
 
 export class ValidationError extends Error {
 	code = 'VALIDATION'
-	status = 400
+	status = 422
 
 	constructor(
 		public type: string,

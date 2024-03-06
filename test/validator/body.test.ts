@@ -196,7 +196,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(res.status).toBe(400)
+		expect(res.status).toBe(422)
 	})
 
 	it('validate maybe empty body', async () => {

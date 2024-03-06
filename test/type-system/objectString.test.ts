@@ -83,6 +83,6 @@ describe('TypeSystem - ObjectString', () => {
 		expect(res1.status).toBe(200)
 
 		const res2 = await app.handle(req('/?pagination={"pageLimit":1}'))
-		expect(res2.status).toBe(400)
+		expect(res2.status).toBe(422)
 	})
 })

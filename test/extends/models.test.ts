@@ -151,7 +151,7 @@ describe('Model', () => {
 			})
 		)
 
-		expect(wrong.status).toBe(400)
+		expect(wrong.status).toBe(422)
 	})
 
 	it('remap', async () => {

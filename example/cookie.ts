@@ -21,9 +21,7 @@ const app = new Elysia({
 		'/update',
 		({ cookie: { name } }) => {
 			name.value = 'seminar: Rio'
-
 			name.value = 'seminar: Himari'
-
 			name.maxAge = 86400
 
 			return name.value

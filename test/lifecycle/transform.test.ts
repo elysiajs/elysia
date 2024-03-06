@@ -214,7 +214,7 @@ describe('Transform', () => {
 		expect(correct).toBe(200)
 
 		const invalid = await app.handle(req('/id/-1')).then((x) => x.status)
-		expect(invalid).toBe(400)
+		expect(invalid).toBe(422)
 	})
 
 	it('inherits from plugin', async () => {

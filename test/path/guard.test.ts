@@ -72,7 +72,7 @@ describe('guard', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate params', async () => {
@@ -92,7 +92,7 @@ describe('guard', () => {
 		const correct = await app.handle(req('/id/1'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate query', async () => {
@@ -109,7 +109,7 @@ describe('guard', () => {
 		const correct = await app.handle(req('/?name=a'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate body', async () => {
@@ -134,7 +134,7 @@ describe('guard', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate response', async () => {
@@ -151,7 +151,7 @@ describe('guard', () => {
 		const correct = await app.handle(req('/correct'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('apply guard globally', async () => {
@@ -168,7 +168,7 @@ describe('guard', () => {
 		const correct = await app.handle(req('/correct'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('inherits singleton / definitions and re-meregd on main', async () => {

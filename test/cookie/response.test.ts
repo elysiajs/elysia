@@ -59,17 +59,6 @@ const app = new Elysia({
 
 		return 'Deleted'
 	})
-	.get('/remove-with-options', ({ cookie }) => {
-		for (const self of Object.values(cookie))
-			self.remove({
-				path: '/',
-				domain: 'elysiajs.com',
-				sameSite: 'lax',
-				secure: true
-			})
-
-		return 'Deleted'
-	})
 	.get('/set', ({ cookie: { session } }) => {
 		session.value = 'rin'
 		session.set({
@@ -124,7 +113,7 @@ describe('Cookie Response', () => {
 		])
 	})
 
-	it('remove cookie without options', async () => {
+	it('remove cookie', async () => {
 		const response = await app.handle(
 			req('/remove', {
 				headers: {
@@ -144,31 +133,6 @@ describe('Cookie Response', () => {
 
 		expect(getCookies(response)[0]).toInclude(
 			`council=; Max-Age=0; Expires=${new Date(0).toUTCString()}`
-		)
-	})
-
-	it('remove cookie with options', async () => {
-		const response = await app.handle(
-			req('/remove-with-options', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
-
-		expect(getCookies(response)[0]).toInclude(
-			`council=; Max-Age=0; Domain=elysiajs.com; Path=/; Expires=${new Date(
-				0
-			).toUTCString()}; Secure; SameSite=Lax`
 		)
 	})
 

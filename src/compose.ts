@@ -150,8 +150,8 @@ const composeValidationFactory = (
 ) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
 		hasErrorHandler
-			? `c.set.status = 400; throw new ValidationError('${type}', ${type}, ${value})`
-			: `c.set.status = 400; return new ValidationError('${type}', ${type}, ${value}).toResponse(c.set.headers)`,
+			? `c.set.status = 422; throw new ValidationError('${type}', ${type}, ${value})`
+			: `c.set.status = 422; return new ValidationError('${type}', ${type}, ${value}).toResponse(c.set.headers)`,
 	composeResponseValidation: (name = 'r') => {
 		const returnError = hasErrorHandler
 			? `throw new ValidationError('response', response[c.set.status], ${name})`
@@ -1669,7 +1669,7 @@ export const composeErrorHandler = (
 	}
 
 	fnLiteral += `if(error.constructor.name === "ValidationError" || error.constructor.name === "TransformDecodeError") {
-		set.status = error.status ?? 400
+		set.status = error.status ?? 422
 		return new Response(
 			error.message,
 			{ 

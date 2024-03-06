@@ -51,7 +51,7 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		expect(res.status).toBe(400)
+		expect(res.status).toBe(422)
 	})
 
 	it('use custom error', async () => {

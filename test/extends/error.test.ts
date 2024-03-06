@@ -87,7 +87,7 @@ describe('Error', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(response.status).toBe(400)
+		expect(response.status).toBe(422)
 		expect(response.headers.get('content-type')).toBe('application/json')
 	})
 })

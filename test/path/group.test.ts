@@ -52,7 +52,7 @@ describe('group', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate params', async () => {
@@ -73,7 +73,7 @@ describe('group', () => {
 		const correct = await app.handle(req('/v1/id/1'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate query', async () => {
@@ -91,7 +91,7 @@ describe('group', () => {
 		const correct = await app.handle(req('/v1?name=a'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate body', async () => {
@@ -117,7 +117,7 @@ describe('group', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate response', async () => {
@@ -138,7 +138,7 @@ describe('group', () => {
 		const correct = await app.handle(req('/v1/correct'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate request with prefix', async () => {
