@@ -510,7 +510,7 @@ app.use(plugin).group(
 		.get('/', () => 1)
 
 	type App = (typeof server)['_routes']
-	type Route = App['']['get']
+	type Route = App['index']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -570,7 +570,7 @@ app.use(plugin).group(
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
 	type App = (typeof server)['_routes']
-	type Route = App['']['get']
+	type Route = App['index']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -775,7 +775,7 @@ app.group(
 	const server = app.use(plugin)
 
 	type App = (typeof server)['_routes']
-	type Route = App['']['get']
+	type Route = App['index']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -812,12 +812,12 @@ app.group(
 	const plugin = new Elysia({
 		prefix: '/v1',
 		scoped: false
-	}).get('/', () => 'hello')
+	}).get('', () => 'hello')
 
 	const server = app.use(plugin)
 
 	type App = (typeof server)['_routes']
-	type Route = App['v1']['']['get']
+	type Route = App['v1']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown

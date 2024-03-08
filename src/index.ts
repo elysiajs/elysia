@@ -3189,7 +3189,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '' : Path}`
 		>
 	>(
 		path: Path,
@@ -3200,7 +3200,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3210,7 +3210,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					get: {
 						body: Schema['body']
@@ -3262,7 +3262,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		path: Path,
@@ -3273,7 +3273,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3283,7 +3283,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					post: {
 						body: Schema['body']
@@ -3335,7 +3335,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		path: Path,
@@ -3346,7 +3346,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3356,7 +3356,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					put: {
 						body: Schema['body']
@@ -3408,7 +3408,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		path: Path,
@@ -3419,7 +3419,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3429,7 +3429,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					patch: {
 						body: Schema['body']
@@ -3481,7 +3481,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		path: Path,
@@ -3492,7 +3492,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3502,7 +3502,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					delete: {
 						body: Schema['body']
@@ -3554,7 +3554,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		path: Path,
@@ -3565,7 +3565,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3575,7 +3575,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					options: {
 						body: Schema['body']
@@ -3627,7 +3627,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		path: Path,
@@ -3638,7 +3638,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3648,7 +3648,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					[method in string]: {
 						body: Schema['body']
@@ -3700,7 +3700,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		path: Path,
@@ -3711,7 +3711,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3721,7 +3721,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					head: {
 						body: Schema['body']
@@ -3773,7 +3773,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		path: Path,
@@ -3784,7 +3784,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3794,7 +3794,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					connect: {
 						body: Schema['body']
@@ -3847,7 +3847,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & EphemeralSingleton,
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	>(
 		method: Method,
@@ -3859,7 +3859,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		> & {
 			config: {
 				allowMeta?: boolean
@@ -3873,7 +3873,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath & string}${Path}`,
+				`${BasePath & string}${Path extends '/' ? '/index' : Path}`,
 				{
 					[method in Method]: {
 						body: Schema['body']
@@ -3931,7 +3931,7 @@ export default class Elysia<
 			Singleton & EphemeralSingleton,
 			Definitions['error'],
 			Metadata['macro'] & EphemeralMetadata['macro'],
-			`${BasePath}${Path}`
+			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
 		BasePath,
@@ -3941,7 +3941,7 @@ export default class Elysia<
 		Metadata,
 		Routes &
 			CreateEden<
-				`${BasePath}${Path}`,
+				`${BasePath}${Path extends '/' ? '/index' : Path}`,
 				{
 					subscribe: {
 						body: Schema['body']
