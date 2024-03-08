@@ -1,7 +1,8 @@
-import { t } from '../../src'
+import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from '@sinclair/typebox/value'
 import { TBoolean, TDate, TypeBoxError } from '@sinclair/typebox'
+import { post } from '../utils'
 
 describe('TypeSystem - Date', () => {
 	it('Create', () => {
@@ -24,11 +25,11 @@ describe('TypeSystem - Date', () => {
 	it('Encode', () => {
 		const schema = t.Date()
 
-		expect(Value.Encode<TDate, Date>(schema, new Date())).toEqual(
-			new Date()
+		expect(Value.Encode<TDate, Date>(schema, new Date())).toBeInstanceOf(
+			Date
 		)
-		expect(Value.Encode<TDate, Date>(schema, '2021/1/1')).toEqual(
-			new Date('2021/1/1')
+		expect(Value.Encode<TDate, Date>(schema, '2021/1/1')).toBeInstanceOf(
+			Date
 		)
 
 		const error = new TypeBoxError('Unable to encode due to invalid value')
@@ -42,11 +43,11 @@ describe('TypeSystem - Date', () => {
 	it('Decode', () => {
 		const schema = t.Date()
 
-		expect(Value.Decode<TDate, Date>(schema, new Date())).toEqual(
-			new Date()
+		expect(Value.Decode<TDate, Date>(schema, new Date())).toBeInstanceOf(
+			Date
 		)
-		expect(Value.Decode<TDate, Date>(schema, '2021/1/1')).toEqual(
-			new Date('2021/1/1')
+		expect(Value.Decode<TDate, Date>(schema, '2021/1/1')).toBeInstanceOf(
+			Date
 		)
 
 		const error = new TypeBoxError('Unable to decode due to invalid value')
@@ -55,5 +56,34 @@ describe('TypeSystem - Date', () => {
 		expect(() => Value.Decode(schema, {})).toThrow(error)
 		expect(() => Value.Decode(schema, undefined)).toThrow(error)
 		expect(() => Value.Decode(schema, null)).toThrow(error)
+	})
+
+	it('Integrate', async () => {
+		const app = new Elysia().post('/', ({ body: { date } }) => date, {
+			body: t.Object({
+				date: t.Date()
+			})
+		})
+
+		const res1 = await app.handle(
+			post('/', {
+				date: new Date()
+			})
+		)
+		expect(res1.status).toBe(200)
+
+		const res2 = await app.handle(
+			post('/', {
+				date: '2021/1/1'
+			})
+		)
+		expect(res2.status).toBe(200)
+
+		const res3 = await app.handle(
+			post('/', {
+				date: 'Skibidi dom dom yes yes'
+			})
+		)
+		expect(res3.status).toBe(422)
 	})
 })
