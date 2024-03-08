@@ -120,22 +120,42 @@ describe('error', () => {
 		expect(response.status).toBe(500)
 	})
 
-	it('error function status', async () => {
-		const app = new Elysia().get('/', () => error(418, 'I am a teapot'))
+	it('return correct number status on error function', async () => {
+		const app = new Elysia().get('/', ({ error }) =>
+			error(418, 'I am a teapot')
+		)
 
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
 	})
 
-	it('error function name', async () => {
-		const app = new Elysia().get('/', () =>
+	it('return correct named status on error function', async () => {
+		const app = new Elysia().get('/', ({ error }) =>
 			error("I'm a teapot", 'I am a teapot')
 		)
 
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
+	})
+
+	it('return correct number status without value on error function', async () => {
+		const app = new Elysia().get('/', ({ error }) => error(418))
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe("I'm a teapot")
+	})
+
+	it('return correct named status without value on error function', async () => {
+		const app = new Elysia().get('/', ({ error }) => error("I'm a teapot"))
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe("I'm a teapot")
 	})
 
 	it('handle error in order', async () => {

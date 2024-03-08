@@ -1105,33 +1105,55 @@ app.resolve(({ headers }) => {
 		.get('/error', ({ error }) => error("I'm a teapot", 'a'))
 		.post('/mirror', ({ body }) => body)
 		.get('/immutable', '1')
-		.get('/immutable-error', error("I'm a teapot", 'a'))
+		.get('/immutable-error', ({ error }) => error("I'm a teapot", 'a'))
+		.get('/async', async ({ error }) => {
+			if (Math.random() > 0.5) return error("I'm a teapot", 'Nagisa')
+
+			return 'Hifumi'
+		})
+		.get('/default-error-code', ({ error }) => {
+			if (Math.random() > 0.5) return error(418, 'Nagisa')
+			if (Math.random() > 0.5) return error(401)
+
+			return 'Hifumi'
+		})
 
 	type app = typeof app._routes
 
 	expectTypeOf<app['index']['get']['response']>().toEqualTypeOf<{
 		200: string
-	}>
+	}>()
 
 	expectTypeOf<app['true']['get']['response']>().toEqualTypeOf<{
 		200: boolean
-	}>
+	}>()
 
 	expectTypeOf<app['error']['get']['response']>().toEqualTypeOf<{
 		200: never
 		418: 'a'
-	}>
+	}>()
 
 	expectTypeOf<app['mirror']['post']['response']>().toEqualTypeOf<{
 		200: unknown
-	}>
+	}>()
 
 	expectTypeOf<app['immutable']['get']['response']>().toEqualTypeOf<{
 		200: '1'
-	}>
+	}>()
 
 	expectTypeOf<app['immutable-error']['get']['response']>().toEqualTypeOf<{
 		200: never
 		418: 'a'
-	}>
+	}>()
+
+	expectTypeOf<app['async']['get']['response']>().toEqualTypeOf<{
+		200: 'Hifumi'
+		418: 'Nagisa'
+	}>()
+
+	expectTypeOf<app['default-error-code']['get']['response']>().toEqualTypeOf<{
+		200: 'Hifumi'
+		401: 'Unauthorized'
+		418: 'Nagisa'
+	}>()
 }

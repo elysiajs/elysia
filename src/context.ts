@@ -1,4 +1,4 @@
-import type { HTTPStatusName, StatusMap } from './utils'
+import type { StatusMap, InvertedStatusMap } from './utils'
 import type { Cookie, ElysiaCookie } from './cookies'
 
 import type {
@@ -7,9 +7,8 @@ import type {
 	GetPathParameter,
 	SingletonBase
 } from './types'
-import { error, type ELYSIA_RESPONSE } from './error'
+import { error, type ELYSIA_RESPONSE, inlineError } from './error'
 
-type InvertedStatusMap = { [K in keyof StatusMap as StatusMap[K]]: K }
 type InvertedStatusMapKey = keyof InvertedStatusMap
 
 type WithoutNullableKeys<Type> = {
@@ -52,7 +51,7 @@ export type Context<
 			headers: Record<string, string> & {
 				'Set-Cookie'?: string | string[]
 			}
-			status?: number | HTTPStatusName
+			status?: number | keyof InvertedStatusMap
 			redirect?: string
 			/**
 			 * ! Internal Property
@@ -96,7 +95,7 @@ export type Context<
 				}
 		  }
 		: {
-				error: typeof error
+				error: typeof inlineError
 		  }) &
 		Singleton['decorator'] &
 		Singleton['derive'] &

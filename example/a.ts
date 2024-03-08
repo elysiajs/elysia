@@ -27,4 +27,11 @@ const app = new Elysia({
 
 		return 'v:' + value
 	})
+	.get('/async', async ({ error }) => {
+		if (Math.random() > 0.5) return error(418)
+
+		return 'ok'
+	})
 	.listen(3000)
+
+app._routes.async

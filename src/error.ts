@@ -1,8 +1,8 @@
+import type { TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import { TSchema } from '@sinclair/typebox'
 
-import { StatusMap } from './utils'
+import { StatusMap, InvertedStatusMap } from './utils'
 
 // ? Cloudflare worker support
 const env =
@@ -25,20 +25,77 @@ export type ElysiaErrors =
 	| ValidationError
 	| InvalidCookieSignature
 
-export const error = <const Code extends number | keyof StatusMap, const T>(
+/**
+ * @deprecated
+ * Use inline error instead
+ *
+ * Inline error can provide auto-completion
+ * and type checking based on route schema
+ *
+ * @example
+ * ```typescript
+ * new Elysia()
+ * 		.get('/', ({ error }) => error('418', ''))
+ * ```
+ */
+export const error = <
+	const Code extends number | keyof StatusMap,
+	const T = Code extends keyof InvertedStatusMap
+		? InvertedStatusMap[Code]
+		: Code,
+	const Status extends number = Code extends keyof StatusMap
+		? StatusMap[Code]
+		: Code
+>(
 	code: Code,
-	response: T
+	response?: T
 ): {
-	[ELYSIA_RESPONSE]: Code extends keyof StatusMap ? StatusMap[Code] : Code
+	[ELYSIA_RESPONSE]: Status
 	response: T
 	_type: {
-		[ERROR_CODE in Code extends keyof StatusMap ? StatusMap[Code] : Code]: T
+		[ERROR_CODE in Status]: T
 	}
 } =>
 	({
 		// @ts-expect-error
 		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
-		response,
+		response:
+			response ??
+			(code in InvertedStatusMap
+				? // @ts-expect-error Always correct
+				  InvertedStatusMap[code]
+				: code),
+		_type: undefined as any
+	} as const)
+
+export const inlineError = <
+	const Code extends number | keyof StatusMap,
+	const T = Code extends keyof InvertedStatusMap
+		? InvertedStatusMap[Code]
+		: Code,
+	Status extends number = Code extends keyof StatusMap
+		? StatusMap[Code]
+		: Code
+>(
+	code: Code,
+	response?: T
+): {
+	[ELYSIA_RESPONSE]: Status
+	response: T
+	_type: {
+		[ERROR_CODE in Status]: T
+	}
+	// eslint-disable-next-line sonarjs/no-identical-functions
+} =>
+	({
+		// @ts-expect-error
+		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
+		response:
+			response ??
+			(code in StatusMap
+				? // @ts-ignore
+				  StatusMap[code]
+				: code),
 		_type: undefined as any
 	} as const)
 

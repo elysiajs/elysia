@@ -885,18 +885,23 @@ export type CreateEden<
 export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 	...a: any[]
 ) => infer A
-	? _ComposeElysiaResponse<Response, A>
-	: _ComposeElysiaResponse<Response, Handle>
+	? _ComposeElysiaResponse<Response, Awaited<A>>
+	: _ComposeElysiaResponse<Response, Awaited<Handle>>
 
 type _ComposeElysiaResponse<Response, Handle> = Prettify<
 	unknown extends Response
 		? {
 				200: Exclude<Handle, { [ELYSIA_RESPONSE]: any }>
-		  } & (Extract<Handle, { [ELYSIA_RESPONSE]: any }> extends {
-				_type: infer A
+		  } & {
+				[ErrorResponse in Extract<
+					Handle,
+					{ response: any }
+				> as ErrorResponse extends {
+					[ELYSIA_RESPONSE]: infer Status extends number
+				}
+					? Status
+					: never]: ErrorResponse['response']
 		  }
-				? A
-				: {})
 		: Response extends { 200: unknown }
 		? Response
 		: {

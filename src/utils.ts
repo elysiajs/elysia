@@ -555,9 +555,14 @@ export const StatusMap = {
 	'Network Authentication Required': 511
 } as const
 
-export type StatusMap = typeof StatusMap
+export const InvertedStatusMap = Object.fromEntries(
+	Object.entries(StatusMap).map(([k, v]) => [v, k])
+) as {
+	[K in keyof StatusMap as StatusMap[K]]: K
+}
 
-export type HTTPStatusName = keyof typeof StatusMap
+export type StatusMap = typeof StatusMap
+export type InvertedStatusMap = typeof InvertedStatusMap
 
 function removeTrailingEquals(digest: string): string {
 	let trimmedDigest = digest
