@@ -49,7 +49,8 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError
+	type InternalServerError,
+	inlineError
 } from './error'
 
 import type {
@@ -5049,6 +5050,8 @@ export {
 	InternalServerError,
 	InvalidCookieSignature
 } from './error'
+
+export type InlineError = typeof inlineError
 
 export type { Context, PreContext } from './context'
 
