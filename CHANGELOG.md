@@ -1,14 +1,20 @@
-# 1.0.0 - 26 Feb 2024
+# 1.0.0 - 8 Mar 2024
 Improvement:
 - macro support for websocket
 - add `mapResolve`
-- add `{ scoped: true }` to lifecycle event
+- add `{ as: 'global' | 'local' }` to lifecycle event
 - add ephemeral type
-- add `error` to handler
-- `error` now has auto-completion and type checking based on status code
+- inline `error` to handler
+- inline `error` has auto-completion and type checking based on status code
 - handler now check return type of `error` based on status code
 - utility `Elysia._types` for types inference
 - [#495](https://github.com/elysiajs/elysia/issues/495) Provide user friendly error for failed parse
+- handler now infers return type for error status for Treaty
+- `t.Date` now allow stringified date
+- improves type test case
+- add test case for all life-cycle
+- resolve, mapResolve, derive, mapDerive use ephemeral type to scope down accurately
+- inference query dynamic variable
 
 Breaking Change:
 - Lifecycle is now local first
@@ -17,7 +23,7 @@ Change:
 - group private API property
 - move `Elysia.routes` to `Elysia.router.history`
 - detect possible json before return
-- unknown response now return as-is
+- unknown response now return as-is instead of JSON.stringify()
 
 Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`

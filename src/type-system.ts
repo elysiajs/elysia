@@ -1,4 +1,4 @@
-import { NumberOptions } from '@sinclair/typebox'
+import { DateOptions, NumberOptions, TDate } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
@@ -223,6 +223,42 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as any as TNumber
 	},
+	Date: (property?: DateOptions) => {
+		const schema = Type.Date(property)
+
+		return t
+			.Transform(
+				t.Union(
+					[
+						Type.Date(property),
+						t.String({
+							format: 'date',
+							default: new Date().toISOString()
+						}),
+						t.String({
+							format: 'date-time',
+							default: new Date().toISOString()
+						})
+					],
+					property
+				)
+			)
+			.Decode((value) => {
+				if (value instanceof Date) return value
+
+				const date = new Date(value)
+
+				if (!Value.Check(schema, date))
+					throw new ValidationError('property', schema, date)
+
+				return date
+			})
+			.Encode((value) => {
+				if (typeof value === 'string') return new Date(value)
+
+				return value
+			}) as any as TDate
+	},
 	BooleanString: (property?: SchemaOptions) => {
 		const schema = Type.Boolean(property)
 
@@ -408,6 +444,7 @@ t.Nullable = (schema) => ElysiaType.Nullable(schema)
 t.MaybeEmpty = ElysiaType.MaybeEmpty
 
 t.Cookie = ElysiaType.Cookie
+t.Date = ElysiaType.Date
 
 export { t }
 

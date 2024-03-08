@@ -1,3 +1,4 @@
+import { Value } from '@sinclair/typebox/value'
 import { Elysia, t } from '../src'
 
 const sessionName = 'user'
@@ -27,7 +28,3 @@ const app = new Elysia({
 		return 'v:' + value
 	})
 	.listen(3000)
-
-// fetch('http://localhost:3000/a')
-// 	.then((x) => x.text())
-// 	.then(console.log)
