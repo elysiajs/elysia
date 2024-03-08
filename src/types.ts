@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Elysia } from '.'
 import type { Serve, Server, WebSocketHandler } from 'bun'
 
@@ -660,8 +661,6 @@ export type Isolate<T> = {
 
 type LocalHookDetail = Partial<OpenAPIV3.OperationObject>
 
-export type NoInfer<T> = [T][T extends any ? 0 : never]
-
 export type LocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
@@ -669,18 +668,15 @@ export type LocalHook<
 	Errors extends Record<string, Error>,
 	Extension extends BaseMacro,
 	Path extends string = '',
-	TypedRoute extends RouteSchema = NoInfer<
-		Schema extends {
-			params: Record<string, unknown>
-		}
-			? Schema
-			: Schema & {
-					params: Record<
-						GetPathParameter<Path extends string ? Path : ''>,
-						string
-					>
-			  }
-	>
+	TypedRoute extends RouteSchema = Schema extends {
+		params: Record<string, unknown>
+	}
+		? Schema
+		: Schema & {
+				params: undefined extends Schema['params']
+					? Record<GetPathParameter<Path>, string>
+					: Schema['params']
+		  }
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**
