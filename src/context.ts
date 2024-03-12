@@ -51,7 +51,7 @@ export type Context<
 			headers: Record<string, string> & {
 				'Set-Cookie'?: string | string[]
 			}
-			status?: number | keyof InvertedStatusMap
+			status?: number | keyof StatusMap
 			redirect?: string
 			/**
 			 * ! Internal Property
