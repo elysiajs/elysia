@@ -18,10 +18,9 @@ import {
 import { type TypeCheck } from '@sinclair/typebox/compiler'
 import { Value } from '@sinclair/typebox/value'
 
-import { CookieOptions } from './cookies'
+import type { CookieOptions } from './cookies'
 import { ValidationError } from './error'
-import { BunFile } from 'bun'
-import { MaybeArray } from './types'
+import type { MaybeArray } from './types'
 
 try {
 	TypeSystem.Format('email', (value) =>
@@ -332,10 +331,7 @@ export const ElysiaType = {
 				return JSON.stringify(value)
 			}) as any as TObject<T>
 	},
-	File: TypeSystem.Type<
-		File | (unknown extends BunFile ? {} : BunFile),
-		ElysiaTypeOptions.File
-	>('File', validateFile),
+	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
 		t
 			.Transform(Files(options))
