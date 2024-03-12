@@ -1,10 +1,10 @@
 import { Elysia, t } from '../src'
+import { cors } from '../../cors/src'
 
-export const app = new Elysia()
-	.get('', () => 'Level 2')
-	.get(
-		'/:id',
-		({ params: { id } }) => `You are in the identified route! ${id}`
-	)
+const app = new Elysia({ precompile: true })
+	.post('/', ({ body, cookie: { session } }) => {
+		session!.value = 'hi'
 
-type Res = typeof app._routes
+		return body
+	})
+	.listen(3000)

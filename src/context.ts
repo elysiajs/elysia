@@ -1,13 +1,13 @@
 import type { StatusMap, InvertedStatusMap } from './utils'
 import type { Cookie, ElysiaCookie } from './cookies'
 
+import { error, type ELYSIA_RESPONSE } from './error'
 import type {
 	RouteSchema,
 	Prettify,
 	GetPathParameter,
 	SingletonBase
 } from './types'
-import { error, type ELYSIA_RESPONSE, inlineError } from './error'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
 
@@ -95,7 +95,7 @@ export type Context<
 				}
 		  }
 		: {
-				error: typeof inlineError
+				error: typeof error
 		  }) &
 		Singleton['decorator'] &
 		Singleton['derive'] &

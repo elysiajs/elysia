@@ -381,11 +381,11 @@ export const composeHandler = ({
 		hooks.type !== 'none' &&
 		(inference.body || !!validator.body)
 
-	// @ts-ignore private
-	const setHeaders = app.setHeaders
+	// @ts-expect-error private
+	const defaultHeaders = app.setHeaders
 
+	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders = inference.headers || validator.headers
-
 	const hasCookie = inference.cookie || !!validator.cookie
 
 	// @ts-ignore private property
@@ -488,7 +488,7 @@ export const composeHandler = ({
 		}`
 			: 'undefined'
 
-		if (hasHeaders || (setHeaders && !!Object.keys(setHeaders).length))
+		if (hasHeaders)
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.headers.cookie, ${options})\n`
 		else
 			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
@@ -552,7 +552,7 @@ export const composeHandler = ({
 		inference.set ||
 		hasTraceSet ||
 		hasHeaders ||
-		(setHeaders && !!Object.keys(setHeaders).length)
+		(defaultHeaders && !!Object.keys(defaultHeaders).length)
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
@@ -1354,6 +1354,9 @@ export const composeGeneralHandler = (
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
+	// @ts-expect-error private
+	const defaultHeaders = app.setHeaders
+
 	// @ts-ignore
 	for (const key of Object.keys(app.singleton.decorator))
 		decoratorsLiteral += `,${key}: app.singleton.decorator.${key}`
@@ -1365,7 +1368,7 @@ export const composeGeneralHandler = (
 	const route = router.find(request.method, path) ${
 		router.http.root.ALL ? '?? router.find("ALL", path)' : ''
 	}
-	
+
 	if (route === null)
 		return ${
 			app.event.error.length
@@ -1378,8 +1381,7 @@ export const composeGeneralHandler = (
 				: `error404.clone()`
 		}
 
-	ctx.params = route.params
-	`
+	ctx.params = route.params\n`
 
 	const shouldPrecompile =
 		app.config.precompile === true ||
@@ -1457,8 +1459,7 @@ export const composeGeneralHandler = (
 				store,
 				set: {
 					headers: ${
-						// @ts-ignore
-						Object.keys(app.setHeaders ?? {}).length
+						Object.keys(defaultHeaders ?? {}).length
 							? 'Object.assign({}, app.setHeaders)'
 							: '{}'
 					},
@@ -1529,8 +1530,7 @@ export const composeGeneralHandler = (
 			path,
 			set: {
 				headers: ${
-					// @ts-ignore
-					Object.keys(app.setHeaders ?? {}).length
+					Object.keys(defaultHeaders ?? {}).length
 						? 'Object.assign({}, app.setHeaders)'
 						: '{}'
 				},
