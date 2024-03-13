@@ -117,7 +117,7 @@ export class ValidationError extends Error {
 				: error.schema.error
 			: undefined
 
-		const accessor = error?.path?.slice(1) || 'root'
+		const accessor = error?.path || 'root'
 		let message = ''
 
 		if (customError) {
@@ -127,8 +127,10 @@ export class ValidationError extends Error {
 					: customError + ''
 		} else if (isProduction) {
 			message = JSON.stringify({
-				type,
-				message: error?.message
+				type: "validation",
+				on: type,
+				message: error?.message,
+				found: value
 			})
 		} else {
 			// @ts-ignore private field
@@ -138,12 +140,26 @@ export class ValidationError extends Error {
 					? [...validator.Errors(value)]
 					: [...Value.Errors(validator, value)]
 
+				let expected
+
+				try {
+					expected = Value.Create(schema)
+				} catch (error) {
+					expected = {
+						type: 'Could not create expected value',
+						// @ts-expect-error
+						message: error?.message,
+						error
+					}
+				}
+
 			message = JSON.stringify(
 				{
-					type,
-					at: accessor,
+					type: "validation",
+					on: type,
+					property: accessor,
 					message: error?.message,
-					expected: Value.Create(schema),
+					expected,
 					found: value,
 					errors
 				},

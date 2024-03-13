@@ -1157,3 +1157,11 @@ app.resolve(({ headers }) => {
 		418: 'Nagisa'
 	}>()
 }
+
+app.get('/', ({ set }) => {
+	// ? Able to set literal type to set.status
+	set.status = 'I\'m a teapot'
+
+	// ? Able to number to set.status
+	set.status = 418
+})

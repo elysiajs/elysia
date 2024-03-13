@@ -15,6 +15,8 @@ Improvement:
 - add test case for all life-cycle
 - resolve, mapResolve, derive, mapDerive use ephemeral type to scope down accurately
 - inference query dynamic variable
+- Fine-grained reactive cookie
+- Using single source of truth for cookie
 
 Breaking Change:
 - Lifecycle is now local first

@@ -1419,7 +1419,7 @@ export const composeGeneralHandler = (
 
 	const store = app.singleton.store
 	const staticRouter = app.router.static.http
-	const wsRouter = app.router.static.ws
+	const wsRouter = app.router.ws
 	const router = app.router.http
 
 	const notFound = new NotFoundError()
