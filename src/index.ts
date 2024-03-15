@@ -2315,6 +2315,9 @@ export default class Elysia<
 		this.singleton = mergeDeep(this.singleton, instance.singleton) as any
 		this.definitions = mergeDeep(this.definitions, instance.definitions)
 
+		// ? Inject getServer for websocket and trace (important, do not remove)
+		sandbox.getServer = () => this.server
+
 		if (sandbox.event.request.length)
 			this.event.request = [
 				...(this.event.request || []),
@@ -3999,8 +4002,9 @@ export default class Elysia<
 		this.route(
 			'$INTERNALWS',
 			path as any,
-			// @ts-ignore
+			// @ts-expect-error
 			(context) => {
+				// ! Enable static code analysis just in case resolveUnknownFunction doesn't work, do not remove
 				// eslint-disable-next-line @typescript-eslint/no-unused-vars
 				const { set, path, qi, headers, query, params } = context
 

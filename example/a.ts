@@ -2,17 +2,20 @@ import { Elysia, t } from '../src'
 import { cors } from '../../cors/src'
 
 const app = new Elysia({ precompile: true })
-	.ws('/ws', {
-		open(ws) {
-			ws.send('Hi')
-		}
-	})
-	.ws('/ws/:id', {
-		open(ws) {
-			ws.send('Hi')
+	.guard(
+		{
+			query: t.Object({
+				__omit: t.ObjectString({
+					'x-id': t.Numeric(),
+					'x-token': t.String({ minLength: 150 })
+				})
+			})
 		},
-		message(ws, data) {
-			ws.send(data)
-		}
-	})
+		(app) =>
+			app.ws('/v2/socket/user', {
+				open(ws) {
+					ws.send('test')
+				}
+			})
+	)
 	.listen(3000)

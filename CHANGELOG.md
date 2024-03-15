@@ -1,8 +1,10 @@
 # 1.0.0 - 8 Mar 2024
 Improvement:
+- fine-grained reactive cookie
+- using single source of truth for cookie
 - macro support for websocket
 - add `mapResolve`
-- add `{ as: 'global' | 'local' }` to lifecycle event
+- add `{ as: 'global' | 'scoped' | 'local' }` to lifecycle event
 - add ephemeral type
 - inline `error` to handler
 - inline `error` has auto-completion and type checking based on status code
@@ -15,17 +17,16 @@ Improvement:
 - add test case for all life-cycle
 - resolve, mapResolve, derive, mapDerive use ephemeral type to scope down accurately
 - inference query dynamic variable
-- Fine-grained reactive cookie
-- Using single source of truth for cookie
 
 Breaking Change:
-- Lifecycle is now local first
+- [#513](https://github.com/elysiajs/elysia/issues/513) lifecycle is now local first
 
 Change:
 - group private API property
 - move `Elysia.routes` to `Elysia.router.history`
 - detect possible json before return
 - unknown response now return as-is instead of JSON.stringify()
+- change Elysia validation error to JSON instead of string
 
 Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`
