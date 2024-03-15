@@ -340,17 +340,17 @@ export const composeHandler = ({
 		trace: Sucrose.TraceInference
 	}
 }): ComposedHandler => {
+	const isHandleFn = typeof handler === 'function'
+	if (!isHandleFn) handler = mapCompactResponse(handler)
+
 	const hasErrorHandler =
-		app.config.forceErrorEncapsulation ||
+		(app.config.forceErrorEncapsulation && isHandleFn) ||
 		hooks.error.length > 0 ||
 		app.event.error.length > 0 ||
 		typeof Bun === 'undefined' ||
-		app.onResponse.length > 0 ||
+		hooks.onResponse.length > 0 ||
 		hooks.onResponse.length > 0 ||
 		!!hooks.trace.length
-
-	const isHandleFn = typeof handler === 'function'
-	if (!isHandleFn) handler = mapCompactResponse(handler)
 
 	const handle = isHandleFn ? `handler(c)` : `handler`
 	const handleResponse = hooks.onResponse.length
@@ -1440,6 +1440,16 @@ export const composeGeneralHandler = (
 
 	const maybeAsync = app.event.request.some(isAsync)
 
+	const init = `\n
+	const url = request.url
+	const s = url.indexOf('/', 11)
+	const qi = url.indexOf('?', s + 1)
+	let path
+	if(qi === -1)
+		path = url.substring(s)
+	else 
+		path = url.substring(s, qi)\n`
+
 	fnLiteral += `const {
 		app,
 		mapEarlyResponse,
@@ -1544,18 +1554,11 @@ export const composeGeneralHandler = (
 
 		endReport()
 
-		fnLiteral += `
-		const url = request.url
-		const s = url.indexOf('/', 11)
-		const qi = ctx.qi = url.indexOf('?', s + 1)
-		const path = ctx.path = url.substring(s, qi === -1 ? undefined : qi)`
+		fnLiteral += init
+		fnLiteral += `\nctx.qi = qi\n ctx.path = path\n`
 	} else {
-		fnLiteral += `
-		const url = request.url
-		const s = url.indexOf('/', 11)
-		const qi = url.indexOf('?', s + 1)
-		const path = url.substring(s, qi === -1 ? undefined : qi)
-		${hasTrace ? 'const id = +requestId.value++' : ''}
+		fnLiteral += init
+		fnLiteral += `${hasTrace ? 'const id = +requestId.value++' : ''}
 		const ctx = {
 			request,
 			store,
@@ -1737,8 +1740,7 @@ export const composeErrorHandler = (
 
 export const jitRoute = (
 	index: number
-) => `if(stc${index}) return stc${index}(ctx)\n
-				
-if(st${index}.compose) return (st${index} = st${index}?.compose())(ctx)
+) => `if(stc${index}) return stc${index}(ctx)
+if(st${index}.compose) return (stc${index} = st${index}.compose())(ctx)
 
 return st${index}(ctx)`
