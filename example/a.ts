@@ -1,21 +1,5 @@
-import { Elysia, t } from '../src'
-import { cors } from '../../cors/src'
+import { Elysia } from '../src'
 
-const app = new Elysia({ precompile: true })
-	.guard(
-		{
-			query: t.Object({
-				__omit: t.ObjectString({
-					'x-id': t.Numeric(),
-					'x-token': t.String({ minLength: 150 })
-				})
-			})
-		},
-		(app) =>
-			app.ws('/v2/socket/user', {
-				open(ws) {
-					ws.send('test')
-				}
-			})
-	)
+const app = new Elysia()
+	.get('/', Bun.file('test/kyuukurarin.mp4'))
 	.listen(3000)

@@ -350,6 +350,8 @@ export const composeHandler = ({
 		!!hooks.trace.length
 
 	const isHandleFn = typeof handler === 'function'
+	if (!isHandleFn) handler = mapCompactResponse(handler)
+
 	const handle = isHandleFn ? `handler(c)` : `handler`
 	const handleResponse = hooks.onResponse.length
 		? `\n;(async () => {${hooks.onResponse
@@ -383,6 +385,8 @@ export const composeHandler = ({
 
 	// @ts-expect-error private
 	const defaultHeaders = app.setHeaders
+	const hasDefaultHeaders =
+		defaultHeaders && !!Object.keys(defaultHeaders).length
 
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders = inference.headers || validator.headers
@@ -552,7 +556,7 @@ export const composeHandler = ({
 		inference.set ||
 		hasTraceSet ||
 		hasHeaders ||
-		(defaultHeaders && !!Object.keys(defaultHeaders).length)
+		hasDefaultHeaders
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
@@ -781,7 +785,6 @@ export const composeHandler = ({
 				name: transform.name
 			})
 
-			// @ts-ignore
 			if (transform.$elysia === 'derive')
 				fnLiteral += isAsync(transform)
 					? `Object.assign(c, await transform[${i}](c));`
@@ -980,7 +983,9 @@ export const composeHandler = ({
 				})
 				if (hooks.afterHandle) {
 					report('handle', {
-						name: isHandleFn ? handler.name : undefined
+						name: isHandleFn
+							? (handler as Function).name
+							: undefined
 					})()
 
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
@@ -1038,7 +1043,7 @@ export const composeHandler = ({
 
 	if (hooks?.afterHandle.length) {
 		const endHandle = report('handle', {
-			name: isHandleFn ? handler.name : undefined
+			name: isHandleFn ? (handler as Function).name : undefined
 		})
 
 		if (hooks.afterHandle.length)
@@ -1112,7 +1117,7 @@ export const composeHandler = ({
 		else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 	} else {
 		const endHandle = report('handle', {
-			name: isHandleFn ? handler.name : undefined
+			name: isHandleFn ? (handler as Function).name : undefined
 		})
 
 		if (validator.response || hooks.mapResponse.length) {
@@ -1139,9 +1144,22 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (handler instanceof Response)
-				fnLiteral += `return ${handle}.clone()\n`
-			else if (hasSet)
+			if (handler instanceof Response) {
+				fnLiteral +=
+					inference.set || hasDefaultHeaders
+						? `if(
+					isNotEmpty(c.set.headers) ||
+					c.set.status !== 200 ||
+					c.set.redirect ||
+					c.set.cookie
+				)
+					return mapResponse(r, c.set, c.request)
+				else
+					return ${handle}.clone()`
+						: `return ${handle}.clone()`
+
+				fnLiteral += '\n'
+			} else if (hasSet)
 				fnLiteral += `return mapResponse(r, c.set, c.request)\n`
 			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 		} else if (traceConditions.handle || hasCookie) {
@@ -1175,9 +1193,22 @@ export const composeHandler = ({
 
 			report('afterHandle')()
 
-			if (handler instanceof Response)
-				fnLiteral += `return ${handle}.clone()\n`
-			else if (hasSet)
+			if (handler instanceof Response) {
+				fnLiteral +=
+					inference.set || hasDefaultHeaders
+						? `if(
+					isNotEmpty(c.set.headers) ||
+					c.set.status !== 200 ||
+					c.set.redirect ||
+					c.set.cookie
+				)
+					return mapResponse(r, c.set, c.request)
+				else
+					return ${handle}.clone()`
+						: `return ${handle}.clone()`
+
+				fnLiteral += '\n'
+			} else if (hasSet)
 				fnLiteral += `return mapResponse(${handled}, c.set, c.request)\n`
 			else
 				fnLiteral += `return mapCompactResponse(${handled}, c.request)\n`
@@ -1267,7 +1298,8 @@ export const composeHandler = ({
 			mapResponse,
 			mapCompactResponse,
 			mapEarlyResponse,
-			parseQuery
+			parseQuery,
+			isNotEmpty
 		},
 		error: {
 			NotFoundError,
@@ -1315,7 +1347,8 @@ export const composeHandler = ({
 			mapResponse,
 			mapCompactResponse,
 			mapEarlyResponse,
-			parseQuery
+			parseQuery,
+			isNotEmpty
 		},
 		error: {
 			NotFoundError,

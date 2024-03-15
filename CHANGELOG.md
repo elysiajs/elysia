@@ -27,6 +27,7 @@ Change:
 - detect possible json before return
 - unknown response now return as-is instead of JSON.stringify()
 - change Elysia validation error to JSON instead of string
+- static content evalute hook JIT instead of AOT
 
 Bug fix:
 - [#466](https://github.com/elysiajs/elysia/issues/466) Async Derive leaks request context to other requests if `aot: true`
@@ -39,6 +40,7 @@ Bug fix:
 - derive/resolve always scoped to Global
 - duplicated onError call if not handled
 - [#516](https://github.com/elysiajs/elysia/issues/516) server timing breaks beforeHandle guards
+- cookie.remove() doesn't set correct cookie path
 
 # 0.8.17 - 12 Feb 2024
 Feature:

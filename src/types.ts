@@ -487,6 +487,7 @@ export type TransformHandler<
 	): MaybePromise<void>
 	$elysiaHookType?: LifeCycleType
 	$elysiaChecksum?: number
+	$elysia?: 'derive' | 'resolve' | (string & {})
 }
 
 export type TraceEvent =
@@ -722,7 +723,11 @@ export type LocalHook<
 		onResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	}
 
-export type ComposedHandler = (context: Context) => MaybePromise<Response>
+export type ComposedHandler = {
+	(context: Context): MaybePromise<Response>
+	compose(): Function
+	composed: Function
+}
 
 export interface InternalRoute {
 	method: HTTPMethod

@@ -14,8 +14,6 @@ import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
 import { mergeDeep } from './utils'
-
-import { mapEarlyResponse } from './handler'
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -472,7 +470,6 @@ export default class Elysia<
 		}
 
 		const hooks = mergeHook(this.event, localHook)
-		const isFn = typeof handle === 'function'
 
 		if (this.config.aot === false) {
 			this.router.dynamic.add(method, path, {
@@ -529,7 +526,7 @@ export default class Elysia<
 						trace: { ...this.inference.trace }
 					}
 			  })
-			: (context: Context) => {
+			: (((context: Context) => {
 					if (composed) return composed(context)
 
 					return (composed = composeHandler({
@@ -551,12 +548,10 @@ export default class Elysia<
 							}
 						}
 					}) as any)(context)
-			  }
+			  }) as ComposedHandler)
 
 		if (!shouldPrecompile)
-			// @ts-expect-error
 			mainHandler.compose = () => {
-				// @ts-expect-error
 				return (mainHandler.composed = composeHandler({
 					app: this,
 					path,
@@ -569,58 +564,6 @@ export default class Elysia<
 					appInference: Object.assign({}, this.inference)
 				}) as any)
 			}
-
-		if (!isFn) {
-			const context = Object.assign(
-				{
-					headers: {},
-					query: {},
-					params: {} as never,
-					body: undefined,
-					request: new Request(`http://localhost${path}`),
-					store: this.singleton.store,
-					path: path,
-					set: {
-						headers: this.setHeaders ?? {},
-						status: 200
-					}
-				},
-				this.singleton as any
-			)
-
-			let response
-
-			for (const onRequest of Object.values(hooks.request)) {
-				try {
-					const inner = mapEarlyResponse(
-						onRequest(context),
-						context.set
-					)
-					if (inner !== undefined) {
-						response = inner
-						break
-					}
-				} catch (error) {
-					response = this.handleError(context, error as Error)
-					break
-				}
-			}
-
-			// @ts-ignore
-			if (response) mainHandler.response = response
-			else {
-				try {
-					// @ts-ignore
-					mainHandler.response = mainHandler(context)
-				} catch (error) {
-					// @ts-ignore
-					mainHandler.response = this.handleError(
-						context,
-						error as Error
-					)
-				}
-			}
-		}
 
 		let routeIndex = this.router.history.length
 
@@ -663,11 +606,7 @@ export default class Elysia<
 				const index = staticRouter.handlers.length
 				staticRouter.handlers.push(mainHandler)
 
-				// @ts-expect-error
-				if (mainHandler.response instanceof Response)
-					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
-				else
-					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
+				staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
 
 				this.router.static.ws[path] = index
 				if (loose) this.router.static.ws[loose] = index
@@ -683,48 +622,25 @@ export default class Elysia<
 			const index = staticRouter.handlers.length
 			staticRouter.handlers.push(mainHandler)
 
-			// @ts-ignore
-			if (mainHandler.response instanceof Response)
-				staticRouter.variables += `const st${index} = staticRouter.handlers[${index}].response\n`
-			else {
-				if (shouldPrecompile)
-					staticRouter.variables += `const st${index} = staticRouter.handlers[${index}]\n`
-				else
-					staticRouter.variables += `let st${index} = staticRouter.handlers[${index}]\nlet stc${index}\n`
-			}
+			staticRouter.variables += shouldPrecompile
+				? `const st${index} = staticRouter.handlers[${index}]\n`
+				: `let st${index} = staticRouter.handlers[${index}]\nlet stc${index}\n`
 
 			if (!staticRouter.map[path])
 				staticRouter.map[path] = {
 					code: ''
 				}
 
-			if (method === 'ALL') {
-				if (shouldPrecompile)
-					staticRouter.map[
-						path
-					].all = `default: return st${index}(ctx)\n`
-				else {
-					staticRouter.map[path].all = `default: ${jitRoute(index)}\n`
-				}
-			} else {
-				// @ts-expect-error
-				if (mainHandler.response instanceof Response)
-					staticRouter.map[
-						path
-					].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[path].code}`
-				else {
-					if (shouldPrecompile)
-						staticRouter.map[
-							path
-						].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[path].code}`
-					else
-						staticRouter.map[
-							path
-						].code = `case '${method}': ${jitRoute(index)}\n${
+			if (method === 'ALL')
+				staticRouter.map[path].all = shouldPrecompile
+					? `default: return st${index}(ctx)\n`
+					: `default: ${jitRoute(index)}\n`
+			else
+				staticRouter.map[path].code = shouldPrecompile
+					? `case '${method}': return st${index}(ctx)\n${staticRouter.map[path].code}`
+					: `case '${method}': ${jitRoute(index)}\n${
 							staticRouter.map[path].code
-						}`
-				}
-			}
+					  }`
 
 			if (!this.config.strictPath) {
 				if (!staticRouter.map[loosePath])
@@ -733,33 +649,15 @@ export default class Elysia<
 					}
 
 				if (method === 'ALL')
-					if (shouldPrecompile)
-						staticRouter.map[
-							loosePath
-						].all = `default: return st${index}(ctx)\n`
-					else
-						staticRouter.map[loosePath].all = `default: ${jitRoute(
-							index
-						)}\n`
-				else {
-					// @ts-ignore
-					if (mainHandler.response instanceof Response)
-						staticRouter.map[
-							loosePath
-						].code = `case '${method}': return st${index}.clone()\n${staticRouter.map[loosePath].code}`
-					else {
-						if (shouldPrecompile)
-							staticRouter.map[
-								loosePath
-							].code = `case '${method}': return st${index}(ctx)\n${staticRouter.map[loosePath].code}`
-						else
-							staticRouter.map[
-								loosePath
-							].code = `case '${method}': ${jitRoute(index)}\n${
+					staticRouter.map[loosePath].all = shouldPrecompile
+						? `default: return st${index}(ctx)\n`
+						: `default: ${jitRoute(index)}\n`
+				else
+					staticRouter.map[loosePath].code = shouldPrecompile
+						? `case '${method}': return st${index}(ctx)\n${staticRouter.map[loosePath].code}`
+						: `case '${method}': ${jitRoute(index)}\n${
 								staticRouter.map[loosePath].code
-							}`
-					}
-				}
+						  }`
 			}
 		} else {
 			this.router.http.add(method, path, mainHandler)
@@ -2763,14 +2661,12 @@ export default class Elysia<
 								type: plugin.definitions.type,
 								error: plugin.definitions.error,
 								derive: plugin.event.transform
-									// @ts-expect-error
 									.filter((x) => x.$elysia === 'derive')
 									.map((x) => ({
 										fn: x.toString(),
 										stack: new Error().stack ?? ''
 									})),
 								resolve: plugin.event.transform
-									// @ts-expect-error
 									.filter((x) => x.$elysia === 'derive')
 									.map((x) => ({
 										fn: x.toString(),
@@ -3012,14 +2908,12 @@ export default class Elysia<
 								type: plugin.definitions.type,
 								error: plugin.definitions.error,
 								derive: plugin.event.transform
-									// @ts-expect-error
 									.filter((x) => x?.$elysia === 'derive')
 									.map((x) => ({
 										fn: x.toString(),
 										stack: new Error().stack ?? ''
 									})),
 								resolve: plugin.event.transform
-									// @ts-expect-error
 									.filter((x) => x?.$elysia === 'resolve')
 									.map((x) => ({
 										fn: x.toString(),
