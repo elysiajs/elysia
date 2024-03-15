@@ -1153,7 +1153,7 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(r, c.set, c.request)
+					return mapResponse(${handle}.clone(), c.set, c.request)
 				else
 					return ${handle}.clone()`
 						: `return ${handle}.clone()`
@@ -1202,7 +1202,7 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(r, c.set, c.request)
+					return mapResponse(${handle}.clone(), c.set, c.request)
 				else
 					return ${handle}.clone()`
 						: `return ${handle}.clone()`
