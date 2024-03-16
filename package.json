@@ -119,7 +119,7 @@
     "@types/bun": "^1.0.8",
     "@types/cookie": "^0.6.0",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
-    "@typescript-eslint/parser": "^6.17.0",
+    "@typescript-eslint/parser": "^7.2.0",
     "benchmark": "^2.1.4",
     "eslint": "^8.49.0",
     "eslint-plugin-security": "^2.1.0",
