@@ -344,7 +344,11 @@ export const composeHandler = ({
 	if (!isHandleFn) handler = mapCompactResponse(handler)
 
 	const hasErrorHandler =
-		(app.config.forceErrorEncapsulation && isHandleFn) ||
+		(app.config.forceErrorEncapsulation &&
+			(isHandleFn ||
+				hooks.afterHandle.length > 0 ||
+				hooks.beforeHandle.length > 0 ||
+				hooks.transform.length > 0)) ||
 		hooks.error.length > 0 ||
 		app.event.error.length > 0 ||
 		typeof Bun === 'undefined' ||

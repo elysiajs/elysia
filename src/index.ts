@@ -172,6 +172,14 @@ export default class Elysia<
 		resolve: {}
 	} as Singleton
 
+	get store(): Singleton['store'] {
+		return this.singleton.store
+	}
+
+	get decorator(): Singleton['decorator'] {
+		return this.singleton.decorator
+	}
+
 	protected definitions = {
 		type: {} as Record<string, TSchema>,
 		error: {} as Record<string, Error>
