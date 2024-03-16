@@ -9,7 +9,7 @@ describe('plugin', () => {
 
 		const app = new Elysia().use(plugin)
 
-		expect(app.routes.some((r) => r.path === '/v1/new')).toBeTrue()
+		expect(app.router.history.some((r) => r.path === '/v1/new')).toBeTrue()
 	})
 
 	it('plugin routes are visible in app.routes', () => {
@@ -19,6 +19,6 @@ describe('plugin', () => {
 
 		const app = new Elysia().use(plugin)
 
-		expect(app.routes.some((r) => r.path === '/v1/new')).toBeTrue()
+		expect(app.router.history.some((r) => r.path === '/v1/new')).toBeTrue()
 	})
 })

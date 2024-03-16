@@ -8,7 +8,7 @@ import type { Context } from './context'
 import { parse as parseQuery } from 'fast-querystring'
 
 import { signCookie } from './utils'
-import { parseCookie } from './cookie'
+import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 
@@ -21,36 +21,32 @@ export type DynamicHandler = {
 }
 
 export const createDynamicHandler =
-	(app: Elysia<any, any, any, any, any, any>) =>
+	(app: Elysia<any, any, any, any, any, any, any, any>) =>
 	async (request: Request): Promise<Response> => {
+		const url = request.url,
+			s = url.indexOf('/', 11),
+			qi = url.indexOf('?', s + 1),
+			path = qi === -1 ? url.substring(s) : url.substring(s, qi)
+
 		const set: Context['set'] = {
 			cookie: {},
 			status: 200,
 			headers: {}
 		}
 
-		let context: Context
-
-		// @ts-ignore
-		if (app.decorators) {
-			// @ts-ignore
-			context = app.decorators as any as Context
-
-			context.request = request
-			context.set = set
-			context.store = app.store
-		} else {
-			context = {
+		const context = Object.assign(
+			{},
+			// @ts-expect-error
+			app.singleton.decorator,
+			{
 				set,
-				store: app.store,
-				request
-			} as any as Context
-		}
-
-		const url = request.url,
-			s = url.indexOf('/', 11),
-			q = url.indexOf('?', s + 1),
-			path = q === -1 ? url.substring(s) : url.substring(s, q)
+				// @ts-expect-error
+				store: app.singleton.store,
+				request,
+				path,
+				qi
+			}
+		) as unknown as Context
 
 		try {
 			for (let i = 0; i < app.event.request.length; i++) {
@@ -64,10 +60,8 @@ export const createDynamicHandler =
 			}
 
 			const handler =
-				// @ts-ignore
-				app.dynamicRouter.find(request.method, path) ??
-				// @ts-ignore
-				app.dynamicRouter.find('ALL', path)
+				app.router.dynamic.find(request.method, path) ??
+				app.router.dynamic.find('ALL', path)
 
 			if (!handler) throw new NotFoundError()
 
@@ -78,7 +72,7 @@ export const createDynamicHandler =
 				if (content) {
 					switch (content) {
 						case 'application/json':
-							body = await request.json() as any
+							body = (await request.json()) as any
 							break
 
 						case 'text/plain':
@@ -129,7 +123,7 @@ export const createDynamicHandler =
 						if (body === undefined) {
 							switch (contentType) {
 								case 'application/json':
-									body = await request.json() as any
+									body = (await request.json()) as any
 									break
 
 								case 'text/plain':
@@ -165,43 +159,46 @@ export const createDynamicHandler =
 			}
 
 			context.body = body
-			// @ts-ignore
+			// @ts-expect-error
 			context.params = handler?.params || undefined
-			context.query = q === -1 ? {} : parseQuery(url.substring(q + 1))
+			context.query = qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
 			context.headers = {}
 			for (const [key, value] of request.headers.entries())
 				context.headers[key] = value
 
-			// @ts-ignore
+			// @ts-expect-error
 			const cookieMeta = validator?.cookie?.schema as {
 				secrets?: string | string[]
 				sign: string[] | true
 				properties: { [x: string]: Object }
 			}
 
-			context.cookie = await parseCookie(
-				context.set,
-				context.headers.cookie,
-				cookieMeta
-					? {
-							secret:
-								cookieMeta.secrets !== undefined
-									? typeof cookieMeta.secrets === 'string'
-										? cookieMeta.secrets
-										: cookieMeta.secrets.join(',')
-									: undefined,
-							sign:
-								cookieMeta.sign === true
-									? true
-									: cookieMeta.sign !== undefined
-									? typeof cookieMeta.sign === 'string'
-										? cookieMeta.sign
-										: cookieMeta.sign.join(',')
-									: undefined
-					  }
-					: undefined
-			)
+			const cookieHeaderValue = request.headers.get('cookie')
+
+			if (cookieHeaderValue)
+				context.cookie = await parseCookie(
+					context.set,
+					cookieHeaderValue,
+					cookieMeta
+						? {
+								secret:
+									cookieMeta.secrets !== undefined
+										? typeof cookieMeta.secrets === 'string'
+											? cookieMeta.secrets
+											: cookieMeta.secrets.join(',')
+										: undefined,
+								sign:
+									cookieMeta.sign === true
+										? true
+										: cookieMeta.sign !== undefined
+										? typeof cookieMeta.sign === 'string'
+											? cookieMeta.sign
+											: cookieMeta.sign.join(',')
+										: undefined
+						  }
+						: undefined
+				)
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const operation = hooks.transform[i](context)
@@ -345,7 +342,7 @@ export const createDynamicHandler =
 						context.set.cookie
 					))
 						context.set.cookie[key].value = await signCookie(
-							cookie.value,
+							cookie.value as any,
 							'${secret}'
 						)
 				else
@@ -354,7 +351,7 @@ export const createDynamicHandler =
 
 						if (context.set.cookie[name]?.value) {
 							context.set.cookie[name].value = await signCookie(
-								context.set.cookie[name].value,
+								context.set.cookie[name].value as any,
 								secret as any
 							)
 						}
@@ -376,7 +373,7 @@ export const createDynamicHandler =
 	}
 
 export const createDynamicErrorHandler =
-	(app: Elysia<any, any, any, any, any, any>) =>
+	(app: Elysia<any, any, any, any, any, any, any, any>) =>
 	async (context: Context, error: ElysiaErrors) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set

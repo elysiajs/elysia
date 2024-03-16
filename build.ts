@@ -36,13 +36,11 @@ await Promise.all([
 await Bun.build({
 	entrypoints: ['./src/index.ts'],
 	outdir: './dist/bun',
-	minify: true,
+	minify: false,
 	target: 'bun',
 	sourcemap: 'external',
 	external: ['@sinclair/typebox']
 })
-
-await Bun.sleep(2000)
 
 await Promise.all([
 	$`cp dist/cjs/*.d.ts dist/`,

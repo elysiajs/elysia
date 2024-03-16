@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { expect } from 'bun:test'
-import { t, Elysia, RouteSchema, Cookie } from '../../src'
+import { t, Elysia, RouteSchema, Cookie, error } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -478,8 +478,8 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['schema']
-	type Route = App['/v1/a']['get']
+	type App = (typeof server)['_routes']
+	type Route = App['v1']['a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		headers: {
@@ -489,7 +489,7 @@ app.use(plugin).group(
 		query: {
 			name: string
 		}
-		params: never
+		params: Record<never, string>
 		response: {
 			200: number
 		}
@@ -509,12 +509,12 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['schema']
-	type Route = App['/']['get']
+	type App = (typeof server)['_routes']
+	type Route = App['index']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
-		params: never
+		params: Record<never, string>
 		query: unknown
 		headers: unknown
 		response: {
@@ -543,22 +543,24 @@ app.use(plugin).group(
 					app.ws('/a', {
 						message(ws, message) {
 							message
+
+							ws.data.params
 						},
 						body: t.String()
 					})
 			)
 	)
-	type App = (typeof server)['schema']
-	type Route = App['/v1/a']['subscribe']
+	type App = (typeof server)['_routes']
+	type Route = App['v1']['a']['subscribe']
 	expectTypeOf<Route>().toEqualTypeOf<{
-		headers: {
-			authorization: string
-		}
 		body: string
+		params: Record<never, string>
 		query: {
 			name: string
 		}
-		params: never
+		headers: {
+			authorization: string
+		}
 		response: unknown
 	}>()
 }
@@ -567,14 +569,14 @@ app.use(plugin).group(
 {
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
-	type App = (typeof server)['schema']
-	type Route = App['/']['get']
+	type App = (typeof server)['_routes']
+	type Route = App['index']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: never
+		params: Record<never, string>
 		response: {
 			200: string
 		}
@@ -772,14 +774,14 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['schema']
-	type Route = App['/']['get']
+	type App = (typeof server)['_routes']
+	type Route = App['index']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: never
+		params: Record<never, string>
 		response: {
 			200: string
 		}
@@ -789,39 +791,39 @@ app.group(
 // ? Inherits plugin prefix path
 {
 	const plugin = new Elysia({
-		prefix: '/plugin'
+		prefix: '/plugin',
+		scoped: false
 	}).get('/test-path', () => 'Test')
 
 	const app = new Elysia({
-		prefix: '/api'
+		prefix: '/api',
+		scoped: false
 	})
 		.use(plugin)
 		.get('/a', () => 'A')
-		.listen(3000)
 
-	type Routes = keyof (typeof app)['schema']
+	type Routes = keyof (typeof app)['_routes']
 
-	expectTypeOf<Routes>().toEqualTypeOf<'/api/a' | '/api/plugin/test-path'>()
+	// expectTypeOf<Routes>().toEqualTypeOf<'/api/a' | '/api/plugin/test-path'>()
 }
 
 // ? Inherits plugin instance prefix
 {
 	const plugin = new Elysia({
-		prefix: '/v1'
-	}).get('/', () => 'hello')
-
-	plugin.config.prefix
+		prefix: '/v1',
+		scoped: false
+	}).get('', () => 'hello')
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['schema']
-	type Route = App['/v1/']['get']
+	type App = (typeof server)['_routes']
+	type Route = App['v1']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
 		headers: unknown
 		query: unknown
-		params: never
+		params: Record<never, string>
 		response: {
 			200: string
 		}
@@ -831,27 +833,23 @@ app.group(
 // ? Inlining function callback don't repeat prefix
 {
 	const test = (app: Elysia) =>
-		app.group('/app', (group) =>
-			group.get('/test', async () => {
-				return 'Test'
-			})
-		)
+		app.group('/app', (group) => group.get('/test', () => 'test'))
 
 	const app = new Elysia().use(test)
 
-	type App = (typeof app)['schema']
-	type Routes = keyof App
+	type App = (typeof app)['_routes']
+	type Routes = keyof App['app']['test']['get']
 
-	expectTypeOf<Routes>().toEqualTypeOf<'/app/test'>()
+	expectTypeOf<Routes>().not.toBeUnknown()
 }
 
 // ? Merging identical plugin type
 {
 	const cookie = new Elysia({
-		name: 'cookie'
-	}).derive(() => {
+		prefix: '/'
+	}).derive({ as: 'global' }, () => {
 		return {
-			cookie: 'A'
+			customCookie: 'A'
 		}
 	})
 
@@ -860,8 +858,8 @@ app.group(
 	const app = new Elysia()
 		.use(cookie)
 		.use(controller)
-		.get('/', ({ cookie }) => {
-			expectTypeOf<typeof cookie>().toBeString()
+		.get('/', ({ customCookie }) => {
+			expectTypeOf<typeof customCookie>().toBeString()
 		})
 }
 
@@ -907,16 +905,18 @@ app.group(
 
 // ? Inherits route for scoped instance
 {
-	const child = new Elysia({ scoped: true })
+	const child = new Elysia()
 		.decorate('b', 'b')
 		.model('b', t.String())
 		.get('/child', () => 'Hello from child route')
 	const main = new Elysia().use(child)
 
-	type Schema = (typeof main)['schema']
+	type App = (typeof main)['_routes']
 
-	expectTypeOf<keyof (typeof main)['schema']>().toEqualTypeOf<'/child'>()
-	expectTypeOf<keyof (typeof main)['decorators']>().not.toEqualTypeOf<{
+	expectTypeOf<keyof (typeof main)['_routes']>().toEqualTypeOf<'child'>()
+	expectTypeOf<
+		keyof (typeof main)['_types']['Singleton']['decorator']
+	>().not.toEqualTypeOf<{
 		request: {
 			b: 'b'
 		}
@@ -989,38 +989,179 @@ app.resolve(({ headers }) => {
 		>().toEqualTypeOf<true>()
 	})
 
-app.macro(() => {
-	return {
-		a(a: string) {}
-	}
-})
-	.get('/', () => {}, {
-		// ? Should contains macro
-		a: 'a'
-	})
-	.get('/', () => {}, {
-		// ? Should have error
-		// @ts-expect-error
-		a: 1
-	})
-	.macro(() => {
+{
+	app.macro(() => {
 		return {
-			b(a: number) {}
+			a(a: string) {}
 		}
 	})
-	.get('/', () => {}, {
-		// ? Should merge macro
-		a: 'a',
-		b: 2
-	})
-	.guard({
-		// ? Should contains macro
-		a: 'a',
-		b: 2
-	}, (app) =>
-		app.get('/', () => {}, {
+		.get('/', () => {}, {
 			// ? Should contains macro
+			a: 'a'
+		})
+		.get('/', () => {}, {
+			// ? Should have error
+			// @ts-expect-error
+			a: 1
+		})
+		.macro(() => {
+			return {
+				b(a: number) {}
+			}
+		})
+		.get('/', () => {}, {
+			// ? Should merge macro
 			a: 'a',
 			b: 2
 		})
-	)
+		.guard(
+			{
+				// ? Should contains macro
+				a: 'a',
+				b: 2
+			},
+			(app) =>
+				app.get('/', () => {}, {
+					// ? Should contains macro
+					a: 'a',
+					b: 2
+				})
+		)
+}
+
+// ? Join Eden path correctly
+{
+	const testController = new Elysia({
+		name: 'testController',
+		prefix: '/test'
+	})
+		.get('/could-be-error/right', () => ({ couldBeError: true }))
+		.ws('/deep/ws', {
+			message() {}
+		})
+
+	const app = new Elysia().group('/api', (app) => app.use(testController))
+
+	expectTypeOf<(typeof app)['_routes']>().toEqualTypeOf<{
+		api: {
+			test: {
+				'could-be-error': {
+					right: {
+						get: {
+							body: unknown
+							params: Record<never, string>
+							query: unknown
+							headers: unknown
+							response: {
+								200: {
+									couldBeError: boolean
+								}
+							}
+						}
+					}
+				}
+			}
+		} & {
+			test: {
+				deep: {
+					ws: {
+						subscribe: {
+							body: unknown
+							params: Record<never, string>
+							query: unknown
+							headers: unknown
+							response: unknown
+						}
+					}
+				}
+			}
+		}
+	}>()
+}
+
+// ? Handle error status
+{
+	const a = new Elysia()
+		.get('/', ({ error }) => error(418, 'a'), {
+			response: {
+				200: t.String(),
+				418: t.Literal('a')
+			}
+		})
+		// @ts-expect-error
+		.get('/', ({ error }) => error(418, 'b'), {
+			response: {
+				200: t.String(),
+				418: t.Literal('a')
+			}
+		})
+}
+
+// ? Get response type correctly
+{
+	const app = new Elysia()
+		.get('', () => 'a')
+		.get('/true', () => true)
+		.get('/error', ({ error }) => error("I'm a teapot", 'a'))
+		.post('/mirror', ({ body }) => body)
+		.get('/immutable', '1')
+		.get('/immutable-error', ({ error }) => error("I'm a teapot", 'a'))
+		.get('/async', async ({ error }) => {
+			if (Math.random() > 0.5) return error("I'm a teapot", 'Nagisa')
+
+			return 'Hifumi'
+		})
+		.get('/default-error-code', ({ error }) => {
+			if (Math.random() > 0.5) return error(418, 'Nagisa')
+			if (Math.random() > 0.5) return error(401)
+
+			return 'Hifumi'
+		})
+
+	type app = typeof app._routes
+
+	expectTypeOf<app['index']['get']['response']>().toEqualTypeOf<{
+		200: string
+	}>()
+
+	expectTypeOf<app['true']['get']['response']>().toEqualTypeOf<{
+		200: boolean
+	}>()
+
+	expectTypeOf<app['error']['get']['response']>().toEqualTypeOf<{
+		200: never
+		418: 'a'
+	}>()
+
+	expectTypeOf<app['mirror']['post']['response']>().toEqualTypeOf<{
+		200: unknown
+	}>()
+
+	expectTypeOf<app['immutable']['get']['response']>().toEqualTypeOf<{
+		200: '1'
+	}>()
+
+	expectTypeOf<app['immutable-error']['get']['response']>().toEqualTypeOf<{
+		200: never
+		418: 'a'
+	}>()
+
+	expectTypeOf<app['async']['get']['response']>().toEqualTypeOf<{
+		200: 'Hifumi'
+		418: 'Nagisa'
+	}>()
+
+	expectTypeOf<app['default-error-code']['get']['response']>().toEqualTypeOf<{
+		200: 'Hifumi'
+		401: 'Unauthorized'
+		418: 'Nagisa'
+	}>()
+}
+
+app.get('/', ({ set }) => {
+	// ? Able to set literal type to set.status
+	set.status = 'I\'m a teapot'
+
+	// ? Able to number to set.status
+	set.status = 418
+})

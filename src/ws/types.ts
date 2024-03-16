@@ -7,7 +7,7 @@ import type { ElysiaWS } from '.'
 import type { Context } from '../context'
 
 import type {
-	DecoratorBase,
+	SingletonBase,
 	Handler,
 	VoidHandler,
 	ErrorHandler,
@@ -16,7 +16,7 @@ import type {
 	Isolate,
 	GetPathParameter,
 	MaybeArray,
-	HeadersInit
+	BaseMacro
 } from '../types'
 
 export namespace WS {
@@ -26,22 +26,19 @@ export namespace WS {
 	>
 
 	export type LocalHook<
-		LocalSchema extends InputSchema = {},
-		Route extends RouteSchema = RouteSchema,
-		Decorators extends DecoratorBase = {
-			request: {}
-			store: {}
-			derive: {}
-			resolve: {}
-		},
-		Errors extends Record<string, Error> = {},
+		LocalSchema extends InputSchema,
+		Route extends RouteSchema,
+		Singleton extends SingletonBase,
+		Errors extends Record<string, Error>,
+		Extension extends BaseMacro,
 		Path extends string = '',
 		TypedRoute extends RouteSchema = keyof Route['params'] extends never
-			? Route & { 
-				params: Record<GetPathParameter<Path>, string>
-			}
+			? Route & {
+					params: Record<GetPathParameter<Path>, string>
+			  }
 			: Route
 	> = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
+		Extension &
 		Omit<
 			Partial<WebSocketHandler<Context>>,
 			'open' | 'message' | 'close' | 'drain' | 'publish' | 'publishToSelf'
@@ -51,14 +48,14 @@ export namespace WS {
 				validator?: TypeCheck<TSchema>
 			}>,
 			TypedRoute,
-			Decorators
+			Singleton
 		> extends infer WS
 			? {
-					transform?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+					transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 					transformMessage?: MaybeArray<
-						VoidHandler<TypedRoute, Decorators>
+						VoidHandler<TypedRoute, Singleton>
 					>
-					beforeHandle?: MaybeArray<Handler<TypedRoute, Decorators>>
+					beforeHandle?: MaybeArray<Handler<TypedRoute, Singleton>>
 					/**
 					 * Catch error
 					 */
@@ -67,7 +64,9 @@ export namespace WS {
 					/**
 					 * Headers to register to websocket before `upgrade`
 					 */
-					upgrade?: HeadersInit | ((context: Context) => HeadersInit)
+					upgrade?:
+						| Bun.HeadersInit
+						| ((context: Context) => Bun.HeadersInit)
 
 					/**
 					 * The {@link ServerWebSocket} has been opened

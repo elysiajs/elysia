@@ -1,22 +1,24 @@
-import { HTTPStatusName } from './utils'
+import type { StatusMap, InvertedStatusMap } from './utils'
+import type { Cookie, ElysiaCookie } from './cookies'
 
-import { Cookie, type CookieOptions } from './cookie'
+import { error, type ELYSIA_RESPONSE } from './error'
+import type {
+	RouteSchema,
+	Prettify,
+	GetPathParameter,
+	SingletonBase
+} from './types'
+
+type InvertedStatusMapKey = keyof InvertedStatusMap
 
 type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>
 }
 
-import type {
-	DecoratorBase,
-	RouteSchema,
-	Prettify,
-	GetPathParameter
-} from './types'
-
 export type Context<
-	Route extends RouteSchema = RouteSchema,
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -49,42 +51,68 @@ export type Context<
 			headers: Record<string, string> & {
 				'Set-Cookie'?: string | string[]
 			}
-			status?: number | HTTPStatusName
+			status?: number | keyof StatusMap
 			redirect?: string
 			/**
 			 * ! Internal Property
 			 *
 			 * Use `Context.cookie` instead
 			 */
-			cookie?: Record<
-				string,
-				Prettify<
-					{
-						value: string
-					} & CookieOptions
-				>
-			>
+			cookie?: Record<string, ElysiaCookie>
 		}
 
 		path: string
 		request: Request
-		store: Decorators['store']
-	} & Decorators['request'] &
-		Decorators['derive'] &
-		Decorators['resolve']
+		store: Singleton['store']
+	} & (Route['response'] extends { 200: unknown }
+		? {
+				error: <
+					const Code extends
+						| keyof Route['response']
+						| InvertedStatusMap[Extract<
+								InvertedStatusMapKey,
+								keyof Route['response']
+						  >],
+					const T extends Code extends keyof Route['response']
+						? Route['response'][Code]
+						: Code extends keyof StatusMap
+						? // @ts-ignore StatusMap[Code] always valid because Code generic check
+						  Route['response'][StatusMap[Code]]
+						: never
+				>(
+					code: Code,
+					response: T
+				) => {
+					[ELYSIA_RESPONSE]: Code extends keyof StatusMap
+						? StatusMap[Code]
+						: Code
+					response: T
+					_type: {
+						[ERROR_CODE in Code extends keyof StatusMap
+							? StatusMap[Code]
+							: Code]: T
+					}
+				}
+		  }
+		: {
+				error: typeof error
+		  }) &
+		Singleton['decorator'] &
+		Singleton['derive'] &
+		Singleton['resolve']
 >
 
 // Use to mimic request before mapping route
 export type PreContext<
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
 > = Prettify<
 	{
-		store: Decorators['store']
+		store: Singleton['store']
 		request: Request
 
 		set: {
@@ -94,5 +122,7 @@ export type PreContext<
 			status?: number
 			redirect?: string
 		}
-	} & Decorators['request']
+
+		error: typeof error
+	} & Singleton['decorator']
 >

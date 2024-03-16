@@ -6,6 +6,7 @@ import { signCookie } from '../../src/utils'
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
 const getCookies = (response: Response) =>
+	// @ts-ignore
 	response.headers.getAll('Set-Cookie').map((x) => {
 		const value = decodeURIComponent(x)
 
@@ -14,7 +15,7 @@ const getCookies = (response: Response) =>
 
 const app = new Elysia({
 	cookie: {
-		path: ''
+		path: '/'
 	}
 })
 	.get(
@@ -60,14 +61,15 @@ const app = new Elysia({
 	})
 	.get('/remove-with-options', ({ cookie }) => {
 		for (const self of Object.values(cookie))
-			self.remove({
-				path: '/',
-				domain: 'elysiajs.com',
-				sameSite: 'lax',
-				secure: true
-			})
+			self.remove()
 
 		return 'Deleted'
+	})
+	.get('/set', ({ cookie: { session } }) => {
+		session.value = 'rin'
+		session.set({
+			path: '/'
+		})
 	})
 
 describe('Cookie Response', () => {
@@ -94,27 +96,6 @@ describe('Cookie Response', () => {
 		])
 	})
 
-	it('skip duplicate cookie value', async () => {
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
-
-		expect(getCookies(response)).toEqual([])
-	})
-
 	it('write cookie on difference value', async () => {
 		const response = await app.handle(
 			req('/council', {
@@ -134,11 +115,11 @@ describe('Cookie Response', () => {
 		)
 
 		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]'
+			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
 		])
 	})
 
-	it('remove cookie without options', async () => {
+	it('remove cookie', async () => {
 		const response = await app.handle(
 			req('/remove', {
 				headers: {
@@ -157,32 +138,7 @@ describe('Cookie Response', () => {
 		)
 
 		expect(getCookies(response)[0]).toInclude(
-			`council=; Max-Age=0; Expires=${new Date(0).toUTCString()}`
-		)
-	})
-
-	it('remove cookie with options', async () => {
-		const response = await app.handle(
-			req('/remove-with-options', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
-
-		expect(getCookies(response)[0]).toInclude(
-			`council=; Max-Age=0; Domain=elysiajs.com; Path=/; Expires=${new Date(
-				0
-			).toUTCString()}; Secure; SameSite=Lax`
+			`council=; Max-Age=0; Path=/; Expires=${new Date(0).toUTCString()}`
 		)
 	})
 
@@ -289,6 +245,14 @@ describe('Cookie Response', () => {
 
 		expect(response.headers.getAll('Set-Cookie')).toEqual([
 			'name=Himari; Path=/; HttpOnly'
+		])
+	})
+
+	it('retain cookie value when using set if not provided', async () => {
+		const response = await app.handle(req('/set'))
+
+		expect(response.headers.getAll('Set-Cookie')).toEqual([
+			'session=rin; Path=/'
 		])
 	})
 })

@@ -1,7 +1,8 @@
-import { t } from '../../src'
+import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from '@sinclair/typebox/value'
 import { TBoolean, TypeBoxError } from '@sinclair/typebox'
+import { req } from '../utils'
 
 describe('TypeSystem - BooleanString', () => {
 	it('Create', () => {
@@ -56,5 +57,26 @@ describe('TypeSystem - BooleanString', () => {
 		expect(() => Value.Decode(schema, {})).toThrow(error)
 		expect(() => Value.Decode(schema, undefined)).toThrow(error)
 		expect(() => Value.Decode(schema, null)).toThrow(error)
+	})
+
+	it('Integrate', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query }) => query,
+			{
+				query: t.Object({
+					value: t.BooleanString()
+				})
+			}
+		)
+
+		const res1 = await app.handle(req('/?value=true'))
+		expect(res1.status).toBe(200)
+
+		const res2 = await app.handle(req('/?value=false'))
+		expect(res2.status).toBe(200)
+
+		const res3 = await app.handle(req('/?value=aight'))
+		expect(res3.status).toBe(422)
 	})
 })

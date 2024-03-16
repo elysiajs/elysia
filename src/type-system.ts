@@ -1,4 +1,4 @@
-import { NumberOptions } from '@sinclair/typebox'
+import { DateOptions, NumberOptions, TDate } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
@@ -14,16 +14,17 @@ import {
 	TBoolean,
 	FormatRegistry
 } from '@sinclair/typebox'
-import { type TypeCheck } from '@sinclair/typebox/compiler'
-import { CookieOptions } from './cookie'
-import { Value } from '@sinclair/typebox/value'
-import { ValidationError } from './error'
 
-const t = Object.assign({}, Type)
+import { type TypeCheck } from '@sinclair/typebox/compiler'
+import { Value } from '@sinclair/typebox/value'
+
+import type { CookieOptions } from './cookies'
+import { ValidationError } from './error'
+import type { MaybeArray } from './types'
 
 try {
 	TypeSystem.Format('email', (value) =>
-		/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(
+		/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(
 			value
 		)
 	)
@@ -47,7 +48,7 @@ try {
 	// Not empty
 }
 
-type MaybeArray<T> = T | T[]
+const t = Object.assign({}, Type)
 
 export namespace ElysiaTypeOptions {
 	export type Numeric = NumberOptions
@@ -165,25 +166,33 @@ const Files = TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
 	}
 )
 
-FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
-FormatRegistry.Set('boolean', (value) => value === 'true' || value === 'false')
-FormatRegistry.Set('ObjectString', (value) => {
-	let start = value.charCodeAt(0)
+if (!FormatRegistry.Get('numeric'))
+	FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
 
-	// If starts with ' ', '\t', '\n', then trim first
-	if (start === 9 || start === 10 || start === 32)
-		start = value.trimStart().charCodeAt(0)
+if (!FormatRegistry.Get('boolean'))
+	FormatRegistry.Set(
+		'boolean',
+		(value) => value === 'true' || value === 'false'
+	)
 
-	if (start !== 123 && start !== 91) return false
+if (!FormatRegistry.Get('ObjectString'))
+	FormatRegistry.Set('ObjectString', (value) => {
+		let start = value.charCodeAt(0)
 
-	try {
-		JSON.parse(value)
+		// If starts with ' ', '\t', '\n', then trim first
+		if (start === 9 || start === 10 || start === 32)
+			start = value.trimStart().charCodeAt(0)
 
-		return true
-	} catch {
-		return false
-	}
-})
+		if (start !== 123 && start !== 91) return false
+
+		try {
+			JSON.parse(value)
+
+			return true
+		} catch {
+			return false
+		}
+	})
 
 export const ElysiaType = {
 	Numeric: (property?: NumberOptions) => {
@@ -213,6 +222,42 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as any as TNumber
 	},
+	Date: (property?: DateOptions) => {
+		const schema = Type.Date(property)
+
+		return t
+			.Transform(
+				t.Union(
+					[
+						Type.Date(property),
+						t.String({
+							format: 'date',
+							default: new Date().toISOString()
+						}),
+						t.String({
+							format: 'date-time',
+							default: new Date().toISOString()
+						})
+					],
+					property
+				)
+			)
+			.Decode((value) => {
+				if (value instanceof Date) return value
+
+				const date = new Date(value)
+
+				if (!Value.Check(schema, date))
+					throw new ValidationError('property', schema, date)
+
+				return date
+			})
+			.Encode((value) => {
+				if (typeof value === 'string') return new Date(value)
+
+				return value
+			}) as any as TDate
+	},
 	BooleanString: (property?: SchemaOptions) => {
 		const schema = Type.Boolean(property)
 
@@ -239,38 +284,57 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as any as TBoolean
 	},
-	ObjectString: <T extends TProperties>(
-		properties: T,
+	ObjectString: <T extends TProperties = {}>(
+		properties: T = {} as T,
 		options?: ObjectOptions
-	) =>
-		t
+	) => {
+		const schema = t.Object(properties, options)
+		const defaultValue = JSON.stringify(Value.Create(schema))
+
+		return t
 			.Transform(
-				t.Union(
-					[
-						t.String({
-							format: 'ObjectString',
-							default: ''
-						}),
-						t.Object(properties, options)
-					],
-					options
-				)
+				t.Union([
+					t.String({
+						format: 'ObjectString',
+						default: defaultValue
+					}),
+					schema
+				])
 			)
 			.Decode((value) => {
-				if (typeof value === 'string')
+				if (typeof value === 'string') {
 					try {
-						return JSON.parse(value as string)
+						value = JSON.parse(value as string)
 					} catch {
-						return value
+						throw new ValidationError('property', schema, value)
 					}
+
+					if (!Value.Check(schema, value))
+						throw new ValidationError('property', schema, value)
+
+					return value
+				}
 
 				return value
 			})
-			.Encode((value) => JSON.stringify(value)) as any as TObject<T>,
+			.Encode((value) => {
+				if (typeof value === 'string')
+					try {
+						value = JSON.parse(value as string)
+					} catch {
+						throw new ValidationError('property', schema, value)
+					}
+
+				if (!Value.Check(schema, value))
+					throw new ValidationError('property', schema, value)
+
+				return JSON.stringify(value)
+			}) as any as TObject<T>
+	},
 	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
 		t
-			.Transform(t.Union([Files(options)]))
+			.Transform(Files(options))
 			.Decode((value) => {
 				if (Array.isArray(value)) return value
 				return [value]
@@ -376,6 +440,7 @@ t.Nullable = (schema) => ElysiaType.Nullable(schema)
 t.MaybeEmpty = ElysiaType.MaybeEmpty
 
 t.Cookie = ElysiaType.Cookie
+t.Date = ElysiaType.Date
 
 export { t }
 

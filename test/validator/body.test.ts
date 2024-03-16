@@ -36,7 +36,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -78,7 +78,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})
@@ -102,7 +102,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16
@@ -129,7 +129,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16,
@@ -196,7 +196,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(res.status).toBe(400)
+		expect(res.status).toBe(422)
 	})
 
 	it('validate maybe empty body', async () => {

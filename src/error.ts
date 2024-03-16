@@ -1,19 +1,20 @@
+import type { TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-import { TSchema } from '@sinclair/typebox'
 
-import { StatusMap } from './utils'
+import { StatusMap, InvertedStatusMap } from './utils'
 
 // ? Cloudflare worker support
 const env =
 	typeof Bun !== 'undefined'
 		? Bun.env
 		: typeof process !== 'undefined'
-		  ? process?.env
-		  : undefined
+		? process?.env
+		: undefined
 
 export const ERROR_CODE = Symbol('ElysiaErrorCode')
 export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
+export type ELYSIA_RESPONSE = typeof ELYSIA_RESPONSE
 
 export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
 
@@ -24,24 +25,35 @@ export type ElysiaErrors =
 	| ValidationError
 	| InvalidCookieSignature
 
-
 export const error = <
-	const Code extends number | keyof typeof StatusMap,
-	const T
+	const Code extends number | keyof StatusMap,
+	const T = Code extends keyof InvertedStatusMap
+		? InvertedStatusMap[Code]
+		: Code,
+	const Status extends number = Code extends keyof StatusMap
+		? StatusMap[Code]
+		: Code
 >(
 	code: Code,
-	response: T
+	response?: T
 ): {
-	[ELYSIA_RESPONSE]: Code extends keyof typeof StatusMap
-		? (typeof StatusMap)[Code]
-		: Code
+	[ELYSIA_RESPONSE]: Status
 	response: T
+	_type: {
+		[ERROR_CODE in Status]: T
+	}
 } =>
 	({
-		// @ts-ignore
+		// @ts-expect-error
 		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
-		response
-	}) as const
+		response:
+			response ??
+			(code in InvertedStatusMap
+				? // @ts-expect-error Always correct
+				  InvertedStatusMap[code]
+				: code),
+		_type: undefined as any
+	} as const)
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -65,7 +77,7 @@ export class ParseError extends Error {
 	code = 'PARSE'
 	status = 400
 
-	constructor(message?: string) {
+	constructor(message?: string, public body?: unknown) {
 		super(message ?? 'PARSE')
 	}
 }
@@ -74,23 +86,25 @@ export class InvalidCookieSignature extends Error {
 	code = 'INVALID_COOKIE_SIGNATURE'
 	status = 400
 
-	constructor(
-		public key: string,
-		message?: string
-	) {
+	constructor(public key: string, message?: string) {
 		super(message ?? `"${key}" has invalid cookie signature`)
 	}
 }
 
 export class ValidationError extends Error {
 	code = 'VALIDATION'
-	status = 400
+	status = 422
 
 	constructor(
 		public type: string,
 		public validator: TSchema | TypeCheck<any>,
 		public value: unknown
 	) {
+		// @ts-expect-error
+		if (typeof value === 'object' && ELYSIA_RESPONSE in value)
+			// @ts-expect-error
+			value = value.response
+
 		const error = isProduction
 			? undefined
 			: 'Errors' in validator
@@ -103,7 +117,7 @@ export class ValidationError extends Error {
 				: error.schema.error
 			: undefined
 
-		const accessor = error?.path?.slice(1) || 'root'
+		const accessor = error?.path || 'root'
 		let message = ''
 
 		if (customError) {
@@ -113,21 +127,41 @@ export class ValidationError extends Error {
 					: customError + ''
 		} else if (isProduction) {
 			message = JSON.stringify({
-				type,
-				message: error?.message
+				type: "validation",
+				on: type,
+				message: error?.message,
+				found: value
 			})
 		} else {
+			// @ts-ignore private field
+			const schema = validator?.schema ?? validator
+			const errors =
+				'Errors' in validator
+					? [...validator.Errors(value)]
+					: [...Value.Errors(validator, value)]
+
+				let expected
+
+				try {
+					expected = Value.Create(schema)
+				} catch (error) {
+					expected = {
+						type: 'Could not create expected value',
+						// @ts-expect-error
+						message: error?.message,
+						error
+					}
+				}
+
 			message = JSON.stringify(
 				{
-					type,
-					at: accessor,
+					type: "validation",
+					on: type,
+					property: accessor,
 					message: error?.message,
-					expected: Value.Create(
-						// @ts-ignore private field
-						validator.schema
-					),
+					expected,
 					found: value,
-					errors: [...validator.Errors(value)]
+					errors
 				},
 				null,
 				2
@@ -161,7 +195,10 @@ export class ValidationError extends Error {
 	toResponse(headers?: Record<string, any>) {
 		return new Response(this.message, {
 			status: 400,
-			headers
+			headers: {
+				...headers,
+				'content-type': 'application/json'
+			}
 		})
 	}
 }

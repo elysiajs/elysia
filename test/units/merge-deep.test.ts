@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import { Elysia } from '../../src'
-import { mergeDeep } from '../../src'
+import { mergeDeep } from '../../src/utils'
 import { req } from '../utils'
 
 describe('mergeDeep', () => {

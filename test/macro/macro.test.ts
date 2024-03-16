@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import Elysia from '../../src'
+import Elysia, { error } from '../../src'
 import { req } from '../utils'
 
 describe('Macro', () => {
@@ -199,7 +199,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.parse?.length).toEqual(1)
+		expect(app.router.history[0].hooks.parse?.length).toEqual(1)
 	})
 
 	it('appends onTransform', async () => {
@@ -213,7 +213,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.transform?.length).toEqual(1)
+		expect(app.router.history[0].hooks.transform?.length).toEqual(1)
 	})
 
 	it('appends onBeforeHandle', async () => {
@@ -227,7 +227,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.beforeHandle?.length).toEqual(1)
+		expect(app.router.history[0].hooks.beforeHandle?.length).toEqual(1)
 	})
 
 	it('appends onAfterHandle', async () => {
@@ -241,7 +241,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.afterHandle?.length).toEqual(1)
+		expect(app.router.history[0].hooks.afterHandle?.length).toEqual(1)
 	})
 
 	it('appends onError', async () => {
@@ -255,7 +255,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.error?.length).toEqual(1)
+		expect(app.router.history[0].hooks.error?.length).toEqual(1)
 	})
 
 	it('appends onResponse', async () => {
@@ -269,7 +269,7 @@ describe('Macro', () => {
 				hi: () => {}
 			})
 
-		expect(app.routes[0].hooks.onResponse?.length).toEqual(1)
+		expect(app.router.history[0].hooks.onResponse?.length).toEqual(1)
 	})
 
 	it('handle deduplication', async () => {
@@ -334,5 +334,60 @@ describe('Macro', () => {
 		)
 
 		expect(call).toBe(3)
+	})
+
+	it('inherits macro from plugin without name', async () => {
+		let called = 0
+
+		const plugin = new Elysia().macro(() => ({
+			hi(config: string) {
+				called++
+			}
+		}))
+
+		const app = new Elysia()
+			.use(plugin)
+			.use(plugin)
+			.use(plugin)
+			.get('/', () => 'Hello World', {
+				hi: 'Hello World'
+			})
+
+		await app.handle(req('/'))
+
+		expect(called).toBe(1)
+	})
+
+	it('handle nested macro', async () => {
+		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+			requiredUser(value: boolean) {
+				onBeforeHandle(async () => {
+					if (value)
+						return error(401, {
+							code: 'S000002',
+							message: 'Unauthorized'
+						})
+				})
+			}
+		}))
+
+		const testRoute = new Elysia({
+			prefix: '/test',
+			name: 'testRoute'
+		})
+			.use(authGuard)
+			.guard({
+				requiredUser: true
+			})
+			.get('/', () => 'Ely')
+
+		const app = new Elysia().use(testRoute).get('/', () => 'Ely')
+
+		const ok = await app.handle(req('/')).then((t) => t.text())
+		const err = await app.handle(req('/test')).then((t) => t.text())
+
+		expect(ok).toBe('Ely')
+		expect(err).not.toBe('Ely')
+		expect(err).not.toBe('NOT_FOUND')
 	})
 })

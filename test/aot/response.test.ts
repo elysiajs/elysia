@@ -6,13 +6,12 @@ import { signCookie } from '../../src/utils'
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
 const getCookies = (response: Response) =>
+	// @ts-expect-error
 	response.headers.getAll('Set-Cookie').map((x) => {
 		return decodeURIComponent(x)
 	})
 
-const app = new Elysia({
-	aot: false
-})
+const app = new Elysia()
 	.get(
 		'/council',
 		({ cookie: { council } }) =>
@@ -76,27 +75,6 @@ describe('Dynamic Cookie Response', () => {
 		])
 	})
 
-	it('skip duplicate cookie value', async () => {
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(
-							JSON.stringify([
-								{
-									name: 'Rin',
-									affilation: 'Administration'
-								}
-							])
-						)
-				}
-			})
-		)
-
-		expect(getCookies(response)).toEqual([])
-	})
-
 	it('write cookie on difference value', async () => {
 		const response = await app.handle(
 			req('/council', {
@@ -138,14 +116,16 @@ describe('Dynamic Cookie Response', () => {
 			})
 		)
 
-		expect(getCookies(response)[0]).toInclude(`council=; Max-Age=0; Expires=${new Date(0).toUTCString()}`)
+		expect(getCookies(response)[0]).toInclude(
+			`council=; Max-Age=0; Expires=${new Date(0).toUTCString()}`
+		)
 	})
 
 	it('sign cookie', async () => {
 		const response = await app.handle(req('/update'))
 
 		expect(getCookies(response)).toEqual([
-			`name=${await signCookie('seminar: Himari', secrets)}`
+			`name=${await signCookie('seminar: Himari', secrets)}; Path=/`
 		])
 	})
 
@@ -230,5 +210,20 @@ describe('Dynamic Cookie Response', () => {
 		)
 
 		expect(response.status).toBe(200)
+	})
+
+	it("don't share context between race condition", async () => {
+		const resolver = Promise.withResolvers()
+
+		const app = new Elysia({ aot: false })
+			.onRequest(() => new Promise((resolve) => setTimeout(resolve, 1)))
+			.get('/test', ({ request }) => {
+				resolver.resolve(request.url)
+			})
+
+		app.handle(new Request('http://localhost:1025/test'))
+		app.handle(new Request('http://localhost:1025/bad'))
+
+		expect(await resolver.promise).toBe('http://localhost:1025/test')
 	})
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { createCookieJar } from '../../src/cookie'
+import { createCookieJar } from '../../src/cookies'
 import type { Context } from '../../src'
 
 const create = () => {
@@ -8,7 +8,7 @@ const create = () => {
 		headers: {}
 	}
 
-	const cookie = createCookieJar({}, set)
+	const cookie = createCookieJar(set, {})
 
 	return {
 		cookie,
@@ -67,7 +67,7 @@ describe('Implicit Cookie', () => {
 		} = create()
 
 		name.value = 'himari'
-		name.add({
+		name.update({
 			domain: 'millennium.sh'
 		})
 
@@ -86,7 +86,7 @@ describe('Implicit Cookie', () => {
 		name.set({
 			value: 'himari',
 			domain: 'millennium.sh'
-		}).add({
+		}).update({
 			httpOnly: true,
 			path: '/'
 		})
@@ -114,9 +114,9 @@ describe('Implicit Cookie', () => {
 		})
 
 		expect(set.cookie?.name).toEqual({
-			value: 'himari',
 			httpOnly: true,
-			path: '/'
+			path: '/',
+			value: 'himari',
 		})
 	})
 
@@ -130,7 +130,7 @@ describe('Implicit Cookie', () => {
 			value: 'aru',
 			domain: 'millennium.sh',
 			httpOnly: true
-		}).add({
+		}).update({
 			domain: 'gehenna.sh'
 		})
 
@@ -152,7 +152,7 @@ describe('Implicit Cookie', () => {
 		expect(set.cookie?.name).toEqual({ value: '' })
 	})
 
-	it('Remove cookie without options', () => {
+	it('Remove cookie', () => {
 		const {
 			cookie: { name },
 			set
@@ -164,28 +164,5 @@ describe('Implicit Cookie', () => {
 		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
 			Date.now()
 		)
-	})
-
-	it('Remove cookie with options', () => {
-		const {
-			cookie: { name },
-			set
-		} = create()
-
-		name.value = 'himari'
-		name.remove({
-			path: '/',
-			domain: 'elysiajs.com',
-			sameSite: 'lax',
-			secure: true
-		})
-
-		expect(set.cookie?.name.expires?.getTime()).toBeLessThanOrEqual(
-			Date.now()
-		)
-		expect(set.cookie?.name.path).toBe('/')
-		expect(set.cookie?.name.domain).toBe('elysiajs.com')
-		expect(set.cookie?.name.sameSite).toBe('lax')
-		expect(set.cookie?.name.secure).toBeTrue()
 	})
 })

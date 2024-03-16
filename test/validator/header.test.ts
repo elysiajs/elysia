@@ -40,7 +40,7 @@ describe('Header Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -86,7 +86,7 @@ describe('Header Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})
@@ -112,7 +112,7 @@ describe('Header Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16
@@ -141,7 +141,7 @@ describe('Header Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			age: 16,
@@ -163,7 +163,7 @@ describe('Header Validator', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(200)
-		expect(await res.json<any>()).toEqual({})
+		expect(await res.json()).toEqual({})
 	})
 
 	it('validate numberic with partial', async () => {
@@ -181,7 +181,7 @@ describe('Header Validator', () => {
 		const res = await app.handle(req('/'))
 
 		expect(res.status).toBe(200)
-		expect(await res.json<any>()).toEqual({})
+		expect(await res.json()).toEqual({})
 	})
 
 	it('loosely validate by default', async () => {
@@ -201,7 +201,7 @@ describe('Header Validator', () => {
 			})
 		)
 
-		expect(await res.json<any>()).toEqual(headers)
+		expect(await res.json()).toEqual(headers)
 		expect(res.status).toBe(200)
 	})
 })

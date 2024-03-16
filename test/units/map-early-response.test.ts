@@ -19,6 +19,12 @@ const context = {
 
 class Student {
 	constructor(public name: string) {}
+
+	toString() {
+		return JSON.stringify({
+			name: this.name
+		})
+	}
 }
 
 describe('Map Early Response', () => {
@@ -54,7 +60,7 @@ describe('Map Early Response', () => {
 		const response = mapEarlyResponse(body, defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json<any>()).toEqual(body)
+		expect(await response?.json()).toEqual(body)
 		expect(response?.status).toBe(200)
 	})
 
@@ -87,7 +93,7 @@ describe('Map Early Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json<any>()).toEqual(body)
+		expect(await response?.json()).toEqual(body)
 		expect(response?.status).toBe(200)
 	})
 
@@ -106,7 +112,7 @@ describe('Map Early Response', () => {
 		const response = mapEarlyResponse(new Student('Himari'), defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json<any>()).toEqual({
+		expect(await response?.json()).toEqual({
 			name: 'Himari'
 		})
 		expect(response?.status).toBe(200)
@@ -143,7 +149,7 @@ describe('Map Early Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json<any>()).toEqual(body)
+		expect(await response?.json()).toEqual(body)
 		expect(response?.headers.toJSON()).toEqual({
 			...context.headers,
 			'content-type': 'application/json;charset=utf-8'
@@ -155,7 +161,7 @@ describe('Map Early Response', () => {
 		const response = mapEarlyResponse(new Error('Hello'), context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.json<any>()).toEqual({
+		expect(await response?.json()).toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -303,7 +309,7 @@ describe('Map Early Response', () => {
 
 		const response = mapEarlyResponse(kyuukararin, {
 			...defaultContext,
-			status: 304,
+			status: 304
 		})
 
 		expect(response).toBeInstanceOf(Response)

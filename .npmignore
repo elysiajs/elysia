@@ -3,6 +3,7 @@
 .github
 .prettierrc
 .eslintrc.js
+.eslint.json
 .swc.cjs.swcrc
 .swc.esm.swcrc
 .swcrc
@@ -29,4 +30,5 @@ CODE_OF_CONDUCT.md
 trace
 
 build.ts
+.scannerwork
 src

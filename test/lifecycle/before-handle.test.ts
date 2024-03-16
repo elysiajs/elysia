@@ -58,15 +58,13 @@ describe('Before Handle', () => {
 		expect(await scoped.text()).toBe('cat')
 	})
 
-	it('before handle from plugin', async () => {
-		const transformId = (app: Elysia) =>
-			app.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
+	it('inherits from plugin', async () => {
+		const transformId = new Elysia().onBeforeHandle(
+			{ as: 'global' },
+			({ params: { name } }) => {
 				if (name === 'Fubuki') return 'Cat'
-			})
+			}
+		)
 
 		const app = new Elysia()
 			.use(transformId)
@@ -77,20 +75,37 @@ describe('Before Handle', () => {
 		expect(await res.text()).toBe('Cat')
 	})
 
-	it('before handle in order', async () => {
+	it('not inherits plugin on local', async () => {
+		const beforeHandle = new Elysia().onBeforeHandle(
+			({ params: { name } }) => {
+				if (name === 'Fubuki') return 'Cat'
+			}
+		)
+
 		const app = new Elysia()
+			.use(beforeHandle)
 			.get('/name/:name', ({ params: { name } }) => name)
-			.onBeforeHandle<{
-				params: {
-					name?: string
-				}
-			}>(({ params: { name } }) => {
-				if (name === 'fubuki') return 'cat'
+
+		const res = await app.handle(req('/name/Fubuki'))
+
+		expect(await res.text()).toBe('Fubuki')
+	})
+
+	it('before handle in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onBeforeHandle(() => {
+				order.push('A')
 			})
+			.onBeforeHandle(() => {
+				order.push('B')
+			})
+			.get('/', () => '')
 
-		const res = await app.handle(req('/name/fubuki'))
+		await app.handle(req('/'))
 
-		expect(await res.text()).toBe('fubuki')
+		expect(order).toEqual(['A', 'B'])
 	})
 
 	it('globally and locally before handle', async () => {
@@ -193,5 +208,62 @@ describe('Before Handle', () => {
 		const res = await app.handle(req('/name/Fubuki'))
 
 		expect(await res.text()).toBe('Not cat')
+	})
+
+	it('as global', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onBeforeHandle({ as: 'global' }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onBeforeHandle({ as: 'local' }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	it('support array', async () => {
+		let total = 0
+
+		const app = new Elysia()
+			.onAfterHandle([
+				() => {
+					total++
+				},
+				() => {
+					total++
+				}
+			])
+			.get('/', () => 'NOOP')
+
+		const res = await app.handle(req('/'))
+
+		expect(total).toEqual(2)
 	})
 })

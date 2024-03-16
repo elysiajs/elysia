@@ -9,7 +9,7 @@ describe('Handle Error', () => {
 	it('handle NOT_FOUND', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			// @ts-ignore
+			// @ts-expect-error private
 			.handleError(
 				{
 					request,
@@ -27,7 +27,7 @@ describe('Handle Error', () => {
 	it('handle INTERNAL_SERVER_ERROR', async () => {
 		const res = await new Elysia()
 			.get('/', () => 'Hi')
-			// @ts-ignore
+			// @ts-expect-error private
 			.handleError(
 				{
 					request,
@@ -51,7 +51,7 @@ describe('Handle Error', () => {
 			})
 			.handle(req('/'))
 
-		expect(res.status).toBe(400)
+		expect(res.status).toBe(422)
 	})
 
 	it('use custom error', async () => {
@@ -87,16 +87,14 @@ describe('Handle Error', () => {
 	})
 
 	it('transform any to error', async () => {
-		const app = new Elysia({
-			forceErrorEncapsulation: true
-		})
-			.get('/', () => {
-				throw new NotFoundError()
-			})
+		const app = new Elysia()
 			.onError(async ({ set }) => {
 				set.status = 418
 
 				return 'aw man'
+			})
+			.get('/', () => {
+				throw new NotFoundError()
 			})
 
 		const res = await app.handle(req('/'))
@@ -106,16 +104,15 @@ describe('Handle Error', () => {
 	})
 
 	it('handle error in group', async () => {
-		const authenticate = (app: Elysia) =>
-			app.group('/group', (group) =>
-				group
-					.get('/inner', () => {
-						throw new Error('A')
-					})
-					.onError(() => {
-						return 'handled'
-					})
-			)
+		const authenticate = new Elysia().group('/group', (group) =>
+			group
+				.get('/inner', () => {
+					throw new Error('A')
+				})
+				.onError(() => {
+					return 'handled'
+				})
+		)
 
 		const app = new Elysia().use(authenticate)
 
@@ -126,18 +123,17 @@ describe('Handle Error', () => {
 	})
 
 	it('handle error status in group', async () => {
-		const authenticate = (app: Elysia) =>
-			app.group('/group', (group) =>
-				group
-					.get('/inner', ({ set }) => {
-						set.status = 418
+		const authenticate = new Elysia().group('/group', (group) =>
+			group
+				.get('/inner', ({ set }) => {
+					set.status = 418
 
-						throw new Error('A')
-					})
-					.onError(() => {
-						return 'handled'
-					})
-			)
+					throw new Error('A')
+				})
+				.onError(() => {
+					return 'handled'
+				})
+		)
 
 		const app = new Elysia().use(authenticate)
 

@@ -19,6 +19,12 @@ const context = {
 
 class Student {
 	constructor(public name: string) {}
+
+	toString() {
+		return JSON.stringify({
+			name: this.name
+		})
+	}
 }
 
 class CustomResponse extends Response {}
@@ -56,7 +62,7 @@ describe('Map Response', () => {
 		const response = mapResponse(body, defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual(body)
+		expect(await response.json()).toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -105,7 +111,7 @@ describe('Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual(body)
+		expect(await response.json()).toEqual(body)
 		expect(response.status).toBe(200)
 	})
 
@@ -113,7 +119,7 @@ describe('Map Response', () => {
 		const response = mapResponse(new Error('Hello'), defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual({
+		expect(await response.json()).toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})
@@ -140,7 +146,7 @@ describe('Map Response', () => {
 		const response = mapResponse(new Student('Himari'), defaultContext)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual({
+		expect(await response.json()).toEqual({
 			name: 'Himari'
 		})
 		expect(response.status).toBe(200)
@@ -195,7 +201,7 @@ describe('Map Response', () => {
 		)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual(body)
+		expect(await response.json()).toEqual(body)
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers,
 			'content-type': 'application/json;charset=utf-8'
@@ -207,7 +213,7 @@ describe('Map Response', () => {
 		const response = mapResponse(new Error('Hello'), context)
 
 		expect(response).toBeInstanceOf(Response)
-		expect(await response.json<any>()).toEqual({
+		expect(await response.json()).toEqual({
 			name: 'Error',
 			message: 'Hello'
 		})

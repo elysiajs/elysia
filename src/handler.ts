@@ -1,10 +1,11 @@
-// @ts-ignore
+/* eslint-disable sonarjs/no-duplicate-string */
 import { serialize } from 'cookie'
 import { StatusMap } from './utils'
 
-import type { Context } from './context'
-import { Cookie } from './cookie'
+import { Cookie } from './cookies'
 import { ELYSIA_RESPONSE } from './error'
+
+import type { Context } from './context'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -17,6 +18,7 @@ export const isNotEmpty = (obj: Object) => {
 
 	return false
 }
+/** */
 
 const handleFile = (response: File | Blob, set?: Context['set']) => {
 	const size = response.size
@@ -62,7 +64,7 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 }
 
 export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
-	if (!headers || !Array.isArray(setCookie)) return headers
+	if (!headers) return headers
 
 	headers.delete('Set-Cookie')
 
@@ -71,39 +73,31 @@ export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 
 		headers.append(
 			'Set-Cookie',
-			`${setCookie[i].slice(0, index)}=${setCookie[i].slice(index + 1)}`
+			`${setCookie[i].slice(0, index)}=${setCookie[i].slice(index + 1) || ''}`
 		)
 	}
 
 	return headers
 }
 
-export const cookieToHeader = (cookies: Context['set']['cookie']) => {
-	if (!cookies || typeof cookies !== 'object' || !isNotEmpty(cookies))
-		return undefined
+export const serializeCookie = (cookies: Context['set']['cookie']) => {
+	if (!cookies || !isNotEmpty(cookies)) return undefined
 
 	const set: string[] = []
 
 	for (const [key, property] of Object.entries(cookies)) {
 		if (!key || !property) continue
 
-		if (Array.isArray(property.value)) {
-			for (let i = 0; i < property.value.length; i++) {
-				let value = property.value[i]
-				if (value === undefined || value === null) continue
+		const value = property.value
+		if (value === undefined || value === null) continue
 
-				if (typeof value === 'object') value = JSON.stringify(value)
-
-				set.push(serialize(key, value, property))
-			}
-		} else {
-			let value = property.value
-			if (value === undefined || value === null) continue
-
-			if (typeof value === 'object') value = JSON.stringify(value)
-
-			set.push(serialize(key, property.value, property))
-		}
+		set.push(
+			serialize(
+				key,
+				typeof value === 'object' ? JSON.stringify(value) : value + '',
+				property
+			)
+		)
 	}
 
 	if (set.length === 0) return undefined
@@ -114,7 +108,8 @@ export const cookieToHeader = (cookies: Context['set']['cookie']) => {
 
 export const mapResponse = (
 	response: unknown,
-	set: Context['set']
+	set: Context['set'],
+	request?: Request
 ): Response => {
 	// @ts-ignore
 	if (response?.[response.$passthrough])
@@ -144,7 +139,7 @@ export const mapResponse = (
 		}
 
 		if (set.cookie && isNotEmpty(set.cookie))
-			set.headers['Set-Cookie'] = cookieToHeader(set.cookie)
+			set.headers['Set-Cookie'] = serializeCookie(set.cookie)
 
 		if (
 			set.headers['Set-Cookie'] &&
@@ -174,6 +169,18 @@ export const mapResponse = (
 				)
 					set.headers['content-type'] =
 						'text/event-stream; charset=utf-8'
+
+				request?.signal.addEventListener(
+					'abort',
+					{
+						handleEvent() {
+							;(response as ReadableStream).cancel(request)
+						}
+					},
+					{
+						once: true
+					}
+				)
 
 				return new Response(
 					response as ReadableStream,
@@ -229,10 +236,12 @@ export const mapResponse = (
 
 			default:
 				if (response instanceof Response) {
-					const inherits = { ...set.headers }
+					const inherits = Object.assign({}, set.headers)
 
 					if (hasHeaderShorthand)
-						set.headers = ((response as Response).headers as Headers).toJSON()
+						set.headers = (
+							(response as Response).headers as Headers
+						).toJSON()
 					else
 						for (const [key, value] of (
 							response as Response
@@ -254,19 +263,21 @@ export const mapResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				const r = JSON.stringify(response)
+				if ('charCodeAt' in (response as any)) {
+					const code = (response as any).charCodeAt(0)
 
-				if (r.charCodeAt(0) === 123) {
-					if (!set.headers['Content-Type'])
-						set.headers['Content-Type'] = 'application/json'
+					if (code === 123 || code === 91) {
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
 
-					return new Response(
-						JSON.stringify(response),
-						set as SetResponse
-					) as any
+						return new Response(
+							JSON.stringify(response),
+							set as SetResponse
+						) as any
+					}
 				}
 
-				return new Response(r, set as SetResponse)
+				return new Response(response as any, set as SetResponse)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -285,6 +296,18 @@ export const mapResponse = (
 				})
 
 			case 'ReadableStream':
+				request?.signal.addEventListener(
+					'abort',
+					{
+						handleEvent() {
+							;(response as ReadableStream).cancel(request)
+						}
+					},
+					{
+						once: true
+					}
+				)
+
 				return new Response(response as ReadableStream, {
 					headers: {
 						'Content-Type': 'text/event-stream; charset=utf-8'
@@ -344,22 +367,28 @@ export const mapResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				const r = JSON.stringify(response)
+				if ('charCodeAt' in (response as any)) {
+					const code = (response as any).charCodeAt(0)
 
-				if (r.charCodeAt(0) === 123)
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+					if (code === 123 || code === 91) {
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
 
-				return new Response(r)
+						return new Response(
+							JSON.stringify(response),
+							set as SetResponse
+						) as any
+					}
+				}
+
+				return new Response(response as any)
 		}
 }
 
 export const mapEarlyResponse = (
 	response: unknown,
-	set: Context['set']
+	set: Context['set'],
+	request?: Request
 ): Response | undefined => {
 	if (response === undefined || response === null) return
 
@@ -394,14 +423,14 @@ export const mapEarlyResponse = (
 		}
 
 		if (set.cookie && isNotEmpty(set.cookie))
-			set.headers['Set-Cookie'] = cookieToHeader(set.cookie)
+			set.headers['Set-Cookie'] = serializeCookie(set.cookie)
 
 		if (
 			set.headers['Set-Cookie'] &&
 			Array.isArray(set.headers['Set-Cookie'])
 		)
 			set.headers = parseSetCookies(
-				(new Headers(set.headers)) as Headers,
+				new Headers(set.headers) as Headers,
 				set.headers['Set-Cookie']
 			) as any
 
@@ -424,6 +453,18 @@ export const mapEarlyResponse = (
 				)
 					set.headers['content-type'] =
 						'text/event-stream; charset=utf-8'
+
+				request?.signal.addEventListener(
+					'abort',
+					{
+						handleEvent() {
+							;(response as ReadableStream).cancel(request)
+						}
+					},
+					{
+						once: true
+					}
+				)
 
 				return new Response(
 					response as ReadableStream,
@@ -459,10 +500,7 @@ export const mapEarlyResponse = (
 				// @ts-ignore
 				return (response as Promise<unknown>).then((x) => {
 					const r = mapEarlyResponse(x, set)
-
 					if (r !== undefined) return r
-
-					return
 				})
 
 			case 'Error':
@@ -489,7 +527,9 @@ export const mapEarlyResponse = (
 					const inherits = { ...set.headers }
 
 					if (hasHeaderShorthand)
-						set.headers = ((response as Response).headers as Headers).toJSON()
+						set.headers = (
+							(response as Response).headers as Headers
+						).toJSON()
 					else
 						for (const [key, value] of (
 							response as Response
@@ -511,18 +551,21 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				const r = JSON.stringify(response)
-				if (r.charCodeAt(0) === 123) {
-					if (!set.headers['Content-Type'])
-						set.headers['Content-Type'] = 'application/json'
+				if ('charCodeAt' in (response as any)) {
+					const code = (response as any).charCodeAt(0)
 
-					return new Response(
-						JSON.stringify(response),
-						set as SetResponse
-					) as any
+					if (code === 123 || code === 91) {
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
+
+						return new Response(
+							JSON.stringify(response),
+							set as SetResponse
+						) as any
+					}
 				}
 
-				return new Response(r, set as SetResponse)
+				return new Response(response as any, set as SetResponse)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -541,6 +584,18 @@ export const mapEarlyResponse = (
 				})
 
 			case 'ReadableStream':
+				request?.signal.addEventListener(
+					'abort',
+					{
+						handleEvent() {
+							;(response as ReadableStream).cancel(request)
+						}
+					},
+					{
+						once: true
+					}
+				)
+
 				return new Response(response as ReadableStream, {
 					headers: {
 						'Content-Type': 'text/event-stream; charset=utf-8'
@@ -563,10 +618,7 @@ export const mapEarlyResponse = (
 				// @ts-ignore
 				return (response as Promise<unknown>).then((x) => {
 					const r = mapEarlyResponse(x, set)
-
 					if (r !== undefined) return r
-
-					return
 				})
 
 			case 'Error':
@@ -599,19 +651,28 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
-				const r = JSON.stringify(response)
-				if (r.charCodeAt(0) === 123)
-					return new Response(JSON.stringify(response), {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					}) as any
+				if ('charCodeAt' in (response as any)) {
+					const code = (response as any).charCodeAt(0)
 
-				return new Response(r)
+					if (code === 123 || code === 91) {
+						if (!set.headers['Content-Type'])
+							set.headers['Content-Type'] = 'application/json'
+
+						return new Response(
+							JSON.stringify(response),
+							set as SetResponse
+						) as any
+					}
+				}
+
+				return new Response(response as any)
 		}
 }
 
-export const mapCompactResponse = (response: unknown): Response => {
+export const mapCompactResponse = (
+	response: unknown,
+	request?: Request
+): Response => {
 	if (
 		// @ts-ignore
 		response?.$passthrough
@@ -644,6 +705,18 @@ export const mapCompactResponse = (response: unknown): Response => {
 			})
 
 		case 'ReadableStream':
+			request?.signal.addEventListener(
+				'abort',
+				{
+					handleEvent() {
+						;(response as ReadableStream).cancel(request)
+					}
+				},
+				{
+					once: true
+				}
+			)
+
 			return new Response(response as ReadableStream, {
 				headers: {
 					'Content-Type': 'text/event-stream; charset=utf-8'

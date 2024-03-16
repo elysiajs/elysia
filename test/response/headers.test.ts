@@ -85,4 +85,16 @@ describe('Response Headers', () => {
 
 		expect(headers.get('x-powered-by')).toBe('Elysia')
 	})
+
+	it('scoped headers', async () => {
+		const plugin = new Elysia({ scoped: true }).headers({
+			'x-powered-by': 'Elysia'
+		})
+
+		const app = new Elysia().use(plugin).get('/', () => 'hi')
+
+		const headers = await app.handle(req('/')).then((x) => x.headers)
+
+		expect(headers.get('x-powered-by')).toBeNull()
+	})
 })

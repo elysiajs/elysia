@@ -51,6 +51,27 @@ describe('Map Response', () => {
 		expect(headers.get('X-Powered-By')).toContain('Elysia')
 	})
 
+	it('inherits plugin', async () => {
+		const plugin = new Elysia().mapResponse(
+			{ as: 'global' },
+			() => new Response('Fubuki')
+		)
+
+		const app = new Elysia().use(plugin).get('/', () => 'a')
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('Fubuki')
+	})
+
+	it('not inherits plugin on local', async () => {
+		const plugin = new Elysia().mapResponse(() => new Response('Fubuki'))
+
+		const app = new Elysia().use(plugin).get('/', () => 'a')
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('a')
+	})
+
 	it('map response only once', async () => {
 		const app = new Elysia().get('/', () => 'Hutao', {
 			mapResponse: [
@@ -120,5 +141,79 @@ describe('Map Response', () => {
 		const res = await app.handle(req('/')).then((x) => x.text())
 
 		expect(res).toBe('Hutao')
+	})
+
+	it('map response in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.mapResponse(() => {
+				order.push('A')
+			})
+			.mapResponse(() => {
+				order.push('B')
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
+	})
+
+	it('as global', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.mapResponse({ as: 'global' }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.mapResponse({ as: 'local' }, ({ path }) => {
+				called.push(path)
+			})
+			.get('/inner', () => 'NOOP')
+
+		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	it('support array', async () => {
+		let total = 0
+
+		const app = new Elysia()
+			.mapResponse([
+				() => {
+					total++
+				},
+				() => {
+					total++
+				}
+			])
+			.get('/', () => 'NOOP')
+
+		const res = await app.handle(req('/'))
+
+		expect(total).toEqual(2)
 	})
 })

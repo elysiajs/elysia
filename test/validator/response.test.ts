@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, error, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req, upload } from '../utils'
@@ -58,7 +58,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json<any>()).toEqual({ name: 'sucrose' })
+		expect(await res.json()).toEqual({ name: 'sucrose' })
 		expect(res.status).toBe(200)
 	})
 
@@ -80,7 +80,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist',
 			trait: 'dog'
@@ -126,7 +126,7 @@ describe('Response Validator', () => {
 		)
 		const res = await app.handle(req('/'))
 
-		expect(await res.json<any>()).toEqual({
+		expect(await res.json()).toEqual({
 			name: 'sucrose',
 			job: 'alchemist'
 		})
@@ -166,7 +166,7 @@ describe('Response Validator', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(res.status).toBe(400)
+		expect(res.status).toBe(422)
 	})
 
 	it('strictly validate by default', async () => {
@@ -185,7 +185,7 @@ describe('Response Validator', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(res.status).toBe(400)
+		expect(res.status).toBe(422)
 	})
 
 	it('handle File', async () => {
@@ -285,8 +285,30 @@ describe('Response Validator', () => {
 		)
 
 		expect(r200valid.status).toBe(200)
-		expect(r200invalid.status).toBe(400)
+		expect(r200invalid.status).toBe(422)
 		expect(r201valid.status).toBe(201)
-		expect(r201invalid.status).toBe(400)
+		expect(r201invalid.status).toBe(422)
+	})
+
+	it('validate response per status with error()', async () => {
+		const app = new Elysia().get('/', () => error(418, 'I am a teapot'), {
+			response: {
+				200: t.String(),
+				418: t.String()
+			}
+		})
+	})
+
+	it('use inline error from handler', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ error }) => error(418, 'I am a teapot'),
+			{
+				response: {
+					200: t.String(),
+					418: t.String()
+				}
+			}
+		)
 	})
 })

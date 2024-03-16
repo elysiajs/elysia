@@ -78,4 +78,16 @@ describe('Error', () => {
 		expect(await response.text()).toBe('UwU')
 		expect(response.status).toBe(404)
 	})
+
+	it('validation error should be application/json', async () => {
+		// @ts-expect-error
+		const app = new Elysia().get('/', () => '1', {
+			response: t.Number()
+		})
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(422)
+		expect(response.headers.get('content-type')).toBe('application/json')
+	})
 })

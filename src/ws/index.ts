@@ -6,7 +6,7 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import { ValidationError } from '../error'
 import type { Context } from '../context'
 
-import type { DecoratorBase, RouteSchema } from '../types'
+import type { SingletonBase, RouteSchema } from '../types'
 
 export const websocket: WebSocketHandler<any> = {
 	open(ws) {
@@ -29,8 +29,8 @@ export class ElysiaWS<
 		validator?: TypeCheck<TSchema>
 	}>,
 	Route extends RouteSchema = RouteSchema,
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -38,7 +38,7 @@ export class ElysiaWS<
 > {
 	validator?: TypeCheck<TSchema>
 
-	constructor(public raw: WS, public data: Context<Route, Decorators>) {
+	constructor(public raw: WS, public data: Context<Route, Singleton>) {
 		this.validator = raw.data.validator
 		if (raw.data.id) {
 			this.id = raw.data.id
@@ -110,7 +110,7 @@ export class ElysiaWS<
 	}
 
 	get cork() {
-		return (callback: (ws: WS) => this) => {
+		return (callback: () => this) => {
 			this.raw.cork(callback as any)
 
 			return this

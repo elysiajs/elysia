@@ -74,10 +74,33 @@ describe('error', () => {
 			})
 
 		const res = await app.handle(post('/login', {}))
-		const data = await res.json<any[]>()
+		const data = await res.json()
 
+		// @ts-ignore
 		expect(data.length).toBe(4)
 		expect(res.status).toBe(400)
+	})
+
+	it('inherits plugin', async () => {
+		const plugin = new Elysia().onError({ as: 'global' }, () => 'hi')
+
+		const app = new Elysia().use(plugin).get('/', () => {
+			throw new Error('')
+		})
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).toBe('hi')
+	})
+
+	it('not inherits plugin on local', async () => {
+		const plugin = new Elysia().onError(() => 'hi')
+
+		const app = new Elysia().use(plugin).get('/', () => {
+			throw new Error('')
+		})
+
+		const res = await app.handle(req('/')).then((t) => t.text())
+		expect(res).not.toBe('hi')
 	})
 
 	it('custom 500', async () => {
@@ -97,19 +120,129 @@ describe('error', () => {
 		expect(response.status).toBe(500)
 	})
 
-	it('error function status', async () => {
-		const app = new Elysia().get('/', () => error(418, 'I am a teapot'))
+	it('return correct number status on error function', async () => {
+		const app = new Elysia().get('/', ({ error }) =>
+			error(418, 'I am a teapot')
+		)
 
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
 	})
 
-	it('error function name', async () => {
-		const app = new Elysia().get('/', () => error("I'm a teapot", 'I am a teapot'))
+	it('return correct named status on error function', async () => {
+		const app = new Elysia().get('/', ({ error }) =>
+			error("I'm a teapot", 'I am a teapot')
+		)
 
 		const response = await app.handle(req('/'))
 
 		expect(response.status).toBe(418)
+	})
+
+	it('return correct number status without value on error function', async () => {
+		const app = new Elysia().get('/', ({ error }) => error(418))
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe("I'm a teapot")
+	})
+
+	it('return correct named status without value on error function', async () => {
+		const app = new Elysia().get('/', ({ error }) => error("I'm a teapot"))
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(418)
+		expect(await response.text()).toBe("I'm a teapot")
+	})
+
+	it('handle error in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onError(() => {
+				order.push('A')
+			})
+			.onError(() => {
+				order.push('B')
+			})
+			.get('/', () => {
+				throw new Error('A')
+			})
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
+	})
+
+	it('as global', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onError({ as: 'global' }, ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => {
+				throw new Error('A')
+			})
+
+		const app = new Elysia().use(plugin).get('/outer', () => {
+			throw new Error('A')
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/outer'])
+	})
+
+	it('as local', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.onError({ as: 'local' }, ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => {
+				throw new Error('A')
+			})
+
+		const app = new Elysia().use(plugin).get('/outer', () => {
+			throw new Error('A')
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner'])
+	})
+
+	it('support array', async () => {
+		let total = 0
+
+		const app = new Elysia()
+			.onAfterHandle([
+				() => {
+					total++
+				},
+				() => {
+					total++
+				}
+			])
+			.get('/', () => 'NOOP')
+
+		const res = await app.handle(req('/'))
+
+		expect(total).toEqual(2)
 	})
 })

@@ -44,4 +44,40 @@ describe('On Request', () => {
 		expect(await res.text()).toBe('Unauthorized')
 		expect(res.status).toBe(401)
 	})
+
+	it('support array', async () => {
+		let total = 0
+
+		const app = new Elysia()
+			.onRequest([
+				() => {
+					total++
+				},
+				() => {
+					total++
+				}
+			])
+			.get('/', () => 'NOOP')
+
+		const res = await app.handle(req('/'))
+
+		expect(total).toEqual(2)
+	})
+
+	it('request in order', async () => {
+		let order = <string[]>[]
+
+		const app = new Elysia()
+			.onRequest(() => {
+				order.push('A')
+			})
+			.onRequest(() => {
+				order.push('B')
+			})
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(order).toEqual(['A', 'B'])
+	})
 })

@@ -33,7 +33,7 @@ describe('Dynamic Mode', () => {
 		const invalid = await app.handle(post('/', {})).then((x) => x.status)
 
 		expect(res.name).toBe(body.name)
-		expect(invalid).toBe(400)
+		expect(invalid).toBe(422)
 	})
 
 	it('handle dynamic all method', async () => {
@@ -46,12 +46,12 @@ describe('Dynamic Mode', () => {
 	})
 
 	it('inherits plugin', async () => {
-		const plugin = () => (app: Elysia) => app.decorate('hi', () => 'hi')
+		const plugin = new Elysia().decorate('hi', () => 'hi')
 
 		const app = new Elysia({
 			aot: false
 		})
-			.use(plugin())
+			.use(plugin)
 			.get('/', ({ hi }) => hi())
 
 		const res = await app.handle(req('/')).then((r) => r.text())

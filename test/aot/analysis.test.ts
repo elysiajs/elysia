@@ -229,4 +229,25 @@ describe('Static code analysis', () => {
 
 		expect(response).toBe('hi')
 	})
+
+	it('handle accurate trie properties', async () => {
+		const app = new Elysia().get('/what', ({ query }) => query, {
+			query: t.Object({
+				stee: t.Optional(t.Literal('on')),
+				mtee: t.Optional(t.Literal('on')),
+				ltee: t.Optional(t.Literal('on')),
+				xltee: t.Optional(t.Literal('on')),
+				xxltee: t.Optional(t.Literal('on')),
+				xxxltee: t.Optional(t.Literal('on'))
+			})
+		})
+
+		const response = await app
+			.handle(req('/what?xxltee=on'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			xxltee: 'on'
+		})
+	})
 })

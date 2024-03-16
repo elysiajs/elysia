@@ -2,6 +2,7 @@ import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
+import { t } from '.'
 import { isNotEmpty } from './handler'
 
 import type {
@@ -9,11 +10,11 @@ import type {
 	LocalHook,
 	MaybeArray,
 	InputSchema,
-	BaseMacro
+	BaseMacro,
+	ElysiaFn,
+	LifeCycleType
 } from './types'
-
-const isObject = (item: any): item is Object =>
-	item && typeof item === 'object' && !Array.isArray(item)
+import type { CookieOptions } from './cookies'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -30,9 +31,12 @@ const isClass = (v: Object) =>
 	// If object prototype is not pure, then probably a class-like object
 	isNotEmpty(Object.getPrototypeOf(v))
 
+const isObject = (item: any): item is Object =>
+	item && typeof item === 'object' && !Array.isArray(item)
+
 export const mergeDeep = <
-	const A extends Record<string, any>,
-	const B extends Record<string, any>
+	A extends Record<string, any>,
+	B extends Record<string, any>
 >(
 	target: A,
 	source: B,
@@ -46,17 +50,7 @@ export const mergeDeep = <
 		for (const [key, value] of Object.entries(source)) {
 			if (skipKeys?.includes(key)) continue
 
-			if (!isObject(value)) {
-				target[key as keyof typeof target] = value
-				continue
-			}
-
-			if (!(key in target)) {
-				target[key as keyof typeof target] = value
-				continue
-			}
-
-			if (isClass(value)) {
+			if (!isObject(value) || !(key in target) || isClass(value)) {
 				target[key as keyof typeof target] = value
 				continue
 			}
@@ -69,35 +63,42 @@ export const mergeDeep = <
 
 	return target as A & B
 }
-
 export const mergeCookie = <const A extends Object, const B extends Object>(
-	target: A,
-	source: B
-): A & B =>
-	mergeDeep(target, source, {
-		skipKeys: ['properties']
-	})
+	a: A,
+	b: B
+): A & B => {
+	// @ts-ignore
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const { properties: _, ...target } = a ?? {}
 
-export const mergeObjectArray = <T>(a: T | T[], b: T | T[]): T[] => {
+	// @ts-ignore
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const { properties: __, ...source } = b ?? {}
+
+	return mergeDeep(target, source) as A & B
+}
+
+export const mergeObjectArray = <T extends ElysiaFn>(
+	a: T | T[] = [],
+	b: T | T[] = []
+): T[] => {
 	if (!a) return []
 
 	// ! Must copy to remove side-effect
-	const array = [...(Array.isArray(a) ? a : [a])]
-	const checksums = []
+	const array = <T[]>[]
+	const checksums = <(number | undefined)[]>[]
 
-	for (const item of array) {
-		// @ts-ignore
-		if (item.$elysiaChecksum)
-			// @ts-ignore
-			checksums.push(item.$elysiaChecksum)
+	if (!Array.isArray(a)) a = [a]
+	if (!Array.isArray(b)) b = [b]
+
+	for (const item of a) {
+		array.push(item)
+
+		if (item.$elysiaChecksum) checksums.push(item.$elysiaChecksum)
 	}
 
-	for (const item of Array.isArray(b) ? b : [b]) {
-		// @ts-ignore
-		if (!checksums.includes(item?.$elysiaChecksum)) {
-			array.push(item)
-		}
-	}
+	for (const item of b)
+		if (!checksums.includes(item?.$elysiaChecksum)) array.push(item)
 
 	return array
 }
@@ -124,9 +125,14 @@ export const primitiveHooks = [
 	'detail'
 ] as const
 
+const primitiveHookMap = primitiveHooks.reduce(
+	(acc, x) => ((acc[x] = true), acc),
+	{} as Record<string, boolean>
+)
+
 export const mergeHook = (
-	a?: LocalHook<any, any, any, any> | LifeCycleStore,
-	b?: LocalHook<any, any, any, any>
+	a?: LocalHook<any, any, any, any, any, any, any> | LifeCycleStore,
+	b?: LocalHook<any, any, any, any, any, any, any>
 ): LifeCycleStore => {
 	// In case if merging union is need
 	// const customAStore: Record<string, unknown> = {}
@@ -178,29 +184,14 @@ export const mergeHook = (
 			// @ts-ignore
 			a?.detail ?? {}
 		),
-		parse: mergeObjectArray((a?.parse as any) ?? [], b?.parse ?? []),
-		transform: mergeObjectArray(
-			a?.transform ?? [],
-			b?.transform ?? []
-		) as any,
-		beforeHandle: mergeObjectArray(
-			a?.beforeHandle ?? [],
-			b?.beforeHandle ?? []
-		),
-		afterHandle: mergeObjectArray(
-			a?.afterHandle ?? [],
-			b?.afterHandle ?? []
-		),
-		onResponse: mergeObjectArray(
-			a?.onResponse ?? [],
-			b?.onResponse ?? []
-		) as any,
-		mapResponse: mergeObjectArray(
-			a?.mapResponse ?? [],
-			b?.mapResponse ?? []
-		) as any,
-		trace: mergeObjectArray(a?.trace ?? [], b?.trace ?? []) as any,
-		error: mergeObjectArray(a?.error ?? [], b?.error ?? [])
+		parse: mergeObjectArray(a?.parse as any, b?.parse),
+		transform: mergeObjectArray(a?.transform, b?.transform),
+		beforeHandle: mergeObjectArray(a?.beforeHandle, b?.beforeHandle),
+		afterHandle: mergeObjectArray(a?.afterHandle, b?.afterHandle),
+		onResponse: mergeObjectArray(a?.onResponse, b?.onResponse) as any,
+		mapResponse: mergeObjectArray(a?.mapResponse, b?.mapResponse) as any,
+		trace: mergeObjectArray(a?.trace, b?.trace) as any,
+		error: mergeObjectArray(a?.error, b?.error)
 	}
 }
 
@@ -331,127 +322,161 @@ export const checksum = (s: string) => {
 	return (h = h ^ (h >>> 9))
 }
 
+export const getCookieValidator = ({
+	validator,
+	defaultConfig = {},
+	config,
+	dynamic,
+	models
+}: {
+	validator: TSchema | string | undefined
+	defaultConfig: CookieOptions | undefined
+	config: CookieOptions
+	dynamic: boolean
+	models: Record<string, TSchema> | undefined
+}) => {
+	let cookieValidator = getSchemaValidator(validator, {
+		dynamic,
+		models,
+		additionalProperties: true
+	})
+
+	if (isNotEmpty(defaultConfig)) {
+		if (cookieValidator) {
+			// @ts-expect-error private
+			cookieValidator.schema = mergeCookie(
+				// @ts-expect-error private
+				cookieValidator.schema,
+				config
+			)
+		} else {
+			cookieValidator = getSchemaValidator(t.Cookie({}, defaultConfig), {
+				dynamic,
+				models,
+				additionalProperties: true
+			})
+		}
+	}
+
+	return cookieValidator
+}
+
 export const mergeLifeCycle = (
 	a: LifeCycleStore,
-	b: LifeCycleStore | LocalHook,
+	b: LifeCycleStore | LocalHook<any, any, any, any, any, any, any>,
 	checksum?: number
 ): LifeCycleStore => {
-	const injectChecksum = <T>(x: T): T => {
-		// @ts-ignore
-		if (checksum && !x.$elysiaChecksum)
-			// @ts-ignore
-			x.$elysiaChecksum = checksum
+	const injectChecksum = (x: MaybeArray<ElysiaFn> | undefined) => {
+		if (!x) return
 
-		return x
+		if (!Array.isArray(x)) {
+			// ? clone fn is required to prevent side-effect from changing hookType
+			const fn = x
+
+			if (checksum && !fn.$elysiaChecksum) fn.$elysiaChecksum = checksum
+			if (fn.$elysiaHookType === 'scoped') fn.$elysiaHookType = 'local'
+
+			return fn
+		}
+
+		// ? clone fns is required to prevent side-effect from changing hookType
+		const fns = [...x]
+
+		for (const fn of fns) {
+			if (checksum && !fn.$elysiaChecksum) fn.$elysiaChecksum = checksum
+
+			if (fn.$elysiaHookType === 'scoped') fn.$elysiaHookType = 'local'
+		}
+
+		return fns
 	}
 
 	return {
 		...a,
 		...b,
-		start: mergeObjectArray(
-			a.start as any,
-			('start' in b ? b.start ?? [] : []).map(injectChecksum) as any
-		),
-		request: mergeObjectArray(
-			a.request as any,
-			('request' in b ? b.request ?? [] : []).map(injectChecksum) as any
-		),
-		parse: mergeObjectArray(
-			a.parse as any,
-			'parse' in b ? b?.parse ?? [] : undefined ?? ([] as any)
-		).map(injectChecksum),
-		transform: mergeObjectArray(
-			a.transform as any,
-			(b?.transform ?? ([] as any)).map(injectChecksum)
-		),
+		start: mergeObjectArray(a.start, injectChecksum(b?.start)),
+		request: mergeObjectArray(a.request, injectChecksum(b?.request)),
+		parse: mergeObjectArray(a.parse, injectChecksum(b?.parse)),
+		transform: mergeObjectArray(a.transform, injectChecksum(b?.transform)),
 		beforeHandle: mergeObjectArray(
-			a.beforeHandle as any,
-			(b?.beforeHandle ?? ([] as any)).map(injectChecksum)
+			a.beforeHandle,
+			injectChecksum(b?.beforeHandle)
 		),
 		afterHandle: mergeObjectArray(
-			a.afterHandle as any,
-			(b?.afterHandle ?? ([] as any)).map(injectChecksum)
+			a.afterHandle,
+			injectChecksum(b?.afterHandle)
 		),
 		mapResponse: mergeObjectArray(
-			a.mapResponse as any,
-			(b?.mapResponse ?? ([] as any)).map(injectChecksum)
+			a.mapResponse,
+			injectChecksum(b?.mapResponse)
 		),
 		onResponse: mergeObjectArray(
-			a.onResponse as any,
-			(b?.onResponse ?? ([] as any)).map(injectChecksum)
+			a.onResponse,
+			injectChecksum(b?.onResponse)
 		),
+		// Already merged on Elysia._use, also logic is more complicated, can't directly merge
 		trace: a.trace,
-		error: mergeObjectArray(
-			a.error as any,
-			(b?.error ?? ([] as any)).map(injectChecksum)
-		),
-		stop: mergeObjectArray(
-			a.stop as any,
-			('stop' in b ? b.stop ?? [] : ([] as any)).map(injectChecksum)
-		)
+		error: mergeObjectArray(a.error, injectChecksum(b?.error)),
+		stop: mergeObjectArray(a.stop, injectChecksum(b?.stop))
 	}
 }
 
-export const asGlobalHook = (
-	hook: LocalHook<any, any>,
-	inject = true
-): LocalHook<any, any> => {
-	return {
-		// rest is validator
-		...hook,
-		type: hook?.type,
-		detail: hook?.detail,
-		parse: asGlobal(hook?.parse, inject),
-		transform: asGlobal(hook?.transform, inject),
-		beforeHandle: asGlobal(hook?.beforeHandle, inject),
-		afterHandle: asGlobal(hook?.afterHandle, inject),
-		onResponse: asGlobal(hook?.onResponse, inject),
-		error: asGlobal(hook?.error, inject)
-	} as LocalHook<any, any>
-}
-
-export const asGlobal = <T extends MaybeArray<Function> | undefined>(
+export const asHookType = <T extends MaybeArray<ElysiaFn> | undefined>(
 	fn: T,
-	inject = true
+	inject: LifeCycleType,
+	{ skipIfHasType = false }: { skipIfHasType?: boolean } = {}
 ): T => {
 	if (!fn) return fn
 
 	if (typeof fn === 'function') {
-		if (inject)
-			// @ts-ignore
-			fn.$elysiaHookType = 'global'
-		// @ts-ignore
-		else fn.$elysiaHookType = undefined
+		if (skipIfHasType) fn.$elysiaHookType ??= inject
+		else fn.$elysiaHookType = inject
 
 		return fn
 	}
 
-	return fn.map((x) => {
-		if (inject)
-			// @ts-ignore
-			x.$elysiaHookType = 'global'
-		// @ts-ignore
-		else x.$elysiaHookType = undefined
+	if (!Array.isArray(fn)) return fn
 
-		return x
-	}) as T
+	for (const x of fn)
+		if (skipIfHasType) x.$elysiaHookType ??= inject
+		else x.$elysiaHookType = inject
+
+	return fn
 }
 
-const filterGlobal = <T extends MaybeArray<Function> | undefined>(fn: T): T => {
+const filterGlobal = <T extends MaybeArray<ElysiaFn> | undefined>(
+	fn: T
+): T | undefined => {
 	if (!fn) return fn
 
-	if (typeof fn === 'function') {
-		// @ts-ignore
-		return fn.$elysiaHookType === 'global' ? fn : undefined
-	}
+	if (typeof fn === 'function')
+		switch (fn.$elysiaHookType) {
+			case 'global':
+			case 'scoped':
+				return fn
 
-	// @ts-ignore
-	return fn.filter((x) => x.$elysiaHookType === 'global') as T
+			default:
+				return undefined
+		}
+
+	if (!Array.isArray(fn)) return <any>[]
+
+	const array = <any>[]
+
+	for (const x of fn)
+		switch (x.$elysiaHookType) {
+			case 'global':
+			case 'scoped':
+				array.push(x)
+				break
+		}
+
+	return array as T
 }
 
 export const filterGlobalHook = (
-	hook: LocalHook<any, any>
-): LocalHook<any, any> => {
+	hook: LocalHook<any, any, any, any, any, any, any>
+): LocalHook<any, any, any, any, any, any, any> => {
 	return {
 		// rest is validator
 		...hook,
@@ -462,8 +487,9 @@ export const filterGlobalHook = (
 		beforeHandle: filterGlobal(hook?.beforeHandle),
 		afterHandle: filterGlobal(hook?.afterHandle),
 		onResponse: filterGlobal(hook?.onResponse),
-		error: filterGlobal(hook?.error)
-	} as LocalHook<any, any>
+		error: filterGlobal(hook?.error),
+		mapResponse: filterGlobal(hook?.mapResponse)
+	} as LocalHook<any, any, any, any, any, any, any>
 }
 
 export const StatusMap = {
@@ -529,7 +555,24 @@ export const StatusMap = {
 	'Network Authentication Required': 511
 } as const
 
-export type HTTPStatusName = keyof typeof StatusMap
+export const InvertedStatusMap = Object.fromEntries(
+	Object.entries(StatusMap).map(([k, v]) => [v, k])
+) as {
+	[K in keyof StatusMap as StatusMap[K]]: K
+}
+
+export type StatusMap = typeof StatusMap
+export type InvertedStatusMap = typeof InvertedStatusMap
+
+function removeTrailingEquals(digest: string): string {
+	let trimmedDigest = digest
+	while (trimmedDigest.endsWith('=')) {
+		trimmedDigest = trimmedDigest.slice(0, -1)
+	}
+	return trimmedDigest
+}
+
+const encoder = new TextEncoder()
 
 export const signCookie = async (val: string, secret: string | null) => {
 	if (typeof val !== 'string')
@@ -537,7 +580,6 @@ export const signCookie = async (val: string, secret: string | null) => {
 
 	if (secret === null) throw new TypeError('Secret key must be provided.')
 
-	const encoder = new TextEncoder()
 	const secretKey = await crypto.subtle.importKey(
 		'raw',
 		encoder.encode(secret),
@@ -551,9 +593,11 @@ export const signCookie = async (val: string, secret: string | null) => {
 		encoder.encode(val)
 	)
 
-	const hmacArray = Array.from(new Uint8Array(hmacBuffer))
-	const digest = btoa(String.fromCharCode(...hmacArray))
-	return `${val}.${digest.replace(/=+$/, '')}`
+	return (
+		val +
+		'.' +
+		removeTrailingEquals(Buffer.from(hmacBuffer).toString('base64'))
+	)
 }
 
 export const unsignCookie = async (input: string, secret: string | null) => {
@@ -569,19 +613,98 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 }
 
 export const traceBackMacro = (
-	extension: BaseMacro,
+	extension: unknown,
 	property: Record<string, unknown>,
 	hooks = property
 ) => {
-	for (const [key, value] of Object.entries(property ?? {})) {
-		if (primitiveHooks.includes(key as any) || !(key in extension)) continue
+	if (!extension || typeof extension !== 'object' || !property) return
 
-		if (typeof extension[key] === 'function') {
-			extension[key](value)
-		} else if (typeof extension[key] === 'object')
-			traceBackMacro(extension[key], value as any, hooks)
+	for (const [key, value] of Object.entries(property)) {
+		if (key in primitiveHookMap || !(key in extension)) continue
+
+		const v = extension[
+			key as unknown as keyof typeof extension
+		] as BaseMacro[string]
+
+		if (typeof v === 'function') {
+			v(value)
+		} else if (typeof v === 'object')
+			traceBackMacro(v as BaseMacro, value as any, hooks)
 	}
 }
+
+export const createMacroManager =
+	({
+		globalHook,
+		localHook
+	}: {
+		globalHook: LifeCycleStore
+		localHook: LocalHook<any, any, any, any, any, any, any>
+	}) =>
+	(stackName: keyof LifeCycleStore) =>
+	(
+		type:
+			| {
+					insert?: 'before' | 'after'
+					stack?: 'global' | 'local'
+			  }
+			| MaybeArray<Function>,
+		fn?: MaybeArray<Function>
+	) => {
+		if (typeof type === 'function' || Array.isArray(type)) {
+			if (!localHook[stackName]) localHook[stackName] = []
+			if (typeof localHook[stackName] === 'function')
+				localHook[stackName] = [localHook[stackName]]
+
+			if (Array.isArray(type))
+				localHook[stackName] = (
+					localHook[stackName] as unknown[]
+				).concat(type) as any
+			else localHook[stackName].push(type)
+
+			return
+		}
+
+		const { insert = 'after', stack = 'local' } = type
+
+		if (stack === 'global') {
+			if (!Array.isArray(fn)) {
+				if (insert === 'before') {
+					;(globalHook[stackName] as any[]).unshift(fn)
+				} else {
+					;(globalHook[stackName] as any[]).push(fn)
+				}
+			} else {
+				if (insert === 'before') {
+					globalHook[stackName] = fn.concat(
+						globalHook[stackName] as any
+					) as any
+				} else {
+					globalHook[stackName] = (
+						globalHook[stackName] as any[]
+					).concat(fn)
+				}
+			}
+		} else {
+			if (!localHook[stackName]) localHook[stackName] = []
+			if (typeof localHook[stackName] === 'function')
+				localHook[stackName] = [localHook[stackName]]
+
+			if (!Array.isArray(fn)) {
+				if (insert === 'before') {
+					;(localHook[stackName] as any[]).unshift(fn)
+				} else {
+					;(localHook[stackName] as any[]).push(fn)
+				}
+			} else {
+				if (insert === 'before') {
+					localHook[stackName] = fn.concat(localHook[stackName])
+				} else {
+					localHook[stackName] = localHook[stackName].concat(fn)
+				}
+			}
+		}
+	}
 
 export const isNumericString = (message: string): boolean => {
 	if (message.length < 16)

@@ -85,4 +85,18 @@ describe('Static Content', () => {
 
 		expect(response).toBe('handled')
 	})
+
+	it('clone content', async () => {
+		const app = new Elysia().get('/', 'Static Content', {
+			beforeHandle({ set }) {
+				set.headers['X-Powered-By'] = 'Elysia'
+			}
+		})
+
+		await app.handle(req('/'))
+		await app.handle(req('/'))
+		const headers = await app.handle(req('/')).then((x) => x.headers)
+
+		expect(headers.get('X-Powered-By')).toBe('Elysia')
+	})
 })

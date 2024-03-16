@@ -72,7 +72,7 @@ describe('guard', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate params', async () => {
@@ -92,7 +92,7 @@ describe('guard', () => {
 		const correct = await app.handle(req('/id/1'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate query', async () => {
@@ -109,7 +109,7 @@ describe('guard', () => {
 		const correct = await app.handle(req('/?name=a'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate body', async () => {
@@ -134,7 +134,7 @@ describe('guard', () => {
 		)
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('validate response', async () => {
@@ -143,32 +143,69 @@ describe('guard', () => {
 				response: t.String()
 			},
 			(app) =>
-				app
-					.get('/correct', () => 'Hello')
-					// @ts-ignore
-					.get('/error', () => 1)
+				// @ts-ignore
+				app.get('/correct', () => 'Hello').get('/error', () => 1)
 		)
 
 		const error = await app.handle(req('/error'))
 		const correct = await app.handle(req('/correct'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
 	})
 
 	it('apply guard globally', async () => {
-		const app = new Elysia()
+		// @ts-ignore
+		const app = new Elysia({ precompile: false })
 			.guard({
 				response: t.String()
 			})
 			.get('/correct', () => 'Hello')
-			// @ts-ignore
+			// @ts-expect-error
 			.get('/error', () => 1)
 
 		const error = await app.handle(req('/error'))
 		const correct = await app.handle(req('/correct'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(400)
+		expect(error.status).toBe(422)
+	})
+
+	it('inherits singleton / definitions and re-meregd on main', async () => {
+		const app = new Elysia()
+			.decorate({ a: 'a' })
+			.state({ a: 'a' })
+			.model('a', t.String())
+			.error('a', Error)
+			.group('/posts', (app) => {
+				// @ts-expect-error
+				expect(Object.keys(app.singleton.decorator)).toEqual(['a'])
+				// @ts-expect-error
+				expect(Object.keys(app.singleton.store)).toEqual(['a'])
+				// @ts-expect-error
+				expect(Object.keys(app.definitions.type)).toEqual(['a'])
+				// @ts-expect-error
+				expect(Object.keys(app.definitions.error)).toEqual(['a'])
+
+				return app
+					.decorate({ b: 'b' })
+					.state({ b: 'b' })
+					.model('b', t.String())
+					.error('b', Error)
+					.get('/', ({ a }) => a ?? 'Aint no response')
+			})
+
+		// @ts-expect-error
+		expect(Object.keys(app.singleton.decorator)).toEqual(['a', 'b'])
+		// @ts-expect-error
+		expect(Object.keys(app.singleton.store)).toEqual(['a', 'b'])
+		// @ts-expect-error
+		expect(Object.keys(app.definitions.type)).toEqual(['a', 'b'])
+		// @ts-expect-error
+		expect(Object.keys(app.definitions.error)).toEqual(['a', 'b'])
+
+		const response = await app.handle(req('/posts')).then((x) => x.text())
+
+		expect(response).toEqual('a')
 	})
 })

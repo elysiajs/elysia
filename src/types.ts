@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Elysia } from '.'
 import type { Serve, Server, WebSocketHandler } from 'bun'
 
@@ -7,9 +8,10 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import type { OpenAPIV3 } from 'openapi-types'
 import type { EventEmitter } from 'eventemitter3'
 
-import type { CookieOptions } from './cookie'
+import type { CookieOptions } from './cookies'
 import type { Context, PreContext } from './context'
 import type {
+	ELYSIA_RESPONSE,
 	InternalServerError,
 	InvalidCookieSignature,
 	NotFoundError,
@@ -17,23 +19,54 @@ import type {
 	ValidationError
 } from './error'
 
-export type HeadersInit =
-	| string[][]
-	| Record<string, string | ReadonlyArray<string>>
-	| Headers
+type PartialServe = Partial<Serve>
 
 export type ElysiaConfig<
-	T extends string = '',
-	Scoped extends boolean = false
+	Prefix extends string | undefined,
+	Scoped extends boolean | undefined
 > = {
+	prefix?: Prefix
+	scoped?: Scoped
 	name?: string
 	seed?: unknown
-	serve?: Partial<Serve>
-	prefix?: T
+	serve?: PartialServe
+	/**
+	 * Warm up Elysia before starting the server
+	 *
+	 * This will perform Ahead of Time compilation and generate code for route handlers
+	 *
+	 * If set to false, Elysia will perform Just in Time compilation
+	 *
+	 * Only required for root instance (instance which use listen) to effect
+	 *
+	 * ! If performing a benchmark, it's recommended to set this to `true`
+	 *
+	 * @default false
+	 */
+	precompile?:
+		| boolean
+		| {
+				/**
+				 * Perform dynamic code generation for route handlers before starting the server
+				 *
+				 * @default false
+				 */
+				compose?: boolean
+				/**
+				 * Perform Ahead of Time compilation for schema before starting the server
+				 *
+				 * @default false
+				 */
+				schema?: boolean
+		  }
 	/**
 	 * Disable `new Error` thrown marked as Error on Bun 0.6
 	 */
 	forceErrorEncapsulation?: boolean
+	/**
+	 * Disable sucrose dynamic query inference
+	 */
+	forceDynamicQuery?: boolean
 	/**
 	 * Disable Ahead of Time compliation
 	 *
@@ -51,7 +84,6 @@ export type ElysiaConfig<
 	 *
 	 * @default false
 	 */
-	scoped?: Scoped
 	websocket?: Omit<
 		WebSocketHandler<any>,
 		'open' | 'close' | 'message' | 'drain'
@@ -66,23 +98,16 @@ export type ElysiaConfig<
 	 * Capture more detail information for each dependencies
 	 */
 	analytic?: boolean
+	/**
+	 * Enable experimental features
+	 */
+	experimental?: {}
 }
 
 export type MaybeArray<T> = T | T[]
 export type MaybePromise<T> = T | Promise<T>
 
 export type ObjectValues<T extends object> = T[keyof T]
-
-/**
- * @link https://stackoverflow.com/a/49928360/1490091
- */
-// export type IsAny<T> = 0 extends 1 & T ? true : false
-// export type IsNever<T> = [T] extends [never] ? true : false
-// export type IsUnknown<T> = IsAny<T> extends true
-// 	? false
-// 	: unknown extends T
-// 	? true
-// 	: false
 
 type IsPathParameter<Part extends string> = Part extends `:${infer Parameter}`
 	? Parameter
@@ -100,6 +125,14 @@ export type Prettify<T> = {
 	[K in keyof T]: T[K]
 } & {}
 
+export type Prettify2<T> = {
+	[K in keyof T]: Prettify<T[K]>
+} & {}
+
+export type Partial2<T> = {
+	[K in keyof T]?: Partial<T[K]>
+}
+
 export type Reconcile<A extends Object, B extends Object> = {
 	[key in keyof A as key extends keyof B ? never : key]: A[key]
 } extends infer Collision
@@ -114,34 +147,23 @@ export type Reconcile<A extends Object, B extends Object> = {
 		  >
 	: never
 
-export type DecoratorBase = {
-	request: {
-		[x: string]: unknown
-	}
-	store: {
-		[x: string]: unknown
-	}
-	derive: {
-		[x: string]: unknown
-	}
-	resolve: {
-		[x: string]: unknown
-	}
+export interface SingletonBase {
+	decorator: Record<string, unknown>
+	store: Record<string, unknown>
+	derive: Record<string, unknown>
+	resolve: Record<string, unknown>
 }
 
-export type DefinitionBase = {
-	type: {
-		[x: string]: unknown
-	}
-	error: {
-		[x: string]: Error
-	}
+export interface DefinitionBase {
+	type: Record<string, unknown>
+	error: Record<string, Error>
 }
 
-export type RouteBase = {
-	[path: string]: {
-		[method: string]: RouteSchema
-	}
+export type RouteBase = Record<string, unknown>
+
+export interface MetadataBase {
+	schema: RouteSchema
+	macro: BaseMacro
 }
 
 export interface RouteSchema {
@@ -155,8 +177,8 @@ export interface RouteSchema {
 
 export type UnwrapSchema<
 	Schema extends TSchema | string | undefined,
-	Definitions extends DefinitionBase['type'] = {}
-> = Schema extends undefined
+	Definitions extends Record<string, unknown> = {}
+> = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
 	? Static<NonNullable<Schema>>
@@ -166,35 +188,15 @@ export type UnwrapSchema<
 		: Definitions
 	: unknown
 
-export type UnwrapRoute<
-	Schema extends InputSchema<any>,
-	Definitions extends DefinitionBase['type'] = {}
-> = {
+export interface UnwrapRoute<
+	in out Schema extends InputSchema<any>,
+	in out Definitions extends DefinitionBase['type'] = {}
+> {
 	body: UnwrapSchema<Schema['body'], Definitions>
-	headers: UnwrapSchema<
-		Schema['headers'],
-		Definitions
-	> extends infer A extends Record<string, any>
-		? A
-		: undefined
-	query: UnwrapSchema<
-		Schema['query'],
-		Definitions
-	> extends infer A extends Record<string, any>
-		? A
-		: undefined
-	params: UnwrapSchema<
-		Schema['params'],
-		Definitions
-	> extends infer A extends Record<string, any>
-		? A
-		: undefined
-	cookie: UnwrapSchema<
-		Schema['cookie'],
-		Definitions
-	> extends infer A extends Record<string, any>
-		? A
-		: undefined
+	headers: UnwrapSchema<Schema['headers'], Definitions>
+	query: UnwrapSchema<Schema['query'], Definitions>
+	params: UnwrapSchema<Schema['params'], Definitions>
+	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
@@ -209,11 +211,11 @@ export type UnwrapRoute<
 		: unknown | void
 }
 
-export type UnwrapGroupGuardRoute<
-	Schema extends InputSchema<any>,
-	Definitions extends DefinitionBase['type'] = {},
+export interface UnwrapGroupGuardRoute<
+	in out Schema extends InputSchema<any>,
+	in out Definitions extends Record<string, unknown> = {},
 	Path extends string = ''
-> = {
+> {
 	body: UnwrapSchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
 		Schema['headers'],
@@ -246,7 +248,10 @@ export type UnwrapGroupGuardRoute<
 		: Schema['response'] extends {
 				[k in string]: TSchema | string
 		  }
-		? UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
+		? UnwrapSchema<
+				Schema['response'][keyof Schema['response']],
+				Definitions
+		  >
 		: unknown | void
 }
 
@@ -341,7 +346,10 @@ export interface InputSchema<Name extends string = string> {
 		| Record<number, Name | TSchema>
 }
 
-export type MergeSchema<A extends RouteSchema, B extends RouteSchema> = {
+export interface MergeSchema<
+	in out A extends RouteSchema,
+	in out B extends RouteSchema
+> {
 	body: undefined extends A['body'] ? B['body'] : A['body']
 	headers: undefined extends A['headers'] ? B['headers'] : A['headers']
 	query: undefined extends A['query'] ? B['query'] : A['query']
@@ -351,45 +359,75 @@ export type MergeSchema<A extends RouteSchema, B extends RouteSchema> = {
 }
 
 export type Handler<
-	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	},
 	Path extends string = ''
 > = (
-	context: Prettify<Context<Route, Decorators, Path>>
+	context: Context<Route, Singleton, Path>
 ) => Route['response'] extends { 200: unknown }
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
 
-export type OptionalHandler<
+export type InlineHandler<
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Path extends string = ''
+> =
+	| ((context: Context<Route, Singleton, Path>) => Route['response'] extends {
+			200: unknown
+	  }
+			?
+					| Response
+					| MaybePromise<
+							| Route['response'][keyof Route['response']]
+							| {
+									[Status in keyof Route['response']]: {
+										_type: Record<
+											Status,
+											Route['response'][Status]
+										>
+										[ELYSIA_RESPONSE]: Status
+									}
+							  }[keyof Route['response']]
+					  >
+			: Response | MaybePromise<Route['response']>)
+	| (unknown extends Route['response']
+			? string | number | Object
+			: Route['response'] extends { 200: unknown }
+			? Route['response'][keyof Route['response']]
+			: Route['response'])
+
+export type OptionalHandler<
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = Handler<Route, Decorators> extends (
-	context: infer Context
-) => infer Returned
+> = Handler<Route, Singleton> extends (context: infer Context) => infer Returned
 	? (context: Context) => Returned | MaybePromise<void>
 	: never
 
 export type AfterHandler<
-	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = Handler<Route, Decorators> extends (
-	context: infer Context
-) => infer Returned
+> = Handler<Route, Singleton> extends (context: infer Context) => infer Returned
 	? (
 			context: Prettify<
 				{
@@ -400,9 +438,9 @@ export type AfterHandler<
 	: never
 
 export type MapResponse<
-	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
@@ -411,7 +449,7 @@ export type MapResponse<
 	Omit<Route, 'response'> & {
 		response: MaybePromise<Response | undefined | void>
 	},
-	Decorators & {
+	Singleton & {
 		derive: {
 			response: Route['response']
 		}
@@ -419,33 +457,38 @@ export type MapResponse<
 >
 
 export type VoidHandler<
-	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = (context: Prettify<Context<Route, Decorators>>) => MaybePromise<void>
+> = (context: Context<Route, Singleton>) => MaybePromise<void>
 
 export type TransformHandler<
-	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = (
-	context: Prettify<
-		Context<
-			Route,
-			Omit<Decorators, 'resolve'> & {
-				resolve: {}
-			}
+> = {
+	(
+		context: Prettify<
+			Context<
+				Route,
+				Omit<Singleton, 'resolve'> & {
+					resolve: {}
+				}
+			>
 		>
-	>
-) => MaybePromise<void>
+	): MaybePromise<void>
+	$elysiaHookType?: LifeCycleType
+	$elysiaChecksum?: number
+	$elysia?: 'derive' | 'resolve' | (string & {})
+}
 
 export type TraceEvent =
 	| 'request'
@@ -487,81 +530,83 @@ export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
 		: number
 
 export type TraceHandler<
-	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = (
-	lifecycle: Prettify<
-		{
-			context: Context<Route, Decorators>
-			set: Context['set']
-			id: number
-			time: number
-		} & {
-			[x in
-				| 'request'
-				| 'parse'
-				| 'transform'
-				| 'beforeHandle'
-				| 'handle'
-				| 'afterHandle'
-				| 'error'
-				| 'response']: Promise<TraceProcess<'begin'>>
-		} & {
-			store: Decorators['store']
-		}
-	>
-) => MaybePromise<void>
+> = {
+	(
+		lifecycle: Prettify<
+			{
+				context: Context<Route, Singleton>
+				set: Context['set']
+				id: number
+				time: number
+			} & {
+				[x in
+					| 'request'
+					| 'parse'
+					| 'transform'
+					| 'beforeHandle'
+					| 'handle'
+					| 'afterHandle'
+					| 'error'
+					| 'response']: Promise<TraceProcess<'begin'>>
+			} & {
+				store: Singleton['store']
+			}
+		>
+	): MaybePromise<void>
+	$elysiaHookType?: LifeCycleType
+	$elysiaChecksum?: number
+}
 
 export type TraceListener = EventEmitter<{
 	[event in TraceEvent | 'all']: (trace: TraceProcess) => MaybePromise<void>
 }>
 
 export type BodyHandler<
-	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
 > = (
-	context: Prettify<Context<Route, Decorators>>,
+	context: Context<Route, Singleton>,
 	contentType: string
 ) => MaybePromise<any>
 
 export type PreHandler<
-	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
-> = (
-	context: Prettify<PreContext<Decorators>>
-) => MaybePromise<Route['response'] | void>
+> = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
 
 export type GracefulHandler<
-	Instance extends Elysia<any, any, any, any, any, any, any>
+	in Instance extends Elysia<any, any, any, any, any, any, any, any>
 > = (data: Instance) => any
 
 export type ErrorHandler<
 	T extends Record<string, Error> = {},
 	Route extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	}
 > = (
 	context: Prettify<
-		Context<Route, Decorators> &
+		Omit<Context<Route, Singleton>, 'error'> &
 			(
 				| {
 						request: Request
@@ -615,24 +660,23 @@ export type Isolate<T> = {
 	[P in keyof T]: T[P]
 }
 
+type LocalHookDetail = Partial<OpenAPIV3.OperationObject>
+
 export type LocalHook<
-	LocalSchema extends InputSchema = {},
-	Route extends RouteSchema = RouteSchema,
-	Decorators extends DecoratorBase = {
-		request: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
-	Errors extends Record<string, Error> = {},
-	Extension extends BaseMacro = {},
+	LocalSchema extends InputSchema,
+	Schema extends RouteSchema,
+	Singleton extends SingletonBase,
+	Errors extends Record<string, Error>,
+	Extension extends BaseMacro,
 	Path extends string = '',
-	TypedRoute extends RouteSchema = Route extends {
+	TypedRoute extends RouteSchema = Schema extends {
 		params: Record<string, unknown>
 	}
-		? Route
-		: Route & {
-				params: Record<GetPathParameter<Path>, string>
+		? Schema
+		: Schema & {
+				params: undefined extends Schema['params']
+					? Record<GetPathParameter<Path>, string>
+					: Schema['params']
 		  }
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
@@ -648,45 +692,49 @@ export type LocalHook<
 		 * - 'arraybuffer': parse body as readable stream
 		 */
 		type?: ContentType
-		detail?: Partial<OpenAPIV3.OperationObject>
+		detail?: LocalHookDetail
 		/**
 		 * Custom body parser
 		 */
-		parse?: MaybeArray<BodyHandler<TypedRoute, Decorators>>
+		parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 		/**
 		 * Transform context's value
 		 */
-		transform?: MaybeArray<TransformHandler<TypedRoute, Decorators>>
+		transform?: MaybeArray<TransformHandler<TypedRoute, Singleton>>
 		/**
 		 * Execute before main handler
 		 */
-		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
+		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 		/**
 		 * Execute after main handler
 		 */
-		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Decorators>>
+		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 		/**
 		 * Execute after main handler
 		 */
-		mapResponse?: MaybeArray<MapResponse<TypedRoute, Decorators>>
+		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 		/**
 		 * Catch error
 		 */
-		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
+		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 		/**
 		 * Custom body parser
 		 */
-		onResponse?: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+		onResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	}
 
-export type ComposedHandler = (context: Context) => MaybePromise<Response>
+export type ComposedHandler = {
+	(context: Context): MaybePromise<Response>
+	compose(): Function
+	composed: Function
+}
 
 export interface InternalRoute {
 	method: HTTPMethod
 	path: string
 	composed: ComposedHandler | Response | null
 	handler: Handler
-	hooks: LocalHook
+	hooks: LocalHook<any, any, any, any, any, any, any>
 }
 
 export type SchemaValidator = {
@@ -701,7 +749,7 @@ export type SchemaValidator = {
 export type ListenCallback = (server: Server) => MaybePromise<void>
 
 export type AddPrefix<Prefix extends string, T> = {
-	[K in keyof T as `${Prefix}${K & string}`]: T[K]
+	[K in keyof T as Prefix extends string ? `${Prefix}${K & string}` : K]: T[K]
 }
 
 export type AddPrefixCapitalize<Prefix extends string, T> = {
@@ -722,8 +770,8 @@ export type Checksum = {
 	checksum: number
 	stack?: string
 	routes?: InternalRoute[]
-	decorators?: DecoratorBase['request']
-	store?: DecoratorBase['store']
+	decorators?: SingletonBase['decorator']
+	store?: SingletonBase['store']
 	type?: DefinitionBase['type']
 	error?: DefinitionBase['error']
 	dependencies?: Record<string, Checksum[]>
@@ -737,65 +785,75 @@ export type Checksum = {
 	}[]
 }
 
-// @ts-ignore
-export type BaseMacro = Record<string, BaseMacro | ((a: any) => unknown)>
+export type BaseMacro = Record<
+	string,
+	Record<string, unknown> | ((...a: any) => unknown)
+>
 
-export type MacroToProperty<T extends BaseMacro> = Prettify<{
+export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
 			? Params | undefined
 			: T[K]
-		: MacroToProperty<T[K]>
+		: T[K] extends BaseMacro
+		? MacroToProperty<T[K]>
+		: never
 }>
 
+export type ElysiaFn = {
+	(...a: any[]): any
+	$elysiaHookType?: LifeCycleType
+	$elysiaChecksum?: number
+}
+
 export interface MacroManager<
-	TypedRoute extends RouteSchema = {},
-	Decorators extends DecoratorBase = {
-		request: {}
+	in out TypedRoute extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
 		store: {}
 		derive: {}
 		resolve: {}
 	},
-	Errors extends Record<string, Error> = {}
+	in out Errors extends Record<string, Error> = {}
 > {
-	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Decorators>>): unknown
+	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
 	onParse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<BodyHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 	): unknown
 
-	onTransform(fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>): unknown
+	onTransform(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
 	onTransform(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onBeforeHandle(
-		fn: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 	onBeforeHandle(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<OptionalHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 
-	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Decorators>>): unknown
+	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>): unknown
 	onAfterHandle(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<AfterHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onError(
-		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
+		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 	onError(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Decorators>>
+		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 
-	onResponse(fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>): unknown
+	onResponse(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
 	onResponse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<VoidHandler<TypedRoute, Decorators>>
+		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
 	events: {
@@ -804,11 +862,121 @@ export interface MacroManager<
 	}
 }
 
-// Route extends RouteSchema = {},
-// Decorators extends DecoratorBase = {
-// 	request: {}
-// 	store: {}
-// 	derive: {}
-// 	resolve: {}
-// },
-// Path extends string = ''
+export type MacroQueue = {
+	(manager: MacroManager<any, any, any>): unknown
+	$elysiaChecksum?: number
+}[]
+
+type _CreateEden<
+	Path extends string,
+	Property extends Record<string, unknown> = {}
+> = Path extends `${infer Start}/${infer Rest}`
+	? {
+			[x in Start]: _CreateEden<Rest, Property>
+	  }
+	: {
+			[x in Path]: Property
+	  }
+
+export type CreateEden<
+	Path extends string,
+	Property extends Record<string, unknown> = {}
+> = Path extends `/${infer Rest}`
+	? _CreateEden<Rest, Property>
+	: Path extends ''
+	? _CreateEden<'index', Property>
+	: _CreateEden<Path, Property>
+
+export type ComposeElysiaResponse<Response, Handle> = Handle extends (
+	...a: any[]
+) => infer A
+	? _ComposeElysiaResponse<Response, Awaited<A>>
+	: _ComposeElysiaResponse<Response, Awaited<Handle>>
+
+type _ComposeElysiaResponse<Response, Handle> = Prettify<
+	unknown extends Response
+		? {
+				200: Exclude<Handle, { [ELYSIA_RESPONSE]: any }>
+		  } & {
+				[ErrorResponse in Extract<
+					Handle,
+					{ response: any }
+				> as ErrorResponse extends {
+					[ELYSIA_RESPONSE]: infer Status extends number
+				}
+					? Status
+					: never]: ErrorResponse['response']
+		  }
+		: Response extends { 200: unknown }
+		? Response
+		: {
+				200: Response
+		  }
+>
+
+export type MergeElysiaInstances<
+	Instances extends Elysia<any, any, any, any, any, any>[] = [],
+	Prefix extends string = '',
+	Scoped extends boolean = false,
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Definitions extends DefinitionBase = {
+		type: {}
+		error: {}
+	},
+	Metadata extends MetadataBase = {
+		schema: {}
+		macro: {}
+	},
+	Routes extends RouteBase = {}
+> = Instances extends [
+	infer Current extends Elysia<any, any, any, any, any, any>,
+	...infer Rest extends Elysia<any, any, any, any, any, any>[]
+]
+	? Current['_types']['Scoped'] extends true
+		? MergeElysiaInstances<
+				Rest,
+				Prefix,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes
+		  >
+		: MergeElysiaInstances<
+				Rest,
+				Prefix,
+				Scoped,
+				Singleton & Current['_types']['Singleton'],
+				Definitions & Current['_types']['Definitions'],
+				Metadata & Current['_types']['Metadata'],
+				Routes &
+					(Prefix extends ``
+						? Current['_routes']
+						: AddPrefix<Prefix, Current['_routes']>)
+		  >
+	: Elysia<
+			Prefix,
+			Scoped,
+			{
+				decorator: Prettify<Singleton['decorator']>
+				store: Prettify<Singleton['store']>
+				derive: Prettify<Singleton['derive']>
+				resolve: Prettify<Singleton['resolve']>
+			},
+			{
+				type: Prettify<Definitions['type']>
+				error: Prettify<Definitions['error']>
+			},
+			{
+				schema: Prettify<Metadata['schema']>
+				macro: Prettify<Metadata['macro']>
+			},
+			Routes
+	  >
+
+export type LifeCycleType = 'global' | 'local' | 'scoped'
