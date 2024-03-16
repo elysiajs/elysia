@@ -1,4 +1,4 @@
-# 1.0.0 - 8 Mar 2024
+# 1.0.0 - 16 Mar 2024
 Improvement:
 - fine-grained reactive cookie
 - using single source of truth for cookie
