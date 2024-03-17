@@ -102,6 +102,8 @@ import type {
 	EphemeralType
 } from './types'
 
+type AnyElysia = Elysia<any, any, any, any, any, any, any, any> // prettier-ignore
+
 /**
  * ### Elysia Server
  * Main instance to create web server using Elysia
@@ -1886,7 +1888,7 @@ export default class Elysia<
 		error?: {
 			prototype: Error
 		}
-	): Elysia<any, any, any, any, any, any, any, any> {
+	): AnyElysia {
 		switch (typeof name) {
 			case 'string':
 				// @ts-ignore
@@ -2146,10 +2148,7 @@ export default class Elysia<
 		return this
 	}
 
-	group<
-		const Prefix extends string,
-		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>
-	>(
+	group<const Prefix extends string, const NewElysia extends AnyElysia>(
 		prefix: Prefix,
 		run: (
 			group: Elysia<
@@ -2176,7 +2175,7 @@ export default class Elysia<
 
 	group<
 		const Prefix extends string,
-		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>,
+		const NewElysia extends AnyElysia,
 		const Input extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
@@ -2241,13 +2240,9 @@ export default class Elysia<
 		prefix: string,
 		schemaOrRun:
 			| LocalHook<any, any, any, any, any, any>
-			| ((
-					group: Elysia<any, any, any, any, any, any, any, any>
-			  ) => Elysia<any, any, any, any, any, any, any, any>),
-		run?: (
-			group: Elysia<any, any, any, any, any, any, any, any>
-		) => Elysia<any, any, any, any, any, any, any, any>
-	): Elysia<any, any, any, any, any, any, any, any> {
+			| ((group: AnyElysia) => AnyElysia),
+		run?: (group: AnyElysia) => AnyElysia
+	): AnyElysia {
 		const instance = new Elysia({
 			...(this.config || {}),
 			prefix: ''
@@ -2375,7 +2370,7 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>,
+		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema']
@@ -2411,7 +2406,7 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			Extract<keyof Definitions['type'], string>
 		>,
-		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>,
+		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema']
@@ -2480,13 +2475,9 @@ export default class Elysia<
 	guard(
 		hook:
 			| LocalHook<any, any, any, any, any, any, any>
-			| ((
-					group: Elysia<any, any, any, any, any, any, any, any>
-			  ) => Elysia<any, any, any, any, any, any, any, any>),
-		run?: (
-			group: Elysia<any, any, any, any, any, any, any, any>
-		) => Elysia<any, any, any, any, any, any, any, any>
-	): Elysia<any, any, any, any, any, any, any, any> {
+			| ((group: AnyElysia) => AnyElysia),
+		run?: (group: AnyElysia) => AnyElysia
+	): AnyElysia {
 		if (!run) {
 			if (typeof hook === 'object') {
 				this.event = mergeLifeCycle(
@@ -2507,7 +2498,7 @@ export default class Elysia<
 			return this.guard({}, hook)
 		}
 
-		const instance = new Elysia<any, any, any, any, any, any, any, any>({
+		const instance: AnyElysia = new Elysia({
 			...this.config,
 			prefix: ''
 		})
@@ -2569,17 +2560,8 @@ export default class Elysia<
 	 * Inline fn
 	 */
 	use<
-		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>,
-		const Param extends Elysia<
-			any,
-			any,
-			any,
-			any,
-			any,
-			any,
-			any,
-			any
-		> = this
+		const NewElysia extends AnyElysia,
+		const Param extends AnyElysia = this
 	>(
 		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>
 	): NewElysia['_scoped'] extends false
@@ -2612,7 +2594,7 @@ export default class Elysia<
 	/**
 	 * Entire Instance
 	 **/
-	use<const NewElysia extends Elysia<any, any, any, any, any, any, any, any>>(
+	use<const NewElysia extends AnyElysia>(
 		instance: MaybePromise<NewElysia>
 	): NewElysia['_scoped'] extends false
 		? Elysia<
@@ -2644,11 +2626,9 @@ export default class Elysia<
 	/**
 	 * Import fn
 	 */
-	use<const NewElysia extends Elysia<any, any, any, any, any, any, any, any>>(
+	use<const NewElysia extends AnyElysia>(
 		plugin: Promise<{
-			default: (
-				elysia: Elysia<any, any, any, any, any, any, any, any>
-			) => MaybePromise<NewElysia>
+			default: (elysia: AnyElysia) => MaybePromise<NewElysia>
 		}>
 	): NewElysia['_scoped'] extends false
 		? Elysia<
@@ -2680,18 +2660,7 @@ export default class Elysia<
 	/**
 	 * Import entire instance
 	 */
-	use<
-		const LazyLoadElysia extends Elysia<
-			any,
-			any,
-			any,
-			any,
-			any,
-			any,
-			any,
-			any
-		>
-	>(
+	use<const LazyLoadElysia extends AnyElysia>(
 		plugin: Promise<{
 			default: LazyLoadElysia
 		}>
@@ -2739,27 +2708,17 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| MaybePromise<Elysia<any, any, any, any, any, any, any, any>>
-			| Elysia<any, any, any, any, any, any, any, any>[]
+			| AnyElysia[]
 			| MaybePromise<
-					(
-						app: Elysia<any, any, any, any, any, any, any, any>
-					) => MaybePromise<
-						Elysia<any, any, any, any, any, any, any, any>
-					>
+					AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 			  >
 			| Promise<{
-					default: Elysia<any, any, any, any, any, any, any, any>
-			  }>
-			| Promise<{
-					default: (
-						elysia: Elysia<any, any, any, any, any, any, any, any>
-					) => MaybePromise<
-						Elysia<any, any, any, any, any, any, any, any>
-					>
+					default:
+						| AnyElysia
+						| ((app: AnyElysia) => MaybePromise<AnyElysia>)
 			  }>,
 		options?: { scoped?: boolean }
-	): Elysia<any, any, any, any, any, any, any, any> {
+	): AnyElysia {
 		if (options?.scoped)
 			return this.guard({}, (app) => app.use(plugin as any))
 
@@ -2805,11 +2764,7 @@ export default class Elysia<
 	}
 
 	private _use(
-		plugin:
-			| Elysia<any, any, any, any, any, any, any, any>
-			| ((
-					app: Elysia<any, any, any, any, any, any, any, any>
-			  ) => MaybePromise<Elysia<any, any, any, any, any, any, any, any>>)
+		plugin: AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 	) {
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
@@ -3243,25 +3198,19 @@ export default class Elysia<
 	}
 
 	mount(
-		handle:
-			| ((request: Request) => MaybePromise<Response>)
-			| Elysia<any, any, any, any, any, any, any, any>
+		handle: ((request: Request) => MaybePromise<Response>) | AnyElysia
 	): this
 	mount(
 		path: string,
-		handle:
-			| ((request: Request) => MaybePromise<Response>)
-			| Elysia<any, any, any, any, any, any, any, any>
+		handle: ((request: Request) => MaybePromise<Response>) | AnyElysia
 	): this
 
 	mount(
 		path:
 			| string
 			| ((request: Request) => MaybePromise<Response>)
-			| Elysia<any, any, any, any, any, any, any, any>,
-		handle?:
-			| ((request: Request) => MaybePromise<Response>)
-			| Elysia<any, any, any, any, any, any, any, any>
+			| AnyElysia,
+		handle?: ((request: Request) => MaybePromise<Response>) | AnyElysia
 	) {
 		if (
 			path instanceof Elysia ||
