@@ -2496,7 +2496,7 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| Elysia<any, any, any, any, any, any, any, any>
+			| MaybePromise<Elysia<any, any, any, any, any, any, any, any>>
 			| Elysia<any, any, any, any, any, any, any, any>[]
 			| MaybePromise<
 					(
