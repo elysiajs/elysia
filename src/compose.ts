@@ -609,12 +609,12 @@ export const composeHandler = ({
 					case 'json':
 					case 'application/json':
 						if (hasErrorHandler)
-							fnLiteral += `const body = await c.request.text()
+							fnLiteral += `const reqBody = await c.request.text()
 							
 							try {
-								c.body = JSON.parse(body)
+								c.body = JSON.parse(reqBody)
 							} catch {
-								throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
+								throw new ParseError('Failed to parse body as found: ' + (typeof reqBody === "string" ? "'" + reqBody + "'" : reqBody), reqBody)
 							}`
 						else fnLiteral += `c.body = await c.request.json()`
 						break
