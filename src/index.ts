@@ -4982,7 +4982,7 @@ export type {
 	LifeCycleEvent,
 	TraceEvent,
 	LifeCycleStore,
-  LifeCycleType,
+	LifeCycleType,
 	MaybePromise,
 	ListenCallback,
 	UnwrapSchema,
