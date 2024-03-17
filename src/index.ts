@@ -13,7 +13,7 @@ import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
-import { mergeDeep } from './utils'
+import { mergeDeep, PromiseGroup } from './utils'
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -260,9 +260,7 @@ export default class Elysia<
 		trace: Sucrose.TraceInference
 	}
 
-	private lazyLoadModules: Promise<
-		Elysia<any, any, any, any, any, any, any, any>
-	>[] = []
+	private promisedModules = new PromiseGroup()
 
 	constructor(config?: ElysiaConfig<BasePath, Scoped>) {
 		this.config = {
@@ -2530,7 +2528,7 @@ export default class Elysia<
 		}
 
 		if (plugin instanceof Promise) {
-			this.lazyLoadModules.push(
+			this.promisedModules.add(
 				plugin
 					.then((plugin) => {
 						if (typeof plugin === 'function') {
@@ -2565,7 +2563,7 @@ export default class Elysia<
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
 			if (instance instanceof Promise) {
-				this.lazyLoadModules.push(
+				this.promisedModules.add(
 					instance
 						.then((plugin) => {
 							if (plugin instanceof Elysia) {
@@ -2620,6 +2618,15 @@ export default class Elysia<
 			}
 
 			return instance
+		}
+
+		if (plugin.promisedModules.size) {
+			this.promisedModules.add(
+				plugin.modules
+					.then(() => this._use(plugin))
+					.then((x) => x.compile())
+			)
+			return this
 		}
 
 		const { name, seed } = plugin.config
@@ -4888,7 +4895,7 @@ export default class Elysia<
 			}
 		})
 
-		Promise.all(this.lazyLoadModules).then(() => {
+		this.promisedModules.then(() => {
 			Bun?.gc(false)
 		})
 
@@ -4930,7 +4937,7 @@ export default class Elysia<
 	 * Wait until all lazy loaded modules all load is fully
 	 */
 	get modules() {
-		return Promise.all(this.lazyLoadModules)
+		return Promise.resolve(this.promisedModules)
 	}
 }
 

@@ -719,3 +719,53 @@ export const isNumericString = (message: string): boolean => {
 
 	return false
 }
+
+export class PromiseGroup implements PromiseLike<void> {
+	private root: Promise<any> | null = null
+	private promises: Promise<any>[] = []
+
+	constructor(public onError: (error: any) => void = console.error) {}
+
+	/**
+	 * The number of promises still being awaited.
+	 */
+	get size() {
+		return this.promises.length
+	}
+
+	/**
+	 * Add a promise to the group.
+	 * @returns The promise that was added.
+	 */
+	add<T>(promise: Promise<T>) {
+		this.promises.push(promise)
+		this.root ||= this.drain()
+		return promise
+	}
+
+	private async drain() {
+		while (this.promises.length > 0) {
+			try {
+				await this.promises[0]
+				this.promises.shift()
+			} catch (error) {
+				this.onError(error)
+			}
+		}
+		this.root = null
+	}
+
+	// Allow the group to be awaited.
+	then<TResult1 = void, TResult2 = never>(
+		onfulfilled?:
+			| ((value: void) => TResult1 | PromiseLike<TResult1>)
+			| undefined
+			| null,
+		onrejected?:
+			| ((reason: any) => TResult2 | PromiseLike<TResult2>)
+			| undefined
+			| null
+	): PromiseLike<TResult1 | TResult2> {
+		return (this.root ?? Promise.resolve()).then(onfulfilled, onrejected)
+	}
+}
