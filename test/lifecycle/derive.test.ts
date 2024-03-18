@@ -137,6 +137,30 @@ describe('derive', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
+	it('as scoped', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.derive({ as: 'scoped' }, ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => 'NOOP')
+
+		const middle = new Elysia().use(plugin).get('/middle', () => 'NOOP')
+
+		const app = new Elysia().use(middle).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/middle')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/middle'])
+	})
+
 	it('support array', async () => {
 		let total = 0
 

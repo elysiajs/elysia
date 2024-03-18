@@ -1160,8 +1160,35 @@ app.resolve(({ headers }) => {
 
 app.get('/', ({ set }) => {
 	// ? Able to set literal type to set.status
-	set.status = 'I\'m a teapot'
+	set.status = "I'm a teapot"
 
 	// ? Able to number to set.status
 	set.status = 418
 })
+
+// ? Ephemeral and Current type
+{
+	const child = new Elysia()
+		.derive({ as: 'scoped' }, () => {
+			return {
+				hello: 'world'
+			}
+		})
+		.get('/', ({ hello }) => {
+			expectTypeOf<typeof hello>().toEqualTypeOf<'world'>()
+
+			return 'hello'
+		})
+
+	const current = new Elysia().use(child).get('/', ({ hello }) => {
+		expectTypeOf<typeof hello>().toEqualTypeOf<'world'>()
+
+		return 'hello'
+	})
+
+	const parrent = new Elysia().use(current).get('/', (context) => {
+		expectTypeOf<typeof context>().not.toHaveProperty('hello')
+
+		return 'hello'
+	})
+}

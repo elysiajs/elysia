@@ -154,6 +154,12 @@ export interface SingletonBase {
 	resolve: Record<string, unknown>
 }
 
+export interface EphemeralType {
+	derive: SingletonBase['derive']
+	resolve: SingletonBase['resolve']
+	schema: MetadataBase['schema']
+}
+
 export interface DefinitionBase {
 	type: Record<string, unknown>
 	error: Record<string, Error>
@@ -414,8 +420,9 @@ export type OptionalHandler<
 		store: {}
 		derive: {}
 		resolve: {}
-	}
-> = Handler<Route, Singleton> extends (context: infer Context) => infer Returned
+	},
+	Path extends string = ''
+> = Handler<Route, Singleton, Path> extends (context: infer Context) => infer Returned
 	? (context: Context) => Returned | MaybePromise<void>
 	: never
 
@@ -473,7 +480,8 @@ export type TransformHandler<
 		store: {}
 		derive: {}
 		resolve: {}
-	}
+	},
+	BasePath extends string = ''
 > = {
 	(
 		context: Prettify<
@@ -481,7 +489,8 @@ export type TransformHandler<
 				Route,
 				Omit<Singleton, 'resolve'> & {
 					resolve: {}
-				}
+				},
+				BasePath
 			>
 		>
 	): MaybePromise<void>
@@ -575,9 +584,10 @@ export type BodyHandler<
 		store: {}
 		derive: {}
 		resolve: {}
-	}
+	},
+	Path extends string = ''
 > = (
-	context: Context<Route, Singleton>,
+	context: Context<Route, Singleton, Path>,
 	contentType: string
 ) => MaybePromise<any>
 

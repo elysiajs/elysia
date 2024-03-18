@@ -122,7 +122,7 @@ const app = new Elysia()
 		.use(plugin)
 
 	type types = typeof types._types
-	type ephemeral = typeof types._ephemeral
+	type current = typeof types._volatile
 
 	expectTypeOf<types['Singleton']>().toEqualTypeOf<{
 		decorator: {
@@ -135,11 +135,14 @@ const app = new Elysia()
 		resolve: {}
 	}>()
 
-	expectTypeOf<ephemeral['Singleton']>().toEqualTypeOf<{
+	expectTypeOf<current['derive']>().toEqualTypeOf<{
 		derive: {
 			readonly b: 'b'
 		}
-		resolve: {
+	}>
+
+	expectTypeOf<current['resolve']>().toEqualTypeOf<{
+		derive: {
 			readonly b: 'b'
 		}
 	}>
