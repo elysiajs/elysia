@@ -782,6 +782,8 @@ export const composeHandler = ({
 			unit: hooks.transform.length
 		})
 
+		fnLiteral += '\nlet transformed\n'
+
 		for (let i = 0; i < hooks.transform.length; i++) {
 			const transform = hooks.transform[i]
 
@@ -789,14 +791,14 @@ export const composeHandler = ({
 				name: transform.name
 			})
 
-			if (transform.$elysia === 'derive')
-				fnLiteral += isAsync(transform)
-					? `Object.assign(c, await transform[${i}](c));`
-					: `Object.assign(c, transform[${i}](c));`
+			fnLiteral += isAsync(transform)
+				? `transformed = await transform[${i}](c)\n`
+				: `transformed = transform[${i}](c)\n`
+
+			fnLiteral += `if(transformed?.[ELYSIA_RESPONSE])
+				throw transformed
 			else
-				fnLiteral += isAsync(transform)
-					? `await transform[${i}](c);`
-					: `transform[${i}](c);`
+				Object.assign(c, transformed)\n`
 
 			endUnit()
 		}
@@ -954,6 +956,8 @@ export const composeHandler = ({
 			unit: hooks.beforeHandle.length
 		})
 
+		let hasResolve = false
+
 		for (let i = 0; i < hooks.beforeHandle.length; i++) {
 			const beforeHandle = hooks.beforeHandle[i]
 
@@ -964,10 +968,22 @@ export const composeHandler = ({
 			const returning = hasReturn(beforeHandle.toString())
 
 			// @ts-ignore
-			if (beforeHandle.$elysia === 'resolve') {
+			const isResolver = beforeHandle.$elysia === 'resolve'
+
+			if (isResolver) {
+				if (!hasResolve) {
+					hasResolve = true
+					fnLiteral += '\nlet resolved\n'
+				}
+
 				fnLiteral += isAsync(beforeHandle)
-					? `Object.assign(c, await beforeHandle[${i}](c));`
-					: `Object.assign(c, beforeHandle[${i}](c));`
+					? `resolved = await beforeHandle[${i}](c);\n`
+					: `resolved = beforeHandle[${i}](c);\n`
+
+				fnLiteral += `if(resolved[ELYSIA_RESPONSE])
+						throw resolved
+					else
+						Object.assign(c, resolved)\n`
 			} else if (!returning) {
 				fnLiteral += isAsync(beforeHandle)
 					? `await beforeHandle[${i}](c);\n`
@@ -975,6 +991,7 @@ export const composeHandler = ({
 
 				endUnit()
 			} else {
+				fnLiteral += `Object.assign(c, be);`
 				fnLiteral += isAsync(beforeHandle)
 					? `be = await beforeHandle[${i}](c);\n`
 					: `be = beforeHandle[${i}](c);\n`

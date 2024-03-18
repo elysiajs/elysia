@@ -1,18 +1,17 @@
 import { Elysia, error, t } from '../src'
 import { post, req } from '../test/utils'
 
-const elysia1 = new Elysia()
-const elysia2 = new Elysia()
-const elysia3 = new Elysia()
+const app = new Elysia()
+	.resolve(() => {
+		return error(418)
 
-elysia3.get('/foo', () => 'foo')
-elysia2.use(elysia3)
-elysia1.use(elysia2)
+		return {
+			a: 'a'
+		}
+	})
+	.get('/', ({ a }) => a)
+	.listen(3000)
 
-console.log(elysia1.routes)
-
-elysia1.handle(
-	req('/foo')
-)
-	.then((x) => x.text())
+app.handle(req('/'))
+	.then((x) => x.status)
 	.then(console.log)

@@ -4957,7 +4957,7 @@ export default class Elysia<
 	 * Wait until all lazy loaded modules all load is fully
 	 */
 	get modules() {
-		return Promise.resolve(this.promisedModules)
+		return Promise.all(this.promisedModules.promises)
 	}
 }
 

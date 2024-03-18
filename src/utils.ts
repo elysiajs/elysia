@@ -721,8 +721,8 @@ export const isNumericString = (message: string): boolean => {
 }
 
 export class PromiseGroup implements PromiseLike<void> {
-	private root: Promise<any> | null = null
-	private promises: Promise<any>[] = []
+	root: Promise<any> | null = null
+	promises: Promise<any>[] = []
 
 	constructor(public onError: (error: any) => void = console.error) {}
 

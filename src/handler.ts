@@ -116,7 +116,7 @@ export const mapResponse = (
 	// @ts-ignore
 	if (response?.$passthrough)
 		// @ts-ignore
-		response = response.$passthrough
+		response = response?.[response.$passthrough]
 
 	// @ts-ignore
 	if (response?.[ELYSIA_RESPONSE]) {
@@ -397,7 +397,7 @@ export const mapEarlyResponse = (
 	// @ts-ignore
 	if (response?.$passthrough)
 		// @ts-ignore
-		response = response.$passthrough
+		response = response?.[response.$passthrough]
 
 	// @ts-ignore
 	if (response?.[ELYSIA_RESPONSE]) {
@@ -676,7 +676,7 @@ export const mapCompactResponse = (
 	// @ts-ignore
 	if (response?.$passthrough)
 		// @ts-ignore
-		response = response.$passthrough
+		response = response?.[response.$passthrough]
 
 	// @ts-ignore
 	if (response?.[ELYSIA_RESPONSE])

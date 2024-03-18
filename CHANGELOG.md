@@ -1,10 +1,13 @@
 # 1.0.1 - 18 Mar 2024
 Improvement:
 - mapHandler now check passthrough once instead of twice
-- exclude `return error` from `derive` and `resolve`
+- exclude return type of`ELYSIA_RESPONSE` type from `derive` and `resolve`
+- throw error if `error` is return in `derive` and `resolve`
+- handle `return error` on `transform`
 
 Bug fix:
 - explicit `type: 'json'` with body schema throw unexpected `body.Check` is not a function
+- [#549](https://github.com/elysiajs/elysia/issues/495) await the .modules of nested Elysia instances
 
 # 1.0.0 - 16 Mar 2024
 Improvement:
