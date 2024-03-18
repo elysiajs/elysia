@@ -36,7 +36,7 @@ await Promise.all([
 await Bun.build({
 	entrypoints: ['./src/index.ts'],
 	outdir: './dist/bun',
-	minify: false,
+	minify: true,
 	target: 'bun',
 	sourcemap: 'external',
 	external: ['@sinclair/typebox']

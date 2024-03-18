@@ -1,3 +1,11 @@
+# 1.0.1 - 18 Mar 2024
+Improvement:
+- mapHandler now check passthrough once instead of twice
+- exclude `return error` from `derive` and `resolve`
+
+Bug fix:
+- explicit `type: 'json'` with body schema throw unexpected `body.Check` is not a function
+
 # 1.0.0 - 16 Mar 2024
 Improvement:
 - fine-grained reactive cookie

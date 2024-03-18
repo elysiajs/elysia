@@ -47,7 +47,8 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError
+	type InternalServerError,
+	ELYSIA_RESPONSE
 } from './error'
 
 import type {
@@ -913,7 +914,13 @@ export default class Elysia<
 					decorator: Singleton['decorator']
 					store: Singleton['store']
 					derive: Singleton['resolve']
-					resolve: Prettify<Singleton['resolve'] & Awaited<Resolver>>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							Exclude<
+								Awaited<Resolver>,
+								{ [ELYSIA_RESPONSE]: any }
+							>
+					>
 				},
 				Definitions,
 				Metadata,
@@ -974,7 +981,10 @@ export default class Elysia<
 			decorator: EphemeralSingleton['decorator']
 			store: EphemeralSingleton['store']
 			derive: EphemeralSingleton['derive']
-			resolve: Prettify<EphemeralSingleton['resolve'] & Awaited<Resolver>>
+			resolve: Prettify<
+				EphemeralSingleton['resolve'] &
+					Exclude<Awaited<Resolver>, { [ELYSIA_RESPONSE]: any }>
+			>
 		},
 		EphemeralMetadata
 	>
@@ -4364,7 +4374,11 @@ export default class Elysia<
 		{
 			decorator: EphemeralSingleton['decorator']
 			store: EphemeralSingleton['store']
-			derive: Prettify<EphemeralSingleton['derive'] & Awaited<Derivative>>
+			derive: Prettify<
+				EphemeralSingleton['derive'] &
+					// Exclude `return error`
+					Exclude<Awaited<Derivative>, { [ELYSIA_RESPONSE]: any }>
+			>
 			resolve: EphemeralSingleton['resolve']
 		},
 		EphemeralMetadata
@@ -4405,7 +4419,13 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Prettify<Singleton['derive'] & Awaited<Derivative>>
+					derive: Prettify<
+						Singleton['derive'] &
+							Exclude<
+								Awaited<Derivative>,
+								{ [ELYSIA_RESPONSE]: any }
+							>
+					>
 					resolve: Singleton['resolve']
 				},
 				Definitions,
