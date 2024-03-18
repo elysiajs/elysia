@@ -768,10 +768,10 @@ export class PromiseGroup implements PromiseLike<void> {
 		while (this.promises.length > 0) {
 			try {
 				await this.promises[0]
-				this.promises.shift()
 			} catch (error) {
 				this.onError(error)
 			}
+			this.promises.shift()
 		}
 		this.root = null
 	}
