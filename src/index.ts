@@ -5015,6 +5015,7 @@ export type {
 	LifeCycleEvent,
 	TraceEvent,
 	LifeCycleStore,
+	LifeCycleType,
 	MaybePromise,
 	ListenCallback,
 	UnwrapSchema,
