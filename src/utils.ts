@@ -191,9 +191,13 @@ export const mergeHook = (
 		params: b?.params ?? a?.params,
 		// @ts-ignore
 		query: b?.query ?? a?.query,
-		// @ts-ignore
 		// ? This order is correct - SaltyAom
-		response: mergeResponses(a?.response, b?.response),
+		response: mergeResponse(
+			// @ts-ignore
+			a?.response,
+			// @ts-ignore
+			b?.response
+		),
 		type: a?.type || b?.type,
 		detail: mergeDeep(
 			// @ts-ignore
