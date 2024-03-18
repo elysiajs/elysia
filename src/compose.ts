@@ -341,7 +341,12 @@ export const composeHandler = ({
 	}
 }): ComposedHandler => {
 	const isHandleFn = typeof handler === 'function'
-	if (!isHandleFn) handler = mapCompactResponse(handler)
+
+	if (!isHandleFn)
+		handler = mapResponse(handler, {
+			// @ts-expect-error private property
+			headers: app.setHeaders ?? {}
+		})
 
 	const hasErrorHandler =
 		(app.config.forceErrorEncapsulation &&
@@ -386,11 +391,6 @@ export const composeHandler = ({
 		method !== 'HEAD' &&
 		hooks.type !== 'none' &&
 		(inference.body || !!validator.body)
-
-	// @ts-expect-error private
-	const defaultHeaders = app.setHeaders
-	const hasDefaultHeaders =
-		defaultHeaders && !!Object.keys(defaultHeaders).length
 
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders = inference.headers || validator.headers
@@ -556,11 +556,7 @@ export const composeHandler = ({
 
 	const hasTraceSet = traceInference.set
 	const hasSet =
-		inference.cookie ||
-		inference.set ||
-		hasTraceSet ||
-		hasHeaders ||
-		hasDefaultHeaders
+		inference.cookie || inference.set || hasTraceSet || hasHeaders
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
@@ -782,7 +778,7 @@ export const composeHandler = ({
 			unit: hooks.transform.length
 		})
 
-		fnLiteral += '\nlet transformed\n'
+		if (hooks.transform.length) fnLiteral += '\nlet transformed\n'
 
 		for (let i = 0; i < hooks.transform.length; i++) {
 			const transform = hooks.transform[i]
@@ -1166,9 +1162,8 @@ export const composeHandler = ({
 			fnLiteral += encodeCookie
 
 			if (handler instanceof Response) {
-				fnLiteral +=
-					inference.set || hasDefaultHeaders
-						? `if(
+				fnLiteral += inference.set
+					? `if(
 					isNotEmpty(c.set.headers) ||
 					c.set.status !== 200 ||
 					c.set.redirect ||
@@ -1177,7 +1172,7 @@ export const composeHandler = ({
 					return mapResponse(${handle}.clone(), c.set, c.request)
 				else
 					return ${handle}.clone()`
-						: `return ${handle}.clone()`
+					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
@@ -1215,9 +1210,8 @@ export const composeHandler = ({
 			report('afterHandle')()
 
 			if (handler instanceof Response) {
-				fnLiteral +=
-					inference.set || hasDefaultHeaders
-						? `if(
+				fnLiteral += inference.set
+					? `if(
 					isNotEmpty(c.set.headers) ||
 					c.set.status !== 200 ||
 					c.set.redirect ||
@@ -1226,7 +1220,7 @@ export const composeHandler = ({
 					return mapResponse(${handle}.clone(), c.set, c.request)
 				else
 					return ${handle}.clone()`
-						: `return ${handle}.clone()`
+					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)

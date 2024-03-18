@@ -1,16 +1,10 @@
-import { Elysia } from '../src'
+import { Elysia, error, t } from '../src'
 
-const child = new Elysia()
-	// ? This is only in local
-	.derive(() => ({
-		hello: 'world'
-	}))
-	/**
-	 * ? Since hello is only in local
-	 * ? It might not be available in global
-	 * 
-	 **/ 
-	.mapDerive(({ hello }) => ({
-		hello
-	}))
-	.get('/child', ({ hello }) => hello)
+const app = new Elysia({ precompile: true })
+	.headers({
+		a: 'hello'
+	})
+	.get('/', 'a')
+	.listen(3000)
+
+console.log(app.routes[0].composed?.toString())

@@ -1,3 +1,18 @@
+# 1.0.3 - 18 Mar 2024
+Improvement:
+- Reduce instruction for static resource
+
+Bug fix:
+- Fix returning mulitple status code using `error` doesn't accept the response
+
+# 1.0.2 - 18 Mar 2024
+Feature:
+- add `scoped` support for `derive` and `resolve`
+
+Improvement:
+- Type soundness
+- type inference performance improvement
+
 # 1.0.1 - 18 Mar 2024
 Improvement:
 - `mapHandler` now check passthrough once instead of twice
