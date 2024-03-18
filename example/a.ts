@@ -1,17 +1,33 @@
 import { Elysia, error, t } from '../src'
+import { sucrose } from '../src/sucrose'
 import { post, req } from '../test/utils'
 
-const app = new Elysia()
-	.resolve(() => {
-		return error(418)
-
-		return {
-			a: 'a'
-		}
+console.log(
+	sucrose({
+		handler: function ({ query }) {
+			query.a
+		},
+		afterHandle: [],
+		beforeHandle: [],
+		error: [
+			function a({
+				query,
+				query: { a, c: d },
+				headers: { hello },
+				...rest
+			}) {
+				query.b
+				rest.query.e
+			},
+			({ query: { f } }) => {}
+		],
+		mapResponse: [],
+		onResponse: [],
+		parse: [],
+		request: [],
+		start: [],
+		stop: [],
+		trace: [],
+		transform: []
 	})
-	.get('/', ({ a }) => a)
-	.listen(3000)
-
-app.handle(req('/'))
-	.then((x) => x.status)
-	.then(console.log)
+)

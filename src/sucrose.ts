@@ -324,6 +324,13 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 	return aliases
 }
 
+const accessor = <T extends string, P extends string>(parent: T, prop: P) =>
+	[
+		parent + '.' + prop,
+		parent + '["' + prop + '"]',
+		parent + "['" + prop + "']"
+	] as const
+
 export const extractMainParameter = (parameter: string) => {
 	if (!parameter) return
 
@@ -357,6 +364,8 @@ export const inferBodyReference = (
 		code.includes(alias + "['" + type + "']")
 
 	for (let alias of aliases) {
+		if (!alias) continue
+
 		if (alias.charCodeAt(0) === 123) {
 			alias = retrieveRootParamters(alias)
 
@@ -391,7 +400,18 @@ export const inferBodyReference = (
 
 		if (!inference.query && access('query', alias)) inference.query = true
 
-		if (inference.query)
+		if (
+			['return'].some((type) =>
+				accessor(type + ' ' + alias, 'query').some((key) =>
+					code.includes(key)
+				)
+			)
+		) {
+			inference.query = true
+			inference.unknownQueries = true
+		}
+
+		if (inference.query && !inference.unknownQueries)
 			while (true) {
 				let keyword = alias + '.'
 				if (code.includes(keyword + 'query')) keyword = alias + '.query'
@@ -675,6 +695,19 @@ export const sucrose = (
 			aliases.splice(0, -1, mainParameter)
 
 			inferBodyReference(body, aliases, inference)
+		}
+
+		const context = rootParameters || mainParameter
+		if (
+			context &&
+			['', 'return '].some((type) =>
+				accessor(type + context, 'query').some((key) =>
+					body.includes(key)
+				)
+			)
+		) {
+			inference.query = true
+			inference.unknownQueries = true
 		}
 
 		if (inference.query) {
