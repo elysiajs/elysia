@@ -2504,7 +2504,7 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| Elysia<any, any, any, any, any, any, any, any>
+			| MaybePromise<Elysia<any, any, any, any, any, any, any, any>>
 			| Elysia<any, any, any, any, any, any, any, any>[]
 			| MaybePromise<
 					(
@@ -2542,25 +2542,31 @@ export default class Elysia<
 				plugin
 					.then((plugin) => {
 						if (typeof plugin === 'function') {
-							return plugin(
-								this as unknown as any
-							) as unknown as Elysia
+							return plugin(this)
 						}
 
-						if (typeof plugin.default === 'function')
-							return plugin.default(
-								this as unknown as any
-							) as unknown as Elysia
+						if (plugin instanceof Elysia) {
+							return this._use(plugin)
+						}
 
-						return this._use(plugin as any)
+						if (typeof plugin.default === 'function') {
+							return plugin.default(this)
+						}
+
+						if (plugin.default instanceof Elysia) {
+							return this._use(plugin.default)
+						}
+
+						throw new Error(
+							'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
+						)
 					})
 					.then((x) => x.compile())
 			)
+			return this
+		}
 
-			return this as unknown as any
-		} else return this._use(plugin)
-
-		return this
+		return this._use(plugin)
 	}
 
 	private _use(
@@ -5009,6 +5015,7 @@ export type {
 	LifeCycleEvent,
 	TraceEvent,
 	LifeCycleStore,
+	LifeCycleType,
 	MaybePromise,
 	ListenCallback,
 	UnwrapSchema,
