@@ -9,6 +9,7 @@ Improvement:
 Bug fix:
 - explicit `type: 'json'` with body schema throw unexpected `body.Check` is not a function
 - [#549](https://github.com/elysiajs/elysia/pull/549) await the .modules of nested Elysia instances
+- [#548](https://github.com/elysiajs/elysia/issues/548) Accessing all query params using property name (ctx.query) doesn't work anymore
 
 # 1.0.0 - 16 Mar 2024
 Improvement:
