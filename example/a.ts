@@ -1,10 +1,8 @@
 import { Elysia, error, t } from '../src'
+import { req } from '../test/utils'
 
 const app = new Elysia({ precompile: true })
-	.headers({
-		a: 'hello'
-	})
-	.get('/', 'a')
+	.get('/', 'hi')
 	.listen(3000)
 
-console.log(app.routes[0].composed?.toString())
+console.log(app.fetch.toString())

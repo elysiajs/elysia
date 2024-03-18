@@ -1,3 +1,7 @@
+# 1.0.4 - 18 Mar 2024
+Improvement:
+- resolve, derive soundness
+
 # 1.0.3 - 18 Mar 2024
 Improvement:
 - Reduce instruction for static resource

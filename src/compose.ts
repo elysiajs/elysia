@@ -392,6 +392,11 @@ export const composeHandler = ({
 		hooks.type !== 'none' &&
 		(inference.body || !!validator.body)
 
+	// @ts-expect-error private
+	const defaultHeaders = app.setHeaders
+	const hasDefaultHeaders =
+		defaultHeaders && !!Object.keys(defaultHeaders).length
+
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders = inference.headers || validator.headers
 	const hasCookie = inference.cookie || !!validator.cookie
@@ -556,7 +561,11 @@ export const composeHandler = ({
 
 	const hasTraceSet = traceInference.set
 	const hasSet =
-		inference.cookie || inference.set || hasTraceSet || hasHeaders
+		inference.cookie ||
+		inference.set ||
+		hasTraceSet ||
+		hasHeaders ||
+		(isHandleFn && hasDefaultHeaders)
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 

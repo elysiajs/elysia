@@ -134,11 +134,13 @@ export default class Elysia<
 		macro: {}
 	},
 	const out Routes extends RouteBase = {},
+	// ? scoped
 	const in out Ephemeral extends EphemeralType = {
 		derive: {}
 		resolve: {}
 		schema: {}
 	},
+	// ? local
 	const in out Volatile extends EphemeralType = {
 		derive: {}
 		resolve: {}
@@ -978,10 +980,30 @@ export default class Elysia<
 					Metadata['schema'] &
 						Ephemeral['schema'] &
 						Volatile['schema'],
-					Singleton & {
-						derive: Ephemeral['derive'] & Volatile['derive']
-						resolve: Ephemeral['resolve'] & Volatile['resolve']
-					},
+					Singleton &
+						('global' extends Type
+							? {
+									derive: Partial<
+										Ephemeral['derive'] & Volatile['derive']
+									>
+									resolve: Partial<
+										Ephemeral['resolve'] &
+											Volatile['resolve']
+									>
+							  }
+							: 'scoped' extends Type
+							? {
+									derive: Ephemeral['derive'] &
+										Partial<Volatile['derive']>
+									resolve: Ephemeral['resolve'] &
+										Partial<Volatile['resolve']>
+							  }
+							: {
+									derive: Ephemeral['derive'] &
+										Volatile['derive']
+									resolve: Ephemeral['resolve'] &
+										Volatile['resolve']
+							  }),
 					BasePath
 				>
 			>
@@ -4619,10 +4641,30 @@ export default class Elysia<
 					Metadata['schema'] &
 						Ephemeral['schema'] &
 						Volatile['schema'],
-					Singleton & {
-						derive: Ephemeral['derive'] & Volatile['derive']
-						resolve: Ephemeral['resolve'] & Volatile['resolve']
-					},
+					Singleton &
+						('global' extends Type
+							? {
+									derive: Partial<
+										Ephemeral['derive'] & Volatile['derive']
+									>
+									resolve: Partial<
+										Ephemeral['resolve'] &
+											Volatile['resolve']
+									>
+							  }
+							: 'scoped' extends Type
+							? {
+									derive: Ephemeral['derive'] &
+										Partial<Volatile['derive']>
+									resolve: Ephemeral['resolve'] &
+										Partial<Volatile['resolve']>
+							  }
+							: {
+									derive: Ephemeral['derive'] &
+										Volatile['derive']
+									resolve: Ephemeral['resolve'] &
+										Volatile['resolve']
+							  }),
 					BasePath
 				>
 			>
