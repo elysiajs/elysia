@@ -113,7 +113,7 @@
     "eslint-plugin-security": "^2.1.0",
     "eslint-plugin-sonarjs": "^0.23.0",
     "expect-type": "^0.16.0",
-    "memoirist": "0.1.6",
+    "memoirist": "0.1.10",
     "tsup": "^8.0.2",
     "typescript": "^5.4.2"
   },
