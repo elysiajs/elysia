@@ -111,7 +111,7 @@
     "benchmark": "^2.1.4",
     "eslint": "^8.49.0",
     "eslint-plugin-security": "^2.1.0",
-    "eslint-plugin-sonarjs": "^0.23.0",
+    "eslint-plugin-sonarjs": "^0.24.0",
     "expect-type": "^0.16.0",
     "memoirist": "0.1.6",
     "tsup": "^8.0.2",
