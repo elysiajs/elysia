@@ -2499,7 +2499,8 @@ export default class Elysia<
 					headers: hook.headers ?? this.validator?.headers,
 					params: hook.params ?? this.validator?.params,
 					query: hook.query ?? this.validator?.query,
-					response: hook.response ?? this.validator?.response
+					response: hook.response ?? this.validator?.response,
+					cookie: hook.cookie ?? this.validator?.cookie
 				}
 
 				return this
@@ -5271,8 +5272,7 @@ export {
 	InternalServerError,
 	InvalidCookieSignature,
 	ERROR_CODE,
-	ELYSIA_RESPONSE,
-	ElysiaErrors
+	ELYSIA_RESPONSE
 } from './error'
 
 export type { Context, PreContext } from './context'

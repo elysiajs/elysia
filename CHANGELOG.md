@@ -1,4 +1,4 @@
-# 1.0.5 -
+# 1.0.5 - 19 Mar 2024
 Improvement:
 - using regex for date pattern matching before using new Date validation
 - using tsc to emit declaration file instead of tsup
@@ -6,6 +6,7 @@ Improvement:
 
 Bug fix:
 - Ephemeral and Volatile type isn't recognize by MacroManager
+- inline guard cookie doesn't apply to local instance
 
 # 1.0.4 - 18 Mar 2024
 Improvement:
