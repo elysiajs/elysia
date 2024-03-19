@@ -6,3 +6,4 @@ dump.rdb
 dist
 trace
 .scannerwork
+*.tsbuildinfo
