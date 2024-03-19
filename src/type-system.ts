@@ -22,6 +22,13 @@ import type { CookieOptions } from './cookies'
 import { ValidationError } from './error'
 import type { MaybeArray } from './types'
 
+const isISO8601 =
+	/(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z))/
+const isFormalDate =
+	/(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d{2}\s\d{4}\s\d{2}:\d{2}:\d{2}\sGMT(?:\+|-)\d{4}\s\([^)]+\)/
+const isShortenDate =
+	/^(?:(?:(?:(?:0?[1-9]|[12][0-9]|3[01])[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:19|20)\d{2})|(?:(?:19|20)\d{2}[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:0?[1-9]|[12][0-9]|3[01]))))(?:\s(?:1[012]|0?[1-9]):[0-5][0-9](?::[0-5][0-9])?(?:\s[AP]M)?)?$/
+
 try {
 	TypeSystem.Format('email', (value) =>
 		/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(
@@ -35,15 +42,37 @@ try {
 		)
 	)
 
-	TypeSystem.Format(
-		'date',
-		(value) => !Number.isNaN(new Date(value).getTime())
-	)
+	TypeSystem.Format('date', (value) => {
+		// Remove quote from stringified date
+		const temp = value.replace(/"/g, '')
 
-	TypeSystem.Format(
-		'date-time',
-		(value) => !Number.isNaN(new Date(value).getTime())
-	)
+		if (
+			isISO8601.test(temp) ||
+			isFormalDate.test(temp) ||
+			isShortenDate.test(temp)
+		) {
+			const date = new Date(temp)
+			if (!Number.isNaN(date.getTime())) return true
+		}
+
+		return false
+	})
+
+	TypeSystem.Format('date-time', (value) => {
+		// Remove quote from stringified date
+		const temp = value.replace(/"/g, '')
+
+		if (
+			isISO8601.test(temp) ||
+			isFormalDate.test(temp) ||
+			isShortenDate.test(temp)
+		) {
+			const date = new Date(temp)
+			if (!Number.isNaN(date.getTime())) return true
+		}
+
+		return false
+	})
 } catch {
 	// Not empty
 }

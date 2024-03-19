@@ -1,3 +1,12 @@
+# 1.0.5 -
+Improvement:
+- using regex for date pattern matching before using new Date validation
+- using tsc to emit declaration file instead of tsup
+- add `mapResponse` to MacroManager
+
+Bug fix:
+- Ephemeral and Volatile type isn't recognize by MacroManager
+
 # 1.0.4 - 18 Mar 2024
 Improvement:
 - resolve, derive soundness

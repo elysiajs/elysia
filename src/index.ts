@@ -47,8 +47,7 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError,
-	ELYSIA_RESPONSE
+	type InternalServerError
 } from './error'
 
 import type {
@@ -99,7 +98,8 @@ import type {
 	ElysiaFn,
 	LifeCycleType,
 	MacroQueue,
-	EphemeralType
+	EphemeralType,
+	ExcludeElysiaResponse
 } from './types'
 
 /**
@@ -473,7 +473,8 @@ export default class Elysia<
 				onBeforeHandle: manage('beforeHandle'),
 				onAfterHandle: manage('afterHandle'),
 				onResponse: manage('onResponse'),
-				onError: manage('error')
+				mapResponse: manage('mapResponse'),
+				onError: manage('error'),
 			}
 
 			for (const macro of this.extender.macros)
@@ -836,8 +837,7 @@ export default class Elysia<
 								derive: Ephemeral['derive'] & Volatile['derive']
 								resolve: Ephemeral['resolve'] &
 									Volatile['resolve']
-						  }),
-				BasePath
+						  })
 			>
 		>
 	): this
@@ -935,8 +935,7 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-						  }),
-				BasePath
+						  })
 			>
 		>
 	): this
@@ -1003,8 +1002,7 @@ export default class Elysia<
 										Volatile['derive']
 									resolve: Ephemeral['resolve'] &
 										Volatile['resolve']
-							  }),
-					BasePath
+							  })
 				>
 			>
 		) => MaybePromise<Resolver>
@@ -1017,11 +1015,7 @@ export default class Elysia<
 					store: Singleton['store']
 					derive: Singleton['resolve']
 					resolve: Prettify<
-						Singleton['resolve'] &
-							Exclude<
-								Awaited<Resolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Singleton['resolve'] & ExcludeElysiaResponse<Resolver>
 					>
 				},
 				Definitions,
@@ -1041,11 +1035,7 @@ export default class Elysia<
 				{
 					derive: Ephemeral['resolve']
 					resolve: Prettify<
-						Ephemeral['resolve'] &
-							Exclude<
-								Awaited<Resolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Ephemeral['resolve'] & ExcludeElysiaResponse<Resolver>
 					>
 					schema: Ephemeral['schema']
 				},
@@ -1062,11 +1052,7 @@ export default class Elysia<
 				{
 					derive: Volatile['resolve']
 					resolve: Prettify<
-						Volatile['resolve'] &
-							Exclude<
-								Awaited<Resolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Volatile['resolve'] & ExcludeElysiaResponse<Resolver>
 					>
 					schema: Volatile['schema']
 				}
@@ -1113,8 +1099,7 @@ export default class Elysia<
 		{
 			derive: Volatile['resolve']
 			resolve: Prettify<
-				Volatile['resolve'] &
-					Exclude<Awaited<Resolver>, { [ELYSIA_RESPONSE]: any }>
+				Volatile['resolve'] & ExcludeElysiaResponse<Resolver>
 			>
 			schema: Volatile['schema']
 		}
@@ -1193,8 +1178,7 @@ export default class Elysia<
 								derive: Ephemeral['derive'] & Volatile['derive']
 								resolve: Ephemeral['resolve'] &
 									Volatile['resolve']
-						  }),
-				BasePath
+						  })
 			>
 		) => MaybePromise<NewResolver>
 	): Type extends 'global'
@@ -1225,10 +1209,7 @@ export default class Elysia<
 					derive: Ephemeral['resolve']
 					resolve: Prettify<
 						Ephemeral['resolve'] &
-							Exclude<
-								Awaited<NewResolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+							ExcludeElysiaResponse<NewResolver>
 					>
 					schema: Ephemeral['schema']
 				},
@@ -1245,11 +1226,7 @@ export default class Elysia<
 				{
 					derive: Volatile['resolve']
 					resolve: Prettify<
-						Volatile['resolve'] &
-							Exclude<
-								Awaited<NewResolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Volatile['resolve'] & ExcludeElysiaResponse<NewResolver>
 					>
 					schema: Volatile['schema']
 				}
@@ -1304,8 +1281,7 @@ export default class Elysia<
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				},
-				BasePath
+				}
 			>
 		>
 	): this
@@ -1363,7 +1339,8 @@ export default class Elysia<
 								derive: Ephemeral['derive'] & Volatile['derive']
 								resolve: Ephemeral['resolve'] &
 									Volatile['resolve']
-						  })
+						  }),
+						  BasePath
 			>
 		>
 	): this
@@ -1409,7 +1386,8 @@ export default class Elysia<
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
+				},
+				BasePath
 			>
 		>
 	): this
@@ -1510,7 +1488,8 @@ export default class Elysia<
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
+				},
+				BasePath
 			>
 		>
 	): this
@@ -2616,7 +2595,7 @@ export default class Elysia<
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Ephemeral,
-				Volatile & NewElysia['_ephemeral']
+				Prettify2<Volatile & NewElysia['_ephemeral']>
 		  >
 		: Elysia<
 				BasePath,
@@ -2648,7 +2627,7 @@ export default class Elysia<
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Ephemeral,
-				Volatile & NewElysia['_ephemeral']
+				Prettify2<Volatile & NewElysia['_ephemeral']>
 		  >
 		: Elysia<
 				BasePath,
@@ -2684,7 +2663,7 @@ export default class Elysia<
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Ephemeral,
-				Volatile & NewElysia['_ephemeral']
+				Prettify2<Volatile & NewElysia['_ephemeral']>
 		  >
 		: Elysia<
 				BasePath,
@@ -2731,7 +2710,7 @@ export default class Elysia<
 					? Routes & LazyLoadElysia['_routes']
 					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
 				Ephemeral,
-				Volatile & LazyLoadElysia['_ephemeral']
+				Prettify2<Volatile & LazyLoadElysia['_ephemeral']>
 		  >
 		: Elysia<
 				BasePath,
@@ -2762,7 +2741,7 @@ export default class Elysia<
 	use(
 		plugin:
 			| MaybePromise<Elysia<any, any, any, any, any, any, any, any>>
-			| Elysia<any, any, any, any, any, any, any, any>[]
+			// | Elysia<any, any, any, any, any, any, any, any>[]
 			| MaybePromise<
 					(
 						app: Elysia<any, any, any, any, any, any, any, any>
@@ -3229,11 +3208,10 @@ export default class Elysia<
 		macro: (
 			route: MacroManager<
 				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema'],
-				Singleton &
-					Ephemeral['derive'] &
-					Ephemeral['resolve'] &
-					Volatile['derive'] &
-					Volatile['resolve'],
+				Singleton & {
+					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+				},
 				Definitions['error']
 			>
 		) => NewMacro
@@ -4608,7 +4586,7 @@ export default class Elysia<
 			derive: Prettify<
 				Volatile['derive'] &
 					// Exclude `return error`
-					Exclude<Awaited<Derivative>, { [ELYSIA_RESPONSE]: any }>
+					ExcludeElysiaResponse<Derivative>
 			>
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
@@ -4678,11 +4656,7 @@ export default class Elysia<
 					store: Singleton['store']
 					derive: Singleton['resolve']
 					resolve: Prettify<
-						Singleton['resolve'] &
-							Exclude<
-								Awaited<Derivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Singleton['resolve'] & ExcludeElysiaResponse<Derivative>
 					>
 				},
 				Definitions,
@@ -4702,11 +4676,7 @@ export default class Elysia<
 				{
 					derive: Ephemeral['resolve']
 					resolve: Prettify<
-						Ephemeral['resolve'] &
-							Exclude<
-								Awaited<Derivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Ephemeral['resolve'] & ExcludeElysiaResponse<Derivative>
 					>
 					schema: Ephemeral['schema']
 				},
@@ -4723,11 +4693,7 @@ export default class Elysia<
 				{
 					derive: Volatile['resolve']
 					resolve: Prettify<
-						Volatile['resolve'] &
-							Exclude<
-								Awaited<Derivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Volatile['resolve'] & ExcludeElysiaResponse<Derivative>
 					>
 					schema: Volatile['schema']
 				}
@@ -4900,10 +4866,7 @@ export default class Elysia<
 					derive: Singleton['resolve']
 					resolve: Prettify<
 						Singleton['resolve'] &
-							Exclude<
-								Awaited<NewDerivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+							ExcludeElysiaResponse<NewDerivative>
 					>
 				},
 				Definitions,
@@ -4924,10 +4887,7 @@ export default class Elysia<
 					derive: Ephemeral['resolve']
 					resolve: Prettify<
 						Ephemeral['resolve'] &
-							Exclude<
-								Awaited<NewDerivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+							ExcludeElysiaResponse<NewDerivative>
 					>
 					schema: Ephemeral['schema']
 				},
@@ -4945,10 +4905,7 @@ export default class Elysia<
 					derive: Volatile['resolve']
 					resolve: Prettify<
 						Volatile['resolve'] &
-							Exclude<
-								Awaited<NewDerivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+							ExcludeElysiaResponse<NewDerivative>
 					>
 					schema: Volatile['schema']
 				}
@@ -5301,7 +5258,9 @@ export {
 	getSchemaValidator,
 	mergeHook,
 	mergeObjectArray,
-	getResponseSchemaValidator
+	getResponseSchemaValidator,
+	StatusMap,
+	InvertedStatusMap
 } from './utils'
 
 export {
@@ -5310,12 +5269,19 @@ export {
 	NotFoundError,
 	ValidationError,
 	InternalServerError,
-	InvalidCookieSignature
+	InvalidCookieSignature,
+	ERROR_CODE,
+	ELYSIA_RESPONSE,
+	ElysiaErrors
 } from './error'
 
 export type { Context, PreContext } from './context'
 
 export type {
+	ElysiaFn,
+	EphemeralType,
+	CreateEden,
+	ComposeElysiaResponse,
 	ElysiaConfig,
 	SingletonBase,
 	DefinitionBase,

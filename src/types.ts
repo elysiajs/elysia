@@ -422,7 +422,9 @@ export type OptionalHandler<
 		resolve: {}
 	},
 	Path extends string = ''
-> = Handler<Route, Singleton, Path> extends (context: infer Context) => infer Returned
+> = Handler<Route, Singleton, Path> extends (
+	context: infer Context
+) => infer Returned
 	? (context: Context) => Returned | MaybePromise<void>
 	: never
 
@@ -433,8 +435,11 @@ export type AfterHandler<
 		store: {}
 		derive: {}
 		resolve: {}
-	}
-> = Handler<Route, Singleton> extends (context: infer Context) => infer Returned
+	},
+	Path extends string = ''
+> = Handler<Route, Singleton, Path> extends (
+	context: infer Context
+) => infer Returned
 	? (
 			context: Prettify<
 				{
@@ -451,7 +456,8 @@ export type MapResponse<
 		store: {}
 		derive: {}
 		resolve: {}
-	}
+	},
+	Path extends string = ''
 > = Handler<
 	Omit<Route, 'response'> & {
 		response: MaybePromise<Response | undefined | void>
@@ -460,7 +466,8 @@ export type MapResponse<
 		derive: {
 			response: Route['response']
 		}
-	}
+	},
+	Path
 >
 
 export type VoidHandler<
@@ -866,6 +873,12 @@ export interface MacroManager<
 		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
+	mapResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
+	mapResponse(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
+	): unknown
+
 	events: {
 		global: Prettify<LifeCycleStore & RouteSchema>
 		local: Prettify<LifeCycleStore & RouteSchema>
@@ -990,3 +1003,8 @@ export type MergeElysiaInstances<
 	  >
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
+
+export type ExcludeElysiaResponse<T> = Exclude<
+	Awaited<T>,
+	{ [ELYSIA_RESPONSE]: any }
+>
