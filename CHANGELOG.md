@@ -1,3 +1,13 @@
+# 1.0.7 - 20 Mar 2024
+Bug fix:
+- duplicate macro call
+- [#548](https://github.com/elysiajs/elysia/issues/548) additional case for "accessing all query params using property name (ctx.query) doesn't work anymore"
+- [#599](https://github.com/elysiajs/elysia/issues/559) plugin with scoped settings not functioning correctly
+
+# 1.0.6 - 20 Mar 2024
+Bug fix:
+- inline function doesn't propagate correctly on type level
+
 # 1.0.5 - 19 Mar 2024
 Improvement:
 - using regex for date pattern matching before using new Date validation

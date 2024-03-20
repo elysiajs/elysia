@@ -50,8 +50,7 @@ export const createDynamicHandler =
 
 		try {
 			for (let i = 0; i < app.event.request.length; i++) {
-				// @ts-ignore
-				const onRequest = app.event.request[i]
+				const onRequest = app.event.request[i].fn
 				let response = onRequest(context as any)
 				if (response instanceof Promise) response = await response
 
@@ -110,7 +109,8 @@ export const createDynamicHandler =
 							contentType = contentType.slice(0, index)
 
 						for (let i = 0; i < hooks.parse.length; i++) {
-							let temp = hooks.parse[i](context, contentType)
+							const hook = hooks.parse[i].fn
+							let temp = hook(context, contentType)
 							if (temp instanceof Promise) temp = await temp
 
 							if (temp) {
@@ -201,10 +201,10 @@ export const createDynamicHandler =
 				)
 
 			for (let i = 0; i < hooks.transform.length; i++) {
-				const operation = hooks.transform[i](context)
+				const hook = hooks.transform[i]
+				const operation = hook.fn(context)
 
-				// @ts-ignore
-				if (hooks.transform[i].$elysia === 'derive') {
+				if (hook.subType === 'derive') {
 					if (operation instanceof Promise)
 						Object.assign(context, await operation)
 					else Object.assign(context, operation)
@@ -257,7 +257,7 @@ export const createDynamicHandler =
 			}
 
 			for (let i = 0; i < hooks.beforeHandle.length; i++) {
-				let response = hooks.beforeHandle[i](context)
+				let response = hooks.beforeHandle[i].fn(context)
 				if (response instanceof Promise) response = await response
 
 				// `false` is a falsey value, check for undefined instead
@@ -269,7 +269,7 @@ export const createDynamicHandler =
 					).response = response
 
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
-						let newResponse = hooks.afterHandle[i](
+						let newResponse = hooks.afterHandle[i].fn(
 							context as Context & {
 								response: unknown
 							}
@@ -305,7 +305,7 @@ export const createDynamicHandler =
 				).response = response
 
 				for (let i = 0; i < hooks.afterHandle.length; i++) {
-					let newResponse = hooks.afterHandle[i](
+					let newResponse = hooks.afterHandle[i].fn(
 						context as Context & {
 							response: unknown
 						}
@@ -363,12 +363,11 @@ export const createDynamicHandler =
 			if ((error as ElysiaErrors).status)
 				set.status = (error as ElysiaErrors).status
 
-			// @ts-ignore
+			// @ts-expect-error private
 			return app.handleError(context, error)
 		} finally {
-			// @ts-ignore
 			for (const onResponse of app.event.onResponse)
-				await onResponse(context)
+				await onResponse.fn(context)
 		}
 	}
 
@@ -378,9 +377,9 @@ export const createDynamicErrorHandler =
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
-		// @ts-ignore
 		for (let i = 0; i < app.event.error.length; i++) {
-			let response = app.event.error[i](errorContext as any)
+			const hook = app.event.error[i]
+			let response = hook.fn(errorContext as any)
 			if (response instanceof Promise) response = await response
 			if (response !== undefined && response !== null)
 				return mapResponse(response, context.set)
