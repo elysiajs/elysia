@@ -1,4 +1,8 @@
 # 1.0.7 - 20 Mar 2024
+Improvement:
+- remove function.$elysia
+- remove function extension
+
 Bug fix:
 - duplicate macro call
 - [#548](https://github.com/elysiajs/elysia/issues/548) additional case for "accessing all query params using property name (ctx.query) doesn't work anymore"

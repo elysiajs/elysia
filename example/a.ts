@@ -1,12 +1,16 @@
 import { Elysia, error, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia({ precompile: true }).onError(({ code }) => {
-	if (code === 'NOT_FOUND') return 'UwU'
+const subPlugin = new Elysia().derive({ as: 'scoped' }, () => {
+	return {
+		hi: '1'
+	}
 })
 
-const response = await app.handle(req('/not/found'))
+const plugin = new Elysia().use(subPlugin).propagate()
 
-console.log(app.handleError.toString())
+const app = new Elysia().use(plugin).get('/', ({ hi }) => hi)
 
-console.log(await response.text())
+app.handle(req('/'))
+	.then((x) => x.text())
+	.then(console.log)

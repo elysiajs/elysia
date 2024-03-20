@@ -2177,6 +2177,44 @@ export default class Elysia<
 		return this
 	}
 
+	propagate(): Elysia<
+		BasePath,
+		Scoped,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Prettify2<Ephemeral & Volatile>,
+		{
+			derive: {}
+			resolve: {}
+			schema: {}
+		}
+	> {
+		/**
+		 * Since it's a plugin, which means that ephemeral is demoted to volatile.
+		 * Which  means there's no volatile and all previous ephemeral become volatile
+		 * We can just promote back without worry
+		 */
+		const promoteEvent = (events: (HookContainer | Function)[]) => {
+			for (const event of events) {
+				if ('scope' in event && event.scope === 'local')
+					event.scope = 'scoped'
+			}
+		}
+
+		promoteEvent(this.event.parse)
+		promoteEvent(this.event.transform)
+		promoteEvent(this.event.beforeHandle)
+		promoteEvent(this.event.afterHandle)
+		promoteEvent(this.event.mapResponse)
+		promoteEvent(this.event.onResponse)
+		promoteEvent(this.event.trace)
+		promoteEvent(this.event.error)
+
+		return this as any
+	}
+
 	group<
 		const Prefix extends string,
 		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>
@@ -2632,7 +2670,7 @@ export default class Elysia<
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Prettify<Ephemeral & NewElysia['_ephemeral']>,
+				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
 				Prettify2<Volatile & NewElysia['_volatile']>
 		  >
 		: Elysia<
