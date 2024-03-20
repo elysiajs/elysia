@@ -1,4 +1,7 @@
 # 1.0.7 - 20 Mar 2024
+Feature:
+- add Elysia.propagate to propagate hook type from 'local' to 'scoped'
+
 Improvement:
 - remove function.$elysia
 - remove function extension
