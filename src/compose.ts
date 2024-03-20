@@ -158,7 +158,8 @@ const composeValidationFactory = (
 			: `return new ValidationError('response', response[c.set.status], ${name}).toResponse(c.set.headers)`
 
 		return `\n${injectResponse}
-
+		    response[c.set.status]?.Clean(${name})
+			response[${name}[ELYSIA_RESPONSE]]?.Clean(${name}.response)
 			if(typeof ${name} === "object" && ELYSIA_RESPONSE in ${name}) {
 				if(!(${name} instanceof Response) && response[${name}[ELYSIA_RESPONSE]]?.Check(${name}.response) === false) {
 					if(!(response instanceof Error)) {
@@ -325,6 +326,7 @@ export const composeHandler = ({
 	validator,
 	handler,
 	allowMeta = false,
+	enableCleaning = false,
 	appInference: { event: eventInference, trace: traceInference }
 }: {
 	app: Elysia<any, any, any, any, any, any, any, any>
@@ -335,6 +337,7 @@ export const composeHandler = ({
 	validator: SchemaValidator
 	handler: unknown | Handler<any, any>
 	allowMeta?: boolean
+	enableCleaning?: boolean,
 	appInference: {
 		event: Sucrose.Inference
 		trace: Sucrose.TraceInference
@@ -892,6 +895,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.body) {
+			fnLiteral += "body.Clean(c.body);\n"
 			// @ts-ignore
 			if (hasProperty('default', validator.body.schema))
 				fnLiteral += `if(body.Check(c.body) === false) {

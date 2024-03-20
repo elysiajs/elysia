@@ -102,6 +102,15 @@ export type ElysiaConfig<
 	 * Enable experimental features
 	 */
 	experimental?: {}
+	/**
+	 * If enabled, the handlers will run a [clean](https://github.com/sinclairzx81/typebox?tab=readme-ov-file#clean) on incoming and outgoing bodies instead of failing directly.
+	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.
+	 * This has no effect when the schemas allow additional properties.
+	 * Since this uses dynamic schema it may have an impact on performance. Use with caution.
+	 * 
+	 * @default false
+	 */
+	enableCleaning?: boolean
 }
 
 export type MaybeArray<T> = T | T[]

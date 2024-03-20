@@ -200,11 +200,13 @@ export const getSchemaValidator = (
 	{
 		models = {},
 		additionalProperties = false,
-		dynamic = false
+		dynamic = false,
+		enableCleaning = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
+		enableCleaning?: boolean
 	}
 ) => {
 	if (!s) return
@@ -216,6 +218,12 @@ export const getSchemaValidator = (
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
+	const cleaner = (value: unknown) => {
+		if (enableCleaning && schema.additionalProperties === false) {
+			Value.Clean(schema, value)
+		}
+	}
+
 	if (dynamic)
 		return {
 			schema,
@@ -224,10 +232,15 @@ export const getSchemaValidator = (
 			code: '',
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => ''
+			Code: () => '',
+			Clean: cleaner
 		} as unknown as TypeCheck<TSchema>
-
-	return TypeCompiler.Compile(schema, Object.values(models))
+	const compiledValidator = TypeCompiler.Compile(
+		schema,
+		Object.values(models)
+	)
+	;(compiledValidator as any).Clean = cleaner
+	return compiledValidator
 }
 
 export const getResponseSchemaValidator = (
@@ -235,11 +248,13 @@ export const getResponseSchemaValidator = (
 	{
 		models = {},
 		additionalProperties = false,
-		dynamic = false
+		dynamic = false,
+		enableCleaning = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
+		enableCleaning?: boolean
 	}
 ): Record<number, TypeCheck<any>> | undefined => {
 	if (!s) return
@@ -248,6 +263,12 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
+		const cleaner = (value: unknown) => {
+			if (enableCleaning && schema.additionalProperties === false) {
+				Value.Clean(schema, value)
+			} 
+		}
+
 		if (dynamic)
 			return {
 				schema,
@@ -256,10 +277,13 @@ export const getResponseSchemaValidator = (
 				code: '',
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
-				Code: () => ''
+				Code: () => '',
+				Clean: cleaner
 			} as unknown as TypeCheck<TSchema>
 
-		return TypeCompiler.Compile(schema, references)
+		const compiledValidator = TypeCompiler.Compile(schema, references)
+		;(compiledValidator as any).Clean = cleaner
+		return compiledValidator
 	}
 
 	if (Kind in maybeSchemaOrRecord) {

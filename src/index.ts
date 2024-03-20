@@ -367,6 +367,8 @@ export default class Elysia<
 				models
 			})
 
+		const enableCleaning = this.config.enableCleaning;
+
 		const validator =
 			this.config.precompile === true ||
 			(typeof this.config.precompile === 'object' &&
@@ -374,7 +376,8 @@ export default class Elysia<
 				? {
 						body: getSchemaValidator(cloned.body, {
 							dynamic,
-							models
+							models,
+							enableCleaning
 						}),
 						headers: getSchemaValidator(cloned.headers, {
 							dynamic,
@@ -392,7 +395,8 @@ export default class Elysia<
 						cookie: cookieValidator(),
 						response: getResponseSchemaValidator(cloned.response, {
 							dynamic,
-							models
+							models,
+							enableCleaning
 						})
 				  }
 				: ({
@@ -401,7 +405,8 @@ export default class Elysia<
 
 							return (_body = getSchemaValidator(cloned.body, {
 								dynamic,
-								models
+								models,
+								enableCleaning
 							}))
 						},
 						get headers() {
@@ -444,7 +449,8 @@ export default class Elysia<
 								cloned.response,
 								{
 									dynamic,
-									models
+									models,
+									enableCleaning
 								}
 							))
 						}
@@ -525,6 +531,7 @@ export default class Elysia<
 					hooks,
 					validator,
 					handler: handle,
+					enableCleaning: this.config.enableCleaning,
 					allowMeta,
 					appInference: {
 						event: {
