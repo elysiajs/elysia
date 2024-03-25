@@ -7,4 +7,4 @@ new Elysia()
 		set.headers['x-powered-by'] = 'Elysia'
 		set.status = 'Bad Request'
 	})
-	.listen(8080)
+	.listen(3000)

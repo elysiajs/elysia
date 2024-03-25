@@ -58,7 +58,7 @@ const app = new Elysia()
 					}
 				})
 	)
-	.listen(8080)
+	.listen(3000)
 
 type A = (typeof app)['meta'][typeof SCHEMA]['/']
 type B = (typeof app)['meta'][typeof DEFS]

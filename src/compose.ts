@@ -9,7 +9,7 @@ import { parse as parseQuery } from 'fast-querystring'
 // @ts-expect-error
 import decodeURIComponent from 'fast-decode-uri-component'
 
-import { lifeCycleToFn, signCookie } from './utils'
+import { getCookieValidator, lifeCycleToFn, signCookie } from './utils'
 import { ParseError, error } from './error'
 
 import {
@@ -404,8 +404,20 @@ export const composeHandler = ({
 	const hasHeaders = inference.headers || validator.headers
 	const hasCookie = inference.cookie || !!validator.cookie
 
+	const cookieValidator = hasCookie
+		? getCookieValidator({
+				validator: validator.cookie as any,
+				defaultConfig: app.config.cookie,
+				dynamic: !!app.config.aot,
+				// @ts-expect-error
+				config: validator.cookie?.config ?? {},
+				// @ts-expect-error
+				models: app.definitions.type
+		  })
+		: undefined
+
 	// @ts-ignore private property
-	const cookieMeta = validator?.cookie?.schema as {
+	const cookieMeta = cookieValidator?.config as {
 		secrets?: string | string[]
 		sign: string[] | true
 		properties: { [x: string]: Object }
@@ -928,17 +940,17 @@ export const composeHandler = ({
 		}
 
 		// @ts-ignore
-		if (isNotEmpty(validator.cookie?.schema.properties ?? {})) {
+		if (isNotEmpty(cookieValidator?.schema.properties ?? {})) {
 			fnLiteral += `const cookieValue = {}
     			for(const [key, value] of Object.entries(c.cookie))
     				cookieValue[key] = value.value\n`
 
 			// @ts-ignore
-			if (hasProperty('default', validator.cookie.schema))
+			if (hasProperty('default', cookieValidator.schema))
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
-						validator.cookie.schema,
+						cookieValidator.schema,
 						{}
 					) as Object
 				)) {
@@ -1019,9 +1031,7 @@ export const composeHandler = ({
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						const hook = hooks.afterHandle[i]
 
-						const returning = hasReturn(
-							hook.fn.toString()
-						)
+						const returning = hasReturn(hook.fn.toString())
 
 						const endUnit = report('afterHandle.unit', {
 							name: hook.fn.name
@@ -1092,7 +1102,7 @@ export const composeHandler = ({
 		})
 
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
-				const hook = hooks.afterHandle[i]
+			const hook = hooks.afterHandle[i]
 
 			const returning = hasReturn(hook.fn.toString())
 
@@ -1497,7 +1507,11 @@ export const composeGeneralHandler = (
 
 	const notFound = new NotFoundError()
 
-	${app.event.request.length ? `const onRequest = app.event.request.map(x => x.fn)` : ''}
+	${
+		app.event.request.length
+			? `const onRequest = app.event.request.map(x => x.fn)`
+			: ''
+	}
 	${router.static.http.variables}
 	${
 		app.event.error.length

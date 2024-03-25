@@ -17,7 +17,7 @@ describe('Custom Response Type', () => {
                     status: 418
                 })
             })
-            .listen(8080)
+            .listen(3000)
 
         const response = await app.handle(req('/'))
 
@@ -32,7 +32,7 @@ describe('Custom Response Type', () => {
             .get('/', () => {
                 return new CustomResponse('Shuba Shuba')
             })
-            .listen(8080)
+            .listen(3000)
 
         const response = await app.handle(req('/'))
 

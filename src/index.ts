@@ -118,7 +118,7 @@ import type {
  *
  * new Elysia()
  *     .get("/", () => "Hello")
- *     .listen(8080)
+ *     .listen(3000)
  * ```
  */
 export default class Elysia<
@@ -282,7 +282,7 @@ export default class Elysia<
 			cookie: {},
 			analytic: false,
 			...config,
-			experimental: config?.experimental ?? { transpiler: false },
+			experimental: config?.experimental ?? {},
 			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
 
@@ -385,7 +385,6 @@ export default class Elysia<
 
 		// ? Clone is need because of JIT, so the context doesn't switch between instance
 		const dynamic = !this.config.aot
-		const cookieConfig = Object.assign({}, this.config.cookie)
 
 		const cloned = {
 			body: localHook?.body ?? (this.validator?.body as any),
@@ -397,13 +396,15 @@ export default class Elysia<
 		}
 
 		const cookieValidator = () =>
-			getCookieValidator({
-				validator: cloned.cookie,
-				defaultConfig: this.config.cookie,
-				config: cookieConfig,
-				dynamic,
-				models
-			})
+			cloned.cookie
+				? getCookieValidator({
+						validator: cloned.cookie,
+						defaultConfig: this.config.cookie,
+						config: cloned.cookie?.config ?? {},
+						dynamic,
+						models
+				  })
+				: undefined
 
 		const validator =
 			this.config.precompile === true ||
@@ -723,7 +724,7 @@ export default class Elysia<
 	 *     .onStart(({ url, port }) => {
 	 *         console.log("Running at ${url}:${port}")
 	 *     })
-	 *     .listen(8080)
+	 *     .listen(3000)
 	 * ```
 	 */
 	onStart(handler: MaybeArray<GracefulHandler<this>>) {
@@ -5159,7 +5160,7 @@ export default class Elysia<
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
 	fetch = (request: Request): MaybePromise<Response> => {
-		if (process.env.NODE_ENV === 'production')
+		if (process.env.NODE_ENV === 'production' && this.config.aot !== false)
 			console.warn(
 				"Performance degradation found. Please call Elysia.compile() before using 'fetch'"
 			)
@@ -5208,7 +5209,7 @@ export default class Elysia<
 	 * ```typescript
 	 * new Elysia()
 	 *     .get("/", () => 'hi')
-	 *     .listen(8080)
+	 *     .listen(3000)
 	 * ```
 	 */
 	listen = (
@@ -5291,7 +5292,7 @@ export default class Elysia<
 	 * ```typescript
 	 * const app = new Elysia()
 	 *     .get("/", () => 'hi')
-	 *     .listen(8080)
+	 *     .listen(3000)
 	 *
 	 * // Sometime later
 	 * app.stop()

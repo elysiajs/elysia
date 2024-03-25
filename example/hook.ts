@@ -18,4 +18,4 @@ new Elysia()
 			}
 		]
 	})
-	.listen(8080)
+	.listen(3000)

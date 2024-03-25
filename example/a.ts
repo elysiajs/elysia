@@ -1,16 +1,32 @@
-import { Elysia, error, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t, ValidationError } from '../src'
 
-const subPlugin = new Elysia().derive({ as: 'scoped' }, () => {
-	return {
-		hi: '1'
-	}
+const app = new Elysia({
+	// precompile: true,
+	aot: false,
 })
+	.get(
+		'/update',
+		({ cookie: { name } }) => {
+			name.value = 'seminar: Himari'
 
-const plugin = new Elysia().use(subPlugin).propagate()
+			return 'a'
+		},
+		{
+			cookie: t.Cookie(
+				{
+					name: t.Optional(t.String())
+				},
+				{
+					secrets: 'a',
+					sign: ['name']
+				}
+			)
+		}
+	)
+	.listen(3000)
 
-const app = new Elysia().use(plugin).get('/', ({ hi }) => hi)
-
-app.handle(req('/'))
-	.then((x) => x.text())
+app.handle(new Request('http://localhost:3000/update'))
+	.then((x) => x.headers.getSetCookie())
 	.then(console.log)
+
+// console.log(app.routes[0].composed?.toString())

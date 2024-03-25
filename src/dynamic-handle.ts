@@ -167,8 +167,12 @@ export const createDynamicHandler =
 			for (const [key, value] of request.headers.entries())
 				context.headers[key] = value
 
-			// @ts-expect-error
-			const cookieMeta = validator?.cookie?.schema as {
+			const cookieMeta = Object.assign(
+				{},
+				app.config?.cookie,
+				// @ts-expect-error
+				validator?.cookie?.config
+			) as {
 				secrets?: string | string[]
 				sign: string[] | true
 				properties: { [x: string]: Object }
@@ -176,29 +180,28 @@ export const createDynamicHandler =
 
 			const cookieHeaderValue = request.headers.get('cookie')
 
-			if (cookieHeaderValue)
-				context.cookie = await parseCookie(
-					context.set,
-					cookieHeaderValue,
-					cookieMeta
-						? {
-								secret:
-									cookieMeta.secrets !== undefined
-										? typeof cookieMeta.secrets === 'string'
-											? cookieMeta.secrets
-											: cookieMeta.secrets.join(',')
-										: undefined,
-								sign:
-									cookieMeta.sign === true
-										? true
-										: cookieMeta.sign !== undefined
-										? typeof cookieMeta.sign === 'string'
-											? cookieMeta.sign
-											: cookieMeta.sign.join(',')
-										: undefined
-						  }
-						: undefined
-				)
+			context.cookie = await parseCookie(
+				context.set,
+				cookieHeaderValue,
+				cookieMeta
+					? {
+							secret:
+								cookieMeta.secrets !== undefined
+									? typeof cookieMeta.secrets === 'string'
+										? cookieMeta.secrets
+										: cookieMeta.secrets.join(',')
+									: undefined,
+							sign:
+								cookieMeta.sign === true
+									? true
+									: cookieMeta.sign !== undefined
+									? typeof cookieMeta.sign === 'string'
+										? cookieMeta.sign
+										: cookieMeta.sign.join(',')
+									: undefined
+					  }
+					: undefined
+			)
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const hook = hooks.transform[i]
@@ -345,9 +348,13 @@ export const createDynamicHandler =
 							cookie.value as any,
 							'${secret}'
 						)
-				else
+				else {
+					// @ts-expect-error private
+					const properties = validator?.cookie?.schema?.properties
+
 					for (const name of cookieMeta.sign) {
-						if (!(name in cookieMeta.properties)) continue
+						if (!(name in properties))
+							continue
 
 						if (context.set.cookie[name]?.value) {
 							context.set.cookie[name].value = await signCookie(
@@ -356,6 +363,7 @@ export const createDynamicHandler =
 							)
 						}
 					}
+				}
 			}
 
 			return mapResponse(response, context.set)

@@ -12,4 +12,4 @@ new Elysia()
 
 		return Bun.file('./example/takodachi.png')
 	})
-	.listen(8080)
+	.listen(3000)

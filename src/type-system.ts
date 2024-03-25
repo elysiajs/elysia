@@ -139,6 +139,24 @@ export namespace ElysiaTypeOptions {
 		minItems?: number
 		maxItems?: number
 	}
+
+	export interface CookieValidatorOption<T extends Object = {}>
+		extends ObjectOptions,
+			CookieOptions {
+		/**
+		 * Secret key for signing cookie
+		 *
+		 * If array is passed, will use Key Rotation.
+		 *
+		 * Key rotation is when an encryption key is retired
+		 * and replaced by generating a new cryptographic key.
+		 */
+		secrets?: string | string[]
+		/**
+		 * Specified cookie name to be signed globally
+		 */
+		sign?: Readonly<(keyof T | (string & {}))[]>
+	}
 }
 
 const parseFileUnit = (size: ElysiaTypeOptions.FileUnit) => {
@@ -378,23 +396,37 @@ export const ElysiaType = {
 		t.Union([t.Null(), t.Undefined(), schema]) as any,
 	Cookie: <T extends TProperties>(
 		properties: T,
-		options?: ObjectOptions &
-			CookieOptions & {
-				/**
-				 * Secret key for signing cookie
-				 *
-				 * If array is passed, will use Key Rotation.
-				 *
-				 * Key rotation is when an encryption key is retired
-				 * and replaced by generating a new cryptographic key.
-				 */
-				secrets?: string | string[]
-				/**
-				 * Specified cookie name to be signed globally
-				 */
-				sign?: Readonly<(keyof T | (string & {}))[]>
-			}
-	): TObject<T> => t.Object(properties, options)
+		{
+			domain,
+			expires,
+			httpOnly,
+			maxAge,
+			path,
+			priority,
+			sameSite,
+			secure,
+			secrets,
+			sign,
+			...options
+		}: ElysiaTypeOptions.CookieValidatorOption<T> = {}
+	) => {
+		const v = t.Object(properties, options)
+
+		v.config = {
+			domain,
+			expires,
+			httpOnly,
+			maxAge,
+			path,
+			priority,
+			sameSite,
+			secure,
+			secrets,
+			sign
+		}
+
+		return v
+	}
 } as const
 
 export type TCookie = (typeof ElysiaType)['Cookie']

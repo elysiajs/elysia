@@ -18,8 +18,6 @@ describe('Propagate', () => {
 
 		const plugin = new Elysia().use(subPlugin1).propagate().use(subPlugin2)
 
-		plugin._volatile
-
 		const app = new Elysia()
 			.use(plugin)
 			// @ts-expect-error

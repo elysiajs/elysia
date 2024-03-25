@@ -254,8 +254,8 @@ export const getSchemaValidator = (
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
-	if (dynamic)
-		return {
+	if (dynamic) {
+		const validator = {
 			schema,
 			references: '',
 			checkFunc: () => {},
@@ -265,7 +265,34 @@ export const getSchemaValidator = (
 			Code: () => ''
 		} as unknown as TypeCheck<TSchema>
 
-	return TypeCompiler.Compile(schema, Object.values(models))
+		// @ts-ignore
+		if (schema.config) {
+			// @ts-ignore
+			validator.config = schema.config
+
+			// @ts-ignore
+			if (validator?.schema?.config)
+				// @ts-ignore
+				delete validator.schema.config
+		}
+
+		return validator
+	}
+
+	const compiled = TypeCompiler.Compile(schema, Object.values(models))
+
+	// @ts-ignore
+	if (schema.config) {
+		// @ts-ignore
+		compiled.config = schema.config
+
+		// @ts-ignore
+		if (compiled?.schema?.config)
+			// @ts-ignore
+			delete compiled.schema.config
+	}
+
+	return compiled
 }
 
 export const getResponseSchemaValidator = (
@@ -382,17 +409,20 @@ export const getCookieValidator = ({
 	if (isNotEmpty(defaultConfig)) {
 		if (cookieValidator) {
 			// @ts-expect-error private
-			cookieValidator.schema = mergeCookie(
+			cookieValidator.config = mergeCookie(
 				// @ts-expect-error private
-				cookieValidator.schema,
+				cookieValidator.config,
 				config
 			)
 		} else {
-			cookieValidator = getSchemaValidator(t.Cookie({}, defaultConfig), {
+			cookieValidator = getSchemaValidator(t.Cookie({}), {
 				dynamic,
 				models,
 				additionalProperties: true
 			})
+
+			// @ts-expect-error private
+			cookieValidator.config = defaultConfig
 		}
 	}
 
