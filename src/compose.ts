@@ -9,7 +9,7 @@ import { parse as parseQuery } from 'fast-querystring'
 // @ts-expect-error
 import decodeURIComponent from 'fast-decode-uri-component'
 
-import { signCookie } from './utils'
+import { getCookieValidator, lifeCycleToFn, signCookie } from './utils'
 import { ParseError, error } from './error'
 
 import {
@@ -32,6 +32,7 @@ import { parseCookie, type CookieOptions } from './cookies'
 import type {
 	ComposedHandler,
 	Handler,
+	HookContainer,
 	LifeCycleStore,
 	SchemaValidator,
 	TraceEvent
@@ -158,7 +159,8 @@ const composeValidationFactory = (
 			: `return new ValidationError('response', response[c.set.status], ${name}).toResponse(c.set.headers)`
 
 		return `\n${injectResponse}
-
+		    response[c.set.status]?.Clean(${name})
+			response[${name}[ELYSIA_RESPONSE]]?.Clean(${name}.response)
 			if(typeof ${name} === "object" && ELYSIA_RESPONSE in ${name}) {
 				if(!(${name} instanceof Response) && response[${name}[ELYSIA_RESPONSE]]?.Check(${name}.response) === false) {
 					if(!(response instanceof Error)) {
@@ -307,7 +309,9 @@ const getUnionedType = (validator: TypeCheck<any> | undefined) => {
 
 const matchFnReturn = /(?:return|=>) \S+\(/g
 
-export const isAsync = (fn: Function) => {
+export const isAsync = (v: Function | HookContainer) => {
+	const fn = 'fn' in v ? v.fn : v
+
 	if (fn.constructor.name === 'AsyncFunction') return true
 
 	const literal = fn.toString()
@@ -325,6 +329,7 @@ export const composeHandler = ({
 	validator,
 	handler,
 	allowMeta = false,
+	enableCleaning = false,
 	appInference: { event: eventInference, trace: traceInference }
 }: {
 	app: Elysia<any, any, any, any, any, any, any, any>
@@ -335,6 +340,7 @@ export const composeHandler = ({
 	validator: SchemaValidator
 	handler: unknown | Handler<any, any>
 	allowMeta?: boolean
+	enableCleaning?: boolean,
 	appInference: {
 		event: Sucrose.Inference
 		trace: Sucrose.TraceInference
@@ -392,12 +398,29 @@ export const composeHandler = ({
 		hooks.type !== 'none' &&
 		(inference.body || !!validator.body)
 
+	// @ts-expect-error private
+	const defaultHeaders = app.setHeaders
+	const hasDefaultHeaders =
+		defaultHeaders && !!Object.keys(defaultHeaders).length
+
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders = inference.headers || validator.headers
 	const hasCookie = inference.cookie || !!validator.cookie
 
+	const cookieValidator = hasCookie
+		? getCookieValidator({
+				validator: validator.cookie as any,
+				defaultConfig: app.config.cookie,
+				dynamic: !!app.config.aot,
+				// @ts-expect-error
+				config: validator.cookie?.config ?? {},
+				// @ts-expect-error
+				models: app.definitions.type
+		  })
+		: undefined
+
 	// @ts-ignore private property
-	const cookieMeta = validator?.cookie?.schema as {
+	const cookieMeta = cookieValidator?.config as {
 		secrets?: string | string[]
 		sign: string[] | true
 		properties: { [x: string]: Object }
@@ -556,7 +579,11 @@ export const composeHandler = ({
 
 	const hasTraceSet = traceInference.set
 	const hasSet =
-		inference.cookie || inference.set || hasTraceSet || hasHeaders
+		inference.cookie ||
+		inference.set ||
+		hasTraceSet ||
+		hasHeaders ||
+		(isHandleFn && hasDefaultHeaders)
 
 	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
@@ -696,7 +723,7 @@ export const composeHandler = ({
 
 					for (let i = 0; i < hooks.parse.length; i++) {
 						const endUnit = report('parse.unit', {
-							name: hooks.parse[i].name
+							name: hooks.parse[i].fn.name
 						})
 
 						const name = `bo${i}`
@@ -784,7 +811,7 @@ export const composeHandler = ({
 			const transform = hooks.transform[i]
 
 			const endUnit = report('transform.unit', {
-				name: transform.name
+				name: transform.fn.name
 			})
 
 			fnLiteral += isAsync(transform)
@@ -890,6 +917,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.body) {
+			fnLiteral += "body.Clean(c.body);\n"
 			// @ts-ignore
 			if (hasProperty('default', validator.body.schema))
 				fnLiteral += `if(body.Check(c.body) === false) {
@@ -916,17 +944,17 @@ export const composeHandler = ({
 		}
 
 		// @ts-ignore
-		if (isNotEmpty(validator.cookie?.schema.properties ?? {})) {
+		if (isNotEmpty(cookieValidator?.schema.properties ?? {})) {
 			fnLiteral += `const cookieValue = {}
     			for(const [key, value] of Object.entries(c.cookie))
     				cookieValue[key] = value.value\n`
 
 			// @ts-ignore
-			if (hasProperty('default', validator.cookie.schema))
+			if (hasProperty('default', cookieValidator.schema))
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
-						validator.cookie.schema,
+						cookieValidator.schema,
 						{}
 					) as Object
 				)) {
@@ -958,13 +986,12 @@ export const composeHandler = ({
 			const beforeHandle = hooks.beforeHandle[i]
 
 			const endUnit = report('beforeHandle.unit', {
-				name: beforeHandle.name
+				name: beforeHandle.fn.name
 			})
 
-			const returning = hasReturn(beforeHandle.toString())
+			const returning = hasReturn(beforeHandle.fn.toString())
 
-			// @ts-ignore
-			const isResolver = beforeHandle.$elysia === 'resolve'
+			const isResolver = beforeHandle.subType === 'resolve'
 
 			if (isResolver) {
 				if (!hasResolve) {
@@ -1006,22 +1033,22 @@ export const composeHandler = ({
 					})()
 
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
-						const returning = hasReturn(
-							hooks.afterHandle[i].toString()
-						)
+						const hook = hooks.afterHandle[i]
+
+						const returning = hasReturn(hook.fn.toString())
 
 						const endUnit = report('afterHandle.unit', {
-							name: hooks.afterHandle[i].name
+							name: hook.fn.name
 						})
 
 						fnLiteral += `c.response = be\n`
 
 						if (!returning) {
-							fnLiteral += isAsync(hooks.afterHandle[i])
+							fnLiteral += isAsync(hook.fn)
 								? `await afterHandle[${i}](c, be)\n`
 								: `afterHandle[${i}](c, be)\n`
 						} else {
-							fnLiteral += isAsync(hooks.afterHandle[i])
+							fnLiteral += isAsync(hook.fn)
 								? `af = await afterHandle[${i}](c)\n`
 								: `af = afterHandle[${i}](c)\n`
 
@@ -1079,20 +1106,22 @@ export const composeHandler = ({
 		})
 
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
-			const returning = hasReturn(hooks.afterHandle[i].toString())
+			const hook = hooks.afterHandle[i]
+
+			const returning = hasReturn(hook.fn.toString())
 
 			const endUnit = report('afterHandle.unit', {
-				name: hooks.afterHandle[i].name
+				name: hook.fn.name
 			})
 
 			if (!returning) {
-				fnLiteral += isAsync(hooks.afterHandle[i])
+				fnLiteral += isAsync(hook.fn)
 					? `await afterHandle[${i}](c)\n`
 					: `afterHandle[${i}](c)\n`
 
 				endUnit()
 			} else {
-				fnLiteral += isAsync(hooks.afterHandle[i])
+				fnLiteral += isAsync(hook.fn)
 					? `af = await afterHandle[${i}](c)\n`
 					: `af = afterHandle[${i}](c)\n`
 
@@ -1249,7 +1278,7 @@ export const composeHandler = ({
 			for (let i = 0; i < hooks.error.length; i++) {
 				const name = `er${i}`
 				const endUnit = report('error.unit', {
-					name: hooks.error[i].name
+					name: hooks.error[i].fn.name
 				})
 
 				fnLiteral += `\nlet ${name} = handleErrors[${i}](c)\n`
@@ -1354,7 +1383,7 @@ export const composeHandler = ({
 
 	return createHandler({
 		handler,
-		hooks,
+		hooks: lifeCycleToFn(hooks),
 		validator,
 		// @ts-expect-error
 		handleError: app.handleError,
@@ -1482,7 +1511,11 @@ export const composeGeneralHandler = (
 
 	const notFound = new NotFoundError()
 
-	${app.event.request.length ? `const onRequest = app.event.request` : ''}
+	${
+		app.event.request.length
+			? `const onRequest = app.event.request.map(x => x.fn)`
+			: ''
+	}
 	${router.static.http.variables}
 	${
 		app.event.error.length
@@ -1537,12 +1570,12 @@ export const composeGeneralHandler = (
 		fnLiteral += `\n try {\n`
 
 		for (let i = 0; i < app.event.request.length; i++) {
-			const fn = app.event.request[i]
-			const withReturn = hasReturn(fn.toString())
-			const maybeAsync = isAsync(fn)
+			const hook = app.event.request[i]
+			const withReturn = hasReturn(hook.fn.toString())
+			const maybeAsync = isAsync(hook)
 
 			const endUnit = report('request.unit', {
-				name: app.event.request[i].name
+				name: app.event.request[i].fn.name
 			})
 
 			if (withReturn) {
@@ -1672,11 +1705,14 @@ export const composeErrorHandler = (
 	app: Elysia<any, any, any, any, any, any, any, any>
 ) => {
 	let fnLiteral = `const {
-		app: { event: { error: onError, onResponse: res } },
+		app: { event: { error: onErrorContainer, onResponse: resContainer } },
 		mapResponse,
 		ERROR_CODE,
 		ELYSIA_RESPONSE
 	} = inject
+
+	const onError = onErrorContainer.map(x => x.fn)
+	const res = resContainer.map(x => x.fn)
 
 	return ${
 		app.event.error.find(isAsync) ? 'async' : ''
@@ -1702,7 +1738,7 @@ export const composeErrorHandler = (
 
 		fnLiteral += '\nif(skipGlobal !== true) {\n'
 
-		if (hasReturn(handler.toString()))
+		if (hasReturn(handler.fn.toString()))
 			fnLiteral += `r = ${response}; if(r !== undefined) {
 				if(r instanceof Response) return r
 

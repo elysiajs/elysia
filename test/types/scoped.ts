@@ -163,3 +163,25 @@ const app = new Elysia()
 		}
 	}>()
 }
+
+// ? Propagate
+{
+	const subPlugin1 = new Elysia().derive({ as: 'scoped' }, () => {
+		return {
+			hi: 'hi'
+		}
+	})
+
+	const subPlugin2 = new Elysia().derive({ as: 'scoped' }, () => {
+		return {
+			none: 'none'
+		}
+	})
+
+	const plugin = new Elysia().use(subPlugin1).propagate().use(subPlugin2)
+
+	const app = new Elysia().use(plugin).get('/', (context) => {
+		expectTypeOf<typeof context>().toHaveProperty('hi')
+		expectTypeOf<typeof context>().not.toHaveProperty('none')
+	})
+}

@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "1.0.3",
+  "version": "1.0.7",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -12,76 +12,64 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "bun": "./dist/bun/index.js",
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/cjs/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/cjs/index.js"
     },
     "./ws": {
-      "bun": "./dist/ws/index.js",
+      "types": "./dist/ws/index.d.ts",
       "import": "./dist/ws/index.mjs",
-      "require": "./dist/cjs/ws/index.js",
-      "types": "./dist/ws/index.d.ts"
+      "require": "./dist/cjs/ws/index.js"
     },
     "./compose": {
-      "bun": "./dist/compose.js",
+      "types": "./dist/compose.d.ts",
       "import": "./dist/compose.mjs",
-      "require": "./dist/cjs/compose.js",
-      "types": "./dist/compose.d.ts"
+      "require": "./dist/cjs/compose.js"
     },
     "./context": {
-      "bun": "./dist/context.js",
+      "types": "./dist/context.d.ts",
       "import": "./dist/context.mjs",
-      "require": "./dist/cjs/context.js",
-      "types": "./dist/context.d.ts"
+      "require": "./dist/cjs/context.js"
     },
     "./cookie": {
-      "bun": "./dist/cookie.js",
+      "types": "./dist/cookie.d.ts",
       "import": "./dist/cookie.mjs",
-      "require": "./dist/cjs/cookie.js",
-      "types": "./dist/cookie.d.ts"
+      "require": "./dist/cjs/cookie.js"
     },
     "./error": {
-      "bun": "./dist/error.js",
+      "types": "./dist/error.d.ts",
       "import": "./dist/error.mjs",
-      "require": "./dist/cjs/error.js",
-      "types": "./dist/error.d.ts"
+      "require": "./dist/cjs/error.js"
     },
     "./handler": {
-      "bun": "./dist/handler.js",
+      "types": "./dist/handler.d.ts",
       "import": "./dist/handler.mjs",
-      "require": "./dist/cjs/handler.js",
-      "types": "./dist/handler.d.ts"
+      "require": "./dist/cjs/handler.js"
     },
     "./schema": {
-      "bun": "./dist/schema.js",
+      "types": "./dist/schema.d.ts",
       "import": "./dist/schema.mjs",
-      "require": "./dist/cjs/schema.js",
-      "types": "./dist/schema.d.ts"
+      "require": "./dist/cjs/schema.js"
     },
     "./trace": {
-      "bun": "./dist/trace.js",
+      "types": "./dist/trace.d.ts",
       "import": "./dist/trace.mjs",
-      "require": "./dist/cjs/trace.js",
-      "types": "./dist/trace.d.ts"
+      "require": "./dist/cjs/trace.js"
     },
     "./type-system": {
-      "bun": "./dist/type-system.js",
+      "types": "./dist/type-system.d.ts",
       "import": "./dist/type-system.mjs",
-      "require": "./dist/cjs/type-system.js",
-      "types": "./dist/type-system.d.ts"
+      "require": "./dist/cjs/type-system.js"
     },
     "./types": {
-      "bun": "./dist/types.js",
+      "types": "./dist/types.d.ts",
       "import": "./dist/types.mjs",
-      "require": "./dist/cjs/types.js",
-      "types": "./dist/types.d.ts"
+      "require": "./dist/cjs/types.js"
     },
     "./utils": {
-      "bun": "./dist/utils.js",
+      "types": "./dist/utils.d.ts",
       "import": "./dist/utils.mjs",
-      "require": "./dist/cjs/utils.js",
-      "types": "./dist/utils.d.ts"
+      "require": "./dist/cjs/utils.js"
     }
   },
   "repository": {
@@ -126,9 +114,7 @@
     "eslint-plugin-sonarjs": "^0.23.0",
     "expect-type": "^0.16.0",
     "memoirist": "0.1.6",
-    "ts-toolbelt": "^9.6.0",
     "tsup": "^8.0.2",
-    "type-fest": "^4.10.1",
     "typescript": "^5.4.2"
   },
   "peerDependencies": {

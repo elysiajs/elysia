@@ -50,8 +50,7 @@ export const createDynamicHandler =
 
 		try {
 			for (let i = 0; i < app.event.request.length; i++) {
-				// @ts-ignore
-				const onRequest = app.event.request[i]
+				const onRequest = app.event.request[i].fn
 				let response = onRequest(context as any)
 				if (response instanceof Promise) response = await response
 
@@ -110,7 +109,8 @@ export const createDynamicHandler =
 							contentType = contentType.slice(0, index)
 
 						for (let i = 0; i < hooks.parse.length; i++) {
-							let temp = hooks.parse[i](context, contentType)
+							const hook = hooks.parse[i].fn
+							let temp = hook(context, contentType)
 							if (temp instanceof Promise) temp = await temp
 
 							if (temp) {
@@ -167,8 +167,12 @@ export const createDynamicHandler =
 			for (const [key, value] of request.headers.entries())
 				context.headers[key] = value
 
-			// @ts-expect-error
-			const cookieMeta = validator?.cookie?.schema as {
+			const cookieMeta = Object.assign(
+				{},
+				app.config?.cookie,
+				// @ts-expect-error
+				validator?.cookie?.config
+			) as {
 				secrets?: string | string[]
 				sign: string[] | true
 				properties: { [x: string]: Object }
@@ -176,35 +180,34 @@ export const createDynamicHandler =
 
 			const cookieHeaderValue = request.headers.get('cookie')
 
-			if (cookieHeaderValue)
-				context.cookie = await parseCookie(
-					context.set,
-					cookieHeaderValue,
-					cookieMeta
-						? {
-								secret:
-									cookieMeta.secrets !== undefined
-										? typeof cookieMeta.secrets === 'string'
-											? cookieMeta.secrets
-											: cookieMeta.secrets.join(',')
-										: undefined,
-								sign:
-									cookieMeta.sign === true
-										? true
-										: cookieMeta.sign !== undefined
-										? typeof cookieMeta.sign === 'string'
-											? cookieMeta.sign
-											: cookieMeta.sign.join(',')
-										: undefined
-						  }
-						: undefined
-				)
+			context.cookie = await parseCookie(
+				context.set,
+				cookieHeaderValue,
+				cookieMeta
+					? {
+							secret:
+								cookieMeta.secrets !== undefined
+									? typeof cookieMeta.secrets === 'string'
+										? cookieMeta.secrets
+										: cookieMeta.secrets.join(',')
+									: undefined,
+							sign:
+								cookieMeta.sign === true
+									? true
+									: cookieMeta.sign !== undefined
+									? typeof cookieMeta.sign === 'string'
+										? cookieMeta.sign
+										: cookieMeta.sign.join(',')
+									: undefined
+					  }
+					: undefined
+			)
 
 			for (let i = 0; i < hooks.transform.length; i++) {
-				const operation = hooks.transform[i](context)
+				const hook = hooks.transform[i]
+				const operation = hook.fn(context)
 
-				// @ts-ignore
-				if (hooks.transform[i].$elysia === 'derive') {
+				if (hook.subType === 'derive') {
 					if (operation instanceof Promise)
 						Object.assign(context, await operation)
 					else Object.assign(context, operation)
@@ -257,7 +260,7 @@ export const createDynamicHandler =
 			}
 
 			for (let i = 0; i < hooks.beforeHandle.length; i++) {
-				let response = hooks.beforeHandle[i](context)
+				let response = hooks.beforeHandle[i].fn(context)
 				if (response instanceof Promise) response = await response
 
 				// `false` is a falsey value, check for undefined instead
@@ -269,7 +272,7 @@ export const createDynamicHandler =
 					).response = response
 
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
-						let newResponse = hooks.afterHandle[i](
+						let newResponse = hooks.afterHandle[i].fn(
 							context as Context & {
 								response: unknown
 							}
@@ -305,7 +308,7 @@ export const createDynamicHandler =
 				).response = response
 
 				for (let i = 0; i < hooks.afterHandle.length; i++) {
-					let newResponse = hooks.afterHandle[i](
+					let newResponse = hooks.afterHandle[i].fn(
 						context as Context & {
 							response: unknown
 						}
@@ -345,9 +348,13 @@ export const createDynamicHandler =
 							cookie.value as any,
 							'${secret}'
 						)
-				else
+				else {
+					// @ts-expect-error private
+					const properties = validator?.cookie?.schema?.properties
+
 					for (const name of cookieMeta.sign) {
-						if (!(name in cookieMeta.properties)) continue
+						if (!(name in properties))
+							continue
 
 						if (context.set.cookie[name]?.value) {
 							context.set.cookie[name].value = await signCookie(
@@ -356,6 +363,7 @@ export const createDynamicHandler =
 							)
 						}
 					}
+				}
 			}
 
 			return mapResponse(response, context.set)
@@ -363,12 +371,11 @@ export const createDynamicHandler =
 			if ((error as ElysiaErrors).status)
 				set.status = (error as ElysiaErrors).status
 
-			// @ts-ignore
+			// @ts-expect-error private
 			return app.handleError(context, error)
 		} finally {
-			// @ts-ignore
 			for (const onResponse of app.event.onResponse)
-				await onResponse(context)
+				await onResponse.fn(context)
 		}
 	}
 
@@ -378,9 +385,9 @@ export const createDynamicErrorHandler =
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
-		// @ts-ignore
 		for (let i = 0; i < app.event.error.length; i++) {
-			let response = app.event.error[i](errorContext as any)
+			const hook = app.event.error[i]
+			let response = hook.fn(errorContext as any)
 			if (response instanceof Promise) response = await response
 			if (response !== undefined && response !== null)
 				return mapResponse(response, context.set)

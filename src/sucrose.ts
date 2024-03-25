@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import type { Handler, LifeCycleStore, TraceHandler } from './types'
+import type { Handler, HookContainer, LifeCycleStore, TraceHandler } from './types'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -401,10 +401,9 @@ export const inferBodyReference = (
 		if (!inference.query && access('query', alias)) inference.query = true
 
 		if (
-			['return'].some((type) =>
-				accessor(type + ' ' + alias, 'query').some((key) =>
-					code.includes(key)
-				)
+			code.includes('return ' + alias) ||
+			accessor('return ' + alias, 'query').some((key) =>
+				code.includes(key)
 			)
 		) {
 			inference.query = true
@@ -684,7 +683,11 @@ export const sucrose = (
 	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
 	if (lifeCycle.onResponse?.length) events.push(...lifeCycle.onResponse)
 
-	for (const event of events) {
+	for (const e of events) {
+		if(!e) continue
+		
+		const event = 'fn' in e ? e.fn : e
+
 		const [parameter, body] = separateFunction(event.toString())
 
 		const rootParameters = findParameterReference(parameter, inference)

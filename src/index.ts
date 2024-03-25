@@ -13,7 +13,12 @@ import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
-import { mergeDeep, PromiseGroup } from './utils'
+import {
+	fnToContainer,
+	localHookToLifeCycleStore,
+	mergeDeep,
+	PromiseGroup
+} from './utils'
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -47,8 +52,7 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError,
-	ELYSIA_RESPONSE
+	type InternalServerError
 } from './error'
 
 import type {
@@ -96,10 +100,11 @@ import type {
 	CreateEden,
 	ComposeElysiaResponse,
 	InlineHandler,
-	ElysiaFn,
+	HookContainer,
 	LifeCycleType,
 	MacroQueue,
-	EphemeralType
+	EphemeralType,
+	ExcludeElysiaResponse
 } from './types'
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any, any> // prettier-ignore
@@ -115,7 +120,7 @@ type AnyElysia = Elysia<any, any, any, any, any, any, any, any> // prettier-igno
  *
  * new Elysia()
  *     .get("/", () => "Hello")
- *     .listen(8080)
+ *     .listen(3000)
  * ```
  */
 export default class Elysia<
@@ -136,11 +141,13 @@ export default class Elysia<
 		macro: {}
 	},
 	const out Routes extends RouteBase = {},
+	// ? scoped
 	const in out Ephemeral extends EphemeralType = {
 		derive: {}
 		resolve: {}
 		schema: {}
 	},
+	// ? local
 	const in out Volatile extends EphemeralType = {
 		derive: {}
 		resolve: {}
@@ -191,7 +198,7 @@ export default class Elysia<
 	}
 
 	protected extender = {
-		macros: <MacroQueue>[]
+		macros: <MacroQueue[]>[]
 	}
 
 	protected validator: SchemaValidator | null = null
@@ -277,7 +284,7 @@ export default class Elysia<
 			cookie: {},
 			analytic: false,
 			...config,
-			experimental: config?.experimental ?? { transpiler: false },
+			experimental: config?.experimental ?? {},
 			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
 
@@ -295,6 +302,34 @@ export default class Elysia<
 
 	protected routeTree = new Map<string, number>()
 
+	private applyMacro(
+		localHook: LocalHook<any, any, any, any, any, any, any>
+	) {
+		if (this.extender.macros.length) {
+			const manage = createMacroManager({
+				globalHook: this.event,
+				localHook
+			})
+
+			const manager: MacroManager = {
+				events: {
+					global: this.event,
+					local: localHook
+				},
+				onParse: manage('parse') as any,
+				onTransform: manage('transform') as any,
+				onBeforeHandle: manage('beforeHandle') as any,
+				onAfterHandle: manage('afterHandle') as any,
+				onResponse: manage('onResponse') as any,
+				mapResponse: manage('mapResponse') as any,
+				onError: manage('error') as any
+			}
+
+			for (const macro of this.extender.macros)
+				traceBackMacro(macro.fn(manager), localHook)
+		}
+	}
+
 	private add(
 		method: HTTPMethod,
 		path: string,
@@ -305,6 +340,8 @@ export default class Elysia<
 			skipPrefix: false as boolean | undefined
 		}
 	) {
+		localHook = localHookToLifeCycleStore(localHook)
+
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
 		if (this.config.prefix && !skipPrefix && !this.config.scoped)
@@ -350,7 +387,6 @@ export default class Elysia<
 
 		// ? Clone is need because of JIT, so the context doesn't switch between instance
 		const dynamic = !this.config.aot
-		const cookieConfig = Object.assign({}, this.config.cookie)
 
 		const cloned = {
 			body: localHook?.body ?? (this.validator?.body as any),
@@ -362,13 +398,17 @@ export default class Elysia<
 		}
 
 		const cookieValidator = () =>
-			getCookieValidator({
-				validator: cloned.cookie,
-				defaultConfig: this.config.cookie,
-				config: cookieConfig,
-				dynamic,
-				models
-			})
+			cloned.cookie
+				? getCookieValidator({
+						validator: cloned.cookie,
+						defaultConfig: this.config.cookie,
+						config: cloned.cookie?.config ?? {},
+						dynamic,
+						models
+				  })
+				: undefined
+
+		const enableCleaning = this.config.enableCleaning;
 
 		const validator =
 			this.config.precompile === true ||
@@ -377,7 +417,8 @@ export default class Elysia<
 				? {
 						body: getSchemaValidator(cloned.body, {
 							dynamic,
-							models
+							models,
+							enableCleaning
 						}),
 						headers: getSchemaValidator(cloned.headers, {
 							dynamic,
@@ -395,7 +436,8 @@ export default class Elysia<
 						cookie: cookieValidator(),
 						response: getResponseSchemaValidator(cloned.response, {
 							dynamic,
-							models
+							models,
+							enableCleaning
 						})
 				  }
 				: ({
@@ -404,7 +446,8 @@ export default class Elysia<
 
 							return (_body = getSchemaValidator(cloned.body, {
 								dynamic,
-								models
+								models,
+								enableCleaning
 							}))
 						},
 						get headers() {
@@ -447,7 +490,8 @@ export default class Elysia<
 								cloned.response,
 								{
 									dynamic,
-									models
+									models,
+									enableCleaning
 								}
 							))
 						}
@@ -457,28 +501,10 @@ export default class Elysia<
 			? path.slice(0, path.length - 1)
 			: path + '/'
 
-		if (this.extender.macros.length) {
-			const manage = createMacroManager({
-				globalHook: this.event,
-				localHook
-			})
+		// ! Init default [] for hooks if undefined
+		localHook = mergeHook(localHook, {}, { allowMacro: true })
 
-			const manager: MacroManager = {
-				events: {
-					global: this.event,
-					local: localHook
-				},
-				onParse: manage('parse'),
-				onTransform: manage('transform'),
-				onBeforeHandle: manage('beforeHandle'),
-				onAfterHandle: manage('afterHandle'),
-				onResponse: manage('onResponse'),
-				onError: manage('error')
-			}
-
-			for (const macro of this.extender.macros)
-				traceBackMacro(macro(manager), mergeHook(localHook) as any)
-		}
+		this.applyMacro(localHook)
 
 		const hooks = mergeHook(this.event, localHook)
 
@@ -528,6 +554,7 @@ export default class Elysia<
 					hooks,
 					validator,
 					handler: handle,
+					enableCleaning: this.config.enableCleaning,
 					allowMeta,
 					appInference: {
 						event: {
@@ -706,7 +733,7 @@ export default class Elysia<
 	 *     .onStart(({ url, port }) => {
 	 *         console.log("Running at ${url}:${port}")
 	 *     })
-	 *     .listen(8080)
+	 *     .listen(3000)
 	 * ```
 	 */
 	onStart(handler: MaybeArray<GracefulHandler<this>>) {
@@ -744,7 +771,7 @@ export default class Elysia<
 			>
 		>
 	) {
-		this.on('request', handler)
+		this.on('request', handler as any)
 
 		return this
 	}
@@ -836,8 +863,7 @@ export default class Elysia<
 								derive: Ephemeral['derive'] & Volatile['derive']
 								resolve: Ephemeral['resolve'] &
 									Volatile['resolve']
-						  }),
-				BasePath
+						  })
 			>
 		>
 	): this
@@ -935,8 +961,7 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-						  }),
-				BasePath
+						  })
 			>
 		>
 	): this
@@ -980,11 +1005,30 @@ export default class Elysia<
 					Metadata['schema'] &
 						Ephemeral['schema'] &
 						Volatile['schema'],
-					Singleton & {
-						derive: Ephemeral['derive'] & Volatile['derive']
-						resolve: Ephemeral['resolve'] & Volatile['resolve']
-					},
-					BasePath
+					Singleton &
+						('global' extends Type
+							? {
+									derive: Partial<
+										Ephemeral['derive'] & Volatile['derive']
+									>
+									resolve: Partial<
+										Ephemeral['resolve'] &
+											Volatile['resolve']
+									>
+							  }
+							: 'scoped' extends Type
+							? {
+									derive: Ephemeral['derive'] &
+										Partial<Volatile['derive']>
+									resolve: Ephemeral['resolve'] &
+										Partial<Volatile['resolve']>
+							  }
+							: {
+									derive: Ephemeral['derive'] &
+										Volatile['derive']
+									resolve: Ephemeral['resolve'] &
+										Volatile['resolve']
+							  })
 				>
 			>
 		) => MaybePromise<Resolver>
@@ -997,11 +1041,7 @@ export default class Elysia<
 					store: Singleton['store']
 					derive: Singleton['resolve']
 					resolve: Prettify<
-						Singleton['resolve'] &
-							Exclude<
-								Awaited<Resolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Singleton['resolve'] & ExcludeElysiaResponse<Resolver>
 					>
 				},
 				Definitions,
@@ -1021,11 +1061,7 @@ export default class Elysia<
 				{
 					derive: Ephemeral['resolve']
 					resolve: Prettify<
-						Ephemeral['resolve'] &
-							Exclude<
-								Awaited<Resolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Ephemeral['resolve'] & ExcludeElysiaResponse<Resolver>
 					>
 					schema: Ephemeral['schema']
 				},
@@ -1042,11 +1078,7 @@ export default class Elysia<
 				{
 					derive: Volatile['resolve']
 					resolve: Prettify<
-						Volatile['resolve'] &
-							Exclude<
-								Awaited<Resolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Volatile['resolve'] & ExcludeElysiaResponse<Resolver>
 					>
 					schema: Volatile['schema']
 				}
@@ -1093,8 +1125,7 @@ export default class Elysia<
 		{
 			derive: Volatile['resolve']
 			resolve: Prettify<
-				Volatile['resolve'] &
-					Exclude<Awaited<Resolver>, { [ELYSIA_RESPONSE]: any }>
+				Volatile['resolve'] & ExcludeElysiaResponse<Resolver>
 			>
 			schema: Volatile['schema']
 		}
@@ -1109,13 +1140,12 @@ export default class Elysia<
 			optionsOrResolve = { as: 'local' }
 		}
 
-		// @ts-ignore
-		resolve.$elysia = 'resolve'
+		const hook: HookContainer = {
+			subType: 'resolve',
+			fn: resolve!
+		}
 
-		return this.onBeforeHandle(
-			optionsOrResolve as any,
-			resolve as any
-		) as any
+		return this.onBeforeHandle(optionsOrResolve as any, hook as any) as any
 	}
 
 	mapResolve<const NewResolver extends Record<string, unknown>>(
@@ -1173,8 +1203,7 @@ export default class Elysia<
 								derive: Ephemeral['derive'] & Volatile['derive']
 								resolve: Ephemeral['resolve'] &
 									Volatile['resolve']
-						  }),
-				BasePath
+						  })
 			>
 		) => MaybePromise<NewResolver>
 	): Type extends 'global'
@@ -1205,10 +1234,7 @@ export default class Elysia<
 					derive: Ephemeral['resolve']
 					resolve: Prettify<
 						Ephemeral['resolve'] &
-							Exclude<
-								Awaited<NewResolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+							ExcludeElysiaResponse<NewResolver>
 					>
 					schema: Ephemeral['schema']
 				},
@@ -1225,11 +1251,7 @@ export default class Elysia<
 				{
 					derive: Volatile['resolve']
 					resolve: Prettify<
-						Volatile['resolve'] &
-							Exclude<
-								Awaited<NewResolver>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Volatile['resolve'] & ExcludeElysiaResponse<NewResolver>
 					>
 					schema: Volatile['schema']
 				}
@@ -1244,13 +1266,12 @@ export default class Elysia<
 			optionsOrResolve = { as: 'local' }
 		}
 
-		// @ts-ignore
-		mapper.$elysia = 'resolve'
+		const hook: HookContainer = {
+			subType: 'resolve',
+			fn: mapper!
+		}
 
-		return this.onBeforeHandle(
-			optionsOrResolve as any,
-			mapper as any
-		) as any
+		return this.onBeforeHandle(optionsOrResolve as any, hook as any) as any
 	}
 
 	/**
@@ -1284,8 +1305,7 @@ export default class Elysia<
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				},
-				BasePath
+				}
 			>
 		>
 	): this
@@ -1343,7 +1363,8 @@ export default class Elysia<
 								derive: Ephemeral['derive'] & Volatile['derive']
 								resolve: Ephemeral['resolve'] &
 									Volatile['resolve']
-						  })
+						  }),
+				BasePath
 			>
 		>
 	): this
@@ -1389,7 +1410,8 @@ export default class Elysia<
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
+				},
+				BasePath
 			>
 		>
 	): this
@@ -1490,7 +1512,8 @@ export default class Elysia<
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
+				},
+				BasePath
 			>
 		>
 	): this
@@ -2030,7 +2053,9 @@ export default class Elysia<
 	 */
 	on<Event extends keyof LifeCycleStore>(
 		type: Exclude<Event, 'onResponse'> | 'response',
-		handlers: MaybeArray<Extract<LifeCycleStore[Event], Function[]>[0]>
+		handlers: MaybeArray<
+			Extract<LifeCycleStore[Event], HookContainer[]>[0]['fn']
+		>
 	): this
 
 	/**
@@ -2057,8 +2082,8 @@ export default class Elysia<
 
 	on(
 		optionsOrType: { as?: LifeCycleType } | string,
-		typeOrHandlers: MaybeArray<ElysiaFn> | string,
-		handlers?: MaybeArray<ElysiaFn>
+		typeOrHandlers: MaybeArray<Function | HookContainer> | string,
+		handlers?: MaybeArray<Function | HookContainer>
 	) {
 		let type: Exclude<keyof LifeCycleStore, 'onResponse'> | 'onResponse'
 
@@ -2077,70 +2102,84 @@ export default class Elysia<
 		// @ts-expect-error possible user error, leave it on
 		if (type === 'response') type = 'onResponse'
 
-		if (!Array.isArray(handlers)) handlers = [handlers!]
+		if (Array.isArray(handlers)) handlers = fnToContainer(handlers)
+		else {
+			if (typeof handlers === 'function')
+				handlers = [
+					{
+						fn: handlers
+					}
+				]
+			else handlers = [handlers!]
+		}
 
-		for (const handler of handlers)
-			handler.$elysiaHookType =
+		const handles = handlers as HookContainer[]
+
+		for (const handle of handles)
+			handle.scope =
 				typeof optionsOrType === 'string'
 					? 'local'
 					: optionsOrType?.as ?? 'local'
 
 		if (type === 'trace')
-			sucroseTrace(handlers as TraceHandler[], this.inference.trace)
+			sucroseTrace(
+				handles.map((x) => x.fn) as TraceHandler[],
+				this.inference.trace
+			)
 		else
 			sucrose(
 				{
-					[type]: handlers
+					[type]: handles.map((x) => x.fn)
 				},
 				this.inference.event
 			)
 
-		for (let handler of handlers) {
-			handler = asHookType(handler, 'global', { skipIfHasType: true })
+		for (const handle of handles) {
+			const fn = asHookType(handle, 'global', { skipIfHasType: true })
 
 			switch (type) {
 				case 'start':
-					this.event.start.push(handler as any)
+					this.event.start.push(fn as any)
 					break
 
 				case 'request':
-					this.event.request.push(handler as any)
+					this.event.request.push(fn as any)
 					break
 
 				case 'parse':
-					this.event.parse.push(handler)
+					this.event.parse.push(fn as any)
 					break
 
 				case 'transform':
-					this.event.transform.push(handler as any)
+					this.event.transform.push(fn as any)
 					break
 
 				case 'beforeHandle':
-					this.event.beforeHandle.push(handler as any)
+					this.event.beforeHandle.push(fn as any)
 					break
 
 				case 'afterHandle':
-					this.event.afterHandle.push(handler as any)
+					this.event.afterHandle.push(fn as any)
 					break
 
 				case 'mapResponse':
-					this.event.mapResponse.push(handler as any)
+					this.event.mapResponse.push(fn as any)
 					break
 
 				case 'onResponse':
-					this.event.onResponse.push(handler as any)
+					this.event.onResponse.push(fn as any)
 					break
 
 				case 'trace':
-					this.event.trace.push(handler as any)
+					this.event.trace.push(fn as any)
 					break
 
 				case 'error':
-					this.event.error.push(handler as any)
+					this.event.error.push(fn as any)
 					break
 
 				case 'stop':
-					this.event.stop.push(handler as any)
+					this.event.stop.push(fn as any)
 					break
 			}
 		}
@@ -2148,7 +2187,48 @@ export default class Elysia<
 		return this
 	}
 
-	group<const Prefix extends string, const NewElysia extends AnyElysia>(
+	propagate(): Elysia<
+		BasePath,
+		Scoped,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Prettify2<Ephemeral & Volatile>,
+		{
+			derive: {}
+			resolve: {}
+			schema: {}
+		}
+	> {
+		/**
+		 * Since it's a plugin, which means that ephemeral is demoted to volatile.
+		 * Which  means there's no volatile and all previous ephemeral become volatile
+		 * We can just promote back without worry
+		 */
+		const promoteEvent = (events: (HookContainer | Function)[]) => {
+			for (const event of events) {
+				if ('scope' in event && event.scope === 'local')
+					event.scope = 'scoped'
+			}
+		}
+
+		promoteEvent(this.event.parse)
+		promoteEvent(this.event.transform)
+		promoteEvent(this.event.beforeHandle)
+		promoteEvent(this.event.afterHandle)
+		promoteEvent(this.event.mapResponse)
+		promoteEvent(this.event.onResponse)
+		promoteEvent(this.event.trace)
+		promoteEvent(this.event.error)
+
+		return this as any
+	}
+
+	group<
+		const Prefix extends string,
+		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>
+	>(
 		prefix: Prefix,
 		run: (
 			group: Elysia<
@@ -2480,16 +2560,15 @@ export default class Elysia<
 	): AnyElysia {
 		if (!run) {
 			if (typeof hook === 'object') {
-				this.event = mergeLifeCycle(
-					this.event,
-					mergeLifeCycle(hook, {})
-				)
+				this.applyMacro(hook)
+				this.event = mergeLifeCycle(this.event, hook)
 				this.validator = {
 					body: hook.body ?? this.validator?.body,
 					headers: hook.headers ?? this.validator?.headers,
 					params: hook.params ?? this.validator?.params,
 					query: hook.query ?? this.validator?.query,
-					response: hook.response ?? this.validator?.response
+					response: hook.response ?? this.validator?.response,
+					cookie: hook.cookie ?? this.validator?.cookie
 				}
 
 				return this
@@ -2532,23 +2611,32 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any, any, any, any, any>, {
-						...((localHook || {}) as LocalHook<
-							any,
-							any,
-							any,
-							any,
-							any
-						>),
-						error: !localHook.error
-							? sandbox.event.error
-							: Array.isArray(localHook.error)
-							? [
-									...(localHook.error || {}),
-									...(sandbox.event.error || [])
-							  ]
-							: [localHook.error, ...(sandbox.event.error || [])]
-					})
+					mergeHook(
+						hook as LocalHook<any, any, any, any, any>,
+						{
+							...((localHook || {}) as LocalHook<
+								any,
+								any,
+								any,
+								any,
+								any
+							>),
+							error: !localHook.error
+								? sandbox.event.error
+								: Array.isArray(localHook.error)
+								? [
+										...(localHook.error || {}),
+										...(sandbox.event.error || [])
+								  ]
+								: [
+										localHook.error,
+										...(sandbox.event.error || [])
+								  ]
+						},
+						{
+							allowMacro: true
+						}
+					)
 				)
 			}
 		)
@@ -2575,8 +2663,8 @@ export default class Elysia<
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Volatile & NewElysia['_ephemeral']
+				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
+				Prettify2<Volatile & NewElysia['_volatile']>
 		  >
 		: Elysia<
 				BasePath,
@@ -2608,7 +2696,7 @@ export default class Elysia<
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Ephemeral,
-				Volatile & NewElysia['_ephemeral']
+				Prettify2<Volatile & NewElysia['_ephemeral']>
 		  >
 		: Elysia<
 				BasePath,
@@ -2641,8 +2729,8 @@ export default class Elysia<
 				BasePath extends ``
 					? Routes & NewElysia['_routes']
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Volatile & NewElysia['_ephemeral']
+				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
+				Prettify2<Volatile & NewElysia['_volatile']>
 		  >
 		: Elysia<
 				BasePath,
@@ -2678,7 +2766,7 @@ export default class Elysia<
 					? Routes & LazyLoadElysia['_routes']
 					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
 				Ephemeral,
-				Volatile & LazyLoadElysia['_ephemeral']
+				Prettify2<Volatile & LazyLoadElysia['_ephemeral']>
 		  >
 		: Elysia<
 				BasePath,
@@ -2708,7 +2796,7 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| AnyElysia[]
+			| MaybePromise<AnyElysia[]>
 			| MaybePromise<
 					AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 			  >
@@ -2735,21 +2823,15 @@ export default class Elysia<
 			this.promisedModules.add(
 				plugin
 					.then((plugin) => {
-						if (typeof plugin === 'function') {
-							return plugin(this)
-						}
+						if (typeof plugin === 'function') return plugin(this)
 
-						if (plugin instanceof Elysia) {
-							return this._use(plugin)
-						}
+						if (plugin instanceof Elysia) return this._use(plugin)
 
-						if (typeof plugin.default === 'function') {
+						if (typeof plugin.default === 'function')
 							return plugin.default(this)
-						}
 
-						if (plugin.default instanceof Elysia) {
+						if (plugin.default instanceof Elysia)
 							return this._use(plugin.default)
-						}
 
 						throw new Error(
 							'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
@@ -2882,15 +2964,15 @@ export default class Elysia<
 								type: plugin.definitions.type,
 								error: plugin.definitions.error,
 								derive: plugin.event.transform
-									.filter((x) => x.$elysia === 'derive')
+									.filter((x) => x.subType === 'derive')
 									.map((x) => ({
-										fn: x.toString(),
+										fn: x.fn.toString(),
 										stack: new Error().stack ?? ''
 									})),
 								resolve: plugin.event.transform
-									.filter((x) => x.$elysia === 'derive')
+									.filter((x) => x.subType === 'derive')
 									.map((x) => ({
-										fn: x.toString(),
+										fn: x.fn.toString(),
 										stack: new Error().stack ?? ''
 									}))
 						  }
@@ -2906,12 +2988,12 @@ export default class Elysia<
 			for (let i = 0; i < plugin.extender.macros.length; i++) {
 				const macro = this.extender.macros[i]
 
-				if (macroHashes.includes(macro.$elysiaChecksum)) {
+				if (macroHashes.includes(macro.checksum)) {
 					plugin.extender.macros.splice(i, 1)
 					i--
 				}
 
-				macroHashes.push(macro.$elysiaChecksum)
+				macroHashes.push(macro.checksum)
 			}
 
 			plugin.onRequest((context) => {
@@ -2976,8 +3058,8 @@ export default class Elysia<
 
 			plugin.reporter = this.reporter
 			for (const trace of plugin.event.trace)
-				if (trace.$elysiaHookType && trace.$elysiaHookType !== 'local')
-					this.trace(trace)
+				if (trace.scope && trace.scope !== 'local')
+					this.trace(trace as any)
 
 			if (name) {
 				if (!(name in this.dependencies)) this.dependencies[name] = []
@@ -3001,19 +3083,19 @@ export default class Elysia<
 				)
 			}
 
-			const macroHashes: string[] = []
+			const macroHashes: number[] = []
 
 			for (let i = 0; i < this.extender.macros.length; i++) {
 				const macro = this.extender.macros[i]
 
-				// @ts-ignore
-				if (macroHashes.includes(macro.$elysiaChecksum)) {
-					this.extender.macros.splice(i, 1)
-					i--
-				}
+				if (macro.checksum) {
+					if (macroHashes.includes(macro.checksum)) {
+						this.extender.macros.splice(i, 1)
+						i--
+					}
 
-				// @ts-ignore
-				macroHashes.push(macro.$elysiaChecksum)
+					macroHashes.push(macro.checksum)
+				}
 			}
 
 			this.inference = {
@@ -3129,13 +3211,13 @@ export default class Elysia<
 								type: plugin.definitions.type,
 								error: plugin.definitions.error,
 								derive: plugin.event.transform
-									.filter((x) => x?.$elysia === 'derive')
+									.filter((x) => x?.subType === 'derive')
 									.map((x) => ({
 										fn: x.toString(),
 										stack: new Error().stack ?? ''
 									})),
 								resolve: plugin.event.transform
-									.filter((x) => x?.$elysia === 'resolve')
+									.filter((x) => x?.subType === 'resolve')
 									.map((x) => ({
 										fn: x.toString(),
 										stack: new Error().stack ?? ''
@@ -3162,11 +3244,10 @@ export default class Elysia<
 		macro: (
 			route: MacroManager<
 				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema'],
-				Singleton &
-					Ephemeral['derive'] &
-					Ephemeral['resolve'] &
-					Volatile['derive'] &
-					Volatile['resolve'],
+				Singleton & {
+					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+				},
 				Definitions['error']
 			>
 		) => NewMacro
@@ -3183,16 +3264,18 @@ export default class Elysia<
 		Ephemeral,
 		Volatile
 	> {
-		// @ts-ignore
-		macro.$elysiaChecksum = checksum(
-			JSON.stringify({
-				name: this.config.name,
-				seed: this.config.seed,
-				content: macro.toString()
-			})
-		)
+		const hook: MacroQueue = {
+			checksum: checksum(
+				JSON.stringify({
+					name: this.config.name,
+					seed: this.config.seed,
+					content: macro.toString()
+				})
+			),
+			fn: macro as any
+		}
 
-		this.extender.macros.push(macro as any)
+		this.extender.macros.push(hook)
 
 		return this as any
 	}
@@ -4535,7 +4618,7 @@ export default class Elysia<
 			derive: Prettify<
 				Volatile['derive'] &
 					// Exclude `return error`
-					Exclude<Awaited<Derivative>, { [ELYSIA_RESPONSE]: any }>
+					ExcludeElysiaResponse<Derivative>
 			>
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
@@ -4568,10 +4651,30 @@ export default class Elysia<
 					Metadata['schema'] &
 						Ephemeral['schema'] &
 						Volatile['schema'],
-					Singleton & {
-						derive: Ephemeral['derive'] & Volatile['derive']
-						resolve: Ephemeral['resolve'] & Volatile['resolve']
-					},
+					Singleton &
+						('global' extends Type
+							? {
+									derive: Partial<
+										Ephemeral['derive'] & Volatile['derive']
+									>
+									resolve: Partial<
+										Ephemeral['resolve'] &
+											Volatile['resolve']
+									>
+							  }
+							: 'scoped' extends Type
+							? {
+									derive: Ephemeral['derive'] &
+										Partial<Volatile['derive']>
+									resolve: Ephemeral['resolve'] &
+										Partial<Volatile['resolve']>
+							  }
+							: {
+									derive: Ephemeral['derive'] &
+										Volatile['derive']
+									resolve: Ephemeral['resolve'] &
+										Volatile['resolve']
+							  }),
 					BasePath
 				>
 			>
@@ -4585,11 +4688,7 @@ export default class Elysia<
 					store: Singleton['store']
 					derive: Singleton['resolve']
 					resolve: Prettify<
-						Singleton['resolve'] &
-							Exclude<
-								Awaited<Derivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Singleton['resolve'] & ExcludeElysiaResponse<Derivative>
 					>
 				},
 				Definitions,
@@ -4609,11 +4708,7 @@ export default class Elysia<
 				{
 					derive: Ephemeral['resolve']
 					resolve: Prettify<
-						Ephemeral['resolve'] &
-							Exclude<
-								Awaited<Derivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Ephemeral['resolve'] & ExcludeElysiaResponse<Derivative>
 					>
 					schema: Ephemeral['schema']
 				},
@@ -4630,11 +4725,7 @@ export default class Elysia<
 				{
 					derive: Volatile['resolve']
 					resolve: Prettify<
-						Volatile['resolve'] &
-							Exclude<
-								Awaited<Derivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+						Volatile['resolve'] & ExcludeElysiaResponse<Derivative>
 					>
 					schema: Volatile['schema']
 				}
@@ -4649,13 +4740,12 @@ export default class Elysia<
 			optionsOrTransform = { as: 'local' }
 		}
 
-		// @ts-expect-error
-		transform.$elysia = 'derive'
+		const hook: HookContainer = {
+			subType: 'derive',
+			fn: transform!
+		}
 
-		return this.onTransform(
-			optionsOrTransform as any,
-			transform as any
-		) as any
+		return this.onTransform(optionsOrTransform as any, hook as any) as any
 	}
 
 	model<const Name extends string, const Model extends TSchema>(
@@ -4807,10 +4897,7 @@ export default class Elysia<
 					derive: Singleton['resolve']
 					resolve: Prettify<
 						Singleton['resolve'] &
-							Exclude<
-								Awaited<NewDerivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+							ExcludeElysiaResponse<NewDerivative>
 					>
 				},
 				Definitions,
@@ -4831,10 +4918,7 @@ export default class Elysia<
 					derive: Ephemeral['resolve']
 					resolve: Prettify<
 						Ephemeral['resolve'] &
-							Exclude<
-								Awaited<NewDerivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+							ExcludeElysiaResponse<NewDerivative>
 					>
 					schema: Ephemeral['schema']
 				},
@@ -4852,10 +4936,7 @@ export default class Elysia<
 					derive: Volatile['resolve']
 					resolve: Prettify<
 						Volatile['resolve'] &
-							Exclude<
-								Awaited<NewDerivative>,
-								{ [ELYSIA_RESPONSE]: any }
-							>
+							ExcludeElysiaResponse<NewDerivative>
 					>
 					schema: Volatile['schema']
 				}
@@ -4870,10 +4951,12 @@ export default class Elysia<
 			optionsOrDerive = { as: 'local' }
 		}
 
-		// @ts-ignore
-		mapper.$elysia = 'derive'
+		const hook: HookContainer = {
+			subType: 'derive',
+			fn: mapper!
+		}
 
-		return this.onTransform(optionsOrDerive as any, mapper as any) as any
+		return this.onTransform(optionsOrDerive as any, hook as any) as any
 	}
 
 	affix<
@@ -5036,7 +5119,7 @@ export default class Elysia<
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
 	fetch = (request: Request): MaybePromise<Response> => {
-		if (process.env.NODE_ENV === 'production')
+		if (process.env.NODE_ENV === 'production' && this.config.aot !== false)
 			console.warn(
 				"Performance degradation found. Please call Elysia.compile() before using 'fetch'"
 			)
@@ -5085,7 +5168,7 @@ export default class Elysia<
 	 * ```typescript
 	 * new Elysia()
 	 *     .get("/", () => 'hi')
-	 *     .listen(8080)
+	 *     .listen(3000)
 	 * ```
 	 */
 	listen = (
@@ -5138,7 +5221,7 @@ export default class Elysia<
 		this.server = Bun?.serve(serve)
 
 		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i](this)
+			this.event.start[i].fn(this)
 
 		if (callback) callback(this.server!)
 
@@ -5148,7 +5231,7 @@ export default class Elysia<
 				this.server = null
 
 				for (let i = 0; i < this.event.stop.length; i++)
-					this.event.stop[i](this)
+					this.event.stop[i].fn(this)
 			}
 		})
 
@@ -5168,7 +5251,7 @@ export default class Elysia<
 	 * ```typescript
 	 * const app = new Elysia()
 	 *     .get("/", () => 'hi')
-	 *     .listen(8080)
+	 *     .listen(3000)
 	 *
 	 * // Sometime later
 	 * app.stop()
@@ -5186,7 +5269,7 @@ export default class Elysia<
 
 			if (this.event.stop.length)
 				for (let i = 0; i < this.event.stop.length; i++)
-					this.event.stop[i](this)
+					this.event.stop[i].fn(this)
 		}
 	}
 
@@ -5208,7 +5291,9 @@ export {
 	getSchemaValidator,
 	mergeHook,
 	mergeObjectArray,
-	getResponseSchemaValidator
+	getResponseSchemaValidator,
+	StatusMap,
+	InvertedStatusMap
 } from './utils'
 
 export {
@@ -5217,12 +5302,17 @@ export {
 	NotFoundError,
 	ValidationError,
 	InternalServerError,
-	InvalidCookieSignature
+	InvalidCookieSignature,
+	ERROR_CODE,
+	ELYSIA_RESPONSE
 } from './error'
 
 export type { Context, PreContext } from './context'
 
 export type {
+	EphemeralType,
+	CreateEden,
+	ComposeElysiaResponse,
 	ElysiaConfig,
 	SingletonBase,
 	DefinitionBase,

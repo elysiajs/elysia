@@ -11,8 +11,17 @@ import type {
 	MaybeArray,
 	InputSchema,
 	BaseMacro,
-	ElysiaFn,
-	LifeCycleType
+	LifeCycleType,
+	HookContainer,
+	GracefulHandler,
+	PreHandler,
+	BodyHandler,
+	TransformHandler,
+	OptionalHandler,
+	AfterHandler,
+	MapResponse,
+	VoidHandler,
+	ErrorHandler
 } from './types'
 import type { CookieOptions } from './cookies'
 
@@ -78,11 +87,12 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 	return mergeDeep(target, source) as A & B
 }
 
-export const mergeObjectArray = <T extends ElysiaFn>(
+export const mergeObjectArray = <T extends HookContainer>(
 	a: T | T[] = [],
 	b: T | T[] = []
 ): T[] => {
 	if (!a) return []
+	if (!b) return a as any
 
 	// ! Must copy to remove side-effect
 	const array = <T[]>[]
@@ -94,11 +104,11 @@ export const mergeObjectArray = <T extends ElysiaFn>(
 	for (const item of a) {
 		array.push(item)
 
-		if (item.$elysiaChecksum) checksums.push(item.$elysiaChecksum)
+		if (item.checksum) checksums.push(item.checksum)
 	}
 
 	for (const item of b)
-		if (!checksums.includes(item?.$elysiaChecksum)) array.push(item)
+		if (!checksums.includes(item.checksum)) array.push(item)
 
 	return array
 }
@@ -147,8 +157,9 @@ export const mergeResponse = (
 }
 
 export const mergeHook = (
-	a?: LocalHook<any, any, any, any, any, any, any> | LifeCycleStore,
-	b?: LocalHook<any, any, any, any, any, any, any>
+	a?: LifeCycleStore,
+	b?: LocalHook<any, any, any, any, any, any, any>,
+	{ allowMacro = false }: { allowMacro?: boolean } = {}
 ): LifeCycleStore => {
 	// In case if merging union is need
 	// const customAStore: Record<string, unknown> = {}
@@ -179,9 +190,15 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
+	const rest = allowMacro
+		? {
+				...a,
+				...b
+		  }
+		: undefined
+
 	return {
-		...a,
-		...b,
+		...rest,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -221,11 +238,13 @@ export const getSchemaValidator = (
 	{
 		models = {},
 		additionalProperties = false,
-		dynamic = false
+		dynamic = false,
+		enableCleaning = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
+		enableCleaning?: boolean
 	}
 ) => {
 	if (!s) return
@@ -237,18 +256,54 @@ export const getSchemaValidator = (
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
-	if (dynamic)
-		return {
+  const cleaner = (value: unknown) => {
+		if (enableCleaning && schema.additionalProperties === false) {
+			Value.Clean(schema, value)
+		}
+	}
+
+	if (dynamic) {
+		const validator = {
 			schema,
 			references: '',
 			checkFunc: () => {},
 			code: '',
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => ''
+			Code: () => '',
+			Clean: cleaner
 		} as unknown as TypeCheck<TSchema>
 
-	return TypeCompiler.Compile(schema, Object.values(models))
+		// @ts-ignore
+		if (schema.config) {
+			// @ts-ignore
+			validator.config = schema.config
+
+			// @ts-ignore
+			if (validator?.schema?.config)
+				// @ts-ignore
+				delete validator.schema.config
+		}
+
+		return validator
+	}
+
+	const compiled = TypeCompiler.Compile(schema, Object.values(models))
+  
+  compiled.Clean = cleaner
+
+	// @ts-ignore
+	if (schema.config) {
+		// @ts-ignore
+		compiled.config = schema.config
+
+		// @ts-ignore
+		if (compiled?.schema?.config)
+			// @ts-ignore
+			delete compiled.schema.config
+	}
+
+	return compiled
 }
 
 export const getResponseSchemaValidator = (
@@ -256,11 +311,13 @@ export const getResponseSchemaValidator = (
 	{
 		models = {},
 		additionalProperties = false,
-		dynamic = false
+		dynamic = false,
+		enableCleaning = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
+		enableCleaning?: boolean
 	}
 ): Record<number, TypeCheck<any>> | undefined => {
 	if (!s) return
@@ -269,6 +326,12 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
+		const cleaner = (value: unknown) => {
+			if (enableCleaning && schema.additionalProperties === false) {
+				Value.Clean(schema, value)
+			} 
+		}
+
 		if (dynamic)
 			return {
 				schema,
@@ -277,10 +340,13 @@ export const getResponseSchemaValidator = (
 				code: '',
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
-				Code: () => ''
+				Code: () => '',
+				Clean: cleaner
 			} as unknown as TypeCheck<TSchema>
 
-		return TypeCompiler.Compile(schema, references)
+		const compiledValidator = TypeCompiler.Compile(schema, references)
+		;(compiledValidator as any).Clean = cleaner
+		return compiledValidator
 	}
 
 	if (Kind in maybeSchemaOrRecord) {
@@ -365,17 +431,20 @@ export const getCookieValidator = ({
 	if (isNotEmpty(defaultConfig)) {
 		if (cookieValidator) {
 			// @ts-expect-error private
-			cookieValidator.schema = mergeCookie(
+			cookieValidator.config = mergeCookie(
 				// @ts-expect-error private
-				cookieValidator.schema,
+				cookieValidator.config,
 				config
 			)
 		} else {
-			cookieValidator = getSchemaValidator(t.Cookie({}, defaultConfig), {
+			cookieValidator = getSchemaValidator(t.Cookie({}), {
 				dynamic,
 				models,
 				additionalProperties: true
 			})
+
+			// @ts-expect-error private
+			cookieValidator.config = defaultConfig
 		}
 	}
 
@@ -387,15 +456,15 @@ export const mergeLifeCycle = (
 	b: LifeCycleStore | LocalHook<any, any, any, any, any, any, any>,
 	checksum?: number
 ): LifeCycleStore => {
-	const injectChecksum = (x: MaybeArray<ElysiaFn> | undefined) => {
+	const injectChecksum = (x: MaybeArray<HookContainer> | undefined) => {
 		if (!x) return
 
 		if (!Array.isArray(x)) {
 			// ? clone fn is required to prevent side-effect from changing hookType
 			const fn = x
 
-			if (checksum && !fn.$elysiaChecksum) fn.$elysiaChecksum = checksum
-			if (fn.$elysiaHookType === 'scoped') fn.$elysiaHookType = 'local'
+			if (checksum && !fn.checksum) fn.checksum = checksum
+			if (fn.scope === 'scoped') fn.scope = 'local'
 
 			return fn
 		}
@@ -404,95 +473,109 @@ export const mergeLifeCycle = (
 		const fns = [...x]
 
 		for (const fn of fns) {
-			if (checksum && !fn.$elysiaChecksum) fn.$elysiaChecksum = checksum
+			if (checksum && !fn.checksum) fn.checksum = checksum
 
-			if (fn.$elysiaHookType === 'scoped') fn.$elysiaHookType = 'local'
+			if (fn.scope === 'scoped') fn.scope = 'local'
 		}
 
 		return fns
 	}
 
 	return {
-		...a,
-		...b,
-		start: mergeObjectArray(a.start, injectChecksum(b?.start)),
-		request: mergeObjectArray(a.request, injectChecksum(b?.request)),
-		parse: mergeObjectArray(a.parse, injectChecksum(b?.parse)),
-		transform: mergeObjectArray(a.transform, injectChecksum(b?.transform)),
+		// ...a,
+		// ...b,
+		start: mergeObjectArray(
+			a.start,
+			injectChecksum(b?.start)
+		) as HookContainer<GracefulHandler<any>>[],
+		request: mergeObjectArray(
+			a.request,
+			injectChecksum(b?.request)
+		) as HookContainer<PreHandler<any, any>>[],
+		parse: mergeObjectArray(
+			a.parse,
+			injectChecksum(b?.parse)
+		) as HookContainer<BodyHandler<any, any>>[],
+		transform: mergeObjectArray(
+			a.transform,
+			injectChecksum(b?.transform)
+		) as HookContainer<TransformHandler<any, any>>[],
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle,
 			injectChecksum(b?.beforeHandle)
-		),
+		) as HookContainer<OptionalHandler<any, any>>[],
 		afterHandle: mergeObjectArray(
 			a.afterHandle,
 			injectChecksum(b?.afterHandle)
-		),
+		) as HookContainer<AfterHandler<any, any>>[],
 		mapResponse: mergeObjectArray(
 			a.mapResponse,
 			injectChecksum(b?.mapResponse)
-		),
+		) as HookContainer<MapResponse<any, any>>[],
 		onResponse: mergeObjectArray(
 			a.onResponse,
 			injectChecksum(b?.onResponse)
-		),
+		) as HookContainer<VoidHandler<any, any>>[],
 		// Already merged on Elysia._use, also logic is more complicated, can't directly merge
 		trace: a.trace,
-		error: mergeObjectArray(a.error, injectChecksum(b?.error)),
-		stop: mergeObjectArray(a.stop, injectChecksum(b?.stop))
+		error: mergeObjectArray(
+			a.error,
+			injectChecksum(b?.error)
+		) as HookContainer<ErrorHandler<any, any, any>>[],
+		stop: mergeObjectArray(
+			a.stop,
+			injectChecksum(b?.stop)
+		) as HookContainer<GracefulHandler<any>>[]
 	}
 }
 
-export const asHookType = <T extends MaybeArray<ElysiaFn> | undefined>(
-	fn: T,
+export const asHookType = (
+	fn: HookContainer,
 	inject: LifeCycleType,
 	{ skipIfHasType = false }: { skipIfHasType?: boolean } = {}
-): T => {
+) => {
 	if (!fn) return fn
 
-	if (typeof fn === 'function') {
-		if (skipIfHasType) fn.$elysiaHookType ??= inject
-		else fn.$elysiaHookType = inject
+	if (!Array.isArray(fn)) {
+		if (skipIfHasType) fn.scope ??= inject
+		else fn.scope = inject
 
 		return fn
 	}
 
-	if (!Array.isArray(fn)) return fn
-
 	for (const x of fn)
-		if (skipIfHasType) x.$elysiaHookType ??= inject
-		else x.$elysiaHookType = inject
+		if (skipIfHasType) x.scope ??= inject
+		else x.scope = inject
 
 	return fn
 }
 
-const filterGlobal = <T extends MaybeArray<ElysiaFn> | undefined>(
-	fn: T
-): T | undefined => {
+const filterGlobal = (fn: MaybeArray<HookContainer>) => {
 	if (!fn) return fn
 
-	if (typeof fn === 'function')
-		switch (fn.$elysiaHookType) {
+	if (!Array.isArray(fn))
+		switch (fn.scope) {
 			case 'global':
 			case 'scoped':
-				return fn
+				return { ...fn }
 
 			default:
-				return undefined
+				return { fn }
 		}
-
-	if (!Array.isArray(fn)) return <any>[]
 
 	const array = <any>[]
 
 	for (const x of fn)
-		switch (x.$elysiaHookType) {
+		switch (x.scope) {
 			case 'global':
 			case 'scoped':
-				array.push(x)
+				array.push({
+					...x
+				})
 				break
 		}
 
-	return array as T
+	return array
 }
 
 export const filterGlobalHook = (
@@ -669,10 +752,15 @@ export const createMacroManager =
 					insert?: 'before' | 'after'
 					stack?: 'global' | 'local'
 			  }
-			| MaybeArray<Function>,
-		fn?: MaybeArray<Function>
+			| MaybeArray<HookContainer>,
+		fn?: MaybeArray<HookContainer>
 	) => {
-		if (typeof type === 'function' || Array.isArray(type)) {
+		if (typeof type === 'function')
+			type = {
+				fn: type
+			}
+
+		if ('fn' in type || Array.isArray(type)) {
 			if (!localHook[stackName]) localHook[stackName] = []
 			if (typeof localHook[stackName] === 'function')
 				localHook[stackName] = [localHook[stackName]]
@@ -687,6 +775,8 @@ export const createMacroManager =
 		}
 
 		const { insert = 'after', stack = 'local' } = type
+
+		if (typeof fn === 'function') fn = { fn }
 
 		if (stack === 'global') {
 			if (!Array.isArray(fn)) {
@@ -768,10 +858,10 @@ export class PromiseGroup implements PromiseLike<void> {
 		while (this.promises.length > 0) {
 			try {
 				await this.promises[0]
-				this.promises.shift()
 			} catch (error) {
 				this.onError(error)
 			}
+			this.promises.shift()
 		}
 		this.root = null
 	}
@@ -788,5 +878,62 @@ export class PromiseGroup implements PromiseLike<void> {
 			| null
 	): PromiseLike<TResult1 | TResult2> {
 		return (this.root ?? Promise.resolve()).then(onfulfilled, onrejected)
+	}
+}
+
+export const fnToContainer = (
+	fn: MaybeArray<Function | HookContainer>
+): MaybeArray<HookContainer> => {
+	if (!fn) return fn
+
+	if (!Array.isArray(fn)) {
+		if (typeof fn === 'function') return { fn }
+		else if ('fn' in fn) return fn
+	}
+
+	const fns = <HookContainer[]>[]
+	for (const x of fn) {
+		if (typeof x === 'function') fns.push({ fn: x })
+		else if ('fn' in x) fns.push(x)
+	}
+
+	return fns
+}
+
+export const localHookToLifeCycleStore = (
+	a: LocalHook<any, any, any, any, any>
+): LifeCycleStore => {
+	return {
+		...a,
+		start: fnToContainer(a?.start),
+		request: fnToContainer(a?.request),
+		parse: fnToContainer(a?.parse),
+		transform: fnToContainer(a?.transform),
+		beforeHandle: fnToContainer(a?.beforeHandle),
+		afterHandle: fnToContainer(a?.afterHandle),
+		onResponse: fnToContainer(a?.onResponse),
+		mapResponse: fnToContainer(a?.mapResponse),
+		trace: fnToContainer(a?.trace),
+		error: fnToContainer(a?.error),
+		stop: fnToContainer(a?.stop)
+	}
+}
+
+export const lifeCycleToFn = (
+	a: LifeCycleStore
+): LocalHook<any, any, any, any, any, any, any> => {
+	return {
+		...a,
+		start: a.start?.map((x) => x.fn),
+		request: a.request?.map((x) => x.fn),
+		parse: a.parse?.map((x) => x.fn),
+		transform: a.transform?.map((x) => x.fn),
+		beforeHandle: a.beforeHandle?.map((x) => x.fn),
+		afterHandle: a.afterHandle?.map((x) => x.fn),
+		onResponse: a.onResponse?.map((x) => x.fn),
+		mapResponse: a.mapResponse?.map((x) => x.fn),
+		trace: a.trace?.map((x) => x.fn),
+		error: a.error?.map((x) => x.fn),
+		stop: a.stop?.map((x) => x.fn)
 	}
 }

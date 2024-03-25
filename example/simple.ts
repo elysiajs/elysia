@@ -4,7 +4,7 @@ import { Elysia } from '../src'
 const t1 = performance.now()
 new Elysia()
 	.get('/', () => 'Hi')
-	.listen(8080)
+	.listen(3000)
 
 console.log(performance.now() - t1)
 

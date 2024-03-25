@@ -5,4 +5,4 @@ new Elysia()
 	.get('/redirect', ({ set }) => {
 		set.redirect = '/'
 	})
-	.listen(8080)
+	.listen(3000)

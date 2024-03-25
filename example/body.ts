@@ -28,6 +28,6 @@ const app = new Elysia()
 		}
 	})
 	.post('/mirror', ({ body }) => body)
-	.listen(8080)
+	.listen(3000)
 
 console.log('🦊 Elysia is running at :8080')

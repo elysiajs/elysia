@@ -30,4 +30,4 @@ new Elysia()
 			console.log(error)
 		}
 	})
-	.listen(8080)
+	.listen(3000)

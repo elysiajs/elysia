@@ -1,3 +1,34 @@
+# 1.0.7 - 20 Mar 2024
+Feature:
+- add Elysia.propagate to propagate hook type from 'local' to 'scoped'
+
+Improvement:
+- remove function.$elysia
+- remove function extension
+
+Bug fix:
+- duplicate macro call
+- [#548](https://github.com/elysiajs/elysia/issues/548) additional case for "accessing all query params using property name (ctx.query) doesn't work anymore"
+- [#599](https://github.com/elysiajs/elysia/issues/559) plugin with scoped settings not functioning correctly
+
+# 1.0.6 - 20 Mar 2024
+Bug fix:
+- inline function doesn't propagate correctly on type level
+
+# 1.0.5 - 19 Mar 2024
+Improvement:
+- using regex for date pattern matching before using new Date validation
+- using tsc to emit declaration file instead of tsup
+- add `mapResponse` to MacroManager
+
+Bug fix:
+- Ephemeral and Volatile type isn't recognize by MacroManager
+- inline guard cookie doesn't apply to local instance
+
+# 1.0.4 - 18 Mar 2024
+Improvement:
+- resolve, derive soundness
+
 # 1.0.3 - 18 Mar 2024
 Improvement:
 - Reduce instruction for static resource

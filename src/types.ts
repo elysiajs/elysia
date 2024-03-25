@@ -102,6 +102,15 @@ export type ElysiaConfig<
 	 * Enable experimental features
 	 */
 	experimental?: {}
+	/**
+	 * If enabled, the handlers will run a [clean](https://github.com/sinclairzx81/typebox?tab=readme-ov-file#clean) on incoming and outgoing bodies instead of failing directly.
+	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.
+	 * This has no effect when the schemas allow additional properties.
+	 * Since this uses dynamic schema it may have an impact on performance. Use with caution.
+	 * 
+	 * @default false
+	 */
+	enableCleaning?: boolean
 }
 
 export type MaybeArray<T> = T | T[]
@@ -261,19 +270,26 @@ export interface UnwrapGroupGuardRoute<
 		: unknown | void
 }
 
+export type HookContainer<T extends Function = Function> = {
+	checksum?: number
+	scope?: LifeCycleType
+	subType?: 'derive' | 'resolve' | (string & {})
+	fn: T
+}
+
 export interface LifeCycleStore {
 	type?: ContentType
-	start: GracefulHandler<any>[]
-	request: PreHandler<any, any>[]
-	parse: BodyHandler<any, any>[]
-	transform: TransformHandler<any, any>[]
-	beforeHandle: OptionalHandler<any, any>[]
-	afterHandle: AfterHandler<any, any>[]
-	mapResponse: MapResponse<any, any>[]
-	onResponse: VoidHandler<any, any>[]
-	trace: TraceHandler<any, any>[]
-	error: ErrorHandler<any, any, any>[]
-	stop: GracefulHandler<any>[]
+	start: HookContainer<GracefulHandler<any>>[]
+	request: HookContainer<PreHandler<any, any>>[]
+	parse: HookContainer<BodyHandler<any, any>>[]
+	transform: HookContainer<TransformHandler<any, any>>[]
+	beforeHandle: HookContainer<OptionalHandler<any, any>>[]
+	afterHandle: HookContainer<AfterHandler<any, any>>[]
+	mapResponse: HookContainer<MapResponse<any, any>>[]
+	onResponse: HookContainer<VoidHandler<any, any>>[]
+	trace: HookContainer<TraceHandler<any, any>>[]
+	error: HookContainer<ErrorHandler<any, any, any>>[]
+	stop: HookContainer<GracefulHandler<any>>[]
 }
 
 export type LifeCycleEvent =
@@ -422,7 +438,9 @@ export type OptionalHandler<
 		resolve: {}
 	},
 	Path extends string = ''
-> = Handler<Route, Singleton, Path> extends (context: infer Context) => infer Returned
+> = Handler<Route, Singleton, Path> extends (
+	context: infer Context
+) => infer Returned
 	? (context: Context) => Returned | MaybePromise<void>
 	: never
 
@@ -433,8 +451,11 @@ export type AfterHandler<
 		store: {}
 		derive: {}
 		resolve: {}
-	}
-> = Handler<Route, Singleton> extends (context: infer Context) => infer Returned
+	},
+	Path extends string = ''
+> = Handler<Route, Singleton, Path> extends (
+	context: infer Context
+) => infer Returned
 	? (
 			context: Prettify<
 				{
@@ -451,7 +472,8 @@ export type MapResponse<
 		store: {}
 		derive: {}
 		resolve: {}
-	}
+	},
+	Path extends string = ''
 > = Handler<
 	Omit<Route, 'response'> & {
 		response: MaybePromise<Response | undefined | void>
@@ -460,7 +482,8 @@ export type MapResponse<
 		derive: {
 			response: Route['response']
 		}
-	}
+	},
+	Path
 >
 
 export type VoidHandler<
@@ -494,9 +517,6 @@ export type TransformHandler<
 			>
 		>
 	): MaybePromise<void>
-	$elysiaHookType?: LifeCycleType
-	$elysiaChecksum?: number
-	$elysia?: 'derive' | 'resolve' | (string & {})
 }
 
 export type TraceEvent =
@@ -569,8 +589,6 @@ export type TraceHandler<
 			}
 		>
 	): MaybePromise<void>
-	$elysiaHookType?: LifeCycleType
-	$elysiaChecksum?: number
 }
 
 export type TraceListener = EventEmitter<{
@@ -810,12 +828,6 @@ export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
 		: never
 }>
 
-export type ElysiaFn = {
-	(...a: any[]): any
-	$elysiaHookType?: LifeCycleType
-	$elysiaChecksum?: number
-}
-
 export interface MacroManager<
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -866,16 +878,21 @@ export interface MacroManager<
 		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
+	mapResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
+	mapResponse(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
+	): unknown
+
 	events: {
 		global: Prettify<LifeCycleStore & RouteSchema>
 		local: Prettify<LifeCycleStore & RouteSchema>
 	}
 }
 
-export type MacroQueue = {
-	(manager: MacroManager<any, any, any>): unknown
-	$elysiaChecksum?: number
-}[]
+export type MacroQueue = HookContainer<
+	(manager: MacroManager<any, any, any>) => unknown
+>
 
 type _CreateEden<
 	Path extends string,
@@ -990,3 +1007,8 @@ export type MergeElysiaInstances<
 	  >
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
+
+export type ExcludeElysiaResponse<T> = Exclude<
+	Awaited<T>,
+	{ [ELYSIA_RESPONSE]: any }
+>
