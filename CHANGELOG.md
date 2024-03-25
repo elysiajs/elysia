@@ -3,6 +3,7 @@ Feature:
 - [#562](https://github.com/elysiajs/elysia/pull/562) add `normalize` config
 
 Improvement:
+- Scope cookie instruction to route level instead of global config
 - [#557](https://github.com/elysiajs/elysia/pull/557) cache tsc buildinfo for running faster
 - [#551](https://github.com/elysiajs/elysia/pull/551) use AnyElysia instead of inline Elysia<any>
 
