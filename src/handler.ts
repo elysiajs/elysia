@@ -176,7 +176,9 @@ export const mapResponse = (
 					'abort',
 					{
 						handleEvent() {
-							;(response as ReadableStream).cancel(request)
+							;
+							if (!request?.signal.aborted)
+								(response as ReadableStream).cancel(request)
 						}
 					},
 					{
@@ -302,7 +304,9 @@ export const mapResponse = (
 					'abort',
 					{
 						handleEvent() {
-							;(response as ReadableStream).cancel(request)
+							;
+							if (!request?.signal.aborted)
+								(response as ReadableStream).cancel(request)
 						}
 					},
 					{
@@ -458,7 +462,9 @@ export const mapEarlyResponse = (
 					'abort',
 					{
 						handleEvent() {
-							;(response as ReadableStream).cancel(request)
+							;
+							if (!request?.signal.aborted)
+								(response as ReadableStream).cancel(request)
 						}
 					},
 					{
@@ -588,7 +594,9 @@ export const mapEarlyResponse = (
 					'abort',
 					{
 						handleEvent() {
-							;(response as ReadableStream).cancel(request)
+							;
+							if (!request?.signal.aborted)
+								(response as ReadableStream).cancel(request)
 						}
 					},
 					{
@@ -707,7 +715,9 @@ export const mapCompactResponse = (
 				'abort',
 				{
 					handleEvent() {
-						;(response as ReadableStream).cancel(request)
+						;
+						if (!request?.signal.aborted)
+							(response as ReadableStream).cancel(request)
 					}
 				},
 				{
