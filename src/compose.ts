@@ -144,9 +144,11 @@ export const hasReturn = (fnLiteral: string) => {
 const composeValidationFactory = (
 	hasErrorHandler: boolean,
 	{
-		injectResponse = ''
+		injectResponse = '',
+		normalize = false
 	}: {
 		injectResponse?: string
+		normalize?: boolean
 	} = {}
 ) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
@@ -158,11 +160,20 @@ const composeValidationFactory = (
 			? `throw new ValidationError('response', response[c.set.status], ${name})`
 			: `return new ValidationError('response', response[c.set.status], ${name}).toResponse(c.set.headers)`
 
-		return `\n${injectResponse}
-		    response[c.set.status]?.Clean(${name})
-			response[${name}[ELYSIA_RESPONSE]]?.Clean(${name}.response)
+		let code = '\n' + injectResponse + '\n'
+
+		code += `const er = ${name}[ELYSIA_RESPONSE]\n`
+
+		if (normalize)
+			code += `
+			if(!er && response[c.set.status]?.Clean)
+				${name} = response[c.set.status]?.Clean(${name})
+			else if(response[er]?.Clean)
+				${name}.response = response[er]?.Clean(${name}.response)`
+
+		code += `
 			if(typeof ${name} === "object" && ELYSIA_RESPONSE in ${name}) {
-				if(!(${name} instanceof Response) && response[${name}[ELYSIA_RESPONSE]]?.Check(${name}.response) === false) {
+				if(!(${name} instanceof Response) && response[er]?.Check(${name}.response) === false) {
 					if(!(response instanceof Error)) {
 						c.set.status = ${name}[ELYSIA_RESPONSE]
 
@@ -173,6 +184,8 @@ const composeValidationFactory = (
 				if(!(response instanceof Error))
 					${returnError}
 			}\n`
+
+		return code
 	}
 })
 
@@ -329,7 +342,6 @@ export const composeHandler = ({
 	validator,
 	handler,
 	allowMeta = false,
-	enableCleaning = false,
 	appInference: { event: eventInference, trace: traceInference }
 }: {
 	app: Elysia<any, any, any, any, any, any, any, any>
@@ -340,7 +352,6 @@ export const composeHandler = ({
 	validator: SchemaValidator
 	handler: unknown | Handler<any, any>
 	allowMeta?: boolean
-	enableCleaning?: boolean,
 	appInference: {
 		event: Sucrose.Inference
 		trace: Sucrose.TraceInference
@@ -455,8 +466,12 @@ export const composeHandler = ({
 		encodeCookie += '}\n'
 	}
 
+	const normalize = app.config.normalize
+
 	const { composeValidation, composeResponseValidation } =
-		composeValidationFactory(hasErrorHandler)
+		composeValidationFactory(hasErrorHandler, {
+			normalize
+		})
 
 	if (hasHeaders) {
 		// This function is Bun specific
@@ -889,6 +904,8 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
+			if (normalize) fnLiteral += 'c.query = query.Clean(c.query);\n'
+
 			// @ts-ignore
 			if (hasProperty('default', validator.query.schema))
 				for (const [key, value] of Object.entries(
@@ -917,7 +934,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.body) {
-			fnLiteral += "body.Clean(c.body);\n"
+			if (normalize) fnLiteral += 'c.body = body.Clean(c.body);\n'
 			// @ts-ignore
 			if (hasProperty('default', validator.body.schema))
 				fnLiteral += `if(body.Check(c.body) === false) {

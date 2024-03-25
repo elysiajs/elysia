@@ -107,7 +107,7 @@ import type {
 	ExcludeElysiaResponse
 } from './types'
 
-type AnyElysia = Elysia<any, any, any, any, any, any, any, any> // prettier-ignore
+type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 /**
  * ### Elysia Server
@@ -408,7 +408,7 @@ export default class Elysia<
 				  })
 				: undefined
 
-		const enableCleaning = this.config.enableCleaning;
+		const normalize = this.config.normalize
 
 		const validator =
 			this.config.precompile === true ||
@@ -418,7 +418,7 @@ export default class Elysia<
 						body: getSchemaValidator(cloned.body, {
 							dynamic,
 							models,
-							enableCleaning
+							normalize
 						}),
 						headers: getSchemaValidator(cloned.headers, {
 							dynamic,
@@ -431,13 +431,14 @@ export default class Elysia<
 						}),
 						query: getSchemaValidator(cloned.query, {
 							dynamic,
-							models
+							models,
+							normalize
 						}),
 						cookie: cookieValidator(),
 						response: getResponseSchemaValidator(cloned.response, {
 							dynamic,
 							models,
-							enableCleaning
+							normalize
 						})
 				  }
 				: ({
@@ -447,7 +448,7 @@ export default class Elysia<
 							return (_body = getSchemaValidator(cloned.body, {
 								dynamic,
 								models,
-								enableCleaning
+								normalize
 							}))
 						},
 						get headers() {
@@ -491,7 +492,7 @@ export default class Elysia<
 								{
 									dynamic,
 									models,
-									enableCleaning
+									normalize
 								}
 							))
 						}
@@ -554,7 +555,6 @@ export default class Elysia<
 					hooks,
 					validator,
 					handler: handle,
-					enableCleaning: this.config.enableCleaning,
 					allowMeta,
 					appInference: {
 						event: {
@@ -2796,7 +2796,7 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| MaybePromise<AnyElysia[]>
+			| MaybePromise<AnyElysia>
 			| MaybePromise<
 					AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 			  >
@@ -4228,11 +4228,13 @@ export default class Elysia<
 		let server: Server | null = null
 
 		const validateMessage = getSchemaValidator(options?.body, {
-			models: this.definitions.type as Record<string, TSchema>
+			models: this.definitions.type as Record<string, TSchema>,
+			normalize: this.config.normalize
 		})
 
 		const validateResponse = getSchemaValidator(options?.response as any, {
-			models: this.definitions.type as Record<string, TSchema>
+			models: this.definitions.type as Record<string, TSchema>,
+			normalize: this.config.normalize
 		})
 
 		const parseMessage = (message: any) => {

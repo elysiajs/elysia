@@ -110,7 +110,7 @@ export type ElysiaConfig<
 	 * 
 	 * @default false
 	 */
-	enableCleaning?: boolean
+	normalize?: boolean
 }
 
 export type MaybeArray<T> = T | T[]

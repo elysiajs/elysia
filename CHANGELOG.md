@@ -1,3 +1,15 @@
+# 1.0.8 - 25 Mar 2024
+Feature:
+- [#562](https://github.com/elysiajs/elysia/pull/562) add `normalize` config
+
+Improvement:
+- [#557](https://github.com/elysiajs/elysia/pull/557) cache tsc buildinfo for running faster
+- [#551](https://github.com/elysiajs/elysia/pull/551) use AnyElysia instead of inline Elysia<any>
+
+Bug fix:
+- [#564](https://github.com/elysiajs/elysia/pull/564) Fixing "ReadableStream is locked"
+- [#552](https://github.com/elysiajs/elysia/pull/552) fix: shift promise in PromiseGroup even when rejected
+
 # 1.0.7 - 20 Mar 2024
 Feature:
 - add Elysia.propagate to propagate hook type from 'local' to 'scoped'

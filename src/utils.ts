@@ -237,14 +237,14 @@ export const getSchemaValidator = (
 	s: TSchema | string | undefined,
 	{
 		models = {},
-		additionalProperties = false,
 		dynamic = false,
-		enableCleaning = false
+		normalize = false,
+		additionalProperties = normalize
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
-		enableCleaning?: boolean
+		normalize?: boolean
 	}
 ) => {
 	if (!s) return
@@ -256,11 +256,7 @@ export const getSchemaValidator = (
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
-  const cleaner = (value: unknown) => {
-		if (enableCleaning && schema.additionalProperties === false) {
-			Value.Clean(schema, value)
-		}
-	}
+	const cleaner = (value: unknown) => Value.Clean(schema, value)
 
 	if (dynamic) {
 		const validator = {
@@ -270,9 +266,12 @@ export const getSchemaValidator = (
 			code: '',
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => '',
-			Clean: cleaner
+			Code: () => ''
 		} as unknown as TypeCheck<TSchema>
+
+		if (normalize && schema.additionalProperties === true)
+			// @ts-ignore
+			validator.Clean = cleaner
 
 		// @ts-ignore
 		if (schema.config) {
@@ -289,8 +288,9 @@ export const getSchemaValidator = (
 	}
 
 	const compiled = TypeCompiler.Compile(schema, Object.values(models))
-  
-  compiled.Clean = cleaner
+
+	// @ts-expect-error
+	compiled.Clean = cleaner
 
 	// @ts-ignore
 	if (schema.config) {
@@ -310,14 +310,14 @@ export const getResponseSchemaValidator = (
 	s: InputSchema['response'] | undefined,
 	{
 		models = {},
-		additionalProperties = false,
 		dynamic = false,
-		enableCleaning = false
+		normalize = false,
+		additionalProperties = normalize
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
-		enableCleaning?: boolean
+		normalize?: boolean
 	}
 ): Record<number, TypeCheck<any>> | undefined => {
 	if (!s) return
@@ -326,11 +326,9 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
-		const cleaner = (value: unknown) => {
-			if (enableCleaning && schema.additionalProperties === false) {
-				Value.Clean(schema, value)
-			} 
-		}
+		// eslint-disable-next-line sonarjs/no-identical-functions
+		// Sonar being delulu, schema is not identical
+		const cleaner = (value: unknown) => Value.Clean(schema, value)
 
 		if (dynamic)
 			return {
@@ -340,12 +338,15 @@ export const getResponseSchemaValidator = (
 				code: '',
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
-				Code: () => '',
-				Clean: cleaner
+				Code: () => ''
 			} as unknown as TypeCheck<TSchema>
 
 		const compiledValidator = TypeCompiler.Compile(schema, references)
-		;(compiledValidator as any).Clean = cleaner
+
+		if (normalize && schema.additionalProperties === true)
+			// @ts-ignore
+			compiledValidator.Clean = cleaner
+
 		return compiledValidator
 	}
 
