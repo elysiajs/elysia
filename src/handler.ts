@@ -13,7 +13,9 @@ type SetResponse = Omit<Context['set'], 'status'> & {
 	status: number
 }
 
-export const isNotEmpty = (obj: Object) => {
+export const isNotEmpty = (obj?: Object) => {
+	if(!obj) return false
+
 	for (const x in obj) return true
 
 	return false

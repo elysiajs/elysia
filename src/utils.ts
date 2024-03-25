@@ -24,6 +24,7 @@ import type {
 	ErrorHandler
 } from './types'
 import type { CookieOptions } from './cookies'
+import { Sucrose } from './sucrose'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -938,3 +939,33 @@ export const lifeCycleToFn = (
 		stop: a.stop?.map((x) => x.fn)
 	}
 }
+
+export const cloneInference = (inference: {
+	event: Sucrose.Inference
+	trace: Sucrose.TraceInference
+}): {
+	event: Sucrose.Inference
+	trace: Sucrose.TraceInference
+} => ({
+	event: {
+		body: inference.event.body,
+		cookie: inference.event.cookie,
+		headers: inference.event.headers,
+		queries: [...inference.event.queries],
+		query: inference.event.query,
+		set: inference.event.set,
+		unknownQueries: inference.event.unknownQueries
+	},
+	trace: {
+		request: inference.trace.request,
+		parse: inference.trace.parse,
+		transform: inference.trace.transform,
+		handle: inference.trace.handle,
+		beforeHandle: inference.trace.beforeHandle,
+		afterHandle: inference.trace.afterHandle,
+		error: inference.trace.error,
+		context: inference.trace.context,
+		store: inference.trace.store,
+		set: inference.trace.set
+	}
+})

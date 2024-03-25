@@ -14,6 +14,7 @@ import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
 import {
+	cloneInference,
 	fnToContainer,
 	localHookToLifeCycleStore,
 	mergeDeep,
@@ -106,6 +107,7 @@ import type {
 	EphemeralType,
 	ExcludeElysiaResponse
 } from './types'
+import { isNotEmpty } from './handler'
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
@@ -245,7 +247,10 @@ export default class Elysia<
 		history: [] as InternalRoute[]
 	}
 
-	protected inference = {
+	protected inference: {
+		event: Sucrose.Inference
+		trace: Sucrose.TraceInference
+	} = {
 		event: {
 			body: false,
 			cookie: false,
@@ -267,14 +272,19 @@ export default class Elysia<
 			store: false,
 			set: false
 		}
-	} as const satisfies {
-		event: Sucrose.Inference
-		trace: Sucrose.TraceInference
 	}
 
 	private promisedModules = new PromiseGroup()
 
 	constructor(config?: ElysiaConfig<BasePath, Scoped>) {
+		if (config?.tags) {
+			if (!config.detail)
+				config.detail = {
+					tags: config.tags
+				}
+			else config.detail.tags = config.tags
+		}
+
 		this.config = {
 			forceErrorEncapsulation: true,
 			prefix: '',
@@ -505,6 +515,20 @@ export default class Elysia<
 		// ! Init default [] for hooks if undefined
 		localHook = mergeHook(localHook, {}, { allowMacro: true })
 
+		if (localHook.tags) {
+			if (!localHook.detail)
+				localHook.detail = {
+					tags: localHook.tags
+				}
+			else localHook.detail.tags = localHook.tags
+		}
+
+		if (isNotEmpty(this.config.detail))
+			localHook.detail = mergeDeep(
+				Object.assign({}, this.config.detail!),
+				localHook.detail
+			)
+
 		this.applyMacro(localHook)
 
 		const hooks = mergeHook(this.event, localHook)
@@ -546,6 +570,8 @@ export default class Elysia<
 			(typeof this.config.precompile === 'object' &&
 				this.config.precompile.compose === true)
 
+		const appInference = cloneInference(this.inference)
+
 		const mainHandler = shouldPrecompile
 			? composeHandler({
 					app: this,
@@ -556,13 +582,7 @@ export default class Elysia<
 					validator,
 					handler: handle,
 					allowMeta,
-					appInference: {
-						event: {
-							...this.inference.event,
-							queries: [...this.inference.event.queries]
-						},
-						trace: { ...this.inference.trace }
-					}
+					appInference
 			  })
 			: (((context: Context) => {
 					if (composed) return composed(context)
@@ -576,15 +596,7 @@ export default class Elysia<
 						validator,
 						handler: handle,
 						allowMeta,
-						appInference: {
-							event: {
-								...this.inference.event,
-								queries: [...this.inference.event.queries]
-							},
-							trace: {
-								...this.inference.trace
-							}
-						}
+						appInference
 					}) as any)(context)
 			  }) as ComposedHandler)
 
@@ -599,7 +611,7 @@ export default class Elysia<
 					validator,
 					handler: handle,
 					allowMeta,
-					appInference: Object.assign({}, this.inference)
+					appInference
 				}) as any)
 			}
 
@@ -2324,13 +2336,14 @@ export default class Elysia<
 		run?: (group: AnyElysia) => AnyElysia
 	): AnyElysia {
 		const instance = new Elysia({
-			...(this.config || {}),
+			...this.config,
 			prefix: ''
 		})
 
 		instance.singleton = { ...this.singleton }
 		instance.definitions = { ...this.definitions }
 		instance.getServer = () => this.server
+		instance.inference = cloneInference(this.inference)
 
 		const isSchema = typeof schemaOrRun === 'object'
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
@@ -2571,18 +2584,36 @@ export default class Elysia<
 					cookie: hook.cookie ?? this.validator?.cookie
 				}
 
+				if (hook.detail) {
+					if (this.config.detail)
+						this.config.detail = mergeDeep(
+							Object.assign({}, this.config.detail),
+							hook.detail
+						)
+					else this.config.detail = hook.detail
+				}
+
+				if (hook?.tags) {
+					if (!this.config.detail)
+						this.config.detail = {
+							tags: hook.tags
+						}
+					else this.config.detail.tags = hook.tags
+				}
+
 				return this
 			}
 
 			return this.guard({}, hook)
 		}
 
-		const instance: AnyElysia = new Elysia({
+		const instance = new Elysia({
 			...this.config,
 			prefix: ''
 		})
 		instance.singleton = { ...this.singleton }
 		instance.definitions = { ...this.definitions }
+		instance.inference = cloneInference(this.inference)
 
 		const sandbox = run(instance)
 		this.singleton = mergeDeep(this.singleton, instance.singleton) as any
@@ -5346,7 +5377,8 @@ export type {
 	TraceProcess,
 	TraceReporter,
 	TraceStream,
-	Checksum
+	Checksum,
+	DocumentDecoration
 } from './types'
 
 export type { Static, TSchema } from '@sinclair/typebox'

@@ -118,4 +118,20 @@ describe('sucrose', () => {
 		// @ts-expect-error
 		expect(main.inference.event.headers).toBe(true)
 	})
+
+	it("don't link inference", async () => {
+		const app = new Elysia({
+			cookie: {
+				secrets: 'Zero Exception',
+				sign: true
+			}
+		})
+			.get('/', () => 'hello')
+			.onBeforeHandle(({ cookie: { session }, error }) => {
+				if (!session.value) return error(401, 'Unauthorized')
+			})
+
+		const status = await app.handle(req('/')).then((x) => x.status)
+		expect(status).toBe(200)
+	})
 })

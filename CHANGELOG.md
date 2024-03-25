@@ -1,3 +1,12 @@
+# 1.0.9 - 25 Mar 2024
+Feature:
+- `Elysia.config.detail` constructor
+- shorthand `Elysia.tags` to constructor, `LocalHook`
+- guard inherits detail
+
+Bug fix:
+- inference link on `precompile: false` creating unnecessary instruction
+
 # 1.0.8 - 25 Mar 2024
 Feature:
 - [#562](https://github.com/elysiajs/elysia/pull/562) add `normalize` config

@@ -1,23 +1,22 @@
 import { Elysia, t, ValidationError } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia({
-	normalize: true
-})
-	.get('/', ({ error }) => ({
-		hello: 'world',
-		a: 'b'
-	}), {
-		response: {
-			200: t.Object({
-				hello: t.String()
-			}),
-			418: t.Object({
-				name: t.Literal('Nagisa')
-			})
-		}
+const app = new Elysia()
+	.get('/', ({ cookie }) => {
+		cookie.auth.set({
+			path: '/',
+			value: Math.random().toString(),
+			maxAge: 7 * 86400,
+			secure: true,
+			httpOnly: true
+		})
 	})
+	.get('/remove', ({ cookie }) => {
+		cookie.auth.remove()
+	})
+	.get('/value', ({ cookie }) => {
+		return cookie.auth.value
+	})
+	.listen(3000)
 
-const response = await app.handle(req('/')).then((x) => x.json())
-
-console.dir(response, { depth: null })
+// console.dir(app.routes, { depth: null })

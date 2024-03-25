@@ -30,6 +30,8 @@ export type ElysiaConfig<
 	name?: string
 	seed?: unknown
 	serve?: PartialServe
+	tags?: DocumentDecoration['tags']
+	detail?: DocumentDecoration
 	/**
 	 * Warm up Elysia before starting the server
 	 *
@@ -688,7 +690,7 @@ export type Isolate<T> = {
 	[P in keyof T]: T[P]
 }
 
-type LocalHookDetail = Partial<OpenAPIV3.OperationObject>
+export type DocumentDecoration = Partial<OpenAPIV3.OperationObject>
 
 export type LocalHook<
 	LocalSchema extends InputSchema,
@@ -720,7 +722,7 @@ export type LocalHook<
 		 * - 'arraybuffer': parse body as readable stream
 		 */
 		type?: ContentType
-		detail?: LocalHookDetail
+		detail?: DocumentDecoration
 		/**
 		 * Custom body parser
 		 */
@@ -749,6 +751,7 @@ export type LocalHook<
 		 * Custom body parser
 		 */
 		onResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		tags?: DocumentDecoration['tags']
 	}
 
 export type ComposedHandler = {
