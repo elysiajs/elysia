@@ -390,4 +390,28 @@ describe('Macro', () => {
 		expect(err).not.toBe('Ely')
 		expect(err).not.toBe('NOT_FOUND')
 	})
+
+	it("don't duplicate call on as plugin", async () => {
+		let called = 0
+
+		const plugin = new Elysia()
+			.macro(({ onBeforeHandle }) => ({
+				count(_: boolean) {
+					onBeforeHandle((ctx) => {
+						called++
+					})
+				}
+			}))
+			.get('/', () => 'hi', {
+				count: true
+			})
+
+		const app = new Elysia().use(plugin).get('/foo', () => 'foo', {
+			count: true
+		})
+
+		await app.handle(req('/'))
+
+		console.log(called)
+	})
 })

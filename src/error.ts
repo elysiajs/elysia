@@ -30,9 +30,9 @@ export const error = <
 	const T = Code extends keyof InvertedStatusMap
 		? InvertedStatusMap[Code]
 		: Code,
-	const Status extends number = Code extends keyof StatusMap
+	const Status extends Code extends keyof StatusMap
 		? StatusMap[Code]
-		: Code
+		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
 >(
 	code: Code,
 	response?: T
@@ -127,7 +127,7 @@ export class ValidationError extends Error {
 					: customError + ''
 		} else if (isProduction) {
 			message = JSON.stringify({
-				type: "validation",
+				type: 'validation',
 				on: type,
 				message: error?.message,
 				found: value
@@ -140,22 +140,22 @@ export class ValidationError extends Error {
 					? [...validator.Errors(value)]
 					: [...Value.Errors(validator, value)]
 
-				let expected
+			let expected
 
-				try {
-					expected = Value.Create(schema)
-				} catch (error) {
-					expected = {
-						type: 'Could not create expected value',
-						// @ts-expect-error
-						message: error?.message,
-						error
-					}
+			try {
+				expected = Value.Create(schema)
+			} catch (error) {
+				expected = {
+					type: 'Could not create expected value',
+					// @ts-expect-error
+					message: error?.message,
+					error
 				}
+			}
 
 			message = JSON.stringify(
 				{
-					type: "validation",
+					type: 'validation',
 					on: type,
 					property: accessor,
 					message: error?.message,

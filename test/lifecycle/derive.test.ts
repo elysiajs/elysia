@@ -1,4 +1,4 @@
-import { Elysia } from '../../src'
+import { Elysia, error } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -137,6 +137,30 @@ describe('derive', () => {
 		expect(called).toEqual(['/inner'])
 	})
 
+	it('as scoped', async () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia()
+			.derive({ as: 'scoped' }, ({ path }) => {
+				called.push(path)
+
+				return {}
+			})
+			.get('/inner', () => 'NOOP')
+
+		const middle = new Elysia().use(plugin).get('/middle', () => 'NOOP')
+
+		const app = new Elysia().use(middle).get('/outer', () => 'NOOP')
+
+		const res = await Promise.all([
+			app.handle(req('/inner')),
+			app.handle(req('/middle')),
+			app.handle(req('/outer'))
+		])
+
+		expect(called).toEqual(['/inner', '/middle'])
+	})
+
 	it('support array', async () => {
 		let total = 0
 
@@ -154,5 +178,17 @@ describe('derive', () => {
 		const res = await app.handle(req('/'))
 
 		expect(total).toEqual(2)
+	})
+
+	it('handle error', async () => {
+		const app = new Elysia()
+			.derive(() => {
+				return error(418)
+			})
+			.get('/', () => '')
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toEqual("I'm a teapot")
 	})
 })

@@ -1,29 +1,10 @@
 import { Elysia } from '../src'
+import { req } from '../test/utils'
 
-const auth = new Elysia({ prefix: '/protected' })
-	.derive(({ cookie: { auth } }) => ({
-		session: {
-			kind: 'logged-in' as string,
-			user: 'saltyaom' as string | null
-		}
-	}))
-	.guard(
-		{
-			beforeHandle({ error, session: { kind, user } }) {
-				if (kind !== 'logged-in') 
-					return error(401, 'Unauthorized')
+const a = new Elysia().trace({ as: 'global' }, async ({ set }) => {
+	set.headers['X-Powered-By'] = 'elysia'
+})
 
-				return user
-			}
-		},
-		(app) =>
-			app
-				.derive(({ session }) => ({ user: session.user! }))
-				.get('/user', ({ user }) => user)
-	)
+const app = new Elysia().use(a).get('/', () => 'hi')
 
-const app = new Elysia()
-	.use(auth)
-	// ? Will not have auth check
-	.get('/', () => 'hai')
-	.listen(3000)
+const response = await app.handle(req('/')).then(x => x.text()).then(console.log)

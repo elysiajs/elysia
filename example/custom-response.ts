@@ -12,4 +12,4 @@ new Elysia()
 	.get('/', () => ({
 		hello: 'world'
 	}))
-	.listen(8080)
+	.listen(3000)

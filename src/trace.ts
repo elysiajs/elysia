@@ -1,4 +1,5 @@
 import type {
+	HookContainer,
 	TraceHandler,
 	TraceProcess,
 	TraceReporter,
@@ -120,8 +121,10 @@ const createSignal = () => {
 export const createTraceListener = (
 	getReporter: () => TraceReporter,
 	totalListener: number,
-	handler: TraceHandler<any, any>
+	handler: TraceHandler<any, any> | HookContainer<TraceHandler<any, any>>
 ) => {
+	if (typeof handler === 'object') handler = handler.fn
+
 	return async function trace(trace: TraceStream) {
 		if (trace.event !== 'request' || trace.type !== 'begin') return
 

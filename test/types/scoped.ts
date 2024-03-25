@@ -122,7 +122,7 @@ const app = new Elysia()
 		.use(plugin)
 
 	type types = typeof types._types
-	type ephemeral = typeof types._ephemeral
+	type current = typeof types._volatile
 
 	expectTypeOf<types['Singleton']>().toEqualTypeOf<{
 		decorator: {
@@ -135,11 +135,14 @@ const app = new Elysia()
 		resolve: {}
 	}>()
 
-	expectTypeOf<ephemeral['Singleton']>().toEqualTypeOf<{
+	expectTypeOf<current['derive']>().toEqualTypeOf<{
 		derive: {
 			readonly b: 'b'
 		}
-		resolve: {
+	}>
+
+	expectTypeOf<current['resolve']>().toEqualTypeOf<{
+		derive: {
 			readonly b: 'b'
 		}
 	}>
@@ -159,4 +162,26 @@ const app = new Elysia()
 			b: Error
 		}
 	}>()
+}
+
+// ? Propagate
+{
+	const subPlugin1 = new Elysia().derive({ as: 'scoped' }, () => {
+		return {
+			hi: 'hi'
+		}
+	})
+
+	const subPlugin2 = new Elysia().derive({ as: 'scoped' }, () => {
+		return {
+			none: 'none'
+		}
+	})
+
+	const plugin = new Elysia().use(subPlugin1).propagate().use(subPlugin2)
+
+	const app = new Elysia().use(plugin).get('/', (context) => {
+		expectTypeOf<typeof context>().toHaveProperty('hi')
+		expectTypeOf<typeof context>().not.toHaveProperty('none')
+	})
 }

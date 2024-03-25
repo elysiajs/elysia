@@ -24,13 +24,13 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 	const size = response.size
 
 	if (
+		(!set && size) ||
 		(size &&
 			set &&
 			set.status !== 206 &&
 			set.status !== 304 &&
 			set.status !== 412 &&
-			set.status !== 416) ||
-		(!set && size)
+			set.status !== 416)
 	) {
 		if (set) {
 			if (set.headers instanceof Headers)
@@ -73,7 +73,9 @@ export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 
 		headers.append(
 			'Set-Cookie',
-			`${setCookie[i].slice(0, index)}=${setCookie[i].slice(index + 1) || ''}`
+			`${setCookie[i].slice(0, index)}=${
+				setCookie[i].slice(index + 1) || ''
+			}`
 		)
 	}
 
@@ -112,9 +114,9 @@ export const mapResponse = (
 	request?: Request
 ): Response => {
 	// @ts-ignore
-	if (response?.[response.$passthrough])
+	if (response?.$passthrough)
 		// @ts-ignore
-		response = response[response.$passthrough]
+		response = response?.[response.$passthrough]
 
 	// @ts-ignore
 	if (response?.[ELYSIA_RESPONSE]) {
@@ -392,12 +394,10 @@ export const mapEarlyResponse = (
 ): Response | undefined => {
 	if (response === undefined || response === null) return
 
-	if (
+	// @ts-ignore
+	if (response?.$passthrough)
 		// @ts-ignore
-		response?.$passthrough
-	)
-		// @ts-ignore
-		response = response[response.$passthrough]
+		response = response?.[response.$passthrough]
 
 	// @ts-ignore
 	if (response?.[ELYSIA_RESPONSE]) {
@@ -673,12 +673,10 @@ export const mapCompactResponse = (
 	response: unknown,
 	request?: Request
 ): Response => {
-	if (
+	// @ts-ignore
+	if (response?.$passthrough)
 		// @ts-ignore
-		response?.$passthrough
-	)
-		// @ts-ignore
-		response = response[response.$passthrough]
+		response = response?.[response.$passthrough]
 
 	// @ts-ignore
 	if (response?.[ELYSIA_RESPONSE])

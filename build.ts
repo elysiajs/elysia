@@ -28,23 +28,25 @@ await Promise.all([
 		outDir: 'dist/cjs',
 		format: 'cjs',
 		target: 'node20',
-		dts: true,
+		// dts: true,
 		...tsupConfig
 	})
 ])
 
+await $`tsc --project tsconfig.dts.json`
+
 await Bun.build({
 	entrypoints: ['./src/index.ts'],
 	outdir: './dist/bun',
-	minify: false,
+	minify: true,
 	target: 'bun',
 	sourcemap: 'external',
 	external: ['@sinclair/typebox']
 })
 
 await Promise.all([
-	$`cp dist/cjs/*.d.ts dist/`,
-	$`cp dist/cjs/ws/*.d.ts dist/ws/`
+	$`cp dist/*.d.ts dist/cjs`,
+	$`cp dist/ws/*.d.ts dist/cjs/ws/`,
 ])
 
 await $`cp dist/index*.d.ts dist/bun`
