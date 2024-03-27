@@ -557,7 +557,7 @@ export const composeHandler = ({
 			!destructured.length
 		) {
 			fnLiteral += `if(c.qi !== -1) {
-				c.query = parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1)).replace(/\\+/g, ' '))
+				c.query = parseQuery(c.request.url.slice(c.qi + 1))
 			} else c.query = {}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
