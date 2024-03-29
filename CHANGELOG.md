@@ -1,3 +1,7 @@
+# 1.0.10 - 30 Mar 2024
+Bug fix:
+- [ServerTiming#1](https://github.com/elysiajs/elysia-server-timing/issues/1) late beforeHandle on set trace inference doesn't produce exit instruction
+
 # 1.0.9 - 25 Mar 2024
 Feature:
 - `Elysia.config.detail` constructor

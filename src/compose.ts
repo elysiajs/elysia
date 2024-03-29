@@ -101,12 +101,7 @@ const createReport = ({
 					'\n'
 			)
 
-			let handled = false
-
 			return () => {
-				if (handled) return
-
-				handled = true
 				addFn(
 					'\n' +
 						`reporter.emit('event', {
@@ -1039,6 +1034,7 @@ export const composeHandler = ({
 				endUnit()
 
 				fnLiteral += `if(be !== undefined) {\n`
+				endBeforeHandle()
 				const endAfterHandle = report('afterHandle', {
 					unit: hooks.transform.length
 				})
@@ -1076,7 +1072,6 @@ export const composeHandler = ({
 					}
 				}
 
-				endBeforeHandle()
 				endAfterHandle()
 
 				if (validator.response)
