@@ -1,6 +1,6 @@
 <br>
 <p align=center>
- <img src=https://github.com/elysiajs/elysia/assets/35027979/15653752-866c-4525-99f9-edde0aafc856 alt="ElysiaJS logo with word ElysiaJS on the left" width=480 />
+ <img src=https://github.com/elysiajs/elysia/assets/35027979/2aa06df7-9acf-46fb-9cbc-3d218dee43ac alt="ElysiaJS logo with word ElysiaJS on the left" width=480 />
 </p>
 
 <p align=center>Ergonomic Framework for Humans</p>
@@ -15,7 +15,7 @@ TypeScript framework supercharged by Bun with End-to-End Type Safety, unified ty
 bun create elysia app
 ```
 
-![Elysia feature sheet including 18x faster than Express based on Techempower benchmark, Frontend RPC Connector, Advance TypeScript type, unified type single source of truth of type TypeScript runtime and documentation all at once, Made of Productivity focus on developer experience, powered by Bun, WinterCG Compliance, Fully type safe GraphQL (same author with GraphQL Mobius), documentation in one line, End-to-end type safety move fast and break nothing like tRPC, strong ecosystem most popular Bun native Web Framework](https://github.com/elysiajs/elysia/assets/35027979/879e297e-857d-419a-a1e2-fc6542e34b6b)
+![Elysia feature sheet including 18x faster than Express based on Techempower benchmark, Frontend RPC Connector, Advance TypeScript type, unified type single source of truth of type TypeScript runtime and documentation all at once, Made of Productivity focus on developer experience, powered by Bun, WinterCG Compliance, Fully type safe GraphQL (same author with GraphQL Mobius), documentation in one line, End-to-end type safety move fast and break nothing like tRPC, strong ecosystem most popular Bun native Web Framework](https://github.com/elysiajs/elysia/assets/35027979/d4b184ca-a622-434d-bb06-06c3110726af)
 
 ## Documentation
 The documentation is available on [elysiajs.com](https://elysiajs.com).
