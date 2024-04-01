@@ -118,6 +118,7 @@
     "typescript": "^5.4.2"
   },
   "peerDependencies": {
+    "ajv-formats": "^3.0.1",
     "@sinclair/typebox": ">= 0.31.0",
     "openapi-types": ">= 12.0.0",
     "typescript": ">= 5.0.0"
