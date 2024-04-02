@@ -17,6 +17,7 @@ import {
 
 import { type TypeCheck } from '@sinclair/typebox/compiler'
 import { Value } from '@sinclair/typebox/value'
+import { fullFormats } from 'ajv-formats/dist/formats'
 
 import type { CookieOptions } from './cookies'
 import { ValidationError } from './error'
@@ -30,17 +31,13 @@ const isShortenDate =
 	/^(?:(?:(?:(?:0?[1-9]|[12][0-9]|3[01])[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:19|20)\d{2})|(?:(?:19|20)\d{2}[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:0?[1-9]|[12][0-9]|3[01]))))(?:\s(?:1[012]|0?[1-9]):[0-5][0-9](?::[0-5][0-9])?(?:\s[AP]M)?)?$/
 
 try {
-	TypeSystem.Format('email', (value) =>
-		/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(
-			value
-		)
-	)
 
-	TypeSystem.Format('uuid', (value) =>
-		/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-			value
-		)
-	)
+	Object.entries(fullFormats).forEach(formatEntry => {
+		const [formatName, formatValue] = formatEntry;
+		if (formatValue instanceof RegExp) {
+			TypeSystem.Format(formatName, (value) => formatValue.test(value))
+		}
+	})
 
 	TypeSystem.Format('date', (value) => {
 		// Remove quote from stringified date
