@@ -2,7 +2,8 @@ import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 
-const req = () => new Request(`http://localhost/?name=sucrose`)
+const req = (path: string = '/?name=sucrose') =>
+	new Request(`http://localhost${path}`)
 
 describe('Query', () => {
 	it('access all using property name', async () => {
@@ -69,8 +70,25 @@ describe('Query', () => {
 				}
 			})
 			.get('/', (ctx) => ctx.yay())
+
 		const response = await app.handle(req())
 
 		expect(await response.json()).toEqual({ name: 'sucrose' })
+	})
+
+	it('destructured encoded & (%26) query string', async () => {
+		const app = new Elysia()
+			.get('/unknown', ({ query }) => query)
+			.get('/named', ({ query: { name } }) => name)
+
+		const unknown = await app
+			.handle(req('/unknown?name=sucrose%26albedo&alias=achemist'))
+			.then((x) => x.json())
+		const named = await app
+			.handle(req('/named?name=sucrose%26albedo&alias=achemist'))
+			.then((x) => x.text())
+
+		expect(unknown).toEqual({ name: 'sucrose&albedo', alias: 'achemist' })
+		expect(named).toEqual('sucrose&albedo')
 	})
 })

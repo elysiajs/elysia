@@ -1,4 +1,10 @@
-import { DateOptions, NumberOptions, TDate } from '@sinclair/typebox'
+import {
+	DateOptions,
+	NumberOptions,
+	TDate,
+	TUnsafe,
+	TypeRegistry
+} from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
@@ -17,7 +23,7 @@ import {
 
 import { type TypeCheck } from '@sinclair/typebox/compiler'
 import { Value } from '@sinclair/typebox/value'
-import { fullFormats } from 'ajv-formats/dist/formats'
+import { fullFormats } from './formats'
 
 import type { CookieOptions } from './cookies'
 import { ValidationError } from './error'
@@ -30,49 +36,53 @@ const isFormalDate =
 const isShortenDate =
 	/^(?:(?:(?:(?:0?[1-9]|[12][0-9]|3[01])[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:19|20)\d{2})|(?:(?:19|20)\d{2}[/\s-](?:0?[1-9]|1[0-2])[/\s-](?:0?[1-9]|[12][0-9]|3[01]))))(?:\s(?:1[012]|0?[1-9]):[0-5][0-9](?::[0-5][0-9])?(?:\s[AP]M)?)?$/
 
-try {
+const _validateDate = fullFormats.date
+const _validateDateTime = fullFormats['date-time']
 
-	Object.entries(fullFormats).forEach(formatEntry => {
-		const [formatName, formatValue] = formatEntry;
-		if (formatValue instanceof RegExp) {
+TypeSystem.Format('date', (value: string) => {
+	// Remove quote from stringified date
+	const temp = value.replace(/"/g, '')
+
+	if (
+		isISO8601.test(temp) ||
+		isFormalDate.test(temp) ||
+		isShortenDate.test(temp) ||
+		_validateDate(temp)
+	) {
+		const date = new Date(temp)
+		if (!Number.isNaN(date.getTime())) return true
+	}
+
+	return false
+})
+
+TypeSystem.Format('date-time', (value: string) => {
+	// Remove quote from stringified date
+	const temp = value.replace(/"/g, '')
+
+	if (
+		isISO8601.test(temp) ||
+		isFormalDate.test(temp) ||
+		isShortenDate.test(temp) ||
+		_validateDateTime(temp)
+	) {
+		const date = new Date(temp)
+		if (!Number.isNaN(date.getTime())) return true
+	}
+
+	return false
+})
+
+Object.entries(fullFormats).forEach((formatEntry) => {
+	const [formatName, formatValue] = formatEntry
+
+	if (!FormatRegistry.Has(formatName)) {
+		if (formatValue instanceof RegExp)
 			TypeSystem.Format(formatName, (value) => formatValue.test(value))
-		}
-	})
-
-	TypeSystem.Format('date', (value) => {
-		// Remove quote from stringified date
-		const temp = value.replace(/"/g, '')
-
-		if (
-			isISO8601.test(temp) ||
-			isFormalDate.test(temp) ||
-			isShortenDate.test(temp)
-		) {
-			const date = new Date(temp)
-			if (!Number.isNaN(date.getTime())) return true
-		}
-
-		return false
-	})
-
-	TypeSystem.Format('date-time', (value) => {
-		// Remove quote from stringified date
-		const temp = value.replace(/"/g, '')
-
-		if (
-			isISO8601.test(temp) ||
-			isFormalDate.test(temp) ||
-			isShortenDate.test(temp)
-		) {
-			const date = new Date(temp)
-			if (!Number.isNaN(date.getTime())) return true
-		}
-
-		return false
-	})
-} catch {
-	// Not empty
-}
+		else if (typeof formatValue === 'function')
+			TypeSystem.Format(formatName, formatValue)
+	}
+})
 
 const t = Object.assign({}, Type)
 
@@ -194,32 +204,48 @@ const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 	return true
 }
 
-const Files = TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
-	'Files',
-	(options, value) => {
-		if (!Array.isArray(value)) return validateFile(options, value)
+type ElysiaFile = (
+	options?: Partial<ElysiaTypeOptions.Files> | undefined
+) => TUnsafe<File>
 
-		if (options.minItems && value.length < options.minItems) return false
+const File: ElysiaFile =
+	(TypeRegistry.Get('Files') as unknown as ElysiaFile) ??
+	TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile)
 
-		if (options.maxItems && value.length > options.maxItems) return false
+type ElysiaFiles = (
+	options?: Partial<ElysiaTypeOptions.Files> | undefined
+) => TUnsafe<File[]>
 
-		for (let i = 0; i < value.length; i++)
-			if (!validateFile(options, value[i])) return false
+const Files: ElysiaFiles =
+	(TypeRegistry.Get('Files') as unknown as ElysiaFiles) ??
+	TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
+		'Files',
+		(options, value) => {
+			if (!Array.isArray(value)) return validateFile(options, value)
 
-		return true
-	}
-)
+			if (options.minItems && value.length < options.minItems)
+				return false
 
-if (!FormatRegistry.Get('numeric'))
+			if (options.maxItems && value.length > options.maxItems)
+				return false
+
+			for (let i = 0; i < value.length; i++)
+				if (!validateFile(options, value[i])) return false
+
+			return true
+		}
+	)
+
+if (!FormatRegistry.Has('numeric'))
 	FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
 
-if (!FormatRegistry.Get('boolean'))
+if (!FormatRegistry.Has('boolean'))
 	FormatRegistry.Set(
 		'boolean',
 		(value) => value === 'true' || value === 'false'
 	)
 
-if (!FormatRegistry.Get('ObjectString'))
+if (!FormatRegistry.Has('ObjectString'))
 	FormatRegistry.Set('ObjectString', (value) => {
 		let start = value.charCodeAt(0)
 
@@ -375,7 +401,7 @@ export const ElysiaType = {
 				return JSON.stringify(value)
 			}) as any as TObject<T>
 	},
-	File: TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile),
+	File,
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
 		t
 			.Transform(Files(options))

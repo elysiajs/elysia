@@ -1,3 +1,9 @@
+# 1.0.11 - 2 Apr 2024
+Bug fix:
+- possibly fix for "Duplicate type kind 'Files' detected"
+- add ajv-formats
+- [#562](https://github.com/elysiajs/elysia/pull/575) %26 (&) to be interpreted as & (query separator)
+
 # 1.0.10 - 30 Mar 2024
 Bug fix:
 - [ServerTiming#1](https://github.com/elysiajs/elysia-server-timing/issues/1) late beforeHandle on set trace inference doesn't produce exit instruction

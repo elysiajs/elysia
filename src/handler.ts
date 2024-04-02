@@ -14,7 +14,7 @@ type SetResponse = Omit<Context['set'], 'status'> & {
 }
 
 export const isNotEmpty = (obj?: Object) => {
-	if(!obj) return false
+	if (!obj) return false
 
 	for (const x in obj) return true
 
@@ -178,7 +178,6 @@ export const mapResponse = (
 					'abort',
 					{
 						handleEvent() {
-							;
 							if (!request?.signal.aborted)
 								(response as ReadableStream).cancel(request)
 						}
@@ -306,7 +305,6 @@ export const mapResponse = (
 					'abort',
 					{
 						handleEvent() {
-							;
 							if (!request?.signal.aborted)
 								(response as ReadableStream).cancel(request)
 						}
@@ -389,6 +387,8 @@ export const mapResponse = (
 					}
 				}
 
+				console.log('HERE')
+
 				return new Response(response as any)
 		}
 }
@@ -464,7 +464,6 @@ export const mapEarlyResponse = (
 					'abort',
 					{
 						handleEvent() {
-							;
 							if (!request?.signal.aborted)
 								(response as ReadableStream).cancel(request)
 						}
@@ -596,7 +595,6 @@ export const mapEarlyResponse = (
 					'abort',
 					{
 						handleEvent() {
-							;
 							if (!request?.signal.aborted)
 								(response as ReadableStream).cancel(request)
 						}
@@ -717,7 +715,6 @@ export const mapCompactResponse = (
 				'abort',
 				{
 					handleEvent() {
-						;
 						if (!request?.signal.aborted)
 							(response as ReadableStream).cancel(request)
 					}
@@ -776,15 +773,22 @@ export const mapCompactResponse = (
 			if (response instanceof Error)
 				return errorToResponse(response as Error)
 
-			const r = JSON.stringify(response)
-			if (r.charCodeAt(0) === 123)
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'Content-Type': 'application/json'
-					}
-				}) as any
+			if ('charCodeAt' in (response as any)) {
+				const code = (response as any).charCodeAt(0)
 
-			return new Response(r)
+				if (code === 123 || code === 91) {
+					return new Response(
+						JSON.stringify(response),
+						{
+							headers: {
+								'Content-Type': 'application/json'
+							}
+						}
+					) as any
+				}
+			}
+
+			return new Response(response as any)
 	}
 }
 

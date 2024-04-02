@@ -552,14 +552,14 @@ export const composeHandler = ({
 			!destructured.length
 		) {
 			fnLiteral += `if(c.qi !== -1) {
-				c.query = parseQuery(decodeURIComponent(c.request.url.slice(c.qi + 1)).replace(/\\+/g, ' '))
+				c.query = parseQuery(c.request.url.slice(c.qi + 1).replace(/\\+/g, ' '))
+
+				for(const key of Object.keys(c.query))
+					c.query[key] = decodeURIComponent(c.query[key])
 			} else c.query = {}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
-				let url = decodeURIComponent(
-					c.request.url.slice(c.qi)
-						.replace(/\\+/g, ' ')
-					)
+				let url = c.request.url.slice(c.qi).replace(/\\+/g, ' ')
 
 				${destructured
 					.map(
@@ -572,8 +572,8 @@ export const composeHandler = ({
 							const start = memory + ${name.length + 2}
 							memory = url.indexOf('&', start)
 
-							if(memory === -1) a${index} = url.slice(start)
-							else a${index} = url.slice(start, memory)
+							if(memory === -1) a${index} = decodeURIComponent(url.slice(start))
+							else a${index} = decodeURIComponent(url.slice(start, memory))
 						}`
 					)
 					.join('\n')}
