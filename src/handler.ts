@@ -387,8 +387,6 @@ export const mapResponse = (
 					}
 				}
 
-				console.log('HERE')
-
 				return new Response(response as any)
 		}
 }

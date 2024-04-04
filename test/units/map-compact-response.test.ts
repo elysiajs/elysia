@@ -4,6 +4,12 @@ import { Passthrough } from './utils'
 
 class Student {
 	constructor(public name: string) {}
+
+	toString() {
+		return JSON.stringify({
+			name: this.name
+		})
+	}
 }
 
 class CustomResponse extends Response {}
