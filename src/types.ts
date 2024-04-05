@@ -109,7 +109,7 @@ export type ElysiaConfig<
 	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.
 	 * This has no effect when the schemas allow additional properties.
 	 * Since this uses dynamic schema it may have an impact on performance. Use with caution.
-	 * 
+	 *
 	 * @default false
 	 */
 	normalize?: boolean
@@ -1014,4 +1014,24 @@ export type LifeCycleType = 'global' | 'local' | 'scoped'
 export type ExcludeElysiaResponse<T> = Exclude<
 	Awaited<T>,
 	{ [ELYSIA_RESPONSE]: any }
+>
+
+export type InferContext<
+	T extends Elysia<any, any, any, any, any, any, any, any>,
+	Path extends string = T['_types']['Prefix'],
+	Schema extends RouteSchema = T['_types']['Metadata']['schema']
+> = Context<
+	MergeSchema<Schema, T['_types']['Metadata']['schema']>,
+	T['_types']['Singleton'],
+	T['_types']['Prefix']
+>
+
+export type InferHandler<
+	T extends Elysia<any, any, any, any, any, any, any, any>,
+	Path extends string = T['_types']['Prefix'],
+	Schema extends RouteSchema = T['_types']['Metadata']['schema']
+> = InlineHandler<
+	MergeSchema<Schema, T['_types']['Metadata']['schema']>,
+	T['_types']['Singleton'],
+	T['_types']['Prefix']
 >

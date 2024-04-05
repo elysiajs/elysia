@@ -34,12 +34,12 @@ describe('Parse Cookie', () => {
 			cookie: {}
 		}
 
-		const secret = 'Fischl von Luftschloss Narfidort'
+		const secrets = 'Fischl von Luftschloss Narfidort'
 
-		const fischl = await signCookie('fischl', secret)
+		const fischl = await signCookie('fischl', secrets)
 		const cookieString = `fischl=${fischl}`
 		const result = await parseCookie(set, cookieString, {
-			secret,
+			secrets,
 			sign: ['fischl']
 		})
 
@@ -52,14 +52,14 @@ describe('Parse Cookie', () => {
 			cookie: {}
 		}
 
-		const secret = 'Fischl von Luftschloss Narfidort'
+		const secrets = 'Fischl von Luftschloss Narfidort'
 
-		const fischl = await signCookie('fischl', secret)
-		const eula = await signCookie('eula', secret)
+		const fischl = await signCookie('fischl', secrets)
+		const eula = await signCookie('eula', secrets)
 
 		const cookieString = `fischl=${fischl}; eula=${eula}`
 		const result = await parseCookie(set, cookieString, {
-			secret,
+			secrets,
 			sign: ['fischl', 'eula']
 		})
 
@@ -128,7 +128,7 @@ describe('Parse Cookie', () => {
 		const fischl = await signCookie('fischl', secret)
 		const cookieString = `fischl=${fischl}`
 		const result = await parseCookie(set, cookieString, {
-			secret: ['New Secret', secret],
+			secrets: ['New Secret', secret],
 			sign: ['fischl']
 		})
 

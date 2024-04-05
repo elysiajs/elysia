@@ -157,7 +157,10 @@ const composeValidationFactory = (
 
 		let code = '\n' + injectResponse + '\n'
 
-		code += `const er = ${name}[ELYSIA_RESPONSE]\n`
+		code += `let er
+		
+		if(${name} && typeof ${name} === "object" && ELYSIA_RESPONSE in ${name})
+			er = ${name}[ELYSIA_RESPONSE]\n`
 
 		if (normalize)
 			code += `
@@ -167,7 +170,7 @@ const composeValidationFactory = (
 				${name}.response = response[er]?.Clean(${name}.response)`
 
 		code += `
-			if(typeof ${name} === "object" && ELYSIA_RESPONSE in ${name}) {
+			if(er) {
 				if(!(${name} instanceof Response) && response[er]?.Check(${name}.response) === false) {
 					if(!(response instanceof Error)) {
 						c.set.status = ${name}[ELYSIA_RESPONSE]
@@ -497,7 +500,7 @@ export const composeHandler = ({
 
 		const options = cookieMeta
 			? `{
-			secret: ${
+			secrets: ${
 				cookieMeta.secrets !== undefined
 					? typeof cookieMeta.secrets === 'string'
 						? `'${cookieMeta.secrets}'`
@@ -1736,7 +1739,7 @@ export const composeErrorHandler = (
 		context.code = error.code
 		context.error = error
 
-		if(error[ELYSIA_RESPONSE]) {
+		if(ELYSIA_RESPONSE in error) {
 			error.status = error[ELYSIA_RESPONSE]
 			error.message = error.response
 		}\n`
@@ -1753,6 +1756,8 @@ export const composeErrorHandler = (
 		if (hasReturn(handler.fn.toString()))
 			fnLiteral += `r = ${response}; if(r !== undefined) {
 				if(r instanceof Response) return r
+
+				console.log(r, error)
 
 				if(r[ELYSIA_RESPONSE]) {
 					error.status = error[ELYSIA_RESPONSE]

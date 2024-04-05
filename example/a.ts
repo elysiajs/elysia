@@ -1,28 +1,23 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
+import { InferContext } from '../src/types'
+import { req } from '../test/utils'
 
-class Data {
-	message: String
-
-	constructor(message: String) {
-		this.message = message
+const app = new Elysia({ precompile: true }).get(
+	'/',
+	({ cookie: { profile } }) => {
+		profile.value = 'a'
+	},
+	{
+		cookie: t.Cookie({
+			profile: t.String()
+		}, {
+			secrets: 'awd'
+		})
 	}
+)
 
-	toString() {
-		return JSON.stringify(this)
-	}
-}
+type Context = InferContext<Elysia>
 
-const app = new Elysia({ precompile: true })
-	.get('/', () => {
-		return new Data('pong')
-	})
-	.get('/ping', ({ set }) => {
-		const data = new Data('pong')
-
-		set.status = 200
-
-		return data
-	})
-	.listen(3000)
-
-console.log(app.routes[1].composed.toString())
+app.handle(req('/'))
+	.then((x) => x.text())
+	.then((x) => console.log({ x }))

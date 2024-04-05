@@ -41,11 +41,13 @@ export type Context<
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<any>>
 			: Record<string, Cookie<any>> &
-					WithoutNullableKeys<{
-						[key in keyof Route['cookie']]: Cookie<
-							Route['cookie'][key]
-						>
-					}>
+					Prettify<
+						WithoutNullableKeys<{
+							[key in keyof Route['cookie']]: Cookie<
+								Route['cookie'][key]
+							>
+						}>
+					>
 
 		set: {
 			headers: Record<string, string> & {

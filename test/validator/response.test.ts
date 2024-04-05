@@ -311,4 +311,26 @@ describe('Response Validator', () => {
 			}
 		)
 	})
+
+	it('return null with schema', async () => {
+		const app = new Elysia().get('/', () => null, {
+			response: t.Union([
+				t.Null(),
+				t.Object({
+					name: t.String()
+				})
+			])
+		})
+	})
+
+	it('return undefined with schema', async () => {
+		const app = new Elysia().get('/', () => undefined, {
+			response: t.Union([
+				t.Undefined(),
+				t.Object({
+					name: t.String()
+				})
+			])
+		})
+	})
 })

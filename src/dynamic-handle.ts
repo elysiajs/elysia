@@ -185,7 +185,7 @@ export const createDynamicHandler =
 				cookieHeaderValue,
 				cookieMeta
 					? {
-							secret:
+							secrets:
 								cookieMeta.secrets !== undefined
 									? typeof cookieMeta.secrets === 'string'
 										? cookieMeta.secrets

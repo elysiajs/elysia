@@ -1,3 +1,11 @@
+# 1.0.12 - 5 Apr 2024
+Feature:
+- add `InferContext`
+
+Bug fix:
+- returning null with response validation cause error
+- 
+
 # 1.0.11 - 2 Apr 2024
 Bug fix:
 - possibly fix for "Duplicate type kind 'Files' detected"
