@@ -157,7 +157,7 @@ const composeValidationFactory = (
 
 		let code = '\n' + injectResponse + '\n'
 
-		code += `const er = ${name}[ELYSIA_RESPONSE]\n`
+		code += `const er = ${name} ? ${name}[ELYSIA_RESPONSE] : null\n`
 
 		if (normalize)
 			code += `
