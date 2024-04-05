@@ -9,7 +9,7 @@ describe('Non 200 Response Type', () => {
                 set.status = 204
             }, {
                 response: {
-                    204: t.Undefined()
+                    204: t.Void()
                 }
             })
             .listen(3000)
