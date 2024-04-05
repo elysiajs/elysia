@@ -1,6 +1,14 @@
 import { Elysia, t } from '../src'
-import { InferContext } from '../src/types'
+import { InferContext, InferHandler } from '../src/types'
 import { req } from '../test/utils'
+
+const setup = new Elysia({ name: 'setup' })
+	.decorate('a', 'a')
+	.derive(() => {
+		return {
+			hello: 'world'
+		}
+	})
 
 const app = new Elysia({ precompile: true }).get(
 	'/',
@@ -15,8 +23,6 @@ const app = new Elysia({ precompile: true }).get(
 		})
 	}
 )
-
-type Context = InferContext<Elysia>
 
 app.handle(req('/'))
 	.then((x) => x.text())

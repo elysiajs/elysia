@@ -1022,7 +1022,10 @@ export type InferContext<
 	Schema extends RouteSchema = T['_types']['Metadata']['schema']
 > = Context<
 	MergeSchema<Schema, T['_types']['Metadata']['schema']>,
-	T['_types']['Singleton'],
+	T['_types']['Singleton'] & {
+		derive: T['_ephemeral']['derive'] & T['_volatile']['derive']
+		resolve: T['_ephemeral']['resolve'] & T['_volatile']['resolve']
+	},
 	T['_types']['Prefix']
 >
 
@@ -1032,6 +1035,9 @@ export type InferHandler<
 	Schema extends RouteSchema = T['_types']['Metadata']['schema']
 > = InlineHandler<
 	MergeSchema<Schema, T['_types']['Metadata']['schema']>,
-	T['_types']['Singleton'],
+	T['_types']['Singleton'] & {
+		derive: T['_ephemeral']['derive'] & T['_volatile']['derive']
+		resolve: T['_ephemeral']['resolve'] & T['_volatile']['resolve']
+	},
 	T['_types']['Prefix']
 >

@@ -1757,8 +1757,6 @@ export const composeErrorHandler = (
 			fnLiteral += `r = ${response}; if(r !== undefined) {
 				if(r instanceof Response) return r
 
-				console.log(r, error)
-
 				if(r[ELYSIA_RESPONSE]) {
 					error.status = error[ELYSIA_RESPONSE]
 					error.message = error.response

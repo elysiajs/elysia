@@ -5378,7 +5378,9 @@ export type {
 	TraceReporter,
 	TraceStream,
 	Checksum,
-	DocumentDecoration
+	DocumentDecoration,
+	InferContext,
+	InferHandler
 } from './types'
 
 export type { Static, TSchema } from '@sinclair/typebox'
