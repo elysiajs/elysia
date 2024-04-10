@@ -373,7 +373,6 @@ export const composeHandler = ({
 		app.event.error.length > 0 ||
 		typeof Bun === 'undefined' ||
 		hooks.onResponse.length > 0 ||
-		hooks.onResponse.length > 0 ||
 		!!hooks.trace.length
 
 	const handle = isHandleFn ? `handler(c)` : `handler`
