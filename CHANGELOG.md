@@ -1,3 +1,12 @@
+# 1.0.14 - 22 Apr 2024
+Improvement:
+- [#596](https://github.com/elysiajs/elysia/pull/596) account for 20x  response status schemas for type safety
+
+Bug fix:
+- [#615](https://github.com/elysiajs/elysia/issues/615)
+- [588](https://github.com/elysiajs/elysia/issues/588) separate async derive/resolve function doesn't get await
+- primitive thrown result in invalid type
+
 # 1.0.12 - 5 Apr 2024
 Improvement:
 - export `InferContext` and `InferHandler`
@@ -151,7 +160,7 @@ Bug fix:
 Feature:
 - [#474](https://github.com/elysiajs/elysia/pull/474) Numeric Cookie with length >= 16 cant be parsed to number
 - [#476](https://github.com/elysiajs/elysia/pull/476) Using a query key that contains a hyphen or a dot raises a SyntaxError
-- [#460](https://github.com/elysiajs/elysia/pull/460) 
+- [#460](https://github.com/elysiajs/elysia/pull/460)
     - [#458](https://github.com/elysiajs/elysia/pull/458) Multiple scoped plugins do not register routes
     - [#457](https://github.com/elysiajs/elysia/pull/457) Elysia arguments scoped and prefix do not work at the same time
 
@@ -164,7 +173,7 @@ Feature:
 
 Bug fix:
 - [#451](https://github.com/elysiajs/elysia/pull/464) handle spread operator use on possible null or undefined
-- [#460](https://github.com/elysiajs/elysia/pull/460) 
+- [#460](https://github.com/elysiajs/elysia/pull/460)
     - [#457](https://github.com/elysiajs/elysia/pull/457) scoped plugin instances now respect the prefix property
     - [#458](https://github.com/elysiajs/elysia/pull/458) adding a second scoped plugin does not unmount the route handler of a previously added scoped instance anymore.
 
@@ -313,7 +322,7 @@ Bug fix:
 - [#309](https://github.com/elysiajs/elysia/issues/309) t.RegExp doesn't work due to requiring default value
 - [#308](https://github.com/elysiajs/elysia/issues/308) t.Numeric should not convert empty string to 0
 - [#305](https://github.com/elysiajs/elysia/issues/305) Elysia({ scoped: true }) should still expose defined routes on type level
-- [#304](https://github.com/elysiajs/elysia/issues/304) Using a hook/guard/schema with a handler function and request without body results in a "Unexpected end of JSON input"-error 
+- [#304](https://github.com/elysiajs/elysia/issues/304) Using a hook/guard/schema with a handler function and request without body results in a "Unexpected end of JSON input"-error
 - [#299](https://github.com/elysiajs/elysia/issues/299) Missing request.path parameter in .onRequest
 - [#289](https://github.com/elysiajs/elysia/issues/289) Ability to localize TypeBox errors
 - [#272](https://github.com/elysiajs/elysia/issues/272) onError handler has error property as undefined on Cloudflare Workers

@@ -158,7 +158,7 @@ const composeValidationFactory = (
 		let code = '\n' + injectResponse + '\n'
 
 		code += `let er
-		
+
 		if(${name} && typeof ${name} === "object" && ELYSIA_RESPONSE in ${name})
 			er = ${name}[ELYSIA_RESPONSE]\n`
 
@@ -327,6 +327,8 @@ export const isAsync = (v: Function | HookContainer) => {
 
 	const literal = fn.toString()
 	if (literal.includes('=> response.clone(')) return false
+	if (literal.includes('await')) return true
+	if (literal.includes('async')) return true
 
 	return !!literal.match(matchFnReturn)
 }
@@ -425,7 +427,7 @@ export const composeHandler = ({
 				config: validator.cookie?.config ?? {},
 				// @ts-expect-error
 				models: app.definitions.type
-		  })
+			})
 		: undefined
 
 	// @ts-ignore private property
@@ -446,8 +448,8 @@ export const composeHandler = ({
 		const secret = !cookieMeta.secrets
 			? undefined
 			: typeof cookieMeta.secrets === 'string'
-			? cookieMeta.secrets
-			: cookieMeta.secrets[0]
+				? cookieMeta.secrets
+				: cookieMeta.secrets[0]
 
 		encodeCookie += `const _setCookie = c.set.cookie
 		if(_setCookie) {`
@@ -505,21 +507,24 @@ export const composeHandler = ({
 					? typeof cookieMeta.secrets === 'string'
 						? `'${cookieMeta.secrets}'`
 						: '[' +
-						  cookieMeta.secrets.reduce(
+							cookieMeta.secrets.reduce(
 								(a, b) => a + `'${b}',`,
 								''
-						  ) +
-						  ']'
+							) +
+							']'
 					: 'undefined'
 			},
 			sign: ${
 				cookieMeta.sign === true
 					? true
 					: cookieMeta.sign !== undefined
-					? '[' +
-					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
-					  ']'
-					: 'undefined'
+						? '[' +
+							cookieMeta.sign.reduce(
+								(a, b) => a + `'${b}',`,
+								''
+							) +
+							']'
+						: 'undefined'
 			},
 			${get('domain')}
 			${get('expires')}
@@ -646,7 +651,7 @@ export const composeHandler = ({
 					case 'application/json':
 						if (hasErrorHandler)
 							fnLiteral += `const tempBody = await c.request.text()
-							
+
 							try {
 								c.body = JSON.parse(tempBody)
 							} catch {
@@ -764,7 +769,7 @@ export const composeHandler = ({
 							hasErrorHandler
 								? `
 						const tempBody = await c.request.text()
-						
+
 						try {
 							c.body = JSON.parse(tempBody)
 						} catch {
@@ -1195,7 +1200,7 @@ export const composeHandler = ({
 			if (hooks.mapResponse.length) {
 				fnLiteral += 'c.response = r'
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
-					fnLiteral += `\nif(mr === undefined) { 
+					fnLiteral += `\nif(mr === undefined) {
 						mr = onMapResponse[${i}](c)
 						if(mr instanceof Promise) mr = await mr
     					if(mr !== undefined) r = c.response = mr
@@ -1466,11 +1471,11 @@ export const composeGeneralHandler = (
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
 				: app.event.request.length
-				? `new Response(error404Message, {
+					? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
 				})`
-				: `error404.clone()`
+					: `error404.clone()`
 		}
 
 	ctx.params = route.params\n`
@@ -1506,7 +1511,7 @@ export const composeGeneralHandler = (
 	let path
 	if(qi === -1)
 		path = url.substring(s)
-	else 
+	else
 		path = url.substring(s, qi)\n`
 
 	fnLiteral += `const {
@@ -1739,7 +1744,7 @@ export const composeErrorHandler = (
 		context.code = error.code
 		context.error = error
 
-		if(ELYSIA_RESPONSE in error) {
+		if(typeof error === "object" && ELYSIA_RESPONSE in error) {
 			error.status = error[ELYSIA_RESPONSE]
 			error.message = error.response
 		}\n`
@@ -1761,7 +1766,7 @@ export const composeErrorHandler = (
 					error.status = error[ELYSIA_RESPONSE]
 					error.message = error.response
 				}
-		
+
 				if(set.status === 200) set.status = error.status
 				return mapResponse(r, set, context.request)
 			}\n`
@@ -1774,11 +1779,11 @@ export const composeErrorHandler = (
 		set.status = error.status ?? 422
 		return new Response(
 			error.message,
-			{ 
+			{
 				headers: Object.assign(
-					{ 'content-type': 'application/json'}, 
+					{ 'content-type': 'application/json'},
 					set.headers
-				), 
+				),
 				status: set.status
 			}
 		)

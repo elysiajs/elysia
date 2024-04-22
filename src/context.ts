@@ -15,6 +15,64 @@ type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>
 }
 
+type SetCookie = {
+	'Set-Cookie'?: string | string[]
+}
+
+export type ErrorContext<
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Path extends string = ''
+> = Prettify<
+	{
+		body: Route['body']
+		query: undefined extends Route['query']
+			? Record<string, string | undefined>
+			: Route['query']
+		params: undefined extends Route['params']
+			? Path extends `${string}/${':' | '*'}${string}`
+				? Record<GetPathParameter<Path>, string>
+				: never
+			: Route['params']
+		headers: undefined extends Route['headers']
+			? Record<string, string | undefined>
+			: Route['headers']
+		cookie: undefined extends Route['cookie']
+			? Record<string, Cookie<any>>
+			: Record<string, Cookie<any>> &
+					Prettify<
+						WithoutNullableKeys<{
+							[key in keyof Route['cookie']]: Cookie<
+								Route['cookie'][key]
+							>
+						}>
+					>
+
+		set: {
+			headers: Record<string, string> & SetCookie
+			status?: number | keyof StatusMap
+			redirect?: string
+			/**
+			 * ! Internal Property
+			 *
+			 * Use `Context.cookie` instead
+			 */
+			cookie?: Record<string, ElysiaCookie>
+		}
+
+		path: string
+		request: Request
+		store: Singleton['store']
+	} & Singleton['decorator'] &
+		Singleton['derive'] &
+		Singleton['resolve']
+>
+
 export type Context<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -50,9 +108,7 @@ export type Context<
 					>
 
 		set: {
-			headers: Record<string, string> & {
-				'Set-Cookie'?: string | string[]
-			}
+			headers: Record<string, string> & SetCookie
 			status?: number | keyof StatusMap
 			redirect?: string
 			/**
@@ -78,9 +134,9 @@ export type Context<
 					const T extends Code extends keyof Route['response']
 						? Route['response'][Code]
 						: Code extends keyof StatusMap
-						? // @ts-ignore StatusMap[Code] always valid because Code generic check
-						  Route['response'][StatusMap[Code]]
-						: never
+							? // @ts-ignore StatusMap[Code] always valid because Code generic check
+								Route['response'][StatusMap[Code]]
+							: never
 				>(
 					code: Code,
 					response: T
@@ -95,10 +151,10 @@ export type Context<
 							: Code]: T
 					}
 				}
-		  }
+			}
 		: {
 				error: typeof error
-		  }) &
+			}) &
 		Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']
@@ -118,9 +174,7 @@ export type PreContext<
 		request: Request
 
 		set: {
-			headers: { [header: string]: string } & {
-				['Set-Cookie']?: string | string[]
-			}
+			headers: { [header: string]: string } & SetCookie
 			status?: number
 			redirect?: string
 		}
