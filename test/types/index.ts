@@ -1102,6 +1102,8 @@ app.resolve(({ headers }) => {
 	const app = new Elysia()
 		.get('', () => 'a')
 		.get('/true', () => true)
+		.post('', () => 'a', { response: { 201: t.String() } })
+		.post('/true', () => true, { response: { 202: t.Boolean() } })
 		.get('/error', ({ error }) => error("I'm a teapot", 'a'))
 		.post('/mirror', ({ body }) => body)
 		.get('/immutable', '1')
@@ -1124,8 +1126,16 @@ app.resolve(({ headers }) => {
 		200: string
 	}>()
 
+	expectTypeOf<app['index']['post']['response']>().toEqualTypeOf<{
+		201: string
+	}>()
+
 	expectTypeOf<app['true']['get']['response']>().toEqualTypeOf<{
 		200: boolean
+	}>()
+
+	expectTypeOf<app['true']['post']['response']>().toEqualTypeOf<{
+		202: boolean
 	}>()
 
 	expectTypeOf<app['error']['get']['response']>().toEqualTypeOf<{

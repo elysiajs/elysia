@@ -205,6 +205,18 @@ export type UnwrapSchema<
 		: Definitions
 	: unknown
 
+export type SuccessfulResponse<T = unknown> =
+	| { 200: T }
+	| { 201: T }
+	| { 202: T }
+	| { 203: T }
+	| { 204: T }
+	| { 205: T }
+	| { 206: T }
+	| { 207: T }
+	| { 208: T }
+	| { 226: T }
+
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['type'] = {}
@@ -216,9 +228,7 @@ export interface UnwrapRoute<
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
-		: Schema['response'] extends {
-				200: TAnySchema | string
-		  }
+		: Schema['response'] extends SuccessfulResponse<TAnySchema | string>
 		? {
 				[k in keyof Schema['response']]: UnwrapSchema<
 					Schema['response'][k],
@@ -393,7 +403,7 @@ export type Handler<
 	Path extends string = ''
 > = (
 	context: Context<Route, Singleton, Path>
-) => Route['response'] extends { 200: unknown }
+) => Route['response'] extends SuccessfulResponse
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
 
@@ -407,9 +417,9 @@ export type InlineHandler<
 	},
 	Path extends string = ''
 > =
-	| ((context: Context<Route, Singleton, Path>) => Route['response'] extends {
-			200: unknown
-	  }
+	| ((
+			context: Context<Route, Singleton, Path>
+	  ) => Route['response'] extends SuccessfulResponse
 			?
 					| Response
 					| MaybePromise<
@@ -427,7 +437,7 @@ export type InlineHandler<
 			: Response | MaybePromise<Route['response']>)
 	| (unknown extends Route['response']
 			? string | number | Object
-			: Route['response'] extends { 200: unknown }
+			: Route['response'] extends SuccessfulResponse
 			? Route['response'][keyof Route['response']]
 			: Route['response'])
 
@@ -937,7 +947,7 @@ type _ComposeElysiaResponse<Response, Handle> = Prettify<
 					? Status
 					: never]: ErrorResponse['response']
 		  }
-		: Response extends { 200: unknown }
+		: Response extends SuccessfulResponse
 		? Response
 		: {
 				200: Response
