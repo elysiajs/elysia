@@ -108,9 +108,12 @@ export const createDynamicHandler =
 						if (index !== -1)
 							contentType = contentType.slice(0, index)
 
+						// @ts-expect-error
+						context.contentType = contentType
+
 						for (let i = 0; i < hooks.parse.length; i++) {
 							const hook = hooks.parse[i].fn
-							let temp = hook(context, contentType)
+							let temp = hook(context as any, contentType)
 							if (temp instanceof Promise) temp = await temp
 
 							if (temp) {
@@ -118,6 +121,9 @@ export const createDynamicHandler =
 								break
 							}
 						}
+
+						// @ts-expect-error
+						delete context.contentType
 
 						// body might be empty string thus can't use !body
 						if (body === undefined) {

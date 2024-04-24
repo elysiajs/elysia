@@ -1,6 +1,16 @@
+# 1.0.15 - 25 Apr 2024
+Change:
+- allow custom parser when `type` is specified
+- add `contentType` to context
+- soft deprecate `contentType` as 2nd `parse` parameter
+
+Bug fix:
+- duplicate format found
+- using `parse`, `type`, `body` generate invalid syntax
+
 # 1.0.14 - 22 Apr 2024
 Improvement:
-- [#596](https://github.com/elysiajs/elysia/pull/596) account for 20x  response status schemas for type safety
+- [#596](https://github.com/elysiajs/elysia/pull/596) account for 20x response status schemas for type safety
 
 Bug fix:
 - [#615](https://github.com/elysiajs/elysia/issues/615)

@@ -39,39 +39,41 @@ const isShortenDate =
 const _validateDate = fullFormats.date
 const _validateDateTime = fullFormats['date-time']
 
-TypeSystem.Format('date', (value: string) => {
-	// Remove quote from stringified date
-	const temp = value.replace(/"/g, '')
+if (!FormatRegistry.Has('date'))
+	TypeSystem.Format('date', (value: string) => {
+		// Remove quote from stringified date
+		const temp = value.replace(/"/g, '')
 
-	if (
-		isISO8601.test(temp) ||
-		isFormalDate.test(temp) ||
-		isShortenDate.test(temp) ||
-		_validateDate(temp)
-	) {
-		const date = new Date(temp)
-		if (!Number.isNaN(date.getTime())) return true
-	}
+		if (
+			isISO8601.test(temp) ||
+			isFormalDate.test(temp) ||
+			isShortenDate.test(temp) ||
+			_validateDate(temp)
+		) {
+			const date = new Date(temp)
+			if (!Number.isNaN(date.getTime())) return true
+		}
 
-	return false
-})
+		return false
+	})
 
-TypeSystem.Format('date-time', (value: string) => {
-	// Remove quote from stringified date
-	const temp = value.replace(/"/g, '')
+if (!FormatRegistry.Has('date-time'))
+	TypeSystem.Format('date-time', (value: string) => {
+		// Remove quote from stringified date
+		const temp = value.replace(/"/g, '')
 
-	if (
-		isISO8601.test(temp) ||
-		isFormalDate.test(temp) ||
-		isShortenDate.test(temp) ||
-		_validateDateTime(temp)
-	) {
-		const date = new Date(temp)
-		if (!Number.isNaN(date.getTime())) return true
-	}
+		if (
+			isISO8601.test(temp) ||
+			isFormalDate.test(temp) ||
+			isShortenDate.test(temp) ||
+			_validateDateTime(temp)
+		) {
+			const date = new Date(temp)
+			if (!Number.isNaN(date.getTime())) return true
+		}
 
-	return false
-})
+		return false
+	})
 
 Object.entries(fullFormats).forEach((formatEntry) => {
 	const [formatName, formatValue] = formatEntry

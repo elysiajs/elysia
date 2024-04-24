@@ -1,16 +1,20 @@
-import { Elysia } from '../src'
-import { req } from '../test/utils';
+import { Elysia, t } from '../src'
+import { post, req } from '../test/utils'
 
-export const app = new Elysia()
-  .derive({ as: "scoped" }, async () => {
-    return { myProp: 42 };
-  })
-  .macro(({ onBeforeHandle }) => ({
-    public: (_?: boolean) => {
-      onBeforeHandle(ctx => {
-        ctx.myProp; // myProp is number | undefined, but it is always undefined in runtime
-      });
-    },
-  }));
+const body = {
+	name: 'Rikuhachima Aru'
+}
 
-app.handle(req('/'))
+const app = new Elysia().post('/json', ({ body: { name } }) => name, {
+	type: 'json',
+	body: t.Object({
+		name: t.String()
+	}),
+	parse({}, type) {
+		if (type === 'custom') return { name: 'Mutsuki' }
+	}
+})
+
+const res = await app.handle(post('/json', body)).then((x) => x.text())
+
+// console.log(res)

@@ -1,7 +1,6 @@
 import { type Elysia } from '.'
 
 import { Value } from '@sinclair/typebox/value'
-import { TypeCheck } from '@sinclair/typebox/compiler'
 import type { TAnySchema } from '@sinclair/typebox'
 
 import { parse as parseQuery } from 'fast-querystring'
@@ -294,29 +293,29 @@ export const hasTransform = (schema: TAnySchema) => {
  * ])
  * ```
  */
-const getUnionedType = (validator: TypeCheck<any> | undefined) => {
-	if (!validator) return
+// const getUnionedType = (validator: TypeCheck<any> | undefined) => {
+// 	if (!validator) return
 
-	// @ts-ignore
-	const schema = validator?.schema
+// 	// @ts-ignore
+// 	const schema = validator?.schema
 
-	if (schema && 'anyOf' in schema) {
-		let foundDifference = false
-		const type: string = schema.anyOf[0].type
+// 	if (schema && 'anyOf' in schema) {
+// 		let foundDifference = false
+// 		const type: string = schema.anyOf[0].type
 
-		for (const validator of schema.anyOf as { type: string }[]) {
-			if (validator.type !== type) {
-				foundDifference = true
-				break
-			}
-		}
+// 		for (const validator of schema.anyOf as { type: string }[]) {
+// 			if (validator.type !== type) {
+// 				foundDifference = true
+// 				break
+// 			}
+// 		}
 
-		if (!foundDifference) return type
-	}
+// 		if (!foundDifference) return type
+// 	}
 
-	// @ts-ignore
-	return validator.schema?.type
-}
+// 	// @ts-ignore
+// 	return validator.schema?.type
+// }
 
 const matchFnReturn = /(?:return|=>) \S+\(/g
 
@@ -426,7 +425,7 @@ export const composeHandler = ({
 				config: validator.cookie?.config ?? {},
 				// @ts-expect-error
 				models: app.definitions.type
-			})
+		  })
 		: undefined
 
 	// @ts-ignore private property
@@ -447,8 +446,8 @@ export const composeHandler = ({
 		const secret = !cookieMeta.secrets
 			? undefined
 			: typeof cookieMeta.secrets === 'string'
-				? cookieMeta.secrets
-				: cookieMeta.secrets[0]
+			? cookieMeta.secrets
+			: cookieMeta.secrets[0]
 
 		encodeCookie += `const _setCookie = c.set.cookie
 		if(_setCookie) {`
@@ -506,24 +505,21 @@ export const composeHandler = ({
 					? typeof cookieMeta.secrets === 'string'
 						? `'${cookieMeta.secrets}'`
 						: '[' +
-							cookieMeta.secrets.reduce(
+						  cookieMeta.secrets.reduce(
 								(a, b) => a + `'${b}',`,
 								''
-							) +
-							']'
+						  ) +
+						  ']'
 					: 'undefined'
 			},
 			sign: ${
 				cookieMeta.sign === true
 					? true
 					: cookieMeta.sign !== undefined
-						? '[' +
-							cookieMeta.sign.reduce(
-								(a, b) => a + `'${b}',`,
-								''
-							) +
-							']'
-						: 'undefined'
+					? '[' +
+					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
+					  ']'
+					: 'undefined'
 			},
 			${get('domain')}
 			${get('expires')}
@@ -641,21 +637,111 @@ export const composeHandler = ({
 	})
 
 	if (hasBody) {
-		const type = getUnionedType(validator?.body)
+		const hasBodyInference =
+			hooks.parse.length || inference.body || validator.body
 
-		if (hooks.type && !Array.isArray(hooks.type)) {
-			if (hooks.type) {
-				switch (hooks.type) {
-					case 'json':
-					case 'application/json':
-						if (hasErrorHandler)
-							fnLiteral += `const tempBody = await c.request.text()
+		if (hooks.type && !hooks.parse.length) {
+			switch (hooks.type) {
+				case 'json':
+				case 'application/json':
+					if (hasErrorHandler)
+						fnLiteral += `const tempBody = await c.request.text()
 
 							try {
 								c.body = JSON.parse(tempBody)
 							} catch {
 								throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
 							}`
+					else fnLiteral += `c.body = await c.request.json()`
+					break
+
+				case 'text':
+				case 'text/plain':
+					fnLiteral += `c.body = await c.request.text()\n`
+					break
+
+				case 'urlencoded':
+				case 'application/x-www-form-urlencoded':
+					fnLiteral += `c.body = parseQuery(await c.request.text())\n`
+					break
+
+				case 'arrayBuffer':
+				case 'application/octet-stream':
+					fnLiteral += `c.body = await c.request.arrayBuffer()\n`
+					break
+
+				case 'formdata':
+				case 'multipart/form-data':
+					fnLiteral += `c.body = {}
+
+						const form = await c.request.formData()
+						for (const key of form.keys()) {
+							if (c.body[key])
+								continue
+
+							const value = form.getAll(key)
+							if (value.length === 1)
+								c.body[key] = value[0]
+							else c.body[key] = value
+						}\n`
+					break
+			}
+		} else if (hasBodyInference) {
+			fnLiteral += '\n'
+			fnLiteral += hasHeaders
+				? `let contentType = c.headers['content-type']`
+				: `let contentType = c.request.headers.get('content-type')`
+
+			fnLiteral += `
+				if (contentType) {
+					const index = contentType.indexOf(';')
+					if (index !== -1) contentType = contentType.substring(0, index)\n
+					c.contentType = contentType\n`
+
+			if (hooks.parse.length) {
+				fnLiteral += `let used = false\n`
+
+				const endReport = report('parse', {
+					unit: hooks.parse.length
+				})
+
+				for (let i = 0; i < hooks.parse.length; i++) {
+					const endUnit = report('parse.unit', {
+						name: hooks.parse[i].fn.name
+					})
+
+					const name = `bo${i}`
+
+					if (i !== 0) fnLiteral += `if(!used) {\n`
+
+					fnLiteral += `let ${name} = parse[${i}](c, contentType)\n`
+					fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}\n`
+					fnLiteral += `if(${name} !== undefined) { c.body = ${name}; used = true }\n`
+
+					endUnit()
+
+					if (i !== 0) fnLiteral += `}`
+				}
+
+				endReport()
+			}
+
+			fnLiteral += '\ndelete c.contentType\n'
+
+			if (hooks.parse.length) fnLiteral += `if (!used) {`
+
+			if (hooks.type && !Array.isArray(hooks.type)) {
+				switch (hooks.type) {
+					case 'json':
+					case 'application/json':
+						if (hasErrorHandler)
+							fnLiteral += `const tempBody = await c.request.text()
+	
+								try {
+									c.body = JSON.parse(tempBody)
+								} catch {
+									throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
+								}`
 						else fnLiteral += `c.body = await c.request.json()`
 						break
 
@@ -677,139 +763,71 @@ export const composeHandler = ({
 					case 'formdata':
 					case 'multipart/form-data':
 						fnLiteral += `c.body = {}
-
-						const form = await c.request.formData()
-						for (const key of form.keys()) {
-							if (c.body[key])
-								continue
-
-							const value = form.getAll(key)
-							if (value.length === 1)
-								c.body[key] = value[0]
-							else c.body[key] = value
-						}\n`
+	
+							const form = await c.request.formData()
+							for (const key of form.keys()) {
+								if (c.body[key])
+									continue
+	
+								const value = form.getAll(key)
+								if (value.length === 1)
+									c.body[key] = value[0]
+								else c.body[key] = value
+							}\n`
 						break
 				}
-			}
-			if (hooks.parse.length) fnLiteral += '}}'
-		} else {
-			const getAotParser = () => {
-				if (hooks.parse.length && type && !Array.isArray(hooks.type)) {
-					// @ts-ignore
-					const schema = validator?.body?.schema
-
-					if (
-						typeof schema === 'object' &&
-						(hasType('File', schema) || hasType('Files', schema))
-					)
-						return `c.body = {}
-
-								const form = await c.request.formData()
-								for (const key of form.keys()) {
-									if (c.body[key])
-										continue
-
-									const value = form.getAll(key)
-									if (value.length === 1)
-										c.body[key] = value[0]
-									else c.body[key] = value
-								}`
-				}
-			}
-
-			const aotParse = getAotParser()
-
-			if (aotParse) fnLiteral += aotParse
-			else {
-				fnLiteral += '\n'
-				fnLiteral += hasHeaders
-					? `let contentType = c.headers['content-type']`
-					: `let contentType = c.request.headers.get('content-type')`
-
+			} else {
 				fnLiteral += `
-				if (contentType) {
-					const index = contentType.indexOf(';')
-					if (index !== -1) contentType = contentType.substring(0, index)\n`
+					switch (contentType) {
+						case 'application/json':
+							${
+								hasErrorHandler
+									? `
+							const tempBody = await c.request.text()
 
-				if (hooks.parse.length) {
-					fnLiteral += `let used = false\n`
+							try {
+								c.body = JSON.parse(tempBody)
+							} catch {
+								throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
+							}
+							`
+									: `c.body = await c.request.json()\n`
+							}
+							break
 
-					const endReport = report('parse', {
-						unit: hooks.parse.length
-					})
+						case 'text/plain':
+							c.body = await c.request.text()
+							break
 
-					for (let i = 0; i < hooks.parse.length; i++) {
-						const endUnit = report('parse.unit', {
-							name: hooks.parse[i].fn.name
-						})
+						case 'application/x-www-form-urlencoded':
+							c.body = parseQuery(await c.request.text())
+							break
 
-						const name = `bo${i}`
+						case 'application/octet-stream':
+							c.body = await c.request.arrayBuffer();
+							break
 
-						if (i !== 0) fnLiteral += `if(!used) {\n`
+						case 'multipart/form-data':
+							c.body = {}
 
-						fnLiteral += `let ${name} = parse[${i}](c, contentType)\n`
-						fnLiteral += `if(${name} instanceof Promise) ${name} = await ${name}\n`
-						fnLiteral += `if(${name} !== undefined) { c.body = ${name}; used = true }\n`
+							const form = await c.request.formData()
+							for (const key of form.keys()) {
+								if (c.body[key])
+									continue
 
-						endUnit()
+								const value = form.getAll(key)
+								if (value.length === 1)
+									c.body[key] = value[0]
+								else c.body[key] = value
+							}
 
-						if (i !== 0) fnLiteral += `}`
-					}
-
-					endReport()
-				}
-
-				if (hooks.parse.length) fnLiteral += `if (!used)`
-
-				fnLiteral += `
-				switch (contentType) {
-					case 'application/json':
-						${
-							hasErrorHandler
-								? `
-						const tempBody = await c.request.text()
-
-						try {
-							c.body = JSON.parse(tempBody)
-						} catch {
-							throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
-						}
-						`
-								: `c.body = await c.request.json()\n`
-						}
-						break
-
-					case 'text/plain':
-						c.body = await c.request.text()
-						break
-
-					case 'application/x-www-form-urlencoded':
-						c.body = parseQuery(await c.request.text())
-						break
-
-					case 'application/octet-stream':
-						c.body = await c.request.arrayBuffer();
-						break
-
-					case 'multipart/form-data':
-						c.body = {}
-
-						const form = await c.request.formData()
-						for (const key of form.keys()) {
-							if (c.body[key])
-								continue
-
-							const value = form.getAll(key)
-							if (value.length === 1)
-								c.body[key] = value[0]
-							else c.body[key] = value
-						}
-
-						break
-					}\n`
-
-				fnLiteral += '}\n'
+							break
+					}`
 			}
+
+			if (hooks.parse.length) fnLiteral += `}`
+
+			fnLiteral += '}\n'
 		}
 
 		fnLiteral += '\n'
@@ -1398,6 +1416,8 @@ export const composeHandler = ({
 		${fnLiteral}
 	}`
 
+	// console.log(fnLiteral)
+
 	const createHandler = Function('hooks', fnLiteral)
 
 	return createHandler({
@@ -1470,11 +1490,11 @@ export const composeGeneralHandler = (
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
 				: app.event.request.length
-					? `new Response(error404Message, {
+				? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
 				})`
-					: `error404.clone()`
+				: `error404.clone()`
 		}
 
 	ctx.params = route.params\n`

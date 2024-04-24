@@ -1,4 +1,4 @@
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post } from '../utils'
@@ -233,5 +233,39 @@ describe('Parser', () => {
 		const res = await app.handle(post('/', {}))
 
 		expect(total).toEqual(2)
+	})
+
+	it('handle type with validator with custom parse', async () => {
+		const app = new Elysia().post('/json', ({ body: { name } }) => name, {
+			type: 'json',
+			body: t.Object({
+				name: t.String()
+			}),
+			parse({ contentType }) {
+				if (contentType === 'custom') return { name: 'Mutsuki' }
+			}
+		})
+
+		const [correct, incorrect, custom] = await Promise.all([
+			app.handle(post('/json', { name: 'Aru' })).then((x) => x.text()),
+			app
+				.handle(post('/json', { school: 'Gehenna' }))
+				.then((x) => x.status),
+			app
+				.handle(
+					new Request('http://localhost/json', {
+						method: 'POST',
+						body: JSON.stringify({ name: 'Aru' }),
+						headers: {
+							'content-type': 'custom'
+						}
+					})
+				)
+				.then((x) => x.text())
+		])
+
+		expect(correct).toBe('Aru')
+		expect(incorrect).toBe(422)
+		expect(custom).toBe('Mutsuki')
 	})
 })
