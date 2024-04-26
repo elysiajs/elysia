@@ -8,7 +8,12 @@ import { parse as parseQuery } from 'fast-querystring'
 // @ts-expect-error
 import decodeURIComponent from 'fast-decode-uri-component'
 
-import { getCookieValidator, lifeCycleToFn, signCookie } from './utils'
+import {
+	getCookieValidator,
+	lifeCycleToFn,
+	redirect,
+	signCookie
+} from './utils'
 import { ParseError, error } from './error'
 
 import {
@@ -1540,7 +1545,8 @@ export const composeGeneralHandler = (
 		requestId,
 		getReporter,
 		handleError,
-		error
+		error,
+		redirect
 	} = data
 
 	const store = app.singleton.store
@@ -1587,6 +1593,7 @@ export const composeGeneralHandler = (
 			const ctx = {
 				request,
 				store,
+				redirect,
 				set: {
 					headers: ${
 						Object.keys(defaultHeaders ?? {}).length
@@ -1651,6 +1658,7 @@ export const composeGeneralHandler = (
 			store,
 			qi,
 			path,
+			redirect,
 			set: {
 				headers: ${
 					Object.keys(defaultHeaders ?? {}).length
@@ -1736,7 +1744,8 @@ export const composeGeneralHandler = (
 		getReporter: () => app.reporter,
 		requestId,
 		handleError,
-		error
+		error,
+		redirect
 	})
 }
 

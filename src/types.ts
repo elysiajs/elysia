@@ -1090,7 +1090,7 @@ export type InferContext<
 		derive: T['_ephemeral']['derive'] & T['_volatile']['derive']
 		resolve: T['_ephemeral']['resolve'] & T['_volatile']['resolve']
 	},
-	T['_types']['Prefix']
+	Path
 >
 
 export type InferHandler<
@@ -1103,5 +1103,5 @@ export type InferHandler<
 		derive: T['_ephemeral']['derive'] & T['_volatile']['derive']
 		resolve: T['_ephemeral']['resolve'] & T['_volatile']['resolve']
 	},
-	T['_types']['Prefix']
+	Path
 >

@@ -1,10 +1,24 @@
 # 1.0.15 - 25 Apr 2024
+Feature:
+- add `redirect` function to `Context`
+
+Improvement:
+- sucrose: remove unreachable query bracket check, reduce bracket instruction
+- sucrose: query accessor keyword check at initialization instead of in loop
+- sucrose: remove accessor check
+- sucrose: skip query check for immediate return
+
+Change:
+- sucrose: add `isArrowReturn` to `separateFunction`
+- sucrose: skip inference queries check if `query` is not found
+
 Change:
 - allow custom parser when `type` is specified
 - add `contentType` to context
 - soft deprecate `contentType` as 2nd `parse` parameter
 
 Bug fix:
+- [#622](https://github.com/elysiajs/elysia/issues/622) sucrose: mistake cookie for query
 - duplicate format found
 - using `parse`, `type`, `body` generate invalid syntax
 

@@ -1,4 +1,4 @@
-import type { StatusMap, InvertedStatusMap } from './utils'
+import type { StatusMap, InvertedStatusMap, redirect as Redirect } from './utils'
 import type { Cookie, ElysiaCookie } from './cookies'
 
 import { error, type ELYSIA_RESPONSE } from './error'
@@ -52,6 +52,8 @@ export type ErrorContext<
 							>
 						}>
 					>
+
+		redirect: Redirect
 
 		set: {
 			headers: Record<string, string> & SetCookie
@@ -107,6 +109,8 @@ export type Context<
 						}>
 					>
 
+		redirect: Redirect
+
 		set: {
 			headers: Record<string, string> & SetCookie
 			status?: number | keyof StatusMap
@@ -134,9 +138,9 @@ export type Context<
 					const T extends Code extends keyof Route['response']
 						? Route['response'][Code]
 						: Code extends keyof StatusMap
-							? // @ts-ignore StatusMap[Code] always valid because Code generic check
-								Route['response'][StatusMap[Code]]
-							: never
+						? // @ts-ignore StatusMap[Code] always valid because Code generic check
+						  Route['response'][StatusMap[Code]]
+						: never
 				>(
 					code: Code,
 					response: T
@@ -151,10 +155,10 @@ export type Context<
 							: Code]: T
 					}
 				}
-			}
+		  }
 		: {
 				error: typeof error
-			}) &
+		  }) &
 		Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']
@@ -172,6 +176,8 @@ export type PreContext<
 	{
 		store: Singleton['store']
 		request: Request
+
+		redirect: Redirect
 
 		set: {
 			headers: { [header: string]: string } & SetCookie

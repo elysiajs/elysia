@@ -10,7 +10,10 @@ describe('Sucrose: separateFunction', () => {
 
 		expect(separateFunction(arrowParam.toString())).toEqual([
 			'{ sucrose, amber }',
-			'{\n      return "sucrose";\n    }'
+			'{\n      return "sucrose";\n    }',
+			{
+				isArrowReturn: false
+			}
 		])
 	})
 
@@ -19,7 +22,10 @@ describe('Sucrose: separateFunction', () => {
 
 		expect(separateFunction(arrowNoParam.toString())).toEqual([
 			'',
-			'"sucrose"'
+			'"sucrose"',
+			{
+				isArrowReturn: true
+			}
 		])
 	})
 
@@ -28,7 +34,10 @@ describe('Sucrose: separateFunction', () => {
 
 		expect(separateFunction(arrowAsync.toString())).toEqual([
 			'sucrose',
-			'"sucrose"'
+			'"sucrose"',
+			{
+				isArrowReturn: true
+			}
 		])
 	})
 
@@ -39,7 +48,10 @@ describe('Sucrose: separateFunction', () => {
 
 		expect(separateFunction(fnParam.toString())).toEqual([
 			'{ sucrose, amber }',
-			'{\n      return "sucrose";\n    }'
+			'{\n      return "sucrose";\n    }',
+			{
+				isArrowReturn: false
+			}
 		])
 	})
 
@@ -50,7 +62,10 @@ describe('Sucrose: separateFunction', () => {
 
 		expect(separateFunction(fnNoParam.toString())).toEqual([
 			'',
-			'{\n      return "sucrose";\n    }'
+			'{\n      return "sucrose";\n    }',
+			{
+				isArrowReturn: false
+			}
 		])
 	})
 
@@ -61,7 +76,10 @@ describe('Sucrose: separateFunction', () => {
 
 		expect(separateFunction(fnAsync.toString())).toEqual([
 			'sucrose',
-			'{\n      return "sucrose";\n    }'
+			'{\n      return "sucrose";\n    }',
+			{
+				isArrowReturn: false
+			}
 		])
 	})
 })

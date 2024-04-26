@@ -1,20 +1,17 @@
 import { Elysia, t } from '../src'
-import { post, req } from '../test/utils'
+import { req } from '../test/utils'
 
-const body = {
-	name: 'Rikuhachima Aru'
-}
+const app = new Elysia({ name: 'Example' })
+	.get(
+		'/',
+		async (c) => {
+			const id = c.query.id
+			const cookie = c.cookie
+			return { cookie, id }
+		}
+	)
+	.listen(3000)
 
-const app = new Elysia().post('/json', ({ body: { name } }) => name, {
-	type: 'json',
-	body: t.Object({
-		name: t.String()
-	}),
-	parse({}, type) {
-		if (type === 'custom') return { name: 'Mutsuki' }
-	}
-})
-
-const res = await app.handle(post('/json', body)).then((x) => x.text())
-
-// console.log(res)
+app.handle(req('/'))
+	.then((x) => x.headers)
+	// .then(console.log)

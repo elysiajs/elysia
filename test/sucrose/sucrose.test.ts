@@ -134,4 +134,35 @@ describe('sucrose', () => {
 		const status = await app.handle(req('/')).then((x) => x.status)
 		expect(status).toBe(200)
 	})
+
+	it('mix up chain properties as query', () => {
+		expect(
+			sucrose({
+				handler: async (c) => {
+					const id = c.query.id
+					const cookie = c.cookie
+					return { cookie, id }
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			body: false,
+			cookie: true,
+			headers: false,
+			queries: ['id'],
+			query: true,
+			set: false,
+			unknownQueries: false
+		})
+	})
 })

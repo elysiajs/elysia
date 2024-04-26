@@ -195,7 +195,7 @@ export const mergeHook = (
 		? {
 				...a,
 				...b
-		  }
+			}
 		: undefined
 
 	return {
@@ -969,3 +969,21 @@ export const cloneInference = (inference: {
 		set: inference.trace.set
 	}
 })
+
+/**
+ *
+ * @param url URL to redirect to
+ * @param HTTP status code to send,
+ */
+export const redirect = (
+	url: string,
+	status: number = 302
+) =>
+	new Response(null, {
+		status,
+		headers: {
+			Location: url
+		}
+	})
+
+export type redirect = typeof redirect

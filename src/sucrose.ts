@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import type { Handler, HookContainer, LifeCycleStore, TraceHandler } from './types'
+import type { Handler, LifeCycleStore, TraceHandler } from './types'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -39,7 +39,9 @@ export namespace Sucrose {
  * separateFunction('async ({ hello }) => { return hello }') // => ['({ hello })', '{ return hello }']
  * ```
  */
-export const separateFunction = (code: string): [string, string] => {
+export const separateFunction = (
+	code: string
+): [string, string, { isArrowReturn: boolean }] => {
 	if (code.startsWith('async')) code = code.slice(6)
 
 	let index = -1
@@ -48,11 +50,21 @@ export const separateFunction = (code: string): [string, string] => {
 	if (code.charCodeAt(0) === 40) {
 		// ? arrow function
 		index = code.indexOf(') => {\n')
-		if (index !== -1) return [code.slice(1, index), code.slice(index + 5)]
+		if (index !== -1)
+			return [
+				code.slice(1, index),
+				code.slice(index + 5),
+				{ isArrowReturn: false }
+			]
 
-		// ? Sudden return
+		// ? Arrow return
 		index = code.indexOf(') => ')
-		if (index !== -1) return [code.slice(1, index), code.slice(index + 5)]
+		if (index !== -1)
+			return [
+				code.slice(1, index),
+				code.slice(index + 5),
+				{ isArrowReturn: true }
+			]
 	}
 
 	// Using function keyword
@@ -60,7 +72,13 @@ export const separateFunction = (code: string): [string, string] => {
 		index = code.indexOf('(')
 		const end = code.indexOf(')')
 
-		return [code.slice(index + 1, end), code.slice(end + 2)]
+		return [
+			code.slice(index + 1, end),
+			code.slice(end + 2),
+			{
+				isArrowReturn: false
+			}
+		]
 	}
 
 	// Probably Declare as method
@@ -70,11 +88,19 @@ export const separateFunction = (code: string): [string, string] => {
 		const [parameter, body] = code.split('\n', 2)
 		const end = parameter.lastIndexOf(')') + 1
 
-		return [parameter.slice(start, end), '{' + body]
+		return [
+			parameter.slice(start, end),
+			'{' + body,
+			{
+				isArrowReturn: false
+			}
+		]
 	}
 
 	// Unknown case
-	return code.split('\n', 2) as [string, string]
+	const x = code.split('\n', 2)
+
+	return [x[0], x[1], { isArrowReturn: false }]
 }
 
 /**
@@ -324,12 +350,13 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 	return aliases
 }
 
-const accessor = <T extends string, P extends string>(parent: T, prop: P) =>
-	[
-		parent + '.' + prop,
-		parent + '["' + prop + '"]',
-		parent + "['" + prop + "']"
-	] as const
+// ? This is normalized to dot notation in Bun
+// const accessor = <T extends string, P extends string>(parent: T, prop: P) =>
+// 	[
+// 		parent + '.' + prop,
+// 		parent + '["' + prop + '"]',
+// 		parent + "['" + prop + "']"
+// 	] as const
 
 export const extractMainParameter = (parameter: string) => {
 	if (!parameter) return
@@ -402,31 +429,32 @@ export const inferBodyReference = (
 
 		if (
 			code.includes('return ' + alias) ||
-			accessor('return ' + alias, 'query').some((key) =>
-				code.includes(key)
-			)
+			code.includes('return ' + alias + '.query')
 		) {
 			inference.query = true
 			inference.unknownQueries = true
+			inference.queries = []
 		}
 
-		if (inference.query && !inference.unknownQueries)
+		if (!inference.unknownQueries && inference.query) {
+			let keyword = alias + '.'
+
+			// ? It's unlikely that user will use separate variable between c.query and query
+			if (code.includes(keyword + 'query')) keyword = alias + '.query'
+
 			while (true) {
-				let keyword = alias + '.'
-				if (code.includes(keyword + 'query')) keyword = alias + '.query'
-
-				let isBracket = false
-
 				let start = code.indexOf(keyword)
-				if (start === -1) {
-					isBracket = true
-					start = code.indexOf(alias + '["')
-				}
 
-				if (start === -1) {
-					isBracket = true
-					start = code.indexOf(alias + "['")
-				}
+				// ? This is normalized to dot notation in Bun
+				// if (start === -1) {
+				// 	isBracket = true
+				// 	start = code.indexOf(alias + '["')
+				// }
+
+				// if (start === -1) {
+				// 	isBracket = true
+				// 	start = code.indexOf(alias + "['")
+				// }
 
 				if (start === -1 && code.indexOf(alias + '[') !== -1) {
 					// ! Query is accessed using dynamic key, skip static parsing
@@ -437,13 +465,21 @@ export const inferBodyReference = (
 				}
 
 				if (start !== -1) {
-					let end: number | undefined = isBracket
-						? findEndQueryBracketIndex(
-								'',
-								code,
-								start + keyword.length + 1
-						  )
-						: findEndIndex('', code, start + keyword.length + 1)
+					let end: number | undefined = findEndIndex(
+						'',
+						code,
+						start + keyword.length + 1
+					)
+
+					// ? Do not remove, might need to use on other runtime
+					// If need, replace above code with this one
+					// let end: number | undefined = isBracket
+					// 	? findEndQueryBracketIndex(
+					// 			'',
+					// 			code,
+					// 			start + keyword.length + 1
+					// 	  )
+					// 	: findEndIndex('', code, start + keyword.length + 1)
 
 					if (end === -1) end = undefined
 
@@ -474,7 +510,8 @@ export const inferBodyReference = (
 					if (query.charCodeAt(query.length - 1) === 41)
 						query = query.slice(0, -1)
 
-					if (isBracket) query = query.replaceAll(/("|')/g, '')
+					// ? Do not remove, might need to use on other runtime
+					// if (isBracket) query = query.replaceAll(/("|')/g, '')
 
 					if (query && !inference.queries.includes(query)) {
 						inference.queries.push(query)
@@ -484,6 +521,7 @@ export const inferBodyReference = (
 
 				break
 			}
+		}
 
 		if (!inference.headers && access('headers', alias))
 			inference.headers = true
@@ -684,14 +722,26 @@ export const sucrose = (
 	if (lifeCycle.onResponse?.length) events.push(...lifeCycle.onResponse)
 
 	for (const e of events) {
-		if(!e) continue
-		
+		if (!e) continue
+
 		const event = 'fn' in e ? e.fn : e
 
-		const [parameter, body] = separateFunction(event.toString())
+		const [parameter, body, { isArrowReturn }] = separateFunction(
+			event.toString()
+		)
 
 		const rootParameters = findParameterReference(parameter, inference)
 		const mainParameter = extractMainParameter(rootParameters)
+
+		if (
+			isArrowReturn &&
+			(body === 'query' ||
+				(rootParameters && body.startsWith(rootParameters + '.query')))
+		) {
+			inference.query = true
+			inference.unknownQueries = true
+			inference.queries = []
+		}
 
 		if (mainParameter) {
 			const aliases = findAlias(mainParameter, body)
@@ -701,16 +751,10 @@ export const sucrose = (
 		}
 
 		const context = rootParameters || mainParameter
-		if (
-			context &&
-			['', 'return '].some((type) =>
-				accessor(type + context, 'query').some((key) =>
-					body.includes(key)
-				)
-			)
-		) {
+		if (context && body.includes('return ' + context + '.query')) {
 			inference.query = true
 			inference.unknownQueries = true
+			inference.queries = []
 		}
 
 		if (inference.query) {
