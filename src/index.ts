@@ -5343,6 +5343,7 @@ export {
 	mergeHook,
 	mergeObjectArray,
 	getResponseSchemaValidator,
+	redirect,
 	StatusMap,
 	InvertedStatusMap
 } from './utils'

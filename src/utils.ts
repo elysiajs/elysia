@@ -977,7 +977,7 @@ export const cloneInference = (inference: {
  */
 export const redirect = (
 	url: string,
-	status: number = 302
+	status: number = 301
 ) =>
 	new Response(null, {
 		status,
