@@ -1,17 +1,13 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { req, post } from '../test/utils'
 
-const app = new Elysia({ name: 'Example' })
-	.get(
-		'/',
-		async (c) => {
-			const id = c.query.id
-			const cookie = c.cookie
-			return { cookie, id }
-		}
-	)
-	.listen(3000)
+const app = new Elysia({ precompile: true }).post('/', ({ body }) => body ?? 'sucrose', {
+	body: t.Optional(t.String())
+})
 
-app.handle(req('/'))
-	.then((x) => x.headers)
-	// .then(console.log)
+console.log(app.routes[0].composed.toString())
+
+app.handle(post('/', null))
+	.then((x) => x.text())
+	.then(console.log)
+// .then(console.log)

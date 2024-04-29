@@ -258,4 +258,62 @@ describe('Body Validator', () => {
 		expect(await res.text()).toBe('sucrose ~ amber + lisa')
 		expect(res.status).toBe(200)
 	})
+
+	it('validate optional primitive', async () => {
+		const app = new Elysia().post('/', ({ body }) => body ?? 'sucrose', {
+			body: t.Optional(t.String())
+		})
+
+		const [valid, invalid] = await Promise.all([
+			app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'text/plain'
+					},
+					body: 'sucrose'
+				})
+			),
+			app.handle(
+				new Request('http://localhost/', {
+					method: 'POST'
+				})
+			)
+		])
+
+		expect(await valid.text()).toBe('sucrose')
+		expect(valid.status).toBe(200)
+
+		expect(await invalid.text()).toBe('sucrose')
+		expect(invalid.status).toBe(200)
+	})
+
+	it('validate optional object', async () => {
+		const app = new Elysia().post('/', ({ body }) => body?.name ?? 'sucrose', {
+			body: t.Optional(
+				t.Object({
+					name: t.String()
+				})
+			)
+		})
+
+		const [valid, invalid] = await Promise.all([
+			app.handle(
+				post('/', {
+					name: 'sucrose'
+				})
+			),
+			app.handle(
+				new Request('http://localhost/', {
+					method: 'POST'
+				})
+			)
+		])
+
+		expect(await valid.text()).toBe('sucrose')
+		expect(valid.status).toBe(200)
+
+		expect(await invalid.text()).toBe('sucrose')
+		expect(invalid.status).toBe(200)
+	})
 })

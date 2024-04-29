@@ -95,7 +95,7 @@
     "release:local": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.32.15",
+    "@sinclair/typebox": "^0.32.27",
     "cookie": "^0.6.0",
     "elysia": "1.0.15",
     "eventemitter3": "^5.0.1",

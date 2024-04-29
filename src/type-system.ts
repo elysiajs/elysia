@@ -9,10 +9,10 @@ import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
 	type SchemaOptions,
-	type TNull,
-	type TUnion,
+	// type TNull,
+	// type TUnion,
 	type TSchema,
-	type TUndefined,
+	// type TUndefined,
 	TProperties,
 	ObjectOptions,
 	TObject,
@@ -412,13 +412,12 @@ export const ElysiaType = {
 				return [value]
 			})
 			.Encode((value) => value),
-	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
-		t.Union([t.Null(), schema]) as any,
+	Nullable: <T extends TSchema>(schema: T) => t.Union([schema, t.Null()]),
 	/**
 	 * Allow Optional, Nullable and Undefined
 	 */
-	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
-		t.Union([t.Null(), t.Undefined(), schema]) as any,
+	MaybeEmpty: <T extends TSchema>(schema: T) =>
+		t.Union([schema, t.Null(), t.Undefined()]),
 	Cookie: <T extends TProperties>(
 		properties: T,
 		{
@@ -466,7 +465,9 @@ declare module '@sinclair/typebox' {
 		File: typeof ElysiaType.File
 		// @ts-ignore
 		Files: typeof ElysiaType.Files
+		// @ts-ignore
 		Nullable: typeof ElysiaType.Nullable
+		// @ts-ignore
 		MaybeEmpty: typeof ElysiaType.MaybeEmpty
 		Cookie: typeof ElysiaType.Cookie
 	}
@@ -523,7 +524,7 @@ t.Files = (arg = {}) =>
 	})
 
 t.Nullable = (schema) => ElysiaType.Nullable(schema)
-t.MaybeEmpty = ElysiaType.MaybeEmpty
+t.MaybeEmpty = ElysiaType.MaybeEmpty as any
 
 t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date

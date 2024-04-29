@@ -41,9 +41,22 @@ import type {
 	SchemaValidator,
 	TraceEvent
 } from './types'
+import type { TypeCheck } from './type-system'
 
 const headersHasToJSON = (new Headers() as Headers).toJSON
 const requestId = { value: 0 }
+
+const TypeBoxSymbol = {
+	optional: Symbol.for('TypeBox.Optional'),
+	kind: Symbol.for('TypeBox.Kind')
+} as const
+
+const isOptional = (validator: TypeCheck<any>) => {
+	// @ts-expect-error
+	const schema = validator?.schema
+
+	return schema && TypeBoxSymbol.optional in schema
+}
 
 const createReport = ({
 	hasTrace,
@@ -430,7 +443,7 @@ export const composeHandler = ({
 				config: validator.cookie?.config ?? {},
 				// @ts-expect-error
 				models: app.definitions.type
-		  })
+			})
 		: undefined
 
 	// @ts-ignore private property
@@ -451,8 +464,8 @@ export const composeHandler = ({
 		const secret = !cookieMeta.secrets
 			? undefined
 			: typeof cookieMeta.secrets === 'string'
-			? cookieMeta.secrets
-			: cookieMeta.secrets[0]
+				? cookieMeta.secrets
+				: cookieMeta.secrets[0]
 
 		encodeCookie += `const _setCookie = c.set.cookie
 		if(_setCookie) {`
@@ -510,21 +523,24 @@ export const composeHandler = ({
 					? typeof cookieMeta.secrets === 'string'
 						? `'${cookieMeta.secrets}'`
 						: '[' +
-						  cookieMeta.secrets.reduce(
+							cookieMeta.secrets.reduce(
 								(a, b) => a + `'${b}',`,
 								''
-						  ) +
-						  ']'
+							) +
+							']'
 					: 'undefined'
 			},
 			sign: ${
 				cookieMeta.sign === true
 					? true
 					: cookieMeta.sign !== undefined
-					? '[' +
-					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
-					  ']'
-					: 'undefined'
+						? '[' +
+							cookieMeta.sign.reduce(
+								(a, b) => a + `'${b}',`,
+								''
+							) +
+							']'
+						: 'undefined'
 			},
 			${get('domain')}
 			${get('expires')}
@@ -741,7 +757,7 @@ export const composeHandler = ({
 					case 'application/json':
 						if (hasErrorHandler)
 							fnLiteral += `const tempBody = await c.request.text()
-	
+
 								try {
 									c.body = JSON.parse(tempBody)
 								} catch {
@@ -768,12 +784,12 @@ export const composeHandler = ({
 					case 'formdata':
 					case 'multipart/form-data':
 						fnLiteral += `c.body = {}
-	
+
 							const form = await c.request.formData()
 							for (const key of form.keys()) {
 								if (c.body[key])
 									continue
-	
+
 								const value = form.getAll(key)
 								if (value.length === 1)
 									c.body[key] = value[0]
@@ -891,7 +907,12 @@ export const composeHandler = ({
 						fnLiteral += `c.headers['${key}'] ??= ${parsed}\n`
 				}
 
-			fnLiteral += `if(headers.Check(c.headers) === false) {
+			if (isOptional(validator.headers))
+				fnLiteral += `if(isNotEmpty(c.headers) && headers.Check(c.headers) === false) {
+				${composeValidation('headers')}
+			}`
+			else
+				fnLiteral += `if(headers.Check(c.headers) === false) {
 				${composeValidation('headers')}
 			}`
 
@@ -948,7 +969,12 @@ export const composeHandler = ({
 					if (parsed) fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
 				}
 
-			fnLiteral += `if(query.Check(c.query) === false) {
+			if (isOptional(validator.query))
+				fnLiteral += `if(isNotEmpty(c.query) && query.Check(c.query) === false) {
+				${composeValidation('query')}
+			}`
+			else
+				fnLiteral += `if(query.Check(c.query) === false) {
 				${composeValidation('query')}
 			}`
 
@@ -961,7 +987,7 @@ export const composeHandler = ({
 		if (validator.body) {
 			if (normalize) fnLiteral += 'c.body = body.Clean(c.body);\n'
 			// @ts-ignore
-			if (hasProperty('default', validator.body.schema))
+			if (hasProperty('default', validator.body.schema)) {
 				fnLiteral += `if(body.Check(c.body) === false) {
     				c.body = Object.assign(${JSON.stringify(
 						Value.Default(
@@ -969,16 +995,30 @@ export const composeHandler = ({
 							validator.body.schema,
 							null
 						) ?? {}
-					)}, c.body)
+					)}, c.body)`
 
+				if (isOptional(validator.body))
+					fnLiteral += `
+					    if(c.body && (typeof c.body === "object" && isNotEmpty(c.query)) && body.Check(c.body) === false) {
+            				${composeValidation('body')}
+             			}
+                    }`
+				else
+					fnLiteral += `
     				if(body.Check(c.query) === false) {
         				${composeValidation('body')}
-     			}
-            }`
-			else
-				fnLiteral += `if(body.Check(c.body) === false) {
-			${composeValidation('body')}
-		}`
+         			}
+                }`
+			} else {
+				if (isOptional(validator.body))
+					fnLiteral += `if(c.body && (typeof c.body === "object" && isNotEmpty(c.query)) && body.Check(c.body) === false) {
+         			${composeValidation('body')}
+          		}`
+				else
+					fnLiteral += `if(body.Check(c.body) === false) {
+         			${composeValidation('body')}
+          		}`
+			}
 
 			// @ts-ignore
 			if (hasTransform(validator.body.schema))
@@ -1495,11 +1535,11 @@ export const composeGeneralHandler = (
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
 				: app.event.request.length
-				? `new Response(error404Message, {
+					? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
 				})`
-				: `error404.clone()`
+					: `error404.clone()`
 		}
 
 	ctx.params = route.params\n`

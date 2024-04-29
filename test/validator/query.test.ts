@@ -199,4 +199,34 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 		expect(await res.json()).toEqual({ param1: true })
 	})
+
+	it('validate optional object', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query }) => query?.name ?? 'sucrose',
+			{
+				query: t.Optional(
+					t.Object(
+						{
+							name: t.String()
+						},
+						{
+							additionalProperties: true
+						}
+					)
+				)
+			}
+		)
+
+		const [valid, invalid] = await Promise.all([
+			app.handle(req('/?name=sucrose')),
+			app.handle(req('/'))
+		])
+
+		expect(await valid.text()).toBe('sucrose')
+		expect(valid.status).toBe(200)
+
+		expect(await invalid.text()).toBe('sucrose')
+		expect(invalid.status).toBe(200)
+	})
 })

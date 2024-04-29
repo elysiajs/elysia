@@ -2,6 +2,7 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
+import { Get } from '@sinclair/typebox/build/cjs/type/registry/type'
 
 describe('Header Validator', () => {
 	it('validate single', async () => {
@@ -203,5 +204,41 @@ describe('Header Validator', () => {
 
 		expect(await res.json()).toEqual(headers)
 		expect(res.status).toBe(200)
+	})
+
+	it('validate optional object', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ headers }) => headers?.name ?? 'sucrose',
+			{
+				headers: t.Optional(
+					t.Object(
+						{
+							name: t.String()
+						},
+						{
+							additionalProperties: true
+						}
+					)
+				)
+			}
+		)
+
+		const [valid, invalid] = await Promise.all([
+			app.handle(
+				req('/', {
+					headers: {
+						name: 'sucrose'
+					}
+				})
+			),
+			app.handle(req('/'))
+		])
+
+		expect(await valid.text()).toBe('sucrose')
+		expect(valid.status).toBe(200)
+
+		expect(await invalid.text()).toBe('sucrose')
+		expect(invalid.status).toBe(200)
 	})
 })

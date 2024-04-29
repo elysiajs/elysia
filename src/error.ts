@@ -100,8 +100,7 @@ export class ValidationError extends Error {
 		public validator: TSchema | TypeCheck<any>,
 		public value: unknown
 	) {
-		// @ts-expect-error
-		if (typeof value === 'object' && ELYSIA_RESPONSE in value)
+		if (value && typeof value === 'object' && ELYSIA_RESPONSE in value)
 			// @ts-expect-error
 			value = value.response
 
