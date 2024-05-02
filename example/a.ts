@@ -1,17 +1,33 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
+import { rateLimit } from 'elysia-rate-limit'
 import { req } from '../test/utils'
+import { serverTiming } from '@elysiajs/server-timing'
 
-const app = new Elysia({ name: 'Example' })
-	.get(
-		'/',
-		async (c) => {
-			const id = c.query.id
-			const cookie = c.cookie
-			return { cookie, id }
-		}
-	)
+const app = new Elysia()
+	.use((app) => {
+		app.use(
+			// @ts-expect-error
+			serverTiming()
+		)
+
+		app.use(
+			// @ts-expect-error
+			rateLimit({
+				max: 3
+			})
+		)
+
+		return app
+	})
+	.get('/', 'hello')
 	.listen(3000)
 
+await Promise.all([
+	app.handle(req('/')),
+	app.handle(req('/')),
+	app.handle(req('/'))
+])
+
 app.handle(req('/'))
-	.then((x) => x.headers)
-	// .then(console.log)
+	.then((x) => x.text())
+	.then(console.log)

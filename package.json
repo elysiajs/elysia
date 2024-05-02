@@ -95,9 +95,11 @@
     "release:local": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
+    "@elysiajs/server-timing": "^1.0.2",
     "@sinclair/typebox": "^0.32.15",
     "cookie": "^0.6.0",
     "elysia": "1.0.15",
+    "elysia-rate-limit": "^3.2.2",
     "eventemitter3": "^5.0.1",
     "fast-decode-uri-component": "^1.0.1",
     "fast-querystring": "^1.1.2",
