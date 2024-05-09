@@ -10,7 +10,7 @@ import type {
 	TNull,
 	TUndefined
 } from '@sinclair/typebox'
-import type { TypeCheck } from '@sinclair/typebox/compiler'
+import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
 
@@ -1117,3 +1117,22 @@ export type InferHandler<
 	},
 	Path
 >
+
+export interface ModelValidatorError extends ValueError {
+	humanReadable: string
+}
+
+// @ts-ignore trust me bro
+export interface ModelValidator<T> extends TypeCheck<T> {
+	parse(a: T): T
+	safeParse(
+		a: T
+	):
+		| { success: true; data: T; error: null }
+		| {
+				success: true
+				data: null
+				error: string
+				errors: ModelValidatorError[]
+		  }
+}

@@ -542,14 +542,16 @@ export const composeHandler = ({
 			!destructured.length
 		) {
 			fnLiteral += `if(c.qi !== -1) {
-				c.query = parseQuery(c.request.url.slice(c.qi + 1).replace(/\\+/g, ' '))
+				c.query = parseQuery(c.path.slice(c.qi + 1).replace(/\\+/g, ' '))
 
 				for(const key of Object.keys(c.query))
 					c.query[key] = decodeURIComponent(c.query[key])
 			} else c.query = {}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
-				let url = c.request.url.slice(c.qi).replace(/\\+/g, ' ')
+				let url = c.path.slice(c.qi).replace(/\\+/g, ' ')
+
+				console.log(c.path)
 
 				${destructured
 					.map(
@@ -583,7 +585,8 @@ export const composeHandler = ({
 		hasHeaders ||
 		(isHandleFn && hasDefaultHeaders)
 
-	fnLiteral += '\nconst id = c.$$requestId\n'
+	if(hasTrace)
+	   fnLiteral += '\nconst id = c.$$requestId\n'
 
 	const report = createReport({
 		hasTrace,
@@ -1571,7 +1574,7 @@ export const composeGeneralHandler = (
 			${hasTrace ? 'const id = randomId()' : ''}
 
 			const ctx = {
-				request,
+				request
 				store,
 				redirect,
 				set: {

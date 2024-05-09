@@ -1,6 +1,6 @@
 import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
-import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
+import { TypeCheck, TypeCompiler, ValueError } from '@sinclair/typebox/compiler'
 
 import { t } from '.'
 import { isNotEmpty } from './handler'
@@ -195,7 +195,7 @@ export const mergeHook = (
 		? {
 				...a,
 				...b
-		  }
+			}
 		: undefined
 
 	return {
@@ -246,7 +246,7 @@ export const getSchemaValidator = (
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: boolean
-	}
+	} = {}
 ) => {
 	if (!s) return
 	if (typeof s === 'string' && !(s in models)) return
@@ -285,6 +285,31 @@ export const getSchemaValidator = (
 				delete validator.schema.config
 		}
 
+		// @ts-ignore
+		validator.parse = (v) => {
+			try {
+				return validator.Decode(v)
+			} catch (error) {
+				throw [...validator.Errors(v)].map(mapValueError)
+			}
+		}
+
+		// @ts-ignore
+		validator.safeParse = (v) => {
+			try {
+				return { success: true, data: validator.Decode(v), error: null }
+			} catch (error) {
+				const errors = [...compiled.Errors(v)].map(mapValueError)
+
+				return {
+					success: false,
+					data: null,
+					error: errors[0]?.humanReadable,
+					errors
+				}
+			}
+		}
+
 		return validator
 	}
 
@@ -304,7 +329,53 @@ export const getSchemaValidator = (
 			delete compiled.schema.config
 	}
 
+	// @ts-ignore
+	compiled.parse = (v) => {
+		try {
+			return compiled.Decode(v)
+		} catch (error) {
+			throw [...compiled.Errors(v)].map(mapValueError)
+		}
+	}
+
+	// @ts-ignore
+	compiled.safeParse = (v) => {
+		try {
+			return { success: true, data: compiled.Decode(v), error: null }
+		} catch (error) {
+			const errors = [...compiled.Errors(v)].map(mapValueError)
+
+			return {
+				success: false,
+				data: null,
+				error: errors[0]?.humanReadable,
+				errors
+			}
+		}
+	}
+
 	return compiled
+}
+
+export const mapValueError = (error: ValueError) => {
+	const { message, path, value } = error
+
+	if (message.startsWith('Expected '))
+		return {
+			...error,
+			humanReadable:
+				message.slice(0, 9) +
+				path.slice(1) +
+				' to be' +
+				message.slice(8) +
+				', found: ' +
+				value
+		}
+
+	if (message === 'Unexpected property')
+		return { ...error, humanReadable: message + ' ' + path.slice(1) }
+
+	return { ...error, humanReadable: message }
 }
 
 export const getResponseSchemaValidator = (

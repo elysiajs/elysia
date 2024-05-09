@@ -108,7 +108,8 @@ import type {
 	LifeCycleType,
 	MacroQueue,
 	EphemeralType,
-	ExcludeElysiaResponse
+	ExcludeElysiaResponse,
+    ModelValidator
 } from './types'
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -327,6 +328,22 @@ export default class Elysia<
 			for (const macro of this.extender.macros)
 				traceBackMacro(macro.fn(manager), localHook)
 		}
+	}
+
+	get models(): {
+		[K in keyof Definitions['type']]: ModelValidator<
+			// @ts-ignore Trust me bro
+			Definitions['type'][K]
+		>
+	} {
+		const models: Record<string, TypeCheck<TSchema>> = {}
+
+		for (const [name, schema] of Object.entries(this.definitions.type))
+			models[name] = getSchemaValidator(
+				schema as any
+			) as TypeCheck<TSchema>
+
+		return models as any
 	}
 
 	private add(
