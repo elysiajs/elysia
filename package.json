@@ -98,7 +98,6 @@
     "@sinclair/typebox": "^0.32.27",
     "cookie": "^0.6.0",
     "elysia": "1.0.15",
-    "eventemitter3": "^5.0.1",
     "fast-decode-uri-component": "^1.0.1",
     "fast-querystring": "^1.1.2",
     "openapi-types": "^12.1.3"

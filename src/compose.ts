@@ -11,6 +11,7 @@ import decodeURIComponent from 'fast-decode-uri-component'
 import {
 	getCookieValidator,
 	lifeCycleToFn,
+	randomId,
 	redirect,
 	signCookie
 } from './utils'
@@ -30,7 +31,7 @@ import {
 	ELYSIA_RESPONSE
 } from './error'
 
-import { Sucrose, sucrose } from './sucrose'
+import { Sucrose, hasReturn, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 
 import type {
@@ -42,9 +43,9 @@ import type {
 	TraceEvent
 } from './types'
 import type { TypeCheck } from './type-system'
+import { ELYSIA_TRACE } from './trace'
 
 const headersHasToJSON = (new Headers() as Headers).toJSON
-const requestId = { value: 0 }
 
 const TypeBoxSymbol = {
 	optional: Symbol.for('TypeBox.Optional'),
@@ -59,98 +60,74 @@ const isOptional = (validator: TypeCheck<any>) => {
 }
 
 const createReport = ({
+	context = 'c',
 	hasTrace,
-	hasTraceSet = false,
-	addFn,
-	condition = {}
+	total,
+	addFn
 }: {
+	context?: string
 	hasTrace: boolean | number
-	hasTraceSet?: boolean
+	total: number
 	addFn(string: string): void
-	condition: Partial<Record<TraceEvent, boolean>>
 }) => {
-	if (hasTrace) {
-		addFn(`\nconst reporter = getReporter()\n`)
+	if (!hasTrace) return () => () => {}
 
-		return (
-			event: TraceEvent,
-			{
-				name,
-				attribute = '',
-				unit = 0
-			}: {
-				name?: string
-				attribute?: string
-				unit?: number
-			} = {}
-		) => {
-			const dotIndex = event.indexOf('.')
-			const isGroup = dotIndex === -1
+	addFn(`\nlet report\n`)
+	for (let i = 0; i < total; i++)
+		addFn(`\nconst trace${i} = ${context}[ELYSIA_TRACE][${i}]\n`)
 
-			if (
-				event !== 'request' &&
-				event !== 'response' &&
-				!condition[
-					(isGroup
-						? event
-						: event.slice(0, dotIndex)) as keyof typeof condition
-				]
-			)
-				return () => {
-					if (hasTraceSet && event === 'afterHandle')
-						addFn(`\nawait traceDone\n`)
-				}
+	return (
+		event: TraceEvent,
+		{
+			name,
+			unit = 0
+		}: {
+			name?: string
+			attribute?: string
+			unit?: number
+		} = {}
+	) => {
+		if (event.indexOf('.') !== -1) return () => {}
 
-			if (isGroup) name ||= event
-			else name ||= 'anonymous'
+		const dotIndex = event.indexOf('.')
+		const isGroup = dotIndex === -1
 
+		// if (event !== 'request' && event !== 'response') return () => {}
+
+		if (isGroup) name ||= event
+		else name ||= 'anonymous'
+
+		for (let i = 0; i < total; i++)
 			addFn(
-				'\n' +
-					`reporter.emit('event', {
-					id,
-					event: '${event}',
-					type: 'begin',
-					name: '${name}',
-					time: performance.now(),
-					${isGroup ? `unit: ${unit},` : ''}
-					${attribute}
-				})`.replace(/(\t| |\n)/g, '') +
-					'\n'
+				`\nreport = trace${i}.${event}({
+				id,
+				event: '${event}',
+				name: '${name}',
+				time: performance.now()
+			})\n`
 			)
 
-			return () => {
+		// addFn(
+		// 	'\n' +
+		// 		`reporter.emit('event', {
+		// 			id,
+		// 			event: '${event}',
+		// 			type: 'begin',
+		// 			name: '${name}',
+		// 			time: performance.now(),
+		// 			${isGroup ? `unit: ${unit},` : ''}
+		// 			${attribute}
+		// 		})`.replace(/(\t| |\n)/g, '') +
+		// 		'\n'
+		// )
+
+		return () => {
+			for (let i = 0; i < total; i++)
 				addFn(
-					'\n' +
-						`reporter.emit('event', {
-							id,
-							event: '${event}',
-							type: 'end',
-							time: performance.now()
-						})`.replace(/(\t| |\n)/g, '') +
-						'\n'
+					`\nreport()\n`
 				)
-
-				if (hasTraceSet && event === 'afterHandle')
-					addFn(`\nawait traceDone\n`)
-			}
 		}
-	} else {
-		return () => () => {}
 	}
-}
-
-export const hasReturn = (fnLiteral: string) => {
-	const parenthesisEnd = fnLiteral.indexOf(')')
-
-	// Is direct arrow function return eg. () => 1
-	if (
-		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
-		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
-	) {
-		return true
-	}
-
-	return fnLiteral.includes('return')
 }
 
 const composeValidationFactory = (
@@ -359,7 +336,7 @@ export const composeHandler = ({
 	validator,
 	handler,
 	allowMeta = false,
-	appInference: { event: eventInference, trace: traceInference }
+	inference
 }: {
 	app: Elysia<any, any, any, any, any, any, any, any>
 	path: string
@@ -369,10 +346,7 @@ export const composeHandler = ({
 	validator: SchemaValidator
 	handler: unknown | Handler<any, any>
 	allowMeta?: boolean
-	appInference: {
-		event: Sucrose.Inference
-		trace: Sucrose.TraceInference
-	}
+	inference: Sucrose.Inference
 }): ComposedHandler => {
 	const isHandleFn = typeof handler === 'function'
 
@@ -401,19 +375,14 @@ export const composeHandler = ({
 				.join(';')}})();\n`
 		: ''
 
-	const traceConditions: Record<
-		Exclude<TraceEvent, `${string}.unit` | 'request' | 'response' | 'exit'>,
-		boolean
-	> = traceInference
-
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
 
-	const inference = sucrose(
+	inference = sucrose(
 		Object.assign(localHook, {
 			handler: handler as any
 		}),
-		eventInference
+		inference
 	)
 
 	const hasQuery = inference.query || !!validator.query
@@ -443,7 +412,7 @@ export const composeHandler = ({
 				config: validator.cookie?.config ?? {},
 				// @ts-expect-error
 				models: app.definitions.type
-			})
+		  })
 		: undefined
 
 	// @ts-ignore private property
@@ -464,8 +433,8 @@ export const composeHandler = ({
 		const secret = !cookieMeta.secrets
 			? undefined
 			: typeof cookieMeta.secrets === 'string'
-				? cookieMeta.secrets
-				: cookieMeta.secrets[0]
+			? cookieMeta.secrets
+			: cookieMeta.secrets[0]
 
 		encodeCookie += `const _setCookie = c.set.cookie
 		if(_setCookie) {`
@@ -523,24 +492,21 @@ export const composeHandler = ({
 					? typeof cookieMeta.secrets === 'string'
 						? `'${cookieMeta.secrets}'`
 						: '[' +
-							cookieMeta.secrets.reduce(
+						  cookieMeta.secrets.reduce(
 								(a, b) => a + `'${b}',`,
 								''
-							) +
-							']'
+						  ) +
+						  ']'
 					: 'undefined'
 			},
 			sign: ${
 				cookieMeta.sign === true
 					? true
 					: cookieMeta.sign !== undefined
-						? '[' +
-							cookieMeta.sign.reduce(
-								(a, b) => a + `'${b}',`,
-								''
-							) +
-							']'
-						: 'undefined'
+					? '[' +
+					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
+					  ']'
+					: 'undefined'
 			},
 			${get('domain')}
 			${get('expires')}
@@ -611,41 +577,28 @@ export const composeHandler = ({
 		}
 	}
 
-	const hasTraceSet = traceInference.set
 	const hasSet =
 		inference.cookie ||
 		inference.set ||
-		hasTraceSet ||
 		hasHeaders ||
 		(isHandleFn && hasDefaultHeaders)
 
-	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
+	fnLiteral += '\nconst id = c.$$requestId\n'
 
 	const report = createReport({
 		hasTrace,
-		hasTraceSet,
-		condition: traceConditions,
+		total: hooks.trace.length,
 		addFn: (word) => {
 			fnLiteral += word
 		}
 	})
-
 	fnLiteral += hasErrorHandler ? '\n try {\n' : ''
-
-	if (hasTraceSet) {
-		fnLiteral += `\nconst traceDone = Promise.all([`
-		for (let i = 0; i < hooks.trace.length; i++) {
-			fnLiteral += `new Promise(r => { reporter.once(\`res\${id}.${i}\`, r) }),`
-		}
-		fnLiteral += `])\n`
-	}
 
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 
 	const maybeAsync =
 		hasCookie ||
 		hasBody ||
-		hasTraceSet ||
 		isAsyncHandler ||
 		!!hooks.mapResponse.length ||
 		hooks.parse.length > 0 ||
@@ -1071,8 +1024,7 @@ export const composeHandler = ({
 				name: beforeHandle.fn.name
 			})
 
-			const returning = hasReturn(beforeHandle.fn.toString())
-
+			const returning = hasReturn(beforeHandle)
 			const isResolver = beforeHandle.subType === 'resolve'
 
 			if (isResolver) {
@@ -1118,7 +1070,7 @@ export const composeHandler = ({
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						const hook = hooks.afterHandle[i]
 
-						const returning = hasReturn(hook.fn.toString())
+						const returning = hasReturn(hook)
 
 						const endUnit = report('afterHandle.unit', {
 							name: hook.fn.name
@@ -1190,7 +1142,7 @@ export const composeHandler = ({
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const hook = hooks.afterHandle[i]
 
-			const returning = hasReturn(hook.fn.toString())
+			const returning = hasReturn(hook)
 
 			const endUnit = report('afterHandle.unit', {
 				name: hook.fn.name
@@ -1289,7 +1241,7 @@ export const composeHandler = ({
 			} else if (hasSet)
 				fnLiteral += `return mapResponse(r, c.set, c.request)\n`
 			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
-		} else if (traceConditions.handle || hasCookie) {
+		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r = await ${handle};\n`
 				: `let r = ${handle};\n`
@@ -1378,10 +1330,8 @@ export const composeHandler = ({
 
 		endError()
 
-		fnLiteral += `return handleError(c, error, true)\n\n`
-
+		fnLiteral += `return handleError(c, error, true)\n`
 		if (!maybeAsync) fnLiteral += '})()'
-
 		fnLiteral += '}'
 
 		if (handleResponse || hasTrace) {
@@ -1410,7 +1360,8 @@ export const composeHandler = ({
 			mapResponse: onMapResponse,
 			parse,
 			error: handleErrors,
-			onResponse
+			onResponse,
+			trace
 		},
 		validator: {
 			body,
@@ -1436,12 +1387,11 @@ export const composeHandler = ({
 		schema,
 		definitions,
 		ERROR_CODE,
-		getReporter,
-		requestId,
 		parseCookie,
 		signCookie,
 		decodeURIComponent,
-		ELYSIA_RESPONSE
+		ELYSIA_RESPONSE,
+		ELYSIA_TRACE
 	} = hooks
 
 	${
@@ -1488,29 +1438,23 @@ export const composeHandler = ({
 		// @ts-expect-error
 		definitions: app.definitions.type,
 		ERROR_CODE,
-		// @ts-expect-error
-		getReporter: () => app.reporter,
-		requestId,
 		parseCookie,
 		signCookie,
 		decodeURIComponent,
-		ELYSIA_RESPONSE
+		ELYSIA_RESPONSE,
+		ELYSIA_TRACE
 	})
 }
 
 export const composeGeneralHandler = (
 	app: Elysia<any, any, any, any, any, any, any, any>
 ) => {
-	const inference = {
-		event: {
-			// @ts-expect-error
-			...app.inference.event,
-			// @ts-expect-error
-			queries: [...app.inference.event.queries]
-		},
-		// @ts-expect-error
-		trace: { ...app.inference.trace }
-	}
+	// const inference = {
+	// 	// @ts-expect-error private
+	// 	...app.inference,
+	// 	// @ts-expect-error private
+	// 	queries: [...app.inference.queries]
+	// }
 
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
@@ -1535,11 +1479,11 @@ export const composeGeneralHandler = (
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
 				: app.event.request.length
-					? `new Response(error404Message, {
+				? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
 				})`
-					: `error404.clone()`
+				: `error404.clone()`
 		}
 
 	ctx.params = route.params\n`
@@ -1582,17 +1526,18 @@ export const composeGeneralHandler = (
 		app,
 		mapEarlyResponse,
 		NotFoundError,
-		requestId,
-		getReporter,
+		randomId,
 		handleError,
 		error,
-		redirect
+		redirect,
+		ELYSIA_TRACE
 	} = data
 
 	const store = app.singleton.store
 	const staticRouter = app.router.static.http
 	const wsRouter = app.router.ws
 	const router = app.router.http
+	const trace = app.event.trace
 
 	const notFound = new NotFoundError()
 
@@ -1605,30 +1550,25 @@ export const composeGeneralHandler = (
 	${
 		app.event.error.length
 			? ''
-			: `
-	const error404Message = notFound.message.toString()
-	const error404 = new Response(error404Message, { status: 404 });
-	`
+			: `\nconst error404Message = notFound.message.toString()
+	const error404 = new Response(error404Message, { status: 404 });\n`
+	}
+
+	${
+		app.event.trace.length
+			? `const ${app.event.trace
+					.map((_, i) => `tr${i} = app.event.trace[${i}].fn`)
+					.join(',')}`
+			: ''
 	}
 
 	return ${maybeAsync ? 'async' : ''} function map(request) {\n`
 
 	if (app.event.request.length) fnLiteral += `let re`
 
-	const report = createReport({
-		hasTrace,
-		hasTraceSet: inference.trace.set,
-		condition: {
-			request: inference.trace.request
-		},
-		addFn: (word) => {
-			fnLiteral += word
-		}
-	})
-
 	if (app.event.request.length) {
 		fnLiteral += `
-			${hasTrace ? 'const id = +requestId.value++' : ''}
+			${hasTrace ? 'const id = randomId()' : ''}
 
 			const ctx = {
 				request,
@@ -1643,10 +1583,23 @@ export const composeGeneralHandler = (
 					status: 200
 				},
 				error
-				${hasTrace ? ',$$requestId: +id' : ''}
+				${hasTrace ? ', $$requestId: id' : ''}
 				${decoratorsLiteral}
+			}\n`
+
+		if (app.event.trace.length)
+			fnLiteral += `ctx[ELYSIA_TRACE] = [${app.event.trace
+				.map((_, i) => `tr${i}(ctx)`)
+				.join(',')}]\n`
+
+		const report = createReport({
+			context: 'ctx',
+			hasTrace,
+			total: app.event.trace.length,
+			addFn: (word) => {
+				fnLiteral += word
 			}
-		`
+		})
 
 		const endReport = report('request', {
 			attribute: 'ctx',
@@ -1657,7 +1610,7 @@ export const composeGeneralHandler = (
 
 		for (let i = 0; i < app.event.request.length; i++) {
 			const hook = app.event.request[i]
-			const withReturn = hasReturn(hook.fn.toString())
+			const withReturn = hasReturn(hook)
 			const maybeAsync = isAsync(hook)
 
 			const endUnit = report('request.unit', {
@@ -1692,7 +1645,7 @@ export const composeGeneralHandler = (
 		fnLiteral += `\nctx.qi = qi\n ctx.path = path\n`
 	} else {
 		fnLiteral += init
-		fnLiteral += `${hasTrace ? 'const id = +requestId.value++' : ''}
+		fnLiteral += `${hasTrace ? 'const id = randomId()' : ''}
 		const ctx = {
 			request,
 			store,
@@ -1710,16 +1663,25 @@ export const composeGeneralHandler = (
 			error
 			${hasTrace ? ',$$requestId: id' : ''}
 			${decoratorsLiteral}
-		}`
+		}\n`
+
+		if (app.event.trace.length)
+			fnLiteral += `ctx[ELYSIA_TRACE] = [${app.event.trace
+				.map((_, i) => `tr${i}(ctx)`)
+				.join(',')}]\n`
+
+		const report = createReport({
+			context: 'ctx',
+			hasTrace,
+			total: app.event.trace.length,
+			addFn: (word) => {
+				fnLiteral += word
+			}
+		})
 
 		report('request', {
 			unit: app.event.request.length,
-			attribute:
-				inference.trace.context ||
-				inference.trace.store ||
-				inference.trace.set
-					? 'ctx'
-					: ''
+			attribute: ''
 		})()
 	}
 
@@ -1773,6 +1735,8 @@ export const composeGeneralHandler = (
 	// @ts-ignore
 	app.handleError = handleError
 
+	// console.log(fnLiteral)
+
 	return Function(
 		'data',
 		fnLiteral
@@ -1780,12 +1744,11 @@ export const composeGeneralHandler = (
 		app,
 		mapEarlyResponse,
 		NotFoundError,
-		// @ts-ignore
-		getReporter: () => app.reporter,
-		requestId,
+		randomId,
 		handleError,
 		error,
-		redirect
+		redirect,
+		ELYSIA_TRACE
 	})
 }
 
@@ -1826,7 +1789,7 @@ export const composeErrorHandler = (
 
 		fnLiteral += '\nif(skipGlobal !== true) {\n'
 
-		if (hasReturn(handler.fn.toString()))
+		if (hasReturn(handler))
 			fnLiteral += `r = ${response}; if(r !== undefined) {
 				if(r instanceof Response) return r
 

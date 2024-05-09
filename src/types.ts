@@ -13,7 +13,6 @@ import type {
 import type { TypeCheck } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
-import type { EventEmitter } from 'eventemitter3'
 
 import type { CookieOptions } from './cookies'
 import type { Context, ErrorContext, PreContext } from './context'
@@ -580,14 +579,6 @@ export type TraceStream = {
 	unit?: number
 }
 
-export type TraceReporter = EventEmitter<
-	{
-		[res in `res${number}.${number}`]: undefined
-	} & {
-		event(stream: TraceStream): MaybePromise<void>
-	}
->
-
 export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
 	Type extends 'begin'
 		? Prettify<{
@@ -631,10 +622,6 @@ export type TraceHandler<
 		>
 	): MaybePromise<void>
 }
-
-export type TraceListener = EventEmitter<{
-	[event in TraceEvent | 'all']: (trace: TraceProcess) => MaybePromise<void>
-}>
 
 export type BodyHandler<
 	in out Route extends RouteSchema = {},

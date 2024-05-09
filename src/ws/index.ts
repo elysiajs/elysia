@@ -7,6 +7,7 @@ import { ValidationError } from '../error'
 import type { Context } from '../context'
 
 import type { SingletonBase, RouteSchema } from '../types'
+import { randomId } from '../utils'
 
 export const websocket: WebSocketHandler<any> = {
 	open(ws) {
@@ -43,9 +44,7 @@ export class ElysiaWS<
 		if (raw.data.id) {
 			this.id = raw.data.id
 		} else {
-			const array = new Uint32Array(1)
-			crypto.getRandomValues(array)
-			this.id = array[0].toString()
+			this.id = randomId().toString()
 		}
 	}
 

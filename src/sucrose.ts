@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import type { Handler, LifeCycleStore, TraceHandler } from './types'
+import type {
+	Handler,
+	HookContainer,
+	LifeCycleStore,
+	TraceHandler
+} from './types'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -16,19 +21,27 @@ export namespace Sucrose {
 	export interface LifeCycle extends Partial<LifeCycleStore> {
 		handler?: Handler
 	}
+}
 
-	export interface TraceInference {
-		request: boolean
-		parse: boolean
-		transform: boolean
-		handle: boolean
-		beforeHandle: boolean
-		afterHandle: boolean
-		error: boolean
-		context: boolean
-		store: boolean
-		set: boolean
+export const hasReturn = (fn: string | HookContainer<any> | Function) => {
+	const fnLiteral =
+		typeof fn === 'object'
+			? fn.fn.toString()
+			: typeof fn === 'string'
+			? fn.toString()
+			: fn
+
+	const parenthesisEnd = fnLiteral.indexOf(')')
+
+	// Is direct arrow function return eg. () => 1
+	if (
+		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
+		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
+	) {
+		return true
 	}
+
+	return fnLiteral.includes('return')
 }
 
 /**
@@ -235,7 +248,6 @@ export const findTraceParameterReference = (
 	if (!inference.error && root.includes('error')) inference.error = true
 	if (!inference.context && root.includes('context')) inference.context = true
 	if (!inference.store && root.includes('store')) inference.store = true
-	if (!inference.set && root.includes('set')) inference.set = true
 
 	return root
 }
@@ -586,115 +598,6 @@ export const validateInferencedQueries = (queries: string[]) => {
 	return true
 }
 
-/**
- * Analyze if context is mentioned in body
- */
-export const inferTraceBodyReference = (
-	code: string,
-	aliases: string[],
-	inference: Sucrose.TraceInference
-) => {
-	const access = (type: string, alias: string) =>
-		code.includes(type + '.' + alias) ||
-		code.includes(type + '["' + alias + '"]') ||
-		code.includes(type + "['" + alias + "']")
-
-	for (let alias of aliases) {
-		if (alias.charCodeAt(0) === 123) {
-			alias = retrieveRootParamters(alias)
-
-			if (!inference.request && alias.includes('request'))
-				inference.request = true
-
-			if (!inference.parse && alias.includes('parse'))
-				inference.parse = true
-
-			if (!inference.transform && alias.includes('transform'))
-				inference.transform = true
-
-			if (!inference.handle && alias.includes('handle'))
-				inference.handle = true
-
-			if (!inference.beforeHandle && alias.includes('beforeHandle'))
-				inference.beforeHandle = true
-
-			if (!inference.afterHandle && alias.includes('afterHandle'))
-				inference.afterHandle = true
-
-			if (!inference.error && alias.includes('error'))
-				inference.error = true
-
-			if (!inference.context && alias.includes('context'))
-				inference.context = true
-
-			if (!inference.store && alias.includes('store'))
-				inference.store = true
-
-			if (!inference.set && alias.includes('set')) inference.set = true
-
-			continue
-		}
-
-		// ! Function is passed to another function, assume as all is accessed
-		if (code.includes('(' + alias + ')')) {
-			inference.request = true
-			inference.parse = true
-			inference.transform = true
-			inference.handle = true
-			inference.beforeHandle = true
-			inference.afterHandle = true
-			inference.error = true
-			inference.context = true
-			inference.store = true
-			inference.set = true
-
-			break
-		}
-
-		if (!inference.request && access('request', alias))
-			inference.request = true
-
-		if (!inference.parse && access('parse', alias)) inference.parse = true
-
-		if (!inference.transform && access('transform', alias))
-			inference.transform = true
-
-		if (!inference.handle && access('handle', alias))
-			inference.handle = true
-
-		if (!inference.beforeHandle && access('beforeHandle', alias))
-			inference.beforeHandle = true
-
-		if (!inference.afterHandle && access('afterHandle', alias))
-			inference.afterHandle = true
-
-		if (!inference.error && access('error', alias)) inference.error = true
-
-		if (!inference.context && access('context', alias))
-			inference.context = true
-
-		if (!inference.store && access('store', alias)) inference.store = true
-
-		if (!inference.set && access('set', alias)) inference.set = true
-
-		if (
-			inference.request &&
-			inference.parse &&
-			inference.transform &&
-			inference.handle &&
-			inference.beforeHandle &&
-			inference.afterHandle &&
-			inference.error &&
-			inference.context &&
-			inference.store &&
-			inference.set
-		)
-			break
-	}
-
-	return aliases
-}
-
 export const sucrose = (
 	lifeCycle: Sucrose.LifeCycle,
 	inference: Sucrose.Inference = {
@@ -797,57 +700,6 @@ export const sucrose = (
 	if (!validateInferencedQueries(inference.queries)) {
 		inference.unknownQueries = true
 		inference.queries = []
-	}
-
-	return inference
-}
-
-/**
- * Analyze if context is mentioned in body in a trace
- */
-export const sucroseTrace = (
-	traces: TraceHandler[],
-	inference: Sucrose.TraceInference = {
-		request: false,
-		parse: false,
-		transform: false,
-		handle: false,
-		beforeHandle: false,
-		afterHandle: false,
-		error: false,
-		context: false,
-		store: false,
-		set: false
-	}
-) => {
-	for (const handler of traces) {
-		const [parameter, body] = separateFunction(handler.toString())
-
-		const rootParameters = findTraceParameterReference(parameter, inference)
-		const mainParameter = extractMainParameter(rootParameters)
-
-		if (mainParameter) {
-			const aliases = findAlias(mainParameter, body)
-			aliases.splice(0, -1, mainParameter)
-
-			inferTraceBodyReference(body, aliases, inference)
-
-			continue
-		}
-
-		if (
-			inference.request &&
-			inference.parse &&
-			inference.transform &&
-			inference.handle &&
-			inference.beforeHandle &&
-			inference.afterHandle &&
-			inference.error &&
-			inference.context &&
-			inference.store &&
-			inference.set
-		)
-			break
 	}
 
 	return inference

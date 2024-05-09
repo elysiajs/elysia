@@ -195,7 +195,7 @@ export const mergeHook = (
 		? {
 				...a,
 				...b
-			}
+		  }
 		: undefined
 
 	return {
@@ -940,34 +940,14 @@ export const lifeCycleToFn = (
 	}
 }
 
-export const cloneInference = (inference: {
-	event: Sucrose.Inference
-	trace: Sucrose.TraceInference
-}): {
-	event: Sucrose.Inference
-	trace: Sucrose.TraceInference
-} => ({
-	event: {
-		body: inference.event.body,
-		cookie: inference.event.cookie,
-		headers: inference.event.headers,
-		queries: [...inference.event.queries],
-		query: inference.event.query,
-		set: inference.event.set,
-		unknownQueries: inference.event.unknownQueries
-	},
-	trace: {
-		request: inference.trace.request,
-		parse: inference.trace.parse,
-		transform: inference.trace.transform,
-		handle: inference.trace.handle,
-		beforeHandle: inference.trace.beforeHandle,
-		afterHandle: inference.trace.afterHandle,
-		error: inference.trace.error,
-		context: inference.trace.context,
-		store: inference.trace.store,
-		set: inference.trace.set
-	}
+export const cloneInference = (inference: Sucrose.Inference) => ({
+	body: inference.body,
+	cookie: inference.cookie,
+	headers: inference.headers,
+	queries: [...inference.queries],
+	query: inference.query,
+	set: inference.set,
+	unknownQueries: inference.unknownQueries
 })
 
 /**
@@ -975,10 +955,7 @@ export const cloneInference = (inference: {
  * @param url URL to redirect to
  * @param HTTP status code to send,
  */
-export const redirect = (
-	url: string,
-	status: number = 301
-) =>
+export const redirect = (url: string, status: number = 301) =>
 	new Response(null, {
 		status,
 		headers: {
@@ -987,3 +964,5 @@ export const redirect = (
 	})
 
 export type redirect = typeof redirect
+
+export const randomId = () => crypto.getRandomValues(new Uint32Array(1))[0]
