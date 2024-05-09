@@ -1060,10 +1060,10 @@ export const composeHandler = ({
 
 				fnLiteral += `if(be !== undefined) {\n`
 				endBeforeHandle()
-				const endAfterHandle = report('afterHandle', {
-					unit: hooks.transform.length
-				})
-				if (hooks.afterHandle) {
+				if (hooks.afterHandle?.length) {
+    				const endAfterHandle = report('afterHandle', {
+    					unit: hooks.transform.length
+    				})
 					report('handle', {
 						name: isHandleFn
 							? (handler as Function).name
@@ -1095,9 +1095,8 @@ export const composeHandler = ({
 
 						endUnit()
 					}
+					endAfterHandle()
 				}
-
-				endAfterHandle()
 
 				if (validator.response)
 					fnLiteral += composeResponseValidation('be')
