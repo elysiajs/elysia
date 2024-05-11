@@ -890,9 +890,7 @@ export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
 		? T[K] extends (a: infer Params) => any
 			? Params | undefined
 			: T[K]
-		: T[K] extends BaseMacro
-		? MacroToProperty<T[K]>
-		: never
+		: T[K]
 }>
 
 export interface MacroManager<

@@ -1,3 +1,10 @@
+# 1.0.18 - 11 May 2024
+Feature:
+- add support for partitioned cookie
+
+Bug fix:
+- recursive MacroToProperty type on unknown macro
+
 # 1.0.17 - 9 May 2024
 Improvement:
 - add context.url to get full URL string (including query)
