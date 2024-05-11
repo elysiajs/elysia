@@ -1,3 +1,8 @@
+# 1.0.17 - 9 May 2024
+Improvement:
+- add context.url to get full URL string (including query)
+- reduce query parsing instruction
+
 # 1.0.16 - 2 May 2024
 Bug fix:
 - [ratelimit#28](https://github.com/rayriffy/elysia-rate-limit/issues/28) trace hang when using server-timing with rate-limit plugin

@@ -542,25 +542,23 @@ export const composeHandler = ({
 			!destructured.length
 		) {
 			fnLiteral += `if(c.qi !== -1) {
-				c.query = parseQuery(c.path.slice(c.qi + 1).replace(/\\+/g, ' '))
+				c.query = parseQuery(c.url.slice(c.qi + 1).replace(/\\+/g, ' '))
 
-				for(const key of Object.keys(c.query))
-					c.query[key] = decodeURIComponent(c.query[key])
+				// decodeURIComponent is already done in parseQuery function
+				// for(const key of Object.keys(c.query))
+				//  	c.query[key] = decodeURIComponentc.query[key])
 			} else c.query = {}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
-				let url = c.path.slice(c.qi).replace(/\\+/g, ' ')
-
-				console.log(c.path)
+				let url = '&' + c.url.slice(c.qi + 1).replace(/\\+/g, ' ')
 
 				${destructured
 					.map(
 						(name, index) => `
 						${index === 0 ? 'let' : ''} memory = url.indexOf('&${name}=')
-						if(memory === -1) memory = url.indexOf('?${name}=')
 						let a${index}
 
-						if(memory !== -1) {
+						if (memory !== -1) {
 							const start = memory + ${name.length + 2}
 							memory = url.indexOf('&', start)
 
@@ -1114,7 +1112,7 @@ export const composeHandler = ({
 				}
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(be, c.set, c.request)}\n`
+				fnLiteral += `return mapEarlyResponse(be, c.set)}\n`
 			}
 		}
 
@@ -1195,8 +1193,8 @@ export const composeHandler = ({
 			}
 		}
 
-		if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
-		else fnLiteral += `return mapCompactResponse(r, c.request)\n`
+		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
 		const endHandle = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
@@ -1234,15 +1232,15 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${handle}.clone(), c.set, c.request)
+					return mapResponse(${handle}.clone(), c.set)
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(r, c.set, c.request)\n`
-			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
+				fnLiteral += `return mapResponse(r, c.set)\n`
+			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r = await ${handle};\n`
@@ -1265,8 +1263,8 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
-			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
+			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
+			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
 			endHandle()
 
@@ -1282,16 +1280,16 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${handle}.clone(), c.set, c.request)
+					return mapResponse(${handle}.clone(), c.set)
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(${handled}, c.set, c.request)\n`
+				fnLiteral += `return mapResponse(${handled}, c.set)\n`
 			else
-				fnLiteral += `return mapCompactResponse(${handled}, c.request)\n`
+				fnLiteral += `return mapCompactResponse(${handled})\n`
 		}
 	}
 
@@ -1324,7 +1322,7 @@ export const composeHandler = ({
 
 				endUnit()
 
-				fnLiteral += `${name} = mapEarlyResponse(${name}, set, c.request)\n`
+				fnLiteral += `${name} = mapEarlyResponse(${name}, set)\n`
 				fnLiteral += `if (${name}) {`
 				fnLiteral += `return ${name} }\n`
 			}
@@ -1573,7 +1571,7 @@ export const composeGeneralHandler = (
 			${hasTrace ? 'const id = randomId()' : ''}
 
 			const ctx = {
-				request
+				request,
 				store,
 				redirect,
 				set: {
@@ -1644,7 +1642,7 @@ export const composeGeneralHandler = (
 		endReport()
 
 		fnLiteral += init
-		fnLiteral += `\nctx.qi = qi\n ctx.path = path\n`
+		fnLiteral += `\nctx.qi = qi\n ctx.path = path\nctx.url=url`
 	} else {
 		fnLiteral += init
 		fnLiteral += `${hasTrace ? 'const id = randomId()' : ''}
@@ -1653,6 +1651,7 @@ export const composeGeneralHandler = (
 			store,
 			qi,
 			path,
+			url,
 			redirect,
 			set: {
 				headers: ${

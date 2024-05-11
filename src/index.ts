@@ -112,7 +112,7 @@ import type {
     ModelValidator
 } from './types'
 
-type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
+export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 /**
  * ### Elysia Server
