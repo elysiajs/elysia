@@ -2358,6 +2358,7 @@ export default class Elysia<
 		instance.definitions = { ...this.definitions }
 		instance.getServer = () => this.server
 		instance.inference = cloneInference(this.inference)
+		instance.extender = { ...this.extender }
 
 		const isSchema = typeof schemaOrRun === 'object'
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
@@ -2628,6 +2629,7 @@ export default class Elysia<
 		instance.singleton = { ...this.singleton }
 		instance.definitions = { ...this.definitions }
 		instance.inference = cloneInference(this.inference)
+		instance.extender = { ...this.extender }
 
 		const sandbox = run(instance)
 		this.singleton = mergeDeep(this.singleton, instance.singleton) as any

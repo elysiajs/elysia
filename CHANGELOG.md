@@ -1,3 +1,7 @@
+# 1.0.20 - 13 May 2024
+Bug fix:
+- macro is not inherits inside group
+
 # 1.0.19 - 13 May 2024
 Bug fix:
 - remove set.clone spread operator for mapping Response
