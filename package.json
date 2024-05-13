@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -104,7 +104,7 @@
   },
   "devDependencies": {
     "@types/benchmark": "^2.1.5",
-    "@types/bun": "^1.0.8",
+    "@types/bun": "^1.1.2",
     "@types/cookie": "^0.6.0",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
     "@typescript-eslint/parser": "^6.17.0",
@@ -115,7 +115,7 @@
     "expect-type": "^0.16.0",
     "memoirist": "0.1.6",
     "tsup": "^8.0.2",
-    "typescript": "^5.4.2"
+    "typescript": "^5.4.5"
   },
   "peerDependencies": {
     "@sinclair/typebox": ">= 0.31.0",

@@ -46,4 +46,25 @@ describe('Response Headers', () => {
 			alias: 'Abyssal Hunter'
 		})
 	})
+
+	it('set multiple cookie on redirect', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ cookie: { name, name2 }, redirect }) => {
+				name.value = 'a'
+				name2.value = 'b'
+
+				return redirect('/skadi')
+			}
+		)
+
+		const { headers, status } = await app.handle(req('/'))
+
+		expect(status).toBe(301)
+		// @ts-expect-error
+		expect(headers.toJSON()).toEqual({
+			location: '/skadi',
+			'set-cookie': ['name=a', 'name2=b']
+		})
+	})
 })

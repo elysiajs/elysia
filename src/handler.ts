@@ -148,11 +148,12 @@ export const mapResponse = (
 		if (
 			set.headers['Set-Cookie'] &&
 			Array.isArray(set.headers['Set-Cookie'])
-		)
+		) {
 			set.headers = parseSetCookies(
 				new Headers(set.headers) as Headers,
 				set.headers['Set-Cookie']
 			) as any
+		}
 
 		switch (response?.constructor?.name) {
 			case 'String':
@@ -198,20 +199,36 @@ export const mapResponse = (
 				return Response.json(response, set as SetResponse)
 
 			case 'Response':
-				const inherits = { ...set.headers }
+				let isCookieSet = false
 
-				if (hasHeaderShorthand)
-					set.headers = (
-						(response as Response).headers as Headers
-					).toJSON()
+				if (set.headers instanceof Headers)
+					for (const key of set.headers.keys()) {
+						if (key === 'set-cookie') {
+							if (isCookieSet) continue
+
+							isCookieSet = true
+
+							for (const cookie of set.headers.getSetCookie()) {
+								;(response as Response).headers.append(
+									'set-cookie',
+									cookie
+								)
+							}
+						} else
+							(response as Response).headers.append(
+								key,
+								set.headers?.get(key) ?? ''
+							)
+					}
 				else
-					for (const [key, value] of (
-						response as Response
-					).headers.entries())
-						if (key in set.headers) set.headers[key] = value
+					for (const key in set.headers)
+						(response as Response).headers.append(
+							key,
+							set.headers[key]
+						)
 
-				for (const key in inherits)
-					(response as Response).headers.append(key, inherits[key])
+				if ((response as Response).status !== set.status)
+					set.status = (response as Response).status
 
 				return response as Response
 
@@ -241,7 +258,33 @@ export const mapResponse = (
 
 			default:
 				if (response instanceof Response) {
-					const inherits = Object.assign({}, set.headers)
+					let isCookieSet = false
+
+					if (set.headers instanceof Headers)
+						for (const key of set.headers.keys()) {
+							if (key === 'set-cookie') {
+								if (isCookieSet) continue
+
+								isCookieSet = true
+
+								for (const cookie of set.headers.getSetCookie()) {
+									;(response as Response).headers.append(
+										'set-cookie',
+										cookie
+									)
+								}
+							} else
+								(response as Response).headers.append(
+									key,
+									set.headers?.get(key) ?? ''
+								)
+						}
+					else
+						for (const key in set.headers)
+							(response as Response).headers.append(
+								key,
+								set.headers[key]
+							)
 
 					if (hasHeaderShorthand)
 						set.headers = (
@@ -252,12 +295,6 @@ export const mapResponse = (
 							response as Response
 						).headers.entries())
 							if (key in set.headers) set.headers[key] = value
-
-					for (const key in inherits)
-						(response as Response).headers.append(
-							key,
-							inherits[key]
-						)
 
 					return response as Response
 				}
@@ -482,19 +519,33 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as SetResponse)
 
 			case 'Response':
-				const inherits = Object.assign({}, set.headers)
+				let isCookieSet = false
 
-				if (hasHeaderShorthand)
-					// @ts-ignore
-					set.headers = (response as Response).headers.toJSON()
+				if (set.headers instanceof Headers)
+					for (const key of set.headers.keys()) {
+						if (key === 'set-cookie') {
+							if (isCookieSet) continue
+
+							isCookieSet = true
+
+							for (const cookie of set.headers.getSetCookie()) {
+								;(response as Response).headers.append(
+									'set-cookie',
+									cookie
+								)
+							}
+						} else
+							(response as Response).headers.append(
+								key,
+								set.headers?.get(key) ?? ''
+							)
+					}
 				else
-					for (const [key, value] of (
-						response as Response
-					).headers.entries())
-						if (!(key in set.headers)) set.headers[key] = value
-
-				for (const key in inherits)
-					(response as Response).headers.append(key, inherits[key])
+					for (const key in set.headers)
+						(response as Response).headers.append(
+							key,
+							set.headers[key]
+						)
 
 				if ((response as Response).status !== set.status)
 					set.status = (response as Response).status
@@ -529,23 +580,36 @@ export const mapEarlyResponse = (
 
 			default:
 				if (response instanceof Response) {
-					const inherits = { ...set.headers }
+					let isCookieSet = false
 
-					if (hasHeaderShorthand)
-						set.headers = (
-							(response as Response).headers as Headers
-						).toJSON()
+					if (set.headers instanceof Headers)
+						for (const key of set.headers.keys()) {
+							if (key === 'set-cookie') {
+								if (isCookieSet) continue
+
+								isCookieSet = true
+
+								for (const cookie of set.headers.getSetCookie()) {
+									;(response as Response).headers.append(
+										'set-cookie',
+										cookie
+									)
+								}
+							} else
+								(response as Response).headers.append(
+									key,
+									set.headers?.get(key) ?? ''
+								)
+						}
 					else
-						for (const [key, value] of (
-							response as Response
-						).headers.entries())
-							if (key in set.headers) set.headers[key] = value
+						for (const key in set.headers)
+							(response as Response).headers.append(
+								key,
+								set.headers[key]
+							)
 
-					for (const key in inherits)
-						(response as Response).headers.append(
-							key,
-							inherits[key]
-						)
+					if ((response as Response).status !== set.status)
+						set.status = (response as Response).status
 
 					return response as Response
 				}
@@ -775,14 +839,11 @@ export const mapCompactResponse = (
 				const code = (response as any).charCodeAt(0)
 
 				if (code === 123 || code === 91) {
-					return new Response(
-						JSON.stringify(response),
-						{
-							headers: {
-								'Content-Type': 'application/json'
-							}
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'Content-Type': 'application/json'
 						}
-					) as any
+					}) as any
 				}
 			}
 

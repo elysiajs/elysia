@@ -2,16 +2,19 @@ import { Elysia } from '../src'
 import { req } from '../test/utils'
 
 const app = new Elysia({ precompile: true })
-	.get('/hello', ({ cookie: { name } }) => {
-		name.value = 'SaltyAom'
-		name.partitioned = false
+	.get('/hello', ({ cookie: { name, name2 }, redirect }) => {
+		const a = new Response("A")
 
-		return `Hello, ${name}!`
+		// a.status = 501
+
+		return a
 	})
-	.listen(3000)
+	.get('/world', () => {
+		return 'a'
+	})
 
-// console.log(app.routes[0].composed.toString())
+console.log(app.routes[0].composed.toString())
 
-app.handle(req('/hello?name=hello+123'))
-	.then((x) => x.text())
-	.then((x) => console.log({ x }))
+app.handle(new Request('http://e.ly/hello'))
+	.then((x) => x.status)
+	.then(console.log)
