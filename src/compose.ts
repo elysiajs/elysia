@@ -30,6 +30,7 @@ import {
 	ERROR_CODE,
 	ELYSIA_RESPONSE
 } from './error'
+import { ELYSIA_TRACE } from './trace'
 
 import { Sucrose, hasReturn, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
@@ -43,7 +44,6 @@ import type {
 	TraceEvent
 } from './types'
 import type { TypeCheck } from './type-system'
-import { ELYSIA_TRACE } from './trace'
 
 const headersHasToJSON = (new Headers() as Headers).toJSON
 
@@ -122,10 +122,7 @@ const createReport = ({
 		// )
 
 		return () => {
-			for (let i = 0; i < total; i++)
-				addFn(
-					`\nreport()\n`
-				)
+			for (let i = 0; i < total; i++) addFn(`\nreport()\n`)
 		}
 	}
 }
@@ -583,8 +580,7 @@ export const composeHandler = ({
 		hasHeaders ||
 		(isHandleFn && hasDefaultHeaders)
 
-	if(hasTrace)
-	   fnLiteral += '\nconst id = c.$$requestId\n'
+	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
 
 	const report = createReport({
 		hasTrace,
@@ -1059,9 +1055,9 @@ export const composeHandler = ({
 				fnLiteral += `if(be !== undefined) {\n`
 				endBeforeHandle()
 				if (hooks.afterHandle?.length) {
-    				const endAfterHandle = report('afterHandle', {
-    					unit: hooks.transform.length
-    				})
+					const endAfterHandle = report('afterHandle', {
+						unit: hooks.transform.length
+					})
 					report('handle', {
 						name: isHandleFn
 							? (handler as Function).name
@@ -1238,8 +1234,7 @@ export const composeHandler = ({
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
-			} else if (hasSet)
-				fnLiteral += `return mapResponse(r, c.set)\n`
+			} else if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
@@ -1288,8 +1283,7 @@ export const composeHandler = ({
 				fnLiteral += '\n'
 			} else if (hasSet)
 				fnLiteral += `return mapResponse(${handled}, c.set)\n`
-			else
-				fnLiteral += `return mapCompactResponse(${handled})\n`
+			else fnLiteral += `return mapCompactResponse(${handled})\n`
 		}
 	}
 
@@ -1449,13 +1443,6 @@ export const composeHandler = ({
 export const composeGeneralHandler = (
 	app: Elysia<any, any, any, any, any, any, any, any>
 ) => {
-	// const inference = {
-	// 	// @ts-expect-error private
-	// 	...app.inference,
-	// 	// @ts-expect-error private
-	// 	queries: [...app.inference.queries]
-	// }
-
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
@@ -1512,16 +1499,6 @@ export const composeGeneralHandler = (
 
 	const maybeAsync = app.event.request.some(isAsync)
 
-	const init = `\n
-	const url = request.url
-	const s = url.indexOf('/', 11)
-	const qi = url.indexOf('?', s + 1)
-	let path
-	if(qi === -1)
-		path = url.substring(s)
-	else
-		path = url.substring(s, qi)\n`
-
 	fnLiteral += `const {
 		app,
 		mapEarlyResponse,
@@ -1566,86 +1543,16 @@ export const composeGeneralHandler = (
 
 	if (app.event.request.length) fnLiteral += `let re`
 
-	if (app.event.request.length) {
-		fnLiteral += `
-			${hasTrace ? 'const id = randomId()' : ''}
+	fnLiteral += `\nconst url = request.url
+		const s = url.indexOf('/', 11)
+		const qi = url.indexOf('?', s + 1)
+		let path
+		if(qi === -1)
+			path = url.substring(s)
+		else
+			path = url.substring(s, qi)\n`
 
-			const ctx = {
-				request,
-				store,
-				redirect,
-				set: {
-					headers: ${
-						Object.keys(defaultHeaders ?? {}).length
-							? 'Object.assign({}, app.setHeaders)'
-							: '{}'
-					},
-					status: 200
-				},
-				error
-				${hasTrace ? ', $$requestId: id' : ''}
-				${decoratorsLiteral}
-			}\n`
-
-		if (app.event.trace.length)
-			fnLiteral += `ctx[ELYSIA_TRACE] = [${app.event.trace
-				.map((_, i) => `tr${i}(ctx)`)
-				.join(',')}]\n`
-
-		const report = createReport({
-			context: 'ctx',
-			hasTrace,
-			total: app.event.trace.length,
-			addFn: (word) => {
-				fnLiteral += word
-			}
-		})
-
-		const endReport = report('request', {
-			attribute: 'ctx',
-			unit: app.event.request.length
-		})
-
-		fnLiteral += `\n try {\n`
-
-		for (let i = 0; i < app.event.request.length; i++) {
-			const hook = app.event.request[i]
-			const withReturn = hasReturn(hook)
-			const maybeAsync = isAsync(hook)
-
-			const endUnit = report('request.unit', {
-				name: app.event.request[i].fn.name
-			})
-
-			if (withReturn) {
-				fnLiteral += `re = mapEarlyResponse(
-					${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
-					ctx.set,
-					request
-				)\n`
-
-				endUnit()
-
-				fnLiteral += `if(re !== undefined) return re\n`
-			} else {
-				fnLiteral += `${
-					maybeAsync ? 'await' : ''
-				} onRequest[${i}](ctx)\n`
-				endUnit()
-			}
-		}
-
-		fnLiteral += `} catch (error) {
-			return app.handleError(ctx, error)
-		}`
-
-		endReport()
-
-		fnLiteral += init
-		fnLiteral += `\nctx.qi = qi\n ctx.path = path\nctx.url=url`
-	} else {
-		fnLiteral += init
-		fnLiteral += `${hasTrace ? 'const id = randomId()' : ''}
+	fnLiteral += `${hasTrace ? 'const id = randomId()' : ''}
 		const ctx = {
 			request,
 			store,
@@ -1662,29 +1569,62 @@ export const composeGeneralHandler = (
 				status: 200
 			},
 			error
+			${
+				app.event.trace.length
+					? `,trace: [${app.event.trace
+							.map((_, i) => `tr${i}(ctx)`)
+							.join(',')}]`
+					: ''
+			}
 			${hasTrace ? ',$$requestId: id' : ''}
 			${decoratorsLiteral}
 		}\n`
 
-		if (app.event.trace.length)
-			fnLiteral += `ctx[ELYSIA_TRACE] = [${app.event.trace
-				.map((_, i) => `tr${i}(ctx)`)
-				.join(',')}]\n`
+	const report = createReport({
+		context: 'ctx',
+		hasTrace,
+		total: app.event.trace.length,
+		addFn: (word) => {
+			fnLiteral += word
+		}
+	})
 
-		const report = createReport({
-			context: 'ctx',
-			hasTrace,
-			total: app.event.trace.length,
-			addFn: (word) => {
-				fnLiteral += word
-			}
+	const endReport = report('request', {
+		attribute: 'ctx',
+		unit: app.event.request.length
+	})
+
+	fnLiteral += `\n try {\n`
+
+	for (let i = 0; i < app.event.request.length; i++) {
+		const hook = app.event.request[i]
+		const withReturn = hasReturn(hook)
+		const maybeAsync = isAsync(hook)
+
+		const endUnit = report('request.unit', {
+			name: app.event.request[i].fn.name
 		})
 
-		report('request', {
-			unit: app.event.request.length,
-			attribute: ''
-		})()
+		if (withReturn) {
+			fnLiteral += `re = mapEarlyResponse(
+				${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
+				ctx.set,
+				request
+			)\n`
+
+			endUnit()
+			fnLiteral += `if(re !== undefined) return re\n`
+		} else {
+			fnLiteral += `${maybeAsync ? 'await' : ''} onRequest[${i}](ctx)\n`
+			endUnit()
+		}
 	}
+
+	fnLiteral += `} catch (error) {
+		return app.handleError(ctx, error)
+	}`
+
+	endReport()
 
 	const wsPaths = app.router.static.ws
 	const wsRouter = app.router.ws
@@ -1733,10 +1673,8 @@ export const composeGeneralHandler = (
 
 	const handleError = composeErrorHandler(app) as any
 
-	// @ts-ignore
+	// @ts-expect-error
 	app.handleError = handleError
-
-	// console.log(fnLiteral)
 
 	return Function(
 		'data',
