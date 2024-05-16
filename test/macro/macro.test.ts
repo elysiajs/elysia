@@ -327,7 +327,6 @@ describe('Macro', () => {
 					.get('/test3', () => 'hello test3')
 			)
 			.get('/hello', () => 'hello', { auth: 'teacher' })
-			.listen(3000)
 
 		await Promise.all(
 			['/test1', '/test2', '/test3'].map((x) => app.handle(req(x)))
@@ -413,5 +412,71 @@ describe('Macro', () => {
 		await app.handle(req('/'))
 
 		console.log(called)
+	})
+
+	it('inherits macro in group', async () => {
+		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+			isAuth(shouldAuth: boolean) {
+				if (shouldAuth) {
+					onBeforeHandle(({ cookie: { session }, error }) => {
+						if (!session.value) return error(418)
+					})
+				}
+			}
+		}))
+
+		const app = new Elysia().use(authGuard).group('/posts', (app) =>
+			app.get('/', () => 'a', {
+				isAuth: true
+			})
+		)
+
+		const status = await app.handle(req('/posts')).then((x) => x.status)
+
+		expect(status).toBe(418)
+	})
+
+	it('inherits macro in guard', async () => {
+		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+			isAuth(shouldAuth: boolean) {
+				if (shouldAuth) {
+					onBeforeHandle(({ cookie: { session }, error }) => {
+						if (!session.value) return error(418)
+					})
+				}
+			}
+		}))
+
+		const app = new Elysia().use(authGuard).guard({}, (app) =>
+			app.get('/posts', () => 'a', {
+				isAuth: true
+			})
+		)
+
+		const status = await app.handle(req('/posts')).then((x) => x.status)
+
+		expect(status).toBe(418)
+	})
+
+	it('inherits macro in group', async () => {
+		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+			isAuth(shouldAuth: boolean) {
+				if (shouldAuth) {
+					onBeforeHandle(({ cookie: { session }, error }) => {
+						if (!session.value) return error(418)
+					})
+				}
+			}
+		}))
+
+		const app = new Elysia().use(authGuard).use((app) =>
+			app.get('/posts', () => 'a', {
+				isAuth: true
+			})
+		)
+
+		const status = await app.handle(req('/posts')).then((x) => x.status)
+
+		expect(status).toBe(418)
 	})
 })

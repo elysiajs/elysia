@@ -225,33 +225,6 @@ export const findParameterReference = (
 	return root
 }
 
-/**
- * Find inference from parameter
- *
- * @param parameter stringified parameter
- */
-export const findTraceParameterReference = (
-	parameter: string,
-	inference: Sucrose.TraceInference
-) => {
-	const root = retrieveRootParamters(parameter)
-
-	if (!inference.request && root.includes('request')) inference.request = true
-	if (!inference.parse && root.includes('parse')) inference.parse = true
-	if (!inference.transform && root.includes('transform'))
-		inference.transform = true
-	if (!inference.handle && root.includes('handle')) inference.handle = true
-	if (!inference.beforeHandle && root.includes('beforeHandle'))
-		inference.beforeHandle = true
-	if (!inference.afterHandle && root.includes('afterHandle'))
-		inference.afterHandle = true
-	if (!inference.error && root.includes('error')) inference.error = true
-	if (!inference.context && root.includes('context')) inference.context = true
-	if (!inference.store && root.includes('store')) inference.store = true
-
-	return root
-}
-
 const findEndIndex = (
 	type: string,
 	content: string,
