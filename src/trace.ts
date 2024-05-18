@@ -37,13 +37,21 @@ export const createTracer = (callback: TraceHandler) => {
 		// ? This is pass to trace listener
 		callback({
 			context,
+			// @ts-ignore
 			request,
+			// @ts-ignore
 			parse,
+			// @ts-ignore
 			transform,
+			// @ts-ignore
 			beforeHandle,
+			// @ts-ignore
 			handle,
+			// @ts-ignore
 			afterHandle,
+			// @ts-ignore
 			error,
+			// @ts-ignore
 			response
 		})
 

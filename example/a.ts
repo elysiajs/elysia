@@ -1,18 +1,9 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Type, Static, StaticDecode, StaticEncode } from '@sinclair/typebox'
 
-const a = new Elysia().macro(({ onBeforeHandle }) => {
-    return {
-        a<A extends string>(hi: A) {
-            return {
-                derive() {
-                    return 'a'
-                }
-            }
-        }
-    }
-})
+const T = Type.Array(Type.Number(), { uniqueItems: true })
 
-// app.handle(req('/hello?name=hello+123'))
-// 	.then((x) => x.text())
-// 	.then((x) => console.log({ x }))
+// const T = Type.Transform(Type.Array(Type.Number(), { uniqueItems: true }))         
+//   .Decode(value => new Set(value))
+//   .Encode(value => [...value])
+
+type D = StaticDecode<typeof T>   

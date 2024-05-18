@@ -130,8 +130,8 @@ export type ObjectValues<T extends object> = T[keyof T]
 type IsPathParameter<Part extends string> = Part extends `:${infer Parameter}`
 	? Parameter
 	: Part extends `*`
-		? '*'
-		: never
+	? '*'
+	: never
 
 export type GetPathParameter<Path extends string> =
 	Path extends `${infer A}/${infer B}`
@@ -161,12 +161,12 @@ export type Reconcile<A extends Object, B extends Object> = {
 	? {} extends Collision
 		? {
 				[key in keyof B]: B[key]
-			}
+		  }
 		: Prettify<
 				Collision & {
 					[key in keyof B]: B[key]
 				}
-			>
+		  >
 	: never
 
 export interface SingletonBase {
@@ -192,6 +192,7 @@ export type RouteBase = Record<string, unknown>
 export interface MetadataBase {
 	schema: RouteSchema
 	macro: BaseMacro
+	macroFn: BaseMacroFn
 }
 
 export interface RouteSchema {
@@ -213,14 +214,14 @@ export type UnwrapSchema<
 > = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
-		? Schema extends OptionalField
-			? Prettify<Partial<Static<Schema>>>
-			: Static<Schema>
-		: Schema extends string
-			? Definitions extends Record<Schema, infer NamedSchema>
-				? NamedSchema
-				: Definitions
-			: unknown
+	? Schema extends OptionalField
+		? Prettify<Partial<Static<Schema>>>
+		: Static<Schema>
+	: Schema extends string
+	? Definitions extends Record<Schema, infer NamedSchema>
+		? NamedSchema
+		: Definitions
+	: unknown
 
 export type UnwrapBodySchema<
 	Schema extends TSchema | string | undefined,
@@ -228,14 +229,14 @@ export type UnwrapBodySchema<
 > = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
-		? Schema extends OptionalField
-			? Prettify<Partial<Static<Schema>>> | null
-			: Static<Schema>
-		: Schema extends string
-			? Definitions extends Record<Schema, infer NamedSchema>
-				? NamedSchema
-				: Definitions
-			: unknown
+	? Schema extends OptionalField
+		? Prettify<Partial<Static<Schema>>> | null
+		: Static<Schema>
+	: Schema extends string
+	? Definitions extends Record<Schema, infer NamedSchema>
+		? NamedSchema
+		: Definitions
+	: unknown
 
 export type SuccessfulResponse<T = unknown> =
 	| { 200: T }
@@ -261,13 +262,13 @@ export interface UnwrapRoute<
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends SuccessfulResponse<TAnySchema | string>
-			? {
-					[k in keyof Schema['response']]: UnwrapSchema<
-						Schema['response'][k],
-						Definitions
-					>
-				} // UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
-			: unknown | void
+		? {
+				[k in keyof Schema['response']]: UnwrapSchema<
+					Schema['response'][k],
+					Definitions
+				>
+		  } // UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
+		: unknown | void
 }
 
 export interface UnwrapGroupGuardRoute<
@@ -282,30 +283,36 @@ export interface UnwrapGroupGuardRoute<
 	> extends infer A extends Record<string, unknown>
 		? A
 		: undefined
-	query: UnwrapSchema<Schema['query'], Definitions> extends infer A extends
-		Record<string, unknown>
+	query: UnwrapSchema<
+		Schema['query'],
+		Definitions
+	> extends infer A extends Record<string, unknown>
 		? A
 		: undefined
-	params: UnwrapSchema<Schema['params'], Definitions> extends infer A extends
-		Record<string, unknown>
+	params: UnwrapSchema<
+		Schema['params'],
+		Definitions
+	> extends infer A extends Record<string, unknown>
 		? A
 		: Path extends `${string}/${':' | '*'}${string}`
-			? Record<GetPathParameter<Path>, string>
-			: never
-	cookie: UnwrapSchema<Schema['cookie'], Definitions> extends infer A extends
-		Record<string, unknown>
+		? Record<GetPathParameter<Path>, string>
+		: never
+	cookie: UnwrapSchema<
+		Schema['cookie'],
+		Definitions
+	> extends infer A extends Record<string, unknown>
 		? A
 		: undefined
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
-					[k in string]: TSchema | string
-			  }
-			? UnwrapSchema<
-					Schema['response'][keyof Schema['response']],
-					Definitions
-				>
-			: unknown | void
+				[k in string]: TSchema | string
+		  }
+		? UnwrapSchema<
+				Schema['response'][keyof Schema['response']],
+				Definitions
+		  >
+		: unknown | void
 }
 
 export type HookContainer<T extends Function = Function> = {
@@ -441,10 +448,16 @@ export type InlineHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string = '',
+	MacroContext = {}
 > =
 	| ((
-			context: Context<Route, Singleton, Path>
+			context: MacroContext extends Record<
+				string | number | symbol,
+				unknown
+			>
+				? Prettify<MacroContext & Context<Route, Singleton, Path>>
+				: Context<Route, Singleton, Path>
 	  ) => Route['response'] extends SuccessfulResponse
 			?
 					| Response
@@ -464,8 +477,8 @@ export type InlineHandler<
 	| (unknown extends Route['response']
 			? string | number | Object
 			: Route['response'] extends SuccessfulResponse
-				? Route['response'][keyof Route['response']]
-				: Route['response'])
+			? Route['response'][keyof Route['response']]
+			: Route['response'])
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
@@ -476,12 +489,11 @@ export type OptionalHandler<
 		resolve: {}
 	},
 	Path extends string = ''
-> =
-	Handler<Route, Singleton, Path> extends (
-		context: infer Context
-	) => infer Returned
-		? (context: Context) => Returned | MaybePromise<void>
-		: never
+> = Handler<Route, Singleton, Path> extends (
+	context: infer Context
+) => infer Returned
+	? (context: Context) => Returned | MaybePromise<void>
+	: never
 
 export type AfterHandler<
 	in out Route extends RouteSchema = {},
@@ -492,18 +504,17 @@ export type AfterHandler<
 		resolve: {}
 	},
 	Path extends string = ''
-> =
-	Handler<Route, Singleton, Path> extends (
-		context: infer Context
-	) => infer Returned
-		? (
-				context: Prettify<
-					{
-						response: Route['response']
-					} & Context
-				>
-			) => Returned | MaybePromise<void>
-		: never
+> = Handler<Route, Singleton, Path> extends (
+	context: infer Context
+) => infer Returned
+	? (
+			context: Prettify<
+				{
+					response: Route['response']
+				} & Context
+			>
+	  ) => Returned | MaybePromise<void>
+	: never
 
 export type MapResponse<
 	in out Route extends RouteSchema = {},
@@ -587,7 +598,7 @@ export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
 				skip: boolean
 				end: Promise<TraceProcess<'end'>>
 				children: Promise<TraceProcess<'begin'>>[]
-			}>
+		  }>
 		: number
 
 export type TraceHandler<
@@ -783,7 +794,7 @@ export type LocalHook<
 				params: undefined extends Schema['params']
 					? Record<GetPathParameter<Path>, string>
 					: Schema['params']
-			}
+		  }
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**
@@ -894,10 +905,11 @@ export type Checksum = {
 
 export type BaseMacro = Record<
 	string,
-	Record<string, unknown> | ((...a: any) => unknown)
+	string | number | boolean | Object | undefined | null
 >
+export type BaseMacroFn = Record<string, (...a: any) => unknown>
 
-export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
+export type MacroToProperty<in out T extends BaseMacroFn> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
 			? Params | undefined
@@ -977,10 +989,10 @@ type _CreateEden<
 > = Path extends `${infer Start}/${infer Rest}`
 	? {
 			[x in Start]: _CreateEden<Rest, Property>
-		}
+	  }
 	: {
 			[x in Path]: Property
-		}
+	  }
 
 export type CreateEden<
 	Path extends string,
@@ -988,8 +1000,8 @@ export type CreateEden<
 > = Path extends `/${infer Rest}`
 	? _CreateEden<Rest, Property>
 	: Path extends ''
-		? _CreateEden<'index', Property>
-		: _CreateEden<Path, Property>
+	? _CreateEden<'index', Property>
+	: _CreateEden<Path, Property>
 
 export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 	...a: any[]
@@ -1001,7 +1013,7 @@ type _ComposeElysiaResponse<Response, Handle> = Prettify<
 	unknown extends Response
 		? {
 				200: Exclude<Handle, { [ELYSIA_RESPONSE]: any }>
-			} & {
+		  } & {
 				[ErrorResponse in Extract<
 					Handle,
 					{ response: any }
@@ -1010,12 +1022,12 @@ type _ComposeElysiaResponse<Response, Handle> = Prettify<
 				}
 					? Status
 					: never]: ErrorResponse['response']
-			}
+		  }
 		: Response extends SuccessfulResponse
-			? Response
-			: {
-					200: Response
-				}
+		? Response
+		: {
+				200: Response
+		  }
 >
 
 export type MergeElysiaInstances<
@@ -1035,6 +1047,7 @@ export type MergeElysiaInstances<
 	Metadata extends MetadataBase = {
 		schema: {}
 		macro: {}
+		macroFn: {}
 	},
 	Routes extends RouteBase = {}
 > = Instances extends [
@@ -1050,7 +1063,7 @@ export type MergeElysiaInstances<
 				Definitions,
 				Metadata,
 				Routes
-			>
+		  >
 		: MergeElysiaInstances<
 				Rest,
 				Prefix,
@@ -1062,7 +1075,7 @@ export type MergeElysiaInstances<
 					(Prefix extends ``
 						? Current['_routes']
 						: AddPrefix<Prefix, Current['_routes']>)
-			>
+		  >
 	: Elysia<
 			Prefix,
 			Scoped,
@@ -1079,9 +1092,10 @@ export type MergeElysiaInstances<
 			{
 				schema: Prettify<Metadata['schema']>
 				macro: Prettify<Metadata['macro']>
+				macroFn: Prettify<Metadata['macroFn']>
 			},
 			Routes
-		>
+	  >
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
 
@@ -1123,9 +1137,7 @@ export interface ModelValidatorError extends ValueError {
 // @ts-ignore trust me bro
 export interface ModelValidator<T> extends TypeCheck<T> {
 	parse(a: T): T
-	safeParse(
-		a: T
-	):
+	safeParse(a: T):
 		| { success: true; data: T; error: null }
 		| {
 				success: true
@@ -1134,3 +1146,27 @@ export interface ModelValidator<T> extends TypeCheck<T> {
 				errors: ModelValidatorError[]
 		  }
 }
+
+export type UnionToIntersect<U> = (
+	U extends unknown ? (arg: U) => 0 : never
+) extends (arg: infer I) => 0
+	? I
+	: never
+
+export type ResolveMacroContext<
+	Macro extends BaseMacro,
+	MacroFn extends BaseMacroFn
+> = UnionToIntersect<
+	{
+		[K in keyof Macro]-?: undefined extends Macro[K]
+			? never
+			: K extends keyof MacroFn
+			? ReturnType<MacroFn[K]> extends infer A extends Record<
+					string | number | symbol,
+					unknown
+			  >
+				? A
+				: never
+			: never
+	}[keyof Macro]
+>

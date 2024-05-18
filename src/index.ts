@@ -109,7 +109,9 @@ import type {
 	MacroQueue,
 	EphemeralType,
 	ExcludeElysiaResponse,
-    ModelValidator
+    ModelValidator,
+	BaseMacroFn,
+	ResolveMacroContext
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -144,6 +146,7 @@ export default class Elysia<
 	const in out Metadata extends MetadataBase = {
 		schema: {}
 		macro: {}
+		macroFn: {}
 	},
 	const out Routes extends RouteBase = {},
 	// ? scoped
@@ -2297,6 +2300,7 @@ export default class Elysia<
 				{
 					schema: Schema
 					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
 				},
 				{},
 				Ephemeral,
@@ -2479,6 +2483,7 @@ export default class Elysia<
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
 				},
 				{},
 				Ephemeral,
@@ -2526,6 +2531,7 @@ export default class Elysia<
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
 				},
 				{},
 				Ephemeral,
@@ -3232,7 +3238,7 @@ export default class Elysia<
 		return this
 	}
 
-	macro<const NewMacro extends BaseMacro>(
+	macro<const NewMacro extends BaseMacroFn>(
 		macro: (
 			route: MacroManager<
 				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema'],
@@ -3251,6 +3257,7 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
+			macroFn: Metadata['macroFn'] & NewMacro
 		},
 		Routes,
 		Ephemeral,
@@ -3377,13 +3384,15 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
-			`${BasePath}${Path extends '/' ? '' : Path}`
+			`${BasePath}${Path extends '/' ? '' : Path}`,
+			ResolveMacroContext<Macro, Metadata['macroFn']>
 		>
 	>(
 		path: Path,
@@ -3396,7 +3405,7 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
 			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
@@ -5337,7 +5346,6 @@ export type {
 	UnwrapSchema,
 	TraceHandler,
 	TraceProcess,
-	TraceReporter,
 	TraceStream,
 	Checksum,
 	DocumentDecoration,
