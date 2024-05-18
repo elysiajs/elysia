@@ -8,7 +8,9 @@ import type {
 	Static,
 	TAnySchema,
 	TNull,
-	TUndefined
+	TUndefined,
+	StaticDecode,
+	OptionalKind
 } from '@sinclair/typebox'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
@@ -24,7 +26,6 @@ import type {
 	ParseError,
 	ValidationError
 } from './error'
-import { OptionalKind } from '@sinclair/typebox'
 
 type PartialServe = Partial<Serve>
 
@@ -216,7 +217,7 @@ export type UnwrapSchema<
 	: Schema extends TSchema
 	? Schema extends OptionalField
 		? Prettify<Partial<Static<Schema>>>
-		: Static<Schema>
+		: StaticDecode<Schema>
 	: Schema extends string
 	? Definitions extends Record<Schema, infer NamedSchema>
 		? NamedSchema
@@ -231,7 +232,7 @@ export type UnwrapBodySchema<
 	: Schema extends TSchema
 	? Schema extends OptionalField
 		? Prettify<Partial<Static<Schema>>> | null
-		: Static<Schema>
+		: StaticDecode<Schema>
 	: Schema extends string
 	? Definitions extends Record<Schema, infer NamedSchema>
 		? NamedSchema
