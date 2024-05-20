@@ -7,7 +7,7 @@ import type { Context } from './context'
 
 import { parse as parseQuery } from 'fast-querystring'
 
-import { signCookie } from './utils'
+import { signCookie, redirect } from './utils'
 import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
@@ -44,7 +44,8 @@ export const createDynamicHandler =
 				store: app.singleton.store,
 				request,
 				path,
-				qi
+				qi,
+				redirect
 			}
 		) as unknown as Context
 

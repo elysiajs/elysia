@@ -1,70 +1,80 @@
 import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
-import { req } from '../utils'
+import { req, namedElysiaIt } from '../utils'
 
-describe('Response Headers', () => {
-	it('handle redirect', async () => {
-		const app = new Elysia().get('/', ({ redirect }) => redirect('/skadi'))
+async function handle_redirect(this: Elysia) {
+	const app = this.get('/', ({ redirect }) => redirect('/skadi'))
 
-		const { headers, status } = await app.handle(req('/'))
+	const { headers, status } = await app.handle(req('/'))
 
-		expect(status).toBe(301)
-		// @ts-expect-error
-		expect(headers.toJSON()).toEqual({
-			location: '/skadi'
-		})
+	expect(status).toBe(301)
+	// @ts-expect-error
+	expect(headers.toJSON()).toEqual({
+		location: '/skadi'
+	})
+}
+
+async function handle_redirect_status(this: Elysia) {
+	const app = this.get('/', ({ redirect }) => redirect('/skadi', 302))
+
+	const { headers, status } = await app.handle(req('/'))
+
+	expect(status).toBe(302)
+	// @ts-expect-error
+	expect(headers.toJSON()).toEqual({
+		location: '/skadi'
+	})
+}
+
+async function add_set_headers_to_redirect(this: Elysia) {
+	const app = new Elysia().get('/', ({ redirect, set }) => {
+		set.headers.alias = 'Abyssal Hunter'
+
+		return redirect('/skadi')
 	})
 
-	it('handle redirect status', async () => {
-		const app = new Elysia().get('/', ({ redirect }) =>
-			redirect('/skadi', 302)
-		)
+	const { headers, status } = await app.handle(req('/'))
 
-		const { headers, status } = await app.handle(req('/'))
-
-		expect(status).toBe(302)
-		// @ts-expect-error
-		expect(headers.toJSON()).toEqual({
-			location: '/skadi'
-		})
+	expect(status).toBe(301)
+	// @ts-expect-error
+	expect(headers.toJSON()).toEqual({
+		location: '/skadi',
+		alias: 'Abyssal Hunter'
 	})
+}
 
-	it('add set.headers to redirect', async () => {
-		const app = new Elysia().get('/', ({ redirect, set }) => {
-			set.headers.alias = 'Abyssal Hunter'
+async function set_multiple_cookie_on_redirect(this: Elysia) {
+	const app = new Elysia().get(
+		'/',
+		({ cookie: { name, name2 }, redirect }) => {
+			name.value = 'a'
+			name2.value = 'b'
 
 			return redirect('/skadi')
-		})
+		}
+	)
 
-		const { headers, status } = await app.handle(req('/'))
+	const { headers, status } = await app.handle(req('/'))
 
-		expect(status).toBe(301)
-		// @ts-expect-error
-		expect(headers.toJSON()).toEqual({
-			location: '/skadi',
-			alias: 'Abyssal Hunter'
-		})
+	expect(status).toBe(301)
+	// @ts-expect-error
+	expect(headers.toJSON()).toEqual({
+		location: '/skadi',
+		'set-cookie': ['name=a', 'name2=b']
 	})
+}
 
-	it('set multiple cookie on redirect', async () => {
-		const app = new Elysia().get(
-			'/',
-			({ cookie: { name, name2 }, redirect }) => {
-				name.value = 'a'
-				name2.value = 'b'
+describe('Response Headers: `aot: true`', () => {
+	namedElysiaIt(handle_redirect, { aot: true })
+	namedElysiaIt(handle_redirect_status, { aot: true })
+	namedElysiaIt(add_set_headers_to_redirect, { aot: true })
+	namedElysiaIt(set_multiple_cookie_on_redirect, { aot: true })
+})
 
-				return redirect('/skadi')
-			}
-		)
-
-		const { headers, status } = await app.handle(req('/'))
-
-		expect(status).toBe(301)
-		// @ts-expect-error
-		expect(headers.toJSON()).toEqual({
-			location: '/skadi',
-			'set-cookie': ['name=a', 'name2=b']
-		})
-	})
+describe('Response Headers: `aot: false`', () => {
+	namedElysiaIt(handle_redirect, { aot: false })
+	namedElysiaIt(handle_redirect_status, { aot: false })
+	namedElysiaIt(add_set_headers_to_redirect, { aot: false })
+	namedElysiaIt(set_multiple_cookie_on_redirect, { aot: false })
 })

@@ -1,3 +1,6 @@
+import { it } from 'bun:test'
+import { Elysia, ElysiaConfig } from '../src'
+
 export const req = (path: string, options?: RequestInit) =>
 	new Request(`http://localhost${path}`, options)
 
@@ -49,3 +52,10 @@ export const post = (path: string, body: Record<string, any>) =>
 
 export const delay = (delay: number) =>
 	new Promise((resolve) => setTimeout(resolve, delay))
+
+export const namedElysiaIt = (
+	fn: (this: Elysia) => void | Promise<void>,
+	config?: ElysiaConfig<'', false>
+) => {
+	it(fn.name.split('_').join(' '), fn.bind(new Elysia(config)))
+}
