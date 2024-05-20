@@ -42,10 +42,10 @@ export const createDynamicHandler =
 				set,
 				// @ts-expect-error
 				store: app.singleton.store,
+				redirect,
 				request,
 				path,
-				qi,
-				redirect
+				qi
 			}
 		) as unknown as Context
 
@@ -360,8 +360,7 @@ export const createDynamicHandler =
 					const properties = validator?.cookie?.schema?.properties
 
 					for (const name of cookieMeta.sign) {
-						if (!(name in properties))
-							continue
+						if (!(name in properties)) continue
 
 						if (context.set.cookie[name]?.value) {
 							context.set.cookie[name].value = await signCookie(

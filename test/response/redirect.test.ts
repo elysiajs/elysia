@@ -1,7 +1,20 @@
-import { Elysia } from '../../src'
-
-import { describe, expect, it } from 'bun:test'
+import { describe, expect } from 'bun:test'
+import { type Elysia } from '../../src'
 import { req, namedElysiaIt } from '../utils'
+
+describe('Response Headers: `aot: true`', () => {
+	namedElysiaIt(handle_redirect, { aot: true })
+	namedElysiaIt(handle_redirect_status, { aot: true })
+	namedElysiaIt(add_set_headers_to_redirect, { aot: true })
+	namedElysiaIt(set_multiple_cookie_on_redirect, { aot: true })
+})
+
+describe('Response Headers: `aot: false`', () => {
+	namedElysiaIt(handle_redirect, { aot: false })
+	namedElysiaIt(handle_redirect_status, { aot: false })
+	namedElysiaIt(add_set_headers_to_redirect, { aot: false })
+	namedElysiaIt(set_multiple_cookie_on_redirect, { aot: false })
+})
 
 async function handle_redirect(this: Elysia) {
 	const app = this.get('/', ({ redirect }) => redirect('/skadi'))
@@ -28,7 +41,7 @@ async function handle_redirect_status(this: Elysia) {
 }
 
 async function add_set_headers_to_redirect(this: Elysia) {
-	const app = new Elysia().get('/', ({ redirect, set }) => {
+	const app = this.get('/', ({ redirect, set }) => {
 		set.headers.alias = 'Abyssal Hunter'
 
 		return redirect('/skadi')
@@ -45,15 +58,12 @@ async function add_set_headers_to_redirect(this: Elysia) {
 }
 
 async function set_multiple_cookie_on_redirect(this: Elysia) {
-	const app = new Elysia().get(
-		'/',
-		({ cookie: { name, name2 }, redirect }) => {
-			name.value = 'a'
-			name2.value = 'b'
+	const app = this.get('/', ({ cookie: { name, name2 }, redirect }) => {
+		name.value = 'a'
+		name2.value = 'b'
 
-			return redirect('/skadi')
-		}
-	)
+		return redirect('/skadi')
+	})
 
 	const { headers, status } = await app.handle(req('/'))
 
@@ -64,17 +74,3 @@ async function set_multiple_cookie_on_redirect(this: Elysia) {
 		'set-cookie': ['name=a', 'name2=b']
 	})
 }
-
-describe('Response Headers: `aot: true`', () => {
-	namedElysiaIt(handle_redirect, { aot: true })
-	namedElysiaIt(handle_redirect_status, { aot: true })
-	namedElysiaIt(add_set_headers_to_redirect, { aot: true })
-	namedElysiaIt(set_multiple_cookie_on_redirect, { aot: true })
-})
-
-describe('Response Headers: `aot: false`', () => {
-	namedElysiaIt(handle_redirect, { aot: false })
-	namedElysiaIt(handle_redirect_status, { aot: false })
-	namedElysiaIt(add_set_headers_to_redirect, { aot: false })
-	namedElysiaIt(set_multiple_cookie_on_redirect, { aot: false })
-})
