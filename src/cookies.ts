@@ -350,6 +350,7 @@ export const parseCookie = async (
 			jar[name] = {
 				value: v
 			}
+			continue
 		}
 
 		const start = value.charCodeAt(0)
