@@ -1981,7 +1981,12 @@ export default class Elysia<
 				Schema,
 				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
 			>,
-			Singleton,
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: {}
+				resolve: {}		
+			},
 			Ephemeral,
 			Volatile
 		>
@@ -2009,7 +2014,12 @@ export default class Elysia<
 				Schema,
 				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
 			>,
-			Singleton,
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: {}
+				resolve: {}		
+			},
 			Ephemeral,
 			Volatile
 		>

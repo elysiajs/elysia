@@ -1,28 +1,12 @@
-import { Elysia } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
+import { post } from '../test/utils'
 
-export const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
-	isAuth(shouldAuth: boolean) {
-		if (shouldAuth) {
-			onBeforeHandle(({ cookie: { session } }) => {
-				if (!session.value) {
-					throw new Error('Not logged in')
-				}
-			})
-		}
-	}
-}))
+const app = new Elysia({ precompile: true }).post('/', () => 'a', {
+	body: t.Object({
+		name: t.String()
+	})
+})
 
-const app = new Elysia()
-	.use(authGuard) // I'd like this macro globally available...
-	.group('/posts', (app) =>
-		app
-			// .use(authGuard) // ... but instead it only works if I add the authGuard macro here
-			.get('/', () => 'a', {
-				isAuth: true
-			})
-	)
-
-app.handle(req('/posts'))
-	.then((x) => x.status)
+app.handle(post('/', {}))
+	.then((x) => x.text())
 	.then(console.log)

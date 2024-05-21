@@ -111,16 +111,24 @@ export class ValidationError extends Error {
 			? validator.Errors(value).First()
 			: Value.Errors(validator, value).First()
 
-		const customError = error?.schema.error
-			? typeof error.schema.error === 'function'
-				? error.schema.error(type, validator, value)
-				: error.schema.error
-			: undefined
+		const customError =
+			error?.schema.error !== undefined
+				? typeof error.schema.error === 'function'
+					? error.schema.error({
+							type,
+							validator,
+							value,
+							get errors() {
+								return [...validator.Errors(value)]
+							}
+					  })
+					: error.schema.error
+				: undefined
 
 		const accessor = error?.path || 'root'
 		let message = ''
 
-		if (customError) {
+		if (customError !== undefined) {
 			message =
 				typeof customError === 'object'
 					? JSON.stringify(customError)

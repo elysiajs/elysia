@@ -986,7 +986,7 @@ export const composeHandler = ({
 		}
 
 		// @ts-ignore
-		if (isNotEmpty(cookieValidator?.schema.properties ?? {})) {
+		if (isNotEmpty(cookieValidator?.schema?.properties ?? cookieValidator?.schema?.schema ?? {})) {
 			fnLiteral += `const cookieValue = {}
     			for(const [key, value] of Object.entries(c.cookie))
     				cookieValue[key] = value.value\n`

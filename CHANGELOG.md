@@ -1,3 +1,17 @@
+# 1.0.21 - 21 May 2024
+Breaking Change:
+- `t.type({ error })` now accepts `(error: ({ type, validator, value, errors }) => unknown)` instead of `(error: (type, validator, value) => unknown)`
+
+Improvement:
+- `t.type({ error })` accepts `string | number | boolean | Object` instead of `string`
+- `t.type({ error })` return `string | number | boolean | Object | void` instead of `string`
+- add `errors: ValueError[]` to `t.type({ error({ errors }) {} })`
+
+Bug fix:
+- [#644](https://github.com/elysiajs/elysia/issues/644) redirect doesn't work with `aot: false`
+- [#641](https://github.com/elysiajs/elysia/issues/641) cookie schema validation doesn't work with `aot: true`
+- [#615](https://github.com/elysiajs/elysia/issues/615) highlight derive and resolve when using `onError`
+
 # 1.0.20 - 13 May 2024
 Bug fix:
 - macro is not inherits inside group

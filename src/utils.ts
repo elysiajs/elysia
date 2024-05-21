@@ -195,7 +195,7 @@ export const mergeHook = (
 		? {
 				...a,
 				...b
-			}
+		  }
 		: undefined
 
 	return {
@@ -234,8 +234,8 @@ export const mergeHook = (
 	}
 }
 
-export const getSchemaValidator = (
-	s: TSchema | string | undefined,
+export const getSchemaValidator = <T extends TSchema | string | undefined>(
+	s: T,
 	{
 		models = {},
 		dynamic = false,
@@ -246,10 +246,10 @@ export const getSchemaValidator = (
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: boolean
-	}
-) => {
-	if (!s) return
-	if (typeof s === 'string' && !(s in models)) return
+	} = {}
+): T extends TSchema ? TypeCheck<TSchema> : undefined => {
+	if (!s) return undefined as any
+	if (typeof s === 'string' && !(s in models)) return undefined as any
 
 	const schema: TSchema = typeof s === 'string' ? models[s] : s
 
@@ -285,7 +285,7 @@ export const getSchemaValidator = (
 				delete validator.schema.config
 		}
 
-		return validator
+		return validator as any
 	}
 
 	const compiled = TypeCompiler.Compile(schema, Object.values(models))
@@ -304,7 +304,7 @@ export const getSchemaValidator = (
 			delete compiled.schema.config
 	}
 
-	return compiled
+	return compiled as any
 }
 
 export const getResponseSchemaValidator = (
@@ -975,10 +975,7 @@ export const cloneInference = (inference: {
  * @param url URL to redirect to
  * @param HTTP status code to send,
  */
-export const redirect = (
-	url: string,
-	status: number = 301
-) =>
+export const redirect = (url: string, status: number = 301) =>
 	new Response(null, {
 		status,
 		headers: {
