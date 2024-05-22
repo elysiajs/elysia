@@ -240,7 +240,7 @@ export const getSchemaValidator = (
 		models = {},
 		dynamic = false,
 		normalize = false,
-		additionalProperties = normalize
+		additionalProperties = false,
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
@@ -270,7 +270,7 @@ export const getSchemaValidator = (
 			Code: () => ''
 		} as unknown as TypeCheck<TSchema>
 
-		if (normalize && schema.additionalProperties === true)
+		if (normalize && schema.additionalProperties === false)
 			// @ts-ignore
 			validator.Clean = cleaner
 
@@ -313,7 +313,7 @@ export const getResponseSchemaValidator = (
 		models = {},
 		dynamic = false,
 		normalize = false,
-		additionalProperties = normalize
+		additionalProperties = false,
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
@@ -344,7 +344,7 @@ export const getResponseSchemaValidator = (
 
 		const compiledValidator = TypeCompiler.Compile(schema, references)
 
-		if (normalize && schema.additionalProperties === true)
+		if (normalize && schema.additionalProperties === false)
 			// @ts-ignore
 			compiledValidator.Clean = cleaner
 

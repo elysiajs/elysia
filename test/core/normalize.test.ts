@@ -100,4 +100,30 @@ describe('Normalize', () => {
 			name: 'nagisa'
 		})
 	})
+
+	it('do not normalize response when allowing additional properties', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				return {
+					hello: 'world',
+					a: 'b'
+				}
+			},
+			{
+				response: t.Object({
+					hello: t.String()
+				}, { additionalProperties: true })
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			hello: 'world',
+			a: 'b'
+		})
+	})
 })
