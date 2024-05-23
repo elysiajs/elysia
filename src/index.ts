@@ -291,7 +291,9 @@ export default class Elysia<
 			aot: true,
 			strictPath: false,
 			global: false,
-			cookie: {},
+			cookie: {
+				path: '/'
+			},
 			analytic: false,
 			...config,
 			experimental: config?.experimental ?? {},
@@ -415,7 +417,7 @@ export default class Elysia<
 						config: cloned.cookie?.config ?? {},
 						dynamic,
 						models
-					})
+				  })
 				: undefined
 
 		const normalize = this.config.normalize
@@ -450,7 +452,7 @@ export default class Elysia<
 							models,
 							normalize
 						})
-					}
+				  }
 				: ({
 						get body() {
 							if (_body) return _body
@@ -506,7 +508,7 @@ export default class Elysia<
 								}
 							))
 						}
-					} as any)
+				  } as any)
 
 		const loosePath = path.endsWith('/')
 			? path.slice(0, path.length - 1)
@@ -583,7 +585,7 @@ export default class Elysia<
 					handler: handle,
 					allowMeta,
 					appInference
-				})
+			  })
 			: (((context: Context) => {
 					if (composed) return composed(context)
 
@@ -598,7 +600,7 @@ export default class Elysia<
 						allowMeta,
 						appInference
 					}) as any)(context)
-				}) as ComposedHandler)
+			  }) as ComposedHandler)
 
 		if (!shouldPrecompile)
 			mainHandler.compose = () => {
@@ -649,8 +651,8 @@ export default class Elysia<
 			const loose = this.config.strictPath
 				? undefined
 				: path.endsWith('/')
-					? path.slice(0, path.length - 1)
-					: path + '/'
+				? path.slice(0, path.length - 1)
+				: path + '/'
 
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 				const index = staticRouter.handlers.length
@@ -690,7 +692,7 @@ export default class Elysia<
 					? `case '${method}': return st${index}(ctx)\n${staticRouter.map[path].code}`
 					: `case '${method}': ${jitRoute(index)}\n${
 							staticRouter.map[path].code
-						}`
+					  }`
 
 			if (!this.config.strictPath) {
 				if (!staticRouter.map[loosePath])
@@ -707,7 +709,7 @@ export default class Elysia<
 						? `case '${method}': return st${index}(ctx)\n${staticRouter.map[loosePath].code}`
 						: `case '${method}': ${jitRoute(index)}\n${
 								staticRouter.map[loosePath].code
-							}`
+						  }`
 			}
 		} else {
 			this.router.http.add(method, path, mainHandler)
@@ -863,20 +865,19 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-							}
+						  }
 						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								})
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+						  }
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+						  })
 			>
 		>
 	): this
@@ -959,23 +960,22 @@ export default class Elysia<
 								derive: Ephemeral['derive'] & Volatile['derive']
 								resolve: Ephemeral['resolve'] &
 									Volatile['resolve']
-							}
+						  }
 						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Partial<
-										Ephemeral['derive'] & Volatile['derive']
-									>
-									resolve: Partial<
-										Ephemeral['resolve'] &
-											Volatile['resolve']
-									>
-								})
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+						  }
+						: {
+								derive: Partial<
+									Ephemeral['derive'] & Volatile['derive']
+								>
+								resolve: Partial<
+									Ephemeral['resolve'] & Volatile['resolve']
+								>
+						  })
 			>
 		>
 	): this
@@ -1029,20 +1029,20 @@ export default class Elysia<
 										Ephemeral['resolve'] &
 											Volatile['resolve']
 									>
-								}
+							  }
 							: 'scoped' extends Type
-								? {
-										derive: Ephemeral['derive'] &
-											Partial<Volatile['derive']>
-										resolve: Ephemeral['resolve'] &
-											Partial<Volatile['resolve']>
-									}
-								: {
-										derive: Ephemeral['derive'] &
-											Volatile['derive']
-										resolve: Ephemeral['resolve'] &
-											Volatile['resolve']
-									})
+							? {
+									derive: Ephemeral['derive'] &
+										Partial<Volatile['derive']>
+									resolve: Ephemeral['resolve'] &
+										Partial<Volatile['resolve']>
+							  }
+							: {
+									derive: Ephemeral['derive'] &
+										Volatile['derive']
+									resolve: Ephemeral['resolve'] &
+										Volatile['resolve']
+							  })
 				>
 			>
 		) => MaybePromise<Resolver>
@@ -1063,42 +1063,40 @@ export default class Elysia<
 				Routes,
 				Ephemeral,
 				Volatile
-			>
+		  >
 		: Type extends 'scoped'
-			? Elysia<
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes,
-					{
-						derive: Ephemeral['resolve']
-						resolve: Prettify<
-							Ephemeral['resolve'] &
-								ExcludeElysiaResponse<Resolver>
-						>
-						schema: Ephemeral['schema']
-					},
-					Volatile
-				>
-			: Elysia<
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes,
-					Ephemeral,
-					{
-						derive: Volatile['resolve']
-						resolve: Prettify<
-							Volatile['resolve'] &
-								ExcludeElysiaResponse<Resolver>
-						>
-						schema: Volatile['schema']
-					}
-				>
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					derive: Ephemeral['resolve']
+					resolve: Prettify<
+						Ephemeral['resolve'] & ExcludeElysiaResponse<Resolver>
+					>
+					schema: Ephemeral['schema']
+				},
+				Volatile
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				Ephemeral,
+				{
+					derive: Volatile['resolve']
+					resolve: Prettify<
+						Volatile['resolve'] & ExcludeElysiaResponse<Resolver>
+					>
+					schema: Volatile['schema']
+				}
+		  >
 
 	/**
 	 * Derive new property for each request with access to `Context`.
@@ -1207,20 +1205,19 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-							}
+						  }
 						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								})
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+						  }
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+						  })
 			>
 		) => MaybePromise<NewResolver>
 	): Type extends 'global'
@@ -1238,42 +1235,41 @@ export default class Elysia<
 				Routes,
 				Ephemeral,
 				Volatile
-			>
+		  >
 		: Type extends 'scoped'
-			? Elysia<
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes,
-					{
-						derive: Ephemeral['resolve']
-						resolve: Prettify<
-							Ephemeral['resolve'] &
-								ExcludeElysiaResponse<NewResolver>
-						>
-						schema: Ephemeral['schema']
-					},
-					Volatile
-				>
-			: Elysia<
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes,
-					Ephemeral,
-					{
-						derive: Volatile['resolve']
-						resolve: Prettify<
-							Volatile['resolve'] &
-								ExcludeElysiaResponse<NewResolver>
-						>
-						schema: Volatile['schema']
-					}
-				>
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					derive: Ephemeral['resolve']
+					resolve: Prettify<
+						Ephemeral['resolve'] &
+							ExcludeElysiaResponse<NewResolver>
+					>
+					schema: Ephemeral['schema']
+				},
+				Volatile
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				Ephemeral,
+				{
+					derive: Volatile['resolve']
+					resolve: Prettify<
+						Volatile['resolve'] & ExcludeElysiaResponse<NewResolver>
+					>
+					schema: Volatile['schema']
+				}
+		  >
 
 	mapResolve(
 		optionsOrResolve: Function | { as?: LifeCycleType },
@@ -1369,20 +1365,19 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-							}
+						  }
 						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								}),
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+						  }
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+						  }),
 				BasePath
 			>
 		>
@@ -1473,20 +1468,19 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-							}
+						  }
 						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								})
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+						  }
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+						  })
 			>
 		>
 	): this
@@ -1573,20 +1567,19 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-							}
+						  }
 						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								})
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+						  }
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+						  })
 			>
 		>
 	): this
@@ -1675,20 +1668,19 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-							}
+						  }
 						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								})
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+						  }
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+						  })
 			>
 		>
 	): this
@@ -1985,7 +1977,7 @@ export default class Elysia<
 				decorator: Singleton['decorator']
 				store: Singleton['store']
 				derive: {}
-				resolve: {}		
+				resolve: {}
 			},
 			Ephemeral,
 			Volatile
@@ -2018,7 +2010,7 @@ export default class Elysia<
 				decorator: Singleton['decorator']
 				store: Singleton['store']
 				derive: {}
-				resolve: {}		
+				resolve: {}
 			},
 			Ephemeral,
 			Volatile
@@ -2414,14 +2406,14 @@ export default class Elysia<
 							error: !localHook.error
 								? sandbox.event.error
 								: Array.isArray(localHook.error)
-									? [
-											...(localHook.error || {}),
-											...(sandbox.event.error || {})
-										]
-									: [
-											localHook.error,
-											...(sandbox.event.error || {})
-										]
+								? [
+										...(localHook.error || {}),
+										...(sandbox.event.error || {})
+								  ]
+								: [
+										localHook.error,
+										...(sandbox.event.error || {})
+								  ]
 						})
 					)
 				} else {
@@ -2681,14 +2673,14 @@ export default class Elysia<
 							error: !localHook.error
 								? sandbox.event.error
 								: Array.isArray(localHook.error)
-									? [
-											...(localHook.error || {}),
-											...(sandbox.event.error || [])
-										]
-									: [
-											localHook.error,
-											...(sandbox.event.error || [])
-										]
+								? [
+										...(localHook.error || {}),
+										...(sandbox.event.error || [])
+								  ]
+								: [
+										localHook.error,
+										...(sandbox.event.error || [])
+								  ]
 						},
 						{
 							allowMacro: true
@@ -2722,7 +2714,7 @@ export default class Elysia<
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
 				Prettify2<Volatile & NewElysia['_volatile']>
-			>
+		  >
 		: Elysia<
 				BasePath,
 				Scoped,
@@ -2734,7 +2726,7 @@ export default class Elysia<
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Ephemeral,
 				Volatile
-			>
+		  >
 
 	/**
 	 * Entire Instance
@@ -2754,7 +2746,7 @@ export default class Elysia<
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Ephemeral,
 				Prettify2<Volatile & NewElysia['_ephemeral']>
-			>
+		  >
 		: Elysia<
 				BasePath,
 				Scoped,
@@ -2766,7 +2758,7 @@ export default class Elysia<
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Ephemeral,
 				Volatile
-			>
+		  >
 
 	/**
 	 * Import fn
@@ -2788,7 +2780,7 @@ export default class Elysia<
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
 				Prettify2<Volatile & NewElysia['_volatile']>
-			>
+		  >
 		: Elysia<
 				BasePath,
 				Scoped,
@@ -2800,7 +2792,7 @@ export default class Elysia<
 					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 				Ephemeral,
 				Volatile
-			>
+		  >
 
 	/**
 	 * Import entire instance
@@ -2824,7 +2816,7 @@ export default class Elysia<
 					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
 				Ephemeral,
 				Prettify2<Volatile & LazyLoadElysia['_ephemeral']>
-			>
+		  >
 		: Elysia<
 				BasePath,
 				Scoped,
@@ -2836,7 +2828,7 @@ export default class Elysia<
 					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
 				Ephemeral,
 				Volatile
-			>
+		  >
 	/**
 	 * ### use
 	 * Merge separate logic of Elysia with current
@@ -3008,7 +3000,7 @@ export default class Elysia<
 								seed: plugin.config.seed,
 								checksum: current,
 								dependencies: plugin.dependencies
-							}
+						  }
 						: {
 								name: plugin.config.name,
 								seed: plugin.config.seed,
@@ -3032,7 +3024,7 @@ export default class Elysia<
 										fn: x.fn.toString(),
 										stack: new Error().stack ?? ''
 									}))
-							}
+						  }
 				)
 			}
 
@@ -3255,7 +3247,7 @@ export default class Elysia<
 								seed: plugin.config.seed,
 								checksum: current,
 								dependencies: plugin.dependencies
-							}
+						  }
 						: {
 								name: plugin.config.name,
 								seed: plugin.config.seed,
@@ -3279,7 +3271,7 @@ export default class Elysia<
 										fn: x.toString(),
 										stack: new Error().stack ?? ''
 									}))
-							}
+						  }
 				)
 
 				this.event = mergeLifeCycle(
@@ -3362,10 +3354,10 @@ export default class Elysia<
 				typeof path === 'function'
 					? path
 					: path instanceof Elysia
-						? path.compile().fetch
-						: handle instanceof Elysia
-							? handle.compile().fetch
-							: handle!
+					? path.compile().fetch
+					: handle instanceof Elysia
+					? handle.compile().fetch
+					: handle!
 
 			const handler: Handler<any, any> = async ({ request, path }) =>
 				run(
@@ -4720,20 +4712,20 @@ export default class Elysia<
 										Ephemeral['resolve'] &
 											Volatile['resolve']
 									>
-								}
+							  }
 							: 'scoped' extends Type
-								? {
-										derive: Ephemeral['derive'] &
-											Partial<Volatile['derive']>
-										resolve: Ephemeral['resolve'] &
-											Partial<Volatile['resolve']>
-									}
-								: {
-										derive: Ephemeral['derive'] &
-											Volatile['derive']
-										resolve: Ephemeral['resolve'] &
-											Volatile['resolve']
-									}),
+							? {
+									derive: Ephemeral['derive'] &
+										Partial<Volatile['derive']>
+									resolve: Ephemeral['resolve'] &
+										Partial<Volatile['resolve']>
+							  }
+							: {
+									derive: Ephemeral['derive'] &
+										Volatile['derive']
+									resolve: Ephemeral['resolve'] &
+										Volatile['resolve']
+							  }),
 					BasePath
 				>
 			>
@@ -4755,42 +4747,40 @@ export default class Elysia<
 				Routes,
 				Ephemeral,
 				Volatile
-			>
+		  >
 		: Type extends 'scoped'
-			? Elysia<
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes,
-					{
-						derive: Ephemeral['resolve']
-						resolve: Prettify<
-							Ephemeral['resolve'] &
-								ExcludeElysiaResponse<Derivative>
-						>
-						schema: Ephemeral['schema']
-					},
-					Volatile
-				>
-			: Elysia<
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes,
-					Ephemeral,
-					{
-						derive: Volatile['resolve']
-						resolve: Prettify<
-							Volatile['resolve'] &
-								ExcludeElysiaResponse<Derivative>
-						>
-						schema: Volatile['schema']
-					}
-				>
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					derive: Ephemeral['resolve']
+					resolve: Prettify<
+						Ephemeral['resolve'] & ExcludeElysiaResponse<Derivative>
+					>
+					schema: Ephemeral['schema']
+				},
+				Volatile
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				Ephemeral,
+				{
+					derive: Volatile['resolve']
+					resolve: Prettify<
+						Volatile['resolve'] & ExcludeElysiaResponse<Derivative>
+					>
+					schema: Volatile['schema']
+				}
+		  >
 
 	derive(
 		optionsOrTransform: { as?: LifeCycleType } | Function,
@@ -4932,20 +4922,19 @@ export default class Elysia<
 								resolve: Partial<
 									Ephemeral['resolve'] & Volatile['resolve']
 								>
-							}
+						  }
 						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								}),
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+						  }
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+						  }),
 				BasePath
 			>
 		) => MaybePromise<NewDerivative>
@@ -4967,42 +4956,42 @@ export default class Elysia<
 				Routes,
 				Ephemeral,
 				Volatile
-			>
+		  >
 		: Type extends 'scoped'
-			? Elysia<
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes,
-					{
-						derive: Ephemeral['resolve']
-						resolve: Prettify<
-							Ephemeral['resolve'] &
-								ExcludeElysiaResponse<NewDerivative>
-						>
-						schema: Ephemeral['schema']
-					},
-					Volatile
-				>
-			: Elysia<
-					BasePath,
-					Scoped,
-					Singleton,
-					Definitions,
-					Metadata,
-					Routes,
-					Ephemeral,
-					{
-						derive: Volatile['resolve']
-						resolve: Prettify<
-							Volatile['resolve'] &
-								ExcludeElysiaResponse<NewDerivative>
-						>
-						schema: Volatile['schema']
-					}
-				>
+		? Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				{
+					derive: Ephemeral['resolve']
+					resolve: Prettify<
+						Ephemeral['resolve'] &
+							ExcludeElysiaResponse<NewDerivative>
+					>
+					schema: Ephemeral['schema']
+				},
+				Volatile
+		  >
+		: Elysia<
+				BasePath,
+				Scoped,
+				Singleton,
+				Definitions,
+				Metadata,
+				Routes,
+				Ephemeral,
+				{
+					derive: Volatile['resolve']
+					resolve: Prettify<
+						Volatile['resolve'] &
+							ExcludeElysiaResponse<NewDerivative>
+					>
+					schema: Volatile['schema']
+				}
+		  >
 
 	mapDerive(
 		optionsOrDerive: { as?: LifeCycleType } | Function,
@@ -5096,9 +5085,8 @@ export default class Elysia<
 							? prefix + word
 							: prefix + capitalize(word)
 				: delimieter.includes(word.at(-1) ?? '')
-					? (suffix: string, word: string) => word + suffix
-					: (suffix: string, word: string) =>
-							word + capitalize(suffix)
+				? (suffix: string, word: string) => word + suffix
+				: (suffix: string, word: string) => word + capitalize(suffix)
 
 		const remap = (type: 'decorator' | 'state' | 'model' | 'error') => {
 			const store: Record<string, any> = {}
@@ -5267,7 +5255,7 @@ export default class Elysia<
 						},
 						fetch,
 						error: this.outerErrorHandler
-					} as Serve)
+				  } as Serve)
 				: ({
 						development: !isProduction,
 						reusePort: true,
@@ -5279,7 +5267,7 @@ export default class Elysia<
 						port: options,
 						fetch,
 						error: this.outerErrorHandler
-					} as Serve)
+				  } as Serve)
 
 		this.server = Bun?.serve(serve)
 
@@ -5357,7 +5345,9 @@ export {
 	getResponseSchemaValidator,
 	redirect,
 	StatusMap,
-	InvertedStatusMap
+	InvertedStatusMap,
+	form,
+	type ELYSIA_FORM_DATA
 } from './utils'
 
 export {

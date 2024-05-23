@@ -1,3 +1,14 @@
+# 1.0.22 - 23 May 2024
+Breaking Change:
+- set default cookie path to `/`
+
+Feature:
+- add `form` utility for returning explicit formdata
+- add object with image to return as `formdata`
+
+Bug fix:
+- return `Bun.file` by specifying `t.File()` and `t.Object({ any: t.File() })` as a response
+
 # 1.0.21 - 21 May 2024
 Breaking Change:
 - `t.type({ error })` now accepts `(error: ({ type, validator, value, errors }) => unknown)` instead of `(error: (type, validator, value) => unknown)`

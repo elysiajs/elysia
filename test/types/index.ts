@@ -1202,3 +1202,51 @@ app.get('/', ({ set }) => {
 		return 'hello'
 	})
 }
+
+// ? Return file with File Schema
+{
+	const child = new Elysia().get(
+		'/',
+		() => {
+			return Bun.file('test/kyuukurarin.mp4')
+		},
+		{
+			response: t.File()
+		}
+	)
+}
+
+// ? Return file with Object File Schema
+{
+	const child = new Elysia().get(
+		'/',
+		() => {
+			return {
+				a: Bun.file('test/kyuukurarin.mp4')
+			}
+		},
+		{
+			response: t.Object({
+				a: t.File()
+			})
+		}
+	)
+}
+
+// ? Accept file with Object File Schema
+{
+	const child = new Elysia().get(
+		'/',
+		({ body: { file } }) => {
+			expectTypeOf<typeof file>().toEqualTypeOf<File>()
+
+			return file
+		},
+		{
+			body: t.Object({
+				file: t.File()
+			}),
+			response: t.File()
+		}
+	)
+}

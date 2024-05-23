@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { mapEarlyResponse } from '../../src/handler'
 import { Passthrough } from './utils'
+import { form } from '../../src'
 
 const defaultContext = {
 	headers: {},
@@ -316,5 +317,20 @@ describe('Map Early Response', () => {
 		expect(response?.headers.get('accept-ranges')).toBeNull()
 		expect(response?.headers.get('content-range')).toBeNull()
 		expect(response?.status).toBe(200)
+	})
+
+	it('map formdata', async () => {
+		const response = mapEarlyResponse(
+			form({
+				a: Bun.file('test/kyuukurarin.mp4')
+			}),
+			defaultContext
+		)!
+
+		expect(response.headers.get('content-type')).toStartWith(
+			'multipart/form-data'
+		)
+		expect(response.status).toBe(200)
+		expect(await response.formData()).toBeInstanceOf(FormData)
 	})
 })

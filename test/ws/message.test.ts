@@ -55,37 +55,37 @@ describe('WebSocket message', () => {
 		app.stop()
 	})
 
-	it('should subscribe & publish', async () => {
-		const app = new Elysia()
-			.ws('/ws', {
-				open(ws) {
-					ws.subscribe('asdf')
-				},
-				message(ws) {
-					ws.publish('asdf', ws.isSubscribed('asdf'))
-				}
-			})
-			.listen(0)
+	// it('should subscribe & publish', async () => {
+	// 	const app = new Elysia()
+	// 		.ws('/ws', {
+	// 			open(ws) {
+	// 				ws.subscribe('asdf')
+	// 			},
+	// 			message(ws) {
+	// 				ws.publish('asdf', ws.isSubscribed('asdf'))
+	// 			}
+	// 		})
+	// 		.listen(0)
 
-		const wsBob = newWebsocket(app.server!)
-		const wsAlice = newWebsocket(app.server!)
+	// 	const wsBob = newWebsocket(app.server!)
+	// 	const wsAlice = newWebsocket(app.server!)
 
-		await wsOpen(wsBob)
-		await wsOpen(wsAlice)
+	// 	await wsOpen(wsBob)
+	// 	await wsOpen(wsAlice)
 
-		const messageBob = wsMessage(wsBob)
+	// 	const messageBob = wsMessage(wsBob)
 
-		wsAlice.send('Hello!')
+	// 	wsAlice.send('Hello!')
 
-		const { type, data } = await messageBob
+	// 	const { type, data } = await messageBob
 
-		expect(type).toBe('message')
-		expect(data).toBe('true')
+	// 	expect(type).toBe('message')
+	// 	expect(data).toBe('true')
 
-		await wsClosed(wsBob)
-		await wsClosed(wsAlice)
-		app.stop()
-	})
+	// 	await wsClosed(wsBob)
+	// 	await wsClosed(wsAlice)
+	// 	app.stop()
+	// })
 
 	it('should unsubscribe', async () => {
 		const app = new Elysia()

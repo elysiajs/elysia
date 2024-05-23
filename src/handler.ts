@@ -1,6 +1,7 @@
+/* eslint-disable sonarjs/no-nested-switch */
 /* eslint-disable sonarjs/no-duplicate-string */
 import { serialize } from 'cookie'
-import { StatusMap } from './utils'
+import { StatusMap, form } from './utils'
 
 import { Cookie } from './cookies'
 import { ELYSIA_RESPONSE } from './error'
@@ -162,8 +163,23 @@ export const mapResponse = (
 			case 'Blob':
 				return handleFile(response as File | Blob, set)
 
-			case 'Object':
 			case 'Array':
+				return Response.json(response, set as SetResponse)
+
+			case 'Object':
+				for (const value in Object.values(response as Object)) {
+					switch (value?.constructor?.name) {
+						case 'Blob':
+						case 'File':
+						case 'ArrayBuffer':
+						case 'FileRef':
+							return new Response(form(response as any))
+
+						default:
+							break
+					}
+				}
+
 				return Response.json(response, set as SetResponse)
 
 			case 'ReadableStream':
@@ -256,6 +272,9 @@ export const mapResponse = (
 
 				return new Response(response?.toString(), set as SetResponse)
 
+			case 'FormData':
+				return new Response(response as FormData, set as SetResponse)
+
 			default:
 				if (response instanceof Response) {
 					let isCookieSet = false
@@ -329,13 +348,27 @@ export const mapResponse = (
 			case 'Blob':
 				return handleFile(response as File | Blob, set)
 
-			case 'Object':
 			case 'Array':
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
+				return Response.json(response)
+
+			case 'Object':
+				for (const value in Object.values(response as Object)) {
+					switch (value?.constructor?.name) {
+						case 'Blob':
+						case 'File':
+						case 'ArrayBuffer':
+						case 'FileRef':
+							return new Response(
+								form(response as any),
+								set as SetResponse
+							)
+
+						default:
+							break
 					}
-				})
+				}
+
+				return Response.json(response, set as SetResponse)
 
 			case 'ReadableStream':
 				request?.signal.addEventListener(
@@ -395,6 +428,9 @@ export const mapResponse = (
 					return new Response(response.value, set as SetResponse)
 
 				return new Response(response?.toString(), set as SetResponse)
+
+			case 'FormData':
+				return new Response(response as FormData, set as SetResponse)
 
 			default:
 				if (response instanceof Response)
@@ -482,8 +518,26 @@ export const mapEarlyResponse = (
 			case 'Blob':
 				return handleFile(response as File | Blob, set)
 
-			case 'Object':
 			case 'Array':
+				return Response.json(response, set as SetResponse)
+
+			case 'Object':
+				for (const value in Object.values(response as Object)) {
+					switch (value?.constructor?.name) {
+						case 'Blob':
+						case 'File':
+						case 'ArrayBuffer':
+						case 'FileRef':
+							return new Response(
+								form(response as any),
+								set as SetResponse
+							)
+
+						default:
+							break
+					}
+				}
+
 				return Response.json(response, set as SetResponse)
 
 			case 'ReadableStream':
@@ -572,6 +626,9 @@ export const mapEarlyResponse = (
 					set as SetResponse
 				)
 
+			case 'FormData':
+				return new Response(response as FormData)
+
 			case 'Cookie':
 				if (response instanceof Cookie)
 					return new Response(response.value, set as SetResponse)
@@ -644,13 +701,27 @@ export const mapEarlyResponse = (
 			case 'Blob':
 				return handleFile(response as File | Blob, set)
 
-			case 'Object':
 			case 'Array':
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
+				return Response.json(response)
+
+			case 'Object':
+				for (const value in Object.values(response as Object)) {
+					switch (value?.constructor?.name) {
+						case 'Blob':
+						case 'File':
+						case 'ArrayBuffer':
+						case 'FileRef':
+							return new Response(
+								form(response as any),
+								set as SetResponse
+							)
+
+						default:
+							break
 					}
-				})
+				}
+
+				return Response.json(response, set as SetResponse)
 
 			case 'ReadableStream':
 				request?.signal.addEventListener(
@@ -706,6 +777,9 @@ export const mapEarlyResponse = (
 					return new Response(response.value, set as SetResponse)
 
 				return new Response(response?.toString(), set as SetResponse)
+
+			case 'FormData':
+				return new Response(response as FormData)
 
 			default:
 				if (response instanceof Response)
@@ -764,13 +838,26 @@ export const mapCompactResponse = (
 		case 'Blob':
 			return handleFile(response as File | Blob)
 
-		case 'Object':
 		case 'Array':
-			return new Response(JSON.stringify(response), {
-				headers: {
-					'content-type': 'application/json'
+			return Response.json(response)
+
+		case 'Object':
+			form: for (const value of Object.values(response as Object))
+				switch (value?.constructor?.name) {
+					case 'Blob':
+					case 'File':
+					case 'ArrayBuffer':
+					case 'FileRef':
+						return new Response(form(response as any))
+
+					case 'Object':
+						break form
+
+					default:
+						break
 				}
-			})
+
+			return Response.json(response)
 
 		case 'ReadableStream':
 			request?.signal.addEventListener(
@@ -820,6 +907,9 @@ export const mapCompactResponse = (
 		case 'Number':
 		case 'Boolean':
 			return new Response((response as number | boolean).toString())
+
+		case 'FormData':
+			return new Response(response as FormData)
 
 		default:
 			if (response instanceof Response)

@@ -64,7 +64,7 @@ describe('Response Headers', () => {
 		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi',
-			'set-cookie': ['name=a', 'name2=b']
+			'set-cookie': ['name=a; Path=/', 'name2=b; Path=/']
 		})
 	})
 })
