@@ -88,7 +88,7 @@ const createReport = ({
 	return (
 		event: TraceEvent,
 		{
-			name = 'anonymous',
+			name,
 			unit = 0
 		}: {
 			name?: string
@@ -104,6 +104,8 @@ const createReport = ({
 		// 		},
 		// 		resolve() {}
 		// 	}
+
+		if (!name) name = 'anonymous'
 
 		for (let i = 0; i < total; i++)
 			addFn(
@@ -123,7 +125,7 @@ const createReport = ({
 			},
 			resolveChild(name: string) {
 				for (let i = 0; i < total; i++)
-					addFn(`reportChild${i} = report${i}.resolveChild.pop()({
+					addFn(`reportChild${i} = report${i}.resolveChild.shift()({
 						id,
 						event: '${event}',
 						name: '${name}',
