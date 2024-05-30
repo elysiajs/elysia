@@ -1,34 +1,28 @@
-import { Type, Static, StaticDecode, StaticEncode } from '@sinclair/typebox'
+import { Elysia } from '../src'
+import { req } from '../test/utils'
 
-<<<<<<< HEAD
-const T = Type.Array(Type.Number(), { uniqueItems: true })
-
-// const T = Type.Transform(Type.Array(Type.Number(), { uniqueItems: true }))         
-//   .Decode(value => new Set(value))
-//   .Encode(value => [...value])
-
-type D = StaticDecode<typeof T>   
-=======
-const group = new Elysia({ prefix: '/group' })
-	.get('/start', ({ cookie: { name } }) => {
-		name.value = 'hello'
-
-		return 'hello'
+const app = new Elysia({ precompile: true })
+	.trace(async ({ beforeHandle }) => {
+		const { children, end } = await beforeHandle
+		for(const child of children) {
+			const { time, end, name } = await child
+			console.log(name, 'took', await end - time, 'ms')
+		}
 	})
-	.get('/end', ({ cookie: { name } }) => {
-		name.remove()
+	.get(
+		'/',
+		() => {
+			return 'a'
+		},
+		{
+			async beforeHandle() {
+				await Bun.sleepSync(500)
+			}
+		}
+	)
+	.compile()
 
-		return 'hello'
-	})
-
-const app = new Elysia({
-	precompile: true,
-	cookie: {
-		path: '/'
-	}
-})
-	.use(group)
-	.listen(3000)
-
-// console.log(app.routes[0].composed?.toString())
->>>>>>> main
+console.log(app.routes[0].composed?.toString())
+app.handle(req('/'))
+	.then((x) => x.text())
+// 	.then(console.log)

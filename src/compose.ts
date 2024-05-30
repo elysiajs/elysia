@@ -70,16 +70,25 @@ const createReport = ({
 	total: number
 	addFn(string: string): void
 }) => {
-	if (!hasTrace) return () => () => {}
+	if (!hasTrace)
+		return () => {
+			return {
+				resolveChild() {
+					return () => {}
+				},
+				resolve() {}
+			}
+		}
 
-	addFn(`\nlet report\n`)
 	for (let i = 0; i < total; i++)
-		addFn(`\nconst trace${i} = ${context}[ELYSIA_TRACE][${i}]\n`)
+		addFn(
+			`let report${i}, reportChild${i};const trace${i} = ${context}[ELYSIA_TRACE][${i}]\n`
+		)
 
 	return (
 		event: TraceEvent,
 		{
-			name,
+			name = 'anonymous',
 			unit = 0
 		}: {
 			name?: string
@@ -87,42 +96,44 @@ const createReport = ({
 			unit?: number
 		} = {}
 	) => {
-		if (event.indexOf('.') !== -1) return () => {}
-
-		const dotIndex = event.indexOf('.')
-		const isGroup = dotIndex === -1
-
-		// if (event !== 'request' && event !== 'response') return () => {}
-
-		if (isGroup) name ||= event
-		else name ||= 'anonymous'
+		// ? For debug specific event
+		// if (event !== 'beforeHandle')
+		// 	return {
+		// 		resolveChild() {
+		// 			return () => {}
+		// 		},
+		// 		resolve() {}
+		// 	}
 
 		for (let i = 0; i < total; i++)
 			addFn(
-				`\nreport = trace${i}.${event}({
+				`\nreport${i} = trace${i}.${event}({
 				id,
 				event: '${event}',
 				name: '${name}',
-				time: performance.now()
+				time: performance.now(),
+				unit: ${unit}
 			})\n`
 			)
 
-		// addFn(
-		// 	'\n' +
-		// 		`reporter.emit('event', {
-		// 			id,
-		// 			event: '${event}',
-		// 			type: 'begin',
-		// 			name: '${name}',
-		// 			time: performance.now(),
-		// 			${isGroup ? `unit: ${unit},` : ''}
-		// 			${attribute}
-		// 		})`.replace(/(\t| |\n)/g, '') +
-		// 		'\n'
-		// )
+		return {
+			resolve() {
+				for (let i = 0; i < total; i++)
+					addFn(`\nreport${i}.resolve()\n`)
+			},
+			resolveChild(name: string) {
+				for (let i = 0; i < total; i++)
+					addFn(`reportChild${i} = report${i}.resolveChild.pop()({
+						id,
+						event: '${event}',
+						name: '${name}',
+						time: performance.now()
+					})\n`)
 
-		return () => {
-			for (let i = 0; i < total; i++) addFn(`\nreport()\n`)
+				return () => {
+					for (let i = 0; i < total; i++) addFn(`reportChild${i}()\n`)
+				}
+			}
 		}
 	}
 }
@@ -538,13 +549,9 @@ export const composeHandler = ({
 			inference.unknownQueries === true ||
 			!destructured.length
 		) {
-			fnLiteral += `if(c.qi !== -1) {
+			fnLiteral += `if(c.qi !== -1)
 				c.query = parseQuery(c.url.slice(c.qi + 1).replace(/\\+/g, ' '))
-
-				// decodeURIComponent is already done in parseQuery function
-				// for(const key of Object.keys(c.query))
-				//  	c.query[key] = decodeURIComponentc.query[key])
-			} else c.query = {}`
+			else c.query = {}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
 				let url = '&' + c.url.slice(c.qi + 1).replace(/\\+/g, ' ')
@@ -603,7 +610,7 @@ export const composeHandler = ({
 		hooks.beforeHandle.some(isAsync) ||
 		hooks.transform.some(isAsync)
 
-	const endParse = report('parse', {
+	const parseReporter = report('parse', {
 		unit: hooks.parse.length
 	})
 
@@ -672,14 +679,14 @@ export const composeHandler = ({
 			if (hooks.parse.length) {
 				fnLiteral += `let used = false\n`
 
-				const endReport = report('parse', {
+				const reporter = report('parse', {
 					unit: hooks.parse.length
 				})
 
 				for (let i = 0; i < hooks.parse.length; i++) {
-					const endUnit = report('parse.unit', {
-						name: hooks.parse[i].fn.name
-					})
+					const endUnit = reporter.resolveChild(
+						hooks.parse[i].fn.name
+					)
 
 					const name = `bo${i}`
 
@@ -694,7 +701,7 @@ export const composeHandler = ({
 					if (i !== 0) fnLiteral += `}`
 				}
 
-				endReport()
+				reporter.resolve()
 			}
 
 			fnLiteral += '\ndelete c.contentType\n'
@@ -804,10 +811,10 @@ export const composeHandler = ({
 		fnLiteral += '\n'
 	}
 
-	endParse()
+	parseReporter.resolve()
 
 	if (hooks?.transform) {
-		const endTransform = report('transform', {
+		const reporter = report('transform', {
 			unit: hooks.transform.length
 		})
 
@@ -816,9 +823,7 @@ export const composeHandler = ({
 		for (let i = 0; i < hooks.transform.length; i++) {
 			const transform = hooks.transform[i]
 
-			const endUnit = report('transform.unit', {
-				name: transform.fn.name
-			})
+			const endUnit = reporter.resolveChild(transform.fn.name)
 
 			fnLiteral += isAsync(transform)
 				? `transformed = await transform[${i}](c)\n`
@@ -832,7 +837,7 @@ export const composeHandler = ({
 			endUnit()
 		}
 
-		endTransform()
+		reporter.resolve()
 	}
 
 	if (validator) {
@@ -975,8 +980,15 @@ export const composeHandler = ({
 				fnLiteral += `\nc.body = body.Decode(c.body)\n`
 		}
 
-		// @ts-ignore
-		if (isNotEmpty(cookieValidator?.schema?.properties ?? cookieValidator?.schema?.schema ?? {})) {
+		if (
+			isNotEmpty(
+				// @ts-ignore
+				cookieValidator?.schema?.properties ??
+					// @ts-ignore
+					cookieValidator?.schema?.schema ??
+					{}
+			)
+		) {
 			fnLiteral += `const cookieValue = {}
     			for(const [key, value] of Object.entries(c.cookie))
     				cookieValue[key] = value.value\n`
@@ -1008,7 +1020,7 @@ export const composeHandler = ({
 	}
 
 	if (hooks?.beforeHandle) {
-		const endBeforeHandle = report('beforeHandle', {
+		const reporter = report('beforeHandle', {
 			unit: hooks.beforeHandle.length
 		})
 
@@ -1017,9 +1029,7 @@ export const composeHandler = ({
 		for (let i = 0; i < hooks.beforeHandle.length; i++) {
 			const beforeHandle = hooks.beforeHandle[i]
 
-			const endUnit = report('beforeHandle.unit', {
-				name: beforeHandle.fn.name
-			})
+			const endUnit = reporter.resolveChild(beforeHandle.fn.name)
 
 			const returning = hasReturn(beforeHandle)
 			const isResolver = beforeHandle.subType === 'resolve'
@@ -1045,7 +1055,6 @@ export const composeHandler = ({
 
 				endUnit()
 			} else {
-				fnLiteral += `Object.assign(c, be);`
 				fnLiteral += isAsync(beforeHandle)
 					? `be = await beforeHandle[${i}](c);\n`
 					: `be = beforeHandle[${i}](c);\n`
@@ -1053,25 +1062,23 @@ export const composeHandler = ({
 				endUnit()
 
 				fnLiteral += `if(be !== undefined) {\n`
-				endBeforeHandle()
+				reporter.resolve()
+
 				if (hooks.afterHandle?.length) {
-					const endAfterHandle = report('afterHandle', {
-						unit: hooks.transform.length
-					})
 					report('handle', {
 						name: isHandleFn
 							? (handler as Function).name
 							: undefined
-					})()
+					}).resolve()
+
+					const reporter = report('afterHandle', {
+						unit: hooks.transform.length
+					})
 
 					for (let i = 0; i < hooks.afterHandle.length; i++) {
 						const hook = hooks.afterHandle[i]
-
 						const returning = hasReturn(hook)
-
-						const endUnit = report('afterHandle.unit', {
-							name: hook.fn.name
-						})
+						const endUnit = reporter.resolveChild(hook.fn.name)
 
 						fnLiteral += `c.response = be\n`
 
@@ -1089,7 +1096,7 @@ export const composeHandler = ({
 
 						endUnit()
 					}
-					endAfterHandle()
+					reporter.resolve()
 				}
 
 				if (validator.response)
@@ -1112,11 +1119,11 @@ export const composeHandler = ({
 			}
 		}
 
-		endBeforeHandle()
+		reporter.resolve()
 	}
 
 	if (hooks?.afterHandle.length) {
-		const endHandle = report('handle', {
+		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
 		})
 
@@ -1129,20 +1136,16 @@ export const composeHandler = ({
 				? `let r = await ${handle};\n`
 				: `let r = ${handle};\n`
 
-		endHandle()
+		handleReporter.resolve()
 
-		const endAfterHandle = report('afterHandle', {
+		const reporter = report('afterHandle', {
 			unit: hooks.afterHandle.length
 		})
 
 		for (let i = 0; i < hooks.afterHandle.length; i++) {
 			const hook = hooks.afterHandle[i]
-
 			const returning = hasReturn(hook)
-
-			const endUnit = report('afterHandle.unit', {
-				name: hook.fn.name
-			})
+			const endUnit = reporter.resolveChild(hook.fn.name)
 
 			if (!returning) {
 				fnLiteral += isAsync(hook.fn)
@@ -1159,21 +1162,21 @@ export const composeHandler = ({
 
 				if (validator.response) {
 					fnLiteral += `if(af !== undefined) {`
-					endAfterHandle()
+					reporter.resolve()
 
 					fnLiteral += composeResponseValidation('af')
 
 					fnLiteral += `c.response = af }`
 				} else {
 					fnLiteral += `if(af !== undefined) {`
-					endAfterHandle()
+					reporter.resolve()
 
 					fnLiteral += `c.response = af}\n`
 				}
 			}
 		}
 
-		endAfterHandle()
+		reporter.resolve()
 
 		fnLiteral += `r = c.response\n`
 
@@ -1192,7 +1195,7 @@ export const composeHandler = ({
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 		else fnLiteral += `return mapCompactResponse(r)\n`
 	} else {
-		const endHandle = report('handle', {
+		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
 		})
 
@@ -1201,11 +1204,11 @@ export const composeHandler = ({
 				? `let r = await ${handle};\n`
 				: `let r = ${handle};\n`
 
-			endHandle()
+			handleReporter.resolve()
 
 			if (validator.response) fnLiteral += composeResponseValidation()
 
-			report('afterHandle')()
+			report('afterHandle').resolve()
 
 			if (hooks.mapResponse.length) {
 				fnLiteral += 'c.response = r'
@@ -1241,9 +1244,9 @@ export const composeHandler = ({
 				? `let r = await ${handle};\n`
 				: `let r = ${handle};\n`
 
-			endHandle()
+			handleReporter.resolve()
 
-			report('afterHandle')()
+			report('afterHandle').resolve()
 
 			if (hooks.mapResponse.length) {
 				fnLiteral += 'c.response = r'
@@ -1261,11 +1264,11 @@ export const composeHandler = ({
 			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else {
-			endHandle()
+			handleReporter.resolve()
 
 			const handled = isAsyncHandler ? `await ${handle}` : handle
 
-			report('afterHandle')()
+			report('afterHandle').resolve()
 
 			if (handler instanceof Response) {
 				fnLiteral += inference.set
@@ -1293,7 +1296,7 @@ export const composeHandler = ({
 
 		fnLiteral += `const set = c.set\nif (!set.status || set.status < 300) set.status = error?.status || 500\n`
 
-		const endError = report('error', {
+		const reporter = report('error', {
 			unit: hooks.error.length
 		})
 
@@ -1305,9 +1308,7 @@ export const composeHandler = ({
 
 			for (let i = 0; i < hooks.error.length; i++) {
 				const name = `er${i}`
-				const endUnit = report('error.unit', {
-					name: hooks.error[i].fn.name
-				})
+				const endUnit = reporter.resolveChild(hooks.error[i].fn.name)
 
 				fnLiteral += `\nlet ${name} = handleErrors[${i}](c)\n`
 
@@ -1322,7 +1323,7 @@ export const composeHandler = ({
 			}
 		}
 
-		endError()
+		reporter.resolve()
 
 		fnLiteral += `return handleError(c, error, true)\n`
 		if (!maybeAsync) fnLiteral += '})()'
@@ -1331,13 +1332,13 @@ export const composeHandler = ({
 		if (handleResponse || hasTrace) {
 			fnLiteral += ` finally { `
 
-			const endResponse = report('response', {
+			const reporter = report('response', {
 				unit: hooks.onResponse.length
 			})
 
 			fnLiteral += handleResponse
 
-			endResponse()
+			reporter.resolve()
 
 			fnLiteral += `}`
 		}
@@ -1405,11 +1406,10 @@ export const composeHandler = ({
 		${fnLiteral}
 	}`
 
-	// console.log(fnLiteral)
-
-	const createHandler = Function('hooks', fnLiteral)
-
-	return createHandler({
+	return Function(
+		'hooks',
+		fnLiteral
+	)({
 		handler,
 		hooks: lifeCycleToFn(hooks),
 		validator,
@@ -1569,16 +1569,14 @@ export const composeGeneralHandler = (
 				status: 200
 			},
 			error
-			${
-				app.event.trace.length
-					? `,trace: [${app.event.trace
-							.map((_, i) => `tr${i}(ctx)`)
-							.join(',')}]`
-					: ''
-			}
 			${hasTrace ? ',$$requestId: id' : ''}
 			${decoratorsLiteral}
 		}\n`
+
+	if (app.event.trace.length)
+		fnLiteral += `\nctx[ELYSIA_TRACE] = [${app.event.trace
+			.map((_, i) => `tr${i}(ctx)`)
+			.join(',')}]\n`
 
 	const report = createReport({
 		context: 'ctx',
@@ -1589,42 +1587,44 @@ export const composeGeneralHandler = (
 		}
 	})
 
-	const endReport = report('request', {
+	const reporter = report('request', {
 		attribute: 'ctx',
 		unit: app.event.request.length
 	})
 
-	fnLiteral += `\n try {\n`
+	if (app.event.request.length) {
+		fnLiteral += `\n try {\n`
 
-	for (let i = 0; i < app.event.request.length; i++) {
-		const hook = app.event.request[i]
-		const withReturn = hasReturn(hook)
-		const maybeAsync = isAsync(hook)
+		for (let i = 0; i < app.event.request.length; i++) {
+			const hook = app.event.request[i]
+			const withReturn = hasReturn(hook)
+			const maybeAsync = isAsync(hook)
 
-		const endUnit = report('request.unit', {
-			name: app.event.request[i].fn.name
-		})
+			const endUnit = reporter.resolveChild(app.event.request[i].fn.name)
 
-		if (withReturn) {
-			fnLiteral += `re = mapEarlyResponse(
-				${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
-				ctx.set,
-				request
-			)\n`
+			if (withReturn) {
+				fnLiteral += `re = mapEarlyResponse(
+					${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
+					ctx.set,
+					request
+				)\n`
 
-			endUnit()
-			fnLiteral += `if(re !== undefined) return re\n`
-		} else {
-			fnLiteral += `${maybeAsync ? 'await' : ''} onRequest[${i}](ctx)\n`
-			endUnit()
+				endUnit()
+				fnLiteral += `if(re !== undefined) return re\n`
+			} else {
+				fnLiteral += `${
+					maybeAsync ? 'await' : ''
+				} onRequest[${i}](ctx)\n`
+				endUnit()
+			}
 		}
+
+		fnLiteral += `} catch (error) {
+			return app.handleError(ctx, error)
+		}`
 	}
 
-	fnLiteral += `} catch (error) {
-		return app.handleError(ctx, error)
-	}`
-
-	endReport()
+	reporter.resolve()
 
 	const wsPaths = app.router.static.ws
 	const wsRouter = app.router.ws

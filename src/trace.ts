@@ -1,5 +1,5 @@
 import type { Context } from './context'
-import type { TraceHandler, TraceProcess } from './types'
+import type { TraceHandler, TraceProcess, TraceStream } from './types'
 
 export const ELYSIA_TRACE = Symbol('ElysiaTrace')
 
@@ -10,14 +10,46 @@ const createProcess = () => {
 
 	return [
 		promise,
-		(v: any) => {
+		(v: TraceStream) => {
+			// console.log({
+			// 	stream: v
+			// })
+
+			const processes = <Promise<TraceProcess>[]>[]
+			const resolvers = <
+				((process: TraceStream) => () => void)[]
+			>[]
+
+			for (let i = 0; i < (v.unit ?? 0); i++) {
+				const { promise, resolve } =
+					Promise.withResolvers<TraceProcess>()
+				const { promise: end, resolve: resolveEnd } =
+					Promise.withResolvers<number>()
+
+				processes.push(promise)
+				resolvers.push((process: TraceStream) => {
+					resolve({
+						...process,
+						end
+					} as any)
+
+					return () => {
+						resolveEnd(performance.now())
+					}
+				})
+			}
+
 			resolve({
 				...v,
+				children: processes,
 				end
-			})
+			} as any)
 
-			return () => {
-				resolveEnd(performance.now())
+			return {
+				resolveChild: resolvers,
+				resolve: () => {
+					resolveEnd(performance.now())
+				}
 			}
 		}
 	] as const

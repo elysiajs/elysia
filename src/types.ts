@@ -606,9 +606,8 @@ export type TraceEvent =
 	| 'beforeHandle'
 	| 'afterHandle'
 	| 'error'
-	| 'response' extends infer Events extends string
-	? Events | `${Events}.unit` | 'handle' | 'exit'
-	: never
+	| 'response'
+	| 'handle'
 
 export type TraceStream = {
 	id: number
