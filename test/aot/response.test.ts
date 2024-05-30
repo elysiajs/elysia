@@ -58,20 +58,20 @@ describe('Dynamic Cookie Response', () => {
 	it('set cookie', async () => {
 		const response = await app.handle(req('/create'))
 
-		expect(getCookies(response)).toEqual(['name=Himari'])
+		expect(getCookies(response)).toEqual(['name=Himari; Path=/'])
 	})
 
 	it('set multiple cookie', async () => {
 		const response = await app.handle(req('/multiple'))
 
-		expect(getCookies(response)).toEqual(['name=Himari', 'president=Rio'])
+		expect(getCookies(response)).toEqual(['name=Himari; Path=/', 'president=Rio; Path=/'])
 	})
 
 	it('set JSON cookie', async () => {
 		const response = await app.handle(req('/council'))
 
 		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]'
+			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
 		])
 	})
 
@@ -88,13 +88,13 @@ describe('Dynamic Cookie Response', () => {
 									affilation: 'Financial'
 								}
 							])
-						)
+						) + '; Path=/'
 				}
 			})
 		)
 
 		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]'
+			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
 		])
 	})
 
@@ -117,7 +117,7 @@ describe('Dynamic Cookie Response', () => {
 		)
 
 		expect(getCookies(response)[0]).toInclude(
-			`council=; Max-Age=0; Expires=${new Date(0).toUTCString()}`
+			`council=; Max-Age=0; Path=/; Expires=${new Date(0).toUTCString()}`
 		)
 	})
 
@@ -204,7 +204,7 @@ describe('Dynamic Cookie Response', () => {
 					cookie: `name=${await signCookie(
 						'seminar: Himari',
 						secrets
-					)}`
+					)}` + '; Path=/'
 				}
 			})
 		)

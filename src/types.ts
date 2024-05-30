@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Elysia } from '.'
-import type { Serve, Server, WebSocketHandler } from 'bun'
+import type { BunFile, Serve, Server, WebSocketHandler } from 'bun'
 
 import type {
 	TSchema,
@@ -239,6 +239,7 @@ export type UnwrapBodySchema<
 		: Definitions
 	: unknown
 
+// ? https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#successful_responses
 export type SuccessfulResponse<T = unknown> =
 	| { 200: T }
 	| { 201: T }
@@ -261,14 +262,15 @@ export interface UnwrapRoute<
 	params: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends TSchema | string
-		? UnwrapSchema<Schema['response'], Definitions>
+		? CoExist<UnwrapSchema<Schema['response'], Definitions>, File, BunFile>
 		: Schema['response'] extends SuccessfulResponse<TAnySchema | string>
 		? {
-				[k in keyof Schema['response']]: UnwrapSchema<
-					Schema['response'][k],
-					Definitions
+				[k in keyof Schema['response']]: CoExist<
+					UnwrapSchema<Schema['response'][k], Definitions>,
+					File,
+					BunFile
 				>
-		  } // UnwrapSchema<ObjectValues<Schema['response']>, Definitions>
+		  }
 		: unknown | void
 }
 
@@ -440,6 +442,32 @@ export type Handler<
 ) => Route['response'] extends SuccessfulResponse
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
+
+export type Replace<Original, Target, With> = Original extends Record<
+	string,
+	unknown
+>
+	? {
+			[K in keyof Original]: Original[K] extends Target
+				? With
+				: Original[K]
+	  }
+	: Original extends Target
+	? With
+	: Original
+
+export type CoExist<Original, Target, With> = Original extends Record<
+	string,
+	unknown
+>
+	? {
+			[K in keyof Original]: Original[K] extends Target
+				? Original[K] | With
+				: Original[K]
+	  }
+	: Original extends Target
+	? Original | With
+	: Original
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
@@ -1007,8 +1035,8 @@ export type CreateEden<
 export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 	...a: any[]
 ) => infer A
-	? _ComposeElysiaResponse<Response, Awaited<A>>
-	: _ComposeElysiaResponse<Response, Awaited<Handle>>
+	? _ComposeElysiaResponse<Response, Replace<Awaited<A>, BunFile, File>>
+	: _ComposeElysiaResponse<Response, Replace<Awaited<Handle>, BunFile, File>>
 
 type _ComposeElysiaResponse<Response, Handle> = Prettify<
 	unknown extends Response

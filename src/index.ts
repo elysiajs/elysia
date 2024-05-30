@@ -96,7 +96,6 @@ import type {
 	MapResponse,
 	Checksum,
 	MacroManager,
-	BaseMacro,
 	MacroToProperty,
 	TransformHandler,
 	MetadataBase,
@@ -294,7 +293,9 @@ export default class Elysia<
 			aot: true,
 			strictPath: false,
 			global: false,
-			cookie: {},
+			cookie: {
+				path: '/'
+			},
 			analytic: false,
 			...config,
 			experimental: config?.experimental ?? {},
@@ -1975,7 +1976,12 @@ export default class Elysia<
 				Schema,
 				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
 			>,
-			Singleton,
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: {}
+				resolve: {}
+			},
 			Ephemeral,
 			Volatile
 		>
@@ -2003,7 +2009,12 @@ export default class Elysia<
 				Schema,
 				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
 			>,
-			Singleton,
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: {}
+				resolve: {}
+			},
 			Ephemeral,
 			Volatile
 		>
@@ -5297,7 +5308,9 @@ export {
 	getResponseSchemaValidator,
 	redirect,
 	StatusMap,
-	InvertedStatusMap
+	InvertedStatusMap,
+	form,
+	type ELYSIA_FORM_DATA
 } from './utils'
 
 export {

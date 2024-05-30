@@ -21,10 +21,12 @@ import type {
 	AfterHandler,
 	MapResponse,
 	VoidHandler,
-	ErrorHandler
+	ErrorHandler,
+	Replace
 } from './types'
 import type { CookieOptions } from './cookies'
 import { Sucrose } from './sucrose'
+import { BunFile } from 'bun'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -195,7 +197,7 @@ export const mergeHook = (
 		? {
 				...a,
 				...b
-			}
+		  }
 		: undefined
 
 	return {
@@ -234,8 +236,8 @@ export const mergeHook = (
 	}
 }
 
-export const getSchemaValidator = (
-	s: TSchema | string | undefined,
+export const getSchemaValidator = <T extends TSchema | string | undefined>(
+	s: T,
 	{
 		models = {},
 		dynamic = false,
@@ -247,9 +249,9 @@ export const getSchemaValidator = (
 		dynamic?: boolean
 		normalize?: boolean
 	} = {}
-) => {
-	if (!s) return
-	if (typeof s === 'string' && !(s in models)) return
+): T extends TSchema ? TypeCheck<TSchema> : undefined => {
+	if (!s) return undefined as any
+	if (typeof s === 'string' && !(s in models)) return undefined as any
 
 	const schema: TSchema = typeof s === 'string' ? models[s] : s
 
@@ -310,7 +312,7 @@ export const getSchemaValidator = (
 			}
 		}
 
-		return validator
+		return validator as any
 	}
 
 	const compiled = TypeCompiler.Compile(schema, Object.values(models))
@@ -354,7 +356,7 @@ export const getSchemaValidator = (
 		}
 	}
 
-	return compiled
+	return compiled as any
 }
 
 export const mapValueError = (error: ValueError) => {
@@ -1026,14 +1028,42 @@ export const cloneInference = (inference: Sucrose.Inference) => ({
  * @param url URL to redirect to
  * @param HTTP status code to send,
  */
-export const redirect = (url: string, status: number = 301) =>
-	new Response(null, {
-		status,
-		headers: {
-			Location: url
-		}
-	})
+export const redirect = (
+	url: string,
+	status: 301 | 302 | 303 | 307 | 308 = 301
+) => Response.redirect(url, status)
 
 export type redirect = typeof redirect
+
+export const ELYSIA_FORM_DATA = Symbol('ElysiaFormData')
+export type ELYSIA_FORM_DATA = typeof ELYSIA_FORM_DATA
+
+type ElysiaFormData<T extends Record<string | number, unknown>> = FormData & {
+	[ELYSIA_FORM_DATA]: Replace<T, BunFile, File>
+}
+
+export const form = <const T extends Record<string | number, unknown>>(
+	items: T
+): ElysiaFormData<T> => {
+	const formData = new FormData()
+
+	for (const [key, value] of Object.entries(items)) {
+		if (Array.isArray(value)) {
+			for (const v of value) {
+				if (value instanceof File)
+					formData.append(key, value, value.name)
+
+				formData.append(key, v)
+			}
+
+			continue
+		}
+
+		if (value instanceof File) formData.append(key, value, value.name)
+		formData.append(key, value)
+	}
+
+	return formData as any
+}
 
 export const randomId = () => crypto.getRandomValues(new Uint32Array(1))[0]

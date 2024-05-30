@@ -21,7 +21,7 @@ import {
 	FormatRegistry
 } from '@sinclair/typebox'
 
-import { type TypeCheck } from '@sinclair/typebox/compiler'
+import { type ValueError, type TypeCheck } from '@sinclair/typebox/compiler'
 import { Value } from '@sinclair/typebox/value'
 import { fullFormats } from './formats'
 
@@ -475,11 +475,15 @@ declare module '@sinclair/typebox' {
 	interface SchemaOptions {
 		error?:
 			| string
-			| ((
-					type: string,
-					validator: TypeCheck<any>,
+			| boolean
+			| number
+			| Object
+			| ((validation: {
+					errors: ValueError[]
+					type: string
+					validator: TypeCheck<any>
 					value: unknown
-			  ) => string | void)
+			  }) => string | boolean | number | Object | void)
 	}
 }
 
