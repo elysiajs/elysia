@@ -17,6 +17,7 @@ import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 import type { OpenAPIV3 } from 'openapi-types'
 
 import type { CookieOptions } from './cookies'
+import type { TraceHandler } from './trace'
 import type { Context, ErrorContext, PreContext } from './context'
 import type {
 	ELYSIA_RESPONSE,
@@ -595,69 +596,6 @@ export type TransformHandler<
 				},
 				BasePath
 			>
-		>
-	): MaybePromise<void>
-}
-
-export type TraceEvent =
-	| 'request'
-	| 'parse'
-	| 'transform'
-	| 'beforeHandle'
-	| 'afterHandle'
-	| 'error'
-	| 'response'
-	| 'handle'
-
-export type TraceStream = {
-	id: number
-	event: TraceEvent
-	type: 'begin' | 'end'
-	time: number
-	name?: string
-	unit?: number
-}
-
-export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
-	Type extends 'begin'
-		? Prettify<{
-				name: string
-				time: number
-				skip: boolean
-				end: Promise<TraceProcess<'end'>>
-				children: Promise<TraceProcess<'begin'>>[]
-		  }>
-		: number
-
-export type TraceHandler<
-	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
-> = {
-	(
-		lifecycle: Prettify<
-			{
-				context: Context<Route, Singleton>
-				set: Context['set']
-				id: number
-				time: number
-			} & {
-				[x in
-					| 'request'
-					| 'parse'
-					| 'transform'
-					| 'beforeHandle'
-					| 'handle'
-					| 'afterHandle'
-					| 'error'
-					| 'response']: Promise<TraceProcess<'begin'>>
-			} & {
-				store: Singleton['store']
-			}
 		>
 	): MaybePromise<void>
 }

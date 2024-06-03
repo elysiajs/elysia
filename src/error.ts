@@ -13,6 +13,8 @@ const env =
 		: undefined
 
 export const ERROR_CODE = Symbol('ElysiaErrorCode')
+export type ERROR_CODE = typeof ERROR_CODE
+
 export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
 export type ELYSIA_RESPONSE = typeof ELYSIA_RESPONSE
 

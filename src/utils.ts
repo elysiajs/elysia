@@ -1042,6 +1042,9 @@ type ElysiaFormData<T extends Record<string | number, unknown>> = FormData & {
 	[ELYSIA_FORM_DATA]: Replace<T, BunFile, File>
 }
 
+export const ELYSIA_REQUEST_ID = Symbol('ElysiaRequestId')
+export type ELYSIA_REQUEST_ID = typeof ELYSIA_REQUEST_ID
+
 export const form = <const T extends Record<string | number, unknown>>(
 	items: T
 ): ElysiaFormData<T> => {

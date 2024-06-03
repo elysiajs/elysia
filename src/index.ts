@@ -60,6 +60,8 @@ import {
 	type InternalServerError
 } from './error'
 
+import type { TraceHandler } from './trace'
+
 import type {
 	ElysiaConfig,
 	SingletonBase,
@@ -89,7 +91,6 @@ import type {
 	AddSuffix,
 	AddPrefixCapitalize,
 	AddSuffixCapitalize,
-	TraceHandler,
 	MaybeArray,
 	GracefulHandler,
 	GetPathParameter,
@@ -108,7 +109,7 @@ import type {
 	MacroQueue,
 	EphemeralType,
 	ExcludeElysiaResponse,
-    ModelValidator,
+	ModelValidator,
 	BaseMacroFn,
 	ResolveMacroContext
 } from './types'
@@ -5300,6 +5301,14 @@ export { Elysia }
 export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
 export { t } from './type-system'
 export { Cookie, type CookieOptions } from './cookies'
+export type { Context, PreContext, ErrorContext } from './context'
+export {
+	ELYSIA_TRACE,
+	type TraceEvent,
+	type TraceHandler,
+	type TraceProcess,
+	type TraceStream
+} from './trace'
 
 export {
 	getSchemaValidator,
@@ -5310,7 +5319,8 @@ export {
 	StatusMap,
 	InvertedStatusMap,
 	form,
-	type ELYSIA_FORM_DATA
+	ELYSIA_FORM_DATA,
+	ELYSIA_REQUEST_ID
 } from './utils'
 
 export {
@@ -5323,8 +5333,6 @@ export {
 	ERROR_CODE,
 	ELYSIA_RESPONSE
 } from './error'
-
-export type { Context, PreContext } from './context'
 
 export type {
 	EphemeralType,
@@ -5351,15 +5359,11 @@ export type {
 	ErrorHandler,
 	AfterHandler,
 	LifeCycleEvent,
-	TraceEvent,
 	LifeCycleStore,
 	LifeCycleType,
 	MaybePromise,
 	ListenCallback,
 	UnwrapSchema,
-	TraceHandler,
-	TraceProcess,
-	TraceStream,
 	Checksum,
 	DocumentDecoration,
 	InferContext,

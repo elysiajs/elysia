@@ -4,7 +4,6 @@ import type {
 	Handler,
 	HookContainer,
 	LifeCycleStore,
-	TraceHandler
 } from './types'
 
 export namespace Sucrose {

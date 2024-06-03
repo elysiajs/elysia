@@ -9,6 +9,7 @@ import { parse as parseQuery } from 'fast-querystring'
 import decodeURIComponent from 'fast-decode-uri-component'
 
 import {
+	ELYSIA_REQUEST_ID,
 	getCookieValidator,
 	lifeCycleToFn,
 	randomId,
@@ -35,13 +36,13 @@ import { ELYSIA_TRACE } from './trace'
 import { Sucrose, hasReturn, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 
+import type { TraceEvent } from './trace'
 import type {
 	ComposedHandler,
 	Handler,
 	HookContainer,
 	LifeCycleStore,
-	SchemaValidator,
-	TraceEvent
+	SchemaValidator
 } from './types'
 import type { TypeCheck } from './type-system'
 
@@ -113,7 +114,7 @@ const createReport = ({
 				id,
 				event: '${event}',
 				name: '${name}',
-				time: performance.now(),
+				start: performance.now(),
 				unit: ${unit}
 			})\n`
 			)
@@ -129,7 +130,7 @@ const createReport = ({
 						id,
 						event: '${event}',
 						name: '${name}',
-						time: performance.now()
+						start: performance.now()
 					})\n`)
 
 				return () => {
@@ -589,7 +590,7 @@ export const composeHandler = ({
 		hasHeaders ||
 		(isHandleFn && hasDefaultHeaders)
 
-	if (hasTrace) fnLiteral += '\nconst id = c.$$requestId\n'
+	if (hasTrace) fnLiteral += '\nconst id = c[ELYSIA_REQUEST_ID]\n'
 
 	const report = createReport({
 		hasTrace,
@@ -1117,7 +1118,7 @@ export const composeHandler = ({
 				}
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(be, c.set)}\n`
+				fnLiteral += `return mapEarlyResponse(be, c.set, request)}\n`
 			}
 		}
 
@@ -1194,8 +1195,8 @@ export const composeHandler = ({
 			}
 		}
 
-		if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-		else fnLiteral += `return mapCompactResponse(r)\n`
+		if (hasSet) fnLiteral += `return mapResponse(r, c.set, response)\n`
+		else fnLiteral += `return mapCompactResponse(r, response)\n`
 	} else {
 		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
@@ -1233,14 +1234,14 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${handle}.clone(), c.set)
+					return mapResponse(${handle}.clone(), c.set, response)
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
-			} else if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(r)\n`
+			} else if (hasSet) fnLiteral += `return mapResponse(r, c.set, response)\n`
+			else fnLiteral += `return mapCompactResponse(r, response)\n`
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r = await ${handle};\n`
@@ -1263,8 +1264,8 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(r)\n`
+			if (hasSet) fnLiteral += `return mapResponse(r, c.set, response)\n`
+			else fnLiteral += `return mapCompactResponse(r, response)\n`
 		} else {
 			handleReporter.resolve()
 
@@ -1280,23 +1281,27 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${handle}.clone(), c.set)
+					return mapResponse(${handle}.clone(), c.set, response)
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(${handled}, c.set)\n`
-			else fnLiteral += `return mapCompactResponse(${handled})\n`
+				fnLiteral += `return mapResponse(${handled}, c.set, response)\n`
+			else fnLiteral += `return mapCompactResponse(${handled}, response)\n`
 		}
 	}
 
 	if (hasErrorHandler || handleResponse) {
 		fnLiteral += `\n} catch(error) {`
-		if (!maybeAsync) fnLiteral += `return (async () => {`
+		if (!maybeAsync) fnLiteral += `return (async () => {\n`
 
 		fnLiteral += `const set = c.set\nif (!set.status || set.status < 300) set.status = error?.status || 500\n`
+
+		if (hasTrace)
+			for (let i = 0; i < hooks.trace.length; i++)
+				fnLiteral += `report${i}.resolve();reportChild${i}();\n`
 
 		const reporter = report('error', {
 			unit: hooks.error.length
@@ -1319,9 +1324,14 @@ export const composeHandler = ({
 
 				endUnit()
 
-				fnLiteral += `${name} = mapEarlyResponse(${name}, set)\n`
+				fnLiteral += `${name} = mapEarlyResponse(${name}, set, request)\n`
 				fnLiteral += `if (${name}) {`
-				fnLiteral += `return ${name} }\n`
+
+				if (hasTrace)
+					for (let i = 0; i < hooks.trace.length; i++)
+						fnLiteral += `\nreport${i}.resolve()\n`
+
+				fnLiteral += `return ${name}\n}\n`
 			}
 		}
 
@@ -1388,7 +1398,8 @@ export const composeHandler = ({
 		signCookie,
 		decodeURIComponent,
 		ELYSIA_RESPONSE,
-		ELYSIA_TRACE
+		ELYSIA_TRACE,
+		ELYSIA_REQUEST_ID
 	} = hooks
 
 	${
@@ -1438,7 +1449,8 @@ export const composeHandler = ({
 		signCookie,
 		decodeURIComponent,
 		ELYSIA_RESPONSE,
-		ELYSIA_TRACE
+		ELYSIA_TRACE,
+		ELYSIA_REQUEST_ID
 	})
 }
 
@@ -1509,7 +1521,8 @@ export const composeGeneralHandler = (
 		handleError,
 		error,
 		redirect,
-		ELYSIA_TRACE
+		ELYSIA_TRACE,
+		ELYSIA_REQUEST_ID
 	} = data
 
 	const store = app.singleton.store
@@ -1571,7 +1584,7 @@ export const composeGeneralHandler = (
 				status: 200
 			},
 			error
-			${hasTrace ? ',$$requestId: id' : ''}
+			${hasTrace ? ',[ELYSIA_REQUEST_ID]: id' : ''}
 			${decoratorsLiteral}
 		}\n`
 
@@ -1689,7 +1702,8 @@ export const composeGeneralHandler = (
 		handleError,
 		error,
 		redirect,
-		ELYSIA_TRACE
+		ELYSIA_TRACE,
+		ELYSIA_REQUEST_ID
 	})
 }
 
