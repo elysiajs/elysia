@@ -6,13 +6,12 @@ describe('Trace Detail', async () => {
 	it('report parse units name', async () => {
 		const app = new Elysia()
 			.trace(({ onParse, set }) => {
-				onParse(({ children, onStop }) => {
+				onParse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
-					for (const child of children)
-						child(({ name }) => {
-							names.push(name)
-						})
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
 					onStop(() => {
 						set.headers.name = names.join(', ')
@@ -32,13 +31,12 @@ describe('Trace Detail', async () => {
 	it('report transform units name', async () => {
 		const app = new Elysia()
 			.trace(({ onTransform, set }) => {
-				onTransform(({ children, onStop }) => {
+				onTransform(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
-					for (const child of children)
-						child(({ name }) => {
-							names.push(name)
-						})
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
 					onStop(() => {
 						set.headers.name = names.join(', ')
@@ -58,13 +56,12 @@ describe('Trace Detail', async () => {
 	it('report beforeHandle units name', async () => {
 		const app = new Elysia()
 			.trace(({ onBeforeHandle, set }) => {
-				onBeforeHandle(({ children, onStop }) => {
+				onBeforeHandle(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
-					for (const child of children)
-						child(({ name }) => {
-							names.push(name)
-						})
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
 					onStop(() => {
 						set.headers.name = names.join(', ')
@@ -84,13 +81,12 @@ describe('Trace Detail', async () => {
 	it('report afterHandle units name', async () => {
 		const app = new Elysia()
 			.trace(({ onAfterHandle, set }) => {
-				onAfterHandle(({ children, onStop }) => {
+				onAfterHandle(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
-					for (const child of children)
-						child(({ name }) => {
-							names.push(name)
-						})
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
 					onStop(() => {
 						set.headers.name = names.join(', ')
@@ -110,13 +106,12 @@ describe('Trace Detail', async () => {
 	it('report mapResponse units name', async () => {
 		const app = new Elysia()
 			.trace(({ onMapResponse, set }) => {
-				onMapResponse(({ children, onStop }) => {
+				onMapResponse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
-					for (const child of children)
-						child(({ name }) => {
-							names.push(name)
-						})
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
 					onStop(() => {
 						set.headers.name = names.join(', ')
@@ -136,13 +131,12 @@ describe('Trace Detail', async () => {
 	it('report afterResponse units name', async () => {
 		const app = new Elysia()
 			.trace(({ onAfterResponse, set }) => {
-				onAfterResponse(({ children, onStop }) => {
+				onAfterResponse(({ onEvent, onStop }) => {
 					const names = <string[]>[]
 
-					for (const child of children)
-						child(({ name }) => {
-							names.push(name)
-						})
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
 					onStop(() => {
 						expect(names.join(', ')).toBe('luna, kindred')

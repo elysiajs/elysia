@@ -3110,7 +3110,7 @@ export default class Elysia<
 
 			for (const trace of plugin.event.trace)
 				if (trace.scope && trace.scope !== 'local')
-					this.trace(trace as any)
+					this.trace(trace.fn)
 
 			if (name) {
 				if (!(name in this.dependencies)) this.dependencies[name] = []

@@ -1,20 +1,20 @@
 import { Elysia } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia({ precompile: true })
-	.trace(({ onHandle, set }) => {
-		onHandle(({ begin, children, onStop }) => {
-			onStop((end) => {
-				console.log(end - begin)
-			})
-		})
-	})
-	.onAfterResponse(function luna() {})
-	.get('/', () => 'a', {
-		afterResponse: [function kindred() {}]
-	})
+const timeout = setTimeout(() => {
+	throw new Error('Trace stuck')
+}, 1000)
 
-console.log(app.routes[0].composed?.toString())
+const a = new Elysia().trace({ as: 'global' }, async ({ set }) => {
+	set.headers['X-Powered-By'] = 'elysia'
+	clearTimeout(timeout)
+})
+
+const app = new Elysia().use(a).get('/', () => 'hi')
+
+const response = await app.handle(req('/'))
+
+// console.log(app.routes[0].composed?.toString())
 
 const { headers } = await app.handle(req('/'))
 

@@ -1,11 +1,7 @@
 import { ELYSIA_REQUEST_ID } from './utils'
 
 import type { Context } from './context'
-import type {
-	Prettify,
-	RouteSchema,
-	SingletonBase
-} from './types'
+import type { Prettify, RouteSchema, SingletonBase } from './types'
 
 export type TraceEvent =
 	| 'request'
@@ -31,21 +27,67 @@ export type TraceProcess<
 	Type extends 'begin' | 'end' = 'begin' | 'end',
 	WithChildren extends boolean = true
 > = Type extends 'begin'
-	? {
-			name: string
-			begin: number
-			onStop: (
-				callback?: (end: TraceProcess<'end'>) => unknown
-			) => Promise<void>
-	  } & (WithChildren extends true
-			? {
-					children: ((
-						callback?: (
-							process: TraceProcess<'begin', false>
-						) => unknown
-					) => Promise<void>)[]
-			  }
-			: {})
+	? Prettify<
+			{
+				/**
+				 * Function name
+				 */
+				name: string
+				/**
+				 * Timestamp of a function is called since the server start
+				 */
+				begin: number
+				/**
+				 * Timestamp of a function after it's executed since the server start
+				 */
+				end: Promise<number>
+				/**
+				 * Listener to intercept the end of the lifecycle
+				 *
+				 * If you want to mutate the context, you must do it in this function
+				 * as there's a lock mechanism to ensure the context is mutate successfully
+				 */
+				onStop(
+					/**
+					 * A callback function that will be called when the function ends
+					 *
+					 * If you want to mutate the context, you must do it in this function
+					 * as there's a lock mechanism to ensure the context is mutate successfully
+					 */
+					callback?: (
+						/**
+						 * Timestamp of a function after it's executed since the server start
+						 */
+						end: TraceProcess<'end'>
+					) => unknown
+				): Promise<void>
+			} & (WithChildren extends true
+				? {
+						/**
+						 * total number of lifecycle's children and
+						 * total number of `onEvent` will be called
+						 * if there were no early exists or error thrown
+						 */
+						total: number
+						/**
+						 * Listener to intercept each child lifecycle
+						 */
+						onEvent(
+							/**
+							 * Callback function that will be called for when each child start
+							 */
+							callback?: (
+								process: TraceProcess<'begin', false>
+							) => unknown
+						): Promise<void>
+				  }
+				: {
+						/**
+						 * Index of the child event
+						 */
+						index: number
+				  })
+	  >
 	: number
 
 export type TraceHandler<
@@ -91,14 +133,11 @@ const createProcess = () => {
 			return promise
 		},
 		(process: TraceStream) => {
-			const processes = <
-				((callback?: Function) => Promise<void>)[]
-			>[]
+			const processes = <((callback?: Function) => Promise<void>)[]>[]
 			const resolvers = <((process: TraceStream) => () => void)[]>[]
 
 			for (let i = 0; i < (process.unit ?? 0); i++) {
-				const { promise, resolve } =
-					Promise.withResolvers<void>()
+				const { promise, resolve } = Promise.withResolvers<void>()
 				const { promise: end, resolve: resolveEnd } =
 					Promise.withResolvers<number>()
 
@@ -115,6 +154,7 @@ const createProcess = () => {
 					const result = {
 						...process,
 						end,
+						index: i,
 						onStop(callback?: Function) {
 							if (callback) callbacksEnd.push(callback)
 
@@ -132,7 +172,7 @@ const createProcess = () => {
 						for (let i = 0; i < callbacksEnd.length; i++)
 							callbacksEnd[i](now)
 
-						resolveEnd()
+						resolveEnd(now)
 					}
 				})
 			}
@@ -140,7 +180,10 @@ const createProcess = () => {
 			const result = {
 				...process,
 				end,
-				children: processes,
+				onEvent(callback?: Function) {
+					for (let i = 0; i < processes.length; i++)
+						processes[i](callback)
+				},
 				onStop(callback?: Function) {
 					if (callback) callbacksEnd.push(callback)
 
@@ -159,7 +202,7 @@ const createProcess = () => {
 					for (let i = 0; i < callbacksEnd.length; i++)
 						callbacksEnd[i](now)
 
-					resolveEnd()
+					resolveEnd(now)
 				}
 			}
 		}
