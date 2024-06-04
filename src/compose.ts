@@ -1118,7 +1118,7 @@ export const composeHandler = ({
 				}
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(be, c.set, request)}\n`
+				fnLiteral += `return mapEarlyResponse(be, c.set, c.request)}\n`
 			}
 		}
 
@@ -1195,8 +1195,8 @@ export const composeHandler = ({
 			}
 		}
 
-		if (hasSet) fnLiteral += `return mapResponse(r, c.set, response)\n`
-		else fnLiteral += `return mapCompactResponse(r, response)\n`
+		if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
+		else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 	} else {
 		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
@@ -1234,14 +1234,14 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${handle}.clone(), c.set, response)
+					return mapResponse(${handle}.clone(), c.set, c.request)
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
-			} else if (hasSet) fnLiteral += `return mapResponse(r, c.set, response)\n`
-			else fnLiteral += `return mapCompactResponse(r, response)\n`
+			} else if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
+			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r = await ${handle};\n`
@@ -1264,8 +1264,8 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set, response)\n`
-			else fnLiteral += `return mapCompactResponse(r, response)\n`
+			if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
+			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 		} else {
 			handleReporter.resolve()
 
@@ -1281,15 +1281,15 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${handle}.clone(), c.set, response)
+					return mapResponse(${handle}.clone(), c.set, c.request)
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(${handled}, c.set, response)\n`
-			else fnLiteral += `return mapCompactResponse(${handled}, response)\n`
+				fnLiteral += `return mapResponse(${handled}, c.set, c.request)\n`
+			else fnLiteral += `return mapCompactResponse(${handled}, c.request)\n`
 		}
 	}
 
@@ -1324,7 +1324,7 @@ export const composeHandler = ({
 
 				endUnit()
 
-				fnLiteral += `${name} = mapEarlyResponse(${name}, set, request)\n`
+				fnLiteral += `${name} = mapEarlyResponse(${name}, set, c.request)\n`
 				fnLiteral += `if (${name}) {`
 
 				if (hasTrace)

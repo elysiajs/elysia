@@ -1971,20 +1971,24 @@ export default class Elysia<
 	 * ```
 	 */
 	onError<const Schema extends RouteSchema>(
-		handler: ErrorHandler<
-			Definitions['error'],
-			MergeSchema<
-				Schema,
-				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
-			>,
-			{
-				decorator: Singleton['decorator']
-				store: Singleton['store']
-				derive: {}
-				resolve: {}
-			},
-			Ephemeral,
-			Volatile
+		handler: MaybeArray<
+			ErrorHandler<
+				Definitions['error'],
+				MergeSchema<
+					Schema,
+					Metadata['schema'] &
+						Ephemeral['schema'] &
+						Volatile['schema']
+				>,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: {}
+					resolve: {}
+				},
+				Ephemeral,
+				Volatile
+			>
 		>
 	): this
 
@@ -2004,20 +2008,24 @@ export default class Elysia<
 	 */
 	onError<const Schema extends RouteSchema>(
 		options: { as?: LifeCycleType },
-		handler: ErrorHandler<
-			Definitions['error'],
-			MergeSchema<
-				Schema,
-				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
-			>,
-			{
-				decorator: Singleton['decorator']
-				store: Singleton['store']
-				derive: {}
-				resolve: {}
-			},
-			Ephemeral,
-			Volatile
+		handler: MaybeArray<
+			ErrorHandler<
+				Definitions['error'],
+				MergeSchema<
+					Schema,
+					Metadata['schema'] &
+						Ephemeral['schema'] &
+						Volatile['schema']
+				>,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: {}
+					resolve: {}
+				},
+				Ephemeral,
+				Volatile
+			>
 		>
 	): this
 
