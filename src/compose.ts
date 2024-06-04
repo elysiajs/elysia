@@ -114,7 +114,7 @@ const createReport = ({
 				id,
 				event: '${event}',
 				name: '${name}',
-				start: performance.now(),
+				begin: performance.now(),
 				unit: ${unit}
 			})\n`
 			)
@@ -130,7 +130,7 @@ const createReport = ({
 						id,
 						event: '${event}',
 						name: '${name}',
-						start: performance.now()
+						begin: performance.now()
 					})\n`)
 
 				return () => {
@@ -380,11 +380,7 @@ export const composeHandler = ({
 		!!hooks.trace.length
 
 	const handle = isHandleFn ? `handler(c)` : `handler`
-	const handleResponse = hooks.afterResponse.length
-		? `\n;(async () => {${hooks.afterResponse
-				.map((_, i) => `await res${i}(c)`)
-				.join(';')}})();\n`
-		: ''
+	const hasAfterResponse = hooks.afterResponse.length > 0
 
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
@@ -588,6 +584,7 @@ export const composeHandler = ({
 		inference.cookie ||
 		inference.set ||
 		hasHeaders ||
+		hasTrace ||
 		(isHandleFn && hasDefaultHeaders)
 
 	if (hasTrace) fnLiteral += '\nconst id = c[ELYSIA_REQUEST_ID]\n'
@@ -1108,13 +1105,25 @@ export const composeHandler = ({
 				if (hooks.mapResponse.length) {
 					fnLiteral += `c.response = be`
 
+					const reporter = report('mapResponse', {
+						unit: hooks.mapResponse.length
+					})
+
 					for (let i = 0; i < hooks.mapResponse.length; i++) {
+						const endUnit = reporter.resolveChild(
+							hooks.mapResponse[i].fn.name
+						)
+
 						fnLiteral += `\nif(mr === undefined) {
 							mr = onMapResponse[${i}](c)
 							if(mr instanceof Promise) mr = await mr
 							if(mr !== undefined) c.response = mr
 						}\n`
+
+						endUnit()
 					}
+
+					reporter.resolve()
 				}
 
 				fnLiteral += encodeCookie
@@ -1188,11 +1197,23 @@ export const composeHandler = ({
 		fnLiteral += encodeCookie
 
 		if (hooks.mapResponse.length) {
+			const reporter = report('mapResponse', {
+				unit: hooks.mapResponse.length
+			})
+
 			for (let i = 0; i < hooks.mapResponse.length; i++) {
+				const endUnit = reporter.resolveChild(
+					hooks.mapResponse[i].fn.name
+				)
+
 				fnLiteral += `\nmr = onMapResponse[${i}](c)
 				if(mr instanceof Promise) mr = await mr
 				if(mr !== undefined) c.response = mr\n`
+
+				endUnit()
 			}
+
+			reporter.resolve()
 		}
 
 		if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
@@ -1215,13 +1236,26 @@ export const composeHandler = ({
 
 			if (hooks.mapResponse.length) {
 				fnLiteral += 'c.response = r'
+
+				const reporter = report('mapResponse', {
+					unit: hooks.mapResponse.length
+				})
+
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
+					const endUnit = reporter.resolveChild(
+						hooks.mapResponse[i].fn.name
+					)
+
 					fnLiteral += `\nif(mr === undefined) {
 						mr = onMapResponse[${i}](c)
 						if(mr instanceof Promise) mr = await mr
     					if(mr !== undefined) r = c.response = mr
 					}\n`
+
+					endUnit()
 				}
+
+				reporter.resolve()
 			}
 
 			fnLiteral += encodeCookie
@@ -1240,7 +1274,8 @@ export const composeHandler = ({
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
-			} else if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
+			} else if (hasSet)
+				fnLiteral += `return mapResponse(r, c.set, c.request)\n`
 			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
@@ -1253,13 +1288,26 @@ export const composeHandler = ({
 
 			if (hooks.mapResponse.length) {
 				fnLiteral += 'c.response = r'
+
+				const reporter = report('mapResponse', {
+					unit: hooks.mapResponse.length
+				})
+
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
+					const endUnit = reporter.resolveChild(
+						hooks.mapResponse[i].fn.name
+					)
+
 					fnLiteral += `\nif(mr === undefined) {
 							mr = onMapResponse[${i}](c)
 							if(mr instanceof Promise) mr = await mr
     						if(mr !== undefined) r = c.response = mr
 						}\n`
+
+					endUnit()
 				}
+
+				reporter.resolve()
 			}
 
 			fnLiteral += encodeCookie
@@ -1289,11 +1337,12 @@ export const composeHandler = ({
 				fnLiteral += '\n'
 			} else if (hasSet)
 				fnLiteral += `return mapResponse(${handled}, c.set, c.request)\n`
-			else fnLiteral += `return mapCompactResponse(${handled}, c.request)\n`
+			else
+				fnLiteral += `return mapCompactResponse(${handled}, c.request)\n`
 		}
 	}
 
-	if (hasErrorHandler || handleResponse) {
+	if (hasErrorHandler || hasAfterResponse) {
 		fnLiteral += `\n} catch(error) {`
 		if (!maybeAsync) fnLiteral += `return (async () => {\n`
 
@@ -1341,16 +1390,26 @@ export const composeHandler = ({
 		if (!maybeAsync) fnLiteral += '})()'
 		fnLiteral += '}'
 
-		if (handleResponse || hasTrace) {
+		if (hasAfterResponse || hasTrace) {
 			fnLiteral += ` finally { `
 
-			const reporter = report('response', {
-				unit: hooks.afterResponse.length
-			})
+			if(hasAfterResponse) {
+				fnLiteral += ';(async () => {'
 
-			fnLiteral += handleResponse
+				const reporter = report('afterResponse', {
+					unit: hooks.afterResponse.length
+				})
 
-			reporter.resolve()
+				for (let i = 0; i < hooks.afterResponse.length; i++) {
+					const endUnit = reporter.resolveChild(hooks.afterResponse[i].fn.name)
+					fnLiteral += `\nawait afterResponse[${i}](c);\n`
+					endUnit()
+				}
+
+				reporter.resolve()
+
+				fnLiteral += '})();'
+			}
 
 			fnLiteral += `}`
 		}
@@ -1401,14 +1460,6 @@ export const composeHandler = ({
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID
 	} = hooks
-
-	${
-		hooks.afterResponse.length
-			? `const ${hooks.afterResponse
-					.map((x, i) => `res${i} = afterResponse[${i}]`)
-					.join(',')}`
-			: ''
-	}
 
 	return ${maybeAsync ? 'async' : ''} function handle(c) {
 		${hooks.beforeHandle.length ? 'let be' : ''}

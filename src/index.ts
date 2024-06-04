@@ -2195,7 +2195,7 @@ export default class Elysia<
 					break
 
 				case 'afterResponse':
-					this.event.mapResponse.push(fn as any)
+					this.event.afterResponse.push(fn as any)
 					break
 
 				case 'trace':

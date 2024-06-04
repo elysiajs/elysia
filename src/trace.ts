@@ -2,7 +2,6 @@ import { ELYSIA_REQUEST_ID } from './utils'
 
 import type { Context } from './context'
 import type {
-	MaybePromise,
 	Prettify,
 	RouteSchema,
 	SingletonBase
@@ -15,8 +14,9 @@ export type TraceEvent =
 	| 'beforeHandle'
 	| 'handle'
 	| 'afterHandle'
+	| 'mapResponse'
+	| 'afterResponse'
 	| 'error'
-	| 'response'
 
 export type TraceStream = {
 	id: number
@@ -33,18 +33,17 @@ export type TraceProcess<
 > = Type extends 'begin'
 	? {
 			name: string
-			start: number
-			stop: TraceProcess<'end'>
+			begin: number
 			onStop: (
-				callback?: (stop: TraceProcess<'end'>) => unknown
-			) => Promise<TraceProcess<'end'>>
+				callback?: (end: TraceProcess<'end'>) => unknown
+			) => Promise<void>
 	  } & (WithChildren extends true
 			? {
 					children: ((
 						callback?: (
 							process: TraceProcess<'begin', false>
 						) => unknown
-					) => Promise<TraceProcess<'begin', false>>)[]
+					) => Promise<void>)[]
 			  }
 			: {})
 	: number
@@ -72,14 +71,14 @@ export type TraceHandler<
 				) => Promise<TraceProcess<'begin'>>
 			}
 		>
-	): MaybePromise<unknown>
+	): unknown
 }
 
 export const ELYSIA_TRACE = Symbol('ElysiaTrace')
 
 const createProcess = () => {
 	const { promise, resolve } = Promise.withResolvers<TraceProcess>()
-	const { promise: stop, resolve: resolveEnd } =
+	const { promise: end, resolve: resolveEnd } =
 		Promise.withResolvers<number>()
 
 	const callbacks = <Function[]>[]
@@ -93,14 +92,14 @@ const createProcess = () => {
 		},
 		(process: TraceStream) => {
 			const processes = <
-				((callback?: Function) => Promise<TraceProcess>)[]
+				((callback?: Function) => Promise<void>)[]
 			>[]
 			const resolvers = <((process: TraceStream) => () => void)[]>[]
 
 			for (let i = 0; i < (process.unit ?? 0); i++) {
 				const { promise, resolve } =
-					Promise.withResolvers<TraceProcess>()
-				const { promise: stop, resolve: resolveEnd } =
+					Promise.withResolvers<void>()
+				const { promise: end, resolve: resolveEnd } =
 					Promise.withResolvers<number>()
 
 				const callbacks = <Function[]>[]
@@ -115,11 +114,11 @@ const createProcess = () => {
 				resolvers.push((process: TraceStream) => {
 					const result = {
 						...process,
-						stop,
+						end,
 						onStop(callback?: Function) {
 							if (callback) callbacksEnd.push(callback)
 
-							return stop
+							return end
 						}
 					} as any
 
@@ -131,21 +130,21 @@ const createProcess = () => {
 						const now = performance.now()
 
 						for (let i = 0; i < callbacksEnd.length; i++)
-							callbacksEnd[i](result)
+							callbacksEnd[i](now)
 
-						resolveEnd(now)
+						resolveEnd()
 					}
 				})
 			}
 
 			const result = {
 				...process,
-				stop,
+				end,
 				children: processes,
 				onStop(callback?: Function) {
 					if (callback) callbacksEnd.push(callback)
 
-					return stop
+					return end
 				}
 			} as any
 
@@ -158,9 +157,9 @@ const createProcess = () => {
 					const now = performance.now()
 
 					for (let i = 0; i < callbacksEnd.length; i++)
-						callbacksEnd[i](result)
+						callbacksEnd[i](now)
 
-					resolveEnd(now)
+					resolveEnd()
 				}
 			}
 		}
@@ -176,7 +175,7 @@ export const createTracer = (traceListener: TraceHandler) => {
 		const [onHandle, resolveHandle] = createProcess()
 		const [onAfterHandle, resolveAfterHandle] = createProcess()
 		const [onError, resolveError] = createProcess()
-		const [mapResponse, resolveMapResponse] = createProcess()
+		const [onMapResponse, resolveMapResponse] = createProcess()
 		const [onAfterResponse, resolveAfterResponse] = createProcess()
 
 		traceListener({
@@ -197,7 +196,7 @@ export const createTracer = (traceListener: TraceHandler) => {
 			// @ts-ignore
 			onAfterHandle,
 			// @ts-ignore
-			mapResponse,
+			onMapResponse,
 			// @ts-ignore
 			onAfterResponse,
 			// @ts-ignore
