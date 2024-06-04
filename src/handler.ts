@@ -111,6 +111,50 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 	return set
 }
 
+// const concatUint8Array = (a: Uint8Array, b: Uint8Array) => {
+// 	const arr = new Uint8Array(a.length + b.length)
+// 	arr.set(a, 0)
+// 	arr.set(b, a.length)
+
+// 	return arr
+// }
+
+const handleStream = (
+	generator: Generator | AsyncGenerator,
+	request?: Request
+) => {
+	let end = false
+
+	return new Response(
+		new ReadableStream({
+			async start(controller) {
+				request?.signal.addEventListener('abort', () => {
+					end = true
+
+					try {
+						controller.close()
+					} catch {
+						// nothing
+					}
+				})
+
+				for await (const chunk of generator) {
+					if (end) break
+					if (!chunk) continue
+
+					controller.enqueue(Buffer.from(chunk.toString()))
+				}
+
+				try {
+					controller.close()
+				} catch {
+					// nothing
+				}
+			}
+		})
+	)
+}
+
 export const mapResponse = (
 	response: unknown,
 	set: Context['set'],
@@ -324,6 +368,10 @@ export const mapResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
+				// @ts-expect-error
+				if (typeof response?.next === 'function')
+					return handleStream(response as any, request)
+
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
 
@@ -408,7 +456,7 @@ export const mapResponse = (
 			case 'Promise':
 				// @ts-ignore
 				return (response as any as Promise<unknown>).then((x) => {
-					const r = mapCompactResponse(x)
+					const r = mapCompactResponse(x, request)
 
 					if (r !== undefined) return r
 
@@ -417,7 +465,7 @@ export const mapResponse = (
 
 			// ? Maybe response or Blob
 			case 'Function':
-				return mapCompactResponse((response as Function)())
+				return mapCompactResponse((response as Function)(), request)
 
 			case 'Number':
 			case 'Boolean':
@@ -445,6 +493,10 @@ export const mapResponse = (
 
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
+
+				// @ts-expect-error
+				if (typeof response?.next === 'function')
+					return handleStream(response as any, request)
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -677,6 +729,10 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
+				// @ts-expect-error
+				if (typeof response?.next === 'function')
+					return handleStream(response as any, request)
+
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
 
@@ -766,7 +822,7 @@ export const mapEarlyResponse = (
 				return errorToResponse(response as Error, set)
 
 			case 'Function':
-				return mapCompactResponse((response as Function)())
+				return mapCompactResponse((response as Function)(), request)
 
 			case 'Number':
 			case 'Boolean':
@@ -794,6 +850,10 @@ export const mapEarlyResponse = (
 
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
+
+				// @ts-expect-error
+				if (typeof response?.next === 'function')
+					return handleStream(response as any, request)
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -896,13 +956,13 @@ export const mapCompactResponse = (
 
 		case 'Promise':
 			// @ts-ignore
-			return (response as any as Promise<unknown>).then(
-				mapCompactResponse
+			return (response as any as Promise<unknown>).then((x) =>
+				mapCompactResponse(x, request)
 			)
 
 		// ? Maybe response or Blob
 		case 'Function':
-			return mapCompactResponse((response as Function)())
+			return mapCompactResponse((response as Function)(), request)
 
 		case 'Number':
 		case 'Boolean':
@@ -920,10 +980,16 @@ export const mapCompactResponse = (
 				})
 
 			if (response instanceof Promise)
-				return response.then(mapCompactResponse) as any
+				return response.then((x) =>
+					mapCompactResponse(x, request)
+				) as any
 
 			if (response instanceof Error)
 				return errorToResponse(response as Error)
+
+			// @ts-expect-error
+			if (typeof response?.next === 'function')
+				return handleStream(response as any, request)
 
 			if ('charCodeAt' in (response as any)) {
 				const code = (response as any).charCodeAt(0)
