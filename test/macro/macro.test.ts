@@ -258,18 +258,18 @@ describe('Macro', () => {
 		expect(app.router.history[0].hooks.error?.length).toEqual(1)
 	})
 
-	it('appends onResponse', async () => {
+	it('appends onAfterResponse', async () => {
 		const app = new Elysia()
-			.macro(({ onResponse }) => ({
+			.macro(({ onAfterResponse }) => ({
 				hi(fn: () => any) {
-					onResponse(fn)
+					onAfterResponse(fn)
 				}
 			}))
 			.get('/', () => 'Hello World', {
 				hi: () => {}
 			})
 
-		expect(app.router.history[0].hooks.onResponse?.length).toEqual(1)
+		expect(app.router.history[0].hooks.afterResponse?.length).toEqual(1)
 	})
 
 	it('handle deduplication', async () => {

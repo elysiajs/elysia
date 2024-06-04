@@ -176,7 +176,8 @@ export const createTracer = (traceListener: TraceHandler) => {
 		const [onHandle, resolveHandle] = createProcess()
 		const [onAfterHandle, resolveAfterHandle] = createProcess()
 		const [onError, resolveError] = createProcess()
-		const [onResponse, resolveResponse] = createProcess()
+		const [mapResponse, resolveMapResponse] = createProcess()
+		const [onAfterResponse, resolveAfterResponse] = createProcess()
 
 		traceListener({
 			// @ts-ignore
@@ -196,9 +197,11 @@ export const createTracer = (traceListener: TraceHandler) => {
 			// @ts-ignore
 			onAfterHandle,
 			// @ts-ignore
-			onError,
+			mapResponse,
 			// @ts-ignore
-			onResponse
+			onAfterResponse,
+			// @ts-ignore
+			onError
 		})
 
 		// ? This is pass to compiler
@@ -210,7 +213,8 @@ export const createTracer = (traceListener: TraceHandler) => {
 			handle: resolveHandle,
 			afterHandle: resolveAfterHandle,
 			error: resolveError,
-			response: resolveResponse
+			mapResponse: resolveMapResponse,
+			afterResponse: resolveAfterResponse
 		}
 	}
 }

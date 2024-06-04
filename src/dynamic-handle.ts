@@ -381,8 +381,8 @@ export const createDynamicHandler =
 			// @ts-expect-error private
 			return app.handleError(context, error)
 		} finally {
-			for (const onResponse of app.event.onResponse)
-				await onResponse.fn(context)
+			for (const afterResponse of app.event.afterResponse)
+				await afterResponse.fn(context)
 		}
 	}
 

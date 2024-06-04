@@ -218,7 +218,7 @@ export default class Elysia<
 		beforeHandle: [],
 		afterHandle: [],
 		mapResponse: [],
-		onResponse: [],
+		afterResponse: [],
 		trace: [],
 		error: [],
 		stop: []
@@ -325,8 +325,8 @@ export default class Elysia<
 				onTransform: manage('transform') as any,
 				onBeforeHandle: manage('beforeHandle') as any,
 				onAfterHandle: manage('afterHandle') as any,
-				onResponse: manage('onResponse') as any,
 				mapResponse: manage('mapResponse') as any,
+				onAfterResponse: manage('afterResponse') as any,
 				onError: manage('error') as any
 			}
 
@@ -1608,21 +1608,18 @@ export default class Elysia<
 
 	/**
 	 * ### response | Life cycle event
-	 * Called when handler is executed
+	 * Call AFTER main handler is executed
 	 * Good for analytic metrics
-	 *
 	 * ---
 	 * @example
 	 * ```typescript
 	 * new Elysia()
-	 *     .onError(({ code }) => {
-	 *         if(code === "NOT_FOUND")
-	 *             return "Path not found :("
+	 *     .onAfterResponse(() => {
+	 *         cleanup()
 	 *     })
 	 * ```
 	 */
-
-	onResponse<const Schema extends RouteSchema>(
+	onAfterResponse<const Schema extends RouteSchema>(
 		handler: MaybeArray<
 			VoidHandler<
 				MergeSchema<
@@ -1641,21 +1638,20 @@ export default class Elysia<
 
 	/**
 	 * ### response | Life cycle event
-	 * Called when handler is executed
+	 * Call AFTER main handler is executed
 	 * Good for analytic metrics
 	 *
 	 * ---
 	 * @example
 	 * ```typescript
 	 * new Elysia()
-	 *     .onError(({ code }) => {
-	 *         if(code === "NOT_FOUND")
-	 *             return "Path not found :("
-	 *     })
+	 *     .onAfterResponse(() => {
+	 *         cleanup()
+	 * 	   })
 	 * ```
 	 */
 
-	onResponse<
+	onAfterResponse<
 		const Schema extends RouteSchema,
 		const Type extends LifeCycleType
 	>(
@@ -1694,15 +1690,15 @@ export default class Elysia<
 		>
 	): this
 
-	onResponse(
+	onAfterResponse(
 		options: { as?: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
-		if (!handler) return this.on('response', options as any)
+		if (!handler) return this.on('afterResponse', options as any)
 
 		return this.on(
 			options as { as?: LifeCycleType },
-			'response',
+			'afterResponse',
 			handler as any
 		)
 	}
@@ -2092,7 +2088,7 @@ export default class Elysia<
 	 * ```
 	 */
 	on<Event extends keyof LifeCycleStore>(
-		type: Exclude<Event, 'onResponse'> | 'response',
+		type: Event,
 		handlers: MaybeArray<
 			Extract<LifeCycleStore[Event], HookContainer[]>[0]['fn']
 		>
@@ -2116,7 +2112,7 @@ export default class Elysia<
 	 */
 	on<const Event extends keyof LifeCycleStore>(
 		options: { as?: LifeCycleType },
-		type: Exclude<Event, 'onResponse'> | 'response',
+		type: Event,
 		handlers: MaybeArray<Extract<LifeCycleStore[Event], Function[]>[0]>
 	): this
 
@@ -2125,7 +2121,7 @@ export default class Elysia<
 		typeOrHandlers: MaybeArray<Function | HookContainer> | string,
 		handlers?: MaybeArray<Function | HookContainer>
 	) {
-		let type: Exclude<keyof LifeCycleStore, 'onResponse'> | 'onResponse'
+		let type: keyof LifeCycleStore
 
 		switch (typeof optionsOrType) {
 			case 'string':
@@ -2138,9 +2134,6 @@ export default class Elysia<
 				type = typeOrHandlers as any
 				break
 		}
-
-		// @ts-expect-error possible user error, leave it on
-		if (type === 'response') type = 'onResponse'
 
 		if (Array.isArray(handlers)) handlers = fnToContainer(handlers)
 		else {
@@ -2201,8 +2194,8 @@ export default class Elysia<
 					this.event.mapResponse.push(fn as any)
 					break
 
-				case 'onResponse':
-					this.event.onResponse.push(fn as any)
+				case 'afterResponse':
+					this.event.mapResponse.push(fn as any)
 					break
 
 				case 'trace':
@@ -2253,7 +2246,7 @@ export default class Elysia<
 		promoteEvent(this.event.beforeHandle)
 		promoteEvent(this.event.afterHandle)
 		promoteEvent(this.event.mapResponse)
-		promoteEvent(this.event.onResponse)
+		promoteEvent(this.event.afterResponse)
 		promoteEvent(this.event.trace)
 		promoteEvent(this.event.error)
 
@@ -2381,10 +2374,10 @@ export default class Elysia<
 				...((sandbox.event.request || []) as any)
 			]
 
-		if (sandbox.event.onResponse.length)
-			this.event.onResponse = [
-				...(this.event.onResponse || []),
-				...((sandbox.event.onResponse || []) as any)
+		if (sandbox.event.mapResponse.length)
+			this.event.mapResponse = [
+				...(this.event.mapResponse || []),
+				...((sandbox.event.mapResponse || []) as any)
 			]
 
 		this.model(sandbox.definitions.type)
@@ -2656,10 +2649,10 @@ export default class Elysia<
 				...(sandbox.event.request || [])
 			]
 
-		if (sandbox.event.onResponse.length)
-			this.event.onResponse = [
-				...(this.event.onResponse || []),
-				...(sandbox.event.onResponse || [])
+		if (sandbox.event.mapResponse.length)
+			this.event.mapResponse = [
+				...(this.event.mapResponse || []),
+				...(sandbox.event.mapResponse || [])
 			]
 
 		this.model(sandbox.definitions.type)

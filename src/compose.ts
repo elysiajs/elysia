@@ -376,12 +376,12 @@ export const composeHandler = ({
 		hooks.error.length > 0 ||
 		app.event.error.length > 0 ||
 		typeof Bun === 'undefined' ||
-		hooks.onResponse.length > 0 ||
+		hooks.afterResponse.length > 0 ||
 		!!hooks.trace.length
 
 	const handle = isHandleFn ? `handler(c)` : `handler`
-	const handleResponse = hooks.onResponse.length
-		? `\n;(async () => {${hooks.onResponse
+	const handleResponse = hooks.afterResponse.length
+		? `\n;(async () => {${hooks.afterResponse
 				.map((_, i) => `await res${i}(c)`)
 				.join(';')}})();\n`
 		: ''
@@ -1345,7 +1345,7 @@ export const composeHandler = ({
 			fnLiteral += ` finally { `
 
 			const reporter = report('response', {
-				unit: hooks.onResponse.length
+				unit: hooks.afterResponse.length
 			})
 
 			fnLiteral += handleResponse
@@ -1367,7 +1367,7 @@ export const composeHandler = ({
 			mapResponse: onMapResponse,
 			parse,
 			error: handleErrors,
-			onResponse,
+			afterResponse,
 			trace
 		},
 		validator: {
@@ -1403,9 +1403,9 @@ export const composeHandler = ({
 	} = hooks
 
 	${
-		hooks.onResponse.length
-			? `const ${hooks.onResponse
-					.map((x, i) => `res${i} = onResponse[${i}]`)
+		hooks.afterResponse.length
+			? `const ${hooks.afterResponse
+					.map((x, i) => `res${i} = afterResponse[${i}]`)
 					.join(',')}`
 			: ''
 	}
@@ -1711,7 +1711,7 @@ export const composeErrorHandler = (
 	app: Elysia<any, any, any, any, any, any, any, any>
 ) => {
 	let fnLiteral = `const {
-		app: { event: { error: onErrorContainer, onResponse: resContainer } },
+		app: { event: { error: onErrorContainer, afterResponse: resContainer } },
 		mapResponse,
 		ERROR_CODE,
 		ELYSIA_RESPONSE

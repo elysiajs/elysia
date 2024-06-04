@@ -587,14 +587,14 @@ export const sucrose = (
 	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
 		events.push(lifeCycle.handler)
 
+	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
 	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
 	if (lifeCycle.parse?.length) events.push(...lifeCycle.parse)
 	if (lifeCycle.error?.length) events.push(...lifeCycle.error)
 	if (lifeCycle.transform?.length) events.push(...lifeCycle.transform)
 	if (lifeCycle.afterHandle?.length) events.push(...lifeCycle.afterHandle)
 	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
-	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
-	if (lifeCycle.onResponse?.length) events.push(...lifeCycle.onResponse)
+	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
 
 	for (const e of events) {
 		if (!e) continue

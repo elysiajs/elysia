@@ -335,7 +335,7 @@ export interface LifeCycleStore {
 	beforeHandle: HookContainer<OptionalHandler<any, any>>[]
 	afterHandle: HookContainer<AfterHandler<any, any>>[]
 	mapResponse: HookContainer<MapResponse<any, any>>[]
-	onResponse: HookContainer<VoidHandler<any, any>>[]
+	afterResponse: HookContainer<VoidHandler<any, any>>[]
 	trace: HookContainer<TraceHandler<any, any>>[]
 	error: HookContainer<ErrorHandler<any, any, any>>[]
 	stop: HookContainer<GracefulHandler<any>>[]
@@ -797,13 +797,13 @@ export type LocalHook<
 		 */
 		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 		/**
+		 * Execute after response is sent
+		 */
+		afterResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		/**
 		 * Catch error
 		 */
 		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-		/**
-		 * Custom body parser
-		 */
-		onResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 		tags?: DocumentDecoration['tags']
 	}
 
@@ -927,14 +927,14 @@ export interface MacroManager<
 		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 
-	onResponse(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
-	onResponse(
+	mapResponse(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
+	mapResponse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
 		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
-	mapResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
-	mapResponse(
+	onAfterResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
+	onAfterResponse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
 		fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
 	): unknown

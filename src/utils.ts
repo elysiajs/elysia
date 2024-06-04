@@ -124,8 +124,8 @@ export const primitiveHooks = [
 	'resolve',
 	'beforeHandle',
 	'afterHandle',
-	'onResponse',
 	'mapResponse',
+	'afterResponse',
 	'trace',
 	'error',
 	'stop',
@@ -229,8 +229,8 @@ export const mergeHook = (
 		transform: mergeObjectArray(a?.transform, b?.transform),
 		beforeHandle: mergeObjectArray(a?.beforeHandle, b?.beforeHandle),
 		afterHandle: mergeObjectArray(a?.afterHandle, b?.afterHandle),
-		onResponse: mergeObjectArray(a?.onResponse, b?.onResponse) as any,
 		mapResponse: mergeObjectArray(a?.mapResponse, b?.mapResponse) as any,
+		afterResponse: mergeObjectArray(a?.afterResponse, b?.afterResponse) as any,
 		trace: mergeObjectArray(a?.trace, b?.trace) as any,
 		error: mergeObjectArray(a?.error, b?.error)
 	}
@@ -587,9 +587,9 @@ export const mergeLifeCycle = (
 			a.mapResponse,
 			injectChecksum(b?.mapResponse)
 		) as HookContainer<MapResponse<any, any>>[],
-		onResponse: mergeObjectArray(
-			a.onResponse,
-			injectChecksum(b?.onResponse)
+		afterResponse: mergeObjectArray(
+			a.afterResponse,
+			injectChecksum(b?.afterResponse)
 		) as HookContainer<VoidHandler<any, any>>[],
 		// Already merged on Elysia._use, also logic is more complicated, can't directly merge
 		trace: a.trace,
@@ -665,9 +665,9 @@ export const filterGlobalHook = (
 		transform: filterGlobal(hook?.transform),
 		beforeHandle: filterGlobal(hook?.beforeHandle),
 		afterHandle: filterGlobal(hook?.afterHandle),
-		onResponse: filterGlobal(hook?.onResponse),
+		mapResponse: filterGlobal(hook?.mapResponse),
+		afterResponse: filterGlobal(hook?.afterResponse),
 		error: filterGlobal(hook?.error),
-		mapResponse: filterGlobal(hook?.mapResponse)
 	} as LocalHook<any, any, any, any, any, any, any>
 }
 
@@ -986,8 +986,8 @@ export const localHookToLifeCycleStore = (
 		transform: fnToContainer(a?.transform),
 		beforeHandle: fnToContainer(a?.beforeHandle),
 		afterHandle: fnToContainer(a?.afterHandle),
-		onResponse: fnToContainer(a?.onResponse),
 		mapResponse: fnToContainer(a?.mapResponse),
+		afterResponse: fnToContainer(a?.afterResponse),
 		trace: fnToContainer(a?.trace),
 		error: fnToContainer(a?.error),
 		stop: fnToContainer(a?.stop)
@@ -1005,7 +1005,7 @@ export const lifeCycleToFn = (
 		transform: a.transform?.map((x) => x.fn),
 		beforeHandle: a.beforeHandle?.map((x) => x.fn),
 		afterHandle: a.afterHandle?.map((x) => x.fn),
-		onResponse: a.onResponse?.map((x) => x.fn),
+		afterResponse: a.afterResponse?.map((x) => x.fn),
 		mapResponse: a.mapResponse?.map((x) => x.fn),
 		trace: a.trace?.map((x) => x.fn),
 		error: a.error?.map((x) => x.fn),
