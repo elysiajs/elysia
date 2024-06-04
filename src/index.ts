@@ -3109,8 +3109,15 @@ export default class Elysia<
 			this.headers(plugin.setHeaders)
 
 			for (const trace of plugin.event.trace)
-				if (trace.scope && trace.scope !== 'local')
-					this.trace(trace.fn)
+				switch (trace.scope) {
+					case 'global':
+						this.on({ as: 'local' }, 'trace', trace.fn as any)
+						break
+					
+					case 'scoped':
+						this.on('trace', trace.fn as any)
+						break
+				}
 
 			if (name) {
 				if (!(name in this.dependencies)) this.dependencies[name] = []
@@ -5306,6 +5313,7 @@ export type { Context, PreContext, ErrorContext } from './context'
 export {
 	ELYSIA_TRACE,
 	type TraceEvent,
+	type TraceListener,
 	type TraceHandler,
 	type TraceProcess,
 	type TraceStream

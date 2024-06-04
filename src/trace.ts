@@ -20,7 +20,7 @@ export type TraceStream = {
 	type: 'begin' | 'end'
 	time: number
 	name?: string
-	unit?: number
+	total?: number
 }
 
 export type TraceProcess<
@@ -90,6 +90,10 @@ export type TraceProcess<
 	  >
 	: number
 
+export type TraceListener = (
+	callback?: (process: TraceProcess<'begin'>) => unknown
+) => Promise<TraceProcess<'begin'>>
+
 export type TraceHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -108,9 +112,7 @@ export type TraceHandler<
 				time: number
 				store: Singleton['store']
 			} & {
-				[x in `on${Capitalize<TraceEvent>}`]: (
-					callback?: (process: TraceProcess<'begin'>) => unknown
-				) => Promise<TraceProcess<'begin'>>
+				[x in `on${Capitalize<TraceEvent>}`]: TraceListener
 			}
 		>
 	): unknown
@@ -136,7 +138,7 @@ const createProcess = () => {
 			const processes = <((callback?: Function) => Promise<void>)[]>[]
 			const resolvers = <((process: TraceStream) => () => void)[]>[]
 
-			for (let i = 0; i < (process.unit ?? 0); i++) {
+			for (let i = 0; i < (process.total ?? 0); i++) {
 				const { promise, resolve } = Promise.withResolvers<void>()
 				const { promise: end, resolve: resolveEnd } =
 					Promise.withResolvers<number>()
@@ -220,6 +222,10 @@ export const createTracer = (traceListener: TraceHandler) => {
 		const [onError, resolveError] = createProcess()
 		const [onMapResponse, resolveMapResponse] = createProcess()
 		const [onAfterResponse, resolveAfterResponse] = createProcess()
+
+		// console.log({
+		// 	context
+		// })
 
 		traceListener({
 			// @ts-ignore

@@ -1,20 +1,27 @@
 import { Elysia } from '../src'
 import { req } from '../test/utils'
 
-const timeout = setTimeout(() => {
-	throw new Error('Trace stuck')
-}, 1000)
+const app = new Elysia({ precompile: true })
+	.trace(({ onMapResponse, set }) => {
+		onMapResponse(({ onEvent, onStop }) => {
+			const names = <string[]>[]
 
-const a = new Elysia().trace({ as: 'global' }, async ({ set }) => {
-	set.headers['X-Powered-By'] = 'elysia'
-	clearTimeout(timeout)
-})
+			onEvent(({ name }) => {
+				names.push(name)
+			})
 
-const app = new Elysia().use(a).get('/', () => 'hi')
+			onStop(() => {
+				set.headers.name = names.join(', ')
+			})
+		})
+	})
+	.mapResponse(function luna() {})
+	.get('/', () => 'a', {
+		mapResponse: [function kindred() {}]
+	})
+	// .compile()
 
-const response = await app.handle(req('/'))
-
-// console.log(app.routes[0].composed?.toString())
+console.log(app.routes[0].composed?.toString())
 
 const { headers } = await app.handle(req('/'))
 
