@@ -18,9 +18,24 @@ export type TraceStream = {
 	id: number
 	event: TraceEvent
 	type: 'begin' | 'end'
-	time: number
+	begin: number
 	name?: string
 	total?: number
+}
+
+type TraceEndDetail = {
+	/**
+	 * Timestamp of a function after it's executed since the server start
+	 */
+	end: TraceProcess<'end'>
+	/**
+	 * Error that was thrown in the lifecycle
+	 */
+	error: Error | null
+	/**
+	 * Elapsed time of the lifecycle
+	 */
+	elapsed: number
 }
 
 export type TraceProcess<
@@ -42,6 +57,10 @@ export type TraceProcess<
 				 */
 				end: Promise<number>
 				/**
+				 * Error that was thrown in the lifecycle
+				 */
+				error: Promise<Error | null>
+				/**
 				 * Listener to intercept the end of the lifecycle
 				 *
 				 * If you want to mutate the context, you must do it in this function
@@ -54,12 +73,7 @@ export type TraceProcess<
 					 * If you want to mutate the context, you must do it in this function
 					 * as there's a lock mechanism to ensure the context is mutate successfully
 					 */
-					callback?: (
-						/**
-						 * Timestamp of a function after it's executed since the server start
-						 */
-						end: TraceProcess<'end'>
-					) => unknown
+					callback?: (detail: TraceEndDetail) => unknown
 				): Promise<void>
 			} & (WithChildren extends true
 				? {
@@ -124,6 +138,8 @@ const createProcess = () => {
 	const { promise, resolve } = Promise.withResolvers<TraceProcess>()
 	const { promise: end, resolve: resolveEnd } =
 		Promise.withResolvers<number>()
+	const { promise: error, resolve: resolveError } =
+		Promise.withResolvers<Error | null>()
 
 	const callbacks = <Function[]>[]
 	const callbacksEnd = <Function[]>[]
@@ -142,6 +158,8 @@ const createProcess = () => {
 				const { promise, resolve } = Promise.withResolvers<void>()
 				const { promise: end, resolve: resolveEnd } =
 					Promise.withResolvers<number>()
+				const { promise: error, resolve: resolveError } =
+					Promise.withResolvers<Error | null>()
 
 				const callbacks = <Function[]>[]
 				const callbacksEnd = <Function[]>[]
@@ -156,6 +174,7 @@ const createProcess = () => {
 					const result = {
 						...process,
 						end,
+						error,
 						index: i,
 						onStop(callback?: Function) {
 							if (callback) callbacksEnd.push(callback)
@@ -168,13 +187,22 @@ const createProcess = () => {
 					for (let i = 0; i < callbacks.length; i++)
 						callbacks[i](result)
 
-					return () => {
-						const now = performance.now()
+					return (error: Error | null = null) => {
+						const end = performance.now()
+
+						const detail = {
+							end,
+							error,
+							get elapsed() {
+								return end - process.begin
+							}
+						}
 
 						for (let i = 0; i < callbacksEnd.length; i++)
-							callbacksEnd[i](now)
+							callbacksEnd[i](detail)
 
-						resolveEnd(now)
+						resolveEnd(end)
+						resolveError(error)
 					}
 				})
 			}
@@ -182,6 +210,7 @@ const createProcess = () => {
 			const result = {
 				...process,
 				end,
+				error,
 				onEvent(callback?: Function) {
 					for (let i = 0; i < processes.length; i++)
 						processes[i](callback)
@@ -198,13 +227,22 @@ const createProcess = () => {
 
 			return {
 				resolveChild: resolvers,
-				resolve() {
-					const now = performance.now()
+				resolve(error: Error | null = null) {
+					const end = performance.now()
+
+					const detail = {
+						end,
+						error,
+						get elapsed() {
+							return end - process.begin
+						}
+					}
 
 					for (let i = 0; i < callbacksEnd.length; i++)
-						callbacksEnd[i](now)
+						callbacksEnd[i](detail)
 
-					resolveEnd(now)
+					resolveEnd(end)
+					resolveError(error)
 				}
 			}
 		}

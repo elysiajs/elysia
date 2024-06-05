@@ -2,12 +2,15 @@ import { Elysia } from '../src'
 import { req } from '../test/utils'
 
 const app = new Elysia({ precompile: true })
-	.trace(({ onMapResponse, set }) => {
-		onMapResponse(({ onEvent, onStop }) => {
+	.trace(({ onBeforeHandle, set }) => {
+		onBeforeHandle(({ onEvent, onStop }) => {
 			const names = <string[]>[]
 
-			onEvent(({ name }) => {
-				names.push(name)
+			onEvent(({ name, onStop }) => {
+				onStop(({ error }) => {
+					console.log(name, error)
+					names.push(name)
+				})
 			})
 
 			onStop(() => {
@@ -15,14 +18,15 @@ const app = new Elysia({ precompile: true })
 			})
 		})
 	})
-	.mapResponse(function luna() {})
+	.onBeforeHandle(function luna() {})
 	.get('/', () => 'a', {
-		mapResponse: [function kindred() {}]
+		beforeHandle() {
+			throw new Error("A")
+		}
 	})
-	// .compile()
 
-console.log(app.routes[0].composed?.toString())
+// console.log(app.routes[0].composed?.toString())
 
 const { headers } = await app.handle(req('/'))
 
-console.log(headers.get('name'))
+// console.log(headers.get('name'))

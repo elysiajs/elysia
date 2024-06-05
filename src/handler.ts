@@ -21,7 +21,6 @@ export const isNotEmpty = (obj?: Object) => {
 
 	return false
 }
-/** */
 
 const handleFile = (response: File | Blob, set?: Context['set']) => {
 	const size = response.size

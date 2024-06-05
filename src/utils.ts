@@ -1,9 +1,11 @@
+import type { BunFile } from 'bun'
 import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler, ValueError } from '@sinclair/typebox/compiler'
 
 import { t } from '.'
 import { isNotEmpty } from './handler'
+import type { Sucrose } from './sucrose'
 
 import type {
 	LifeCycleStore,
@@ -25,8 +27,6 @@ import type {
 	Replace
 } from './types'
 import type { CookieOptions } from './cookies'
-import { Sucrose } from './sucrose'
-import { BunFile } from 'bun'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -230,7 +230,10 @@ export const mergeHook = (
 		beforeHandle: mergeObjectArray(a?.beforeHandle, b?.beforeHandle),
 		afterHandle: mergeObjectArray(a?.afterHandle, b?.afterHandle),
 		mapResponse: mergeObjectArray(a?.mapResponse, b?.mapResponse) as any,
-		afterResponse: mergeObjectArray(a?.afterResponse, b?.afterResponse) as any,
+		afterResponse: mergeObjectArray(
+			a?.afterResponse,
+			b?.afterResponse
+		) as any,
 		trace: mergeObjectArray(a?.trace, b?.trace) as any,
 		error: mergeObjectArray(a?.error, b?.error)
 	}
@@ -667,7 +670,7 @@ export const filterGlobalHook = (
 		afterHandle: filterGlobal(hook?.afterHandle),
 		mapResponse: filterGlobal(hook?.mapResponse),
 		afterResponse: filterGlobal(hook?.afterResponse),
-		error: filterGlobal(hook?.error),
+		error: filterGlobal(hook?.error)
 	} as LocalHook<any, any, any, any, any, any, any>
 }
 

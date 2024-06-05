@@ -1344,7 +1344,7 @@ export const composeHandler = ({
 
 		if (hasTrace)
 			for (let i = 0; i < hooks.trace.length; i++)
-				fnLiteral += `report${i}.resolve();reportChild${i}();\n`
+				fnLiteral += `report${i}.resolve(error);reportChild${i}(error);\n`
 
 		const reporter = report('error', {
 			total: hooks.error.length
@@ -1387,12 +1387,12 @@ export const composeHandler = ({
 		if (hasAfterResponse || hasTrace) {
 			fnLiteral += ` finally { `
 
+			const reporter = report('afterResponse', {
+				total: hooks.afterResponse.length
+			})
+
 			if (hasAfterResponse) {
 				fnLiteral += ';(async () => {'
-
-				const reporter = report('afterResponse', {
-					total: hooks.afterResponse.length
-				})
 
 				for (let i = 0; i < hooks.afterResponse.length; i++) {
 					const endUnit = reporter.resolveChild(
@@ -1402,10 +1402,10 @@ export const composeHandler = ({
 					endUnit()
 				}
 
-				reporter.resolve()
-
 				fnLiteral += '})();'
 			}
+
+			reporter.resolve()
 
 			fnLiteral += `}`
 		}
