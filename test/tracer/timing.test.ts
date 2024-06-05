@@ -10,9 +10,9 @@ describe('Trace Timing', async () => {
 	it('handle', async () => {
 		const app = new Elysia()
 			.trace(({ onHandle, set }) => {
-				onHandle(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -30,9 +30,9 @@ describe('Trace Timing', async () => {
 	it('request', async () => {
 		const app = new Elysia()
 			.trace(({ onRequest, set }) => {
-				onRequest(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onRequest(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -49,9 +49,9 @@ describe('Trace Timing', async () => {
 	it('parse', async () => {
 		const app = new Elysia()
 			.trace(({ onParse, set }) => {
-				onParse(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onParse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -68,9 +68,9 @@ describe('Trace Timing', async () => {
 	it('transform', async () => {
 		const app = new Elysia()
 			.trace(({ onTransform, set }) => {
-				onTransform(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onTransform(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -87,9 +87,9 @@ describe('Trace Timing', async () => {
 	it('beforeHandle', async () => {
 		const app = new Elysia()
 			.trace(({ onBeforeHandle, set }) => {
-				onBeforeHandle(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onBeforeHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -106,9 +106,9 @@ describe('Trace Timing', async () => {
 	it('afterHandle', async () => {
 		const app = new Elysia()
 			.trace(({ onAfterHandle, set }) => {
-				onAfterHandle(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onAfterHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -125,9 +125,9 @@ describe('Trace Timing', async () => {
 	it('mapResponse', async () => {
 		const app = new Elysia()
 			.trace(({ onMapResponse, set }) => {
-				onMapResponse(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onMapResponse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -144,9 +144,9 @@ describe('Trace Timing', async () => {
 	it('afterResponse', async () => {
 		const app = new Elysia()
 			.trace(({ onAfterResponse, set }) => {
-				onAfterResponse(({ begin, onStop }) => {
-					onStop((end) => {
-						expect(end - begin).toBeGreaterThan(5)
+				onAfterResponse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						expect(elapsed).toBeGreaterThan(5)
 					})
 				})
 			})
@@ -161,9 +161,9 @@ describe('Trace Timing', async () => {
 	it('inline parse', async () => {
 		const app = new Elysia()
 			.trace(({ onParse, set }) => {
-				onParse(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onParse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -181,9 +181,9 @@ describe('Trace Timing', async () => {
 	it('inline transform', async () => {
 		const app = new Elysia()
 			.trace(({ onTransform, set }) => {
-				onTransform(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onTransform(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -201,9 +201,9 @@ describe('Trace Timing', async () => {
 	it('inline beforeHandle', async () => {
 		const app = new Elysia()
 			.trace(({ onBeforeHandle, set }) => {
-				onBeforeHandle(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onBeforeHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -221,9 +221,9 @@ describe('Trace Timing', async () => {
 	it('inline afterHandle', async () => {
 		const app = new Elysia()
 			.trace(({ onAfterHandle, set }) => {
-				onAfterHandle(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onAfterHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -241,9 +241,9 @@ describe('Trace Timing', async () => {
 	it('inline mapResponse', async () => {
 		const app = new Elysia()
 			.trace(({ onMapResponse, set }) => {
-				onMapResponse(({ begin, onStop }) => {
-					onStop((end) => {
-						set.headers.time = (end - begin).toString()
+				onMapResponse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
 					})
 				})
 			})
@@ -261,9 +261,9 @@ describe('Trace Timing', async () => {
 	it('inline afterResponse', async () => {
 		const app = new Elysia()
 			.trace(({ onAfterResponse, set }) => {
-				onAfterResponse(({ begin, onStop }) => {
-					onStop((end) => {
-						expect(end - begin).toBeGreaterThan(5)
+				onAfterResponse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						expect(elapsed).toBeGreaterThan(5)
 					})
 				})
 			})
@@ -283,12 +283,12 @@ describe('Trace Timing', async () => {
 					let total = 0
 
 					onEvent(({ begin }) => {
-						onStop((end) => {
-							total += end - begin
+						onStop(({ elapsed }) => {
+							total += elapsed
 						})
 					})
 
-					onStop((end) => {
+					onStop(({ elapsed }) => {
 						set.headers.time = total.toString()
 					})
 				})
@@ -315,13 +315,13 @@ describe('Trace Timing', async () => {
 				onTransform(({ onStop, onEvent }) => {
 					let total = 0
 
-					onEvent(({ begin, onStop }) => {
-						onStop((end) => {
-							total += end - begin
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
 						})
 					})
 
-					onStop((end) => {
+					onStop(({ elapsed }) => {
 						set.headers.time = total.toString()
 					})
 				})
@@ -348,13 +348,13 @@ describe('Trace Timing', async () => {
 				onBeforeHandle(({ onStop, onEvent }) => {
 					let total = 0
 
-					onEvent(({ begin, onStop }) => {
-						onStop((end) => {
-							total += end - begin
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
 						})
 					})
 
-					onStop((end) => {
+					onStop(({ elapsed }) => {
 						set.headers.time = total.toString()
 					})
 				})
@@ -381,13 +381,13 @@ describe('Trace Timing', async () => {
 				onBeforeHandle(({ onStop, onEvent }) => {
 					let total = 0
 
-					onEvent(({ begin, onStop }) => {
-						onStop((end) => {
-							total += end - begin
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
 						})
 					})
 
-					onStop((end) => {
+					onStop(({ elapsed }) => {
 						set.headers.time = total.toString()
 					})
 				})
@@ -414,13 +414,13 @@ describe('Trace Timing', async () => {
 				onAfterHandle(({ onStop, onEvent }) => {
 					let total = 0
 
-					onEvent(({ begin, onStop }) => {
-						onStop((end) => {
-							total += end - begin
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
 						})
 					})
 
-					onStop((end) => {
+					onStop(({ elapsed }) => {
 						set.headers.time = total.toString()
 					})
 				})
@@ -447,13 +447,13 @@ describe('Trace Timing', async () => {
 				onMapResponse(({ onStop, onEvent }) => {
 					let total = 0
 
-					onEvent(({ begin, onStop }) => {
-						onStop((end) => {
-							total += end - begin
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
 						})
 					})
 
-					onStop((end) => {
+					onStop(({ elapsed }) => {
 						set.headers.time = total.toString()
 					})
 				})
@@ -480,13 +480,13 @@ describe('Trace Timing', async () => {
 				onAfterResponse(({ onStop, onEvent }) => {
 					let total = 0
 
-					onEvent(({ begin, onStop }) => {
-						onStop((end) => {
-							total += end - begin
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
 						})
 					})
 
-					onStop((end) => {
+					onStop(({ elapsed }) => {
 						set.headers.time = total.toString()
 					})
 				})

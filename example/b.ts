@@ -1,32 +1,24 @@
+import { mapResponse } from '../dist'
 import { Elysia } from '../src'
 import { req } from '../test/utils'
 
+class CustomClass {
+	constructor(public name: string) {}
+}
+
 const app = new Elysia({ precompile: true })
-	.trace(({ onBeforeHandle, set }) => {
-		onBeforeHandle(({ onEvent, onStop }) => {
-			const names = <string[]>[]
-
-			onEvent(({ name, onStop }) => {
-				onStop(({ error }) => {
-					console.log(name, error)
-					names.push(name)
-				})
-			})
-
-			onStop(() => {
-				set.headers.name = names.join(', ')
-			})
-		})
+	.trace(() => {})
+	.onError(() => new CustomClass('aru'))
+	.mapResponse(({ response }) => {
+		if (response instanceof CustomClass) return new Response(response.name)
 	})
-	.onBeforeHandle(function luna() {})
-	.get('/', () => 'a', {
-		beforeHandle() {
-			throw new Error("A")
-		}
+	.get('/', () => {
+		throw new Error('Hello')
 	})
+	.compile()
 
-// console.log(app.routes[0].composed?.toString())
-
-const { headers } = await app.handle(req('/'))
+app.handle(req('/'))
+	.then((x) => x.text())
+	.then(console.log)
 
 // console.log(headers.get('name'))

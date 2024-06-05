@@ -261,10 +261,6 @@ export const createTracer = (traceListener: TraceHandler) => {
 		const [onMapResponse, resolveMapResponse] = createProcess()
 		const [onAfterResponse, resolveAfterResponse] = createProcess()
 
-		// console.log({
-		// 	context
-		// })
-
 		traceListener({
 			// @ts-ignore
 			id: context[ELYSIA_REQUEST_ID],
