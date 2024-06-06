@@ -1,7 +1,7 @@
 import type { BunFile } from 'bun'
 import { Kind, TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
-import { TypeCheck, TypeCompiler, ValueError } from '@sinclair/typebox/compiler'
+import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { t } from '.'
 import { isNotEmpty } from './handler'
@@ -27,6 +27,7 @@ import type {
 	Replace
 } from './types'
 import type { CookieOptions } from './cookies'
+import { mapValueError } from './error'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -272,7 +273,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			code: '',
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => ''
+			Code: () => '',
+			Clean: cleaner
 		} as unknown as TypeCheck<TSchema>
 
 		if (normalize && schema.additionalProperties === true)
@@ -309,7 +311,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 				return {
 					success: false,
 					data: null,
-					error: errors[0]?.humanReadable,
+					error: errors[0]?.summary,
 					errors
 				}
 			}
@@ -353,34 +355,13 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			return {
 				success: false,
 				data: null,
-				error: errors[0]?.humanReadable,
+				error: errors[0]?.summary,
 				errors
 			}
 		}
 	}
 
 	return compiled as any
-}
-
-export const mapValueError = (error: ValueError) => {
-	const { message, path, value } = error
-
-	if (message.startsWith('Expected '))
-		return {
-			...error,
-			humanReadable:
-				message.slice(0, 9) +
-				path.slice(1) +
-				' to be' +
-				message.slice(8) +
-				', found: ' +
-				value
-		}
-
-	if (message === 'Unexpected property')
-		return { ...error, humanReadable: message + ' ' + path.slice(1) }
-
-	return { ...error, humanReadable: message }
 }
 
 export const getResponseSchemaValidator = (

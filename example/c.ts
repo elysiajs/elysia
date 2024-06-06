@@ -1,14 +1,7 @@
 // ? client
-import { models } from './a'
+import { Elysia } from '../src'
+import { isMainThread } from 'bun'
 
-const value = models.user.parse({
-    name: 'Doro',
-    age: 21
-})
+console.log(isMainThread)
 
-const { data, error } = models.user.safeParse({
-    name: 'Doro',
-    age: '21'
-})
-
-console.log({ data, error })
+new Elysia().get('/', () => 'from worker').listen(3000)

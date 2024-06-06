@@ -34,13 +34,40 @@ export type ElysiaConfig<
 	Prefix extends string | undefined,
 	Scoped extends boolean | undefined
 > = {
+	/**
+	 * Path prefix of the instance
+	 *
+	 * @default '''
+	 */
 	prefix?: Prefix
+	/**
+	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
+	 *
+	 * @default false
+	 */
 	scoped?: Scoped
 	name?: string
 	seed?: unknown
+	/**
+	 * Bun serve
+	 *
+	 * @see https://bun.sh/docs/api/http
+	 */
 	serve?: PartialServe
-	tags?: DocumentDecoration['tags']
+	/**
+	 * OpenAPI documentation (use in Swagger)
+	 * 
+	 * @see https://swagger.io/specification/
+	 */
 	detail?: DocumentDecoration
+	/**
+	 * OpenAPI tags
+	 * 
+	 * current instance' routes with tags
+	 * 
+	 * @see https://swagger.io/specification/#tag-object
+	 */
+	tags?: DocumentDecoration['tags']
 	/**
 	 * Warm up Elysia before starting the server
 	 *
@@ -91,9 +118,9 @@ export type ElysiaConfig<
 	 */
 	strictPath?: boolean
 	/**
-	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
-	 *
-	 * @default false
+	 * Override websocket configuration
+	 * 
+	 * @see https://bun.sh/docs/api/websockets
 	 */
 	websocket?: Omit<
 		WebSocketHandler<any>,
@@ -1097,7 +1124,7 @@ export type InferHandler<
 >
 
 export interface ModelValidatorError extends ValueError {
-	humanReadable: string
+	summary: string
 }
 
 // @ts-ignore trust me bro

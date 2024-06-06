@@ -1,24 +1,15 @@
-import { mapResponse } from '../dist'
-import { Elysia } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
 
-class CustomClass {
-	constructor(public name: string) {}
-}
-
-const app = new Elysia({ precompile: true })
-	.trace(() => {})
-	.onError(() => new CustomClass('aru'))
-	.mapResponse(({ response }) => {
-		if (response instanceof CustomClass) return new Response(response.name)
+const app = new Elysia().post('/', () => {}, {
+	body: t.Object({
+		id: t.Numeric()
 	})
-	.get('/', () => {
-		throw new Error('Hello')
+})
+
+app.handle(
+	new Request('http://localhost:3000', {
+		method: 'POST'
 	})
-	.compile()
-
-app.handle(req('/'))
-	.then((x) => x.text())
-	.then(console.log)
-
-// console.log(headers.get('name'))
+)
+	.then((x) => x.json())
+	.then(console.dir)

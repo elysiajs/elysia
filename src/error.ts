@@ -1,6 +1,6 @@
 import type { TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
-import type { TypeCheck } from '@sinclair/typebox/compiler'
+import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import { StatusMap, InvertedStatusMap } from './utils'
 
@@ -93,6 +93,57 @@ export class InvalidCookieSignature extends Error {
 	}
 }
 
+export const mapValueError = (error: ValueError) => {
+	const { message, path, value, type } = error
+
+	const property = path.slice(1).replaceAll('/', '.')
+	const isRoot = path === ''
+
+	switch (type) {
+		case 42:
+			return {
+				...error,
+				summary: isRoot
+					? `Value should not be provided`
+					: `Property '${property}' should not be provided`
+			}
+
+		case 45:
+			return {
+				...error,
+				summary: isRoot
+					? `Value is missing`
+					: `Property '${property}' is missing`
+			}
+
+		case 54:
+			return {
+				...error,
+				summary: `${message.slice(
+					0,
+					9
+				)} property '${property}' to be ${message.slice(
+					8
+				)} but found: ${value}`
+			}
+
+		case 62:
+			const union = error.schema.anyOf
+				.map((x: Record<string, unknown>) => `'${x?.format ?? x.type}'`)
+				.join(', ')
+
+			return {
+				...error,
+				summary: isRoot
+					? `Value should be one of ${union}`
+					: `Property '${property}' should be one of: ${union}`
+			}
+
+		default:
+			return { summary: message, ...error }
+	}
+}
+
 export class ValidationError extends Error {
 	code = 'VALIDATION'
 	status = 422
@@ -120,7 +171,9 @@ export class ValidationError extends Error {
 							validator,
 							value,
 							get errors() {
-								return [...validator.Errors(value)]
+								return [...validator.Errors(value)].map(
+									mapValueError
+								)
 							}
 					  })
 					: error.schema.error
@@ -138,6 +191,7 @@ export class ValidationError extends Error {
 			message = JSON.stringify({
 				type: 'validation',
 				on: type,
+				summary: mapValueError(error).summary,
 				message: error?.message,
 				found: value
 			})
@@ -146,8 +200,8 @@ export class ValidationError extends Error {
 			const schema = validator?.schema ?? validator
 			const errors =
 				'Errors' in validator
-					? [...validator.Errors(value)]
-					: [...Value.Errors(validator, value)]
+					? [...validator.Errors(value)].map(mapValueError)
+					: [...Value.Errors(validator, value)].map(mapValueError)
 
 			let expected
 
@@ -166,6 +220,7 @@ export class ValidationError extends Error {
 				{
 					type: 'validation',
 					on: type,
+					summary: errors[0]?.summary,
 					property: accessor,
 					message: error?.message,
 					expected,
@@ -183,7 +238,10 @@ export class ValidationError extends Error {
 	}
 
 	get all() {
-		return [...this.validator.Errors(this.value)]
+		return 'Errors' in this.validator
+			? [...this.validator.Errors(this.value)].map(mapValueError)
+			: // @ts-ignore
+			  [...Value.Errors(this.validator, this.value)].map(mapValueError)
 	}
 
 	static simplifyModel(validator: TSchema | TypeCheck<any>) {

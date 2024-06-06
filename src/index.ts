@@ -1,7 +1,7 @@
 import type { Serve, Server, ServerWebSocket } from 'bun'
 
 import { Memoirist } from 'memoirist'
-import { type Static, type TSchema } from '@sinclair/typebox'
+import { type TObject, type Static, type TSchema } from '@sinclair/typebox'
 
 import type { Context } from './context'
 
@@ -10,6 +10,8 @@ import { sucrose, type Sucrose } from './sucrose'
 
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
+
+import { version as _version } from '../package.json'
 
 import { isNotEmpty } from './handler'
 
@@ -180,6 +182,9 @@ export default class Elysia<
 	_ephemeral = {} as Ephemeral
 	_volatile = {} as Volatile
 
+	static version = _version
+	version = _version
+
 	protected singleton = {
 		decorator: {},
 		store: {},
@@ -305,6 +310,21 @@ export default class Elysia<
 
 		if (config?.analytic && (config?.name || config?.seed !== undefined))
 			this.telemetry.stack = new Error().stack
+	}
+
+	env(model: TObject<any>, env = Bun?.env ?? process.env) {
+		const validator = getSchemaValidator(model, {
+			dynamic: true,
+			additionalProperties: true
+		})
+
+		if (validator.Check(env) === false) {
+			const error = new ValidationError('env', model, env)
+
+			throw new Error(error.all.map((x) => x.summary).join('\n'))
+		}
+
+		return this
 	}
 
 	private applyMacro(
@@ -3113,7 +3133,7 @@ export default class Elysia<
 					case 'global':
 						this.on({ as: 'local' }, 'trace', trace.fn as any)
 						break
-					
+
 					case 'scoped':
 						this.on('trace', trace.fn as any)
 						break
@@ -5334,6 +5354,7 @@ export {
 
 export {
 	error,
+	mapValueError,
 	ParseError,
 	NotFoundError,
 	ValidationError,
