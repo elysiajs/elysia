@@ -550,15 +550,9 @@ export const composeHandler = ({
 		if (validator.query && validator.query.schema.type === 'object') {
 			// @ts-ignore
 			destructured = Object.keys(validator.query.schema.properties)
-		} else
-			for (const query of inference.queries)
-				if (destructured.indexOf(query) === -1) destructured.push(query)
+		}
 
-		if (
-			app.config.forceDynamicQuery === true ||
-			inference.unknownQueries === true ||
-			!destructured.length
-		) {
+		if (!destructured.length) {
 			fnLiteral += `if(c.qi !== -1)
 				c.query = parseQuery(c.url.slice(c.qi + 1).replace(/\\+/g, ' '))
 			else c.query = {}`

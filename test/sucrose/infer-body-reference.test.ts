@@ -6,13 +6,11 @@ describe('infer body reference', () => {
 		const code = 'context.body.a'
 		const aliases = ['context']
 		const inference = {
-			queries: [],
 			query: false,
 			headers: false,
 			body: false,
 			cookie: false,
 			set: false,
-			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -24,13 +22,11 @@ describe('infer body reference', () => {
 		const code = 'context["body"]["a"]'
 		const aliases = ['context']
 		const inference = {
-			queries: [],
 			query: false,
 			headers: false,
 			body: false,
 			cookie: false,
 			set: false,
-			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -42,25 +38,21 @@ describe('infer body reference', () => {
 		const code = 'a(context)'
 		const aliases = ['context']
 		const inference = {
-			queries: [],
 			query: false,
 			headers: false,
 			body: false,
 			cookie: false,
 			set: false,
-			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
 
 		expect(inference).toEqual({
-			queries: [],
 			query: true,
 			headers: true,
 			body: true,
 			cookie: true,
 			set: true,
-			unknownQueries: true
 		})
 	})
 
@@ -78,10 +70,8 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: <string[]>[],
 			query: true,
 			set: true,
-			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -90,10 +80,8 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: ['quack', 'duck', 'bark'],
 			query: true,
 			set: true,
-			unknownQueries: false
 		})
 	})
 
@@ -169,10 +157,8 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: <string[]>[],
 			query: true,
 			set: true,
-			unknownQueries: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -181,10 +167,8 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: [],
 			query: true,
 			set: true,
-			unknownQueries: true
 		})
 	})
 })

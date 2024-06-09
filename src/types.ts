@@ -102,6 +102,8 @@ export type ElysiaConfig<
 	 */
 	forceErrorEncapsulation?: boolean
 	/**
+	 * @deprecated on 1.1, Elysia now use dynamic query by default
+	 * 
 	 * Disable sucrose dynamic query inference
 	 */
 	forceDynamicQuery?: boolean

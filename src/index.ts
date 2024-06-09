@@ -267,10 +267,8 @@ export default class Elysia<
 		body: false,
 		cookie: false,
 		headers: false,
-		queries: [],
 		query: false,
-		set: false,
-		unknownQueries: false
+		set: false
 	}
 
 	private getServer() {
@@ -303,7 +301,6 @@ export default class Elysia<
 				path: '/'
 			},
 			analytic: false,
-			forceDynamicQuery: true,
 			...config,
 			experimental: config?.experimental ?? {},
 			seed: config?.seed === undefined ? '' : config?.seed
@@ -3181,15 +3178,8 @@ export default class Elysia<
 				body: this.inference.body || plugin.inference.body,
 				cookie: this.inference.cookie || plugin.inference.cookie,
 				headers: this.inference.headers || plugin.inference.headers,
-				queries: [
-					...this.inference.queries,
-					...plugin.inference.queries
-				],
 				query: this.inference.query || plugin.inference.query,
 				set: this.inference.set || plugin.inference.set,
-				unknownQueries:
-					this.inference.unknownQueries ||
-					plugin.inference.unknownQueries
 			}
 		}
 

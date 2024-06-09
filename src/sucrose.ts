@@ -1,15 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import type {
-	Handler,
-	HookContainer,
-	LifeCycleStore,
-} from './types'
+import type { Handler, HookContainer, LifeCycleStore } from './types'
 
 export namespace Sucrose {
 	export interface Inference {
-		queries: string[]
-		unknownQueries: boolean
 		query: boolean
 		headers: boolean
 		body: boolean
@@ -370,7 +364,7 @@ export const extractMainParameter = (parameter: string) => {
 export const inferBodyReference = (
 	code: string,
 	aliases: string[],
-	inference: Sucrose.Inference,
+	inference: Sucrose.Inference
 ) => {
 	const access = (type: string, alias: string) =>
 		code.includes(alias + '.' + type) ||
@@ -407,8 +401,6 @@ export const inferBodyReference = (
 			inference.body = true
 			inference.cookie = true
 			inference.set = true
-			inference.queries = []
-			inference.unknownQueries = true
 
 			break
 		}
@@ -420,95 +412,6 @@ export const inferBodyReference = (
 			code.includes('return ' + alias + '.query')
 		) {
 			inference.query = true
-			inference.unknownQueries = true
-			inference.queries = []
-		}
-
-		if (!inference.unknownQueries && inference.query) {
-			let keyword = alias + '.'
-
-			// ? It's unlikely that user will use separate variable between c.query and query
-			if (code.includes(keyword + 'query')) keyword = alias + '.query'
-
-			while (true) {
-				let start = code.indexOf(keyword)
-
-				// ? This is normalized to dot notation in Bun
-				// if (start === -1) {
-				// 	isBracket = true
-				// 	start = code.indexOf(alias + '["')
-				// }
-
-				// if (start === -1) {
-				// 	isBracket = true
-				// 	start = code.indexOf(alias + "['")
-				// }
-
-				if (start === -1 && code.indexOf(alias + '[') !== -1) {
-					// ! Query is accessed using dynamic key, skip static parsing
-					inference.queries = []
-					inference.unknownQueries = true
-
-					break
-				}
-
-				if (start !== -1) {
-					let end: number | undefined = findEndIndex(
-						'',
-						code,
-						start + keyword.length + 1
-					)
-
-					// ? Do not remove, might need to use on other runtime
-					// If need, replace above code with this one
-					// let end: number | undefined = isBracket
-					// 	? findEndQueryBracketIndex(
-					// 			'',
-					// 			code,
-					// 			start + keyword.length + 1
-					// 	  )
-					// 	: findEndIndex('', code, start + keyword.length + 1)
-
-					if (end === -1) end = undefined
-
-					const index = start + alias.length + 1
-					code = code.slice(start + alias.length + 1)
-					let query = code.slice(0, end ? end - index : end).trimEnd()
-
-					// Remove nested dot
-					while (start !== -1) {
-						start = query.indexOf('.')
-
-						if (start !== -1) query = query.slice(start + 1)
-					}
-
-					// Remove semi-colon
-					if (query.charCodeAt(query.length - 1) === 59)
-						query = query.slice(0, -1)
-
-					// Remove comma
-					if (query.charCodeAt(query.length - 1) === 44)
-						query = query.slice(0, -1)
-
-					// Remove closing square bracket
-					if (query.charCodeAt(query.length - 1) === 93)
-						query = query.slice(0, -1)
-
-					// Remove closing bracket
-					if (query.charCodeAt(query.length - 1) === 41)
-						query = query.slice(0, -1)
-
-					// ? Do not remove, might need to use on other runtime
-					// if (isBracket) query = query.replaceAll(/("|')/g, '')
-
-					if (query && !inference.queries.includes(query)) {
-						inference.queries.push(query)
-						continue
-					}
-				}
-
-				break
-			}
 		}
 
 		if (!inference.headers && access('headers', alias))
@@ -562,29 +465,14 @@ export const removeDefaultParameter = (parameter: string) => {
 		.join(', ')
 }
 
-export const validateInferencedQueries = (queries: string[]) => {
-	for (const query of queries) {
-		if (query.charCodeAt(0) === 123) return false
-		if (query.indexOf("'") !== -1) return false
-		if (query.indexOf('"') !== -1) return false
-		if (query.indexOf('\n') !== -1) return false
-		if (query.indexOf('\t') !== -1) return false
-		if (query.indexOf('(') !== -1) return false
-	}
-
-	return true
-}
-
 export const sucrose = (
 	lifeCycle: Sucrose.LifeCycle,
 	inference: Sucrose.Inference = {
-		queries: [],
 		query: false,
 		headers: false,
 		body: false,
 		cookie: false,
-		set: false,
-		unknownQueries: false
+		set: false
 	}
 ): Sucrose.Inference => {
 	const events = []
@@ -613,16 +501,6 @@ export const sucrose = (
 		const rootParameters = findParameterReference(parameter, inference)
 		const mainParameter = extractMainParameter(rootParameters)
 
-		if (
-			isArrowReturn &&
-			(body === 'query' ||
-				(rootParameters && body.startsWith(rootParameters + '.query')))
-		) {
-			inference.query = true
-			inference.unknownQueries = true
-			inference.queries = []
-		}
-
 		if (mainParameter) {
 			const aliases = findAlias(mainParameter, body)
 			aliases.splice(0, -1, mainParameter)
@@ -633,35 +511,6 @@ export const sucrose = (
 		const context = rootParameters || mainParameter
 		if (context && body.includes('return ' + context + '.query')) {
 			inference.query = true
-			inference.unknownQueries = true
-			inference.queries = []
-		}
-
-		if (inference.query) {
-			inferBodyReference(body, ['query'], inference)
-
-			const queryIndex = parameter.indexOf('query: {')
-
-			if (queryIndex !== -1) {
-				const part = parameter.slice(queryIndex + 7)
-				const [start, end] = bracketPairRange(part)
-
-				const queryBracket = removeDefaultParameter(
-					part.slice(start, end)
-				)
-
-				for (let query of queryBracket.slice(1, -1).split(',')) {
-					const index = query.indexOf(':')
-
-					// Remove variable name casting: { a: b } should be b
-					if (index !== -1) query = query.slice(0, index)
-
-					query = query.trim()
-
-					if (query && !inference.queries.includes(query))
-						inference.queries.push(query.trim())
-				}
-			}
 		}
 
 		if (
@@ -672,11 +521,6 @@ export const sucrose = (
 			inference.set
 		)
 			break
-	}
-
-	if (!validateInferencedQueries(inference.queries)) {
-		inference.unknownQueries = true
-		inference.queries = []
 	}
 
 	return inference
