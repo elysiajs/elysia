@@ -3,6 +3,9 @@ Bug fix:
 - [#654](https://github.com/elysiajs/elysia/issues/654) set correct normalization behavior for addtional properties
 - [#649](https://github.com/elysiajs/elysia/issues/649) cookie decode value might be null
 - [#664](https://github.com/elysiajs/elysia/issues/664) "default" option is not being applied on validation
+- [#656](https://github.com/elysiajs/elysia/issues/656) ctx.query doesn't work in some case
+    - set forceDynamicQuery to true by default
+- [#658](https://github.com/elysiajs/elysia/issues/658) aot does not recognize the use of ctx.body within a try catch
 
 # 1.0.22 - 23 May 2024
 Breaking Change:

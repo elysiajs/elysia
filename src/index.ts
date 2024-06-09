@@ -295,6 +295,7 @@ export default class Elysia<
 				path: '/'
 			},
 			analytic: false,
+			forceDynamicQuery: true,
 			...config,
 			experimental: config?.experimental ?? {},
 			seed: config?.seed === undefined ? '' : config?.seed

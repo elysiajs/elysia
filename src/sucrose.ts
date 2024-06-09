@@ -85,8 +85,11 @@ export const separateFunction = (
 	const start = code.indexOf('(')
 
 	if (start !== -1) {
-		const [parameter, body] = code.split('\n', 2)
+		const sep = code.indexOf('\n', 2)
+		const parameter = code.slice(0, sep)
 		const end = parameter.lastIndexOf(')') + 1
+
+		const body = code.slice(sep + 1)
 
 		return [
 			parameter.slice(start, end),
@@ -383,7 +386,7 @@ export const extractMainParameter = (parameter: string) => {
 export const inferBodyReference = (
 	code: string,
 	aliases: string[],
-	inference: Sucrose.Inference
+	inference: Sucrose.Inference,
 ) => {
 	const access = (type: string, alias: string) =>
 		code.includes(alias + '.' + type) ||
@@ -393,6 +396,7 @@ export const inferBodyReference = (
 	for (let alias of aliases) {
 		if (!alias) continue
 
+		// Scan object destructured property
 		if (alias.charCodeAt(0) === 123) {
 			alias = retrieveRootParamters(alias)
 

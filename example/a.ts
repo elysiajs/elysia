@@ -1,33 +1,24 @@
 import { Context, Elysia, t } from '../src'
 import { post, req } from '../test/utils'
 
-const checker = {
-	check: async (ctx: Context, name: string, state?: string) => {
-		return typeof state !== 'undefined'
+class Controller {
+	static async handle(ctx: Context) {
+		try {
+			// @ts-ignore
+			const { token } = ctx.body
+			return token
+		} catch {
+			return 'nope'
+		}
 	}
 }
 
-const app = new Elysia()
-	.derive((ctx) => {
-		const { name } = ctx.params
+const app = new Elysia().post('/', Controller.handle)
 
-		return {
-			check: async () => {
-				const { state } = ctx.query
-
-				if (
-					!(await checker.check(ctx, name, state ?? ctx.query.state))
-				) {
-					throw new Error('State mismatch')
-				}
-			}
-		}
+app.handle(
+	post('/', {
+		token: 'yay'
 	})
-	.get('/:name', async (ctx) => {
-		await ctx.check()
-		return 'yay'
-	})
-
-app.handle(req('/a'))
+)
 	.then((x) => x.text())
 	.then(console.log)
