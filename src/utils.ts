@@ -54,9 +54,11 @@ export const mergeDeep = <
 	target: A,
 	source: B,
 	{
-		skipKeys
+		skipKeys,
+		override = true
 	}: {
 		skipKeys?: string[]
+		override?: boolean
 	} = {}
 ): A & B => {
 	if (isObject(target) && isObject(source))
@@ -64,13 +66,16 @@ export const mergeDeep = <
 			if (skipKeys?.includes(key)) continue
 
 			if (!isObject(value) || !(key in target) || isClass(value)) {
-				target[key as keyof typeof target] = value
+				if (override || !(key in target))
+					target[key as keyof typeof target] = value
+
 				continue
 			}
 
 			target[key as keyof typeof target] = mergeDeep(
 				(target as any)[key] as any,
-				value
+				value,
+				{ skipKeys, override }
 			)
 		}
 
@@ -246,7 +251,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		models = {},
 		dynamic = false,
 		normalize = false,
-		additionalProperties = false,
+		additionalProperties = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
@@ -370,7 +375,7 @@ export const getResponseSchemaValidator = (
 		models = {},
 		dynamic = false,
 		normalize = false,
-		additionalProperties = false,
+		additionalProperties = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
@@ -1002,7 +1007,7 @@ export const cloneInference = (inference: Sucrose.Inference) => ({
 	cookie: inference.cookie,
 	headers: inference.headers,
 	query: inference.query,
-	set: inference.set,
+	set: inference.set
 })
 
 /**

@@ -113,7 +113,8 @@ import type {
 	ExcludeElysiaResponse,
 	ModelValidator,
 	BaseMacroFn,
-	ResolveMacroContext
+	ResolveMacroContext,
+	ContextAppendType
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -3179,7 +3180,7 @@ export default class Elysia<
 				cookie: this.inference.cookie || plugin.inference.cookie,
 				headers: this.inference.headers || plugin.inference.headers,
 				query: this.inference.query || plugin.inference.query,
-				set: this.inference.set || plugin.inference.set,
+				set: this.inference.set || plugin.inference.set
 			}
 		}
 
@@ -4582,33 +4583,182 @@ export default class Elysia<
 	 * @example
 	 * ```typescript
 	 * new Elysia()
+	 *     .decorate({ as: 'override' }, 'getDate', () => Date.now())
+	 *     .get('/', (({ getDate }) => getDate())
+	 * ```
+	 */
+	decorate<const Name extends string, const Value>(
+		options: { as: ContextAppendType },
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Prettify<
+				Singleton['decorator'] & {
+					[name in Name]: Value
+				}
+			>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * ### decorate
+	 * Define custom method to `Context` accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .decorate('getDate', () => Date.now())
+	 *     .get('/', (({ getDate }) => getDate())
+	 * ```
+	 */
+	decorate<const NewDecorators extends Record<string, unknown>>(
+		options: { as: ContextAppendType },
+		decorators: NewDecorators
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Prettify<Singleton['decorator'] & NewDecorators>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	decorate<const NewDecorators extends Record<string, unknown>>(
+		options: { as: ContextAppendType },
+		mapper: (decorators: Singleton['decorator']) => NewDecorators
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: NewDecorators
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * ### decorate
+	 * Define custom method to `Context` accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
 	 *     .decorate('getDate', () => Date.now())
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
 	decorate(
-		name: string | Record<string, unknown> | Function,
+		options:
+			| { as: ContextAppendType }
+			| string
+			| Record<string, unknown>
+			| Function,
+		name?:
+			| string
+			| Record<string, unknown>
+			| Function
+			| { as: ContextAppendType },
 		value?: unknown
 	) {
-		switch (typeof name) {
+		if (name === undefined) {
+			/**
+			 * Using either
+			 * - decorate({ name: value })
+			 */
+			value = options
+			options = { as: 'append' }
+			name = ''
+		} else if (value === undefined) {
+			/**
+			 * Using either
+			 * - decorate({ as: 'override' }, { name: value })
+			 * - decorate('name', value)
+			 */
+
+			// decorate('name', value)
+			if (typeof options === 'string') {
+				value = name
+				name = options
+				options = { as: 'append' }
+			} else if (typeof options === 'object') {
+				// decorate({ as: 'override' }, { name: value })
+				value = name
+				name = ''
+			}
+		}
+
+		const { as } = options as { as: ContextAppendType }
+
+		if (typeof name !== 'string') return this
+
+		switch (typeof value) {
 			case 'object':
+				if (name) {
+					this.singleton.decorator[name] = value
+
+					return this
+				}
+
+				if (value === null) {
+					this.singleton.decorator[name] = value
+
+					return this
+				}
+
 				this.singleton.decorator = mergeDeep(
 					this.singleton.decorator,
-					name
+					value,
+					{
+						override: as === 'override'
+					}
 				)
 
 				return this as any
 
 			case 'function':
-				this.singleton.decorator = name(this.singleton.decorator)
+				if (name) {
+					if (
+						as === 'override' ||
+						!(name in this.singleton.decorator)
+					)
+						this.singleton.decorator[name] = value
+				} else
+					this.singleton.decorator = value(this.singleton.decorator)
 
 				return this as any
+
+			default:
+				if (as === 'override' || !(name in this.singleton.decorator))
+					this.singleton.decorator[name] = value
+
+				return this
 		}
-
-		if (!(name in this.singleton.decorator))
-			this.singleton.decorator[name] = value
-
-		return this as any
 	}
 
 	/**

@@ -56,15 +56,15 @@ export type ElysiaConfig<
 	serve?: PartialServe
 	/**
 	 * OpenAPI documentation (use in Swagger)
-	 * 
+	 *
 	 * @see https://swagger.io/specification/
 	 */
 	detail?: DocumentDecoration
 	/**
 	 * OpenAPI tags
-	 * 
+	 *
 	 * current instance' routes with tags
-	 * 
+	 *
 	 * @see https://swagger.io/specification/#tag-object
 	 */
 	tags?: DocumentDecoration['tags']
@@ -103,7 +103,7 @@ export type ElysiaConfig<
 	forceErrorEncapsulation?: boolean
 	/**
 	 * @deprecated on 1.1, Elysia now use dynamic query by default
-	 * 
+	 *
 	 * Disable sucrose dynamic query inference
 	 */
 	forceDynamicQuery?: boolean
@@ -121,7 +121,7 @@ export type ElysiaConfig<
 	strictPath?: boolean
 	/**
 	 * Override websocket configuration
-	 * 
+	 *
 	 * @see https://bun.sh/docs/api/websockets
 	 */
 	websocket?: Omit<
@@ -1165,3 +1165,5 @@ export type ResolveMacroContext<
 			: never
 	}[keyof Macro]
 >
+
+export type ContextAppendType = 'append' | 'override'
