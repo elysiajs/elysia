@@ -4,8 +4,8 @@ Feature:
 - [#606](https://github.com/elysiajs/elysia/issues/606) Object encoding in query parameters
 
 Bug fix:
-- [#654](https://github.com/elysiajs/elysia/issues/654) set correct normalization behavior for addtional properties
-- [#649](https://github.com/elysiajs/elysia/issues/649) cookie decode value might be null
+- [#654](https://github.com/elysiajs/elysia/pull/654) set correct normalization behavior for addtional properties
+- [#649](https://github.com/elysiajs/elysia/pull/649) cookie decode value might be null
 - [#664](https://github.com/elysiajs/elysia/issues/664) "default" option is not being applied on validation
 - [#656](https://github.com/elysiajs/elysia/issues/656) ctx.query doesn't work in some case
     - set forceDynamicQuery to true by default
