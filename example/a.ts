@@ -1,24 +1,25 @@
-import { Context, Elysia, t } from '../src'
-import { post, req } from '../test/utils'
+import { Elysia, t } from '../src'
+import { expectTypeOf } from 'expect-type'
+import { req } from '../test/utils'
 
-class Controller {
-	static async handle(ctx: Context) {
-		try {
-			// @ts-ignore
-			const { token } = ctx.body
-			return token
-		} catch {
-			return 'nope'
-		}
-	}
-}
-
-const app = new Elysia().post('/', Controller.handle)
+const app = new Elysia()
+	.get('/', ({ query }) => query, {
+		query: t.Optional(
+			t.Object({
+				role: t.Optional(
+					t.Array(
+						t.Object({
+							name: t.String()
+						})
+					)
+				)
+			})
+		)
+	})
+	.compile()
 
 app.handle(
-	post('/', {
-		token: 'yay'
-	})
+	req(`/?role=${JSON.stringify([{ name: 'hello' }, { name: 'world' }])}`)
 )
-	.then((x) => x.text())
+	.then((x) => x.json())
 	.then(console.log)

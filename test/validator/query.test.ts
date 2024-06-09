@@ -268,4 +268,37 @@ describe('Query Validator', () => {
 
 		expect(response).toBe('yay')
 	})
+
+	it('parse query object', async () => {
+		const app = new Elysia()
+			.get('/', ({ query }) => query, {
+				query: t.Optional(
+					t.Object({
+						role: t.Optional(
+							t.Array(
+								t.Object({
+									name: t.String()
+								})
+							)
+						)
+					})
+				)
+			})
+			.compile()
+
+		const response = await app
+			.handle(
+				req(
+					`/?role=${JSON.stringify([
+						{ name: 'hello' },
+						{ name: 'world' }
+					])}`
+				)
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			role: [{ name: 'hello' }, { name: 'world' }]
+		})
+	})
 })

@@ -954,6 +954,24 @@ export const composeHandler = ({
 					if (parsed) fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
 				}
 
+			for (const [key, value] of Object.entries(
+				// @ts-ignore
+				validator.query.schema?.properties
+			)) {
+				// @ts-ignore
+				const { type, anyOf } = value
+
+				if (type === 'object' || type === 'array') {
+					fnLiteral += `c.query['${key}'] = JSON.parse(c.query['${key}'])\n`
+
+					continue
+				}
+
+				if (anyOf) {
+					fnLiteral += `if(typeof c.query['${key}'] === "object") c.query['${key}'] = JSON.parse(c.query['${key}'])\n`
+				}
+			}
+
 			fnLiteral += `if(query.Check(c.query) === false) {
 				${composeValidation('query')}
 			}`

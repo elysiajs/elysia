@@ -1,4 +1,8 @@
 # 1.0.23 - 9 Jun 2024
+Feature:
+- add `toResponse` for mapping custom response
+- [#606](https://github.com/elysiajs/elysia/issues/606) Object encoding in query parameters
+
 Bug fix:
 - [#654](https://github.com/elysiajs/elysia/issues/654) set correct normalization behavior for addtional properties
 - [#649](https://github.com/elysiajs/elysia/issues/649) cookie decode value might be null
@@ -6,6 +10,7 @@ Bug fix:
 - [#656](https://github.com/elysiajs/elysia/issues/656) ctx.query doesn't work in some case
     - set forceDynamicQuery to true by default
 - [#658](https://github.com/elysiajs/elysia/issues/658) aot does not recognize the use of ctx.body within a try catch
+- [#630](https://github.com/elysiajs/elysia/issues/630) accessing ctx.query directly breaks the object
 
 # 1.0.22 - 23 May 2024
 Breaking Change:

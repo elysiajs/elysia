@@ -585,6 +585,7 @@ export const validateInferencedQueries = (queries: string[]) => {
 		if (query.indexOf('"') !== -1) return false
 		if (query.indexOf('\n') !== -1) return false
 		if (query.indexOf('\t') !== -1) return false
+		if (query.indexOf('(') !== -1) return false
 	}
 
 	return true
