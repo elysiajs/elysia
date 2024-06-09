@@ -874,7 +874,7 @@ export const composeHandler = ({
 
 		if (validator.headers) {
 			// @ts-ignore
-			if (hasProperty('default', validator.headers.params))
+			if (hasProperty('default', validator.headers.schema))
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -885,7 +885,9 @@ export const composeHandler = ({
 					const parsed =
 						typeof value === 'object'
 							? JSON.stringify(value)
-							: `'${value}'`
+							: typeof value === 'string'
+							? `'${value}'`
+							: value
 
 					if (parsed)
 						fnLiteral += `c.headers['${key}'] ??= ${parsed}\n`
@@ -913,7 +915,9 @@ export const composeHandler = ({
 					const parsed =
 						typeof value === 'object'
 							? JSON.stringify(value)
-							: `'${value}'`
+							: typeof value === 'string'
+							? `'${value}'`
+							: value
 
 					if (parsed)
 						fnLiteral += `c.params['${key}'] ??= ${parsed}\n`
@@ -943,7 +947,9 @@ export const composeHandler = ({
 					const parsed =
 						typeof value === 'object'
 							? JSON.stringify(value)
-							: `'${value}'`
+							: typeof value === 'string'
+							? `'${value}'`
+							: value
 
 					if (parsed) fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
 				}
@@ -960,22 +966,36 @@ export const composeHandler = ({
 
 		if (validator.body) {
 			if (normalize) fnLiteral += 'c.body = body.Clean(c.body);\n'
-			// @ts-ignore
-			if (hasProperty('default', validator.body.schema))
-				fnLiteral += `if(body.Check(c.body) === false) {
-    				c.body = Object.assign(${JSON.stringify(
-						Value.Default(
-							// @ts-ignore
-							validator.body.schema,
-							null
-						) ?? {}
-					)}, c.body)
 
-    				if(body.Check(c.query) === false) {
+			// @ts-ignore
+			if (hasProperty('default', validator.body.schema)) {
+				fnLiteral += `if(body.Check(c.body) === false) {
+					if (typeof c.body === 'object') {
+						c.body = Object.assign(${JSON.stringify(
+							Value.Default(
+								// @ts-ignore
+								validator.body.schema,
+								{}
+							) ?? {}
+						)}, c.body)
+					} else {`
+
+				const defaultValue = Value.Default(
+					// @ts-ignore
+					validator.body.schema,
+					undefined
+				)
+
+				if (typeof defaultValue === 'string')
+					fnLiteral += `c.body = '${defaultValue}'`
+				else fnLiteral += `c.body = ${defaultValue}`
+
+				fnLiteral += `}
+    				if(body.Check(c.body) === false) {
         				${composeValidation('body')}
      			}
             }`
-			else
+			} else
 				fnLiteral += `if(body.Check(c.body) === false) {
 			${composeValidation('body')}
 		}`
@@ -986,7 +1006,15 @@ export const composeHandler = ({
 		}
 
 		// @ts-ignore
-		if (isNotEmpty(cookieValidator?.schema?.properties ?? cookieValidator?.schema?.schema ?? {})) {
+		if (
+			isNotEmpty(
+				// @ts-ignore
+				cookieValidator?.schema?.properties ??
+					// @ts-ignore
+					cookieValidator?.schema?.schema ??
+					{}
+			)
+		) {
 			fnLiteral += `const cookieValue = {}
     			for(const [key, value] of Object.entries(c.cookie))
     				cookieValue[key] = value.value\n`
@@ -1066,9 +1094,9 @@ export const composeHandler = ({
 				fnLiteral += `if(be !== undefined) {\n`
 				endBeforeHandle()
 				if (hooks.afterHandle?.length) {
-    				const endAfterHandle = report('afterHandle', {
-    					unit: hooks.transform.length
-    				})
+					const endAfterHandle = report('afterHandle', {
+						unit: hooks.transform.length
+					})
 					report('handle', {
 						name: isHandleFn
 							? (handler as Function).name
@@ -1245,8 +1273,7 @@ export const composeHandler = ({
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
-			} else if (hasSet)
-				fnLiteral += `return mapResponse(r, c.set)\n`
+			} else if (hasSet) fnLiteral += `return mapResponse(r, c.set)\n`
 			else fnLiteral += `return mapCompactResponse(r)\n`
 		} else if (traceConditions.handle || hasCookie) {
 			fnLiteral += isAsyncHandler
@@ -1295,8 +1322,7 @@ export const composeHandler = ({
 				fnLiteral += '\n'
 			} else if (hasSet)
 				fnLiteral += `return mapResponse(${handled}, c.set)\n`
-			else
-				fnLiteral += `return mapCompactResponse(${handled})\n`
+			else fnLiteral += `return mapCompactResponse(${handled})\n`
 		}
 	}
 

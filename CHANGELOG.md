@@ -1,3 +1,9 @@
+# 1.0.23 - 9 Jun 2024
+Bug fix:
+- [#654](https://github.com/elysiajs/elysia/issues/654) set correct normalization behavior for addtional properties
+- [#649](https://github.com/elysiajs/elysia/issues/649) cookie decode value might be null
+- [#664](https://github.com/elysiajs/elysia/issues/664) "default" option is not being applied on validation
+
 # 1.0.22 - 23 May 2024
 Breaking Change:
 - set default cookie path to `/`

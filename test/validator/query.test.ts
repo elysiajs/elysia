@@ -199,4 +199,40 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 		expect(await res.json()).toEqual({ param1: true })
 	})
+
+	it('create default string query', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				faction: t.String({ default: 'tea_party' })
+			})
+		})
+
+		const value = await app
+			.handle(req('/?name=nagisa'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			name: 'nagisa',
+			faction: 'tea_party'
+		})
+	})
+
+	it('create default number query', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				rank: t.Number({ default: 1 })
+			})
+		})
+
+		const value = await app
+			.handle(req('/?name=nagisa'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			name: 'nagisa',
+			rank: 1
+		})
+	})
 })

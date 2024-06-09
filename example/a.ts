@@ -1,25 +1,15 @@
-import { Elysia } from '../src'
-import { req } from '../test/utils'
+import { Value } from '@sinclair/typebox/value'
+import { Elysia, t } from '../src'
+import { post, req } from '../test/utils'
 
-const group = new Elysia({ prefix: '/group' })
-	.get('/start', ({ cookie: { name } }) => {
-		name.value = 'hello'
-
-		return 'hello'
+const app = new Elysia().get('/', ({ query }) => query, {
+	query: t.Object({
+		name: t.String(),
+		faction: t.String({ default: 'tea_party' })
 	})
-	.get('/end', ({ cookie: { name } }) => {
-		name.remove()
-
-		return 'hello'
-	})
-
-const app = new Elysia({
-	precompile: true,
-	cookie: {
-		path: '/'
-	}
 })
-	.use(group)
-	.listen(3000)
 
-// console.log(app.routes[0].composed?.toString())
+const value = await app
+	.handle(req('/?name=nagisa'))
+	.then((x) => x.json())
+	.then(console.log)
