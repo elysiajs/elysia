@@ -346,6 +346,13 @@ export const parseCookie = async (
 			}
 		}
 
+		if (value == null) {
+			jar[name] = {
+				value: v
+			}
+			continue
+		}
+
 		const start = value.charCodeAt(0)
 		if (start === 123 || start === 91)
 			try {
