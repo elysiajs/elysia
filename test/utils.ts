@@ -38,13 +38,15 @@ export const upload = (
 	}
 }
 
-export const post = (path: string, body: Record<string, any>) =>
+export const post = (path: string, body?: Record<string, any>) =>
 	new Request(`http://localhost${path}`, {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify(body)
+		headers: body
+			? {
+					'Content-Type': 'application/json'
+			  }
+			: {},
+		body: body ? JSON.stringify(body) : body
 	})
 
 export const delay = (delay: number) =>

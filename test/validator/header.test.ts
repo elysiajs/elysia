@@ -241,4 +241,52 @@ describe('Header Validator', () => {
 		expect(await invalid.text()).toBe('sucrose')
 		expect(invalid.status).toBe(200)
 	})
+
+	it('create default string params', async () => {
+		const app = new Elysia().get('/', ({ headers }) => headers, {
+			headers: t.Object({
+				name: t.String(),
+				faction: t.String({ default: 'tea_party' })
+			})
+		})
+
+		const value = await app
+			.handle(
+				req('/', {
+					headers: {
+						name: 'nagisa'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			name: 'nagisa',
+			faction: 'tea_party'
+		})
+	})
+
+	it('create default number params', async () => {
+		const app = new Elysia().get('/', ({ headers }) => headers, {
+			headers: t.Object({
+				name: t.String(),
+				rank: t.Number({ default: 1 })
+			})
+		})
+
+		const value = await app
+			.handle(
+				req('/', {
+					headers: {
+						name: 'nagisa'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			name: 'nagisa',
+			rank: 1
+		})
+	})
 })

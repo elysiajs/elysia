@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Context, Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -228,5 +228,107 @@ describe('Query Validator', () => {
 
 		expect(await invalid.text()).toBe('sucrose')
 		expect(invalid.status).toBe(200)
+	})
+
+	it('create default string query', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				faction: t.String({ default: 'tea_party' })
+			})
+		})
+
+		const value = await app
+			.handle(req('/?name=nagisa'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			name: 'nagisa',
+			faction: 'tea_party'
+		})
+	})
+
+	it('create default number query', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				rank: t.Number({ default: 1 })
+			})
+		})
+
+		const value = await app
+			.handle(req('/?name=nagisa'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			name: 'nagisa',
+			rank: 1
+		})
+	})
+
+	it('handle query edge case', async () => {
+		const checker = {
+			check(ctx: Context, name: string, state?: string) {
+				return typeof state !== 'undefined'
+			}
+		}
+
+		const app = new Elysia()
+			.derive((ctx) => {
+				const { name } = ctx.params
+
+				return {
+					check() {
+						const { state } = ctx.query
+
+						if (!checker.check(ctx, name, state ?? ctx.query.state))
+							throw new Error('State mismatch')
+					}
+				}
+			})
+			.get('/:name', ({ check }) => {
+				check()
+
+				return 'yay'
+			})
+
+		const response = await app
+			.handle(req('/a?state=123'))
+			.then((x) => x.text())
+
+		expect(response).toBe('yay')
+	})
+
+	it('parse query object', async () => {
+		const app = new Elysia()
+			.get('/', ({ query }) => query, {
+				query: t.Optional(
+					t.Object({
+						role: t.Optional(
+							t.Array(
+								t.Object({
+									name: t.String()
+								})
+							)
+						)
+					})
+				)
+			})
+			.compile()
+
+		const response = await app
+			.handle(
+				req(
+					`/?role=${JSON.stringify([
+						{ name: 'hello' },
+						{ name: 'world' }
+					])}`
+				)
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			role: [{ name: 'hello' }, { name: 'world' }]
+		})
 	})
 })

@@ -1,4 +1,5 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
+import { expectTypeOf } from 'expect-type'
 import { req } from '../test/utils'
 
 const app = new Elysia().get('/', async function* () {

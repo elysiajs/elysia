@@ -856,7 +856,7 @@ export const composeHandler = ({
 
 		if (validator.headers) {
 			// @ts-ignore
-			if (hasProperty('default', validator.headers.params))
+			if (hasProperty('default', validator.headers.schema))
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -867,9 +867,11 @@ export const composeHandler = ({
 					const parsed =
 						typeof value === 'object'
 							? JSON.stringify(value)
-							: `'${value}'`
+							: typeof value === 'string'
+							? `'${value}'`
+							: value
 
-					if (parsed)
+					if (parsed !== undefined)
 						fnLiteral += `c.headers['${key}'] ??= ${parsed}\n`
 				}
 
@@ -900,9 +902,11 @@ export const composeHandler = ({
 					const parsed =
 						typeof value === 'object'
 							? JSON.stringify(value)
-							: `'${value}'`
+							: typeof value === 'string'
+							? `'${value}'`
+							: value
 
-					if (parsed)
+					if (parsed !== undefined)
 						fnLiteral += `c.params['${key}'] ??= ${parsed}\n`
 				}
 
@@ -930,10 +934,31 @@ export const composeHandler = ({
 					const parsed =
 						typeof value === 'object'
 							? JSON.stringify(value)
-							: `'${value}'`
+							: typeof value === 'string'
+							? `'${value}'`
+							: value
 
-					if (parsed) fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
+					if (parsed !== undefined)
+						fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
 				}
+
+			for (const [key, value] of Object.entries(
+				// @ts-ignore
+				validator.query.schema?.properties
+			)) {
+				// @ts-ignore
+				const { type, anyOf } = value
+
+				if (type === 'object' || type === 'array') {
+					fnLiteral += `c.query['${key}'] = JSON.parse(c.query['${key}'])\n`
+
+					continue
+				}
+
+				if (anyOf) {
+					fnLiteral += `if(typeof c.query['${key}'] === "object") c.query['${key}'] = JSON.parse(c.query['${key}'])\n`
+				}
+			}
 
 			if (isOptional(validator.query))
 				fnLiteral += `if(isNotEmpty(c.query) && query.Check(c.query) === false) {
@@ -952,32 +977,47 @@ export const composeHandler = ({
 
 		if (validator.body) {
 			if (normalize) fnLiteral += 'c.body = body.Clean(c.body);\n'
+
 			// @ts-ignore
 			if (hasProperty('default', validator.body.schema)) {
 				fnLiteral += `if(body.Check(c.body) === false) {
-    				c.body = Object.assign(${JSON.stringify(
-						Value.Default(
-							// @ts-ignore
-							validator.body.schema,
-							null
-						) ?? {}
-					)}, c.body)`
+					if (typeof c.body === 'object') {
+						c.body = Object.assign(${JSON.stringify(
+							Value.Default(
+								// @ts-ignore
+								validator.body.schema,
+								{}
+							) ?? {}
+						)}, c.body)
+					} else {`
+
+				const defaultValue = Value.Default(
+					// @ts-ignore
+					validator.body.schema,
+					undefined
+				)
+
+				if (typeof defaultValue === 'string')
+					fnLiteral += `c.body = '${defaultValue}'`
+				else fnLiteral += `c.body = ${defaultValue}`
+
+				fnLiteral += `}`
 
 				if (isOptional(validator.body))
 					fnLiteral += `
-					    if(c.body && (typeof c.body === "object" && isNotEmpty(c.query)) && body.Check(c.body) === false) {
+					    if(c.body && (typeof c.body === "object" && isNotEmpty(c.body)) && body.Check(c.body) === false) {
             				${composeValidation('body')}
              			}
                     }`
 				else
 					fnLiteral += `
-    				if(body.Check(c.query) === false) {
+    				if(body.Check(c.body) === false) {
         				${composeValidation('body')}
          			}
                 }`
 			} else {
 				if (isOptional(validator.body))
-					fnLiteral += `if(c.body && (typeof c.body === "object" && isNotEmpty(c.query)) && body.Check(c.body) === false) {
+					fnLiteral += `if(c.body && (typeof c.body === "object" && isNotEmpty(c.body)) && body.Check(c.body) === false) {
          			${composeValidation('body')}
           		}`
 				else

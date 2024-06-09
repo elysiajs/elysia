@@ -289,13 +289,17 @@ describe('Body Validator', () => {
 	})
 
 	it('validate optional object', async () => {
-		const app = new Elysia().post('/', ({ body }) => body?.name ?? 'sucrose', {
-			body: t.Optional(
-				t.Object({
-					name: t.String()
-				})
-			)
-		})
+		const app = new Elysia().post(
+			'/',
+			({ body }) => body?.name ?? 'sucrose',
+			{
+				body: t.Optional(
+					t.Object({
+						name: t.String()
+					})
+				)
+			}
+		)
 
 		const [valid, invalid] = await Promise.all([
 			app.handle(
@@ -315,5 +319,73 @@ describe('Body Validator', () => {
 
 		expect(await invalid.text()).toBe('sucrose')
 		expect(invalid.status).toBe(200)
+	})
+
+	it('create default object body', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({
+				username: t.String(),
+				password: t.String(),
+				email: t.Optional(t.String({ format: 'email' })),
+				isSuperuser: t.Boolean({ default: false })
+			})
+		})
+
+		const value = await app
+			.handle(
+				post('/', {
+					username: 'nagisa',
+					password: 'hifumi_daisuki',
+					email: 'kirifuji_nagisa@trinity.school'
+				})
+			)
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			username: 'nagisa',
+			password: 'hifumi_daisuki',
+			email: 'kirifuji_nagisa@trinity.school',
+			isSuperuser: false
+		})
+	})
+
+	it('create default string body', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.String({ default: 'hifumi_daisuki' })
+		})
+
+		const value = await app.handle(post('/')).then((x) => x.text())
+
+		expect(value).toBe('hifumi_daisuki')
+	})
+
+	it('create default boolean body', async () => {
+		const app = new Elysia().post('/', ({ body }) => typeof body, {
+			body: t.Boolean({ default: true })
+		})
+
+		const value = await app.handle(post('/')).then((x) => x.text())
+
+		expect(value).toBe('boolean')
+	})
+
+	it('create default number body', async () => {
+		const app = new Elysia().post('/', ({ body }) => typeof body, {
+			body: t.Number({ default: 1 })
+		})
+
+		const value = await app.handle(post('/')).then((x) => x.text())
+
+		expect(value).toBe('number')
+	})
+
+	it('create default numeric body', async () => {
+		const app = new Elysia().post('/', ({ body }) => typeof body, {
+			body: t.Numeric({ default: 1 })
+		})
+
+		const value = await app.handle(post('/')).then((x) => x.text())
+
+		expect(value).toBe('number')
 	})
 })

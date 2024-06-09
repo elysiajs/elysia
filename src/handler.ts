@@ -371,6 +371,9 @@ export const mapResponse = (
 				if (typeof response?.next === 'function')
 					return handleStream(response as any, request)
 
+				if ('toResponse' in (response as any))
+					return mapResponse((response as any).toResponse(), set)
+
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
 
@@ -496,6 +499,9 @@ export const mapResponse = (
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					return handleStream(response as any, request)
+
+				if ('toResponse' in (response as any))
+					return mapResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -732,6 +738,9 @@ export const mapEarlyResponse = (
 				if (typeof response?.next === 'function')
 					return handleStream(response as any, request)
 
+				if ('toResponse' in (response as any))
+					return mapEarlyResponse((response as any).toResponse(), set)
+
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
 
@@ -853,6 +862,9 @@ export const mapEarlyResponse = (
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					return handleStream(response as any, request)
+
+				if ('toResponse' in (response as any))
+					return mapEarlyResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -989,6 +1001,9 @@ export const mapCompactResponse = (
 			// @ts-expect-error
 			if (typeof response?.next === 'function')
 				return handleStream(response as any, request)
+
+			if ('toResponse' in (response as any))
+				return mapCompactResponse((response as any).toResponse())
 
 			if ('charCodeAt' in (response as any)) {
 				const code = (response as any).charCodeAt(0)
