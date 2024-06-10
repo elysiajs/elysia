@@ -4377,7 +4377,7 @@ export default class Elysia<
 	 * @example
 	 * ```typescript
 	 * new Elysia()
-	 *     .state({ counter: 0 })
+	 *     .state('counter', 0)
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
 	 */
@@ -4389,11 +4389,42 @@ export default class Elysia<
 		Scoped,
 		{
 			decorator: Singleton['decorator']
-			store: Prettify<
-				Singleton['store'] & {
+			store: Reconcile<
+				Singleton['store'],
+				{
 					[name in Name]: Value
 				}
 			>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * ### state
+	 * Assign global mutatable state accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .state({ counter: 0 })
+	 *     .get('/', (({ counter }) => ++counter)
+	 * ```
+	 */
+	state<Store extends Record<string, unknown>>(
+		store: Store
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Singleton['decorator']
+			store: Reconcile<Singleton['store'], Store>
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
@@ -4416,14 +4447,64 @@ export default class Elysia<
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
 	 */
-	state<Store extends Record<string, unknown>>(
+	state<
+		const Type extends ContextAppendType,
+		const Name extends string | number | symbol,
+		Value
+	>(
+		options: { as: Type },
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Singleton['decorator']
+			store: Reconcile<
+				Singleton['store'],
+				{
+					[name in Name]: Value
+				},
+				Type extends 'override' ? true : false
+			>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * ### state
+	 * Assign global mutatable state accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .state({ counter: 0 })
+	 *     .get('/', (({ counter }) => ++counter)
+	 * ```
+	 */
+	state<
+		const Type extends ContextAppendType,
+		Store extends Record<string, unknown>
+	>(
+		options: { as: Type },
 		store: Store
 	): Elysia<
 		BasePath,
 		Scoped,
 		{
 			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & Store>
+			store: Reconcile<
+				Singleton['store'],
+				Store,
+				Type extends 'override' ? true : false
+			>
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
@@ -4465,32 +4546,95 @@ export default class Elysia<
 	 * ```
 	 */
 	state(
-		name: string | number | symbol | Record<string, unknown> | Function,
+		options:
+			| { as: ContextAppendType }
+			| string
+			| Record<string, unknown>
+			| Function,
+		name?:
+			| string
+			| Record<string, unknown>
+			| Function
+			| { as: ContextAppendType },
 		value?: unknown
 	) {
-		switch (typeof name) {
+		if (name === undefined) {
+			/**
+			 * Using either
+			 * - decorate({ name: value })
+			 */
+			value = options
+			options = { as: 'append' }
+			name = ''
+		} else if (value === undefined) {
+			/**
+			 * Using either
+			 * - decorate({ as: 'override' }, { name: value })
+			 * - decorate('name', value)
+			 */
+
+			// decorate('name', value)
+			if (typeof options === 'string') {
+				value = name
+				name = options
+				options = { as: 'append' }
+			} else if (typeof options === 'object') {
+				// decorate({ as: 'override' }, { name: value })
+				value = name
+				name = ''
+			}
+		}
+
+		const { as } = options as { as: ContextAppendType }
+
+		if (typeof name !== 'string') return this
+
+		switch (typeof value) {
 			case 'object':
-				this.singleton.store = mergeDeep(this.singleton.store, name)
+				if (name) {
+					if (name in this.singleton.store)
+						this.singleton.store[name] = mergeDeep(
+							this.singleton.store[name] as any,
+							value!,
+							{
+								override: as === 'override'
+							}
+						)
+					else this.singleton.store[name] = value
+
+					return this
+				}
+
+				if (value === null) return this
+
+				this.singleton.store = mergeDeep(
+					this.singleton.store,
+					value,
+					{
+						override: as === 'override'
+					}
+				)
 
 				return this as any
 
 			case 'function':
-				this.singleton.store = name(this.singleton.store)
+				if (name) {
+					if (
+						as === 'override' ||
+						!(name in this.singleton.store)
+					)
+						this.singleton.store[name] = value
+				} else
+					this.singleton.store = value(this.singleton.store)
 
 				return this as any
-		}
 
-		if (!(name in this.singleton.store)) {
-			// eslint-disable-next-line no-extra-semi
-			;(
-				this.singleton.store as Record<
-					string | number | symbol,
-					unknown
-				>
-			)[name] = value
-		}
+			default:
+				if (as === 'override' || !(name in this.singleton.store))
+					this.singleton.store[name] = value
 
-		return this as any
+				return this
+		}
 	}
 
 	/**

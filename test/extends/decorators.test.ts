@@ -32,10 +32,6 @@ describe('Decorate', () => {
 			.decorate({
 				name: 'Fubuki'
 			})
-			.get('/', ({ name, job }) => ({
-				name,
-				job
-			}))
 
 		expect(app.decorator).toEqual({
 			name: 'Ina',
@@ -52,10 +48,6 @@ describe('Decorate', () => {
 			.decorate(({ job, ...rest }) => ({
 				...rest,
 				job: 'streamer'
-			}))
-			.get('/', ({ name, job }) => ({
-				name,
-				job
 			}))
 
 		expect(app.decorator).toEqual({
@@ -115,10 +107,7 @@ describe('Decorate', () => {
 			}
 		}
 
-		const app = new Elysia()
-			.decorate('a', new A())
-			.decorate('a', new A())
-			.get('/', ({ a }) => a.i)
+		const app = new Elysia().decorate('a', new A()).decorate('a', new A())
 
 		expect(app.decorator.a.i).toBe(0)
 	})
@@ -151,7 +140,6 @@ describe('Decorate', () => {
 		const app = new Elysia()
 			.decorate('name', 'Ina')
 			.decorate({ as: 'override' }, 'name', 'Tako')
-			.get('/', ({ name }) => name)
 
 		expect(app.decorator.name).toBe('Tako')
 	})
@@ -175,7 +163,7 @@ describe('Decorate', () => {
 		})
 	})
 
-	it('handle class deduplication', async () => {
+	it('override handle class', async () => {
 		let _i = 0
 
 		class A {
@@ -189,9 +177,8 @@ describe('Decorate', () => {
 		const app = new Elysia()
 			.decorate('a', new A())
 			.decorate({ as: 'override' }, 'a', new A())
-			.get('/', ({ a }) => a.i)
 
-		expect(app.decorator.a.i).toBe(0)
+		expect(app.decorator.a.i).toBe(1)
 	})
 
 	it('override nested object deduplication using name', async () => {

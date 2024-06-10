@@ -1,18 +1,17 @@
 import { Elysia } from '../src'
 
-const app = new Elysia()
-	.decorate({
-		hello: {
-			world: 'Tako'
-		}
-	})
-	.decorate(
-		{
-			hello: {
-				world: 'Ina',
-				cookie: 'wah!'
-			}
-		}
-	)
+let _i = 0
 
-	console.log(app.decorator.hello)
+class A {
+	public i: number
+
+	constructor() {
+		this.i = _i++
+	}
+}
+
+const app = new Elysia()
+	.decorate('a', new A())
+	.decorate('a', new A())
+
+console.log(app.decorator.a.i)
