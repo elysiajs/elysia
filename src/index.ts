@@ -114,7 +114,8 @@ import type {
 	ModelValidator,
 	BaseMacroFn,
 	ResolveMacroContext,
-	ContextAppendType
+	ContextAppendType,
+	Reconcile
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -4511,8 +4512,9 @@ export default class Elysia<
 		BasePath,
 		Scoped,
 		{
-			decorator: Prettify<
-				Singleton['decorator'] & {
+			decorator: Reconcile<
+				Singleton['decorator'],
+				{
 					[name in Name]: Value
 				}
 			>
@@ -4545,7 +4547,7 @@ export default class Elysia<
 		BasePath,
 		Scoped,
 		{
-			decorator: Prettify<Singleton['decorator'] & NewDecorators>
+			decorator: Reconcile<Singleton['decorator'], NewDecorators>
 			store: Singleton['store']
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
@@ -4587,18 +4589,24 @@ export default class Elysia<
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
-	decorate<const Name extends string, const Value>(
-		options: { as: ContextAppendType },
+	decorate<
+		const Type extends ContextAppendType,
+		const Name extends string,
+		const Value
+	>(
+		options: { as: Type },
 		name: Name,
 		value: Value
 	): Elysia<
 		BasePath,
 		Scoped,
 		{
-			decorator: Prettify<
-				Singleton['decorator'] & {
+			decorator: Reconcile<
+				Singleton['decorator'],
+				{
 					[name in Name]: Value
-				}
+				},
+				Type extends 'override' ? true : false
 			>
 			store: Singleton['store']
 			derive: Singleton['derive']
@@ -4623,33 +4631,21 @@ export default class Elysia<
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
-	decorate<const NewDecorators extends Record<string, unknown>>(
-		options: { as: ContextAppendType },
+	decorate<
+		const Type extends ContextAppendType,
+		const NewDecorators extends Record<string, unknown>
+	>(
+		options: { as: Type },
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
 		Scoped,
 		{
-			decorator: Prettify<Singleton['decorator'] & NewDecorators>
-			store: Singleton['store']
-			derive: Singleton['derive']
-			resolve: Singleton['resolve']
-		},
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	decorate<const NewDecorators extends Record<string, unknown>>(
-		options: { as: ContextAppendType },
-		mapper: (decorators: Singleton['decorator']) => NewDecorators
-	): Elysia<
-		BasePath,
-		Scoped,
-		{
-			decorator: NewDecorators
+			decorator: Reconcile<
+				Singleton['decorator'],
+				NewDecorators,
+				Type extends 'override' ? true : false
+			>
 			store: Singleton['store']
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
@@ -4720,16 +4716,20 @@ export default class Elysia<
 		switch (typeof value) {
 			case 'object':
 				if (name) {
-					this.singleton.decorator[name] = value
+					if (name in this.singleton.decorator)
+						this.singleton.decorator[name] = mergeDeep(
+							this.singleton.decorator[name] as any,
+							value!,
+							{
+								override: as === 'override'
+							}
+						)
+					else this.singleton.decorator[name] = value
 
 					return this
 				}
 
-				if (value === null) {
-					this.singleton.decorator[name] = value
-
-					return this
-				}
+				if (value === null) return this
 
 				this.singleton.decorator = mergeDeep(
 					this.singleton.decorator,

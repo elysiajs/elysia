@@ -35,12 +35,13 @@ export const replaceUrlPath = (url: string, pathname: string) => {
 	return urlObject.toString()
 }
 
-const isClass = (v: Object) =>
+export const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
 	// Handle import * as Sentry from '@sentry/bun'
 	// This also handle [object Date], [object Array]
 	// and FFI value like [object Prisma]
-	v.toString().startsWith('[object ') ||
+	(v.toString().startsWith('[object ') &&
+		v.toString() !== '[object Object]') ||
 	// If object prototype is not pure, then probably a class-like object
 	isNotEmpty(Object.getPrototypeOf(v))
 
@@ -61,23 +62,24 @@ export const mergeDeep = <
 		override?: boolean
 	} = {}
 ): A & B => {
-	if (isObject(target) && isObject(source))
-		for (const [key, value] of Object.entries(source)) {
-			if (skipKeys?.includes(key)) continue
+	if (!isObject(target) || !isObject(source)) return target as A & B
 
-			if (!isObject(value) || !(key in target) || isClass(value)) {
-				if (override || !(key in target))
-					target[key as keyof typeof target] = value
+	for (const [key, value] of Object.entries(source)) {
+		if (skipKeys?.includes(key)) continue
 
-				continue
-			}
+		if (!isObject(value) || !(key in target) || isClass(value)) {
+			if (override || !(key in target))
+				target[key as keyof typeof target] = value
 
-			target[key as keyof typeof target] = mergeDeep(
-				(target as any)[key] as any,
-				value,
-				{ skipKeys, override }
-			)
+			continue
 		}
+
+		target[key as keyof typeof target] = mergeDeep(
+			(target as any)[key] as any,
+			value,
+			{ skipKeys, override }
+		)
+	}
 
 	return target as A & B
 }

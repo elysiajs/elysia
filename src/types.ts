@@ -186,17 +186,49 @@ export type NeverKey<T> = {
 	[K in keyof T]: never
 } & {}
 
-export type Reconcile<A extends Object, B extends Object> = {
-	[key in keyof A as key extends keyof B ? never : key]: A[key]
-} extends infer Collision
+type IsBothObject<A, B> = A extends Record<string | number | symbol, unknown>
+	? B extends Record<string | number | symbol, unknown>
+		? true
+		: false
+	: false
+
+export type Reconcile<
+	A extends Object,
+	B extends Object,
+	Override extends boolean = false
+> = Override extends true
+	? {
+			[key in keyof A as key extends keyof B ? never : key]: A[key]
+	  } extends infer Collision
+		? {} extends Collision
+			? {
+				// @ts-ignore trust me bro
+				[key in keyof B]: IsBothObject<A[key], B[key]> extends true
+					? // @ts-ignore trust me bro
+					  Reconcile<A[key], B[key], Override>
+					: B[key]
+			  }
+			: Prettify<
+					Collision & {
+						[key in keyof B]: B[key]
+					}
+			  >
+		: never
+	: {
+			[key in keyof B as key extends keyof A ? never : key]: B[key]
+	  } extends infer Collision
 	? {} extends Collision
 		? {
-				[key in keyof B]: B[key]
+				// @ts-ignore trust me bro
+				[key in keyof A]: IsBothObject<A[key], B[key]> extends true
+					? // @ts-ignore trust me bro
+					  Reconcile<A[key], B[key], Override>
+					: A[key]
 		  }
 		: Prettify<
-				Collision & {
-					[key in keyof B]: B[key]
-				}
+				{
+					[key in keyof A]: A[key]
+				} & Collision
 		  >
 	: never
 

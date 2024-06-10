@@ -1,22 +1,18 @@
 import { Elysia } from '../src'
-import { req } from '../test/utils'
-
-let _i = 0
-
-class A {
-	public i: number
-
-	constructor() {
-		this.i = _i++
-	}
-}
 
 const app = new Elysia()
 	.decorate({
-		a: '1'
+		hello: {
+			world: 'Tako'
+		}
 	})
-	.get('/', ({ a }) => a)
+	.decorate(
+		{
+			hello: {
+				world: 'Ina',
+				cookie: 'wah!'
+			}
+		}
+	)
 
-app.handle(req('/'))
-	.then((x) => x.text())
-	.then(console.log)
+	console.log(app.decorator.hello)

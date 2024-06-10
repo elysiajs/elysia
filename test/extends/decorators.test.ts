@@ -8,23 +8,16 @@ describe('Decorate', () => {
 		const app = new Elysia()
 			.decorate('name', 'Ina')
 			.decorate('name', 'Tako')
-			.get('/', ({ name }) => name)
 
-		const res = await app.handle(req('/')).then((r) => r.text())
-		expect(res).toBe('Ina')
+		expect(app.decorator.name).toBe('Ina')
 	})
 
 	it('decorate multiple', async () => {
 		const app = new Elysia()
 			.decorate('name', 'Ina')
 			.decorate('job', 'artist')
-			.get('/', ({ name, job }) => ({
-				name,
-				job
-			}))
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual({
+		expect(app.decorator).toEqual({
 			name: 'Ina',
 			job: 'artist'
 		})
@@ -44,8 +37,7 @@ describe('Decorate', () => {
 				job
 			}))
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual({
+		expect(app.decorator).toEqual({
 			name: 'Ina',
 			job: 'artist'
 		})
@@ -66,8 +58,7 @@ describe('Decorate', () => {
 				job
 			}))
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual({
+		expect(app.decorator).toEqual({
 			name: 'Ina',
 			job: 'streamer'
 		})
@@ -92,16 +83,13 @@ describe('Decorate', () => {
 	})
 
 	it('accepts any type', async () => {
-		const app = new Elysia()
-			.decorate('hi', {
-				there: {
-					hello: 'world'
-				}
-			})
-			.get('/', ({ hi }) => hi.there.hello)
+		const app = new Elysia().decorate('hi', {
+			there: {
+				hello: 'world'
+			}
+		})
 
-		const res = await app.handle(req('/')).then((r) => r.text())
-		expect(res).toBe('world')
+		expect(app.decorator.hi.there.hello).toBe('world')
 	})
 
 	it('remap', async () => {
@@ -112,10 +100,51 @@ describe('Decorate', () => {
 				...decorators,
 				job: 'vtuber'
 			}))
-			.get('/', ({ job }) => job)
 
-		const res = await app.handle(req('/')).then((r) => r.text())
-		expect(res).toBe('vtuber')
+		expect(app.decorator.job).toBe('vtuber')
+	})
+
+	it('handle class deduplication', async () => {
+		let _i = 0
+
+		class A {
+			public i: number
+
+			constructor() {
+				this.i = _i++
+			}
+		}
+
+		const app = new Elysia()
+			.decorate('a', new A())
+			.decorate('a', new A())
+			.get('/', ({ a }) => a.i)
+
+		expect(app.decorator.a.i).toBe(0)
+	})
+
+	it('handle nested object deduplication', async () => {
+		const app = new Elysia()
+			.decorate('a', {
+				hello: {
+					world: 'Tako'
+				}
+			})
+			.decorate('a', {
+				hello: {
+					world: 'Ina',
+					cookie: 'wah!'
+				}
+			})
+
+		expect(app.decorator).toEqual({
+			a: {
+				hello: {
+					world: 'Tako',
+					cookie: 'wah!'
+				}
+			}
+		})
 	})
 
 	it('override primitive', async () => {
@@ -124,8 +153,7 @@ describe('Decorate', () => {
 			.decorate({ as: 'override' }, 'name', 'Tako')
 			.get('/', ({ name }) => name)
 
-		const res = await app.handle(req('/')).then((r) => r.text())
-		expect(res).toBe('Tako')
+		expect(app.decorator.name).toBe('Tako')
 	})
 
 	it('override object', async () => {
@@ -140,37 +168,72 @@ describe('Decorate', () => {
 					name: 'Fubuki'
 				}
 			)
-			.get('/', ({ name, job }) => ({
-				name,
-				job
-			}))
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual({
+		expect(app.decorator).toEqual({
 			name: 'Fubuki',
 			job: 'artist'
 		})
 	})
 
-	it('override remap', async () => {
+	it('handle class deduplication', async () => {
+		let _i = 0
+
+		class A {
+			public i: number
+
+			constructor() {
+				this.i = _i++
+			}
+		}
+
+		const app = new Elysia()
+			.decorate('a', new A())
+			.decorate({ as: 'override' }, 'a', new A())
+			.get('/', ({ a }) => a.i)
+
+		expect(app.decorator.a.i).toBe(0)
+	})
+
+	it('override nested object deduplication using name', async () => {
+		const app = new Elysia()
+			.decorate('a', {
+				hello: {
+					world: 'Tako'
+				}
+			})
+			.decorate({ as: 'override' }, 'a', {
+				hello: {
+					world: 'Ina',
+					cookie: 'wah!'
+				}
+			})
+
+		expect(app.decorator.a.hello).toEqual({
+			world: 'Ina',
+			cookie: 'wah!'
+		})
+	})
+
+	it('override nested object deduplication using value', async () => {
 		const app = new Elysia()
 			.decorate({
-				name: 'Ina',
-				job: 'artist'
+				hello: {
+					world: 'Tako'
+				}
 			})
-			.decorate({ as: 'override' }, ({ job, ...rest }) => ({
-				...rest,
-				job: 'streamer'
-			}))
-			.get('/', ({ name, job }) => ({
-				name,
-				job
-			}))
+			.decorate(
+				{ as: 'override' },
+				{
+					hello: {
+						world: 'Ina',
+						cookie: 'wah!'
+					}
+				}
+			)
 
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual({
-			name: 'Ina',
-			job: 'streamer'
+		expect(app.decorator.hello).toEqual({
+			world: 'Ina',
+			cookie: 'wah!'
 		})
 	})
 })

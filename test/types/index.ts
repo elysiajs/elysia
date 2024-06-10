@@ -284,6 +284,53 @@ app.decorate('a', 'b')
 		}>()
 	})
 
+// ? Reconcile deep using name
+{
+	const app = new Elysia()
+		.decorate('a', {
+			hello: {
+				world: 'Tako'
+			}
+		})
+		.decorate('a', {
+			hello: {
+				world: 'Ina',
+				cookie: 'wah!'
+			}
+		})
+
+	expectTypeOf<(typeof app)['decorator']['a']>().toEqualTypeOf<{
+		readonly hello: {
+			readonly cookie: 'wah!'
+			readonly world: 'Tako'
+		}
+	}>()
+}
+
+// ? Reconcile deep using value
+{
+	const app = new Elysia()
+		.decorate({
+			hello: {
+				world: 'Tako'
+			}
+		})
+		.decorate(
+			{ as: 'override' },
+			{
+				hello: {
+					world: 'Ina',
+					cookie: 'wah!'
+				}
+			}
+		)
+
+	expect(app.decorator.hello).toEqual({
+		world: 'Ina',
+		cookie: 'wah!'
+	})
+}
+
 const b = app
 	.model('a', t.Literal('a'))
 	// ? Infer label model
