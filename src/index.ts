@@ -231,7 +231,7 @@ export default class Elysia<
 		stop: []
 	}
 
-	telemetry = {
+	protected telemetry = {
 		stack: undefined as string | undefined
 	}
 

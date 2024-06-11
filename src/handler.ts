@@ -120,6 +120,7 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 
 const handleStream = (
 	generator: Generator | AsyncGenerator,
+	set?: Context['set'],
 	request?: Request
 ) => {
 	let end = false
@@ -142,6 +143,12 @@ const handleStream = (
 					if (!chunk) continue
 
 					controller.enqueue(Buffer.from(chunk.toString()))
+
+					// Wait for the next event loop
+					// Otherwise the data will be mixed up
+					await new Promise<void>((resolve) =>
+						setTimeout(() => resolve(), 0)
+					)
 				}
 
 				try {
@@ -150,7 +157,15 @@ const handleStream = (
 					// nothing
 				}
 			}
-		})
+		}),
+		{
+			...(set as ResponseInit),
+			headers: {
+				// Manually set transfer-encoding for direct response, eg. app.handle, eden
+				'transfer-encoding': 'chunked',
+				'content-type': 'text/event-stream; charset=utf-8'
+			}
+		}
 	)
 }
 
@@ -369,7 +384,7 @@ export const mapResponse = (
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
-					return handleStream(response as any, request)
+					return handleStream(response as any, set, request)
 
 				if ('toResponse' in (response as any))
 					return mapResponse((response as any).toResponse(), set)
@@ -498,7 +513,7 @@ export const mapResponse = (
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
-					return handleStream(response as any, request)
+					return handleStream(response as any, set, request)
 
 				if ('toResponse' in (response as any))
 					return mapResponse((response as any).toResponse(), set)
@@ -736,7 +751,7 @@ export const mapEarlyResponse = (
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
-					return handleStream(response as any, request)
+					return handleStream(response as any, set, request)
 
 				if ('toResponse' in (response as any))
 					return mapEarlyResponse((response as any).toResponse(), set)
@@ -861,7 +876,7 @@ export const mapEarlyResponse = (
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
-					return handleStream(response as any, request)
+					return handleStream(response as any, set, request)
 
 				if ('toResponse' in (response as any))
 					return mapEarlyResponse((response as any).toResponse(), set)
@@ -1000,7 +1015,7 @@ export const mapCompactResponse = (
 
 			// @ts-expect-error
 			if (typeof response?.next === 'function')
-				return handleStream(response as any, request)
+				return handleStream(response as any, undefined, request)
 
 			if ('toResponse' in (response as any))
 				return mapCompactResponse((response as any).toResponse())

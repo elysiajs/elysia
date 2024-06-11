@@ -1,17 +1,11 @@
 import { Elysia } from '../src'
 
-let _i = 0
-
-class A {
-	public i: number
-
-	constructor() {
-		this.i = _i++
-	}
-}
-
 const app = new Elysia()
-	.decorate('a', new A())
-	.decorate('a', new A())
+	.get('/', async function* () {
+		yield 'hello'
+		await Bun.sleep(200)
 
-console.log(app.decorator.a.i)
+		// yield 'hello'
+		// await Bun.sleep(200)
+	})
+	.listen(3000)
