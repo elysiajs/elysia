@@ -2152,6 +2152,10 @@ export default class Elysia<
 
 			case 'object':
 				type = typeOrHandlers as any
+
+				if(!Array.isArray(typeOrHandlers) && typeof typeOrHandlers === 'object')
+					handlers = typeOrHandlers
+
 				break
 		}
 
@@ -3131,7 +3135,7 @@ export default class Elysia<
 			for (const trace of plugin.event.trace)
 				switch (trace.scope) {
 					case 'global':
-						this.on({ as: 'local' }, 'trace', trace.fn as any)
+						this.on({ as: 'global' }, 'trace', trace.fn as any)
 						break
 
 					case 'scoped':

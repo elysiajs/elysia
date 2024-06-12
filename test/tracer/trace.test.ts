@@ -147,4 +147,84 @@ describe('trace', () => {
 
 		const app = new Elysia().get('/', 'hi')
 	})
+
+	it('handle local scope', async () => {
+		let called = false
+
+		const plugin = new Elysia().trace(() => {
+			called = true
+		})
+
+		const parent = new Elysia().use(plugin)
+		const main = new Elysia().use(parent).get('/', () => 'h')
+
+		await main.handle(req('/'))
+		expect(called).toBe(false)
+
+		await parent.handle(req('/'))
+		expect(called).toBe(false)
+
+		await plugin.handle(req('/'))
+		expect(called).toBe(true)
+	})
+
+	it('handle scoped scope', async () => {
+		let called = false
+
+		const plugin = new Elysia().trace({ as: 'scoped' }, () => {
+			called = true
+		})
+
+		const parent = new Elysia().use(plugin)
+		const main = new Elysia().use(parent).get('/', () => 'h')
+
+		await main.handle(req('/'))
+		expect(called).toBe(false)
+
+		await parent.handle(req('/'))
+		expect(called).toBe(true)
+
+		await plugin.handle(req('/'))
+		expect(called).toBe(true)
+	})
+
+	it('handle global scope', async () => {
+		let called = false
+
+		const plugin = new Elysia().trace({ as: 'global' }, () => {
+			called = true
+		})
+
+		const parent = new Elysia().use(plugin)
+		const main = new Elysia().use(parent).get('/', () => 'h')
+
+		await main.handle(req('/'))
+		expect(called).toBe(true)
+
+		await parent.handle(req('/'))
+		expect(called).toBe(true)
+
+		await plugin.handle(req('/'))
+		expect(called).toBe(true)
+	})
+
+	it('handle propagate', async () => {
+		let called = false
+
+		const plugin = new Elysia().trace({ as: 'scoped' }, () => {
+			called = true
+		})
+
+		const parent = new Elysia().use(plugin).propagate()
+		const main = new Elysia().use(parent).get('/', () => 'h')
+
+		await main.handle(req('/'))
+		expect(called).toBe(true)
+
+		await parent.handle(req('/'))
+		expect(called).toBe(true)
+
+		await plugin.handle(req('/'))
+		expect(called).toBe(true)
+	})
 })

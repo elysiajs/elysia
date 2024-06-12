@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "1.1.0-exp.2",
+  "version": "1.1.0-exp.3",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -93,7 +93,7 @@
     "test:node": "npm install --prefix ./test/node/cjs/ && npm install --prefix ./test/node/esm/ && node ./test/node/cjs/index.js && node ./test/node/esm/index.js && bun dist/bun/index.js",
     "dev": "bun run --watch example/a.ts",
     "build": "rimraf dist && bun build.ts",
-    "release:local": "npm run build && npm run test && npm publish"
+    "release": "npm run build && npm run test && npm publish"
   },
   "dependencies": {
     "@sinclair/typebox": "0.32.30",

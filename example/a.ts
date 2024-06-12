@@ -1,8 +1,11 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const app = new Elysia()
-	.trace({ as: 'global' }, () => {})
-	// .onBeforeHandle(() => {})
-	.onError(() => {})
-	.get('/health', 'OK')
-	.listen(3000)
+const plugin = new Elysia().trace({ as: 'scoped' }, () => {
+})
+
+const parent = new Elysia().use(plugin)
+
+const main = new Elysia().use(parent).get('/', () => 'h')
+
+main.handle(req('/'))
