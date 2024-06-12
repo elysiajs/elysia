@@ -1,11 +1,8 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.get('/', async function* () {
-		yield 'hello'
-		await Bun.sleep(200)
-
-		// yield 'hello'
-		// await Bun.sleep(200)
-	})
+	.trace({ as: 'global' }, () => {})
+	// .onBeforeHandle(() => {})
+	.onError(() => {})
+	.get('/health', 'OK')
 	.listen(3000)

@@ -93,4 +93,58 @@ describe('trace', () => {
 
 		const app = new Elysia().get('/', 'hi')
 	})
+
+	it("don't crash on composer", () => {
+		const called = <string[]>[]
+
+		const detectEvent =
+			(event: TraceEvent) =>
+			({ onStop }: TraceProcess<'begin'>) => {
+				onStop(() => {
+					called.push(event)
+				})
+			}
+
+		const plugin = new Elysia()
+			.onRequest(() => {})
+			.onTransform(() => {})
+			.onError(() => {})
+			.trace(
+				{ as: 'scoped' },
+				({
+					onRequest,
+					onParse,
+					onTransform,
+					onBeforeHandle,
+					onHandle,
+					onAfterHandle,
+					onMapResponse,
+					onAfterResponse
+				}) => {
+					onRequest(detectEvent('request'))
+					onParse(detectEvent('parse'))
+					onTransform(detectEvent('transform'))
+					onBeforeHandle(detectEvent('beforeHandle'))
+					onHandle(detectEvent('handle'))
+					onAfterHandle(detectEvent('afterHandle'))
+					onMapResponse(detectEvent('mapResponse'))
+					onAfterResponse(detectEvent('afterResponse'))
+
+					onAfterResponse(() => {
+						expect(called).toEqual([
+							'request',
+							'parse',
+							'transform',
+							'beforeHandle',
+							'handle',
+							'afterHandle',
+							'mapResponse',
+							'afterResponse'
+						])
+					})
+				}
+			)
+
+		const app = new Elysia().get('/', 'hi')
+	})
 })

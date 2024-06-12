@@ -127,7 +127,7 @@ const createReport = ({
 			resolveChild(name: string) {
 				for (let i = 0; i < totalListener; i++)
 					addFn(
-						`reportChild${i} = report${i}.resolveChild.shift()({` +
+						`reportChild${i} = report${i}.resolveChild?.shift()?.({` +
 							`id,` +
 							`event: '${event}',` +
 							`name: '${name}',` +
@@ -137,7 +137,7 @@ const createReport = ({
 
 				return () => {
 					for (let i = 0; i < totalListener; i++)
-						addFn(`reportChild${i}()\n`)
+						addFn(`reportChild${i}?.()\n`)
 				}
 			}
 		}
@@ -1841,7 +1841,8 @@ export const composeErrorHandler = (
 		app: { event: { error: onErrorContainer, afterResponse: resContainer, mapResponse: _onMapResponse } },
 		mapResponse,
 		ERROR_CODE,
-		ELYSIA_RESPONSE
+		ELYSIA_RESPONSE,
+		ELYSIA_TRACE
 	} = inject
 	
 	const onMapResponse = []
@@ -1981,7 +1982,8 @@ export const composeErrorHandler = (
 		app,
 		mapResponse,
 		ERROR_CODE,
-		ELYSIA_RESPONSE
+		ELYSIA_RESPONSE,
+		ELYSIA_TRACE
 	})
 }
 
