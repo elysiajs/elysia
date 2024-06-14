@@ -1,5 +1,6 @@
-import type { StatusMap, InvertedStatusMap, redirect as Redirect } from './utils'
+import type { Server } from 'bun'
 import type { Cookie, ElysiaCookie } from './cookies'
+import type { StatusMap, InvertedStatusMap, redirect as Redirect } from './utils'
 
 import { error, type ELYSIA_RESPONSE } from './error'
 import type {
@@ -53,6 +54,7 @@ export type ErrorContext<
 						}>
 					>
 
+		server: Server | null
 		redirect: Redirect
 
 		set: {
@@ -70,6 +72,7 @@ export type ErrorContext<
 		path: string
 		request: Request
 		store: Singleton['store']
+		response: Route['response']
 	} & Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']
@@ -109,6 +112,7 @@ export type Context<
 						}>
 					>
 
+		server: Server | null
 		redirect: Redirect
 
 		set: {
@@ -126,6 +130,7 @@ export type Context<
 		path: string
 		request: Request
 		store: Singleton['store']
+		response?: Route['response']
 	} & (Route['response'] extends { 200: unknown }
 		? {
 				error: <
@@ -178,6 +183,7 @@ export type PreContext<
 		request: Request
 
 		redirect: Redirect
+		server: Server | null
 
 		set: {
 			headers: { [header: string]: string } & SetCookie

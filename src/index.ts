@@ -78,7 +78,6 @@ import type {
 	InternalRoute,
 	HTTPMethod,
 	SchemaValidator,
-	VoidHandler,
 	PreHandler,
 	BodyHandler,
 	OptionalHandler,
@@ -115,7 +114,8 @@ import type {
 	BaseMacroFn,
 	ResolveMacroContext,
 	ContextAppendType,
-	Reconcile
+	Reconcile,
+	AfterResponseHandler
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -613,7 +613,7 @@ export default class Elysia<
 					validator,
 					handler: handle,
 					allowMeta,
-					inference
+					inference,
 			  })
 			: (((context: Context) => {
 					if (composed) return composed(context)
@@ -1641,7 +1641,7 @@ export default class Elysia<
 	 */
 	onAfterResponse<const Schema extends RouteSchema>(
 		handler: MaybeArray<
-			VoidHandler<
+			AfterResponseHandler<
 				MergeSchema<
 					Schema,
 					Metadata['schema'] &
@@ -1677,7 +1677,7 @@ export default class Elysia<
 	>(
 		options: { as?: Type },
 		handler: MaybeArray<
-			VoidHandler<
+			AfterResponseHandler<
 				MergeSchema<
 					Schema,
 					Metadata['schema'] &
@@ -2153,7 +2153,10 @@ export default class Elysia<
 			case 'object':
 				type = typeOrHandlers as any
 
-				if(!Array.isArray(typeOrHandlers) && typeof typeOrHandlers === 'object')
+				if (
+					!Array.isArray(typeOrHandlers) &&
+					typeof typeOrHandlers === 'object'
+				)
 					handlers = typeOrHandlers
 
 				break
@@ -4611,25 +4614,17 @@ export default class Elysia<
 
 				if (value === null) return this
 
-				this.singleton.store = mergeDeep(
-					this.singleton.store,
-					value,
-					{
-						override: as === 'override'
-					}
-				)
+				this.singleton.store = mergeDeep(this.singleton.store, value, {
+					override: as === 'override'
+				})
 
 				return this as any
 
 			case 'function':
 				if (name) {
-					if (
-						as === 'override' ||
-						!(name in this.singleton.store)
-					)
+					if (as === 'override' || !(name in this.singleton.store))
 						this.singleton.store[name] = value
-				} else
-					this.singleton.store = value(this.singleton.store)
+				} else this.singleton.store = value(this.singleton.store)
 
 				return this as any
 
@@ -5675,6 +5670,7 @@ export type {
 	PreHandler,
 	BodyHandler,
 	OptionalHandler,
+	AfterResponseHandler,
 	ErrorHandler,
 	AfterHandler,
 	LifeCycleEvent,

@@ -47,7 +47,9 @@ export const createDynamicHandler =
 				qi,
 				redirect
 			}
-		) as unknown as Context
+		) as unknown as Context & {
+			response: unknown
+		}
 
 		try {
 			for (let i = 0; i < app.event.request.length; i++) {
@@ -56,7 +58,7 @@ export const createDynamicHandler =
 				if (response instanceof Promise) response = await response
 
 				response = mapEarlyResponse(response, set)
-				if (response) return response
+				if (response) return (context.response = response)
 			}
 
 			const handler =
@@ -291,7 +293,7 @@ export const createDynamicHandler =
 					}
 
 					const result = mapEarlyResponse(response, context.set)
-					if (result) return result
+					if (result) return (context.response = result)
 				}
 			}
 
@@ -335,7 +337,7 @@ export const createDynamicHandler =
 								result
 							)
 
-						return result
+						return (context.response = result)
 					}
 				}
 			}
@@ -360,8 +362,7 @@ export const createDynamicHandler =
 					const properties = validator?.cookie?.schema?.properties
 
 					for (const name of cookieMeta.sign) {
-						if (!(name in properties))
-							continue
+						if (!(name in properties)) continue
 
 						if (context.set.cookie[name]?.value) {
 							context.set.cookie[name].value = await signCookie(
@@ -373,7 +374,7 @@ export const createDynamicHandler =
 				}
 			}
 
-			return mapResponse(response, context.set)
+			return (context.response = mapResponse(response, context.set))
 		} catch (error) {
 			if ((error as ElysiaErrors).status)
 				set.status = (error as ElysiaErrors).status
@@ -382,13 +383,18 @@ export const createDynamicHandler =
 			return app.handleError(context, error)
 		} finally {
 			for (const afterResponse of app.event.afterResponse)
-				await afterResponse.fn(context)
+				await afterResponse.fn(context as any)
 		}
 	}
 
 export const createDynamicErrorHandler =
 	(app: Elysia<any, any, any, any, any, any, any, any>) =>
-	async (context: Context, error: ElysiaErrors) => {
+	async (
+		context: Context & {
+			response: unknown
+		},
+		error: ElysiaErrors
+	) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
@@ -397,7 +403,7 @@ export const createDynamicErrorHandler =
 			let response = hook.fn(errorContext as any)
 			if (response instanceof Promise) response = await response
 			if (response !== undefined && response !== null)
-				return mapResponse(response, context.set)
+				return (context.response = mapResponse(response, context.set))
 		}
 
 		return new Response(

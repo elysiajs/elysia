@@ -22,9 +22,9 @@ import type {
 	OptionalHandler,
 	AfterHandler,
 	MapResponse,
-	VoidHandler,
 	ErrorHandler,
-	Replace
+	Replace,
+	AfterResponseHandler
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
@@ -581,7 +581,7 @@ export const mergeLifeCycle = (
 		afterResponse: mergeObjectArray(
 			a.afterResponse,
 			injectChecksum(b?.afterResponse)
-		) as HookContainer<VoidHandler<any, any>>[],
+		) as HookContainer<AfterResponseHandler<any, any>>[],
 		// Already merged on Elysia._use, also logic is more complicated, can't directly merge
 		trace: a.trace,
 		error: mergeObjectArray(
@@ -883,19 +883,33 @@ export const createMacroManager =
 		}
 	}
 
-export const isNumericString = (message: string): boolean => {
-	if (message.length < 16)
-		return message.trim().length !== 0 && !Number.isNaN(Number(message))
+const parseNumericString = (message: string | number): number | null => {
+	if (typeof message === 'number') return message
+
+	if (message.length < 16) {
+		if (message.trim().length === 0) return null
+
+		const length = Number(message)
+		if (Number.isNaN(length)) return null
+
+		return length
+	}
 
 	// if 16 digit but less then 9,007,199,254,740,991 then can be parsed
 	if (message.length === 16) {
-		const numVal = Number(message)
-		if (numVal.toString() === message)
-			return message.trim().length !== 0 && !Number.isNaN(numVal)
+		if (message.trim().length === 0) return null
+
+		const number = Number(message)
+		if (Number.isNaN(number) || number.toString() !== message) return null
+
+		return number
 	}
 
-	return false
+	return null
 }
+
+export const isNumericString = (message: string | number): boolean =>
+	parseNumericString(message) !== null
 
 export class PromiseGroup implements PromiseLike<void> {
 	root: Promise<any> | null = null

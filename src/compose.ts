@@ -605,6 +605,9 @@ export const composeHandler = ({
 
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 
+	const saveResponse =
+		hasTrace || hooks.afterResponse.length > 0 ? 'c.response = ' : ''
+
 	const maybeAsync =
 		hasCookie ||
 		hasBody ||
@@ -614,6 +617,8 @@ export const composeHandler = ({
 		hooks.beforeHandle.some(isAsync) ||
 		hooks.transform.some(isAsync) ||
 		hooks.mapResponse.some(isAsync)
+
+	if (hasTrace) fnLiteral += `c.route = \`${path}\`\n`
 
 	const parseReporter = report('parse', {
 		total: hooks.parse.length
@@ -1173,7 +1178,7 @@ export const composeHandler = ({
 				mapResponseReporter.resolve()
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(be, c.set, c.request)}\n`
+				fnLiteral += `return mapEarlyResponse(${saveResponse} be, c.set, c.request)}\n`
 			}
 		}
 
@@ -1263,8 +1268,10 @@ export const composeHandler = ({
 		}
 		mapResponseReporter.resolve()
 
-		if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
-		else fnLiteral += `return mapCompactResponse(r, c.request)\n`
+		if (hasSet)
+			fnLiteral += `return mapResponse(${saveResponse} r, c.set, c.request)\n`
+		else
+			fnLiteral += `return mapCompactResponse(${saveResponse} r, c.request)\n`
 	} else {
 		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
@@ -1315,15 +1322,16 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${handle}.clone(), c.set, c.request)
+					return mapResponse(${saveResponse} ${handle}.clone(), c.set, c.request)
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(r, c.set, c.request)\n`
-			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
+				fnLiteral += `return mapResponse(${saveResponse} r, c.set, c.request)\n`
+			else
+				fnLiteral += `return mapCompactResponse(${saveResponse} r, c.request)\n`
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r = await ${handle};\n`
@@ -1358,8 +1366,10 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
-			if (hasSet) fnLiteral += `return mapResponse(r, c.set, c.request)\n`
-			else fnLiteral += `return mapCompactResponse(r, c.request)\n`
+			if (hasSet)
+				fnLiteral += `return mapResponse(${saveResponse} r, c.set, c.request)\n`
+			else
+				fnLiteral += `return mapCompactResponse(${saveResponse} r, c.request)\n`
 		} else {
 			handleReporter.resolve()
 
@@ -1375,16 +1385,16 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${handle}.clone(), c.set, c.request)
+					return mapResponse(${saveResponse} ${handle}.clone(), c.set, c.request)
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(${handled}, c.set, c.request)\n`
+				fnLiteral += `return mapResponse(${saveResponse} ${handled}, c.set, c.request)\n`
 			else
-				fnLiteral += `return mapCompactResponse(${handled}, c.request)\n`
+				fnLiteral += `return mapCompactResponse(${saveResponse} ${handled}, c.request)\n`
 		}
 	}
 
@@ -1646,7 +1656,8 @@ export const composeGeneralHandler = (
 		error,
 		redirect,
 		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID
+		ELYSIA_REQUEST_ID,
+		getServer
 	} = data
 
 	const store = app.singleton.store
@@ -1707,7 +1718,10 @@ export const composeGeneralHandler = (
 				},
 				status: 200
 			},
-			error
+			error,
+			get server() {
+				return getServer()
+			}
 			${hasTrace ? ',[ELYSIA_REQUEST_ID]: id' : ''}
 			${decoratorsLiteral}
 		}\n`
@@ -1827,7 +1841,9 @@ export const composeGeneralHandler = (
 		error,
 		redirect,
 		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID
+		ELYSIA_REQUEST_ID,
+		// @ts-expect-error private property
+		getServer: () => app.getServer()
 	})
 }
 
@@ -1882,6 +1898,11 @@ export const composeErrorHandler = (
 			error.message = error.response
 		}\n`
 
+	const saveResponse =
+		app.event.trace.length > 0 || hooks.afterResponse.length > 0
+			? 'c.response = '
+			: ''
+
 	for (let i = 0; i < app.event.error.length; i++) {
 		const handler = app.event.error[i]
 
@@ -1923,7 +1944,7 @@ export const composeErrorHandler = (
 
 			mapResponseReporter.resolve()
 
-			fnLiteral += `return mapResponse(r, set, context.request)}\n`
+			fnLiteral += `return mapResponse(${saveResponse} r, set, context.request)}\n`
 		} else fnLiteral += response + '\n'
 
 		fnLiteral += '\n}\n'
@@ -1971,7 +1992,7 @@ export const composeErrorHandler = (
 
 	mapResponseReporter.resolve()
 
-	fnLiteral += `\nreturn mapResponse(error, set, context.request)\n}\n}`
+	fnLiteral += `\nreturn mapResponse(${saveResponse} error, set, context.request)\n}\n}`
 
 	// console.log(fnLiteral)
 

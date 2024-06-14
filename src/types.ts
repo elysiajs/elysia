@@ -202,11 +202,11 @@ export type Reconcile<
 	  } extends infer Collision
 		? {} extends Collision
 			? {
-				// @ts-ignore trust me bro
-				[key in keyof B]: IsBothObject<A[key], B[key]> extends true
-					? // @ts-ignore trust me bro
-					  Reconcile<A[key], B[key], Override>
-					: B[key]
+					// @ts-ignore trust me bro
+					[key in keyof B]: IsBothObject<A[key], B[key]> extends true
+						? // @ts-ignore trust me bro
+						  Reconcile<A[key], B[key], Override>
+						: B[key]
 			  }
 			: Prettify<
 					Collision & {
@@ -396,7 +396,7 @@ export interface LifeCycleStore {
 	beforeHandle: HookContainer<OptionalHandler<any, any>>[]
 	afterHandle: HookContainer<AfterHandler<any, any>>[]
 	mapResponse: HookContainer<MapResponse<any, any>>[]
-	afterResponse: HookContainer<VoidHandler<any, any>>[]
+	afterResponse: HookContainer<AfterResponseHandler<any, any>>[]
 	trace: HookContainer<TraceHandler<any, any>>[]
 	error: HookContainer<ErrorHandler<any, any, any>>[]
 	stop: HookContainer<GracefulHandler<any>>[]
@@ -703,6 +703,22 @@ export type PreHandler<
 	}
 > = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
 
+export type AfterResponseHandler<
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	}
+> = (
+	context: Prettify<
+		Context<Route, Singleton> & {
+			response: Route['response']
+		}
+	>
+) => MaybePromise<void>
+
 export type GracefulHandler<
 	in Instance extends Elysia<any, any, any, any, any, any, any, any>
 > = (data: Instance) => any
@@ -988,16 +1004,18 @@ export interface MacroManager<
 		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 
-	mapResponse(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
+	mapResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
 	mapResponse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
 	): unknown
 
-	onAfterResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
+	onAfterResponse(
+		fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+	): unknown
 	onAfterResponse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
+		fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 	): unknown
 
 	events: {
