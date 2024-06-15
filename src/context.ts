@@ -7,17 +7,14 @@ import type {
 	RouteSchema,
 	Prettify,
 	GetPathParameter,
-	SingletonBase
+	SingletonBase,
+	HTTPHeaders
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
 
 type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>
-}
-
-type SetCookie = {
-	'Set-Cookie'?: string | string[]
 }
 
 export type ErrorContext<
@@ -58,7 +55,7 @@ export type ErrorContext<
 		redirect: Redirect
 
 		set: {
-			headers: Record<string, string> & SetCookie
+			headers: HTTPHeaders
 			status?: number | keyof StatusMap
 			redirect?: string
 			/**
@@ -116,7 +113,7 @@ export type Context<
 		redirect: Redirect
 
 		set: {
-			headers: Record<string, string> & SetCookie
+			headers: HTTPHeaders
 			status?: number | keyof StatusMap
 			redirect?: string
 			/**
@@ -186,7 +183,7 @@ export type PreContext<
 		server: Server | null
 
 		set: {
-			headers: { [header: string]: string } & SetCookie
+			headers: HTTPHeaders
 			status?: number
 			redirect?: string
 		}

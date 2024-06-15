@@ -1,13 +1,16 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
 const main = new Elysia()
-	.derive(async () => {
-		if(Math.random() > 0.5)
-			return { 'a': 'b' }
+	.post('/', ({ set }) => {
+		set.headers.accept = 'application/json;q=1'
+	}, {
+		body: t.Object({
+			ticketId: t.String({
+				description: 'Ticket ID to redeem'
+			}),
+			email: t.String({ format: 'email' })
+		})
 	})
 	.get('/json', () => ({
 		hello: 'world'
 	}))
-
-main.handle(req('/'))

@@ -116,6 +116,21 @@ export const mapValueError = (error: ValueError) => {
 					: `Property '${property}' is missing`
 			}
 
+		case 50:
+			// Expected string to match 'email' format
+			const quoteIndex = message.indexOf("'")!
+			const format = message.slice(
+				quoteIndex + 1,
+				message.indexOf("'", quoteIndex + 1)
+			)
+
+			return {
+				...error,
+				summary: isRoot
+					? `Value should be an email`
+					: `Property '${property}' should be ${format}`
+			}
+
 		case 54:
 			return {
 				...error,
