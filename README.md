@@ -25,3 +25,10 @@ See [Contributing Guide](CONTRIBUTING.md) and please follow our [Code of Conduct
 
 ## Discord
 Come join the [Discord community channel~](https://discord.gg/eaFJ2KDJck)
+
+## Usage Trend
+[Usage Trend of elysia](https://npm-compare.com/elysia#timeRange=THREE_YEARS)
+  
+<a href="https://npm-compare.com/elysia#timeRange=THREE_YEARS" target="_blank">
+  <img src="https://npm-compare.com/img/npm-trend/THREE_YEARS/elysia.png" width="100%" alt="NPM Usage Trend of elysia" />
+</a>
