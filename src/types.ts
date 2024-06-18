@@ -1107,7 +1107,7 @@ export type MergeElysiaInstances<
 export type LifeCycleType = 'global' | 'local' | 'scoped'
 
 export type ExcludeElysiaResponse<T> = Exclude<
-	Awaited<T>,
+	undefined extends Awaited<T> ? Partial<Awaited<T>> : Awaited<T>,
 	{ [ELYSIA_RESPONSE]: any }
 >
 

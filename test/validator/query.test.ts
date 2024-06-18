@@ -269,6 +269,23 @@ describe('Query Validator', () => {
 		expect(response).toBe('yay')
 	})
 
+	it('parse query array', async () => {
+		const params = new URLSearchParams()
+		params.append('keys', '1')
+		params.append('keys', '2')
+
+		const response = await new Elysia()
+			.get('/', ({ query }) => query, {
+				query: t.Object({
+					keys: t.Array(t.String())
+				})
+			})
+			.handle(new Request(`http://localhost/?${params.toString()}`))
+			.then((res) => res.json())
+
+		expect(response).toEqual({ keys: ['1', '2'] })
+	})
+
 	it('parse query object', async () => {
 		const app = new Elysia()
 			.get('/', ({ query }) => query, {

@@ -312,6 +312,32 @@ const b = app
 		}
 	)
 
+// ? It derive void
+{
+	app.derive(({ headers }) => {
+		if (Math.random() > 0.5)
+			return {
+				stuff: 'a'
+			}
+	}).get('/', ({ stuff }) => {
+		expectTypeOf<typeof stuff>().not.toBeUnknown()
+		expectTypeOf<typeof stuff>().toEqualTypeOf<'a' | undefined>()
+	})
+}
+
+// ? It resolve void
+{
+	app.resolve(async ({ headers }) => {
+		if (Math.random() > 0.5)
+			return {
+				stuff: 'a'
+			}
+	}).get('/', ({ stuff }) => {
+		expectTypeOf<typeof stuff>().not.toBeUnknown()
+		expectTypeOf<typeof stuff>().toEqualTypeOf<'a' | undefined>()
+	})
+}
+
 app.derive(({ headers }) => {
 	return {
 		authorization: headers.authorization as string

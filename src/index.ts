@@ -1046,7 +1046,7 @@ export default class Elysia<
 							  })
 				>
 			>
-		) => MaybePromise<Resolver>
+		) => MaybePromise<Resolver | void>
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
@@ -1114,7 +1114,7 @@ export default class Elysia<
 	 *         }
 	 *     }))
 	 */
-	resolve<const Resolver extends Record<string, unknown>>(
+	resolve<const Resolver extends Record<string, unknown> | void>(
 		resolver: (
 			context: Prettify<
 				Context<
@@ -1128,7 +1128,7 @@ export default class Elysia<
 					BasePath
 				>
 			>
-		) => MaybePromise<Resolver>
+		) => MaybePromise<Resolver | void>
 	): Elysia<
 		BasePath,
 		Scoped,
@@ -1173,7 +1173,7 @@ export default class Elysia<
 				},
 				BasePath
 			>
-		) => MaybePromise<NewResolver>
+		) => MaybePromise<NewResolver | void>
 	): Elysia<
 		BasePath,
 		Scoped,
@@ -1220,7 +1220,7 @@ export default class Elysia<
 									Volatile['resolve']
 						  })
 			>
-		) => MaybePromise<NewResolver>
+		) => MaybePromise<NewResolver | void>
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
@@ -4644,7 +4644,7 @@ export default class Elysia<
 	 *         }
 	 *     }))
 	 */
-	derive<const Derivative extends Record<string, unknown>>(
+	derive<const Derivative extends Record<string, unknown> | void>(
 		transform: (
 			context: Prettify<
 				Context<
@@ -4693,7 +4693,7 @@ export default class Elysia<
 	 *     }))
 	 */
 	derive<
-		const Derivative extends Record<string, unknown>,
+		const Derivative extends Record<string, unknown> | void,
 		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },

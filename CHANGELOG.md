@@ -1,3 +1,7 @@
+# 1.0.24 - 18 Jun 2024
+Bug fix:
+- `derive`, `resolve` support void return
+
 # 1.0.23 - 9 Jun 2024
 Feature:
 - add `toResponse` for mapping custom response
