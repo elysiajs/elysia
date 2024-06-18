@@ -1219,38 +1219,38 @@ export type ResolveMacroContext<
 
 export type ContextAppendType = 'append' | 'override'
 
-type GenerateArray<
-	I extends number = 0,
-	Arr extends 1[] = []
-> = Arr['length'] extends I ? Arr : GenerateArray<I, [...Arr, 1]>
+// type GenerateArray<
+// 	I extends number = 0,
+// 	Arr extends 1[] = []
+// > = Arr['length'] extends I ? Arr : GenerateArray<I, [...Arr, 1]>
 
-// Exclude type without slash
-type HTTPAcceptFileType = Prettify<
-	ElysiaTypeOptions.FileType extends infer A
-		? A extends `${string}/${string}`
-			? A
-			: never
-		: never
->
+// // Exclude type without slash
+// type HTTPAcceptFileType = Prettify<
+// 	ElysiaTypeOptions.StrictFileType extends infer A
+// 		? A extends `${string}/${string}`
+// 			? A
+// 			: never
+// 		: never
+// >
 
-type PointOneToOne = 0.1 | 0.2 | 0.3 | 0.4 | 0.5 | 0.6 | 0.7 | 0.8 | 0.9 | 1
+// type PointOneToOne = 0.1 | 0.2 | 0.3 | 0.4 | 0.5 | 0.6 | 0.7 | 0.8 | 0.9 | 1
 
-type HTTPAccept<
-	I extends number = 1,
-	Arr extends 1[] = GenerateArray<I>,
-	Carry extends string = ''
-> = Arr['length'] extends 0
-	? Carry
-	: HTTPAccept<
-			I,
-			Arr extends [infer _, ...infer Rest] ? Rest : [],
-			| Carry
-			| `${Carry extends '' ? '' : `${Carry}, `}${HTTPAcceptFileType}${
-					| `;q=${PointOneToOne}`
-					| ''}`
-	  >
+// type HTTPAccept<
+// 	I extends number = 1,
+// 	Arr extends 1[] = GenerateArray<I>,
+// 	Carry extends string = ''
+// > = Arr['length'] extends 0
+// 	? Carry
+// 	: HTTPAccept<
+// 			I,
+// 			Arr extends [infer _, ...infer Rest] ? Rest : [],
+// 			| Carry
+// 			| `${Carry extends '' ? '' : `${Carry}, `}${HTTPAcceptFileType}${
+// 					| `;q=${PointOneToOne}`
+// 					| ''}`
+// 	  >
 
-const header: HTTPAccept | (string & {}) = ''
+// const header: HTTPAccept | (string & {}) = ''
 
 export type HTTPHeaders = Record<string, string> & {
 	// Authentication
@@ -1281,7 +1281,7 @@ export type HTTPHeaders = Record<string, string> & {
 	'keep-alive'?: string
 
 	// Content negotiation
-	accept?: HTTPAccept | (string & {})
+	accept?: string
 	'accept-encoding'?: string
 	'accept-language'?: string
 
@@ -1331,7 +1331,7 @@ export type HTTPHeaders = Record<string, string> & {
 
 	// Response context
 	allow?: string
-	server?: string
+	server?: 'Elysia' | (string & {})
 
 	// Range requests
 	'accept-ranges'?: string
@@ -1382,7 +1382,7 @@ export type HTTPHeaders = Record<string, string> & {
 	'x-forwarded-for'?: string
 	'x-forwarded-host'?: string
 	'x-forwarded-proto'?: string
-	'x-powered-by'?: string
+	'x-powered-by'?: 'Elysia' | (string & {})
 	'x-request-id'?: string
 	'x-requested-with'?: string
 	'x-robots-tag'?: string
