@@ -1,3 +1,8 @@
+# 1.0.24 - 18 Jun 2024
+Bug fix:
+- `derive`, `resolve` support void return
+- [#677](https://github.com/elysiajs/elysia/issues/677) Query params validation for array of string fail
+
 # 1.0.23 - 9 Jun 2024
 Feature:
 - add `toResponse` for mapping custom response

@@ -949,7 +949,10 @@ export const composeHandler = ({
 				const { type, anyOf } = value
 
 				if (type === 'object' || type === 'array') {
-					fnLiteral += `c.query['${key}'] = JSON.parse(c.query['${key}'])\n`
+					fnLiteral += `\nif(typeof c.query['${key}'] === "string")
+						try {
+							c.query['${key}'] = JSON.parse(c.query['${key}'])
+						} catch {}\n`
 
 					continue
 				}
