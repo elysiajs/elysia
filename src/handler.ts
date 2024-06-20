@@ -68,13 +68,13 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 	if (!headers) return headers
 
-	headers.delete('Set-Cookie')
+	headers.delete('set-cookie')
 
 	for (let i = 0; i < setCookie.length; i++) {
 		const index = setCookie[i].indexOf('=')
 
 		headers.append(
-			'Set-Cookie',
+			'set-cookie',
 			`${setCookie[i].slice(0, index)}=${
 				setCookie[i].slice(index + 1) || ''
 			}`
@@ -202,15 +202,15 @@ export const mapResponse = (
 		}
 
 		if (set.cookie && isNotEmpty(set.cookie))
-			set.headers['Set-Cookie'] = serializeCookie(set.cookie)
+			set.headers['set-cookie'] = serializeCookie(set.cookie)
 
 		if (
-			set.headers['Set-Cookie'] &&
-			Array.isArray(set.headers['Set-Cookie'])
+			set.headers['set-cookie'] &&
+			Array.isArray(set.headers['set-cookie'])
 		) {
 			set.headers = parseSetCookies(
 				new Headers(set.headers) as Headers,
-				set.headers['Set-Cookie']
+				set.headers['set-cookie']
 			) as any
 		}
 
@@ -572,15 +572,15 @@ export const mapEarlyResponse = (
 		}
 
 		if (set.cookie && isNotEmpty(set.cookie))
-			set.headers['Set-Cookie'] = serializeCookie(set.cookie)
+			set.headers['set-cookie'] = serializeCookie(set.cookie)
 
 		if (
-			set.headers['Set-Cookie'] &&
-			Array.isArray(set.headers['Set-Cookie'])
+			set.headers['set-cookie'] &&
+			Array.isArray(set.headers['set-cookie'])
 		)
 			set.headers = parseSetCookies(
 				new Headers(set.headers) as Headers,
-				set.headers['Set-Cookie']
+				set.headers['set-cookie']
 			) as any
 
 		switch (response?.constructor?.name) {
