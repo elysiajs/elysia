@@ -1314,7 +1314,7 @@ export default class Elysia<
 		}
 
 		const hook: HookContainer = {
-			subType: 'resolve',
+			subType: 'mapResolve',
 			fn: mapper!
 		}
 
@@ -5284,7 +5284,7 @@ export default class Elysia<
 		}
 
 		const hook: HookContainer = {
-			subType: 'derive',
+			subType: 'mapDerive',
 			fn: mapper!
 		}
 

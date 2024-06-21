@@ -544,40 +544,168 @@ export const composeHandler = ({
 	}
 
 	if (hasQuery) {
-		let destructured = [] as string[]
+		const destructured = <
+			{
+				key: string
+				isArray: boolean
+				isNestedObjectArray: boolean
+				isObject: boolean
+				anyOf: boolean
+			}[]
+		>[]
 
 		// @ts-ignore
 		if (validator.query && validator.query.schema.type === 'object') {
-			// @ts-ignore
-			destructured = Object.keys(validator.query.schema.properties)
+			// @ts-expect-error private property
+			const properties = validator.query.schema.properties
+
+			// eslint-disable-next-line prefer-const
+			for (let [key, _value] of Object.entries(properties)) {
+				let value = _value as TAnySchema
+
+				// @ts-ignore
+				if (
+					value &&
+					TypeBoxSymbol.optional in value &&
+					value.type === 'array' &&
+					value.items
+				)
+					value = value.items
+
+				// @ts-ignore unknown
+				const { type, anyOf } = value
+				const isArray = type === 'array'
+
+				destructured.push({
+					key,
+					isArray,
+					isNestedObjectArray:
+						(isArray && value.items?.type === 'object') ||
+						value.items?.anyOf,
+					isObject: type === 'object',
+					anyOf: !!anyOf
+				})
+			}
 		}
 
 		if (!destructured.length) {
-			fnLiteral += `if(c.qi !== -1)
+			fnLiteral += `if(c.qi === -1) {
+				c.query = {} 
+			} else {
 				c.query = parseQuery(c.url.slice(c.qi + 1).replace(/\\+/g, ' '))
-			else c.query = {}`
+
+				for (const key in c.query) {
+					const value = c.query[key]
+
+					if (Array.isArray(value) && value.length > 0) {
+						for (let i = 0; i < value.length; i++)
+							try {
+								value[i] = JSON.parse(value[i])
+							} catch {}
+
+						continue
+					}
+
+					if(typeof value === "string") {
+						const start = value.charCodeAt(0)
+						const end = value.charCodeAt(value.length - 1)
+
+						if(start === 91 && end === 93 || start === 123 && end === 125)
+							try {
+								c.query[key] = JSON.parse(c.query[key])
+							} catch {}
+
+						continue
+					}
+				}
+			}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
 				let url = '&' + c.url.slice(c.qi + 1).replace(/\\+/g, ' ')
 
 				${destructured
 					.map(
-						(name, index) => `
-						${index === 0 ? 'let' : ''} memory = url.indexOf('&${name}=')
-						let a${index}
+						(
+							{
+								key,
+								isArray,
+								isObject,
+								isNestedObjectArray,
+								anyOf
+							},
+							index
+						) => {
+							const init = `${
+								index === 0 ? 'let' : ''
+							} memory = url.indexOf('&${key}=')
+							let a${index}\n`
 
-						if (memory !== -1) {
-							const start = memory + ${name.length + 2}
-							memory = url.indexOf('&', start)
+							if (isArray)
+								return (
+									init +
+									(isNestedObjectArray
+										? `while (memory !== -1) {
+											const start = memory + ${key.length + 2}
+											memory = url.indexOf('&', start)
+				
+											if(a${index} === undefined)
+												a${index} = ''
+											else
+												a${index} += ','
 
-							if(memory === -1) a${index} = decodeURIComponent(url.slice(start))
-							else a${index} = decodeURIComponent(url.slice(start, memory))
-						}`
+											if(memory === -1) a${index} += decodeURIComponent(url.slice(start))
+											else a${index} += decodeURIComponent(url.slice(start, memory))
+										}
+
+										try {
+											a${index} = JSON.parse('[' + a${index} + ']')\n
+										} catch {}\n`
+										: `while (memory !== -1) {
+											const start = memory + ${key.length + 2}
+											memory = url.indexOf('&', start)
+				
+											if(a${index} === undefined)
+												a${index} = []
+
+											if(memory === -1) a${index}.push(decodeURIComponent(url.slice(start)))
+											else a${index}.push(decodeURIComponent(url.slice(start, memory)))
+										}\n`)
+								)
+
+							if (isObject || anyOf)
+								return (
+									init +
+									`if (memory !== -1) {
+										const start = memory + ${key.length + 2}
+										memory = url.indexOf('&', start)
+		
+										if(memory === -1) a${index} = decodeURIComponent(url.slice(start))
+										else a${index} = decodeURIComponent(url.slice(start, memory))
+
+										if (a${index} !== undefined) {
+											try {
+												a${index} = JSON.parse(a${index})
+											} catch {}
+										}
+									}`
+								)
+
+							return (
+								init +
+								`if (memory !== -1) {
+									const start = memory + ${key.length + 2}
+									memory = url.indexOf('&', start)
+
+									if(memory === -1) a${index} = decodeURIComponent(url.slice(start))
+									else a${index} = decodeURIComponent(url.slice(start, memory))
+								}`
+							)
+						}
 					)
 					.join('\n')}
 
 				c.query = {
-					${destructured.map((name, index) => `'${name}': a${index}`).join(', ')}
+					${destructured.map(({ key }, index) => `'${key}': a${index}`).join(', ')}
 				}
 			} else {
 				c.query = {}
@@ -839,10 +967,26 @@ export const composeHandler = ({
 				? `transformed = await transform[${i}](c)\n`
 				: `transformed = transform[${i}](c)\n`
 
-			fnLiteral += `if(transformed?.[ELYSIA_RESPONSE])
-				throw transformed
+			if (transform.subType === 'mapDerive')
+				fnLiteral += `if(transformed?.[ELYSIA_RESPONSE])
+					throw transformed
+				else {
+					transformed.request = c.request
+					transformed.store = c.store
+					transformed.qi = c.qi
+					transformed.path = c.path
+					transformed.url = c.url
+					transformed.redirect = c.redirec
+					transformed.set = c.set
+					transformed.error = c.error
+
+					c = transformed
+			}`
 			else
-				Object.assign(c, transformed)\n`
+				fnLiteral += `if(transformed?.[ELYSIA_RESPONSE])
+					throw transformed
+				else
+					Object.assign(c, transformed)\n`
 
 			endUnit()
 		}
@@ -940,27 +1084,6 @@ export const composeHandler = ({
 					if (parsed !== undefined)
 						fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
 				}
-
-			for (const [key, value] of Object.entries(
-				// @ts-ignore
-				validator.query.schema?.properties
-			)) {
-				// @ts-ignore
-				const { type, anyOf } = value
-
-				if (type === 'object' || type === 'array') {
-					fnLiteral += `\nif(typeof c.query['${key}'] === "string")
-						try {
-							c.query['${key}'] = JSON.parse(c.query['${key}'])
-						} catch {}\n`
-
-					continue
-				}
-
-				if (anyOf) {
-					fnLiteral += `if(typeof c.query['${key}'] === "object") c.query['${key}'] = JSON.parse(c.query['${key}'])\n`
-				}
-			}
 
 			if (isOptional(validator.query))
 				fnLiteral += `if(isNotEmpty(c.query) && query.Check(c.query) === false) {
@@ -1085,7 +1208,9 @@ export const composeHandler = ({
 			const endUnit = reporter.resolveChild(beforeHandle.fn.name)
 
 			const returning = hasReturn(beforeHandle)
-			const isResolver = beforeHandle.subType === 'resolve'
+			const isResolver =
+				beforeHandle.subType === 'resolve' ||
+				beforeHandle.subType === 'mapResolve'
 
 			if (isResolver) {
 				if (!hasResolve) {
@@ -1097,7 +1222,23 @@ export const composeHandler = ({
 					? `resolved = await beforeHandle[${i}](c);\n`
 					: `resolved = beforeHandle[${i}](c);\n`
 
-				fnLiteral += `if(resolved[ELYSIA_RESPONSE])
+				if (beforeHandle.subType === 'mapResolve')
+					fnLiteral += `if(resolved[ELYSIA_RESPONSE])
+						throw resolved
+					else {
+						resolved.request = c.request
+						resolved.store = c.store
+						resolved.qi = c.qi
+						resolved.path = c.path
+						resolved.url = c.url
+						resolved.redirect = c.redirect
+						resolved.set = c.set
+						resolved.error = c.error
+
+						c = resolved
+					}`
+				else
+					fnLiteral += `if(resolved[ELYSIA_RESPONSE])
 						throw resolved
 					else
 						Object.assign(c, resolved)\n`
@@ -1125,7 +1266,7 @@ export const composeHandler = ({
 					}).resolve()
 
 					const reporter = report('afterHandle', {
-						total: hooks.transform.length
+						total: hooks.afterHandle.length
 					})
 
 					for (let i = 0; i < hooks.afterHandle.length; i++) {

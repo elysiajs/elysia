@@ -384,7 +384,7 @@ export interface UnwrapGroupGuardRoute<
 export type HookContainer<T extends Function = Function> = {
 	checksum?: number
 	scope?: LifeCycleType
-	subType?: 'derive' | 'resolve' | (string & {})
+	subType?: 'derive' | 'resolve' | 'mapDerive' | 'mapResolve' | (string & {})
 	fn: T
 }
 

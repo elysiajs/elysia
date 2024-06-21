@@ -1,9 +1,19 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const main = new Elysia({ precompile: true })
-	.get('/json', () => ({
-		hello: 'world'
-	}))
-	.compile()
+const params = new URLSearchParams()
+params.append('keys', JSON.stringify({ a: 'hello' }))
+params.append('keys', JSON.stringify({ a: 'hi' }))
 
-// console.log(main.fetch.toString())
+const response = await new Elysia()
+	.get('/', ({ query }) => query, {
+		// query: t.Object({
+		// 	keys: t.Array(t.Object({
+		// 		a: t.String(),
+		// 	}))
+		// })
+	})
+	.handle(new Request(`http://localhost/?${params.toString()}`))
+	.then((res) => res.json())
+
+console.log(response)

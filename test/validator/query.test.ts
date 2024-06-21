@@ -319,6 +319,37 @@ describe('Query Validator', () => {
 	it('parse query object', async () => {
 		const app = new Elysia()
 			.get('/', ({ query }) => query, {
+				query: t.Object({
+					role: t.Optional(
+						t.Array(
+							t.Object({
+								name: t.String()
+							})
+						)
+					)
+				})
+			})
+			.compile()
+
+		const response = await app
+			.handle(
+				req(
+					`/?role=${JSON.stringify([
+						{ name: 'hello' },
+						{ name: 'world' }
+					])}`
+				)
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			role: [{ name: 'hello' }, { name: 'world' }]
+		})
+	})
+
+	it('parse optional query object', async () => {
+		const app = new Elysia()
+			.get('/', ({ query }) => query, {
 				query: t.Optional(
 					t.Object({
 						role: t.Optional(
@@ -347,5 +378,95 @@ describe('Query Validator', () => {
 		expect(response).toEqual({
 			role: [{ name: 'hello' }, { name: 'world' }]
 		})
+	})
+
+	it('parse array with nested object', async () => {
+		const params = new URLSearchParams()
+		params.append('keys', JSON.stringify({ a: 'hello' }))
+		params.append('keys', JSON.stringify({ a: 'hi' }))
+
+		const response = await new Elysia()
+			.get('/', ({ query }) => query, {
+				query: t.Object({
+					keys: t.Array(
+						t.Object({
+							a: t.String()
+						})
+					)
+				})
+			})
+			.handle(new Request(`http://localhost/?${params.toString()}`))
+			.then((res) => res.json())
+
+		expect(response).toEqual({
+			keys: [{ a: 'hello' }, { a: 'hi' }]
+		})
+	})
+
+	it('parse optional array with nested object', async () => {
+		const params = new URLSearchParams()
+		params.append('keys', JSON.stringify({ a: 'hello' }))
+		params.append('keys', JSON.stringify({ a: 'hi' }))
+
+		const response = await new Elysia()
+			.get('/', ({ query }) => query, {
+				query: t.Optional(
+					t.Object({
+						keys: t.Array(
+							t.Object({
+								a: t.String()
+							})
+						)
+					})
+				)
+			})
+			.handle(new Request(`http://localhost/?${params.toString()}`))
+			.then((res) => res.json())
+
+		expect(response).toEqual({
+			keys: [{ a: 'hello' }, { a: 'hi' }]
+		})
+	})
+
+	it('parse query object array without schema', async () => {
+		const params = new URLSearchParams()
+		params.append('keys', JSON.stringify({ a: 'hello' }))
+		params.append('keys', JSON.stringify({ a: 'hi' }))
+
+		const response = await new Elysia()
+			.get('/', ({ query }) => query, {
+				query: t.Optional(
+					t.Object({
+						keys: t.Array(
+							t.Object({
+								a: t.String()
+							})
+						)
+					})
+				)
+			})
+			.handle(new Request(`http://localhost/?${params.toString()}`))
+			.then((res) => res.json())
+
+		expect(response).toEqual({
+			keys: [{ a: 'hello' }, { a: 'hi' }]
+		})
+	})
+
+	it('parse query array without schema', async () => {
+		const params = new URLSearchParams()
+		params.append('keys', '1')
+		params.append('keys', '2')
+
+		const response = await new Elysia()
+			.get('/', ({ query }) => query, {
+				query: t.Object({
+					keys: t.Array(t.String())
+				})
+			})
+			.handle(new Request(`http://localhost/?${params.toString()}`))
+			.then((res) => res.json())
+
+		expect(response).toEqual({ keys: ['1', '2'] })
 	})
 })
