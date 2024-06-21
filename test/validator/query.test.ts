@@ -469,4 +469,16 @@ describe('Query Validator', () => {
 
 		expect(response).toEqual({ keys: ['1', '2'] })
 	})
+
+	it('parse query object without schema', async () => {
+		const app = new Elysia().get('/', ({ query }) => query).compile()
+
+		const response = await app
+			.handle(req(`/?role=${JSON.stringify({ name: 'hello' })}`))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			role: { name: 'hello' }
+		})
+	})
 })
