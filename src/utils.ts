@@ -26,7 +26,7 @@ import type {
 } from './types'
 import type { CookieOptions } from './cookies'
 import { Sucrose } from './sucrose'
-import { BunFile } from 'bun'
+import type { BunFile } from 'bun'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)

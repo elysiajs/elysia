@@ -1,3 +1,7 @@
+# 1.0.25 - 21 Jun 2024
+Bug fix:
+- type is resolved as `File` if `@types/bun` is not installed when using with Eden Treaty
+
 # 1.0.24 - 18 Jun 2024
 Bug fix:
 - `derive`, `resolve` support void return

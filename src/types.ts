@@ -418,10 +418,9 @@ export type Handler<
 	? Response | MaybePromise<Route['response'][keyof Route['response']]>
 	: Response | MaybePromise<Route['response']>
 
-export type Replace<Original, Target, With> = Original extends Record<
-	string,
-	unknown
->
+export type Replace<Original, Target, With> = IsAny<Target> extends true
+	? Original
+	: Original extends Record<string, unknown>
 	? {
 			[K in keyof Original]: Original[K] extends Target
 				? With
@@ -431,10 +430,11 @@ export type Replace<Original, Target, With> = Original extends Record<
 	? With
 	: Original
 
-export type CoExist<Original, Target, With> = Original extends Record<
-	string,
-	unknown
->
+type IsAny<T> = 0 extends 1 & T ? true : false
+
+export type CoExist<Original, Target, With> = IsAny<Target> extends true
+	? Original
+	: Original extends Record<string, unknown>
 	? {
 			[K in keyof Original]: Original[K] extends Target
 				? Original[K] | With
