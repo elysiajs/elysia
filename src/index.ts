@@ -265,6 +265,10 @@ export default class Elysia<
 		return this.router.history
 	}
 
+	protected getGlobalRoutes(): InternalRoute[] {
+		return this.router.history
+	}
+
 	protected inference: Sucrose.Inference = {
 		body: false,
 		cookie: false,
@@ -613,7 +617,7 @@ export default class Elysia<
 					validator,
 					handler: handle,
 					allowMeta,
-					inference,
+					inference
 			  })
 			: (((context: Context) => {
 					if (composed) return composed(context)
@@ -2999,6 +3003,7 @@ export default class Elysia<
 		const { name, seed } = plugin.config
 
 		plugin.getServer = () => this.getServer()
+		plugin.getGlobalRoutes = () => this.getGlobalRoutes()
 
 		/**
 		 * Model and error is required for Swagger generation

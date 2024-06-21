@@ -1,7 +1,7 @@
 {
   "name": "elysia",
   "description": "Ergonomic Framework for Human",
-  "version": "1.1.0-exp.3",
+  "version": "1.1.0-exp.4",
   "author": {
     "name": "saltyAom",
     "url": "https://github.com/SaltyAom",
@@ -115,7 +115,7 @@
     "expect-type": "^0.16.0",
     "memoirist": "^0.2.0",
     "tsup": "^8.0.2",
-    "typescript": "^5.5.1-rc"
+    "typescript": "^5.5.2"
   },
   "peerDependencies": {
     "@sinclair/typebox": ">= 0.31.0",
