@@ -592,7 +592,7 @@ export const composeHandler = ({
 			fnLiteral += `if(c.qi === -1) {
 				c.query = {} 
 			} else {
-				c.query = parseQuery(c.url.slice(c.qi + 1).replace(/\\+/g, ' '))
+				c.query = parseQuery(c.url.slice(c.qi + 1))
 
 				for (const key in c.query) {
 					const value = c.query[key]
@@ -621,7 +621,7 @@ export const composeHandler = ({
 			}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
-				let url = '&' + c.url.slice(c.qi + 1).replace(/\\+/g, ' ')
+				let url = '&' + c.url.slice(c.qi + 1)
 
 				${destructured
 					.map(

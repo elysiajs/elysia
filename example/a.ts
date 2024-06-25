@@ -1,19 +1,12 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const params = new URLSearchParams()
-params.append('keys', JSON.stringify({ a: 'hello' }))
-params.append('keys', JSON.stringify({ a: 'hi' }))
+const app = new Elysia({ precompile: true })
+	.get('/', ({ query }) => query)
+	.listen(3000)
 
-const response = await new Elysia()
-	.get('/', ({ query }) => query, {
-		// query: t.Object({
-		// 	keys: t.Array(t.Object({
-		// 		a: t.String(),
-		// 	}))
-		// })
-	})
-	.handle(new Request(`http://localhost/?${params.toString()}`))
-	.then((res) => res.json())
+app.handle(new Request('http://localhost/?name=ely+sia'))
+	.then((t) => t.text())
+	.then(console.log)
 
-console.log(response)
+console.log(app.routes[0].composed?.toString())

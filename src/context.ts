@@ -1,6 +1,10 @@
 import type { Server } from 'bun'
 import type { Cookie, ElysiaCookie } from './cookies'
-import type { StatusMap, InvertedStatusMap, redirect as Redirect } from './utils'
+import type {
+	StatusMap,
+	InvertedStatusMap,
+	redirect as Redirect
+} from './utils'
 
 import { error, type ELYSIA_RESPONSE } from './error'
 import type {
@@ -92,7 +96,7 @@ export type Context<
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
-				? Record<GetPathParameter<Path>, string>
+				? { [path in GetPathParameter<Path>]: string }
 				: never
 			: Route['params']
 		headers: undefined extends Route['headers']
