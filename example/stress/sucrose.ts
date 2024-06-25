@@ -11,16 +11,15 @@ for (let i = 0; i < total; i++) {
 			query.a
 		},
 		afterHandle: [],
-		beforeHandle: [],
-		error: [
-			function a({
-				query,
-				query: { a, c: d },
-				headers: { hello },
-				...rest
-			}) {
+		beforeHandle: [
+			function a({ params: { a, c: d }, ...rest }) {
 				query.b
-				rest.query.e
+			},
+			({ error }) => {}
+		],
+		error: [
+			function a({ query, query: { a, c: d }, headers: { hello } }) {
+				query.b
 			},
 			({ query: { f } }) => {}
 		],
