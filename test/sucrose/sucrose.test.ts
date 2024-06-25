@@ -56,10 +56,6 @@ describe('sucrose', () => {
 			.get('/4', ({ query }) => query[path])
 			.get('/5', (c) => c.query[path])
 
-		addEventListener('fetch', (request) => {
-			console.log(request)
-		})
-
 		new Array(5).fill(0).map(async (_, i) => {
 			const result = await app
 				.handle(req(`/${i + 1}?a=a&b=b`))
