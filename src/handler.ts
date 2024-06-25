@@ -925,11 +925,11 @@ export const mapCompactResponse = (
 
 		case 'Object':
 			// @ts-ignore
-			const status = response[ELYSIA_RESPONSE]
-			if (status)
+			if (response[ELYSIA_RESPONSE])
 				// @ts-ignore
 				return mapResponse(response.response, {
-					status,
+					// @ts-ignore
+					status: response[ELYSIA_RESPONSE],
 					headers: {}
 				})
 

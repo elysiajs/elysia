@@ -403,14 +403,18 @@ export const composeHandler = ({
 		inference
 	)
 
+	if (inference.server)
+		fnLiteral += `\nObject.defineProperty(c, 'server', {
+			get: function() { return getServer() }
+		})\n`
+
 	const hasQuery = inference.query || !!validator.query
 
 	const hasBody =
 		method !== '$INTERNALWS' &&
 		method !== 'GET' &&
 		method !== 'HEAD' &&
-		hooks.type !== 'none' &&
-		(inference.body || !!validator.body)
+		(inference.body || !!validator.body || hooks.parse.length)
 
 	// @ts-expect-error private
 	const defaultHeaders = app.setHeaders
@@ -1685,7 +1689,8 @@ export const composeHandler = ({
 		decodeURIComponent,
 		ELYSIA_RESPONSE,
 		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID
+		ELYSIA_REQUEST_ID,
+		getServer
 	} = hooks
 
 	return ${maybeAsync ? 'async' : ''} function handle(c) {
@@ -1728,7 +1733,9 @@ export const composeHandler = ({
 		decodeURIComponent,
 		ELYSIA_RESPONSE,
 		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID
+		ELYSIA_REQUEST_ID,
+		// @ts-expect-error private property
+		getServer: () => app.getServer()
 	})
 }
 
@@ -1862,9 +1869,14 @@ export const composeGeneralHandler = (
 				},
 				status: 200
 			},
-			error,
-			get server() {
-				return getServer()
+			error
+			${
+				// @ts-expect-error private property
+				app.inference.server
+					? `, get server() {
+							return getServer()
+						}`
+					: ''
 			}
 			${hasTrace ? ',[ELYSIA_REQUEST_ID]: id' : ''}
 			${decoratorsLiteral}

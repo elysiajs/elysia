@@ -40,7 +40,8 @@ describe('sucrose', () => {
 			headers: true,
 			body: false,
 			cookie: false,
-			set: false
+			set: false,
+			server: false
 		})
 	})
 
@@ -143,7 +144,64 @@ describe('sucrose', () => {
 			cookie: true,
 			headers: false,
 			query: true,
-			set: false
+			set: false,
+			server: false
+		})
+	})
+
+	it('infer all inferences if context is passed to function', () => {
+		expect(
+			sucrose({
+				handler: function (context) {
+					console.log(context)
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			query: true,
+			headers: true,
+			body: true,
+			cookie: true,
+			set: true,
+			server: true
+		})
+	})
+
+	it('infer all inferences if context is passed to function', () => {
+		expect(
+			sucrose({
+				handler: function ({ ...context }) {
+					console.log(context)
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			query: true,
+			headers: true,
+			body: true,
+			cookie: true,
+			set: true,
+			server: true
 		})
 	})
 })

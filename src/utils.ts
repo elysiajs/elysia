@@ -1023,7 +1023,8 @@ export const cloneInference = (inference: Sucrose.Inference) => ({
 	cookie: inference.cookie,
 	headers: inference.headers,
 	query: inference.query,
-	set: inference.set
+	set: inference.set,
+	server: inference.server
 })
 
 /**

@@ -9,6 +9,7 @@ export namespace Sucrose {
 		body: boolean
 		cookie: boolean
 		set: boolean
+		server: boolean
 	}
 
 	export interface LifeCycle extends Partial<LifeCycleStore> {
@@ -186,10 +187,17 @@ export const bracketPairRangeReverse = (
  * ```
  */
 export const retrieveRootParamters = (parameter: string) => {
-	// Remove () and {}
+	let hasParenthesis = false
+
+	// Remove () from parameter
 	if (parameter.charCodeAt(0) === 40) parameter = parameter.slice(1, -1)
-	// Using 2 because of the space
-	if (parameter.charCodeAt(0) === 123) parameter = parameter.slice(2, -2)
+
+	// Remove {} from parameter
+	if (parameter.charCodeAt(0) === 123) {
+		hasParenthesis = true
+		// Using 2 because of the space
+		parameter = parameter.slice(2, -2)
+	}
 
 	while (true) {
 		const [start, end] = bracketPairRange(parameter)
@@ -198,7 +206,10 @@ export const retrieveRootParamters = (parameter: string) => {
 		parameter = parameter.slice(0, start - 2) + parameter.slice(end + 1)
 	}
 
-	return parameter.replace(/:/g, '').trim()
+	const result = parameter.replace(/:/g, '').trim()
+
+	if (hasParenthesis) return '{ ' + result + ' }'
+	return result
 }
 
 /**
@@ -212,11 +223,18 @@ export const findParameterReference = (
 ) => {
 	const root = retrieveRootParamters(parameter)
 
-	if (!inference.query && root.includes('query')) inference.query = true
-	if (!inference.headers && root.includes('headers')) inference.headers = true
-	if (!inference.body && root.includes('body')) inference.body = true
-	if (!inference.cookie && root.includes('cookie')) inference.cookie = true
-	if (!inference.set && root.includes('set')) inference.set = true
+	// Check if root is an object destructuring
+	if (root.charCodeAt(0) === 123) {
+		if (!inference.query && root.includes('query')) inference.query = true
+		if (!inference.headers && root.includes('headers'))
+			inference.headers = true
+		if (!inference.body && root.includes('body')) inference.body = true
+		if (!inference.cookie && root.includes('cookie'))
+			inference.cookie = true
+		if (!inference.set && root.includes('set')) inference.set = true
+		if (!inference.server && root.includes('server'))
+			inference.server = true
+	}
 
 	return root
 }
@@ -317,7 +335,8 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 		while (variable.charCodeAt(0) === 44) variable = variable.slice(1)
 		while (variable.charCodeAt(0) === 9) variable = variable.slice(1)
 
-		aliases.push(variable)
+		if (!variable.includes('(')) aliases.push(variable)
+
 		content = content.slice(index + 3 + type.length)
 	}
 
@@ -342,13 +361,17 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 export const extractMainParameter = (parameter: string) => {
 	if (!parameter) return
 
+	if (parameter.charCodeAt(0) !== 123) return parameter
+
+	parameter = parameter.slice(2, -2)
+
 	const hasComma = parameter.includes(',')
 	if (!hasComma) {
 		// This happens when spread operator is used as the only parameter
 		if (parameter.includes('...'))
 			return parameter.slice(parameter.indexOf('...') + 3)
 
-		return parameter
+		return
 	}
 
 	const spreadIndex = parameter.indexOf('...')
@@ -391,18 +414,10 @@ export const inferBodyReference = (
 
 			if (!inference.set && alias.includes('set')) inference.set = true
 
+			if (!inference.query && alias.includes('server'))
+				inference.server = true
+
 			continue
-		}
-
-		// ! Function is passed to another function, assume as all is accessed
-		if (code.includes('(' + alias + ')')) {
-			inference.query = true
-			inference.headers = true
-			inference.body = true
-			inference.cookie = true
-			inference.set = true
-
-			break
 		}
 
 		if (!inference.query && access('query', alias)) inference.query = true
@@ -410,9 +425,8 @@ export const inferBodyReference = (
 		if (
 			code.includes('return ' + alias) ||
 			code.includes('return ' + alias + '.query')
-		) {
+		)
 			inference.query = true
-		}
 
 		if (!inference.headers && access('headers', alias))
 			inference.headers = true
@@ -423,13 +437,16 @@ export const inferBodyReference = (
 			inference.cookie = true
 
 		if (!inference.set && access('set', alias)) inference.set = true
+		if (!inference.server && access('server', alias))
+			inference.server = true
 
 		if (
 			inference.query &&
 			inference.headers &&
 			inference.body &&
 			inference.cookie &&
-			inference.set
+			inference.set &&
+			inference.server
 		)
 			break
 	}
@@ -465,6 +482,36 @@ export const removeDefaultParameter = (parameter: string) => {
 		.join(', ')
 }
 
+const isContextPassToFunction = (
+	context: string,
+	body: string,
+	inference: Sucrose.Inference
+) => {
+	// ! Function is passed to another function, assume as all is accessed
+	const captureFunction = new RegExp(`(?:\\w)\\((?:.*)?${context}`, 'gs')
+	captureFunction.test(body)
+
+	/*
+	Since JavaScript engine already format the code (removing whitespace, newline, etc.),
+	we can safely assume that the next character is either a closing bracket or a comma
+	if the function is passed to another function
+	*/
+	const nextChar = body.charCodeAt(captureFunction.lastIndex)
+
+	if (nextChar === 41 || nextChar === 44) {
+		inference.query = true
+		inference.headers = true
+		inference.body = true
+		inference.cookie = true
+		inference.set = true
+		inference.server = true
+
+		return true
+	}
+
+	return false
+}
+
 export const sucrose = (
 	lifeCycle: Sucrose.LifeCycle,
 	inference: Sucrose.Inference = {
@@ -472,7 +519,8 @@ export const sucrose = (
 		headers: false,
 		body: false,
 		cookie: false,
-		set: false
+		set: false,
+		server: false
 	}
 ): Sucrose.Inference => {
 	const events = []
@@ -505,12 +553,17 @@ export const sucrose = (
 			const aliases = findAlias(mainParameter, body)
 			aliases.splice(0, -1, mainParameter)
 
-			inferBodyReference(body, aliases, inference)
-		}
+			for (const alias of aliases)
+				if (isContextPassToFunction(mainParameter, body, inference))
+					break
 
-		const context = rootParameters || mainParameter
-		if (context && body.includes('return ' + context + '.query')) {
-			inference.query = true
+			inferBodyReference(body, aliases, inference)
+
+			if (
+				!inference.query &&
+				body.includes('return ' + mainParameter + '.query')
+			)
+				inference.query = true
 		}
 
 		if (
@@ -518,7 +571,8 @@ export const sucrose = (
 			inference.headers &&
 			inference.body &&
 			inference.cookie &&
-			inference.set
+			inference.set &&
+			inference.server
 		)
 			break
 	}

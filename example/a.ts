@@ -1,18 +1,24 @@
 import { Elysia, t, error } from '../src'
-import { req } from '../test/utils'
+import { post, req } from '../test/utils'
 
-const app = new Elysia({ precompile: true }).get(
-	'/id/:id',
-	({ set, params: { id }, query: { name } }) => {
-		set.headers['x-powered-by'] = 'benchmark'
+const called = <string[]>[]
 
-		return id + ' ' + name
-	}
-)
+const plugin = new Elysia()
+	.onParse({ as: 'global' }, ({ path }) => {
+		called.push(path)
+	})
+	.post('/inner', () => 'NOOP')
 
-console.log(app.routes[0].composed?.toString())
+const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
 
-const response = await app
-	.handle(req('/'))
-	.then((x) => x.status)
-	.then(console.log)
+const res = await Promise.all([
+	app.handle(post('/inner', {})),
+	app.handle(post('/outer', {}))
+])
+
+console.log(called)
+
+// const response = await app
+// 	.handle(req('/'))
+// 	.then((x) => x.status)
+// 	.then(console.log)

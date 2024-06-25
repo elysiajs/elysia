@@ -274,7 +274,8 @@ export default class Elysia<
 		cookie: false,
 		headers: false,
 		query: false,
-		set: false
+		set: false,
+		server: false
 	}
 
 	private getServer() {
@@ -3193,7 +3194,8 @@ export default class Elysia<
 				cookie: this.inference.cookie || plugin.inference.cookie,
 				headers: this.inference.headers || plugin.inference.headers,
 				query: this.inference.query || plugin.inference.query,
-				set: this.inference.set || plugin.inference.set
+				set: this.inference.set || plugin.inference.set,
+				server: this.inference.server || plugin.inference.server
 			}
 		}
 
