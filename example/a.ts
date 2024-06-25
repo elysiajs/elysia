@@ -3,22 +3,25 @@ import { post, req } from '../test/utils'
 
 const called = <string[]>[]
 
-const plugin = new Elysia()
-	.onParse({ as: 'global' }, ({ path }) => {
-		called.push(path)
+const app = new Elysia({ precompile: true })
+	.post(
+		'/json',
+		({ body }) => {
+			return 'a'
+		},
+		{
+			type: 'json'
+		}
+	)
+	.listen(3000)
+
+app.handle(
+	new Request('https://localhost:3000/json', {
+		method: 'POST',
+		body: 'a'
 	})
-	.post('/inner', () => 'NOOP')
+)
+	.then((x) => x.text())
+	.then(console.log)
 
-const app = new Elysia().use(plugin).post('/outer', () => 'NOOP')
-
-const res = await Promise.all([
-	app.handle(post('/inner', {})),
-	app.handle(post('/outer', {}))
-])
-
-console.log(called)
-
-// const response = await app
-// 	.handle(req('/'))
-// 	.then((x) => x.status)
-// 	.then(console.log)
+console.log(app.routes[0].composed?.toString())

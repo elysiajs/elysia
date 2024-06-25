@@ -349,6 +349,16 @@ export const isAsync = (v: Function | HookContainer) => {
 	return !!literal.match(matchFnReturn)
 }
 
+export const isGenerator = (v: Function | HookContainer) => {
+	// @ts-ignore
+	const fn = v?.fn ?? v
+
+	return (
+		fn.constructor.name === 'AsyncGeneratorFunction' ||
+		fn.constructor.name === 'GeneratorFunction'
+	)
+}
+
 export const composeHandler = ({
 	app,
 	path,
@@ -407,6 +417,8 @@ export const composeHandler = ({
 		fnLiteral += `\nObject.defineProperty(c, 'server', {
 			get: function() { return getServer() }
 		})\n`
+
+	if (inference.body) fnLiteral += `let isParsing = false\n`
 
 	const hasQuery = inference.query || !!validator.query
 
@@ -750,6 +762,14 @@ export const composeHandler = ({
 		hooks.transform.some(isAsync) ||
 		hooks.mapResponse.some(isAsync)
 
+	const maybeStream =
+		(typeof handler === 'function' ? isGenerator(handler as any) : false) ||
+		hooks.beforeHandle.some(isGenerator) ||
+		hooks.afterHandle.some(isGenerator) ||
+		hooks.transform.some(isGenerator)
+
+	const requestMapper = maybeStream ? `, c.request` : ``
+
 	if (hasTrace) fnLiteral += `c.route = \`${path}\`\n`
 
 	const parseReporter = report('parse', {
@@ -760,19 +780,12 @@ export const composeHandler = ({
 		const hasBodyInference =
 			hooks.parse.length || inference.body || validator.body
 
+		fnLiteral += 'isParsing = true\n'
 		if (hooks.type && !hooks.parse.length) {
 			switch (hooks.type) {
 				case 'json':
 				case 'application/json':
-					if (hasErrorHandler)
-						fnLiteral += `const tempBody = await c.request.text()
-
-							try {
-								c.body = JSON.parse(tempBody)
-							} catch {
-								throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
-							}`
-					else fnLiteral += `c.body = await c.request.json()`
+					fnLiteral += `c.body = await c.request.json()`
 					break
 
 				case 'text':
@@ -854,15 +867,7 @@ export const composeHandler = ({
 				switch (hooks.type) {
 					case 'json':
 					case 'application/json':
-						if (hasErrorHandler)
-							fnLiteral += `const tempBody = await c.request.text()
-
-								try {
-									c.body = JSON.parse(tempBody)
-								} catch {
-									throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
-								}`
-						else fnLiteral += `c.body = await c.request.json()`
+						fnLiteral += `c.body = await c.request.json()`
 						break
 
 					case 'text':
@@ -900,19 +905,7 @@ export const composeHandler = ({
 				fnLiteral += `
 					switch (contentType) {
 						case 'application/json':
-							${
-								hasErrorHandler
-									? `
-							const tempBody = await c.request.text()
-
-							try {
-								c.body = JSON.parse(tempBody)
-							} catch {
-								throw new ParseError('Failed to parse body as found: ' + (typeof body === "string" ? "'" + body + "'" : body), body)
-							}
-							`
-									: `c.body = await c.request.json()\n`
-							}
+							c.body = await c.request.json()
 							break
 
 						case 'text/plain':
@@ -950,7 +943,7 @@ export const composeHandler = ({
 			fnLiteral += '}\n'
 		}
 
-		fnLiteral += '\n'
+		fnLiteral += '\nisParsing = false\n'
 	}
 
 	parseReporter.resolve()
@@ -1326,7 +1319,7 @@ export const composeHandler = ({
 				mapResponseReporter.resolve()
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(${saveResponse} be, c.set, c.request)}\n`
+				fnLiteral += `return mapEarlyResponse(${saveResponse} be, c.set ${requestMapper})}\n`
 			}
 		}
 
@@ -1417,9 +1410,9 @@ export const composeHandler = ({
 		mapResponseReporter.resolve()
 
 		if (hasSet)
-			fnLiteral += `return mapResponse(${saveResponse} r, c.set, c.request)\n`
+			fnLiteral += `return mapResponse(${saveResponse} r, c.set ${requestMapper})\n`
 		else
-			fnLiteral += `return mapCompactResponse(${saveResponse} r, c.request)\n`
+			fnLiteral += `return mapCompactResponse(${saveResponse} r ${requestMapper})\n`
 	} else {
 		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
@@ -1470,16 +1463,16 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${saveResponse} ${handle}.clone(), c.set, c.request)
+					return mapResponse(${saveResponse} ${handle}.clone(), c.set ${requestMapper})
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse} r, c.set, c.request)\n`
+				fnLiteral += `return mapResponse(${saveResponse} r, c.set ${requestMapper})\n`
 			else
-				fnLiteral += `return mapCompactResponse(${saveResponse} r, c.request)\n`
+				fnLiteral += `return mapCompactResponse(${saveResponse} r ${requestMapper})\n`
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r = await ${handle};\n`
@@ -1515,9 +1508,9 @@ export const composeHandler = ({
 			fnLiteral += encodeCookie
 
 			if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse} r, c.set, c.request)\n`
+				fnLiteral += `return mapResponse(${saveResponse} r, c.set ${requestMapper})\n`
 			else
-				fnLiteral += `return mapCompactResponse(${saveResponse} r, c.request)\n`
+				fnLiteral += `return mapCompactResponse(${saveResponse} r ${requestMapper})\n`
 		} else {
 			handleReporter.resolve()
 
@@ -1533,21 +1526,23 @@ export const composeHandler = ({
 					c.set.redirect ||
 					c.set.cookie
 				)
-					return mapResponse(${saveResponse} ${handle}.clone(), c.set, c.request)
+					return mapResponse(${saveResponse} ${handle}.clone(), c.set ${requestMapper})
 				else
 					return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse} ${handled}, c.set, c.request)\n`
+				fnLiteral += `return mapResponse(${saveResponse} ${handled}, c.set ${requestMapper})\n`
 			else
-				fnLiteral += `return mapCompactResponse(${saveResponse} ${handled}, c.request)\n`
+				fnLiteral += `return mapCompactResponse(${saveResponse} ${handled} ${requestMapper})\n`
 		}
 	}
 
 	if (hasErrorHandler || hasAfterResponse) {
 		fnLiteral += `\n} catch(error) {`
+
+		if (hasBody) fnLiteral += `\nif(isParsing) error = new ParseError()\n`
 
 		if (!maybeAsync) fnLiteral += `\nreturn (async () => {\n`
 		fnLiteral += `\nconst set = c.set\nif (!set.status || set.status < 300) set.status = error?.status || 500\n`
@@ -1602,7 +1597,7 @@ export const composeHandler = ({
 
 				mapResponseReporter.resolve()
 
-				fnLiteral += `er = mapEarlyResponse(er, set, c.request)\n`
+				fnLiteral += `er = mapEarlyResponse(er, set ${requestMapper})\n`
 				fnLiteral += `if (er) {`
 
 				if (hasTrace)

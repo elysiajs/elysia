@@ -119,6 +119,17 @@ export type Context<
 		set: {
 			headers: HTTPHeaders
 			status?: number | keyof StatusMap
+			/**
+			 * @deprecated Use inline redirect instead
+			 * 
+			 * Will be removed in 1.2.0
+			 * 
+			 * @example Migration example
+			 * ```ts
+			 * new Elysia()
+			 *     .get(({ redirect }) => redirect('/'))
+			 * ```
+			 */
 			redirect?: string
 			/**
 			 * ! Internal Property

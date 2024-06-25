@@ -79,8 +79,8 @@ export class ParseError extends Error {
 	code = 'PARSE'
 	status = 400
 
-	constructor(message?: string, public body?: unknown) {
-		super(message ?? 'PARSE')
+	constructor() {
+		super('Failed to parse body')
 	}
 }
 
