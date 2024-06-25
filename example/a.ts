@@ -1,12 +1,18 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, error } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia({ precompile: true })
-	.get('/', ({ query }) => query)
-	.listen(3000)
+const app = new Elysia({ precompile: true }).get(
+	'/id/:id',
+	({ set, params: { id }, query: { name } }) => {
+		set.headers['x-powered-by'] = 'benchmark'
 
-app.handle(new Request('http://localhost/?name=ely+sia'))
-	.then((t) => t.text())
-	.then(console.log)
+		return id + ' ' + name
+	}
+)
 
 console.log(app.routes[0].composed?.toString())
+
+const response = await app
+	.handle(req('/'))
+	.then((x) => x.status)
+	.then(console.log)

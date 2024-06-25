@@ -174,19 +174,6 @@ export const mapResponse = (
 	set: Context['set'],
 	request?: Request
 ): Response => {
-	// @ts-ignore
-	if (response?.$passthrough)
-		// @ts-ignore
-		response = response?.[response.$passthrough]
-
-	// @ts-ignore
-	if (response?.[ELYSIA_RESPONSE]) {
-		// @ts-ignore
-		set.status = response[ELYSIA_RESPONSE]
-		// @ts-ignore
-		response = response.response
-	}
-
 	if (
 		isNotEmpty(set.headers) ||
 		set.status !== 200 ||
@@ -225,6 +212,15 @@ export const mapResponse = (
 				return Response.json(response, set as SetResponse)
 
 			case 'Object':
+				// @ts-ignore
+				const status = response[ELYSIA_RESPONSE]
+				if (status) {
+					set.status = status
+
+					// @ts-ignore
+					return mapResponse(response.response, set, request)
+				}
+
 				for (const value in Object.values(response as Object)) {
 					switch (value?.constructor?.name) {
 						case 'Blob':
@@ -417,6 +413,15 @@ export const mapResponse = (
 				return Response.json(response)
 
 			case 'Object':
+				// @ts-ignore
+				const status = response[ELYSIA_RESPONSE]
+				if (status) {
+					set.status = status
+
+					// @ts-ignore
+					return mapResponse(response.response, set, request)
+				}
+
 				for (const value in Object.values(response as Object)) {
 					switch (value?.constructor?.name) {
 						case 'Blob':
@@ -543,19 +548,6 @@ export const mapEarlyResponse = (
 ): Response | undefined => {
 	if (response === undefined || response === null) return
 
-	// @ts-ignore
-	if (response?.$passthrough)
-		// @ts-ignore
-		response = response?.[response.$passthrough]
-
-	// @ts-ignore
-	if (response?.[ELYSIA_RESPONSE]) {
-		// @ts-ignore
-		set.status = response[ELYSIA_RESPONSE]
-		// @ts-ignore
-		response = response.response
-	}
-
 	if (
 		isNotEmpty(set.headers) ||
 		set.status !== 200 ||
@@ -594,6 +586,15 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as SetResponse)
 
 			case 'Object':
+				// @ts-ignore
+				const status = response[ELYSIA_RESPONSE]
+				if (status) {
+					set.status = status
+
+					// @ts-ignore
+					return mapEarlyResponse(response.response, set, request)
+				}
+
 				for (const value in Object.values(response as Object)) {
 					switch (value?.constructor?.name) {
 						case 'Blob':
@@ -784,6 +785,15 @@ export const mapEarlyResponse = (
 				return Response.json(response)
 
 			case 'Object':
+				// @ts-ignore
+				const status = response[ELYSIA_RESPONSE]
+				if (status) {
+					set.status = status
+
+					// @ts-ignore
+					return mapEarlyResponse(response.response, set, request)
+				}
+
 				for (const value in Object.values(response as Object)) {
 					switch (value?.constructor?.name) {
 						case 'Blob':
@@ -903,20 +913,6 @@ export const mapCompactResponse = (
 	response: unknown,
 	request?: Request
 ): Response => {
-	// @ts-ignore
-	if (response?.$passthrough)
-		// @ts-ignore
-		response = response?.[response.$passthrough]
-
-	// @ts-ignore
-	if (response?.[ELYSIA_RESPONSE])
-		// @ts-ignore
-		return mapResponse(response.response, {
-			// @ts-ignore
-			status: response[ELYSIA_RESPONSE],
-			headers: {}
-		})
-
 	switch (response?.constructor?.name) {
 		case 'String':
 			return new Response(response as string)
@@ -928,6 +924,15 @@ export const mapCompactResponse = (
 			return Response.json(response)
 
 		case 'Object':
+			// @ts-ignore
+			const status = response[ELYSIA_RESPONSE]
+			if (status)
+				// @ts-ignore
+				return mapResponse(response.response, {
+					status,
+					headers: {}
+				})
+
 			form: for (const value of Object.values(response as Object))
 				switch (value?.constructor?.name) {
 					case 'Blob':
