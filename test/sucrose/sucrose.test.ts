@@ -204,4 +204,32 @@ describe('sucrose', () => {
 			server: true
 		})
 	})
+
+	it('infer single object destructure property', () => {
+		expect(
+			sucrose({
+				handler: function ({ server }) {
+					console.log(server)
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			query: false,
+			headers: false,
+			body: false,
+			cookie: false,
+			set: false,
+			server: true
+		})
+	})
 })
