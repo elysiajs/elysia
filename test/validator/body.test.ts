@@ -182,12 +182,37 @@ describe('Body Validator', () => {
 		expect(await res.text()).toEqual('')
 	})
 
-	it('strictly validate by default', async () => {
+	it('normalize by default', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Object({
 				name: t.String()
 			})
 		})
+
+		const res = await app
+			.handle(
+				post('/', {
+					name: 'sucrose',
+					job: 'alchemist'
+				})
+			)
+			.then((x) => x.json())
+
+		expect(res).toEqual({
+			name: 'sucrose'
+		})
+	})
+
+	it('strictly validate if not normalize', async () => {
+		const app = new Elysia({ normalize: false }).post(
+			'/',
+			({ body }) => body,
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			}
+		)
 
 		const res = await app.handle(
 			post('/', {

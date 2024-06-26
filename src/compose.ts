@@ -60,6 +60,38 @@ const isOptional = (validator: TypeCheck<any>) => {
 	return schema && TypeBoxSymbol.optional in schema
 }
 
+export const hasAdditionalProperties = (
+	_schema: TAnySchema | TypeCheck<any>
+) => {
+	if (!_schema) return
+
+	// @ts-expect-error private property
+	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? schema
+
+	if (schema.type === 'object') {
+		const properties = schema.properties as Record<string, TAnySchema>
+
+		if ('additionalProperties' in schema) return schema.additionalProperties
+
+		for (const key of Object.keys(properties)) {
+			const property = properties[key]
+
+			if (property.type === 'object') {
+				if (hasAdditionalProperties(property)) return true
+			} else if (property.anyOf) {
+				for (let i = 0; i < property.anyOf.length; i++)
+					if (hasAdditionalProperties(property.anyOf[i])) return true
+			}
+
+			return property.additionalProperties
+		}
+
+		return false
+	}
+
+	return false
+}
+
 const createReport = ({
 	context = 'c',
 	hasTrace,
@@ -146,43 +178,51 @@ const createReport = ({
 
 const composeValidationFactory = ({
 	injectResponse = '',
-	normalize = false
+	normalize = false,
+	validator
 }: {
 	injectResponse?: string
 	normalize?: boolean
-} = {}) => ({
+	validator: SchemaValidator
+}) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
 		`c.set.status = 422; throw new ValidationError('${type}', ${type}, ${value})`,
 	composeResponseValidation: (name = 'r') => {
-		const returnError = `throw new ValidationError('response', response[c.set.status], ${name})`
-
 		let code = '\n' + injectResponse + '\n'
 
-		code += `let er
+		code += `if(typeof ${name} === "object" && ${name} && ELYSIA_RESPONSE in ${name}) {
+			c.set.status = ${name}[ELYSIA_RESPONSE]
+			${name} = ${name}.response
+		}
+		
+		const isResponse = ${name} instanceof Response\n\n`
 
-		if(${name} && typeof ${name} === "object" && ELYSIA_RESPONSE in ${name})
-			er = ${name}[ELYSIA_RESPONSE]\n`
+		code += `switch(c.set.status) {\n`
 
-		if (normalize)
-			code += `
-			if(!er && response[c.set.status]?.Clean)
-				${name} = response[c.set.status]?.Clean(${name})
-			else if(response[er]?.Clean)
-				${name}.response = response[er]?.Clean(${name}.response)`
+		for (const [status, value] of Object.entries(
+			validator.response as Record<string, TypeCheck<any>>
+		)) {
+			code += `\tcase ${status}:
+				if (!isResponse) {\n`
 
-		code += `
-			if(er) {
-				if(!(${name} instanceof Response) && response[er]?.Check(${name}.response) === false) {
-					if(!(response instanceof Error)) {
-						c.set.status = ${name}[ELYSIA_RESPONSE]
+			if (
+				normalize &&
+				'Clean' in value &&
+				!hasAdditionalProperties(value as any)
+			)
+				code += `${name} = response['${status}'].Clean(${name})\n`
 
-						${returnError}
-					}
+			code += `if(response['${status}'].Check(${name}) === false) {
+					c.set.status = 422
+
+					throw new ValidationError('response', response['${status}'], ${name})
 				}
-			} else if(!(${name} instanceof Response) && response[c.set.status]?.Check(${name}) === false) {
-				if(!(response instanceof Error))
-					${returnError}
-			}\n`
+			}
+
+			break\n\n`
+		}
+
+		code += '\n}\n'
 
 		return code
 	}
@@ -470,7 +510,8 @@ export const composeHandler = ({
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory({
-			normalize
+			normalize,
+			validator
 		})
 
 	if (hasHeaders) {
@@ -556,33 +597,34 @@ export const composeHandler = ({
 			// @ts-expect-error private property
 			const properties = validator.query.schema.properties
 
-			// eslint-disable-next-line prefer-const
-			for (let [key, _value] of Object.entries(properties)) {
-				let value = _value as TAnySchema
+			if (!hasAdditionalProperties(validator.query as any))
+				// eslint-disable-next-line prefer-const
+				for (let [key, _value] of Object.entries(properties)) {
+					let value = _value as TAnySchema
 
-				// @ts-ignore
-				if (
-					value &&
-					TypeBoxSymbol.optional in value &&
-					value.type === 'array' &&
-					value.items
-				)
-					value = value.items
+					// @ts-ignore
+					if (
+						value &&
+						TypeBoxSymbol.optional in value &&
+						value.type === 'array' &&
+						value.items
+					)
+						value = value.items
 
-				// @ts-ignore unknown
-				const { type, anyOf } = value
-				const isArray = type === 'array'
+					// @ts-ignore unknown
+					const { type, anyOf } = value
+					const isArray = type === 'array'
 
-				destructured.push({
-					key,
-					isArray,
-					isNestedObjectArray:
-						(isArray && value.items?.type === 'object') ||
-						value.items?.anyOf,
-					isObject: type === 'object',
-					anyOf: !!anyOf
-				})
-			}
+					destructured.push({
+						key,
+						isArray,
+						isNestedObjectArray:
+							(isArray && value.items?.type === 'object') ||
+							value.items?.anyOf,
+						isObject: type === 'object',
+						anyOf: !!anyOf
+					})
+				}
 		}
 
 		if (!destructured.length) {
@@ -976,6 +1018,13 @@ export const composeHandler = ({
 		fnLiteral += '\n'
 
 		if (validator.headers) {
+			if (
+				normalize &&
+				'Clean' in validator.headers &&
+				!hasAdditionalProperties(validator.query as any)
+			)
+				fnLiteral += 'c.headers = headers.Clean(c.headers);\n'
+
 			// @ts-ignore
 			if (hasProperty('default', validator.headers.schema))
 				for (const [key, value] of Object.entries(
@@ -1041,7 +1090,12 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
-			if (normalize) fnLiteral += 'c.query = query.Clean(c.query);\n'
+			if (
+				normalize &&
+				'Clean' in validator.query &&
+				!hasAdditionalProperties(validator.query as any)
+			)
+				fnLiteral += 'c.query = query.Clean(c.query);\n'
 
 			// @ts-ignore
 			if (hasProperty('default', validator.query.schema))
@@ -1079,32 +1133,33 @@ export const composeHandler = ({
 		}
 
 		if (validator.body) {
-			if (normalize) fnLiteral += 'c.body = body.Clean(c.body);\n'
+			if (
+				normalize &&
+				'Clean' in validator.body &&
+				!hasAdditionalProperties(validator.body as any)
+			)
+				fnLiteral += 'c.body = body.Clean(c.body);\n'
 
 			// @ts-ignore
 			if (hasProperty('default', validator.body.schema)) {
-				fnLiteral += `if(body.Check(c.body) === false) {
-					if (typeof c.body === 'object') {
-						c.body = Object.assign(${JSON.stringify(
-							Value.Default(
-								// @ts-ignore
-								validator.body.schema,
-								{}
-							) ?? {}
-						)}, c.body)
-					} else {`
-
-				const defaultValue = Value.Default(
-					// @ts-ignore
+				const value = Value.Default(
+					// @ts-expect-error private property
 					validator.body.schema,
-					undefined
+					// @ts-expect-error private property
+					validator.body.schema.type === 'object' ? {} : undefined
 				)
 
-				if (typeof defaultValue === 'string')
-					fnLiteral += `c.body = '${defaultValue}'`
-				else fnLiteral += `c.body = ${defaultValue}`
+				const parsed =
+					typeof value === 'object'
+						? JSON.stringify(value)
+						: typeof value === 'string'
+						? `'${value}'`
+						: value
 
-				fnLiteral += `}`
+				fnLiteral += `if(body.Check(c.body) === false) {
+					if (typeof c.body === 'object') {
+						c.body = Object.assign(${parsed}, c.body)
+					} else { c.body = ${parsed} }`
 
 				if (isOptional(validator.body))
 					fnLiteral += `

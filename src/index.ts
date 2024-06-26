@@ -307,6 +307,7 @@ export default class Elysia<
 				path: '/'
 			},
 			analytic: false,
+			normalize: true,
 			...config,
 			experimental: config?.experimental ?? {},
 			seed: config?.seed === undefined ? '' : config?.seed

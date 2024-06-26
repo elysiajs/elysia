@@ -185,27 +185,6 @@ describe('Header Validator', () => {
 		expect(await res.json()).toEqual({})
 	})
 
-	it('loosely validate by default', async () => {
-		const app = new Elysia().get('/', ({ headers }) => headers, {
-			headers: t.Object({
-				name: t.String()
-			})
-		})
-
-		const headers = {
-			name: 'sucrose',
-			job: 'alchemist'
-		}
-		const res = await app.handle(
-			req('/', {
-				headers
-			})
-		)
-
-		expect(await res.json()).toEqual(headers)
-		expect(res.status).toBe(200)
-	})
-
 	it('validate optional object', async () => {
 		const app = new Elysia().get(
 			'/',

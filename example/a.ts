@@ -1,12 +1,25 @@
-import { Elysia, t, error } from '../src'
+import { Elysia, t } from '../src'
 import { post, req } from '../test/utils'
 
-await fetch('http://localhost:3000', {
-	signal: AbortSignal.timeout(25)
+const app = new Elysia().post('/', ({ body }) => body, {
+	body: t.Optional(
+		t.Array(
+			t.Object({
+				name: t.String({
+					default: 'a'
+				})
+			}),
+			{
+				default: [
+					{
+						name: 'a'
+					}
+				]
+			}
+		)
+	)
 })
-	.then((x) => x.text())
-	.catch(() => {})
 
-fetch('http://localhost:3000')
-	.then((x) => x.text())
-	.then(console.log)
+const res = await app.handle(post('/')).then((x) => x.json())
+
+console.log({ res })
