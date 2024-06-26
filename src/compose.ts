@@ -144,24 +144,17 @@ const createReport = ({
 	}
 }
 
-const composeValidationFactory = (
-	hasErrorHandler: boolean,
-	{
-		injectResponse = '',
-		normalize = false
-	}: {
-		injectResponse?: string
-		normalize?: boolean
-	} = {}
-) => ({
+const composeValidationFactory = ({
+	injectResponse = '',
+	normalize = false
+}: {
+	injectResponse?: string
+	normalize?: boolean
+} = {}) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
-		hasErrorHandler
-			? `c.set.status = 422; throw new ValidationError('${type}', ${type}, ${value})`
-			: `c.set.status = 422; return new ValidationError('${type}', ${type}, ${value}).toResponse(c.set.headers)`,
+		`c.set.status = 422; throw new ValidationError('${type}', ${type}, ${value})`,
 	composeResponseValidation: (name = 'r') => {
-		const returnError = hasErrorHandler
-			? `throw new ValidationError('response', response[c.set.status], ${name})`
-			: `return new ValidationError('response', response[c.set.status], ${name}).toResponse(c.set.headers)`
+		const returnError = `throw new ValidationError('response', response[c.set.status], ${name})`
 
 		let code = '\n' + injectResponse + '\n'
 
@@ -388,18 +381,6 @@ export const composeHandler = ({
 			headers: app.setHeaders ?? {}
 		})
 
-	const hasErrorHandler =
-		(app.config.forceErrorEncapsulation &&
-			(isHandleFn ||
-				hooks.afterHandle.length > 0 ||
-				hooks.beforeHandle.length > 0 ||
-				hooks.transform.length > 0)) ||
-		hooks.error.length > 0 ||
-		app.event.error.length > 0 ||
-		typeof Bun === 'undefined' ||
-		hooks.afterResponse.length > 0 ||
-		!!hooks.trace.length
-
 	const handle = isHandleFn ? `handler(c)` : `handler`
 	const hasAfterResponse = hooks.afterResponse.length > 0
 
@@ -488,7 +469,7 @@ export const composeHandler = ({
 	const normalize = app.config.normalize
 
 	const { composeValidation, composeResponseValidation } =
-		composeValidationFactory(hasErrorHandler, {
+		composeValidationFactory({
 			normalize
 		})
 
@@ -745,8 +726,8 @@ export const composeHandler = ({
 			fnLiteral += word
 		}
 	})
-	fnLiteral += hasErrorHandler ? '\n try {\n' : ''
 
+	fnLiteral += '\ntry {\n'
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 
 	const saveResponse =
@@ -1539,106 +1520,104 @@ export const composeHandler = ({
 		}
 	}
 
-	if (hasErrorHandler || hasAfterResponse) {
-		fnLiteral += `\n} catch(error) {`
+	fnLiteral += `\n} catch(error) {`
 
-		if (hasBody) fnLiteral += `\nif(isParsing) error = new ParseError()\n`
+	if (hasBody) fnLiteral += `\nif(isParsing) error = new ParseError()\n`
 
-		if (!maybeAsync) fnLiteral += `\nreturn (async () => {\n`
-		fnLiteral += `\nconst set = c.set\nif (!set.status || set.status < 300) set.status = error?.status || 500\n`
+	if (!maybeAsync) fnLiteral += `\nreturn (async () => {\n`
+	fnLiteral += `\nconst set = c.set\nif (!set.status || set.status < 300) set.status = error?.status || 500\n`
 
-		if (hasTrace)
-			for (let i = 0; i < hooks.trace.length; i++)
-				// There's a case where the error is thrown before any trace is called
-				fnLiteral += `report${i}?.resolve(error);reportChild${i}?.(error);\n`
+	if (hasTrace)
+		for (let i = 0; i < hooks.trace.length; i++)
+			// There's a case where the error is thrown before any trace is called
+			fnLiteral += `report${i}?.resolve(error);reportChild${i}?.(error);\n`
 
-		const reporter = report('error', {
-			total: hooks.error.length
-		})
+	const reporter = report('error', {
+		total: hooks.error.length
+	})
 
-		if (hooks.error.length) {
-			fnLiteral += `
+	if (hooks.error.length) {
+		fnLiteral += `
 				c.error = error
 				c.code = error.code ?? error[ERROR_CODE] ?? "UNKNOWN"
 				let er
 			`
 
-			for (let i = 0; i < hooks.error.length; i++) {
-				const endUnit = reporter.resolveChild(hooks.error[i].fn.name)
+		for (let i = 0; i < hooks.error.length; i++) {
+			const endUnit = reporter.resolveChild(hooks.error[i].fn.name)
 
-				if (isAsync(hooks.error[i]))
-					fnLiteral += `\ner = await handleErrors[${i}](c)\n`
-				else
-					fnLiteral +=
-						`\ner = handleErrors[${i}](c)\n` +
-						`if (er instanceof Promise) er = await er\n`
+			if (isAsync(hooks.error[i]))
+				fnLiteral += `\ner = await handleErrors[${i}](c)\n`
+			else
+				fnLiteral +=
+					`\ner = handleErrors[${i}](c)\n` +
+					`if (er instanceof Promise) er = await er\n`
 
-				endUnit()
+			endUnit()
 
-				const mapResponseReporter = report('mapResponse', {
-					total: hooks.mapResponse.length
-				})
+			const mapResponseReporter = report('mapResponse', {
+				total: hooks.mapResponse.length
+			})
 
-				if (hooks.mapResponse.length) {
-					for (let i = 0; i < hooks.mapResponse.length; i++) {
-						const mapResponse = hooks.mapResponse[i]
+			if (hooks.mapResponse.length) {
+				for (let i = 0; i < hooks.mapResponse.length; i++) {
+					const mapResponse = hooks.mapResponse[i]
 
-						const endUnit = mapResponseReporter.resolveChild(
-							mapResponse.fn.name
-						)
+					const endUnit = mapResponseReporter.resolveChild(
+						mapResponse.fn.name
+					)
 
-						fnLiteral += `\nc.response = er\n
+					fnLiteral += `\nc.response = er\n
 							er = ${isAsyncName(mapResponse) ? 'await' : ''} onMapResponse[${i}](c)
 							if(er instanceof Promise) er = await er\n`
 
-						endUnit()
-					}
+					endUnit()
 				}
+			}
 
-				mapResponseReporter.resolve()
+			mapResponseReporter.resolve()
 
-				fnLiteral += `er = mapEarlyResponse(er, set ${requestMapper})\n`
-				fnLiteral += `if (er) {`
+			fnLiteral += `er = mapEarlyResponse(er, set ${requestMapper})\n`
+			fnLiteral += `if (er) {`
 
-				if (hasTrace)
-					for (let i = 0; i < hooks.trace.length; i++)
-						fnLiteral += `\nreport${i}.resolve()\n`
+			if (hasTrace)
+				for (let i = 0; i < hooks.trace.length; i++)
+					fnLiteral += `\nreport${i}.resolve()\n`
 
-				fnLiteral += `return er\n}\n`
+			fnLiteral += `return er\n}\n`
+		}
+	}
+
+	reporter.resolve()
+
+	fnLiteral += `return handleError(c, error, true)\n`
+	if (!maybeAsync) fnLiteral += '})()'
+	fnLiteral += '}'
+
+	if (hasAfterResponse || hasTrace) {
+		fnLiteral += ` finally { `
+
+		if (!maybeAsync) fnLiteral += ';(async () => {'
+
+		const reporter = report('afterResponse', {
+			total: hooks.afterResponse.length
+		})
+
+		if (hasAfterResponse) {
+			for (let i = 0; i < hooks.afterResponse.length; i++) {
+				const endUnit = reporter.resolveChild(
+					hooks.afterResponse[i].fn.name
+				)
+				fnLiteral += `\nawait afterResponse[${i}](c);\n`
+				endUnit()
 			}
 		}
 
 		reporter.resolve()
 
-		fnLiteral += `return handleError(c, error, true)\n`
-		if (!maybeAsync) fnLiteral += '})()'
-		fnLiteral += '}'
+		if (!maybeAsync) fnLiteral += '})();'
 
-		if (hasAfterResponse || hasTrace) {
-			fnLiteral += ` finally { `
-
-			if (!maybeAsync) fnLiteral += ';(async () => {'
-
-			const reporter = report('afterResponse', {
-				total: hooks.afterResponse.length
-			})
-
-			if (hasAfterResponse) {
-				for (let i = 0; i < hooks.afterResponse.length; i++) {
-					const endUnit = reporter.resolveChild(
-						hooks.afterResponse[i].fn.name
-					)
-					fnLiteral += `\nawait afterResponse[${i}](c);\n`
-					endUnit()
-				}
-			}
-
-			reporter.resolve()
-
-			if (!maybeAsync) fnLiteral += '})();'
-
-			fnLiteral += `}`
-		}
+		fnLiteral += `}`
 	}
 
 	fnLiteral = `const {

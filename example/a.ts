@@ -1,27 +1,12 @@
 import { Elysia, t, error } from '../src'
 import { post, req } from '../test/utils'
 
-const called = <string[]>[]
+await fetch('http://localhost:3000', {
+	signal: AbortSignal.timeout(25)
+})
+	.then((x) => x.text())
+	.catch(() => {})
 
-const app = new Elysia({ precompile: true })
-	.post(
-		'/json',
-		({ body }) => {
-			return 'a'
-		},
-		{
-			type: 'json'
-		}
-	)
-	.listen(3000)
-
-app.handle(
-	new Request('https://localhost:3000/json', {
-		method: 'POST',
-		body: 'a'
-	})
-)
+fetch('http://localhost:3000')
 	.then((x) => x.text())
 	.then(console.log)
-
-console.log(app.routes[0].composed?.toString())

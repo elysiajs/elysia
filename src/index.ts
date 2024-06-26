@@ -299,7 +299,6 @@ export default class Elysia<
 		}
 
 		this.config = {
-			forceErrorEncapsulation: true,
 			prefix: '',
 			aot: true,
 			strictPath: false,
