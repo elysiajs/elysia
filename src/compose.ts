@@ -115,7 +115,7 @@ const createReport = ({
 
 	for (let i = 0; i < totalListener; i++)
 		addFn(
-			`let report${i}, reportChild${i};const trace${i} = ${context}[ELYSIA_TRACE][${i}]\n`
+			`let report${i}, reportChild${i}, reportErr${i}, reportErrChild${i} ;const trace${i} = ${context}[ELYSIA_TRACE][${i}]\n`
 		)
 
 	return (
@@ -140,9 +140,11 @@ const createReport = ({
 
 		if (!name) name = 'anonymous'
 
+		const reporter = event === 'error' ? 'reportErr' : 'report'
+
 		for (let i = 0; i < totalListener; i++)
 			addFn(
-				`\nreport${i} = trace${i}.${event}({` +
+				`\n${reporter}${i} = trace${i}.${event}({` +
 					`id,` +
 					`event: '${event}',` +
 					`name: '${name}',` +
@@ -154,12 +156,12 @@ const createReport = ({
 		return {
 			resolve() {
 				for (let i = 0; i < totalListener; i++)
-					addFn(`\nreport${i}.resolve()\n`)
+					addFn(`\n${reporter}${i}.resolve()\n`)
 			},
 			resolveChild(name: string) {
 				for (let i = 0; i < totalListener; i++)
 					addFn(
-						`reportChild${i} = report${i}.resolveChild?.shift()?.({` +
+						`${reporter}Child${i} = ${reporter}${i}.resolveChild?.shift()?.({` +
 							`id,` +
 							`event: '${event}',` +
 							`name: '${name}',` +
@@ -169,7 +171,7 @@ const createReport = ({
 
 				return () => {
 					for (let i = 0; i < totalListener; i++)
-						addFn(`reportChild${i}?.()\n`)
+						addFn(`${reporter}Child${i}?.()\n`)
 				}
 			}
 		}
@@ -1587,7 +1589,7 @@ export const composeHandler = ({
 			// There's a case where the error is thrown before any trace is called
 			fnLiteral += `report${i}?.resolve(error);reportChild${i}?.(error);\n`
 
-	const reporter = report('error', {
+	const errorReporter = report('error', {
 		total: hooks.error.length
 	})
 
@@ -1599,7 +1601,7 @@ export const composeHandler = ({
 			`
 
 		for (let i = 0; i < hooks.error.length; i++) {
-			const endUnit = reporter.resolveChild(hooks.error[i].fn.name)
+			const endUnit = errorReporter.resolveChild(hooks.error[i].fn.name)
 
 			if (isAsync(hooks.error[i]))
 				fnLiteral += `\ner = await handleErrors[${i}](c)\n`
@@ -1635,15 +1637,18 @@ export const composeHandler = ({
 			fnLiteral += `er = mapEarlyResponse(er, set ${requestMapper})\n`
 			fnLiteral += `if (er) {`
 
-			if (hasTrace)
+			if (hasTrace) {
 				for (let i = 0; i < hooks.trace.length; i++)
 					fnLiteral += `\nreport${i}.resolve()\n`
+
+				errorReporter.resolve()
+			}
 
 			fnLiteral += `return er\n}\n`
 		}
 	}
 
-	reporter.resolve()
+	errorReporter.resolve()
 
 	fnLiteral += `return handleError(c, error, true)\n`
 	if (!maybeAsync) fnLiteral += '})()'
