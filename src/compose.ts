@@ -1731,41 +1731,79 @@ export const composeHandler = ({
 		${fnLiteral}
 	}`
 
-	return Function(
-		'hooks',
-		fnLiteral
-	)({
-		handler,
-		hooks: lifeCycleToFn(hooks),
-		validator,
-		// @ts-expect-error
-		handleError: app.handleError,
-		utils: {
-			mapResponse,
-			mapCompactResponse,
-			mapEarlyResponse,
-			parseQuery,
-			isNotEmpty
-		},
-		error: {
-			NotFoundError,
-			ValidationError,
-			InternalServerError,
-			ParseError
-		},
-		schema: app.router.history,
-		// @ts-expect-error
-		definitions: app.definitions.type,
-		ERROR_CODE,
-		parseCookie,
-		signCookie,
-		decodeURIComponent,
-		ELYSIA_RESPONSE,
-		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID,
-		// @ts-expect-error private property
-		getServer: () => app.getServer()
-	})
+	try {
+		return Function(
+			'hooks',
+			fnLiteral
+		)({
+			handler,
+			hooks: lifeCycleToFn(hooks),
+			validator,
+			// @ts-expect-error
+			handleError: app.handleError,
+			utils: {
+				mapResponse,
+				mapCompactResponse,
+				mapEarlyResponse,
+				parseQuery,
+				isNotEmpty
+			},
+			error: {
+				NotFoundError,
+				ValidationError,
+				InternalServerError,
+				ParseError
+			},
+			schema: app.router.history,
+			// @ts-expect-error
+			definitions: app.definitions.type,
+			ERROR_CODE,
+			parseCookie,
+			signCookie,
+			decodeURIComponent,
+			ELYSIA_RESPONSE,
+			ELYSIA_TRACE,
+			ELYSIA_REQUEST_ID,
+			// @ts-expect-error private property
+			getServer: () => app.getServer()
+		})
+	} catch {
+		const debugHooks = lifeCycleToFn(hooks)
+
+		console.log('[Compiler] failed to generate optimized handler')
+		console.log('Please report the following to SaltyAom privately as it may include sensitive information about your codebase:')
+		console.log("---")
+		console.log({
+			handler: typeof handler === "function" ? handler.toString() : handler,
+			hooks: {
+				...debugHooks,
+				// @ts-expect-error
+				transform: debugHooks?.transform?.map?.(x => x.toString()),
+				// @ts-expect-error
+				resolve: debugHooks?.resolve?.map?.(x => x.toString()),
+				// @ts-expect-error
+				beforeHandle: debugHooks?.beforeHandle?.map?.(x => x.toString()),
+				// @ts-expect-error
+				afterHandle: debugHooks?.afterHandle?.map?.(x => x.toString()),
+				// @ts-expect-error
+				mapResponse: debugHooks?.mapResponse?.map?.(x => x.toString()),
+				// @ts-expect-error
+				parse: debugHooks?.parse?.map?.(x => x.toString()),
+				// @ts-expect-error
+				error: debugHooks?.error?.map?.(x => x.toString()),
+				// @ts-expect-error
+				afterResponse: debugHooks?.afterResponse?.map?.(x => x.toString()),
+				// @ts-expect-error
+				stop: debugHooks?.stop?.map?.(x => x.toString())
+			},
+			validator,
+			// @ts-expect-error
+			definitions: app.definitions.type,
+		})
+		console.log("---")
+
+		process.exit(1)
+	}
 }
 
 export const composeGeneralHandler = (

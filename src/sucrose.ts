@@ -56,21 +56,13 @@ export const separateFunction = (
 	// Starts with '(', is an arrow function
 	if (code.charCodeAt(0) === 40) {
 		// ? arrow function
-		index = code.indexOf(') => {\n')
-		if (index !== -1)
-			return [
-				code.slice(1, index),
-				code.slice(index + 5),
-				{ isArrowReturn: false }
-			]
-
-		// ? Arrow return
 		index = code.indexOf(') => ')
+
 		if (index !== -1)
 			return [
 				code.slice(1, index),
 				code.slice(index + 5),
-				{ isArrowReturn: true }
+				{ isArrowReturn: code.charCodeAt(index + 5) !== 123 }
 			]
 	}
 
@@ -488,28 +480,37 @@ const isContextPassToFunction = (
 	inference: Sucrose.Inference
 ) => {
 	// ! Function is passed to another function, assume as all is accessed
-	const captureFunction = new RegExp(`(?:\\w)\\((?:.*)?${context}`, 'gs')
-	captureFunction.test(body)
+	try {
+		const captureFunction = new RegExp(`(?:\\w)\\((?:.*)?${context}`, 'gs')
+		captureFunction.test(body)
 
-	/*
-	Since JavaScript engine already format the code (removing whitespace, newline, etc.),
-	we can safely assume that the next character is either a closing bracket or a comma
-	if the function is passed to another function
-	*/
-	const nextChar = body.charCodeAt(captureFunction.lastIndex)
+		/*
+		Since JavaScript engine already format the code (removing whitespace, newline, etc.),
+		we can safely assume that the next character is either a closing bracket or a comma
+		if the function is passed to another function
+		*/
+		const nextChar = body.charCodeAt(captureFunction.lastIndex)
 
-	if (nextChar === 41 || nextChar === 44) {
-		inference.query = true
-		inference.headers = true
-		inference.body = true
-		inference.cookie = true
-		inference.set = true
-		inference.server = true
+		if (nextChar === 41 || nextChar === 44) {
+			inference.query = true
+			inference.headers = true
+			inference.body = true
+			inference.cookie = true
+			inference.set = true
+			inference.server = true
+
+			return true
+		}
+
+		return false
+	} catch(error) {
+		console.log("[Sucrose] unexpected isContextPassToFunction error, please report the following to the developer:")
+		console.log("---")
+		console.log(context)
+		console.log("---")
 
 		return true
 	}
-
-	return false
 }
 
 export const sucrose = (
