@@ -412,13 +412,13 @@ export const ElysiaType = {
 				return [value]
 			})
 			.Encode((value) => value),
-	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
-		t.Union([t.Null(), schema]) as any,
+	Nullable: <T extends TSchema>(schema: T) =>
+		t.Union([t.Null(), schema]),
 	/**
 	 * Allow Optional, Nullable and Undefined
 	 */
-	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
-		t.Union([t.Null(), t.Undefined(), schema]) as any,
+	MaybeEmpty: <T extends TSchema>(schema: T) =>
+		t.Union([t.Null(), t.Undefined(), schema]),
 	Cookie: <T extends TProperties>(
 		properties: T,
 		{
