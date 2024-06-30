@@ -1,10 +1,18 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
 import { req } from '../test/utils'
 
-const main = new Elysia()
-	.mapResponse(({ response }) => {
-		console.log('test')
+const app = new Elysia({ precompile: true })
+	.mapResponse(() => {
+		return new Response('b')
 	})
-	.get('/', () => 'stuff')
+	.get('/', () => 'a', {
+		afterHandle() {
+			return 'a'
+		}
+	})
 
-main.handle(req('/'))
+app.handle(req('/'))
+	.then((res) => res.text())
+	.then(console.log)
+
+console.log(app.routes[0].composed?.toString())

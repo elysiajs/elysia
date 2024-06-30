@@ -1105,7 +1105,6 @@ export const composeHandler = ({
 
 				endUnit()
 			} else {
-				fnLiteral += `Object.assign(c, be);`
 				fnLiteral += isAsync(beforeHandle)
 					? `be = await beforeHandle[${i}](c);\n`
 					: `be = beforeHandle[${i}](c);\n`
@@ -1162,7 +1161,7 @@ export const composeHandler = ({
 						fnLiteral += `\nif(mr === undefined) {
 							mr = onMapResponse[${i}](c)
 							if(mr instanceof Promise) mr = await mr
-							if(mr !== undefined) c.response = mr
+							if(mr !== undefined) be = c.response = mr
 						}\n`
 					}
 				}
@@ -1245,7 +1244,7 @@ export const composeHandler = ({
 			for (let i = 0; i < hooks.mapResponse.length; i++) {
 				fnLiteral += `\nmr = onMapResponse[${i}](c)
 				if(mr instanceof Promise) mr = await mr
-				if(mr !== undefined) c.response = mr\n`
+				if(mr !== undefined) r = c.response = mr\n`
 			}
 		}
 

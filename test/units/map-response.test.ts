@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'bun:test'
 import { mapResponse } from '../../src/handler'
 import { Passthrough } from './utils'
-import { form } from '../../src'
+import Elysia, { form } from '../../src'
+import { req } from '../utils'
 
 const defaultContext = {
 	cookie: {},
@@ -374,5 +375,37 @@ describe('Map Response', () => {
 			'multipart/form-data'
 		)
 		expect(response.status).toBe(200)
+	})
+
+	it('map beforeHandle', async () => {
+		const app = new Elysia()
+			.mapResponse(() => {
+				return new Response('b')
+			})
+			.get('/', () => 'a', {
+				beforeHandle() {
+					return 'a'
+				}
+			})
+
+		const response = await app.handle(req('/')).then(x => x.text())
+
+		expect(response).toBe('b')
+	})
+
+	it('map afterHandle', async () => {
+		const app = new Elysia()
+			.mapResponse(() => {
+				return new Response('b')
+			})
+			.get('/', () => 'a', {
+				beforeHandle() {
+					return 'a'
+				}
+			})
+
+		const response = await app.handle(req('/')).then(x => x.text())
+
+		expect(response).toBe('b')
 	})
 })
