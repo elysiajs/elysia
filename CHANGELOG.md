@@ -1,3 +1,7 @@
+# 1.0.26 - 30 Jun 2024
+Bug fix:
+- mapResponse is not called on beforeHandle, and afterHandle
+
 # 1.0.25 - 21 Jun 2024
 Bug fix:
 - type is resolved as `File` if `@types/bun` is not installed when using with Eden Treaty

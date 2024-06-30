@@ -1347,7 +1347,7 @@ export const composeHandler = ({
 
 						fnLiteral += `\nif(mr === undefined) {
 							mr = ${isAsyncName(mapResponse) ? 'await' : ''} onMapResponse[${i}](c)
-							if(mr !== undefined) c.response = mr
+							if(mr !== undefined) be = c.response = mr
 						}\n`
 
 						endUnit()
@@ -1440,7 +1440,7 @@ export const composeHandler = ({
 				fnLiteral += `\nmr = ${
 					isAsyncName(mapResponse) ? 'await' : ''
 				} onMapResponse[${i}](c)
-				if(mr !== undefined) c.response = mr\n`
+				if(mr !== undefined) r = c.response = mr\n`
 
 				endUnit()
 			}
