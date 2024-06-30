@@ -162,4 +162,13 @@ describe('Edge Case', () => {
 		// @ts-expect-error
 		expect(app.routeTree.get('GET/4')).toEqual(4)
 	})
+
+	it('get getGlobalRoutes', () => {
+		const plugin = new Elysia().get('/', () => 'hello')
+
+		const main = new Elysia().use(plugin).get('/2', () => 'hi')
+
+		// @ts-expect-error private property
+		expect(main.getGlobalRoutes().length).toBe(2)
+	})
 })

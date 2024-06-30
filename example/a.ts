@@ -2,7 +2,8 @@ import { Elysia, t } from '../src'
 import { separateFunction } from '../src/sucrose'
 import { post, req } from '../test/utils'
 
-const arrowNoParam = () => 'sucrose'
+const plugin = new Elysia().get('/', () => 'hello')
 
+const main = new Elysia().use(plugin).get('/2', () => 'hi')
 
-console.log(separateFunction(arrowNoParam.toString()))
+console.log(main.getGlobalRoutes())
