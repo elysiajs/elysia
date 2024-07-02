@@ -1,5 +1,5 @@
 import type { BunFile } from 'bun'
-import { Kind, TSchema } from '@sinclair/typebox'
+import { Kind, type TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
@@ -247,6 +247,105 @@ export const mergeHook = (
 	}
 }
 
+export const replaceSchemaType = (
+	schema: TSchema,
+	options: { from: TSchema; to(): TSchema }
+) => {
+	if (!schema) return schema
+
+	const { from, to } = options
+	const fromSymbol = from[Kind]
+
+	if (schema.oneOf) {
+		for (let i = 0; i < schema.oneOf.length; i++)
+			schema.oneOf[i] = replaceSchemaType(schema.oneOf[i], options)
+
+		return schema
+	}
+
+	if (schema.anyOf) {
+		for (let i = 0; i < schema.anyOf.length; i++)
+			schema.anyOf[i] = replaceSchemaType(schema.anyOf[i], options)
+
+		return schema
+	}
+
+	if (schema.allOf) {
+		for (let i = 0; i < schema.allOf.length; i++)
+			schema.allOf[i] = replaceSchemaType(schema.allOf[i], options)
+
+		return schema
+	}
+
+	if (schema.not) {
+		for (let i = 0; i < schema.not.length; i++)
+			schema.not[i] = replaceSchemaType(schema.not[i], options)
+
+		return schema
+	}
+
+	if (schema[Kind] === fromSymbol) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { anyOf, oneOf, allOf, not, type, ...rest } = schema
+		const to = options.to()
+
+		if (to.anyOf)
+			for (let i = 0; i < to.anyOf.length; i++)
+				to.anyOf[i] = { ...rest, ...to.anyOf[i] }
+		else if (to.oneOf)
+			for (let i = 0; i < to.oneOf.length; i++)
+				to.oneOf[i] = { ...rest, ...to.oneOf[i] }
+		else if (to.allOf)
+			for (let i = 0; i < to.allOf.length; i++)
+				to.allOf[i] = { ...rest, ...to.allOf[i] }
+		else if (to.not)
+			for (let i = 0; i < to.not.length; i++)
+				to.not[i] = { ...rest, ...to.not[i] }
+
+		return { ...rest, ...to }
+	}
+
+	const properties = schema?.properties as Record<string, TSchema>
+
+	if (properties)
+		for (const [key, value] of Object.entries(properties)) {
+			switch (value[Kind]) {
+				case fromSymbol:
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
+					const { anyOf, oneOf, allOf, not, type, ...rest } = value
+					const to = options.to()
+
+					if (to.anyOf)
+						for (let i = 0; i < to.anyOf.length; i++)
+							to.anyOf[i] = { ...rest, ...to.anyOf[i] }
+					else if (to.oneOf)
+						for (let i = 0; i < to.oneOf.length; i++)
+							to.oneOf[i] = { ...rest, ...to.oneOf[i] }
+					else if (to.allOf)
+						for (let i = 0; i < to.allOf.length; i++)
+							to.allOf[i] = { ...rest, ...to.allOf[i] }
+					else if (to.not)
+						for (let i = 0; i < to.not.length; i++)
+							to.not[i] = { ...rest, ...to.not[i] }
+
+					properties[key] = { ...rest, ...to }
+					break
+
+				case 'Object':
+				case 'Union':
+					properties[key] = replaceSchemaType(value, options)
+					break
+
+				default:
+					if (value.anyOf || value.oneOf || value.allOf || value.not)
+						properties[key] = replaceSchemaType(value, options)
+					break
+			}
+		}
+
+	return schema
+}
+
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	s: T,
 	{
@@ -264,7 +363,13 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (!s) return undefined as any
 	if (typeof s === 'string' && !(s in models)) return undefined as any
 
-	const schema: TSchema = typeof s === 'string' ? models[s] : s
+	const schema: TSchema = replaceSchemaType(
+		typeof s === 'string' ? models[s] : s,
+		{
+			from: t.Number(),
+			to: () => t.Numeric()
+		}
+	)
 
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
@@ -391,6 +496,11 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
+		schema = replaceSchemaType(schema, {
+			from: t.Number(),
+			to: () => t.Numeric()
+		})
+
 		// eslint-disable-next-line sonarjs/no-identical-functions
 		// Sonar being delulu, schema is not identical
 		const cleaner = (value: unknown) => Value.Clean(schema, value)

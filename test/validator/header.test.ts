@@ -167,7 +167,7 @@ describe('Header Validator', () => {
 		expect(await res.json()).toEqual({})
 	})
 
-	it('validate numberic with partial', async () => {
+	it('validate numeric with partial', async () => {
 		const app = new Elysia().get('/', ({ headers }) => headers, {
 			headers: t.Partial(
 				t.Object({
@@ -267,5 +267,25 @@ describe('Header Validator', () => {
 			name: 'nagisa',
 			rank: 1
 		})
+	})
+
+	it('coerce number object to numeric', async () => {
+		const app = new Elysia().get('/', ({ headers: { id } }) => typeof id, {
+			headers: t.Object({
+				id: t.Number()
+			})
+		})
+
+		const value = await app
+			.handle(
+				req('/', {
+					headers: {
+						id: '1'
+					}
+				})
+			)
+			.then((x) => x.text())
+
+		expect(value).toBe('number')
 	})
 })

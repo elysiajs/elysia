@@ -469,7 +469,7 @@ export default class Elysia<
 						headers: getSchemaValidator(cloned.headers, {
 							dynamic,
 							models,
-							additionalProperties: true
+							additionalProperties: !this.config.normalize
 						}),
 						params: getSchemaValidator(cloned.params, {
 							dynamic,
@@ -503,7 +503,7 @@ export default class Elysia<
 							return getSchemaValidator(cloned.headers, {
 								dynamic,
 								models,
-								additionalProperties: true
+								additionalProperties: !normalize
 							})
 						},
 						get params() {
@@ -5642,6 +5642,8 @@ export {
 	StatusMap,
 	InvertedStatusMap,
 	form,
+	replaceSchemaType,
+	replaceUrlPath,
 	ELYSIA_FORM_DATA,
 	ELYSIA_REQUEST_ID
 } from './utils'

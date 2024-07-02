@@ -500,4 +500,20 @@ describe('Query Validator', () => {
 
 		expect(response).toEqual([1, { a: 'b' }])
 	})
+
+	it('coerce number object to numeric', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query: { id } }) => typeof id,
+			{
+				query: t.Object({
+					id: t.Number()
+				})
+			}
+		)
+
+		const value = await app.handle(req('/?id=1')).then((x) => x.text())
+
+		expect(value).toBe('number')
+	})
 })

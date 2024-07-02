@@ -415,4 +415,42 @@ describe('Body Validator', () => {
 
 		expect(value).toBe('number')
 	})
+
+	it('coerce number to numeric', async () => {
+		const app = new Elysia().post('/', ({ body }) => typeof body, {
+			body: t.Number()
+		})
+
+		const value = await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'text/plain'
+					},
+					body: '1'
+				})
+			)
+			.then((x) => x.text())
+
+		expect(value).toBe('number')
+	})
+
+	it('coerce number object to numeric', async () => {
+		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
+			body: t.Object({
+				id: t.Number()
+			})
+		})
+
+		const value = await app
+			.handle(
+				post('/', {
+					id: '1'
+				})
+			)
+			.then((x) => x.text())
+
+		expect(value).toBe('number')
+	})
 })

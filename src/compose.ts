@@ -63,10 +63,15 @@ const isOptional = (validator: TypeCheck<any>) => {
 export const hasAdditionalProperties = (
 	_schema: TAnySchema | TypeCheck<any>
 ) => {
-	if (!_schema) return
+	if (!_schema) return false
 
 	// @ts-expect-error private property
-	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? schema
+	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? _schema
+
+	if (schema.anyOf) return schema.anyOf.some(hasAdditionalProperties)
+	if (schema.someOf) return schema.someOf.some(hasAdditionalProperties)
+	if (schema.allOf) return schema.allOf.some(hasAdditionalProperties)
+	if (schema.not) return schema.not.some(hasAdditionalProperties)
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
@@ -1045,7 +1050,7 @@ export const composeHandler = ({
 			if (
 				normalize &&
 				'Clean' in validator.headers &&
-				!hasAdditionalProperties(validator.query as any)
+				!hasAdditionalProperties(validator.headers as any)
 			)
 				fnLiteral += 'c.headers = headers.Clean(c.headers);\n'
 
