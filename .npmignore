@@ -22,8 +22,10 @@ src
 .DS_Store
 test
 tsconfig.cjs.json
+tsconfig.dts.json
 tsconfig.esm.json
 tsconfig.test.json
+tsconfig.test.tsbuildinfo
 
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md

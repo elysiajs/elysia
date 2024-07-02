@@ -162,7 +162,7 @@ export const mergeResponse = (
 export const mergeHook = (
 	a?: LifeCycleStore,
 	b?: LocalHook<any, any, any, any, any, any, any>,
-	{ allowMacro = false }: { allowMacro?: boolean } = {}
+	{ allowMacro = true }: { allowMacro?: boolean } = {}
 ): LifeCycleStore => {
 	// In case if merging union is need
 	// const customAStore: Record<string, unknown> = {}
