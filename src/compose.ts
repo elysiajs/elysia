@@ -562,9 +562,6 @@ export const composeHandler = ({
 			fnLiteral += `if(c.qi !== -1) {
 				c.query = parseQuery(c.url.slice(c.qi + 1).replace(/\\+/g, ' '))
 
-				// decodeURIComponent is already done in parseQuery function
-				// for(const key of Object.keys(c.query))
-				//  	c.query[key] = decodeURIComponentc.query[key])
 			} else c.query = {}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
@@ -971,7 +968,20 @@ export const composeHandler = ({
 				}
 
 				if (anyOf) {
-					fnLiteral += `if(typeof c.query['${key}'] === "object") c.query['${key}'] = JSON.parse(c.query['${key}'])\n`
+					fnLiteral += `\nif(Array.isArray(c.query['${key}'])) {
+						for(let i = 0; i < c.query['${key}'].length; i++) {
+							if(
+								typeof c.query['${key}'][i] === "string" && 
+								(c.query['${key}'][i].charCodeAt(0) === 123  ||
+								 c.query['${key}'][i].charCodeAt(0) === 91)
+							)
+								try {
+									c.query['${key}'][i] = JSON.parse(c.query['${key}'][i])
+								} catch {}
+						}
+					} else if(typeof c.query['${key}'] === "object") {
+						c.query['${key}'] = JSON.parse(c.query['${key}'])
+					}\n`
 				}
 			}
 

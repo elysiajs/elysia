@@ -318,4 +318,23 @@ describe('Query Validator', () => {
 			role: [{ name: 'hello' }, { name: 'world' }]
 		})
 	})
+
+	it('parse union primitive and object', async () => {
+		const app = new Elysia().get('/', ({ query: { ids } }) => ids, {
+			query: t.Object({
+				ids: t.Union([
+					t.Array(
+						t.Union([t.Object({ a: t.String() }), t.Numeric()])
+					),
+					t.Numeric()
+				])
+			})
+		})
+
+		const response = await app
+			.handle(req(`/?ids=1&ids=${JSON.stringify({ a: 'b' })}`))
+			.then((res) => res.json())
+
+		expect(response).toEqual([1, { a: 'b' }])
+	})
 })
