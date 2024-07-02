@@ -9,10 +9,10 @@ import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
 	type SchemaOptions,
-	type TNull,
-	type TUnion,
+	// type TNull,
+	// type TUnion,
 	type TSchema,
-	type TUndefined,
+	// type TUndefined,
 	TProperties,
 	ObjectOptions,
 	TObject,
@@ -93,53 +93,66 @@ export namespace ElysiaTypeOptions {
 
 	export type FileUnit = number | `${number}${'k' | 'm'}`
 
+	export type StrictFileType =
+		| 'image'
+		| 'image/*'
+		| 'image/jpeg'
+		| 'image/png'
+		| 'image/gif'
+		| 'image/tiff'
+		| 'image/x-icon'
+		| 'image/svg'
+		| 'image/webp'
+		| 'image/avif'
+		| 'audio'
+		| 'audio/*'
+		| 'audio/aac'
+		| 'audio/mpeg'
+		| 'audio/x-ms-wma'
+		| 'audio/vnd.rn-realaudio'
+		| 'audio/x-wav'
+		| 'video'
+		| 'video/*'
+		| 'video/mpeg'
+		| 'video/mp4'
+		| 'video/quicktime'
+		| 'video/x-ms-wmv'
+		| 'video/x-msvideo'
+		| 'video/x-flv'
+		| 'video/webm'
+		| 'text'
+		| 'text/*'
+		| 'text/css'
+		| 'text/csv'
+		| 'text/html'
+		| 'text/javascript'
+		| 'text/plain'
+		| 'text/xml'
+		| 'application'
+		| 'application/*'
+		| 'application/graphql'
+		| 'application/graphql-response+json'
+		| 'application/ogg'
+		| 'application/pdf'
+		| 'application/xhtml'
+		| 'application/xhtml+html'
+		| 'application/xml-dtd'
+		| 'application/html'
+		| 'application/json'
+		| 'application/ld+json'
+		| 'application/xml'
+		| 'application/zip'
+		| 'font'
+		| 'font/*'
+		| 'font/woff2'
+		| 'font/woff'
+		| 'font/ttf'
+		| 'font/otf'
+
+	export type FileType = (string & {}) | StrictFileType
+
 	export interface File extends SchemaOptions {
-		type?: MaybeArray<
-			| (string & {})
-			| 'image'
-			| 'image/jpeg'
-			| 'image/png'
-			| 'image/gif'
-			| 'image/tiff'
-			| 'image/x-icon'
-			| 'image/svg'
-			| 'image/webp'
-			| 'image/avif'
-			| 'audio'
-			| 'audio/mpeg'
-			| 'audio/x-ms-wma'
-			| 'audio/vnd.rn-realaudio'
-			| 'audio/x-wav'
-			| 'video'
-			| 'video/mpeg'
-			| 'video/mp4'
-			| 'video/quicktime'
-			| 'video/x-ms-wmv'
-			| 'video/x-msvideo'
-			| 'video/x-flv'
-			| 'video/webm'
-			| 'text'
-			| 'text/css'
-			| 'text/csv'
-			| 'text/html'
-			| 'text/javascript'
-			| 'text/plain'
-			| 'text/xml'
-			| 'application'
-			| 'application/ogg'
-			| 'application/pdf'
-			| 'application/xhtml'
-			| 'application/html'
-			| 'application/json'
-			| 'application/ld+json'
-			| 'application/xml'
-			| 'application/zip'
-			| 'font'
-			| 'font/woff2'
-			| 'font/woff'
-			| 'font/ttf'
-			| 'font/otf'
-		>
+		type?: MaybeArray<FileType>
 		minSize?: FileUnit
 		maxSize?: FileUnit
 	}
@@ -412,13 +425,12 @@ export const ElysiaType = {
 				return [value]
 			})
 			.Encode((value) => value),
-	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
-		t.Union([t.Null(), schema]) as any,
+	Nullable: <T extends TSchema>(schema: T) => t.Union([schema, t.Null()]),
 	/**
 	 * Allow Optional, Nullable and Undefined
 	 */
-	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
-		t.Union([t.Null(), t.Undefined(), schema]) as any,
+	MaybeEmpty: <T extends TSchema>(schema: T) =>
+		t.Union([schema, t.Null(), t.Undefined()]),
 	Cookie: <T extends TProperties>(
 		properties: T,
 		{
@@ -466,7 +478,9 @@ declare module '@sinclair/typebox' {
 		File: typeof ElysiaType.File
 		// @ts-ignore
 		Files: typeof ElysiaType.Files
+		// @ts-ignore
 		Nullable: typeof ElysiaType.Nullable
+		// @ts-ignore
 		MaybeEmpty: typeof ElysiaType.MaybeEmpty
 		Cookie: typeof ElysiaType.Cookie
 	}
@@ -527,7 +541,7 @@ t.Files = (arg = {}) =>
 	})
 
 t.Nullable = (schema) => ElysiaType.Nullable(schema)
-t.MaybeEmpty = ElysiaType.MaybeEmpty
+t.MaybeEmpty = ElysiaType.MaybeEmpty as any
 
 t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date

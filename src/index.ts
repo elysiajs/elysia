@@ -1,17 +1,19 @@
 import type { Serve, Server, ServerWebSocket } from 'bun'
 
 import { Memoirist } from 'memoirist'
-import EventEmitter from 'eventemitter3'
-import { type Static, type TSchema } from '@sinclair/typebox'
+import { type TObject, type Static, type TSchema } from '@sinclair/typebox'
 
-import { createTraceListener } from './trace'
 import type { Context } from './context'
 
 import { t, TypeCheck } from './type-system'
-import { sucrose, sucroseTrace, type Sucrose } from './sucrose'
+import { sucrose, type Sucrose } from './sucrose'
 
 import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
+
+import { version as _version } from '../package.json'
+
+import { isNotEmpty } from './handler'
 
 import {
 	cloneInference,
@@ -20,12 +22,16 @@ import {
 	mergeDeep,
 	PromiseGroup
 } from './utils'
+
 import {
 	composeHandler,
 	composeGeneralHandler,
 	composeErrorHandler,
 	jitRoute
 } from './compose'
+
+import { createTracer } from './trace'
+
 import {
 	mergeHook,
 	getSchemaValidator,
@@ -56,6 +62,8 @@ import {
 	type InternalServerError
 } from './error'
 
+import type { TraceHandler } from './trace'
+
 import type {
 	ElysiaConfig,
 	SingletonBase,
@@ -70,7 +78,6 @@ import type {
 	InternalRoute,
 	HTTPMethod,
 	SchemaValidator,
-	VoidHandler,
 	PreHandler,
 	BodyHandler,
 	OptionalHandler,
@@ -85,15 +92,12 @@ import type {
 	AddSuffix,
 	AddPrefixCapitalize,
 	AddSuffixCapitalize,
-	TraceReporter,
-	TraceHandler,
 	MaybeArray,
 	GracefulHandler,
 	GetPathParameter,
 	MapResponse,
 	Checksum,
 	MacroManager,
-	BaseMacro,
 	MacroToProperty,
 	TransformHandler,
 	MetadataBase,
@@ -105,11 +109,16 @@ import type {
 	LifeCycleType,
 	MacroQueue,
 	EphemeralType,
-	ExcludeElysiaResponse
+	ExcludeElysiaResponse,
+	ModelValidator,
+	BaseMacroFn,
+	ResolveMacroContext,
+	ContextAppendType,
+	Reconcile,
+	AfterResponseHandler
 } from './types'
-import { isNotEmpty } from './handler'
 
-type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
+export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
 
 /**
  * ### Elysia Server
@@ -141,6 +150,7 @@ export default class Elysia<
 	const in out Metadata extends MetadataBase = {
 		schema: {}
 		macro: {}
+		macroFn: {}
 	},
 	const out Routes extends RouteBase = {},
 	// ? scoped
@@ -160,7 +170,6 @@ export default class Elysia<
 
 	server: Server | null = null
 	private dependencies: Record<string, Checksum[]> = {}
-	private reporter: TraceReporter = new EventEmitter()
 
 	_routes: Routes = {} as any
 
@@ -174,6 +183,9 @@ export default class Elysia<
 
 	_ephemeral = {} as Ephemeral
 	_volatile = {} as Volatile
+
+	static version = _version
+	version = _version
 
 	protected singleton = {
 		decorator: {},
@@ -213,13 +225,13 @@ export default class Elysia<
 		beforeHandle: [],
 		afterHandle: [],
 		mapResponse: [],
-		onResponse: [],
+		afterResponse: [],
 		trace: [],
 		error: [],
 		stop: []
 	}
 
-	telemetry = {
+	protected telemetry = {
 		stack: undefined as string | undefined
 	}
 
@@ -247,34 +259,35 @@ export default class Elysia<
 		history: [] as InternalRoute[]
 	}
 
-	protected inference: {
-		event: Sucrose.Inference
-		trace: Sucrose.TraceInference
-	} = {
-		event: {
-			body: false,
-			cookie: false,
-			headers: false,
-			queries: [],
-			query: false,
-			set: false,
-			unknownQueries: false
-		},
-		trace: {
-			request: false,
-			parse: false,
-			transform: false,
-			handle: false,
-			beforeHandle: false,
-			afterHandle: false,
-			error: false,
-			context: false,
-			store: false,
-			set: false
-		}
+	protected routeTree = new Map<string, number>()
+
+	get routes(): InternalRoute[] {
+		return this.router.history
 	}
 
-	private promisedModules = new PromiseGroup()
+	protected getGlobalRoutes(): InternalRoute[] {
+		return this.router.history
+	}
+
+	protected inference: Sucrose.Inference = {
+		body: false,
+		cookie: false,
+		headers: false,
+		query: false,
+		set: false,
+		server: false
+	}
+
+	private getServer() {
+		return this.server
+	}
+
+	private _promisedModules: PromiseGroup | undefined
+	private get promisedModules() {
+		if (!this._promisedModules) this._promisedModules = new PromiseGroup()
+
+		return this._promisedModules
+	}
 
 	constructor(config?: ElysiaConfig<BasePath, Scoped>) {
 		if (config?.tags) {
@@ -286,7 +299,6 @@ export default class Elysia<
 		}
 
 		this.config = {
-			forceErrorEncapsulation: true,
 			prefix: '',
 			aot: true,
 			strictPath: false,
@@ -295,7 +307,7 @@ export default class Elysia<
 				path: '/'
 			},
 			analytic: false,
-			forceDynamicQuery: true,
+			normalize: true,
 			...config,
 			experimental: config?.experimental ?? {},
 			seed: config?.seed === undefined ? '' : config?.seed
@@ -305,15 +317,20 @@ export default class Elysia<
 			this.telemetry.stack = new Error().stack
 	}
 
-	private getServer() {
-		return this.server
-	}
+	env(model: TObject<any>, env = Bun?.env ?? process.env) {
+		const validator = getSchemaValidator(model, {
+			dynamic: true,
+			additionalProperties: true
+		})
 
-	get routes(): InternalRoute[] {
-		return this.router.history
-	}
+		if (validator.Check(env) === false) {
+			const error = new ValidationError('env', model, env)
 
-	protected routeTree = new Map<string, number>()
+			throw new Error(error.all.map((x) => x.summary).join('\n'))
+		}
+
+		return this
+	}
 
 	private applyMacro(
 		localHook: LocalHook<any, any, any, any, any, any, any>
@@ -333,14 +350,30 @@ export default class Elysia<
 				onTransform: manage('transform') as any,
 				onBeforeHandle: manage('beforeHandle') as any,
 				onAfterHandle: manage('afterHandle') as any,
-				onResponse: manage('onResponse') as any,
 				mapResponse: manage('mapResponse') as any,
+				onAfterResponse: manage('afterResponse') as any,
 				onError: manage('error') as any
 			}
 
 			for (const macro of this.extender.macros)
 				traceBackMacro(macro.fn(manager), localHook)
 		}
+	}
+
+	get models(): {
+		[K in keyof Definitions['type']]: ModelValidator<
+			// @ts-ignore Trust me bro
+			Definitions['type'][K]
+		>
+	} {
+		const models: Record<string, TypeCheck<TSchema>> = {}
+
+		for (const [name, schema] of Object.entries(this.definitions.type))
+			models[name] = getSchemaValidator(
+				schema as any
+			) as TypeCheck<TSchema>
+
+		return models as any
 	}
 
 	private add(
@@ -436,7 +469,7 @@ export default class Elysia<
 						headers: getSchemaValidator(cloned.headers, {
 							dynamic,
 							models,
-							additionalProperties: true
+							additionalProperties: !this.config.normalize
 						}),
 						params: getSchemaValidator(cloned.params, {
 							dynamic,
@@ -470,7 +503,7 @@ export default class Elysia<
 							return getSchemaValidator(cloned.headers, {
 								dynamic,
 								models,
-								additionalProperties: true
+								additionalProperties: !normalize
 							})
 						},
 						get params() {
@@ -573,7 +606,7 @@ export default class Elysia<
 			(typeof this.config.precompile === 'object' &&
 				this.config.precompile.compose === true)
 
-		const appInference = cloneInference(this.inference)
+		const inference = cloneInference(this.inference)
 
 		const mainHandler = shouldPrecompile
 			? composeHandler({
@@ -585,7 +618,7 @@ export default class Elysia<
 					validator,
 					handler: handle,
 					allowMeta,
-					appInference
+					inference
 			  })
 			: (((context: Context) => {
 					if (composed) return composed(context)
@@ -599,7 +632,7 @@ export default class Elysia<
 						validator,
 						handler: handle,
 						allowMeta,
-						appInference
+						inference
 					}) as any)(context)
 			  }) as ComposedHandler)
 
@@ -614,7 +647,7 @@ export default class Elysia<
 					validator,
 					handler: handle,
 					allowMeta,
-					appInference
+					inference
 				}) as any)
 			}
 
@@ -1282,7 +1315,7 @@ export default class Elysia<
 		}
 
 		const hook: HookContainer = {
-			subType: 'resolve',
+			subType: 'mapResolve',
 			fn: mapper!
 		}
 
@@ -1600,23 +1633,20 @@ export default class Elysia<
 
 	/**
 	 * ### response | Life cycle event
-	 * Called when handler is executed
+	 * Call AFTER main handler is executed
 	 * Good for analytic metrics
-	 *
 	 * ---
 	 * @example
 	 * ```typescript
 	 * new Elysia()
-	 *     .onError(({ code }) => {
-	 *         if(code === "NOT_FOUND")
-	 *             return "Path not found :("
+	 *     .onAfterResponse(() => {
+	 *         cleanup()
 	 *     })
 	 * ```
 	 */
-
-	onResponse<const Schema extends RouteSchema>(
+	onAfterResponse<const Schema extends RouteSchema>(
 		handler: MaybeArray<
-			VoidHandler<
+			AfterResponseHandler<
 				MergeSchema<
 					Schema,
 					Metadata['schema'] &
@@ -1633,27 +1663,26 @@ export default class Elysia<
 
 	/**
 	 * ### response | Life cycle event
-	 * Called when handler is executed
+	 * Call AFTER main handler is executed
 	 * Good for analytic metrics
 	 *
 	 * ---
 	 * @example
 	 * ```typescript
 	 * new Elysia()
-	 *     .onError(({ code }) => {
-	 *         if(code === "NOT_FOUND")
-	 *             return "Path not found :("
-	 *     })
+	 *     .onAfterResponse(() => {
+	 *         cleanup()
+	 * 	   })
 	 * ```
 	 */
 
-	onResponse<
+	onAfterResponse<
 		const Schema extends RouteSchema,
 		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },
 		handler: MaybeArray<
-			VoidHandler<
+			AfterResponseHandler<
 				MergeSchema<
 					Schema,
 					Metadata['schema'] &
@@ -1686,15 +1715,15 @@ export default class Elysia<
 		>
 	): this
 
-	onResponse(
+	onAfterResponse(
 		options: { as?: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
-		if (!handler) return this.on('response', options as any)
+		if (!handler) return this.on('afterResponse', options as any)
 
 		return this.on(
 			options as { as?: LifeCycleType },
-			'response',
+			'afterResponse',
 			handler as any
 		)
 	}
@@ -1768,16 +1797,11 @@ export default class Elysia<
 		if (!Array.isArray(handler)) handler = [handler] as Function[]
 
 		for (const fn of handler)
-			this.reporter.on(
-				'event',
-				createTraceListener(
-					() => this.reporter,
-					this.event.trace.length,
-					fn as any
-				)
+			this.on(
+				options as { as?: LifeCycleType },
+				'trace',
+				createTracer(fn as any) as any
 			)
-
-		this.on(options as { as?: LifeCycleType }, 'trace', handler as any)
 
 		return this
 	}
@@ -1968,20 +1992,24 @@ export default class Elysia<
 	 * ```
 	 */
 	onError<const Schema extends RouteSchema>(
-		handler: ErrorHandler<
-			Definitions['error'],
-			MergeSchema<
-				Schema,
-				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
-			>,
-			{
-				decorator: Singleton['decorator']
-				store: Singleton['store']
-				derive: {}
-				resolve: {}
-			},
-			Ephemeral,
-			Volatile
+		handler: MaybeArray<
+			ErrorHandler<
+				Definitions['error'],
+				MergeSchema<
+					Schema,
+					Metadata['schema'] &
+						Ephemeral['schema'] &
+						Volatile['schema']
+				>,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: {}
+					resolve: {}
+				},
+				Ephemeral,
+				Volatile
+			>
 		>
 	): this
 
@@ -2001,20 +2029,24 @@ export default class Elysia<
 	 */
 	onError<const Schema extends RouteSchema>(
 		options: { as?: LifeCycleType },
-		handler: ErrorHandler<
-			Definitions['error'],
-			MergeSchema<
-				Schema,
-				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
-			>,
-			{
-				decorator: Singleton['decorator']
-				store: Singleton['store']
-				derive: {}
-				resolve: {}
-			},
-			Ephemeral,
-			Volatile
+		handler: MaybeArray<
+			ErrorHandler<
+				Definitions['error'],
+				MergeSchema<
+					Schema,
+					Metadata['schema'] &
+						Ephemeral['schema'] &
+						Volatile['schema']
+				>,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: {}
+					resolve: {}
+				},
+				Ephemeral,
+				Volatile
+			>
 		>
 	): this
 
@@ -2081,7 +2113,7 @@ export default class Elysia<
 	 * ```
 	 */
 	on<Event extends keyof LifeCycleStore>(
-		type: Exclude<Event, 'onResponse'> | 'response',
+		type: Event,
 		handlers: MaybeArray<
 			Extract<LifeCycleStore[Event], HookContainer[]>[0]['fn']
 		>
@@ -2105,7 +2137,7 @@ export default class Elysia<
 	 */
 	on<const Event extends keyof LifeCycleStore>(
 		options: { as?: LifeCycleType },
-		type: Exclude<Event, 'onResponse'> | 'response',
+		type: Event,
 		handlers: MaybeArray<Extract<LifeCycleStore[Event], Function[]>[0]>
 	): this
 
@@ -2114,7 +2146,7 @@ export default class Elysia<
 		typeOrHandlers: MaybeArray<Function | HookContainer> | string,
 		handlers?: MaybeArray<Function | HookContainer>
 	) {
-		let type: Exclude<keyof LifeCycleStore, 'onResponse'> | 'onResponse'
+		let type: keyof LifeCycleStore
 
 		switch (typeof optionsOrType) {
 			case 'string':
@@ -2125,11 +2157,15 @@ export default class Elysia<
 
 			case 'object':
 				type = typeOrHandlers as any
+
+				if (
+					!Array.isArray(typeOrHandlers) &&
+					typeof typeOrHandlers === 'object'
+				)
+					handlers = typeOrHandlers
+
 				break
 		}
-
-		// @ts-expect-error possible user error, leave it on
-		if (type === 'response') type = 'onResponse'
 
 		if (Array.isArray(handlers)) handlers = fnToContainer(handlers)
 		else {
@@ -2150,17 +2186,12 @@ export default class Elysia<
 					? 'local'
 					: optionsOrType?.as ?? 'local'
 
-		if (type === 'trace')
-			sucroseTrace(
-				handles.map((x) => x.fn) as TraceHandler[],
-				this.inference.trace
-			)
-		else
+		if (type !== 'trace')
 			sucrose(
 				{
 					[type]: handles.map((x) => x.fn)
 				},
-				this.inference.event
+				this.inference
 			)
 
 		for (const handle of handles) {
@@ -2195,8 +2226,8 @@ export default class Elysia<
 					this.event.mapResponse.push(fn as any)
 					break
 
-				case 'onResponse':
-					this.event.onResponse.push(fn as any)
+				case 'afterResponse':
+					this.event.afterResponse.push(fn as any)
 					break
 
 				case 'trace':
@@ -2247,7 +2278,7 @@ export default class Elysia<
 		promoteEvent(this.event.beforeHandle)
 		promoteEvent(this.event.afterHandle)
 		promoteEvent(this.event.mapResponse)
-		promoteEvent(this.event.onResponse)
+		promoteEvent(this.event.afterResponse)
 		promoteEvent(this.event.trace)
 		promoteEvent(this.event.error)
 
@@ -2314,6 +2345,7 @@ export default class Elysia<
 				{
 					schema: Schema
 					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
 				},
 				{},
 				Ephemeral,
@@ -2374,10 +2406,10 @@ export default class Elysia<
 				...((sandbox.event.request || []) as any)
 			]
 
-		if (sandbox.event.onResponse.length)
-			this.event.onResponse = [
-				...(this.event.onResponse || []),
-				...((sandbox.event.onResponse || []) as any)
+		if (sandbox.event.mapResponse.length)
+			this.event.mapResponse = [
+				...(this.event.mapResponse || []),
+				...((sandbox.event.mapResponse || []) as any)
 			]
 
 		this.model(sandbox.definitions.type)
@@ -2496,6 +2528,7 @@ export default class Elysia<
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
 				},
 				{},
 				Ephemeral,
@@ -2543,6 +2576,7 @@ export default class Elysia<
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
 				},
 				{},
 				Ephemeral,
@@ -2647,10 +2681,10 @@ export default class Elysia<
 				...(sandbox.event.request || [])
 			]
 
-		if (sandbox.event.onResponse.length)
-			this.event.onResponse = [
-				...(this.event.onResponse || []),
-				...(sandbox.event.onResponse || [])
+		if (sandbox.event.mapResponse.length)
+			this.event.mapResponse = [
+				...(this.event.mapResponse || []),
+				...(sandbox.event.mapResponse || [])
 			]
 
 		this.model(sandbox.definitions.type)
@@ -2970,6 +3004,7 @@ export default class Elysia<
 		const { name, seed } = plugin.config
 
 		plugin.getServer = () => this.getServer()
+		plugin.getGlobalRoutes = () => this.getGlobalRoutes()
 
 		/**
 		 * Model and error is required for Swagger generation
@@ -3106,10 +3141,16 @@ export default class Elysia<
 		} else {
 			this.headers(plugin.setHeaders)
 
-			plugin.reporter = this.reporter
 			for (const trace of plugin.event.trace)
-				if (trace.scope && trace.scope !== 'local')
-					this.trace(trace as any)
+				switch (trace.scope) {
+					case 'global':
+						this.on({ as: 'global' }, 'trace', trace.fn as any)
+						break
+
+					case 'scoped':
+						this.on('trace', trace.fn as any)
+						break
+				}
 
 			if (name) {
 				if (!(name in this.dependencies)) this.dependencies[name] = []
@@ -3149,58 +3190,12 @@ export default class Elysia<
 			}
 
 			this.inference = {
-				event: {
-					body:
-						this.inference.event.body ||
-						plugin.inference.event.body,
-					cookie:
-						this.inference.event.cookie ||
-						plugin.inference.event.cookie,
-					headers:
-						this.inference.event.headers ||
-						plugin.inference.event.headers,
-					queries: [
-						...this.inference.event.queries,
-						...plugin.inference.event.queries
-					],
-					query:
-						this.inference.event.query ||
-						plugin.inference.event.query,
-					set: this.inference.event.set || plugin.inference.event.set,
-					unknownQueries:
-						this.inference.event.unknownQueries ||
-						plugin.inference.event.unknownQueries
-				},
-				trace: {
-					request:
-						this.inference.trace.request ||
-						plugin.inference.trace.request,
-					parse:
-						this.inference.trace.parse ||
-						plugin.inference.trace.parse,
-					transform:
-						this.inference.trace.transform ||
-						plugin.inference.trace.transform,
-					handle:
-						this.inference.trace.handle ||
-						plugin.inference.trace.handle,
-					beforeHandle:
-						this.inference.trace.beforeHandle ||
-						plugin.inference.trace.beforeHandle,
-					afterHandle:
-						this.inference.trace.afterHandle ||
-						plugin.inference.trace.afterHandle,
-					error:
-						this.inference.trace.error ||
-						plugin.inference.trace.error,
-					context:
-						this.inference.trace.context ||
-						plugin.inference.trace.context,
-					store:
-						this.inference.trace.store ||
-						plugin.inference.trace.store,
-					set: this.inference.trace.set || plugin.inference.trace.set
-				}
+				body: this.inference.body || plugin.inference.body,
+				cookie: this.inference.cookie || plugin.inference.cookie,
+				headers: this.inference.headers || plugin.inference.headers,
+				query: this.inference.query || plugin.inference.query,
+				set: this.inference.set || plugin.inference.set,
+				server: this.inference.server || plugin.inference.server
 			}
 		}
 
@@ -3293,7 +3288,7 @@ export default class Elysia<
 		return this
 	}
 
-	macro<const NewMacro extends BaseMacro>(
+	macro<const NewMacro extends BaseMacroFn>(
 		macro: (
 			route: MacroManager<
 				Metadata['schema'] & Ephemeral['schema'] & Volatile['schema'],
@@ -3312,6 +3307,7 @@ export default class Elysia<
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
+			macroFn: Metadata['macroFn'] & NewMacro
 		},
 		Routes,
 		Ephemeral,
@@ -3438,13 +3434,15 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema'] & Ephemeral['schema'] & Volatile['schema']
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
-			`${BasePath}${Path extends '/' ? '' : Path}`
+			`${BasePath}${Path extends '/' ? '' : Path}`,
+			ResolveMacroContext<Macro, Metadata['macroFn']>
 		>
 	>(
 		path: Path,
@@ -3457,7 +3455,7 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
 			`${BasePath}${Path extends '/' ? '/index' : Path}`
 		>
 	): Elysia<
@@ -4396,7 +4394,7 @@ export default class Elysia<
 	 * @example
 	 * ```typescript
 	 * new Elysia()
-	 *     .state({ counter: 0 })
+	 *     .state('counter', 0)
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
 	 */
@@ -4408,11 +4406,42 @@ export default class Elysia<
 		Scoped,
 		{
 			decorator: Singleton['decorator']
-			store: Prettify<
-				Singleton['store'] & {
+			store: Reconcile<
+				Singleton['store'],
+				{
 					[name in Name]: Value
 				}
 			>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * ### state
+	 * Assign global mutatable state accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .state({ counter: 0 })
+	 *     .get('/', (({ counter }) => ++counter)
+	 * ```
+	 */
+	state<Store extends Record<string, unknown>>(
+		store: Store
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Singleton['decorator']
+			store: Reconcile<Singleton['store'], Store>
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
@@ -4435,14 +4464,64 @@ export default class Elysia<
 	 *     .get('/', (({ counter }) => ++counter)
 	 * ```
 	 */
-	state<Store extends Record<string, unknown>>(
+	state<
+		const Type extends ContextAppendType,
+		const Name extends string | number | symbol,
+		Value
+	>(
+		options: { as: Type },
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Singleton['decorator']
+			store: Reconcile<
+				Singleton['store'],
+				{
+					[name in Name]: Value
+				},
+				Type extends 'override' ? true : false
+			>
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * ### state
+	 * Assign global mutatable state accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .state({ counter: 0 })
+	 *     .get('/', (({ counter }) => ++counter)
+	 * ```
+	 */
+	state<
+		const Type extends ContextAppendType,
+		Store extends Record<string, unknown>
+	>(
+		options: { as: Type },
 		store: Store
 	): Elysia<
 		BasePath,
 		Scoped,
 		{
 			decorator: Singleton['decorator']
-			store: Prettify<Singleton['store'] & Store>
+			store: Reconcile<
+				Singleton['store'],
+				Store,
+				Type extends 'override' ? true : false
+			>
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
@@ -4484,32 +4563,87 @@ export default class Elysia<
 	 * ```
 	 */
 	state(
-		name: string | number | symbol | Record<string, unknown> | Function,
+		options:
+			| { as: ContextAppendType }
+			| string
+			| Record<string, unknown>
+			| Function,
+		name?:
+			| string
+			| Record<string, unknown>
+			| Function
+			| { as: ContextAppendType },
 		value?: unknown
 	) {
-		switch (typeof name) {
+		if (name === undefined) {
+			/**
+			 * Using either
+			 * - decorate({ name: value })
+			 */
+			value = options
+			options = { as: 'append' }
+			name = ''
+		} else if (value === undefined) {
+			/**
+			 * Using either
+			 * - decorate({ as: 'override' }, { name: value })
+			 * - decorate('name', value)
+			 */
+
+			// decorate('name', value)
+			if (typeof options === 'string') {
+				value = name
+				name = options
+				options = { as: 'append' }
+			} else if (typeof options === 'object') {
+				// decorate({ as: 'override' }, { name: value })
+				value = name
+				name = ''
+			}
+		}
+
+		const { as } = options as { as: ContextAppendType }
+
+		if (typeof name !== 'string') return this
+
+		switch (typeof value) {
 			case 'object':
-				this.singleton.store = mergeDeep(this.singleton.store, name)
+				if (name) {
+					if (name in this.singleton.store)
+						this.singleton.store[name] = mergeDeep(
+							this.singleton.store[name] as any,
+							value!,
+							{
+								override: as === 'override'
+							}
+						)
+					else this.singleton.store[name] = value
+
+					return this
+				}
+
+				if (value === null) return this
+
+				this.singleton.store = mergeDeep(this.singleton.store, value, {
+					override: as === 'override'
+				})
 
 				return this as any
 
 			case 'function':
-				this.singleton.store = name(this.singleton.store)
+				if (name) {
+					if (as === 'override' || !(name in this.singleton.store))
+						this.singleton.store[name] = value
+				} else this.singleton.store = value(this.singleton.store)
 
 				return this as any
-		}
 
-		if (!(name in this.singleton.store)) {
-			// eslint-disable-next-line no-extra-semi
-			;(
-				this.singleton.store as Record<
-					string | number | symbol,
-					unknown
-				>
-			)[name] = value
-		}
+			default:
+				if (as === 'override' || !(name in this.singleton.store))
+					this.singleton.store[name] = value
 
-		return this as any
+				return this
+		}
 	}
 
 	/**
@@ -4531,8 +4665,9 @@ export default class Elysia<
 		BasePath,
 		Scoped,
 		{
-			decorator: Prettify<
-				Singleton['decorator'] & {
+			decorator: Reconcile<
+				Singleton['decorator'],
+				{
 					[name in Name]: Value
 				}
 			>
@@ -4565,7 +4700,7 @@ export default class Elysia<
 		BasePath,
 		Scoped,
 		{
-			decorator: Prettify<Singleton['decorator'] & NewDecorators>
+			decorator: Reconcile<Singleton['decorator'], NewDecorators>
 			store: Singleton['store']
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
@@ -4603,33 +4738,180 @@ export default class Elysia<
 	 * @example
 	 * ```typescript
 	 * new Elysia()
+	 *     .decorate({ as: 'override' }, 'getDate', () => Date.now())
+	 *     .get('/', (({ getDate }) => getDate())
+	 * ```
+	 */
+	decorate<
+		const Type extends ContextAppendType,
+		const Name extends string,
+		const Value
+	>(
+		options: { as: Type },
+		name: Name,
+		value: Value
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Reconcile<
+				Singleton['decorator'],
+				{
+					[name in Name]: Value
+				},
+				Type extends 'override' ? true : false
+			>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * ### decorate
+	 * Define custom method to `Context` accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .decorate('getDate', () => Date.now())
+	 *     .get('/', (({ getDate }) => getDate())
+	 * ```
+	 */
+	decorate<
+		const Type extends ContextAppendType,
+		const NewDecorators extends Record<string, unknown>
+	>(
+		options: { as: Type },
+		decorators: NewDecorators
+	): Elysia<
+		BasePath,
+		Scoped,
+		{
+			decorator: Reconcile<
+				Singleton['decorator'],
+				NewDecorators,
+				Type extends 'override' ? true : false
+			>
+			store: Singleton['store']
+			derive: Singleton['derive']
+			resolve: Singleton['resolve']
+		},
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * ### decorate
+	 * Define custom method to `Context` accessible for all handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
 	 *     .decorate('getDate', () => Date.now())
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
 	decorate(
-		name: string | Record<string, unknown> | Function,
+		options:
+			| { as: ContextAppendType }
+			| string
+			| Record<string, unknown>
+			| Function,
+		name?:
+			| string
+			| Record<string, unknown>
+			| Function
+			| { as: ContextAppendType },
 		value?: unknown
 	) {
-		switch (typeof name) {
+		if (name === undefined) {
+			/**
+			 * Using either
+			 * - decorate({ name: value })
+			 */
+			value = options
+			options = { as: 'append' }
+			name = ''
+		} else if (value === undefined) {
+			/**
+			 * Using either
+			 * - decorate({ as: 'override' }, { name: value })
+			 * - decorate('name', value)
+			 */
+
+			// decorate('name', value)
+			if (typeof options === 'string') {
+				value = name
+				name = options
+				options = { as: 'append' }
+			} else if (typeof options === 'object') {
+				// decorate({ as: 'override' }, { name: value })
+				value = name
+				name = ''
+			}
+		}
+
+		const { as } = options as { as: ContextAppendType }
+
+		if (typeof name !== 'string') return this
+
+		switch (typeof value) {
 			case 'object':
+				if (name) {
+					if (name in this.singleton.decorator)
+						this.singleton.decorator[name] = mergeDeep(
+							this.singleton.decorator[name] as any,
+							value!,
+							{
+								override: as === 'override'
+							}
+						)
+					else this.singleton.decorator[name] = value
+
+					return this
+				}
+
+				if (value === null) return this
+
 				this.singleton.decorator = mergeDeep(
 					this.singleton.decorator,
-					name
+					value,
+					{
+						override: as === 'override'
+					}
 				)
 
 				return this as any
 
 			case 'function':
-				this.singleton.decorator = name(this.singleton.decorator)
+				if (name) {
+					if (
+						as === 'override' ||
+						!(name in this.singleton.decorator)
+					)
+						this.singleton.decorator[name] = value
+				} else
+					this.singleton.decorator = value(this.singleton.decorator)
 
 				return this as any
+
+			default:
+				if (as === 'override' || !(name in this.singleton.decorator))
+					this.singleton.decorator[name] = value
+
+				return this
 		}
-
-		if (!(name in this.singleton.decorator))
-			this.singleton.decorator[name] = value
-
-		return this as any
 	}
 
 	/**
@@ -5007,7 +5289,7 @@ export default class Elysia<
 		}
 
 		const hook: HookContainer = {
-			subType: 'derive',
+			subType: 'mapDerive',
 			fn: mapper!
 		}
 
@@ -5341,6 +5623,15 @@ export { Elysia }
 export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
 export { t } from './type-system'
 export { Cookie, type CookieOptions } from './cookies'
+export type { Context, PreContext, ErrorContext } from './context'
+export {
+	ELYSIA_TRACE,
+	type TraceEvent,
+	type TraceListener,
+	type TraceHandler,
+	type TraceProcess,
+	type TraceStream
+} from './trace'
 
 export {
 	getSchemaValidator,
@@ -5351,11 +5642,15 @@ export {
 	StatusMap,
 	InvertedStatusMap,
 	form,
-	type ELYSIA_FORM_DATA
+	replaceSchemaType,
+	replaceUrlPath,
+	ELYSIA_FORM_DATA,
+	ELYSIA_REQUEST_ID
 } from './utils'
 
 export {
 	error,
+	mapValueError,
 	ParseError,
 	NotFoundError,
 	ValidationError,
@@ -5364,8 +5659,6 @@ export {
 	ERROR_CODE,
 	ELYSIA_RESPONSE
 } from './error'
-
-export type { Context, PreContext } from './context'
 
 export type {
 	EphemeralType,
@@ -5389,19 +5682,15 @@ export type {
 	PreHandler,
 	BodyHandler,
 	OptionalHandler,
+	AfterResponseHandler,
 	ErrorHandler,
 	AfterHandler,
 	LifeCycleEvent,
-	TraceEvent,
 	LifeCycleStore,
 	LifeCycleType,
 	MaybePromise,
 	ListenCallback,
 	UnwrapSchema,
-	TraceHandler,
-	TraceProcess,
-	TraceReporter,
-	TraceStream,
 	Checksum,
 	DocumentDecoration,
 	InferContext,

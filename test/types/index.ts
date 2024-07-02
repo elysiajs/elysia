@@ -61,7 +61,7 @@ app.model({
 
 		// ? unwrap cookie
 		expectTypeOf<
-			Record<string, Cookie<any>> & {
+			Record<string, Cookie<unknown>> & {
 				username: Cookie<string>
 				password: Cookie<string>
 			}
@@ -283,6 +283,100 @@ app.decorate('a', 'b')
 			d: 'e'
 		}>()
 	})
+
+// ? Reconcile deep using name
+{
+	const app = new Elysia()
+		.decorate('a', {
+			hello: {
+				world: 'Tako'
+			}
+		})
+		.decorate('a', {
+			hello: {
+				world: 'Ina',
+				cookie: 'wah!'
+			}
+		})
+
+	expectTypeOf<(typeof app)['decorator']['a']>().toEqualTypeOf<{
+		readonly hello: {
+			readonly cookie: 'wah!'
+			readonly world: 'Tako'
+		}
+	}>()
+}
+
+// ? Reconcile deep using value
+{
+	const app = new Elysia()
+		.decorate({
+			hello: {
+				world: 'Tako'
+			}
+		})
+		.decorate(
+			{ as: 'override' },
+			{
+				hello: {
+					world: 'Ina',
+					cookie: 'wah!'
+				}
+			}
+		)
+
+	expect(app.decorator.hello).toEqual({
+		world: 'Ina',
+		cookie: 'wah!'
+	})
+}
+
+// ? Reconcile deep using name
+{
+	const app = new Elysia()
+		.state('a', {
+			hello: {
+				world: 'Tako'
+			}
+		})
+		.state('a', {
+			hello: {
+				world: 'Ina',
+				cookie: 'wah!'
+			}
+		})
+
+	expectTypeOf<(typeof app)['store']['a']>().toEqualTypeOf<{
+		hello: {
+			world: string
+			cookie: string
+		}
+	}>()
+}
+
+// ? Reconcile deep using value
+{
+	const app = new Elysia()
+		.state({
+			hello: {
+				world: 'Tako'
+			}
+		})
+		.state(
+			{ as: 'override' },
+			{
+				hello: {
+					world: 'Ina',
+					cookie: 'wah!'
+				}
+			}
+		)
+
+	expect(app.store.hello).toEqual({
+		world: 'Ina',
+		cookie: 'wah!'
+	})
+}
 
 const b = app
 	.model('a', t.Literal('a'))

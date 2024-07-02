@@ -9,13 +9,13 @@ describe('extract main parameter', () => {
 	})
 
 	it('extract main parameter when there is a spread operator and only one parameter', () => {
-		const parameter = '...param1'
+		const parameter = '{ ...param1 }'
 		const result = extractMainParameter(parameter)
 		expect(result).toBe('param1')
 	})
 
 	it('extract main parameter when there are multiple parameters and a spread operator', () => {
-		const parameter = 'param1, param2, ...param3'
+		const parameter = '{ param1, param2, ...param3 }'
 		const result = extractMainParameter(parameter)
 		expect(result).toBe('param3')
 	})

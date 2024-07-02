@@ -1,10 +1,26 @@
-import { Elysia } from '../src'
-import { req } from '../test/utils'
+type ToArray<
+	T extends string,
+	Acc extends string[] = []
+> = T extends `${infer Char}${infer Rest}`
+	? ToArray<Rest, Char extends ' ' ? Acc : [Char, ...Acc]>
+	: Acc
 
-const a = new Elysia().trace({ as: 'global' }, async ({ set }) => {
-	set.headers['X-Powered-By'] = 'elysia'
-})
+type PalindromeCheck<T extends string[]> = T extends [
+	infer First,
+	...infer Rest extends string[],
+	infer Last
+]
+	? First extends Last
+		? Rest['length'] extends 0
+			? true
+			: PalindromeCheck<Rest>
+		: false
+	: T['length'] extends 1
+	? true
+	: false
 
-const app = new Elysia().use(a).get('/', () => 'hi')
+type IsPalindrome<T extends string> =
+	ToArray<T> extends infer Arr extends string[] ? PalindromeCheck<Arr> : false
 
-const response = await app.handle(req('/')).then(x => x.text()).then(console.log)
+
+type A = IsPalindrome<'aibohphobia'>

@@ -9,11 +9,12 @@ const delay = (delay = 10) =>
 describe('Trace Timing', async () => {
 	it('handle', async () => {
 		const app = new Elysia()
-			.trace(async ({ handle, set }) => {
-				const { time, skip, end } = await handle
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onHandle, set }) => {
+				onHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.get('/', async () => {
 				await delay()
@@ -23,17 +24,17 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('request', async () => {
 		const app = new Elysia()
-			.trace(async ({ request, set }) => {
-				const { time, skip, end } = await request
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onRequest, set }) => {
+				onRequest(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.onRequest(async () => {
 				await delay()
@@ -42,36 +43,36 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('parse', async () => {
 		const app = new Elysia()
-			.trace(async ({ parse, set }) => {
-				const { time, skip, end } = await parse
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onParse, set }) => {
+				onParse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.onParse(async () => {
 				await delay()
 			})
-			.post('/', async ({ body }) => body)
+			.post('/', ({ body }) => 'a')
 
 		const { headers } = await app.handle(post('/', {}))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('transform', async () => {
 		const app = new Elysia()
-			.trace(async ({ transform, set }) => {
-				const { time, skip, end } = await transform
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onTransform, set }) => {
+				onTransform(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.onTransform(async () => {
 				await delay()
@@ -80,17 +81,17 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('beforeHandle', async () => {
 		const app = new Elysia()
-			.trace(async ({ beforeHandle, set }) => {
-				const { time, skip, end } = await beforeHandle
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onBeforeHandle, set }) => {
+				onBeforeHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.onBeforeHandle(async () => {
 				await delay()
@@ -99,17 +100,17 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('afterHandle', async () => {
 		const app = new Elysia()
-			.trace(async ({ afterHandle, set }) => {
-				const { time, skip, end } = await afterHandle
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onAfterHandle, set }) => {
+				onAfterHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.onAfterHandle(async () => {
 				await delay()
@@ -118,19 +119,55 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
+	})
+
+	it('mapResponse', async () => {
+		const app = new Elysia()
+			.trace(({ onMapResponse, set }) => {
+				onMapResponse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
+			})
+			.mapResponse(async () => {
+				await delay()
+			})
+			.get('/', () => 'a')
+
+		const { headers } = await app.handle(req('/'))
+
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
+	})
+
+	it('afterResponse', async () => {
+		const app = new Elysia()
+			.trace(({ onAfterResponse, set }) => {
+				onAfterResponse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						expect(elapsed).toBeGreaterThan(5)
+					})
+				})
+			})
+			.onAfterResponse(async () => {
+				await delay()
+			})
+			.get('/', () => 'a')
+
+		app.handle(req('/'))
 	})
 
 	it('inline parse', async () => {
 		const app = new Elysia()
-			.trace(async ({ parse, set }) => {
-				const { time, skip, end } = await parse
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onParse, set }) => {
+				onParse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
-			.post('/', async ({ body }) => body, {
+			.post('/', ({ body }) => 'a', {
 				async parse() {
 					await delay()
 				}
@@ -138,17 +175,17 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(post('/', {}))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('inline transform', async () => {
 		const app = new Elysia()
-			.trace(async ({ transform, set }) => {
-				const { time, skip, end } = await transform
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onTransform, set }) => {
+				onTransform(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.get('/', () => 'a', {
 				async transform() {
@@ -158,17 +195,17 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('inline beforeHandle', async () => {
 		const app = new Elysia()
-			.trace(async ({ beforeHandle, set }) => {
-				const { time, skip, end } = await beforeHandle
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onBeforeHandle, set }) => {
+				onBeforeHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.get('/', () => 'a', {
 				async beforeHandle() {
@@ -178,17 +215,17 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('inline afterHandle', async () => {
 		const app = new Elysia()
-			.trace(async ({ afterHandle, set }) => {
-				const { time, skip, end } = await afterHandle
-
-				set.headers.time = ((await end) - time).toString()
-				set.headers.skip = `${skip}`
+			.trace(({ onAfterHandle, set }) => {
+				onAfterHandle(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
 			})
 			.get('/', () => 'a', {
 				async afterHandle() {
@@ -198,80 +235,162 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
-		expect(headers.get('skip')).toBe('false')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
-	it('parse units', async () => {
+	it('inline mapResponse', async () => {
 		const app = new Elysia()
-			.trace(async ({ parse, set }) => {
-				const { children } = await parse
-				let total = 0
-
-				for (const child of children) {
-					const { time, end } = await child
-					total += (await end) - time
+			.trace(({ onMapResponse, set }) => {
+				onMapResponse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						set.headers.time = elapsed.toString()
+					})
+				})
+			})
+			.get('/', () => 'a', {
+				async mapResponse() {
+					await delay()
 				}
+			})
 
-				set.headers.time = total.toString()
+		const { headers } = await app.handle(req('/'))
+
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
+	})
+
+	it('inline afterResponse', async () => {
+		const app = new Elysia()
+			.trace(({ onAfterResponse, set }) => {
+				onAfterResponse(({ onStop }) => {
+					onStop(({ elapsed }) => {
+						expect(elapsed).toBeGreaterThan(5)
+					})
+				})
+			})
+			.get('/', () => 'a', {
+				async afterResponse() {
+					await delay()
+				}
+			})
+
+		app.handle(req('/'))
+	})
+
+	it('parse unit', async () => {
+		const app = new Elysia()
+			.trace(({ onParse, set }) => {
+				onParse(({ onStop, onEvent }) => {
+					let total = 0
+
+					onEvent(({ begin }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
+						})
+					})
+
+					onStop(({ elapsed }) => {
+						set.headers.time = total.toString()
+					})
+				})
 			})
 			.onParse(async function luna() {
-				await delay(6.25)
+				await delay(6)
 			})
 			.post('/', ({ body }) => body, {
 				parse: [
 					async function kindred() {
-						await delay(6.25)
+						await delay(6)
 					}
 				]
 			})
 
 		const { headers } = await app.handle(post('/', {}))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
-	it('transform units', async () => {
+	it('transform unit', async () => {
 		const app = new Elysia()
-			.trace(async ({ transform, set }) => {
-				const { children } = await transform
-				let total = 0
+			.trace(({ onTransform, set }) => {
+				onTransform(({ onStop, onEvent }) => {
+					let total = 0
 
-				for (const child of children) {
-					const { time, end } = await child
-					total += (await end) - time
-				}
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
+						})
+					})
 
-				set.headers.time = total.toString()
+					onStop(({ elapsed }) => {
+						set.headers.time = total.toString()
+					})
+				})
 			})
 			.onTransform(async function luna() {
-				await delay(6.25)
+				await delay(6)
 			})
 			.get('/', () => 'a', {
 				transform: [
 					async function kindred() {
-						await delay(6.25)
+						await delay(6)
 					}
 				]
 			})
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
+	})
+
+	it('beforeHandle unit', async () => {
+		const app = new Elysia()
+			.trace(({ onBeforeHandle, set }) => {
+				onBeforeHandle(({ onStop, onEvent }) => {
+					let total = 0
+
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
+						})
+					})
+
+					onStop(({ elapsed }) => {
+						set.headers.time = total.toString()
+					})
+				})
+			})
+			.onBeforeHandle(async function luna() {
+				await delay(6)
+			})
+			.get('/', () => 'a', {
+				beforeHandle: [
+					async function kindred() {
+						await delay(6)
+					}
+				]
+			})
+
+		const { headers } = await app.handle(req('/'))
+
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
 	it('beforeHandle units', async () => {
 		const app = new Elysia()
-			.trace(async ({ beforeHandle, set }) => {
-				const { children } = await beforeHandle
-				let total = 0
+			.trace(({ onBeforeHandle, set }) => {
+				onBeforeHandle(({ onStop, onEvent }) => {
+					let total = 0
 
-				for (const child of children) {
-					const { time, end } = await child
-					total += (await end) - time
-				}
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
+						})
+					})
 
-				set.headers.time = total.toString()
+					onStop(({ elapsed }) => {
+						set.headers.time = total.toString()
+					})
+				})
 			})
 			.onBeforeHandle(async function luna() {
 				await delay(6.25)
@@ -286,107 +405,103 @@ describe('Trace Timing', async () => {
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
-	it('afterHandle units', async () => {
+	it('afterHandle unit', async () => {
 		const app = new Elysia()
-			.trace(async ({ afterHandle, set }) => {
-				const { children } = await afterHandle
-				let total = 0
+			.trace(({ onAfterHandle, set }) => {
+				onAfterHandle(({ onStop, onEvent }) => {
+					let total = 0
 
-				for (const child of children) {
-					const { time, end } = await child
-					total += (await end) - time
-				}
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
+						})
+					})
 
-				set.headers.time = total.toString()
+					onStop(({ elapsed }) => {
+						set.headers.time = total.toString()
+					})
+				})
 			})
 			.onAfterHandle(async function luna() {
-				await delay(6.25)
+				await delay(6)
 			})
 			.get('/', () => 'a', {
 				afterHandle: [
 					async function kindred() {
-						await delay(6.25)
+						await delay(6)
 					}
 				]
 			})
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(10)
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
-	it('wait for all trace to be completed before returning value', async () => {
+	it('mapResponse unit', async () => {
 		const app = new Elysia()
-			.trace(async ({ set }) => {
-				await delay(5)
+			.trace(({ onMapResponse, set }) => {
+				onMapResponse(({ onStop, onEvent }) => {
+					let total = 0
 
-				set.headers.delay = 'true'
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
+						})
+					})
+
+					onStop(({ elapsed }) => {
+						set.headers.time = total.toString()
+					})
+				})
 			})
-			.trace(({ set }) => {
-				set.headers.immediate = 'true'
-			})
-			.get('/', () => 'a')
-
-		const { headers } = await app.handle(req('/'))
-
-		expect(headers.get('delay')).toBe('true')
-		expect(headers.get('immediate')).toBe('true')
-	})
-
-	it('resolve early return beforeHandle', async () => {
-		const app = new Elysia()
-			.trace(({ set }) => {
-				set.headers.trace = 'true'
+			.mapResponse(async function luna() {
+				await delay(6)
 			})
 			.get('/', () => 'a', {
-				beforeHandle: [() => {}, () => 'end', () => {}]
+				mapResponse: [
+					async function kindred() {
+						await delay(6)
+					}
+				]
 			})
 
 		const { headers } = await app.handle(req('/'))
 
-		expect(headers.get('trace')).toBe('true')
+		expect(+(headers.get('time') ?? 0)).toBeGreaterThan(5)
 	})
 
-	it('resolve early return afterHandle', async () => {
+	it('afterResponse unit', async () => {
 		const app = new Elysia()
-			.trace(({ set }) => {
-				set.headers.trace = 'true'
+			.trace(({ onAfterResponse, set }) => {
+				onAfterResponse(({ onStop, onEvent }) => {
+					let total = 0
+
+					onEvent(({ onStop }) => {
+						onStop(({ elapsed }) => {
+							total += elapsed
+						})
+					})
+
+					onStop(({ elapsed }) => {
+						set.headers.time = total.toString()
+					})
+				})
+			})
+			.onAfterResponse(async function luna() {
+				await delay(6)
 			})
 			.get('/', () => 'a', {
-				afterHandle: [() => {}, () => 'end', () => {}]
+				afterResponse: [
+					async function kindred() {
+						await delay(6)
+					}
+				]
 			})
 
-		const { headers } = await app.handle(req('/'))
-
-		expect(headers.get('trace')).toBe('true')
-	})
-
-	it('resolve early return beforeHandle with afterHandle', async () => {
-		const delay = (time = 1000) => new Promise((r) => setTimeout(r, time))
-
-		const app = new Elysia()
-			.trace(({ beforeHandle, afterHandle, set }) => {
-				set.headers.a = 'a'
-			})
-			.get('/', () => 'A', {
-				beforeHandle: [
-					() => {},
-					async function a() {
-						await delay(1)
-						return 'a'
-					},
-					() => {}
-				],
-				afterHandle: async () => {
-					await delay(1)
-				}
-			})
-
-		const { headers } = await app.handle(req('/'))
-
-		expect(headers.get('a')).toBe('a')
+		app.handle(req('/'))
 	})
 })

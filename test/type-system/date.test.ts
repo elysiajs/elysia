@@ -32,7 +32,9 @@ describe('TypeSystem - Date', () => {
 			Date
 		)
 
-		const error = new TypeBoxError('Unable to encode due to invalid value')
+		const error = new TypeBoxError(
+			'The encoded value does not match the expected schema'
+		)
 		expect(() => Value.Encode(schema, 'yay')).toThrow(error)
 		expect(() => Value.Encode(schema, 42)).toThrow(error)
 		expect(() => Value.Encode(schema, {})).toThrow(error)
@@ -50,7 +52,9 @@ describe('TypeSystem - Date', () => {
 			Date
 		)
 
-		const error = new TypeBoxError('Unable to decode due to invalid value')
+		const error = new TypeBoxError(
+			'Unable to decode value as it does not match the expected schema'
+		)
 		expect(() => Value.Decode(schema, 'yay')).toThrow(error)
 		expect(() => Value.Decode(schema, 42)).toThrow(error)
 		expect(() => Value.Decode(schema, {})).toThrow(error)

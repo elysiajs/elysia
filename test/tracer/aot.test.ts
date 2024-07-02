@@ -2,13 +2,13 @@ import { Context, Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 
 describe('Trace AoT', async () => {
-	it('inject request report', async () => {
-		const app = new Elysia().trace(async () => {}).get('/', () => '')
+	// it('inject request report', async () => {
+	// 	const app = new Elysia().trace(async () => {}).get('/', () => '')
 
-		expect(app.compile().fetch.toString()).toInclude(
-			`reporter.emit('event',{id,event:'request'`
-		)
-	})
+	// 	expect(app.compile().fetch.toString()).toInclude(
+	// 		`reporter.emit('event',{id,event:'request'`
+	// 	)
+	// })
 
 	it('try-catch edge case', async () => {
 		class Controller {

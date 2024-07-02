@@ -1,9 +1,11 @@
-import { Kind, TSchema } from '@sinclair/typebox'
+import type { BunFile } from 'bun'
+import { Kind, type TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { t } from '.'
 import { isNotEmpty } from './handler'
+import type { Sucrose } from './sucrose'
 
 import type {
 	LifeCycleStore,
@@ -20,13 +22,12 @@ import type {
 	OptionalHandler,
 	AfterHandler,
 	MapResponse,
-	VoidHandler,
 	ErrorHandler,
-	Replace
+	Replace,
+	AfterResponseHandler
 } from './types'
 import type { CookieOptions } from './cookies'
-import { Sucrose } from './sucrose'
-import type { BunFile } from 'bun'
+import { mapValueError } from './error'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -34,12 +35,13 @@ export const replaceUrlPath = (url: string, pathname: string) => {
 	return urlObject.toString()
 }
 
-const isClass = (v: Object) =>
+export const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
 	// Handle import * as Sentry from '@sentry/bun'
 	// This also handle [object Date], [object Array]
 	// and FFI value like [object Prisma]
-	v.toString().startsWith('[object ') ||
+	(v.toString().startsWith('[object ') &&
+		v.toString() !== '[object Object]') ||
 	// If object prototype is not pure, then probably a class-like object
 	isNotEmpty(Object.getPrototypeOf(v))
 
@@ -53,25 +55,31 @@ export const mergeDeep = <
 	target: A,
 	source: B,
 	{
-		skipKeys
+		skipKeys,
+		override = true
 	}: {
 		skipKeys?: string[]
+		override?: boolean
 	} = {}
 ): A & B => {
-	if (isObject(target) && isObject(source))
-		for (const [key, value] of Object.entries(source)) {
-			if (skipKeys?.includes(key)) continue
+	if (!isObject(target) || !isObject(source)) return target as A & B
 
-			if (!isObject(value) || !(key in target) || isClass(value)) {
+	for (const [key, value] of Object.entries(source)) {
+		if (skipKeys?.includes(key)) continue
+
+		if (!isObject(value) || !(key in target) || isClass(value)) {
+			if (override || !(key in target))
 				target[key as keyof typeof target] = value
-				continue
-			}
 
-			target[key as keyof typeof target] = mergeDeep(
-				(target as any)[key] as any,
-				value
-			)
+			continue
 		}
+
+		target[key as keyof typeof target] = mergeDeep(
+			(target as any)[key] as any,
+			value,
+			{ skipKeys, override }
+		)
+	}
 
 	return target as A & B
 }
@@ -124,8 +132,8 @@ export const primitiveHooks = [
 	'resolve',
 	'beforeHandle',
 	'afterHandle',
-	'onResponse',
 	'mapResponse',
+	'afterResponse',
 	'trace',
 	'error',
 	'stop',
@@ -229,11 +237,113 @@ export const mergeHook = (
 		transform: mergeObjectArray(a?.transform, b?.transform),
 		beforeHandle: mergeObjectArray(a?.beforeHandle, b?.beforeHandle),
 		afterHandle: mergeObjectArray(a?.afterHandle, b?.afterHandle),
-		onResponse: mergeObjectArray(a?.onResponse, b?.onResponse) as any,
 		mapResponse: mergeObjectArray(a?.mapResponse, b?.mapResponse) as any,
+		afterResponse: mergeObjectArray(
+			a?.afterResponse,
+			b?.afterResponse
+		) as any,
 		trace: mergeObjectArray(a?.trace, b?.trace) as any,
 		error: mergeObjectArray(a?.error, b?.error)
 	}
+}
+
+export const replaceSchemaType = (
+	schema: TSchema,
+	options: { from: TSchema; to(): TSchema }
+) => {
+	if (!schema) return schema
+
+	const { from, to } = options
+	const fromSymbol = from[Kind]
+
+	if (schema.oneOf) {
+		for (let i = 0; i < schema.oneOf.length; i++)
+			schema.oneOf[i] = replaceSchemaType(schema.oneOf[i], options)
+
+		return schema
+	}
+
+	if (schema.anyOf) {
+		for (let i = 0; i < schema.anyOf.length; i++)
+			schema.anyOf[i] = replaceSchemaType(schema.anyOf[i], options)
+
+		return schema
+	}
+
+	if (schema.allOf) {
+		for (let i = 0; i < schema.allOf.length; i++)
+			schema.allOf[i] = replaceSchemaType(schema.allOf[i], options)
+
+		return schema
+	}
+
+	if (schema.not) {
+		for (let i = 0; i < schema.not.length; i++)
+			schema.not[i] = replaceSchemaType(schema.not[i], options)
+
+		return schema
+	}
+
+	if (schema[Kind] === fromSymbol) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { anyOf, oneOf, allOf, not, type, ...rest } = schema
+		const to = options.to()
+
+		if (to.anyOf)
+			for (let i = 0; i < to.anyOf.length; i++)
+				to.anyOf[i] = { ...rest, ...to.anyOf[i] }
+		else if (to.oneOf)
+			for (let i = 0; i < to.oneOf.length; i++)
+				to.oneOf[i] = { ...rest, ...to.oneOf[i] }
+		else if (to.allOf)
+			for (let i = 0; i < to.allOf.length; i++)
+				to.allOf[i] = { ...rest, ...to.allOf[i] }
+		else if (to.not)
+			for (let i = 0; i < to.not.length; i++)
+				to.not[i] = { ...rest, ...to.not[i] }
+
+		return { ...rest, ...to }
+	}
+
+	const properties = schema?.properties as Record<string, TSchema>
+
+	if (properties)
+		for (const [key, value] of Object.entries(properties)) {
+			switch (value[Kind]) {
+				case fromSymbol:
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
+					const { anyOf, oneOf, allOf, not, type, ...rest } = value
+					const to = options.to()
+
+					if (to.anyOf)
+						for (let i = 0; i < to.anyOf.length; i++)
+							to.anyOf[i] = { ...rest, ...to.anyOf[i] }
+					else if (to.oneOf)
+						for (let i = 0; i < to.oneOf.length; i++)
+							to.oneOf[i] = { ...rest, ...to.oneOf[i] }
+					else if (to.allOf)
+						for (let i = 0; i < to.allOf.length; i++)
+							to.allOf[i] = { ...rest, ...to.allOf[i] }
+					else if (to.not)
+						for (let i = 0; i < to.not.length; i++)
+							to.not[i] = { ...rest, ...to.not[i] }
+
+					properties[key] = { ...rest, ...to }
+					break
+
+				case 'Object':
+				case 'Union':
+					properties[key] = replaceSchemaType(value, options)
+					break
+
+				default:
+					if (value.anyOf || value.oneOf || value.allOf || value.not)
+						properties[key] = replaceSchemaType(value, options)
+					break
+			}
+		}
+
+	return schema
 }
 
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
@@ -242,7 +352,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		models = {},
 		dynamic = false,
 		normalize = false,
-		additionalProperties = false,
+		additionalProperties = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
@@ -253,7 +363,13 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (!s) return undefined as any
 	if (typeof s === 'string' && !(s in models)) return undefined as any
 
-	const schema: TSchema = typeof s === 'string' ? models[s] : s
+	const schema: TSchema = replaceSchemaType(
+		typeof s === 'string' ? models[s] : s,
+		{
+			from: t.Number(),
+			to: () => t.Numeric()
+		}
+	)
 
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
@@ -269,7 +385,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			code: '',
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => ''
+			Code: () => '',
+			Clean: cleaner
 		} as unknown as TypeCheck<TSchema>
 
 		if (normalize && schema.additionalProperties === false)
@@ -285,6 +402,31 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			if (validator?.schema?.config)
 				// @ts-ignore
 				delete validator.schema.config
+		}
+
+		// @ts-ignore
+		validator.parse = (v) => {
+			try {
+				return validator.Decode(v)
+			} catch (error) {
+				throw [...validator.Errors(v)].map(mapValueError)
+			}
+		}
+
+		// @ts-ignore
+		validator.safeParse = (v) => {
+			try {
+				return { success: true, data: validator.Decode(v), error: null }
+			} catch (error) {
+				const errors = [...compiled.Errors(v)].map(mapValueError)
+
+				return {
+					success: false,
+					data: null,
+					error: errors[0]?.summary,
+					errors
+				}
+			}
 		}
 
 		return validator as any
@@ -306,6 +448,31 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			delete compiled.schema.config
 	}
 
+	// @ts-ignore
+	compiled.parse = (v) => {
+		try {
+			return compiled.Decode(v)
+		} catch (error) {
+			throw [...compiled.Errors(v)].map(mapValueError)
+		}
+	}
+
+	// @ts-ignore
+	compiled.safeParse = (v) => {
+		try {
+			return { success: true, data: compiled.Decode(v), error: null }
+		} catch (error) {
+			const errors = [...compiled.Errors(v)].map(mapValueError)
+
+			return {
+				success: false,
+				data: null,
+				error: errors[0]?.summary,
+				errors
+			}
+		}
+	}
+
 	return compiled as any
 }
 
@@ -315,7 +482,7 @@ export const getResponseSchemaValidator = (
 		models = {},
 		dynamic = false,
 		normalize = false,
-		additionalProperties = false,
+		additionalProperties = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
@@ -329,6 +496,11 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
+		schema = replaceSchemaType(schema, {
+			from: t.Number(),
+			to: () => t.Numeric()
+		})
+
 		// eslint-disable-next-line sonarjs/no-identical-functions
 		// Sonar being delulu, schema is not identical
 		const cleaner = (value: unknown) => Value.Clean(schema, value)
@@ -516,10 +688,10 @@ export const mergeLifeCycle = (
 			a.mapResponse,
 			injectChecksum(b?.mapResponse)
 		) as HookContainer<MapResponse<any, any>>[],
-		onResponse: mergeObjectArray(
-			a.onResponse,
-			injectChecksum(b?.onResponse)
-		) as HookContainer<VoidHandler<any, any>>[],
+		afterResponse: mergeObjectArray(
+			a.afterResponse,
+			injectChecksum(b?.afterResponse)
+		) as HookContainer<AfterResponseHandler<any, any>>[],
 		// Already merged on Elysia._use, also logic is more complicated, can't directly merge
 		trace: a.trace,
 		error: mergeObjectArray(
@@ -594,9 +766,9 @@ export const filterGlobalHook = (
 		transform: filterGlobal(hook?.transform),
 		beforeHandle: filterGlobal(hook?.beforeHandle),
 		afterHandle: filterGlobal(hook?.afterHandle),
-		onResponse: filterGlobal(hook?.onResponse),
-		error: filterGlobal(hook?.error),
-		mapResponse: filterGlobal(hook?.mapResponse)
+		mapResponse: filterGlobal(hook?.mapResponse),
+		afterResponse: filterGlobal(hook?.afterResponse),
+		error: filterGlobal(hook?.error)
 	} as LocalHook<any, any, any, any, any, any, any>
 }
 
@@ -821,19 +993,33 @@ export const createMacroManager =
 		}
 	}
 
-export const isNumericString = (message: string): boolean => {
-	if (message.length < 16)
-		return message.trim().length !== 0 && !Number.isNaN(Number(message))
+const parseNumericString = (message: string | number): number | null => {
+	if (typeof message === 'number') return message
+
+	if (message.length < 16) {
+		if (message.trim().length === 0) return null
+
+		const length = Number(message)
+		if (Number.isNaN(length)) return null
+
+		return length
+	}
 
 	// if 16 digit but less then 9,007,199,254,740,991 then can be parsed
 	if (message.length === 16) {
-		const numVal = Number(message)
-		if (numVal.toString() === message)
-			return message.trim().length !== 0 && !Number.isNaN(numVal)
+		if (message.trim().length === 0) return null
+
+		const number = Number(message)
+		if (Number.isNaN(number) || number.toString() !== message) return null
+
+		return number
 	}
 
-	return false
+	return null
 }
+
+export const isNumericString = (message: string | number): boolean =>
+	parseNumericString(message) !== null
 
 export class PromiseGroup implements PromiseLike<void> {
 	root: Promise<any> | null = null
@@ -915,8 +1101,8 @@ export const localHookToLifeCycleStore = (
 		transform: fnToContainer(a?.transform),
 		beforeHandle: fnToContainer(a?.beforeHandle),
 		afterHandle: fnToContainer(a?.afterHandle),
-		onResponse: fnToContainer(a?.onResponse),
 		mapResponse: fnToContainer(a?.mapResponse),
+		afterResponse: fnToContainer(a?.afterResponse),
 		trace: fnToContainer(a?.trace),
 		error: fnToContainer(a?.error),
 		stop: fnToContainer(a?.stop)
@@ -934,7 +1120,7 @@ export const lifeCycleToFn = (
 		transform: a.transform?.map((x) => x.fn),
 		beforeHandle: a.beforeHandle?.map((x) => x.fn),
 		afterHandle: a.afterHandle?.map((x) => x.fn),
-		onResponse: a.onResponse?.map((x) => x.fn),
+		afterResponse: a.afterResponse?.map((x) => x.fn),
 		mapResponse: a.mapResponse?.map((x) => x.fn),
 		trace: a.trace?.map((x) => x.fn),
 		error: a.error?.map((x) => x.fn),
@@ -942,34 +1128,13 @@ export const lifeCycleToFn = (
 	}
 }
 
-export const cloneInference = (inference: {
-	event: Sucrose.Inference
-	trace: Sucrose.TraceInference
-}): {
-	event: Sucrose.Inference
-	trace: Sucrose.TraceInference
-} => ({
-	event: {
-		body: inference.event.body,
-		cookie: inference.event.cookie,
-		headers: inference.event.headers,
-		queries: [...inference.event.queries],
-		query: inference.event.query,
-		set: inference.event.set,
-		unknownQueries: inference.event.unknownQueries
-	},
-	trace: {
-		request: inference.trace.request,
-		parse: inference.trace.parse,
-		transform: inference.trace.transform,
-		handle: inference.trace.handle,
-		beforeHandle: inference.trace.beforeHandle,
-		afterHandle: inference.trace.afterHandle,
-		error: inference.trace.error,
-		context: inference.trace.context,
-		store: inference.trace.store,
-		set: inference.trace.set
-	}
+export const cloneInference = (inference: Sucrose.Inference) => ({
+	body: inference.body,
+	cookie: inference.cookie,
+	headers: inference.headers,
+	query: inference.query,
+	set: inference.set,
+	server: inference.server
 })
 
 /**
@@ -990,6 +1155,9 @@ export type ELYSIA_FORM_DATA = typeof ELYSIA_FORM_DATA
 type ElysiaFormData<T extends Record<string | number, unknown>> = FormData & {
 	[ELYSIA_FORM_DATA]: Replace<T, BunFile, File>
 }
+
+export const ELYSIA_REQUEST_ID = Symbol('ElysiaRequestId')
+export type ELYSIA_REQUEST_ID = typeof ELYSIA_REQUEST_ID
 
 export const form = <const T extends Record<string | number, unknown>>(
 	items: T
@@ -1014,3 +1182,5 @@ export const form = <const T extends Record<string | number, unknown>>(
 
 	return formData as any
 }
+
+export const randomId = () => crypto.getRandomValues(new Uint32Array(1))[0]

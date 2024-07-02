@@ -5,15 +5,19 @@ import type { BunFile, Serve, Server, WebSocketHandler } from 'bun'
 import type {
 	TSchema,
 	TObject,
+	Static,
+	TAnySchema,
+	TNull,
+	TUndefined,
 	StaticDecode,
-	TAnySchema
+	OptionalKind
 } from '@sinclair/typebox'
-import type { TypeCheck } from '@sinclair/typebox/compiler'
+import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
-import type { EventEmitter } from 'eventemitter3'
 
 import type { CookieOptions } from './cookies'
+import type { TraceHandler } from './trace'
 import type { Context, ErrorContext, PreContext } from './context'
 import type {
 	ELYSIA_RESPONSE,
@@ -23,6 +27,7 @@ import type {
 	ParseError,
 	ValidationError
 } from './error'
+import { ElysiaTypeOptions } from './type-system'
 
 type PartialServe = Partial<Serve>
 
@@ -30,13 +35,48 @@ export type ElysiaConfig<
 	Prefix extends string | undefined,
 	Scoped extends boolean | undefined
 > = {
+	/**
+	 * Path prefix of the instance
+	 *
+	 * @default '''
+	 */
 	prefix?: Prefix
+	/**
+	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
+	 *
+	 * @default false
+	 */
 	scoped?: Scoped
+	/**
+	 * Name of the instance for debugging, and plugin deduplication purpose
+	 */
 	name?: string
+	/**
+	 * Seed for generating checksum for plugin deduplication
+	 * 
+	 * @see https://elysiajs.com/essential/plugin.html#plugin-deduplication
+	 */
 	seed?: unknown
+	/**
+	 * Bun serve
+	 *
+	 * @see https://bun.sh/docs/api/http
+	 */
 	serve?: PartialServe
-	tags?: DocumentDecoration['tags']
+	/**
+	 * OpenAPI documentation (use in Swagger)
+	 *
+	 * @see https://swagger.io/specification/
+	 */
 	detail?: DocumentDecoration
+	/**
+	 * OpenAPI tags
+	 *
+	 * current instance' routes with tags
+	 *
+	 * @see https://swagger.io/specification/#tag-object
+	 */
+	tags?: DocumentDecoration['tags']
 	/**
 	 * Warm up Elysia before starting the server
 	 *
@@ -67,14 +107,6 @@ export type ElysiaConfig<
 				schema?: boolean
 		  }
 	/**
-	 * Disable `new Error` thrown marked as Error on Bun 0.6
-	 */
-	forceErrorEncapsulation?: boolean
-	/**
-	 * Disable sucrose dynamic query inference
-	 */
-	forceDynamicQuery?: boolean
-	/**
 	 * Disable Ahead of Time compliation
 	 *
 	 * Reduced performance but faster startup time
@@ -87,9 +119,9 @@ export type ElysiaConfig<
 	 */
 	strictPath?: boolean
 	/**
-	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
+	 * Override websocket configuration
 	 *
-	 * @default false
+	 * @see https://bun.sh/docs/api/websockets
 	 */
 	websocket?: Omit<
 		WebSocketHandler<any>,
@@ -113,7 +145,7 @@ export type ElysiaConfig<
 	 * If enabled, the handlers will run a [clean](https://github.com/sinclairzx81/typebox?tab=readme-ov-file#clean) on incoming and outgoing bodies instead of failing directly.
 	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.
 	 * This has no effect when the schemas allow additional properties.
-	 * Since this uses dynamic schema it may have an impact on performance. Use with caution.
+	 * Since this uses dynamic schema it may have an impact on performance.
 	 *
 	 * @default false
 	 */
@@ -153,17 +185,49 @@ export type NeverKey<T> = {
 	[K in keyof T]: never
 } & {}
 
-export type Reconcile<A extends Object, B extends Object> = {
-	[key in keyof A as key extends keyof B ? never : key]: A[key]
-} extends infer Collision
+type IsBothObject<A, B> = A extends Record<string | number | symbol, unknown>
+	? B extends Record<string | number | symbol, unknown>
+		? true
+		: false
+	: false
+
+export type Reconcile<
+	A extends Object,
+	B extends Object,
+	Override extends boolean = false
+> = Override extends true
+	? {
+			[key in keyof A as key extends keyof B ? never : key]: A[key]
+	  } extends infer Collision
+		? {} extends Collision
+			? {
+					// @ts-ignore trust me bro
+					[key in keyof B]: IsBothObject<A[key], B[key]> extends true
+						? // @ts-ignore trust me bro
+						  Reconcile<A[key], B[key], Override>
+						: B[key]
+			  }
+			: Prettify<
+					Collision & {
+						[key in keyof B]: B[key]
+					}
+			  >
+		: never
+	: {
+			[key in keyof B as key extends keyof A ? never : key]: B[key]
+	  } extends infer Collision
 	? {} extends Collision
 		? {
-				[key in keyof B]: B[key]
+				// @ts-ignore trust me bro
+				[key in keyof A]: IsBothObject<A[key], B[key]> extends true
+					? // @ts-ignore trust me bro
+					  Reconcile<A[key], B[key], Override>
+					: A[key]
 		  }
 		: Prettify<
-				Collision & {
-					[key in keyof B]: B[key]
-				}
+				{
+					[key in keyof A]: A[key]
+				} & Collision
 		  >
 	: never
 
@@ -190,6 +254,7 @@ export type RouteBase = Record<string, unknown>
 export interface MetadataBase {
 	schema: RouteSchema
 	macro: BaseMacro
+	macroFn: BaseMacroFn
 }
 
 export interface RouteSchema {
@@ -201,13 +266,34 @@ export interface RouteSchema {
 	response?: unknown
 }
 
+type OptionalField = {
+	[OptionalKind]: 'Optional'
+}
+
 export type UnwrapSchema<
 	Schema extends TSchema | string | undefined,
 	Definitions extends Record<string, unknown> = {}
 > = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
-	? StaticDecode<NonNullable<Schema>>
+	? Schema extends OptionalField
+		? Prettify<Partial<Static<Schema>>>
+		: StaticDecode<Schema>
+	: Schema extends string
+	? Definitions extends Record<Schema, infer NamedSchema>
+		? NamedSchema
+		: Definitions
+	: unknown
+
+export type UnwrapBodySchema<
+	Schema extends TSchema | string | undefined,
+	Definitions extends Record<string, unknown> = {}
+> = undefined extends Schema
+	? unknown
+	: Schema extends TSchema
+	? Schema extends OptionalField
+		? Prettify<Partial<Static<Schema>>> | null
+		: StaticDecode<Schema>
 	: Schema extends string
 	? Definitions extends Record<Schema, infer NamedSchema>
 		? NamedSchema
@@ -231,7 +317,7 @@ export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['type'] = {}
 > {
-	body: UnwrapSchema<Schema['body'], Definitions>
+	body: UnwrapBodySchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<Schema['headers'], Definitions>
 	query: UnwrapSchema<Schema['query'], Definitions>
 	params: UnwrapSchema<Schema['params'], Definitions>
@@ -254,7 +340,7 @@ export interface UnwrapGroupGuardRoute<
 	in out Definitions extends Record<string, unknown> = {},
 	Path extends string = ''
 > {
-	body: UnwrapSchema<Schema['body'], Definitions>
+	body: UnwrapBodySchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
 		Schema['headers'],
 		Definitions
@@ -296,7 +382,7 @@ export interface UnwrapGroupGuardRoute<
 export type HookContainer<T extends Function = Function> = {
 	checksum?: number
 	scope?: LifeCycleType
-	subType?: 'derive' | 'resolve' | (string & {})
+	subType?: 'derive' | 'resolve' | 'mapDerive' | 'mapResolve' | (string & {})
 	fn: T
 }
 
@@ -309,7 +395,7 @@ export interface LifeCycleStore {
 	beforeHandle: HookContainer<OptionalHandler<any, any>>[]
 	afterHandle: HookContainer<AfterHandler<any, any>>[]
 	mapResponse: HookContainer<MapResponse<any, any>>[]
-	onResponse: HookContainer<VoidHandler<any, any>>[]
+	afterResponse: HookContainer<AfterResponseHandler<any, any>>[]
 	trace: HookContainer<TraceHandler<any, any>>[]
 	error: HookContainer<ErrorHandler<any, any, any>>[]
 	stop: HookContainer<GracefulHandler<any>>[]
@@ -380,10 +466,10 @@ export type HTTPMethod =
 
 export interface InputSchema<Name extends string = string> {
 	body?: TSchema | Name
-	headers?: TObject | Name
-	query?: TObject | Name
-	params?: TObject | Name
-	cookie?: TObject | Name
+	headers?: TObject | TNull | TUndefined | Name
+	query?: TObject | TNull | TUndefined | Name
+	params?: TObject | TNull | TUndefined | Name
+	cookie?: TObject | TNull | TUndefined | Name
 	response?:
 		| TSchema
 		| Record<number, TSchema>
@@ -452,10 +538,16 @@ export type InlineHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string = '',
+	MacroContext = {}
 > =
 	| ((
-			context: Context<Route, Singleton, Path>
+			context: MacroContext extends Record<
+				string | number | symbol,
+				unknown
+			>
+				? Prettify<MacroContext & Context<Route, Singleton, Path>>
+				: Context<Route, Singleton, Path>
 	  ) => Route['response'] extends SuccessfulResponse
 			?
 					| Response
@@ -568,82 +660,6 @@ export type TransformHandler<
 	): MaybePromise<void>
 }
 
-export type TraceEvent =
-	| 'request'
-	| 'parse'
-	| 'transform'
-	| 'beforeHandle'
-	| 'afterHandle'
-	| 'error'
-	| 'response' extends infer Events extends string
-	? Events | `${Events}.unit` | 'handle' | 'exit'
-	: never
-
-export type TraceStream = {
-	id: number
-	event: TraceEvent
-	type: 'begin' | 'end'
-	time: number
-	name?: string
-	unit?: number
-}
-
-export type TraceReporter = EventEmitter<
-	{
-		[res in `res${number}.${number}`]: undefined
-	} & {
-		event(stream: TraceStream): MaybePromise<void>
-	}
->
-
-export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
-	Type extends 'begin'
-		? Prettify<{
-				name: string
-				time: number
-				skip: boolean
-				end: Promise<TraceProcess<'end'>>
-				children: Promise<TraceProcess<'begin'>>[]
-		  }>
-		: number
-
-export type TraceHandler<
-	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
-> = {
-	(
-		lifecycle: Prettify<
-			{
-				context: Context<Route, Singleton>
-				set: Context['set']
-				id: number
-				time: number
-			} & {
-				[x in
-					| 'request'
-					| 'parse'
-					| 'transform'
-					| 'beforeHandle'
-					| 'handle'
-					| 'afterHandle'
-					| 'error'
-					| 'response']: Promise<TraceProcess<'begin'>>
-			} & {
-				store: Singleton['store']
-			}
-		>
-	): MaybePromise<void>
-}
-
-export type TraceListener = EventEmitter<{
-	[event in TraceEvent | 'all']: (trace: TraceProcess) => MaybePromise<void>
-}>
-
 export type BodyHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -685,6 +701,22 @@ export type PreHandler<
 		resolve: {}
 	}
 > = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
+
+export type AfterResponseHandler<
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	}
+> = (
+	context: Prettify<
+		Context<Route, Singleton> & {
+			response: Route['response']
+		}
+	>
+) => MaybePromise<void>
 
 export type GracefulHandler<
 	in Instance extends Elysia<any, any, any, any, any, any, any, any>
@@ -841,13 +873,13 @@ export type LocalHook<
 		 */
 		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 		/**
+		 * Execute after response is sent
+		 */
+		afterResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		/**
 		 * Catch error
 		 */
 		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-		/**
-		 * Custom body parser
-		 */
-		onResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 		tags?: DocumentDecoration['tags']
 	}
 
@@ -915,10 +947,11 @@ export type Checksum = {
 
 export type BaseMacro = Record<
 	string,
-	Record<string, unknown> | ((...a: any) => unknown)
+	string | number | boolean | Object | undefined | null
 >
+export type BaseMacroFn = Record<string, (...a: any) => unknown>
 
-export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
+export type MacroToProperty<in out T extends BaseMacroFn> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
 			? Params | undefined
@@ -970,16 +1003,18 @@ export interface MacroManager<
 		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 
-	onResponse(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
-	onResponse(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-	): unknown
-
 	mapResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
 	mapResponse(
 		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
 		fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
+	): unknown
+
+	onAfterResponse(
+		fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+	): unknown
+	onAfterResponse(
+		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 	): unknown
 
 	events: {
@@ -1056,6 +1091,7 @@ export type MergeElysiaInstances<
 	Metadata extends MetadataBase = {
 		schema: {}
 		macro: {}
+		macroFn: {}
 	},
 	Routes extends RouteBase = {}
 > = Instances extends [
@@ -1100,6 +1136,7 @@ export type MergeElysiaInstances<
 			{
 				schema: Prettify<Metadata['schema']>
 				macro: Prettify<Metadata['macro']>
+				macroFn: Prettify<Metadata['macroFn']>
 			},
 			Routes
 	  >
@@ -1136,3 +1173,216 @@ export type InferHandler<
 	},
 	Path
 >
+
+export interface ModelValidatorError extends ValueError {
+	summary: string
+}
+
+// @ts-ignore trust me bro
+export interface ModelValidator<T> extends TypeCheck<T> {
+	parse(a: T): T
+	safeParse(a: T):
+		| { success: true; data: T; error: null }
+		| {
+				success: true
+				data: null
+				error: string
+				errors: ModelValidatorError[]
+		  }
+}
+
+export type UnionToIntersect<U> = (
+	U extends unknown ? (arg: U) => 0 : never
+) extends (arg: infer I) => 0
+	? I
+	: never
+
+export type ResolveMacroContext<
+	Macro extends BaseMacro,
+	MacroFn extends BaseMacroFn
+> = UnionToIntersect<
+	{
+		[K in keyof Macro]-?: undefined extends Macro[K]
+			? never
+			: K extends keyof MacroFn
+			? ReturnType<MacroFn[K]> extends infer A extends Record<
+					string | number | symbol,
+					unknown
+			  >
+				? A
+				: never
+			: never
+	}[keyof Macro]
+>
+
+export type ContextAppendType = 'append' | 'override'
+
+// type GenerateArray<
+// 	I extends number = 0,
+// 	Arr extends 1[] = []
+// > = Arr['length'] extends I ? Arr : GenerateArray<I, [...Arr, 1]>
+
+// // Exclude type without slash
+// type HTTPAcceptFileType = Prettify<
+// 	ElysiaTypeOptions.StrictFileType extends infer A
+// 		? A extends `${string}/${string}`
+// 			? A
+// 			: never
+// 		: never
+// >
+
+// type PointOneToOne = 0.1 | 0.2 | 0.3 | 0.4 | 0.5 | 0.6 | 0.7 | 0.8 | 0.9 | 1
+
+// type HTTPAccept<
+// 	I extends number = 1,
+// 	Arr extends 1[] = GenerateArray<I>,
+// 	Carry extends string = ''
+// > = Arr['length'] extends 0
+// 	? Carry
+// 	: HTTPAccept<
+// 			I,
+// 			Arr extends [infer _, ...infer Rest] ? Rest : [],
+// 			| Carry
+// 			| `${Carry extends '' ? '' : `${Carry}, `}${HTTPAcceptFileType}${
+// 					| `;q=${PointOneToOne}`
+// 					| ''}`
+// 	  >
+
+// const header: HTTPAccept | (string & {}) = ''
+
+export type HTTPHeaders = Record<string, string> & {
+	// Authentication
+	'www-authenticate'?: string
+	authorization?: string
+	'proxy-aauthenticate'?: string
+	'proxy-authorization'?: string
+
+	// Caching
+	age?: string
+	'cache-ctonrol'?: string
+	'clear-site-data'?: string
+	expires?: string
+	'no-vary-search'?: string
+	pragma?: string
+
+	// Conditionals
+	'last-modified'?: string
+	etag?: string
+	'if-match'?: string
+	'if-none-match'?: string
+	'if-modified-since'?: string
+	'if-unmodified-since'?: string
+	vary?: string
+
+	// Connection management
+	connection?: string
+	'keep-alive'?: string
+
+	// Content negotiation
+	accept?: string
+	'accept-encoding'?: string
+	'accept-language'?: string
+
+	// Controls
+	expect?: string
+	'max-forwards'?: string
+
+	// Cokies
+	cookie?: string
+	'set-cookie'?: string | string[]
+
+	// CORS
+	'access-control-allow-origin'?: string
+	'access-control-allow-credentials'?: string
+	'access-control-allow-headers'?: string
+	'access-control-allow-methods'?: string
+	'access-control-expose-headers'?: string
+	'access-control-max-age'?: string
+	'access-control-request-headers'?: string
+	'access-control-request-method'?: string
+	origin?: string
+	'timing-allow-origin'?: string
+
+	// Downloads
+	'content-disposition'?: string
+
+	// Message body information
+	'content-length'?: string
+	'content-type'?: string
+	'content-encoding'?: string
+	'content-language'?: string
+	'content-location'?: string
+
+	// Proxies
+	forwarded?: string
+	via?: string
+
+	// Redirects
+	location?: string
+	refresh?: string
+
+	// Request context
+	// from?: string
+	// host?: string
+	// referer?: string
+	// 'user-agent'?: string
+
+	// Response context
+	allow?: string
+	server?: 'Elysia' | (string & {})
+
+	// Range requests
+	'accept-ranges'?: string
+	range?: string
+	'if-range'?: string
+	'content-range'?: string
+
+	// Security
+	'content-security-policy'?: string
+	'content-security-policy-report-only'?: string
+	'cross-origin-embedder-policy'?: string
+	'cross-origin-opener-policy'?: string
+	'cross-origin-resource-policy'?: string
+	'expect-ct'?: string
+	'permission-policy'?: string
+	'strict-transport-security'?: string
+	'upgrade-insecure-requests'?: string
+	'x-content-type-options'?: string
+	'x-frame-options'?: string
+	'x-xss-protection'?: string
+
+	// Server-sent events
+	'last-event-id'?: string
+	'ping-from'?: string
+	'ping-to'?: string
+	'report-to'?: string
+
+	// Transfer coding
+	te?: string
+	trailer?: string
+	'transfer-encoding'?: string
+
+	// Other
+	'alt-svg'?: string
+	'alt-used'?: string
+	date?: string
+	dnt?: string
+	'early-data'?: string
+	'large-allocation'?: string
+	link?: string
+	'retry-after'?: string
+	'service-worker-allowed'?: string
+	'source-map'?: string
+	upgrade?: string
+
+	// Non-standard
+	'x-dns-prefetch-control'?: string
+	'x-forwarded-for'?: string
+	'x-forwarded-host'?: string
+	'x-forwarded-proto'?: string
+	'x-powered-by'?: 'Elysia' | (string & {})
+	'x-request-id'?: string
+	'x-requested-with'?: string
+	'x-robots-tag'?: string
+	'x-ua-compatible'?: string
+}

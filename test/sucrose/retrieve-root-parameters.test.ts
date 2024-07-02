@@ -17,7 +17,7 @@ describe('retrieve root parameter', () => {
 	it('remove brackets and their contents when they are at the root level', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootParamters(parameter)
-		expect(result).toEqual('hello elysia')
+		expect(result).toEqual('{ hello elysia }')
 	})
 
 	it('return an empty string when given only brackets', () => {
@@ -35,36 +35,36 @@ describe('retrieve root parameter', () => {
 	it('return even if bracket is unbalanced', () => {
 		const parameter = '({ hello: { world: { a } })'
 		const result = retrieveRootParamters(parameter)
-		expect(result).toEqual('hello')
+		expect(result).toEqual('{ hello }')
 	})
 
 	it('return the root parameters when given a string with spaces between brackets', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootParamters(parameter)
-		expect(result).toEqual('hello elysia')
+		expect(result).toEqual('{ hello elysia }')
 	})
 
 	it('return the root parameters when given a string with spaces between brackets and curly braces', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootParamters(parameter)
-		expect(result).toEqual('hello elysia')
+		expect(result).toEqual('{ hello elysia }')
 	})
 
 	it('return the root parameters when given a string with spaces between brackets and parentheses', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootParamters(parameter)
-		expect(result).toEqual('hello elysia')
+		expect(result).toEqual('{ hello elysia }')
 	})
 
 	it('return the root parameters when given a string with spaces between brackets, curly braces, and parentheses', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootParamters(parameter)
-		expect(result).toEqual('hello elysia')
+		expect(result).toEqual('{ hello elysia }')
 	})
 
 	it('return the root parameters when given a string with spaces between brackets, curly braces, parentheses, and other characters', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootParamters(parameter)
-		expect(result).toEqual('hello elysia')
+		expect(result).toEqual('{ hello elysia }')
 	})
 })

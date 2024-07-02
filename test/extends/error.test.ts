@@ -82,7 +82,7 @@ describe('Error', () => {
 	it('validation error should be application/json', async () => {
 		// @ts-expect-error
 		const app = new Elysia().get('/', () => '1', {
-			response: t.Number()
+			response: t.Null()
 		})
 
 		const response = await app.handle(req('/'))

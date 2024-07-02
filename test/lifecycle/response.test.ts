@@ -3,10 +3,10 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-describe('On Response', () => {
+describe('On After Response', () => {
 	it('inherits set if Response is return', async () => {
 		const app = new Elysia()
-			.onResponse(({ set }) => {
+			.onAfterResponse(({ set }) => {
 				expect(set.status).toBe(401)
 			})
 			.onError(() => {
@@ -25,10 +25,10 @@ describe('On Response', () => {
 		let order = <string[]>[]
 
 		const app = new Elysia()
-			.onResponse(() => {
+			.onAfterResponse(() => {
 				order.push('A')
 			})
-			.onResponse(() => {
+			.onAfterResponse(() => {
 				order.push('B')
 			})
 			.get('/', () => '')
@@ -59,7 +59,7 @@ describe('On Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onResponse({ as: 'global' }, ({ path }) => {
+			.onAfterResponse({ as: 'global' }, ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')
@@ -78,7 +78,7 @@ describe('On Response', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia()
-			.onResponse({ as: 'local' }, ({ path }) => {
+			.onAfterResponse({ as: 'local' }, ({ path }) => {
 				called.push(path)
 			})
 			.get('/inner', () => 'NOOP')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { Elysia } from '../../src'
+import { Elysia, type TraceProcess, type TraceEvent } from '../../src'
 import { req } from '../utils'
 
 describe('trace', () => {
@@ -44,24 +44,187 @@ describe('trace', () => {
 		expect(response.status).toBe(200)
 	})
 
-	// ! Fix me: uncomment when 1.0.0 is released
-	// it("don't block on handle when skip from beforeHandle", async () => {
-	// 	const app = new Elysia()
-	// 		.trace(async ({ beforeHandle, handle, afterHandle }) => {
-	// 			await beforeHandle
-	// 			await handle
-	// 			await afterHandle
-	// 		})
-	// 		.get('/', () => 'Hikari', {
-	// 			beforeHandle() {
-	// 				return 'Tairitsu'
-	// 			},
-	// 			afterHandle() {}
-	// 		})
+	it('call all trace', () => {
+		const called = <string[]>[]
 
-	// 	console.log(app.router.history[0].composed!.toString())
+		const detectEvent =
+			(event: TraceEvent) =>
+			({ onStop }: TraceProcess<'begin'>) => {
+				onStop(() => {
+					called.push(event)
+				})
+			}
 
-	// 	const res = await app.handle(req('/')).then((x) => x.text())
-	// 	expect(res).toBe('Tairitsu')
-	// })
+		const plugin = new Elysia().trace(
+			{ as: 'scoped' },
+			({
+				onRequest,
+				onParse,
+				onTransform,
+				onBeforeHandle,
+				onHandle,
+				onAfterHandle,
+				onMapResponse,
+				onAfterResponse
+			}) => {
+				onRequest(detectEvent('request'))
+				onParse(detectEvent('parse'))
+				onTransform(detectEvent('transform'))
+				onBeforeHandle(detectEvent('beforeHandle'))
+				onHandle(detectEvent('handle'))
+				onAfterHandle(detectEvent('afterHandle'))
+				onMapResponse(detectEvent('mapResponse'))
+				onAfterResponse(detectEvent('afterResponse'))
+
+				onAfterResponse(() => {
+					expect(called).toEqual([
+						'request',
+						'parse',
+						'transform',
+						'beforeHandle',
+						'handle',
+						'afterHandle',
+						'mapResponse',
+						'afterResponse'
+					])
+				})
+			}
+		)
+
+		const app = new Elysia().get('/', 'hi')
+	})
+
+	it("don't crash on composer", () => {
+		const called = <string[]>[]
+
+		const detectEvent =
+			(event: TraceEvent) =>
+			({ onStop }: TraceProcess<'begin'>) => {
+				onStop(() => {
+					called.push(event)
+				})
+			}
+
+		const plugin = new Elysia()
+			.onRequest(() => {})
+			.onTransform(() => {})
+			.onError(() => {})
+			.trace(
+				{ as: 'scoped' },
+				({
+					onRequest,
+					onParse,
+					onTransform,
+					onBeforeHandle,
+					onHandle,
+					onAfterHandle,
+					onMapResponse,
+					onAfterResponse
+				}) => {
+					onRequest(detectEvent('request'))
+					onParse(detectEvent('parse'))
+					onTransform(detectEvent('transform'))
+					onBeforeHandle(detectEvent('beforeHandle'))
+					onHandle(detectEvent('handle'))
+					onAfterHandle(detectEvent('afterHandle'))
+					onMapResponse(detectEvent('mapResponse'))
+					onAfterResponse(detectEvent('afterResponse'))
+
+					onAfterResponse(() => {
+						expect(called).toEqual([
+							'request',
+							'parse',
+							'transform',
+							'beforeHandle',
+							'handle',
+							'afterHandle',
+							'mapResponse',
+							'afterResponse'
+						])
+					})
+				}
+			)
+
+		const app = new Elysia().get('/', 'hi')
+	})
+
+	it('handle local scope', async () => {
+		let called = false
+
+		const plugin = new Elysia().trace(() => {
+			called = true
+		})
+
+		const parent = new Elysia().use(plugin)
+		const main = new Elysia().use(parent).get('/', () => 'h')
+
+		await main.handle(req('/'))
+		expect(called).toBe(false)
+
+		await parent.handle(req('/'))
+		expect(called).toBe(false)
+
+		await plugin.handle(req('/'))
+		expect(called).toBe(true)
+	})
+
+	it('handle scoped scope', async () => {
+		let called = false
+
+		const plugin = new Elysia().trace({ as: 'scoped' }, () => {
+			called = true
+		})
+
+		const parent = new Elysia().use(plugin)
+		const main = new Elysia().use(parent).get('/', () => 'h')
+
+		await main.handle(req('/'))
+		expect(called).toBe(false)
+
+		await parent.handle(req('/'))
+		expect(called).toBe(true)
+
+		await plugin.handle(req('/'))
+		expect(called).toBe(true)
+	})
+
+	it('handle global scope', async () => {
+		let called = false
+
+		const plugin = new Elysia().trace({ as: 'global' }, () => {
+			called = true
+		})
+
+		const parent = new Elysia().use(plugin)
+		const main = new Elysia().use(parent).get('/', () => 'h')
+
+		await main.handle(req('/'))
+		expect(called).toBe(true)
+
+		await parent.handle(req('/'))
+		expect(called).toBe(true)
+
+		await plugin.handle(req('/'))
+		expect(called).toBe(true)
+	})
+
+	it('handle propagate', async () => {
+		let called = false
+
+		const plugin = new Elysia().trace({ as: 'scoped' }, () => {
+			called = true
+		})
+
+		const parent = new Elysia().use(plugin).propagate()
+		const main = new Elysia().use(parent).get('/', () => 'h')
+
+		await main.handle(req('/'))
+		expect(called).toBe(true)
+
+		await parent.handle(req('/'))
+		expect(called).toBe(true)
+
+		await plugin.handle(req('/'))
+		expect(called).toBe(true)
+	})
 })

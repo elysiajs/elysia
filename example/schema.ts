@@ -59,9 +59,3 @@ const app = new Elysia()
 				})
 	)
 	.listen(3000)
-
-type A = (typeof app)['meta'][typeof SCHEMA]['/']
-type B = (typeof app)['meta'][typeof DEFS]
-type C = (typeof app)['meta'][typeof SCHEMA]['/query/:id']
-
-// const a = app.getModel('b')

@@ -2,7 +2,7 @@ import { Elysia } from '../src'
 
 type MaybeArray<T> = T | T[]
 
-const extension = new Elysia({ name: 'extension' }).extends(
+const extension = new Elysia({ name: 'extension' }).macro(
 	({ onBeforeHandle, events }) => ({
 		beforeBeforeHandle(fn: MaybeArray<() => unknown>) {
 			onBeforeHandle({ insert: 'before' }, fn)
@@ -14,10 +14,7 @@ const extension = new Elysia({ name: 'extension' }).extends(
 )
 
 const app = new Elysia().use(extension).get('/', () => 'a', {
-	beforeBeforeHandle: [
-		() => console.log(1),
-		() => console.log(2)
-	],
+	beforeBeforeHandle: [() => console.log(1), () => console.log(2)],
 	beforeHandle: () => console.log(3),
 	afterBeforeHandle: () => console.log(4)
 })
