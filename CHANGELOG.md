@@ -1,6 +1,7 @@
 # 1.0.27 - 2 Jul 2024
 Bug fix:
 - [#640](https://github.com/elysiajs/elysia/issues/640) Unable to access root level macros in plugins
+- [#606](https://github.com/elysiajs/elysia/issues/606) Object encoding in query parameters
 
 # 1.0.26 - 30 Jun 2024
 Bug fix:
