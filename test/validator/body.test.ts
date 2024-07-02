@@ -94,6 +94,7 @@ describe('Body Validator', () => {
 				age: t.Numeric()
 			})
 		})
+
 		const res = await app.handle(
 			post('/', {
 				name: 'sucrose',
@@ -107,6 +108,7 @@ describe('Body Validator', () => {
 			job: 'alchemist',
 			age: 16
 		})
+
 		expect(res.status).toBe(200)
 	})
 

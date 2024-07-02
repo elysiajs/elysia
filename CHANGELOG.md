@@ -1,3 +1,7 @@
+# 1.0.27 - 2 Jul 2024
+Bug fix:
+- [#640](https://github.com/elysiajs/elysia/issues/640) Unable to access root level macros in plugins
+
 # 1.0.26 - 30 Jun 2024
 Bug fix:
 - mapResponse is not called on beforeHandle, and afterHandle

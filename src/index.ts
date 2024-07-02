@@ -3203,6 +3203,9 @@ export default class Elysia<
 		this.state(plugin.singleton.store)
 		this.model(plugin.definitions.type)
 		this.error(plugin.definitions.error as any)
+		plugin.extender.macros = this.extender.macros.concat(
+			plugin.extender.macros
+		)
 
 		for (const { method, path, handler, hooks } of Object.values(
 			plugin.router.history

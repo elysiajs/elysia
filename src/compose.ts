@@ -638,25 +638,19 @@ export const composeHandler = ({
 				for (const key in c.query) {
 					const value = c.query[key]
 
-					if (Array.isArray(value) && value.length > 0) {
+					if (Array.isArray(value)) {
 						for (let i = 0; i < value.length; i++)
 							try {
 								value[i] = JSON.parse(value[i])
 							} catch {}
-
-						continue
-					}
-
-					if(typeof value === "string") {
+					} else if(typeof value === "string") {
 						const start = value.charCodeAt(0)
 						const end = value.charCodeAt(value.length - 1)
 
-						if(start === 91 && end === 93 || start === 123 && end === 125)
+						if((start === 91 && end === 93) || (start === 123 && end === 125))
 							try {
 								c.query[key] = JSON.parse(c.query[key])
 							} catch {}
-
-						continue
 					}
 				}
 			}`
@@ -667,13 +661,7 @@ export const composeHandler = ({
 				${destructured
 					.map(
 						(
-							{
-								key,
-								isArray,
-								isObject,
-								isNestedObjectArray,
-								anyOf
-							},
+							{ key, isArray, isObject, isNestedObjectArray },
 							index
 						) => {
 							const init = `${
@@ -699,7 +687,7 @@ export const composeHandler = ({
 										}
 
 										try {
-											a${index} = JSON.parse('[' + a${index} + ']')\n
+											a${index} = JSON.parse('[' + a${index} + ']')
 										} catch {}\n`
 										: `while (memory !== -1) {
 											const start = memory + ${key.length + 2}
@@ -713,7 +701,7 @@ export const composeHandler = ({
 										}\n`)
 								)
 
-							if (isObject || anyOf)
+							if (isObject)
 								return (
 									init +
 									`if (memory !== -1) {
@@ -731,15 +719,49 @@ export const composeHandler = ({
 									}`
 								)
 
+							// Might be union primitive and array
 							return (
 								init +
 								`if (memory !== -1) {
-									const start = memory + ${key.length + 2}
-									memory = url.indexOf('&', start)
+										const start = memory + ${key.length + 2}
+										memory = url.indexOf('&', start)
 
-									if(memory === -1) a${index} = decodeURIComponent(url.slice(start))
-									else a${index} = decodeURIComponent(url.slice(start, memory))
-								}`
+										if(memory === -1) a${index} = decodeURIComponent(url.slice(start))
+										else {
+											a${index} = decodeURIComponent(url.slice(start, memory))
+
+											let deepMemory = url.indexOf('&${key}=', memory)
+
+											if(deepMemory !== -1) {
+												a${index} = [a${index}]
+												let first = true
+
+												while(true) {
+													const start = deepMemory + ${key.length + 2}	
+													if(first)
+														first = false
+													else
+														deepMemory = url.indexOf('&', start)
+
+													let value
+													if(deepMemory === -1) value = decodeURIComponent(url.slice(start))
+													else value = decodeURIComponent(url.slice(start, deepMemory))
+
+													const vStart = value.charCodeAt(0)
+													const vEnd = value.charCodeAt(value.length - 1)
+
+													if((vStart === 91 && vEnd === 93) || (vStart === 123 && vEnd === 125))
+														try {
+															a${index}.push(JSON.parse(value))
+														} catch {
+														 	a${index}.push(value)
+														}
+
+													if(deepMemory === -1) break
+												}
+											}
+										}
+									}`
 							)
 						}
 					)
@@ -1776,36 +1798,47 @@ export const composeHandler = ({
 		const debugHooks = lifeCycleToFn(hooks)
 
 		console.log('[Compiler] failed to generate optimized handler')
-		console.log('Please report the following to SaltyAom privately as it may include sensitive information about your codebase:')
-		console.log("---")
+		console.log(
+			'Please report the following to SaltyAom privately as it may include sensitive information about your codebase:'
+		)
+		console.log('---')
 		console.log({
-			handler: typeof handler === "function" ? handler.toString() : handler,
+			handler:
+				typeof handler === 'function' ? handler.toString() : handler,
 			hooks: {
 				...debugHooks,
 				// @ts-expect-error
-				transform: debugHooks?.transform?.map?.(x => x.toString()),
+				transform: debugHooks?.transform?.map?.((x) => x.toString()),
 				// @ts-expect-error
-				resolve: debugHooks?.resolve?.map?.(x => x.toString()),
+				resolve: debugHooks?.resolve?.map?.((x) => x.toString()),
 				// @ts-expect-error
-				beforeHandle: debugHooks?.beforeHandle?.map?.(x => x.toString()),
+				beforeHandle: debugHooks?.beforeHandle?.map?.((x) =>
+					x.toString()
+				),
 				// @ts-expect-error
-				afterHandle: debugHooks?.afterHandle?.map?.(x => x.toString()),
+				afterHandle: debugHooks?.afterHandle?.map?.((x) =>
+					x.toString()
+				),
 				// @ts-expect-error
-				mapResponse: debugHooks?.mapResponse?.map?.(x => x.toString()),
+				mapResponse: debugHooks?.mapResponse?.map?.((x) =>
+					x.toString()
+				),
 				// @ts-expect-error
-				parse: debugHooks?.parse?.map?.(x => x.toString()),
+				parse: debugHooks?.parse?.map?.((x) => x.toString()),
 				// @ts-expect-error
-				error: debugHooks?.error?.map?.(x => x.toString()),
+				error: debugHooks?.error?.map?.((x) => x.toString()),
 				// @ts-expect-error
-				afterResponse: debugHooks?.afterResponse?.map?.(x => x.toString()),
+				afterResponse: debugHooks?.afterResponse?.map?.((x) =>
+					x.toString()
+				),
 				// @ts-expect-error
-				stop: debugHooks?.stop?.map?.(x => x.toString())
+				stop: debugHooks?.stop?.map?.((x) => x.toString())
 			},
 			validator,
 			// @ts-expect-error
-			definitions: app.definitions.type,
+			definitions: app.definitions.type
 		})
-		console.log("---")
+		console.log('---')
 
 		process.exit(1)
 	}

@@ -479,4 +479,28 @@ describe('Macro', () => {
 
 		expect(status).toBe(418)
 	})
+
+	it('inherits macro to plugin without type reference', () => {
+		const called = <string[]>[]
+
+		const plugin = new Elysia().get('/hello', () => 'hello', {
+			// @ts-expect-error missing type reference
+			hello: 'nagisa'
+		})
+
+		new Elysia()
+			.macro(() => {
+				return {
+					hello(a: string) {
+						called.push(a)
+					}
+				}
+			})
+			.use(plugin)
+			.get('/', () => 'a', {
+				hello: 'hifumi'
+			})
+
+		expect(called).toEqual(['nagisa', 'hifumi'])
+	})
 })
