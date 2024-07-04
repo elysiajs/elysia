@@ -329,7 +329,6 @@ describe('Query Validator', () => {
 					)
 				})
 			})
-			.compile()
 
 		const response = await app
 			.handle(
@@ -362,7 +361,6 @@ describe('Query Validator', () => {
 					})
 				)
 			})
-			.compile()
 
 		const response = await app
 			.handle(
@@ -470,16 +468,15 @@ describe('Query Validator', () => {
 		expect(response).toEqual({ keys: ['1', '2'] })
 	})
 
-	it('parse query object without schema', async () => {
-		const app = new Elysia().get('/', ({ query }) => query).compile()
+	it("don't parse query object without schema", async () => {
+		const app = new Elysia()
+			.get('/', ({ query: { role } }) => role)
 
 		const response = await app
 			.handle(req(`/?role=${JSON.stringify({ name: 'hello' })}`))
-			.then((x) => x.json())
+			.then((x) => x.text())
 
-		expect(response).toEqual({
-			role: { name: 'hello' }
-		})
+		expect(response).toBe(JSON.stringify({ name: 'hello' }))
 	})
 
 	it('parse union primitive and object', async () => {
@@ -524,7 +521,9 @@ describe('Query Validator', () => {
 			}
 		)
 
-		const value = await app.handle(req('/?isAdmin=true')).then((x) => x.text())
+		const value = await app
+			.handle(req('/?isAdmin=true'))
+			.then((x) => x.text())
 
 		expect(value).toBe('boolean')
 	})

@@ -646,25 +646,6 @@ export const composeHandler = ({
 				c.query = {}
 			} else {
 				c.query = parseQuery(c.url.slice(c.qi + 1))
-
-				for (const key in c.query) {
-					const value = c.query[key]
-
-					if (Array.isArray(value)) {
-						for (let i = 0; i < value.length; i++)
-							try {
-								value[i] = JSON.parse(value[i])
-							} catch {}
-					} else if(typeof value === "string") {
-						const start = value.charCodeAt(0)
-						const end = value.charCodeAt(value.length - 1)
-
-						if((start === 91 && end === 93) || (start === 123 && end === 125))
-							try {
-								c.query[key] = JSON.parse(c.query[key])
-							} catch {}
-					}
-				}
 			}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
@@ -1059,7 +1040,7 @@ export const composeHandler = ({
 				'Clean' in validator.headers &&
 				!hasAdditionalProperties(validator.headers as any)
 			)
-				fnLiteral += 'console.log(c.headers);c.headers = headers.Clean(c.headers);\n'
+				fnLiteral += 'c.headers = headers.Clean(c.headers);\n'
 
 			// @ts-ignore
 			if (hasProperty('default', validator.headers.schema))
@@ -1891,8 +1872,7 @@ export const composeGeneralHandler = (
 
 	ctx.params = route.params\n`
 
-	findDynamicRoute += `
-	if(route.store.handler) return route.store.handler(ctx)
+	findDynamicRoute += `if(route.store.handler) return route.store.handler(ctx)
 	return (route.store.handler = route.store.compile())(ctx)\n`
 
 	let switchMap = ``
@@ -1918,6 +1898,7 @@ export const composeGeneralHandler = (
 
 	const store = app.singleton.store
 	const staticRouter = app.router.static.http
+	const st = staticRouter.handlers
 	const wsRouter = app.router.ws
 	const router = app.router.http
 	const trace = app.event.trace
@@ -1929,7 +1910,6 @@ export const composeGeneralHandler = (
 			? `const onRequest = app.event.request.map(x => x.fn)`
 			: ''
 	}
-	${router.static.http.variables}
 	${
 		app.event.error.length
 			? ''
@@ -2052,7 +2032,7 @@ export const composeGeneralHandler = (
 			fnLiteral += `
 					case '${path}':
 						if(request.headers.get('upgrade') === 'websocket')
-							return st${index}(ctx)
+							return st[${index}](ctx)
 
 						break`
 		}
@@ -2271,10 +2251,3 @@ export const composeErrorHandler = (
 		ELYSIA_TRACE
 	})
 }
-
-export const jitRoute = (
-	index: number
-) => `if(stc${index}) return stc${index}(ctx)
-if(st${index}.compose) return (stc${index} = st${index}.compose())(ctx)
-
-return st${index}(ctx)`
