@@ -224,48 +224,48 @@ export const createDynamicHandler =
 			}
 
 			if (validator) {
-				if (validator.headers) {
+				if (validator.createHeaders?.()) {
 					const _header: Record<string, string> = {}
 					for (const key in request.headers)
 						_header[key] = request.headers.get(key)!
 
-					if (validator.headers.Check(_header) === false)
+					if (validator.headers!.Check(_header) === false)
 						throw new ValidationError(
 							'header',
-							validator.headers,
+							validator.headers!,
 							_header
 						)
 				}
 
-				if (validator.params?.Check(context.params) === false)
+				if (validator.createParams?.()?.Check(context.params) === false)
 					throw new ValidationError(
 						'params',
-						validator.params,
+						validator.params!,
 						context.params
 					)
 
-				if (validator.query?.Check(context.query) === false)
+				if (validator.createQuery?.()?.Check(context.query) === false)
 					throw new ValidationError(
 						'query',
-						validator.query,
+						validator.query!,
 						context.query
 					)
 
-				if (validator.cookie) {
+				if (validator.createCookie?.()) {
 					const cookieValue: Record<string, unknown> = {}
 					for (const [key, value] of Object.entries(context.cookie))
 						cookieValue[key] = value.value
 
-					if (validator.cookie?.Check(cookieValue) === false)
+					if (validator.cookie!.Check(cookieValue) === false)
 						throw new ValidationError(
 							'cookie',
-							validator.cookie,
+							validator.cookie!,
 							cookieValue
 						)
 				}
 
-				if (validator.body?.Check(body) === false)
-					throw new ValidationError('body', validator.body, body)
+				if (validator.createBody?.()?.Check(body) === false)
+					throw new ValidationError('body', validator.body!, body)
 			}
 
 			for (let i = 0; i < hooks.beforeHandle.length; i++) {
@@ -301,7 +301,7 @@ export const createDynamicHandler =
 			if (response instanceof Promise) response = await response
 
 			if (!hooks.afterHandle.length) {
-				const responseValidator = validator?.response?.[response.status]
+				const responseValidator = validator?.createResponse?.()?.[response.status]
 
 				if (responseValidator?.Check(response) === false)
 					throw new ValidationError(

@@ -53,7 +53,7 @@ export type ElysiaConfig<
 	name?: string
 	/**
 	 * Seed for generating checksum for plugin deduplication
-	 * 
+	 *
 	 * @see https://elysiajs.com/essential/plugin.html#plugin-deduplication
 	 */
 	seed?: unknown
@@ -883,11 +883,7 @@ export type LocalHook<
 		tags?: DocumentDecoration['tags']
 	}
 
-export type ComposedHandler = {
-	(context: Context): MaybePromise<Response>
-	compose(): Function
-	composed: Function
-}
+export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
 export interface InternalRoute {
 	method: HTTPMethod
@@ -898,6 +894,12 @@ export interface InternalRoute {
 }
 
 export type SchemaValidator = {
+    createBody?(): TypeCheck<any>
+    createHeaders?(): TypeCheck<any>
+	createQuery?(): TypeCheck<any>
+	createParams?(): TypeCheck<any>
+	createCookie?(): TypeCheck<any>
+	createResponse?(): Record<number, TypeCheck<any>>
 	body?: TypeCheck<any>
 	headers?: TypeCheck<any>
 	query?: TypeCheck<any>

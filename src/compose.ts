@@ -448,6 +448,13 @@ export const composeHandler = ({
 
 	if (inference.body) fnLiteral += `let isParsing = false\n`
 
+	validator.createBody?.()
+	validator.createQuery?.()
+	validator.createHeaders?.()
+	validator.createParams?.()
+	validator.createCookie?.()
+	validator.createResponse?.()
+
 	const hasQuery = inference.query || !!validator.query
 
 	const hasBody =
@@ -1884,21 +1891,8 @@ export const composeGeneralHandler = (
 
 	ctx.params = route.params\n`
 
-	const shouldPrecompile =
-		app.config.precompile === true ||
-		(typeof app.config.precompile === 'object' &&
-			app.config.precompile.compose === true)
-
-	if (!shouldPrecompile)
-		findDynamicRoute += `
-			if(route.store.composed)
-				return route.store.composed(ctx)
-
-			if(route.store.compose)
-				return (route.store.compose())(ctx)`
-	else findDynamicRoute += `return route.store(ctx)`
-
-	findDynamicRoute += '\n'
+	findDynamicRoute += `if(route.store.cache) return route.store.cache(ctx)
+	return (route.store.cache = route.store.handler)(ctx)\n`
 
 	let switchMap = ``
 	for (const [path, { code, all }] of Object.entries(router.static.http.map))
@@ -2070,7 +2064,10 @@ export const composeGeneralHandler = (
 						if(route) {
 							ctx.params = route.params
 
-							return route.store(ctx)
+							if(route.store.cache)
+							    return route.store.cache(ctx)
+
+							return (route.store.cache = route.store.handler)(ctx)
 						}
 					}
 

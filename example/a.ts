@@ -1,29 +1,9 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { post, req } from '../test/utils'
 
-const app = new Elysia({ precompile: true }).get(
-	'/',
-	({ headers: { isAdmin } }) => typeof isAdmin,
-	{
-		headers: t.Object({
-			isAdmin: t.String()
-		})
-	}
-)
+const app = new Elysia().get('/id/:id', 'a').listen(3000)
 
-const value = await app
-	.handle(
-		req('/', {
-			headers: {
-				isAdmin: 'true'
-			}
-		})
-	)
-	.then((x) => x.text())
+await app.handle(req('/id/123')).then((x) => x.text())
+const res = await app.handle(req('/id/123')).then((x) => x.text())
 
-// console.log(app.routes[0].composed?.toString())
-// console.log(value)
-
-// app.handle(new Request('http://localhost/id/123'))
-// 	.then((x) => x.text())
-// 	.then(console.log)
+console.log(res)
