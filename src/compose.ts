@@ -1891,8 +1891,9 @@ export const composeGeneralHandler = (
 
 	ctx.params = route.params\n`
 
-	findDynamicRoute += `if(route.store.cache) return route.store.cache(ctx)
-	return (route.store.cache = route.store.handler)(ctx)\n`
+	findDynamicRoute += `
+	if(route.store.handler) return route.store.handler(ctx)
+	return (route.store.handler = route.store.compile())(ctx)\n`
 
 	let switchMap = ``
 	for (const [path, { code, all }] of Object.entries(router.static.http.map))
@@ -2064,10 +2065,10 @@ export const composeGeneralHandler = (
 						if(route) {
 							ctx.params = route.params
 
-							if(route.store.cache)
-							    return route.store.cache(ctx)
+							if(route.store.handler)
+							    return route.store.handler(ctx)
 
-							return (route.store.cache = route.store.handler)(ctx)
+							return (route.store.handler = route.store.compile())(ctx)
 						}
 					}
 

@@ -237,12 +237,12 @@ export default class Elysia<
 
 	router = {
 		http: new Memoirist<{
-			cached?: ComposedHandler
-			handler: ComposedHandler
+			compile: Function
+			handler?: ComposedHandler
 		}>(),
 		ws: new Memoirist<{
-			cache?: ComposedHandler
-			handler: ComposedHandler
+			compile: Function
+			handler?: ComposedHandler
 		}>(),
 		// Use in non-AOT mode
 		dynamic: new Memoirist<DynamicHandler>(),
@@ -616,48 +616,23 @@ export default class Elysia<
 
 		const inference = cloneInference(this.inference)
 
-		const mainHandler = shouldPrecompile
-			? composeHandler({
-					app: this,
-					path,
-					method,
-					localHook: mergeHook(localHook),
-					hooks,
-					validator,
-					handler: handle,
-					allowMeta,
-					inference
-				})
-			: (((context: Context) => {
-					return (
-						composeHandler({
-							app: this,
-							path,
-							method,
-							localHook: mergeHook(localHook),
-							hooks,
-							validator,
-							handler: handle,
-							allowMeta,
-							inference
-						}) as any
-					)(context)
-				}) as ComposedHandler)
+        const compile = () => composeHandler({
+            app: this,
+            path,
+            method,
+            localHook: mergeHook(localHook),
+            hooks,
+            validator,
+            handler: handle,
+            allowMeta,
+            inference
+        })
 
-		// if (!shouldPrecompile)
-		// 	mainHandler.compose = () => {
-		// 		return (mainHandler.composed = composeHandler({
-		// 			app: this,
-		// 			path,
-		// 			method,
-		// 			localHook: mergeHook(localHook),
-		// 			hooks,
-		// 			validator,
-		// 			handler: handle,
-		// 			allowMeta,
-		// 			inference
-		// 		}) as any)
-		// 	}
+		const mainHandler = shouldPrecompile
+			? compile()
+			: (((context: Context) => {
+					return compile()(context)
+				}) as ComposedHandler)
 
 		let routeIndex = this.router.history.length
 
@@ -689,6 +664,11 @@ export default class Elysia<
 
 		const staticRouter = this.router.static.http
 
+		const handler = {
+			handler: shouldPrecompile ? mainHandler : undefined,
+			compile
+		}
+
 		if (method === '$INTERNALWS') {
 			const loose = this.config.strictPath
 				? undefined
@@ -705,9 +685,8 @@ export default class Elysia<
 				this.router.static.ws[path] = index
 				if (loose) this.router.static.ws[loose] = index
 			} else {
-				this.router.ws.add('ws', path, { handler: mainHandler })
-				if (loose)
-					this.router.ws.add('ws', loose, { handler: mainHandler })
+				this.router.ws.add('ws', path, handler)
+				if (loose) this.router.ws.add('ws', loose, handler)
 			}
 
 			return
@@ -755,7 +734,7 @@ export default class Elysia<
 							}`
 			}
 		} else {
-			this.router.http.add(method, path, { handler: mainHandler })
+			this.router.http.add(method, path, handler)
 
 			if (!this.config.strictPath)
 				this.router.http.add(
@@ -763,7 +742,7 @@ export default class Elysia<
 					path.endsWith('/')
 						? path.slice(0, path.length - 1)
 						: path + '/',
-					{ handler: mainHandler }
+					handler
 				)
 		}
 	}
