@@ -201,7 +201,7 @@ const composeValidationFactory = ({
 			c.set.status = ${name}[ELYSIA_RESPONSE]
 			${name} = ${name}.response
 		}
-		
+
 		const isResponse = ${name} instanceof Response\n\n`
 
 		code += `switch(c.set.status) {\n`
@@ -636,7 +636,7 @@ export const composeHandler = ({
 
 		if (!destructured.length) {
 			fnLiteral += `if(c.qi === -1) {
-				c.query = {} 
+				c.query = {}
 			} else {
 				c.query = parseQuery(c.url.slice(c.qi + 1))
 
@@ -681,7 +681,7 @@ export const composeHandler = ({
 										? `while (memory !== -1) {
 											const start = memory + ${key.length + 2}
 											memory = url.indexOf('&', start)
-				
+
 											if(a${index} === undefined)
 												a${index} = ''
 											else
@@ -697,7 +697,7 @@ export const composeHandler = ({
 										: `while (memory !== -1) {
 											const start = memory + ${key.length + 2}
 											memory = url.indexOf('&', start)
-				
+
 											if(a${index} === undefined)
 												a${index} = []
 
@@ -712,7 +712,7 @@ export const composeHandler = ({
 									`if (memory !== -1) {
 										const start = memory + ${key.length + 2}
 										memory = url.indexOf('&', start)
-		
+
 										if(memory === -1) a${index} = decodeURIComponent(url.slice(start))
 										else a${index} = decodeURIComponent(url.slice(start, memory))
 
@@ -742,7 +742,7 @@ export const composeHandler = ({
 												let first = true
 
 												while(true) {
-													const start = deepMemory + ${key.length + 2}	
+													const start = deepMemory + ${key.length + 2}
 													if(first)
 														first = false
 													else
@@ -1052,7 +1052,7 @@ export const composeHandler = ({
 				'Clean' in validator.headers &&
 				!hasAdditionalProperties(validator.headers as any)
 			)
-				fnLiteral += 'c.headers = headers.Clean(c.headers);\n'
+				fnLiteral += 'console.log(c.headers);c.headers = headers.Clean(c.headers);\n'
 
 			// @ts-ignore
 			if (hasProperty('default', validator.headers.schema))
@@ -2126,7 +2126,7 @@ export const composeErrorHandler = (
 		ELYSIA_RESPONSE,
 		ELYSIA_TRACE
 	} = inject
-	
+
 	const onMapResponse = []
 
 	for(let i = 0; i < _onMapResponse.length; i++)

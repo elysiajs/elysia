@@ -107,4 +107,30 @@ describe('Replace Schema Type', () => {
 			})
 		)
 	})
+
+	it('accept multiple replacement', async () => {
+		expect(
+			replaceSchemaType(
+				t.Object({
+					id: t.Number(),
+					isAdmin: t.Boolean()
+				}),
+				[
+					{
+						from: t.Number(),
+						to: () => t.Numeric()
+					},
+					{
+						from: t.Boolean(),
+						to: () => t.BooleanString()
+					}
+				]
+			)
+		).toMatchObject(
+			t.Object({
+				id: t.Numeric(),
+				isAdmin: t.BooleanString()
+			})
+		)
+	})
 })

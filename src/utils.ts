@@ -205,7 +205,7 @@ export const mergeHook = (
 		? {
 				...a,
 				...b
-		  }
+			}
 		: undefined
 
 	return {
@@ -249,12 +249,22 @@ export const mergeHook = (
 
 export const replaceSchemaType = (
 	schema: TSchema,
+	options: MaybeArray<{ from: TSchema; to(): TSchema }>
+) => {
+	if (!Array.isArray(options)) return _replaceSchemaType(schema, options)
+
+	for (const option of options) schema = _replaceSchemaType(schema, option)
+
+	return schema
+}
+
+const _replaceSchemaType = (
+	schema: TSchema,
 	options: { from: TSchema; to(): TSchema }
 ) => {
 	if (!schema) return schema
 
-	const { from, to } = options
-	const fromSymbol = from[Kind]
+	const fromSymbol = options.from[Kind]
 
 	if (schema.oneOf) {
 		for (let i = 0; i < schema.oneOf.length; i++)
@@ -352,24 +362,32 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		models = {},
 		dynamic = false,
 		normalize = false,
-		additionalProperties = false
+		additionalProperties = false,
+		coerce = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: boolean
+		coerce?: boolean
 	} = {}
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
 	if (typeof s === 'string' && !(s in models)) return undefined as any
 
-	const schema: TSchema = replaceSchemaType(
-		typeof s === 'string' ? models[s] : s,
-		{
-			from: t.Number(),
-			to: () => t.Numeric()
-		}
-	)
+	let schema: TSchema = typeof s === 'string' ? models[s] : s
+
+	if (coerce)
+		schema = replaceSchemaType(schema, [
+			{
+				from: t.Number(),
+				to: () => t.Numeric()
+			},
+			{
+				from: t.Boolean(),
+				to: () => t.BooleanString()
+			}
+		])
 
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
@@ -496,10 +514,16 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
-		schema = replaceSchemaType(schema, {
-			from: t.Number(),
-			to: () => t.Numeric()
-		})
+		schema = replaceSchemaType(schema, [
+			{
+				from: t.Number(),
+				to: () => t.Numeric()
+			},
+			{
+				from: t.Boolean(),
+				to: () => t.BooleanString()
+			}
+		])
 
 		// eslint-disable-next-line sonarjs/no-identical-functions
 		// Sonar being delulu, schema is not identical
@@ -601,7 +625,8 @@ export const getCookieValidator = ({
 	let cookieValidator = getSchemaValidator(validator, {
 		dynamic,
 		models,
-		additionalProperties: true
+		additionalProperties: true,
+		coerce: true
 	})
 
 	if (isNotEmpty(defaultConfig)) {

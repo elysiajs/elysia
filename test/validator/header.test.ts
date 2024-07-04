@@ -288,4 +288,28 @@ describe('Header Validator', () => {
 
 		expect(value).toBe('number')
 	})
+
+	it('coerce string to boolean', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ headers }) => typeof headers['is-admin'],
+			{
+				headers: t.Object({
+					'is-admin': t.Boolean()
+				})
+			}
+		)
+
+		const value = await app
+			.handle(
+				req('/', {
+					headers: {
+						'is-admin': 'true'
+					}
+				})
+			)
+			.then((x) => x.text())
+
+		expect(value).toBe('boolean')
+	})
 })

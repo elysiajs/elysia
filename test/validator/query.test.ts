@@ -502,18 +502,30 @@ describe('Query Validator', () => {
 	})
 
 	it('coerce number object to numeric', async () => {
-		const app = new Elysia().get(
-			'/',
-			({ query: { id } }) => typeof id,
-			{
-				query: t.Object({
-					id: t.Number()
-				})
-			}
-		)
+		const app = new Elysia().get('/', ({ query: { id } }) => typeof id, {
+			query: t.Object({
+				id: t.Number()
+			})
+		})
 
 		const value = await app.handle(req('/?id=1')).then((x) => x.text())
 
 		expect(value).toBe('number')
+	})
+
+	it('coerce string object to boolean', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query: { isAdmin } }) => typeof isAdmin,
+			{
+				query: t.Object({
+					isAdmin: t.Boolean()
+				})
+			}
+		)
+
+		const value = await app.handle(req('/?isAdmin=true')).then((x) => x.text())
+
+		expect(value).toBe('boolean')
 	})
 })

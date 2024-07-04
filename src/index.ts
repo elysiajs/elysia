@@ -320,7 +320,8 @@ export default class Elysia<
 	env(model: TObject<any>, env = Bun?.env ?? process.env) {
 		const validator = getSchemaValidator(model, {
 			dynamic: true,
-			additionalProperties: true
+			additionalProperties: true,
+			coerce: true
 		})
 
 		if (validator.Check(env) === false) {
@@ -469,16 +470,19 @@ export default class Elysia<
 						headers: getSchemaValidator(cloned.headers, {
 							dynamic,
 							models,
-							additionalProperties: !this.config.normalize
+							additionalProperties: !this.config.normalize,
+							coerce: true
 						}),
 						params: getSchemaValidator(cloned.params, {
 							dynamic,
-							models
+							models,
+							coerce: true
 						}),
 						query: getSchemaValidator(cloned.query, {
 							dynamic,
 							models,
-							normalize
+							normalize,
+							coerce: true
 						}),
 						cookie: cookieValidator(),
 						response: getResponseSchemaValidator(cloned.response, {
@@ -503,7 +507,8 @@ export default class Elysia<
 							return getSchemaValidator(cloned.headers, {
 								dynamic,
 								models,
-								additionalProperties: !normalize
+								additionalProperties: !normalize,
+								coerce: true
 							})
 						},
 						get params() {
@@ -513,7 +518,8 @@ export default class Elysia<
 								cloned.params,
 								{
 									dynamic,
-									models
+									models,
+									coerce: true
 								}
 							))
 						},
@@ -522,7 +528,8 @@ export default class Elysia<
 
 							return (_query = getSchemaValidator(cloned.query, {
 								dynamic,
-								models
+								models,
+								coerce: true
 							}))
 						},
 						get cookie() {

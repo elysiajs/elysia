@@ -416,12 +416,12 @@ describe('Body Validator', () => {
 		expect(value).toBe('number')
 	})
 
-	it('coerce number to numeric', async () => {
+	it('don\'t coerce number to numeric', async () => {
 		const app = new Elysia().post('/', ({ body }) => typeof body, {
 			body: t.Number()
 		})
 
-		const value = await app
+		const response = await app
 			.handle(
 				new Request('http://localhost/', {
 					method: 'POST',
@@ -431,26 +431,60 @@ describe('Body Validator', () => {
 					body: '1'
 				})
 			)
-			.then((x) => x.text())
 
-		expect(value).toBe('number')
+		expect(response.status).toBe(422)
 	})
 
-	it('coerce number object to numeric', async () => {
+	it('don\'t coerce number object to numeric', async () => {
 		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
 			body: t.Object({
 				id: t.Number()
 			})
 		})
 
-		const value = await app
+		const response = await app
 			.handle(
 				post('/', {
 					id: '1'
 				})
 			)
-			.then((x) => x.text())
 
-		expect(value).toBe('number')
+		expect(response.status).toBe(422)
+	})
+
+	it('don\'t coerce string to boolean', async () => {
+		const app = new Elysia().post('/', ({ body }) => typeof body, {
+			body: t.Number()
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'text/plain'
+					},
+					body: 'true'
+				})
+			)
+
+		expect(response.status).toBe(422)
+	})
+
+	it('don\'t coerce string object to boolean', async () => {
+		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
+			body: t.Object({
+				id: t.Number()
+			})
+		})
+
+		const response = await app
+			.handle(
+				post('/', {
+					id: 'true'
+				})
+			)
+
+		expect(response.status).toBe(422)
 	})
 })

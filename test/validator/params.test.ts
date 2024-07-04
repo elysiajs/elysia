@@ -136,4 +136,20 @@ describe('Params Validator', () => {
 
 		expect(value).toBe('number')
 	})
+
+	it('coerce string object to boolean', async () => {
+		const app = new Elysia().get(
+			'/is-admin/:value',
+			({ params: { value } }) => typeof value,
+			{
+				params: t.Object({
+					value: t.Boolean()
+				})
+			}
+		)
+
+		const value = await app.handle(req('/is-admin/true')).then((x) => x.text())
+
+		expect(value).toBe('boolean')
+	})
 })
