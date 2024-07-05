@@ -1109,8 +1109,12 @@ export const composeHandler = ({
 			}`
 
 			// @ts-ignore
-			if (hasTransform(validator.headers.schema))
-				fnLiteral += `\nc.headers = headers.Decode(c.headers)\n`
+			if (hasTransform(validator.headers.schema)) {
+				if(isOptional(validator.headers))
+					fnLiteral += `\nif(c.headers) {c.headers = headers.Decode(c.headers)}\n`
+				else
+					fnLiteral += `\nc.headers = headers.Decode(c.headers)\n`
+			}
 		}
 
 		if (validator.params) {

@@ -247,13 +247,19 @@ export const mergeHook = (
 	}
 }
 
+interface ReplaceSchemaTypeOptions {
+	from: TSchema
+	to(): TSchema
+	excludeRoot?: boolean
+	/**
+	 * Traverse until object is found except root object
+	 **/
+	untilObjectFound?: boolean
+}
+
 export const replaceSchemaType = (
 	schema: TSchema,
-	options: MaybeArray<{
-		from: TSchema
-		to(): TSchema
-		excludeRoot?: boolean
-	}>,
+	options: MaybeArray<ReplaceSchemaTypeOptions>,
 	root = true
 ) => {
 	if (!Array.isArray(options))
@@ -267,10 +273,12 @@ export const replaceSchemaType = (
 
 const _replaceSchemaType = (
 	schema: TSchema,
-	options: { from: TSchema; to(): TSchema; excludeRoot?: boolean },
+	options: ReplaceSchemaTypeOptions,
 	root = true
 ) => {
 	if (!schema) return schema
+	if (options.untilObjectFound && !root && schema.type === 'object')
+		return schema
 
 	const fromSymbol = options.from[Kind]
 
@@ -411,8 +419,7 @@ const _replaceSchemaType = (
 			for (let i = 0; i < to.not.length; i++)
 				to.not[i] = composeProperties(to.not[i])
 
-		if (transform)
-			to[TransformKind as any] = transform[TransformKind]
+		if (transform) to[TransformKind as any] = transform[TransformKind]
 
 		if (to.anyOf || to.oneOf || to.allOf || to.not) return to
 
@@ -470,7 +477,7 @@ const _replaceSchemaType = (
 
 					properties[key] = {
 						...rest,
-						..._replaceSchemaType(rest, options, false),
+						..._replaceSchemaType(rest, options, false)
 					}
 					break
 
@@ -521,7 +528,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		dynamic?: boolean
 		normalize?: boolean
 		coerce?: boolean
-		additionalCoerce?: Parameters<typeof replaceSchemaType>[1]
+		additionalCoerce?: MaybeArray<ReplaceSchemaTypeOptions>
 	} = {}
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
@@ -533,11 +540,13 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		schema = replaceSchemaType(schema, [
 			{
 				from: t.Number(),
-				to: () => t.Numeric()
+				to: () => t.Numeric(),
+				untilObjectFound: true
 			},
 			{
 				from: t.Boolean(),
-				to: () => t.BooleanString()
+				to: () => t.BooleanString(),
+				untilObjectFound: true
 			},
 			...(Array.isArray(additionalCoerce)
 				? additionalCoerce
@@ -673,17 +682,6 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
-		schema = replaceSchemaType(schema, [
-			{
-				from: t.Number(),
-				to: () => t.Numeric()
-			},
-			{
-				from: t.Boolean(),
-				to: () => t.BooleanString()
-			}
-		])
-
 		// eslint-disable-next-line sonarjs/no-identical-functions
 		// Sonar being delulu, schema is not identical
 		const cleaner = (value: unknown) => Value.Clean(schema, value)
@@ -777,9 +775,8 @@ export const stringToStructureCoercions = [
 	{
 		from: t.Array(t.Any()),
 		to: () => t.ArrayString(t.Any())
-		// excludeRoot: true
 	}
-]
+] satisfies ReplaceSchemaTypeOptions[]
 
 export const getCookieValidator = ({
 	validator,

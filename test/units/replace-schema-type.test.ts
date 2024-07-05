@@ -146,7 +146,8 @@ describe('Replace Schema Type', () => {
 				{
 					from: t.Object({}),
                     to: () => t.ObjectString({}),
-					excludeRoot: true
+					excludeRoot: true,
+					untilObjectFound: false
 				}
 			)
 		).toMatchObject(

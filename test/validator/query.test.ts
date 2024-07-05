@@ -592,4 +592,26 @@ describe('Query Validator', () => {
 			]
 		})
 	})
+
+	it('don\t coerce number in nested object', async () => {
+		const app = new Elysia().get('/', ({ query: { user } }) => user, {
+			query: t.Object({
+				user: t.Object({
+					id: t.Number(),
+					name: t.String()
+				})
+			})
+		})
+
+		const response = await app.handle(
+			req(
+				`?user=${JSON.stringify({
+					id: '2',
+					name: 'test'
+				})}`
+			)
+		)
+
+		expect(response.status).toBe(422)
+	})
 })
