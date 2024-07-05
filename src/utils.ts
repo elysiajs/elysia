@@ -1,9 +1,9 @@
 import type { BunFile } from 'bun'
-import { Kind, type TSchema } from '@sinclair/typebox'
+import { Kind, TransformKind, type TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
-import { t } from '.'
+import { t } from './type-system'
 import { isNotEmpty } from './handler'
 import type { Sucrose } from './sucrose'
 
@@ -249,18 +249,26 @@ export const mergeHook = (
 
 export const replaceSchemaType = (
 	schema: TSchema,
-	options: MaybeArray<{ from: TSchema; to(): TSchema }>
+	options: MaybeArray<{
+		from: TSchema
+		to(): TSchema
+		excludeRoot?: boolean
+	}>,
+	root = true
 ) => {
-	if (!Array.isArray(options)) return _replaceSchemaType(schema, options)
+	if (!Array.isArray(options))
+		return _replaceSchemaType(schema, options, root)
 
-	for (const option of options) schema = _replaceSchemaType(schema, option)
+	for (const option of options)
+		schema = _replaceSchemaType(schema, option, root)
 
 	return schema
 }
 
 const _replaceSchemaType = (
 	schema: TSchema,
-	options: { from: TSchema; to(): TSchema }
+	options: { from: TSchema; to(): TSchema; excludeRoot?: boolean },
+	root = true
 ) => {
 	if (!schema) return schema
 
@@ -268,51 +276,170 @@ const _replaceSchemaType = (
 
 	if (schema.oneOf) {
 		for (let i = 0; i < schema.oneOf.length; i++)
-			schema.oneOf[i] = replaceSchemaType(schema.oneOf[i], options)
+			schema.oneOf[i] = _replaceSchemaType(schema.oneOf[i], options, root)
 
 		return schema
 	}
 
 	if (schema.anyOf) {
 		for (let i = 0; i < schema.anyOf.length; i++)
-			schema.anyOf[i] = replaceSchemaType(schema.anyOf[i], options)
+			schema.anyOf[i] = _replaceSchemaType(schema.anyOf[i], options, root)
 
 		return schema
 	}
 
 	if (schema.allOf) {
 		for (let i = 0; i < schema.allOf.length; i++)
-			schema.allOf[i] = replaceSchemaType(schema.allOf[i], options)
+			schema.allOf[i] = _replaceSchemaType(schema.allOf[i], options, root)
 
 		return schema
 	}
 
 	if (schema.not) {
 		for (let i = 0; i < schema.not.length; i++)
-			schema.not[i] = replaceSchemaType(schema.not[i], options)
+			schema.not[i] = _replaceSchemaType(schema.not[i], options, root)
 
 		return schema
 	}
 
+	const isRoot = root && options.excludeRoot
+
 	if (schema[Kind] === fromSymbol) {
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const { anyOf, oneOf, allOf, not, type, ...rest } = schema
+		const { anyOf, oneOf, allOf, not, properties, items, ...rest } = schema
 		const to = options.to()
 
-		if (to.anyOf)
-			for (let i = 0; i < to.anyOf.length; i++)
-				to.anyOf[i] = { ...rest, ...to.anyOf[i] }
-		else if (to.oneOf)
-			for (let i = 0; i < to.oneOf.length; i++)
-				to.oneOf[i] = { ...rest, ...to.oneOf[i] }
-		else if (to.allOf)
-			for (let i = 0; i < to.allOf.length; i++)
-				to.allOf[i] = { ...rest, ...to.allOf[i] }
-		else if (to.not)
-			for (let i = 0; i < to.not.length; i++)
-				to.not[i] = { ...rest, ...to.not[i] }
+		// If t.Transform is used, we need to re-calculate Encode, Decode
+		let transform
 
-		return { ...rest, ...to }
+		const composeProperties = (v: TSchema) => {
+			if (properties && v.type === 'object') {
+				const newProperties = <Record<string, unknown>>{}
+				for (const [key, value] of Object.entries(properties))
+					newProperties[key] = _replaceSchemaType(
+						value as TSchema,
+						options,
+						false
+					)
+
+				return {
+					...rest,
+					...v,
+					properties: newProperties
+				}
+			}
+
+			if (items && v.type === 'array')
+				return {
+					...rest,
+					...v,
+					items: _replaceSchemaType(items, options, false)
+				}
+
+			const value = {
+				...rest,
+				...v
+			}
+
+			// Remove required as it's not object
+			delete value['required']
+
+			// Create default value for ObjectString
+			if (
+				properties &&
+				v.type === 'string' &&
+				v.format === 'ObjectString' &&
+				v.default === '{}'
+			) {
+				transform = t.ObjectString(properties, rest)
+				value.default = JSON.stringify(
+					Value.Create(t.Object(properties))
+				)
+			}
+
+			// Create default value for ArrayString
+			if (
+				items &&
+				v.type === 'string' &&
+				v.format === 'ArrayString' &&
+				v.default === '[]'
+			) {
+				transform = t.ArrayString(items, rest)
+				value.default = JSON.stringify(Value.Create(t.Array(items)))
+			}
+
+			return value
+		}
+
+		if (isRoot) {
+			if (properties) {
+				const newProperties = <Record<string, unknown>>{}
+				for (const [key, value] of Object.entries(properties))
+					newProperties[key] = _replaceSchemaType(
+						value as TSchema,
+						options,
+						false
+					)
+
+				return {
+					...rest,
+					properties: newProperties
+				}
+			} else if (items?.map)
+				return {
+					...rest,
+					items: items.map((v: TSchema) =>
+						_replaceSchemaType(v, options, false)
+					)
+				}
+
+			return rest
+		}
+
+		if (!isRoot) {
+			if (to.anyOf)
+				for (let i = 0; i < to.anyOf.length; i++)
+					to.anyOf[i] = composeProperties(to.anyOf[i])
+			else if (to.oneOf)
+				for (let i = 0; i < to.oneOf.length; i++)
+					to.oneOf[i] = composeProperties(to.oneOf[i])
+			else if (to.allOf)
+				for (let i = 0; i < to.allOf.length; i++)
+					to.allOf[i] = composeProperties(to.allOf[i])
+			else if (to.not)
+				for (let i = 0; i < to.not.length; i++)
+					to.not[i] = composeProperties(to.not[i])
+
+			if (transform) to[TransformKind as any] = transform[TransformKind]
+		}
+
+		if (to.anyOf || to.oneOf || to.allOf || to.not) return to
+
+		if (properties) {
+			const newProperties = <Record<string, unknown>>{}
+			for (const [key, value] of Object.entries(properties))
+				newProperties[key] = _replaceSchemaType(
+					value as TSchema,
+					options,
+					false
+				)
+
+			return {
+				...rest,
+				...to,
+				properties: newProperties
+			}
+		} else if (items?.map)
+			return {
+				...rest,
+				...to,
+				items: items.map((v: TSchema) => _replaceSchemaType(v, options, false))
+			}
+
+		return {
+			...rest,
+			...to
+		}
 	}
 
 	const properties = schema?.properties as Record<string, TSchema>
@@ -338,17 +465,21 @@ const _replaceSchemaType = (
 						for (let i = 0; i < to.not.length; i++)
 							to.not[i] = { ...rest, ...to.not[i] }
 
-					properties[key] = { ...rest, ...to }
+					if (!isRoot) properties[key] = { ...rest, ...to }
 					break
 
 				case 'Object':
 				case 'Union':
-					properties[key] = replaceSchemaType(value, options)
+					properties[key] = _replaceSchemaType(value, options, false)
 					break
 
 				default:
 					if (value.anyOf || value.oneOf || value.allOf || value.not)
-						properties[key] = replaceSchemaType(value, options)
+						properties[key] = _replaceSchemaType(
+							value,
+							options,
+							false
+						)
 					break
 			}
 		}
@@ -363,13 +494,15 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		dynamic = false,
 		normalize = false,
 		additionalProperties = false,
-		coerce = false
+		coerce = false,
+		additionalCoerce = []
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: boolean
 		coerce?: boolean
+		additionalCoerce?: Parameters<typeof replaceSchemaType>[1]
 	} = {}
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
@@ -386,8 +519,15 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			{
 				from: t.Boolean(),
 				to: () => t.BooleanString()
-			}
+			},
+			...(Array.isArray(additionalCoerce)
+				? additionalCoerce
+				: [additionalCoerce])
 		])
+
+	// console.dir(schema, {
+	// 	depth: null
+	// })
 
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
@@ -609,6 +749,18 @@ export const checksum = (s: string) => {
 	return (h = h ^ (h >>> 9))
 }
 
+export const stringToStructureCoercions = [
+	{
+		from: t.Object({}),
+		to: () => t.ObjectString({}),
+		excludeRoot: true
+	},
+	{
+		from: t.Array(t.Any()),
+		to: () => t.ArrayString(t.Any())
+	}
+]
+
 export const getCookieValidator = ({
 	validator,
 	defaultConfig = {},
@@ -626,7 +778,8 @@ export const getCookieValidator = ({
 		dynamic,
 		models,
 		additionalProperties: true,
-		coerce: true
+		coerce: true,
+		additionalCoerce: stringToStructureCoercions
 	})
 
 	if (isNotEmpty(defaultConfig)) {

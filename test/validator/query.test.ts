@@ -317,18 +317,17 @@ describe('Query Validator', () => {
 	})
 
 	it('parse query object', async () => {
-		const app = new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Object({
-					role: t.Optional(
-						t.Array(
-							t.Object({
-								name: t.String()
-							})
-						)
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				role: t.Optional(
+					t.Array(
+						t.Object({
+							name: t.String()
+						})
 					)
-				})
+				)
 			})
+		})
 
 		const response = await app
 			.handle(
@@ -347,20 +346,19 @@ describe('Query Validator', () => {
 	})
 
 	it('parse optional query object', async () => {
-		const app = new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Optional(
-					t.Object({
-						role: t.Optional(
-							t.Array(
-								t.Object({
-									name: t.String()
-								})
-							)
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Optional(
+				t.Object({
+					role: t.Optional(
+						t.Array(
+							t.Object({
+								name: t.String()
+							})
 						)
-					})
-				)
-			})
+					)
+				})
+			)
+		})
 
 		const response = await app
 			.handle(
@@ -469,8 +467,7 @@ describe('Query Validator', () => {
 	})
 
 	it("don't parse query object without schema", async () => {
-		const app = new Elysia()
-			.get('/', ({ query: { role } }) => role)
+		const app = new Elysia().get('/', ({ query: { role } }) => role)
 
 		const response = await app
 			.handle(req(`/?role=${JSON.stringify({ name: 'hello' })}`))
@@ -526,5 +523,58 @@ describe('Query Validator', () => {
 			.then((x) => x.text())
 
 		expect(value).toBe('boolean')
+	})
+
+	it('handle object array in single query', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				pagination: t.Array(
+					t.Object({
+						pageIndex: t.Number(),
+						pageLimit: t.Number()
+					})
+				)
+			})
+		})
+
+		const response = await app
+			.handle(
+				req(
+					`/?pagination=${JSON.stringify([{ pageIndex: 1, pageLimit: 10 }])}`
+				)
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			pagination: [{ pageIndex: 1, pageLimit: 10 }]
+		})
+	})
+
+	it('handle merge object to array in multiple query', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				pagination: t.Array(
+					t.Object({
+						pageIndex: t.Number(),
+						pageLimit: t.Number()
+					})
+				)
+			})
+		})
+
+		const response = await app
+			.handle(
+				req(
+					`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}&pagination=${JSON.stringify({ pageIndex: 2, pageLimit: 9 })}`
+				)
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			pagination: [
+				{ pageIndex: 1, pageLimit: 10 },
+				{ pageIndex: 2, pageLimit: 9 }
+			]
+		})
 	})
 })

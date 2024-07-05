@@ -346,49 +346,6 @@ export const parseCookie = async (
 			}
 		}
 
-		if (value == null) {
-			jar[name] = {
-				value: v
-			}
-			continue
-		}
-
-		const start = value.charCodeAt(0)
-		if (start === 123 || start === 91)
-			try {
-				jar[name] = {
-					value: JSON.parse(value)
-				}
-
-				continue
-			} catch {
-				// ignore
-			}
-
-		if (isNumericString(value)) {
-			jar[name] = {
-				value: parseInt(value)
-			}
-
-			continue
-		}
-
-		if (value === 'true') {
-			jar[name] = {
-				value: true
-			}
-
-			continue
-		}
-
-		if (value === 'false') {
-			jar[name] = {
-				value: false
-			}
-
-			continue
-		}
-
 		jar[name] = {
 			value
 		}

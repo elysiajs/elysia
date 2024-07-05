@@ -210,7 +210,7 @@ export const createDynamicHandler =
 									: undefined
 					  }
 					: undefined
-			)
+			) as any
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const hook = hooks.transform[i]

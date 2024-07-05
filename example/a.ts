@@ -1,23 +1,36 @@
-import { Elysia, t } from '../src'
+import { Elysia, replaceSchemaType, t } from '../src'
+import { TypeCompiler } from '../src/type-system'
 import { post, req } from '../test/utils'
 
-const app = new Elysia()
-	.trace(({ onBeforeHandle }) => {
-		onBeforeHandle(({ onStop, onEvent }) => {
-			onStop(({ error }) => {
-				console.log(error)
+// const a = TypeCompiler.Compile(
+// 	replaceSchemaType(t.Array(t.String()), {
+// 		from: t.Array(t.Any()),
+// 		to: () => t.ArrayString(t.Any())
+// 	})
+// )
+
+// console.log(a.Decode(JSON.stringify(['a', 'b'])))
+
+const app = new Elysia().get(
+	'/council',
+	({ cookie: { council } }) => council.value = { id: 'a' },
+	{
+		cookie: t.Object({
+			council: t.Object({
+				id: t.String()
 			})
 		})
-	})
-	.onBeforeHandle(({ error }) => {
-		return error("I'm a teapot")
-	})
-	.get('/', () => 'hello')
-	.listen(3000)
+	}
+)
 
-// await app.handle(req('/id/123'))
-// await app.handle(req('/id/123'))
-// await app.handle(req('/id/123'))
-// const res = await app.handle(req('/id/123')).then((x) => x.text())
+const response = await app
+	.handle(
+		req('/council', {
+			headers: {
+				cookie: 'council=' + encodeURIComponent(JSON.stringify({ id: 'a' }))
+			}
+		})
+	)
+	.then((x) => x.json())
 
-// console.log(app.routes[0].composed.toString())
+console.log(response)

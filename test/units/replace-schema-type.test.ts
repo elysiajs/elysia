@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test'
-import { t } from '../../src'
+import { Elysia, t } from '../../src'
 import { replaceSchemaType } from '../../src/utils'
+import { req } from '../utils'
 
 describe('Replace Schema Type', () => {
 	it('replace primitive', async () => {
@@ -132,5 +133,64 @@ describe('Replace Schema Type', () => {
 				isAdmin: t.BooleanString()
 			})
 		)
+	})
+
+	it('replace excludeRoot (match ObjectString)', () => {
+		expect(
+			replaceSchemaType(
+				t.Object({
+					obj: t.Object({
+						id: t.String()
+					})
+				}),
+				{
+					from: t.Object({}),
+                    to: () => t.ObjectString({}),
+					excludeRoot: true
+				}
+			)
+		).toMatchObject(
+			t.Object({
+				obj: t.ObjectString({
+					id: t.String()
+				})
+			})
+		)
+	})
+
+	it('replace replace ArrayString', () => {
+		expect(
+			replaceSchemaType(
+				t.Object({
+					arr: t.Array(t.String())
+				}),
+				{
+					from: t.Object({}),
+                    to: () => t.ObjectString({}),
+					excludeRoot: true
+				}
+			)
+		).toMatchObject(
+			t.Object({
+				arr: t.Array(t.String())
+			})
+		)
+	})
+
+	it('replace recalculate transform', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				pagination: t.Object({
+					pageIndex: t.Number(),
+					pageLimit: t.Number()
+				})
+			})
+		})
+
+		const status = await app
+			.handle(req('/?pagination={"pageIndex":1}'))
+			.then((x) => x.status)
+
+		expect(status).toBe(422)
 	})
 })

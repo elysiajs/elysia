@@ -1,6 +1,8 @@
 import {
+	ArrayOptions,
 	DateOptions,
 	NumberOptions,
+	TArray,
 	TDate,
 	TUnsafe,
 	TypeRegistry
@@ -21,7 +23,11 @@ import {
 	FormatRegistry
 } from '@sinclair/typebox'
 
-import { type ValueError, type TypeCheck } from '@sinclair/typebox/compiler'
+import {
+	type ValueError,
+	type TypeCheck,
+	TypeCompiler
+} from '@sinclair/typebox/compiler'
 import { Value } from '@sinclair/typebox/value'
 import { fullFormats } from './formats'
 
@@ -279,6 +285,25 @@ if (!FormatRegistry.Has('ObjectString'))
 		}
 	})
 
+if (!FormatRegistry.Has('ArrayString'))
+	FormatRegistry.Set('ArrayString', (value) => {
+		let start = value.charCodeAt(0)
+
+		// If starts with ' ', '\t', '\n', then trim first
+		if (start === 9 || start === 10 || start === 32)
+			start = value.trimStart().charCodeAt(0)
+
+		if (start !== 123 && start !== 91) return false
+
+		try {
+			JSON.parse(value)
+
+			return true
+		} catch {
+			return false
+		}
+	})
+
 export const ElysiaType = {
 	Numeric: (property?: NumberOptions) => {
 		const schema = Type.Number(property)
@@ -369,12 +394,19 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as any as TBoolean
 	},
-	ObjectString: <T extends TProperties = {}>(
-		properties: T = {} as T,
+	ObjectString: <T extends TProperties>(
+		properties: T,
 		options?: ObjectOptions
 	) => {
 		const schema = t.Object(properties, options)
 		const defaultValue = JSON.stringify(Value.Create(schema))
+
+		let compiler: TypeCheck<TObject<T>>
+		try {
+			compiler = TypeCompiler.Compile(schema)
+		} catch {
+			// Nothing
+		}
 
 		return t
 			.Transform(
@@ -388,16 +420,90 @@ export const ElysiaType = {
 			)
 			.Decode((value) => {
 				if (typeof value === 'string') {
+					if (value.charCodeAt(0) !== 123)
+						throw new ValidationError('property', schema, value)
+
 					try {
 						value = JSON.parse(value as string)
 					} catch {
 						throw new ValidationError('property', schema, value)
 					}
 
+					if (compiler) {
+						if (!compiler.Check(value))
+							throw new ValidationError('property', schema, value)
+
+						return compiler.Decode(value)
+					}
+
 					if (!Value.Check(schema, value))
 						throw new ValidationError('property', schema, value)
 
-					return value
+					return Value.Decode(schema, value)
+				}
+
+				return value
+			})
+			.Encode((value) => {
+				if (typeof value === 'string')
+					try {
+						value = JSON.parse(value as string)
+					} catch {
+						throw new ValidationError('property', schema, value)
+					}
+
+				if (!Value.Check(schema, value))
+					throw new ValidationError('property', schema, value)
+
+				return JSON.stringify(value)
+			}) as any as TObject<T>
+	},
+	ArrayString: <T extends TSchema>(
+		children: T = {} as T,
+		options?: ArrayOptions
+	) => {
+		const schema = t.Array(children, options)
+		const defaultValue = JSON.stringify(Value.Create(schema))
+
+		let compiler: TypeCheck<TArray<T>>
+		try {
+			compiler = TypeCompiler.Compile(schema)
+		} catch {
+			// Nothing
+		}
+
+		return t
+			.Transform(
+				t.Union([
+					t.String({
+						format: 'ArrayString',
+						default: defaultValue
+					}),
+					schema
+				])
+			)
+			.Decode((value) => {
+				if (typeof value === 'string') {
+					if (value.charCodeAt(0) !== 91)
+						throw new ValidationError('property', schema, value)
+
+					try {
+						value = JSON.parse(value as string)
+					} catch {
+						throw new ValidationError('property', schema, value)
+					}
+
+					if (compiler) {
+						if (!compiler.Check(value))
+							throw new ValidationError('property', schema, value)
+
+						return compiler.Decode(value)
+					}
+
+					if (!Value.Check(schema, value))
+						throw new ValidationError('property', schema, value)
+
+					return Value.Decode(schema, value)
 				}
 
 				return value
@@ -472,6 +578,7 @@ declare module '@sinclair/typebox' {
 	interface JavaScriptTypeBuilder {
 		BooleanString: typeof ElysiaType.BooleanString
 		ObjectString: typeof ElysiaType.ObjectString
+		ArrayString: typeof ElysiaType.ArrayString
 		// @ts-ignore
 		Numeric: typeof ElysiaType.Numeric
 		// @ts-ignore
@@ -506,8 +613,8 @@ declare module '@sinclair/typebox' {
  * Will be parse to Boolean
  */
 t.BooleanString = ElysiaType.BooleanString
-
 t.ObjectString = ElysiaType.ObjectString
+t.ArrayString = ElysiaType.ArrayString
 
 /**
  * A Numeric string

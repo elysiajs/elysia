@@ -692,7 +692,10 @@ export const composeHandler = ({
 										}
 
 										try {
-											a${index} = JSON.parse('[' + a${index} + ']')
+										    if(a${index}.charCodeAt(0) === 91)
+												a${index} = JSON.parse(a${index})
+											else
+												a${index} = JSON.parse('[' + a${index} + ']')
 										} catch {}\n`
 										: `while (memory !== -1) {
 											const start = memory + ${key.length + 2}
@@ -1247,13 +1250,20 @@ export const composeHandler = ({
 					}\n`
 				}
 
-			fnLiteral += `if(cookie.Check(cookieValue) === false) {
-				${composeValidation('cookie', 'cookieValue')}
-			}`
+			// @ts-ignore
+			if (isOptional(validator.cookie))
+				fnLiteral += `if(isNotEmpty(c.cookie) && cookie.Check(cookeValue) === false) {
+					${composeValidation('cookie', 'cookieValue')}
+				}`
+			else
+				fnLiteral += `if(cookie.Check(cookieValue) === false) {
+					${composeValidation('cookie', 'cookieValue')}
+				}`
 
-			// // @ts-ignore
-			// if (hasTransform(validator.cookie.schema))
-			// 	fnLiteral += `\nc.cookie = params.Decode(c.cookie)\n`
+			// @ts-expect-error
+			if (hasTransform(validator.cookie.schema))
+				fnLiteral += `\nfor(const [key, value] of Object.entries(cookie.Decode(cookieValue)))
+					c.cookie[key].value = value\n`
 		}
 	}
 

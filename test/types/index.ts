@@ -61,7 +61,7 @@ app.model({
 
 		// ? unwrap cookie
 		expectTypeOf<
-			Record<string, Cookie<unknown>> & {
+			Record<string, Cookie<string>> & {
 				username: Cookie<string>
 				password: Cookie<string>
 			}
