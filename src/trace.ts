@@ -154,6 +154,9 @@ const createProcess = () => {
 			const processes = <((callback?: Function) => Promise<void>)[]>[]
 			const resolvers = <((process: TraceStream) => () => void)[]>[]
 
+			// When error is return but not thrown
+			let groupError: Error | null = null
+
 			for (let i = 0; i < (process.total ?? 0); i++) {
 				const { promise, resolve } = Promise.withResolvers<void>()
 				const { promise: end, resolve: resolveEnd } =
@@ -189,6 +192,10 @@ const createProcess = () => {
 
 					return (error: Error | null = null) => {
 						const end = performance.now()
+
+						// Catch return error
+						if(error)
+							groupError = error
 
 						const detail = {
 							end,
@@ -229,6 +236,11 @@ const createProcess = () => {
 				resolveChild: resolvers,
 				resolve(error: Error | null = null) {
 					const end = performance.now()
+
+					// If error is return, parent group will not catch an error
+					// but the child group will catch the error
+					if(!error && groupError)
+						error = groupError
 
 					const detail = {
 						end,

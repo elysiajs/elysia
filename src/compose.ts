@@ -174,9 +174,18 @@ const createReport = ({
 							`})\n`
 					)
 
-				return () => {
-					for (let i = 0; i < totalListener; i++)
-						addFn(`${reporter}Child${i}?.()\n`)
+				return (toValidate?: string) => {
+					for (let i = 0; i < totalListener; i++) {
+						if (toValidate)
+							addFn(`
+                       			if (ELYSIA_RESPONSE in ${toValidate}) {
+                       				${reporter}Child${i}?.(${toValidate}.error)
+                           		} else if (${toValidate} instanceof Error)
+                    				${reporter}Child${i}?.(${toValidate}.response)
+                           		else
+                             		${reporter}Child${i}?.()\n`)
+						else addFn(`${reporter}Child${i}?.()\n`)
+					}
 				}
 			}
 		}
@@ -481,7 +490,7 @@ export const composeHandler = ({
 				config: validator.cookie?.config ?? {},
 				// @ts-expect-error
 				models: app.definitions.type
-		  })
+			})
 		: undefined
 
 	// @ts-ignore private property
@@ -502,8 +511,8 @@ export const composeHandler = ({
 		const secret = !cookieMeta.secrets
 			? undefined
 			: typeof cookieMeta.secrets === 'string'
-			? cookieMeta.secrets
-			: cookieMeta.secrets[0]
+				? cookieMeta.secrets
+				: cookieMeta.secrets[0]
 
 		encodeCookie += `const _setCookie = c.set.cookie
 		if(_setCookie) {`
@@ -562,21 +571,24 @@ export const composeHandler = ({
 					? typeof cookieMeta.secrets === 'string'
 						? `'${cookieMeta.secrets}'`
 						: '[' +
-						  cookieMeta.secrets.reduce(
+							cookieMeta.secrets.reduce(
 								(a, b) => a + `'${b}',`,
 								''
-						  ) +
-						  ']'
+							) +
+							']'
 					: 'undefined'
 			},
 			sign: ${
 				cookieMeta.sign === true
 					? true
 					: cookieMeta.sign !== undefined
-					? '[' +
-					  cookieMeta.sign.reduce((a, b) => a + `'${b}',`, '') +
-					  ']'
-					: 'undefined'
+						? '[' +
+							cookieMeta.sign.reduce(
+								(a, b) => a + `'${b}',`,
+								''
+							) +
+							']'
+						: 'undefined'
 			},
 			${get('domain')}
 			${get('expires')}
@@ -1055,8 +1067,8 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-							? `'${value}'`
-							: value
+								? `'${value}'`
+								: value
 
 					if (parsed !== undefined)
 						fnLiteral += `c.headers['${key}'] ??= ${parsed}\n`
@@ -1090,8 +1102,8 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-							? `'${value}'`
-							: value
+								? `'${value}'`
+								: value
 
 					if (parsed !== undefined)
 						fnLiteral += `c.params['${key}'] ??= ${parsed}\n`
@@ -1127,8 +1139,8 @@ export const composeHandler = ({
 						typeof value === 'object'
 							? JSON.stringify(value)
 							: typeof value === 'string'
-							? `'${value}'`
-							: value
+								? `'${value}'`
+								: value
 
 					if (parsed !== undefined)
 						fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
@@ -1170,8 +1182,8 @@ export const composeHandler = ({
 					typeof value === 'object'
 						? JSON.stringify(value)
 						: typeof value === 'string'
-						? `'${value}'`
-						: value
+							? `'${value}'`
+							: value
 
 				fnLiteral += `if(body.Check(c.body) === false) {
 					if (typeof c.body === 'object') {
@@ -1303,7 +1315,7 @@ export const composeHandler = ({
 					? `be = await beforeHandle[${i}](c);\n`
 					: `be = beforeHandle[${i}](c);\n`
 
-				endUnit()
+				endUnit('be')
 
 				fnLiteral += `if(be !== undefined) {\n`
 				reporter.resolve()
@@ -1338,7 +1350,7 @@ export const composeHandler = ({
 							fnLiteral += `if(af !== undefined) { c.response = be = af }\n`
 						}
 
-						endUnit()
+						endUnit('af')
 					}
 					reporter.resolve()
 				}
@@ -1415,7 +1427,7 @@ export const composeHandler = ({
 					? `af = await afterHandle[${i}](c)\n`
 					: `af = afterHandle[${i}](c)\n`
 
-				endUnit()
+				endUnit('af')
 
 				if (validator.response) {
 					fnLiteral += `if(af !== undefined) {`
@@ -1863,11 +1875,11 @@ export const composeGeneralHandler = (
 			app.event.error.length
 				? `app.handleError(ctx, notFound)`
 				: app.event.request.length
-				? `new Response(error404Message, {
+					? `new Response(error404Message, {
 					status: ctx.set.status === 200 ? 404 : ctx.set.status,
 					headers: ctx.set.headers
 				})`
-				: `error404.clone()`
+					: `error404.clone()`
 		}
 
 	ctx.params = route.params\n`
@@ -2003,7 +2015,7 @@ export const composeGeneralHandler = (
 					request
 				)\n`
 
-				endUnit()
+				endUnit('re')
 				fnLiteral += `if(re !== undefined) return re\n`
 			} else {
 				fnLiteral += `${

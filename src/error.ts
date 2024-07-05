@@ -9,8 +9,8 @@ const env =
 	typeof Bun !== 'undefined'
 		? Bun.env
 		: typeof process !== 'undefined'
-		? process?.env
-		: undefined
+			? process?.env
+			: undefined
 
 export const ERROR_CODE = Symbol('ElysiaErrorCode')
 export type ERROR_CODE = typeof ERROR_CODE
@@ -44,18 +44,22 @@ export const error = <
 	_type: {
 		[ERROR_CODE in Status]: T
 	}
-} =>
-	({
-		// @ts-expect-error
+	error: Error
+} => {
+	const res = response ??
+		(code in InvertedStatusMap
+			? // @ts-expect-error Always correct
+				InvertedStatusMap[code]
+			: code)
+
+	return {
+		// @ts-expect-error trust me bro
 		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
-		response:
-			response ??
-			(code in InvertedStatusMap
-				? // @ts-expect-error Always correct
-				  InvertedStatusMap[code]
-				: code),
-		_type: undefined as any
-	} as const)
+		response: res,
+		_type: undefined as any,
+		error: new Error(res)
+	} as const
+}
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -88,7 +92,10 @@ export class InvalidCookieSignature extends Error {
 	code = 'INVALID_COOKIE_SIGNATURE'
 	status = 400
 
-	constructor(public key: string, message?: string) {
+	constructor(
+		public key: string,
+		message?: string
+	) {
 		super(message ?? `"${key}" has invalid cookie signature`)
 	}
 }
@@ -175,8 +182,8 @@ export class ValidationError extends Error {
 		const error = isProduction
 			? undefined
 			: 'Errors' in validator
-			? validator.Errors(value).First()
-			: Value.Errors(validator, value).First()
+				? validator.Errors(value).First()
+				: Value.Errors(validator, value).First()
 
 		const customError =
 			error?.schema.error !== undefined
@@ -190,7 +197,7 @@ export class ValidationError extends Error {
 									mapValueError
 								)
 							}
-					  })
+						})
 					: error.schema.error
 				: undefined
 
@@ -256,7 +263,7 @@ export class ValidationError extends Error {
 		return 'Errors' in this.validator
 			? [...this.validator.Errors(this.value)].map(mapValueError)
 			: // @ts-ignore
-			  [...Value.Errors(this.validator, this.value)].map(mapValueError)
+				[...Value.Errors(this.validator, this.value)].map(mapValueError)
 	}
 
 	static simplifyModel(validator: TSchema | TypeCheck<any>) {
