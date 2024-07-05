@@ -1,7 +1,7 @@
 import { type Elysia } from '.'
 
 import { Value } from '@sinclair/typebox/value'
-import type { TAnySchema } from '@sinclair/typebox'
+import type { TAnySchema, TSchema } from '@sinclair/typebox'
 
 import { parse as parseQuery } from 'fast-querystring'
 
@@ -639,15 +639,29 @@ export const composeHandler = ({
 
 					// @ts-ignore unknown
 					const { type, anyOf } = value
-					const isArray = type === 'array'
+					const isArray =
+						type === 'array' ||
+						anyOf?.some(
+							(v: TSchema) =>
+								v.type === 'string' &&
+								v.format === 'ArrayString'
+						)
 
 					destructured.push({
 						key,
 						isArray,
 						isNestedObjectArray:
-							(isArray && value.items?.type === 'object') ||
-							value.items?.anyOf,
-						isObject: type === 'object',
+							(isArray &&
+								(value.items?.type === 'object' ||
+									!!anyOf?.length)) ||
+							!!value.items?.anyOf,
+						isObject:
+							type === 'object' ||
+							anyOf?.some(
+								(v: TSchema) =>
+									v.type === 'string' &&
+									v.format === 'ArrayString'
+							),
 						anyOf: !!anyOf
 					})
 				}
@@ -687,8 +701,16 @@ export const composeHandler = ({
 											else
 												a${index} += ','
 
-											if(memory === -1) a${index} += decodeURIComponent(url.slice(start))
-											else a${index} += decodeURIComponent(url.slice(start, memory))
+											let temp
+
+											if(memory === -1) temp = decodeURIComponent(url.slice(start))
+											else temp = decodeURIComponent(url.slice(start, memory))
+
+											const charCode = temp.charCodeAt(0)
+											if(charCode !== 91 && charCode !== 123)
+												temp = '"' + temp + '"'
+
+											a${index} += temp
 										}
 
 										try {

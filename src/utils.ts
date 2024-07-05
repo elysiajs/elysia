@@ -302,7 +302,7 @@ const _replaceSchemaType = (
 		return schema
 	}
 
-	const isRoot = root && options.excludeRoot
+	const isRoot = root && !!options.excludeRoot
 
 	if (schema[Kind] === fromSymbol) {
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -355,6 +355,7 @@ const _replaceSchemaType = (
 				value.default = JSON.stringify(
 					Value.Create(t.Object(properties))
 				)
+				value.properties = properties
 			}
 
 			// Create default value for ArrayString
@@ -366,6 +367,7 @@ const _replaceSchemaType = (
 			) {
 				transform = t.ArrayString(items, rest)
 				value.default = JSON.stringify(Value.Create(t.Array(items)))
+				value.items = items
 			}
 
 			return value
@@ -396,22 +398,21 @@ const _replaceSchemaType = (
 			return rest
 		}
 
-		if (!isRoot) {
-			if (to.anyOf)
-				for (let i = 0; i < to.anyOf.length; i++)
-					to.anyOf[i] = composeProperties(to.anyOf[i])
-			else if (to.oneOf)
-				for (let i = 0; i < to.oneOf.length; i++)
-					to.oneOf[i] = composeProperties(to.oneOf[i])
-			else if (to.allOf)
-				for (let i = 0; i < to.allOf.length; i++)
-					to.allOf[i] = composeProperties(to.allOf[i])
-			else if (to.not)
-				for (let i = 0; i < to.not.length; i++)
-					to.not[i] = composeProperties(to.not[i])
+		if (to.anyOf)
+			for (let i = 0; i < to.anyOf.length; i++)
+				to.anyOf[i] = composeProperties(to.anyOf[i])
+		else if (to.oneOf)
+			for (let i = 0; i < to.oneOf.length; i++)
+				to.oneOf[i] = composeProperties(to.oneOf[i])
+		else if (to.allOf)
+			for (let i = 0; i < to.allOf.length; i++)
+				to.allOf[i] = composeProperties(to.allOf[i])
+		else if (to.not)
+			for (let i = 0; i < to.not.length; i++)
+				to.not[i] = composeProperties(to.not[i])
 
-			if (transform) to[TransformKind as any] = transform[TransformKind]
-		}
+		if (transform)
+			to[TransformKind as any] = transform[TransformKind]
 
 		if (to.anyOf || to.oneOf || to.allOf || to.not) return to
 
@@ -433,7 +434,9 @@ const _replaceSchemaType = (
 			return {
 				...rest,
 				...to,
-				items: items.map((v: TSchema) => _replaceSchemaType(v, options, false))
+				items: items.map((v: TSchema) =>
+					_replaceSchemaType(v, options, false)
+				)
 			}
 
 		return {
@@ -465,7 +468,10 @@ const _replaceSchemaType = (
 						for (let i = 0; i < to.not.length; i++)
 							to.not[i] = { ...rest, ...to.not[i] }
 
-					if (!isRoot) properties[key] = { ...rest, ...to }
+					properties[key] = {
+						...rest,
+						..._replaceSchemaType(rest, options, false),
+					}
 					break
 
 				case 'Object':
@@ -474,7 +480,20 @@ const _replaceSchemaType = (
 					break
 
 				default:
-					if (value.anyOf || value.oneOf || value.allOf || value.not)
+					if (value.items)
+						for (let i = 0; i < value.items.length; i++) {
+							value.items[i] = _replaceSchemaType(
+								value.items[i],
+								options,
+								false
+							)
+						}
+					else if (
+						value.anyOf ||
+						value.oneOf ||
+						value.allOf ||
+						value.not
+					)
 						properties[key] = _replaceSchemaType(
 							value,
 							options,
@@ -758,6 +777,7 @@ export const stringToStructureCoercions = [
 	{
 		from: t.Array(t.Any()),
 		to: () => t.ArrayString(t.Any())
+		// excludeRoot: true
 	}
 ]
 

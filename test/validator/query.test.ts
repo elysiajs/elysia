@@ -454,16 +454,14 @@ describe('Query Validator', () => {
 		params.append('keys', '1')
 		params.append('keys', '2')
 
+		let value: string[] | undefined
+
 		const response = await new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Object({
-					keys: t.Array(t.String())
-				})
-			})
+			.get('/', ({ query: { keys } }) => (value = keys as string[]))
 			.handle(new Request(`http://localhost/?${params.toString()}`))
 			.then((res) => res.json())
 
-		expect(response).toEqual({ keys: ['1', '2'] })
+		expect(value).toEqual(['1', '2'])
 	})
 
 	it("don't parse query object without schema", async () => {
@@ -523,6 +521,23 @@ describe('Query Validator', () => {
 			.then((x) => x.text())
 
 		expect(value).toBe('boolean')
+	})
+
+	it("don't parse object automatically unless explicitly specified", async () => {
+		let value: string | undefined
+
+		const app = new Elysia().get(
+			'/',
+			({ query: { pagination } }) => (value = pagination as string)
+		)
+
+		await app.handle(
+			req(
+				`/?pagination=${JSON.stringify({ pageIndex: 1, pageLimit: 10 })}`
+			)
+		)
+
+		expect(value).toEqual(JSON.stringify({ pageIndex: 1, pageLimit: 10 }))
 	})
 
 	it('handle object array in single query', async () => {

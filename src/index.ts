@@ -511,7 +511,8 @@ export default class Elysia<
 									dynamic,
 									models,
 									additionalProperties: !normalize,
-									coerce: true
+									coerce: true,
+									additionalCoerce: stringToStructureCoercions
 								}
 							))
 						},
@@ -523,7 +524,8 @@ export default class Elysia<
 								{
 									dynamic,
 									models,
-									coerce: true
+									coerce: true,
+									additionalCoerce: stringToStructureCoercions
 								}
 							))
 						},
@@ -535,7 +537,8 @@ export default class Elysia<
 								{
 									dynamic,
 									models,
-									coerce: true
+									coerce: true,
+									additionalCoerce: stringToStructureCoercions
 								}
 							))
 						},

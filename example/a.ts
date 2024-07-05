@@ -1,36 +1,20 @@
-import { Elysia, replaceSchemaType, t } from '../src'
-import { TypeCompiler } from '../src/type-system'
-import { post, req } from '../test/utils'
+import { Elysia, t, replaceSchemaType } from '../src'
+import { req } from '../test/utils'
 
-// const a = TypeCompiler.Compile(
-// 	replaceSchemaType(t.Array(t.String()), {
-// 		from: t.Array(t.Any()),
-// 		to: () => t.ArrayString(t.Any())
-// 	})
-// )
+const app = new Elysia().get('/', ({ query: { keys } }) => {
+	console.log(keys)
 
-// console.log(a.Decode(JSON.stringify(['a', 'b'])))
+	return keys
+})
 
-const app = new Elysia().get(
-	'/council',
-	({ cookie: { council } }) => council.value = { id: 'a' },
-	{
-		cookie: t.Object({
-			council: t.Object({
-				id: t.String()
-			})
-		})
-	}
-)
+console.log(app.routes[0]?.composed?.toString())
 
-const response = await app
+const response = app
 	.handle(
-		req('/council', {
-			headers: {
-				cookie: 'council=' + encodeURIComponent(JSON.stringify({ id: 'a' }))
-			}
-		})
+		new Request(
+			`http://localhost/?keys=${JSON.stringify({ hello: 'world' })}`
+		)
 	)
-	.then((x) => x.json())
+	.then((res) => res.text())
 
-console.log(response)
+// console.log(app.routes[0].composed?.toString())

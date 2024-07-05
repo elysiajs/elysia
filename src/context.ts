@@ -34,7 +34,7 @@ export type ErrorContext<
 	{
 		body: Route['body']
 		query: undefined extends Route['query']
-			? Record<string, string | undefined>
+			? Record<string, string | string[] | undefined>
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
@@ -45,8 +45,8 @@ export type ErrorContext<
 			? Record<string, string | undefined>
 			: Route['headers']
 		cookie: undefined extends Route['cookie']
-			? Record<string, Cookie<any>>
-			: Record<string, Cookie<any>> &
+			? Record<string, Cookie<string>>
+			: Record<string, Cookie<string>> &
 					Prettify<
 						WithoutNullableKeys<{
 							[key in keyof Route['cookie']]: Cookie<
@@ -92,7 +92,7 @@ export type Context<
 	{
 		body: Route['body']
 		query: undefined extends Route['query']
-			? Record<string, string | undefined>
+			? Record<string, string | string[] | undefined>
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
