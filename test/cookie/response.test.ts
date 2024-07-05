@@ -295,4 +295,31 @@ describe('Cookie Response', () => {
 		expect(response.status).toBe(200)
 		expect(await response.json()).toEqual(expected)
 	})
+
+	it('don\'t parse cookie type unless specified', async () => {
+		let value: string | undefined
+
+		const app = new Elysia().get(
+			'/council',
+			({ cookie: { council } }) => value = council.value,
+		)
+
+		const expected = {
+			name: 'Rin',
+			affilation: 'Administration'
+		}
+
+		const response = await app.handle(
+			req('/council', {
+				headers: {
+					cookie:
+						'council=' +
+						encodeURIComponent(JSON.stringify(expected))
+				}
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(value).toEqual(JSON.stringify(expected))
+	})
 })
