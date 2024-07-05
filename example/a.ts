@@ -1,20 +1,25 @@
-import { Elysia, t, replaceSchemaType } from '../src'
+import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia().get('/', ({ query: { keys } }) => {
-	console.log(keys)
-
-	return keys
+const app = new Elysia().get('/', ({ query: { user } }) => user, {
+	query: t.Optional(
+		t.Object({
+			user: t.Object({
+				id: t.Number(),
+				name: t.String()
+			})
+		})
+	)
 })
 
-console.log(app.routes[0]?.composed?.toString())
-
-const response = app
+app
 	.handle(
-		new Request(
-			`http://localhost/?keys=${JSON.stringify({ hello: 'world' })}`
+		req(
+			`?user=${JSON.stringify({
+				id: 1,
+				name: 'test'
+			})}`
 		)
 	)
-	.then((res) => res.text())
-
-// console.log(app.routes[0].composed?.toString())
+	.then((res) => res.json())
+	.then(console.log)
