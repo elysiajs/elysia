@@ -3265,8 +3265,6 @@ export default class Elysia<
 					filterGlobalHook(plugin.event),
 					current
 				)
-
-				console.log(this.event)
 			} else {
 				this.event = mergeLifeCycle(
 					this.event,
