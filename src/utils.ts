@@ -7,6 +7,7 @@ import { t } from './type-system'
 import { isNotEmpty } from './handler'
 import type { Sucrose } from './sucrose'
 
+import type { TraceHandler } from './trace'
 import type {
 	LifeCycleStore,
 	LocalHook,
@@ -888,7 +889,10 @@ export const mergeLifeCycle = (
 			injectChecksum(b?.afterResponse)
 		) as HookContainer<AfterResponseHandler<any, any>>[],
 		// Already merged on Elysia._use, also logic is more complicated, can't directly merge
-		trace: a.trace,
+		trace: mergeObjectArray(
+			a.trace,
+			injectChecksum(b?.trace)
+		) as HookContainer<TraceHandler<any, any>>[],
 		error: mergeObjectArray(
 			a.error,
 			injectChecksum(b?.error)
@@ -896,7 +900,7 @@ export const mergeLifeCycle = (
 		stop: mergeObjectArray(
 			a.stop,
 			injectChecksum(b?.stop)
-		) as HookContainer<GracefulHandler<any>>[]
+		) as HookContainer<GracefulHandler<any>>[],
 	}
 }
 
@@ -963,7 +967,8 @@ export const filterGlobalHook = (
 		afterHandle: filterGlobal(hook?.afterHandle),
 		mapResponse: filterGlobal(hook?.mapResponse),
 		afterResponse: filterGlobal(hook?.afterResponse),
-		error: filterGlobal(hook?.error)
+		error: filterGlobal(hook?.error),
+		trace: filterGlobal(hook?.trace)
 	} as LocalHook<any, any, any, any, any, any, any>
 }
 

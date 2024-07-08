@@ -8,4 +8,4 @@ const app = new Elysia()
 	.use(a)
 	.get('/', () => {})
 
-console.log(app.routes[0].hooks)
+// console.log(app.routes[0].hooks)

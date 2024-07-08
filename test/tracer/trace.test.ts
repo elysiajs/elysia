@@ -227,4 +227,18 @@ describe('trace', () => {
 		await plugin.handle(req('/'))
 		expect(called).toBe(true)
 	})
+
+	it('deduplicate plugin when name is provided', () => {
+		const a = new Elysia({ name: 'a' }).trace({ as: 'global' }, () => {})
+		const b = new Elysia().use(a)
+
+		const app = new Elysia()
+			.use(a)
+			.use(a)
+			.use(b)
+			.use(b)
+			.get('/', () => 'ok')
+
+		expect(app.routes[0].hooks.trace.length).toBe(1)
+	})
 })

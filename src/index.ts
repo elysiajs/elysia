@@ -3154,37 +3154,11 @@ export default class Elysia<
 					this.extender.macros = this.extender.macros.concat(
 						plugin.extender.macros
 					)
-
-					for (const trace of plugin.event.trace)
-						switch (trace.scope) {
-							case 'global':
-								this.on(
-									{ as: 'global' },
-									'trace',
-									trace.fn as any
-								)
-								break
-
-							case 'scoped':
-								this.on('trace', trace.fn as any)
-								break
-						}
 				}
 			} else {
 				this.extender.macros = this.extender.macros.concat(
 					plugin.extender.macros
 				)
-
-				for (const trace of plugin.event.trace)
-					switch (trace.scope) {
-						case 'global':
-							this.on({ as: 'global' }, 'trace', trace.fn as any)
-							break
-
-						case 'scoped':
-							this.on('trace', trace.fn as any)
-							break
-					}
 			}
 
 			const macroHashes: number[] = []
@@ -3291,6 +3265,8 @@ export default class Elysia<
 					filterGlobalHook(plugin.event),
 					current
 				)
+
+				console.log(this.event)
 			} else {
 				this.event = mergeLifeCycle(
 					this.event,
