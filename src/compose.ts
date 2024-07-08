@@ -178,7 +178,7 @@ const createReport = ({
 					for (let i = 0; i < totalListener; i++) {
 						if (toValidate)
 							addFn(`
-                       			if (ELYSIA_RESPONSE in ${toValidate}) {
+                       			if (typeof ELYSIA_RESPONSE === "object" && ${toValidate} && ELYSIA_RESPONSE in ${toValidate}) {
                        				${reporter}Child${i}?.(${toValidate}.error)
                            		} else if (${toValidate} instanceof Error)
                     				${reporter}Child${i}?.(${toValidate}.response)
@@ -2184,7 +2184,7 @@ export const composeErrorHandler = (
 		context.code = error.code
 		context.error = error
 
-		if(typeof error === "object" && ELYSIA_RESPONSE in error) {
+		if(typeof error === "object" && error && ELYSIA_RESPONSE in error) {
 			error.status = error[ELYSIA_RESPONSE]
 			error.message = error.response
 		}\n`
