@@ -21,7 +21,7 @@ import {
 	localHookToLifeCycleStore,
 	mergeDeep,
 	PromiseGroup,
-    stringToStructureCoercions
+	stringToStructureCoercions
 } from './utils'
 
 import {
@@ -3138,17 +3138,6 @@ export default class Elysia<
 		} else {
 			this.headers(plugin.setHeaders)
 
-			for (const trace of plugin.event.trace)
-				switch (trace.scope) {
-					case 'global':
-						this.on({ as: 'global' }, 'trace', trace.fn as any)
-						break
-
-					case 'scoped':
-						this.on('trace', trace.fn as any)
-						break
-				}
-
 			if (name) {
 				if (!(name in this.dependencies)) this.dependencies[name] = []
 
@@ -3161,14 +3150,41 @@ export default class Elysia<
 					!this.dependencies[name].some(
 						({ checksum }) => current === checksum
 					)
-				)
+				) {
 					this.extender.macros = this.extender.macros.concat(
 						plugin.extender.macros
 					)
+
+					for (const trace of plugin.event.trace)
+						switch (trace.scope) {
+							case 'global':
+								this.on(
+									{ as: 'global' },
+									'trace',
+									trace.fn as any
+								)
+								break
+
+							case 'scoped':
+								this.on('trace', trace.fn as any)
+								break
+						}
+				}
 			} else {
 				this.extender.macros = this.extender.macros.concat(
 					plugin.extender.macros
 				)
+
+				for (const trace of plugin.event.trace)
+					switch (trace.scope) {
+						case 'global':
+							this.on({ as: 'global' }, 'trace', trace.fn as any)
+							break
+
+						case 'scoped':
+							this.on('trace', trace.fn as any)
+							break
+					}
 			}
 
 			const macroHashes: number[] = []
