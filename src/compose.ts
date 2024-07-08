@@ -2213,7 +2213,8 @@ export const composeErrorHandler = (
 				if(set.status === 200) set.status = error.status\n`
 
 			const mapResponseReporter = report('mapResponse', {
-				total: hooks.mapResponse.length
+				total: hooks.mapResponse.length,
+				name: 'context'
 			})
 
 			if (hooks.mapResponse.length) {
@@ -2259,7 +2260,8 @@ export const composeErrorHandler = (
 			)\n`
 
 	const mapResponseReporter = report('mapResponse', {
-		total: hooks.mapResponse.length
+		total: hooks.mapResponse.length,
+		name: 'context'
 	})
 
 	if (hooks.mapResponse.length) {
