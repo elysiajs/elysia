@@ -2164,7 +2164,7 @@ export const composeErrorHandler = (
 	} function(context, error, skipGlobal) {`
 
 	if(app.event.trace.length > 0)
-		fnLiteral += '\nconst id = c[ELYSIA_REQUEST_ID]\n'
+		fnLiteral += '\nconst id = context[ELYSIA_REQUEST_ID]\n'
 
 	const report = createReport({
 		context: 'context',
