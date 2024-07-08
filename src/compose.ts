@@ -202,7 +202,7 @@ const composeValidationFactory = ({
 	validator: SchemaValidator
 }) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
-		`c.set.status = 422; throw new ValidationError('${type}', ${type}, ${value})`,
+		`c.set.status = 422; throw new ValidationError('${type}', validator.${type}, ${value})`,
 	composeResponseValidation: (name = 'r') => {
 		let code = '\n' + injectResponse + '\n'
 
@@ -226,12 +226,12 @@ const composeValidationFactory = ({
 				'Clean' in value &&
 				!hasAdditionalProperties(value as any)
 			)
-				code += `${name} = response['${status}'].Clean(${name})\n`
+				code += `${name} = validator.response['${status}'].Clean(${name})\n`
 
-			code += `if(response['${status}'].Check(${name}) === false) {
+			code += `if(validator.response['${status}'].Check(${name}) === false) {
 					c.set.status = 422
 
-					throw new ValidationError('response', response['${status}'], ${name})
+					throw new ValidationError('response', validator.response['${status}'], ${name})
 				}
 			}
 
@@ -1077,7 +1077,7 @@ export const composeHandler = ({
 				'Clean' in validator.headers &&
 				!hasAdditionalProperties(validator.headers as any)
 			)
-				fnLiteral += 'c.headers = headers.Clean(c.headers);\n'
+				fnLiteral += 'c.headers = validator.headers.Clean(c.headers);\n'
 
 			// @ts-ignore
 			if (hasProperty('default', validator.headers.schema))
@@ -1100,20 +1100,20 @@ export const composeHandler = ({
 				}
 
 			if (isOptional(validator.headers))
-				fnLiteral += `if(isNotEmpty(c.headers) && headers.Check(c.headers) === false) {
+				fnLiteral += `if(isNotEmpty(c.headers) && validator.headers.Check(c.headers) === false) {
 				${composeValidation('headers')}
 			}`
 			else
-				fnLiteral += `if(headers.Check(c.headers) === false) {
+				fnLiteral += `if(validator.headers.Check(c.headers) === false) {
 				${composeValidation('headers')}
 			}`
 
 			// @ts-ignore
 			if (hasTransform(validator.headers.schema)) {
 				if(isOptional(validator.headers))
-					fnLiteral += `\nif(c.headers) {c.headers = headers.Decode(c.headers)}\n`
+					fnLiteral += `\nif(c.headers) {c.headers = validator.headers.Decode(c.headers)}\n`
 				else
-					fnLiteral += `\nc.headers = headers.Decode(c.headers)\n`
+					fnLiteral += `\nc.headers = validator.headers.Decode(c.headers)\n`
 			}
 		}
 
@@ -1138,13 +1138,13 @@ export const composeHandler = ({
 						fnLiteral += `c.params['${key}'] ??= ${parsed}\n`
 				}
 
-			fnLiteral += `if(params.Check(c.params) === false) {
+			fnLiteral += `if(validator.params.Check(c.params) === false) {
 				${composeValidation('params')}
 			}`
 
 			// @ts-ignore
 			if (hasTransform(validator.params.schema))
-				fnLiteral += `\nc.params = params.Decode(c.params)\n`
+				fnLiteral += `\nc.params = validator.params.Decode(c.params)\n`
 		}
 
 		if (validator.query) {
@@ -1153,7 +1153,7 @@ export const composeHandler = ({
 				'Clean' in validator.query &&
 				!hasAdditionalProperties(validator.query as any)
 			)
-				fnLiteral += 'c.query = query.Clean(c.query);\n'
+				fnLiteral += 'c.query = validator.query.Clean(c.query);\n'
 
 			// @ts-ignore
 			if (hasProperty('default', validator.query.schema))
@@ -1172,22 +1172,22 @@ export const composeHandler = ({
 								: value
 
 					if (parsed !== undefined)
-						fnLiteral += `c.query['${key}'] ??= ${parsed}\n`
+                        fnLiteral += `if(c.query['${key}'] === undefined) c.query['${key}'] = ${parsed}\n`
 				}
 
 			if (isOptional(validator.query))
-				fnLiteral += `if(isNotEmpty(c.query) && query.Check(c.query) === false) {
+				fnLiteral += `if(isNotEmpty(c.query) && validator.query.Check(c.query) === false) {
 				${composeValidation('query')}
 			}`
 			else
-				fnLiteral += `if(query.Check(c.query) === false) {
+				fnLiteral += `if(validator.query.Check(c.query) === false) {
 				${composeValidation('query')}
 			}`
 
 			// @ts-ignore
 			if (hasTransform(validator.query.schema))
 				// Decode doesn't work with Object.create(null)
-				fnLiteral += `\nc.query = query.Decode(Object.assign({}, c.query))\n`
+				fnLiteral += `\nc.query = validator.query.Decode(Object.assign({}, c.query))\n`
 		}
 
 		if (validator.body) {
@@ -1196,7 +1196,7 @@ export const composeHandler = ({
 				'Clean' in validator.body &&
 				!hasAdditionalProperties(validator.body as any)
 			)
-				fnLiteral += 'c.body = body.Clean(c.body);\n'
+				fnLiteral += 'c.body = validator.body.Clean(c.body);\n'
 
 			// @ts-ignore
 			if (hasProperty('default', validator.body.schema)) {
@@ -1214,37 +1214,37 @@ export const composeHandler = ({
 							? `'${value}'`
 							: value
 
-				fnLiteral += `if(body.Check(c.body) === false) {
+				fnLiteral += `if(validator.body.Check(c.body) === false) {
 					if (typeof c.body === 'object') {
 						c.body = Object.assign(${parsed}, c.body)
 					} else { c.body = ${parsed} }`
 
 				if (isOptional(validator.body))
 					fnLiteral += `
-					    if(c.body && (typeof c.body === "object" && isNotEmpty(c.body)) && body.Check(c.body) === false) {
+					    if(c.body && (typeof c.body === "object" && isNotEmpty(c.body)) && validator.body.Check(c.body) === false) {
             				${composeValidation('body')}
              			}
                     }`
 				else
 					fnLiteral += `
-    				if(body.Check(c.body) === false) {
+    				if(validator.body.Check(c.body) === false) {
         				${composeValidation('body')}
          			}
                 }`
 			} else {
 				if (isOptional(validator.body))
-					fnLiteral += `if(c.body && (typeof c.body === "object" && isNotEmpty(c.body)) && body.Check(c.body) === false) {
+					fnLiteral += `if(c.body && (typeof c.body === "object" && isNotEmpty(c.body)) && validator.body.Check(c.body) === false) {
          			${composeValidation('body')}
           		}`
 				else
-					fnLiteral += `if(body.Check(c.body) === false) {
+					fnLiteral += `if(validator.body.Check(c.body) === false) {
          			${composeValidation('body')}
           		}`
 			}
 
 			// @ts-ignore
 			if (hasTransform(validator.body.schema))
-				fnLiteral += `\nc.body = body.Decode(c.body)\n`
+				fnLiteral += `\nc.body = validator.body.Decode(c.body)\n`
 		}
 
 		if (
@@ -1278,17 +1278,17 @@ export const composeHandler = ({
 
 			// @ts-ignore
 			if (isOptional(validator.cookie))
-				fnLiteral += `if(isNotEmpty(c.cookie) && cookie.Check(cookeValue) === false) {
+				fnLiteral += `if(isNotEmpty(c.cookie) && validator.cookie.Check(cookeValue) === false) {
 					${composeValidation('cookie', 'cookieValue')}
 				}`
 			else
-				fnLiteral += `if(cookie.Check(cookieValue) === false) {
+				fnLiteral += `if(validator.cookie.Check(cookieValue) === false) {
 					${composeValidation('cookie', 'cookieValue')}
 				}`
 
 			// @ts-expect-error
 			if (hasTransform(validator.cookie.schema))
-				fnLiteral += `\nfor(const [key, value] of Object.entries(cookie.Decode(cookieValue)))
+				fnLiteral += `\nfor(const [key, value] of Object.entries(validator.cookie.Decode(cookieValue)))
 					c.cookie[key].value = value\n`
 		}
 	}
@@ -1757,14 +1757,7 @@ export const composeHandler = ({
 			afterResponse,
 			trace
 		},
-		validator: {
-			body,
-			headers,
-			params,
-			query,
-			response,
-			cookie
-		},
+		validator,
 		utils: {
 			mapResponse,
 			mapCompactResponse,
