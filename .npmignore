@@ -8,6 +8,7 @@
 .swc.esm.swcrc
 .swcrc
 .husky
+.eslintrc.json
 
 bun.lockb
 node_modules

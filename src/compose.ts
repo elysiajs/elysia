@@ -2143,7 +2143,8 @@ export const composeErrorHandler = (
 		mapResponse,
 		ERROR_CODE,
 		ELYSIA_RESPONSE,
-		ELYSIA_TRACE
+		ELYSIA_TRACE,
+		ELYSIA_REQUEST_ID
 	} = inject
 
 	const onMapResponse = []
@@ -2161,6 +2162,9 @@ export const composeErrorHandler = (
 			? 'async'
 			: ''
 	} function(context, error, skipGlobal) {`
+
+	if(app.event.trace.length > 0)
+		fnLiteral += '\nconst id = c[ELYSIA_REQUEST_ID]\n'
 
 	const report = createReport({
 		context: 'context',
@@ -2289,6 +2293,7 @@ export const composeErrorHandler = (
 		mapResponse,
 		ERROR_CODE,
 		ELYSIA_RESPONSE,
-		ELYSIA_TRACE
+		ELYSIA_TRACE,
+		ELYSIA_REQUEST_ID
 	})
 }

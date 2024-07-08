@@ -308,12 +308,13 @@ export default class Elysia<
 			aot: true,
 			strictPath: false,
 			global: false,
-			cookie: {
-				path: '/'
-			},
 			analytic: false,
 			normalize: true,
 			...config,
+			cookie: {
+				path: '/',
+				...config?.cookie
+			},
 			experimental: config?.experimental ?? {},
 			seed: config?.seed === undefined ? '' : config?.seed
 		} as any
