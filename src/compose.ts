@@ -2163,7 +2163,9 @@ export const composeErrorHandler = (
 			: ''
 	} function(context, error, skipGlobal) {`
 
-	if(app.event.trace.length > 0)
+	const hasTrace = app.event.trace.length > 0
+
+	if(hasTrace)
 		fnLiteral += '\nconst id = context[ELYSIA_REQUEST_ID]\n'
 
 	const report = createReport({
@@ -2188,8 +2190,8 @@ export const composeErrorHandler = (
 		}\n`
 
 	const saveResponse =
-		app.event.trace.length > 0 || hooks.afterResponse.length > 0
-			? 'c.response = '
+		hasTrace || hooks.afterResponse.length > 0 || hooks.afterResponse.length > 0
+			? 'context.response = '
 			: ''
 
 	for (let i = 0; i < app.event.error.length; i++) {
