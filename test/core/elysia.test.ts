@@ -3,6 +3,8 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
+import { AsyncLocalStorage } from 'async_hooks'
+
 describe('Edge Case', () => {
 	it('handle state', async () => {
 		const app = new Elysia()
@@ -170,5 +172,26 @@ describe('Edge Case', () => {
 
 		// @ts-expect-error private property
 		expect(main.getGlobalRoutes().length).toBe(2)
+	})
+
+	it('inherits AsyncLocalStorage', async () => {
+		const store = new AsyncLocalStorage()
+
+		const plugin = new Elysia({ asyncLocalStorage: store }).get(
+			'/plugin',
+			() => typeof store.getStore()
+		)
+
+		const app = new Elysia()
+			.use(plugin)
+			.get('/main', () => typeof store.getStore())
+
+		const response = await Promise.all([
+			app.handle(req('/plugin')).then((x) => x.text()),
+			app.handle(req('/main')).then((x) => x.text())
+		])
+
+		expect(response).toStrictEqual(['object', 'object'])
+		expect(app.config.asyncLocalStorage).toBe(store)
 	})
 })

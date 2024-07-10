@@ -303,7 +303,7 @@ export default class Elysia<
 			else config.detail.tags = config.tags
 		}
 
-        this.config = {}
+		this.config = {}
 		this.applyConfig(config ?? {})
 
 		if (config?.analytic && (config?.name || config?.seed !== undefined))
@@ -2995,6 +2995,9 @@ export default class Elysia<
 
 			return instance
 		}
+
+		if (plugin.config.asyncLocalStorage)
+			this.config.asyncLocalStorage = plugin.config.asyncLocalStorage
 
 		if (plugin.promisedModules.size) {
 			this.promisedModules.add(
