@@ -14,6 +14,8 @@ import type {
 } from '@sinclair/typebox'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
+import type { AsyncLocalStorage } from 'async_hooks'
+
 import type { OpenAPIV3 } from 'openapi-types'
 
 import type { CookieOptions } from './cookies'
@@ -150,6 +152,7 @@ export type ElysiaConfig<
 	 * @default false
 	 */
 	normalize?: boolean
+	asyncLocalStorage?: AsyncLocalStorage<unknown>
 }
 
 export type MaybeArray<T> = T | T[]

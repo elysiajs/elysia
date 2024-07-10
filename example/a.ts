@@ -1,11 +1,32 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
+import { AsyncLocalStorage } from 'async_hooks'
 
-const a = new Elysia({ name: 'a' }).trace({ as: 'global' }, () => {})
+const store = new AsyncLocalStorage<{ i: number }>()
+
+const outer = () => {
+	const b = store.getStore()
+
+	console.log({ b })
+}
 
 const app = new Elysia()
-	.use(a)
-	.use(a)
-	.get('/', () => {})
+	.applyConfig({
+		asyncLocalStorage: store
+	})
+	.onRequest(() => {
+		const a = store.getStore()
 
-// console.log(app.routes[0].hooks)
+		console.log({ a })
+
+		if (a) a.i = 0
+	})
+	.get('/', async ({ query: { id } }) => {
+		outer()
+
+		return 'a'
+	})
+
+app.handle(req('/?id=1'))
+// await Bun.sleep(100)
+app.handle(req('/?id=2'))

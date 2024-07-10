@@ -1934,7 +1934,8 @@ export const composeGeneralHandler = (
 		redirect,
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID,
-		getServer
+		getServer,
+		asl
 	} = data
 
 	const store = app.singleton.store
@@ -1968,6 +1969,7 @@ export const composeGeneralHandler = (
 
 	return ${maybeAsync ? 'async' : ''} function map(request) {\n`
 
+	if (app.config.asyncLocalStorage) fnLiteral += `return asl.run({}, () => {\n`
 	if (app.event.request.length) fnLiteral += `let re`
 
 	fnLiteral += `\nconst url = request.url
@@ -2109,6 +2111,8 @@ export const composeGeneralHandler = (
 		${findDynamicRoute}
 	}`
 
+	if (app.config.asyncLocalStorage) fnLiteral += `)}`
+
 	const handleError = composeErrorHandler(app) as any
 
 	// @ts-expect-error
@@ -2128,7 +2132,8 @@ export const composeGeneralHandler = (
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID,
 		// @ts-expect-error private property
-		getServer: () => app.getServer()
+		getServer: () => app.getServer(),
+		asl: app.config.asyncLocalStorage
 	})
 }
 

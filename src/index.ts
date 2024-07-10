@@ -303,21 +303,8 @@ export default class Elysia<
 			else config.detail.tags = config.tags
 		}
 
-		this.config = {
-			prefix: '',
-			aot: true,
-			strictPath: false,
-			global: false,
-			analytic: false,
-			normalize: true,
-			...config,
-			cookie: {
-				path: '/',
-				...config?.cookie
-			},
-			experimental: config?.experimental ?? {},
-			seed: config?.seed === undefined ? '' : config?.seed
-		} as any
+        this.config = {}
+		this.applyConfig(config ?? {})
 
 		if (config?.analytic && (config?.name || config?.seed !== undefined))
 			this.telemetry.stack = new Error().stack
@@ -365,6 +352,26 @@ export default class Elysia<
 			for (const macro of this.extender.macros)
 				traceBackMacro(macro.fn(manager), localHook)
 		}
+	}
+
+	applyConfig(config: ElysiaConfig<BasePath, Scoped>) {
+		this.config = {
+			prefix: '',
+			aot: true,
+			strictPath: false,
+			global: false,
+			analytic: false,
+			normalize: true,
+			...config,
+			cookie: {
+				path: '/',
+				...config?.cookie
+			},
+			experimental: config?.experimental ?? {},
+			seed: config?.seed === undefined ? '' : config?.seed
+		} as any
+
+		return this
 	}
 
 	get models(): {
