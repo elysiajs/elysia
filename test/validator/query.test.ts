@@ -281,6 +281,7 @@ describe('Query Validator', () => {
 					check() {
 						const { state } = ctx.query
 
+						// @ts-expect-error
 						if (!checker.check(ctx, name, state ?? ctx.query.state))
 							throw new Error('State mismatch')
 					}
@@ -613,5 +614,22 @@ describe('Query Validator', () => {
 		)
 
 		expect(response.status).toBe(422)
+	})
+
+	it('handle optional at root', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Optional(
+				t.Object({
+					id: t.Numeric()
+				})
+			)
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/')).then((x) => x.json()),
+			app.handle(req('/?id=1')).then((x) => x.json())
+		])
+
+		expect(res).toEqual([{}, { id: 1 }])
 	})
 })

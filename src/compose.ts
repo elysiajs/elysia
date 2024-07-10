@@ -53,11 +53,13 @@ const TypeBoxSymbol = {
 	kind: Symbol.for('TypeBox.Kind')
 } as const
 
-const isOptional = (validator: TypeCheck<any>) => {
+const isOptional = (validator?: TypeCheck<any>) => {
+	if(!validator) return false
+
 	// @ts-expect-error
 	const schema = validator?.schema
 
-	return schema && TypeBoxSymbol.optional in schema
+	return !!schema && TypeBoxSymbol.optional in schema
 }
 
 export const hasAdditionalProperties = (
@@ -1100,21 +1102,17 @@ export const composeHandler = ({
 				}
 
 			if (isOptional(validator.headers))
-				fnLiteral += `if(isNotEmpty(c.headers) && validator.headers.Check(c.headers) === false) {
-				${composeValidation('headers')}
-			}`
-			else
-				fnLiteral += `if(validator.headers.Check(c.headers) === false) {
+				fnLiteral += `if(isNotEmpty(c.headers)) {`
+
+			fnLiteral += `if(validator.headers.Check(c.headers) === false) {
 				${composeValidation('headers')}
 			}`
 
-			// @ts-ignore
-			if (hasTransform(validator.headers.schema)) {
-				if(isOptional(validator.headers))
-					fnLiteral += `\nif(c.headers) {c.headers = validator.headers.Decode(c.headers)}\n`
-				else
-					fnLiteral += `\nc.headers = validator.headers.Decode(c.headers)\n`
-			}
+			// @ts-expect-error private property
+			if (hasTransform(validator.headers.schema))
+				fnLiteral += `c.headers = validator.headers.Decode(c.headers)\n`
+
+			if (isOptional(validator.headers)) fnLiteral += '}'
 		}
 
 		if (validator.params) {
@@ -1142,7 +1140,7 @@ export const composeHandler = ({
 				${composeValidation('params')}
 			}`
 
-			// @ts-ignore
+			// @ts-expect-error private property
 			if (hasTransform(validator.params.schema))
 				fnLiteral += `\nc.params = validator.params.Decode(c.params)\n`
 		}
@@ -1172,22 +1170,21 @@ export const composeHandler = ({
 								: value
 
 					if (parsed !== undefined)
-                        fnLiteral += `if(c.query['${key}'] === undefined) c.query['${key}'] = ${parsed}\n`
+						fnLiteral += `if(c.query['${key}'] === undefined) c.query['${key}'] = ${parsed}\n`
 				}
 
 			if (isOptional(validator.query))
-				fnLiteral += `if(isNotEmpty(c.query) && validator.query.Check(c.query) === false) {
-				${composeValidation('query')}
-			}`
-			else
-				fnLiteral += `if(validator.query.Check(c.query) === false) {
-				${composeValidation('query')}
+				fnLiteral += `if(isNotEmpty(c.query)) {`
+
+			fnLiteral += `if(validator.query.Check(c.query) === false) {
+          		${composeValidation('query')}
 			}`
 
-			// @ts-ignore
+			// @ts-expect-error private property
 			if (hasTransform(validator.query.schema))
-				// Decode doesn't work with Object.create(null)
 				fnLiteral += `\nc.query = validator.query.Decode(Object.assign({}, c.query))\n`
+
+			if (isOptional(validator.query)) fnLiteral += `}`
 		}
 
 		if (validator.body) {
@@ -1197,6 +1194,12 @@ export const composeHandler = ({
 				!hasAdditionalProperties(validator.body as any)
 			)
 				fnLiteral += 'c.body = validator.body.Clean(c.body);\n'
+
+			// @ts-expect-error private property
+			const doesHaveTransform = hasTransform(validator.body.schema)
+
+			if (doesHaveTransform || isOptional(validator.body))
+				fnLiteral += `\nconst isNotEmptyObject = c.body && (typeof c.body === "object" && isNotEmpty(c.body))\n`
 
 			// @ts-ignore
 			if (hasProperty('default', validator.body.schema)) {
@@ -1221,7 +1224,7 @@ export const composeHandler = ({
 
 				if (isOptional(validator.body))
 					fnLiteral += `
-					    if(c.body && (typeof c.body === "object" && isNotEmpty(c.body)) && validator.body.Check(c.body) === false) {
+					    if(isNotEmptyObject && validator.body.Check(c.body) === false) {
             				${composeValidation('body')}
              			}
                     }`
@@ -1233,7 +1236,7 @@ export const composeHandler = ({
                 }`
 			} else {
 				if (isOptional(validator.body))
-					fnLiteral += `if(c.body && (typeof c.body === "object" && isNotEmpty(c.body)) && validator.body.Check(c.body) === false) {
+					fnLiteral += `if(isNotEmptyObject && validator.body.Check(c.body) === false) {
          			${composeValidation('body')}
           		}`
 				else
@@ -1242,9 +1245,8 @@ export const composeHandler = ({
           		}`
 			}
 
-			// @ts-ignore
-			if (hasTransform(validator.body.schema))
-				fnLiteral += `\nc.body = validator.body.Decode(c.body)\n`
+			if (doesHaveTransform)
+				fnLiteral += `\nif(isNotEmptyObject) c.body = validator.body.Decode(c.body)\n`
 		}
 
 		if (
@@ -1276,20 +1278,20 @@ export const composeHandler = ({
 					}\n`
 				}
 
-			// @ts-ignore
 			if (isOptional(validator.cookie))
-				fnLiteral += `if(isNotEmpty(c.cookie) && validator.cookie.Check(cookeValue) === false) {
-					${composeValidation('cookie', 'cookieValue')}
-				}`
-			else
-				fnLiteral += `if(validator.cookie.Check(cookieValue) === false) {
-					${composeValidation('cookie', 'cookieValue')}
-				}`
+				fnLiteral += `if(isNotEmpty(c.cookie)) {`
 
-			// @ts-expect-error
+			fnLiteral += `if(validator.cookie.Check(cookieValue) === false) {
+				${composeValidation('cookie', 'cookieValue')}
+			}`
+
+			// @ts-expect-error private property
 			if (hasTransform(validator.cookie.schema))
 				fnLiteral += `\nfor(const [key, value] of Object.entries(validator.cookie.Decode(cookieValue)))
 					c.cookie[key].value = value\n`
+
+			if (isOptional(validator.cookie))
+				fnLiteral += `}`
 		}
 	}
 
@@ -1831,7 +1833,7 @@ export const composeHandler = ({
 	} catch {
 		const debugHooks = lifeCycleToFn(hooks)
 
-		console.log('[Compiler] failed to generate optimized handler')
+		console.log('[Composer] failed to generate optimized handler')
 		console.log(
 			'Please report the following to SaltyAom privately as it may include sensitive information about your codebase:'
 		)
@@ -1969,7 +1971,8 @@ export const composeGeneralHandler = (
 
 	return ${maybeAsync ? 'async' : ''} function map(request) {\n`
 
-	if (app.config.asyncLocalStorage) fnLiteral += `return asl.run({}, () => {\n`
+	if (app.config.asyncLocalStorage)
+		fnLiteral += `return asl.run({}, () => {\n`
 	if (app.event.request.length) fnLiteral += `let re`
 
 	fnLiteral += `\nconst url = request.url
@@ -2170,8 +2173,7 @@ export const composeErrorHandler = (
 
 	const hasTrace = app.event.trace.length > 0
 
-	if(hasTrace)
-		fnLiteral += '\nconst id = context[ELYSIA_REQUEST_ID]\n'
+	if (hasTrace) fnLiteral += '\nconst id = context[ELYSIA_REQUEST_ID]\n'
 
 	const report = createReport({
 		context: 'context',
@@ -2195,7 +2197,9 @@ export const composeErrorHandler = (
 		}\n`
 
 	const saveResponse =
-		hasTrace || hooks.afterResponse.length > 0 || hooks.afterResponse.length > 0
+		hasTrace ||
+		hooks.afterResponse.length > 0 ||
+		hooks.afterResponse.length > 0
 			? 'context.response = '
 			: ''
 

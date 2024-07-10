@@ -416,75 +416,94 @@ describe('Body Validator', () => {
 		expect(value).toBe('number')
 	})
 
-	it('don\'t coerce number to numeric', async () => {
+	it("don't coerce number to numeric", async () => {
 		const app = new Elysia().post('/', ({ body }) => typeof body, {
 			body: t.Number()
 		})
 
-		const response = await app
-			.handle(
-				new Request('http://localhost/', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'text/plain'
-					},
-					body: '1'
-				})
-			)
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'text/plain'
+				},
+				body: '1'
+			})
+		)
 
 		expect(response.status).toBe(422)
 	})
 
-	it('don\'t coerce number object to numeric', async () => {
+	it("don't coerce number object to numeric", async () => {
 		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
 			body: t.Object({
 				id: t.Number()
 			})
 		})
 
-		const response = await app
-			.handle(
-				post('/', {
-					id: '1'
-				})
-			)
+		const response = await app.handle(
+			post('/', {
+				id: '1'
+			})
+		)
 
 		expect(response.status).toBe(422)
 	})
 
-	it('don\'t coerce string to boolean', async () => {
+	it("don't coerce string to boolean", async () => {
 		const app = new Elysia().post('/', ({ body }) => typeof body, {
 			body: t.Number()
 		})
 
-		const response = await app
-			.handle(
-				new Request('http://localhost/', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'text/plain'
-					},
-					body: 'true'
-				})
-			)
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'text/plain'
+				},
+				body: 'true'
+			})
+		)
 
 		expect(response.status).toBe(422)
 	})
 
-	it('don\'t coerce string object to boolean', async () => {
+	it("don't coerce string object to boolean", async () => {
 		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
 			body: t.Object({
 				id: t.Number()
 			})
 		})
 
-		const response = await app
-			.handle(
-				post('/', {
-					id: 'true'
-				})
-			)
+		const response = await app.handle(
+			post('/', {
+				id: 'true'
+			})
+		)
 
 		expect(response.status).toBe(422)
+	})
+
+	it('handle optional at root', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Optional(
+				t.Object({
+					id: t.Numeric()
+				})
+			)
+		})
+
+		const res = await Promise.all([
+			app.handle(post('/')).then((x) => x.json()),
+			app
+				.handle(
+					post('/', {
+						id: 1
+					})
+				)
+				.then((x) => x.json())
+		])
+
+		expect(res).toEqual([{}, { id: 1 }])
 	})
 })

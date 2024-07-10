@@ -312,4 +312,29 @@ describe('Header Validator', () => {
 
 		expect(value).toBe('boolean')
 	})
+
+	it('handle optional at root', async () => {
+		const app = new Elysia().get('/', ({ headers }) => headers, {
+			headers: t.Optional(
+				t.Object({
+					id: t.Numeric()
+				})
+			)
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/')).then((x) => x.json()),
+			app
+				.handle(
+					req('/', {
+						headers: {
+							id: '1'
+						}
+					})
+				)
+				.then((x) => x.json())
+		])
+
+		expect(res).toEqual([{}, { id: 1 }])
+	})
 })

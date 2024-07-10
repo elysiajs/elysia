@@ -296,12 +296,12 @@ describe('Cookie Response', () => {
 		expect(await response.json()).toEqual(expected)
 	})
 
-	it('don\'t parse cookie type unless specified', async () => {
+	it("don't parse cookie type unless specified", async () => {
 		let value: string | undefined
 
 		const app = new Elysia().get(
 			'/council',
-			({ cookie: { council } }) => value = council.value,
+			({ cookie: { council } }) => (value = council.value)
 		)
 
 		const expected = {
@@ -321,5 +321,30 @@ describe('Cookie Response', () => {
 
 		expect(response.status).toBe(200)
 		expect(value).toEqual(JSON.stringify(expected))
+	})
+
+	it('handle optional at root', async () => {
+		const app = new Elysia().get('/', ({ cookie: { id } }) => id.value, {
+			cookie: t.Optional(
+				t.Object({
+					id: t.Numeric()
+				})
+			)
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/')).then((x) => x.text()),
+			app
+				.handle(
+					req('/', {
+						headers: {
+							cookie: 'id=1'
+						}
+					})
+				)
+				.then((x) => x.text())
+		])
+
+		expect(res).toEqual(['', '1'])
 	})
 })
