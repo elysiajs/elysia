@@ -31,7 +31,7 @@ import {
 	ERROR_CODE,
 	ELYSIA_RESPONSE
 } from './error'
-import { ELYSIA_TRACE } from './trace'
+import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
 import { Sucrose, hasReturn, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
@@ -45,7 +45,6 @@ import type {
 	SchemaValidator
 } from './types'
 import type { TypeCheck } from './type-system'
-import { TraceHandler } from '../dist/cjs'
 
 const headersHasToJSON = (new Headers() as Headers).toJSON
 
