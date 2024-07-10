@@ -823,84 +823,87 @@ export const getCookieValidator = ({
 	return cookieValidator
 }
 
+const injectChecksum = (
+	checksum: number | undefined,
+	x: MaybeArray<HookContainer> | undefined
+) => {
+	if (!x) return
+
+	if (!Array.isArray(x)) {
+		// ? clone fn is required to prevent side-effect from changing hookType
+		const fn = x
+
+		if (checksum && !fn.checksum) fn.checksum = checksum
+		if (fn.scope === 'scoped') fn.scope = 'local'
+
+		return fn
+	}
+
+	// ? clone fns is required to prevent side-effect from changing hookType
+	const fns = [...x]
+
+	for (const fn of fns) {
+		if (checksum && !fn.checksum) fn.checksum = checksum
+
+		if (fn.scope === 'scoped') fn.scope = 'local'
+	}
+
+	return fns
+}
+
 export const mergeLifeCycle = (
 	a: LifeCycleStore,
 	b: LifeCycleStore | LocalHook<any, any, any, any, any, any, any>,
 	checksum?: number
 ): LifeCycleStore => {
-	const injectChecksum = (x: MaybeArray<HookContainer> | undefined) => {
-		if (!x) return
-
-		if (!Array.isArray(x)) {
-			// ? clone fn is required to prevent side-effect from changing hookType
-			const fn = x
-
-			if (checksum && !fn.checksum) fn.checksum = checksum
-			if (fn.scope === 'scoped') fn.scope = 'local'
-
-			return fn
-		}
-
-		// ? clone fns is required to prevent side-effect from changing hookType
-		const fns = [...x]
-
-		for (const fn of fns) {
-			if (checksum && !fn.checksum) fn.checksum = checksum
-
-			if (fn.scope === 'scoped') fn.scope = 'local'
-		}
-
-		return fns
-	}
-
 	return {
 		// ...a,
 		// ...b,
 		start: mergeObjectArray(
 			a.start,
-			injectChecksum(b?.start)
+			injectChecksum(checksum, b?.start)
 		) as HookContainer<GracefulHandler<any>>[],
 		request: mergeObjectArray(
 			a.request,
-			injectChecksum(b?.request)
+			injectChecksum(checksum, b?.request)
 		) as HookContainer<PreHandler<any, any>>[],
 		parse: mergeObjectArray(
 			a.parse,
-			injectChecksum(b?.parse)
+			injectChecksum(checksum, b?.parse)
 		) as HookContainer<BodyHandler<any, any>>[],
 		transform: mergeObjectArray(
 			a.transform,
-			injectChecksum(b?.transform)
+			injectChecksum(checksum, b?.transform)
 		) as HookContainer<TransformHandler<any, any>>[],
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle,
-			injectChecksum(b?.beforeHandle)
+			injectChecksum(checksum, b?.beforeHandle)
 		) as HookContainer<OptionalHandler<any, any>>[],
 		afterHandle: mergeObjectArray(
 			a.afterHandle,
-			injectChecksum(b?.afterHandle)
+			injectChecksum(checksum, b?.afterHandle)
 		) as HookContainer<AfterHandler<any, any>>[],
 		mapResponse: mergeObjectArray(
 			a.mapResponse,
-			injectChecksum(b?.mapResponse)
+			injectChecksum(checksum, b?.mapResponse)
 		) as HookContainer<MapResponse<any, any>>[],
 		afterResponse: mergeObjectArray(
 			a.afterResponse,
-			injectChecksum(b?.afterResponse)
+			injectChecksum(checksum, b?.afterResponse)
 		) as HookContainer<AfterResponseHandler<any, any>>[],
 		// Already merged on Elysia._use, also logic is more complicated, can't directly merge
 		trace: mergeObjectArray(
 			a.trace,
-			injectChecksum(b?.trace)
+			injectChecksum(checksum, b?.trace)
 		) as HookContainer<TraceHandler<any, any>>[],
 		error: mergeObjectArray(
 			a.error,
-			injectChecksum(b?.error)
+			injectChecksum(checksum, b?.error)
 		) as HookContainer<ErrorHandler<any, any, any>>[],
 		stop: mergeObjectArray(
 			a.stop,
-			injectChecksum(b?.stop)
-		) as HookContainer<GracefulHandler<any>>[],
+			injectChecksum(checksum, b?.stop)
+		) as HookContainer<GracefulHandler<any>>[]
 	}
 }
 

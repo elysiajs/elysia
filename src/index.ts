@@ -115,7 +115,8 @@ import type {
 	ResolveMacroContext,
 	ContextAppendType,
 	Reconcile,
-	AfterResponseHandler
+	AfterResponseHandler,
+	HigherOrderFunction
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -212,7 +213,8 @@ export default class Elysia<
 	}
 
 	protected extender = {
-		macros: <MacroQueue[]>[]
+		macros: <MacroQueue[]>[],
+		higherOrderFunctions: <HookContainer<HigherOrderFunction>[]>[]
 	}
 
 	protected validator: SchemaValidator | null = null
@@ -322,6 +324,21 @@ export default class Elysia<
 
 			throw new Error(error.all.map((x) => x.summary).join('\n'))
 		}
+
+		return this
+	}
+
+	wrap(fn: HigherOrderFunction) {
+		this.extender.higherOrderFunctions.push({
+			checksum: checksum(
+				JSON.stringify({
+					name: this.config.name,
+					seed: this.config.seed,
+					content: fn.toString()
+				})
+			),
+			fn
+		})
 
 		return this
 	}
@@ -2996,9 +3013,6 @@ export default class Elysia<
 			return instance
 		}
 
-		if (plugin.config.asyncLocalStorage)
-			this.config.asyncLocalStorage = plugin.config.asyncLocalStorage
-
 		if (plugin.promisedModules.size) {
 			this.promisedModules.add(
 				plugin.modules
@@ -3076,7 +3090,6 @@ export default class Elysia<
 			)
 
 			const macroHashes = <(number | undefined)[]>[]
-
 			for (let i = 0; i < plugin.extender.macros.length; i++) {
 				const macro = this.extender.macros[i]
 
@@ -3164,15 +3177,24 @@ export default class Elysia<
 					this.extender.macros = this.extender.macros.concat(
 						plugin.extender.macros
 					)
+
+					this.extender.higherOrderFunctions =
+						this.extender.higherOrderFunctions.concat(
+							plugin.extender.higherOrderFunctions
+						)
 				}
 			} else {
 				this.extender.macros = this.extender.macros.concat(
 					plugin.extender.macros
 				)
+				this.extender.higherOrderFunctions =
+					this.extender.higherOrderFunctions.concat(
+						plugin.extender.higherOrderFunctions
+					)
 			}
 
+			// ! Deduplicate current instance
 			const macroHashes: number[] = []
-
 			for (let i = 0; i < this.extender.macros.length; i++) {
 				const macro = this.extender.macros[i]
 
@@ -3183,6 +3205,21 @@ export default class Elysia<
 					}
 
 					macroHashes.push(macro.checksum)
+				}
+			}
+
+			// ! Deduplicate current instance
+			const hocHashes: number[] = []
+			for (let i = 0; i < this.extender.higherOrderFunctions.length; i++) {
+				const hoc = this.extender.higherOrderFunctions[i]
+
+				if (hoc.checksum) {
+					if (hocHashes.includes(hoc.checksum)) {
+						this.extender.higherOrderFunctions.splice(i, 1)
+						i--
+					}
+
+					hocHashes.push(hoc.checksum)
 				}
 			}
 

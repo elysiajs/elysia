@@ -1934,8 +1934,7 @@ export const composeGeneralHandler = (
 		redirect,
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID,
-		getServer,
-		asl
+		getServer
 	} = data
 
 	const store = app.singleton.store
@@ -1946,6 +1945,7 @@ export const composeGeneralHandler = (
 	const trace = app.event.trace.map(x => typeof x === 'function' ? x : x.fn)
 
 	const notFound = new NotFoundError()
+	const hoc = app.extender.higherOrderFunctions.map(x => x.fn)
 
 	${
 		app.event.request.length
@@ -1967,10 +1967,8 @@ export const composeGeneralHandler = (
 			: ''
 	}
 
-	return ${maybeAsync ? 'async' : ''} function map(request) {\n`
+	${maybeAsync ? 'async' : ''} function map(request) {\n`
 
-	if (app.config.asyncLocalStorage)
-		fnLiteral += `return asl.run({}, () => {\n`
 	if (app.event.request.length) fnLiteral += `let re`
 
 	fnLiteral += `\nconst url = request.url
@@ -2109,9 +2107,19 @@ export const composeGeneralHandler = (
 		}
 
 		${findDynamicRoute}
-	}`
+	}\n`
 
-	if (app.config.asyncLocalStorage) fnLiteral += `)}`
+	// @ts-expect-error private property
+	if(app.extender.higherOrderFunctions.length) {
+		let handler = 'map'
+		// @ts-expect-error private property
+	    for (let i = 0; i < app.extender.higherOrderFunctions.length; i++)
+			handler = `hoc[${i}](${handler}, request)`
+
+		fnLiteral += `return function hocMap(request) { return ${handler}(request) }`
+	} else fnLiteral += `return map`
+
+	// console.log(fnLiteral)
 
 	const handleError = composeErrorHandler(app) as any
 
@@ -2132,8 +2140,7 @@ export const composeGeneralHandler = (
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID,
 		// @ts-expect-error private property
-		getServer: () => app.getServer(),
-		asl: app.config.asyncLocalStorage
+		getServer: () => app.getServer()
 	})
 }
 

@@ -4,17 +4,21 @@ import { AsyncLocalStorage } from 'async_hooks'
 
 const store = new AsyncLocalStorage()
 
-const plugin = new Elysia({ asyncLocalStorage: store })
-	.get('/plugin', () => typeof store.getStore())
+const plugin = new Elysia()
+	.wrap((fn) => store.run({ a: 1 }, () => AsyncLocalStorage.bind(fn)))
 
-const app = new Elysia().use(plugin).get('/main', () => typeof store.getStore())
+const app = new Elysia()
+	.use(plugin)
+	.use(plugin)
+	.use(plugin)
+	.get('/a', () => {
+		console.log('A', store.getStore())
+		return 'a'
+	})
+	.compile()
 
-await app
-	.handle(req('/plugin'))
-	.then(x => x.text())
-	.then(console.log)
+console.log(app.fetch.toString())
 
-await app
-	.handle(req('/main'))
-	.then(x => x.text())
+app.handle(req('/a'))
+	.then((x) => x.text())
 	.then(console.log)
