@@ -45,6 +45,7 @@ import type {
 	SchemaValidator
 } from './types'
 import type { TypeCheck } from './type-system'
+import { TraceHandler } from '../dist/cjs'
 
 const headersHasToJSON = (new Headers() as Headers).toJSON
 
@@ -54,7 +55,7 @@ const TypeBoxSymbol = {
 } as const
 
 const isOptional = (validator?: TypeCheck<any>) => {
-	if(!validator) return false
+	if (!validator) return false
 
 	// @ts-expect-error
 	const schema = validator?.schema
@@ -101,16 +102,14 @@ export const hasAdditionalProperties = (
 
 const createReport = ({
 	context = 'c',
-	hasTrace,
-	total: totalListener,
+	trace,
 	addFn
 }: {
 	context?: string
-	hasTrace: boolean | number
-	total: number
+	trace: (TraceHandler | HookContainer<TraceHandler>)[]
 	addFn(string: string): void
 }) => {
-	if (!hasTrace)
+	if (!trace.length)
 		return () => {
 			return {
 				resolveChild() {
@@ -120,9 +119,9 @@ const createReport = ({
 			}
 		}
 
-	for (let i = 0; i < totalListener; i++)
+	for (let i = 0; i < trace.length; i++)
 		addFn(
-			`let report${i}, reportChild${i}, reportErr${i}, reportErrChild${i} ;const trace${i} = ${context}[ELYSIA_TRACE][${i}]\n`
+			`let report${i}, reportChild${i}, reportErr${i}, reportErrChild${i}; let trace${i} = ${context}[ELYSIA_TRACE]?.[${i}] ?? trace[${i}](${context});\n`
 		)
 
 	return (
@@ -149,7 +148,7 @@ const createReport = ({
 
 		const reporter = event === 'error' ? 'reportErr' : 'report'
 
-		for (let i = 0; i < totalListener; i++)
+		for (let i = 0; i < trace.length; i++)
 			addFn(
 				`\n${reporter}${i} = trace${i}.${event}({` +
 					`id,` +
@@ -162,11 +161,11 @@ const createReport = ({
 
 		return {
 			resolve() {
-				for (let i = 0; i < totalListener; i++)
+				for (let i = 0; i < trace.length; i++)
 					addFn(`\n${reporter}${i}.resolve()\n`)
 			},
 			resolveChild(name: string) {
-				for (let i = 0; i < totalListener; i++)
+				for (let i = 0; i < trace.length; i++)
 					addFn(
 						`${reporter}Child${i} = ${reporter}${i}.resolveChild?.shift()?.({` +
 							`id,` +
@@ -177,7 +176,7 @@ const createReport = ({
 					)
 
 				return (toValidate?: string) => {
-					for (let i = 0; i < totalListener; i++) {
+					for (let i = 0; i < trace.length; i++) {
 						if (toValidate)
 							addFn(`
                        			if (typeof ELYSIA_RESPONSE === "object" && ${toValidate} && ELYSIA_RESPONSE in ${toValidate}) {
@@ -818,8 +817,7 @@ export const composeHandler = ({
 	if (hasTrace) fnLiteral += '\nconst id = c[ELYSIA_REQUEST_ID]\n'
 
 	const report = createReport({
-		hasTrace,
-		total: hooks.trace.length,
+		trace: hooks.trace,
 		addFn: (word) => {
 			fnLiteral += word
 		}
@@ -1290,8 +1288,7 @@ export const composeHandler = ({
 				fnLiteral += `\nfor(const [key, value] of Object.entries(validator.cookie.Decode(cookieValue)))
 					c.cookie[key].value = value\n`
 
-			if (isOptional(validator.cookie))
-				fnLiteral += `}`
+			if (isOptional(validator.cookie)) fnLiteral += `}`
 		}
 	}
 
@@ -1757,7 +1754,7 @@ export const composeHandler = ({
 			parse,
 			error: handleErrors,
 			afterResponse,
-			trace
+			trace: _trace
 		},
 		validator,
 		utils: {
@@ -1784,6 +1781,8 @@ export const composeHandler = ({
 		ELYSIA_REQUEST_ID,
 		getServer
 	} = hooks
+
+	const trace = _trace.map(x => typeof x === 'function' ? x : x.fn)
 
 	return ${maybeAsync ? 'async' : ''} function handle(c) {
 		${hooks.beforeHandle.length ? 'let be' : ''}
@@ -1945,7 +1944,7 @@ export const composeGeneralHandler = (
 	const st = staticRouter.handlers
 	const wsRouter = app.router.ws
 	const router = app.router.http
-	const trace = app.event.trace
+	const trace = app.event.trace.map(x => typeof x === 'function' ? x : x.fn)
 
 	const notFound = new NotFoundError()
 
@@ -2020,8 +2019,7 @@ export const composeGeneralHandler = (
 
 	const report = createReport({
 		context: 'ctx',
-		hasTrace,
-		total: app.event.trace.length,
+		trace: app.event.trace,
 		addFn: (word) => {
 			fnLiteral += word
 		}
@@ -2147,7 +2145,7 @@ export const composeErrorHandler = (
 	let fnLiteral = ''
 
 	fnLiteral += `const {
-		app: { event: { error: onErrorContainer, afterResponse: resContainer, mapResponse: _onMapResponse } },
+		app: { event: { error: onErrorContainer, afterResponse: resContainer, mapResponse: _onMapResponse, trace: _trace } },
 		mapResponse,
 		ERROR_CODE,
 		ELYSIA_RESPONSE,
@@ -2155,6 +2153,7 @@ export const composeErrorHandler = (
 		ELYSIA_REQUEST_ID
 	} = inject
 
+	const trace = _trace.map(x => typeof x === 'function' ? x : x.fn)
 	const onMapResponse = []
 
 	for(let i = 0; i < _onMapResponse.length; i++)
@@ -2177,8 +2176,7 @@ export const composeErrorHandler = (
 
 	const report = createReport({
 		context: 'context',
-		hasTrace: hooks.trace.length > 0,
-		total: hooks.trace.length,
+		trace: hooks.trace,
 		addFn: (word) => {
 			fnLiteral += word
 		}

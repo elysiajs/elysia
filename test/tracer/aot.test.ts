@@ -1,5 +1,6 @@
 import { Context, Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
+import { req } from '../utils'
 
 describe('Trace AoT', async () => {
 	// it('inject request report', async () => {
@@ -44,4 +45,25 @@ describe('Trace AoT', async () => {
 	// 		`reporter.emit('event',{id,event:'response'`
 	// 	)
 	// })
+
+	it('handle scope', async () => {
+		let called = 0
+
+		const plugin = new Elysia()
+			.trace(({ onHandle }) => {
+				onHandle(() => {
+					called++
+				})
+			})
+			.get('/plugin', () => 'ok')
+
+		const app = new Elysia().use(plugin).get('/main', () => 'ok')
+
+		await Promise.all([
+			app.handle(req('/plugin')),
+			app.handle(req('/main'))
+		])
+
+		expect(called).toBe(1)
+	})
 })
