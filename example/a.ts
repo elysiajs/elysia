@@ -1,14 +1,32 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const a = new Elysia().get('/error', ({ cookie: { a } }) => {
-	a.value = null
-
-	return 'ok'
+const a = new Elysia({ name: 'a' }).macro(({ onBeforeHandle }) => {
+	return {
+		isSignIn() {
+			console.log('RE')
+			onBeforeHandle(() => {
+				console.log('EX')
+			})
+		}
+	}
 })
 
-a.handle(new Request('http://localhost/error'))
-	.then((x) => x.headers.toJSON())
-	.then(console.log)
+const b = new Elysia({ name: 'b' }).use(a)
+
+const c = new Elysia().use(b).get(
+	'/',
+	() => {
+		return 'ok'
+	},
+	{
+		isSignIn: true
+	}
+)
+
+const app = new Elysia().use(c)
+
+app.handle(req('/'))
 
 // const api = treaty(a)
 

@@ -480,7 +480,7 @@ describe('Macro', () => {
 		expect(status).toBe(418)
 	})
 
-	it('inherits macro to plugin without type reference', () => {
+	it("don't inherits macro to plugin without type reference", () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia().get('/hello', () => 'hello', {
@@ -501,6 +501,34 @@ describe('Macro', () => {
 				hello: 'hifumi'
 			})
 
-		expect(called).toEqual(['nagisa', 'hifumi'])
+		expect(called).toEqual(['hifumi'])
+	})
+
+	it("don't duplicate macro call", async () => {
+		let registered = 0
+		let called = 0
+
+		const a = new Elysia({ name: 'a' }).macro(({ onBeforeHandle }) => {
+			return {
+				isSignIn() {
+					registered++
+					onBeforeHandle(() => {
+						called++
+					})
+				}
+			}
+		})
+
+		const b = new Elysia({ name: 'b' }).use(a)
+		const c = new Elysia().use(b).get('/', () => 'ok', {
+			isSignIn: true
+		})
+
+		const app = new Elysia().use(c)
+
+		await app.handle(req('/'))
+
+		expect(registered).toBe(1)
+		expect(called).toBe(1)
 	})
 })
