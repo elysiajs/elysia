@@ -347,4 +347,18 @@ describe('Cookie Response', () => {
 
 		expect(res).toEqual(['', '1'])
 	})
+
+	it("don't set cookie if new value is undefined", async () => {
+		const app = new Elysia().get('/', ({ cookie: { id } }) => {
+			id.value = undefined
+
+			return 'a'
+		})
+
+		// @ts-expect-error
+		const res = app.handle(req('/')).then((x) => x.headers.toJSON())
+
+		// @ts-expect-error
+		expect(res).toEqual({})
+	})
 })

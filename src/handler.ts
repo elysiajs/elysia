@@ -188,8 +188,11 @@ export const mapResponse = (
 				set.status = 302
 		}
 
-		if (set.cookie && isNotEmpty(set.cookie))
-			set.headers['set-cookie'] = serializeCookie(set.cookie)
+		if (set.cookie && isNotEmpty(set.cookie)) {
+			const cookie = serializeCookie(set.cookie)
+
+			if (cookie) set.headers['set-cookie'] = cookie
+		}
 
 		if (
 			set.headers['set-cookie'] &&
@@ -563,8 +566,11 @@ export const mapEarlyResponse = (
 				set.status = 302
 		}
 
-		if (set.cookie && isNotEmpty(set.cookie))
-			set.headers['set-cookie'] = serializeCookie(set.cookie)
+		if (set.cookie && isNotEmpty(set.cookie)) {
+			const cookie = serializeCookie(set.cookie)
+
+			if (cookie) set.headers['set-cookie'] = cookie
+		}
 
 		if (
 			set.headers['set-cookie'] &&

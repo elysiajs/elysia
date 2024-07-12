@@ -1,18 +1,17 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
-const a = new Elysia({ precompile: true }).get(
-	'/error',
-	({ error }) => error("I'm a teapot", 'Kirifuji Nagisa'),
-	{
-		response: {
-			200: t.Void(),
-			418: t.Literal('Kirifuji Nagisa'),
-			420: t.Literal('Snoop Dogg')
-		}
-	}
-)
+const a = new Elysia().get('/error', ({ cookie: { a } }) => {
+	a.value = null
 
-a.handle(new Request('http://localhost/error')).then(x => x.status).then(console.log)
+	return 'ok'
+})
 
-console.log(a.routes[0].composed?.toString())
+a.handle(new Request('http://localhost/error'))
+	.then((x) => x.headers.toJSON())
+	.then(console.log)
+
+// const api = treaty(a)
+
+// const { data, error, response } = await api.error.get()
+
+// console.log(data, error, response)

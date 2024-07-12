@@ -45,8 +45,8 @@ export type ErrorContext<
 			? Record<string, string | undefined>
 			: Route['headers']
 		cookie: undefined extends Route['cookie']
-			? Record<string, Cookie<string>>
-			: Record<string, Cookie<string>> &
+			? Record<string, Cookie<string | undefined>>
+			: Record<string, Cookie<string | undefined>> &
 					Prettify<
 						WithoutNullableKeys<{
 							[key in keyof Route['cookie']]: Cookie<
@@ -103,8 +103,8 @@ export type Context<
 			? Record<string, string | undefined>
 			: Route['headers']
 		cookie: undefined extends Route['cookie']
-			? Record<string, Cookie<string>>
-			: Record<string, Cookie<string>> &
+			? Record<string, Cookie<string | undefined>>
+			: Record<string, Cookie<string | undefined>> &
 					Prettify<
 						WithoutNullableKeys<{
 							[key in keyof Route['cookie']]: Cookie<
