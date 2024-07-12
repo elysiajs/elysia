@@ -501,7 +501,7 @@ describe('Macro', () => {
 				hello: 'hifumi'
 			})
 
-		expect(called).toEqual(['hifumi'])
+		expect(called).toEqual(['nagisa', 'hifumi'])
 	})
 
 	it("don't duplicate macro call", async () => {

@@ -171,7 +171,7 @@ export const mergeResponse = (
 export const mergeHook = (
 	a?: LifeCycleStore,
 	b?: LocalHook<any, any, any, any, any, any, any>,
-	{ allowMacro = false }: { allowMacro?: boolean } = {}
+	// { allowMacro = false }: { allowMacro?: boolean } = {}
 ): LifeCycleStore => {
 	// In case if merging union is need
 	// const customAStore: Record<string, unknown> = {}
@@ -202,15 +202,9 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
-	const rest = allowMacro
-		? {
-				...a,
-				...b
-			}
-		: undefined
-
 	return {
-		...rest,
+		...a,
+		...b,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -1097,8 +1091,7 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 
 export const traceBackMacro = (
 	extension: unknown,
-	property: Record<string, unknown>,
-	hooks = property
+	property: Record<string, unknown>
 ) => {
 	if (!extension || typeof extension !== 'object' || !property) return
 
@@ -1111,8 +1104,8 @@ export const traceBackMacro = (
 
 		if (typeof v === 'function') {
 			v(value)
-		} else if (typeof v === 'object')
-			traceBackMacro(v as BaseMacro, value as any, hooks)
+			delete property[key as unknown as keyof typeof extension]
+		}
 	}
 }
 

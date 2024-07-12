@@ -597,7 +597,7 @@ export default class Elysia<
 			: path + '/'
 
 		// ! Init default [] for hooks if undefined
-		localHook = mergeHook(localHook, {}, { allowMacro: true })
+		localHook = mergeHook(localHook, {})
 
 		if (localHook.tags) {
 			if (!localHook.detail)
@@ -2743,9 +2743,6 @@ export default class Elysia<
 											localHook.error,
 											...(sandbox.event.error || [])
 										]
-						},
-						{
-							allowMacro: true
 						}
 					)
 				)
