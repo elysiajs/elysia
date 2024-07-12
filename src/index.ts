@@ -328,6 +328,12 @@ export default class Elysia<
 		return this
 	}
 
+	/**
+	 * @private DO_NOT_USE_OR_YOU_WILL_BE_FIRE
+	 *
+	 * ! Do not use unless you now exactly what you are doing
+	 * ? Add Higher order function to Elysia.fetch
+	 */
 	wrap(fn: HigherOrderFunction) {
 		this.extender.higherOrderFunctions.push({
 			checksum: checksum(
@@ -3209,17 +3215,21 @@ export default class Elysia<
 			}
 
 			// ! Deduplicate current instance
-			const hocHashes: number[] = []
-			for (let i = 0; i < this.extender.higherOrderFunctions.length; i++) {
-				const hoc = this.extender.higherOrderFunctions[i]
+			const hofHashes: number[] = []
+			for (
+				let i = 0;
+				i < this.extender.higherOrderFunctions.length;
+				i++
+			) {
+				const hof = this.extender.higherOrderFunctions[i]
 
-				if (hoc.checksum) {
-					if (hocHashes.includes(hoc.checksum)) {
+				if (hof.checksum) {
+					if (hofHashes.includes(hof.checksum)) {
 						this.extender.higherOrderFunctions.splice(i, 1)
 						i--
 					}
 
-					hocHashes.push(hoc.checksum)
+					hofHashes.push(hof.checksum)
 				}
 			}
 

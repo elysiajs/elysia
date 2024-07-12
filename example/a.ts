@@ -1,24 +1,18 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
-import { AsyncLocalStorage } from 'async_hooks'
 
-const store = new AsyncLocalStorage()
+const a = new Elysia({ precompile: true }).get(
+	'/error',
+	({ error }) => error("I'm a teapot", 'Kirifuji Nagisa'),
+	{
+		response: {
+			200: t.Void(),
+			418: t.Literal('Kirifuji Nagisa'),
+			420: t.Literal('Snoop Dogg')
+		}
+	}
+)
 
-const plugin = new Elysia()
-	.wrap((fn) => store.run({ a: 1 }, () => AsyncLocalStorage.bind(fn)))
+a.handle(new Request('http://localhost/error')).then(x => x.status).then(console.log)
 
-const app = new Elysia()
-	.use(plugin)
-	.use(plugin)
-	.use(plugin)
-	.get('/a', () => {
-		console.log('A', store.getStore())
-		return 'a'
-	})
-	.compile()
-
-console.log(app.fetch.toString())
-
-app.handle(req('/a'))
-	.then((x) => x.text())
-	.then(console.log)
+console.log(a.routes[0].composed?.toString())

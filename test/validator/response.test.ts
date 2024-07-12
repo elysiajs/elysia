@@ -376,4 +376,46 @@ describe('Response Validator', () => {
 			}
 		})
 	})
+
+	it('return error response with validator', async () => {
+		const app = new Elysia()
+			.get('/ok', ({ error }) => 'ok', {
+				response: {
+					200: t.String(),
+					418: t.Literal('Kirifuji Nagisa'),
+					420: t.Literal('Snoop Dogg')
+				}
+			})
+			.get(
+				'/error',
+				({ error }) => error("I'm a teapot", 'Kirifuji Nagisa'),
+				{
+					response: {
+						200: t.String(),
+						418: t.Literal('Kirifuji Nagisa'),
+						420: t.Literal('Snoop Dogg')
+					}
+				}
+			)
+			.get(
+				'/validate-error',
+				// @ts-expect-error
+				({ error }) => error("I'm a teapot", 'Nagisa'),
+				{
+					response: {
+						200: t.String(),
+						418: t.Literal('Kirifuji Nagisa'),
+						420: t.Literal('Snoop Dogg')
+					}
+				}
+			)
+
+		const response = await Promise.all([
+			app.handle(req('/ok')).then((x) => x.status),
+			app.handle(req('/error')).then((x) => x.status),
+			app.handle(req('/validate-error')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([200, 418, 422])
+	})
 })

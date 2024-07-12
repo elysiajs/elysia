@@ -233,6 +233,8 @@ const composeValidationFactory = ({
 
 					throw new ValidationError('response', validator.response['${status}'], ${name})
 				}
+
+				c.set.status = ${status}
 			}
 
 			break\n\n`
@@ -811,6 +813,7 @@ export const composeHandler = ({
 		inference.set ||
 		hasHeaders ||
 		hasTrace ||
+		validator.response ||
 		(isHandleFn && hasDefaultHeaders)
 
 	if (hasTrace) fnLiteral += '\nconst id = c[ELYSIA_REQUEST_ID]\n'
@@ -838,11 +841,11 @@ export const composeHandler = ({
 		hooks.transform.some(isAsync) ||
 		hooks.mapResponse.some(isAsync)
 
-	const maybeStream =
-		(typeof handler === 'function' ? isGenerator(handler as any) : false) ||
-		hooks.beforeHandle.some(isGenerator) ||
-		hooks.afterHandle.some(isGenerator) ||
-		hooks.transform.some(isGenerator)
+	const maybeStream = true
+		// (typeof handler === 'function' ? isGenerator(handler as any) : false) ||
+		// hooks.beforeHandle.some(isGenerator) ||
+		// hooks.afterHandle.some(isGenerator) ||
+		// hooks.transform.some(isGenerator)
 
 	const requestMapper = maybeStream ? `, c.request` : ``
 
