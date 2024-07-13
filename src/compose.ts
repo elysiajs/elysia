@@ -174,14 +174,17 @@ const createReport = ({
 							`})\n`
 					)
 
-				return (toValidate?: string) => {
+				return (binding?: string) => {
 					for (let i = 0; i < trace.length; i++) {
-						if (toValidate)
+						if (binding)
+			    			// Don't report error because HTTP response is expected and not an actual error to look for
+			     			// if (${binding} && typeof ${binding} === "object" && ELYSIA_RESPONSE in ${binding}) {
+							//     ${reporter}Child${i}?.(${binding}.error)
+							//     ${reporter}Child${i}?.()\n
+			          		// } else
 							addFn(`
-                       			if (typeof ELYSIA_RESPONSE === "object" && ${toValidate} && ELYSIA_RESPONSE in ${toValidate}) {
-                       				${reporter}Child${i}?.(${toValidate}.error)
-                           		} else if (${toValidate} instanceof Error)
-                    				${reporter}Child${i}?.(${toValidate}.response)
+                             	if (${binding} instanceof Error)
+                    				${reporter}Child${i}?.(${binding})
                            		else
                              		${reporter}Child${i}?.()\n`)
 						else addFn(`${reporter}Child${i}?.()\n`)
@@ -842,14 +845,14 @@ export const composeHandler = ({
 		hooks.mapResponse.some(isAsync)
 
 	const maybeStream = true
-		// (typeof handler === 'function' ? isGenerator(handler as any) : false) ||
-		// hooks.beforeHandle.some(isGenerator) ||
-		// hooks.afterHandle.some(isGenerator) ||
-		// hooks.transform.some(isGenerator)
+	// (typeof handler === 'function' ? isGenerator(handler as any) : false) ||
+	// hooks.beforeHandle.some(isGenerator) ||
+	// hooks.afterHandle.some(isGenerator) ||
+	// hooks.transform.some(isGenerator)
 
 	const requestMapper = maybeStream ? `, c.request` : ``
 
-	if (hasTrace) fnLiteral += `c.route = \`${path}\`\n`
+	fnLiteral += `c.route = \`${path}\`\n`
 
 	const parseReporter = report('parse', {
 		total: hooks.parse.length
@@ -2113,10 +2116,10 @@ export const composeGeneralHandler = (
 	}\n`
 
 	// @ts-expect-error private property
-	if(app.extender.higherOrderFunctions.length) {
+	if (app.extender.higherOrderFunctions.length) {
 		let handler = 'map'
 		// @ts-expect-error private property
-	    for (let i = 0; i < app.extender.higherOrderFunctions.length; i++)
+		for (let i = 0; i < app.extender.higherOrderFunctions.length; i++)
 			handler = `hoc[${i}](${handler}, request)`
 
 		fnLiteral += `return function hocMap(request) { return ${handler}(request) }`

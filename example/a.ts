@@ -1,30 +1,27 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const a = new Elysia({ name: 'a' }).macro(({ onBeforeHandle }) => {
-	return {
-		isSignIn() {
-			console.log('RE')
-			onBeforeHandle(() => {
-				console.log('EX')
+const app = new Elysia({ precompile: true })
+	.trace(({ onBeforeHandle }) => {
+		onBeforeHandle(({ onEvent }) => {
+			onEvent(({ onStop }) => {
+				onStop(({ error }) => {
+					console.log({ error })
+					// if (error) isCalled = true
+				})
 			})
+		})
+	})
+	.get('/', () => 'ok', {
+		beforeHandle() {
+			return new Error('A')
 		}
-	}
-})
+	})
+	// .listen(3000)
 
-const b = new Elysia({ name: 'b' }).use(a)
+await app.handle(req('/'))
 
-const c = new Elysia().use(b).get(
-	'/',
-	() => {
-		return 'ok'
-	},
-	{
-		isSignIn: true
-	}
-)
-
-const app = new Elysia().use(c)
+console.log(app.routes[0].composed?.toString())
 
 app.handle(req('/'))
 

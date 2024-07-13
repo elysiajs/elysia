@@ -94,14 +94,14 @@ export type TraceProcess<
 								process: TraceProcess<'begin', false>
 							) => unknown
 						): Promise<void>
-				  }
+					}
 				: {
 						/**
 						 * Index of the child event
 						 */
 						index: number
-				  })
-	  >
+					})
+		>
 	: number
 
 export type TraceListener = (
@@ -194,8 +194,7 @@ const createProcess = () => {
 						const end = performance.now()
 
 						// Catch return error
-						if(error)
-							groupError = error
+						if (error) groupError = error
 
 						const detail = {
 							end,
@@ -239,8 +238,7 @@ const createProcess = () => {
 
 					// If error is return, parent group will not catch an error
 					// but the child group will catch the error
-					if(!error && groupError)
-						error = groupError
+					if (!error && groupError) error = groupError
 
 					const detail = {
 						end,

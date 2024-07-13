@@ -241,4 +241,185 @@ describe('trace', () => {
 
 		expect(app.routes[0].hooks.trace.length).toBe(1)
 	})
+
+	it('report error thrown in lifecycle event', async () => {
+		let isCalled = false
+
+		const app = new Elysia()
+			.trace(({ onBeforeHandle }) => {
+				onBeforeHandle(({ onEvent }) => {
+					onEvent(({ onStop }) => {
+						onStop(({ error }) => {
+							if (error) isCalled = true
+							expect(error).toBeInstanceOf(Error)
+						})
+					})
+				})
+			})
+			.get('/', () => 'ok', {
+				beforeHandle() {
+					throw new Error('A')
+				}
+			})
+
+		await app.handle(req('/'))
+
+		expect(isCalled).toBeTrue()
+	})
+
+	it('report error return in lifecycle event', async () => {
+		let isCalled = false
+
+		const app = new Elysia()
+			.trace(({ onBeforeHandle }) => {
+				onBeforeHandle(({ onEvent }) => {
+					onEvent(({ onStop }) => {
+						onStop(({ error }) => {
+							if (error) isCalled = true
+							expect(error).toBeInstanceOf(Error)
+						})
+					})
+				})
+			})
+			.get('/', () => 'ok', {
+				beforeHandle() {
+					return new Error('A')
+				}
+			})
+
+		await app.handle(req('/'))
+
+		expect(isCalled).toBeTrue()
+	})
+
+	it('report error to parent group', async () => {
+		let isCalled = false
+
+		const app = new Elysia()
+			.trace(({ onBeforeHandle }) => {
+				onBeforeHandle(({ onStop }) => {
+					onStop(({ error }) => {
+						if (error) isCalled = true
+						expect(error).toBeInstanceOf(Error)
+					})
+				})
+			})
+			.get('/', () => 'ok', {
+				beforeHandle() {
+					return new Error('A')
+				}
+			})
+
+		await app.handle(req('/'))
+
+		expect(isCalled).toBeTrue()
+	})
+
+	it('report resolve parent error', async () => {
+		let isCalled = false
+
+		const app = new Elysia()
+			.trace(({ onBeforeHandle }) => {
+				onBeforeHandle(async ({ error: err }) => {
+					const error = await err
+					if (error) isCalled = true
+					expect(error).toBeInstanceOf(Error)
+				})
+			})
+			.get('/', () => 'ok', {
+				beforeHandle() {
+					return new Error('A')
+				}
+			})
+
+		await app.handle(req('/'))
+
+		expect(isCalled).toBeTrue()
+	})
+
+	it('report error return in lifecycle event', async () => {
+		let isCalled = false
+
+		const app = new Elysia()
+			.trace(({ onBeforeHandle }) => {
+				onBeforeHandle(({ onStop }) => {
+					onStop(({ error }) => {
+						if (error) isCalled = true
+						expect(error).toBeInstanceOf(Error)
+					})
+				})
+			})
+			.get('/', () => 'ok', {
+				beforeHandle() {
+					return new Error('A')
+				}
+			})
+
+		await app.handle(req('/'))
+
+		expect(isCalled).toBeTrue()
+	})
+
+	it('report error throw in handle', async () => {
+		let isCalled = false
+
+		const app = new Elysia()
+			.trace(({ onHandle }) => {
+				onHandle(({ onStop }) => {
+					onStop(({ error }) => {
+						if (error) isCalled = true
+						expect(error).toBeInstanceOf(Error)
+					})
+				})
+			})
+			.get('/', () => {
+				throw new Error('A')
+			})
+
+		await app.handle(req('/'))
+
+		expect(isCalled).toBeTrue()
+	})
+
+	it('report error return in handle', async () => {
+		let isCalled = false
+
+		const app = new Elysia()
+			.trace(({ onHandle }) => {
+				onHandle(({ onStop }) => {
+					onStop(({ error }) => {
+						if (error) isCalled = true
+						expect(error).toBeInstanceOf(Error)
+					})
+				})
+			})
+			.get('/', () => {
+				return new Error('A')
+			})
+
+		await app.handle(req('/'))
+
+		expect(isCalled).toBeTrue()
+	})
+
+	it('report error throw in handle', async () => {
+		let isCalled = false
+
+		const app = new Elysia()
+			.trace(({ onHandle }) => {
+				onHandle(({ onStop }) => {
+					onStop(({ error }) => {
+						if (error) isCalled = true
+						expect(error).toBeInstanceOf(Error)
+					})
+				})
+			})
+			.get('/', () => {
+				throw new Error('A')
+			})
+
+		await app.handle(req('/'))
+
+		expect(isCalled).toBeTrue()
+	})
 })

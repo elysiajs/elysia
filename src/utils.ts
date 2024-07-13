@@ -170,7 +170,7 @@ export const mergeResponse = (
 
 export const mergeHook = (
 	a?: LifeCycleStore,
-	b?: LocalHook<any, any, any, any, any, any, any>,
+	b?: LocalHook<any, any, any, any, any, any, any>
 	// { allowMacro = false }: { allowMacro?: boolean } = {}
 ): LifeCycleStore => {
 	// In case if merging union is need
@@ -817,7 +817,7 @@ export const getCookieValidator = ({
 	return cookieValidator
 }
 
-const injectChecksum = (
+export const injectChecksum = (
 	checksum: number | undefined,
 	x: MaybeArray<HookContainer> | undefined
 ) => {
@@ -1380,3 +1380,25 @@ export const form = <const T extends Record<string | number, unknown>>(
 }
 
 export const randomId = () => crypto.getRandomValues(new Uint32Array(1))[0]
+
+// ! Deduplicate current instance
+export const deduplicateChecksum = <T extends Function>(
+	array: HookContainer<T>[]
+): HookContainer<T>[] => {
+	const hashes: number[] = []
+
+	for (let i = 0; i < array.length; i++) {
+		const item = array[i]
+
+		if (item.checksum) {
+			if (hashes.includes(item.checksum)) {
+				array.splice(i, 1)
+				i--
+			}
+
+			hashes.push(item.checksum)
+		}
+	}
+
+	return array
+}

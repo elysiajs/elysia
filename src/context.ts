@@ -70,7 +70,22 @@ export type ErrorContext<
 			cookie?: Record<string, ElysiaCookie>
 		}
 
+		/**
+		 * Path extracted from incoming URL
+		 *
+		 * Represent a value extracted from URL
+		 *
+		 * @example '/id/9'
+	     */
 		path: string
+		/**
+		 * Path as registered to router
+		 *
+		 * Represent a path registered to a router, not a URL
+		 *
+		 * @example '/id/:id'
+	     */
+		route: string
 		request: Request
 		store: Singleton['store']
 		response: Route['response']
@@ -139,7 +154,22 @@ export type Context<
 			cookie?: Record<string, ElysiaCookie>
 		}
 
+		/**
+		 * Path extracted from incoming URL
+		 *
+		 * Represent a value extracted from URL
+		 *
+		 * @example '/id/9'
+	     */
 		path: string
+		/**
+		 * Path as registered to router
+		 *
+		 * Represent a path registered to a router, not a URL
+		 *
+		 * @example '/id/:id'
+	     */
+		route: string
 		request: Request
 		store: Singleton['store']
 		response?: Route['response']

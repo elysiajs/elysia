@@ -17,6 +17,7 @@ import { isNotEmpty } from './handler'
 
 import {
 	cloneInference,
+	deduplicateChecksum,
 	fnToContainer,
 	localHookToLifeCycleStore,
 	mergeDeep,
@@ -3197,19 +3198,8 @@ export default class Elysia<
 			}
 
 			// ! Deduplicate current instance
-			const macroHashes: number[] = []
-			for (let i = 0; i < this.extender.macros.length; i++) {
-				const macro = this.extender.macros[i]
-
-				if (macro.checksum) {
-					if (macroHashes.includes(macro.checksum)) {
-						this.extender.macros.splice(i, 1)
-						i--
-					}
-
-					macroHashes.push(macro.checksum)
-				}
-			}
+			deduplicateChecksum(this.extender.macros)
+			deduplicateChecksum(this.extender.higherOrderFunctions)
 
 			// ! Deduplicate current instance
 			const hofHashes: number[] = []
@@ -5689,6 +5679,9 @@ export {
 	form,
 	replaceSchemaType,
 	replaceUrlPath,
+	checksum,
+	cloneInference,
+	deduplicateChecksum,
 	ELYSIA_FORM_DATA,
 	ELYSIA_REQUEST_ID
 } from './utils'

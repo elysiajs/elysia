@@ -960,6 +960,11 @@ export type MacroToProperty<in out T extends BaseMacroFn> = Prettify<{
 		: T[K]
 }>
 
+interface MacroOptions {
+	insert?: 'before' | 'after'
+	stack?: 'global' | 'local'
+}
+
 export interface MacroManager<
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -972,13 +977,13 @@ export interface MacroManager<
 > {
 	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
 	onParse(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onTransform(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
 	onTransform(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
@@ -986,13 +991,13 @@ export interface MacroManager<
 		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 	onBeforeHandle(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>): unknown
 	onAfterHandle(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 	): unknown
 
@@ -1000,13 +1005,13 @@ export interface MacroManager<
 		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 	onError(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 
 	mapResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
 	mapResponse(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
 	): unknown
 
@@ -1014,7 +1019,7 @@ export interface MacroManager<
 		fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 	): unknown
 	onAfterResponse(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 	): unknown
 
