@@ -5227,7 +5227,7 @@ export default class Elysia<
 	 * ```
 	 */
 	listen = (
-		options: string | number | Partial<Serve>,
+		options: string | number | ((data: Singleton['decorator']) => number | string) | Partial<Serve>,
 		callback?: ListenCallback
 	) => {
 		if (typeof Bun === 'undefined')
@@ -5242,6 +5242,9 @@ export default class Elysia<
 				throw new Error('Port must be a numeric value')
 
 			options = parseInt(options)
+		}
+		if (typeof options === 'function') {
+			options = options(this.decorator)
 		}
 
 		const fetch = this.fetch
