@@ -3,8 +3,8 @@ import { req } from '../test/utils'
 
 const inner = new Elysia()
 	.guard({
+		as: 'global',
 		response: t.Number(),
-		as: 'global'
 	})
 	.get('/inner', () => 2)
 
@@ -15,10 +15,10 @@ const plugin = new Elysia()
 	})
 	.get('/', () => true)
 
-plugin._volatile
+const app = new Elysia()
+	.use(plugin)
+	// @ts-expect-error
+	.get('/', () => 'not a number')
 
-const app = new Elysia().use(plugin).get('/', () => 'ok')
-
-app.handle(req('/plugin'))
+app.handle(req('/'))
 	.then((x) => x.status)
-	.then(console.log)

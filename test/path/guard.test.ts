@@ -208,4 +208,217 @@ describe('guard', () => {
 
 		expect(response).toEqual('a')
 	})
+
+	it('handle as global', async () => {
+		const inner = new Elysia()
+			.guard({
+				as: 'global',
+				response: t.Number(),
+			})
+			// @ts-expect-error
+			.get('/inner', () => 'a')
+
+		const plugin = new Elysia()
+			.use(inner)
+			// @ts-expect-error
+			.get('/plugin', () => true)
+
+		// @ts-expect-error
+		const app = new Elysia().use(plugin).get('/', () => 'not a number')
+
+		const response = await Promise.all([
+			app.handle(req('/inner')).then((x) => x.status),
+			app.handle(req('/plugin')).then((x) => x.status),
+			app.handle(req('/')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([422, 422, 422])
+	})
+
+	it('handle as global with local override', async () => {
+		const inner = new Elysia()
+			.guard({
+				as: 'global',
+				response: t.Number()
+			})
+			// @ts-expect-error
+			.get('/inner', () => 'a')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.guard({
+				response: t.Boolean()
+			})
+			.get('/plugin', () => true)
+
+		// @ts-expect-error
+		const app = new Elysia().use(plugin).get('/', () => 'not a number')
+
+		const response = await Promise.all([
+			app.handle(req('/inner')).then((x) => x.status),
+			app.handle(req('/plugin')).then((x) => x.status),
+			app.handle(req('/')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([422, 200, 422])
+	})
+
+	it('handle as global with scoped override', async () => {
+		const inner = new Elysia()
+			.guard({
+				as: 'global',
+				response: t.Number()
+			})
+			// @ts-expect-error
+			.get('/inner', () => 'a')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.guard({
+				as: 'scoped',
+				response: t.String()
+			})
+			.get('/plugin', () => 'ok')
+
+		const app = new Elysia().use(plugin).get('/', () => 'not a number')
+
+		const response = await Promise.all([
+			app.handle(req('/inner')).then((x) => x.status),
+			app.handle(req('/plugin')).then((x) => x.status),
+			app.handle(req('/')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([422, 200, 200])
+	})
+
+	it('handle as global', async () => {
+		const inner = new Elysia()
+			.guard({
+				as: 'global',
+				response: t.Number()
+			})
+			// @ts-expect-error
+			.get('/inner', () => 'a')
+
+		const plugin = new Elysia()
+			.use(inner)
+			// @ts-expect-error
+			.get('/plugin', () => true)
+
+		// @ts-expect-error
+		const app = new Elysia().use(plugin).get('/', () => 'not a number')
+
+		const response = await Promise.all([
+			app.handle(req('/inner')).then((x) => x.status),
+			app.handle(req('/plugin')).then((x) => x.status),
+			app.handle(req('/')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([422, 422, 422])
+	})
+
+	it('handle as global with local override', async () => {
+		const inner = new Elysia()
+			.guard({
+				as: 'global',
+				response: t.Number()
+			})
+			// @ts-expect-error
+			.get('/inner', () => 'a')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.guard({
+				response: t.Boolean()
+			})
+			.get('/plugin', () => true)
+
+		// @ts-expect-error
+		const app = new Elysia().use(plugin).get('/', () => 'not a number')
+
+		const response = await Promise.all([
+			app.handle(req('/inner')).then((x) => x.status),
+			app.handle(req('/plugin')).then((x) => x.status),
+			app.handle(req('/')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([422, 200, 422])
+	})
+
+	it('handle as global with scoped override', async () => {
+		const inner = new Elysia()
+			.guard({
+				as: 'global',
+				response: t.Number()
+			})
+			// @ts-expect-error
+			.get('/inner', () => 'a')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.guard({
+				as: 'scoped',
+				response: t.String()
+			})
+			.get('/plugin', () => 'ok')
+
+		const app = new Elysia().use(plugin).get('/', () => 'not a number')
+
+		const response = await Promise.all([
+			app.handle(req('/inner')).then((x) => x.status),
+			app.handle(req('/plugin')).then((x) => x.status),
+			app.handle(req('/')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([422, 200, 200])
+	})
+
+	it('handle as scoped', async () => {
+		const inner = new Elysia()
+			.guard({
+				as: 'scoped',
+				response: t.Number()
+			})
+			// @ts-expect-error
+			.get('/inner', () => 'a')
+
+		const plugin = new Elysia()
+			.use(inner)
+			// @ts-expect-error
+			.get('/plugin', () => true)
+
+		const app = new Elysia().use(plugin).get('/', () => 'not a number')
+
+		const response = await Promise.all([
+			app.handle(req('/inner')).then((x) => x.status),
+			app.handle(req('/plugin')).then((x) => x.status),
+			app.handle(req('/')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([422, 422, 200])
+	})
+
+	it('handle as local', async () => {
+		const inner = new Elysia()
+			.guard({
+				as: 'local',
+				response: t.Number()
+			})
+			// @ts-expect-error
+			.get('/inner', () => 'a')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.get('/plugin', () => true)
+
+		const app = new Elysia().use(plugin).get('/', () => 'not a number')
+
+		const response = await Promise.all([
+			app.handle(req('/inner')).then((x) => x.status),
+			app.handle(req('/plugin')).then((x) => x.status),
+			app.handle(req('/')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([422, 200, 200])
+	})
 })
