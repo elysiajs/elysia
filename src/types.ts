@@ -516,16 +516,7 @@ export interface MergeSchema<
 	query: undefined extends A['query'] ? B['query'] : A['query']
 	params: undefined extends A['params'] ? B['params'] : A['params']
 	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
-	response: Prettify<
-		{
-			[v in keyof A['response']]: A['response'][v]
-		} & {
-			[v in keyof Omit<
-				B['response'],
-				keyof A['response']
-			>]: B['response'][v]
-		}
-	>
+	response: undefined extends A['response'] ? B['response'] : A['response']
 }
 
 export type Handler<
