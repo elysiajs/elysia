@@ -2878,7 +2878,7 @@ export default class Elysia<
 		if (!run) {
 			if (typeof hook === 'object') {
 				this.applyMacro(hook)
-				this.event = mergeLifeCycle(this.event, hook)
+				// this.event = mergeLifeCycle(this.event, hook)
 
 				const type: LifeCycleType = hook.as ?? 'local'
 
@@ -2890,6 +2890,19 @@ export default class Elysia<
 					response: hook.response ?? this.validator[type]?.response,
 					cookie: hook.cookie ?? this.validator[type]?.cookie
 				}
+
+				if (hook.parse) this.on({ as: type }, 'parse', hook.parse)
+				if (hook.transform)
+					this.on({ as: type }, 'transform', hook.transform)
+				if (hook.beforeHandle)
+					this.on({ as: type }, 'beforeHandle', hook.beforeHandle)
+				if (hook.afterHandle)
+					this.on({ as: type }, 'afterHandle', hook.afterHandle)
+				if (hook.mapResponse)
+					this.on({ as: type }, 'mapResponse', hook.mapResponse)
+				if (hook.afterResponse)
+					this.on({ as: type }, 'afterResponse', hook.afterResponse)
+				if (hook.error) this.on({ as: type }, 'error', hook.error)
 
 				if (hook.detail) {
 					if (this.config.detail)
