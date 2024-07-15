@@ -10,7 +10,7 @@ import { error, type ELYSIA_RESPONSE } from './error'
 import type {
 	RouteSchema,
 	Prettify,
-	GetPathParameter,
+	ResolvePath,
 	SingletonBase,
 	HTTPHeaders
 } from './types'
@@ -20,12 +20,6 @@ type InvertedStatusMapKey = keyof InvertedStatusMap
 type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>
 }
-
-type ResolvePath<Path extends string> = Prettify<{
-	[Param in GetPathParameter<Path> as Param extends `${infer OptionalParam}?`
-		? OptionalParam
-		: Param]: Param extends `${string}?` ? string | undefined : string
-}>
 
 export type ErrorContext<
 	in out Route extends RouteSchema = {},

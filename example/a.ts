@@ -1,16 +1,17 @@
-import { Elysia, t } from '../src'
-import { Reconcile } from '../src/types'
-import { req } from '../test/utils'
+import { Elysia } from '../src'
 
-class A {
-	get a() {
-		return this
-	}
-}
+const app = new Elysia()
+	.ws('/ws', { message: (ws, message) => ws.send(message) })
+	.group('/nes', (app) =>
+		app.use((app) =>
+			app.group('/ted', (app) =>
+				app.ws('/ws', { message: (ws, message) => ws.send(message) })
+			)
+		)
+	)
+	.listen(3000)
 
-type E = Reconcile<A, {}>
-
-const app = new Elysia().get('/*', ({ params }) => 'hi')
+console.log(app.routes)
 
 // const api = treaty(a)
 

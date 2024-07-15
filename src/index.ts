@@ -1,7 +1,7 @@
 import type { Serve, Server, ServerWebSocket } from 'bun'
 
 import { Memoirist } from 'memoirist'
-import { type TObject, type Static, type TSchema } from '@sinclair/typebox'
+import { type TObject, type Static, type TSchema, Partial } from '@sinclair/typebox'
 
 import type { Context } from './context'
 
@@ -95,7 +95,6 @@ import type {
 	AddSuffixCapitalize,
 	MaybeArray,
 	GracefulHandler,
-	GetPathParameter,
 	MapResponse,
 	Checksum,
 	MacroManager,
@@ -117,7 +116,8 @@ import type {
 	ContextAppendType,
 	Reconcile,
 	AfterResponseHandler,
-	HigherOrderFunction
+	HigherOrderFunction,
+	ResolvePath
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -2419,7 +2419,7 @@ export default class Elysia<
 
 		instance.singleton = { ...this.singleton }
 		instance.definitions = { ...this.definitions }
-		instance.getServer = () => this.server
+		instance.getServer = () => this.getServer()
 		instance.inference = cloneInference(this.inference)
 		instance.extender = { ...this.extender }
 
@@ -2723,29 +2723,26 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(
-						hook as LocalHook<any, any, any, any, any>,
-						{
-							...((localHook || {}) as LocalHook<
-								any,
-								any,
-								any,
-								any,
-								any
-							>),
-							error: !localHook.error
-								? sandbox.event.error
-								: Array.isArray(localHook.error)
-									? [
-											...(localHook.error || {}),
-											...(sandbox.event.error || [])
-										]
-									: [
-											localHook.error,
-											...(sandbox.event.error || [])
-										]
-						}
-					)
+					mergeHook(hook as LocalHook<any, any, any, any, any>, {
+						...((localHook || {}) as LocalHook<
+							any,
+							any,
+							any,
+							any,
+							any
+						>),
+						error: !localHook.error
+							? sandbox.event.error
+							: Array.isArray(localHook.error)
+								? [
+										...(localHook.error || {}),
+										...(sandbox.event.error || [])
+									]
+								: [
+										localHook.error,
+										...(sandbox.event.error || [])
+									]
+					})
 				)
 			}
 		)
@@ -3502,7 +3499,7 @@ export default class Elysia<
 					get: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -3581,7 +3578,7 @@ export default class Elysia<
 					post: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -3660,7 +3657,7 @@ export default class Elysia<
 					put: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -3739,7 +3736,7 @@ export default class Elysia<
 					patch: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -3818,7 +3815,7 @@ export default class Elysia<
 					delete: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -3897,7 +3894,7 @@ export default class Elysia<
 					options: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -3976,7 +3973,7 @@ export default class Elysia<
 					[method in string]: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -4055,7 +4052,7 @@ export default class Elysia<
 					head: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -4134,7 +4131,7 @@ export default class Elysia<
 					connect: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -4219,7 +4216,7 @@ export default class Elysia<
 					[method in Method]: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -4290,7 +4287,7 @@ export default class Elysia<
 					subscribe: {
 						body: Schema['body']
 						params: undefined extends Schema['params']
-							? Record<GetPathParameter<Path>, string>
+							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
@@ -5732,7 +5729,24 @@ export type {
 	Checksum,
 	DocumentDecoration,
 	InferContext,
-	InferHandler
+	InferHandler,
+	ResolvePath,
+	MapResponse,
+	MacroQueue,
+	BaseMacro,
+	MacroManager,
+	BaseMacroFn,
+	MacroToProperty,
+	ResolveMacroContext,
+	MergeElysiaInstances,
+	MaybeArray,
+	ModelValidator,
+	MetadataBase,
+	UnwrapBodySchema,
+	UnwrapGroupGuardRoute,
+	ModelValidatorError,
+	ExcludeElysiaResponse,
+	CoExist
 } from './types'
 
 export type { Static, TSchema } from '@sinclair/typebox'

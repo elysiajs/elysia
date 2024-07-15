@@ -168,6 +168,18 @@ export type GetPathParameter<Path extends string> =
 		? IsPathParameter<A> | GetPathParameter<B>
 		: IsPathParameter<Path>
 
+export type ResolvePath<Path extends string> = Prettify<
+	{
+		[Param in GetPathParameter<Path> as Param extends `${string}?`
+			? never
+			: Param]: string
+	} & {
+		[Param in GetPathParameter<Path> as Param extends `${infer OptionalParam}?`
+			? OptionalParam
+			: never]?: string
+	}
+>
+
 // https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
 export type Prettify<T> = {
 	[K in keyof T]: T[K]

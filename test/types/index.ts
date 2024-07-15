@@ -1376,13 +1376,13 @@ app.get('/', ({ set }) => {
 	new Elysia()
 		.get('/:id?', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
-				id: string | undefined
+				id?: string
 			}>()
 		})
-		.get('/:id?/:name?', ({ params }) => {
+		.get('/:id/:name?', ({ params }) => {
 			expectTypeOf<typeof params>().toEqualTypeOf<{
-				id: string | undefined
-				name: string | undefined
+				id: string
+				name?: string
 			}>()
 		})
 }
