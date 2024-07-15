@@ -1169,7 +1169,7 @@ app.resolve(({ headers }) => {
 					right: {
 						get: {
 							body: unknown
-							params: Record<never, string>
+                            params: {}
 							query: unknown
 							headers: unknown
 							response: {
@@ -1187,7 +1187,7 @@ app.resolve(({ headers }) => {
 					ws: {
 						subscribe: {
 							body: unknown
-							params: Record<never, string>
+                            params: {}
 							query: unknown
 							headers: unknown
 							response: unknown

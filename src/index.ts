@@ -1,7 +1,12 @@
 import type { Serve, Server, ServerWebSocket } from 'bun'
 
 import { Memoirist } from 'memoirist'
-import { type TObject, type Static, type TSchema, Partial } from '@sinclair/typebox'
+import {
+	type TObject,
+	type Static,
+	type TSchema,
+	Partial
+} from '@sinclair/typebox'
 
 import type { Context } from './context'
 
@@ -4291,7 +4296,9 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: Schema['response']
+						response: {} extends Schema['response']
+							? unknown
+							: Schema['response']
 					}
 				}
 			>,

@@ -1,17 +1,19 @@
-import { Elysia } from '../src'
+import { Elysia, t, UnwrapRoute } from '../src'
+import { Prettify } from '../src/types'
 
-const app = new Elysia()
-	.ws('/ws', { message: (ws, message) => ws.send(message) })
-	.group('/nes', (app) =>
-		app.use((app) =>
-			app.group('/ted', (app) =>
-				app.ws('/ws', { message: (ws, message) => ws.send(message) })
-			)
-		)
-	)
-	.listen(3000)
+new Elysia().group(
+	'/:a',
+	{
+		beforeHandle({ params, params: { a } }) {
+			return a
+		}
+	},
+	(app) => app
+)
 
-console.log(app.routes)
+// typeof app._routes['true']['post']['response']
+
+// console.log(app.routes)
 
 // const api = treaty(a)
 

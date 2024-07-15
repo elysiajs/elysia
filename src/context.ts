@@ -173,8 +173,11 @@ export type Context<
 		request: Request
 		store: Singleton['store']
 		response?: Route['response']
-	} & (Route['response'] extends { 200: unknown }
+    } & ({} extends Route['response']
 		? {
+				error: typeof error
+			}
+		: {
 				error: <
 					const Code extends
 						| keyof Route['response']
@@ -202,9 +205,6 @@ export type Context<
 							: Code]: T
 					}
 				}
-			}
-		: {
-				error: typeof error
 			}) &
 		Singleton['decorator'] &
 		Singleton['derive'] &

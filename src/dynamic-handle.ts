@@ -1,13 +1,19 @@
 import type { Elysia } from '.'
 
 import { mapEarlyResponse, mapResponse } from './handler'
-import { ElysiaErrors, NotFoundError, ValidationError } from './error'
+import {
+	ELYSIA_RESPONSE,
+	ElysiaErrors,
+	NotFoundError,
+	ValidationError
+} from './error'
 
 import type { Context } from './context'
+import { type error } from './error'
 
 import { parse as parseQuery } from 'fast-querystring'
 
-import { redirect, signCookie } from './utils'
+import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
@@ -189,7 +195,7 @@ export const createDynamicHandler =
 
 			const cookieHeaderValue = request.headers.get('cookie')
 
-			context.cookie = await parseCookie(
+			context.cookie = (await parseCookie(
 				context.set,
 				cookieHeaderValue,
 				cookieMeta
@@ -204,13 +210,13 @@ export const createDynamicHandler =
 								cookieMeta.sign === true
 									? true
 									: cookieMeta.sign !== undefined
-									? typeof cookieMeta.sign === 'string'
-										? cookieMeta.sign
-										: cookieMeta.sign.join(',')
-									: undefined
-					  }
+										? typeof cookieMeta.sign === 'string'
+											? cookieMeta.sign
+											: cookieMeta.sign.join(',')
+										: undefined
+						}
 					: undefined
-			) as any
+			)) as any
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const hook = hooks.transform[i]
@@ -301,7 +307,16 @@ export const createDynamicHandler =
 			if (response instanceof Promise) response = await response
 
 			if (!hooks.afterHandle.length) {
-				const responseValidator = validator?.createResponse?.()?.[response.status]
+				const status =
+					(response as ReturnType<typeof error>)[ELYSIA_RESPONSE] ??
+					(set.status
+						? typeof set.status === 'string'
+							? StatusMap[set.status]
+							: set.status
+						: 200)
+
+				const responseValidator =
+					validator?.createResponse?.()?.[status]
 
 				if (responseValidator?.Check(response) === false)
 					throw new ValidationError(
@@ -328,7 +343,7 @@ export const createDynamicHandler =
 					const result = mapEarlyResponse(newResponse, context.set)
 					if (result !== undefined) {
 						const responseValidator =
-							validator?.response?.[response.status]
+							validator?.response?.[result.status]
 
 						if (responseValidator?.Check(result) === false)
 							throw new ValidationError(
@@ -346,8 +361,8 @@ export const createDynamicHandler =
 				const secret = !cookieMeta.secrets
 					? undefined
 					: typeof cookieMeta.secrets === 'string'
-					? cookieMeta.secrets
-					: cookieMeta.secrets[0]
+						? cookieMeta.secrets
+						: cookieMeta.secrets[0]
 
 				if (cookieMeta.sign === true)
 					for (const [key, cookie] of Object.entries(

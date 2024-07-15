@@ -343,19 +343,6 @@ export type UnwrapBodySchema<
 				: Definitions
 			: unknown
 
-// ? https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#successful_responses
-export type SuccessfulResponse<T = unknown> =
-	| { 200: T }
-	| { 201: T }
-	| { 202: T }
-	| { 203: T }
-	| { 204: T }
-	| { 205: T }
-	| { 206: T }
-	| { 207: T }
-	| { 208: T }
-	| { 226: T }
-
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['type'] = {}
@@ -366,8 +353,14 @@ export interface UnwrapRoute<
 	params: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends TSchema | string
-		? CoExist<UnwrapSchema<Schema['response'], Definitions>, File, BunFile>
-		: Schema['response'] extends SuccessfulResponse<TAnySchema | string>
+		? {
+				200: CoExist<
+					UnwrapSchema<Schema['response'], Definitions>,
+					File,
+					BunFile
+				>
+			}
+		: Schema['response'] extends Record<number, TAnySchema | string>
 			? {
 					[k in keyof Schema['response']]: CoExist<
 						UnwrapSchema<Schema['response'][k], Definitions>,
@@ -523,7 +516,16 @@ export interface MergeSchema<
 	query: undefined extends A['query'] ? B['query'] : A['query']
 	params: undefined extends A['params'] ? B['params'] : A['params']
 	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
-	response: undefined extends A['response'] ? B['response'] : A['response']
+	response: Prettify<
+		{
+			[v in keyof A['response']]: A['response'][v]
+		} & {
+			[v in keyof Omit<
+				B['response'],
+				keyof A['response']
+			>]: B['response'][v]
+		}
+	>
 }
 
 export type Handler<
@@ -537,9 +539,11 @@ export type Handler<
 	Path extends string = ''
 > = (
 	context: Context<Route, Singleton, Path>
-) => Route['response'] extends SuccessfulResponse
-	? Response | MaybePromise<Route['response'][keyof Route['response']]>
-	: Response | MaybePromise<Route['response']>
+) => MaybePromise<
+	{} extends Route['response']
+		? unknown
+		: Route['response'][keyof Route['response']]
+>
 
 export type Replace<Original, Target, With> =
 	IsAny<Target> extends true
@@ -587,27 +591,33 @@ export type InlineHandler<
 			>
 				? Prettify<MacroContext & Context<Route, Singleton, Path>>
 				: Context<Route, Singleton, Path>
-	  ) => Route['response'] extends SuccessfulResponse
-			?
-					| Response
-					| MaybePromise<
-							| Route['response'][keyof Route['response']]
-							| {
-									[Status in keyof Route['response']]: {
-										_type: Record<
-											Status,
-											Route['response'][Status]
-										>
-										[ELYSIA_RESPONSE]: Status
-									}
-							  }[keyof Route['response']]
-					  >
-			: Response | MaybePromise<Route['response']>)
-	| (unknown extends Route['response']
-			? string | number | Object
-			: Route['response'] extends SuccessfulResponse
-				? Route['response'][keyof Route['response']]
-				: Route['response'])
+	  ) =>
+			| Response
+			| MaybePromise<
+					{} extends Route['response']
+						? unknown
+						:
+								| Route['response'][keyof Route['response']]
+								| {
+										[Status in keyof Route['response']]: {
+											_type: Record<
+												Status,
+												Route['response'][Status]
+											>
+											[ELYSIA_RESPONSE]: Status
+										}
+								  }[keyof Route['response']]
+			  >)
+	| ({} extends Route['response']
+			? string | number | boolean | Object
+			:
+					| Route['response'][keyof Route['response']]
+					| {
+							[Status in keyof Route['response']]: {
+								_type: Record<Status, Route['response'][Status]>
+								[ELYSIA_RESPONSE]: Status
+							}
+					  }[keyof Route['response']])
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
@@ -875,7 +885,7 @@ export type LocalHook<
 		? Schema
 		: Schema & {
 				params: undefined extends Schema['params']
-					? Record<GetPathParameter<Path>, string>
+					? ResolvePath<Path>
 					: Schema['params']
 			}
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
@@ -1102,7 +1112,7 @@ export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 	: _ComposeElysiaResponse<Response, Replace<Awaited<Handle>, BunFile, File>>
 
 type _ComposeElysiaResponse<Response, Handle> = Prettify<
-	unknown extends Response
+	{} extends Response
 		? {
 				200: Exclude<Handle, { [ELYSIA_RESPONSE]: any }>
 			} & {
@@ -1115,11 +1125,7 @@ type _ComposeElysiaResponse<Response, Handle> = Prettify<
 					? Status
 					: never]: ErrorResponse['response']
 			}
-		: Response extends SuccessfulResponse
-			? Response
-			: {
-					200: Response
-				}
+		: Response
 >
 
 export type MergeElysiaInstances<
