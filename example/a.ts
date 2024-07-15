@@ -4,21 +4,29 @@ import { req } from '../test/utils'
 const inner = new Elysia()
 	.guard({
 		as: 'global',
-		response: t.Number(),
+		response: {
+			401: t.Number(),
+			402: t.Number()
+		}
 	})
-	.get('/inner', () => 2)
+	.get('/inner', () => '')
 
 const plugin = new Elysia()
 	.use(inner)
 	.guard({
-		response: t.Boolean()
+		response: {
+			401: t.Boolean()
+		}
 	})
-	.get('/', () => true)
+	.get('/plugin', ({ error }) => {
+		error('Payment Required', 20)
+		return error(401, true)
+	})
 
 const app = new Elysia()
 	.use(plugin)
-	// @ts-expect-error
-	.get('/', () => 'not a number')
+	.get('/', () => 'ok')
 
-app.handle(req('/'))
+app.handle(req('/plugin'))
 	.then((x) => x.status)
+	.then(console.log)

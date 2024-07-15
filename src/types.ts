@@ -523,7 +523,13 @@ export interface MergeSchema<
 	query: undefined extends A['query'] ? B['query'] : A['query']
 	params: undefined extends A['params'] ? B['params'] : A['params']
 	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
-	response: undefined extends A['response'] ? B['response'] : A['response']
+	response: {} extends A['response']
+		? {} extends B['response']
+			? {}
+			: B['response']
+		: {} extends B['response']
+			? A['response']
+			: A['response'] & Omit<B['response'], keyof A['response']>
 }
 
 export type Handler<
@@ -595,6 +601,9 @@ export type InlineHandler<
 					{} extends Route['response']
 						? unknown
 						:
+								| (Route['response'] extends { 200: any }
+										? Route['response']
+										: string | number | boolean | Object)
 								| Route['response'][keyof Route['response']]
 								| {
 										[Status in keyof Route['response']]: {
@@ -609,6 +618,9 @@ export type InlineHandler<
 	| ({} extends Route['response']
 			? string | number | boolean | Object
 			:
+					| (Route['response'] extends { 200: any }
+							? Route['response']
+							: string | number | boolean | Object)
 					| Route['response'][keyof Route['response']]
 					| {
 							[Status in keyof Route['response']]: {

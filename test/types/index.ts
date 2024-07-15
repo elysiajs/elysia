@@ -1548,6 +1548,57 @@ app.get('/', ({ set }) => {
 		// @ts-expect-error
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
 	}
+
+	// ? Reconcile status
+	{
+		const inner = new Elysia()
+			.guard({
+				response: {
+					401: t.Number(),
+					402: t.Number()
+				}
+			})
+			.get('/inner', () => '')
+			.as('global')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.guard({
+				response: {
+					401: t.Boolean()
+				}
+			})
+			.get('/plugin', ({ error }) => {
+				error('Payment Required', 20)
+				return error(401, true)
+			})
+
+		const app = new Elysia().use(plugin).get('/', () => 'ok')
+	}
+
+	// ? Reconcile inline handle
+	{
+		const inner = new Elysia()
+			.guard({
+				response: {
+					401: t.Number(),
+					402: t.Number()
+				}
+			})
+			.get('/inner', '')
+			.as('global')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.guard({
+				response: {
+					401: t.Boolean()
+				}
+			})
+			.get('/plugin', error(401, true))
+
+		const app = new Elysia().use(plugin).get('/', 'ok')
+	}
 }
 
 // ? Guard as
@@ -1759,4 +1810,55 @@ app.get('/', ({ set }) => {
 						}
 					)
 		)
+
+	// ? Reconcile status
+	{
+		const inner = new Elysia()
+			.guard({
+				as: 'global',
+				response: {
+					401: t.Number(),
+					402: t.Number()
+				}
+			})
+			.get('/inner', () => '')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.guard({
+				response: {
+					401: t.Boolean()
+				}
+			})
+			.get('/plugin', ({ error }) => {
+				error('Payment Required', 20)
+				return error(401, true)
+			})
+
+		const app = new Elysia().use(plugin).get('/', () => 'ok')
+	}
+
+	// ? Reconcile inline handle
+	{
+		const inner = new Elysia()
+			.guard({
+				as: 'global',
+				response: {
+					401: t.Number(),
+					402: t.Number()
+				}
+			})
+			.get('/inner', '')
+
+		const plugin = new Elysia()
+			.use(inner)
+			.guard({
+				response: {
+					401: t.Boolean()
+				}
+			})
+			.get('/plugin', error(401, true))
+
+		const app = new Elysia().use(plugin).get('/', 'ok')
+	}
 }
