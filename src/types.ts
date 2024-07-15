@@ -188,49 +188,79 @@ export type NeverKey<T> = {
 type IsBothObject<A, B> =
 	A extends Record<string | number | symbol, unknown>
 		? B extends Record<string | number | symbol, unknown>
-			? true
+			? IsClass<A> extends false
+				? IsClass<B> extends false
+					? true
+					: false
+				: false
 			: false
 		: false
+
+type IsClass<V> = V extends abstract new (...args: any) => any ? true : false
+type And<A, B> = A extends true ? (B extends true ? true : false) : false
 
 export type Reconcile<
 	A extends Object,
 	B extends Object,
-	Override extends boolean = false
-> = Override extends true
-	? {
-			[key in keyof A as key extends keyof B ? never : key]: A[key]
-		} extends infer Collision
-		? {} extends Collision
-			? {
-					// @ts-ignore trust me bro
-					[key in keyof B]: IsBothObject<A[key], B[key]> extends true
-						? // @ts-ignore trust me bro
-							Reconcile<A[key], B[key], Override>
-						: B[key]
-				}
-			: Prettify<
-					Collision & {
-						[key in keyof B]: B[key]
+	Override extends boolean = false,
+	// Detect Stack limit, eg. circular dependency
+	Stack extends number[] = []
+> = Stack['length'] extends 16
+	? A
+	: Override extends true
+		? {
+				[key in keyof A as key extends keyof B ? never : key]: A[key]
+			} extends infer Collision
+			? {} extends Collision
+				? {
+						[key in keyof B]: IsBothObject<
+							// @ts-ignore trust me bro
+							A[key],
+							B[key]
+						> extends true
+							? Reconcile<
+									// @ts-ignore trust me bro
+									A[key],
+									B[key],
+									Override,
+									[0, ...Stack]
+								>
+							: B[key]
 					}
-				>
-		: never
-	: {
-				[key in keyof B as key extends keyof A ? never : key]: B[key]
-		  } extends infer Collision
-		? {} extends Collision
-			? {
-					// @ts-ignore trust me bro
-					[key in keyof A]: IsBothObject<A[key], B[key]> extends true
-						? // @ts-ignore trust me bro
-							Reconcile<A[key], B[key], Override>
-						: A[key]
-				}
-			: Prettify<
-					{
-						[key in keyof A]: A[key]
-					} & Collision
-				>
-		: never
+				: Prettify<
+						Collision & {
+							[key in keyof B]: B[key]
+						}
+					>
+			: never
+		: {
+					[key in keyof B as key extends keyof A
+						? never
+						: key]: B[key]
+			  } extends infer Collision
+			? {} extends Collision
+				? {
+						[key in keyof A]: IsBothObject<
+							A[key],
+							// @ts-ignore trust me bro
+							B[key]
+						> extends true
+							? Reconcile<
+									// @ts-ignore trust me bro
+									A[key],
+									// @ts-ignore trust me bro
+									B[key],
+									Override,
+									[0, ...Stack]
+								>
+							: A[key]
+					}
+				: Prettify<
+						{
+							[key in keyof A]: A[key]
+						} & Collision
+					>
+			: never
 
 export interface SingletonBase {
 	decorator: Record<string, unknown>

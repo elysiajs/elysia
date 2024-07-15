@@ -1,29 +1,16 @@
 import { Elysia, t } from '../src'
+import { Reconcile } from '../src/types'
 import { req } from '../test/utils'
 
-const app = new Elysia({ precompile: true })
-	.trace(({ onBeforeHandle }) => {
-		onBeforeHandle(({ onEvent }) => {
-			onEvent(({ onStop }) => {
-				onStop(({ error }) => {
-					console.log({ error })
-					// if (error) isCalled = true
-				})
-			})
-		})
-	})
-	.get('/', () => 'ok', {
-		beforeHandle() {
-			return new Error('A')
-		}
-	})
-	// .listen(3000)
+class A {
+	get a() {
+		return this
+	}
+}
 
-await app.handle(req('/'))
+type E = Reconcile<A, {}>
 
-console.log(app.routes[0].composed?.toString())
-
-app.handle(req('/'))
+const app = new Elysia().get('/*', ({ params }) => 'hi')
 
 // const api = treaty(a)
 

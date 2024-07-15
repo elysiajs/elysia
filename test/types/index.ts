@@ -1370,3 +1370,19 @@ app.get('/', ({ set }) => {
 		}
 	)
 }
+
+// It handle optional params
+{
+	new Elysia()
+		.get('/:id?', ({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<{
+				id: string | undefined
+			}>()
+		})
+		.get('/:id?/:name?', ({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<{
+				id: string | undefined
+				name: string | undefined
+			}>()
+		})
+}

@@ -21,6 +21,12 @@ type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>
 }
 
+type ResolvePath<Path extends string> = Prettify<{
+	[Param in GetPathParameter<Path> as Param extends `${infer OptionalParam}?`
+		? OptionalParam
+		: Param]: Param extends `${string}?` ? string | undefined : string
+}>
+
 export type ErrorContext<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -38,7 +44,7 @@ export type ErrorContext<
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
-				? Record<GetPathParameter<Path>, string>
+				? ResolvePath<Path>
 				: never
 			: Route['params']
 		headers: undefined extends Route['headers']
@@ -76,7 +82,7 @@ export type ErrorContext<
 		 * Represent a value extracted from URL
 		 *
 		 * @example '/id/9'
-	     */
+		 */
 		path: string
 		/**
 		 * Path as registered to router
@@ -84,7 +90,7 @@ export type ErrorContext<
 		 * Represent a path registered to a router, not a URL
 		 *
 		 * @example '/id/:id'
-	     */
+		 */
 		route: string
 		request: Request
 		store: Singleton['store']
@@ -111,7 +117,7 @@ export type Context<
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
-				? { [path in GetPathParameter<Path>]: string }
+				? ResolvePath<Path>
 				: never
 			: Route['params']
 		headers: undefined extends Route['headers']
@@ -160,7 +166,7 @@ export type Context<
 		 * Represent a value extracted from URL
 		 *
 		 * @example '/id/9'
-	     */
+		 */
 		path: string
 		/**
 		 * Path as registered to router
@@ -168,7 +174,7 @@ export type Context<
 		 * Represent a path registered to a router, not a URL
 		 *
 		 * @example '/id/:id'
-	     */
+		 */
 		route: string
 		request: Request
 		store: Singleton['store']
@@ -185,9 +191,9 @@ export type Context<
 					const T extends Code extends keyof Route['response']
 						? Route['response'][Code]
 						: Code extends keyof StatusMap
-						? // @ts-ignore StatusMap[Code] always valid because Code generic check
-						  Route['response'][StatusMap[Code]]
-						: never
+							? // @ts-ignore StatusMap[Code] always valid because Code generic check
+								Route['response'][StatusMap[Code]]
+							: never
 				>(
 					code: Code,
 					response: T
@@ -202,10 +208,10 @@ export type Context<
 							: Code]: T
 					}
 				}
-		  }
+			}
 		: {
 				error: typeof error
-		  }) &
+			}) &
 		Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']

@@ -1340,7 +1340,7 @@ export const cloneInference = (inference: Sucrose.Inference) => ({
  */
 export const redirect = (
 	url: string,
-	status: 301 | 302 | 303 | 307 | 308 = 301
+	status: 301 | 302 | 303 | 307 | 308 = 302
 ) => Response.redirect(url, status)
 
 export type redirect = typeof redirect

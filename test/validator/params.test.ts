@@ -148,8 +148,41 @@ describe('Params Validator', () => {
 			}
 		)
 
-		const value = await app.handle(req('/is-admin/true')).then((x) => x.text())
+		const value = await app
+			.handle(req('/is-admin/true'))
+			.then((x) => x.text())
 
 		expect(value).toBe('boolean')
+	})
+
+	it('create default value on optional params', () => {
+		it('parse multiple optional params', async () => {
+			const app = new Elysia().get(
+				'/name/:last?/:first?',
+				({ params: { first, last } }) => `${last}/${first}`,
+				{
+					params: t.Object({
+						first: t.String({
+							default: 'fubuki'
+						}),
+						last: t.String({
+							default: 'shirakami'
+						})
+					})
+				}
+			)
+
+			const res = await Promise.all([
+				app.handle(req('/name')).then((x) => x.text()),
+				app.handle(req('/name/kurokami')).then((x) => x.text()),
+				app.handle(req('/name/kurokami/sucorn')).then((x) => x.text())
+			])
+
+			expect(res).toEqual([
+				'shirakami/fubuki',
+				'kurokami/fubuki',
+				'kurokami/sucorn'
+			])
+		})
 	})
 })

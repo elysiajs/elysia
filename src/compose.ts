@@ -1055,7 +1055,7 @@ export const composeHandler = ({
 					transformed.qi = c.qi
 					transformed.path = c.path
 					transformed.url = c.url
-					transformed.redirect = c.redirec
+					transformed.redirect = c.redirect
 					transformed.set = c.set
 					transformed.error = c.error
 
