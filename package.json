@@ -114,6 +114,7 @@
     "eslint-plugin-sonarjs": "^0.23.0",
     "expect-type": "^0.16.0",
     "memoirist": "^0.2.0",
+    "prettier": "^3.3.3",
     "tsup": "^8.0.2",
     "typescript": "^5.5.2"
   },

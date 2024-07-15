@@ -152,6 +152,13 @@ export type ElysiaConfig<
 	normalize?: boolean
 }
 
+export type ValidatorLayer = {
+	global: SchemaValidator | null
+	scoped: SchemaValidator | null
+	local: SchemaValidator | null
+	getCandidate(): SchemaValidator
+}
+
 export type MaybeArray<T> = T | T[]
 export type MaybePromise<T> = T | Promise<T>
 
@@ -1407,3 +1414,8 @@ export type HTTPHeaders = Record<string, string> & {
 	'x-robots-tag'?: string
 	'x-ua-compatible'?: string
 }
+
+export type JoinPath<
+	A extends string,
+	B extends string
+> = `${A}${B extends '/' ? '/index' : B extends '' ? B : B extends `/${string}` ? B : B}`

@@ -1,22 +1,24 @@
-import { Elysia, t, UnwrapRoute } from '../src'
-import { Prettify } from '../src/types'
+import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-new Elysia().group(
-	'/:a',
-	{
-		beforeHandle({ params, params: { a } }) {
-			return a
-		}
-	},
-	(app) => app
-)
+const inner = new Elysia()
+	.guard({
+		response: t.Number(),
+		as: 'global'
+	})
+	.get('/inner', () => 2)
 
-// typeof app._routes['true']['post']['response']
+const plugin = new Elysia()
+	.use(inner)
+	.guard({
+		response: t.Boolean()
+	})
+	.get('/', () => true)
 
-// console.log(app.routes)
+plugin._volatile
 
-// const api = treaty(a)
+const app = new Elysia().use(plugin).get('/', () => 'ok')
 
-// const { data, error, response } = await api.error.get()
-
-// console.log(data, error, response)
+app.handle(req('/plugin'))
+	.then((x) => x.status)
+	.then(console.log)

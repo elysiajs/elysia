@@ -25,7 +25,8 @@ import type {
 	MapResponse,
 	ErrorHandler,
 	Replace,
-	AfterResponseHandler
+	AfterResponseHandler,
+	SchemaValidator
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
@@ -166,6 +167,25 @@ export const mergeResponse = (
 		return { ...(a as RecordNumber), ...(b as RecordNumber) }
 
 	return b ?? a
+}
+
+export const mergeSchemaValidator = (
+	a?: SchemaValidator | null,
+	b?: SchemaValidator | null
+): SchemaValidator => {
+	return {
+		body: b?.body ?? a?.body,
+		headers: b?.headers ?? a?.headers,
+		params: b?.params ?? a?.params,
+		query: b?.query ?? a?.query,
+		// @ts-ignore ? This order is correct - SaltyAom
+		response: mergeResponse(
+			// @ts-ignore
+			a?.response,
+			// @ts-ignore
+			b?.response
+		)
+	}
 }
 
 export const mergeHook = (
@@ -1401,4 +1421,24 @@ export const deduplicateChecksum = <T extends Function>(
 	}
 
 	return array
+}
+
+/**
+ * Since it's a plugin, which means that ephemeral is demoted to volatile.
+ * Which  means there's no volatile and all previous ephemeral become volatile
+ * We can just promote back without worry
+ */
+export const promoteEvent = (
+	events: (HookContainer | Function)[],
+	as: 'scoped' | 'global' = 'scoped'
+): void => {
+	if (as === 'scoped') {
+		for (const event of events)
+			if ('scope' in event && event.scope === 'local')
+				event.scope = 'scoped'
+
+		return
+	}
+
+	for (const event of events) if ('scope' in event) event.scope = 'global'
 }
