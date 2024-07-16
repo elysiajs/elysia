@@ -1,18 +1,16 @@
 import { Elysia } from '../src'
 
-export const isSignIn = (body: any): boolean | undefined => true
-export const findUserById = (id?: string) => id
+const db = {
+	query(query: string) {
+		return new Promise<unknown>((resolve) => {
+			resolve('')
+		})
+	}
+}
 
-new Elysia()
-    .guard(
-        {
-            beforeHandle: isSignIn
-        },
-        (app) =>
-            app
-                .resolve(({ cookie: { session } }) => ({
-                    userId: findUserById(session.value)
-                }))
-                .get('/profile', ({ userId }) => userId)
-    )
-    .listen(3000)
+export const plugin = new Elysia()
+	.get('', () => {
+		return record('database.query', () => {
+			return db.query('SELECT * FROM users')
+		})
+	})
