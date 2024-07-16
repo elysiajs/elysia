@@ -450,20 +450,22 @@ describe('Query Validator', () => {
 		})
 	})
 
-	it('parse query array without schema', async () => {
-		const params = new URLSearchParams()
-		params.append('keys', '1')
-		params.append('keys', '2')
+	// People don't expect this
+	// @see: https://x.com/saltyAom/status/1813236251321069918
+	// it('parse query array without schema', async () => {
+	// 	const params = new URLSearchParams()
+	// 	params.append('keys', '1')
+	// 	params.append('keys', '2')
 
-		let value: string[] | undefined
+	// 	let value: string[] | undefined
 
-		const response = await new Elysia()
-			.get('/', ({ query: { keys } }) => (value = keys as string[]))
-			.handle(new Request(`http://localhost/?${params.toString()}`))
-			.then((res) => res.json())
+	// 	const response = await new Elysia()
+	// 		.get('/', ({ query: { keys } }) => (value = keys as string[]))
+	// 		.handle(new Request(`http://localhost/?${params.toString()}`))
+	// 		.then((res) => res.json())
 
-		expect(value).toEqual(['1', '2'])
-	})
+	// 	expect(value).toEqual(['1', '2'])
+	// })
 
 	it("don't parse query object without schema", async () => {
 		const app = new Elysia().get('/', ({ query: { role } }) => role)

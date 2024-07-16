@@ -3,9 +3,9 @@ import { type Elysia } from '.'
 import { Value } from '@sinclair/typebox/value'
 import type { TAnySchema, TSchema } from '@sinclair/typebox'
 
-import { parse as parseQuery } from 'fast-querystring'
+import { parseQuery } from './fast-querystring'
 
-// @ts-expect-error
+// @ts-ignore
 import decodeURIComponent from 'fast-decode-uri-component'
 
 import {

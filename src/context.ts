@@ -34,7 +34,7 @@ export type ErrorContext<
 	{
 		body: Route['body']
 		query: undefined extends Route['query']
-			? Record<string, string | string[] | undefined>
+			? Record<string, string | undefined>
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
@@ -107,7 +107,7 @@ export type Context<
 	{
 		body: Route['body']
 		query: undefined extends Route['query']
-			? Record<string, string | string[] | undefined>
+			? Record<string, string | undefined>
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`

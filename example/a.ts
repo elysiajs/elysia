@@ -1,16 +1,11 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-const db = {
-	query(query: string) {
-		return new Promise<unknown>((resolve) => {
-			resolve('')
-		})
-	}
-}
-
-export const plugin = new Elysia()
-	.get('', () => {
-		return record('database.query', () => {
-			return db.query('SELECT * FROM users')
-		})
+const app = new Elysia().get('/', ({ query }) => query, {
+	query: t.Object({
+		id: t.Array(t.String())
 	})
+})
+
+app.handle(new Request('http://localhost:3000/?id=1&id=2'))
+	.then((x) => x.json())
+	.then(console.log)

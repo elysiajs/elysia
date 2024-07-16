@@ -1,3 +1,7 @@
+# 1.1.1 - 16 Jul 2024
+Breaking Change:
+- parse query as `string` instead of `string | string[]` unless specified
+
 # 1.1.0 - 16 Jul 2024
 Feature:
 - Trace v2
