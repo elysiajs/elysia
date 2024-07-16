@@ -232,8 +232,8 @@ export default class Elysia<
 		local: null,
 		getCandidate() {
 			return mergeSchemaValidator(
-				{ ...mergeSchemaValidator(this.global, this.scoped) },
-				{ ...this.local }
+				mergeSchemaValidator(this.global, this.scoped),
+				this.local
 			)
 		}
 	}
@@ -2420,18 +2420,16 @@ export default class Elysia<
 
 		if (type === 'plugin') {
 			this.validator.scoped = mergeSchemaValidator(
-				{ ...this.validator.scoped },
-				{
-					...this.validator.local
-				}
+				this.validator.scoped,
+				this.validator.local
 			)
 			this.validator.local = null
 		} else if (type === 'global') {
 			this.validator.global = mergeSchemaValidator(
-				{ ...this.validator.global },
+				this.validator.global,
 				mergeSchemaValidator(
-					{ ...this.validator.scoped },
-					{ ...this.validator.local }
+					this.validator.scoped,
+					this.validator.local
 				) as SchemaValidator
 			) as SchemaValidator
 

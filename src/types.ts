@@ -678,7 +678,7 @@ export type MapResponse<
 	Path extends string = ''
 > = Handler<
 	Omit<Route, 'response'> & {
-		response: MaybePromise<Response | undefined | void>
+		response: MaybePromise<Response | undefined | unknown>
 	},
 	Singleton & {
 		derive: {

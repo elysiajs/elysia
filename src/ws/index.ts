@@ -6,7 +6,7 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import { ValidationError } from '../error'
 import type { Context } from '../context'
 
-import type { SingletonBase, RouteSchema } from '../types'
+import type { SingletonBase, RouteSchema, Prettify } from '../types'
 import { randomId } from '../utils'
 
 export const websocket: WebSocketHandler<any> = {
@@ -38,8 +38,12 @@ export class ElysiaWS<
 	}
 > {
 	validator?: TypeCheck<TSchema>
+	_validator?: Prettify<Route>
 
-	constructor(public raw: WS, public data: Context<Route, Singleton>) {
+	constructor(
+		public raw: WS,
+		public data: Context<Route, Singleton>
+	) {
 		this.validator = raw.data.validator
 		if (raw.data.id) {
 			this.id = raw.data.id
@@ -74,7 +78,13 @@ export class ElysiaWS<
 	}
 
 	get send() {
-		return (data: Route['response']) => {
+		return (
+			data: {} extends Route['response']
+				? unknown
+				: Route['response'] extends Record<200, unknown>
+					? Route['response'][200]
+					: unknown
+		) => {
 			if (this.validator?.Check(data) === false)
 				throw new ValidationError('message', this.validator, data)
 

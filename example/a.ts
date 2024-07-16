@@ -1,30 +1,18 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia } from '../src'
 
-const inner = new Elysia()
-	.guard({
-		as: 'global',
-		response: {
-			401: t.Number(),
-			402: t.Number()
-		}
-	})
-	.get('/inner', () => 'ok')
+export const isSignIn = (body: any): boolean | undefined => true
+export const findUserById = (id?: string) => id
 
-const plugin = new Elysia()
-	.use(inner)
-	// ? Local override
-	.guard({
-		response: {
-			401: t.Boolean()
-		}
-	})
-	.get('/plugin', ({ error }) => error(401, 1))
-
-const app = new Elysia()
-	.use(plugin)
-	.get('/', ({ error }) => error(401, 1))
-
-app.handle(req('/plugin'))
-	.then((x) => x.status)
-	.then(console.log)
+new Elysia()
+    .guard(
+        {
+            beforeHandle: isSignIn
+        },
+        (app) =>
+            app
+                .resolve(({ cookie: { session } }) => ({
+                    userId: findUserById(session.value)
+                }))
+                .get('/profile', ({ userId }) => userId)
+    )
+    .listen(3000)
