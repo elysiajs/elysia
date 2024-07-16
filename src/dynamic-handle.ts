@@ -11,7 +11,7 @@ import {
 import type { Context } from './context'
 import { type error } from './error'
 
-import { parse as parseQuery } from 'fast-querystring'
+import { parseQuery } from './fast-querystring'
 
 import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
