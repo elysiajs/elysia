@@ -40,7 +40,7 @@ Improvement:
 Change:
 - Deprecated `ObjectString` for parsing array
 - Using `Cookie<unknown>` instead of `Cookie<any>` if schema is not defined
-- Remove prototype poluation from hook
+- Remove prototype pollution from hook
 - remove static analysis for query name
 - remove query replace '+' in favor removing static query analysis
 - mapResponse is now called in error event
