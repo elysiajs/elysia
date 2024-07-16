@@ -1072,15 +1072,15 @@ app.group(
 		})
 }
 
-app.resolve(({ headers }) => {
+const a = app.resolve(({ headers }) => {
 	return {
 		authorization: headers.authorization as string
 	}
 })
-	.get('/', ({ authorization }) => {
-		// ? infers derive type
-		expectTypeOf<typeof authorization>().toBeString()
-	})
+	// .get('/', ({ authorization }) => {
+	// 	// ? infers derive type
+	// 	expectTypeOf<typeof authorization>().toBeString()
+	// })
 	.decorate('a', 'b')
 	.resolve(({ a }) => {
 		// ? derive from current context

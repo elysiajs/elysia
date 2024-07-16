@@ -128,8 +128,6 @@ export type Context<
 						}>
 					>
 
-		b: Route['cookie']
-
 		server: Server | null
 		redirect: Redirect
 

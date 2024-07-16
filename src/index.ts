@@ -852,9 +852,11 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
 				>,
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: {}
+					resolve: {}
 				}
 			>
 		>
@@ -893,9 +895,13 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
 				>,
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Singleton['derive'] &
+						Ephemeral['derive'] &
+						Volatile['derive']
+					resolve: {}
 				},
 				BasePath
 			>
@@ -932,29 +938,33 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
 				>,
-				Singleton &
-					('global' extends Type
-						? {
-								derive: Partial<
+				'global' extends Type
+					? {
+							decorator: Singleton['decorator']
+							store: Singleton['store']
+							derive: Singleton['derive'] &
+								Partial<
 									Ephemeral['derive'] & Volatile['derive']
 								>
-								resolve: Partial<
-									Ephemeral['resolve'] & Volatile['resolve']
-								>
+							resolve: {}
+						}
+					: 'scoped' extends Type
+						? {
+								decorator: Singleton['decorator']
+								store: Singleton['store']
+								derive: Singleton['derive'] &
+									Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: {}
 							}
-						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								})
+						: {
+								decorator: Singleton['decorator']
+								store: Singleton['store']
+								derive: Singleton['derive'] &
+									Ephemeral['derive'] &
+									Volatile['derive']
+								resolve: {}
+							}
 			>
 		>
 	): this
@@ -996,9 +1006,13 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
 				>,
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Singleton['derive'] &
+						Ephemeral['derive'] &
+						Volatile['derive']
+					resolve: {}
 				},
 				BasePath
 			>
@@ -1033,29 +1047,33 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
 				>,
-				Singleton &
-					('global' extends Type
+				'global' extends Type
+					? {
+							decorator: Singleton['decorator']
+							store: Singleton['store']
+							derive: Singleton['derive'] &
+								Ephemeral['derive'] &
+								Volatile['derive']
+							resolve: {}
+						}
+					: 'scoped' extends Type
 						? {
-								derive: Ephemeral['derive'] & Volatile['derive']
-								resolve: Ephemeral['resolve'] &
-									Volatile['resolve']
+								decorator: Singleton['decorator']
+								store: Singleton['store']
+								derive: Singleton['derive'] &
+									Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: {}
 							}
-						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Partial<
+						: {
+								decorator: Singleton['decorator']
+								store: Singleton['store']
+								derive: Singleton['derive'] &
+									Partial<
 										Ephemeral['derive'] & Volatile['derive']
 									>
-									resolve: Partial<
-										Ephemeral['resolve'] &
-											Volatile['resolve']
-									>
-								})
+								resolve: {}
+							}
 			>
 		>
 	): this
@@ -1221,7 +1239,7 @@ export default class Elysia<
 		Routes,
 		Ephemeral,
 		{
-			derive: Volatile['resolve']
+			derive: Volatile['derive']
 			resolve: Prettify<
 				Volatile['resolve'] & ExcludeElysiaResponse<Resolver>
 			>
