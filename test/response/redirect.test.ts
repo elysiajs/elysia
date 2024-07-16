@@ -3,13 +3,13 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-describe('Response Headers', () => {
+describe('Response Redirect', () => {
 	it('handle redirect', async () => {
 		const app = new Elysia().get('/', ({ redirect }) => redirect('/skadi'))
 
 		const { headers, status } = await app.handle(req('/'))
 
-		expect(status).toBe(301)
+		expect(status).toBe(302)
 		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi'
@@ -18,12 +18,12 @@ describe('Response Headers', () => {
 
 	it('handle redirect status', async () => {
 		const app = new Elysia().get('/', ({ redirect }) =>
-			redirect('/skadi', 302)
+			redirect('/skadi', 301)
 		)
 
 		const { headers, status } = await app.handle(req('/'))
 
-		expect(status).toBe(302)
+		expect(status).toBe(301)
 		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi'
@@ -39,7 +39,7 @@ describe('Response Headers', () => {
 
 		const { headers, status } = await app.handle(req('/'))
 
-		expect(status).toBe(301)
+		expect(status).toBe(302)
 		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi',
@@ -60,7 +60,7 @@ describe('Response Headers', () => {
 
 		const { headers, status } = await app.handle(req('/'))
 
-		expect(status).toBe(301)
+		expect(status).toBe(302)
 		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi',

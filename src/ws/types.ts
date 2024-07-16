@@ -16,7 +16,8 @@ import type {
 	Isolate,
 	GetPathParameter,
 	MaybeArray,
-	BaseMacro
+	BaseMacro,
+	TransformHandler
 } from '../types'
 
 export namespace WS {
@@ -51,9 +52,11 @@ export namespace WS {
 			Singleton
 		> extends infer WS
 			? {
-					transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+					transform?: MaybeArray<
+						TransformHandler<TypedRoute, Singleton>
+					>
 					transformMessage?: MaybeArray<
-						VoidHandler<TypedRoute, Singleton>
+						TransformHandler<TypedRoute, Singleton>
 					>
 					beforeHandle?: MaybeArray<Handler<TypedRoute, Singleton>>
 					/**

@@ -97,9 +97,7 @@ describe('Params Validator', () => {
 			})
 		})
 
-		const value = await app
-			.handle(req('/nagisa'))
-			.then((x) => x.json())
+		const value = await app.handle(req('/nagisa')).then((x) => x.json())
 
 		expect(value).toEqual({
 			name: 'nagisa',
@@ -115,13 +113,76 @@ describe('Params Validator', () => {
 			})
 		})
 
-		const value = await app
-			.handle(req('/nagisa'))
-			.then((x) => x.json())
+		const value = await app.handle(req('/nagisa')).then((x) => x.json())
 
 		expect(value).toEqual({
 			name: 'nagisa',
 			rank: 1
+		})
+	})
+
+	it('coerce number object to numeric', async () => {
+		const app = new Elysia().get(
+			'/id/:id',
+			({ params: { id } }) => typeof id,
+			{
+				params: t.Object({
+					id: t.Number()
+				})
+			}
+		)
+
+		const value = await app.handle(req('/id/1')).then((x) => x.text())
+
+		expect(value).toBe('number')
+	})
+
+	it('coerce string object to boolean', async () => {
+		const app = new Elysia().get(
+			'/is-admin/:value',
+			({ params: { value } }) => typeof value,
+			{
+				params: t.Object({
+					value: t.Boolean()
+				})
+			}
+		)
+
+		const value = await app
+			.handle(req('/is-admin/true'))
+			.then((x) => x.text())
+
+		expect(value).toBe('boolean')
+	})
+
+	it('create default value on optional params', () => {
+		it('parse multiple optional params', async () => {
+			const app = new Elysia().get(
+				'/name/:last?/:first?',
+				({ params: { first, last } }) => `${last}/${first}`,
+				{
+					params: t.Object({
+						first: t.String({
+							default: 'fubuki'
+						}),
+						last: t.String({
+							default: 'shirakami'
+						})
+					})
+				}
+			)
+
+			const res = await Promise.all([
+				app.handle(req('/name')).then((x) => x.text()),
+				app.handle(req('/name/kurokami')).then((x) => x.text()),
+				app.handle(req('/name/kurokami/sucorn')).then((x) => x.text())
+			])
+
+			expect(res).toEqual([
+				'shirakami/fubuki',
+				'kurokami/fubuki',
+				'kurokami/sucorn'
+			])
 		})
 	})
 })

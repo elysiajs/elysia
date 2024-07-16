@@ -6,7 +6,7 @@ const tsupConfig: Options = {
 	splitting: false,
 	sourcemap: false,
 	clean: true,
-	bundle: true
+	bundle: true,
 	// outExtension() {
 	// 	return {
 	// 		js: '.js'

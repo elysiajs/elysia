@@ -1,3 +1,59 @@
+# 1.1.0 - 16 Jul 2024
+Feature:
+- Trace v2
+- Normalization is on by default
+- Data type coercion
+- Guard as, bulk as cast
+- Response status coercion
+- Optional path parameter
+- Generator response stream
+
+Breaking Change:
+- Parse value as string for all validators unless explicitly specified.
+    - See [50a5d92](https://github.com/elysiajs/elysia/commit/50a5d92ea3212c5f95f94552e4cb7d31b2c253ad), [44bf279](https://github.com/elysiajs/elysia/commit/44bf279c3752c6909533d19c83b24413d19d27fa).
+    - Remove objects auto-parsing in query unless explicitly specified via query
+   	- Except query string as defined in RFC 3986, TLDR; query string could be either string or array of string.
+- Rename `onResponse` to `onAfterResponse`
+- [Internal] Remove $passthrough in favor of toResponse
+- [Internal] UnwrapRoute type now always resolve with status code
+
+Improvement:
+- Add auto-complete for `set.headers`
+- Add `server` property
+- `onError` supports array function
+- Parse query object with and without schema
+- Sucrose: improve isContextPassToFunction, and extractMainParameter stability
+- Add `replaceSchemaType`
+- Add `route` to `context`
+- Optimize recursive MacroToProperty type
+- Parse query array and object
+- Optimize code path for `composeGeneralHandler`
+- Add debug report on compiler panic
+- Reduce memory usage of route registration ~36% on large codebase
+    - Reduce compilation code path
+    - Remove trace inference
+    - Reduce router compilation code path
+    - removing route handler compilation cache (st${index}, stc${index})
+- Add undefined union to cookie in case if cookie is not present
+- Optimize response status resolve type inference
+
+Change:
+- Deprecated `ObjectString` for parsing array
+- Using `Cookie<unknown>` instead of `Cookie<any>` if schema is not defined
+- Remove prototype poluation from hook
+- remove static analysis for query name
+- remove query replace '+' in favor removing static query analysis
+- mapResponse is now called in error event
+- reconcilation decorator in type level
+
+Bug fix:
+- Normalize headers accidentally use query validator check instead
+- `onError` missing trace symbol
+- Headers validator compilation is not cached
+- Deduplicate macro propagation
+- Websocket in nested group now work
+- Error response is not check unless successful status code is provided
+
 # 1.0.27 - 2 Jul 2024
 Bug fix:
 - [#640](https://github.com/elysiajs/elysia/issues/640) Unable to access root level macros in plugins

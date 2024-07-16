@@ -66,6 +66,7 @@ const app = new Elysia()
 	expectTypeOf<types['Metadata']>().toEqualTypeOf<{
 		schema: {}
 		macro: {}
+		macroFn: {}
 	}>()
 
 	expectTypeOf<types['Definitions']>().toEqualTypeOf<{
@@ -95,6 +96,7 @@ const app = new Elysia()
 	expectTypeOf<types['Metadata']>().toEqualTypeOf<{
 		schema: {}
 		macro: {}
+		macroFn: {}
 	}>()
 
 	expectTypeOf<types['Definitions']>().toEqualTypeOf<{
@@ -152,6 +154,9 @@ const app = new Elysia()
 		macro: Partial<{
 			readonly b: string | undefined
 		}>
+		macroFn: {
+			readonly b: (b: string) => string
+		}
 	}>()
 
 	expectTypeOf<types['Definitions']>().toEqualTypeOf<{

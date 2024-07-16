@@ -1,12 +1,11 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from '@sinclair/typebox/value'
-import { TBoolean, TString, TypeBoxError } from '@sinclair/typebox'
 import { req } from '../utils'
 
 describe('TypeSystem - ObjectString', () => {
 	it('Create', () => {
-		expect(Value.Create(t.ObjectString())).toBe('{}')
+		expect(Value.Create(t.ObjectString({}))).toBe('{}')
 	})
 
 	it('Check', () => {
@@ -66,20 +65,18 @@ describe('TypeSystem - ObjectString', () => {
 	})
 
 	it('Integrate', async () => {
-		const app = new Elysia().get(
-			'/',
-			({ query }) => query,
-			{
-				query: t.Object({
-					pagination: t.ObjectString({
-						pageIndex: t.Number(),
-						pageLimit: t.Number()
-					})
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				pagination: t.ObjectString({
+					pageIndex: t.Number(),
+					pageLimit: t.Number()
 				})
-			}
-		)
+			})
+		})
 
-		const res1 = await app.handle(req('/?pagination={"pageIndex":1,"pageLimit":1}'))
+		const res1 = await app.handle(
+			req('/?pagination={"pageIndex":1,"pageLimit":1}')
+		)
 		expect(res1.status).toBe(200)
 
 		const res2 = await app.handle(req('/?pagination={"pageLimit":1}'))

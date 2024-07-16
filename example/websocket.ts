@@ -12,6 +12,7 @@ const app = new Elysia()
 		},
 		message(ws, message) {
 			ws.publish('asdf', message)
+			ws.send('asdf', message)
 		}
 	})
 	.get('/publish/:publish', ({ params: { publish: text } }) => {
@@ -19,6 +20,6 @@ const app = new Elysia()
 
 		return text
 	})
-	.listen(8080, (server) => {
+	.listen(3000, (server) => {
 		console.log(`http://${server.hostname}:${server.port}`)
 	})

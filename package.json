@@ -1,134 +1,135 @@
 {
-  "name": "elysia",
-  "description": "Ergonomic Framework for Human",
-  "version": "1.0.27",
-  "author": {
-    "name": "saltyAom",
-    "url": "https://github.com/SaltyAom",
-    "email": "saltyaom@gmail.com"
-  },
-  "main": "./dist/cjs/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    "./package.json": "./package.json",
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/cjs/index.js"
-    },
-    "./ws": {
-      "types": "./dist/ws/index.d.ts",
-      "import": "./dist/ws/index.mjs",
-      "require": "./dist/cjs/ws/index.js"
-    },
-    "./compose": {
-      "types": "./dist/compose.d.ts",
-      "import": "./dist/compose.mjs",
-      "require": "./dist/cjs/compose.js"
-    },
-    "./context": {
-      "types": "./dist/context.d.ts",
-      "import": "./dist/context.mjs",
-      "require": "./dist/cjs/context.js"
-    },
-    "./cookie": {
-      "types": "./dist/cookie.d.ts",
-      "import": "./dist/cookie.mjs",
-      "require": "./dist/cjs/cookie.js"
-    },
-    "./error": {
-      "types": "./dist/error.d.ts",
-      "import": "./dist/error.mjs",
-      "require": "./dist/cjs/error.js"
-    },
-    "./handler": {
-      "types": "./dist/handler.d.ts",
-      "import": "./dist/handler.mjs",
-      "require": "./dist/cjs/handler.js"
-    },
-    "./schema": {
-      "types": "./dist/schema.d.ts",
-      "import": "./dist/schema.mjs",
-      "require": "./dist/cjs/schema.js"
-    },
-    "./trace": {
-      "types": "./dist/trace.d.ts",
-      "import": "./dist/trace.mjs",
-      "require": "./dist/cjs/trace.js"
-    },
-    "./type-system": {
-      "types": "./dist/type-system.d.ts",
-      "import": "./dist/type-system.mjs",
-      "require": "./dist/cjs/type-system.js"
-    },
-    "./types": {
-      "types": "./dist/types.d.ts",
-      "import": "./dist/types.mjs",
-      "require": "./dist/cjs/types.js"
-    },
-    "./utils": {
-      "types": "./dist/utils.d.ts",
-      "import": "./dist/utils.mjs",
-      "require": "./dist/cjs/utils.js"
-    }
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/elysiajs/elysia"
-  },
-  "bugs": "https://github.com/elysiajs/elysia/issues",
-  "homepage": "https://github.com/elysiajs/elysia",
-  "keywords": [
-    "bun",
-    "http",
-    "web",
-    "server"
-  ],
-  "license": "MIT",
-  "scripts": {
-    "test": "npm run test:functionality && npm run test:types",
-    "test:functionality": "bun test && npm run test:node",
-    "test:types": "tsc --project tsconfig.test.json",
-    "test:node": "npm install --prefix ./test/node/cjs/ && npm install --prefix ./test/node/esm/ && node ./test/node/cjs/index.js && node ./test/node/esm/index.js && bun dist/bun/index.js",
-    "dev": "bun run --watch example/a.ts",
-    "build": "rimraf dist && bun build.ts",
-    "release:local": "npm run build && npm run test && npm publish"
-  },
-  "dependencies": {
-    "@sinclair/typebox": "^0.32.15",
-    "cookie": "^0.6.0",
-    "eventemitter3": "^5.0.1",
-    "fast-decode-uri-component": "^1.0.1",
-    "fast-querystring": "^1.1.2",
-    "openapi-types": "^12.1.3"
-  },
-  "devDependencies": {
-    "@types/benchmark": "^2.1.5",
-    "@types/bun": "^1.1.2",
-    "@types/cookie": "^0.6.0",
-    "@typescript-eslint/eslint-plugin": "^6.17.0",
-    "@typescript-eslint/parser": "^6.17.0",
-    "benchmark": "^2.1.4",
-    "eslint": "^8.49.0",
-    "eslint-plugin-security": "^2.1.0",
-    "eslint-plugin-sonarjs": "^0.23.0",
-    "expect-type": "^0.16.0",
-    "memoirist": "0.1.6",
-    "tsup": "^8.0.2",
-    "typescript": "^5.4.5"
-  },
-  "peerDependencies": {
-    "@sinclair/typebox": ">= 0.31.0",
-    "openapi-types": ">= 12.0.0",
-    "typescript": ">= 5.0.0"
-  },
-  "peerDependenciesMeta": {
-    "openapi-types": {
-      "optional": true
-    },
-    "typescript": {
-      "optional": true
-    }
-  }
+	"name": "elysia",
+	"description": "Ergonomic Framework for Human",
+	"version": "1.1.0",
+	"author": {
+		"name": "saltyAom",
+		"url": "https://github.com/SaltyAom",
+		"email": "saltyaom@gmail.com"
+	},
+	"main": "./dist/cjs/index.js",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"bun": "./dist/bun/index.js",
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.mjs",
+			"require": "./dist/cjs/index.js"
+		},
+		"./ws": {
+			"types": "./dist/ws/index.d.ts",
+			"import": "./dist/ws/index.mjs",
+			"require": "./dist/cjs/ws/index.js"
+		},
+		"./compose": {
+			"types": "./dist/compose.d.ts",
+			"import": "./dist/compose.mjs",
+			"require": "./dist/cjs/compose.js"
+		},
+		"./context": {
+			"types": "./dist/context.d.ts",
+			"import": "./dist/context.mjs",
+			"require": "./dist/cjs/context.js"
+		},
+		"./cookie": {
+			"types": "./dist/cookie.d.ts",
+			"import": "./dist/cookie.mjs",
+			"require": "./dist/cjs/cookie.js"
+		},
+		"./error": {
+			"types": "./dist/error.d.ts",
+			"import": "./dist/error.mjs",
+			"require": "./dist/cjs/error.js"
+		},
+		"./handler": {
+			"types": "./dist/handler.d.ts",
+			"import": "./dist/handler.mjs",
+			"require": "./dist/cjs/handler.js"
+		},
+		"./schema": {
+			"types": "./dist/schema.d.ts",
+			"import": "./dist/schema.mjs",
+			"require": "./dist/cjs/schema.js"
+		},
+		"./trace": {
+			"types": "./dist/trace.d.ts",
+			"import": "./dist/trace.mjs",
+			"require": "./dist/cjs/trace.js"
+		},
+		"./type-system": {
+			"types": "./dist/type-system.d.ts",
+			"import": "./dist/type-system.mjs",
+			"require": "./dist/cjs/type-system.js"
+		},
+		"./types": {
+			"types": "./dist/types.d.ts",
+			"import": "./dist/types.mjs",
+			"require": "./dist/cjs/types.js"
+		},
+		"./utils": {
+			"types": "./dist/utils.d.ts",
+			"import": "./dist/utils.mjs",
+			"require": "./dist/cjs/utils.js"
+		}
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/elysiajs/elysia"
+	},
+	"bugs": "https://github.com/elysiajs/elysia/issues",
+	"homepage": "https://github.com/elysiajs/elysia",
+	"keywords": [
+		"bun",
+		"http",
+		"web",
+		"server"
+	],
+	"license": "MIT",
+	"scripts": {
+		"test": "npm run test:functionality && npm run test:types",
+		"test:functionality": "bun test && npm run test:node",
+		"test:types": "tsc --project tsconfig.test.json",
+		"test:node": "npm install --prefix ./test/node/cjs/ && npm install --prefix ./test/node/esm/ && node ./test/node/cjs/index.js && node ./test/node/esm/index.js && bun dist/bun/index.js",
+		"dev": "bun run --watch example/a.ts",
+		"build": "rimraf dist && bun build.ts",
+		"release": "npm run build && npm run test && npm publish"
+	},
+	"dependencies": {
+		"@sinclair/typebox": "0.32.34",
+		"cookie": "^0.6.0",
+		"fast-decode-uri-component": "^1.0.1",
+		"fast-querystring": "^1.1.2",
+		"openapi-types": "^12.1.3"
+	},
+	"devDependencies": {
+		"@types/benchmark": "^2.1.5",
+		"@types/bun": "^1.1.2",
+		"@types/cookie": "^0.6.0",
+		"@typescript-eslint/eslint-plugin": "^6.17.0",
+		"@typescript-eslint/parser": "^6.17.0",
+		"benchmark": "^2.1.4",
+		"eslint": "^8.49.0",
+		"eslint-plugin-security": "^2.1.0",
+		"eslint-plugin-sonarjs": "^0.23.0",
+		"expect-type": "^0.16.0",
+		"memoirist": "^0.2.0",
+		"prettier": "^3.3.3",
+		"tsup": "^8.0.2",
+		"typescript": "^5.5.2"
+	},
+	"peerDependencies": {
+		"@sinclair/typebox": ">= 0.31.0",
+		"openapi-types": ">= 12.0.0",
+		"typescript": ">= 5.0.0"
+	},
+	"peerDependenciesMeta": {
+		"openapi-types": {
+			"optional": true
+		},
+		"typescript": {
+			"optional": true
+		}
+	}
 }

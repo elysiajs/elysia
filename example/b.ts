@@ -1,10 +1,28 @@
-import { Elysia } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
 
-const a = new Elysia().trace({ as: 'global' }, async ({ set }) => {
-	set.headers['X-Powered-By'] = 'elysia'
-})
+const subPlugin = new Elysia()
+	.guard({
+		as: 'global',
+		response: {
+			401: t.Literal('uma'),
+			403: t.Literal(':('),
+		}
+	})
 
-const app = new Elysia().use(a).get('/', () => 'hi')
+const plugin = new Elysia()
+	.use(subPlugin)
+	.guard({
+		response: { 401: t.Number() }
+	})
+	.guard({
+		as: 'global',
+		response: { 418: t.Literal("I'm a teapot") }
+	})
+	.get('/', ({ error }) => error(401, 'uma'))
+	.get('/', ({ error }) => error(401, 1))
+	.get('/', ({ error }) => error(418, 'I\'m a teapot'))
 
-const response = await app.handle(req('/')).then(x => x.text()).then(console.log)
+const app = new Elysia()
+	.use(plugin)
+	.get('/', ({ error }) => error(401, 'uma'))
+	.get('/', ({ error }) => error(418, 'I\'m a teapot'))

@@ -13,11 +13,7 @@ const getCookies = (response: Response) =>
 		return value
 	})
 
-const app = new Elysia({
-	cookie: {
-		path: '/'
-	}
-})
+const app = new Elysia()
 	.get(
 		'/council',
 		({ cookie: { council } }) =>
@@ -26,7 +22,19 @@ const app = new Elysia({
 					name: 'Rin',
 					affilation: 'Administration'
 				}
-			])
+			]),
+		{
+			cookie: t.Cookie({
+				council: t.Optional(
+					t.Array(
+						t.Object({
+							name: t.String(),
+							affilation: t.String()
+						})
+					)
+				)
+			})
+		}
 	)
 	.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 	.get('/multiple', ({ cookie: { name, president } }) => {
@@ -60,8 +68,7 @@ const app = new Elysia({
 		return 'Deleted'
 	})
 	.get('/remove-with-options', ({ cookie }) => {
-		for (const self of Object.values(cookie))
-			self.remove()
+		for (const self of Object.values(cookie)) self.remove()
 
 		return 'Deleted'
 	})
@@ -96,7 +103,7 @@ describe('Cookie Response', () => {
 		])
 	})
 
-	it('write cookie on difference value', async () => {
+	it('write cookie on different value', async () => {
 		const response = await app.handle(
 			req('/council', {
 				headers: {
@@ -254,5 +261,104 @@ describe('Cookie Response', () => {
 		expect(response.headers.getAll('Set-Cookie')).toEqual([
 			'session=rin; Path=/'
 		])
+	})
+
+	it('parse object cookie', async () => {
+		const app = new Elysia().get(
+			'/council',
+			({ cookie: { council } }) => council.value,
+			{
+				cookie: t.Cookie({
+					council: t.Object({
+						name: t.String(),
+						affilation: t.String()
+					})
+				})
+			}
+		)
+
+		const expected = {
+			name: 'Rin',
+			affilation: 'Administration'
+		}
+
+		const response = await app.handle(
+			req('/council', {
+				headers: {
+					cookie:
+						'council=' +
+						encodeURIComponent(JSON.stringify(expected))
+				}
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual(expected)
+	})
+
+	it("don't parse cookie type unless specified", async () => {
+		let value: string | undefined
+
+		const app = new Elysia().get(
+			'/council',
+			({ cookie: { council } }) => (value = council.value)
+		)
+
+		const expected = {
+			name: 'Rin',
+			affilation: 'Administration'
+		}
+
+		const response = await app.handle(
+			req('/council', {
+				headers: {
+					cookie:
+						'council=' +
+						encodeURIComponent(JSON.stringify(expected))
+				}
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(value).toEqual(JSON.stringify(expected))
+	})
+
+	it('handle optional at root', async () => {
+		const app = new Elysia().get('/', ({ cookie: { id } }) => id.value, {
+			cookie: t.Optional(
+				t.Object({
+					id: t.Numeric()
+				})
+			)
+		})
+
+		const res = await Promise.all([
+			app.handle(req('/')).then((x) => x.text()),
+			app
+				.handle(
+					req('/', {
+						headers: {
+							cookie: 'id=1'
+						}
+					})
+				)
+				.then((x) => x.text())
+		])
+
+		expect(res).toEqual(['', '1'])
+	})
+
+	it("don't set cookie if new value is undefined", async () => {
+		const app = new Elysia().get('/', ({ cookie: { id } }) => {
+			id.value = undefined
+
+			return 'a'
+		})
+
+		// @ts-expect-error
+		const res = app.handle(req('/')).then((x) => x.headers.toJSON())
+
+		// @ts-expect-error
+		expect(res).toEqual({})
 	})
 })

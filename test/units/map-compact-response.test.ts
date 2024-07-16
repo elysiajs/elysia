@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { mapCompactResponse } from '../../src/handler'
-import { Passthrough } from './utils'
 import { form } from '../../src'
+import { Passthrough } from './utils'
 
 class Student {
 	constructor(public name: string) {}
@@ -145,17 +145,20 @@ describe('Map Compact Response', () => {
 				}
 			})
 		)
+
+		// @ts-ignore
 		const headers = response.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('Shiroko')
+		// @ts-ignore
 		expect(response.headers.toJSON()).toEqual({
 			...headers,
 			name: 'Himari'
 		})
 	})
 
-	it('map Passthrough', async () => {
+	it('map toResponse', async () => {
 		const response = mapCompactResponse(new Passthrough())
 
 		expect(response).toBeInstanceOf(Response)
