@@ -1,12 +1,21 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
-const app = new Elysia().get('/', ({query}) => {
-	console.log("Query:", query)
+new Elysia()
+	.get(
+		'/',
+		({ error }) => {
+			const hello = false
 
-	return query
-})
+			if (!hello) {
+				return error(400)
+			}
 
-app.handle(req('/?id=a'))
-	.then((x) => x.json())
-	.then(console.log)
+			return { example: 'Hello' }
+		},
+		{
+			response: {
+				200: t.Object({ example: t.String() })
+			}
+		}
+	)
+	.listen(8080)

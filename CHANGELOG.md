@@ -4,6 +4,7 @@ Bug fix:
 - derive is being override by resolve in certain function
 	- [#722](https://github.com/elysiajs/elysia/issues/722) Type error with global `app.derive` followed by onError
 - params on `onError` is now `{ [key in string]: string }` instead of `never`
+- [#721](https://github.com/elysiajs/elysia/issues/721) unexpected isContextPassToFunction: minified whitespace of arrow function causing inaccurate separateFunction
 
 # 1.1.1 - 16 Jul 2024
 Breaking Change:

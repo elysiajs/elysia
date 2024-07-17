@@ -82,4 +82,16 @@ describe('Sucrose: separateFunction', () => {
 			}
 		])
 	})
+
+	it('separate minify arrow param', () => {
+		const arrowParam = `({ sucrose, amber })=>{return "sucrose"}`
+
+		expect(separateFunction(arrowParam.toString())).toEqual([
+			'{ sucrose, amber }',
+			'{return "sucrose"}',
+			{
+				isArrowReturn: false
+			}
+		])
+	})
 })

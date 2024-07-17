@@ -22,8 +22,8 @@ export const hasReturn = (fn: string | HookContainer<any> | Function) => {
 		typeof fn === 'object'
 			? fn.fn.toString()
 			: typeof fn === 'string'
-			? fn.toString()
-			: fn
+				? fn.toString()
+				: fn
 
 	const parenthesisEnd = fnLiteral.indexOf(')')
 
@@ -55,15 +55,25 @@ export const separateFunction = (
 
 	// Starts with '(', is an arrow function
 	if (code.charCodeAt(0) === 40) {
-		// ? arrow function
-		index = code.indexOf(') => ')
+		index = code.indexOf('=>', code.indexOf(')'))
 
-		if (index !== -1)
+		if (index !== -1) {
+			let bracketEndIndex = index
+			// Walk back to find bracket end
+			while (bracketEndIndex > 0)
+				if (code.charCodeAt(--bracketEndIndex) === 41) break
+
+			let body = code.slice(index + 2)
+			if (body.charCodeAt(0) === 32) body = body.trimLeft()
+
 			return [
-				code.slice(1, index),
-				code.slice(index + 5),
-				{ isArrowReturn: code.charCodeAt(index + 5) !== 123 }
+				code.slice(1, bracketEndIndex),
+				body,
+				{
+					isArrowReturn: body.charCodeAt(0) !== 123
+				}
 			]
+		}
 	}
 
 	// Using function keyword
@@ -505,11 +515,14 @@ const isContextPassToFunction = (
 		}
 
 		return false
-	} catch(error) {
-		console.log("[Sucrose] unexpected isContextPassToFunction error, please report the following to the developer:")
-		console.log("---")
+	} catch (error) {
+		console.log(
+			'[Sucrose] warning: unexpected isContextPassToFunction error, you may continue development as usual but please report the following to the developer:'
+		)
+		console.log('--- body ---')
+		console.log(body)
+		console.log('--- context ---')
 		console.log(context)
-		console.log("---")
 
 		return true
 	}
