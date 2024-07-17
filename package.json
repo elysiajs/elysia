@@ -1,6 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
+	"type": "commonjs",
 	"version": "1.1.2",
 	"author": {
 		"name": "saltyAom",
@@ -13,8 +14,8 @@
 	"exports": {
 		"./package.json": "./package.json",
 		".": {
-			"bun": "./dist/bun/index.js",
 			"types": "./dist/index.d.ts",
+			"bun": "./dist/bun/index.js",
 			"import": "./dist/index.mjs",
 			"require": "./dist/cjs/index.js"
 		},
@@ -33,10 +34,10 @@
 			"import": "./dist/context.mjs",
 			"require": "./dist/cjs/context.js"
 		},
-		"./cookie": {
-			"types": "./dist/cookie.d.ts",
-			"import": "./dist/cookie.mjs",
-			"require": "./dist/cjs/cookie.js"
+		"./cookies": {
+			"types": "./dist/cookies.d.ts",
+			"import": "./dist/cookies.mjs",
+			"require": "./dist/cjs/cookies.js"
 		},
 		"./error": {
 			"types": "./dist/error.d.ts",
@@ -48,10 +49,10 @@
 			"import": "./dist/handler.mjs",
 			"require": "./dist/cjs/handler.js"
 		},
-		"./schema": {
-			"types": "./dist/schema.d.ts",
-			"import": "./dist/schema.mjs",
-			"require": "./dist/cjs/schema.js"
+		"./sucrose": {
+			"types": "./dist/sucrose.d.ts",
+			"import": "./dist/sucrose.mjs",
+			"require": "./dist/cjs/sucrose.js"
 		},
 		"./trace": {
 			"types": "./dist/trace.d.ts",
