@@ -44,6 +44,24 @@ describe('Stream', () => {
 		expect(response).toBe('abc')
 	})
 
+	it('handle stream with hook header', async () => {
+		const app = new Elysia()
+			.onRequest(({ set }) => {
+				set.headers['my'] = 'header'
+			})
+			.get('/', async function* () {
+				yield 'a'
+			})
+
+		const response = await app.handle(req('/'))
+
+		expect(response.headers.get('my')).toBe('header')
+		expect(response.headers.get('transfer-encoding')).toBe('chunked')
+		expect(response.headers.get('content-type')).toBe(
+			'text/event-stream; charset=utf-8'
+		)
+	})
+
 	it('stop stream on canceled request', async () => {
 		const expected = ['a', 'b']
 

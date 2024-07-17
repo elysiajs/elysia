@@ -125,6 +125,12 @@ const handleStream = (
 ) => {
 	let end = false
 
+	set ??= { headers: {} }
+
+	// Manually set transfer-encoding for direct response, eg. app.handle, eden
+	set.headers['transfer-encoding'] = 'chunked'
+	set.headers['content-type'] = 'text/event-stream; charset=utf-8'
+
 	return new Response(
 		new ReadableStream({
 			async start(controller) {
@@ -158,14 +164,7 @@ const handleStream = (
 				}
 			}
 		}),
-		{
-			...(set as ResponseInit),
-			headers: {
-				// Manually set transfer-encoding for direct response, eg. app.handle, eden
-				'transfer-encoding': 'chunked',
-				'content-type': 'text/event-stream; charset=utf-8'
-			}
-		}
+		set as ResponseInit
 	)
 }
 
@@ -1055,7 +1054,8 @@ export const errorToResponse = (error: Error, set?: Context['set']) =>
 			cause: error?.cause
 		}),
 		{
-			status: set?.status !== 200 ? (set?.status as number) ?? 500 : 500,
+			status:
+				set?.status !== 200 ? ((set?.status as number) ?? 500) : 500,
 			headers: set?.headers
 		}
 	)
