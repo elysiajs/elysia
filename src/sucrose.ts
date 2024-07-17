@@ -180,12 +180,30 @@ export const bracketPairRangeReverse = (
 	return [start, end + 1]
 }
 
+const removeColonAlias = (parameter: string) => {
+	while (true) {
+		const start = parameter.indexOf(':')
+		if (start === -1) break
+
+		let end = parameter.indexOf(',', start)
+		if (end === -1) end = parameter.indexOf('}', start) - 1
+		if (end === 0) end = parameter.length
+
+		parameter = parameter.slice(0, start) + parameter.slice(end)
+	}
+
+	return parameter
+}
+
 /**
  * Retrieve only root paramters of a function
  *
  * @example
  * ```typescript
- * retrieveRootParameters('({ hello: { world: { a } }, elysia })') // => 'hello elysia'
+ * retrieveRootParameters('({ hello: { world: { a } }, elysia })') // => {
+ *   parameters: ['hello', 'elysia'],
+ *   hasParenthesis: true
+ * }
  * ```
  */
 export const retrieveRootParamters = (parameter: string) => {
@@ -197,23 +215,32 @@ export const retrieveRootParamters = (parameter: string) => {
 	// Remove {} from parameter
 	if (parameter.charCodeAt(0) === 123) {
 		hasParenthesis = true
-		// ! Do not trim space because there could be a case of non space ({query})
 		parameter = parameter.slice(1, -1)
 	}
 
-	parameter = parameter.trim()
+	parameter = parameter.replace(/( |\t|\n)/g, '').trim()
+	let parameters = <string[]>[]
 
+	// Object destructuring
 	while (true) {
-		const [start, end] = bracketPairRange(parameter)
+		// eslint-disable-next-line prefer-const
+		let [start, end] = bracketPairRange(parameter)
 		if (start === -1) break
 
-		parameter = parameter.slice(0, start - 2) + parameter.slice(end + 1)
+		// Remove colon from object structuring cast
+		parameters.push(parameter.slice(0, start - 1))
+		if (parameter.charCodeAt(end) === 44) end++
+		parameter = parameter.slice(end)
 	}
 
-	const result = parameter.replace(/:/g, '').trim()
+	parameter = removeColonAlias(parameter)
 
-	if (hasParenthesis) return '{ ' + result + ' }'
-	return result
+	if (parameter) parameters = parameters.concat(parameter.split(','))
+
+	return {
+		hasParenthesis,
+		parameters
+	}
 }
 
 /**
@@ -225,22 +252,22 @@ export const findParameterReference = (
 	parameter: string,
 	inference: Sucrose.Inference
 ) => {
-	const root = retrieveRootParamters(parameter)
+	const { parameters, hasParenthesis } = retrieveRootParamters(parameter)
 
 	// Check if root is an object destructuring
-	if (root.charCodeAt(0) === 123) {
-		if (!inference.query && root.includes('query')) inference.query = true
-		if (!inference.headers && root.includes('headers'))
-			inference.headers = true
-		if (!inference.body && root.includes('body')) inference.body = true
-		if (!inference.cookie && root.includes('cookie'))
-			inference.cookie = true
-		if (!inference.set && root.includes('set')) inference.set = true
-		if (!inference.server && root.includes('server'))
-			inference.server = true
-	}
+	if (!inference.query && parameters.includes('query')) inference.query = true
+	if (!inference.headers && parameters.includes('headers'))
+		inference.headers = true
+	if (!inference.body && parameters.includes('body')) inference.body = true
+	if (!inference.cookie && parameters.includes('cookie'))
+		inference.cookie = true
+	if (!inference.set && parameters.includes('set')) inference.set = true
+	if (!inference.server && parameters.includes('server'))
+		inference.server = true
 
-	return root
+	if (hasParenthesis) return `{ ${parameters.join(', ')} }`
+
+	return parameters.join(', ')
 }
 
 const findEndIndex = (
@@ -328,7 +355,7 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 		if (variable === '}') {
 			const [start, end] = bracketPairRangeReverse(part)
 
-			aliases.push(content.slice(start, end))
+			aliases.push(removeColonAlias(content.slice(start, end)))
 
 			content = content.slice(index + 3 + type.length)
 
@@ -398,27 +425,29 @@ export const inferBodyReference = (
 		code.includes(alias + '["' + type + '"]') ||
 		code.includes(alias + "['" + type + "']")
 
-	for (let alias of aliases) {
+	for (const alias of aliases) {
 		if (!alias) continue
 
 		// Scan object destructured property
 		if (alias.charCodeAt(0) === 123) {
-			alias = retrieveRootParamters(alias)
+			const parameters = retrieveRootParamters(alias).parameters
 
-			if (!inference.query && alias.includes('query'))
+			if (!inference.query && parameters.includes('query'))
 				inference.query = true
 
-			if (!inference.headers && alias.includes('headers'))
+			if (!inference.headers && parameters.includes('headers'))
 				inference.headers = true
 
-			if (!inference.body && alias.includes('body')) inference.body = true
+			if (!inference.body && parameters.includes('body'))
+				inference.body = true
 
-			if (!inference.cookie && alias.includes('cookie'))
+			if (!inference.cookie && parameters.includes('cookie'))
 				inference.cookie = true
 
-			if (!inference.set && alias.includes('set')) inference.set = true
+			if (!inference.set && parameters.includes('set'))
+				inference.set = true
 
-			if (!inference.query && alias.includes('server'))
+			if (!inference.query && parameters.includes('server'))
 				inference.server = true
 
 			continue
@@ -569,11 +598,8 @@ export const sucrose = (
 			const aliases = findAlias(mainParameter, body)
 			aliases.splice(0, -1, mainParameter)
 
-			for (const alias of aliases)
-				if (isContextPassToFunction(mainParameter, body, inference))
-					break
-
-			inferBodyReference(body, aliases, inference)
+			if (!isContextPassToFunction(mainParameter, body, inference))
+				inferBodyReference(body, aliases, inference)
 
 			if (
 				!inference.query &&

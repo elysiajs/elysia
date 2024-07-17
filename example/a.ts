@@ -1,21 +1,37 @@
 import { Elysia, t } from '../src'
+import { retrieveRootParamters, sucrose } from '../src/sucrose'
 
-new Elysia()
-	.get(
-		'/',
-		({ error }) => {
-			const hello = false
+// const parameter = '({ hello: { a }, path })'
+// const result = retrieveRootParamters(parameter)
 
-			if (!hello) {
-				return error(400)
-			}
+// console.log(result)
 
-			return { example: 'Hello' }
+console.log(
+	sucrose({
+		handler: function ({ query }) {
+			query.a
 		},
-		{
-			response: {
-				200: t.Object({ example: t.String() })
-			}
-		}
-	)
-	.listen(8080)
+		afterHandle: [],
+		beforeHandle: [],
+		error: [
+			function a({
+				query,
+				query: { a, c: d },
+				headers: { hello },
+				...rest
+			}) {
+				query.b
+				rest.query.e
+			},
+			({ query: { f } }) => {}
+		],
+		mapResponse: [],
+		onResponse: [],
+		parse: [],
+		request: [],
+		start: [],
+		stop: [],
+		trace: [],
+		transform: []
+	})
+)
