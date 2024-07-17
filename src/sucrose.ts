@@ -187,9 +187,11 @@ export const retrieveRootParamters = (parameter: string) => {
 	// Remove {} from parameter
 	if (parameter.charCodeAt(0) === 123) {
 		hasParenthesis = true
-		// Using 2 because of the space
-		parameter = parameter.slice(2, -2)
+		// ! Do not trim space because there could be a case of non space ({query})
+		parameter = parameter.slice(1, -1)
 	}
+
+	parameter = parameter.trim()
 
 	while (true) {
 		const [start, end] = bracketPairRange(parameter)

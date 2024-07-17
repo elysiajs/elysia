@@ -1,3 +1,10 @@
+# 1.1.2 - 16 Jul 2024
+Bug fix:
+- [#724](https://github.com/elysiajs/elysia/issues/724), [bun#12594](https://github.com/oven-sh/bun/issues/12594) sucrose: possibly fix `bun build --compile` not being able to infer first, and last context parameter
+- derive is being override by resolve in certain function
+	- [#722](https://github.com/elysiajs/elysia/issues/722) Type error with global `app.derive` followed by onError
+- params on `onError` is now `{ [key in string]: string }` instead of `never`
+
 # 1.1.1 - 16 Jul 2024
 Breaking Change:
 - parse query as `string` instead of `string | string[]` unless specified

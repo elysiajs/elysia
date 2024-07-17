@@ -1,11 +1,12 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const app = new Elysia().get('/', ({ query }) => query, {
-	query: t.Object({
-		id: t.Array(t.String())
-	})
+const app = new Elysia().get('/', ({query}) => {
+	console.log("Query:", query)
+
+	return query
 })
 
-app.handle(new Request('http://localhost:3000/?id=1&id=2'))
+app.handle(req('/?id=a'))
 	.then((x) => x.json())
 	.then(console.log)

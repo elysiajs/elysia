@@ -201,7 +201,7 @@ export type Partial2<T> = {
 }
 
 export type NeverKey<T> = {
-	[K in keyof T]: never
+	[K in keyof T]?: T[K]
 } & {}
 
 type IsBothObject<A, B> =
@@ -805,7 +805,15 @@ export type ErrorHandler<
 		schema: {}
 	}
 > = (
-	context: ErrorContext<Route, Singleton> &
+	context: ErrorContext<
+		Route,
+		{
+			store: Singleton['store']
+			decorator: Singleton['decorator']
+			derive: {}
+			resolve: {}
+		}
+	> &
 		(
 			| Prettify<
 					{
@@ -813,8 +821,9 @@ export type ErrorHandler<
 						code: 'UNKNOWN'
 						error: Readonly<Error>
 						set: Context['set']
-					} & Partial<Ephemeral['derive'] & Volatile['derive']> &
-						Partial<Ephemeral['resolve'] & Volatile['resolve']>
+						a: Singleton
+					} & Partial<Singleton['derive'] & Ephemeral['derive'] & Volatile['derive']> &
+						Partial<Singleton['derive'] & Ephemeral['resolve'] & Volatile['resolve']>
 			  >
 			| Prettify<
 					{
@@ -822,8 +831,8 @@ export type ErrorHandler<
 						code: 'VALIDATION'
 						error: Readonly<ValidationError>
 						set: Context['set']
-					} & NeverKey<Ephemeral['derive'] & Volatile['derive']> &
-						NeverKey<Ephemeral['resolve'] & Volatile['resolve']>
+					} & NeverKey<Singleton['derive'] & Ephemeral['derive'] & Volatile['derive']> &
+						NeverKey<Singleton['derive'] & Ephemeral['resolve'] & Volatile['resolve']>
 			  >
 			| Prettify<
 					{
@@ -831,8 +840,8 @@ export type ErrorHandler<
 						code: 'NOT_FOUND'
 						error: Readonly<NotFoundError>
 						set: Context['set']
-					} & NeverKey<Ephemeral['derive'] & Volatile['derive']> &
-						NeverKey<Ephemeral['resolve'] & Volatile['resolve']>
+					} & NeverKey<Singleton['derive'] & Ephemeral['derive'] & Volatile['derive']> &
+						NeverKey<Singleton['derive'] & Ephemeral['resolve'] & Volatile['resolve']>
 			  >
 			| Prettify<
 					{
@@ -840,8 +849,8 @@ export type ErrorHandler<
 						code: 'PARSE'
 						error: Readonly<ParseError>
 						set: Context['set']
-					} & NeverKey<Ephemeral['derive'] & Volatile['derive']> &
-						NeverKey<Ephemeral['resolve'] & Volatile['resolve']>
+					} & NeverKey<Singleton['derive'] & Ephemeral['derive'] & Volatile['derive']> &
+						NeverKey<Singleton['derive'] & Ephemeral['resolve'] & Volatile['resolve']>
 			  >
 			| Prettify<
 					{
@@ -849,8 +858,8 @@ export type ErrorHandler<
 						code: 'INTERNAL_SERVER_ERROR'
 						error: Readonly<InternalServerError>
 						set: Context['set']
-					} & Partial<Ephemeral['derive'] & Volatile['derive']> &
-						Partial<Ephemeral['resolve'] & Volatile['resolve']>
+					} & Partial<Singleton['derive'] & Ephemeral['derive'] & Volatile['derive']> &
+						Partial<Singleton['derive'] & Ephemeral['resolve'] & Volatile['resolve']>
 			  >
 			| Prettify<
 					{
@@ -858,8 +867,8 @@ export type ErrorHandler<
 						code: 'INVALID_COOKIE_SIGNATURE'
 						error: Readonly<InvalidCookieSignature>
 						set: Context['set']
-					} & NeverKey<Ephemeral['derive'] & Volatile['derive']> &
-						NeverKey<Ephemeral['resolve'] & Volatile['resolve']>
+					} & NeverKey<Singleton['derive'] & Ephemeral['derive'] & Volatile['derive']> &
+						NeverKey<Singleton['derive'] & Ephemeral['resolve'] & Volatile['resolve']>
 			  >
 			| Prettify<
 					{
@@ -870,8 +879,8 @@ export type ErrorHandler<
 							set: Context['set']
 						}
 					}[keyof T] &
-						Partial<Ephemeral['derive'] & Volatile['derive']> &
-						Partial<Ephemeral['resolve'] & Volatile['resolve']>
+						Partial<Singleton['derive'] & Ephemeral['derive'] & Volatile['derive']> &
+						Partial<Singleton['derive'] & Ephemeral['resolve'] & Volatile['resolve']>
 			  >
 		)
 ) => any | Promise<any>
@@ -1207,6 +1216,7 @@ export type MergeElysiaInstances<
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
 
+// Exclude return error()
 export type ExcludeElysiaResponse<T> = Exclude<
 	undefined extends Awaited<T> ? Partial<Awaited<T>> : Awaited<T>,
 	{ [ELYSIA_RESPONSE]: any }

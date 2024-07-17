@@ -39,7 +39,7 @@ export type ErrorContext<
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
 				? ResolvePath<Path>
-				: never
+				: { [key in string]: string }
 			: Route['params']
 		headers: undefined extends Route['headers']
 			? Record<string, string | undefined>

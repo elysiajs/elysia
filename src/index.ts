@@ -1152,7 +1152,7 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Singleton['resolve']
+					derive: Singleton['derive']
 					resolve: Prettify<
 						Singleton['resolve'] & ExcludeElysiaResponse<Resolver>
 					>
@@ -1172,7 +1172,7 @@ export default class Elysia<
 					Metadata,
 					Routes,
 					{
-						derive: Ephemeral['resolve']
+						derive: Ephemeral['derive']
 						resolve: Prettify<
 							Ephemeral['resolve'] &
 								ExcludeElysiaResponse<Resolver>
@@ -1190,7 +1190,7 @@ export default class Elysia<
 					Routes,
 					Ephemeral,
 					{
-						derive: Volatile['resolve']
+						derive: Volatile['derive']
 						resolve: Prettify<
 							Volatile['resolve'] &
 								ExcludeElysiaResponse<Resolver>
@@ -1336,7 +1336,7 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Singleton['resolve']
+					derive: Singleton['derive']
 					resolve: Awaited<NewResolver>
 				},
 				Definitions,
@@ -1354,7 +1354,7 @@ export default class Elysia<
 					Metadata,
 					Routes,
 					{
-						derive: Ephemeral['resolve']
+						derive: Ephemeral['derive']
 						resolve: Prettify<
 							Ephemeral['resolve'] &
 								ExcludeElysiaResponse<NewResolver>
@@ -1372,7 +1372,7 @@ export default class Elysia<
 					Routes,
 					Ephemeral,
 					{
-						derive: Volatile['resolve']
+						derive: Volatile['derive']
 						resolve: Prettify<
 							Volatile['resolve'] &
 								ExcludeElysiaResponse<NewResolver>
@@ -2093,8 +2093,8 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: {}
-					resolve: {}
+					derive: Singleton['derive']
+					resolve: Singleton['resolve']
 				},
 				Ephemeral,
 				Volatile
@@ -2699,7 +2699,7 @@ export default class Elysia<
 					Metadata,
 					Routes,
 					{
-						derive: Volatile['resolve']
+						derive: Volatile['derive']
 						resolve: Volatile['resolve']
 						schema: Prettify<
 							MergeSchema<
@@ -2719,7 +2719,7 @@ export default class Elysia<
 					Routes,
 					Ephemeral,
 					{
-						derive: Volatile['resolve']
+						derive: Volatile['derive']
 						resolve: Volatile['resolve']
 						schema: Prettify<
 							MergeSchema<
@@ -2761,7 +2761,7 @@ export default class Elysia<
 		Routes,
 		Ephemeral,
 		{
-			derive: Volatile['resolve']
+			derive: Volatile['derive']
 			resolve: Volatile['resolve']
 			schema: Prettify<
 				MergeSchema<
@@ -5281,9 +5281,7 @@ export default class Elysia<
 		Ephemeral,
 		{
 			derive: Prettify<
-				Volatile['derive'] &
-					// Exclude `return error`
-					ExcludeElysiaResponse<Derivative>
+				Volatile['derive'] & ExcludeElysiaResponse<Derivative>
 			>
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
@@ -5352,10 +5350,10 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Singleton['resolve']
-					resolve: Prettify<
-						Singleton['resolve'] & ExcludeElysiaResponse<Derivative>
+					derive: Prettify<
+						Singleton['derive'] & ExcludeElysiaResponse<Derivative>
 					>
+					resolve: Singleton['resolve']
 				},
 				Definitions,
 				Metadata,
@@ -5372,11 +5370,11 @@ export default class Elysia<
 					Metadata,
 					Routes,
 					{
-						derive: Ephemeral['resolve']
-						resolve: Prettify<
-							Ephemeral['resolve'] &
+						derive: Prettify<
+							Ephemeral['derive'] &
 								ExcludeElysiaResponse<Derivative>
 						>
+						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 					},
 					Volatile
@@ -5390,11 +5388,11 @@ export default class Elysia<
 					Routes,
 					Ephemeral,
 					{
-						derive: Volatile['resolve']
-						resolve: Prettify<
-							Volatile['resolve'] &
+						derive: Prettify<
+							Volatile['derive'] &
 								ExcludeElysiaResponse<Derivative>
 						>
+						resolve: Ephemeral['resolve']
 						schema: Volatile['schema']
 					}
 				>
@@ -5569,7 +5567,7 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Singleton['resolve']
+					derive: Singleton['derive']
 					resolve: Prettify<
 						Singleton['resolve'] &
 							ExcludeElysiaResponse<NewDerivative>
@@ -5590,7 +5588,7 @@ export default class Elysia<
 					Metadata,
 					Routes,
 					{
-						derive: Ephemeral['resolve']
+						derive: Ephemeral['derive']
 						resolve: Prettify<
 							Ephemeral['resolve'] &
 								ExcludeElysiaResponse<NewDerivative>
@@ -5608,7 +5606,7 @@ export default class Elysia<
 					Routes,
 					Ephemeral,
 					{
-						derive: Volatile['resolve']
+						derive: Volatile['derive']
 						resolve: Prettify<
 							Volatile['resolve'] &
 								ExcludeElysiaResponse<NewDerivative>

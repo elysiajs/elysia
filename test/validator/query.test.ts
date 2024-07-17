@@ -453,15 +453,11 @@ describe('Query Validator', () => {
 	// People don't expect this
 	// @see: https://x.com/saltyAom/status/1813236251321069918
 	// it('parse query array without schema', async () => {
-	// 	const params = new URLSearchParams()
-	// 	params.append('keys', '1')
-	// 	params.append('keys', '2')
-
 	// 	let value: string[] | undefined
 
 	// 	const response = await new Elysia()
-	// 		.get('/', ({ query: { keys } }) => (value = keys as string[]))
-	// 		.handle(new Request(`http://localhost/?${params.toString()}`))
+	// 		.get('/', ({ query: { keys } }) => value = keys)
+	// 		.handle(new Request(`http://localhost/?id=1&id=2`))
 	// 		.then((res) => res.json())
 
 	// 	expect(value).toEqual(['1', '2'])
