@@ -2090,12 +2090,7 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
 				>,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['store']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve']
-				},
+				Singleton,
 				Ephemeral,
 				Volatile
 			>
@@ -2116,8 +2111,11 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onError<const Schema extends RouteSchema>(
-		options: { as?: LifeCycleType },
+	onError<
+		const Schema extends RouteSchema,
+		const Scope extends LifeCycleType
+	>(
+		options: { as?: Scope },
 		handler: MaybeArray<
 			ErrorHandler<
 				Definitions['error'],
@@ -2128,14 +2126,43 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
 				>,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['store']
-					derive: {}
-					resolve: {}
-				},
-				Ephemeral,
-				Volatile
+				Scope extends 'global'
+					? {
+							store: Singleton['store']
+							decorator: Singleton['decorator']
+							derive: Singleton['derive'] &
+								Ephemeral['derive'] &
+								Volatile['derive']
+							resolve: Singleton['resolve'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						}
+					: Scope extends 'scoped'
+						? {
+								store: Singleton['store']
+								decorator: Singleton['decorator']
+								derive: Singleton['derive'] &
+									Ephemeral['derive']
+								resolve: Singleton['resolve'] &
+									Ephemeral['resolve']
+							}
+						: Singleton,
+				Scoped extends 'global'
+					? Ephemeral
+					: {
+							derive: Partial<Ephemeral['derive']>
+							resolve: Partial<Ephemeral['resolve']>
+							schema: Ephemeral['schema']
+						},
+				Scoped extends 'global'
+					? Ephemeral
+					: Scoped extends 'scoped'
+						? Ephemeral
+						: {
+								derive: Partial<Ephemeral['derive']>
+								resolve: Partial<Ephemeral['resolve']>
+								schema: Ephemeral['schema']
+							}
 			>
 		>
 	): this
