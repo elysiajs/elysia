@@ -1309,7 +1309,7 @@ export type HTTPHeaders = Record<string, string> & {
 
 	// Caching
 	age?: string
-	'cache-ctonrol'?: string
+	'cache-control'?: string
 	'clear-site-data'?: string
 	expires?: string
 	'no-vary-search'?: string
