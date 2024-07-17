@@ -1,6 +1,11 @@
 # 1.1.3 - 17 Jul 2024
 Change:
 - sucrose: exact inference name
+- use `mapResponse` instead of `mapCompactResponse` for stream
+	- [#727](https://github.com/elysiajs/elysia/issues/727)
+- defers first stream execution before returning response
+	- [#729](https://github.com/elysiajs/elysia/issues/729)
+- [#722](https://github.com/elysiajs/elysia/issues/722) derive context is not passed to onError
 
 Bug fix:
 - `onError` with scope not being able to infer context type

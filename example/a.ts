@@ -1,17 +1,29 @@
 import { Elysia } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia()
-	.get('/', function* ({ set }) {
-		return 'hello'
+export const logger = new Elysia({ name: 'logger' }).derive(
+	{ as: 'global' },
+	() => ({
+		logger: {
+			log(msg: string) {
+				console.log(msg)
+			}
+		}
 	})
-	.get('/json', function* ({ set }) {
-		return { hello: 'world' }
+)
+
+export const error = new Elysia({ name: 'error' })
+	.use(logger)
+	.error({
+		Error
+	})
+	.onError({ as: 'global' }, (ctx) => {
+		ctx.logger?.log(ctx.code)
 	})
 
-const response = await Promise.all([
-	app.handle(req('/')),
-	app.handle(req('/json'))
-])
-
-console.log(response[0].headers.get('content-type'))
+new Elysia()
+	.use(error)
+	.get('/', () => {
+		throw new Error('whelp')
+	})
+	.listen(8080)
