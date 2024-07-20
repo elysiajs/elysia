@@ -3,6 +3,15 @@ import { req } from '../utils'
 
 import { Elysia } from '../../src'
 
+function textEventStream(items: string[]) {
+	return items.map((item) => `data: ${JSON.stringify(item)}\n\n`).join('')
+}
+
+function parseTextEventStreamItem(item: string) {
+	if (!item.startsWith('data: ')) return
+	return JSON.parse(item.split('data: ')[1].split('\n')[0])
+}
+
 describe('Stream', () => {
 	it('handle stream', async () => {
 		const expected = ['a', 'b', 'c']
@@ -31,7 +40,9 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					expect(value.toString()).toBe(expected.shift()!)
+					expect(parseTextEventStreamItem(value.toString())).toBe(
+						expected.shift()!
+					)
 
 					acc += value.toString()
 					return reader.read().then(pump)
@@ -41,7 +52,7 @@ describe('Stream', () => {
 			})
 
 		expect(expected).toHaveLength(0)
-		expect(response).toBe('abc')
+		expect(response).toBe(textEventStream(['a', 'b', 'c']))
 	})
 
 	it('stop stream on canceled request', async () => {
@@ -79,9 +90,14 @@ describe('Stream', () => {
 				const { promise, resolve } = Promise.withResolvers()
 
 				reader.read().then(function pump({ done, value }): unknown {
-					if (done) return resolve(acc)
+					if (done) {
+						console.log({ value })
+						return resolve(acc)
+					}
 
-					expect(value.toString()).toBe(expected.shift()!)
+					expect(parseTextEventStreamItem(value.toString())).toBe(
+						expected.shift()!
+					)
 
 					acc += value.toString()
 					return reader.read().then(pump)
@@ -91,7 +107,7 @@ describe('Stream', () => {
 			})
 
 		expect(expected).toHaveLength(0)
-		expect(response).toBe('ab')
+		expect(response).toBe(textEventStream(['a', 'b']))
 	})
 
 	it('mutate set before yield is called', async () => {

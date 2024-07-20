@@ -166,7 +166,6 @@ const handleStream = async (
 				}
 
 				try {
-					controller.enqueue(Buffer.from('event: done\n\n'))
 					controller.close()
 				} catch {
 					// nothing
