@@ -122,12 +122,19 @@ const handleStream = async (
 	set?: Context['set'],
 	request?: Request
 ) => {
-	let init = generator.next()
-	if (init instanceof Promise) init = await init
+	let init
+	try {
+		init = generator.next()
+		if (init instanceof Promise) init = await init
 
-	if (init.done) {
-		if (set) return mapResponse(init.value, set, request)
-		return mapCompactResponse(init.value, request)
+		if (init.done) {
+			if (set) return mapResponse(init.value, set, request)
+			return mapCompactResponse(init.value, request)
+		}
+	} catch (error) {
+		// TODO should call app.onError if set
+		if (set) return mapResponse(error, set, request)
+		return mapCompactResponse(error, request)
 	}
 
 	return new Response(
@@ -147,7 +154,9 @@ const handleStream = async (
 
 				if (init.value !== undefined && init.value !== null)
 					controller.enqueue(
-						Buffer.from(`event: message\ndata: ${JSON.stringify(init.value)}\n\n`)
+						Buffer.from(
+							`event: message\ndata: ${JSON.stringify(init.value)}\n\n`
+						)
 					)
 
 				try {
@@ -156,7 +165,9 @@ const handleStream = async (
 						if (chunk === undefined || chunk === null) continue
 
 						controller.enqueue(
-							Buffer.from(`event: message\ndata: ${JSON.stringify(chunk)}\n\n`)
+							Buffer.from(
+								`event: message\ndata: ${JSON.stringify(chunk)}\n\n`
+							)
 						)
 					}
 				} catch (error: any) {
