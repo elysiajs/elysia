@@ -147,7 +147,7 @@ const handleStream = async (
 
 				if (init.value !== undefined && init.value !== null)
 					controller.enqueue(
-						Buffer.from(`data: ${JSON.stringify(init.value)}\n\n`)
+						Buffer.from(`event: message\ndata: ${JSON.stringify(init.value)}\n\n`)
 					)
 
 				try {
@@ -156,13 +156,13 @@ const handleStream = async (
 						if (chunk === undefined || chunk === null) continue
 
 						controller.enqueue(
-							Buffer.from(`data: ${JSON.stringify(chunk)}\n\n`)
+							Buffer.from(`event: message\ndata: ${JSON.stringify(chunk)}\n\n`)
 						)
 					}
 				} catch (error: any) {
 					controller.enqueue(
 						Buffer.from(
-							`data: ${JSON.stringify(error.message || error.name || 'Error')}\n\n`
+							`event: error\ndata: ${JSON.stringify(error.message || error.name || 'Error')}\n\n`
 						)
 					)
 				}

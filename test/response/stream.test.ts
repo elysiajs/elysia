@@ -4,12 +4,12 @@ import { req } from '../utils'
 import { Elysia } from '../../src'
 
 function textEventStream(items: string[]) {
-	return items.map((item) => `data: ${JSON.stringify(item)}\n\n`).join('')
+	return items.map((item) => `event: message\ndata: ${JSON.stringify(item)}\n\n`).join('')
 }
 
 function parseTextEventStreamItem(item: string) {
-	if (!item.startsWith('data: ')) return
-	return JSON.parse(item.split('data: ')[1].split('\n')[0])
+	const data = item.split('data: ')[1].split('\n')[0]
+	return JSON.parse(data)
 }
 
 describe('Stream', () => {
