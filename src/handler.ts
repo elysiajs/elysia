@@ -117,7 +117,6 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 
 // 	return arr
 // }
-
 const handleStream = async (
 	generator: Generator | AsyncGenerator,
 	set?: Context['set'],
@@ -147,13 +146,17 @@ const handleStream = async (
 				})
 
 				if (init.value !== undefined && init.value !== null)
-					controller.enqueue(Buffer.from(init.value.toString()))
+					controller.enqueue(
+						Buffer.from(`data: ${JSON.stringify(init.value)}\n\n`)
+					)
 
 				for await (const chunk of generator) {
 					if (end) break
 					if (chunk === undefined || chunk === null) continue
 
-					controller.enqueue(Buffer.from(chunk.toString()))
+					controller.enqueue(
+						Buffer.from(`data: ${JSON.stringify(chunk)}\n\n`)
+					)
 
 					// Wait for the next event loop
 					// Otherwise the data will be mixed up
@@ -163,6 +166,7 @@ const handleStream = async (
 				}
 
 				try {
+					controller.enqueue(Buffer.from('event: done\n\n'))
 					controller.close()
 				} catch {
 					// nothing
