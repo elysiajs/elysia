@@ -57,6 +57,20 @@ describe('Stream', () => {
 		expect(expected).toHaveLength(0)
 		expect(response).toBe(textEventStream(['a', 'b', 'c']))
 	})
+	it('handle errors', async () => {
+		const app = new Elysia().get('/', async function* () {
+			yield 'a'
+			await Bun.sleep(10)
+
+			throw new Error('an error')
+		})
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toBe(
+			'event: message\ndata: "a"\n\nevent: error\ndata: "an error"\n\n'
+		)
+	})
 
 	it('stop stream on canceled request', async () => {
 		const expected = ['a', 'b']
