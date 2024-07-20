@@ -157,12 +157,6 @@ const handleStream = async (
 					controller.enqueue(
 						Buffer.from(`data: ${JSON.stringify(chunk)}\n\n`)
 					)
-
-					// Wait for the next event loop
-					// Otherwise the data will be mixed up
-					await new Promise<void>((resolve) =>
-						setTimeout(() => resolve(), 0)
-					)
 				}
 
 				try {
