@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'bun:test'
 import { req } from '../utils'
+import { createParser } from 'eventsource-parser'
 
 import { Elysia } from '../../src'
 
 function textEventStream(items: string[]) {
-	return items.map((item) => `event: message\ndata: ${JSON.stringify(item)}\n\n`).join('')
+	return items
+		.map((item) => `event: message\ndata: ${JSON.stringify(item)}\n\n`)
+		.join('')
 }
 
 function parseTextEventStreamItem(item: string) {
@@ -91,7 +94,6 @@ describe('Stream', () => {
 
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) {
-						console.log({ value })
 						return resolve(acc)
 					}
 
@@ -125,6 +127,42 @@ describe('Stream', () => {
 
 		expect(response.get('access-control-allow-origin')).toBe(
 			'http://saltyaom.com'
+		)
+	})
+	it('handle stream with objects', async () => {
+		const objects = [
+			{ message: 'hello' },
+			{ response: 'world' },
+			{ data: [1, 2, 3] },
+			{ result: [4, 5, 6] }
+		]
+		const app = new Elysia().get('/', async function* ({}) {
+			for (const obj of objects) {
+				yield obj
+			}
+		})
+
+		const body = await app.handle(req('/')).then((x) => x.body)
+
+		let events = [] as any[]
+		const parser = createParser((event) => {
+			events.push(event)
+		})
+		const { promise, resolve } = Promise.withResolvers()
+		const reader = body?.getReader()!
+
+		reader.read().then(function pump({ done, value }): unknown {
+			if (done) {
+				return resolve()
+			}
+			const text = value.toString()
+			parser.feed(text)
+			return reader.read().then(pump)
+		})
+		await promise
+
+		expect(events.map((x) => x.data)).toEqual(
+			objects.map((x) => JSON.stringify(x))
 		)
 	})
 

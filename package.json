@@ -112,6 +112,7 @@
 		"eslint": "^8.49.0",
 		"eslint-plugin-security": "^2.1.0",
 		"eslint-plugin-sonarjs": "^0.23.0",
+		"eventsource-parser": "^1.1.2",
 		"expect-type": "^0.16.0",
 		"memoirist": "^0.2.0",
 		"prettier": "^3.3.3",
