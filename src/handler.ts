@@ -127,7 +127,7 @@ const handleStream = async (
 		init = generator.next()
 		if (init instanceof Promise) init = await init
 
-		if (init.done) {
+		if (init?.done) {
 			if (set) return mapResponse(init.value, set, request)
 			return mapCompactResponse(init.value, request)
 		}
@@ -152,7 +152,7 @@ const handleStream = async (
 					}
 				})
 
-				if (init.value !== undefined && init.value !== null)
+				if (init?.value !== undefined && init?.value !== null)
 					controller.enqueue(
 						Buffer.from(
 							`event: message\ndata: ${JSON.stringify(init.value)}\n\n`
