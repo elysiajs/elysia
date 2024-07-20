@@ -150,12 +150,20 @@ const handleStream = async (
 						Buffer.from(`data: ${JSON.stringify(init.value)}\n\n`)
 					)
 
-				for await (const chunk of generator) {
-					if (end) break
-					if (chunk === undefined || chunk === null) continue
+				try {
+					for await (const chunk of generator) {
+						if (end) break
+						if (chunk === undefined || chunk === null) continue
 
+						controller.enqueue(
+							Buffer.from(`data: ${JSON.stringify(chunk)}\n\n`)
+						)
+					}
+				} catch (error: any) {
 					controller.enqueue(
-						Buffer.from(`data: ${JSON.stringify(chunk)}\n\n`)
+						Buffer.from(
+							`data: ${JSON.stringify(error.message || error.name || 'Error')}\n\n`
+						)
 					)
 				}
 
