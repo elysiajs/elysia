@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from '../../src'
 
@@ -35,13 +36,12 @@ describe('sucrose', () => {
 				transform: []
 			})
 		).toEqual({
-			queries: ['a', 'e', 'b', 'c', 'f'],
 			query: true,
 			headers: true,
 			body: false,
 			cookie: false,
 			set: false,
-			unknownQueries: false
+			server: false
 		})
 	})
 
@@ -65,40 +65,24 @@ describe('sucrose', () => {
 		})
 	})
 
-	it("don't link object inference", () => {
-		const app = new Elysia({ precompile: true })
-			.get('/', 'Hi')
-			.get('/id/:id', ({ set, params: { id }, query: { name } }) => {
-				set.headers['x-powered-by'] = 'benchmark'
+	// Remove as forceDynamicQuery is remove
+	// it("don't link object inference", () => {
+	// 	const app = new Elysia({ precompile: true })
+	// 		.get('/', 'Hi')
+	// 		.get('/id/:id', ({ set, params: { id }, query: { name } }) => {
+	// 			set.headers['x-powered-by'] = 'benchmark'
 
-				return id + ' ' + name
-			})
+	// 			return id + ' ' + name
+	// 		})
 
-		// @ts-expect-error
-		expect(app.inference).toEqual({
-			event: {
-				body: false,
-				cookie: false,
-				headers: false,
-				queries: [],
-				query: false,
-				set: false,
-				unknownQueries: false
-			},
-			trace: {
-				request: false,
-				parse: false,
-				transform: false,
-				handle: false,
-				beforeHandle: false,
-				afterHandle: false,
-				error: false,
-				context: false,
-				store: false,
-				set: false
-			}
-		})
-	})
+	// 	expect(app.inference).toEqual({
+	// 		body: false,
+	// 		cookie: false,
+	// 		headers: false,
+	// 		query: false,
+	// 		set: false,
+	// 	})
+	// })
 
 	it('inherits inference from plugin', () => {
 		const plugin = new Elysia().derive(({ headers: { authorization } }) => {
@@ -112,7 +96,7 @@ describe('sucrose', () => {
 		const main = new Elysia().use(plugin)
 
 		// @ts-expect-error
-		expect(main.inference.event.headers).toBe(true)
+		expect(main.inference.headers).toBe(true)
 	})
 
 	it("don't link inference", async () => {
@@ -155,10 +139,93 @@ describe('sucrose', () => {
 			body: false,
 			cookie: true,
 			headers: false,
-			queries: ['id'],
 			query: true,
 			set: false,
-			unknownQueries: false
+			server: false
+		})
+	})
+
+	it('infer all inferences if context is passed to function', () => {
+		expect(
+			sucrose({
+				handler: function (context) {
+					console.log(context)
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			query: true,
+			headers: true,
+			body: true,
+			cookie: true,
+			set: true,
+			server: true
+		})
+	})
+
+	it('infer all inferences if context is passed to function', () => {
+		expect(
+			sucrose({
+				handler: function ({ ...context }) {
+					console.log(context)
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			query: true,
+			headers: true,
+			body: true,
+			cookie: true,
+			set: true,
+			server: true
+		})
+	})
+
+	it('infer single object destructure property', () => {
+		expect(
+			sucrose({
+				handler: function ({ server }) {
+					console.log(server)
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			query: false,
+			headers: false,
+			body: false,
+			cookie: false,
+			set: false,
+			server: true
 		})
 	})
 })

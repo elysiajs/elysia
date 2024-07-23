@@ -1,10 +1,13 @@
-import { Kind, TSchema } from '@sinclair/typebox'
+import type { BunFile } from 'bun'
+import { Kind, TransformKind, type TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
-import { t } from '.'
+import { t } from './type-system'
 import { isNotEmpty } from './handler'
+import type { Sucrose } from './sucrose'
 
+import type { TraceHandler } from './trace'
 import type {
 	LifeCycleStore,
 	LocalHook,
@@ -20,13 +23,13 @@ import type {
 	OptionalHandler,
 	AfterHandler,
 	MapResponse,
-	VoidHandler,
 	ErrorHandler,
-	Replace
+	Replace,
+	AfterResponseHandler,
+	SchemaValidator
 } from './types'
 import type { CookieOptions } from './cookies'
-import { Sucrose } from './sucrose'
-import type { BunFile } from 'bun'
+import { mapValueError } from './error'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -34,12 +37,13 @@ export const replaceUrlPath = (url: string, pathname: string) => {
 	return urlObject.toString()
 }
 
-const isClass = (v: Object) =>
+export const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
 	// Handle import * as Sentry from '@sentry/bun'
 	// This also handle [object Date], [object Array]
 	// and FFI value like [object Prisma]
-	v.toString().startsWith('[object ') ||
+	(v.toString().startsWith('[object ') &&
+		v.toString() !== '[object Object]') ||
 	// If object prototype is not pure, then probably a class-like object
 	isNotEmpty(Object.getPrototypeOf(v))
 
@@ -53,25 +57,31 @@ export const mergeDeep = <
 	target: A,
 	source: B,
 	{
-		skipKeys
+		skipKeys,
+		override = true
 	}: {
 		skipKeys?: string[]
+		override?: boolean
 	} = {}
 ): A & B => {
-	if (isObject(target) && isObject(source))
-		for (const [key, value] of Object.entries(source)) {
-			if (skipKeys?.includes(key)) continue
+	if (!isObject(target) || !isObject(source)) return target as A & B
 
-			if (!isObject(value) || !(key in target) || isClass(value)) {
+	for (const [key, value] of Object.entries(source)) {
+		if (skipKeys?.includes(key)) continue
+
+		if (!isObject(value) || !(key in target) || isClass(value)) {
+			if (override || !(key in target))
 				target[key as keyof typeof target] = value
-				continue
-			}
 
-			target[key as keyof typeof target] = mergeDeep(
-				(target as any)[key] as any,
-				value
-			)
+			continue
 		}
+
+		target[key as keyof typeof target] = mergeDeep(
+			(target as any)[key] as any,
+			value,
+			{ skipKeys, override }
+		)
+	}
 
 	return target as A & B
 }
@@ -124,8 +134,8 @@ export const primitiveHooks = [
 	'resolve',
 	'beforeHandle',
 	'afterHandle',
-	'onResponse',
 	'mapResponse',
+	'afterResponse',
 	'trace',
 	'error',
 	'stop',
@@ -159,10 +169,29 @@ export const mergeResponse = (
 	return b ?? a
 }
 
+export const mergeSchemaValidator = (
+	a?: SchemaValidator | null,
+	b?: SchemaValidator | null
+): SchemaValidator => {
+	return {
+		body: b?.body ?? a?.body,
+		headers: b?.headers ?? a?.headers,
+		params: b?.params ?? a?.params,
+		query: b?.query ?? a?.query,
+		// @ts-ignore ? This order is correct - SaltyAom
+		response: mergeResponse(
+			// @ts-ignore
+			a?.response,
+			// @ts-ignore
+			b?.response
+		)
+	}
+}
+
 export const mergeHook = (
 	a?: LifeCycleStore,
-	b?: LocalHook<any, any, any, any, any, any, any>,
-	{ allowMacro = true }: { allowMacro?: boolean } = {}
+	b?: LocalHook<any, any, any, any, any, any, any>
+	// { allowMacro = false }: { allowMacro?: boolean } = {}
 ): LifeCycleStore => {
 	// In case if merging union is need
 	// const customAStore: Record<string, unknown> = {}
@@ -193,15 +222,9 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
-	const rest = allowMacro
-		? {
-				...a,
-				...b
-		  }
-		: undefined
-
 	return {
-		...rest,
+		...a,
+		...b,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -229,11 +252,280 @@ export const mergeHook = (
 		transform: mergeObjectArray(a?.transform, b?.transform),
 		beforeHandle: mergeObjectArray(a?.beforeHandle, b?.beforeHandle),
 		afterHandle: mergeObjectArray(a?.afterHandle, b?.afterHandle),
-		onResponse: mergeObjectArray(a?.onResponse, b?.onResponse) as any,
 		mapResponse: mergeObjectArray(a?.mapResponse, b?.mapResponse) as any,
+		afterResponse: mergeObjectArray(
+			a?.afterResponse,
+			b?.afterResponse
+		) as any,
 		trace: mergeObjectArray(a?.trace, b?.trace) as any,
 		error: mergeObjectArray(a?.error, b?.error)
 	}
+}
+
+interface ReplaceSchemaTypeOptions {
+	from: TSchema
+	to(): TSchema
+	excludeRoot?: boolean
+	/**
+	 * Traverse until object is found except root object
+	 **/
+	untilObjectFound?: boolean
+}
+
+export const replaceSchemaType = (
+	schema: TSchema,
+	options: MaybeArray<ReplaceSchemaTypeOptions>,
+	root = true
+) => {
+	if (!Array.isArray(options))
+		return _replaceSchemaType(schema, options, root)
+
+	for (const option of options)
+		schema = _replaceSchemaType(schema, option, root)
+
+	return schema
+}
+
+const _replaceSchemaType = (
+	schema: TSchema,
+	options: ReplaceSchemaTypeOptions,
+	root = true
+) => {
+	if (!schema) return schema
+	if (options.untilObjectFound && !root && schema.type === 'object')
+		return schema
+
+	const fromSymbol = options.from[Kind]
+
+	if (schema.oneOf) {
+		for (let i = 0; i < schema.oneOf.length; i++)
+			schema.oneOf[i] = _replaceSchemaType(schema.oneOf[i], options, root)
+
+		return schema
+	}
+
+	if (schema.anyOf) {
+		for (let i = 0; i < schema.anyOf.length; i++)
+			schema.anyOf[i] = _replaceSchemaType(schema.anyOf[i], options, root)
+
+		return schema
+	}
+
+	if (schema.allOf) {
+		for (let i = 0; i < schema.allOf.length; i++)
+			schema.allOf[i] = _replaceSchemaType(schema.allOf[i], options, root)
+
+		return schema
+	}
+
+	if (schema.not) {
+		for (let i = 0; i < schema.not.length; i++)
+			schema.not[i] = _replaceSchemaType(schema.not[i], options, root)
+
+		return schema
+	}
+
+	const isRoot = root && !!options.excludeRoot
+
+	if (schema[Kind] === fromSymbol) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { anyOf, oneOf, allOf, not, properties, items, ...rest } = schema
+		const to = options.to()
+
+		// If t.Transform is used, we need to re-calculate Encode, Decode
+		let transform
+
+		const composeProperties = (v: TSchema) => {
+			if (properties && v.type === 'object') {
+				const newProperties = <Record<string, unknown>>{}
+				for (const [key, value] of Object.entries(properties))
+					newProperties[key] = _replaceSchemaType(
+						value as TSchema,
+						options,
+						false
+					)
+
+				return {
+					...rest,
+					...v,
+					properties: newProperties
+				}
+			}
+
+			if (items && v.type === 'array')
+				return {
+					...rest,
+					...v,
+					items: _replaceSchemaType(items, options, false)
+				}
+
+			const value = {
+				...rest,
+				...v
+			}
+
+			// Remove required as it's not object
+			delete value['required']
+
+			// Create default value for ObjectString
+			if (
+				properties &&
+				v.type === 'string' &&
+				v.format === 'ObjectString' &&
+				v.default === '{}'
+			) {
+				transform = t.ObjectString(properties, rest)
+				value.default = JSON.stringify(
+					Value.Create(t.Object(properties))
+				)
+				value.properties = properties
+			}
+
+			// Create default value for ArrayString
+			if (
+				items &&
+				v.type === 'string' &&
+				v.format === 'ArrayString' &&
+				v.default === '[]'
+			) {
+				transform = t.ArrayString(items, rest)
+				value.default = JSON.stringify(Value.Create(t.Array(items)))
+				value.items = items
+			}
+
+			return value
+		}
+
+		if (isRoot) {
+			if (properties) {
+				const newProperties = <Record<string, unknown>>{}
+				for (const [key, value] of Object.entries(properties))
+					newProperties[key] = _replaceSchemaType(
+						value as TSchema,
+						options,
+						false
+					)
+
+				return {
+					...rest,
+					properties: newProperties
+				}
+			} else if (items?.map)
+				return {
+					...rest,
+					items: items.map((v: TSchema) =>
+						_replaceSchemaType(v, options, false)
+					)
+				}
+
+			return rest
+		}
+
+		if (to.anyOf)
+			for (let i = 0; i < to.anyOf.length; i++)
+				to.anyOf[i] = composeProperties(to.anyOf[i])
+		else if (to.oneOf)
+			for (let i = 0; i < to.oneOf.length; i++)
+				to.oneOf[i] = composeProperties(to.oneOf[i])
+		else if (to.allOf)
+			for (let i = 0; i < to.allOf.length; i++)
+				to.allOf[i] = composeProperties(to.allOf[i])
+		else if (to.not)
+			for (let i = 0; i < to.not.length; i++)
+				to.not[i] = composeProperties(to.not[i])
+
+		if (transform) to[TransformKind as any] = transform[TransformKind]
+
+		if (to.anyOf || to.oneOf || to.allOf || to.not) return to
+
+		if (properties) {
+			const newProperties = <Record<string, unknown>>{}
+			for (const [key, value] of Object.entries(properties))
+				newProperties[key] = _replaceSchemaType(
+					value as TSchema,
+					options,
+					false
+				)
+
+			return {
+				...rest,
+				...to,
+				properties: newProperties
+			}
+		} else if (items?.map)
+			return {
+				...rest,
+				...to,
+				items: items.map((v: TSchema) =>
+					_replaceSchemaType(v, options, false)
+				)
+			}
+
+		return {
+			...rest,
+			...to
+		}
+	}
+
+	const properties = schema?.properties as Record<string, TSchema>
+
+	if (properties)
+		for (const [key, value] of Object.entries(properties)) {
+			switch (value[Kind]) {
+				case fromSymbol:
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
+					const { anyOf, oneOf, allOf, not, type, ...rest } = value
+					const to = options.to()
+
+					if (to.anyOf)
+						for (let i = 0; i < to.anyOf.length; i++)
+							to.anyOf[i] = { ...rest, ...to.anyOf[i] }
+					else if (to.oneOf)
+						for (let i = 0; i < to.oneOf.length; i++)
+							to.oneOf[i] = { ...rest, ...to.oneOf[i] }
+					else if (to.allOf)
+						for (let i = 0; i < to.allOf.length; i++)
+							to.allOf[i] = { ...rest, ...to.allOf[i] }
+					else if (to.not)
+						for (let i = 0; i < to.not.length; i++)
+							to.not[i] = { ...rest, ...to.not[i] }
+
+					properties[key] = {
+						...rest,
+						..._replaceSchemaType(rest, options, false)
+					}
+					break
+
+				case 'Object':
+				case 'Union':
+					properties[key] = _replaceSchemaType(value, options, false)
+					break
+
+				default:
+					if (value.items)
+						for (let i = 0; i < value.items.length; i++) {
+							value.items[i] = _replaceSchemaType(
+								value.items[i],
+								options,
+								false
+							)
+						}
+					else if (
+						value.anyOf ||
+						value.oneOf ||
+						value.allOf ||
+						value.not
+					)
+						properties[key] = _replaceSchemaType(
+							value,
+							options,
+							false
+						)
+					break
+			}
+		}
+
+	return schema
 }
 
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
@@ -243,17 +535,42 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		dynamic = false,
 		normalize = false,
 		additionalProperties = false,
+		coerce = false,
+		additionalCoerce = []
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: boolean
+		coerce?: boolean
+		additionalCoerce?: MaybeArray<ReplaceSchemaTypeOptions>
 	} = {}
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
 	if (typeof s === 'string' && !(s in models)) return undefined as any
 
-	const schema: TSchema = typeof s === 'string' ? models[s] : s
+	let schema: TSchema = typeof s === 'string' ? models[s] : s
+
+	if (coerce)
+		schema = replaceSchemaType(schema, [
+			{
+				from: t.Number(),
+				to: () => t.Numeric(),
+				untilObjectFound: true
+			},
+			{
+				from: t.Boolean(),
+				to: () => t.BooleanString(),
+				untilObjectFound: true
+			},
+			...(Array.isArray(additionalCoerce)
+				? additionalCoerce
+				: [additionalCoerce])
+		])
+
+	// console.dir(schema, {
+	// 	depth: null
+	// })
 
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
@@ -269,7 +586,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			code: '',
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => ''
+			Code: () => '',
+			Clean: cleaner
 		} as unknown as TypeCheck<TSchema>
 
 		if (normalize && schema.additionalProperties === false)
@@ -285,6 +603,31 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			if (validator?.schema?.config)
 				// @ts-ignore
 				delete validator.schema.config
+		}
+
+		// @ts-ignore
+		validator.parse = (v) => {
+			try {
+				return validator.Decode(v)
+			} catch (error) {
+				throw [...validator.Errors(v)].map(mapValueError)
+			}
+		}
+
+		// @ts-ignore
+		validator.safeParse = (v) => {
+			try {
+				return { success: true, data: validator.Decode(v), error: null }
+			} catch (error) {
+				const errors = [...compiled.Errors(v)].map(mapValueError)
+
+				return {
+					success: false,
+					data: null,
+					error: errors[0]?.summary,
+					errors
+				}
+			}
 		}
 
 		return validator as any
@@ -306,6 +649,31 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			delete compiled.schema.config
 	}
 
+	// @ts-ignore
+	compiled.parse = (v) => {
+		try {
+			return compiled.Decode(v)
+		} catch (error) {
+			throw [...compiled.Errors(v)].map(mapValueError)
+		}
+	}
+
+	// @ts-ignore
+	compiled.safeParse = (v) => {
+		try {
+			return { success: true, data: compiled.Decode(v), error: null }
+		} catch (error) {
+			const errors = [...compiled.Errors(v)].map(mapValueError)
+
+			return {
+				success: false,
+				data: null,
+				error: errors[0]?.summary,
+				errors
+			}
+		}
+	}
+
 	return compiled as any
 }
 
@@ -315,7 +683,7 @@ export const getResponseSchemaValidator = (
 		models = {},
 		dynamic = false,
 		normalize = false,
-		additionalProperties = false,
+		additionalProperties = false
 	}: {
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
@@ -448,6 +816,25 @@ export const checksum = (s: string) => {
 	return (h = h ^ (h >>> 9))
 }
 
+let _stringToStructureCoercions: ReplaceSchemaTypeOptions[]
+
+export const stringToStructureCoercions = () => {
+	if (!_stringToStructureCoercions) {
+		_stringToStructureCoercions = [
+			{
+				from: t.Object({}),
+				to: () => t.ObjectString({}),
+				excludeRoot: true
+			},
+			{
+				from: t.Array(t.Any()),
+				to: () => t.ArrayString(t.Any())
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
+	}
+	return _stringToStructureCoercions
+}
+
 export const getCookieValidator = ({
 	validator,
 	defaultConfig = {},
@@ -464,7 +851,9 @@ export const getCookieValidator = ({
 	let cookieValidator = getSchemaValidator(validator, {
 		dynamic,
 		models,
-		additionalProperties: true
+		additionalProperties: true,
+		coerce: true,
+		additionalCoerce: stringToStructureCoercions()
 	})
 
 	if (isNotEmpty(defaultConfig)) {
@@ -490,80 +879,86 @@ export const getCookieValidator = ({
 	return cookieValidator
 }
 
+export const injectChecksum = (
+	checksum: number | undefined,
+	x: MaybeArray<HookContainer> | undefined
+) => {
+	if (!x) return
+
+	if (!Array.isArray(x)) {
+		// ? clone fn is required to prevent side-effect from changing hookType
+		const fn = x
+
+		if (checksum && !fn.checksum) fn.checksum = checksum
+		if (fn.scope === 'scoped') fn.scope = 'local'
+
+		return fn
+	}
+
+	// ? clone fns is required to prevent side-effect from changing hookType
+	const fns = [...x]
+
+	for (const fn of fns) {
+		if (checksum && !fn.checksum) fn.checksum = checksum
+
+		if (fn.scope === 'scoped') fn.scope = 'local'
+	}
+
+	return fns
+}
+
 export const mergeLifeCycle = (
 	a: LifeCycleStore,
 	b: LifeCycleStore | LocalHook<any, any, any, any, any, any, any>,
 	checksum?: number
 ): LifeCycleStore => {
-	const injectChecksum = (x: MaybeArray<HookContainer> | undefined) => {
-		if (!x) return
-
-		if (!Array.isArray(x)) {
-			// ? clone fn is required to prevent side-effect from changing hookType
-			const fn = x
-
-			if (checksum && !fn.checksum) fn.checksum = checksum
-			if (fn.scope === 'scoped') fn.scope = 'local'
-
-			return fn
-		}
-
-		// ? clone fns is required to prevent side-effect from changing hookType
-		const fns = [...x]
-
-		for (const fn of fns) {
-			if (checksum && !fn.checksum) fn.checksum = checksum
-
-			if (fn.scope === 'scoped') fn.scope = 'local'
-		}
-
-		return fns
-	}
-
 	return {
 		// ...a,
 		// ...b,
 		start: mergeObjectArray(
 			a.start,
-			injectChecksum(b?.start)
+			injectChecksum(checksum, b?.start)
 		) as HookContainer<GracefulHandler<any>>[],
 		request: mergeObjectArray(
 			a.request,
-			injectChecksum(b?.request)
+			injectChecksum(checksum, b?.request)
 		) as HookContainer<PreHandler<any, any>>[],
 		parse: mergeObjectArray(
 			a.parse,
-			injectChecksum(b?.parse)
+			injectChecksum(checksum, b?.parse)
 		) as HookContainer<BodyHandler<any, any>>[],
 		transform: mergeObjectArray(
 			a.transform,
-			injectChecksum(b?.transform)
+			injectChecksum(checksum, b?.transform)
 		) as HookContainer<TransformHandler<any, any>>[],
 		beforeHandle: mergeObjectArray(
 			a.beforeHandle,
-			injectChecksum(b?.beforeHandle)
+			injectChecksum(checksum, b?.beforeHandle)
 		) as HookContainer<OptionalHandler<any, any>>[],
 		afterHandle: mergeObjectArray(
 			a.afterHandle,
-			injectChecksum(b?.afterHandle)
+			injectChecksum(checksum, b?.afterHandle)
 		) as HookContainer<AfterHandler<any, any>>[],
 		mapResponse: mergeObjectArray(
 			a.mapResponse,
-			injectChecksum(b?.mapResponse)
+			injectChecksum(checksum, b?.mapResponse)
 		) as HookContainer<MapResponse<any, any>>[],
-		onResponse: mergeObjectArray(
-			a.onResponse,
-			injectChecksum(b?.onResponse)
-		) as HookContainer<VoidHandler<any, any>>[],
+		afterResponse: mergeObjectArray(
+			a.afterResponse,
+			injectChecksum(checksum, b?.afterResponse)
+		) as HookContainer<AfterResponseHandler<any, any>>[],
 		// Already merged on Elysia._use, also logic is more complicated, can't directly merge
-		trace: a.trace,
+		trace: mergeObjectArray(
+			a.trace,
+			injectChecksum(checksum, b?.trace)
+		) as HookContainer<TraceHandler<any, any>>[],
 		error: mergeObjectArray(
 			a.error,
-			injectChecksum(b?.error)
+			injectChecksum(checksum, b?.error)
 		) as HookContainer<ErrorHandler<any, any, any>>[],
 		stop: mergeObjectArray(
 			a.stop,
-			injectChecksum(b?.stop)
+			injectChecksum(checksum, b?.stop)
 		) as HookContainer<GracefulHandler<any>>[]
 	}
 }
@@ -629,9 +1024,10 @@ export const filterGlobalHook = (
 		transform: filterGlobal(hook?.transform),
 		beforeHandle: filterGlobal(hook?.beforeHandle),
 		afterHandle: filterGlobal(hook?.afterHandle),
-		onResponse: filterGlobal(hook?.onResponse),
+		mapResponse: filterGlobal(hook?.mapResponse),
+		afterResponse: filterGlobal(hook?.afterResponse),
 		error: filterGlobal(hook?.error),
-		mapResponse: filterGlobal(hook?.mapResponse)
+		trace: filterGlobal(hook?.trace)
 	} as LocalHook<any, any, any, any, any, any, any>
 }
 
@@ -757,8 +1153,7 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 
 export const traceBackMacro = (
 	extension: unknown,
-	property: Record<string, unknown>,
-	hooks = property
+	property: Record<string, unknown>
 ) => {
 	if (!extension || typeof extension !== 'object' || !property) return
 
@@ -771,8 +1166,8 @@ export const traceBackMacro = (
 
 		if (typeof v === 'function') {
 			v(value)
-		} else if (typeof v === 'object')
-			traceBackMacro(v as BaseMacro, value as any, hooks)
+			delete property[key as unknown as keyof typeof extension]
+		}
 	}
 }
 
@@ -856,19 +1251,33 @@ export const createMacroManager =
 		}
 	}
 
-export const isNumericString = (message: string): boolean => {
-	if (message.length < 16)
-		return message.trim().length !== 0 && !Number.isNaN(Number(message))
+const parseNumericString = (message: string | number): number | null => {
+	if (typeof message === 'number') return message
+
+	if (message.length < 16) {
+		if (message.trim().length === 0) return null
+
+		const length = Number(message)
+		if (Number.isNaN(length)) return null
+
+		return length
+	}
 
 	// if 16 digit but less then 9,007,199,254,740,991 then can be parsed
 	if (message.length === 16) {
-		const numVal = Number(message)
-		if (numVal.toString() === message)
-			return message.trim().length !== 0 && !Number.isNaN(numVal)
+		if (message.trim().length === 0) return null
+
+		const number = Number(message)
+		if (Number.isNaN(number) || number.toString() !== message) return null
+
+		return number
 	}
 
-	return false
+	return null
 }
+
+export const isNumericString = (message: string | number): boolean =>
+	parseNumericString(message) !== null
 
 export class PromiseGroup implements PromiseLike<void> {
 	root: Promise<any> | null = null
@@ -950,8 +1359,8 @@ export const localHookToLifeCycleStore = (
 		transform: fnToContainer(a?.transform),
 		beforeHandle: fnToContainer(a?.beforeHandle),
 		afterHandle: fnToContainer(a?.afterHandle),
-		onResponse: fnToContainer(a?.onResponse),
 		mapResponse: fnToContainer(a?.mapResponse),
+		afterResponse: fnToContainer(a?.afterResponse),
 		trace: fnToContainer(a?.trace),
 		error: fnToContainer(a?.error),
 		stop: fnToContainer(a?.stop)
@@ -969,7 +1378,7 @@ export const lifeCycleToFn = (
 		transform: a.transform?.map((x) => x.fn),
 		beforeHandle: a.beforeHandle?.map((x) => x.fn),
 		afterHandle: a.afterHandle?.map((x) => x.fn),
-		onResponse: a.onResponse?.map((x) => x.fn),
+		afterResponse: a.afterResponse?.map((x) => x.fn),
 		mapResponse: a.mapResponse?.map((x) => x.fn),
 		trace: a.trace?.map((x) => x.fn),
 		error: a.error?.map((x) => x.fn),
@@ -977,34 +1386,13 @@ export const lifeCycleToFn = (
 	}
 }
 
-export const cloneInference = (inference: {
-	event: Sucrose.Inference
-	trace: Sucrose.TraceInference
-}): {
-	event: Sucrose.Inference
-	trace: Sucrose.TraceInference
-} => ({
-	event: {
-		body: inference.event.body,
-		cookie: inference.event.cookie,
-		headers: inference.event.headers,
-		queries: [...inference.event.queries],
-		query: inference.event.query,
-		set: inference.event.set,
-		unknownQueries: inference.event.unknownQueries
-	},
-	trace: {
-		request: inference.trace.request,
-		parse: inference.trace.parse,
-		transform: inference.trace.transform,
-		handle: inference.trace.handle,
-		beforeHandle: inference.trace.beforeHandle,
-		afterHandle: inference.trace.afterHandle,
-		error: inference.trace.error,
-		context: inference.trace.context,
-		store: inference.trace.store,
-		set: inference.trace.set
-	}
+export const cloneInference = (inference: Sucrose.Inference) => ({
+	body: inference.body,
+	cookie: inference.cookie,
+	headers: inference.headers,
+	query: inference.query,
+	set: inference.set,
+	server: inference.server
 })
 
 /**
@@ -1014,7 +1402,7 @@ export const cloneInference = (inference: {
  */
 export const redirect = (
 	url: string,
-	status: 301 | 302 | 303 | 307 | 308 = 301
+	status: 301 | 302 | 303 | 307 | 308 = 302
 ) => Response.redirect(url, status)
 
 export type redirect = typeof redirect
@@ -1025,6 +1413,9 @@ export type ELYSIA_FORM_DATA = typeof ELYSIA_FORM_DATA
 type ElysiaFormData<T extends Record<string | number, unknown>> = FormData & {
 	[ELYSIA_FORM_DATA]: Replace<T, BunFile, File>
 }
+
+export const ELYSIA_REQUEST_ID = Symbol('ElysiaRequestId')
+export type ELYSIA_REQUEST_ID = typeof ELYSIA_REQUEST_ID
 
 export const form = <const T extends Record<string | number, unknown>>(
 	items: T
@@ -1048,4 +1439,48 @@ export const form = <const T extends Record<string | number, unknown>>(
 	}
 
 	return formData as any
+}
+
+export const randomId = () => crypto.getRandomValues(new Uint32Array(1))[0]
+
+// ! Deduplicate current instance
+export const deduplicateChecksum = <T extends Function>(
+	array: HookContainer<T>[]
+): HookContainer<T>[] => {
+	const hashes: number[] = []
+
+	for (let i = 0; i < array.length; i++) {
+		const item = array[i]
+
+		if (item.checksum) {
+			if (hashes.includes(item.checksum)) {
+				array.splice(i, 1)
+				i--
+			}
+
+			hashes.push(item.checksum)
+		}
+	}
+
+	return array
+}
+
+/**
+ * Since it's a plugin, which means that ephemeral is demoted to volatile.
+ * Which  means there's no volatile and all previous ephemeral become volatile
+ * We can just promote back without worry
+ */
+export const promoteEvent = (
+	events: (HookContainer | Function)[],
+	as: 'scoped' | 'global' = 'scoped'
+): void => {
+	if (as === 'scoped') {
+		for (const event of events)
+			if ('scope' in event && event.scope === 'local')
+				event.scope = 'scoped'
+
+		return
+	}
+
+	for (const event of events) if ('scope' in event) event.scope = 'global'
 }

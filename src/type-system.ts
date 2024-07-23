@@ -1,6 +1,8 @@
 import {
+	ArrayOptions,
 	DateOptions,
 	NumberOptions,
+	TArray,
 	TDate,
 	TUnsafe,
 	TypeRegistry
@@ -9,10 +11,10 @@ import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
 	type SchemaOptions,
-	type TNull,
-	type TUnion,
+	// type TNull,
+	// type TUnion,
 	type TSchema,
-	type TUndefined,
+	// type TUndefined,
 	TProperties,
 	ObjectOptions,
 	TObject,
@@ -21,7 +23,11 @@ import {
 	FormatRegistry
 } from '@sinclair/typebox'
 
-import { type ValueError, type TypeCheck } from '@sinclair/typebox/compiler'
+import {
+	type ValueError,
+	type TypeCheck,
+	TypeCompiler
+} from '@sinclair/typebox/compiler'
 import { Value } from '@sinclair/typebox/value'
 import { fullFormats } from './formats'
 
@@ -93,53 +99,66 @@ export namespace ElysiaTypeOptions {
 
 	export type FileUnit = number | `${number}${'k' | 'm'}`
 
+	export type StrictFileType =
+		| 'image'
+		| 'image/*'
+		| 'image/jpeg'
+		| 'image/png'
+		| 'image/gif'
+		| 'image/tiff'
+		| 'image/x-icon'
+		| 'image/svg'
+		| 'image/webp'
+		| 'image/avif'
+		| 'audio'
+		| 'audio/*'
+		| 'audio/aac'
+		| 'audio/mpeg'
+		| 'audio/x-ms-wma'
+		| 'audio/vnd.rn-realaudio'
+		| 'audio/x-wav'
+		| 'video'
+		| 'video/*'
+		| 'video/mpeg'
+		| 'video/mp4'
+		| 'video/quicktime'
+		| 'video/x-ms-wmv'
+		| 'video/x-msvideo'
+		| 'video/x-flv'
+		| 'video/webm'
+		| 'text'
+		| 'text/*'
+		| 'text/css'
+		| 'text/csv'
+		| 'text/html'
+		| 'text/javascript'
+		| 'text/plain'
+		| 'text/xml'
+		| 'application'
+		| 'application/*'
+		| 'application/graphql'
+		| 'application/graphql-response+json'
+		| 'application/ogg'
+		| 'application/pdf'
+		| 'application/xhtml'
+		| 'application/xhtml+html'
+		| 'application/xml-dtd'
+		| 'application/html'
+		| 'application/json'
+		| 'application/ld+json'
+		| 'application/xml'
+		| 'application/zip'
+		| 'font'
+		| 'font/*'
+		| 'font/woff2'
+		| 'font/woff'
+		| 'font/ttf'
+		| 'font/otf'
+
+	export type FileType = (string & {}) | StrictFileType
+
 	export interface File extends SchemaOptions {
-		type?: MaybeArray<
-			| (string & {})
-			| 'image'
-			| 'image/jpeg'
-			| 'image/png'
-			| 'image/gif'
-			| 'image/tiff'
-			| 'image/x-icon'
-			| 'image/svg'
-			| 'image/webp'
-			| 'image/avif'
-			| 'audio'
-			| 'audio/mpeg'
-			| 'audio/x-ms-wma'
-			| 'audio/vnd.rn-realaudio'
-			| 'audio/x-wav'
-			| 'video'
-			| 'video/mpeg'
-			| 'video/mp4'
-			| 'video/quicktime'
-			| 'video/x-ms-wmv'
-			| 'video/x-msvideo'
-			| 'video/x-flv'
-			| 'video/webm'
-			| 'text'
-			| 'text/css'
-			| 'text/csv'
-			| 'text/html'
-			| 'text/javascript'
-			| 'text/plain'
-			| 'text/xml'
-			| 'application'
-			| 'application/ogg'
-			| 'application/pdf'
-			| 'application/xhtml'
-			| 'application/html'
-			| 'application/json'
-			| 'application/ld+json'
-			| 'application/xml'
-			| 'application/zip'
-			| 'font'
-			| 'font/woff2'
-			| 'font/woff'
-			| 'font/ttf'
-			| 'font/otf'
-		>
+		type?: MaybeArray<FileType>
 		minSize?: FileUnit
 		maxSize?: FileUnit
 	}
@@ -266,6 +285,25 @@ if (!FormatRegistry.Has('ObjectString'))
 		}
 	})
 
+if (!FormatRegistry.Has('ArrayString'))
+	FormatRegistry.Set('ArrayString', (value) => {
+		let start = value.charCodeAt(0)
+
+		// If starts with ' ', '\t', '\n', then trim first
+		if (start === 9 || start === 10 || start === 32)
+			start = value.trimStart().charCodeAt(0)
+
+		if (start !== 123 && start !== 91) return false
+
+		try {
+			JSON.parse(value)
+
+			return true
+		} catch {
+			return false
+		}
+	})
+
 export const ElysiaType = {
 	Numeric: (property?: NumberOptions) => {
 		const schema = Type.Number(property)
@@ -356,12 +394,19 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as any as TBoolean
 	},
-	ObjectString: <T extends TProperties = {}>(
-		properties: T = {} as T,
+	ObjectString: <T extends TProperties>(
+		properties: T,
 		options?: ObjectOptions
 	) => {
 		const schema = t.Object(properties, options)
 		const defaultValue = JSON.stringify(Value.Create(schema))
+
+		let compiler: TypeCheck<TObject<T>>
+		try {
+			compiler = TypeCompiler.Compile(schema)
+		} catch {
+			// Nothing
+		}
 
 		return t
 			.Transform(
@@ -375,16 +420,90 @@ export const ElysiaType = {
 			)
 			.Decode((value) => {
 				if (typeof value === 'string') {
+					if (value.charCodeAt(0) !== 123)
+						throw new ValidationError('property', schema, value)
+
 					try {
 						value = JSON.parse(value as string)
 					} catch {
 						throw new ValidationError('property', schema, value)
 					}
 
+					if (compiler) {
+						if (!compiler.Check(value))
+							throw new ValidationError('property', schema, value)
+
+						return compiler.Decode(value)
+					}
+
 					if (!Value.Check(schema, value))
 						throw new ValidationError('property', schema, value)
 
-					return value
+					return Value.Decode(schema, value)
+				}
+
+				return value
+			})
+			.Encode((value) => {
+				if (typeof value === 'string')
+					try {
+						value = JSON.parse(value as string)
+					} catch {
+						throw new ValidationError('property', schema, value)
+					}
+
+				if (!Value.Check(schema, value))
+					throw new ValidationError('property', schema, value)
+
+				return JSON.stringify(value)
+			}) as any as TObject<T>
+	},
+	ArrayString: <T extends TSchema>(
+		children: T = {} as T,
+		options?: ArrayOptions
+	) => {
+		const schema = t.Array(children, options)
+		const defaultValue = JSON.stringify(Value.Create(schema))
+
+		let compiler: TypeCheck<TArray<T>>
+		try {
+			compiler = TypeCompiler.Compile(schema)
+		} catch {
+			// Nothing
+		}
+
+		return t
+			.Transform(
+				t.Union([
+					t.String({
+						format: 'ArrayString',
+						default: defaultValue
+					}),
+					schema
+				])
+			)
+			.Decode((value) => {
+				if (typeof value === 'string') {
+					if (value.charCodeAt(0) !== 91)
+						throw new ValidationError('property', schema, value)
+
+					try {
+						value = JSON.parse(value as string)
+					} catch {
+						throw new ValidationError('property', schema, value)
+					}
+
+					if (compiler) {
+						if (!compiler.Check(value))
+							throw new ValidationError('property', schema, value)
+
+						return compiler.Decode(value)
+					}
+
+					if (!Value.Check(schema, value))
+						throw new ValidationError('property', schema, value)
+
+					return Value.Decode(schema, value)
 				}
 
 				return value
@@ -412,13 +531,12 @@ export const ElysiaType = {
 				return [value]
 			})
 			.Encode((value) => value),
-	Nullable: <T extends TSchema>(schema: T): TUnion<[T, TNull]> =>
-		t.Union([t.Null(), schema]) as any,
+	Nullable: <T extends TSchema>(schema: T) => t.Union([schema, t.Null()]),
 	/**
 	 * Allow Optional, Nullable and Undefined
 	 */
-	MaybeEmpty: <T extends TSchema>(schema: T): TUnion<[T, TUndefined]> =>
-		t.Union([t.Null(), t.Undefined(), schema]) as any,
+	MaybeEmpty: <T extends TSchema>(schema: T) =>
+		t.Union([schema, t.Null(), t.Undefined()]),
 	Cookie: <T extends TProperties>(
 		properties: T,
 		{
@@ -460,13 +578,16 @@ declare module '@sinclair/typebox' {
 	interface JavaScriptTypeBuilder {
 		BooleanString: typeof ElysiaType.BooleanString
 		ObjectString: typeof ElysiaType.ObjectString
+		ArrayString: typeof ElysiaType.ArrayString
 		// @ts-ignore
 		Numeric: typeof ElysiaType.Numeric
 		// @ts-ignore
 		File: typeof ElysiaType.File
 		// @ts-ignore
 		Files: typeof ElysiaType.Files
+		// @ts-ignore
 		Nullable: typeof ElysiaType.Nullable
+		// @ts-ignore
 		MaybeEmpty: typeof ElysiaType.MaybeEmpty
 		Cookie: typeof ElysiaType.Cookie
 	}
@@ -492,8 +613,8 @@ declare module '@sinclair/typebox' {
  * Will be parse to Boolean
  */
 t.BooleanString = ElysiaType.BooleanString
-
 t.ObjectString = ElysiaType.ObjectString
+t.ArrayString = ElysiaType.ArrayString
 
 /**
  * A Numeric string
@@ -527,7 +648,7 @@ t.Files = (arg = {}) =>
 	})
 
 t.Nullable = (schema) => ElysiaType.Nullable(schema)
-t.MaybeEmpty = ElysiaType.MaybeEmpty
+t.MaybeEmpty = ElysiaType.MaybeEmpty as any
 
 t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date

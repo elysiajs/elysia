@@ -6,13 +6,12 @@ describe('infer body reference', () => {
 		const code = 'context.body.a'
 		const aliases = ['context']
 		const inference = {
-			queries: [],
 			query: false,
 			headers: false,
 			body: false,
 			cookie: false,
 			set: false,
-			unknownQueries: false
+			server: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -24,44 +23,17 @@ describe('infer body reference', () => {
 		const code = 'context["body"]["a"]'
 		const aliases = ['context']
 		const inference = {
-			queries: [],
 			query: false,
 			headers: false,
 			body: false,
 			cookie: false,
 			set: false,
-			unknownQueries: false
+			server: false
 		}
 
 		inferBodyReference(code, aliases, inference)
 
 		expect(inference.body).toBe(true)
-	})
-
-	it('infer all inferences if passed to function', () => {
-		const code = 'a(context)'
-		const aliases = ['context']
-		const inference = {
-			queries: [],
-			query: false,
-			headers: false,
-			body: false,
-			cookie: false,
-			set: false,
-			unknownQueries: false
-		}
-
-		inferBodyReference(code, aliases, inference)
-
-		expect(inference).toEqual({
-			queries: [],
-			query: true,
-			headers: true,
-			body: true,
-			cookie: true,
-			set: true,
-			unknownQueries: true
-		})
 	})
 
 	it('infer multiple query', () => {
@@ -78,10 +50,9 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: <string[]>[],
 			query: true,
 			set: true,
-			unknownQueries: false
+			server: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -90,10 +61,9 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: ['quack', 'duck', 'bark'],
 			query: true,
 			set: true,
-			unknownQueries: false
+			server: false
 		})
 	})
 
@@ -169,10 +139,9 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: <string[]>[],
 			query: true,
 			set: true,
-			unknownQueries: false
+			server: false
 		}
 
 		inferBodyReference(code, aliases, inference)
@@ -181,10 +150,28 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			headers: false,
-			queries: [],
 			query: true,
 			set: true,
-			unknownQueries: true
+			server: false
 		})
+	})
+
+	it('infer dot notation', () => {
+		const code = `
+			context.server?.upgrade(request)
+		`
+		const aliases = ['context']
+		const inference = {
+			query: false,
+			headers: false,
+			body: false,
+			cookie: false,
+			set: false,
+			server: false
+		}
+
+		inferBodyReference(code, aliases, inference)
+
+		expect(inference.server).toBe(true)
 	})
 })

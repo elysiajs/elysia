@@ -63,11 +63,14 @@ describe('Transform', () => {
 	})
 
 	it('transform from plugin', async () => {
-		const transformId = new Elysia().onTransform<{
-			params: {
-				id: number
-			} | null
-		}>({ as: 'global' }, (request) => {
+		const transformId = new Elysia().onTransform<
+			{
+				params: {
+					id: number
+				} | null
+			},
+			'global'
+		>({ as: 'global' }, (request) => {
 			if (request.params?.id) request.params.id = +request.params.id
 		})
 
@@ -218,11 +221,14 @@ describe('Transform', () => {
 	})
 
 	it('inherits from plugin', async () => {
-		const transformId = new Elysia().onTransform<{
-			params: {
-				name: string
-			} | null
-		}>({ as: 'global' }, ({ params }) => {
+		const transformId = new Elysia().onTransform<
+			{
+				params: {
+					name: string
+				} | null
+			},
+			'global'
+		>({ as: 'global' }, ({ params }) => {
 			if (params?.name === 'Fubuki') params.name = 'Cat'
 		})
 

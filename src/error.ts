@@ -1,6 +1,6 @@
 import type { TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
-import type { TypeCheck } from '@sinclair/typebox/compiler'
+import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import { StatusMap, InvertedStatusMap } from './utils'
 
@@ -9,10 +9,12 @@ const env =
 	typeof Bun !== 'undefined'
 		? Bun.env
 		: typeof process !== 'undefined'
-		? process?.env
-		: undefined
+			? process?.env
+			: undefined
 
 export const ERROR_CODE = Symbol('ElysiaErrorCode')
+export type ERROR_CODE = typeof ERROR_CODE
+
 export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
 export type ELYSIA_RESPONSE = typeof ELYSIA_RESPONSE
 
@@ -42,18 +44,22 @@ export const error = <
 	_type: {
 		[ERROR_CODE in Status]: T
 	}
-} =>
-	({
-		// @ts-expect-error
+	error: Error
+} => {
+	const res = response ??
+		(code in InvertedStatusMap
+			? // @ts-expect-error Always correct
+				InvertedStatusMap[code]
+			: code)
+
+	return {
+		// @ts-expect-error trust me bro
 		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
-		response:
-			response ??
-			(code in InvertedStatusMap
-				? // @ts-expect-error Always correct
-				  InvertedStatusMap[code]
-				: code),
-		_type: undefined as any
-	} as const)
+		response: res,
+		_type: undefined as any,
+		error: new Error(res)
+	} as const
+}
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -77,8 +83,8 @@ export class ParseError extends Error {
 	code = 'PARSE'
 	status = 400
 
-	constructor(message?: string, public body?: unknown) {
-		super(message ?? 'PARSE')
+	constructor() {
+		super('Failed to parse body')
 	}
 }
 
@@ -86,8 +92,77 @@ export class InvalidCookieSignature extends Error {
 	code = 'INVALID_COOKIE_SIGNATURE'
 	status = 400
 
-	constructor(public key: string, message?: string) {
+	constructor(
+		public key: string,
+		message?: string
+	) {
 		super(message ?? `"${key}" has invalid cookie signature`)
+	}
+}
+
+export const mapValueError = (error: ValueError) => {
+	const { message, path, value, type } = error
+
+	const property = path.slice(1).replaceAll('/', '.')
+	const isRoot = path === ''
+
+	switch (type) {
+		case 42:
+			return {
+				...error,
+				summary: isRoot
+					? `Value should not be provided`
+					: `Property '${property}' should not be provided`
+			}
+
+		case 45:
+			return {
+				...error,
+				summary: isRoot
+					? `Value is missing`
+					: `Property '${property}' is missing`
+			}
+
+		case 50:
+			// Expected string to match 'email' format
+			const quoteIndex = message.indexOf("'")!
+			const format = message.slice(
+				quoteIndex + 1,
+				message.indexOf("'", quoteIndex + 1)
+			)
+
+			return {
+				...error,
+				summary: isRoot
+					? `Value should be an email`
+					: `Property '${property}' should be ${format}`
+			}
+
+		case 54:
+			return {
+				...error,
+				summary: `${message.slice(
+					0,
+					9
+				)} property '${property}' to be ${message.slice(
+					8
+				)} but found: ${value}`
+			}
+
+		case 62:
+			const union = error.schema.anyOf
+				.map((x: Record<string, unknown>) => `'${x?.format ?? x.type}'`)
+				.join(', ')
+
+			return {
+				...error,
+				summary: isRoot
+					? `Value should be one of ${union}`
+					: `Property '${property}' should be one of: ${union}`
+			}
+
+		default:
+			return { summary: message, ...error }
 	}
 }
 
@@ -100,16 +175,15 @@ export class ValidationError extends Error {
 		public validator: TSchema | TypeCheck<any>,
 		public value: unknown
 	) {
-		// @ts-expect-error
-		if (typeof value === 'object' && ELYSIA_RESPONSE in value)
+		if (value && typeof value === 'object' && ELYSIA_RESPONSE in value)
 			// @ts-expect-error
 			value = value.response
 
 		const error = isProduction
 			? undefined
 			: 'Errors' in validator
-			? validator.Errors(value).First()
-			: Value.Errors(validator, value).First()
+				? validator.Errors(value).First()
+				: Value.Errors(validator, value).First()
 
 		const customError =
 			error?.schema.error !== undefined
@@ -119,9 +193,11 @@ export class ValidationError extends Error {
 							validator,
 							value,
 							get errors() {
-								return [...validator.Errors(value)]
+								return [...validator.Errors(value)].map(
+									mapValueError
+								)
 							}
-					  })
+						})
 					: error.schema.error
 				: undefined
 
@@ -137,6 +213,7 @@ export class ValidationError extends Error {
 			message = JSON.stringify({
 				type: 'validation',
 				on: type,
+				summary: mapValueError(error).summary,
 				message: error?.message,
 				found: value
 			})
@@ -145,8 +222,8 @@ export class ValidationError extends Error {
 			const schema = validator?.schema ?? validator
 			const errors =
 				'Errors' in validator
-					? [...validator.Errors(value)]
-					: [...Value.Errors(validator, value)]
+					? [...validator.Errors(value)].map(mapValueError)
+					: [...Value.Errors(validator, value)].map(mapValueError)
 
 			let expected
 
@@ -165,6 +242,7 @@ export class ValidationError extends Error {
 				{
 					type: 'validation',
 					on: type,
+					summary: errors[0]?.summary,
 					property: accessor,
 					message: error?.message,
 					expected,
@@ -182,7 +260,10 @@ export class ValidationError extends Error {
 	}
 
 	get all() {
-		return [...this.validator.Errors(this.value)]
+		return 'Errors' in this.validator
+			? [...this.validator.Errors(this.value)].map(mapValueError)
+			: // @ts-ignore
+				[...Value.Errors(this.validator, this.value)].map(mapValueError)
 	}
 
 	static simplifyModel(validator: TSchema | TypeCheck<any>) {

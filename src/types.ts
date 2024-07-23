@@ -5,15 +5,19 @@ import type { BunFile, Serve, Server, WebSocketHandler } from 'bun'
 import type {
 	TSchema,
 	TObject,
+	Static,
+	TAnySchema,
+	TNull,
+	TUndefined,
 	StaticDecode,
-	TAnySchema
+	OptionalKind
 } from '@sinclair/typebox'
-import type { TypeCheck } from '@sinclair/typebox/compiler'
+import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
-import type { EventEmitter } from 'eventemitter3'
 
 import type { CookieOptions } from './cookies'
+import type { TraceHandler } from './trace'
 import type { Context, ErrorContext, PreContext } from './context'
 import type {
 	ELYSIA_RESPONSE,
@@ -23,6 +27,7 @@ import type {
 	ParseError,
 	ValidationError
 } from './error'
+import { ElysiaTypeOptions } from './type-system'
 
 type PartialServe = Partial<Serve>
 
@@ -30,13 +35,48 @@ export type ElysiaConfig<
 	Prefix extends string | undefined,
 	Scoped extends boolean | undefined
 > = {
+	/**
+	 * Path prefix of the instance
+	 *
+	 * @default '''
+	 */
 	prefix?: Prefix
+	/**
+	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
+	 *
+	 * @default false
+	 */
 	scoped?: Scoped
+	/**
+	 * Name of the instance for debugging, and plugin deduplication purpose
+	 */
 	name?: string
+	/**
+	 * Seed for generating checksum for plugin deduplication
+	 *
+	 * @see https://elysiajs.com/essential/plugin.html#plugin-deduplication
+	 */
 	seed?: unknown
+	/**
+	 * Bun serve
+	 *
+	 * @see https://bun.sh/docs/api/http
+	 */
 	serve?: PartialServe
-	tags?: DocumentDecoration['tags']
+	/**
+	 * OpenAPI documentation (use in Swagger)
+	 *
+	 * @see https://swagger.io/specification/
+	 */
 	detail?: DocumentDecoration
+	/**
+	 * OpenAPI tags
+	 *
+	 * current instance' routes with tags
+	 *
+	 * @see https://swagger.io/specification/#tag-object
+	 */
+	tags?: DocumentDecoration['tags']
 	/**
 	 * Warm up Elysia before starting the server
 	 *
@@ -67,14 +107,6 @@ export type ElysiaConfig<
 				schema?: boolean
 		  }
 	/**
-	 * Disable `new Error` thrown marked as Error on Bun 0.6
-	 */
-	forceErrorEncapsulation?: boolean
-	/**
-	 * Disable sucrose dynamic query inference
-	 */
-	forceDynamicQuery?: boolean
-	/**
 	 * Disable Ahead of Time compliation
 	 *
 	 * Reduced performance but faster startup time
@@ -87,9 +119,9 @@ export type ElysiaConfig<
 	 */
 	strictPath?: boolean
 	/**
-	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
+	 * Override websocket configuration
 	 *
-	 * @default false
+	 * @see https://bun.sh/docs/api/websockets
 	 */
 	websocket?: Omit<
 		WebSocketHandler<any>,
@@ -113,11 +145,18 @@ export type ElysiaConfig<
 	 * If enabled, the handlers will run a [clean](https://github.com/sinclairzx81/typebox?tab=readme-ov-file#clean) on incoming and outgoing bodies instead of failing directly.
 	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.
 	 * This has no effect when the schemas allow additional properties.
-	 * Since this uses dynamic schema it may have an impact on performance. Use with caution.
+	 * Since this uses dynamic schema it may have an impact on performance.
 	 *
 	 * @default false
 	 */
 	normalize?: boolean
+}
+
+export type ValidatorLayer = {
+	global: SchemaValidator | null
+	scoped: SchemaValidator | null
+	local: SchemaValidator | null
+	getCandidate(): SchemaValidator
 }
 
 export type MaybeArray<T> = T | T[]
@@ -128,13 +167,25 @@ export type ObjectValues<T extends object> = T[keyof T]
 type IsPathParameter<Part extends string> = Part extends `:${infer Parameter}`
 	? Parameter
 	: Part extends `*`
-	? '*'
-	: never
+		? '*'
+		: never
 
 export type GetPathParameter<Path extends string> =
 	Path extends `${infer A}/${infer B}`
 		? IsPathParameter<A> | GetPathParameter<B>
 		: IsPathParameter<Path>
+
+export type ResolvePath<Path extends string> = Prettify<
+	{
+		[Param in GetPathParameter<Path> as Param extends `${string}?`
+			? never
+			: Param]: string
+	} & {
+		[Param in GetPathParameter<Path> as Param extends `${infer OptionalParam}?`
+			? OptionalParam
+			: never]?: string
+	}
+>
 
 // https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
 export type Prettify<T> = {
@@ -150,22 +201,85 @@ export type Partial2<T> = {
 }
 
 export type NeverKey<T> = {
-	[K in keyof T]: never
+	[K in keyof T]?: T[K]
 } & {}
 
-export type Reconcile<A extends Object, B extends Object> = {
-	[key in keyof A as key extends keyof B ? never : key]: A[key]
-} extends infer Collision
-	? {} extends Collision
+type IsBothObject<A, B> =
+	A extends Record<string | number | symbol, unknown>
+		? B extends Record<string | number | symbol, unknown>
+			? IsClass<A> extends false
+				? IsClass<B> extends false
+					? true
+					: false
+				: false
+			: false
+		: false
+
+type IsClass<V> = V extends abstract new (...args: any) => any ? true : false
+type And<A, B> = A extends true ? (B extends true ? true : false) : false
+
+export type Reconcile<
+	A extends Object,
+	B extends Object,
+	Override extends boolean = false,
+	// Detect Stack limit, eg. circular dependency
+	Stack extends number[] = []
+> = Stack['length'] extends 16
+	? A
+	: Override extends true
 		? {
-				[key in keyof B]: B[key]
-		  }
-		: Prettify<
-				Collision & {
-					[key in keyof B]: B[key]
-				}
-		  >
-	: never
+				[key in keyof A as key extends keyof B ? never : key]: A[key]
+			} extends infer Collision
+			? {} extends Collision
+				? {
+						[key in keyof B]: IsBothObject<
+							// @ts-ignore trust me bro
+							A[key],
+							B[key]
+						> extends true
+							? Reconcile<
+									// @ts-ignore trust me bro
+									A[key],
+									B[key],
+									Override,
+									[0, ...Stack]
+								>
+							: B[key]
+					}
+				: Prettify<
+						Collision & {
+							[key in keyof B]: B[key]
+						}
+					>
+			: never
+		: {
+					[key in keyof B as key extends keyof A
+						? never
+						: key]: B[key]
+			  } extends infer Collision
+			? {} extends Collision
+				? {
+						[key in keyof A]: IsBothObject<
+							A[key],
+							// @ts-ignore trust me bro
+							B[key]
+						> extends true
+							? Reconcile<
+									// @ts-ignore trust me bro
+									A[key],
+									// @ts-ignore trust me bro
+									B[key],
+									Override,
+									[0, ...Stack]
+								>
+							: A[key]
+					}
+				: Prettify<
+						{
+							[key in keyof A]: A[key]
+						} & Collision
+					>
+			: never
 
 export interface SingletonBase {
 	decorator: Record<string, unknown>
@@ -190,6 +304,7 @@ export type RouteBase = Record<string, unknown>
 export interface MetadataBase {
 	schema: RouteSchema
 	macro: BaseMacro
+	macroFn: BaseMacroFn
 }
 
 export interface RouteSchema {
@@ -201,52 +316,66 @@ export interface RouteSchema {
 	response?: unknown
 }
 
+type OptionalField = {
+	[OptionalKind]: 'Optional'
+}
+
 export type UnwrapSchema<
 	Schema extends TSchema | string | undefined,
 	Definitions extends Record<string, unknown> = {}
 > = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
-	? StaticDecode<NonNullable<Schema>>
-	: Schema extends string
-	? Definitions extends Record<Schema, infer NamedSchema>
-		? NamedSchema
-		: Definitions
-	: unknown
+		? Schema extends OptionalField
+			? Prettify<Partial<Static<Schema>>>
+			: StaticDecode<Schema>
+		: Schema extends string
+			? Definitions extends Record<Schema, infer NamedSchema>
+				? NamedSchema
+				: Definitions
+			: unknown
 
-// ? https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#successful_responses
-export type SuccessfulResponse<T = unknown> =
-	| { 200: T }
-	| { 201: T }
-	| { 202: T }
-	| { 203: T }
-	| { 204: T }
-	| { 205: T }
-	| { 206: T }
-	| { 207: T }
-	| { 208: T }
-	| { 226: T }
+export type UnwrapBodySchema<
+	Schema extends TSchema | string | undefined,
+	Definitions extends Record<string, unknown> = {}
+> = undefined extends Schema
+	? unknown
+	: Schema extends TSchema
+		? Schema extends OptionalField
+			? Prettify<Partial<Static<Schema>>> | null
+			: StaticDecode<Schema>
+		: Schema extends string
+			? Definitions extends Record<Schema, infer NamedSchema>
+				? NamedSchema
+				: Definitions
+			: unknown
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['type'] = {}
 > {
-	body: UnwrapSchema<Schema['body'], Definitions>
+	body: UnwrapBodySchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<Schema['headers'], Definitions>
 	query: UnwrapSchema<Schema['query'], Definitions>
 	params: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends TSchema | string
-		? CoExist<UnwrapSchema<Schema['response'], Definitions>, File, BunFile>
-		: Schema['response'] extends SuccessfulResponse<TAnySchema | string>
 		? {
-				[k in keyof Schema['response']]: CoExist<
-					UnwrapSchema<Schema['response'][k], Definitions>,
+				200: CoExist<
+					UnwrapSchema<Schema['response'], Definitions>,
 					File,
 					BunFile
 				>
-		  }
-		: unknown | void
+			}
+		: Schema['response'] extends Record<number, TAnySchema | string>
+			? {
+					[k in keyof Schema['response']]: CoExist<
+						UnwrapSchema<Schema['response'][k], Definitions>,
+						File,
+						BunFile
+					>
+				}
+			: unknown | void
 }
 
 export interface UnwrapGroupGuardRoute<
@@ -254,49 +383,43 @@ export interface UnwrapGroupGuardRoute<
 	in out Definitions extends Record<string, unknown> = {},
 	Path extends string = ''
 > {
-	body: UnwrapSchema<Schema['body'], Definitions>
+	body: UnwrapBodySchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
 		Schema['headers'],
 		Definitions
 	> extends infer A extends Record<string, unknown>
 		? A
 		: undefined
-	query: UnwrapSchema<
-		Schema['query'],
-		Definitions
-	> extends infer A extends Record<string, unknown>
+	query: UnwrapSchema<Schema['query'], Definitions> extends infer A extends
+		Record<string, unknown>
 		? A
 		: undefined
-	params: UnwrapSchema<
-		Schema['params'],
-		Definitions
-	> extends infer A extends Record<string, unknown>
+	params: UnwrapSchema<Schema['params'], Definitions> extends infer A extends
+		Record<string, unknown>
 		? A
 		: Path extends `${string}/${':' | '*'}${string}`
-		? Record<GetPathParameter<Path>, string>
-		: never
-	cookie: UnwrapSchema<
-		Schema['cookie'],
-		Definitions
-	> extends infer A extends Record<string, unknown>
+			? Record<GetPathParameter<Path>, string>
+			: never
+	cookie: UnwrapSchema<Schema['cookie'], Definitions> extends infer A extends
+		Record<string, unknown>
 		? A
 		: undefined
 	response: Schema['response'] extends TSchema | string
 		? UnwrapSchema<Schema['response'], Definitions>
 		: Schema['response'] extends {
-				[k in string]: TSchema | string
-		  }
-		? UnwrapSchema<
-				Schema['response'][keyof Schema['response']],
-				Definitions
-		  >
-		: unknown | void
+					[k in string]: TSchema | string
+			  }
+			? UnwrapSchema<
+					Schema['response'][keyof Schema['response']],
+					Definitions
+				>
+			: unknown | void
 }
 
 export type HookContainer<T extends Function = Function> = {
 	checksum?: number
 	scope?: LifeCycleType
-	subType?: 'derive' | 'resolve' | (string & {})
+	subType?: 'derive' | 'resolve' | 'mapDerive' | 'mapResolve' | (string & {})
 	fn: T
 }
 
@@ -309,7 +432,7 @@ export interface LifeCycleStore {
 	beforeHandle: HookContainer<OptionalHandler<any, any>>[]
 	afterHandle: HookContainer<AfterHandler<any, any>>[]
 	mapResponse: HookContainer<MapResponse<any, any>>[]
-	onResponse: HookContainer<VoidHandler<any, any>>[]
+	afterResponse: HookContainer<AfterResponseHandler<any, any>>[]
 	trace: HookContainer<TraceHandler<any, any>>[]
 	error: HookContainer<ErrorHandler<any, any, any>>[]
 	stop: HookContainer<GracefulHandler<any>>[]
@@ -380,10 +503,10 @@ export type HTTPMethod =
 
 export interface InputSchema<Name extends string = string> {
 	body?: TSchema | Name
-	headers?: TObject | Name
-	query?: TObject | Name
-	params?: TObject | Name
-	cookie?: TObject | Name
+	headers?: TObject | TNull | TUndefined | Name
+	query?: TObject | TNull | TUndefined | Name
+	params?: TObject | TNull | TUndefined | Name
+	cookie?: TObject | TNull | TUndefined | Name
 	response?:
 		| TSchema
 		| Record<number, TSchema>
@@ -400,7 +523,13 @@ export interface MergeSchema<
 	query: undefined extends A['query'] ? B['query'] : A['query']
 	params: undefined extends A['params'] ? B['params'] : A['params']
 	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
-	response: undefined extends A['response'] ? B['response'] : A['response']
+	response: {} extends A['response']
+		? {} extends B['response']
+			? {}
+			: B['response']
+		: {} extends B['response']
+			? A['response']
+			: A['response'] & Omit<B['response'], keyof A['response']>
 }
 
 export type Handler<
@@ -414,35 +543,39 @@ export type Handler<
 	Path extends string = ''
 > = (
 	context: Context<Route, Singleton, Path>
-) => Route['response'] extends SuccessfulResponse
-	? Response | MaybePromise<Route['response'][keyof Route['response']]>
-	: Response | MaybePromise<Route['response']>
+) => MaybePromise<
+	{} extends Route['response']
+		? unknown
+		: Route['response'][keyof Route['response']]
+>
 
-export type Replace<Original, Target, With> = IsAny<Target> extends true
-	? Original
-	: Original extends Record<string, unknown>
-	? {
-			[K in keyof Original]: Original[K] extends Target
+export type Replace<Original, Target, With> =
+	IsAny<Target> extends true
+		? Original
+		: Original extends Record<string, unknown>
+			? {
+					[K in keyof Original]: Original[K] extends Target
+						? With
+						: Original[K]
+				}
+			: Original extends Target
 				? With
-				: Original[K]
-	  }
-	: Original extends Target
-	? With
-	: Original
+				: Original
 
 type IsAny<T> = 0 extends 1 & T ? true : false
 
-export type CoExist<Original, Target, With> = IsAny<Target> extends true
-	? Original
-	: Original extends Record<string, unknown>
-	? {
-			[K in keyof Original]: Original[K] extends Target
-				? Original[K] | With
-				: Original[K]
-	  }
-	: Original extends Target
-	? Original | With
-	: Original
+export type CoExist<Original, Target, With> =
+	IsAny<Target> extends true
+		? Original
+		: Original extends Record<string, unknown>
+			? {
+					[K in keyof Original]: Original[K] extends Target
+						? Original[K] | With
+						: Original[K]
+				}
+			: Original extends Target
+				? Original | With
+				: Original
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
@@ -452,31 +585,49 @@ export type InlineHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string = '',
+	MacroContext = {}
 > =
 	| ((
-			context: Context<Route, Singleton, Path>
-	  ) => Route['response'] extends SuccessfulResponse
-			?
-					| Response
-					| MaybePromise<
-							| Route['response'][keyof Route['response']]
-							| {
-									[Status in keyof Route['response']]: {
-										_type: Record<
-											Status,
-											Route['response'][Status]
-										>
-										[ELYSIA_RESPONSE]: Status
-									}
-							  }[keyof Route['response']]
-					  >
-			: Response | MaybePromise<Route['response']>)
-	| (unknown extends Route['response']
-			? string | number | Object
-			: Route['response'] extends SuccessfulResponse
-			? Route['response'][keyof Route['response']]
-			: Route['response'])
+			context: MacroContext extends Record<
+				string | number | symbol,
+				unknown
+			>
+				? Prettify<MacroContext & Context<Route, Singleton, Path>>
+				: Context<Route, Singleton, Path>
+	  ) =>
+			| Response
+			| MaybePromise<
+					{} extends Route['response']
+						? unknown
+						:
+								| (Route['response'] extends { 200: any }
+										? Route['response']
+										: string | number | boolean | Object)
+								| Route['response'][keyof Route['response']]
+								| {
+										[Status in keyof Route['response']]: {
+											_type: Record<
+												Status,
+												Route['response'][Status]
+											>
+											[ELYSIA_RESPONSE]: Status
+										}
+								  }[keyof Route['response']]
+			  >)
+	| ({} extends Route['response']
+			? string | number | boolean | Object
+			:
+					| (Route['response'] extends { 200: any }
+							? Route['response']
+							: string | number | boolean | Object)
+					| Route['response'][keyof Route['response']]
+					| {
+							[Status in keyof Route['response']]: {
+								_type: Record<Status, Route['response'][Status]>
+								[ELYSIA_RESPONSE]: Status
+							}
+					  }[keyof Route['response']])
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
@@ -487,11 +638,12 @@ export type OptionalHandler<
 		resolve: {}
 	},
 	Path extends string = ''
-> = Handler<Route, Singleton, Path> extends (
-	context: infer Context
-) => infer Returned
-	? (context: Context) => Returned | MaybePromise<void>
-	: never
+> =
+	Handler<Route, Singleton, Path> extends (
+		context: infer Context
+	) => infer Returned
+		? (context: Context) => Returned | MaybePromise<void>
+		: never
 
 export type AfterHandler<
 	in out Route extends RouteSchema = {},
@@ -502,17 +654,18 @@ export type AfterHandler<
 		resolve: {}
 	},
 	Path extends string = ''
-> = Handler<Route, Singleton, Path> extends (
-	context: infer Context
-) => infer Returned
-	? (
-			context: Prettify<
-				{
-					response: Route['response']
-				} & Context
-			>
-	  ) => Returned | MaybePromise<void>
-	: never
+> =
+	Handler<Route, Singleton, Path> extends (
+		context: infer Context
+	) => infer Returned
+		? (
+				context: Prettify<
+					{
+						response: Route['response']
+					} & Context
+				>
+			) => Returned | MaybePromise<void>
+		: never
 
 export type MapResponse<
 	in out Route extends RouteSchema = {},
@@ -525,7 +678,7 @@ export type MapResponse<
 	Path extends string = ''
 > = Handler<
 	Omit<Route, 'response'> & {
-		response: MaybePromise<Response | undefined | void>
+		response: MaybePromise<Response | undefined | unknown>
 	},
 	Singleton & {
 		derive: {
@@ -567,82 +720,6 @@ export type TransformHandler<
 		>
 	): MaybePromise<void>
 }
-
-export type TraceEvent =
-	| 'request'
-	| 'parse'
-	| 'transform'
-	| 'beforeHandle'
-	| 'afterHandle'
-	| 'error'
-	| 'response' extends infer Events extends string
-	? Events | `${Events}.unit` | 'handle' | 'exit'
-	: never
-
-export type TraceStream = {
-	id: number
-	event: TraceEvent
-	type: 'begin' | 'end'
-	time: number
-	name?: string
-	unit?: number
-}
-
-export type TraceReporter = EventEmitter<
-	{
-		[res in `res${number}.${number}`]: undefined
-	} & {
-		event(stream: TraceStream): MaybePromise<void>
-	}
->
-
-export type TraceProcess<Type extends 'begin' | 'end' = 'begin' | 'end'> =
-	Type extends 'begin'
-		? Prettify<{
-				name: string
-				time: number
-				skip: boolean
-				end: Promise<TraceProcess<'end'>>
-				children: Promise<TraceProcess<'begin'>>[]
-		  }>
-		: number
-
-export type TraceHandler<
-	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	}
-> = {
-	(
-		lifecycle: Prettify<
-			{
-				context: Context<Route, Singleton>
-				set: Context['set']
-				id: number
-				time: number
-			} & {
-				[x in
-					| 'request'
-					| 'parse'
-					| 'transform'
-					| 'beforeHandle'
-					| 'handle'
-					| 'afterHandle'
-					| 'error'
-					| 'response']: Promise<TraceProcess<'begin'>>
-			} & {
-				store: Singleton['store']
-			}
-		>
-	): MaybePromise<void>
-}
-
-export type TraceListener = EventEmitter<{
-	[event in TraceEvent | 'all']: (trace: TraceProcess) => MaybePromise<void>
-}>
 
 export type BodyHandler<
 	in out Route extends RouteSchema = {},
@@ -686,6 +763,22 @@ export type PreHandler<
 	}
 > = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
 
+export type AfterResponseHandler<
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	}
+> = (
+	context: Prettify<
+		Context<Route, Singleton> & {
+			response: Route['response']
+		}
+	>
+) => MaybePromise<void>
+
 export type GracefulHandler<
 	in Instance extends Elysia<any, any, any, any, any, any, any, any>
 > = (data: Instance) => any
@@ -712,7 +805,15 @@ export type ErrorHandler<
 		schema: {}
 	}
 > = (
-	context: ErrorContext<Route, Singleton> &
+	context: ErrorContext<
+		Route,
+		{
+			store: Singleton['store']
+			decorator: Singleton['decorator']
+			derive: {}
+			resolve: {}
+		}
+	> &
 		(
 			| Prettify<
 					{
@@ -720,8 +821,16 @@ export type ErrorHandler<
 						code: 'UNKNOWN'
 						error: Readonly<Error>
 						set: Context['set']
-					} & Partial<Ephemeral['derive'] & Volatile['derive']> &
-						Partial<Ephemeral['resolve'] & Volatile['resolve']>
+					} & Partial<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+					> &
+						Partial<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
 			  >
 			| Prettify<
 					{
@@ -729,8 +838,14 @@ export type ErrorHandler<
 						code: 'VALIDATION'
 						error: Readonly<ValidationError>
 						set: Context['set']
-					} & NeverKey<Ephemeral['derive'] & Volatile['derive']> &
-						NeverKey<Ephemeral['resolve'] & Volatile['resolve']>
+					} & Singleton['derive'] &
+						Ephemeral['derive'] &
+						Volatile['derive'] &
+						NeverKey<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
 			  >
 			| Prettify<
 					{
@@ -738,8 +853,16 @@ export type ErrorHandler<
 						code: 'NOT_FOUND'
 						error: Readonly<NotFoundError>
 						set: Context['set']
-					} & NeverKey<Ephemeral['derive'] & Volatile['derive']> &
-						NeverKey<Ephemeral['resolve'] & Volatile['resolve']>
+					} & NeverKey<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+					> &
+						NeverKey<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
 			  >
 			| Prettify<
 					{
@@ -747,8 +870,14 @@ export type ErrorHandler<
 						code: 'PARSE'
 						error: Readonly<ParseError>
 						set: Context['set']
-					} & NeverKey<Ephemeral['derive'] & Volatile['derive']> &
-						NeverKey<Ephemeral['resolve'] & Volatile['resolve']>
+					} & Singleton['derive'] &
+						Ephemeral['derive'] &
+						Volatile['derive'] &
+						NeverKey<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
 			  >
 			| Prettify<
 					{
@@ -756,8 +885,16 @@ export type ErrorHandler<
 						code: 'INTERNAL_SERVER_ERROR'
 						error: Readonly<InternalServerError>
 						set: Context['set']
-					} & Partial<Ephemeral['derive'] & Volatile['derive']> &
-						Partial<Ephemeral['resolve'] & Volatile['resolve']>
+					} & Partial<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+					> &
+						Partial<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
 			  >
 			| Prettify<
 					{
@@ -765,8 +902,16 @@ export type ErrorHandler<
 						code: 'INVALID_COOKIE_SIGNATURE'
 						error: Readonly<InvalidCookieSignature>
 						set: Context['set']
-					} & NeverKey<Ephemeral['derive'] & Volatile['derive']> &
-						NeverKey<Ephemeral['resolve'] & Volatile['resolve']>
+					} & NeverKey<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+					> &
+						NeverKey<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
 			  >
 			| Prettify<
 					{
@@ -777,8 +922,16 @@ export type ErrorHandler<
 							set: Context['set']
 						}
 					}[keyof T] &
-						Partial<Ephemeral['derive'] & Volatile['derive']> &
-						Partial<Ephemeral['resolve'] & Volatile['resolve']>
+						Partial<
+							Singleton['derive'] &
+								Ephemeral['derive'] &
+								Volatile['derive']
+						> &
+						Partial<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
 			  >
 		)
 ) => any | Promise<any>
@@ -802,9 +955,9 @@ export type LocalHook<
 		? Schema
 		: Schema & {
 				params: undefined extends Schema['params']
-					? Record<GetPathParameter<Path>, string>
+					? ResolvePath<Path>
 					: Schema['params']
-		  }
+			}
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**
@@ -841,21 +994,17 @@ export type LocalHook<
 		 */
 		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 		/**
+		 * Execute after response is sent
+		 */
+		afterResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		/**
 		 * Catch error
 		 */
 		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-		/**
-		 * Custom body parser
-		 */
-		onResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 		tags?: DocumentDecoration['tags']
 	}
 
-export type ComposedHandler = {
-	(context: Context): MaybePromise<Response>
-	compose(): Function
-	composed: Function
-}
+export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
 export interface InternalRoute {
 	method: HTTPMethod
@@ -866,6 +1015,12 @@ export interface InternalRoute {
 }
 
 export type SchemaValidator = {
+	createBody?(): TypeCheck<any>
+	createHeaders?(): TypeCheck<any>
+	createQuery?(): TypeCheck<any>
+	createParams?(): TypeCheck<any>
+	createCookie?(): TypeCheck<any>
+	createResponse?(): Record<number, TypeCheck<any>>
 	body?: TypeCheck<any>
 	headers?: TypeCheck<any>
 	query?: TypeCheck<any>
@@ -915,16 +1070,22 @@ export type Checksum = {
 
 export type BaseMacro = Record<
 	string,
-	Record<string, unknown> | ((...a: any) => unknown)
+	string | number | boolean | Object | undefined | null
 >
+export type BaseMacroFn = Record<string, (...a: any) => unknown>
 
-export type MacroToProperty<in out T extends BaseMacro> = Prettify<{
+export type MacroToProperty<in out T extends BaseMacroFn> = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
 			? Params | undefined
 			: T[K]
 		: T[K]
 }>
+
+interface MacroOptions {
+	insert?: 'before' | 'after'
+	stack?: 'global' | 'local'
+}
 
 export interface MacroManager<
 	in out TypedRoute extends RouteSchema = {},
@@ -938,13 +1099,13 @@ export interface MacroManager<
 > {
 	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
 	onParse(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onTransform(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
 	onTransform(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
@@ -952,13 +1113,13 @@ export interface MacroManager<
 		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 	onBeforeHandle(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>): unknown
 	onAfterHandle(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 	): unknown
 
@@ -966,20 +1127,22 @@ export interface MacroManager<
 		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 	): unknown
 	onError(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-	): unknown
-
-	onResponse(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
-	onResponse(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
-		fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 	): unknown
 
 	mapResponse(fn: MaybeArray<MapResponse<TypedRoute, Singleton>>): unknown
 	mapResponse(
-		options: { insert?: 'before' | 'after'; stack?: 'global' | 'local' },
+		options: MacroOptions,
 		fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
+	): unknown
+
+	onAfterResponse(
+		fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+	): unknown
+	onAfterResponse(
+		options: MacroOptions,
+		fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 	): unknown
 
 	events: {
@@ -998,10 +1161,10 @@ type _CreateEden<
 > = Path extends `${infer Start}/${infer Rest}`
 	? {
 			[x in Start]: _CreateEden<Rest, Property>
-	  }
+		}
 	: {
 			[x in Path]: Property
-	  }
+		}
 
 export type CreateEden<
 	Path extends string,
@@ -1009,8 +1172,8 @@ export type CreateEden<
 > = Path extends `/${infer Rest}`
 	? _CreateEden<Rest, Property>
 	: Path extends ''
-	? _CreateEden<'index', Property>
-	: _CreateEden<Path, Property>
+		? _CreateEden<'index', Property>
+		: _CreateEden<Path, Property>
 
 export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 	...a: any[]
@@ -1019,10 +1182,10 @@ export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 	: _ComposeElysiaResponse<Response, Replace<Awaited<Handle>, BunFile, File>>
 
 type _ComposeElysiaResponse<Response, Handle> = Prettify<
-	unknown extends Response
+	{} extends Response
 		? {
 				200: Exclude<Handle, { [ELYSIA_RESPONSE]: any }>
-		  } & {
+			} & {
 				[ErrorResponse in Extract<
 					Handle,
 					{ response: any }
@@ -1031,12 +1194,8 @@ type _ComposeElysiaResponse<Response, Handle> = Prettify<
 				}
 					? Status
 					: never]: ErrorResponse['response']
-		  }
-		: Response extends SuccessfulResponse
-		? Response
-		: {
-				200: Response
-		  }
+			}
+		: Response
 >
 
 export type MergeElysiaInstances<
@@ -1056,6 +1215,7 @@ export type MergeElysiaInstances<
 	Metadata extends MetadataBase = {
 		schema: {}
 		macro: {}
+		macroFn: {}
 	},
 	Routes extends RouteBase = {}
 > = Instances extends [
@@ -1071,7 +1231,7 @@ export type MergeElysiaInstances<
 				Definitions,
 				Metadata,
 				Routes
-		  >
+			>
 		: MergeElysiaInstances<
 				Rest,
 				Prefix,
@@ -1083,7 +1243,7 @@ export type MergeElysiaInstances<
 					(Prefix extends ``
 						? Current['_routes']
 						: AddPrefix<Prefix, Current['_routes']>)
-		  >
+			>
 	: Elysia<
 			Prefix,
 			Scoped,
@@ -1100,12 +1260,14 @@ export type MergeElysiaInstances<
 			{
 				schema: Prettify<Metadata['schema']>
 				macro: Prettify<Metadata['macro']>
+				macroFn: Prettify<Metadata['macroFn']>
 			},
 			Routes
-	  >
+		>
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
 
+// Exclude return error()
 export type ExcludeElysiaResponse<T> = Exclude<
 	undefined extends Awaited<T> ? Partial<Awaited<T>> : Awaited<T>,
 	{ [ELYSIA_RESPONSE]: any }
@@ -1136,3 +1298,197 @@ export type InferHandler<
 	},
 	Path
 >
+
+export interface ModelValidatorError extends ValueError {
+	summary: string
+}
+
+// @ts-ignore trust me bro
+export interface ModelValidator<T> extends TypeCheck<T> {
+	parse(a: T): T
+	safeParse(a: T):
+		| { success: true; data: T; error: null }
+		| {
+				success: true
+				data: null
+				error: string
+				errors: ModelValidatorError[]
+		  }
+}
+
+export type UnionToIntersect<U> = (
+	U extends unknown ? (arg: U) => 0 : never
+) extends (arg: infer I) => 0
+	? I
+	: never
+
+export type ResolveMacroContext<
+	Macro extends BaseMacro,
+	MacroFn extends BaseMacroFn
+> = UnionToIntersect<
+	{
+		[K in keyof Macro]-?: undefined extends Macro[K]
+			? never
+			: K extends keyof MacroFn
+				? ReturnType<MacroFn[K]> extends infer A extends Record<
+						string | number | symbol,
+						unknown
+					>
+					? A
+					: never
+				: never
+	}[keyof Macro]
+>
+
+export type ContextAppendType = 'append' | 'override'
+
+export type HigherOrderFunction<
+	T extends (...arg: unknown[]) => Function = (...arg: unknown[]) => Function
+> = (fn: T, request: Request) => ReturnType<T>
+
+// new Elysia()
+// 	.wrap((fn) => {
+// 		return fn()
+// 	})
+
+export type HTTPHeaders = Record<string, string> & {
+	// Authentication
+	'www-authenticate'?: string
+	authorization?: string
+	'proxy-authenticate'?: string
+	'proxy-authorization'?: string
+
+	// Caching
+	age?: string
+	'cache-control'?: string
+	'clear-site-data'?: string
+	expires?: string
+	'no-vary-search'?: string
+	pragma?: string
+
+	// Conditionals
+	'last-modified'?: string
+	etag?: string
+	'if-match'?: string
+	'if-none-match'?: string
+	'if-modified-since'?: string
+	'if-unmodified-since'?: string
+	vary?: string
+
+	// Connection management
+	connection?: string
+	'keep-alive'?: string
+
+	// Content negotiation
+	accept?: string
+	'accept-encoding'?: string
+	'accept-language'?: string
+
+	// Controls
+	expect?: string
+	'max-forwards'?: string
+
+	// Cokies
+	cookie?: string
+	'set-cookie'?: string | string[]
+
+	// CORS
+	'access-control-allow-origin'?: string
+	'access-control-allow-credentials'?: string
+	'access-control-allow-headers'?: string
+	'access-control-allow-methods'?: string
+	'access-control-expose-headers'?: string
+	'access-control-max-age'?: string
+	'access-control-request-headers'?: string
+	'access-control-request-method'?: string
+	origin?: string
+	'timing-allow-origin'?: string
+
+	// Downloads
+	'content-disposition'?: string
+
+	// Message body information
+	'content-length'?: string
+	'content-type'?: string
+	'content-encoding'?: string
+	'content-language'?: string
+	'content-location'?: string
+
+	// Proxies
+	forwarded?: string
+	via?: string
+
+	// Redirects
+	location?: string
+	refresh?: string
+
+	// Request context
+	// from?: string
+	// host?: string
+	// referer?: string
+	// 'user-agent'?: string
+
+	// Response context
+	allow?: string
+	server?: 'Elysia' | (string & {})
+
+	// Range requests
+	'accept-ranges'?: string
+	range?: string
+	'if-range'?: string
+	'content-range'?: string
+
+	// Security
+	'content-security-policy'?: string
+	'content-security-policy-report-only'?: string
+	'cross-origin-embedder-policy'?: string
+	'cross-origin-opener-policy'?: string
+	'cross-origin-resource-policy'?: string
+	'expect-ct'?: string
+	'permission-policy'?: string
+	'strict-transport-security'?: string
+	'upgrade-insecure-requests'?: string
+	'x-content-type-options'?: string
+	'x-frame-options'?: string
+	'x-xss-protection'?: string
+
+	// Server-sent events
+	'last-event-id'?: string
+	'ping-from'?: string
+	'ping-to'?: string
+	'report-to'?: string
+
+	// Transfer coding
+	te?: string
+	trailer?: string
+	'transfer-encoding'?: string
+
+	// Other
+	'alt-svg'?: string
+	'alt-used'?: string
+	date?: string
+	dnt?: string
+	'early-data'?: string
+	'large-allocation'?: string
+	link?: string
+	'retry-after'?: string
+	'service-worker-allowed'?: string
+	'source-map'?: string
+	upgrade?: string
+
+	// Non-standard
+	'x-dns-prefetch-control'?: string
+	'x-forwarded-for'?: string
+	'x-forwarded-host'?: string
+	'x-forwarded-proto'?: string
+	'x-powered-by'?: 'Elysia' | (string & {})
+	'x-request-id'?: string
+	'x-requested-with'?: string
+	'x-robots-tag'?: string
+	'x-ua-compatible'?: string
+}
+
+export type JoinPath<
+	A extends string,
+	B extends string
+> = `${A}${B extends '/' ? '/index' : B extends '' ? B : B extends `/${string}` ? B : B}`

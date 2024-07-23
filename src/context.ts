@@ -1,22 +1,24 @@
-import type { StatusMap, InvertedStatusMap, redirect as Redirect } from './utils'
+import type { Server } from 'bun'
 import type { Cookie, ElysiaCookie } from './cookies'
+import type {
+	StatusMap,
+	InvertedStatusMap,
+	redirect as Redirect
+} from './utils'
 
 import { error, type ELYSIA_RESPONSE } from './error'
 import type {
 	RouteSchema,
 	Prettify,
-	GetPathParameter,
-	SingletonBase
+	ResolvePath,
+	SingletonBase,
+	HTTPHeaders
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
 
 type WithoutNullableKeys<Type> = {
 	[Key in keyof Type]-?: NonNullable<Type[Key]>
-}
-
-type SetCookie = {
-	'Set-Cookie'?: string | string[]
 }
 
 export type ErrorContext<
@@ -36,15 +38,15 @@ export type ErrorContext<
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
-				? Record<GetPathParameter<Path>, string>
-				: never
+				? ResolvePath<Path>
+				: { [key in string]: string }
 			: Route['params']
 		headers: undefined extends Route['headers']
 			? Record<string, string | undefined>
 			: Route['headers']
 		cookie: undefined extends Route['cookie']
-			? Record<string, Cookie<any>>
-			: Record<string, Cookie<any>> &
+			? Record<string, Cookie<string | undefined>>
+			: Record<string, Cookie<string | undefined>> &
 					Prettify<
 						WithoutNullableKeys<{
 							[key in keyof Route['cookie']]: Cookie<
@@ -53,10 +55,11 @@ export type ErrorContext<
 						}>
 					>
 
+		server: Server | null
 		redirect: Redirect
 
 		set: {
-			headers: Record<string, string> & SetCookie
+			headers: HTTPHeaders
 			status?: number | keyof StatusMap
 			redirect?: string
 			/**
@@ -67,9 +70,25 @@ export type ErrorContext<
 			cookie?: Record<string, ElysiaCookie>
 		}
 
+		/**
+		 * Path extracted from incoming URL
+		 *
+		 * Represent a value extracted from URL
+		 *
+		 * @example '/id/9'
+		 */
 		path: string
+		/**
+		 * Path as registered to router
+		 *
+		 * Represent a path registered to a router, not a URL
+		 *
+		 * @example '/id/:id'
+		 */
+		route: string
 		request: Request
 		store: Singleton['store']
+		response: Route['response']
 	} & Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']
@@ -92,15 +111,15 @@ export type Context<
 			: Route['query']
 		params: undefined extends Route['params']
 			? Path extends `${string}/${':' | '*'}${string}`
-				? Record<GetPathParameter<Path>, string>
+				? ResolvePath<Path>
 				: never
 			: Route['params']
 		headers: undefined extends Route['headers']
 			? Record<string, string | undefined>
 			: Route['headers']
 		cookie: undefined extends Route['cookie']
-			? Record<string, Cookie<any>>
-			: Record<string, Cookie<any>> &
+			? Record<string, Cookie<string | undefined>>
+			: Record<string, Cookie<string | undefined>> &
 					Prettify<
 						WithoutNullableKeys<{
 							[key in keyof Route['cookie']]: Cookie<
@@ -109,11 +128,23 @@ export type Context<
 						}>
 					>
 
+		server: Server | null
 		redirect: Redirect
 
 		set: {
-			headers: Record<string, string> & SetCookie
+			headers: HTTPHeaders
 			status?: number | keyof StatusMap
+			/**
+			 * @deprecated Use inline redirect instead
+			 *
+			 * Will be removed in 1.2.0
+			 *
+			 * @example Migration example
+			 * ```ts
+			 * new Elysia()
+			 *     .get(({ redirect }) => redirect('/'))
+			 * ```
+			 */
 			redirect?: string
 			/**
 			 * ! Internal Property
@@ -123,11 +154,30 @@ export type Context<
 			cookie?: Record<string, ElysiaCookie>
 		}
 
+		/**
+		 * Path extracted from incoming URL
+		 *
+		 * Represent a value extracted from URL
+		 *
+		 * @example '/id/9'
+		 */
 		path: string
+		/**
+		 * Path as registered to router
+		 *
+		 * Represent a path registered to a router, not a URL
+		 *
+		 * @example '/id/:id'
+		 */
+		route: string
 		request: Request
 		store: Singleton['store']
-	} & (Route['response'] extends { 200: unknown }
+		response?: Route['response']
+    } & ({} extends Route['response']
 		? {
+				error: typeof error
+			}
+		: {
 				error: <
 					const Code extends
 						| keyof Route['response']
@@ -138,9 +188,9 @@ export type Context<
 					const T extends Code extends keyof Route['response']
 						? Route['response'][Code]
 						: Code extends keyof StatusMap
-						? // @ts-ignore StatusMap[Code] always valid because Code generic check
-						  Route['response'][StatusMap[Code]]
-						: never
+							? // @ts-ignore StatusMap[Code] always valid because Code generic check
+								Route['response'][StatusMap[Code]]
+							: never
 				>(
 					code: Code,
 					response: T
@@ -155,10 +205,7 @@ export type Context<
 							: Code]: T
 					}
 				}
-		  }
-		: {
-				error: typeof error
-		  }) &
+			}) &
 		Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']
@@ -178,9 +225,10 @@ export type PreContext<
 		request: Request
 
 		redirect: Redirect
+		server: Server | null
 
 		set: {
-			headers: { [header: string]: string } & SetCookie
+			headers: HTTPHeaders
 			status?: number
 			redirect?: string
 		}

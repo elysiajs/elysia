@@ -3,6 +3,8 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
+import { AsyncLocalStorage } from 'async_hooks'
+
 describe('Edge Case', () => {
 	it('handle state', async () => {
 		const app = new Elysia()
@@ -161,5 +163,14 @@ describe('Edge Case', () => {
 		expect(app.routeTree.get('GET/0')).toEqual(0)
 		// @ts-expect-error
 		expect(app.routeTree.get('GET/4')).toEqual(4)
+	})
+
+	it('get getGlobalRoutes', () => {
+		const plugin = new Elysia().get('/', () => 'hello')
+
+		const main = new Elysia().use(plugin).get('/2', () => 'hi')
+
+		// @ts-expect-error private property
+		expect(main.getGlobalRoutes().length).toBe(2)
 	})
 })

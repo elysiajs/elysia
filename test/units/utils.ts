@@ -1,5 +1,7 @@
 export class Passthrough {
-    $passthrough = 'custom'
+    toResponse() {
+        return this.custom
+    }
 
     get custom() {
         return 'hi'

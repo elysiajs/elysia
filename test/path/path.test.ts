@@ -81,6 +81,32 @@ describe('Path', () => {
 		expect(await res.text()).toBe('fubuki/Elysia')
 	})
 
+	it('parse optional params', async () => {
+		const app = new Elysia().get('/id/:id?', ({ params: { id } }) => id)
+
+		const res = await Promise.all([
+			app.handle(req('/id')).then((x) => x.text()),
+			app.handle(req('/id/fubuki')).then((x) => x.text())
+		])
+
+		expect(res).toEqual(['', 'fubuki'])
+	})
+
+	it('parse multiple optional params', async () => {
+		const app = new Elysia().get(
+			'/id/:id?/:name?',
+			({ params: { id = '', name = '' } }) => `${id}/${name}`
+		)
+
+		const res = await Promise.all([
+			app.handle(req('/id')).then((x) => x.text()),
+			app.handle(req('/id/fubuki')).then((x) => x.text()),
+			app.handle(req('/id/fubuki/shirakami')).then((x) => x.text())
+		])
+
+		expect(res).toEqual(['/', 'fubuki/', 'fubuki/shirakami'])
+	})
+
 	it('accept wildcard', async () => {
 		const app = new Elysia().get('/wildcard/*', () => 'Wildcard')
 

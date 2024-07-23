@@ -5,16 +5,18 @@ import { post, req } from '../utils'
 describe('Trace Detail', async () => {
 	it('report parse units name', async () => {
 		const app = new Elysia()
-			.trace(async ({ parse, set }) => {
-				const { children } = await parse
-				const names = []
+			.trace(({ onParse, set }) => {
+				onParse(({ onEvent, onStop }) => {
+					const names = <string[]>[]
 
-				for (const child of children) {
-					const { name } = await child
-					names.push(name)
-				}
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
-				set.headers.name = names.join(', ')
+					onStop(() => {
+						set.headers.name = names.join(', ')
+					})
+				})
 			})
 			.onParse(function luna() {})
 			.post('/', ({ body }) => body, {
@@ -28,16 +30,18 @@ describe('Trace Detail', async () => {
 
 	it('report transform units name', async () => {
 		const app = new Elysia()
-			.trace(async ({ transform, set }) => {
-				const { children } = await transform
-				const names = []
+			.trace(({ onTransform, set }) => {
+				onTransform(({ onEvent, onStop }) => {
+					const names = <string[]>[]
 
-				for (const child of children) {
-					const { name } = await child
-					names.push(name)
-				}
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
-				set.headers.name = names.join(', ')
+					onStop(() => {
+						set.headers.name = names.join(', ')
+					})
+				})
 			})
 			.onTransform(function luna() {})
 			.get('/', () => 'a', {
@@ -51,16 +55,18 @@ describe('Trace Detail', async () => {
 
 	it('report beforeHandle units name', async () => {
 		const app = new Elysia()
-			.trace(async ({ beforeHandle, set }) => {
-				const { children } = await beforeHandle
-				const names = []
+			.trace(({ onBeforeHandle, set }) => {
+				onBeforeHandle(({ onEvent, onStop }) => {
+					const names = <string[]>[]
 
-				for (const child of children) {
-					const { name } = await child
-					names.push(name)
-				}
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
-				set.headers.name = names.join(', ')
+					onStop(() => {
+						set.headers.name = names.join(', ')
+					})
+				})
 			})
 			.onBeforeHandle(function luna() {})
 			.get('/', () => 'a', {
@@ -74,16 +80,18 @@ describe('Trace Detail', async () => {
 
 	it('report afterHandle units name', async () => {
 		const app = new Elysia()
-			.trace(async ({ afterHandle, set }) => {
-				const { children } = await afterHandle
-				const names = []
+			.trace(({ onAfterHandle, set }) => {
+				onAfterHandle(({ onEvent, onStop }) => {
+					const names = <string[]>[]
 
-				for (const child of children) {
-					const { name } = await child
-					names.push(name)
-				}
+					onEvent(({ name }) => {
+						names.push(name)
+					})
 
-				set.headers.name = names.join(', ')
+					onStop(() => {
+						set.headers.name = names.join(', ')
+					})
+				})
 			})
 			.onAfterHandle(function luna() {})
 			.get('/', () => 'a', {
@@ -93,5 +101,53 @@ describe('Trace Detail', async () => {
 		const { headers } = await app.handle(req('/'))
 
 		expect(headers.get('name')).toBe('luna, kindred')
+	})
+
+	it('report mapResponse units name', async () => {
+		const app = new Elysia()
+			.trace(({ onMapResponse, set }) => {
+				onMapResponse(({ onEvent, onStop }) => {
+					const names = <string[]>[]
+
+					onEvent(({ name }) => {
+						names.push(name)
+					})
+
+					onStop(() => {
+						set.headers.name = names.join(', ')
+					})
+				})
+			})
+			.mapResponse(function luna() {})
+			.get('/', () => 'a', {
+				mapResponse: [function kindred() {}]
+			})
+
+		const { headers } = await app.handle(req('/'))
+
+		expect(headers.get('name')).toBe('luna, kindred')
+	})
+
+	it('report afterResponse units name', async () => {
+		const app = new Elysia()
+			.trace(({ onAfterResponse, set }) => {
+				onAfterResponse(({ onEvent, onStop }) => {
+					const names = <string[]>[]
+
+					onEvent(({ name }) => {
+						names.push(name)
+					})
+
+					onStop(() => {
+						expect(names.join(', ')).toBe('luna, kindred')
+					})
+				})
+			})
+			.onAfterResponse(function luna() {})
+			.get('/', () => 'a', {
+				afterResponse: [function kindred() {}]
+			})
+
+		app.handle(req('/'))
 	})
 })

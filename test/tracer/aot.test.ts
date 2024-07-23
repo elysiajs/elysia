@@ -1,14 +1,15 @@
 import { Context, Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
+import { req } from '../utils'
 
 describe('Trace AoT', async () => {
-	it('inject request report', async () => {
-		const app = new Elysia().trace(async () => {}).get('/', () => '')
+	// it('inject request report', async () => {
+	// 	const app = new Elysia().trace(async () => {}).get('/', () => '')
 
-		expect(app.compile().fetch.toString()).toInclude(
-			`reporter.emit('event',{id,event:'request'`
-		)
-	})
+	// 	expect(app.compile().fetch.toString()).toInclude(
+	// 		`reporter.emit('event',{id,event:'request'`
+	// 	)
+	// })
 
 	it('try-catch edge case', async () => {
 		class Controller {
@@ -44,4 +45,25 @@ describe('Trace AoT', async () => {
 	// 		`reporter.emit('event',{id,event:'response'`
 	// 	)
 	// })
+
+	it('handle scope', async () => {
+		let called = 0
+
+		const plugin = new Elysia()
+			.trace(({ onHandle }) => {
+				onHandle(() => {
+					called++
+				})
+			})
+			.get('/plugin', () => 'ok')
+
+		const app = new Elysia().use(plugin).get('/main', () => 'ok')
+
+		await Promise.all([
+			app.handle(req('/plugin')),
+			app.handle(req('/main'))
+		])
+
+		expect(called).toBe(1)
+	})
 })

@@ -116,10 +116,11 @@ const app = new Elysia()
 			return 'Not Found :('
 		}
 	})
-	.listen(8080, ({ hostname, port }) => {
-		console.log(`🦊 Elysia is running at http://${hostname}:${port}`)
-	})
 
 const t2 = performance.now()
+
+app.listen(8080, ({ hostname, port }) => {
+	console.log(`🦊 Elysia is running at http://${hostname}:${port}`)
+})
 
 console.log('took', t2 - t1, 'ms')

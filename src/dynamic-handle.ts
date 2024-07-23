@@ -1,13 +1,19 @@
 import type { Elysia } from '.'
 
 import { mapEarlyResponse, mapResponse } from './handler'
-import { ElysiaErrors, NotFoundError, ValidationError } from './error'
+import {
+	ELYSIA_RESPONSE,
+	ElysiaErrors,
+	NotFoundError,
+	ValidationError
+} from './error'
 
 import type { Context } from './context'
+import { type error } from './error'
 
-import { parse as parseQuery } from 'fast-querystring'
+import { parseQuery } from './fast-querystring'
 
-import { redirect, signCookie } from './utils'
+import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
@@ -47,7 +53,9 @@ export const createDynamicHandler =
 				qi,
 				redirect
 			}
-		) as unknown as Context
+		) as unknown as Context & {
+			response: unknown
+		}
 
 		try {
 			for (let i = 0; i < app.event.request.length; i++) {
@@ -56,7 +64,7 @@ export const createDynamicHandler =
 				if (response instanceof Promise) response = await response
 
 				response = mapEarlyResponse(response, set)
-				if (response) return response
+				if (response) return (context.response = response)
 			}
 
 			const handler =
@@ -187,7 +195,7 @@ export const createDynamicHandler =
 
 			const cookieHeaderValue = request.headers.get('cookie')
 
-			context.cookie = await parseCookie(
+			context.cookie = (await parseCookie(
 				context.set,
 				cookieHeaderValue,
 				cookieMeta
@@ -202,13 +210,13 @@ export const createDynamicHandler =
 								cookieMeta.sign === true
 									? true
 									: cookieMeta.sign !== undefined
-									? typeof cookieMeta.sign === 'string'
-										? cookieMeta.sign
-										: cookieMeta.sign.join(',')
-									: undefined
-					  }
+										? typeof cookieMeta.sign === 'string'
+											? cookieMeta.sign
+											: cookieMeta.sign.join(',')
+										: undefined
+						}
 					: undefined
-			)
+			)) as any
 
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const hook = hooks.transform[i]
@@ -222,48 +230,48 @@ export const createDynamicHandler =
 			}
 
 			if (validator) {
-				if (validator.headers) {
+				if (validator.createHeaders?.()) {
 					const _header: Record<string, string> = {}
 					for (const key in request.headers)
 						_header[key] = request.headers.get(key)!
 
-					if (validator.headers.Check(_header) === false)
+					if (validator.headers!.Check(_header) === false)
 						throw new ValidationError(
 							'header',
-							validator.headers,
+							validator.headers!,
 							_header
 						)
 				}
 
-				if (validator.params?.Check(context.params) === false)
+				if (validator.createParams?.()?.Check(context.params) === false)
 					throw new ValidationError(
 						'params',
-						validator.params,
+						validator.params!,
 						context.params
 					)
 
-				if (validator.query?.Check(context.query) === false)
+				if (validator.createQuery?.()?.Check(context.query) === false)
 					throw new ValidationError(
 						'query',
-						validator.query,
+						validator.query!,
 						context.query
 					)
 
-				if (validator.cookie) {
+				if (validator.createCookie?.()) {
 					const cookieValue: Record<string, unknown> = {}
 					for (const [key, value] of Object.entries(context.cookie))
 						cookieValue[key] = value.value
 
-					if (validator.cookie?.Check(cookieValue) === false)
+					if (validator.cookie!.Check(cookieValue) === false)
 						throw new ValidationError(
 							'cookie',
-							validator.cookie,
+							validator.cookie!,
 							cookieValue
 						)
 				}
 
-				if (validator.body?.Check(body) === false)
-					throw new ValidationError('body', validator.body, body)
+				if (validator.createBody?.()?.Check(body) === false)
+					throw new ValidationError('body', validator.body!, body)
 			}
 
 			for (let i = 0; i < hooks.beforeHandle.length; i++) {
@@ -291,7 +299,7 @@ export const createDynamicHandler =
 					}
 
 					const result = mapEarlyResponse(response, context.set)
-					if (result) return result
+					if (result) return (context.response = result)
 				}
 			}
 
@@ -299,7 +307,16 @@ export const createDynamicHandler =
 			if (response instanceof Promise) response = await response
 
 			if (!hooks.afterHandle.length) {
-				const responseValidator = validator?.response?.[response.status]
+				const status =
+					(response as ReturnType<typeof error>)[ELYSIA_RESPONSE] ??
+					(set.status
+						? typeof set.status === 'string'
+							? StatusMap[set.status]
+							: set.status
+						: 200)
+
+				const responseValidator =
+					validator?.createResponse?.()?.[status]
 
 				if (responseValidator?.Check(response) === false)
 					throw new ValidationError(
@@ -326,7 +343,7 @@ export const createDynamicHandler =
 					const result = mapEarlyResponse(newResponse, context.set)
 					if (result !== undefined) {
 						const responseValidator =
-							validator?.response?.[response.status]
+							validator?.response?.[result.status]
 
 						if (responseValidator?.Check(result) === false)
 							throw new ValidationError(
@@ -335,7 +352,7 @@ export const createDynamicHandler =
 								result
 							)
 
-						return result
+						return (context.response = result)
 					}
 				}
 			}
@@ -344,8 +361,8 @@ export const createDynamicHandler =
 				const secret = !cookieMeta.secrets
 					? undefined
 					: typeof cookieMeta.secrets === 'string'
-					? cookieMeta.secrets
-					: cookieMeta.secrets[0]
+						? cookieMeta.secrets
+						: cookieMeta.secrets[0]
 
 				if (cookieMeta.sign === true)
 					for (const [key, cookie] of Object.entries(
@@ -360,8 +377,7 @@ export const createDynamicHandler =
 					const properties = validator?.cookie?.schema?.properties
 
 					for (const name of cookieMeta.sign) {
-						if (!(name in properties))
-							continue
+						if (!(name in properties)) continue
 
 						if (context.set.cookie[name]?.value) {
 							context.set.cookie[name].value = await signCookie(
@@ -373,7 +389,7 @@ export const createDynamicHandler =
 				}
 			}
 
-			return mapResponse(response, context.set)
+			return (context.response = mapResponse(response, context.set))
 		} catch (error) {
 			if ((error as ElysiaErrors).status)
 				set.status = (error as ElysiaErrors).status
@@ -381,14 +397,19 @@ export const createDynamicHandler =
 			// @ts-expect-error private
 			return app.handleError(context, error)
 		} finally {
-			for (const onResponse of app.event.onResponse)
-				await onResponse.fn(context)
+			for (const afterResponse of app.event.afterResponse)
+				await afterResponse.fn(context as any)
 		}
 	}
 
 export const createDynamicErrorHandler =
 	(app: Elysia<any, any, any, any, any, any, any, any>) =>
-	async (context: Context, error: ElysiaErrors) => {
+	async (
+		context: Context & {
+			response: unknown
+		},
+		error: ElysiaErrors
+	) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
@@ -397,7 +418,7 @@ export const createDynamicErrorHandler =
 			let response = hook.fn(errorContext as any)
 			if (response instanceof Promise) response = await response
 			if (response !== undefined && response !== null)
-				return mapResponse(response, context.set)
+				return (context.response = mapResponse(response, context.set))
 		}
 
 		return new Response(

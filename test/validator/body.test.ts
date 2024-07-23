@@ -94,6 +94,7 @@ describe('Body Validator', () => {
 				age: t.Numeric()
 			})
 		})
+
 		const res = await app.handle(
 			post('/', {
 				name: 'sucrose',
@@ -107,6 +108,7 @@ describe('Body Validator', () => {
 			job: 'alchemist',
 			age: 16
 		})
+
 		expect(res.status).toBe(200)
 	})
 
@@ -182,12 +184,37 @@ describe('Body Validator', () => {
 		expect(await res.text()).toEqual('')
 	})
 
-	it('strictly validate by default', async () => {
+	it('normalize by default', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Object({
 				name: t.String()
 			})
 		})
+
+		const res = await app
+			.handle(
+				post('/', {
+					name: 'sucrose',
+					job: 'alchemist'
+				})
+			)
+			.then((x) => x.json())
+
+		expect(res).toEqual({
+			name: 'sucrose'
+		})
+	})
+
+	it('strictly validate if not normalize', async () => {
+		const app = new Elysia({ normalize: false }).post(
+			'/',
+			({ body }) => body,
+			{
+				body: t.Object({
+					name: t.String()
+				})
+			}
+		)
 
 		const res = await app.handle(
 			post('/', {
@@ -259,6 +286,68 @@ describe('Body Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('validate optional primitive', async () => {
+		const app = new Elysia().post('/', ({ body }) => body ?? 'sucrose', {
+			body: t.Optional(t.String())
+		})
+
+		const [valid, invalid] = await Promise.all([
+			app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'text/plain'
+					},
+					body: 'sucrose'
+				})
+			),
+			app.handle(
+				new Request('http://localhost/', {
+					method: 'POST'
+				})
+			)
+		])
+
+		expect(await valid.text()).toBe('sucrose')
+		expect(valid.status).toBe(200)
+
+		expect(await invalid.text()).toBe('sucrose')
+		expect(invalid.status).toBe(200)
+	})
+
+	it('validate optional object', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => body?.name ?? 'sucrose',
+			{
+				body: t.Optional(
+					t.Object({
+						name: t.String()
+					})
+				)
+			}
+		)
+
+		const [valid, invalid] = await Promise.all([
+			app.handle(
+				post('/', {
+					name: 'sucrose'
+				})
+			),
+			app.handle(
+				new Request('http://localhost/', {
+					method: 'POST'
+				})
+			)
+		])
+
+		expect(await valid.text()).toBe('sucrose')
+		expect(valid.status).toBe(200)
+
+		expect(await invalid.text()).toBe('sucrose')
+		expect(invalid.status).toBe(200)
+	})
+
 	it('create default object body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Object({
@@ -269,13 +358,14 @@ describe('Body Validator', () => {
 			})
 		})
 
-		const value = await app.handle(
-			post('/', {
-				username: 'nagisa',
-				password: 'hifumi_daisuki',
-				email: 'kirifuji_nagisa@trinity.school'
-			})
-		)
+		const value = await app
+			.handle(
+				post('/', {
+					username: 'nagisa',
+					password: 'hifumi_daisuki',
+					email: 'kirifuji_nagisa@trinity.school'
+				})
+			)
 			.then((x) => x.json())
 
 		expect(value).toEqual({
@@ -291,10 +381,7 @@ describe('Body Validator', () => {
 			body: t.String({ default: 'hifumi_daisuki' })
 		})
 
-		const value = await app.handle(
-			post('/')
-		)
-			.then((x) => x.text())
+		const value = await app.handle(post('/')).then((x) => x.text())
 
 		expect(value).toBe('hifumi_daisuki')
 	})
@@ -304,10 +391,7 @@ describe('Body Validator', () => {
 			body: t.Boolean({ default: true })
 		})
 
-		const value = await app.handle(
-			post('/')
-		)
-			.then((x) => x.text())
+		const value = await app.handle(post('/')).then((x) => x.text())
 
 		expect(value).toBe('boolean')
 	})
@@ -317,10 +401,7 @@ describe('Body Validator', () => {
 			body: t.Number({ default: 1 })
 		})
 
-		const value = await app.handle(
-			post('/')
-		)
-			.then((x) => x.text())
+		const value = await app.handle(post('/')).then((x) => x.text())
 
 		expect(value).toBe('number')
 	})
@@ -330,11 +411,99 @@ describe('Body Validator', () => {
 			body: t.Numeric({ default: 1 })
 		})
 
-		const value = await app.handle(
-			post('/')
-		)
-			.then((x) => x.text())
+		const value = await app.handle(post('/')).then((x) => x.text())
 
 		expect(value).toBe('number')
+	})
+
+	it("don't coerce number to numeric", async () => {
+		const app = new Elysia().post('/', ({ body }) => typeof body, {
+			body: t.Number()
+		})
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'text/plain'
+				},
+				body: '1'
+			})
+		)
+
+		expect(response.status).toBe(422)
+	})
+
+	it("don't coerce number object to numeric", async () => {
+		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
+			body: t.Object({
+				id: t.Number()
+			})
+		})
+
+		const response = await app.handle(
+			post('/', {
+				id: '1'
+			})
+		)
+
+		expect(response.status).toBe(422)
+	})
+
+	it("don't coerce string to boolean", async () => {
+		const app = new Elysia().post('/', ({ body }) => typeof body, {
+			body: t.Number()
+		})
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'text/plain'
+				},
+				body: 'true'
+			})
+		)
+
+		expect(response.status).toBe(422)
+	})
+
+	it("don't coerce string object to boolean", async () => {
+		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
+			body: t.Object({
+				id: t.Number()
+			})
+		})
+
+		const response = await app.handle(
+			post('/', {
+				id: 'true'
+			})
+		)
+
+		expect(response.status).toBe(422)
+	})
+
+	it('handle optional at root', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Optional(
+				t.Object({
+					id: t.Numeric()
+				})
+			)
+		})
+
+		const res = await Promise.all([
+			app.handle(post('/')).then((x) => x.json()),
+			app
+				.handle(
+					post('/', {
+						id: 1
+					})
+				)
+				.then((x) => x.json())
+		])
+
+		expect(res).toEqual([{}, { id: 1 }])
 	})
 })

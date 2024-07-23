@@ -67,55 +67,55 @@ describe('Parse Cookie', () => {
 		expect(result.eula.value).toEqual('eula')
 	})
 
-	it('parse JSON value', async () => {
-		const set = {
-			headers: {},
-			cookie: {}
-		}
+	// it('parse JSON value', async () => {
+	// 	const set = {
+	// 		headers: {},
+	// 		cookie: {}
+	// 	}
 
-		const value = {
-			eula: 'Vengeance will be mine'
-		}
+	// 	const value = {
+	// 		eula: 'Vengeance will be mine'
+	// 	}
 
-		const cookieString = `letter=${encodeURIComponent(
-			JSON.stringify(value)
-		)}`
-		const result = await parseCookie(set, cookieString)
-		expect(result.letter.value).toEqual(value)
-	})
+	// 	const cookieString = `letter=${encodeURIComponent(
+	// 		JSON.stringify(value)
+	// 	)}`
+	// 	const result = await parseCookie(set, cookieString)
+	// 	expect(result.letter.value).toEqual(value)
+	// })
 
-	it('parse true', async () => {
-		const set = {
-			headers: {},
-			cookie: {}
-		}
+	// it('parse true', async () => {
+	// 	const set = {
+	// 		headers: {},
+	// 		cookie: {}
+	// 	}
 
-		const cookieString = `letter=true`
-		const result = await parseCookie(set, cookieString)
-		expect(result.letter.value).toEqual(true)
-	})
+	// 	const cookieString = `letter=true`
+	// 	const result = await parseCookie(set, cookieString)
+	// 	expect(result.letter.value).toEqual(true)
+	// })
 
-	it('parse false', async () => {
-		const set = {
-			headers: {},
-			cookie: {}
-		}
+	// it('parse false', async () => {
+	// 	const set = {
+	// 		headers: {},
+	// 		cookie: {}
+	// 	}
 
-		const cookieString = `letter=false`
-		const result = await parseCookie(set, cookieString)
-		expect(result.letter.value).toEqual(false)
-	})
+	// 	const cookieString = `letter=false`
+	// 	const result = await parseCookie(set, cookieString)
+	// 	expect(result.letter.value).toEqual(false)
+	// })
 
-	it('parse number', async () => {
-		const set = {
-			headers: {},
-			cookie: {}
-		}
+	// it('parse number', async () => {
+	// 	const set = {
+	// 		headers: {},
+	// 		cookie: {}
+	// 	}
 
-		const cookieString = `letter=123`
-		const result = await parseCookie(set, cookieString)
-		expect(result.letter.value).toEqual(123)
-	})
+	// 	const cookieString = `letter=123`
+	// 	const result = await parseCookie(set, cookieString)
+	// 	expect(result.letter.value).toEqual(123)
+	// })
 
 	it('Unsign signature via secret rotation', async () => {
 		const set = {

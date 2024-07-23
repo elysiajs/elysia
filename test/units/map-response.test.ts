@@ -327,7 +327,7 @@ describe('Map Response', () => {
 		])
 	})
 
-	it('map Passthrough', async () => {
+	it('map toResponse', async () => {
 		const response = mapResponse(new Passthrough(), defaultContext)
 
 		expect(response).toBeInstanceOf(Response)

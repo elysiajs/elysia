@@ -150,7 +150,7 @@ describe('Response Validator', () => {
 		expect(await res.text()).toBe('')
 	})
 
-	it('strictly validate by default', async () => {
+	it('normalize by default', async () => {
 		const app = new Elysia().get(
 			'/',
 			() => ({
@@ -164,22 +164,26 @@ describe('Response Validator', () => {
 			}
 		)
 
-		const res = await app.handle(req('/'))
+		const res = await app.handle(req('/')).then((x) => x.json())
 
-		expect(res.status).toBe(422)
+		expect(res).toEqual({
+			name: 'sucrose'
+		})
 	})
 
-	it('strictly validate by default', async () => {
-		const app = new Elysia().get(
+	it('strictly validate if not normalize', async () => {
+		const app = new Elysia({ normalize: false }).get(
 			'/',
 			() => ({
 				name: 'sucrose',
 				job: 'alchemist'
 			}),
 			{
-				response: t.Object({
-					name: t.String()
-				})
+				response: {
+					200: t.Object({
+						name: t.String()
+					})
+				}
 			}
 		)
 
@@ -371,5 +375,47 @@ describe('Response Validator', () => {
 				418: t.String()
 			}
 		})
+	})
+
+	it('return error response with validator', async () => {
+		const app = new Elysia()
+			.get('/ok', ({ error }) => 'ok', {
+				response: {
+					200: t.String(),
+					418: t.Literal('Kirifuji Nagisa'),
+					420: t.Literal('Snoop Dogg')
+				}
+			})
+			.get(
+				'/error',
+				({ error }) => error("I'm a teapot", 'Kirifuji Nagisa'),
+				{
+					response: {
+						200: t.String(),
+						418: t.Literal('Kirifuji Nagisa'),
+						420: t.Literal('Snoop Dogg')
+					}
+				}
+			)
+			.get(
+				'/validate-error',
+				// @ts-expect-error
+				({ error }) => error("I'm a teapot", 'Nagisa'),
+				{
+					response: {
+						200: t.String(),
+						418: t.Literal('Kirifuji Nagisa'),
+						420: t.Literal('Snoop Dogg')
+					}
+				}
+			)
+
+		const response = await Promise.all([
+			app.handle(req('/ok')).then((x) => x.status),
+			app.handle(req('/error')).then((x) => x.status),
+			app.handle(req('/validate-error')).then((x) => x.status)
+		])
+
+		expect(response).toEqual([200, 418, 422])
 	})
 })
