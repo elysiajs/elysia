@@ -1,3 +1,7 @@
+# 1.1.4 - 23 Jul 2024
+Bug fix:
+- removeColonAlias accidentally slice -2 end index for last parameter
+
 # 1.1.3 - 17 Jul 2024
 Change:
 - sucrose: exact inference name

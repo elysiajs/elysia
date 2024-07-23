@@ -1,29 +1,16 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-export const logger = new Elysia({ name: 'logger' }).derive(
-	{ as: 'global' },
-	() => ({
-		logger: {
-			log(msg: string) {
-				console.log(msg)
-			}
-		}
-	})
-)
-
-export const error = new Elysia({ name: 'error' })
-	.use(logger)
-	.error({
-		Error
-	})
-	.onError({ as: 'global' }, (ctx) => {
-		ctx.logger?.log(ctx.code)
-	})
-
 new Elysia()
-	.use(error)
-	.get('/', () => {
-		throw new Error('whelp')
+  .onError(({ code, error }) => {
+	if(code === "VALIDATION")
+		return code
+  })
+  .get('/query', () => {
+	return 'a'
+  }, {
+	query: t.Object({
+		a: t.String()
 	})
-	.listen(8080)
+  })
+  .listen(3000)

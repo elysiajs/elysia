@@ -5820,11 +5820,6 @@ export default class Elysia<
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
 	fetch = (request: Request): MaybePromise<Response> => {
-		if (process.env.NODE_ENV === 'production' && this.config.aot !== false)
-			console.warn(
-				"Performance degradation found. Please call Elysia.compile() before using 'fetch'"
-			)
-
 		return (this.fetch = this.config.aot
 			? composeGeneralHandler(this)
 			: createDynamicHandler(this))(request)

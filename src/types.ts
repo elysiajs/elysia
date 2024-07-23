@@ -1355,7 +1355,7 @@ export type HTTPHeaders = Record<string, string> & {
 	// Authentication
 	'www-authenticate'?: string
 	authorization?: string
-	'proxy-aauthenticate'?: string
+	'proxy-authenticate'?: string
 	'proxy-authorization'?: string
 
 	// Caching
