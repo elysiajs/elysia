@@ -1,6 +1,8 @@
 # 1.1.4 - 23 Jul 2024
 Bug fix:
 - removeColonAlias accidentally slice -2 end index for last parameter
+- [#726](https://github.com/elysiajs/elysia/pull/726) lazy instantiation of `stringToStructureCoercions`
+- [#750](https://github.com/elysiajs/elysia/issues/750) Cookie: Right side of assignment cannot be destructured
 
 # 1.1.3 - 17 Jul 2024
 Change:

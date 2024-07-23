@@ -1,16 +1,23 @@
 import { Elysia, t } from '../src'
+import { sucrose } from '../src/sucrose'
 import { req } from '../test/utils'
 
-new Elysia()
-  .onError(({ code, error }) => {
-	if(code === "VALIDATION")
-		return code
-  })
-  .get('/query', () => {
-	return 'a'
-  }, {
-	query: t.Object({
-		a: t.String()
+console.log(
+	sucrose({
+		handler: ({ set, cookie: { auth } }) => {
+			console.log(auth.value)
+			return ''
+		},
+		afterHandle: [],
+		beforeHandle: [],
+		error: [],
+		mapResponse: [],
+		afterResponse: [],
+		parse: [],
+		request: [],
+		start: [],
+		stop: [],
+		trace: [],
+		transform: []
 	})
-  })
-  .listen(3000)
+)

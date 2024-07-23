@@ -234,8 +234,19 @@ export const retrieveRootParamters = (parameter: string) => {
 	}
 
 	parameter = removeColonAlias(parameter)
+	if (parameter) parameters = parameters.concat(parameter.split(','))	
 
-	if (parameter) parameters = parameters.concat(parameter.split(','))
+	const newParameters = []
+	for (const p of parameters) {
+		if (p.indexOf(',') === -1) {
+			newParameters.push(p)
+			continue
+		}
+
+		for (const q of p.split(','))
+			newParameters.push(q.trim())
+	}
+	parameters = newParameters
 
 	return {
 		hasParenthesis,
@@ -594,13 +605,9 @@ export const sucrose = (
 		const rootParameters = findParameterReference(parameter, inference)
 		const mainParameter = extractMainParameter(rootParameters)
 
-		console.log(rootParameters)
-
 		if (mainParameter) {
 			const aliases = findAlias(mainParameter, body)
 			aliases.splice(0, -1, mainParameter)
-
-			console.log(aliases)
 
 			if (!isContextPassToFunction(mainParameter, body, inference))
 				inferBodyReference(body, aliases, inference)
