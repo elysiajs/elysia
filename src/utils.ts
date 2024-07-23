@@ -697,43 +697,75 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
-		// eslint-disable-next-line sonarjs/no-identical-functions
-		// Sonar being delulu, schema is not identical
 		const cleaner = (value: unknown) => {
-			if (!value || typeof value !== 'object')
+			if (!value || typeof value !== 'object') {
 				return Value.Clean(schema, value)
-
-			const retrievedFields: any = {}
+			}
 			let touched = false
+			const visited = new Set<any>();
 
-			// Iterate over the prototype chain
-			let currentObj = value
-			while (currentObj !== null) {
-				for (const name of Object.getOwnPropertyNames(currentObj)) {
-					const descriptor = Object.getOwnPropertyDescriptor(
-						currentObj,
-						name
-					)
-					if (
-						descriptor &&
-						typeof descriptor.get === 'function' &&
-						name !== '__proto__'
-					) {
-						retrievedFields[name] = (value as any)[name]
-						delete (currentObj as any)[name]
-						touched = true
+			const retrieveAllFieldsOfObjectOrArray = (value: any): any => {
+				// there could be circular references
+				if (visited.has(value)) {
+					return value
+				}
+				visited.add(value)
+				
+				// if we get an array, retrieve each element
+				if(Array.isArray(value)) {
+					return value.map((x) => retrieveAllFieldsOfObjectOrArray(x))
+				}
+
+				// if we have fields which are arrays, retrieve each field
+				const retrievedArrayFields = {} as any
+				for (const [key, val] of Object.entries(value)) {
+					if(Array.isArray(val)) {
+					retrievedArrayFields[key] = retrieveAllFieldsOfObjectOrArray(val)
+						delete value[key]
 					}
 				}
-				currentObj = Object.getPrototypeOf(currentObj)
-			}
+				Object.assign(value, retrievedArrayFields)
 
-			if (touched) {
+				const retrievedFields: any = {}
+				// Iterate over the prototype chain
+				let currentObj = value
+				while (currentObj !== null) {
+					for (const name of Object.getOwnPropertyNames(currentObj)) {
+						const descriptor = Object.getOwnPropertyDescriptor(
+							currentObj,
+							name
+						)
+						if (
+							descriptor &&
+							typeof descriptor.get === 'function' &&
+							name !== '__proto__'
+						) {
+							retrievedFields[name] = (value as any)[name]
+							delete (currentObj as any)[name]
+							touched = true
+						}
+					}
+					currentObj = Object.getPrototypeOf(currentObj)
+				}
+
 				Object.assign(value, retrievedFields)
-				// clone to create a serializable object from class instances
-				return { ...(Value.Clean(schema, value) as any) }
+				return value
+			}
+			
+			value = retrieveAllFieldsOfObjectOrArray(value)
+
+			if (!touched) {
+				return Value.Clean(schema, value)
 			}
 
-			return Value.Clean(schema, value)
+			if (Array.isArray(value)) {
+				value = Value.Clean(schema, value)
+			} else {
+				// clone to create a serializable object from class instances
+				value = { ...(Value.Clean(schema, value) as any) }
+			}
+
+			return value
 		}
 
 		if (dynamic)
