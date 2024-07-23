@@ -699,7 +699,42 @@ export const getResponseSchemaValidator = (
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		// eslint-disable-next-line sonarjs/no-identical-functions
 		// Sonar being delulu, schema is not identical
-		const cleaner = (value: unknown) => Value.Clean(schema, value)
+		const cleaner = (value: unknown) => {
+			if (!value || typeof value !== 'object') {
+				return Value.Clean(schema, value)
+			}
+
+			const retrievedFields: any = {}
+			let touched = false
+
+			// Iterate over the prototype chain
+			let currentObj = value
+			while (currentObj !== null) {
+				for (const name of Object.getOwnPropertyNames(currentObj)) {
+					const descriptor = Object.getOwnPropertyDescriptor(
+						currentObj,
+						name
+					)
+					if (
+						descriptor &&
+						typeof descriptor.get === 'function' &&
+						name !== '__proto__'
+					) {
+						retrievedFields[name] = (value as any)[name]
+						delete (currentObj as any)[name]
+						touched = true
+					}
+				}
+				currentObj = Object.getPrototypeOf(currentObj)
+			}
+
+			if (touched) {
+				Object.assign(value, retrievedFields)
+				// clone to create a serializable object from class instances
+				return { ...(Value.Clean(schema, value) as any) }
+			}
+			return Value.Clean(schema, value)
+		}
 
 		if (dynamic)
 			return {
