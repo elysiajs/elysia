@@ -714,6 +714,8 @@ export const getResponseSchemaValidator = (
 
 		const compiledValidator = TypeCompiler.Compile(schema, references)
 
+		console.log("A", normalize)
+
 		if (normalize && schema.additionalProperties === false)
 			// @ts-ignore
 			compiledValidator.Clean = cleaner
