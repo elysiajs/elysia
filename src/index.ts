@@ -520,20 +520,20 @@ export default class Elysia<
 							models,
 							additionalProperties: !this.config.normalize,
 							coerce: true,
-							additionalCoerce: stringToStructureCoercions
+							additionalCoerce: stringToStructureCoercions()
 						}),
 						params: getSchemaValidator(cloned.params, {
 							dynamic,
 							models,
 							coerce: true,
-							additionalCoerce: stringToStructureCoercions
+							additionalCoerce: stringToStructureCoercions()
 						}),
 						query: getSchemaValidator(cloned.query, {
 							dynamic,
 							models,
 							normalize,
 							coerce: true,
-							additionalCoerce: stringToStructureCoercions
+							additionalCoerce: stringToStructureCoercions()
 						}),
 						cookie: cookieValidator(),
 						response: getResponseSchemaValidator(cloned.response, {
@@ -565,7 +565,8 @@ export default class Elysia<
 									models,
 									additionalProperties: !normalize,
 									coerce: true,
-									additionalCoerce: stringToStructureCoercions
+									additionalCoerce:
+										stringToStructureCoercions()
 								}
 							))
 						},
@@ -578,7 +579,8 @@ export default class Elysia<
 									dynamic,
 									models,
 									coerce: true,
-									additionalCoerce: stringToStructureCoercions
+									additionalCoerce:
+										stringToStructureCoercions()
 								}
 							))
 						},
@@ -591,7 +593,8 @@ export default class Elysia<
 									dynamic,
 									models,
 									coerce: true,
-									additionalCoerce: stringToStructureCoercions
+									additionalCoerce:
+										stringToStructureCoercions()
 								}
 							))
 						},

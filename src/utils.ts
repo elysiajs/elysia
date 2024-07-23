@@ -781,17 +781,24 @@ export const checksum = (s: string) => {
 	return (h = h ^ (h >>> 9))
 }
 
-export const stringToStructureCoercions = [
-	{
-		from: t.Object({}),
-		to: () => t.ObjectString({}),
-		excludeRoot: true
-	},
-	{
-		from: t.Array(t.Any()),
-		to: () => t.ArrayString(t.Any())
+let _stringToStructureCoercions: ReplaceSchemaTypeOptions[]
+
+export const stringToStructureCoercions = () => {
+	if (!_stringToStructureCoercions) {
+		_stringToStructureCoercions = [
+			{
+				from: t.Object({}),
+				to: () => t.ObjectString({}),
+				excludeRoot: true
+			},
+			{
+				from: t.Array(t.Any()),
+				to: () => t.ArrayString(t.Any())
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
 	}
-] satisfies ReplaceSchemaTypeOptions[]
+	return _stringToStructureCoercions
+}
 
 export const getCookieValidator = ({
 	validator,
@@ -811,7 +818,7 @@ export const getCookieValidator = ({
 		models,
 		additionalProperties: true,
 		coerce: true,
-		additionalCoerce: stringToStructureCoercions
+		additionalCoerce: stringToStructureCoercions()
 	})
 
 	if (isNotEmpty(defaultConfig)) {
