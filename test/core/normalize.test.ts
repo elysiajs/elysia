@@ -431,4 +431,85 @@ describe('Normalize', () => {
 
 		expect(response.status).toBe(422)
 	})
+  
+  	it('normalize response with getter fields on class', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				class MyTest {
+					constructor(hello: string) {
+						this.one = hello
+						this.two = hello
+					}
+					public one: string
+					public two: string
+
+					get oneGet() {
+						return this.one
+					}
+
+					get twoGet() {
+						return this.two
+					}
+				}
+
+				const res = new MyTest('world')
+				return res
+			},
+			{
+				response: t.Object(
+					{
+						one: t.String(),
+						oneGet: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			one: 'world',
+			oneGet: 'world'
+		})
+	})
+
+	it('normalize response with getter fields on simple object', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				return {
+					one: 'world',
+					get oneGet() {
+						return 'world'
+					},
+					two: 'world',
+					get twoGet() {
+						return 'world'
+					}
+				}
+			},
+			{
+				response: t.Object(
+					{
+						one: t.String(),
+						oneGet: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			one: 'world',
+			oneGet: 'world'
+		})
+	})
 })
