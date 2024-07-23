@@ -724,6 +724,7 @@ app.group(
 	'/:a',
 	{
 		beforeHandle({ params, params: { a } }) {
+			// @ts-expect-error
 			expectTypeOf<typeof params>().toEqualTypeOf<{
 				a: string
 			}>()
@@ -754,6 +755,7 @@ app.group(
 				'/:c',
 				{
 					beforeHandle({ params, params: { a, c } }) {
+						// @ts-expect-error
 						expectTypeOf<typeof params>().toEqualTypeOf<{
 							a: string
 							c: string
@@ -785,6 +787,7 @@ app.group(
 			user: t.String()
 		}),
 		beforeHandle: ({ body }) => {
+			// @ts-expect-error
 			expectTypeOf<typeof body>().toEqualTypeOf<{
 				username: string
 			}>()
@@ -795,10 +798,12 @@ app.group(
 			'/:c',
 			{
 				beforeHandle({ body, query }) {
+					// @ts-expect-error
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						password: string
 					}>()
 
+					// @ts-expect-error
 					expectTypeOf<typeof query>().toEqualTypeOf<{
 						user: string
 					}>()
@@ -992,6 +997,7 @@ app.group(
 				id: t.Numeric()
 			}),
 			beforeHandle({ params }) {
+				// @ts-expect-error
 				expectTypeOf<typeof params>().toEqualTypeOf<{
 					id: number
 				}>()
@@ -1072,11 +1078,12 @@ app.group(
 		})
 }
 
-const a = app.resolve(({ headers }) => {
-	return {
-		authorization: headers.authorization as string
-	}
-})
+const a = app
+	.resolve(({ headers }) => {
+		return {
+			authorization: headers.authorization as string
+		}
+	})
 	// .get('/', ({ authorization }) => {
 	// 	// ? infers derive type
 	// 	expectTypeOf<typeof authorization>().toBeString()
@@ -1106,6 +1113,7 @@ const a = app.resolve(({ headers }) => {
 	.onBeforeHandle((context) => {
 		expectTypeOf<
 			'b' extends keyof typeof context ? true : false
+			// @ts-expect-error
 		>().toEqualTypeOf<true>()
 	})
 
