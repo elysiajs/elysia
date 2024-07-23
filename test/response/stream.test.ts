@@ -93,4 +93,98 @@ describe('Stream', () => {
 		expect(expected).toHaveLength(0)
 		expect(response).toBe('ab')
 	})
+
+	it('mutate set before yield is called', async () => {
+		const expected = ['a', 'b', 'c']
+
+		const app = new Elysia().get('/', function* ({ set }) {
+			set.headers['access-control-allow-origin'] = 'http://saltyaom.com'
+
+			yield 'a'
+			yield 'b'
+			yield 'c'
+		})
+
+		const response = await app.handle(req('/')).then((x) => x.headers)
+
+		expect(response.get('access-control-allow-origin')).toBe(
+			'http://saltyaom.com'
+		)
+	})
+
+	it('mutate set before yield is called', async () => {
+		const expected = ['a', 'b', 'c']
+
+		const app = new Elysia().get('/', function* ({ set }) {
+			set.headers['access-control-allow-origin'] = 'http://saltyaom.com'
+
+			yield 'a'
+			yield 'b'
+			yield 'c'
+		})
+
+		const response = await app.handle(req('/')).then((x) => x.headers)
+
+		expect(response.get('access-control-allow-origin')).toBe(
+			'http://saltyaom.com'
+		)
+	})
+
+	it('async mutate set before yield is called', async () => {
+		const expected = ['a', 'b', 'c']
+
+		const app = new Elysia().get('/', async function* ({ set }) {
+			set.headers['access-control-allow-origin'] = 'http://saltyaom.com'
+
+			yield 'a'
+			yield 'b'
+			yield 'c'
+		})
+
+		const response = await app.handle(req('/')).then((x) => x.headers)
+
+		expect(response.get('access-control-allow-origin')).toBe(
+			'http://saltyaom.com'
+		)
+	})
+
+	it('return value if not yield', async () => {
+		const app = new Elysia()
+			.get('/', function* ({ set }) {
+				return 'hello'
+			})
+			.get('/json', function* ({ set }) {
+				return { hello: 'world' }
+			})
+
+		const response = await Promise.all([
+			app.handle(req('/')),
+			app.handle(req('/json'))
+		])
+
+		expect(await response[0].text()).toBe('hello')
+		expect(await response[1].json()).toEqual({
+			hello: 'world'
+		})
+	})
+
+	it('return async value if not yield', async () => {
+		const app = new Elysia()
+			.get('/', function* ({ set }) {
+				return 'hello'
+			})
+			.get('/json', function* ({ set }) {
+				return { hello: 'world' }
+			})
+
+		const response = await Promise.all([
+			app.handle(req('/')),
+			app.handle(req('/json'))
+		])
+
+		expect(await response[0].text()).toBe('hello')
+		expect(await response[1].json()).toEqual({
+			hello: 'world'
+		})
+	})
 })

@@ -177,11 +177,11 @@ const createReport = ({
 				return (binding?: string) => {
 					for (let i = 0; i < trace.length; i++) {
 						if (binding)
-			    			// Don't report error because HTTP response is expected and not an actual error to look for
-			     			// if (${binding} && typeof ${binding} === "object" && ELYSIA_RESPONSE in ${binding}) {
+							// Don't report error because HTTP response is expected and not an actual error to look for
+							// if (${binding} && typeof ${binding} === "object" && ELYSIA_RESPONSE in ${binding}) {
 							//     ${reporter}Child${i}?.(${binding}.error)
 							//     ${reporter}Child${i}?.()\n
-			          		// } else
+							// } else
 							addFn(`
                              	if (${binding} instanceof Error)
                     				${reporter}Child${i}?.(${binding})
@@ -811,14 +811,6 @@ export const composeHandler = ({
 		}
 	}
 
-	const hasSet =
-		inference.cookie ||
-		inference.set ||
-		hasHeaders ||
-		hasTrace ||
-		validator.response ||
-		(isHandleFn && hasDefaultHeaders)
-
 	if (hasTrace) fnLiteral += '\nconst id = c[ELYSIA_REQUEST_ID]\n'
 
 	const report = createReport({
@@ -844,13 +836,22 @@ export const composeHandler = ({
 		hooks.transform.some(isAsync) ||
 		hooks.mapResponse.some(isAsync)
 
-	const maybeStream = true
-	// (typeof handler === 'function' ? isGenerator(handler as any) : false) ||
-	// hooks.beforeHandle.some(isGenerator) ||
-	// hooks.afterHandle.some(isGenerator) ||
-	// hooks.transform.some(isGenerator)
+	const maybeStream =
+		(typeof handler === 'function' ? isGenerator(handler as any) : false) ||
+		hooks.beforeHandle.some(isGenerator) ||
+		hooks.afterHandle.some(isGenerator) ||
+		hooks.transform.some(isGenerator)
 
-	const requestMapper = maybeStream ? `, c.request` : ``
+	const hasSet =
+		inference.cookie ||
+		inference.set ||
+		hasHeaders ||
+		hasTrace ||
+		validator.response ||
+		(isHandleFn && hasDefaultHeaders) ||
+		maybeStream
+
+	const requestMapper = `, c.request`
 
 	fnLiteral += `c.route = \`${path}\`\n`
 

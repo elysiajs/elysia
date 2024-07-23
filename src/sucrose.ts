@@ -180,14 +180,14 @@ export const bracketPairRangeReverse = (
 	return [start, end + 1]
 }
 
-const removeColonAlias = (parameter: string) => {
+export const removeColonAlias = (parameter: string) => {
 	while (true) {
 		const start = parameter.indexOf(':')
 		if (start === -1) break
 
 		let end = parameter.indexOf(',', start)
 		if (end === -1) end = parameter.indexOf('}', start) - 1
-		if (end === 0) end = parameter.length
+		if (end === -2) end = parameter.length
 
 		parameter = parameter.slice(0, start) + parameter.slice(end)
 	}
@@ -594,9 +594,13 @@ export const sucrose = (
 		const rootParameters = findParameterReference(parameter, inference)
 		const mainParameter = extractMainParameter(rootParameters)
 
+		console.log(rootParameters)
+
 		if (mainParameter) {
 			const aliases = findAlias(mainParameter, body)
 			aliases.splice(0, -1, mainParameter)
+
+			console.log(aliases)
 
 			if (!isContextPassToFunction(mainParameter, body, inference))
 				inferBodyReference(body, aliases, inference)
