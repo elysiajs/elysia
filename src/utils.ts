@@ -700,9 +700,8 @@ export const getResponseSchemaValidator = (
 		// eslint-disable-next-line sonarjs/no-identical-functions
 		// Sonar being delulu, schema is not identical
 		const cleaner = (value: unknown) => {
-			if (!value || typeof value !== 'object') {
+			if (!value || typeof value !== 'object')
 				return Value.Clean(schema, value)
-			}
 
 			const retrievedFields: any = {}
 			let touched = false
@@ -733,6 +732,7 @@ export const getResponseSchemaValidator = (
 				// clone to create a serializable object from class instances
 				return { ...(Value.Clean(schema, value) as any) }
 			}
+
 			return Value.Clean(schema, value)
 		}
 
@@ -748,8 +748,6 @@ export const getResponseSchemaValidator = (
 			} as unknown as TypeCheck<TSchema>
 
 		const compiledValidator = TypeCompiler.Compile(schema, references)
-
-		console.log("A", normalize)
 
 		if (normalize && schema.additionalProperties === false)
 			// @ts-ignore
