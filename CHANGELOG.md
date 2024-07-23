@@ -8,6 +8,7 @@ Bug fix:
 - [#750](https://github.com/elysiajs/elysia/issues/750) Cookie: Right side of assignment cannot be destructured
 - [#749](https://github.com/elysiajs/elysia/issues/749) Query params following an array query are parsed as array items
 - [#751](https://github.com/elysiajs/elysia/issues/751) Dynamic mode response failed if null or undefined value is returned
+- [#741](https://github.com/elysiajs/elysia/issues/741) stream stringify object
 
 # 1.1.3 - 17 Jul 2024
 Change:
