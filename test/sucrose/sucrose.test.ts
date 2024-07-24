@@ -27,7 +27,7 @@ describe('sucrose', () => {
 					({ query: { f } }) => {}
 				],
 				mapResponse: [],
-				onResponse: [],
+				afterResponse: [],
 				parse: [],
 				request: [],
 				start: [],
@@ -41,6 +41,35 @@ describe('sucrose', () => {
 			body: false,
 			cookie: false,
 			set: false,
+			server: false
+		})
+	})
+
+	it('common 2', async () => {
+		expect(
+			sucrose({
+				handler: ({ set, cookie: { auth } }) => {
+					console.log(auth.value)
+					return ''
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				afterResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			query: false,
+			headers: false,
+			body: false,
+			cookie: true,
+			set: true,
 			server: false
 		})
 	})

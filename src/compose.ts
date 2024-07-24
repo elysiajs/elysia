@@ -652,14 +652,16 @@ export const composeHandler = ({
 								v.format === 'ArrayString'
 						)
 
+
 					destructured.push({
 						key,
 						isArray,
 						isNestedObjectArray:
-							(isArray &&
-								(value.items?.type === 'object' ||
-									!!anyOf?.length)) ||
-							!!value.items?.anyOf,
+							(isArray && value.items?.type === 'object') ||
+							!!value.items?.anyOf?.some(
+								// @ts-expect-error
+								(x) => x.type === 'object' || x.type === 'array'
+							),
 						isObject:
 							type === 'object' ||
 							anyOf?.some(
@@ -685,7 +687,13 @@ export const composeHandler = ({
 				${destructured
 					.map(
 						(
-							{ key, isArray, isObject, isNestedObjectArray },
+							{
+								key,
+								isArray,
+								isObject,
+								isNestedObjectArray,
+								anyOf
+							},
 							index
 						) => {
 							const init = `${
@@ -716,6 +724,11 @@ export const composeHandler = ({
 												temp = '"' + temp + '"'
 
 											a${index} += temp
+
+											if(memory === -1) break
+
+											memory = url.indexOf('&${key}=', memory)
+											if(memory === -1) break
 										}
 
 										try {
@@ -731,8 +744,14 @@ export const composeHandler = ({
 											if(a${index} === undefined)
 												a${index} = []
 
-											if(memory === -1) a${index}.push(decodeURIComponent(url.slice(start)))
+											if(memory === -1) {
+												a${index}.push(decodeURIComponent(url.slice(start)))
+												break
+											}
 											else a${index}.push(decodeURIComponent(url.slice(start, memory)))
+
+											memory = url.indexOf('&${key}=', memory)
+											if(memory === -1) break
 										}\n`)
 								)
 
@@ -765,6 +784,9 @@ export const composeHandler = ({
 										else {
 											a${index} = decodeURIComponent(url.slice(start, memory))
 
+											${
+												anyOf
+													? `
 											let deepMemory = url.indexOf('&${key}=', memory)
 
 											if(deepMemory !== -1) {
@@ -794,6 +816,9 @@ export const composeHandler = ({
 
 													if(deepMemory === -1) break
 												}
+											}
+												`
+													: ''
 											}
 										}
 									}`

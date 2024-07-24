@@ -84,4 +84,13 @@ describe('retrieve root parameter', () => {
 			hasParenthesis: true
 		})
 	})
+
+	it('handle last parameter destructuring', () => {
+		const parameter = '{ set, cookie: { auth } }'
+		const result = retrieveRootParamters(parameter)
+		expect(result).toEqual({
+			hasParenthesis: true,
+			parameters: ['set', 'cookie']
+		})
+	})
 })

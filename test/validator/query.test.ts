@@ -630,4 +630,25 @@ describe('Query Validator', () => {
 
 		expect(res).toEqual([{}, { id: 1 }])
 	})
+
+	it('parse query array in multiple location correctly', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				leading: t.String(),
+				arr: t.Array(t.String()),
+				trailing: t.String()
+			})
+		})
+		
+		// console.log(app.routes[0].composed?.toString())
+		
+		const response = await app.handle(req('/?leading=foo&arr=bar&arr=baz&trailing=qux&arr=xd'))
+			.then((x) => x.json())
+			
+		expect(response).toEqual({
+			leading: 'foo',
+			arr: ['bar', 'baz', 'xd'],
+			trailing: 'qux'
+		})
+	})
 })

@@ -1,3 +1,15 @@
+# 1.1.4 - 23 Jul 2024
+Feature:
+- [#718](https://github.com/elysiajs/elysia/pull/718) implement normalization support for class instances with getter functions
+
+Bug fix:
+- removeColonAlias accidentally slice -2 end index for last parameter
+- [#726](https://github.com/elysiajs/elysia/pull/726) lazy instantiation of `stringToStructureCoercions`
+- [#750](https://github.com/elysiajs/elysia/issues/750) Cookie: Right side of assignment cannot be destructured
+- [#749](https://github.com/elysiajs/elysia/issues/749) Query params following an array query are parsed as array items
+- [#751](https://github.com/elysiajs/elysia/issues/751) Dynamic mode response failed if null or undefined value is returned
+- [#741](https://github.com/elysiajs/elysia/issues/741) stream stringify object
+
 # 1.1.3 - 17 Jul 2024
 Change:
 - sucrose: exact inference name

@@ -699,7 +699,42 @@ export const getResponseSchemaValidator = (
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		// eslint-disable-next-line sonarjs/no-identical-functions
 		// Sonar being delulu, schema is not identical
-		const cleaner = (value: unknown) => Value.Clean(schema, value)
+		const cleaner = (value: unknown) => {
+			if (!value || typeof value !== 'object')
+				return Value.Clean(schema, value)
+
+			const retrievedFields: any = {}
+			let touched = false
+
+			// Iterate over the prototype chain
+			let currentObj = value
+			while (currentObj !== null) {
+				for (const name of Object.getOwnPropertyNames(currentObj)) {
+					const descriptor = Object.getOwnPropertyDescriptor(
+						currentObj,
+						name
+					)
+					if (
+						descriptor &&
+						typeof descriptor.get === 'function' &&
+						name !== '__proto__'
+					) {
+						retrievedFields[name] = (value as any)[name]
+						delete (currentObj as any)[name]
+						touched = true
+					}
+				}
+				currentObj = Object.getPrototypeOf(currentObj)
+			}
+
+			if (touched) {
+				Object.assign(value, retrievedFields)
+				// clone to create a serializable object from class instances
+				return { ...(Value.Clean(schema, value) as any) }
+			}
+
+			return Value.Clean(schema, value)
+		}
 
 		if (dynamic)
 			return {
@@ -781,17 +816,24 @@ export const checksum = (s: string) => {
 	return (h = h ^ (h >>> 9))
 }
 
-export const stringToStructureCoercions = [
-	{
-		from: t.Object({}),
-		to: () => t.ObjectString({}),
-		excludeRoot: true
-	},
-	{
-		from: t.Array(t.Any()),
-		to: () => t.ArrayString(t.Any())
+let _stringToStructureCoercions: ReplaceSchemaTypeOptions[]
+
+export const stringToStructureCoercions = () => {
+	if (!_stringToStructureCoercions) {
+		_stringToStructureCoercions = [
+			{
+				from: t.Object({}),
+				to: () => t.ObjectString({}),
+				excludeRoot: true
+			},
+			{
+				from: t.Array(t.Any()),
+				to: () => t.ArrayString(t.Any())
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
 	}
-] satisfies ReplaceSchemaTypeOptions[]
+	return _stringToStructureCoercions
+}
 
 export const getCookieValidator = ({
 	validator,
@@ -811,7 +853,7 @@ export const getCookieValidator = ({
 		models,
 		additionalProperties: true,
 		coerce: true,
-		additionalCoerce: stringToStructureCoercions
+		additionalCoerce: stringToStructureCoercions()
 	})
 
 	if (isNotEmpty(defaultConfig)) {
