@@ -309,7 +309,9 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(value.toString()).toBe(JSON.stringify(expected[i++]))
+					expect(parseTextEventStreamItem(value.toString())).toEqual(
+						expected[i++]
+					)
 
 					return reader.read().then(pump)
 				})
