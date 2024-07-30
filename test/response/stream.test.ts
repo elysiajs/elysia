@@ -71,11 +71,15 @@ describe('Stream', () => {
 			'event: message\ndata: "a"\n\nevent: error\ndata: "an error"\n\n'
 		)
 	})
-	
+
 	it('handle errors before yield', async () => {
-		const app = new Elysia().get('/', async function* () {
-			throw new Error('an error')
-		})
+		const app = new Elysia()
+			.onError(({ error }) => {
+				return new Response(error.message)
+			})
+			.get('/', async function* () {
+				throw new Error('an error')
+			})
 
 		const response = await app.handle(req('/')).then((x) => x.text())
 
