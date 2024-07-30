@@ -71,8 +71,8 @@ describe('Stream', () => {
 			'event: message\ndata: "a"\n\nevent: error\ndata: "an error"\n\n'
 		)
 	})
-	// TODO
-	it.skip('handle errors before yield', async () => {
+	
+	it('handle errors before yield', async () => {
 		const app = new Elysia().get('/', async function* () {
 			throw new Error('an error')
 		})
