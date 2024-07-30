@@ -122,20 +122,14 @@ const handleStream = async (
 	set?: Context['set'],
 	request?: Request
 ) => {
-	let init
-	try {
-		init = generator.next()
-		if (init instanceof Promise) init = await init
+	let init = generator.next()
+	if (init instanceof Promise) init = await init
 
-		if (init?.done) {
-			if (set) return mapResponse(init.value, set, request)
-			return mapCompactResponse(init.value, request)
-		}
-	} catch (error) {
-		// TODO should call app.onError if set
-		if (set) return mapResponse(error, set, request)
-		return mapCompactResponse(error, request)
+	if (init?.done) {
+		if (set) return mapResponse(init.value, set, request)
+		return mapCompactResponse(init.value, request)
 	}
+	
 
 	return new Response(
 		new ReadableStream({

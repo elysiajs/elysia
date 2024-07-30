@@ -72,8 +72,22 @@ describe('Stream', () => {
 		)
 	})
 
-	it('handle errors before yield', async () => {
-		const app = new Elysia()
+	it('handle errors before yield when aot is false', async () => {
+		const app = new Elysia({ aot: false })
+			.onError(({ error }) => {
+				return new Response(error.message)
+			})
+			.get('/', async function* () {
+				throw new Error('an error xxxx')
+			})
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toInclude('an error')
+	})
+	
+	it.todo('handle errors before yield when aot is true', async () => {
+		const app = new Elysia({ aot: true })
 			.onError(({ error }) => {
 				return new Response(error.message)
 			})

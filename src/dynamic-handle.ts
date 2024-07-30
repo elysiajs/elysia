@@ -389,7 +389,7 @@ export const createDynamicHandler =
 				}
 			}
 
-			return (context.response = mapResponse(response, context.set))
+			return (context.response = await mapResponse(response, context.set))
 		} catch (error) {
 			if ((error as ElysiaErrors).status)
 				set.status = (error as ElysiaErrors).status
@@ -418,7 +418,7 @@ export const createDynamicErrorHandler =
 			let response = hook.fn(errorContext as any)
 			if (response instanceof Promise) response = await response
 			if (response !== undefined && response !== null)
-				return (context.response = mapResponse(response, context.set))
+				return (context.response = await mapResponse(response, context.set))
 		}
 
 		return new Response(
