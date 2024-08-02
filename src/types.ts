@@ -1355,12 +1355,12 @@ export type HTTPHeaders = Record<string, string> & {
 	// Authentication
 	'www-authenticate'?: string
 	authorization?: string
-	'proxy-aauthenticate'?: string
+	'proxy-authenticate'?: string
 	'proxy-authorization'?: string
 
 	// Caching
 	age?: string
-	'cache-ctonrol'?: string
+	'cache-control'?: string
 	'clear-site-data'?: string
 	expires?: string
 	'no-vary-search'?: string

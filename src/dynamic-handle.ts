@@ -308,7 +308,7 @@ export const createDynamicHandler =
 
 			if (!hooks.afterHandle.length) {
 				const status =
-					(response as ReturnType<typeof error>)[ELYSIA_RESPONSE] ??
+					(response as ReturnType<typeof error>)?.[ELYSIA_RESPONSE] ??
 					(set.status
 						? typeof set.status === 'string'
 							? StatusMap[set.status]

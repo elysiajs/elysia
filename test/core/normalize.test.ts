@@ -431,4 +431,338 @@ describe('Normalize', () => {
 
 		expect(response.status).toBe(422)
 	})
+  
+  	it('normalize response with getter fields on class', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				class MyTest {
+					constructor(hello: string) {
+						this.one = hello
+						this.two = hello
+					}
+					public one: string
+					public two: string
+
+					get oneGet() {
+						return this.one
+					}
+
+					get twoGet() {
+						return this.two
+					}
+				}
+
+				const res = new MyTest('world')
+				return res
+			},
+			{
+				response: t.Object(
+					{
+						one: t.String(),
+						oneGet: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			one: 'world',
+			oneGet: 'world'
+		})
+	})
+
+	it('normalize response with getter fields on simple object', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				return {
+					one: 'world',
+					get oneGet() {
+						return 'world'
+					},
+					two: 'world',
+					get twoGet() {
+						return 'world'
+					}
+				}
+			},
+			{
+				response: t.Object(
+					{
+						one: t.String(),
+						oneGet: t.String()
+					},
+					{ additionalProperties: false }
+				)
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			one: 'world',
+			oneGet: 'world'
+		})
+	})
+
+	it('normalize response with getter fields on class array', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				class MyTest {
+					constructor(hello: string) {
+						this.one = hello
+						this.two = hello
+					}
+					public one: string
+					public two: string
+
+					get oneGet() {
+						return this.one
+					}
+
+					get twoGet() {
+						return this.two
+					}
+				}
+
+				const res = new MyTest('world')
+				return [res]
+			},
+			{
+				response: t.Array(t.Object(
+					{
+						one: t.String(),
+						oneGet: t.String()
+					},
+					{ additionalProperties: false }
+				))
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual([{
+			one: 'world',
+			oneGet: 'world'
+		}])
+	})
+
+	it('normalize response with getter fields on simple object array', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				return [{
+					one: 'world',
+					get oneGet() {
+						return 'world'
+					},
+					two: 'world',
+					get twoGet() {
+						return 'world'
+					}
+				}]
+			},
+			{
+				response: t.Array(t.Object(
+					{
+						one: t.String(),
+						oneGet: t.String()
+					},
+					{ additionalProperties: false }
+				))
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual([{
+			one: 'world',
+			oneGet: 'world'
+		}])
+	})
+
+	it('normalize response with getter fields on class array with nested arrays', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				class MyTest {
+					constructor(hello: string) {
+						this.one = hello
+						this.two = hello
+					}
+					public one: string
+					public two: string
+
+					get oneGet() {
+						return this.one
+					}
+
+					get twoGet() {
+						return this.two
+					}
+				}
+
+				class MyTest2 {
+					constructor(hello: string) {
+						this.one = hello
+						this.two = hello
+						this.three = [new MyTest(hello)]
+						this.four = [new MyTest(hello)]
+					}
+					public one: string
+					public two: string
+					public three: MyTest[]
+					public four: MyTest[]
+
+					get oneGet() {
+						return this.one
+					}
+
+					get twoGet() {
+						return this.two
+					}
+
+					get threeGet() {
+						return this.three
+					}
+
+					get fourGet() {
+						return this.four
+					}
+				}
+
+				const res = new MyTest2('world')
+				return [res]
+			},
+			{
+				response: t.Array(t.Object(
+					{
+						one: t.String(),
+						oneGet: t.String(),
+						three: t.Array(t.Object(
+							{
+								one: t.String(),
+								oneGet: t.String()
+							},
+							{ additionalProperties: false }
+						)),
+						threeGet: t.Array(t.Object(
+							{
+								one: t.String(),
+								oneGet: t.String()
+							},
+							{ additionalProperties: false }
+						))
+					},
+					{ additionalProperties: false }
+				))
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual([{
+			one: 'world',
+			oneGet: 'world',
+			three: [{
+				one: 'world',
+				oneGet: 'world'
+			}],
+			threeGet: [{
+				one: 'world',
+				oneGet: 'world'
+			}]
+		}])
+	})
+
+	it('normalize response with getter fields on simple object array with nested arrays', async () => {
+		const app = new Elysia({
+			normalize: true
+		}).get(
+			'/',
+			() => {
+				const o = [{
+					one: 'world',
+					get oneGet() {
+						return 'world'
+					},
+					two: 'world',
+					get twoGet() {
+						return 'world'
+					},
+				}];
+				return [{
+					one: 'world',
+					get oneGet() {
+						return 'world'
+					},
+					two: 'world',
+					get twoGet() {
+						return 'world'
+					},
+					three: o ,
+					get threeGet() {
+						return o
+					},
+					four: o,
+					get fourGet() {
+						return o
+					}
+				}]
+			},
+			{
+				response: t.Array(t.Object(
+					{
+						one: t.String(),
+						oneGet: t.String(),
+						three: t.Array(t.Object(
+							{
+								one: t.String(),
+								oneGet: t.String()
+							},
+							{ additionalProperties: false }
+						)),
+						threeGet: t.Array(t.Object(
+							{
+								one: t.String(),
+								oneGet: t.String()
+							},
+							{ additionalProperties: false }
+						))
+					},
+					{ additionalProperties: false }
+				))
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual([{
+			one: 'world',
+			oneGet: 'world',
+			three: [{
+				one: 'world',
+				oneGet: 'world'
+			}],
+			threeGet: [{
+				one: 'world',
+				oneGet: 'world'
+			}]
+		}])
+	})
 })

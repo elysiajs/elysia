@@ -146,14 +146,33 @@ const handleStream = async (
 					}
 				})
 
-				if (init.value !== undefined && init.value !== null)
-					controller.enqueue(Buffer.from(init.value.toString()))
+				if (init.value !== undefined && init.value !== null) {
+					if (
+						typeof init.value === "object"
+					)
+						try {
+							controller.enqueue(
+								Buffer.from(JSON.stringify(init.value))
+							)
+						} catch {
+							controller.enqueue(Buffer.from(init.value.toString()))
+						}
+					else controller.enqueue(Buffer.from(init.value.toString()))
+				}
 
 				for await (const chunk of generator) {
 					if (end) break
 					if (chunk === undefined || chunk === null) continue
 
-					controller.enqueue(Buffer.from(chunk.toString()))
+					if (typeof chunk === 'object')
+						try {
+							controller.enqueue(
+								Buffer.from(JSON.stringify(chunk))
+							)
+						} catch {
+							controller.enqueue(Buffer.from(chunk.toString()))
+						}
+					else controller.enqueue(Buffer.from(chunk.toString()))
 
 					// Wait for the next event loop
 					// Otherwise the data will be mixed up
