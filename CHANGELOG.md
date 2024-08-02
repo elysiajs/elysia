@@ -4,6 +4,7 @@ Feature:
 
 Bug fix:
 - sucrose: invalid separateFunction on minified async function
+- [#758](https://github.com/elysiajs/elysia/issues/758) guard doesn't apply cookie schema
 
 # 1.1.4 - 23 Jul 2024
 Feature:

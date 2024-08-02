@@ -178,6 +178,7 @@ export const mergeSchemaValidator = (
 		headers: b?.headers ?? a?.headers,
 		params: b?.params ?? a?.params,
 		query: b?.query ?? a?.query,
+		cookie: b?.cookie ?? a?.cookie,
 		// @ts-ignore ? This order is correct - SaltyAom
 		response: mergeResponse(
 			// @ts-ignore
@@ -234,6 +235,8 @@ export const mergeHook = (
 		params: b?.params ?? a?.params,
 		// @ts-ignore
 		query: b?.query ?? a?.query,
+		// @ts-ignore
+		cookie: b?.cookie ?? a?.cookie,
 		// ? This order is correct - SaltyAom
 		response: mergeResponse(
 			// @ts-ignore
@@ -710,7 +713,7 @@ export const getResponseSchemaValidator = (
 					return value
 				}
 				visited.add(value)
-				
+
 				// if we get an array, retrieve each element
 				if(Array.isArray(value)) {
 					return value.map((x) => retrieveAllFieldsOfObjectOrArray(x))
@@ -751,7 +754,7 @@ export const getResponseSchemaValidator = (
 				Object.assign(value, retrievedFields)
 				return value
 			}
-			
+
 			value = retrieveAllFieldsOfObjectOrArray(value)
 
 			if (!touched) {

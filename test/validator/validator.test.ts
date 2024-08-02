@@ -78,16 +78,15 @@ describe('Validator Additional Case', () => {
 				})
 			},
 			(app) =>
-				app
-					.post('/user', ({ query: { name } }) => name, {
-						body: t.Object({
-							id: t.Number(),
-							username: t.String(),
-							profile: t.Object({
-								name: t.String()
-							})
+				app.post('/user', ({ query: { name } }) => name, {
+					body: t.Object({
+						id: t.Number(),
+						username: t.String(),
+						profile: t.Object({
+							name: t.String()
 						})
 					})
+				})
 		)
 
 		const body = JSON.stringify({
@@ -131,7 +130,7 @@ describe('Validator Additional Case', () => {
 			new Request('http://localhost/user?name=salt', {
 				method: 'POST',
 				headers: {
-					'content-type': 'application/json',
+					'content-type': 'application/json'
 				},
 				body: JSON.stringify({
 					id: 6,
@@ -142,5 +141,23 @@ describe('Validator Additional Case', () => {
 		)
 
 		expect(invalidBody.status).toBe(422)
+	})
+
+	it('inherits cookie on guard', async () => {
+		const app = new Elysia()
+			.guard({
+				cookie: t.Cookie({ session: t.String() })
+			})
+			.get('/', ({ cookie: { session } }) =>
+				session.value ? session.value : 'Empty'
+			)
+
+		const res = await Promise.all([
+			app.handle(req('/')),
+			app.handle(req('/', { headers: { Cookie: 'session=value' } }))
+		])
+
+		expect(res[0].status).toBe(422)
+		expect(res[1].status).toBe(200)
 	})
 })

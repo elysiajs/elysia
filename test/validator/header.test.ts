@@ -2,7 +2,6 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
-import { Get } from '@sinclair/typebox/build/cjs/type/registry/type'
 
 describe('Header Validator', () => {
 	it('validate single', async () => {
