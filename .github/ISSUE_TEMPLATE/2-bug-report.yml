@@ -17,7 +17,7 @@ body:
 
     - type: input
       attributes:
-          label: What version of Elysia.JS is running?
+          label: What version of Elysia is running?
           description: Copy the output of `Elysia --revision`
     - type: input
       attributes:
@@ -43,3 +43,7 @@ body:
       attributes:
           label: Additional information
           description: Is there anything else you think we should know?
+    - type: input
+      attributes:
+        label: Have you try removing the `node_modules` and `bun.lockb` and try again yet?
+        description: rm -rf node_modules && bun.lockb

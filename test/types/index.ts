@@ -1072,11 +1072,12 @@ app.group(
 		})
 }
 
-const a = app.resolve(({ headers }) => {
-	return {
-		authorization: headers.authorization as string
-	}
-})
+const a = app
+	.resolve(({ headers }) => {
+		return {
+			authorization: headers.authorization as string
+		}
+	})
 	// .get('/', ({ authorization }) => {
 	// 	// ? infers derive type
 	// 	expectTypeOf<typeof authorization>().toBeString()
@@ -1787,7 +1788,7 @@ app.get('/', ({ set }) => {
 
 							expectTypeOf<typeof query>().toEqualTypeOf<{
 								name: string
-							}>
+							}>()
 
 							expectTypeOf<typeof body>().toEqualTypeOf<{
 								id: number
@@ -1795,7 +1796,7 @@ app.get('/', ({ set }) => {
 								profile: {
 									name: string
 								}
-							}>
+							}>()
 						},
 						{
 							body: t.Object({
@@ -1861,4 +1862,27 @@ app.get('/', ({ set }) => {
 
 		const app = new Elysia().use(plugin).get('/', 'ok')
 	}
+}
+
+// Derive guard
+{
+	new Elysia()
+		.guard({
+			query: t.Object({
+				id: t.Number()
+			})
+		})
+		.derive(({ query }) => {
+			expectTypeOf<typeof query>().toEqualTypeOf<
+				Record<string, string | undefined>
+			>()
+			expectTypeOf<typeof query>().not.toEqualTypeOf<{
+				id: number
+			}>()
+		})
+		.resolve(({ query }) => {
+			expectTypeOf<typeof query>().toEqualTypeOf<{
+				id: number
+			}>()
+		})
 }

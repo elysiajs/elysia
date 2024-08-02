@@ -1,5 +1,11 @@
 /**
+Fork of fast-querystring
+
+originate
 @from https://github.com/anonrig/fast-querystring/tree/main
+
+modified
+@from https://discord.com/channels/876711213126520882/1111136889743888455/1263902371801595979
 
 Copyright (c) 2022 Yagiz Nizipli
 
@@ -33,86 +39,91 @@ import fastDecode from 'fast-decode-uri-component'
 
 const plusRegex = /\+/g
 
-/**
- * @callback parse
- * @param {string} input
- */
 export function parseQuery(input: string) {
 	const result = <Record<string, string>>{}
 
 	if (typeof input !== 'string') return result
 
-	const inputLength = input.length
 	let key = ''
 	let value = ''
 	let startingIndex = -1
 	let equalityIndex = -1
-	let shouldDecodeKey = false
-	let shouldDecodeValue = false
-	let keyHasPlus = false
-	let valueHasPlus = false
-	let hasBothKeyValuePair = false
-	let c = 0
+	let flags = 0
 
-	// Have a boundary of input.length + 1 to access last pair inside the loop.
-	for (let i = 0; i < inputLength + 1; i++) {
-		c = i !== inputLength ? input.charCodeAt(i) : 38
+	const l = input.length
 
-		// Handle '&' and end of line to pass the current values to result
-		if (c === 38) {
-			hasBothKeyValuePair = equalityIndex > startingIndex
+	for (let i = 0; i < l; i++) {
+		switch (input.charCodeAt(i)) {
+			case 38: // '&'
+				const hasBothKeyValuePair = equalityIndex > startingIndex
+				if (!hasBothKeyValuePair) equalityIndex = i
 
-			// Optimization: Reuse equality index to store the end of key
-			if (!hasBothKeyValuePair) equalityIndex = i
+				key = input.slice(startingIndex + 1, equalityIndex)
 
-			key = input.slice(startingIndex + 1, equalityIndex)
+				if (hasBothKeyValuePair || key.length > 0) {
+					if (flags & 0b0000_0001) key = key.replace(plusRegex, ' ')
+					if (flags & 0b0000_0010) key = fastDecode(key) || key
 
-			// Add key/value pair only if the range size is greater than 1; a.k.a. contains at least "="
-			if (hasBothKeyValuePair || key.length > 0) {
-				// Optimization: Replace '+' with space
-				if (keyHasPlus) key = key.replace(plusRegex, ' ')
+					if (!result[key]) {
+						if (hasBothKeyValuePair) {
+							value = input.slice(equalityIndex + 1, i)
 
-				// Optimization: Do not decode if it's not necessary.
-				if (shouldDecodeKey) key = fastDecode(key) || key
+							if (flags & 0b0000_0100)
+								value = value.replace(plusRegex, ' ')
+							if (flags & 0b0000_1000)
+								value = fastDecode(value) || value
+						}
 
-				if (!result[key]) {
-					if (hasBothKeyValuePair) {
-						value = input.slice(equalityIndex + 1, i)
-
-						if (valueHasPlus) value = value.replace(plusRegex, ' ')
-
-						if (shouldDecodeValue)
-							value = fastDecode(value) || value
+						result[key] = value
 					}
-
-					result[key] = value
 				}
-			}
 
-			// Reset reading key value pairs
-			value = ''
-			startingIndex = i
-			equalityIndex = i
-			shouldDecodeKey = false
-			shouldDecodeValue = false
-			keyHasPlus = false
-			valueHasPlus = false
+				key = ''
+				value = ''
+				startingIndex = i
+				equalityIndex = i
+				flags = 0
+				break
+
+			case 61: // '='
+				if (equalityIndex <= startingIndex) equalityIndex = i
+				else flags |= 0b0000_1000
+				break
+
+			case 43: // '+'
+				if (equalityIndex > startingIndex) flags |= 0b0000_0100
+				else flags |= 0b0000_0001
+				break
+
+			case 37: // '%'
+				if (equalityIndex > startingIndex) flags |= 0b0000_1000
+				else flags |= 0b0000_0010
+				break
 		}
-		// Check '='
-		else if (c === 61) {
-			if (equalityIndex <= startingIndex) equalityIndex = i
-			// If '=' character occurs again, we should decode the input.
-			else shouldDecodeValue = true
-		}
-		// Check '+', and remember to replace it with empty space.
-		else if (c === 43) {
-			if (equalityIndex > startingIndex) valueHasPlus = true
-			else keyHasPlus = true
-		}
-		// Check '%' character for encoding
-		else if (c === 37) {
-			if (equalityIndex > startingIndex) shouldDecodeValue = true
-			else shouldDecodeKey = true
+	}
+
+	if (startingIndex < l) {
+		const hasBothKeyValuePair = equalityIndex > startingIndex
+		key = input.slice(
+			startingIndex + 1,
+			hasBothKeyValuePair ? equalityIndex : l
+		)
+
+		if (hasBothKeyValuePair || key.length > 0) {
+			if (flags & 0b0000_0001) key = key.replace(plusRegex, ' ')
+			if (flags & 0b0000_0010) key = fastDecode(key) || key
+
+			if (!result[key]) {
+				if (hasBothKeyValuePair) {
+					value = input.slice(equalityIndex + 1, l)
+
+					if (flags & 0b0000_0100)
+						value = value.replace(plusRegex, ' ')
+					if (flags & 0b0000_1000) value = fastDecode(value) || value
+				}
+
+				result[key] = value
+			}
 		}
 	}
 

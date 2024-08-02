@@ -5287,10 +5287,7 @@ export default class Elysia<
 		transform: (
 			context: Prettify<
 				Context<
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
+					{},
 					Singleton & {
 						derive: Ephemeral['derive'] & Volatile['derive']
 						resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5338,10 +5335,7 @@ export default class Elysia<
 		transform: (
 			context: Prettify<
 				Context<
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
+					{},
 					Singleton &
 						('global' extends Type
 							? {
@@ -5524,10 +5518,7 @@ export default class Elysia<
 	mapDerive<const NewDerivative extends Record<string, unknown>>(
 		mapper: (
 			context: Context<
-				MergeSchema<
-					Metadata['schema'],
-					MergeSchema<Ephemeral['schema'], Volatile['schema']>
-				>,
+				{},
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5557,10 +5548,7 @@ export default class Elysia<
 		options: { as?: Type },
 		mapper: (
 			context: Context<
-				MergeSchema<
-					Metadata['schema'],
-					MergeSchema<Ephemeral['schema'], Volatile['schema']>
-				>,
+				{},
 				Singleton &
 					('global' extends Type
 						? {

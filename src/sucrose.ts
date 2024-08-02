@@ -49,7 +49,9 @@ export const hasReturn = (fn: string | HookContainer<any> | Function) => {
 export const separateFunction = (
 	code: string
 ): [string, string, { isArrowReturn: boolean }] => {
-	if (code.startsWith('async')) code = code.slice(6)
+	// Remove async keyword without removing space (both minify and non-minify)
+	if (code.startsWith('async')) code = code.slice(5)
+	code = code.trimStart()
 
 	let index = -1
 
@@ -64,7 +66,7 @@ export const separateFunction = (
 				if (code.charCodeAt(--bracketEndIndex) === 41) break
 
 			let body = code.slice(index + 2)
-			if (body.charCodeAt(0) === 32) body = body.trimLeft()
+			if (body.charCodeAt(0) === 32) body = body.trimStart()
 
 			return [
 				code.slice(1, bracketEndIndex),
@@ -515,7 +517,7 @@ export const removeDefaultParameter = (parameter: string) => {
 		.join(', ')
 }
 
-const isContextPassToFunction = (
+export const isContextPassToFunction = (
 	context: string,
 	body: string,
 	inference: Sucrose.Inference
@@ -546,7 +548,7 @@ const isContextPassToFunction = (
 		return false
 	} catch (error) {
 		console.log(
-			'[Sucrose] warning: unexpected isContextPassToFunction error, you may continue development as usual but please report the following to the developer:'
+			'[Sucrose] warning: unexpected isContextPassToFunction error, you may continue development as usual but please report the following to maintainers:'
 		)
 		console.log('--- body ---')
 		console.log(body)

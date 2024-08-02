@@ -1,3 +1,18 @@
+# 1.1.5
+Feature:
+- refactor fastQuerystring using switch and bitwise flag
+
+Bug fix:
+- sucrose: invalid separateFunction on minified async function
+
+# 1.1.4 - 22 Jul
+Feature:
+- normalize getter field in class
+
+Bug fix:
+- handle object stream
+- sucrose: query param
+
 # 1.1.3 - 17 Jul 2024
 Change:
 - sucrose: exact inference name

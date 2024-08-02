@@ -1,29 +1,32 @@
-import { Elysia } from '../src'
-import { req } from '../test/utils'
+import {
+	sucrose,
+	separateFunction,
+	findParameterReference,
+	extractMainParameter,
+	isContextPassToFunction
+} from '../src/sucrose'
 
-export const logger = new Elysia({ name: 'logger' }).derive(
-	{ as: 'global' },
-	() => ({
-		logger: {
-			log(msg: string) {
-				console.log(msg)
-			}
-		}
-	})
-)
+const event = `async({user:z,params:{id:J},query:{conversation:G}})=>{const Q=await z.id;if(G)return setImmediate(()=>{O6.conversation.setActiveConversation(Q,J,G)}),O6.conversation.getChatsById(Q,J,G);return O6.conversation.getChats(Q,J)}`
 
-export const error = new Elysia({ name: 'error' })
-	.use(logger)
-	.error({
-		Error
-	})
-	.onError({ as: 'global' }, (ctx) => {
-		ctx.logger?.log(ctx.code)
-	})
+const [parameter, body, { isArrowReturn }] = separateFunction(event.toString())
 
-new Elysia()
-	.use(error)
-	.get('/', () => {
-		throw new Error('whelp')
-	})
-	.listen(8080)
+const inference = {
+	body: false,
+	cookie: false,
+	headers: false,
+	query: false,
+	server: false,
+	set: false
+}
+
+const rootParameters = findParameterReference(parameter, {
+	body: false,
+	cookie: false,
+	headers: false,
+	query: false,
+	server: false,
+	set: false
+})
+const mainParameter = extractMainParameter(rootParameters)
+
+isContextPassToFunction(mainParameter!, body, inference)
