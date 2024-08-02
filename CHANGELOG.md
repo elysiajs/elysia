@@ -1,4 +1,4 @@
-# 1.1.5
+# 1.1.5 - 2 Aug 2024
 Feature:
 - refactor fastQuerystring using switch and bitwise flag
 
