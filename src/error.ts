@@ -18,7 +18,7 @@ export type ERROR_CODE = typeof ERROR_CODE
 export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
 export type ELYSIA_RESPONSE = typeof ELYSIA_RESPONSE
 
-export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
+export const isProduction = (env?.NODE_ENV ?? env?.ENV) !== 'development'
 
 export type ElysiaErrors =
 	| InternalServerError
