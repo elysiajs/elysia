@@ -399,7 +399,7 @@ export default class Elysia<
 	applyConfig(config: ElysiaConfig<BasePath, Scoped>) {
 		this.config = {
 			prefix: '',
-			aot: true,
+			aot: false,
 			strictPath: false,
 			global: false,
 			analytic: false,

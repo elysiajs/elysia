@@ -94,6 +94,7 @@ describe('Stream', () => {
 		expect(response).toBe('ab')
 	})
 
+
 	it('mutate set before yield is called', async () => {
 		const expected = ['a', 'b', 'c']
 
