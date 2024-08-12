@@ -1,6 +1,9 @@
 # 1.1.6 - 12 Aug 2024
 Feature:
 - [#763](https://github.com/elysiajs/elysia/pull/763) add hide in detail to hide route from OpenAPI/swagger
+- add streaming support for fetch proxy
+
+Bug fix:
 - [#776](https://github.com/elysiajs/elysia/issues/776) custom errors throw in onRequest do not get proper code set in onError
 
 # 1.1.5 - 2 Aug 2024

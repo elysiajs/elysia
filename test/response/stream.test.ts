@@ -203,8 +203,7 @@ describe('Stream', () => {
 			yield expected[2]
 		})
 
-		const response = await app
-			.handle(req('/'))
+		app.handle(req('/'))
 			.then((x) => x.body)
 			.then((x) => {
 				if (!x) return
@@ -217,6 +216,44 @@ describe('Stream', () => {
 					if (done) return resolve()
 
 					expect(value.toString()).toBe(JSON.stringify(expected[i++]))
+
+					return reader.read().then(pump)
+				})
+
+				return promise
+			})
+	})
+
+	it('proxy fetch stream', async () => {
+		const expected = ['a', 'b', 'c']
+		let i = 0
+
+		const app = new Elysia().get('/', async function* () {
+			yield 'a'
+			await Bun.sleep(10)
+			yield 'b'
+			await Bun.sleep(10)
+			yield 'c'
+		})
+
+		const proxy = new Elysia().get('/', () =>
+			app.handle(new Request('http://e.ly'))
+		)
+
+		proxy
+			.handle(req('/'))
+			.then((x) => x.body)
+			.then((x) => {
+				if (!x) return
+
+				const reader = x?.getReader()
+
+				const { promise, resolve } = Promise.withResolvers()
+
+				reader.read().then(function pump({ done, value }): unknown {
+					if (done) return resolve()
+
+					expect(value.toString()).toBe(expected[i++])
 
 					return reader.read().then(pump)
 				})

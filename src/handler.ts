@@ -147,15 +147,15 @@ const handleStream = async (
 				})
 
 				if (init.value !== undefined && init.value !== null) {
-					if (
-						typeof init.value === "object"
-					)
+					if (typeof init.value === 'object')
 						try {
 							controller.enqueue(
 								Buffer.from(JSON.stringify(init.value))
 							)
 						} catch {
-							controller.enqueue(Buffer.from(init.value.toString()))
+							controller.enqueue(
+								Buffer.from(init.value.toString())
+							)
 						}
 					else controller.enqueue(Buffer.from(init.value.toString()))
 				}
@@ -198,6 +198,26 @@ const handleStream = async (
 			}
 		}
 	)
+}
+
+export async function* streamResponse(response: Response) {
+	const body = response.body
+
+	if (!body) return
+
+	const reader = body.getReader()
+	const decoder = new TextDecoder()
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read()
+			if (done) break
+
+			yield decoder.decode(value)
+		}
+	} finally {
+		reader.releaseLock()
+	}
 }
 
 export const mapResponse = (
@@ -333,6 +353,16 @@ export const mapResponse = (
 
 				if ((response as Response).status !== set.status)
 					set.status = (response as Response).status
+
+				if (
+					(response as Response).headers.get('transfer-encoding') ===
+					'chunked'
+				)
+					return handleStream(
+						streamResponse(response as Response),
+						set,
+						request
+					) as any
 
 				return response as Response
 
@@ -505,6 +535,16 @@ export const mapResponse = (
 				})
 
 			case 'Response':
+				if (
+					(response as Response).headers.get('transfer-encoding') ===
+					'chunked'
+				)
+					return handleStream(
+						streamResponse(response as Response),
+						set,
+						request
+					) as any
+
 				return response as Response
 
 			case 'Error':
@@ -716,6 +756,16 @@ export const mapEarlyResponse = (
 				if ((response as Response).status !== set.status)
 					set.status = (response as Response).status
 
+				if (
+					(response as Response).headers.get('transfer-encoding') ===
+					'chunked'
+				)
+					return handleStream(
+						streamResponse(response as Response),
+						set,
+						request
+					) as any
+
 				return response as Response
 
 			case 'Promise':
@@ -882,6 +932,14 @@ export const mapEarlyResponse = (
 				})
 
 			case 'Response':
+				if (
+					(response as Response).headers.get('transfer-encoding') ===
+					'chunked'
+				)
+					return handleStream(
+						streamResponse(response as Response)
+					) as any
+
 				return response as Response
 
 			case 'Promise':
@@ -1021,6 +1079,12 @@ export const mapCompactResponse = (
 			})
 
 		case 'Response':
+			if (
+				(response as Response).headers.get('transfer-encoding') ===
+				'chunked'
+			)
+				return handleStream(streamResponse(response as Response)) as any
+
 			return response as Response
 
 		case 'Error':
