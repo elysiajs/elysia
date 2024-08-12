@@ -1,18 +1,36 @@
-// index.ts
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const app = new Elysia()
-	.guard({
-		cookie: t.Cookie({ session: t.String() })
+class APIError extends Error {
+	public readonly message: string
+	public readonly status: number
+
+	constructor(status: number, message: string, options?: ErrorOptions) {
+		super(message, options)
+
+		this.status = status
+		this.message = message
+		this.name = 'APIError'
+
+		Object.setPrototypeOf(this, APIError.prototype)
+		Error.captureStackTrace(this)
+	}
+}
+
+const errors = new Elysia()
+	.error({ APIError })
+	.onError({ as: 'global' }, ({ error, request, set, code }) => {
+		console.log(code)
 	})
-	.get('/', ({ cookie: { session } }) =>
-		session.value ? session.value : 'Empty'
-	)
 
-let response = await app.handle(new Request(`http://localhost`))
-console.log(await response.text())
+const requestHandler = new Elysia()
+	.onTransform((context) => {
+		throw new APIError(403, 'Not authorized')
+	})
+	.get('/', () => 'a')
 
-response = await app.handle(
-	new Request(`http://localhost`, { headers: { Cookie: 'session=value' } })
-)
-console.log(await response.text())
+const app = new Elysia().use(errors).use(requestHandler).compile()
+
+// console.log(app.fetch.toString())
+
+app.handle(req('/'))

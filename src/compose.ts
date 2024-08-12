@@ -2224,8 +2224,11 @@ export const composeErrorHandler = (
 		const set = context.set
 		let r
 
-		context.code = error.code
-		context.error = error
+		if(!context.code)
+			context.code = error.code ?? error[ERROR_CODE]
+
+		if(!context.error)
+			context.error = error
 
 		if(typeof error === "object" && error && ELYSIA_RESPONSE in error) {
 			error.status = error[ELYSIA_RESPONSE]
