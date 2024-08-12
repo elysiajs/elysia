@@ -1,7 +1,19 @@
 import { describe, it, expect } from 'bun:test'
 import { req } from '../utils'
+import { createParser } from 'eventsource-parser'
 
 import { Elysia } from '../../src'
+
+function textEventStream(items: string[]) {
+	return items
+		.map((item) => `event: message\ndata: ${JSON.stringify(item)}\n\n`)
+		.join('')
+}
+
+function parseTextEventStreamItem(item: string) {
+	const data = item.split('data: ')[1].split('\n')[0]
+	return JSON.parse(data)
+}
 
 describe('Stream', () => {
 	it('handle stream', async () => {
@@ -31,7 +43,9 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve(acc)
 
-					expect(value.toString()).toBe(expected.shift()!)
+					expect(parseTextEventStreamItem(value.toString())).toBe(
+						expected.shift()!
+					)
 
 					acc += value.toString()
 					return reader.read().then(pump)
@@ -41,7 +55,64 @@ describe('Stream', () => {
 			})
 
 		expect(expected).toHaveLength(0)
-		expect(response).toBe('abc')
+		expect(response).toBe(textEventStream(['a', 'b', 'c']))
+	})
+	it('handle errors after yield', async () => {
+		const app = new Elysia().get('/', async function* () {
+			yield 'a'
+			await Bun.sleep(10)
+
+			throw new Error('an error')
+		})
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toBe(
+			'event: message\ndata: "a"\n\nevent: error\ndata: "an error"\n\n'
+		)
+	})
+
+	it('handle errors before yield when aot is false', async () => {
+		const app = new Elysia({ aot: false })
+			.onError(({ error }) => {
+				return new Response(error.message)
+			})
+			.get('/', async function* () {
+				throw new Error('an error xxxx')
+			})
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toInclude('an error')
+	})
+	
+	it.todo('handle errors before yield when aot is true', async () => {
+		const app = new Elysia({ aot: true })
+			.onError(({ error }) => {
+				return new Response(error.message)
+			})
+			.get('/', async function* () {
+				throw new Error('an error')
+			})
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toInclude('an error')
+	})
+
+	it.todo('handle errors before yield with onError', async () => {
+		const expected = 'error expected'
+		const app = new Elysia()
+			.onError(({}) => {
+				return new Response(expected)
+			})
+			.get('/', async function* () {
+				throw new Error('an error')
+			})
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toBe(expected)
 	})
 
 	it('stop stream on canceled request', async () => {
@@ -79,9 +150,13 @@ describe('Stream', () => {
 				const { promise, resolve } = Promise.withResolvers()
 
 				reader.read().then(function pump({ done, value }): unknown {
-					if (done) return resolve(acc)
+					if (done) {
+						return resolve(acc)
+					}
 
-					expect(value.toString()).toBe(expected.shift()!)
+					expect(parseTextEventStreamItem(value.toString())).toBe(
+						expected.shift()!
+					)
 
 					acc += value.toString()
 					return reader.read().then(pump)
@@ -91,7 +166,7 @@ describe('Stream', () => {
 			})
 
 		expect(expected).toHaveLength(0)
-		expect(response).toBe('ab')
+		expect(response).toBe(textEventStream(['a', 'b']))
 	})
 
 	it('mutate set before yield is called', async () => {
@@ -109,6 +184,42 @@ describe('Stream', () => {
 
 		expect(response.get('access-control-allow-origin')).toBe(
 			'http://saltyaom.com'
+		)
+	})
+	it('handle stream with objects', async () => {
+		const objects = [
+			{ message: 'hello' },
+			{ response: 'world' },
+			{ data: [1, 2, 3] },
+			{ result: [4, 5, 6] }
+		]
+		const app = new Elysia().get('/', async function* ({}) {
+			for (const obj of objects) {
+				yield obj
+			}
+		})
+
+		const body = await app.handle(req('/')).then((x) => x.body)
+
+		let events = [] as any[]
+		const parser = createParser((event) => {
+			events.push(event)
+		})
+		const { promise, resolve } = Promise.withResolvers()
+		const reader = body?.getReader()!
+
+		reader.read().then(function pump({ done, value }): unknown {
+			if (done) {
+				return resolve()
+			}
+			const text = value.toString()
+			parser.feed(text)
+			return reader.read().then(pump)
+		})
+		await promise
+
+		expect(events.map((x) => x.data)).toEqual(
+			objects.map((x) => JSON.stringify(x))
 		)
 	})
 
@@ -216,7 +327,9 @@ describe('Stream', () => {
 				reader.read().then(function pump({ done, value }): unknown {
 					if (done) return resolve()
 
-					expect(value.toString()).toBe(JSON.stringify(expected[i++]))
+					expect(parseTextEventStreamItem(value.toString())).toEqual(
+						expected[i++]
+					)
 
 					return reader.read().then(pump)
 				})
