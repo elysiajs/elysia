@@ -940,7 +940,12 @@ export type Isolate<T> = {
 	[P in keyof T]: T[P]
 }
 
-export type DocumentDecoration = Partial<OpenAPIV3.OperationObject>
+export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
+	/** 
+	 * Pass `true` to hide route from OpenAPI/swagger document
+	 * */
+	hide?: boolean
+}
 
 export type LocalHook<
 	LocalSchema extends InputSchema,
