@@ -11,7 +11,7 @@ import {
 import type { Context } from './context'
 import { type error } from './error'
 
-import { parseQuery } from './fast-querystring'
+import { parseQuery, parseQueryFromURL } from './fast-querystring'
 
 import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
@@ -176,7 +176,8 @@ export const createDynamicHandler =
 			context.body = body
 			// @ts-expect-error
 			context.params = handler?.params || undefined
-			context.query = qi === -1 ? {} : parseQuery(url.substring(qi + 1))
+			context.query =
+				qi === -1 ? {} : parseQueryFromURL(url.substring(qi + 1))
 
 			context.headers = {}
 			for (const [key, value] of request.headers.entries())

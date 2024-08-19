@@ -1,3 +1,11 @@
+# 1.1.7 - 19 Aug 2024
+Bug fix:
+- `parseQuery` is not parsing array on body
+
+Change:
+- rename `parseQuery` to `parseQueryFromURL`
+- export fast-querystring.js path
+
 # 1.1.6 - 12 Aug 2024
 Feature:
 - [#763](https://github.com/elysiajs/elysia/pull/763) add hide in detail to hide route from OpenAPI/swagger

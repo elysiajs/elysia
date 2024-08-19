@@ -506,4 +506,23 @@ describe('Body Validator', () => {
 
 		expect(res).toEqual([{}, { id: 1 }])
 	})
+
+	it('parse query body with array', async () => {
+		const app = new Elysia().post('/', ({ body }) => body)
+
+		const res = await app.handle(
+			new Request('https://e.ly', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded'
+				},
+				body: `tea_party=nagisa&tea_party=mika&tea_party=seia`
+			})
+		)
+
+		expect(await res.json()).toEqual({
+			tea_party: ['nagisa', 'mika', 'seia']
+		})
+		expect(res.status).toBe(200)
+	})
 })

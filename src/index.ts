@@ -4,8 +4,7 @@ import { Memoirist } from 'memoirist'
 import {
 	type TObject,
 	type Static,
-	type TSchema,
-	Partial
+	type TSchema
 } from '@sinclair/typebox'
 
 import type { Context } from './context'

@@ -1,15 +1,15 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia } from '../src'
 
-const app1 = new Elysia()
-	.get('/', async function* () {
-		for (let i = 0; i < 100_000; i++) {
-			await Bun.sleep(500)
-			yield 'a'
-		}
+const app = new Elysia().post('/', ({ body }) => body)
+
+const res = await app.handle(
+	new Request('https://e.ly', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/x-www-form-urlencoded'
+		},
+		body: `tea_party=nagisa&tea_party=mika&tea_party=seia`
 	})
-	.listen(3001)
+)
 
-const app2 = new Elysia()
-	.get('/', () => app1.handle(req('/')))
-	.listen(3000)
+console.log(await res.json())

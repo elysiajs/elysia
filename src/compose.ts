@@ -3,7 +3,7 @@ import { type Elysia } from '.'
 import { Value } from '@sinclair/typebox/value'
 import type { TAnySchema, TSchema } from '@sinclair/typebox'
 
-import { parseQuery } from './fast-querystring'
+import { parseQuery, parseQueryFromURL } from './fast-querystring'
 
 // @ts-ignore
 import decodeURIComponent from 'fast-decode-uri-component'
@@ -678,7 +678,7 @@ export const composeHandler = ({
 			fnLiteral += `if(c.qi === -1) {
 				c.query = {}
 			} else {
-				c.query = parseQuery(c.url.slice(c.qi + 1))
+				c.query = parseQueryFromURL(c.url.slice(c.qi + 1))
 			}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
@@ -1793,6 +1793,7 @@ export const composeHandler = ({
 			mapCompactResponse,
 			mapEarlyResponse,
 			parseQuery,
+			parseQueryFromURL,
 			isNotEmpty
 		},
 		error: {
@@ -1839,6 +1840,7 @@ export const composeHandler = ({
 				mapCompactResponse,
 				mapEarlyResponse,
 				parseQuery,
+				parseQueryFromURL,
 				isNotEmpty
 			},
 			error: {
