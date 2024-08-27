@@ -2233,7 +2233,7 @@ export const composeErrorHandler = (
 		if(!context.code)
 			context.code = error.code ?? error[ERROR_CODE]
 
-		if(!context.error)
+		if(!(context.error instanceof Error))
 			context.error = error
 
 		if(typeof error === "object" && error && ELYSIA_RESPONSE in error) {

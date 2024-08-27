@@ -3,6 +3,7 @@ Bug fix:
 - [#787](https://github.com/elysiajs/elysia/issues/787) [#789](https://github.com/elysiajs/elysia/issues/789) Unexpected TypeError on NODE_ENV=production in mapValueError
 - [#793](https://github.com/elysiajs/elysia/issues/793) Unable to delete property t.File()
 - [#780](https://github.com/elysiajs/elysia/issues/780) error from sending empty body multipart/form-data
+- [#779](https://github.com/elysiajs/elysia/issues/779) Custom errors thrown in onRequest are not usable when caught in onError
 
 # 1.1.7 - 19 Aug 2024
 Bug fix:

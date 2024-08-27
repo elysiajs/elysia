@@ -1,25 +1,22 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia({ precompile: true })
-	.post(
-		'/',
-		({ body }) => {
-			console.log(body)
+class SomeCustomError extends Error {
+	asJSON() {
+		return JSON.stringify({
+			somePretty: 'json'
+		})
+	}
+}
 
-			return { ok: true }
-		},
-		{
-			type: 'multipart/form-data',
-			body: t.Optional(
-				t.Object({
-					file: t.Optional(t.File()),
-					name: t.Optional(t.String())
-				})
-			)
-		}
-	)
-	.listen(3000, (server) => {
-		console.log(`> App is listening at: ${server.url.origin}`)
+const app = new Elysia()
+	.onError(({ error }) => {
+		if (error instanceof SomeCustomError)
+			return error.asJSON()
 	})
+	.onRequest(() => {
+		throw new SomeCustomError()
+	})
+	.get('/', () => '')
 
-console.log(app.routes[0].composed?.toString())
+const res = await app.handle(new Request('https://localhost/'))
+const body = await res.json()

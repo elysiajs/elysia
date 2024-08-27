@@ -245,4 +245,31 @@ describe('error', () => {
 
 		expect(total).toEqual(2)
 	})
+
+	it('handle custom error thrown in onRequest', async () => {
+		class SomeCustomError extends Error {
+			asJSON() {
+				return JSON.stringify({
+					somePretty: 'json'
+				})
+			}
+		}
+
+		const app = new Elysia()
+			.onError(({ error }) => {
+				if (error instanceof SomeCustomError) return error.asJSON()
+			})
+			.onRequest(() => {
+				throw new SomeCustomError()
+			})
+			.get('/', () => '')
+
+		const body = await app
+			.handle(new Request('https://localhost/'))
+			.then((x) => x.json())
+
+		expect(body).toEqual({
+			somePretty: 'json'
+		})
+	})
 })
