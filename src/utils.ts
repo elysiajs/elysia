@@ -705,7 +705,7 @@ export const getResponseSchemaValidator = (
 				return Value.Clean(schema, value)
 			}
 			let touched = false
-			const visited = new Set<any>();
+			const visited = new Set<any>()
 
 			const retrieveAllFieldsOfObjectOrArray = (value: any): any => {
 				// there could be circular references
@@ -715,16 +715,22 @@ export const getResponseSchemaValidator = (
 				visited.add(value)
 
 				// if we get an array, retrieve each element
-				if(Array.isArray(value)) {
+				if (Array.isArray(value)) {
 					return value.map((x) => retrieveAllFieldsOfObjectOrArray(x))
 				}
 
 				// if we have fields which are arrays, retrieve each field
 				const retrievedArrayFields = {} as any
 				for (const [key, val] of Object.entries(value)) {
-					if(Array.isArray(val)) {
-					retrievedArrayFields[key] = retrieveAllFieldsOfObjectOrArray(val)
-						delete value[key]
+					if (Array.isArray(val)) {
+						retrievedArrayFields[key] =
+							retrieveAllFieldsOfObjectOrArray(val)
+
+						try {
+							delete value[key]
+						} catch {
+							// If the property is non-configurable, we can't delete it
+						}
 					}
 				}
 				Object.assign(value, retrievedArrayFields)
@@ -744,7 +750,11 @@ export const getResponseSchemaValidator = (
 							name !== '__proto__'
 						) {
 							retrievedFields[name] = (value as any)[name]
-							delete (currentObj as any)[name]
+							try {
+								delete (currentObj as any)[name]
+							} catch {
+								// If the property is non-configurable, we can't delete it
+							}
 							touched = true
 						}
 					}

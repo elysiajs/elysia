@@ -1,11 +1,25 @@
-import { Elysia, form, mapResponse, t } from '../src'
+import { Elysia, t } from '../src'
 
-const response = mapResponse(
-	form({
-		a: Bun.file('test/kyuukurarin.mp4')
-	}),
-	{}
-)
+const app = new Elysia({ precompile: true })
+	.post(
+		'/',
+		({ body }) => {
+			console.log(body)
 
-console.log(await response.formData())
-console.log(response.status)
+			return { ok: true }
+		},
+		{
+			type: 'multipart/form-data',
+			body: t.Optional(
+				t.Object({
+					file: t.Optional(t.File()),
+					name: t.Optional(t.String())
+				})
+			)
+		}
+	)
+	.listen(3000, (server) => {
+		console.log(`> App is listening at: ${server.url.origin}`)
+	})
+
+console.log(app.routes[0].composed?.toString())

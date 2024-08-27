@@ -652,7 +652,6 @@ export const composeHandler = ({
 								v.format === 'ArrayString'
 						)
 
-
 					destructured.push({
 						key,
 						isArray,
@@ -913,9 +912,14 @@ export const composeHandler = ({
 
 				case 'formdata':
 				case 'multipart/form-data':
-					fnLiteral += `c.body = {}
+					fnLiteral += `c.body = {}\n`
 
-						const form = await c.request.formData()
+					// ? If formdata body is empty, mimetype is not set, might cause an error
+					if (isOptional(validator.body))
+						fnLiteral += `let form; try { form = await c.request.formData() } catch {}`
+					else fnLiteral += `const form = await c.request.formData()`
+
+					fnLiteral += `\nif(form)
 						for (const key of form.keys()) {
 							if (c.body[key])
 								continue
@@ -924,7 +928,7 @@ export const composeHandler = ({
 							if (value.length === 1)
 								c.body[key] = value[0]
 							else c.body[key] = value
-						}\n`
+						} else form = {}\n`
 					break
 			}
 		} else if (hasBodyInference) {
