@@ -1,11 +1,7 @@
 import type { Serve, Server, ServerWebSocket } from 'bun'
 
 import { Memoirist } from 'memoirist'
-import {
-	type TObject,
-	type Static,
-	type TSchema
-} from '@sinclair/typebox'
+import { type TObject, type Static, type TSchema } from '@sinclair/typebox'
 
 import type { Context } from './context'
 
@@ -16,7 +12,6 @@ import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
 import { version as _version } from '../package.json'
-
 import { isNotEmpty } from './handler'
 
 import {
@@ -3216,7 +3211,8 @@ export default class Elysia<
 					.then((plugin) => {
 						if (typeof plugin === 'function') return plugin(this)
 
-						if (plugin instanceof Elysia) return this._use(plugin)
+						if (plugin instanceof Elysia)
+							return this._use(plugin).compile()
 
 						if (typeof plugin.default === 'function')
 							return plugin.default(this)
@@ -3230,6 +3226,7 @@ export default class Elysia<
 					})
 					.then((x) => x.compile())
 			)
+
 			return this
 		}
 
@@ -3246,7 +3243,15 @@ export default class Elysia<
 					instance
 						.then((plugin) => {
 							if (plugin instanceof Elysia) {
-								this.compile()
+								plugin.getServer = () => this.getServer()
+								plugin.getGlobalRoutes = () =>
+									this.getGlobalRoutes()
+
+								/**
+								 * Model and error is required for Swagger generation
+								 */
+								plugin.model(this.definitions.type as any)
+								plugin.error(this.definitions.error as any)
 
 								// Recompile async plugin routes
 								for (const {
@@ -3275,6 +3280,8 @@ export default class Elysia<
 									)
 								}
 
+								plugin.compile()
+
 								return plugin
 							}
 
@@ -3297,15 +3304,6 @@ export default class Elysia<
 			}
 
 			return instance
-		}
-
-		if (plugin.promisedModules.size) {
-			this.promisedModules.add(
-				plugin.modules
-					.then(() => this._use(plugin))
-					.then((x) => x.compile())
-			)
-			return this
 		}
 
 		const { name, seed } = plugin.config

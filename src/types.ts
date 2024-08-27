@@ -27,7 +27,7 @@ import type {
 	ParseError,
 	ValidationError
 } from './error'
-import { ElysiaTypeOptions } from './type-system'
+import type { ComposerGeneralHandlerOptions } from './compose'
 
 type PartialServe = Partial<Serve>
 
@@ -150,6 +150,7 @@ export type ElysiaConfig<
 	 * @default false
 	 */
 	normalize?: boolean
+	handler?: ComposerGeneralHandlerOptions
 }
 
 export type ValidatorLayer = {
@@ -941,7 +942,7 @@ export type Isolate<T> = {
 }
 
 export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
-	/** 
+	/**
 	 * Pass `true` to hide route from OpenAPI/swagger document
 	 * */
 	hide?: boolean

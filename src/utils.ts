@@ -701,82 +701,15 @@ export const getResponseSchemaValidator = (
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		const cleaner = (value: unknown) => {
-			if (!value || typeof value !== 'object') {
+			if (!value || typeof value !== 'object')
 				return Value.Clean(schema, value)
-			}
-			let touched = false
-			const visited = new Set<any>()
 
-			const retrieveAllFieldsOfObjectOrArray = (value: any): any => {
-				// there could be circular references
-				if (visited.has(value)) {
-					return value
-				}
-				visited.add(value)
-
-				// if we get an array, retrieve each element
-				if (Array.isArray(value)) {
-					return value.map((x) => retrieveAllFieldsOfObjectOrArray(x))
-				}
-
-				// if we have fields which are arrays, retrieve each field
-				const retrievedArrayFields = {} as any
-				for (const [key, val] of Object.entries(value)) {
-					if (Array.isArray(val)) {
-						retrievedArrayFields[key] =
-							retrieveAllFieldsOfObjectOrArray(val)
-
-						try {
-							delete value[key]
-						} catch {
-							// If the property is non-configurable, we can't delete it
-						}
-					}
-				}
-				Object.assign(value, retrievedArrayFields)
-
-				const retrievedFields: any = {}
-				// Iterate over the prototype chain
-				let currentObj = value
-				while (currentObj !== null) {
-					for (const name of Object.getOwnPropertyNames(currentObj)) {
-						const descriptor = Object.getOwnPropertyDescriptor(
-							currentObj,
-							name
-						)
-						if (
-							descriptor &&
-							typeof descriptor.get === 'function' &&
-							name !== '__proto__'
-						) {
-							retrievedFields[name] = (value as any)[name]
-							try {
-								delete (currentObj as any)[name]
-							} catch {
-								// If the property is non-configurable, we can't delete it
-							}
-							touched = true
-						}
-					}
-					currentObj = Object.getPrototypeOf(currentObj)
-				}
-
-				Object.assign(value, retrievedFields)
-				return value
-			}
-
-			value = retrieveAllFieldsOfObjectOrArray(value)
-
-			if (!touched) {
-				return Value.Clean(schema, value)
-			}
-
-			if (Array.isArray(value)) {
-				value = Value.Clean(schema, value)
-			} else {
-				// clone to create a serializable object from class instances
-				value = { ...(Value.Clean(schema, value) as any) }
-			}
+			if (Array.isArray(value))
+				value = Value.Clean(
+					schema,
+					value.map((x) => classToObject(x))
+				)
+			else value = Value.Clean(schema, classToObject(value))
 
 			return value
 		}
@@ -1528,4 +1461,51 @@ export const promoteEvent = (
 	}
 
 	for (const event of events) if ('scope' in event) event.scope = 'global'
+}
+
+type PropertyKeys<T> = {
+	[K in keyof T]: T[K] extends (...args: any[]) => any ? never : K
+}[keyof T]
+
+type PropertiesOnly<T> = Pick<T, PropertyKeys<T>>
+
+export const classToObject = <T>(
+	instance: T,
+	processed: WeakMap<object, object> = new WeakMap()
+): T extends object ? PropertiesOnly<T> : T => {
+	if (typeof instance !== 'object' || instance === null)
+		return instance as any
+
+	if (Array.isArray(instance))
+		return instance.map((x) => classToObject(x, processed)) as any
+
+	if (processed.has(instance)) return processed.get(instance) as any
+
+	const result: Partial<T> = {}
+
+	for (const key of Object.keys(instance) as Array<keyof T>) {
+		const value = instance[key]
+		if (typeof value === 'object' && value !== null)
+			result[key] = classToObject(value, processed) as T[keyof T]
+		else result[key] = value
+	}
+
+	const prototype = Object.getPrototypeOf(instance)
+	if (!prototype) return result as any
+
+	const properties = Object.getOwnPropertyNames(prototype)
+
+	for (const property of properties) {
+		const descriptor = Object.getOwnPropertyDescriptor(
+			Object.getPrototypeOf(instance),
+			property
+		)
+
+		if (descriptor && typeof descriptor.get === 'function')
+			(result as any)[property as keyof typeof instance] = classToObject(
+				instance[property as keyof typeof instance]
+			)
+	}
+
+	return result as any
 }

@@ -892,7 +892,10 @@ export const composeHandler = ({
 			switch (hooks.type) {
 				case 'json':
 				case 'application/json':
-					fnLiteral += `c.body = await c.request.json()`
+					if (isOptional(validator.body))
+						fnLiteral += `try { c.body = await c.request.json() } catch {}`
+					else fnLiteral += `c.body = await c.request.json()`
+
 					break
 
 				case 'text':
@@ -979,7 +982,9 @@ export const composeHandler = ({
 				switch (hooks.type) {
 					case 'json':
 					case 'application/json':
-						fnLiteral += `c.body = await c.request.json()`
+						if (isOptional(validator.body))
+							fnLiteral += `try { c.body = await c.request.json() } catch {}`
+						else fnLiteral += `c.body = await c.request.json()`
 						break
 
 					case 'text':
@@ -1017,7 +1022,7 @@ export const composeHandler = ({
 				fnLiteral += `
 					switch (contentType) {
 						case 'application/json':
-							c.body = await c.request.json()
+							${isOptional(validator.body) ? 'try { c.body = await c.request.json() } catch {}' : 'c.body = await c.request.json()'}
 							break
 
 						case 'text/plain':
@@ -1916,9 +1921,24 @@ export const composeHandler = ({
 	}
 }
 
+export interface ComposerGeneralHandlerOptions {
+	/**
+	 * optimization for standard internet hostname
+	 * this will assume hostname is always use a standard internet hostname
+	 * assuming hostname is at minimum of 11 length of string (http://a.bc)
+	 *
+	 * setting this to true will skip the first 11 character of the hostname
+	 *
+	 * @default true
+	 */
+	standardHostname?: boolean
+}
+
 export const composeGeneralHandler = (
 	app: Elysia<any, any, any, any, any, any, any, any>
 ) => {
+	const standardHostname = app.config.handler?.standardHostname ?? true
+
 	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
@@ -2010,7 +2030,7 @@ export const composeGeneralHandler = (
 	if (app.event.request.length) fnLiteral += `let re`
 
 	fnLiteral += `\nconst url = request.url
-		const s = url.indexOf('/', 11)
+		const s = url.indexOf('/', ${standardHostname ? 11 : 7})
 		const qi = url.indexOf('?', s + 1)
 		let path
 		if(qi === -1)

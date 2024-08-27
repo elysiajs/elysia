@@ -1,9 +1,15 @@
 # 1.1.8 - 27 Aug 2024
+Feature:
+- [#748](https://github.com/elysiajs/elysia/issues/748) add standardHostname config
+
 Bug fix:
-- [#787](https://github.com/elysiajs/elysia/issues/787) [#789](https://github.com/elysiajs/elysia/issues/789) Unexpected TypeError on NODE_ENV=production in mapValueError
-- [#793](https://github.com/elysiajs/elysia/issues/793) Unable to delete property t.File()
+- [#787](https://github.com/elysiajs/elysia/issues/787) [#789](https://github.com/elysiajs/elysia/issues/789)[#737](https://github.com/elysiajs/elysia/issues/737) Unexpected TypeError on NODE_ENV=production in mapValueError
+- [#793](https://github.com/elysiajs/elysia/issues/793) unable to delete property t.File()
 - [#780](https://github.com/elysiajs/elysia/issues/780) error from sending empty body multipart/form-data
-- [#779](https://github.com/elysiajs/elysia/issues/779) Custom errors thrown in onRequest are not usable when caught in onError
+- [#779](https://github.com/elysiajs/elysia/issues/779) custom errors thrown in onRequest are not usable when caught in onError
+- [#771](https://github.com/elysiajs/elysia/issues/771) error from body-parser when sent Content-Type header without body
+- [#679](https://github.com/elysiajs/elysia/issues/679) plugin registered by async inline function don't work
+- [#670](https://github.com/elysiajs/elysia/issues/670) support for classes and getter fields
 
 # 1.1.7 - 19 Aug 2024
 Bug fix:
