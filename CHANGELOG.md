@@ -1,3 +1,7 @@
+# 1.1.8 - 27 Aug 2024
+Bug fix:
+- [#787](https://github.com/elysiajs/elysia/issues/787) [#789](https://github.com/elysiajs/elysia/issues/789) Unexpected TypeError on NODE_ENV=production in mapValueError
+
 # 1.1.7 - 19 Aug 2024
 Bug fix:
 - `parseQuery` is not parsing array on body

@@ -1,15 +1,11 @@
-import { Elysia } from '../src'
+import { Elysia, form, mapResponse, t } from '../src'
 
-const app = new Elysia().post('/', ({ body }) => body)
-
-const res = await app.handle(
-	new Request('https://e.ly', {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/x-www-form-urlencoded'
-		},
-		body: `tea_party=nagisa&tea_party=mika&tea_party=seia`
-	})
+const response = mapResponse(
+	form({
+		a: Bun.file('test/kyuukurarin.mp4')
+	}),
+	{}
 )
 
-console.log(await res.json())
+console.log(await response.formData())
+console.log(response.status)

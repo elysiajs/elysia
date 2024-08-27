@@ -46,7 +46,8 @@ export const error = <
 	}
 	error: Error
 } => {
-	const res = response ??
+	const res =
+		response ??
 		(code in InvertedStatusMap
 			? // @ts-expect-error Always correct
 				InvertedStatusMap[code]
@@ -100,7 +101,12 @@ export class InvalidCookieSignature extends Error {
 	}
 }
 
-export const mapValueError = (error: ValueError) => {
+export const mapValueError = (error: ValueError | undefined) => {
+	if (!error)
+		return {
+			summary: undefined
+		}
+
 	const { message, path, value, type } = error
 
 	const property = path.slice(1).replaceAll('/', '.')
