@@ -704,12 +704,8 @@ export const getResponseSchemaValidator = (
 			if (!value || typeof value !== 'object')
 				return Value.Clean(schema, value)
 
-			if (Array.isArray(value))
-				value = Value.Clean(
-					schema,
-					value.map((x) => classToObject(x))
-				)
-			else value = Value.Clean(schema, classToObject(value))
+			if (Array.isArray(value)) value = Value.Clean(schema, value)
+			else value = Value.Clean(schema, value)
 
 			return value
 		}
@@ -1501,10 +1497,15 @@ export const classToObject = <T>(
 			property
 		)
 
-		if (descriptor && typeof descriptor.get === 'function')
-			(result as any)[property as keyof typeof instance] = classToObject(
+		if (descriptor && typeof descriptor.get === 'function') {
+			// ? Very important to prevent prototype pollution
+			if (property === '__proto__') continue
+
+			console.log(property)
+			;(result as any)[property as keyof typeof instance] = classToObject(
 				instance[property as keyof typeof instance]
 			)
+		}
 	}
 
 	return result as any

@@ -1,9 +1,15 @@
+# 1.1.9 - 28 Aug 2024
+Bug fix:
+- [#796](https://github.com/elysiajs/elysia/issues/796) ValueClone: Unable to clone value after 1.1.8 update
+- [#795](https://github.com/elysiajs/elysia/issues/795) Broken Dates after 1.1.8 update
+- [#793](https://github.com/elysiajs/elysia/issues/793) Unable to delete property. t.File()
+
 # 1.1.8 - 27 Aug 2024
 Feature:
 - [#748](https://github.com/elysiajs/elysia/issues/748) add standardHostname config
 
 Bug fix:
-- [#787](https://github.com/elysiajs/elysia/issues/787) [#789](https://github.com/elysiajs/elysia/issues/789)[#737](https://github.com/elysiajs/elysia/issues/737) Unexpected TypeError on NODE_ENV=production in mapValueError
+- [#787](https://github.com/elysiajs/elysia/issues/787) [#789](https://github.com/elysiajs/elysia/issues/789) [#737](https://github.com/elysiajs/elysia/issues/737) Unexpected TypeError on NODE_ENV=production in mapValueError
 - [#793](https://github.com/elysiajs/elysia/issues/793) unable to delete property t.File()
 - [#780](https://github.com/elysiajs/elysia/issues/780) error from sending empty body multipart/form-data
 - [#779](https://github.com/elysiajs/elysia/issues/779) custom errors thrown in onRequest are not usable when caught in onError
