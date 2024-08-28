@@ -1,4 +1,7 @@
 # 1.1.9 - 28 Aug 2024
+Change:
+- getter fields no longer stringified to JSON by default on returning response
+
 Bug fix:
 - [#796](https://github.com/elysiajs/elysia/issues/796) ValueClone: Unable to clone value after 1.1.8 update
 - [#795](https://github.com/elysiajs/elysia/issues/795) Broken Dates after 1.1.8 update
