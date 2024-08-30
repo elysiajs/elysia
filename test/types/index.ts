@@ -1886,3 +1886,20 @@ app.get('/', ({ set }) => {
 			}>()
 		})
 }
+
+// ? As cast shouldn't resolve derive as any key
+{
+	const plugin = new Elysia()
+		.derive(() => ({
+			pluginMethod() {
+				console.log('pluginMethod')
+			}
+		}))
+		.derive(({ pluginMethod, ...rest }) => ({
+			myPluginMethod: pluginMethod,
+			...rest
+		}))
+		.as('plugin')
+
+	expectTypeOf<typeof plugin._ephemeral.derive>().toHaveProperty('pluginMethod')
+}

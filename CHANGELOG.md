@@ -3,6 +3,9 @@ Feature:
 - [#93](https://github.com/elysiajs/elysia/issues/93) export TypeSystemPolicy
 - [#752](https://github.com/elysiajs/elysia/issues/752) tye coercion on dynamic mode
 
+Bug fix:
+- Using as('plugin') cast cause derive key to be unknown
+
 # 1.1.10 30 Aug 2024
 Bug fix:
 - incorrect named export 'fasti-querystring' to 'fast-querystring'

@@ -1,9 +1,17 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.get('items/:id', ({ params: { id } }) => typeof id, {
-		params: t.Object({ id: t.Number() })
-	})
-	.listen(3000)
+const plugin = new Elysia()
+	.derive(() => ({
+		pluginMethod() {
+			console.log('pluginMethod')
+		}
+	}))
+	.derive(({ pluginMethod, ...rest }) => ({
+		myPluginMethod: pluginMethod,
+		...rest
+	}))
+	.as('plugin')
 
-// console.log(app.routes[0].composed.toString())
+const app = new Elysia().use(plugin).get('/', (ctx) => {
+	ctx.myPluginMethod()
+})

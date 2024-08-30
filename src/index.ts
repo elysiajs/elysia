@@ -2437,8 +2437,8 @@ export default class Elysia<
 		Metadata,
 		Routes,
 		{
-			derive: Prettify2<Ephemeral['derive'] & Volatile['derive']>
-			resolve: Prettify2<Ephemeral['resolve'] & Volatile['resolve']>
+			derive: Prettify<Ephemeral['derive'] & Volatile['derive']>
+			resolve: Prettify<Ephemeral['resolve'] & Volatile['resolve']>
 			schema: MergeSchema<Volatile['schema'], Ephemeral['schema']>
 		},
 		{

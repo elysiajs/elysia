@@ -194,7 +194,7 @@ export type Prettify<T> = {
 } & {}
 
 export type Prettify2<T> = {
-	[K in keyof T]: Prettify<T[K]>
+	[K in keyof T]: T extends object ? Prettify<T[K]> : T[K]
 } & {}
 
 export type Partial2<T> = {
