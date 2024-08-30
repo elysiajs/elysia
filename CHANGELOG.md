@@ -4,6 +4,7 @@ Feature:
 - [#752](https://github.com/elysiajs/elysia/issues/752) tye coercion on dynamic mode
 
 Bug fix:
+- [#332](https://github.com/elysiajs/elysia/issues/332) mount() does not preserve body when fetching through http server
 - Using as('plugin') cast cause derive key to be unknown
 
 # 1.1.10 30 Aug 2024

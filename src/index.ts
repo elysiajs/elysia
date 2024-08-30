@@ -3682,13 +3682,26 @@ export default class Elysia<
 							? handle.compile().fetch
 							: handle!
 
-			const handler: Handler<any, any> = async ({ request, path }) =>
-				run(
-					new Request(
-						replaceUrlPath(request.url, path || '/'),
-						request
-					)
+			const handler: Handler<any, any> = async ({ request, path }) => {
+				if (
+					request.method === 'GET' ||
+					request.method === 'HEAD' ||
+					!request.headers.get('content-type')
 				)
+					return run(
+						new Request(
+							replaceUrlPath(request.url, path || '/'),
+							request
+						)
+					)
+
+				return run(
+					new Request(replaceUrlPath(request.url, path || '/'), {
+						...request,
+						body: await request.arrayBuffer()
+					})
+				)
+			}
 
 			this.all(
 				'/*',
@@ -3705,13 +3718,29 @@ export default class Elysia<
 
 		if (handle instanceof Elysia) handle = handle.compile().fetch
 
-		const handler: Handler<any, any> = async ({ request, path }) =>
-			(handle as Function)!(
+		const handler: Handler<any, any> = async ({ request, path }) => {
+			if (
+				request.method === 'GET' ||
+				request.method === 'HEAD' ||
+				!request.headers.get('content-type')
+			)
+				return (handle as Function)(
+					new Request(
+						replaceUrlPath(request.url, path.slice(length) || '/'),
+						request
+					)
+				)
+
+			return (handle as Function)(
 				new Request(
 					replaceUrlPath(request.url, path.slice(length) || '/'),
-					request
+					{
+						...request,
+						body: await request.arrayBuffer()
+					}
 				)
 			)
+		}
 
 		this.all(
 			path,
