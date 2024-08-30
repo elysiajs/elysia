@@ -1,24 +1,9 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-const handler = async (req: Request) => {
-	return new Response(await req.text())
-}
+new Elysia()
+	.onStart(({ server }) => {
+		console.log(`${server?.url}:${server?.port}`)
+	})
+	.listen(1234, (a) => {
 
-const app = new Elysia()
-	.mount('/mount', (req) => handler(req))
-	.post('/not-mount', ({ body }) => body)
-
-app.listen(3005)
-
-const body = 'sucrose'
-
-const options = {
-	method: 'POST',
-	headers: {
-		'content-type': 'text/plain'
-	},
-	body
-}
-
-const res = await fetch('http://localhost:3005/mount', options)
-console.log(`Body: ${JSON.stringify(await res.text())}`)
+	})

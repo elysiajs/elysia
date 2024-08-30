@@ -814,8 +814,8 @@ export default class Elysia<
 	 * @example
 	 * ```typescript
 	 * new Elysia()
-	 *     .onStart(({ url, port }) => {
-	 *         console.log("Running at ${url}:${port}")
+	 *     .onStart(({ server }) => {
+	 *         console.log("Running at ${server?.url}:${server?.port}")
 	 *     })
 	 *     .listen(3000)
 	 * ```
