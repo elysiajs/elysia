@@ -6067,4 +6067,5 @@ export type {
 	CoExist
 } from './types'
 
+export { TypeSystemPolicy } from '@sinclair/typebox/system'
 export type { Static, TSchema } from '@sinclair/typebox'

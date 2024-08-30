@@ -1,3 +1,7 @@
+# 1.1.11 -
+Feature:
+- [#93](https://github.com/elysiajs/elysia/issues/93) export TypeSystemPolicy
+
 # 1.1.10 30 Aug 2024
 Bug fix:
 - incorrect named export 'fasti-querystring' to 'fast-querystring'
