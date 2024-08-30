@@ -147,7 +147,7 @@ export type ElysiaConfig<
 	 * This has no effect when the schemas allow additional properties.
 	 * Since this uses dynamic schema it may have an impact on performance.
 	 *
-	 * @default false
+	 * @default true
 	 */
 	normalize?: boolean
 	handler?: ComposerGeneralHandlerOptions
