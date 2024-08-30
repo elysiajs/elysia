@@ -1,26 +1,10 @@
 import { Elysia, t } from '../src'
+import { TypeCompiler, SetErrorFunction } from '@sinclair/typebox/errors'
 
-export const userSchema = t.Object({
-	a: t.Date()
+SetErrorFunction((error) => {
+	error.
 })
 
-const app = new Elysia().get(
-	'/test',
-	() => ({
-		a: new Date()
-	}),
-	{
-		response: userSchema,
-		error({ error }) {
-			console.log(error)
-		}
-	}
-)
+const a = TypeCompiler.Compile(t.String())
 
-const response = await app.handle(
-	new Request('http://localhost/test', {
-		method: 'GET'
-	})
-)
-
-console.log(response, await response.text())
+console.log(a)

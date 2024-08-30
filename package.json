@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.1.9",
+	"version": "1.1.10",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -73,7 +73,7 @@
 			"import": "./dist/utils.mjs",
 			"require": "./dist/cjs/utils.js"
 		},
-		"./fasti-querystring": {
+		"./fast-querystring": {
 			"types": "./dist/fast-querystring.d.ts",
 			"import": "./dist/fast-querystring.mjs",
 			"require": "./dist/cjs/fast-querystring.js"

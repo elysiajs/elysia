@@ -1,3 +1,7 @@
+# 1.1.10 30 Aug 2024
+Bug fix:
+- incorrect named export 'fasti-querystring' to 'fast-querystring'
+
 # 1.1.9 - 28 Aug 2024
 Change:
 - getter fields no longer stringified to JSON by default on returning response
