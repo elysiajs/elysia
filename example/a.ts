@@ -1,7 +1,9 @@
 import { Elysia, t } from '../src'
 
-console.log(
-	new Request('http://localhost', {
-		method: 'CUSTOM'
-	}).method
-)
+const app = new Elysia()
+	.get('items/:id', ({ params: { id } }) => typeof id, {
+		params: t.Object({ id: t.Number() })
+	})
+	.listen(3000)
+
+// console.log(app.routes[0].composed.toString())

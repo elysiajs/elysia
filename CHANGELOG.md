@@ -1,6 +1,7 @@
 # 1.1.11 -
 Feature:
 - [#93](https://github.com/elysiajs/elysia/issues/93) export TypeSystemPolicy
+- [#752](https://github.com/elysiajs/elysia/issues/752) tye coercion on dynamic mode
 
 # 1.1.10 30 Aug 2024
 Bug fix:

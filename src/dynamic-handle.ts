@@ -242,14 +242,21 @@ export const createDynamicHandler =
 							validator.headers!,
 							_header
 						)
-				}
+				} else if (validator.headers?.Decode)
+					// @ts-ignore
+					context.headers = validator.headers.Decode(context.headers)
 
-				if (validator.createParams?.()?.Check(context.params) === false)
+				if (
+					validator.createParams?.()?.Check(context.params) === false
+				) {
 					throw new ValidationError(
 						'params',
 						validator.params!,
 						context.params
 					)
+				} else if (validator.params?.Decode)
+					// @ts-ignore
+					context.params = validator.params.Decode(context.params)
 
 				if (validator.createQuery?.()?.Check(context.query) === false)
 					throw new ValidationError(
@@ -257,9 +264,11 @@ export const createDynamicHandler =
 						validator.query!,
 						context.query
 					)
+				else if (validator.query?.Decode)
+					context.query = validator.query.Decode(context.query) as any
 
 				if (validator.createCookie?.()) {
-					const cookieValue: Record<string, unknown> = {}
+					let cookieValue: Record<string, unknown> = {}
 					for (const [key, value] of Object.entries(context.cookie))
 						cookieValue[key] = value.value
 
@@ -269,10 +278,16 @@ export const createDynamicHandler =
 							validator.cookie!,
 							cookieValue
 						)
+					else if (validator.cookie?.Decode)
+						cookieValue = validator.cookie.Decode(
+							cookieValue
+						) as any
 				}
 
 				if (validator.createBody?.()?.Check(body) === false)
 					throw new ValidationError('body', validator.body!, body)
+				else if (validator.body?.Decode)
+					context.body = validator.body.Decode(body) as any
 			}
 
 			for (let i = 0; i < hooks.beforeHandle.length; i++) {
@@ -325,6 +340,8 @@ export const createDynamicHandler =
 						responseValidator,
 						response
 					)
+				else if (responseValidator?.Decode)
+					response = responseValidator.Decode(response)
 			} else {
 				;(
 					context as Context & {
@@ -352,6 +369,8 @@ export const createDynamicHandler =
 								responseValidator,
 								result
 							)
+						else if (responseValidator?.Decode)
+							response = responseValidator.Decode(response)
 
 						return (context.response = result)
 					}

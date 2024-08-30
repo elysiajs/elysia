@@ -590,7 +590,9 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
 			Code: () => '',
-			Clean: cleaner
+			Clean: cleaner,
+			Decode: (value: unknown) => Value.Decode(schema, value),
+			Encode: (value: unknown) => Value.Encode(schema, value)
 		} as unknown as TypeCheck<TSchema>
 
 		if (normalize && schema.additionalProperties === false)
@@ -718,7 +720,9 @@ export const getResponseSchemaValidator = (
 				code: '',
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
-				Code: () => ''
+				Code: () => '',
+				Decode: (value: unknown) => Value.Decode(schema, value),
+				Encode: (value: unknown) => Value.Encode(schema, value)
 			} as unknown as TypeCheck<TSchema>
 
 		const compiledValidator = TypeCompiler.Compile(schema, references)
