@@ -151,6 +151,12 @@ export type ElysiaConfig<
 	 */
 	normalize?: boolean
 	handler?: ComposerGeneralHandlerOptions
+	/**
+	 * Enable Bun static response
+	 *
+	 * @default true
+	 */
+	nativeStaticResponse?: boolean
 }
 
 export type ValidatorLayer = {

@@ -12,7 +12,7 @@ import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
 import { version as _version } from '../package.json'
-import { isNotEmpty } from './handler'
+import { createStaticHandler, isNotEmpty } from './handler'
 
 import {
 	cloneInference,
@@ -263,12 +263,14 @@ export default class Elysia<
 		dynamic: new Memoirist<DynamicHandler>(),
 		static: {
 			http: {
+				static: {} as Record<string, Response>,
 				handlers: [] as ComposedHandler[],
 				map: {} as Record<
 					string,
 					{
 						code: string
 						all?: string
+						static?: Function
 					}
 				>,
 				all: ''
@@ -318,7 +320,9 @@ export default class Elysia<
 			else config.detail.tags = config.tags
 		}
 
-		this.config = {}
+		this.config = {
+			nativeStaticResponse: true
+		}
 		this.applyConfig(config ?? {})
 
 		if (config?.analytic && (config?.name || config?.seed !== undefined))
@@ -671,6 +675,18 @@ export default class Elysia<
 
 		const inference = cloneInference(this.inference)
 
+		const staticHandler =
+			typeof handle !== 'function'
+				? createStaticHandler(handle, hooks, this.setHeaders)
+				: undefined
+
+		if (
+			this.config.nativeStaticResponse === true &&
+			staticHandler &&
+			(method === 'GET' || method === 'ALL')
+		)
+			this.router.static.http.static[path] = staticHandler()
+
 		const compile = () =>
 			composeHandler({
 				app: this,
@@ -750,10 +766,13 @@ export default class Elysia<
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 			const index = staticRouter.handlers.length
-			staticRouter.handlers.push((ctx) =>
-				((staticRouter.handlers[index] = compile()) as ComposedHandler)(
-					ctx
-				)
+			staticRouter.handlers.push(
+				(staticHandler as any) ??
+					((ctx) =>
+						(
+							(staticRouter.handlers[index] =
+								compile()) as ComposedHandler
+						)(ctx))
 			)
 
 			if (!staticRouter.map[path])
@@ -761,12 +780,14 @@ export default class Elysia<
 					code: ''
 				}
 
+			const ctx = staticHandler ? '' : 'ctx'
+
 			if (method === 'ALL')
 				staticRouter.map[path].all =
-					`default: return st[${index}](ctx)\n`
+					`default: return st[${index}](${ctx})\n`
 			else
 				staticRouter.map[path].code =
-					`case '${method}': return st[${index}](ctx)\n${staticRouter.map[path].code}`
+					`case '${method}': return st[${index}](${ctx})\n${staticRouter.map[path].code}`
 
 			if (!this.config.strictPath) {
 				if (!staticRouter.map[loosePath])
@@ -776,10 +797,10 @@ export default class Elysia<
 
 				if (method === 'ALL')
 					staticRouter.map[loosePath].all =
-						`default: return st[${index}](ctx)\n`
+						`default: return st[${index}](${ctx})\n`
 				else
 					staticRouter.map[loosePath].code =
-						`case '${method}': return st[${index}](ctx)\n${staticRouter.map[loosePath].code}`
+						`case '${method}': return st[${index}](${ctx})\n${staticRouter.map[loosePath].code}`
 			}
 		} else {
 			this.router.http.add(method, path, handler)
@@ -5914,6 +5935,8 @@ export default class Elysia<
 						reusePort: true,
 						...(this.config.serve || {}),
 						...(options || {}),
+						// @ts-ignore
+						static: this.router.static.http.static,
 						websocket: {
 							...(this.config.websocket || {}),
 							...(websocket || {})
@@ -5925,6 +5948,8 @@ export default class Elysia<
 						development: !isProduction,
 						reusePort: true,
 						...(this.config.serve || {}),
+						// @ts-ignore
+						static: this.router.static.http.static,
 						websocket: {
 							...(this.config.websocket || {}),
 							...(websocket || {})

@@ -436,11 +436,23 @@ export const composeHandler = ({
 }): ComposedHandler => {
 	const isHandleFn = typeof handler === 'function'
 
-	if (!isHandleFn)
+	if (!isHandleFn) {
 		handler = mapResponse(handler, {
 			// @ts-expect-error private property
 			headers: app.setHeaders ?? {}
 		})
+
+		if (
+			hooks.parse.length === 0 &&
+			hooks.transform.length === 0 &&
+			hooks.beforeHandle.length === 0 &&
+			hooks.afterHandle.length === 0
+		)
+			return Function(
+				'a',
+				`return function () { return a.clone() }`
+			)(handler)
+	}
 
 	const handle = isHandleFn ? `handler(c)` : `handler`
 	const hasAfterResponse = hooks.afterResponse.length > 0
@@ -1975,10 +1987,18 @@ export const composeGeneralHandler = (
 	return (route.store.handler = route.store.compile())(ctx)\n`
 
 	let switchMap = ``
-	for (const [path, { code, all }] of Object.entries(router.static.http.map))
+	for (const [path, { code, all, static: staticFn }] of Object.entries(
+		router.static.http.map
+	)) {
+		if (staticFn)
+			switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
+				all ?? `default: break map`
+			}}\n\n`
+
 		switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
 			all ?? `default: break map`
 		}}\n\n`
+	}
 
 	const maybeAsync = app.event.request.some(isAsync)
 
@@ -2075,7 +2095,7 @@ export const composeGeneralHandler = (
 	const report = createReport({
 		context: 'ctx',
 		trace: app.event.trace,
-		addFn: (word) => {
+		addFn(word) {
 			fnLiteral += word
 		}
 	})
@@ -2360,8 +2380,6 @@ export const composeErrorHandler = (
 	mapResponseReporter.resolve()
 
 	fnLiteral += `\nreturn mapResponse(${saveResponse} error, set, context.request)\n}\n}`
-
-	// console.log(fnLiteral)
 
 	return Function(
 		'inject',

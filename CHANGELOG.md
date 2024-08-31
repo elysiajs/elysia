@@ -1,5 +1,7 @@
-# 1.1.11 -
+# 1.1.11 - 1 Sep 2024
 Feature:
+- native Bun native static response
+	- can be disabled by setting `app.config.nativeStaticResponse = false`
 - [#93](https://github.com/elysiajs/elysia/issues/93) export TypeSystemPolicy
 - [#752](https://github.com/elysiajs/elysia/issues/752) tye coercion on dynamic mode
 
