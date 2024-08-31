@@ -5972,15 +5972,24 @@ export default class Elysia<
 	 * // Sometime later
 	 * app.stop()
 	 * ```
+	 *
+	 * @example
+	 * ```typescript
+	 * const app = new Elysia()
+	 *     .get("/", () => 'hi')
+	 *     .listen(3000)
+	 *
+	 * app.stop(true) // Abruptly any requests inflight
+	 * ```
 	 */
-	stop = async () => {
+	stop = async (closeActiveConnections?: boolean) => {
 		if (!this.server)
 			throw new Error(
 				"Elysia isn't running. Call `app.listen` to start the server."
 			)
 
 		if (this.server) {
-			this.server.stop()
+			this.server.stop(closeActiveConnections)
 			this.server = null
 
 			if (this.event.stop.length)
