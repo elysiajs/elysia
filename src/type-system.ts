@@ -316,9 +316,11 @@ TypeRegistry.Set<TUnionEnum>('UnionEnum', (schema, value) => {
 
 type NonEmptyArray<T> = [T, ...T[]]
 
-export type TEnumValue = number | string | null;
+export type TEnumValue = number | string | null
 
-export interface TUnionEnum<T extends NonEmptyArray<TEnumValue> = [TEnumValue]> extends TSchema {
+export interface TUnionEnum<T extends NonEmptyArray<TEnumValue> = [TEnumValue]>
+	extends TSchema {
+	type?: 'number' | 'string' | 'null'
 	[Kind]: 'UnionEnum'
 	static: T[number]
 	enum: T
@@ -599,7 +601,7 @@ export const ElysiaType = {
 			? { type: 'string' }
 			: values.every((value) => typeof value === 'number')
 				? { type: 'number' }
-				: values.every((value) => value === 'null')
+				: values.every((value) => value === null)
 					? { type: 'null' }
 					: {}
 
