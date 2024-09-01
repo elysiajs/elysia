@@ -1,6 +1,7 @@
 import {
 	ArrayOptions,
 	DateOptions,
+	Kind,
 	NumberOptions,
 	TArray,
 	TDate,
@@ -304,6 +305,25 @@ if (!FormatRegistry.Has('ArrayString'))
 		}
 	})
 
+TypeRegistry.Set<TUnionEnum>('UnionEnum', (schema, value) => {
+	return (
+		(typeof value === 'number' ||
+			typeof value === 'string' ||
+			value === null) &&
+		schema.enum.includes(value as never)
+	)
+})
+
+type NonEmptyArray<T> = [T, ...T[]]
+
+export type TEnumValue = number | string | null;
+
+export interface TUnionEnum<T extends NonEmptyArray<TEnumValue> = [TEnumValue]> extends TSchema {
+	[Kind]: 'UnionEnum'
+	static: T[number]
+	enum: T
+}
+
 export const ElysiaType = {
 	Numeric: (property?: NumberOptions) => {
 		const schema = Type.Number(property)
@@ -569,6 +589,31 @@ export const ElysiaType = {
 		}
 
 		return v
+	},
+	// based on https://github.com/elysiajs/elysia/issues/512#issuecomment-1980134955
+	UnionEnum: <const T extends NonEmptyArray<TEnumValue>>(
+		values: T,
+		options: SchemaOptions = {}
+	) => {
+		const type = values.every((value) => typeof value === 'string')
+			? { type: 'string' }
+			: values.every((value) => typeof value === 'number')
+				? { type: 'number' }
+				: values.every((value) => value === 'null')
+					? { type: 'null' }
+					: {}
+
+		if (values.some((x) => typeof x === 'object' && x !== null))
+			throw new Error('This type does not support objects or arrays')
+
+		return {
+			// why it need default??
+			default: values[0],
+			...options,
+			[Kind]: 'UnionEnum',
+			...type,
+			enum: values
+		} as any as TUnionEnum<T>
 	}
 } as const
 
@@ -579,17 +624,13 @@ declare module '@sinclair/typebox' {
 		BooleanString: typeof ElysiaType.BooleanString
 		ObjectString: typeof ElysiaType.ObjectString
 		ArrayString: typeof ElysiaType.ArrayString
-		// @ts-ignore
 		Numeric: typeof ElysiaType.Numeric
-		// @ts-ignore
 		File: typeof ElysiaType.File
-		// @ts-ignore
 		Files: typeof ElysiaType.Files
-		// @ts-ignore
 		Nullable: typeof ElysiaType.Nullable
-		// @ts-ignore
 		MaybeEmpty: typeof ElysiaType.MaybeEmpty
 		Cookie: typeof ElysiaType.Cookie
+		UnionEnum: typeof ElysiaType.UnionEnum
 	}
 
 	interface SchemaOptions {
@@ -652,6 +693,8 @@ t.MaybeEmpty = ElysiaType.MaybeEmpty as any
 
 t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date
+
+t.UnionEnum = ElysiaType.UnionEnum
 
 export { t }
 
