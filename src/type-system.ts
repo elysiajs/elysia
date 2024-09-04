@@ -520,7 +520,7 @@ export const ElysiaType = {
 					throw new ValidationError('property', schema, value)
 
 				return JSON.stringify(value)
-			}) as any as TObject<T>
+			}) as any as TArray<T>
 	},
 	File,
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
