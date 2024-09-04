@@ -1,6 +1,14 @@
+# 1.1.12 - 4 Sep 2024
+Feature:
+- [#808](https://github.com/elysiajs/elysia/pull/808) add UnionEnum type with JSON schema enum usage
+- [#807](https://github.com/elysiajs/elysia/pull/807) add closeActiveConnections to Elysia.stop()
+
+Bug fix:
+- [#808](https://github.com/elysiajs/elysia/pull/808) ArrayString type cast as Object instead of Array
+
 # 1.1.11 - 1 Sep 2024
 Feature:
-- native Bun native static response
+- native Bun static response
 	- can be disabled by setting `app.config.nativeStaticResponse = false`
 - [#93](https://github.com/elysiajs/elysia/issues/93) export TypeSystemPolicy
 - [#752](https://github.com/elysiajs/elysia/issues/752) tye coercion on dynamic mode
