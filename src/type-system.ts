@@ -318,7 +318,7 @@ type NonEmptyArray<T> = [T, ...T[]]
 
 export type TEnumValue = number | string | null
 
-export interface TUnionEnum<T extends NonEmptyArray<TEnumValue> = [TEnumValue]>
+export interface TUnionEnum<T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]>
 	extends TSchema {
 	type?: 'number' | 'string' | 'null'
 	[Kind]: 'UnionEnum'
@@ -593,7 +593,7 @@ export const ElysiaType = {
 		return v
 	},
 	// based on https://github.com/elysiajs/elysia/issues/512#issuecomment-1980134955
-	UnionEnum: <const T extends NonEmptyArray<TEnumValue>>(
+	UnionEnum: <const T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>>>(
 		values: T,
 		options: SchemaOptions = {}
 	) => {

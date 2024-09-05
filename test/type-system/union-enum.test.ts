@@ -8,6 +8,11 @@ describe('TypeSystem - UnionEnum', () => {
 		expect(Value.Create(t.UnionEnum(['some', 'data']))).toEqual('some')
 	})
 
+	it('Allows readonly', () => {
+		const readonlyArray = ['some', 'data'] as const
+		expect(Value.Create(t.UnionEnum(readonlyArray))).toEqual('some')
+	})
+
 	it('Check', () => {
 		const schema = t.UnionEnum(['some', 'data', null])
 
