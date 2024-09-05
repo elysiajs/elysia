@@ -1,5 +1,6 @@
 # 1.1.12 - 4 Sep 2024
 Feature:
+- setup provenance publish
 - [#808](https://github.com/elysiajs/elysia/pull/808) add UnionEnum type with JSON schema enum usage
 - [#807](https://github.com/elysiajs/elysia/pull/807) add closeActiveConnections to Elysia.stop()
 

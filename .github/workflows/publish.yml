@@ -1,4 +1,4 @@
-name: Publish Experimental
+name: Publish
 
 on:
   release:
@@ -8,33 +8,16 @@ defaults:
   run:
     shell: bash
 
+permissions:
+  id-token: write
+
 env:
   # Enable debug logging for actions
   ACTIONS_RUNNER_DEBUG: true
 
 jobs:
-  changelog:
-    name: 'Generate Changelog'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Generate Changelog
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bunx changelogithub --no-group
-        continue-on-error: true
-
   publish-npm:
     name: 'Publish: npm Registry'
-    needs: [changelog]
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout'
@@ -45,6 +28,11 @@ jobs:
         with:
           bun-version: latest
           registry-url: "https://registry.npmjs.org"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install packages
         run: bun install
@@ -59,4 +47,4 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm publish --access=public
+          npm publish --provenance --access=public
