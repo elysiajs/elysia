@@ -5,6 +5,7 @@ Feature:
 
 Bug fix:
 - [#808](https://github.com/elysiajs/elysia/pull/808) ArrayString type cast as Object instead of Array
+- config.nativeStaticResponse is not defined
 
 # 1.1.11 - 1 Sep 2024
 Feature:

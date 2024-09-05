@@ -311,8 +311,8 @@ export default class Elysia<
 		return this._promisedModules
 	}
 
-	constructor(config?: ElysiaConfig<BasePath, Scoped>) {
-		if (config?.tags) {
+	constructor(config: ElysiaConfig<BasePath, Scoped> = {}) {
+		if (config.tags) {
 			if (!config.detail)
 				config.detail = {
 					tags: config.tags
@@ -320,9 +320,10 @@ export default class Elysia<
 			else config.detail.tags = config.tags
 		}
 
-		this.config = {
-			nativeStaticResponse: true
-		}
+		if (config.nativeStaticResponse === undefined)
+			config.nativeStaticResponse = true
+
+		this.config = {}
 		this.applyConfig(config ?? {})
 
 		if (config?.analytic && (config?.name || config?.seed !== undefined))
@@ -795,6 +796,13 @@ export default class Elysia<
 						code: ''
 					}
 
+				if (
+					this.config.nativeStaticResponse === true &&
+					staticHandler &&
+					(method === 'GET' || method === 'ALL')
+				)
+					this.router.static.http.static[loosePath] = staticHandler()
+
 				if (method === 'ALL')
 					staticRouter.map[loosePath].all =
 						`default: return st[${index}](${ctx})\n`
@@ -805,14 +813,20 @@ export default class Elysia<
 		} else {
 			this.router.http.add(method, path, handler)
 
-			if (!this.config.strictPath)
-				this.router.http.add(
-					method,
-					path.endsWith('/')
-						? path.slice(0, path.length - 1)
-						: path + '/',
-					handler
+			if (!this.config.strictPath) {
+				const loosePath = path.endsWith('/')
+					? path.slice(0, path.length - 1)
+					: path + '/'
+
+				if (
+					this.config.nativeStaticResponse === true &&
+					staticHandler &&
+					(method === 'GET' || method === 'ALL')
 				)
+					this.router.static.http.static[loosePath] = staticHandler()
+
+				this.router.http.add(method, loosePath, handler)
+			}
 		}
 	}
 
