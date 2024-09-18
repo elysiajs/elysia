@@ -174,7 +174,6 @@ export const createDynamicHandler =
 			}
 
 			context.body = body
-			// @ts-expect-error
 			context.params = handler?.params || undefined
 			context.query =
 				qi === -1 ? {} : parseQueryFromURL(url.substring(qi + 1))
