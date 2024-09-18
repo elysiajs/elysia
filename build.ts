@@ -6,7 +6,8 @@ const tsupConfig: Options = {
 	splitting: false,
 	sourcemap: false,
 	clean: true,
-	bundle: true,
+	bundle: false,
+	minify: true
 	// outExtension() {
 	// 	return {
 	// 		js: '.js'
@@ -41,12 +42,17 @@ await Bun.build({
 	minify: true,
 	target: 'bun',
 	sourcemap: 'external',
-	external: ['@sinclair/typebox']
+	external: [
+		'@sinclair/typebox',
+		'cookie',
+		'fast-decode-uri-component',
+		'memoirist'
+	]
 })
 
 await Promise.all([
 	$`cp dist/*.d.ts dist/cjs`,
-	$`cp dist/ws/*.d.ts dist/cjs/ws/`,
+	$`cp dist/ws/*.d.ts dist/cjs/ws/`
 ])
 
 await $`cp dist/index*.d.ts dist/bun`
