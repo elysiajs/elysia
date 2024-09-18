@@ -9,7 +9,6 @@ import type { Context } from '../context'
 import type {
 	SingletonBase,
 	Handler,
-	VoidHandler,
 	ErrorHandler,
 	InputSchema,
 	RouteSchema,

@@ -639,16 +639,38 @@ describe('Query Validator', () => {
 				trailing: t.String()
 			})
 		})
-		
+
 		// console.log(app.routes[0].composed?.toString())
-		
-		const response = await app.handle(req('/?leading=foo&arr=bar&arr=baz&trailing=qux&arr=xd'))
+
+		const response = await app
+			.handle(req('/?leading=foo&arr=bar&arr=baz&trailing=qux&arr=xd'))
 			.then((x) => x.json())
-			
+
 		expect(response).toEqual({
 			leading: 'foo',
 			arr: ['bar', 'baz', 'xd'],
 			trailing: 'qux'
+		})
+	})
+
+	it('parse + in query', async () => {
+		const api = new Elysia()
+			.get('', ({ query }) => query, {
+				query: t.Object({
+					keyword: t.String()
+				})
+			})
+
+		const url = new URL('http://localhost:3000/')
+		url.searchParams.append('keyword', 'hello world')
+		console.log(url.href) //http://localhost:3000/?keyword=hello+world
+
+		const result = await api
+			.handle(new Request(url.href))
+			.then((response) => response.json())
+
+		expect(result).toEqual({
+			'keyword': 'hello world'
 		})
 	})
 })

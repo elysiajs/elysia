@@ -28,6 +28,8 @@ class Student {
 	}
 }
 
+class CustomResponse extends Response {}
+
 describe('Map Early Response', () => {
 	it('map string', async () => {
 		const response = mapEarlyResponse('Shiroko', defaultContext)
@@ -107,6 +109,33 @@ describe('Map Early Response', () => {
 		expect(response).toBeInstanceOf(Response)
 		expect(await response?.text()).toEqual('Shiroko')
 		expect(response?.status).toBe(200)
+	})
+
+	it('map custom Response', async () => {
+		const response = mapEarlyResponse(
+			new CustomResponse('Shiroko'),
+			defaultContext
+		)!
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response.text()).toEqual('Shiroko')
+		expect(response.status).toBe(200)
+	})
+
+	it('map custom Response with custom headers', async () => {
+		const response = mapEarlyResponse(new CustomResponse('Shiroko'), {
+			...defaultContext,
+			headers: {
+				'content-type': 'text/html; charset=utf8'
+			}
+		})!
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response.text()).toEqual('Shiroko')
+		expect(response.status).toBe(200)
+		expect(response.headers.get('content-type')).toBe(
+			'text/html; charset=utf8'
+		)
 	})
 
 	it('map custom class', async () => {

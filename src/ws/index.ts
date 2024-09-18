@@ -63,7 +63,11 @@ export class ElysiaWS<
 	get publish() {
 		return (
 			topic: string,
-			data: Route['response'] = undefined,
+			data: {} extends Route['response']
+				? unknown
+				: Route['response'] extends Record<200, unknown>
+					? Route['response'][200]
+					: unknown = undefined,
 			compress?: boolean
 		) => {
 			if (this.validator?.Check(data) === false)

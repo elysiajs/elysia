@@ -7,7 +7,7 @@ import { Cookie } from './cookies'
 import { ELYSIA_RESPONSE } from './error'
 
 import type { Context } from './context'
-import { LocalHook } from './types'
+import type { LocalHook } from './types'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -580,11 +580,7 @@ export const mapResponse = (
 
 			default:
 				if (response instanceof Response)
-					return new Response(response.body, {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					})
+					return response
 
 				if (response instanceof Promise)
 					return response.then((x) => mapResponse(x, set)) as any
@@ -971,11 +967,7 @@ export const mapEarlyResponse = (
 
 			default:
 				if (response instanceof Response)
-					return new Response(response.body, {
-						headers: {
-							'Content-Type': 'application/json'
-						}
-					})
+					return response
 
 				if (response instanceof Promise)
 					return response.then((x) => mapEarlyResponse(x, set)) as any
@@ -1110,11 +1102,7 @@ export const mapCompactResponse = (
 
 		default:
 			if (response instanceof Response)
-				return new Response(response.body, {
-					headers: {
-						'Content-Type': 'application/json'
-					}
-				})
+				return response
 
 			if (response instanceof Promise)
 				return response.then((x) =>

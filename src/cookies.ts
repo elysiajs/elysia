@@ -133,7 +133,7 @@ export class Cookie<T> implements ElysiaCookie {
 	) {}
 
 	get cookie() {
-		if (!(this.name in this.jar)) return this.initial
+		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
 
 		return this.jar[this.name]
 	}
@@ -149,9 +149,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set value(value: T) {
-		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
-
-		this.jar[this.name].value = value
+		this.cookie.value = value
 	}
 
 	get expires() {
@@ -160,6 +158,8 @@ export class Cookie<T> implements ElysiaCookie {
 
 	set expires(expires) {
 		this.cookie.expires = expires
+
+		console.log(this.cookie)
 	}
 
 	get maxAge() {
@@ -270,7 +270,7 @@ export class Cookie<T> implements ElysiaCookie {
 	toString() {
 		return typeof this.value === 'object'
 			? JSON.stringify(this.value)
-			: this.value?.toString() ?? ''
+			: (this.value?.toString() ?? '')
 	}
 }
 

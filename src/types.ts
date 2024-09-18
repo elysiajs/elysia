@@ -155,6 +155,7 @@ export type ElysiaConfig<
 	 * Enable Bun static response
 	 *
 	 * @default true
+	 * @since 1.1.11
 	 */
 	nativeStaticResponse?: boolean
 }
@@ -388,7 +389,7 @@ export interface UnwrapRoute<
 export interface UnwrapGroupGuardRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends Record<string, unknown> = {},
-	Path extends string = ''
+	Path extends string | undefined = undefined
 > {
 	body: UnwrapBodySchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<
@@ -547,7 +548,7 @@ export type Handler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string | undefined = undefined
 > = (
 	context: Context<Route, Singleton, Path>
 ) => MaybePromise<
@@ -592,7 +593,7 @@ export type InlineHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = '',
+	Path extends string | undefined = undefined,
 	MacroContext = {}
 > =
 	| ((
@@ -644,7 +645,7 @@ export type OptionalHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string | undefined = undefined
 > =
 	Handler<Route, Singleton, Path> extends (
 		context: infer Context
@@ -660,7 +661,7 @@ export type AfterHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string | undefined = undefined
 > =
 	Handler<Route, Singleton, Path> extends (
 		context: infer Context
@@ -668,7 +669,7 @@ export type AfterHandler<
 		? (
 				context: Prettify<
 					{
-						response: Route['response']
+						response: Route['response'][keyof Route['response']]
 					} & Context
 				>
 			) => Returned | MaybePromise<void>
@@ -682,7 +683,7 @@ export type MapResponse<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string | undefined = undefined
 > = Handler<
 	Omit<Route, 'response'> & {
 		response: MaybePromise<Response | undefined | unknown>
@@ -713,7 +714,7 @@ export type TransformHandler<
 		derive: {}
 		resolve: {}
 	},
-	BasePath extends string = ''
+	Path extends string | undefined = undefined
 > = {
 	(
 		context: Prettify<
@@ -722,7 +723,7 @@ export type TransformHandler<
 				Omit<Singleton, 'resolve'> & {
 					resolve: {}
 				},
-				BasePath
+				Path
 			>
 		>
 	): MaybePromise<void>
@@ -736,7 +737,7 @@ export type BodyHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string | undefined = undefined
 > = (
 	context: Prettify<
 		{

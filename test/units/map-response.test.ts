@@ -147,6 +147,22 @@ describe('Map Response', () => {
 		expect(response.status).toBe(200)
 	})
 
+	it('map custom Response with custom headers', async () => {
+		const response = mapResponse(new CustomResponse('Shiroko'), {
+			...defaultContext,
+			headers: {
+				'content-type': 'text/html; charset=utf8'
+			}
+		})
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response.text()).toEqual('Shiroko')
+		expect(response.status).toBe(200)
+		expect(response.headers.get('content-type')).toBe(
+			'text/html; charset=utf8'
+		)
+	})
+
 	it('map custom class', async () => {
 		const response = mapResponse(new Student('Himari'), defaultContext)
 
@@ -389,7 +405,7 @@ describe('Map Response', () => {
 				}
 			})
 
-		const response = await app.handle(req('/')).then(x => x.text())
+		const response = await app.handle(req('/')).then((x) => x.text())
 
 		expect(response).toBe('b')
 	})
@@ -405,7 +421,7 @@ describe('Map Response', () => {
 				}
 			})
 
-		const response = await app.handle(req('/')).then(x => x.text())
+		const response = await app.handle(req('/')).then((x) => x.text())
 
 		expect(response).toBe('b')
 	})

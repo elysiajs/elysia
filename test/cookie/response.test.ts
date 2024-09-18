@@ -361,4 +361,25 @@ describe('Cookie Response', () => {
 		// @ts-expect-error
 		expect(res).toEqual({})
 	})
+
+	it('set cookie attribute before value', async () => {
+		const date = new Date(
+			Date.now() + 1000 * 60 * 60 * 24
+		)
+
+		const app = new Elysia().get('/', ({ cookie }) => {
+			cookie.my_cookie.expires = date
+			cookie.my_cookie.value = 'my_cookie_value'
+
+			return 'HI'
+		})
+
+		const setCookie = await app
+			.handle(new Request('http://localhost'))
+			.then((x) => x.headers.getSetCookie())
+
+		expect(setCookie).toEqual([
+			`my_cookie=my_cookie_value; Path=/; Expires=${date.toUTCString()}`
+		])
+	})
 })

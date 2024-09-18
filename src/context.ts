@@ -29,7 +29,7 @@ export type ErrorContext<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string | undefined = undefined
 > = Prettify<
 	{
 		body: Route['body']
@@ -102,7 +102,7 @@ export type Context<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string = ''
+	Path extends string | undefined = undefined
 > = Prettify<
 	{
 		body: Route['body']
@@ -110,9 +110,11 @@ export type Context<
 			? Record<string, string | undefined>
 			: Route['query']
 		params: undefined extends Route['params']
-			? Path extends `${string}/${':' | '*'}${string}`
-				? ResolvePath<Path>
-				: never
+			? undefined extends Path
+				? Record<string, string>
+				: Path extends `${string}/${':' | '*'}${string}`
+					? ResolvePath<Path>
+					: never
 			: Route['params']
 		headers: undefined extends Route['headers']
 			? Record<string, string | undefined>
@@ -172,8 +174,8 @@ export type Context<
 		route: string
 		request: Request
 		store: Singleton['store']
-		response?: Route['response']
-    } & ({} extends Route['response']
+		response?: Route['response'][keyof Route['response']]
+	} & ({} extends Route['response']
 		? {
 				error: typeof error
 			}

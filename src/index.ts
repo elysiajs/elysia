@@ -934,8 +934,7 @@ export default class Elysia<
 						Ephemeral['derive'] &
 						Volatile['derive']
 					resolve: {}
-				},
-				BasePath
+				}
 			>
 		>
 	): this
@@ -1045,8 +1044,7 @@ export default class Elysia<
 						Ephemeral['derive'] &
 						Volatile['derive']
 					resolve: {}
-				},
-				BasePath
+				}
 			>
 		>
 	): this
@@ -1570,8 +1568,7 @@ export default class Elysia<
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				},
-				BasePath
+				}
 			>
 		>
 	): this
@@ -1675,8 +1672,7 @@ export default class Elysia<
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				},
-				BasePath
+				}
 			>
 		>
 	): this
@@ -4681,7 +4677,9 @@ export default class Elysia<
 						headers: Schema['headers']
 						response: {} extends Schema['response']
 							? unknown
-							: Schema['response']
+							: Schema['response'] extends Record<200, unknown>
+								? Schema['response'][200]
+								: unknown
 					}
 				}
 			>,

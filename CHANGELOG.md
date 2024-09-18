@@ -1,3 +1,12 @@
+# 1.1.13 - 18 Sep 2024
+Bug fix:
+- [#830](https://github.com/elysiajs/elysia/issues/830) Incorrect type for ws.publish
+- [#827](https://github.com/elysiajs/elysia/issues/827) returning a response is forcing application/json content-type
+- [#821](https://github.com/elysiajs/elysia/issues/821) handle "+" in query with validation
+- [#820](https://github.com/elysiajs/elysia/issues/820) params in hooks inside prefixed groups are incorrectly typed never
+- [#819](https://github.com/elysiajs/elysia/issues/819) setting cookie attribute before value cause cookie attribute to not be set
+- [#810](https://github.com/elysiajs/elysia/issues/810) wrong inference of response in afterResponse, includes status code
+
 # 1.1.12 - 4 Sep 2024
 Feature:
 - setup provenance publish

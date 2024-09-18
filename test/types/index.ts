@@ -1901,5 +1901,81 @@ app.get('/', ({ set }) => {
 		}))
 		.as('plugin')
 
-	expectTypeOf<typeof plugin._ephemeral.derive>().toHaveProperty('pluginMethod')
+	expectTypeOf<typeof plugin._ephemeral.derive>().toHaveProperty(
+		'pluginMethod'
+	)
+}
+
+// ? afterResponse type
+{
+	const app = new Elysia().get(
+		'/',
+		() => {
+			return {
+				duration: 200
+			}
+		},
+		{
+			response: {
+				200: t.Object({
+					duration: t.Number()
+				}),
+				400: t.Object({
+					stuff: t.Number()
+				})
+			},
+			afterResponse({ response }) {
+				expectTypeOf<typeof response>().toEqualTypeOf<
+					| {
+							duration: number
+					  }
+					| {
+							stuff: number
+					  }
+					| undefined
+				>()
+			}
+		}
+	)
+}
+
+// ? params in lifecycle shouldn't be never
+{
+	new Elysia()
+		.onParse(({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
+		})
+		.onTransform(({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
+		})
+		.onBeforeHandle(({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
+		})
+		.onAfterHandle(({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
+		})
+	// .mapResponse(({ params }) => {
+	// 	expectTypeOf<typeof params>().toEqualTypeOf<Record<string, string>>()
+	// })
+	// .onAfterResponse(({ params }) => {
+	// 	expectTypeOf<typeof params>().toEqualTypeOf<Record<string, string>>()
+	// })
+}
+
+// ? Websocket Response
+{
+	new Elysia().ws('/', {
+		open: (ws) => {
+			ws.publish('channel', 'hello')
+		},
+		response: t.String()
+	})
 }
