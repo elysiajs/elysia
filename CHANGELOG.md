@@ -1,4 +1,7 @@
 # 1.1.13 - 18 Sep 2024
+Feature:
+- [#813](https://github.com/elysiajs/elysia/pull/813) allow UnionEnum to get readonly array by @BleedingDev
+
 Bug fix:
 - [#830](https://github.com/elysiajs/elysia/issues/830) Incorrect type for ws.publish
 - [#827](https://github.com/elysiajs/elysia/issues/827) returning a response is forcing application/json content-type
