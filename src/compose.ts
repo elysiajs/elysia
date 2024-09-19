@@ -1810,7 +1810,7 @@ export const composeHandler = ({
 	if (hooks.beforeHandle.length) init += 'let be\n'
 	if (hooks.afterHandle.length) init += 'let af\n'
 	if (hooks.mapResponse.length) init += 'let mr\n'
-	if (allowMeta) init += 'c.schema = schema; c.defs = definitions\n'
+	if (allowMeta) init += 'c.schema = schema\nc.defs = definitions\n'
 
 	init += fnLiteral + '}'
 
@@ -1933,133 +1933,122 @@ export const composeGeneralHandler = (
 	const router = app.router
 	const hasTrace = app.event.trace.length > 0
 
-	let findDynamicRoute = `
-	const route = router.find(request.method, path) ${
-		router.http.root.ALL ? '?? router.find("ALL", path)' : ''
-	}
+	let findDynamicRoute = `const route=router.find(request.method,path)`
+	findDynamicRoute += router.http.root.ALL
+		? '??router.find("ALL",path)\n'
+		: '\n'
 
-	if (route === null)
-		return ${
-			app.event.error.length
-				? `app.handleError(ctx, notFound)`
-				: app.event.request.length
-					? `new Response(error404Message, {
-					status: ctx.set.status === 200 ? 404 : ctx.set.status,
-					headers: ctx.set.headers
-				})`
-					: `error404.clone()`
-		}
+	findDynamicRoute += `if(route===null)return `
+	if (app.event.error.length)
+		findDynamicRoute += `app.handleError(ctx,notFound)`
+	else
+		findDynamicRoute += app.event.request.length
+			? `new Response(error404Message,{` +
+				`status:ctx.set.status===200?404:ctx.set.status,` +
+				`headers:ctx.set.headers` +
+				`})`
+			: `error404.clone()`
 
-	ctx.params = route.params\n`
-
-	findDynamicRoute += `if(route.store.handler) return route.store.handler(ctx)
-	return (route.store.handler = route.store.compile())(ctx)\n`
+	findDynamicRoute +=
+		`\nctx.params=route.params\n` +
+		`if(route.store.handler)return route.store.handler(ctx)\n` +
+		`return (route.store.handler=route.store.compile())(ctx)\n`
 
 	let switchMap = ``
 	for (const [path, { code, all, static: staticFn }] of Object.entries(
 		router.static.http.map
 	)) {
 		if (staticFn)
-			switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
-				all ?? `default: break map`
-			}}\n\n`
+			switchMap += `case'${path}':switch(request.method){${code}\n${
+				all ?? `default:break map`
+			}}`
 
-		switchMap += `case '${path}':\nswitch(request.method) {\n${code}\n${
-			all ?? `default: break map`
-		}}\n\n`
+		switchMap += `case'${path}':switch(request.method){${code}${
+			all ?? `default:break map`
+		}}`
 	}
 
 	const maybeAsync = app.event.request.some(isAsync)
 
-	fnLiteral += `const {
-		app,
-		mapEarlyResponse,
-		NotFoundError,
-		randomId,
-		handleError,
-		error,
-		redirect,
-		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID,
-		getServer
-	} = data
+	fnLiteral +=
+		`\nconst {` +
+		`app,` +
+		`mapEarlyResponse,` +
+		`NotFoundError,` +
+		`randomId,` +
+		`handleError,` +
+		`error,` +
+		`redirect,` +
+		`ELYSIA_TRACE,` +
+		`ELYSIA_REQUEST_ID,` +
+		`getServer` +
+		`}=data\n` +
+		`const store=app.singleton.store\n` +
+		`const staticRouter=app.router.static.http\n` +
+		`const st=staticRouter.handlers\n` +
+		`const wsRouter=app.router.ws\n` +
+		`const router=app.router.http\n` +
+		`const trace=app.event.trace.map(x=>typeof x==='function'?x:x.fn)\n` +
+		`const notFound=new NotFoundError()\n` +
+		`const hoc=app.extender.higherOrderFunctions.map(x=>x.fn)\n`
 
-	const store = app.singleton.store
-	const staticRouter = app.router.static.http
-	const st = staticRouter.handlers
-	const wsRouter = app.router.ws
-	const router = app.router.http
-	const trace = app.event.trace.map(x => typeof x === 'function' ? x : x.fn)
+	if (app.event.request.length)
+		fnLiteral += `const onRequest=app.event.request.map(x=>x.fn)\n`
 
-	const notFound = new NotFoundError()
-	const hoc = app.extender.higherOrderFunctions.map(x => x.fn)
-
-	${
-		app.event.request.length
-			? `const onRequest = app.event.request.map(x => x.fn)`
-			: ''
-	}
-	${
-		app.event.error.length
-			? ''
-			: `\nconst error404Message = notFound.message.toString()
-	const error404 = new Response(error404Message, { status: 404 });\n`
-	}
-
-	${
-		app.event.trace.length
-			? `const ${app.event.trace
-					.map((_, i) => `tr${i} = app.event.trace[${i}].fn`)
-					.join(',')}`
-			: ''
-	}
-
-	${maybeAsync ? 'async' : ''} function map(request) {\n`
-
-	if (app.event.request.length) fnLiteral += `let re`
-
-	fnLiteral += `\nconst url = request.url
-		const s = url.indexOf('/', ${standardHostname ? 11 : 7})
-		const qi = url.indexOf('?', s + 1)
-		let path
-		if(qi === -1)
-			path = url.substring(s)
-		else
-			path = url.substring(s, qi)\n`
-
-	fnLiteral += `${hasTrace ? 'const id = randomId()' : ''}
-		const ctx = {
-			request,
-			store,
-			qi,
-			path,
-			url,
-			redirect,
-			set: {
-				headers: ${
-					Object.keys(defaultHeaders ?? {}).length
-						? 'Object.assign({}, app.setHeaders)'
-						: '{}'
-				},
-				status: 200
-			},
-			error
-			${
-				// @ts-expect-error private property
-				app.inference.server
-					? `, get server() {
-							return getServer()
-						}`
-					: ''
-			}
-			${hasTrace ? ',[ELYSIA_REQUEST_ID]: id' : ''}
-			${decoratorsLiteral}
-		}\n`
+	if (!app.event.error.length)
+		fnLiteral +=
+			`const error404Message=notFound.message.toString()\n` +
+			`const error404=new Response(error404Message,{status:404})\n`
 
 	if (app.event.trace.length)
-		fnLiteral += `\nctx[ELYSIA_TRACE] = [${app.event.trace
-			.map((_, i) => `tr${i}(ctx)`)
-			.join(',')}]\n`
+		fnLiteral +=
+			`const ` +
+			app.event.trace
+				.map((_, i) => `tr${i}=app.event.trace[${i}].fn`)
+				.join(',') +
+			'\n'
+
+	fnLiteral += `${maybeAsync ? 'async ' : ''}function map(request){`
+
+	if (app.event.request.length) fnLiteral += `let re\n`
+
+	fnLiteral +=
+		`const url=request.url,` +
+		`s=url.indexOf('/',${standardHostname ? 11 : 7}),` +
+		`qi=url.indexOf('?', s + 1)\n` +
+		`let path\n` +
+		`if(qi===-1) path = url.substring(s)\n` +
+		`else path = url.substring(s, qi)\n`
+
+	if (hasTrace) fnLiteral += `const id=randomId()\n`
+
+	fnLiteral +=
+		`const ctx={request,` +
+		`store,` +
+		`qi,` +
+		`path,` +
+		`url,` +
+		`redirect,` +
+		`error,` +
+		`set: {headers: `
+
+	fnLiteral += Object.keys(defaultHeaders ?? {}).length
+		? 'Object.assign({}, app.setHeaders)'
+		: '{}'
+
+	fnLiteral += `,status: 200}`
+
+	// @ts-expect-error private
+	if (app.inference.server) fnLiteral += `,get server(){return getServer()}`
+	if (hasTrace) fnLiteral += ',[ELYSIA_REQUEST_ID]:id'
+	fnLiteral += decoratorsLiteral
+	fnLiteral += `}\n`
+
+	if (app.event.trace.length)
+		fnLiteral +=
+			`ctx[ELYSIA_TRACE]=[` +
+			app.event.trace.map((_, i) => `tr${i}(ctx)`).join(',') +
+			`]\n`
 
 	const report = createReport({
 		context: 'ctx',
@@ -2075,7 +2064,7 @@ export const composeGeneralHandler = (
 	})
 
 	if (app.event.request.length) {
-		fnLiteral += `\n try {\n`
+		fnLiteral += `try{`
 
 		for (let i = 0; i < app.event.request.length; i++) {
 			const hook = app.event.request[i]
@@ -2085,25 +2074,23 @@ export const composeGeneralHandler = (
 			const endUnit = reporter.resolveChild(app.event.request[i].fn.name)
 
 			if (withReturn) {
-				fnLiteral += `re = mapEarlyResponse(
-					${maybeAsync ? 'await' : ''} onRequest[${i}](ctx),
-					ctx.set,
-					request
-				)\n`
+				fnLiteral +=
+					`re=mapEarlyResponse(` +
+					`${maybeAsync ? 'await ' : ''}onRequest[${i}](ctx),` +
+					`ctx.set,` +
+					`request)\n`
 
 				endUnit('re')
-				fnLiteral += `if(re !== undefined) return re\n`
+				fnLiteral += `if(re!==undefined)return re\n`
 			} else {
 				fnLiteral += `${
-					maybeAsync ? 'await' : ''
-				} onRequest[${i}](ctx)\n`
+					maybeAsync ? 'await ' : ''
+				}onRequest[${i}](ctx)\n`
 				endUnit()
 			}
 		}
 
-		fnLiteral += `} catch (error) {
-			return app.handleError(ctx, error)
-		}`
+		fnLiteral += `}catch(error){return app.handleError(ctx,error)}`
 	}
 
 	reporter.resolve()
@@ -2112,61 +2099,46 @@ export const composeGeneralHandler = (
 	const wsRouter = app.router.ws
 
 	if (Object.keys(wsPaths).length || wsRouter.history.length) {
-		fnLiteral += `
-			if(request.method === 'GET') {
-				switch(path) {`
+		fnLiteral += `if(request.method==='GET'){switch(path){`
 
 		for (const [path, index] of Object.entries(wsPaths)) {
-			fnLiteral += `
-					case '${path}':
-						if(request.headers.get('upgrade') === 'websocket')
-							return st[${index}](ctx)
-
-						break`
+			fnLiteral +=
+				`case'${path}':` +
+				`if(request.headers.get('upgrade')==='websocket')` +
+				`return st[${index}](ctx)\n`
 		}
 
-		fnLiteral += `
-				default:
-					if(request.headers.get('upgrade') === 'websocket') {
-						const route = wsRouter.find('ws', path)
-
-						if(route) {
-							ctx.params = route.params
-
-							if(route.store.handler)
-							    return route.store.handler(ctx)
-
-							return (route.store.handler = route.store.compile())(ctx)
-						}
-					}
-
-					break
-			}
-		}\n`
+		fnLiteral +=
+			`default:` +
+			`if(request.headers.get('upgrade')==='websocket'){` +
+			`const route=wsRouter.find('ws',path)\n` +
+			`if(route){` +
+			`ctx.params=route.params\n` +
+			`if(route.store.handler)return route.store.handler(ctx)\n` +
+			`return (route.store.handler=route.store.compile())(ctx)` +
+			`}` +
+			`}` +
+			`break` +
+			`}` +
+			`}`
 	}
 
-	fnLiteral += `
-		map: switch(path) {
-			${switchMap}
-
-			default:
-				break
-		}
-
-		${findDynamicRoute}
-	}\n`
+	fnLiteral +=
+		`map:switch(path){` +
+		switchMap +
+		`\ndefault:break}` +
+		findDynamicRoute +
+		`}\n`
 
 	// @ts-expect-error private property
 	if (app.extender.higherOrderFunctions.length) {
 		let handler = 'map'
 		// @ts-expect-error private property
 		for (let i = 0; i < app.extender.higherOrderFunctions.length; i++)
-			handler = `hoc[${i}](${handler}, request)`
+			handler = `hoc[${i}](${handler},request)`
 
-		fnLiteral += `return function hocMap(request) { return ${handler}(request) }`
+		fnLiteral += `return function hocMap(request){return ${handler}(request)}`
 	} else fnLiteral += `return map`
-
-	// console.log(fnLiteral)
 
 	const handleError = composeErrorHandler(app) as any
 
@@ -2197,35 +2169,40 @@ export const composeErrorHandler = (
 	const hooks = app.event
 	let fnLiteral = ''
 
-	fnLiteral += `const {
-		app: { event: { error: onErrorContainer, afterResponse: resContainer, mapResponse: _onMapResponse, trace: _trace } },
-		mapResponse,
-		ERROR_CODE,
-		ELYSIA_RESPONSE,
-		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID
-	} = inject
+	fnLiteral +=
+		`const {` +
+		`app:{` +
+		`event:{` +
+		`error:onErrorContainer,` +
+		`afterResponse:resContainer,` +
+		`mapResponse:_onMapResponse,` +
+		`trace:_trace` +
+		`}` +
+		`},` +
+		`mapResponse,` +
+		`ERROR_CODE,` +
+		`ELYSIA_RESPONSE,` +
+		`ELYSIA_TRACE,` +
+		`ELYSIA_REQUEST_ID` +
+		`}=inject\n`
 
-	const trace = _trace.map(x => typeof x === 'function' ? x : x.fn)
-	const onMapResponse = []
-
-	for(let i = 0; i < _onMapResponse.length; i++)
-		onMapResponse.push(_onMapResponse[i].fn ?? _onMapResponse[i])
-
-	delete _onMapResponse
-
-	const onError = onErrorContainer.map(x => x.fn)
-	const res = resContainer.map(x => x.fn)
-
-	return ${
-		app.event.error.find(isAsync) || app.event.mapResponse.find(isAsync)
-			? 'async'
-			: ''
-	} function(context, error, skipGlobal) {`
+	fnLiteral +=
+		`const trace=_trace.map(x=>typeof x==='function'?x:x.fn)\n` +
+		`const onMapResponse=[]\n` +
+		`for(let i=0;i<_onMapResponse.length;i++)` +
+		`onMapResponse.push(_onMapResponse[i].fn??_onMapResponse[i])\n` +
+		`delete _onMapResponse\n` +
+		`const onError=onErrorContainer.map(x=>x.fn)\n` +
+		`const res=resContainer.map(x=>x.fn)\n` +
+		`return ${
+			app.event.error.find(isAsync) || app.event.mapResponse.find(isAsync)
+				? 'async '
+				: ''
+		}function(context,error,skipGlobal){`
 
 	const hasTrace = app.event.trace.length > 0
 
-	if (hasTrace) fnLiteral += '\nconst id = context[ELYSIA_REQUEST_ID]\n'
+	if (hasTrace) fnLiteral += 'const id=context[ELYSIA_REQUEST_ID]\n'
 
 	const report = createReport({
 		context: 'context',
@@ -2235,20 +2212,15 @@ export const composeErrorHandler = (
 		}
 	})
 
-	fnLiteral += `
-		const set = context.set
-		let r
-
-		if(!context.code)
-			context.code = error.code ?? error[ERROR_CODE]
-
-		if(!(context.error instanceof Error))
-			context.error = error
-
-		if(typeof error === "object" && error && ELYSIA_RESPONSE in error) {
-			error.status = error[ELYSIA_RESPONSE]
-			error.message = error.response
-		}\n`
+	fnLiteral +=
+		`const set = context.set\n` +
+		`let r\n` +
+		`if(!context.code)context.code=error.code??error[ERROR_CODE]\n` +
+		`if(!(context.error instanceof Error))context.error = error\n` +
+		`if(typeof error==="object"&&error&&ELYSIA_RESPONSE in error){` +
+		`error.status = error[ELYSIA_RESPONSE]\n` +
+		`error.message = error.response` +
+		`}\n`
 
 	const saveResponse =
 		hasTrace ||
@@ -2262,20 +2234,19 @@ export const composeErrorHandler = (
 
 		const response = `${
 			isAsync(handler) ? 'await ' : ''
-		}onError[${i}](context)`
+		}onError[${i}](context)\n`
 
-		fnLiteral += '\nif(skipGlobal !== true) {\n'
+		fnLiteral += 'if(skipGlobal!==true){'
 
 		if (hasReturn(handler)) {
-			fnLiteral += `r = ${response}; if(r !== undefined) {
-				if(r instanceof Response) return r
-
-				if(r[ELYSIA_RESPONSE]) {
-					error.status = error[ELYSIA_RESPONSE]
-					error.message = error.response
-				}
-
-				if(set.status === 200) set.status = error.status\n`
+			fnLiteral +=
+				`r=${response}\nif(r!==undefined){` +
+				`if(r instanceof Response)return r\n` +
+				`if(r[ELYSIA_RESPONSE]){` +
+				`error.status=error[ELYSIA_RESPONSE]\n` +
+				`error.message = error.response` +
+				`}` +
+				`if(set.status === 200) set.status = error.status\n`
 
 			const mapResponseReporter = report('mapResponse', {
 				total: hooks.mapResponse.length,
@@ -2290,8 +2261,9 @@ export const composeErrorHandler = (
 						mapResponse.fn.name
 					)
 
-					fnLiteral += `\ncontext.response = r
-						r = ${isAsyncName(mapResponse) ? 'await' : ''} onMapResponse[${i}](context)\n`
+					fnLiteral +=
+						`context.response=r` +
+						`r=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n`
 
 					endUnit()
 				}
@@ -2299,30 +2271,31 @@ export const composeErrorHandler = (
 
 			mapResponseReporter.resolve()
 
-			fnLiteral += `return mapResponse(${saveResponse} r, set, context.request)}\n`
-		} else fnLiteral += response + '\n'
+			fnLiteral += `return mapResponse(${saveResponse}r,set,context.request)}`
+		} else fnLiteral += response
 
-		fnLiteral += '\n}\n'
+		fnLiteral += '}'
 	}
 
-	fnLiteral += `if(error.constructor.name === "ValidationError" || error.constructor.name === "TransformDecodeError") {
-		set.status = error.status ?? 422
-		return new Response(
-			error.message,
-			{
-				headers: Object.assign(
-					{ 'content-type': 'application/json'},
-					set.headers
-				),
-				status: set.status
-			}
-		)
-	} else {
-		if(error.code && typeof error.status === "number")
-			return new Response(
-				error.message,
-				{ headers: set.headers, status: error.status }
-			)\n`
+	fnLiteral +=
+		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){` +
+		`set.status = error.status??422\n` +
+		`return new Response(` +
+		`error.message,` +
+		`{` +
+		`headers:Object.assign(` +
+		`{'content-type':'application/json'},` +
+		`set.headers` +
+		`),` +
+		`status:set.status` +
+		`}` +
+		`)` +
+		`}else{` +
+		`if(error.code&&typeof error.status==="number")` +
+		`return new Response(` +
+		`error.message,` +
+		`{headers:set.headers,status:error.status}` +
+		`)\n`
 
 	const mapResponseReporter = report('mapResponse', {
 		total: hooks.mapResponse.length,
@@ -2337,10 +2310,11 @@ export const composeErrorHandler = (
 				mapResponse.fn.name
 			)
 
-			fnLiteral += `\ncontext.response = error
-			error = ${
-				isAsyncName(mapResponse) ? 'await' : ''
-			} onMapResponse[${i}](context)\n`
+			fnLiteral +=
+				`context.response=error\n` +
+				`error=${
+					isAsyncName(mapResponse) ? 'await ' : ''
+				}onMapResponse[${i}](context)\n`
 
 			endUnit()
 		}
@@ -2348,7 +2322,7 @@ export const composeErrorHandler = (
 
 	mapResponseReporter.resolve()
 
-	fnLiteral += `\nreturn mapResponse(${saveResponse} error, set, context.request)\n}\n}`
+	fnLiteral += `\nreturn mapResponse(${saveResponse}error,set,context.request)}}`
 
 	return Function(
 		'inject',

@@ -8,10 +8,9 @@ import type { Context } from './context'
 import { t, TypeCheck } from './type-system'
 import { sucrose, type Sucrose } from './sucrose'
 
-import { ElysiaWS, websocket } from './ws'
+import { ElysiaWS, websocket } from './ws/index'
 import type { WS } from './ws/types'
 
-import { version as _version } from '../package.json'
 import { createStaticHandler, isNotEmpty } from './handler'
 
 import {
@@ -187,9 +186,6 @@ export default class Elysia<
 
 	_ephemeral = {} as Ephemeral
 	_volatile = {} as Volatile
-
-	static version = _version
-	version = _version
 
 	protected singleton = {
 		decorator: {},
