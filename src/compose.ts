@@ -565,65 +565,6 @@ export const composeHandler = ({
 				`
 	}
 
-	if (hasCookie) {
-		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
-			// @ts-ignore
-			const value = cookieMeta?.[name] ?? defaultValue
-			if (!value)
-				return typeof defaultValue === 'string'
-					? `${name}: "${defaultValue}",`
-					: `${name}: ${defaultValue},`
-
-			if (typeof value === 'string') return `${name}: '${value}',`
-			if (value instanceof Date)
-				return `${name}: new Date(${value.getTime()}),`
-
-			return `${name}: ${value},`
-		}
-
-		const options = cookieMeta
-			? `{
-			secrets: ${
-				cookieMeta.secrets !== undefined
-					? typeof cookieMeta.secrets === 'string'
-						? `'${cookieMeta.secrets}'`
-						: '[' +
-							cookieMeta.secrets.reduce(
-								(a, b) => a + `'${b}',`,
-								''
-							) +
-							']'
-					: 'undefined'
-			},
-			sign: ${
-				cookieMeta.sign === true
-					? true
-					: cookieMeta.sign !== undefined
-						? '[' +
-							cookieMeta.sign.reduce(
-								(a, b) => a + `'${b}',`,
-								''
-							) +
-							']'
-						: 'undefined'
-			},
-			${get('domain')}
-			${get('expires')}
-			${get('httpOnly')}
-			${get('maxAge')}
-			${get('path', '/')}
-			${get('priority')}
-			${get('sameSite')}
-			${get('secure')}
-		}`
-			: 'undefined'
-
-		if (hasHeaders)
-			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.headers.cookie, ${options})\n`
-		else
-			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
-	}
-
 	if (hasQuery) {
 		const destructured = <
 			{
@@ -888,6 +829,65 @@ export const composeHandler = ({
 		maybeStream
 
 	const requestMapper = `, c.request`
+
+	if (hasCookie) {
+		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
+			// @ts-ignore
+			const value = cookieMeta?.[name] ?? defaultValue
+			if (!value)
+				return typeof defaultValue === 'string'
+					? `${name}: "${defaultValue}",`
+					: `${name}: ${defaultValue},`
+
+			if (typeof value === 'string') return `${name}: '${value}',`
+			if (value instanceof Date)
+				return `${name}: new Date(${value.getTime()}),`
+
+			return `${name}: ${value},`
+		}
+
+		const options = cookieMeta
+			? `{
+			secrets: ${
+				cookieMeta.secrets !== undefined
+					? typeof cookieMeta.secrets === 'string'
+						? `'${cookieMeta.secrets}'`
+						: '[' +
+							cookieMeta.secrets.reduce(
+								(a, b) => a + `'${b}',`,
+								''
+							) +
+							']'
+					: 'undefined'
+			},
+			sign: ${
+				cookieMeta.sign === true
+					? true
+					: cookieMeta.sign !== undefined
+						? '[' +
+							cookieMeta.sign.reduce(
+								(a, b) => a + `'${b}',`,
+								''
+							) +
+							']'
+						: 'undefined'
+			},
+			${get('domain')}
+			${get('expires')}
+			${get('httpOnly')}
+			${get('maxAge')}
+			${get('path', '/')}
+			${get('priority')}
+			${get('sameSite')}
+			${get('secure')}
+		}`
+			: 'undefined'
+
+		if (hasHeaders)
+			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.headers.cookie, ${options})\n`
+		else
+			fnLiteral += `\nc.cookie = await parseCookie(c.set, c.request.headers.get('cookie'), ${options})\n`
+	}
 
 	fnLiteral += `c.route = \`${path}\`\n`
 
