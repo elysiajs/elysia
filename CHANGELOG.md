@@ -1,3 +1,8 @@
+# 1.1.16 - 23 Sep 2024
+Bug fix:
+- separate between `createStaticHandler` and `createNativeStaticHandler` for maintainability
+- performance degradation using inline fetch on text static response and file
+
 # 1.1.15 - 23 Sep 2024
 Bug fix:
 - `createStaticResponse` unintentionally mutate `set.headers`

@@ -2,9 +2,7 @@ import { Elysia, t } from '../src'
 
 const app = new Elysia({ precompile: true })
 	.get('A', "A")
-	.get('B', ({ set }) => {
-		set.headers['content-type'] = 'text/plain'
-	})
+	.get('B', Bun.file("test/kyuukurarin.mp4"))
 	.compile()
 	.listen(3000)
 

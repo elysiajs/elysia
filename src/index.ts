@@ -687,7 +687,7 @@ export default class Elysia<
 
 		const nativeStaticHandler =
 			typeof handle !== 'function'
-				? createStaticHandler(handle, hooks, this.setHeaders)
+				? createNativeStaticHandler(handle, hooks, this.setHeaders)
 				: undefined
 
 		if (
@@ -807,10 +807,10 @@ export default class Elysia<
 
 				if (
 					this.config.nativeStaticResponse === true &&
-					staticHandler &&
+					nativeStaticHandler &&
 					(method === 'GET' || method === 'ALL')
 				)
-					this.router.static.http.static[loosePath] = staticHandler()
+					this.router.static.http.static[loosePath] = nativeStaticHandler()
 
 				if (method === 'ALL')
 					staticRouter.map[loosePath].all =
