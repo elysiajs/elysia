@@ -1480,7 +1480,7 @@ export type HTTPHeaders = Record<string, string> & {
 
 	// Message body information
 	'content-length'?: string
-	'content-type'?: SetContentType | {}
+	'content-type'?: SetContentType | (string & {})
 	'content-encoding'?: string
 	'content-language'?: string
 	'content-location'?: string

@@ -39,6 +39,7 @@ describe('Native Static Response', () => {
 
 		expect(app.router.static.http.static['/']).toBeInstanceOf(Response)
 		expect(app.router.static.http.static['/'].headers.toJSON()).toEqual({
+			'content-type': 'text/plain;charset=utf-8',
 			server: 'Elysia'
 		})
 		expect(await app.router.static.http.static['/'].text()).toEqual(
@@ -51,6 +52,7 @@ describe('Native Static Response', () => {
 		expect(
 			app.router.static.http.static['/plugin'].headers.toJSON()
 		).toEqual({
+			'content-type': 'text/plain;charset=utf-8',
 			server: 'Elysia'
 		})
 		expect(await app.router.static.http.static['/plugin'].text()).toEqual(
