@@ -1,3 +1,7 @@
+# 1.1.15 - 23 Sep 2024
+Bug fix:
+- `createStaticResponse` unintentionally mutate `set.headers`
+
 # 1.1.14 - 23 Sep 2024
 Feature:
 - add auto-completion to `Content-Type` headers

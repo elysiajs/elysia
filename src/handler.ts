@@ -1155,9 +1155,6 @@ export const createStaticHandler = (
 ): (() => Response) | undefined => {
 	if (typeof handle === 'function' || handle instanceof Blob) return
 
-	if (typeof handle === 'string' && setHeaders['content-type'] === undefined)
-		setHeaders['content-type'] = 'text/plain;charset=utf-8'
-
 	const response = mapResponse(handle, {
 		headers: setHeaders
 	})
@@ -1167,6 +1164,10 @@ export const createStaticHandler = (
 		hooks.transform.length === 0 &&
 		hooks.beforeHandle.length === 0 &&
 		hooks.afterHandle.length === 0
-	)
+	) {
+		if (!response.headers.has('content-type'))
+			response.headers.append('content-type', 'text/plain;charset=utf-8')
+
 		return response.clone.bind(response)
+	}
 }
