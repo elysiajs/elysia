@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
-new Elysia({ precompile: true })
-	.get('A', () => ({ hello: 'world' }))
+const app = new Elysia({ precompile: true })
+	.get('A', "A")
 	.get('B', ({ set }) => {
 		set.headers['content-type'] = 'text/plain'
 	})

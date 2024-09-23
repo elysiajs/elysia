@@ -12,7 +12,11 @@ import { ElysiaWS, websocket } from './ws'
 import type { WS } from './ws/types'
 
 import { version as _version } from '../package.json'
-import { createStaticHandler, isNotEmpty } from './handler'
+import {
+	createNativeStaticHandler,
+	createStaticHandler,
+	isNotEmpty
+} from './handler'
 
 import {
 	cloneInference,
@@ -685,8 +689,13 @@ export default class Elysia<
 			this.config.nativeStaticResponse === true &&
 			staticHandler &&
 			(method === 'GET' || method === 'ALL')
-		)
-			this.router.static.http.static[path] = staticHandler()
+		) {
+			this.router.static.http.static[path] = createNativeStaticHandler(
+				handle as unknown as Function,
+				hooks,
+				this.setHeaders
+			)!()
+		}
 
 		const compile = () =>
 			composeHandler({
