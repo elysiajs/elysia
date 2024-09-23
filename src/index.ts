@@ -685,17 +685,17 @@ export default class Elysia<
 				? createStaticHandler(handle, hooks, this.setHeaders)
 				: undefined
 
+		const nativeStaticHandler =
+			typeof handle !== 'function'
+				? createStaticHandler(handle, hooks, this.setHeaders)
+				: undefined
+
 		if (
 			this.config.nativeStaticResponse === true &&
-			staticHandler &&
+			nativeStaticHandler &&
 			(method === 'GET' || method === 'ALL')
-		) {
-			this.router.static.http.static[path] = createNativeStaticHandler(
-				handle as unknown as Function,
-				hooks,
-				this.setHeaders
-			)!()
-		}
+		)
+			this.router.static.http.static[path] = nativeStaticHandler()
 
 		const compile = () =>
 			composeHandler({

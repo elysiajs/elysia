@@ -1153,7 +1153,7 @@ export const createStaticHandler = (
 	hooks: LocalHook<any, any, any, any, any, any, any>,
 	setHeaders: Context['set']['headers'] = {}
 ): (() => Response) | undefined => {
-	if (typeof handle === 'function' || handle instanceof Blob) return
+	if (typeof handle === 'function') return
 
 	const response = mapResponse(handle, {
 		headers: setHeaders
