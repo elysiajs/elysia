@@ -35,7 +35,7 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 			set.status !== 412 &&
 			set.status !== 416)
 	) {
-		if (set) {
+		if (set && isNotEmpty(set.headers)) {
 			if (set.headers instanceof Headers)
 				if (hasHeaderShorthand)
 					set.headers = (set.headers as unknown as Headers).toJSON()
@@ -58,7 +58,8 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 		return new Response(response as Blob, {
 			headers: {
 				'accept-ranges': 'bytes',
-				'content-range': `bytes 0-${size - 1}/${size}`
+				'content-range': `bytes 0-${size - 1}/${size}`,
+				'transfer-encoding': 'chunked'
 			}
 		})
 	}
@@ -579,8 +580,7 @@ export const mapResponse = (
 				return new Response(response as FormData, set as SetResponse)
 
 			default:
-				if (response instanceof Response)
-					return response
+				if (response instanceof Response) return response
 
 				if (response instanceof Promise)
 					return response.then((x) => mapResponse(x, set)) as any
@@ -966,8 +966,7 @@ export const mapEarlyResponse = (
 				return new Response(response as FormData)
 
 			default:
-				if (response instanceof Response)
-					return response
+				if (response instanceof Response) return response
 
 				if (response instanceof Promise)
 					return response.then((x) => mapEarlyResponse(x, set)) as any
@@ -1101,8 +1100,7 @@ export const mapCompactResponse = (
 			return new Response(response as FormData)
 
 		default:
-			if (response instanceof Response)
-				return response
+			if (response instanceof Response) return response
 
 			if (response instanceof Promise)
 				return response.then((x) =>
@@ -1155,7 +1153,10 @@ export const createStaticHandler = (
 	hooks: LocalHook<any, any, any, any, any, any, any>,
 	setHeaders: Context['set']['headers'] = {}
 ): (() => Response) | undefined => {
-	if (typeof handle === 'function') return
+	if (typeof handle === 'function' || handle instanceof Blob) return
+
+	if (typeof handle === 'string' && setHeaders['content-type'] === undefined)
+		setHeaders['content-type'] = 'text/plain;charset=utf-8'
 
 	const response = mapResponse(handle, {
 		headers: setHeaders

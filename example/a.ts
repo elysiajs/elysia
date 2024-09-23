@@ -1,12 +1,11 @@
 import { Elysia, t } from '../src'
 
-new Elysia()
-	.ws('/', {
-		open: (ws) => {
-			ws.publish('channel', 'hello')
-		},
-		response: t.String()
+new Elysia({ precompile: true })
+	.get('A', { hello: 'world' })
+	.get('B', ({ set }) => {
+		set.headers['content-type'] = 'text/plain'
 	})
+	.compile()
 	.listen(3000)
 
 // app.handle(new Request('http://localhost'))
