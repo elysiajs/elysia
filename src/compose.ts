@@ -1,4 +1,4 @@
-import { type Elysia } from '.'
+import type { AnyElysia } from '.'
 
 import { Value } from '@sinclair/typebox/value'
 import type { TAnySchema, TSchema } from '@sinclair/typebox'
@@ -421,7 +421,7 @@ export const composeHandler = ({
 	allowMeta = false,
 	inference
 }: {
-	app: Elysia<any, any, any, any, any, any, any, any>
+	app: AnyElysia
 	path: string
 	method: string
 	hooks: LifeCycleStore
@@ -1916,7 +1916,7 @@ export interface ComposerGeneralHandlerOptions {
 }
 
 export const composeGeneralHandler = (
-	app: Elysia<any, any, any, any, any, any, any, any>
+	app: AnyElysia
 ) => {
 	const standardHostname = app.config.handler?.standardHostname ?? true
 
@@ -1933,38 +1933,38 @@ export const composeGeneralHandler = (
 	const router = app.router
 	const hasTrace = app.event.trace.length > 0
 
-	let findDynamicRoute = `const route=router.find(request.method,path)`
+	let findDynamicRoute = `const route=router.find(r.method,p)`
 	findDynamicRoute += router.http.root.ALL
-		? '??router.find("ALL",path)\n'
+		? '??router.find("ALL",p)\n'
 		: '\n'
 
 	findDynamicRoute += `if(route===null)return `
 	if (app.event.error.length)
-		findDynamicRoute += `app.handleError(ctx,notFound)`
+		findDynamicRoute += `app.handleError(c,notFound)`
 	else
 		findDynamicRoute += app.event.request.length
 			? `new Response(error404Message,{` +
-				`status:ctx.set.status===200?404:ctx.set.status,` +
-				`headers:ctx.set.headers` +
+				`status:c.set.status===200?404:c.set.status,` +
+				`headers:c.set.headers` +
 				`})`
 			: `error404.clone()`
 
 	findDynamicRoute +=
-		`\nctx.params=route.params\n` +
-		`if(route.store.handler)return route.store.handler(ctx)\n` +
-		`return (route.store.handler=route.store.compile())(ctx)\n`
+		`\nc.params=route.params\n` +
+		`if(route.store.handler)return route.store.handler(c)\n` +
+		`return (route.store.handler=route.store.compile())(c)\n`
 
 	let switchMap = ``
 	for (const [path, { code, all, static: staticFn }] of Object.entries(
 		router.static.http.map
 	)) {
 		if (staticFn)
-			switchMap += `case'${path}':switch(request.method){${code}\n${
-				all ?? `default:break map`
+			switchMap += `case'${path}':switch(r.method){${code}\n${
+				all ?? `default:` + findDynamicRoute
 			}}`
 
-		switchMap += `case'${path}':switch(request.method){${code}${
-			all ?? `default:break map`
+		switchMap += `case'${path}':switch(r.method){${code}${
+			all ?? `default:` + findDynamicRoute
 		}}`
 	}
 
@@ -2008,35 +2008,35 @@ export const composeGeneralHandler = (
 				.join(',') +
 			'\n'
 
-	fnLiteral += `${maybeAsync ? 'async ' : ''}function map(request){`
+	fnLiteral += `${maybeAsync ? 'async ' : ''}function map(r){`
 
 	if (app.event.request.length) fnLiteral += `let re\n`
 
 	fnLiteral +=
-		`const url=request.url,` +
-		`s=url.indexOf('/',${standardHostname ? 11 : 7}),` +
-		`qi=url.indexOf('?', s + 1)\n` +
-		`let path\n` +
-		`if(qi===-1) path = url.substring(s)\n` +
-		`else path = url.substring(s, qi)\n`
+		`const u=r.url,` +
+		`s=u.indexOf('/',${standardHostname ? 11 : 7}),` +
+		`qi=u.indexOf('?', s + 1)\n` +
+		`let p\n` +
+		`if(qi===-1)p=u.substring(s)\n` +
+		`else p=u.substring(s, qi)\n`
 
 	if (hasTrace) fnLiteral += `const id=randomId()\n`
 
 	fnLiteral +=
-		`const ctx={request,` +
+		`const c={request:r,` +
 		`store,` +
 		`qi,` +
-		`path,` +
-		`url,` +
+		`path:p,` +
+		`url:u,` +
 		`redirect,` +
 		`error,` +
-		`set: {headers: `
+		`set:{headers:`
 
 	fnLiteral += Object.keys(defaultHeaders ?? {}).length
 		? 'Object.assign({}, app.setHeaders)'
 		: '{}'
 
-	fnLiteral += `,status: 200}`
+	fnLiteral += `,status:200}`
 
 	// @ts-expect-error private
 	if (app.inference.server) fnLiteral += `,get server(){return getServer()}`
@@ -2046,12 +2046,11 @@ export const composeGeneralHandler = (
 
 	if (app.event.trace.length)
 		fnLiteral +=
-			`ctx[ELYSIA_TRACE]=[` +
-			app.event.trace.map((_, i) => `tr${i}(ctx)`).join(',') +
+			`c[ELYSIA_TRACE]=[` +
+			app.event.trace.map((_, i) => `tr${i}(c)`).join(',') +
 			`]\n`
 
 	const report = createReport({
-		context: 'ctx',
 		trace: app.event.trace,
 		addFn(word) {
 			fnLiteral += word
@@ -2059,7 +2058,6 @@ export const composeGeneralHandler = (
 	})
 
 	const reporter = report('request', {
-		attribute: 'ctx',
 		total: app.event.request.length
 	})
 
@@ -2076,21 +2074,19 @@ export const composeGeneralHandler = (
 			if (withReturn) {
 				fnLiteral +=
 					`re=mapEarlyResponse(` +
-					`${maybeAsync ? 'await ' : ''}onRequest[${i}](ctx),` +
-					`ctx.set,` +
-					`request)\n`
+					`${maybeAsync ? 'await ' : ''}onRequest[${i}](c),` +
+					`c.set,` +
+					`r)\n`
 
 				endUnit('re')
 				fnLiteral += `if(re!==undefined)return re\n`
 			} else {
-				fnLiteral += `${
-					maybeAsync ? 'await ' : ''
-				}onRequest[${i}](ctx)\n`
+				fnLiteral += `${maybeAsync ? 'await ' : ''}onRequest[${i}](c)\n`
 				endUnit()
 			}
 		}
 
-		fnLiteral += `}catch(error){return app.handleError(ctx,error)}`
+		fnLiteral += `}catch(error){return app.handleError(c,error)}`
 	}
 
 	reporter.resolve()
@@ -2099,23 +2095,23 @@ export const composeGeneralHandler = (
 	const wsRouter = app.router.ws
 
 	if (Object.keys(wsPaths).length || wsRouter.history.length) {
-		fnLiteral += `if(request.method==='GET'){switch(path){`
+		fnLiteral += `if(r.method==='GET'){switch(p){`
 
 		for (const [path, index] of Object.entries(wsPaths)) {
 			fnLiteral +=
 				`case'${path}':` +
-				`if(request.headers.get('upgrade')==='websocket')` +
-				`return st[${index}](ctx)\n`
+				`if(r.headers.get('upgrade')==='websocket')` +
+				`return st[${index}](c)\n`
 		}
 
 		fnLiteral +=
 			`default:` +
-			`if(request.headers.get('upgrade')==='websocket'){` +
-			`const route=wsRouter.find('ws',path)\n` +
+			`if(r.headers.get('upgrade')==='websocket'){` +
+			`const route=wsRouter.find('ws',p)\n` +
 			`if(route){` +
-			`ctx.params=route.params\n` +
-			`if(route.store.handler)return route.store.handler(ctx)\n` +
-			`return (route.store.handler=route.store.compile())(ctx)` +
+			`c.params=route.params\n` +
+			`if(route.store.handler)return route.store.handler(c)\n` +
+			`return (route.store.handler=route.store.compile())(c)` +
 			`}` +
 			`}` +
 			`break` +
@@ -2124,20 +2120,16 @@ export const composeGeneralHandler = (
 	}
 
 	fnLiteral +=
-		`map:switch(path){` +
-		switchMap +
-		`\ndefault:break}` +
-		findDynamicRoute +
-		`}\n`
+		`switch(p){` + switchMap + `default:break}` + findDynamicRoute + `}`
 
 	// @ts-expect-error private property
 	if (app.extender.higherOrderFunctions.length) {
 		let handler = 'map'
 		// @ts-expect-error private property
 		for (let i = 0; i < app.extender.higherOrderFunctions.length; i++)
-			handler = `hoc[${i}](${handler},request)`
+			handler = `hoc[${i}](${handler},r)`
 
-		fnLiteral += `return function hocMap(request){return ${handler}(request)}`
+		fnLiteral += `return function hocMap(r){return ${handler}(r)}`
 	} else fnLiteral += `return map`
 
 	const handleError = composeErrorHandler(app) as any
@@ -2164,7 +2156,7 @@ export const composeGeneralHandler = (
 }
 
 export const composeErrorHandler = (
-	app: Elysia<any, any, any, any, any, any, any, any>
+	app: AnyElysia
 ) => {
 	const hooks = app.event
 	let fnLiteral = ''

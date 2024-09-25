@@ -1,4 +1,4 @@
-import type { Elysia } from '.'
+import type { AnyElysia } from '.'
 
 import { mapEarlyResponse, mapResponse } from './handler'
 import {
@@ -27,7 +27,7 @@ export type DynamicHandler = {
 }
 
 export const createDynamicHandler =
-	(app: Elysia<any, any, any, any, any, any, any, any>) =>
+	(app: AnyElysia) =>
 	async (request: Request): Promise<Response> => {
 		const url = request.url,
 			s = url.indexOf('/', 11),
@@ -422,7 +422,7 @@ export const createDynamicHandler =
 	}
 
 export const createDynamicErrorHandler =
-	(app: Elysia<any, any, any, any, any, any, any, any>) =>
+	(app: AnyElysia) =>
 	async (
 		context: Context & {
 			response: unknown

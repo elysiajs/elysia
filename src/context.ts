@@ -134,7 +134,7 @@ export type Context<
 		redirect: Redirect
 
 		set: {
-			headers: HTTPHeaders
+		headers: HTTPHeaders
 			status?: number | keyof StatusMap
 			/**
 			 * @deprecated Use inline redirect instead

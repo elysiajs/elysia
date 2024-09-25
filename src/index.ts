@@ -11,7 +11,11 @@ import { sucrose, type Sucrose } from './sucrose'
 import { ElysiaWS, websocket } from './ws/index'
 import type { WS } from './ws/types'
 
-import { createStaticHandler, isNotEmpty } from './handler'
+import {
+	createNativeStaticHandler,
+	createStaticHandler,
+	isNotEmpty
+} from './handler'
 
 import {
 	cloneInference,
@@ -118,10 +122,11 @@ import type {
 	HigherOrderFunction,
 	ResolvePath,
 	JoinPath,
-	ValidatorLayer
+	ValidatorLayer,
+    MergeElysiaInstances
 } from './types'
 
-export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
+export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
 /**
  * ### Elysia Server
@@ -139,7 +144,6 @@ export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
  */
 export default class Elysia<
 	const in out BasePath extends string = '',
-	const in out Scoped extends boolean = false,
 	const in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
@@ -169,7 +173,7 @@ export default class Elysia<
 		schema: {}
 	}
 > {
-	config: ElysiaConfig<BasePath, Scoped>
+	config: ElysiaConfig<BasePath>
 
 	server: Server | null = null
 	private dependencies: Record<string, Checksum[]> = {}
@@ -178,7 +182,6 @@ export default class Elysia<
 
 	_types = {
 		Prefix: '' as BasePath,
-		Scoped: false as Scoped,
 		Singleton: {} as Singleton,
 		Definitions: {} as Definitions,
 		Metadata: {} as Metadata
@@ -200,10 +203,6 @@ export default class Elysia<
 
 	get decorator(): Singleton['decorator'] {
 		return this.singleton.decorator
-	}
-
-	get _scoped() {
-		return this.config.scoped as Scoped
 	}
 
 	protected definitions = {
@@ -307,7 +306,7 @@ export default class Elysia<
 		return this._promisedModules
 	}
 
-	constructor(config: ElysiaConfig<BasePath, Scoped> = {}) {
+	constructor(config: ElysiaConfig<BasePath> = {}) {
 		if (config.tags) {
 			if (!config.detail)
 				config.detail = {
@@ -391,7 +390,7 @@ export default class Elysia<
 		}
 	}
 
-	applyConfig(config: ElysiaConfig<BasePath, Scoped>) {
+	applyConfig(config: ElysiaConfig<BasePath>) {
 		this.config = {
 			prefix: '',
 			aot: true,
@@ -441,7 +440,7 @@ export default class Elysia<
 
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
-		if (this.config.prefix && !skipPrefix && !this.config.scoped)
+		if (this.config.prefix && !skipPrefix)
 			path = this.config.prefix + path
 
 		if (localHook?.type)
@@ -677,12 +676,17 @@ export default class Elysia<
 				? createStaticHandler(handle, hooks, this.setHeaders)
 				: undefined
 
+		const nativeStaticHandler =
+			typeof handle !== 'function'
+				? createNativeStaticHandler(handle, hooks, this.setHeaders)
+				: undefined
+
 		if (
 			this.config.nativeStaticResponse === true &&
-			staticHandler &&
+			nativeStaticHandler &&
 			(method === 'GET' || method === 'ALL')
 		)
-			this.router.static.http.static[path] = staticHandler()
+			this.router.static.http.static[path] = nativeStaticHandler()
 
 		const compile = () =>
 			composeHandler({
@@ -777,7 +781,7 @@ export default class Elysia<
 					code: ''
 				}
 
-			const ctx = staticHandler ? '' : 'ctx'
+			const ctx = staticHandler ? '' : 'c'
 
 			if (method === 'ALL')
 				staticRouter.map[path].all =
@@ -794,10 +798,11 @@ export default class Elysia<
 
 				if (
 					this.config.nativeStaticResponse === true &&
-					staticHandler &&
+					nativeStaticHandler &&
 					(method === 'GET' || method === 'ALL')
 				)
-					this.router.static.http.static[loosePath] = staticHandler()
+					this.router.static.http.static[loosePath] =
+						nativeStaticHandler()
 
 				if (method === 'ALL')
 					staticRouter.map[loosePath].all =
@@ -1174,7 +1179,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -1192,7 +1196,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -1209,7 +1212,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -1258,7 +1260,6 @@ export default class Elysia<
 		) => MaybePromise<Resolver | void>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -1306,7 +1307,6 @@ export default class Elysia<
 		) => MaybePromise<NewResolver | void>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -1358,7 +1358,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -1374,7 +1373,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -1391,7 +1389,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -1945,7 +1942,6 @@ export default class Elysia<
 		errors: Errors
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
 			type: Definitions['type']
@@ -1991,7 +1987,6 @@ export default class Elysia<
 		errors: CustomError
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
 			type: Definitions['type']
@@ -2029,7 +2024,6 @@ export default class Elysia<
 		mapper: (decorators: Definitions['error']) => NewErrors
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
 			type: Definitions['type']
@@ -2171,16 +2165,16 @@ export default class Elysia<
 									Ephemeral['resolve']
 							}
 						: Singleton,
-				Scoped extends 'global'
+				Scope extends 'global'
 					? Ephemeral
 					: {
 							derive: Partial<Ephemeral['derive']>
 							resolve: Partial<Ephemeral['resolve']>
 							schema: Ephemeral['schema']
 						},
-				Scoped extends 'global'
+				Scope extends 'global'
 					? Ephemeral
-					: Scoped extends 'scoped'
+					: Scope extends 'scoped'
 						? Ephemeral
 						: {
 								derive: Partial<Ephemeral['derive']>
@@ -2395,7 +2389,6 @@ export default class Elysia<
 	 */
 	propagate(): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2421,7 +2414,6 @@ export default class Elysia<
 
 	as(type: 'global'): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Singleton['store']
@@ -2458,7 +2450,6 @@ export default class Elysia<
 
 	as(type: 'plugin'): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2509,15 +2500,11 @@ export default class Elysia<
 		return this as any
 	}
 
-	group<
-		const Prefix extends string,
-		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>
-	>(
+	group<const Prefix extends string, const NewElysia extends AnyElysia>(
 		prefix: Prefix,
 		run: (
 			group: Elysia<
 				`${BasePath}${Prefix}`,
-				Scoped,
 				Singleton,
 				Definitions,
 				Metadata,
@@ -2528,7 +2515,6 @@ export default class Elysia<
 		) => NewElysia
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2563,7 +2549,6 @@ export default class Elysia<
 		run: (
 			group: Elysia<
 				`${BasePath}${Prefix}`,
-				false,
 				Singleton,
 				Definitions,
 				{
@@ -2578,7 +2563,6 @@ export default class Elysia<
 		) => NewElysia
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2719,7 +2703,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -2744,7 +2727,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -2763,7 +2745,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -2805,7 +2786,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2839,7 +2819,6 @@ export default class Elysia<
 		run: (
 			group: Elysia<
 				BasePath,
-				Scoped,
 				Singleton,
 				Definitions,
 				{
@@ -2854,7 +2833,6 @@ export default class Elysia<
 		) => NewElysia
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2887,7 +2865,6 @@ export default class Elysia<
 		run: (
 			group: Elysia<
 				BasePath,
-				Scoped,
 				Singleton,
 				Definitions,
 				{
@@ -2902,7 +2879,6 @@ export default class Elysia<
 		) => NewElysia
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -3065,64 +3041,43 @@ export default class Elysia<
 		const Param extends AnyElysia = this
 	>(
 		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>
-	): NewElysia['_scoped'] extends false
-		? Elysia<
-				BasePath,
-				Scoped,
-				// @ts-expect-error - This is truly ideal
-				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
-				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
-				Prettify2<Volatile & NewElysia['_volatile']>
-			>
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Volatile
-			>
+	): Elysia<
+		BasePath,
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+		Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & NewElysia['_routes']
+			: Routes & CreateEden<BasePath, NewElysia['_routes']>,
+		Prettify2<Ephemeral & NewElysia['_ephemeral']>,
+		Prettify2<Volatile & NewElysia['_volatile']>
+	>
 
 	/**
 	 * Entire Instance
 	 **/
 	use<const NewElysia extends AnyElysia>(
 		instance: MaybePromise<NewElysia>
-	): NewElysia['_scoped'] extends false
-		? Elysia<
-				BasePath,
-				Scoped,
-				// @ts-expect-error - This is truly ideal
-				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
-				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Prettify2<Volatile & NewElysia['_ephemeral']>
-			>
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Volatile
-			>
+	): Elysia<
+		BasePath,
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+		Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & NewElysia['_routes']
+			: Routes & CreateEden<BasePath, NewElysia['_routes']>,
+		Ephemeral,
+		Prettify2<Volatile & NewElysia['_ephemeral']>
+	>
+
+	/**
+	 * Entire multiple Instance
+	 **/
+	use<const Instances extends AnyElysia[]>(
+		instance: MaybePromise<Instances>
+	): MergeElysiaInstances<Instances>
 
 	/**
 	 * Import fn
@@ -3131,32 +3086,18 @@ export default class Elysia<
 		plugin: Promise<{
 			default: (elysia: AnyElysia) => MaybePromise<NewElysia>
 		}>
-	): NewElysia['_scoped'] extends false
-		? Elysia<
-				BasePath,
-				Scoped,
-				// @ts-expect-error - This is truly ideal
-				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
-				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
-				Prettify2<Volatile & NewElysia['_volatile']>
-			>
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Volatile
-			>
+	): Elysia<
+		BasePath,
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+		Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & NewElysia['_routes']
+			: Routes & CreateEden<BasePath, NewElysia['_routes']>,
+		Prettify2<Ephemeral & NewElysia['_ephemeral']>,
+		Prettify2<Volatile & NewElysia['_volatile']>
+	>
 
 	/**
 	 * Import entire instance
@@ -3165,34 +3106,19 @@ export default class Elysia<
 		plugin: Promise<{
 			default: LazyLoadElysia
 		}>
-	): LazyLoadElysia['_scoped'] extends false
-		? Elysia<
-				BasePath,
-				Scoped,
-				// @ts-expect-error - This is truly ideal
-				Prettify2<Singleton & LazyLoadElysia['_types']['Singleton']>,
-				Prettify2<
-					Definitions & LazyLoadElysia['_types']['Definitions']
-				>,
-				Prettify2<Metadata & LazyLoadElysia['_types']['Metadata']>,
-				BasePath extends ``
-					? Routes & LazyLoadElysia['_routes']
-					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
-				Ephemeral,
-				Prettify2<Volatile & LazyLoadElysia['_ephemeral']>
-			>
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				BasePath extends ``
-					? Routes & LazyLoadElysia['_routes']
-					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
-				Ephemeral,
-				Volatile
-			>
+	): Elysia<
+		BasePath,
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & LazyLoadElysia['_types']['Singleton']>,
+		Prettify2<Definitions & LazyLoadElysia['_types']['Definitions']>,
+		Prettify2<Metadata & LazyLoadElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & LazyLoadElysia['_routes']
+			: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
+		Ephemeral,
+		Prettify2<Volatile & LazyLoadElysia['_ephemeral']>
+	>
+
 	/**
 	 * ### use
 	 * Merge separate logic of Elysia with current
@@ -3209,7 +3135,7 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| MaybePromise<AnyElysia>
+			| MaybeArray<MaybePromise<AnyElysia>>
 			| MaybePromise<
 					AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 			  >
@@ -3220,6 +3146,13 @@ export default class Elysia<
 			  }>,
 		options?: { scoped?: boolean }
 	): AnyElysia {
+		if (Array.isArray(plugin)) {
+			// eslint-disable-next-line @typescript-eslint/no-this-alias
+			let app = this
+			for (const p of plugin) app = app.use(p) as any
+			return app
+		}
+
 		if (options?.scoped)
 			return this.guard({}, (app) => app.use(plugin as any))
 
@@ -3344,197 +3277,64 @@ export default class Elysia<
 		plugin.model(this.definitions.type as any)
 		plugin.error(this.definitions.error as any)
 
-		const isScoped = plugin.config.scoped as boolean
-		if (isScoped) {
-			if (name) {
-				if (!(name in this.dependencies)) this.dependencies[name] = []
+		this.headers(plugin.setHeaders)
 
-				const current =
-					seed !== undefined
-						? checksum(name + JSON.stringify(seed))
-						: 0
+		if (name) {
+			if (!(name in this.dependencies)) this.dependencies[name] = []
 
-				if (
-					this.dependencies[name].some(
-						({ checksum }) => current === checksum
-					)
+			const current =
+				seed !== undefined ? checksum(name + JSON.stringify(seed)) : 0
+
+			if (
+				!this.dependencies[name].some(
+					({ checksum }) => current === checksum
 				)
-					return this
-
-				this.dependencies[name].push(
-					!this.config?.analytic
-						? {
-								name: plugin.config.name,
-								seed: plugin.config.seed,
-								checksum: current,
-								dependencies: plugin.dependencies
-							}
-						: {
-								name: plugin.config.name,
-								seed: plugin.config.seed,
-								checksum: current,
-								dependencies: plugin.dependencies,
-								stack: plugin.telemetry.stack,
-								routes: plugin.router.history,
-								decorators: plugin.singleton.decorator,
-								store: plugin.singleton.store,
-								type: plugin.definitions.type,
-								error: plugin.definitions.error,
-								derive: plugin.event.transform
-									.filter((x) => x.subType === 'derive')
-									.map((x) => ({
-										fn: x.fn.toString(),
-										stack: new Error().stack ?? ''
-									})),
-								resolve: plugin.event.transform
-									.filter((x) => x.subType === 'derive')
-									.map((x) => ({
-										fn: x.fn.toString(),
-										stack: new Error().stack ?? ''
-									}))
-							}
-				)
-			}
-
-			plugin.extender.macros = this.extender.macros.concat(
-				plugin.extender.macros
-			)
-
-			const macroHashes = <(number | undefined)[]>[]
-			for (let i = 0; i < plugin.extender.macros.length; i++) {
-				const macro = this.extender.macros[i]
-
-				if (macroHashes.includes(macro.checksum)) {
-					plugin.extender.macros.splice(i, 1)
-					i--
-				}
-
-				macroHashes.push(macro.checksum)
-			}
-
-			plugin.onRequest((context) => {
-				Object.assign(context, this.singleton.decorator)
-				Object.assign(context.store, this.singleton.store)
-			})
-
-			if (plugin.event.trace.length)
-				plugin.event.trace.push(...plugin.event.trace)
-
-			if (!plugin.config.prefix)
-				console.warn(
-					"It's recommended to use scoped instance with a prefix to prevent collision routing with other instance."
-				)
-
-			if (plugin.event.error.length)
-				plugin.event.error.push(...this.event.error)
-
-			if (plugin.config.aot) plugin.compile()
-
-			if (isScoped === true && plugin.config.prefix) {
-				this.mount(plugin.config.prefix + '/', plugin.fetch)
-
-				// Ensure that when using plugins routes are correctly showing up in the .routes property. Else plugins e.g. swagger will not correctly work.
-				// This also avoids adding routes multiple times.
-				for (const route of plugin.router.history) {
-					this.routeTree.set(
-						route.method + `${plugin.config.prefix}${route.path}`,
-						this.router.history.length
-					)
-
-					this.router.history.push({
-						...route,
-						path: `${plugin.config.prefix}${route.path}`,
-						hooks: mergeHook(route.hooks, {
-							error: this.event.error
-						})
-					})
-				}
-			} else {
-				this.mount(plugin.fetch)
-
-				for (const route of plugin.router.history) {
-					this.routeTree.set(
-						route.method + `${plugin.config.prefix}${route.path}`,
-						this.router.history.length
-					)
-
-					this.router.history.push({
-						...route,
-						path: `${plugin.config.prefix}${route.path}`,
-						hooks: mergeHook(route.hooks, {
-							error: this.event.error
-						})
-					})
-				}
-			}
-
-			return this
-		} else {
-			this.headers(plugin.setHeaders)
-
-			if (name) {
-				if (!(name in this.dependencies)) this.dependencies[name] = []
-
-				const current =
-					seed !== undefined
-						? checksum(name + JSON.stringify(seed))
-						: 0
-
-				if (
-					!this.dependencies[name].some(
-						({ checksum }) => current === checksum
-					)
-				) {
-					this.extender.macros = this.extender.macros.concat(
-						plugin.extender.macros
-					)
-
-					this.extender.higherOrderFunctions =
-						this.extender.higherOrderFunctions.concat(
-							plugin.extender.higherOrderFunctions
-						)
-				}
-			} else {
+			) {
 				this.extender.macros = this.extender.macros.concat(
 					plugin.extender.macros
 				)
+
 				this.extender.higherOrderFunctions =
 					this.extender.higherOrderFunctions.concat(
 						plugin.extender.higherOrderFunctions
 					)
 			}
+		} else {
+			this.extender.macros = this.extender.macros.concat(
+				plugin.extender.macros
+			)
+			this.extender.higherOrderFunctions =
+				this.extender.higherOrderFunctions.concat(
+					plugin.extender.higherOrderFunctions
+				)
+		}
 
-			// ! Deduplicate current instance
-			deduplicateChecksum(this.extender.macros)
-			deduplicateChecksum(this.extender.higherOrderFunctions)
+		// ! Deduplicate current instance
+		deduplicateChecksum(this.extender.macros)
+		deduplicateChecksum(this.extender.higherOrderFunctions)
 
-			// ! Deduplicate current instance
-			const hofHashes: number[] = []
-			for (
-				let i = 0;
-				i < this.extender.higherOrderFunctions.length;
-				i++
-			) {
-				const hof = this.extender.higherOrderFunctions[i]
+		// ! Deduplicate current instance
+		const hofHashes: number[] = []
+		for (let i = 0; i < this.extender.higherOrderFunctions.length; i++) {
+			const hof = this.extender.higherOrderFunctions[i]
 
-				if (hof.checksum) {
-					if (hofHashes.includes(hof.checksum)) {
-						this.extender.higherOrderFunctions.splice(i, 1)
-						i--
-					}
-
-					hofHashes.push(hof.checksum)
+			if (hof.checksum) {
+				if (hofHashes.includes(hof.checksum)) {
+					this.extender.higherOrderFunctions.splice(i, 1)
+					i--
 				}
-			}
 
-			this.inference = {
-				body: this.inference.body || plugin.inference.body,
-				cookie: this.inference.cookie || plugin.inference.cookie,
-				headers: this.inference.headers || plugin.inference.headers,
-				query: this.inference.query || plugin.inference.query,
-				set: this.inference.set || plugin.inference.set,
-				server: this.inference.server || plugin.inference.server
+				hofHashes.push(hof.checksum)
 			}
+		}
+
+		this.inference = {
+			body: this.inference.body || plugin.inference.body,
+			cookie: this.inference.cookie || plugin.inference.cookie,
+			headers: this.inference.headers || plugin.inference.headers,
+			query: this.inference.query || plugin.inference.query,
+			set: this.inference.set || plugin.inference.set,
+			server: this.inference.server || plugin.inference.server
 		}
 
 		this.decorate(plugin.singleton.decorator)
@@ -3561,72 +3361,71 @@ export default class Elysia<
 			)
 		}
 
-		if (!isScoped)
-			if (name) {
-				if (!(name in this.dependencies)) this.dependencies[name] = []
+		if (name) {
+			if (!(name in this.dependencies)) this.dependencies[name] = []
 
-				const current =
-					seed !== undefined
-						? checksum(name + JSON.stringify(seed))
-						: 0
+			const current =
+				seed !== undefined
+					? checksum(name + JSON.stringify(seed))
+					: 0
 
-				if (
-					this.dependencies[name].some(
-						({ checksum }) => current === checksum
-					)
+			if (
+				this.dependencies[name].some(
+					({ checksum }) => current === checksum
 				)
-					return this
+			)
+				return this
 
-				this.dependencies[name].push(
-					!this.config?.analytic
-						? {
-								name: plugin.config.name,
-								seed: plugin.config.seed,
-								checksum: current,
-								dependencies: plugin.dependencies
-							}
-						: {
-								name: plugin.config.name,
-								seed: plugin.config.seed,
-								checksum: current,
-								dependencies: plugin.dependencies,
-								stack: plugin.telemetry.stack,
-								routes: plugin.router.history,
-								decorators: plugin.singleton,
-								store: plugin.singleton.store,
-								type: plugin.definitions.type,
-								error: plugin.definitions.error,
-								derive: plugin.event.transform
-									.filter((x) => x?.subType === 'derive')
-									.map((x) => ({
-										fn: x.toString(),
-										stack: new Error().stack ?? ''
-									})),
-								resolve: plugin.event.transform
-									.filter((x) => x?.subType === 'resolve')
-									.map((x) => ({
-										fn: x.toString(),
-										stack: new Error().stack ?? ''
-									}))
-							}
-				)
+			this.dependencies[name].push(
+				!this.config?.analytic
+					? {
+							name: plugin.config.name,
+							seed: plugin.config.seed,
+							checksum: current,
+							dependencies: plugin.dependencies
+						}
+					: {
+							name: plugin.config.name,
+							seed: plugin.config.seed,
+							checksum: current,
+							dependencies: plugin.dependencies,
+							stack: plugin.telemetry.stack,
+							routes: plugin.router.history,
+							decorators: plugin.singleton,
+							store: plugin.singleton.store,
+							type: plugin.definitions.type,
+							error: plugin.definitions.error,
+							derive: plugin.event.transform
+								.filter((x) => x?.subType === 'derive')
+								.map((x) => ({
+									fn: x.toString(),
+									stack: new Error().stack ?? ''
+								})),
+							resolve: plugin.event.transform
+								.filter((x) => x?.subType === 'resolve')
+								.map((x) => ({
+									fn: x.toString(),
+									stack: new Error().stack ?? ''
+								}))
+						}
+			)
 
-				this.event = mergeLifeCycle(
-					this.event,
-					filterGlobalHook(plugin.event),
-					current
-				)
-			} else {
-				this.event = mergeLifeCycle(
-					this.event,
-					filterGlobalHook(plugin.event)
-				)
-			}
+			this.event = mergeLifeCycle(
+				this.event,
+				filterGlobalHook(plugin.event),
+				current
+			)
+		} else {
+			this.event = mergeLifeCycle(
+				this.event,
+				filterGlobalHook(plugin.event)
+			)
+		}
 
 		// @ts-ignore
 		this.validator.global = mergeHook(this.validator.global, {
 			...plugin.validator.global
-		})
+		}) as any
 		// @ts-ignore
 		this.validator.local = mergeHook(this.validator.local, {
 			...plugin.validator.scoped
@@ -3651,7 +3450,6 @@ export default class Elysia<
 		) => NewMacro
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		{
@@ -3841,7 +3639,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -3923,7 +3720,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4005,7 +3801,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4087,7 +3882,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4169,7 +3963,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4251,7 +4044,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4333,7 +4125,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4415,7 +4206,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4497,7 +4287,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4585,7 +4374,6 @@ export default class Elysia<
 		}
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4656,7 +4444,6 @@ export default class Elysia<
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4815,7 +4602,6 @@ export default class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Reconcile<
@@ -4850,7 +4636,6 @@ export default class Elysia<
 		store: Store
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Reconcile<Singleton['store'], Store>
@@ -4886,7 +4671,6 @@ export default class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Reconcile<
@@ -4926,7 +4710,6 @@ export default class Elysia<
 		store: Store
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Reconcile<
@@ -4948,7 +4731,6 @@ export default class Elysia<
 		mapper: (decorators: Singleton['store']) => NewStore
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: NewStore
@@ -5075,7 +4857,6 @@ export default class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Reconcile<
 				Singleton['decorator'],
@@ -5110,7 +4891,6 @@ export default class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Reconcile<Singleton['decorator'], NewDecorators>
 			store: Singleton['store']
@@ -5128,7 +4908,6 @@ export default class Elysia<
 		mapper: (decorators: Singleton['decorator']) => NewDecorators
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: NewDecorators
 			store: Singleton['store']
@@ -5164,7 +4943,6 @@ export default class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Reconcile<
 				Singleton['decorator'],
@@ -5204,7 +4982,6 @@ export default class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Reconcile<
 				Singleton['decorator'],
@@ -5355,7 +5132,6 @@ export default class Elysia<
 		) => MaybePromise<Derivative>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -5425,7 +5201,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -5443,7 +5218,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -5460,7 +5234,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -5498,7 +5271,6 @@ export default class Elysia<
 		model: Model
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
 			type: Prettify<
@@ -5516,7 +5288,6 @@ export default class Elysia<
 		record: Recorder
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
 			type: Prettify<
@@ -5540,7 +5311,6 @@ export default class Elysia<
 		}) => NewType
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
 			type: { [x in keyof NewType]: Static<NewType[x]> }
@@ -5586,7 +5356,6 @@ export default class Elysia<
 		) => MaybePromise<NewDerivative>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -5636,7 +5405,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -5655,7 +5423,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -5672,7 +5439,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -5715,7 +5481,6 @@ export default class Elysia<
 		word: Word
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Type extends 'decorator' | 'all'
 				? 'prefix' extends Base

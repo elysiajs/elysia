@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Elysia } from '.'
+import type { Elysia, AnyElysia } from '.'
 import type { BunFile, Serve, Server, WebSocketHandler } from 'bun'
 
 import type {
@@ -31,22 +31,13 @@ import type { ComposerGeneralHandlerOptions } from './compose'
 
 type PartialServe = Partial<Serve>
 
-export type ElysiaConfig<
-	Prefix extends string | undefined,
-	Scoped extends boolean | undefined
-> = {
+export type ElysiaConfig<Prefix extends string | undefined> = {
 	/**
 	 * Path prefix of the instance
 	 *
 	 * @default '''
 	 */
 	prefix?: Prefix
-	/**
-	 * If set to true, other Elysia handler will not inherits global life-cycle, store, decorators from the current instance
-	 *
-	 * @default false
-	 */
-	scoped?: Scoped
 	/**
 	 * Name of the instance for debugging, and plugin deduplication purpose
 	 */
@@ -787,9 +778,9 @@ export type AfterResponseHandler<
 	>
 ) => MaybePromise<void>
 
-export type GracefulHandler<
-	in Instance extends Elysia<any, any, any, any, any, any, any, any>
-> = (data: Instance) => any
+export type GracefulHandler<in Instance extends AnyElysia> = (
+	data: Instance
+) => any
 
 export type ErrorHandler<
 	in out T extends Record<string, Error> = {},
@@ -1212,9 +1203,8 @@ type _ComposeElysiaResponse<Response, Handle> = Prettify<
 >
 
 export type MergeElysiaInstances<
-	Instances extends Elysia<any, any, any, any, any, any>[] = [],
+	Instances extends AnyElysia[] = [],
 	Prefix extends string = '',
-	Scoped extends boolean = false,
 	Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
@@ -1230,52 +1220,42 @@ export type MergeElysiaInstances<
 		macro: {}
 		macroFn: {}
 	},
+	Ephemeral extends EphemeralType = {
+		derive: {}
+		resolve: {}
+		schema: {}
+	},
+	Volatile extends EphemeralType = {
+		derive: {}
+		resolve: {}
+		schema: {}
+	},
 	Routes extends RouteBase = {}
 > = Instances extends [
-	infer Current extends Elysia<any, any, any, any, any, any>,
-	...infer Rest extends Elysia<any, any, any, any, any, any>[]
+	infer Current extends AnyElysia,
+	...infer Rest extends AnyElysia[]
 ]
-	? Current['_types']['Scoped'] extends true
-		? MergeElysiaInstances<
-				Rest,
-				Prefix,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				Routes
-			>
-		: MergeElysiaInstances<
-				Rest,
-				Prefix,
-				Scoped,
-				Singleton & Current['_types']['Singleton'],
-				Definitions & Current['_types']['Definitions'],
-				Metadata & Current['_types']['Metadata'],
-				Routes &
-					(Prefix extends ``
-						? Current['_routes']
-						: AddPrefix<Prefix, Current['_routes']>)
-			>
+	? MergeElysiaInstances<
+			Rest,
+			Prefix,
+			Singleton & Current['_types']['Singleton'],
+			Definitions & Current['_types']['Definitions'],
+			Metadata & Current['_types']['Metadata'],
+			Ephemeral,
+			Volatile & Current['_ephemeral'],
+			Routes &
+				(Prefix extends ``
+					? Current['_routes']
+					: AddPrefix<Prefix, Current['_routes']>)
+		>
 	: Elysia<
 			Prefix,
-			Scoped,
-			{
-				decorator: Prettify<Singleton['decorator']>
-				store: Prettify<Singleton['store']>
-				derive: Prettify<Singleton['derive']>
-				resolve: Prettify<Singleton['resolve']>
-			},
-			{
-				type: Prettify<Definitions['type']>
-				error: Prettify<Definitions['error']>
-			},
-			{
-				schema: Prettify<Metadata['schema']>
-				macro: Prettify<Metadata['macro']>
-				macroFn: Prettify<Metadata['macroFn']>
-			},
-			Routes
+			Prettify2<Singleton>,
+			Prettify2<Definitions>,
+			Prettify2<Metadata>,
+			Routes,
+			Ephemeral,
+			Prettify2<Volatile>
 		>
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
@@ -1287,7 +1267,7 @@ export type ExcludeElysiaResponse<T> = Exclude<
 >
 
 export type InferContext<
-	T extends Elysia<any, any, any, any, any, any, any, any>,
+	T extends AnyElysia,
 	Path extends string = T['_types']['Prefix'],
 	Schema extends RouteSchema = T['_types']['Metadata']['schema']
 > = Context<
@@ -1300,7 +1280,7 @@ export type InferContext<
 >
 
 export type InferHandler<
-	T extends Elysia<any, any, any, any, any, any, any, any>,
+	T extends AnyElysia,
 	Path extends string = T['_types']['Prefix'],
 	Schema extends RouteSchema = T['_types']['Metadata']['schema']
 > = InlineHandler<
@@ -1355,14 +1335,72 @@ export type ResolveMacroContext<
 
 export type ContextAppendType = 'append' | 'override'
 
-export type HigherOrderFunction<
-	T extends (...arg: unknown[]) => Function = (...arg: unknown[]) => Function
-> = (fn: T, request: Request) => ReturnType<T>
-
 // new Elysia()
 // 	.wrap((fn) => {
 // 		return fn()
 // 	})
+export type HigherOrderFunction<
+	T extends (...arg: unknown[]) => Function = (...arg: unknown[]) => Function
+> = (fn: T, request: Request) => ReturnType<T>
+
+type SetContentType =
+	| 'application/octet-stream'
+	| 'application/vnd.ms-fontobject'
+	| 'application/epub+zip'
+	| 'application/gzip'
+	| 'application/json'
+	| 'application/ld+json'
+	| 'application/ogg'
+	| 'application/pdf'
+	| 'application/rtf'
+	| 'application/wasm'
+	| 'application/xhtml+xml'
+	| 'application/xml'
+	| 'application/zip'
+	| 'text/css'
+	| 'text/csv'
+	| 'text/html'
+	| 'text/calendar'
+	| 'text/javascript'
+	| 'text/plain'
+	| 'text/xml'
+	| 'image/avif'
+	| 'image/bmp'
+	| 'image/gif'
+	| 'image/x-icon'
+	| 'image/jpeg'
+	| 'image/png'
+	| 'image/svg+xml'
+	| 'image/tiff'
+	| 'image/webp'
+	| 'multipart/mixed'
+	| 'multipart/alternative'
+	| 'multipart/form-data'
+	| 'audio/aac'
+	| 'audio/x-midi'
+	| 'audio/mpeg'
+	| 'audio/ogg'
+	| 'audio/opus'
+	| 'audio/webm'
+	| 'video/x-msvideo'
+	| 'video/quicktime'
+	| 'video/x-ms-wmv'
+	| 'video/x-msvideo'
+	| 'video/x-flv'
+	| 'video/av1'
+	| 'video/mp4'
+	| 'video/mpeg'
+	| 'video/ogg'
+	| 'video/mp2t'
+	| 'video/webm'
+	| 'video/3gpp'
+	| 'video/3gpp2'
+	| 'font/otf'
+	| 'font/ttf'
+	| 'font/woff'
+	| 'font/woff2'
+	| 'model/gltf+json'
+	| 'model/gltf-binary'
 
 export type HTTPHeaders = Record<string, string> & {
 	// Authentication
@@ -1422,7 +1460,7 @@ export type HTTPHeaders = Record<string, string> & {
 
 	// Message body information
 	'content-length'?: string
-	'content-type'?: string
+	'content-type'?: SetContentType | (string & {})
 	'content-encoding'?: string
 	'content-language'?: string
 	'content-location'?: string

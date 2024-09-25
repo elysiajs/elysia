@@ -1,3 +1,20 @@
+# 1.1.16 - 23 Sep 2024
+Bug fix:
+- separate between `createStaticHandler` and `createNativeStaticHandler` for maintainability
+- performance degradation using inline fetch on text static response and file
+
+# 1.1.15 - 23 Sep 2024
+Bug fix:
+- `createStaticResponse` unintentionally mutate `set.headers`
+
+# 1.1.14 - 23 Sep 2024
+Feature:
+- add auto-completion to `Content-Type` headers
+
+Bug fix:
+- exclude file from Bun native static response until Bun support
+- set 'text/plain' for string if no content-type is set for native static response
+
 # 1.1.13 - 18 Sep 2024
 Feature:
 - [#813](https://github.com/elysiajs/elysia/pull/813) allow UnionEnum to get readonly array by @BleedingDev

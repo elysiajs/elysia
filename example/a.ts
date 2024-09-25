@@ -1,9 +1,8 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
 
-new Elysia({ precompile: true })
-	.get('/', ({ query }) => query)
-	.compile()
+const p1 = new Elysia().state('a', 'a')
+const p2 = new Elysia().state('b', 'b')
 
-// app.handle(new Request('http://localhost'))
-// 	.then((x) => x.headers.getSetCookie())
-// 	.then(console.log)
+new Elysia()
+	.use([p1, p2])
+	.get('/', ({ store }) => store.b)
