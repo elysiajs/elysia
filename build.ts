@@ -40,8 +40,7 @@ await Bun.build({
 	outdir: './dist/bun',
 	minify: true,
 	target: 'bun',
-	sourcemap: 'external',
-	external: ['@sinclair/typebox']
+	sourcemap: 'external'
 })
 
 await Promise.all([
