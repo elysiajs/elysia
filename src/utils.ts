@@ -824,19 +824,24 @@ export const stringToStructureCoercions = () => {
 	return _stringToStructureCoercions
 }
 
-let _coerceNumberRoot: ReplaceSchemaTypeOptions[]
+let _coercePrimitiveRoot: ReplaceSchemaTypeOptions[]
 
-export const coerceNumberRoot = () => {
-	if (!_coerceNumberRoot)
-		_coerceNumberRoot = [
+export const coercePrimitiveRoot = () => {
+	if (!_coercePrimitiveRoot)
+		_coercePrimitiveRoot = [
 			{
 				from: t.Number(),
 				to: (options) => t.Numeric(options),
 				rootOnly: true
+			},
+			{
+				from: t.Boolean(),
+				to: (options) => t.BooleanString(options),
+				rootOnly: true
 			}
 		] satisfies ReplaceSchemaTypeOptions[]
 
-	return _coerceNumberRoot
+	return _coercePrimitiveRoot
 }
 
 export const getCookieValidator = ({

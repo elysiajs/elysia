@@ -1,6 +1,7 @@
 # 1.1.17 - 29 Sep 2024
 Change:
 - Coerce number to numeric on body root automatically
+- Coerce boolean to booleanString on body root automatically
 
 Bug fix:
 - [#838](https://github.com/elysiajs/elysia/issues/838) invalid `onAfterResponse` typing

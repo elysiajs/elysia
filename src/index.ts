@@ -20,7 +20,7 @@ import {
 
 import {
 	cloneInference,
-	coerceNumberRoot,
+	coercePrimitiveRoot,
 	deduplicateChecksum,
 	fnToContainer,
 	localHookToLifeCycleStore,
@@ -518,7 +518,7 @@ export default class Elysia<
 							dynamic,
 							models,
 							normalize,
-							additionalCoerce: coerceNumberRoot()
+							additionalCoerce: coercePrimitiveRoot()
 						}),
 						headers: getSchemaValidator(cloned.headers, {
 							dynamic,
@@ -557,7 +557,7 @@ export default class Elysia<
 									dynamic,
 									models,
 									normalize,
-									additionalCoerce: coerceNumberRoot()
+									additionalCoerce: coercePrimitiveRoot()
 								}
 							))
 						},

@@ -3,7 +3,7 @@ import { post } from '../test/utils'
 
 const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
 	body: t.Object({
-		id: t.Number()
+		id: t.Boolean()
 	})
 })
 
