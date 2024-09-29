@@ -419,7 +419,8 @@ export const composeHandler = ({
 	validator,
 	handler,
 	allowMeta = false,
-	inference
+	inference,
+	asManifest = false
 }: {
 	app: AnyElysia
 	path: string
@@ -430,6 +431,7 @@ export const composeHandler = ({
 	handler: unknown | Handler<any, any>
 	allowMeta?: boolean
 	inference: Sucrose.Inference
+	asManifest?: boolean
 }): ComposedHandler => {
 	const isHandleFn = typeof handler === 'function'
 
@@ -1815,6 +1817,8 @@ export const composeHandler = ({
 	init += fnLiteral + '}'
 
 	try {
+		if (asManifest) return Function('hooks', init) as any
+
 		return Function(
 			'hooks',
 			init
@@ -1916,7 +1920,8 @@ export interface ComposerGeneralHandlerOptions {
 }
 
 export const composeGeneralHandler = (
-	app: AnyElysia
+	app: AnyElysia,
+	{ asManifest = false }: { asManifest?: false } = {}
 ) => {
 	const standardHostname = app.config.handler?.standardHostname ?? true
 
@@ -1934,9 +1939,7 @@ export const composeGeneralHandler = (
 	const hasTrace = app.event.trace.length > 0
 
 	let findDynamicRoute = `const route=router.find(r.method,p)`
-	findDynamicRoute += router.http.root.ALL
-		? '??router.find("ALL",p)\n'
-		: '\n'
+	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
 
 	findDynamicRoute += `if(route===null)return `
 	if (app.event.error.length)
@@ -2155,9 +2158,7 @@ export const composeGeneralHandler = (
 	})
 }
 
-export const composeErrorHandler = (
-	app: AnyElysia
-) => {
+export const composeErrorHandler = (app: AnyElysia) => {
 	const hooks = app.event
 	let fnLiteral = ''
 

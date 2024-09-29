@@ -1,8 +1,8 @@
 import { Elysia } from '../src'
+import { manifest } from '../src/manifest'
 
-const p1 = new Elysia().state('a', 'a')
-const p2 = new Elysia().state('b', 'b')
+const b = new Elysia().get('/b', () => 'Hello, World!')
 
-new Elysia()
-	.use([p1, p2])
-	.get('/', ({ store }) => store.b)
+const app = new Elysia().use(b).get('/', () => 'Hello, World!')
+
+manifest(app)

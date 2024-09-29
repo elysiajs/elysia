@@ -1015,6 +1015,7 @@ export interface InternalRoute {
 	path: string
 	composed: ComposedHandler | Response | null
 	handler: Handler
+	compile(): Function
 	hooks: LocalHook<any, any, any, any, any, any, any>
 }
 

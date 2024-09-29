@@ -393,7 +393,7 @@ export default class Elysia<
 	applyConfig(config: ElysiaConfig<BasePath>) {
 		this.config = {
 			prefix: '',
-			aot: true,
+			aot: process.env.ELYSIA_AOT !== 'false',
 			strictPath: false,
 			global: false,
 			analytic: false,
@@ -658,7 +658,8 @@ export default class Elysia<
 				path,
 				composed: null,
 				handler: handle,
-				hooks: hooks as any
+				hooks: hooks as any,
+				compile: handle
 			})
 
 			return
@@ -688,7 +689,7 @@ export default class Elysia<
 		)
 			this.router.static.http.static[path] = nativeStaticHandler()
 
-		const compile = () =>
+		const compile = (asManifest = false) =>
 			composeHandler({
 				app: this,
 				path,
@@ -698,7 +699,8 @@ export default class Elysia<
 				validator,
 				handler: handle,
 				allowMeta,
-				inference
+				inference,
+				asManifest
 			})
 
 		const mainHandler = shouldPrecompile
@@ -729,7 +731,8 @@ export default class Elysia<
 			path,
 			composed: mainHandler,
 			handler: handle,
-			hooks: hooks as any
+			hooks: hooks as any,
+			compile: () => compile(true)
 		})
 
 		const staticRouter = this.router.static.http
