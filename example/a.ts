@@ -1,10 +1,14 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia({ precompile: true })
-	.get('A', "A")
-	.get('B', Bun.file("test/kyuukurarin.mp4"))
-	.compile()
-	.listen(3000)
+new Elysia()
+	.derive(() => {
+		return {
+			startTime: performance.now()
+		}
+	})
+	.onAfterResponse((ctx) => {
+		console.log(ctx.response)
+	})
 
 // app.handle(new Request('http://localhost'))
 // 	.then((x) => x.headers.getSetCookie())
