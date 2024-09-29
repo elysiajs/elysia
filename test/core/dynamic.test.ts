@@ -128,6 +128,21 @@ describe('Dynamic Mode', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('resolve', async () => {
+		const app = new Elysia({ aot: false })
+			.resolve(() => {
+				return {
+					hello: 'Sunday'
+				}
+			})
+			.get('/', ({ hello }) => hello)
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('Sunday')
+		expect(res.status).toBe(200)
+	})
+
 	it('validate', async () => {
 		const app = new Elysia({
 			// aot: false

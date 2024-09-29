@@ -1890,7 +1890,6 @@ app.get('/', ({ set }) => {
 					| {
 							stuff: number
 					  }
-					| undefined
 				>()
 			}
 		}
@@ -1920,12 +1919,30 @@ app.get('/', ({ set }) => {
 				Record<string, string>
 			>()
 		})
-	// .mapResponse(({ params }) => {
-	// 	expectTypeOf<typeof params>().toEqualTypeOf<Record<string, string>>()
-	// })
-	// .onAfterResponse(({ params }) => {
-	// 	expectTypeOf<typeof params>().toEqualTypeOf<Record<string, string>>()
-	// })
+		.mapResponse(({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
+		})
+		.onAfterResponse(({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
+		})
+}
+
+// ? onAfterResponse should have derivative
+{
+	new Elysia()
+		.derive(() => {
+			return {
+				startTime: performance.now()
+			}
+		})
+		.onAfterResponse((ctx) => {
+			expectTypeOf<typeof ctx>().not.toBeNever()
+			expectTypeOf<(typeof ctx)['startTime']>().toBeNumber()
+		})
 }
 
 // ? Websocket Response

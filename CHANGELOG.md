@@ -1,3 +1,13 @@
+# 1.1.17 - 29 Sep 2024
+Change:
+- Coerce number to numeric on body root automatically
+- Coerce boolean to booleanString on body root automatically
+
+Bug fix:
+- [#838](https://github.com/elysiajs/elysia/issues/838) invalid `onAfterResponse` typing
+- [#855](https://github.com/elysiajs/elysia/issues/855) Validation with Numeric & Number options doesn't work
+- [#843](https://github.com/elysiajs/elysia/issues/843) Resolve does not work with aot: false
+
 # 1.1.16 - 23 Sep 2024
 Bug fix:
 - separate between `createStaticHandler` and `createNativeStaticHandler` for maintainability

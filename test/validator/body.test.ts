@@ -416,7 +416,7 @@ describe('Body Validator', () => {
 		expect(value).toBe('number')
 	})
 
-	it("don't coerce number to numeric", async () => {
+	it("coerce number to numeric", async () => {
 		const app = new Elysia().post('/', ({ body }) => typeof body, {
 			body: t.Number()
 		})
@@ -431,7 +431,7 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(response.status).toBe(422)
+		expect(response.status).toBe(200)
 	})
 
 	it("don't coerce number object to numeric", async () => {
@@ -450,9 +450,9 @@ describe('Body Validator', () => {
 		expect(response.status).toBe(422)
 	})
 
-	it("don't coerce string to boolean", async () => {
+	it("coerce string to boolean", async () => {
 		const app = new Elysia().post('/', ({ body }) => typeof body, {
-			body: t.Number()
+			body: t.Boolean()
 		})
 
 		const response = await app.handle(
@@ -465,13 +465,13 @@ describe('Body Validator', () => {
 			})
 		)
 
-		expect(response.status).toBe(422)
+		expect(response.status).toBe(200)
 	})
 
 	it("don't coerce string object to boolean", async () => {
 		const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
 			body: t.Object({
-				id: t.Number()
+				id: t.Boolean()
 			})
 		})
 

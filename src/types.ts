@@ -677,7 +677,7 @@ export type MapResponse<
 	Path extends string | undefined = undefined
 > = Handler<
 	Omit<Route, 'response'> & {
-		response: MaybePromise<Response | undefined | unknown>
+		response: {} extends Route['response'] ? unknown : Route['response']
 	},
 	Singleton & {
 		derive: {
@@ -772,8 +772,10 @@ export type AfterResponseHandler<
 	}
 > = (
 	context: Prettify<
-		Context<Route, Singleton> & {
-			response: Route['response']
+		Omit<Context<Route, Singleton>, 'response'> & {
+			response: {} extends Route['response']
+				? unknown
+				: Route['response'][keyof Route['response']]
 		}
 	>
 ) => MaybePromise<void>
@@ -1000,7 +1002,7 @@ export type LocalHook<
 		/**
 		 * Execute after response is sent
 		 */
-		afterResponse?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 		/**
 		 * Catch error
 		 */

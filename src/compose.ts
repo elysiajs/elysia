@@ -1,7 +1,7 @@
 import type { AnyElysia } from '.'
 
 import { Value } from '@sinclair/typebox/value'
-import type { TAnySchema, TSchema } from '@sinclair/typebox'
+import { TypeBoxError, type TAnySchema, type TSchema } from '@sinclair/typebox'
 
 import { parseQuery, parseQueryFromURL } from './fast-querystring'
 
@@ -1681,7 +1681,11 @@ export const composeHandler = ({
 	if (hooks.error.length) {
 		fnLiteral +=
 			`c.error=error\n` +
-			`c.code=error.code??error[ERROR_CODE]??"UNKNOWN"\n` +
+			`if(error instanceof TypeBoxError){` +
+			'c.code="VALIDATION"\n' +
+			'c.set.status=422' +
+			'}else{' +
+			`c.code=error.code??error[ERROR_CODE]??"UNKNOWN"}` +
 			`let er\n`
 
 		for (let i = 0; i < hooks.error.length; i++) {
@@ -1804,7 +1808,8 @@ export const composeHandler = ({
 		`ELYSIA_RESPONSE,` +
 		`ELYSIA_TRACE,` +
 		`ELYSIA_REQUEST_ID,` +
-		`getServer` +
+		`getServer,` +
+		'TypeBoxError' +
 		`}=hooks\n` +
 		`const trace=_trace.map(x=>typeof x==='function'?x:x.fn)\n` +
 		`return ${maybeAsync ? 'async ' : ''}function handle(c){`
@@ -1853,7 +1858,8 @@ export const composeHandler = ({
 			ELYSIA_TRACE,
 			ELYSIA_REQUEST_ID,
 			// @ts-expect-error private property
-			getServer: () => app.getServer()
+			getServer: () => app.getServer(),
+			TypeBoxError
 		})
 	} catch {
 		const debugHooks = lifeCycleToFn(hooks)
