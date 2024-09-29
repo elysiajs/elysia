@@ -267,7 +267,7 @@ export const mergeHook = (
 
 interface ReplaceSchemaTypeOptions {
 	from: TSchema
-	to(): TSchema
+	to(options: Object): TSchema
 	excludeRoot?: boolean
 	/**
 	 * Traverse until object is found except root object
@@ -333,7 +333,7 @@ const _replaceSchemaType = (
 	if (schema[Kind] === fromSymbol) {
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		const { anyOf, oneOf, allOf, not, properties, items, ...rest } = schema
-		const to = options.to()
+		const to = options.to(rest)
 
 		// If t.Transform is used, we need to re-calculate Encode, Decode
 		let transform
@@ -478,7 +478,7 @@ const _replaceSchemaType = (
 				case fromSymbol:
 					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					const { anyOf, oneOf, allOf, not, type, ...rest } = value
-					const to = options.to()
+					const to = options.to(rest)
 
 					if (to.anyOf)
 						for (let i = 0; i < to.anyOf.length; i++)
@@ -558,12 +558,12 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		schema = replaceSchemaType(schema, [
 			{
 				from: t.Number(),
-				to: () => t.Numeric(),
+				to: (options) => t.Numeric(options),
 				untilObjectFound: true
 			},
 			{
 				from: t.Boolean(),
-				to: () => t.BooleanString(),
+				to: (options) => t.BooleanString(options),
 				untilObjectFound: true
 			},
 			...(Array.isArray(additionalCoerce)
@@ -1469,48 +1469,47 @@ type PropertyKeys<T> = {
 
 type PropertiesOnly<T> = Pick<T, PropertyKeys<T>>
 
-export const classToObject = <T>(
-	instance: T,
-	processed: WeakMap<object, object> = new WeakMap()
-): T extends object ? PropertiesOnly<T> : T => {
-	if (typeof instance !== 'object' || instance === null)
-		return instance as any
+// export const classToObject = <T>(
+// 	instance: T,
+// 	processed: WeakMap<object, object> = new WeakMap()
+// ): T extends object ? PropertiesOnly<T> : T => {
+// 	if (typeof instance !== 'object' || instance === null)
+// 		return instance as any
 
-	if (Array.isArray(instance))
-		return instance.map((x) => classToObject(x, processed)) as any
+// 	if (Array.isArray(instance))
+// 		return instance.map((x) => classToObject(x, processed)) as any
 
-	if (processed.has(instance)) return processed.get(instance) as any
+// 	if (processed.has(instance)) return processed.get(instance) as any
 
-	const result: Partial<T> = {}
+// 	const result: Partial<T> = {}
 
-	for (const key of Object.keys(instance) as Array<keyof T>) {
-		const value = instance[key]
-		if (typeof value === 'object' && value !== null)
-			result[key] = classToObject(value, processed) as T[keyof T]
-		else result[key] = value
-	}
+// 	for (const key of Object.keys(instance) as Array<keyof T>) {
+// 		const value = instance[key]
+// 		if (typeof value === 'object' && value !== null)
+// 			result[key] = classToObject(value, processed) as T[keyof T]
+// 		else result[key] = value
+// 	}
 
-	const prototype = Object.getPrototypeOf(instance)
-	if (!prototype) return result as any
+// 	const prototype = Object.getPrototypeOf(instance)
+// 	if (!prototype) return result as any
 
-	const properties = Object.getOwnPropertyNames(prototype)
+// 	const properties = Object.getOwnPropertyNames(prototype)
 
-	for (const property of properties) {
-		const descriptor = Object.getOwnPropertyDescriptor(
-			Object.getPrototypeOf(instance),
-			property
-		)
+// 	for (const property of properties) {
+// 		const descriptor = Object.getOwnPropertyDescriptor(
+// 			Object.getPrototypeOf(instance),
+// 			property
+// 		)
 
-		if (descriptor && typeof descriptor.get === 'function') {
-			// ? Very important to prevent prototype pollution
-			if (property === '__proto__') continue
+// 		if (descriptor && typeof descriptor.get === 'function') {
+// 			// ? Very important to prevent prototype pollution
+// 			if (property === '__proto__') continue
 
-			console.log(property)
-			;(result as any)[property as keyof typeof instance] = classToObject(
-				instance[property as keyof typeof instance]
-			)
-		}
-	}
+// 			;(result as any)[property as keyof typeof instance] = classToObject(
+// 				instance[property as keyof typeof instance]
+// 			)
+// 		}
+// 	}
 
-	return result as any
-}
+// 	return result as any
+// }
