@@ -20,6 +20,7 @@ import {
 
 import {
 	cloneInference,
+	coerceNumberRoot,
 	deduplicateChecksum,
 	fnToContainer,
 	localHookToLifeCycleStore,
@@ -516,7 +517,8 @@ export default class Elysia<
 						body: getSchemaValidator(cloned.body, {
 							dynamic,
 							models,
-							normalize
+							normalize,
+							additionalCoerce: coerceNumberRoot()
 						}),
 						headers: getSchemaValidator(cloned.headers, {
 							dynamic,
@@ -554,7 +556,8 @@ export default class Elysia<
 								{
 									dynamic,
 									models,
-									normalize
+									normalize,
+									additionalCoerce: coerceNumberRoot()
 								}
 							))
 						},
@@ -810,7 +813,8 @@ export default class Elysia<
 					nativeStaticHandler &&
 					(method === 'GET' || method === 'ALL')
 				)
-					this.router.static.http.static[loosePath] = nativeStaticHandler()
+					this.router.static.http.static[loosePath] =
+						nativeStaticHandler()
 
 				if (method === 'ALL')
 					staticRouter.map[loosePath].all =

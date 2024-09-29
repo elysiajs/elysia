@@ -269,6 +269,7 @@ interface ReplaceSchemaTypeOptions {
 	from: TSchema
 	to(options: Object): TSchema
 	excludeRoot?: boolean
+	rootOnly?: boolean
 	/**
 	 * Traverse until object is found except root object
 	 **/
@@ -472,7 +473,7 @@ const _replaceSchemaType = (
 
 	const properties = schema?.properties as Record<string, TSchema>
 
-	if (properties)
+	if (properties && root && options.rootOnly !== true)
 		for (const [key, value] of Object.entries(properties)) {
 			switch (value[Kind]) {
 				case fromSymbol:
@@ -554,22 +555,31 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 	let schema: TSchema = typeof s === 'string' ? models[s] : s
 
-	if (coerce)
-		schema = replaceSchemaType(schema, [
-			{
-				from: t.Number(),
-				to: (options) => t.Numeric(options),
-				untilObjectFound: true
-			},
-			{
-				from: t.Boolean(),
-				to: (options) => t.BooleanString(options),
-				untilObjectFound: true
-			},
-			...(Array.isArray(additionalCoerce)
-				? additionalCoerce
-				: [additionalCoerce])
-		])
+	if (coerce || additionalCoerce) {
+		if (coerce)
+			schema = replaceSchemaType(schema, [
+				{
+					from: t.Number(),
+					to: (options) => t.Numeric(options),
+					untilObjectFound: true
+				},
+				{
+					from: t.Boolean(),
+					to: (options) => t.BooleanString(options),
+					untilObjectFound: true
+				},
+				...(Array.isArray(additionalCoerce)
+					? additionalCoerce
+					: [additionalCoerce])
+			])
+		else {
+			schema = replaceSchemaType(schema, [
+				...(Array.isArray(additionalCoerce)
+					? additionalCoerce
+					: [additionalCoerce])
+			])
+		}
+	}
 
 	// console.dir(schema, {
 	// 	depth: null
@@ -810,7 +820,23 @@ export const stringToStructureCoercions = () => {
 			}
 		] satisfies ReplaceSchemaTypeOptions[]
 	}
+
 	return _stringToStructureCoercions
+}
+
+let _coerceNumberRoot: ReplaceSchemaTypeOptions[]
+
+export const coerceNumberRoot = () => {
+	if (!_coerceNumberRoot)
+		_coerceNumberRoot = [
+			{
+				from: t.Number(),
+				to: (options) => t.Numeric(options),
+				rootOnly: true
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
+
+	return _coerceNumberRoot
 }
 
 export const getCookieValidator = ({

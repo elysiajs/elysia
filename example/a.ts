@@ -1,14 +1,16 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { post } from '../test/utils'
 
-const app = new Elysia({ aot: false })
-	.resolve(() => {
-		return {
-			hello: 'world'
-		}
+const app = new Elysia().post('/', ({ body: { id } }) => typeof id, {
+	body: t.Object({
+		id: t.Number()
 	})
-	.get('/', ({ hello }) => hello)
+})
 
-const res = await app.handle(req('/')).then((x) => x.text())
+const response = await app.handle(
+	post('/', {
+		id: '1'
+	})
+)
 
-console.log(res)
+console.log(response.status)
