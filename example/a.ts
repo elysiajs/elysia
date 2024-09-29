@@ -1,24 +1,14 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const numberApp = new Elysia()
-	.onError(({ code }) => code)
-	.get('/:entityType', ({ params: { entityType } }) => entityType, {
-		params: t.Object({
-			entityType: t.Number({
-				minimum: 0,
-				maximum: 3,
-				multipleOf: 1
-			})
-		})
+const app = new Elysia({ aot: false })
+	.resolve(() => {
+		return {
+			hello: 'world'
+		}
 	})
+	.get('/', ({ hello }) => hello)
 
-const response = await numberApp.handle(
-  new Request("http://localhost/999")
-);
+const res = await app.handle(req('/')).then((x) => x.text())
 
-console.log(await response.status)
-console.log(await response.text())
-
-// app.handle(new Request('http://localhost'))
-// 	.then((x) => x.headers.getSetCookie())
-// 	.then(console.log)
+console.log(res)

@@ -290,8 +290,16 @@ export const createDynamicHandler =
 			}
 
 			for (let i = 0; i < hooks.beforeHandle.length; i++) {
-				let response = hooks.beforeHandle[i].fn(context)
-				if (response instanceof Promise) response = await response
+				const hook = hooks.beforeHandle[i]
+				let response = hook.fn(context)
+
+				if (hook.subType === 'resolve') {
+					if (response instanceof Promise)
+						Object.assign(context, await response)
+					else Object.assign(context, response)
+
+					continue
+				} else if (response instanceof Promise) response = await response
 
 				// `false` is a falsey value, check for undefined instead
 				if (response !== undefined) {
