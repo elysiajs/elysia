@@ -1,8 +1,14 @@
 import { Elysia } from '../src'
-import { manifest } from '../src/manifest'
 
-const b = new Elysia().get('/b', () => 'Hello, World!')
+const app = new Elysia()
+	.get('/', (context) => {
+		context.b
+	}, {
+		derive: () => { return { b: 'b' } }
+		// resolve: () => ({ resolved: 'a' })
+	})
+	.listen(3000)
 
-const app = new Elysia().use(b).get('/', () => 'Hello, World!')
-
-manifest(app)
+app.handle(new Request('http://localhost/'))
+	.then((t) => t.text())
+	.then(console.log)

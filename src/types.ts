@@ -31,6 +31,8 @@ import type { ComposerGeneralHandlerOptions } from './compose'
 
 type PartialServe = Partial<Serve>
 
+export type IsNever<T> = [T] extends [never] ? true : false
+
 export type ElysiaConfig<Prefix extends string | undefined> = {
 	/**
 	 * Path prefix of the instance
@@ -159,6 +161,7 @@ export type ValidatorLayer = {
 }
 
 export type MaybeArray<T> = T | T[]
+export type MaybeReadonlyArray<T> = T | readonly T[]
 export type MaybePromise<T> = T | Promise<T>
 
 export type ObjectValues<T extends object> = T[keyof T]
@@ -585,15 +588,29 @@ export type InlineHandler<
 		resolve: {}
 	},
 	Path extends string | undefined = undefined,
-	MacroContext = {}
+	MacroFn extends BaseMacroFn = {},
+	SelectedMacro extends MetadataBase['macro'] = {}
 > =
 	| ((
-			context: MacroContext extends Record<
-				string | number | symbol,
-				unknown
-			>
-				? Prettify<MacroContext & Context<Route, Singleton, Path>>
-				: Context<Route, Singleton, Path>
+			context: {} extends SelectedMacro
+				? Context<Route, Singleton, Path>
+				: Prettify<
+						Context<Route, Singleton, Path> &
+							(MacroFn[keyof SelectedMacro] extends infer Fn extends
+								(
+									...v: any[]
+								) => Record<
+									string,
+									(...v: any[]) => Record<keyof any, unknown>
+								>
+								? ReturnType<Fn> extends {
+										derive: infer Derive extends
+											() => Record<keyof any, unknown>
+									}
+									? ReturnType<Derive>
+									: {}
+								: {})
+					>
 	  ) =>
 			| Response
 			| MaybePromise<
@@ -948,12 +965,73 @@ export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
 	hide?: boolean
 }
 
+export type DeriveHandler<
+	Singleton extends SingletonBase,
+	Derivative extends Record<string, unknown> | void = Record<
+		string,
+		unknown
+	> | void
+> = (context: Prettify<Context<{}, Singleton>>) => MaybePromise<Derivative>
+
+export type ResolveHandler<
+	Route extends RouteSchema,
+	Singleton extends SingletonBase,
+	Derivative extends Record<string, unknown> | void = Record<
+		string,
+		unknown
+	> | void
+> = (context: Prettify<Context<Route, Singleton>>) => MaybePromise<Derivative>
+
+type AnyContextFn = (context?: any) => any
+
+type DefaultDeriveHandler = MaybeArray<DeriveHandler<any>> | undefined
+
+export type ResolveDerivatives<T extends DefaultDeriveHandler> =
+	IsNever<keyof T> extends true
+		? any[] extends T
+			? {}
+			: ReturnType<// @ts-ignore Trust me bro
+				T>
+		: ResolveDerivativesArray<// @ts-ignore Trust me bro
+			T>
+
+export type ResolveDerivativesArray<
+	T extends any[],
+	Carry extends Record<keyof any, unknown> = {}
+> = T extends [infer Fn extends AnyContextFn, ...infer Rest]
+	? ReturnType<Fn> extends infer Value extends Record<keyof any, unknown>
+		? ResolveDerivativesArray<Rest, Value & Carry>
+		: ResolveDerivativesArray<Rest, Carry>
+	: Prettify<Carry>
+
+type DefaultResolveHandler = MaybeArray<ResolveHandler<any, any>> | undefined
+
+export type ResolveResolutions<T extends DefaultResolveHandler> =
+	IsNever<keyof T> extends true
+		? any[] extends T
+			? {}
+			: ReturnType<// @ts-ignore Trust me bro
+				T>
+		: ResolveResolutionsArray<// @ts-ignore Trust me bro
+			T>
+
+export type ResolveResolutionsArray<
+	T extends any[],
+	Carry extends Record<keyof any, unknown> = {}
+> = T extends [infer Fn extends AnyContextFn, ...infer Rest]
+	? ReturnType<Fn> extends infer Value extends Record<keyof any, unknown>
+		? ResolveResolutionsArray<Rest, Value & Carry>
+		: ResolveResolutionsArray<Rest, Carry>
+	: Prettify<Carry>
+
 export type LocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
 	Extension extends BaseMacro,
+	Derivatives extends MaybeArray<DeriveHandler<Singleton>>,
+	Resolutions extends MaybeArray<ResolveHandler<Schema, Singleton>>,
 	Path extends string = '',
 	TypedRoute extends RouteSchema = Schema extends {
 		params: Record<string, unknown>
@@ -986,23 +1064,78 @@ export type LocalHook<
 		/**
 		 * Transform context's value
 		 */
-		transform?: MaybeArray<TransformHandler<TypedRoute, Singleton>>
+		transform?: MaybeArray<
+			TransformHandler<
+				TypedRoute,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['decorator']
+					derive: ResolveDerivatives<Derivatives>
+					resolve: {}
+				}
+			>
+		>
+		/**
+		 * Derive **(must be an arrow function)
+		 */
+		derive?: Derivatives
+		resolve?: Resolutions
 		/**
 		 * Execute before main handler
 		 */
-		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+		beforeHandle?: MaybeArray<
+			OptionalHandler<
+				TypedRoute,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['decorator']
+					derive: ResolveDerivatives<Derivatives>
+					resolve: ResolveResolutions<Resolutions>
+				}
+			>
+		>
 		/**
 		 * Execute after main handler
 		 */
-		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+		afterHandle?: MaybeArray<
+			AfterHandler<
+				TypedRoute,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['decorator']
+					derive: ResolveDerivatives<Derivatives>
+					resolve: ResolveResolutions<Resolutions>
+				}
+			>
+		>
 		/**
 		 * Execute after main handler
 		 */
-		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+		mapResponse?: MaybeArray<
+			MapResponse<
+				TypedRoute,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['decorator']
+					derive: ResolveDerivatives<Derivatives>
+					resolve: ResolveResolutions<Resolutions>
+				}
+			>
+		>
 		/**
 		 * Execute after response is sent
 		 */
-		afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+		afterResponse?: MaybeArray<
+			AfterResponseHandler<
+				TypedRoute,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['decorator']
+					derive: ResolveDerivatives<Derivatives>
+					resolve: ResolveResolutions<Resolutions>
+				}
+			>
+		>
 		/**
 		 * Catch error
 		 */
@@ -1079,15 +1212,116 @@ export type BaseMacro = Record<
 	string,
 	string | number | boolean | Object | undefined | null
 >
-export type BaseMacroFn = Record<string, (...a: any) => unknown>
 
-export type MacroToProperty<in out T extends BaseMacroFn> = Prettify<{
-	[K in keyof T]: T[K] extends Function
-		? T[K] extends (a: infer Params) => any
-			? Params | undefined
+export type BaseMacroFn<
+	in out TypedRoute extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	in out Errors extends Record<string, Error> = {}
+> = Record<
+	keyof any,
+	(...a: any) => void | {
+		onParse?(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
+		onParse?(
+			options: MacroOptions,
+			fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+		): unknown
+
+		onTransform?(
+			fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		): unknown
+		onTransform?(
+			options: MacroOptions,
+			fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		): unknown
+
+		onBeforeHandle?(
+			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+		): unknown
+		onBeforeHandle?(
+			options: MacroOptions,
+			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+		): unknown
+
+		onAfterHandle?(
+			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+		): unknown
+		onAfterHandle?(
+			options: MacroOptions,
+			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+		): unknown
+
+		onError?(
+			fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+		): unknown
+		onError?(
+			options: MacroOptions,
+			fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+		): unknown
+
+		mapResponse?(
+			fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
+		): unknown
+		mapResponse?(
+			options: MacroOptions,
+			fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
+		): unknown
+
+		onAfterResponse?(
+			fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+		): unknown
+		onAfterResponse?(
+			options: MacroOptions,
+			fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+		): unknown
+	}
+>
+
+export type HookMacroFn<
+	in out TypedRoute extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	in out Errors extends Record<string, Error> = {}
+> = Record<
+	keyof any,
+	(...a: any) => {
+		parse?(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
+		transform?(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
+		derive?(fn: DeriveHandler<Singleton>): unknown
+		beforeHandle?(
+			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+		): unknown
+		afterHandle?(
+			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+		): unknown
+		error?(
+			fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+		): unknown
+		mapResponse?(
+			fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
+		): unknown
+		afterResponse?(
+			fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+		): unknown
+	}
+>
+
+export type MacroToProperty<in out T extends BaseMacroFn | HookMacroFn> =
+	Prettify<{
+		[K in keyof T]: T[K] extends Function
+			? T[K] extends (a: infer Params) => any
+				? Params | undefined
+				: T[K]
 			: T[K]
-		: T[K]
-}>
+	}>
 
 interface MacroOptions {
 	insert?: 'before' | 'after'

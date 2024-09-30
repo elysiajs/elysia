@@ -223,9 +223,13 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
+	// @ts-expect-error
+	const { derive: deriveA, resolve: resolveA, ...restA } = a ?? {}
+	const { derive: deriveB, resolve: resolveB, ...restB } = b ?? {}
+
 	return {
-		...a,
-		...b,
+		...restA,
+		...restB,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -252,8 +256,20 @@ export const mergeHook = (
 			a?.detail ?? {}
 		),
 		parse: mergeObjectArray(a?.parse as any, b?.parse),
-		transform: mergeObjectArray(a?.transform, b?.transform),
-		beforeHandle: mergeObjectArray(a?.beforeHandle, b?.beforeHandle),
+		transform: mergeObjectArray(
+			mergeObjectArray(fnToContainer(deriveA, 'derive'), a?.transform),
+			mergeObjectArray(fnToContainer(deriveB, 'derive'), b?.transform)
+		),
+		beforeHandle: mergeObjectArray(
+			mergeObjectArray(
+				fnToContainer(resolveA, 'resolve'),
+				a?.beforeHandle
+			),
+			mergeObjectArray(
+				fnToContainer(resolveB, 'resolve'),
+				b?.beforeHandle
+			)
+		),
 		afterHandle: mergeObjectArray(a?.afterHandle, b?.afterHandle),
 		mapResponse: mergeObjectArray(a?.mapResponse, b?.mapResponse) as any,
 		afterResponse: mergeObjectArray(
@@ -937,12 +953,32 @@ export const mergeLifeCycle = (
 			injectChecksum(checksum, b?.parse)
 		) as HookContainer<BodyHandler<any, any>>[],
 		transform: mergeObjectArray(
-			a.transform,
-			injectChecksum(checksum, b?.transform)
+			mergeObjectArray(
+				// @ts-ignore
+				fnToContainer(a?.derive, 'derive'),
+				a.transform
+			),
+			injectChecksum(
+				checksum,
+				mergeObjectArray(
+					fnToContainer(b?.derive, 'derive'),
+					b?.transform
+				)
+			)
 		) as HookContainer<TransformHandler<any, any>>[],
 		beforeHandle: mergeObjectArray(
-			a.beforeHandle,
-			injectChecksum(checksum, b?.beforeHandle)
+			mergeObjectArray(
+				// @ts-ignore
+				fnToContainer(a.resolve, 'resolve'),
+				a.beforeHandle
+			),
+			injectChecksum(
+				checksum,
+				mergeObjectArray(
+					fnToContainer(b?.resolve, 'resolve'),
+					b?.beforeHandle
+				)
+			)
 		) as HookContainer<OptionalHandler<any, any>>[],
 		afterHandle: mergeObjectArray(
 			a.afterHandle,
@@ -1162,7 +1198,8 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 
 export const traceBackMacro = (
 	extension: unknown,
-	property: Record<string, unknown>
+	property: Record<string, unknown>,
+	manage: ReturnType<typeof createMacroManager>
 ) => {
 	if (!extension || typeof extension !== 'object' || !property) return
 
@@ -1174,7 +1211,15 @@ export const traceBackMacro = (
 		] as BaseMacro[string]
 
 		if (typeof v === 'function') {
-			v(value)
+			const hook = v(value)
+
+			if (typeof hook === 'object')
+				// @ts-expect-error
+				for (const [k, v] of Object.values(hook))
+					manage(k)({
+						fn: v as any
+					})
+
 			delete property[key as unknown as keyof typeof extension]
 		}
 	}
@@ -1186,7 +1231,7 @@ export const createMacroManager =
 		localHook
 	}: {
 		globalHook: LifeCycleStore
-		localHook: LocalHook<any, any, any, any, any, any, any>
+		localHook: LocalHook<any, any, any, any, any, any, any, any, any>
 	}) =>
 	(stackName: keyof LifeCycleStore) =>
 	(
@@ -1339,18 +1384,21 @@ export class PromiseGroup implements PromiseLike<void> {
 }
 
 export const fnToContainer = (
-	fn: MaybeArray<Function | HookContainer>
+	fn: MaybeArray<Function | HookContainer>,
+	/** Only add subType to non contained fn */
+	subType?: HookContainer['subType']
 ): MaybeArray<HookContainer> => {
 	if (!fn) return fn
 
 	if (!Array.isArray(fn)) {
-		if (typeof fn === 'function') return { fn }
+		if (typeof fn === 'function') return subType ? { fn, subType } : { fn }
 		else if ('fn' in fn) return fn
 	}
 
 	const fns = <HookContainer[]>[]
 	for (const x of fn) {
-		if (typeof x === 'function') fns.push({ fn: x })
+		if (typeof x === 'function')
+			fns.push(subType ? { fn: x, subType } : { fn: x })
 		else if ('fn' in x) fns.push(x)
 	}
 
@@ -1358,7 +1406,7 @@ export const fnToContainer = (
 }
 
 export const localHookToLifeCycleStore = (
-	a: LocalHook<any, any, any, any, any>
+	a: LocalHook<any, any, any, any, any, any, any>
 ): LifeCycleStore => {
 	return {
 		...a,
@@ -1494,11 +1542,11 @@ export const promoteEvent = (
 	for (const event of events) if ('scope' in event) event.scope = 'global'
 }
 
-type PropertyKeys<T> = {
-	[K in keyof T]: T[K] extends (...args: any[]) => any ? never : K
-}[keyof T]
+// type PropertyKeys<T> = {
+// 	[K in keyof T]: T[K] extends (...args: any[]) => any ? never : K
+// }[keyof T]
 
-type PropertiesOnly<T> = Pick<T, PropertyKeys<T>>
+// type PropertiesOnly<T> = Pick<T, PropertyKeys<T>>
 
 // export const classToObject = <T>(
 // 	instance: T,

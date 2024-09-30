@@ -1206,7 +1206,7 @@ const a = app
 	}>()
 
 	expectTypeOf<app['index']['post']['response']>().toEqualTypeOf<{
-		201: string
+		readonly 201: string
 	}>()
 
 	expectTypeOf<app['true']['get']['response']>().toEqualTypeOf<{
@@ -1214,7 +1214,7 @@ const a = app
 	}>()
 
 	expectTypeOf<app['true']['post']['response']>().toEqualTypeOf<{
-		202: boolean
+		readonly 202: boolean
 	}>()
 
 	expectTypeOf<app['error']['get']['response']>().toEqualTypeOf<{

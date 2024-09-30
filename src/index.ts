@@ -124,7 +124,12 @@ import type {
 	ResolvePath,
 	JoinPath,
 	ValidatorLayer,
-    MergeElysiaInstances
+	MergeElysiaInstances,
+	DeriveHandler,
+	ResolveDerivatives,
+	HookMacroFn,
+	ResolveHandler,
+	ResolveResolutions
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -377,17 +382,31 @@ export default class Elysia<
 					global: this.event,
 					local: localHook
 				},
-				onParse: manage('parse') as any,
-				onTransform: manage('transform') as any,
-				onBeforeHandle: manage('beforeHandle') as any,
-				onAfterHandle: manage('afterHandle') as any,
-				mapResponse: manage('mapResponse') as any,
-				onAfterResponse: manage('afterResponse') as any,
-				onError: manage('error') as any
+				get onParse() {
+					return manage('parse') as any
+				},
+				get onTransform() {
+					return manage('transform') as any
+				},
+				get onBeforeHandle() {
+					return manage('beforeHandle') as any
+				},
+				get onAfterHandle() {
+					return manage('afterHandle') as any
+				},
+				get mapResponse() {
+					return manage('mapResponse') as any
+				},
+				get onAfterResponse() {
+					return manage('afterResponse') as any
+				},
+				get onError() {
+					return manage('error') as any
+				}
 			}
 
 			for (const macro of this.extender.macros)
-				traceBackMacro(macro.fn(manager), localHook)
+				traceBackMacro(macro.fn(manager), localHook, manage)
 		}
 	}
 
@@ -431,7 +450,7 @@ export default class Elysia<
 		method: HTTPMethod,
 		path: string,
 		handle: Handler<any, any, any> | any,
-		localHook?: LocalHook<any, any, any, any, any, any>,
+		localHook?: LocalHook<any, any, any, any, any, any, any, any>,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
 			skipPrefix: false as boolean | undefined
@@ -441,8 +460,7 @@ export default class Elysia<
 
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
-		if (this.config.prefix && !skipPrefix)
-			path = this.config.prefix + path
+		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
 
 		if (localHook?.type)
 			switch (localHook.type) {
@@ -2321,11 +2339,15 @@ export default class Elysia<
 
 		const handles = handlers as HookContainer[]
 
-		for (const handle of handles)
+		for (const handle of handles) {
 			handle.scope =
 				typeof optionsOrType === 'string'
 					? 'local'
 					: (optionsOrType?.as ?? 'local')
+
+			// @ts-expect-error
+			if (type === 'resolve' || type === 'derive') handle.subType = type
+		}
 
 		if (type !== 'trace')
 			sucrose(
@@ -2355,8 +2377,23 @@ export default class Elysia<
 					this.event.transform.push(fn as any)
 					break
 
+				// @ts-expect-error
+				case 'derive':
+					this.event.transform.push(
+						fnToContainer(fn as any, 'derive') as any
+					)
+					break
+
 				case 'beforeHandle':
 					this.event.beforeHandle.push(fn as any)
+					break
+
+				// @ts-expect-error
+				// eslint-disable-next-line sonarjs/no-duplicated-branches
+				case 'resolve':
+					this.event.beforeHandle.push(
+						fnToContainer(fn as any, 'resolve') as any
+					)
 					break
 
 				case 'afterHandle':
@@ -2538,6 +2575,23 @@ export default class Elysia<
 		const Schema extends MergeSchema<
 			UnwrapRoute<Input, Definitions['type']>,
 			Metadata['schema']
+		>,
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
 		>
 	>(
 		prefix: Prefix,
@@ -2550,12 +2604,29 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
+			Derivatives,
+			Resolutions,
 			`${BasePath}${Prefix}`
 		>,
 		run: (
 			group: Elysia<
 				`${BasePath}${Prefix}`,
-				Singleton,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Prettify<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive'] &
+							ResolveDerivatives<Derivatives>
+					>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve'] &
+							ResolveResolutions<Resolutions>
+					>
+				},
 				Definitions,
 				{
 					schema: Schema
@@ -2594,7 +2665,7 @@ export default class Elysia<
 	group(
 		prefix: string,
 		schemaOrRun:
-			| LocalHook<any, any, any, any, any, any>
+			| LocalHook<any, any, any, any, any, any, any, any>
 			| ((group: AnyElysia) => AnyElysia),
 		run?: (group: AnyElysia) => AnyElysia
 	): AnyElysia {
@@ -2669,7 +2740,16 @@ export default class Elysia<
 						path,
 						handler,
 						mergeHook(
-							hooks as LocalHook<any, any, any, any, any, any>,
+							hooks as LocalHook<
+								any,
+								any,
+								any,
+								any,
+								any,
+								any,
+								any,
+								any
+							>,
 							{
 								error: sandbox.event.error
 							}
@@ -2693,17 +2773,44 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema']
 		>,
-		const Type extends LifeCycleType
+		const Type extends LifeCycleType,
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>
 	>(
 		hook: { as: Type } & LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: Singleton['derive'] &
+					Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Singleton['resolve'] &
+					Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
 			Definitions['error'],
 			Metadata['macro'],
+			Derivatives,
+			Resolutions,
 			BasePath
 		>
 	): Type extends 'global'
@@ -2712,8 +2819,10 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve']
+					derive: Singleton['derive'] &
+						ResolveDerivatives<Derivatives>
+					resolve: Singleton['resolve'] &
+						ResolveResolutions<Resolutions>
 				},
 				Definitions,
 				{
@@ -2738,8 +2847,10 @@ export default class Elysia<
 					Metadata,
 					Routes,
 					{
-						derive: Volatile['derive']
-						resolve: Volatile['resolve']
+						derive: Volatile['derive'] &
+							ResolveDerivatives<Derivatives>
+						resolve: Volatile['resolve'] &
+							ResolveResolutions<Resolutions>
 						schema: Prettify<
 							MergeSchema<
 								UnwrapRoute<LocalSchema, Definitions['type']>,
@@ -2757,8 +2868,10 @@ export default class Elysia<
 					Routes,
 					Ephemeral,
 					{
-						derive: Volatile['derive']
-						resolve: Volatile['resolve']
+						derive: Volatile['derive'] &
+							ResolveDerivatives<Derivatives>
+						resolve: Volatile['resolve'] &
+							ResolveResolutions<Resolutions>
 						schema: Prettify<
 							MergeSchema<
 								UnwrapRoute<LocalSchema, Definitions['type']>,
@@ -2777,17 +2890,44 @@ export default class Elysia<
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema']
+		>,
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
 		>
 	>(
 		hook: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: Singleton['derive'] &
+					Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Singleton['resolve'] &
+					Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
 			Definitions['error'],
 			Metadata['macro'],
+			Derivatives,
+			Resolutions,
 			BasePath
 		>
 	): Elysia<
@@ -2798,8 +2938,12 @@ export default class Elysia<
 		Routes,
 		Ephemeral,
 		{
-			derive: Volatile['derive']
-			resolve: Volatile['resolve']
+			derive: Prettify<
+				Volatile['derive'] & ResolveDerivatives<Derivatives>
+			>
+			resolve: Prettify<
+				Volatile['resolve'] & ResolveResolutions<Resolutions>
+			>
 			schema: Prettify<
 				MergeSchema<
 					UnwrapRoute<LocalSchema, Definitions['type']>,
@@ -2855,23 +2999,57 @@ export default class Elysia<
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
 			Metadata['schema']
+		>,
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
 		>
 	>(
 		schema: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: Singleton['derive'] &
+					Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Singleton['resolve'] &
+					Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
 			Definitions['error'],
 			Metadata['macro'],
+			Derivatives,
+			Resolutions,
 			''
 		>,
 		run: (
 			group: Elysia<
 				BasePath,
-				Singleton,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Singleton['derive'] &
+						ResolveDerivatives<Derivatives>
+					resolve: Singleton['resolve'] &
+						ResolveResolutions<Resolutions>
+				},
 				Definitions,
 				{
 					schema: Prettify<Schema>
@@ -2943,8 +3121,12 @@ export default class Elysia<
 				if (hook.parse) this.on({ as: type }, 'parse', hook.parse)
 				if (hook.transform)
 					this.on({ as: type }, 'transform', hook.transform)
+				// @ts-expect-error
+				if (hook.derive) this.on({ as: type }, 'derive', hook.derive)
 				if (hook.beforeHandle)
 					this.on({ as: type }, 'beforeHandle', hook.beforeHandle)
+				// @ts-expect-error
+				if (hook.resolve) this.on({ as: type }, 'resolve', hook.resolve)
 				if (hook.afterHandle)
 					this.on({ as: type }, 'afterHandle', hook.afterHandle)
 				if (hook.mapResponse)
@@ -3012,26 +3194,43 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any, any, any, any, any>, {
-						...((localHook || {}) as LocalHook<
+					mergeHook(
+						hook as LocalHook<
+							any,
+							any,
+							any,
+							any,
 							any,
 							any,
 							any,
 							any,
 							any
-						>),
-						error: !localHook.error
-							? sandbox.event.error
-							: Array.isArray(localHook.error)
-								? [
-										...(localHook.error || {}),
-										...(sandbox.event.error || [])
-									]
-								: [
-										localHook.error,
-										...(sandbox.event.error || [])
-									]
-					})
+						>,
+						{
+							...((localHook || {}) as LocalHook<
+								any,
+								any,
+								any,
+								any,
+								any,
+								any,
+								any,
+								any,
+								any
+							>),
+							error: !localHook.error
+								? sandbox.event.error
+								: Array.isArray(localHook.error)
+									? [
+											...(localHook.error || {}),
+											...(sandbox.event.error || [])
+										]
+									: [
+											localHook.error,
+											...(sandbox.event.error || [])
+										]
+						}
+					)
 				)
 			}
 		)
@@ -3237,6 +3436,8 @@ export default class Elysia<
 												any,
 												any,
 												any,
+												any,
+												any,
 												any
 											>,
 											{
@@ -3371,9 +3572,7 @@ export default class Elysia<
 			if (!(name in this.dependencies)) this.dependencies[name] = []
 
 			const current =
-				seed !== undefined
-					? checksum(name + JSON.stringify(seed))
-					: 0
+				seed !== undefined ? checksum(name + JSON.stringify(seed)) : 0
 
 			if (
 				this.dependencies[name].some(
@@ -3466,19 +3665,54 @@ export default class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile
-	> {
-		const hook: MacroQueue = {
-			checksum: checksum(
-				JSON.stringify({
-					name: this.config.name,
-					seed: this.config.seed,
-					content: macro.toString()
-				})
-			),
-			fn: macro as any
-		}
+	>
 
-		this.extender.macros.push(hook)
+	macro<const NewMacro extends HookMacroFn>(
+		macro: NewMacro
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			macro: Metadata['macro'] & Partial<MacroToProperty<HookMacroFn>>
+			macroFn: Metadata['macroFn'] & NewMacro
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro(macro: Function | Record<keyof any, Function>) {
+		if (typeof macro === 'function') {
+			const hook: MacroQueue = {
+				checksum: checksum(
+					JSON.stringify({
+						name: this.config.name,
+						seed: this.config.seed,
+						content: macro.toString()
+					})
+				),
+				fn: macro as any
+			}
+
+			this.extender.macros.push(hook)
+		} else if (typeof macro === 'object') {
+			const hook: MacroQueue = {
+				checksum: checksum(
+					JSON.stringify({
+						name: this.config.name,
+						seed: this.config.seed,
+						content: Object.entries(macro)
+							.map(([k, v]) => `${k}+${v}`)
+							.join(',')
+					})
+				),
+				fn: () => macro
+			}
+
+			this.extender.macros.push(hook)
+		}
 
 		return this as any
 	}
@@ -3621,13 +3855,38 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<{
+				decorator: Singleton['decorator']
+				store: Singleton['decorator']
+				derive: Ephemeral['derive'] & Volatile['derive']
+				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			}>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['decorator']
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -3641,6 +3900,8 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -3702,13 +3963,41 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
-		const Handle extends InlineHandler<
-			Schema,
-			Singleton & {
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<{
+				decorator: Singleton['decorator']
+				store: Singleton['decorator']
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			}>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['decorator']
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Handle extends InlineHandler<
+			Schema,
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['decorator']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -3716,12 +4005,16 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton & {
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['decorator']
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -3783,13 +4076,37 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -3802,7 +4119,9 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -3864,13 +4183,37 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -3883,7 +4226,9 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -3945,13 +4290,37 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -3964,7 +4333,9 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -4026,13 +4397,37 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -4045,7 +4440,9 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -4107,13 +4504,37 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -4126,7 +4547,9 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -4188,13 +4611,37 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -4207,7 +4654,9 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -4269,13 +4718,37 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		path: Path,
@@ -4288,7 +4761,9 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -4351,13 +4826,37 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const Derivatives extends MaybeArray<
+			DeriveHandler<
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				derive: Ephemeral['derive'] &
+					Volatile['derive'] &
+					ResolveDerivatives<Derivatives>
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions>
 			},
-			JoinPath<BasePath, Path>
+			JoinPath<BasePath, Path>,
+			Metadata['macroFn'],
+			Macro
 		>
 	>(
 		method: Method,
@@ -4371,7 +4870,9 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			Derivatives,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		> & {
 			config: {
