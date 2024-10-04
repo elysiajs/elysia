@@ -1,7 +1,7 @@
 import { Elysia } from '../src'
 
 const app = new Elysia()
-	.get('/', (context) => {
+	.post('/', (context) => {
 		context.b
 	}, {
 		derive: () => { return { b: 'b' } }

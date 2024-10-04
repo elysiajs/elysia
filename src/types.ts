@@ -967,26 +967,26 @@ export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
 
 export type DeriveHandler<
 	Singleton extends SingletonBase,
-	Derivative extends Record<string, unknown> | void = Record<
+	in out Derivative extends Record<string, unknown> | void = Record<
 		string,
 		unknown
 	> | void
-> = (context: Prettify<Context<{}, Singleton>>) => MaybePromise<Derivative>
+> = (context: Context<{}, Singleton>) => MaybePromise<Derivative>
 
 export type ResolveHandler<
-	Route extends RouteSchema,
+	in out Route extends RouteSchema,
 	Singleton extends SingletonBase,
-	Derivative extends Record<string, unknown> | void = Record<
+	in out Derivative extends Record<string, unknown> | void = Record<
 		string,
 		unknown
 	> | void
-> = (context: Prettify<Context<Route, Singleton>>) => MaybePromise<Derivative>
+> = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
 
 type AnyContextFn = (context?: any) => any
 
-type DefaultDeriveHandler = MaybeArray<DeriveHandler<any>> | undefined
-
-export type ResolveDerivatives<T extends DefaultDeriveHandler> =
+export type ResolveDerivatives<
+	T extends MaybeArray<DeriveHandler<any>> | undefined
+> =
 	IsNever<keyof T> extends true
 		? any[] extends T
 			? {}
@@ -1004,9 +1004,9 @@ export type ResolveDerivativesArray<
 		: ResolveDerivativesArray<Rest, Carry>
 	: Prettify<Carry>
 
-type DefaultResolveHandler = MaybeArray<ResolveHandler<any, any>> | undefined
-
-export type ResolveResolutions<T extends DefaultResolveHandler> =
+export type ResolveResolutions<
+	T extends MaybeArray<ResolveHandler<any, any>> | undefined
+> =
 	IsNever<keyof T> extends true
 		? any[] extends T
 			? {}
