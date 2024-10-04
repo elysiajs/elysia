@@ -714,10 +714,10 @@ export const getResponseSchemaValidator = (
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		const cleaner = (value: unknown) => {
 			if (!value || typeof value !== 'object')
-				return Value.Clean(schema, value)
+        return Value.Clean(schema, references || [], value)
 
-			if (Array.isArray(value)) value = Value.Clean(schema, value)
-			else value = Value.Clean(schema, value)
+      if (Array.isArray(value)) value = Value.Clean(schema, references || [], value)
+      else value = Value.Clean(schema, references || [], value)
 
 			return value
 		}
