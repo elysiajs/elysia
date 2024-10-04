@@ -6540,8 +6540,7 @@ export {
 	ValidationError,
 	InternalServerError,
 	InvalidCookieSignature,
-	ERROR_CODE,
-	ELYSIA_RESPONSE
+	ERROR_CODE
 } from './error'
 
 export type {

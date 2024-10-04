@@ -6,7 +6,7 @@ import type {
 	redirect as Redirect
 } from './utils'
 
-import { error, type ELYSIA_RESPONSE } from './error'
+import { ElysiaCustomStatusResponse, error } from './error'
 import type {
 	RouteSchema,
 	Prettify,
@@ -134,7 +134,7 @@ export type Context<
 		redirect: Redirect
 
 		set: {
-		headers: HTTPHeaders
+			headers: HTTPHeaders
 			status?: number | keyof StatusMap
 			/**
 			 * @deprecated Use inline redirect instead
@@ -198,17 +198,8 @@ export type Context<
 				>(
 					code: Code,
 					response: T
-				) => {
-					[ELYSIA_RESPONSE]: Code extends keyof StatusMap
-						? StatusMap[Code]
-						: Code
-					response: T
-					_type: {
-						[ERROR_CODE in Code extends keyof StatusMap
-							? StatusMap[Code]
-							: Code]: T
-					}
-				}
+					// @ts-ignore trust me bro
+				) => ElysiaCustomStatusResponse<Code, T>
 			}) &
 		Singleton['decorator'] &
 		Singleton['derive'] &

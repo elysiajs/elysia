@@ -29,7 +29,7 @@ import {
 	ValidationError,
 	InternalServerError,
 	ERROR_CODE,
-	ELYSIA_RESPONSE
+	ElysiaCustomStatusResponse
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
@@ -179,7 +179,7 @@ const createReport = ({
 					for (let i = 0; i < trace.length; i++) {
 						if (binding)
 							// Don't report error because HTTP response is expected and not an actual error to look for
-							// if (${binding} && typeof ${binding} === "object" && ELYSIA_RESPONSE in ${binding}) {
+							// if (${binding} instanceof ElysiaCustomStatusResponse) {
 							//     ${reporter}Child${i}?.(${binding}.error)
 							//     ${reporter}Child${i}?.()\n
 							// } else
@@ -213,8 +213,8 @@ const composeValidationFactory = ({
 		let code = injectResponse + '\n'
 
 		code +=
-			`if(typeof ${name}==="object"&&${name}&&ELYSIA_RESPONSE in ${name}){` +
-			`c.set.status=${name}[ELYSIA_RESPONSE]\n` +
+			`if(${name} instanceof ElysiaCustomStatusResponse){` +
+			`c.set.status=${name}.code\n` +
 			`${name}=${name}.response` +
 			`}` +
 			`const isResponse=${name} instanceof Response\n` +
@@ -1064,7 +1064,7 @@ export const composeHandler = ({
 
 			if (transform.subType === 'mapDerive')
 				fnLiteral +=
-					`if(transformed?.[ELYSIA_RESPONSE])throw transformed\n` +
+				`if(transformed instanceof ElysiaCustomStatusResponse)throw transformed\n` +
 					`else{` +
 					`transformed.request=c.request\n` +
 					`transformed.store=c.store\n` +
@@ -1078,7 +1078,7 @@ export const composeHandler = ({
 					'}'
 			else
 				fnLiteral +=
-					`if(transformed?.[ELYSIA_RESPONSE])throw transformed\n` +
+					`if(transformed instanceof ElysiaCustomStatusResponse)throw transformed\n` +
 					`else Object.assign(c,transformed)\n`
 
 			endUnit()
@@ -1347,7 +1347,7 @@ export const composeHandler = ({
 
 				if (beforeHandle.subType === 'mapResolve')
 					fnLiteral +=
-						`if(resolved[ELYSIA_RESPONSE])` +
+						`if(resolved instanceof ElysiaCustomStatusResponse)` +
 						`throw resolved\n` +
 						`else{` +
 						`resolved.request = c.request\n` +
@@ -1362,7 +1362,7 @@ export const composeHandler = ({
 						`}`
 				else
 					fnLiteral +=
-						`if(resolved[ELYSIA_RESPONSE]) throw resolved\n` +
+						`if(resolved instanceof ElysiaCustomStatusResponse)throw resolved\n` +
 						`else Object.assign(c, resolved)\n`
 			} else if (!returning) {
 				fnLiteral += isAsync(beforeHandle)
@@ -1805,7 +1805,7 @@ export const composeHandler = ({
 		`parseCookie,` +
 		`signCookie,` +
 		`decodeURIComponent,` +
-		`ELYSIA_RESPONSE,` +
+		`ElysiaCustomStatusResponse,` +
 		`ELYSIA_TRACE,` +
 		`ELYSIA_REQUEST_ID,` +
 		`getServer,` +
@@ -1854,7 +1854,7 @@ export const composeHandler = ({
 			parseCookie,
 			signCookie,
 			decodeURIComponent,
-			ELYSIA_RESPONSE,
+			ElysiaCustomStatusResponse,
 			ELYSIA_TRACE,
 			ELYSIA_REQUEST_ID,
 			// @ts-expect-error private property
@@ -2180,7 +2180,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`},` +
 		`mapResponse,` +
 		`ERROR_CODE,` +
-		`ELYSIA_RESPONSE,` +
+		`ElysiaCustomStatusResponse,` +
 		`ELYSIA_TRACE,` +
 		`ELYSIA_REQUEST_ID` +
 		`}=inject\n`
@@ -2216,10 +2216,10 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`let r\n` +
 		`if(!context.code)context.code=error.code??error[ERROR_CODE]\n` +
 		`if(!(context.error instanceof Error))context.error = error\n` +
-		`if(typeof error==="object"&&error&&ELYSIA_RESPONSE in error){` +
-		`error.status = error[ELYSIA_RESPONSE]\n` +
+		`if(error instanceof ElysiaCustomStatusResponse){` +
+		`error.status = error.code\n` +
 		`error.message = error.response` +
-		`}\n`
+		`}`
 
 	const saveResponse =
 		hasTrace ||
@@ -2241,8 +2241,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 			fnLiteral +=
 				`r=${response}\nif(r!==undefined){` +
 				`if(r instanceof Response)return r\n` +
-				`if(r[ELYSIA_RESPONSE]){` +
-				`error.status=error[ELYSIA_RESPONSE]\n` +
+				`if(r instanceof ElysiaCustomStatusResponse){` +
+				`error.status=error.code\n` +
 				`error.message = error.response` +
 				`}` +
 				`if(set.status === 200) set.status = error.status\n`
@@ -2330,7 +2330,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		app,
 		mapResponse,
 		ERROR_CODE,
-		ELYSIA_RESPONSE,
+		ElysiaCustomStatusResponse,
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID
 	})

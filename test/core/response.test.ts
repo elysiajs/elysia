@@ -17,19 +17,4 @@ describe('Response', () => {
 
 		expect(contentType).toStartWith('multipart/form-data')
 	})
-
-	it('return formdata', async () => {
-		const app = new Elysia().get('/', () => {
-			return {
-				a: 'hello',
-				b: Bun.file('test/kyuukurarin.mp4')
-			}
-		})
-
-		const contentType = await app
-			.handle(req('/'))
-			.then((x) => x.headers.get('content-type'))
-
-		expect(contentType).toStartWith('multipart/form-data')
-	})
 })

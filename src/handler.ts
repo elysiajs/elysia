@@ -1,13 +1,13 @@
 /* eslint-disable sonarjs/no-nested-switch */
 /* eslint-disable sonarjs/no-duplicate-string */
 import { serialize } from 'cookie'
-import { StatusMap, form } from './utils'
+import { StatusMap } from './utils'
 
 import { Cookie } from './cookies'
-import { ELYSIA_RESPONSE } from './error'
 
 import type { Context } from './context'
 import type { LocalHook } from './types'
+import { ElysiaCustomStatusResponse } from './error'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -268,29 +268,16 @@ export const mapResponse = (
 				return Response.json(response, set as SetResponse)
 
 			case 'Object':
-				// @ts-ignore
-				const status = response[ELYSIA_RESPONSE]
-				if (status) {
-					set.status = status
-
-					// @ts-ignore
-					return mapResponse(response.response, set, request)
-				}
-
-				for (const value in Object.values(response as Object)) {
-					switch (value?.constructor?.name) {
-						case 'Blob':
-						case 'File':
-						case 'ArrayBuffer':
-						case 'FileRef':
-							return new Response(form(response as any))
-
-						default:
-							break
-					}
-				}
-
 				return Response.json(response, set as SetResponse)
+
+			case 'ElysiaCustomStatusResponse':
+				set.status = (response as ElysiaCustomStatusResponse<200>).code
+
+				return mapResponse(
+					(response as ElysiaCustomStatusResponse<200>).response,
+					set,
+					request
+				)
 
 			case 'ReadableStream':
 				if (
@@ -444,6 +431,18 @@ export const mapResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
+				if (response instanceof ElysiaCustomStatusResponse) {
+					set.status = (
+						response as ElysiaCustomStatusResponse<200>
+					).code
+
+					return mapResponse(
+						(response as ElysiaCustomStatusResponse<200>).response,
+						set,
+						request
+					)
+				}
+
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					// @ts-expect-error
@@ -480,32 +479,16 @@ export const mapResponse = (
 				return Response.json(response)
 
 			case 'Object':
-				// @ts-ignore
-				const status = response[ELYSIA_RESPONSE]
-				if (status) {
-					set.status = status
-
-					// @ts-ignore
-					return mapResponse(response.response, set, request)
-				}
-
-				for (const value in Object.values(response as Object)) {
-					switch (value?.constructor?.name) {
-						case 'Blob':
-						case 'File':
-						case 'ArrayBuffer':
-						case 'FileRef':
-							return new Response(
-								form(response as any),
-								set as SetResponse
-							)
-
-						default:
-							break
-					}
-				}
-
 				return Response.json(response, set as SetResponse)
+
+			case 'ElysiaCustomStatusResponse':
+				set.status = (response as ElysiaCustomStatusResponse<200>).code
+
+				return mapResponse(
+					(response as ElysiaCustomStatusResponse<200>).response,
+					set,
+					request
+				)
 
 			case 'ReadableStream':
 				request?.signal.addEventListener(
@@ -588,6 +571,18 @@ export const mapResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
+				if (response instanceof ElysiaCustomStatusResponse) {
+					set.status = (
+						response as ElysiaCustomStatusResponse<200>
+					).code
+
+					return mapResponse(
+						(response as ElysiaCustomStatusResponse<200>).response,
+						set,
+						request
+					)
+				}
+
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					// @ts-expect-error
@@ -662,32 +657,16 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as SetResponse)
 
 			case 'Object':
-				// @ts-ignore
-				const status = response[ELYSIA_RESPONSE]
-				if (status) {
-					set.status = status
-
-					// @ts-ignore
-					return mapEarlyResponse(response.response, set, request)
-				}
-
-				for (const value in Object.values(response as Object)) {
-					switch (value?.constructor?.name) {
-						case 'Blob':
-						case 'File':
-						case 'ArrayBuffer':
-						case 'FileRef':
-							return new Response(
-								form(response as any),
-								set as SetResponse
-							)
-
-						default:
-							break
-					}
-				}
-
 				return Response.json(response, set as SetResponse)
+
+			case 'ElysiaCustomStatusResponse':
+				set.status = (response as ElysiaCustomStatusResponse<200>).code
+
+				return mapEarlyResponse(
+					(response as ElysiaCustomStatusResponse<200>).response,
+					set,
+					request
+				)
 
 			case 'ReadableStream':
 				if (
@@ -836,6 +815,18 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
+				if (response instanceof ElysiaCustomStatusResponse) {
+					set.status = (
+						response as ElysiaCustomStatusResponse<200>
+					).code
+
+					return mapEarlyResponse(
+						(response as ElysiaCustomStatusResponse<200>).response,
+						set,
+						request
+					)
+				}
+
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					// @ts-expect-error
@@ -872,32 +863,16 @@ export const mapEarlyResponse = (
 				return Response.json(response)
 
 			case 'Object':
-				// @ts-ignore
-				const status = response[ELYSIA_RESPONSE]
-				if (status) {
-					set.status = status
-
-					// @ts-ignore
-					return mapEarlyResponse(response.response, set, request)
-				}
-
-				for (const value in Object.values(response as Object)) {
-					switch (value?.constructor?.name) {
-						case 'Blob':
-						case 'File':
-						case 'ArrayBuffer':
-						case 'FileRef':
-							return new Response(
-								form(response as any),
-								set as SetResponse
-							)
-
-						default:
-							break
-					}
-				}
-
 				return Response.json(response, set as SetResponse)
+
+			case 'ElysiaCustomStatusResponse':
+				set.status = (response as ElysiaCustomStatusResponse<200>).code
+
+				return mapEarlyResponse(
+					(response as ElysiaCustomStatusResponse<200>).response,
+					set,
+					request
+				)
 
 			case 'ReadableStream':
 				request?.signal.addEventListener(
@@ -974,6 +949,18 @@ export const mapEarlyResponse = (
 				if (response instanceof Error)
 					return errorToResponse(response as Error, set)
 
+				if (response instanceof ElysiaCustomStatusResponse) {
+					set.status = (
+						response as ElysiaCustomStatusResponse<200>
+					).code
+
+					return mapEarlyResponse(
+						(response as ElysiaCustomStatusResponse<200>).response,
+						set,
+						request
+					)
+				}
+
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					// @ts-expect-error
@@ -1015,31 +1002,16 @@ export const mapCompactResponse = (
 			return Response.json(response)
 
 		case 'Object':
-			// @ts-ignore
-			if (response[ELYSIA_RESPONSE])
-				// @ts-ignore
-				return mapResponse(response.response, {
-					// @ts-ignore
-					status: response[ELYSIA_RESPONSE],
-					headers: {}
-				})
-
-			form: for (const value of Object.values(response as Object))
-				switch (value?.constructor?.name) {
-					case 'Blob':
-					case 'File':
-					case 'ArrayBuffer':
-					case 'FileRef':
-						return new Response(form(response as any))
-
-					case 'Object':
-						break form
-
-					default:
-						break
-				}
-
 			return Response.json(response)
+
+		case 'ElysiaCustomStatusResponse':
+			return mapResponse(
+				(response as ElysiaCustomStatusResponse<200>).response,
+				{
+					status: (response as ElysiaCustomStatusResponse<200>).code,
+					headers: {}
+				}
+			)
 
 		case 'ReadableStream':
 			request?.signal.addEventListener(
@@ -1109,6 +1081,16 @@ export const mapCompactResponse = (
 
 			if (response instanceof Error)
 				return errorToResponse(response as Error)
+
+			if (response instanceof ElysiaCustomStatusResponse)
+				return mapResponse(
+					(response as ElysiaCustomStatusResponse<200>).response,
+					{
+						status: (response as ElysiaCustomStatusResponse<200>)
+							.code,
+						headers: {}
+					}
+				)
 
 			// @ts-expect-error
 			if (typeof response?.next === 'function')
