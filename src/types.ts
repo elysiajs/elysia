@@ -20,7 +20,7 @@ import type { CookieOptions } from './cookies'
 import type { TraceHandler } from './trace'
 import type { Context, ErrorContext, PreContext } from './context'
 import type {
-	ELYSIA_RESPONSE,
+	ElysiaCustomStatusResponse,
 	InternalServerError,
 	InvalidCookieSignature,
 	NotFoundError,
@@ -614,13 +614,11 @@ export type InlineHandler<
 										: string | number | boolean | Object)
 								| Route['response'][keyof Route['response']]
 								| {
-										[Status in keyof Route['response']]: {
-											_type: Record<
-												Status,
-												Route['response'][Status]
-											>
-											[ELYSIA_RESPONSE]: Status
-										}
+										[Status in keyof Route['response']]: ElysiaCustomStatusResponse<
+											// @ts-ignore Status is always a number
+											Status,
+											Route['response'][Status]
+										>
 								  }[keyof Route['response']]
 			  >)
 	| ({} extends Route['response']
@@ -631,10 +629,11 @@ export type InlineHandler<
 							: string | number | boolean | Object)
 					| Route['response'][keyof Route['response']]
 					| {
-							[Status in keyof Route['response']]: {
-								_type: Record<Status, Route['response'][Status]>
-								[ELYSIA_RESPONSE]: Status
-							}
+							[Status in keyof Route['response']]: ElysiaCustomStatusResponse<
+								// @ts-ignore Status is always a number
+								Status,
+								Route['response'][Status]
+							>
 					  }[keyof Route['response']])
 
 export type OptionalHandler<
@@ -1199,15 +1198,17 @@ export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 type _ComposeElysiaResponse<Response, Handle> = Prettify<
 	{} extends Response
 		? {
-				200: Exclude<Handle, { [ELYSIA_RESPONSE]: any }>
+				200: Exclude<Handle, ElysiaCustomStatusResponse<any, any, any>>
 			} & {
 				[ErrorResponse in Extract<
 					Handle,
-					{ response: any }
-				> as ErrorResponse extends {
-					[ELYSIA_RESPONSE]: infer Status extends number
-				}
-					? Status
+					ElysiaCustomStatusResponse<any, any, any>
+				> as ErrorResponse extends ElysiaCustomStatusResponse<
+					any,
+					any,
+					any
+				>
+					? ErrorResponse['code']
 					: never]: ErrorResponse['response']
 			}
 		: Response
@@ -1285,7 +1286,7 @@ export type LifeCycleType = 'global' | 'local' | 'scoped'
 // Exclude return error()
 export type ExcludeElysiaResponse<T> = Exclude<
 	undefined extends Awaited<T> ? Partial<Awaited<T>> : Awaited<T>,
-	{ [ELYSIA_RESPONSE]: any }
+	ElysiaCustomStatusResponse<any, any, any>
 >
 
 export type InferContext<
