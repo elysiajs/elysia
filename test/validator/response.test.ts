@@ -109,6 +109,29 @@ describe('Response Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+  it('validate nested references', async () => {
+    const job = t.Object({
+      name : t.String()
+    }, { $id: "job" })
+
+    const person = t.Object({
+      name : t.String(),
+      job  : t.Ref(job)
+    })
+
+    const app = new Elysia()
+    .model({ job, person })
+    .get('/', () => ({
+      name : 'sucrose',
+      job: { name: 'alchemist' }
+    }), {
+      response : person
+    })
+
+    const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+  })
+
 	it('validate optional', async () => {
 		const app = new Elysia().get(
 			'/',
