@@ -2,7 +2,7 @@ import type { Elysia } from '.'
 
 import { mapEarlyResponse, mapResponse } from './handler'
 import {
-	ELYSIA_RESPONSE,
+	ElysiaCustomStatusResponse,
 	ElysiaErrors,
 	NotFoundError,
 	ValidationError
@@ -299,7 +299,8 @@ export const createDynamicHandler =
 					else Object.assign(context, response)
 
 					continue
-				} else if (response instanceof Promise) response = await response
+				} else if (response instanceof Promise)
+					response = await response
 
 				// `false` is a falsey value, check for undefined instead
 				if (response !== undefined) {
@@ -331,12 +332,13 @@ export const createDynamicHandler =
 
 			if (!hooks.afterHandle.length) {
 				const status =
-					(response as ReturnType<typeof error>)?.[ELYSIA_RESPONSE] ??
-					(set.status
-						? typeof set.status === 'string'
-							? StatusMap[set.status]
-							: set.status
-						: 200)
+					response instanceof ElysiaCustomStatusResponse
+						? response.code
+						: set.status
+							? typeof set.status === 'string'
+								? StatusMap[set.status]
+								: set.status
+							: 200
 
 				const responseValidator =
 					validator?.createResponse?.()?.[status]

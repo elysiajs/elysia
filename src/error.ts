@@ -15,9 +15,6 @@ const env =
 export const ERROR_CODE = Symbol('ElysiaErrorCode')
 export type ERROR_CODE = typeof ERROR_CODE
 
-export const ELYSIA_RESPONSE = Symbol('ElysiaResponse')
-export type ELYSIA_RESPONSE = typeof ELYSIA_RESPONSE
-
 export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
 
 export type ElysiaErrors =
@@ -27,7 +24,7 @@ export type ElysiaErrors =
 	| ValidationError
 	| InvalidCookieSignature
 
-export const error = <
+export class ElysiaCustomStatusResponse<
 	const Code extends number | keyof StatusMap,
 	const T = Code extends keyof InvertedStatusMap
 		? InvertedStatusMap[Code]
@@ -35,32 +32,33 @@ export const error = <
 	const Status extends Code extends keyof StatusMap
 		? StatusMap[Code]
 		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
+> {
+	code: Status
+	response: T
+
+	constructor(code: Code, response: T) {
+		const res =
+			response ??
+			(code in InvertedStatusMap
+				? // @ts-expect-error Always correct
+					InvertedStatusMap[code]
+				: code)
+
+		// @ts-ignore Trust me bro
+		this.code = StatusMap[code] ?? code
+		this.response = res
+	}
+}
+
+export const error = <
+	const Code extends number | keyof StatusMap,
+	const T = Code extends keyof InvertedStatusMap
+		? InvertedStatusMap[Code]
+		: Code
 >(
 	code: Code,
 	response?: T
-): {
-	[ELYSIA_RESPONSE]: Status
-	response: T
-	_type: {
-		[ERROR_CODE in Status]: T
-	}
-	error: Error
-} => {
-	const res =
-		response ??
-		(code in InvertedStatusMap
-			? // @ts-expect-error Always correct
-				InvertedStatusMap[code]
-			: code)
-
-	return {
-		// @ts-expect-error trust me bro
-		[ELYSIA_RESPONSE]: StatusMap[code] ?? code,
-		response: res,
-		_type: undefined as any,
-		error: new Error(res)
-	} as const
-}
+) => new ElysiaCustomStatusResponse<Code, T>(code, response as any)
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -181,8 +179,11 @@ export class ValidationError extends Error {
 		public validator: TSchema | TypeCheck<any>,
 		public value: unknown
 	) {
-		if (value && typeof value === 'object' && ELYSIA_RESPONSE in value)
-			// @ts-expect-error
+		if (
+			value &&
+			typeof value === 'object' &&
+			value instanceof ElysiaCustomStatusResponse
+		)
 			value = value.response
 
 		const error = isProduction

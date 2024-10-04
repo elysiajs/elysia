@@ -29,7 +29,7 @@ import {
 	ValidationError,
 	InternalServerError,
 	ERROR_CODE,
-	ELYSIA_RESPONSE
+	ElysiaCustomStatusResponse
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
@@ -178,7 +178,7 @@ const createReport = ({
 					for (let i = 0; i < trace.length; i++) {
 						if (binding)
 							// Don't report error because HTTP response is expected and not an actual error to look for
-							// if (${binding} && typeof ${binding} === "object" && ELYSIA_RESPONSE in ${binding}) {
+							// if (${binding} instanceof ElysiaCustomStatusResponse) {
 							//     ${reporter}Child${i}?.(${binding}.error)
 							//     ${reporter}Child${i}?.()\n
 							// } else
@@ -209,8 +209,8 @@ const composeValidationFactory = ({
 	composeResponseValidation: (name = 'r') => {
 		let code = '\n' + injectResponse + '\n'
 
-		code += `if(typeof ${name} === "object" && ${name} && ELYSIA_RESPONSE in ${name}) {
-			c.set.status = ${name}[ELYSIA_RESPONSE]
+		code += `if(${name} instanceof ElysiaCustomStatusResponse) {
+			c.set.status = ${name}.code
 			${name} = ${name}.response
 		}
 
@@ -1094,7 +1094,7 @@ export const composeHandler = ({
 				: `transformed = transform[${i}](c)\n`
 
 			if (transform.subType === 'mapDerive')
-				fnLiteral += `if(transformed?.[ELYSIA_RESPONSE])
+				fnLiteral += `if(transformed instanceof ElysiaCustomStatusResponse)
 					throw transformed
 				else {
 					transformed.request = c.request
@@ -1109,7 +1109,7 @@ export const composeHandler = ({
 					c = transformed
 			}`
 			else
-				fnLiteral += `if(transformed?.[ELYSIA_RESPONSE])
+				fnLiteral += `if(transformed instanceof ElysiaCustomStatusResponse)
 					throw transformed
 				else
 					Object.assign(c, transformed)\n`
@@ -1372,7 +1372,7 @@ export const composeHandler = ({
 					: `resolved = beforeHandle[${i}](c);\n`
 
 				if (beforeHandle.subType === 'mapResolve')
-					fnLiteral += `if(resolved[ELYSIA_RESPONSE])
+					fnLiteral += `if(resolved instanceof ElysiaCustomStatusResponse)
 						throw resolved
 					else {
 						resolved.request = c.request
@@ -1387,7 +1387,7 @@ export const composeHandler = ({
 						c = resolved
 					}`
 				else
-					fnLiteral += `if(resolved[ELYSIA_RESPONSE])
+					fnLiteral += `if(resolved instanceof ElysiaCustomStatusResponse)
 						throw resolved
 					else
 						Object.assign(c, resolved)\n`
@@ -1833,7 +1833,7 @@ export const composeHandler = ({
 		parseCookie,
 		signCookie,
 		decodeURIComponent,
-		ELYSIA_RESPONSE,
+		ElysiaCustomStatusResponse,
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID,
 		getServer,
@@ -1882,7 +1882,7 @@ export const composeHandler = ({
 			parseCookie,
 			signCookie,
 			decodeURIComponent,
-			ELYSIA_RESPONSE,
+			ElysiaCustomStatusResponse,
 			ELYSIA_TRACE,
 			ELYSIA_REQUEST_ID,
 			// @ts-expect-error private property
@@ -2238,7 +2238,7 @@ export const composeErrorHandler = (
 		app: { event: { error: onErrorContainer, afterResponse: resContainer, mapResponse: _onMapResponse, trace: _trace } },
 		mapResponse,
 		ERROR_CODE,
-		ELYSIA_RESPONSE,
+		ElysiaCustomStatusResponse,
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID
 	} = inject
@@ -2282,8 +2282,8 @@ export const composeErrorHandler = (
 		if(!(context.error instanceof Error))
 			context.error = error
 
-		if(typeof error === "object" && error && ELYSIA_RESPONSE in error) {
-			error.status = error[ELYSIA_RESPONSE]
+		if(error instanceof ElysiaCustomStatusResponse) {
+			error.status = error.code
 			error.message = error.response
 		}\n`
 
@@ -2307,8 +2307,8 @@ export const composeErrorHandler = (
 			fnLiteral += `r = ${response}; if(r !== undefined) {
 				if(r instanceof Response) return r
 
-				if(r[ELYSIA_RESPONSE]) {
-					error.status = error[ELYSIA_RESPONSE]
+				if(r instanceof ElysiaCustomStatusResponse) {
+					error.status = error.code
 					error.message = error.response
 				}
 
@@ -2394,7 +2394,7 @@ export const composeErrorHandler = (
 		app,
 		mapResponse,
 		ERROR_CODE,
-		ELYSIA_RESPONSE,
+		ElysiaCustomStatusResponse,
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID
 	})

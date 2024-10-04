@@ -2188,16 +2188,16 @@ export default class Elysia<
 									Ephemeral['resolve']
 							}
 						: Singleton,
-				Scoped extends 'global'
+				Scope extends 'global'
 					? Ephemeral
 					: {
 							derive: Partial<Ephemeral['derive']>
 							resolve: Partial<Ephemeral['resolve']>
 							schema: Ephemeral['schema']
 						},
-				Scoped extends 'global'
+				Scope extends 'global'
 					? Ephemeral
-					: Scoped extends 'scoped'
+					: Scope extends 'scoped'
 						? Ephemeral
 						: {
 								derive: Partial<Ephemeral['derive']>
@@ -6097,8 +6097,7 @@ export {
 	ValidationError,
 	InternalServerError,
 	InvalidCookieSignature,
-	ERROR_CODE,
-	ELYSIA_RESPONSE
+	ERROR_CODE
 } from './error'
 
 export type {

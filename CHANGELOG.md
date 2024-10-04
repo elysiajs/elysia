@@ -1,3 +1,13 @@
+# 1.1.18 - 4 Oct 2024
+Breaking change:
+- remove automatic conversion of 1-level deep object with file field to formdata
+	- migration: wrap a response with `formdata`
+- (internal): remove `ELYSIA_RESPONSE` symbol
+- (internal) `error` now use `class ElysiaCustomStatusResponse` instead of plain object
+
+Improvement:
+- Optimize `object type` response mapping performance
+
 # 1.1.17 - 29 Sep 2024
 Change:
 - Coerce number to numeric on body root automatically
