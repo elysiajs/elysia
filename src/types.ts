@@ -1503,6 +1503,10 @@ export type ExcludeElysiaResponse<T> = Exclude<
 	ElysiaCustomStatusResponse<any, any, any>
 >
 
+type B = ExcludeElysiaResponse<
+	ElysiaCustomStatusResponse<'Unauthorized', 'Unauthorized'> | { a: 'b' }
+>
+
 export type InferContext<
 	T extends AnyElysia,
 	Path extends string = T['_types']['Prefix'],
