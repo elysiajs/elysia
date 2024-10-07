@@ -224,8 +224,8 @@ export const mergeHook = (
 	// 	)
 
 	// @ts-expect-error
-	const { derive: deriveA, resolve: resolveA, ...restA } = a ?? {}
-	const { derive: deriveB, resolve: resolveB, ...restB } = b ?? {}
+	const { resolve: resolveA, ...restA } = a ?? {}
+	const { resolve: resolveB, ...restB } = b ?? {}
 
 	return {
 		...restA,
@@ -256,10 +256,7 @@ export const mergeHook = (
 			a?.detail ?? {}
 		),
 		parse: mergeObjectArray(a?.parse as any, b?.parse),
-		transform: mergeObjectArray(
-			mergeObjectArray(fnToContainer(deriveA, 'derive'), a?.transform),
-			mergeObjectArray(fnToContainer(deriveB, 'derive'), b?.transform)
-		),
+		transform: mergeObjectArray(a?.transform, b?.transform),
 		beforeHandle: mergeObjectArray(
 			mergeObjectArray(
 				fnToContainer(resolveA, 'resolve'),
@@ -953,18 +950,8 @@ export const mergeLifeCycle = (
 			injectChecksum(checksum, b?.parse)
 		) as HookContainer<BodyHandler<any, any>>[],
 		transform: mergeObjectArray(
-			mergeObjectArray(
-				// @ts-ignore
-				fnToContainer(a?.derive, 'derive'),
-				a.transform
-			),
-			injectChecksum(
-				checksum,
-				mergeObjectArray(
-					fnToContainer(b?.derive, 'derive'),
-					b?.transform
-				)
-			)
+			a.transform,
+			injectChecksum(checksum, b?.transform)
 		) as HookContainer<TransformHandler<any, any>>[],
 		beforeHandle: mergeObjectArray(
 			mergeObjectArray(
@@ -1231,7 +1218,7 @@ export const createMacroManager =
 		localHook
 	}: {
 		globalHook: LifeCycleStore
-		localHook: LocalHook<any, any, any, any, any, any, any, any, any>
+		localHook: LocalHook<any, any, any, any, any, any, any, any>
 	}) =>
 	(stackName: keyof LifeCycleStore) =>
 	(

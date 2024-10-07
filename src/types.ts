@@ -964,13 +964,13 @@ export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
 	hide?: boolean
 }
 
-export type DeriveHandler<
-	Singleton extends SingletonBase,
-	in out Derivative extends Record<string, unknown> | void = Record<
-		string,
-		unknown
-	> | void
-> = (context: Context<{}, Singleton>) => MaybePromise<Derivative>
+// export type DeriveHandler<
+// 	Singleton extends SingletonBase,
+// 	in out Derivative extends Record<string, unknown> | void = Record<
+// 		string,
+// 		unknown
+// 	> | void
+// > = (context: Context<{}, Singleton>) => MaybePromise<Derivative>
 
 export type ResolveHandler<
 	in out Route extends RouteSchema,
@@ -983,16 +983,16 @@ export type ResolveHandler<
 
 type AnyContextFn = (context?: any) => any
 
-export type ResolveDerivatives<
-	T extends MaybeArray<DeriveHandler<any>> | undefined
-> =
-	IsNever<keyof T> extends true
-		? any[] extends T
-			? {}
-			: ReturnType<// @ts-ignore Trust me bro
-				T>
-		: ResolveDerivativesArray<// @ts-ignore Trust me bro
-			T>
+// export type ResolveDerivatives<
+// 	T extends MaybeArray<DeriveHandler<any>> | undefined
+// > =
+// 	IsNever<keyof T> extends true
+// 		? any[] extends T
+// 			? {}
+// 			: ReturnType<// @ts-ignore Trust me bro
+// 				T>
+// 		: ResolveDerivativesArray<// @ts-ignore Trust me bro
+// 			T>
 
 export type ResolveDerivativesArray<
 	T extends any[],
@@ -1029,7 +1029,6 @@ export type LocalHook<
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
 	Extension extends BaseMacro,
-	Derivatives extends MaybeArray<DeriveHandler<Singleton>>,
 	Resolutions extends MaybeArray<ResolveHandler<Schema, Singleton>>,
 	Path extends string = '',
 	TypedRoute extends RouteSchema = Schema extends {
@@ -1069,15 +1068,11 @@ export type LocalHook<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['decorator']
-					derive: ResolveDerivatives<Derivatives>
+					derive: Singleton['derive']
 					resolve: {}
 				}
 			>
 		>
-		/**
-		 * Derive **(must be an arrow function)
-		 */
-		derive?: Derivatives
 		resolve?: Resolutions
 		/**
 		 * Execute before main handler
@@ -1088,8 +1083,9 @@ export type LocalHook<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['decorator']
-					derive: ResolveDerivatives<Derivatives>
-					resolve: ResolveResolutions<Resolutions>
+					derive: Singleton['derive']
+					resolve: Singleton['resolve'] &
+						ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -1102,8 +1098,9 @@ export type LocalHook<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['decorator']
-					derive: ResolveDerivatives<Derivatives>
-					resolve: ResolveResolutions<Resolutions>
+					derive: Singleton['derive']
+					resolve: Singleton['resolve'] &
+						ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -1116,8 +1113,9 @@ export type LocalHook<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['decorator']
-					derive: ResolveDerivatives<Derivatives>
-					resolve: ResolveResolutions<Resolutions>
+					derive: Singleton['derive']
+					resolve: Singleton['resolve'] &
+						ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -1130,8 +1128,9 @@ export type LocalHook<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['decorator']
-					derive: ResolveDerivatives<Derivatives>
-					resolve: ResolveResolutions<Resolutions>
+					derive: Singleton['derive']
+					resolve: Singleton['resolve'] &
+						ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -1294,7 +1293,7 @@ export type HookMacroFn<
 	(...a: any) => {
 		parse?(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
 		transform?(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
-		derive?(fn: DeriveHandler<Singleton>): unknown
+		// derive?(fn: DeriveHandler<Singleton>): unknown
 		beforeHandle?(
 			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 		): unknown
