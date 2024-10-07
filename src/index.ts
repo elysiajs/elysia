@@ -66,7 +66,8 @@ import {
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
-	type InternalServerError
+	type InternalServerError,
+	ElysiaCustomStatusResponse
 } from './error'
 
 import type { TraceHandler } from './trace'
@@ -1150,7 +1151,9 @@ export default class Elysia<
 	 *     }))
 	 */
 	resolve<
-		const Resolver extends Record<string, unknown>,
+		const Resolver extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>,
 		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },
@@ -1257,7 +1260,12 @@ export default class Elysia<
 	 *         }
 	 *     }))
 	 */
-	resolve<const Resolver extends Record<string, unknown> | void>(
+	resolve<
+		const Resolver extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>
+			| void
+	>(
 		resolver: (
 			context: Prettify<
 				Context<
@@ -1307,7 +1315,11 @@ export default class Elysia<
 		return this.onBeforeHandle(optionsOrResolve as any, hook as any) as any
 	}
 
-	mapResolve<const NewResolver extends Record<string, unknown>>(
+	mapResolve<
+		const NewResolver extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>
+	>(
 		mapper: (
 			context: Context<
 				MergeSchema<
@@ -1331,13 +1343,15 @@ export default class Elysia<
 		Ephemeral,
 		{
 			derive: Volatile['derive']
-			resolve: NewResolver
+			resolve: ExcludeElysiaResponse<NewResolver>
 			schema: Volatile['schema']
 		}
 	>
 
 	mapResolve<
-		const NewResolver extends Record<string, unknown>,
+		const NewResolver extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>,
 		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },
@@ -1380,7 +1394,7 @@ export default class Elysia<
 					decorator: Singleton['decorator']
 					store: Singleton['store']
 					derive: Singleton['derive']
-					resolve: Awaited<NewResolver>
+					resolve: ExcludeElysiaResponse<NewResolver>
 				},
 				Definitions,
 				Metadata,
@@ -5358,7 +5372,12 @@ export default class Elysia<
 	 *         }
 	 *     }))
 	 */
-	derive<const Derivative extends Record<string, unknown> | void>(
+	derive<
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>
+			| void
+	>(
 		transform: (
 			context: Prettify<
 				Context<
@@ -5403,7 +5422,10 @@ export default class Elysia<
 	 *     }))
 	 */
 	derive<
-		const Derivative extends Record<string, unknown> | void,
+		const Derivative extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>
+			| void,
 		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },
@@ -5590,7 +5612,11 @@ export default class Elysia<
 		return this as any
 	}
 
-	mapDerive<const NewDerivative extends Record<string, unknown>>(
+	mapDerive<
+		const NewDerivative extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>
+	>(
 		mapper: (
 			context: Context<
 				{},
@@ -5610,14 +5636,16 @@ export default class Elysia<
 		Routes,
 		Ephemeral,
 		{
-			derive: NewDerivative
+			derive: ExcludeElysiaResponse<NewDerivative>
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 		}
 	>
 
 	mapDerive<
-		const NewDerivative extends Record<string, unknown>,
+		const NewDerivative extends
+			| Record<string, unknown>
+			| ElysiaCustomStatusResponse<any, any, any>,
 		const Type extends LifeCycleType
 	>(
 		options: { as?: Type },

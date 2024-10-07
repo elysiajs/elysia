@@ -1,3 +1,7 @@
+# 1.1.19 - 7 Oct 2024
+Bug fix:
+- unable to return `error` from derive/resolve
+
 # 1.1.18 - 4 Oct 2024
 Breaking change:
 - remove automatic conversion of 1-level deep object with file field to formdata

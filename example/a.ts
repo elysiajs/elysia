@@ -1,16 +1,21 @@
-import { Elysia, t } from '../src'
-import { post } from '../test/utils'
+import { Elysia } from '../src'
 
-const app = new Elysia().get('/', ({ error }) => error(420, 'a'), {
-	// body: t.Object({
-	// 	id: t.Boolean()
-	// })
-}).listen(3000)
+const optionalUserMiddleware = (app: Elysia) =>
+	app.derive({ as: 'scoped' }, async () => {
+		const user = { name: 'something' }
 
-const response = await app.handle(
-	post('/', {
-		id: '1'
+		return {
+			user
+		}
 	})
-)
 
-console.log(response.status)
+export const isUserAuthenticated = (app: Elysia) =>
+	app.derive(({ error }) => {
+		if (true) return error('Unauthorized')
+
+		return {
+			user: 'a'
+		}
+	})
+
+export default optionalUserMiddleware
