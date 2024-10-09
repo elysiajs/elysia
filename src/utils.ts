@@ -589,7 +589,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
-	const cleaner = (value: unknown) => Value.Clean(schema, value)
+  const references = Object.values(models)
+	const cleaner = (value: unknown) => Value.Clean(schema, references, value)
 
 	if (dynamic) {
 		const validator = {
