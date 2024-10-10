@@ -309,6 +309,11 @@ export interface DefinitionBase {
 
 export type RouteBase = Record<string, unknown>
 
+export interface RouteConfig {
+	allowMeta?: boolean | undefined
+	skipPrefix?: boolean | undefined
+}
+
 export interface MetadataBase {
 	schema: RouteSchema
 	macro: BaseMacro
@@ -647,7 +652,7 @@ export type OptionalHandler<
 	Path extends string | undefined = undefined
 > =
 	Handler<Route, Singleton, Path> extends (
-		context: infer Context
+		context: Context<Route, Singleton, Path>
 	) => infer Returned
 		? (context: Context) => Returned | MaybePromise<void>
 		: never
@@ -663,7 +668,7 @@ export type AfterHandler<
 	Path extends string | undefined = undefined
 > =
 	Handler<Route, Singleton, Path> extends (
-		context: infer Context
+		context: Context<Route, Singleton, Path>
 	) => infer Returned
 		? (
 				context: Prettify<

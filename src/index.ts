@@ -125,7 +125,8 @@ import type {
 	HigherOrderFunction,
 	ResolvePath,
 	JoinPath,
-	ValidatorLayer
+	ValidatorLayer,
+	RouteConfig
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
@@ -442,7 +443,7 @@ export default class Elysia<
 		path: string,
 		handle: Handler<any, any, any> | any,
 		localHook?: LocalHook<any, any, any, any, any, any>,
-		{ allowMeta = false, skipPrefix = false } = {
+		{ allowMeta = false, skipPrefix = false }: RouteConfig = {
 			allowMeta: false as boolean | undefined,
 			skipPrefix: false as boolean | undefined
 		}
@@ -4609,11 +4610,8 @@ export default class Elysia<
 			Definitions['error'],
 			Metadata['macro'],
 			JoinPath<BasePath, Path>
-		> & {
-			config: {
-				allowMeta?: boolean
-			}
-		}
+		> &
+			Partial<{ config: RouteConfig }>
 	): Elysia<
 		BasePath,
 		Scoped,
