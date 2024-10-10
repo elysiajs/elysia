@@ -401,4 +401,23 @@ describe('guard', () => {
 		expect(called).toBe(3)
 		expect(response).toEqual([422, 200])
 	})
+
+	it('handle merge guard and hook responses status', () => {
+		const app = new Elysia()
+			.guard({
+				response: {
+					400: t.String(),
+					500: t.String()
+				}
+			})
+			.get('/', () => '', {
+				response: t.String()
+			})
+
+		expect(Object.keys(app.routes[0].hooks.response)).toEqual([
+			'200',
+			'400',
+			'500'
+		])
+	})
 })

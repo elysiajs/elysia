@@ -1,21 +1,14 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-const optionalUserMiddleware = (app: Elysia) =>
-	app.derive({ as: 'scoped' }, async () => {
-		const user = { name: 'something' }
-
-		return {
-			user
+const app = new Elysia()
+	.guard({
+		response: {
+			400: t.String(),
+			500: t.String()
 		}
 	})
-
-export const isUserAuthenticated = (app: Elysia) =>
-	app.derive(({ error }) => {
-		if (true) return error('Unauthorized')
-
-		return {
-			user: 'a'
-		}
+	.get('/', () => '', {
+		response: t.String()
 	})
 
-export default optionalUserMiddleware
+console.log(app.routes[0].hooks)
