@@ -1,10 +1,14 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.post('/', (context) => {
-		// context.b
-	}, {
-		derive: () => { return { b: 'b' } }
-		// resolve: () => ({ resolved: 'a' })
+	.guard({
+		response: {
+			400: t.String(),
+			500: t.String()
+		}
 	})
-	.listen(3000)
+	.get('/', () => '', {
+		response: t.String()
+	})
+
+console.log(app.routes[0].hooks)

@@ -1,3 +1,7 @@
+# 1.1.20 - 10 Oct 2024
+Bug fix:
+- merge guard and not specified hook responses status
+
 # 1.1.19 - 7 Oct 2024
 Bug fix:
 - unable to return `error` from derive/resolve

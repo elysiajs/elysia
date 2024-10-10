@@ -165,6 +165,8 @@ export const mergeResponse = (
 
 	if (isRecordNumber(a) && isRecordNumber(b))
 		return { ...(a as RecordNumber), ...(b as RecordNumber) }
+	else if (a && !isRecordNumber(a) && isRecordNumber(b))
+		return { 200: a, ...(b as RecordNumber) }
 
 	return b ?? a
 }
