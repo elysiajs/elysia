@@ -402,7 +402,7 @@ describe('guard', () => {
 		expect(response).toEqual([422, 200])
 	})
 
-	it('handle merge guard and hook responses status', () => {
+	it('handle merge guard and hook on non-specified responses status', () => {
 		const app = new Elysia()
 			.guard({
 				response: {
