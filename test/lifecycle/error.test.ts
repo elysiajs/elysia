@@ -272,4 +272,26 @@ describe('error', () => {
 			somePretty: 'json'
 		})
 	})
+
+	it('handle cookie signature error', async () => {
+		const app = new Elysia({
+			cookie: { secrets: 'secrets', sign: ['session'] }
+		})
+			.onError(({ code, error }) => {
+				if (code === 'INVALID_COOKIE_SIGNATURE')
+					return 'Where is the signature?'
+			})
+			.get('/', ({ cookie: { session } }) => '')
+
+		const root = await app.handle(
+			new Request('http://localhost/', {
+				headers: {
+					Cookie: 'session=1234'
+				}
+			})
+		)
+
+		expect(await root.text()).toBe('Where is the signature?')
+		expect(root.status).toBe(400)
+	})
 })
