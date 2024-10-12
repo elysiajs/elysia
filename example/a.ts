@@ -1,14 +1,9 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.guard({
-		response: {
-			400: t.String(),
-			500: t.String()
-		}
-	})
-	.get('/', () => '', {
-		response: t.String()
-	})
+const main = new Elysia().get('/', () => 'a', {
+	response: { 200: t.Number({
+		default: () => 'a'
+	}), 500: t.String() }
+})
 
-console.log(app.routes[0].hooks)
+type A = (typeof main)['_routes']['index']['get']['response']

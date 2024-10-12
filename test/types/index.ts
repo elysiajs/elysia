@@ -1248,6 +1248,7 @@ const a = app
 	}>()
 
 	expectTypeOf<app['index']['post']['response']>().toEqualTypeOf<{
+		200: string
 		201: string
 	}>()
 
@@ -1256,6 +1257,7 @@ const a = app
 	}>()
 
 	expectTypeOf<app['true']['post']['response']>().toEqualTypeOf<{
+		200: boolean
 		202: boolean
 	}>()
 
