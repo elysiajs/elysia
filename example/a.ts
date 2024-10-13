@@ -2,10 +2,9 @@ import { Elysia, t } from '../src'
 import { memoryUsage } from 'process'
 
 const a = memoryUsage()
+const app = new Elysia({ precompile: true }).get('a', 'a')
 
-const app = new Elysia({ precompile: true }).get('a', 'a').listen(3000)
-
-const l = 100000
+const l = 100_000
 for (let i = 0; i < l; i++) app.post(`/${i}`, () => 'a', {
 	body: t.Object({
 		username: t.String(),
@@ -13,7 +12,8 @@ for (let i = 0; i < l; i++) app.post(`/${i}`, () => 'a', {
 	})
 })
 
-app.compile().listen(3000)
+app.compile()
+app.listen(3000)
 
 const mb = (byte: number) => (byte / 1024 / 1024).toFixed(2)
 

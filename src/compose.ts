@@ -1968,14 +1968,12 @@ export const composeGeneralHandler = (
 	for (const [path, { code, all }] of Object.entries(
 		router.static.http.map
 	)) {
-		switchMap += `case'${path}':switch(r.method){${code}\n${
-			all ?? `default:` + findDynamicRoute
-		}}`
-
-		if (app.config.strictPath !== true)
-			switchMap += `case'${getLoosePath(path)}':switch(r.method){${code}${
-				all ?? `default:` + findDynamicRoute
-			}}`
+		switchMap +=
+			`case'${path}':` +
+			(app.config.strictPath !== true ? `case'${getLoosePath(path)}':` : '') +
+			`switch(r.method){${code}\n` +
+			(all ?? `default:` + findDynamicRoute) +
+			'}'
 	}
 
 	const maybeAsync = app.event.request.some(isAsync)
@@ -1995,7 +1993,7 @@ export const composeGeneralHandler = (
 		`}=data\n` +
 		`const store=app.singleton.store\n` +
 		`const staticRouter=app.router.static.http\n` +
-		`const st=staticRouter.handlers\n` +
+		`const ht=app.router.history\n` +
 		`const wsRouter=app.router.ws\n` +
 		`const router=app.router.http\n` +
 		`const trace=app.event.trace.map(x=>typeof x==='function'?x:x.fn)\n` +
@@ -2110,8 +2108,11 @@ export const composeGeneralHandler = (
 		for (const [path, index] of Object.entries(wsPaths)) {
 			fnLiteral +=
 				`case'${path}':` +
+				(app.config.strictPath !== true
+					? `case'${getLoosePath(path)}':`
+					: '') +
 				`if(r.headers.get('upgrade')==='websocket')` +
-				`return st[${index}](c)\n`
+				`return ht[${index}].composed(c)\n`
 		}
 
 		fnLiteral +=

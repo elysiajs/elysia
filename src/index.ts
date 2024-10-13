@@ -265,7 +265,7 @@ export default class Elysia<
 		static: {
 			http: {
 				static: {} as Record<string, Response>,
-				handlers: [] as ComposedHandler[],
+				// handlers: [] as ComposedHandler[],
 				map: {} as Record<
 					string,
 					{
@@ -717,14 +717,6 @@ export default class Elysia<
 				asManifest
 			})
 
-		const mainHandler = shouldPrecompile
-			? compile()
-			: (((context: Context) => {
-					return compile()(context)
-				}) as ComposedHandler)
-
-		const routeIndex = this.router.history.length
-
 		if (this.routeTree.has(method + path))
 			for (let i = 0; i < this.router.history.length; i++) {
 				const route = this.router.history[i]
@@ -738,7 +730,17 @@ export default class Elysia<
 						this.routeTree.delete(removed.method + removed.path)
 				}
 			}
-		else this.routeTree.set(method + path, routeIndex)
+		else this.routeTree.set(method + path, this.router.history.length)
+
+		const history = this.router.history
+		const index = this.router.history.length
+
+		const mainHandler = shouldPrecompile
+			? compile()
+			: (ctx: Context) =>
+					((history[index].composed = compile()) as ComposedHandler)(
+						ctx
+					)
 
 		this.router.history.push({
 			method,
@@ -757,23 +759,10 @@ export default class Elysia<
 		}
 
 		if (method === '$INTERNALWS') {
-			const loose = this.config.strictPath
-				? undefined
-				: path.endsWith('/')
-					? path.slice(0, path.length - 1)
-					: path + '/'
+			const loose = getLoosePath(path)
 
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-				const index = staticRouter.handlers.length
-				staticRouter.handlers.push((ctx) =>
-					(
-						(staticRouter.handlers[index] =
-							compile()) as ComposedHandler
-					)(ctx)
-				)
-
 				this.router.static.ws[path] = index
-				if (loose) this.router.static.ws[loose] = index
 			} else {
 				this.router.ws.add('ws', path, handler)
 				if (loose) this.router.ws.add('ws', loose, handler)
@@ -783,16 +772,6 @@ export default class Elysia<
 		}
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-			const index = staticRouter.handlers.length
-			staticRouter.handlers.push(
-				(staticHandler as any) ??
-					((ctx) =>
-						(
-							(staticRouter.handlers[index] =
-								compile()) as ComposedHandler
-						)(ctx))
-			)
-
 			if (!staticRouter.map[path])
 				staticRouter.map[path] = {
 					code: ''
@@ -802,10 +781,10 @@ export default class Elysia<
 
 			if (method === 'ALL')
 				staticRouter.map[path].all =
-					`default: return st[${index}](${ctx})\n`
+					`default: return ht[${index}].composed(${ctx})\n`
 			else
 				staticRouter.map[path].code =
-					`case '${method}': return st[${index}](${ctx})\n${staticRouter.map[path].code}`
+					`case '${method}': return ht[${index}].composed(${ctx})\n${staticRouter.map[path].code}`
 
 			if (
 				!this.config.strictPath &&
