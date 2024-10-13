@@ -1,3 +1,7 @@
+# 1.1.21 - 13 Oct 2024
+Improvement:
+- infer 200 response from handle if not specified
+
 # 1.1.20 - 10 Oct 2024
 Bug fix:
 - merge guard and not specified hook responses status

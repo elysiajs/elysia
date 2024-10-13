@@ -1421,23 +1421,25 @@ export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 	: _ComposeElysiaResponse<Response, Replace<Awaited<Handle>, BunFile, File>>
 
 type _ComposeElysiaResponse<Response, Handle> = Prettify<
-	{} extends Response
-		? {
-				200: Exclude<Handle, ElysiaCustomStatusResponse<any, any, any>>
-			} & {
-				[ErrorResponse in Extract<
-					Handle,
-					ElysiaCustomStatusResponse<any, any, any>
-				> as ErrorResponse extends ElysiaCustomStatusResponse<
-					any,
-					any,
-					any
-				>
-					? ErrorResponse['code']
-					: never]: ErrorResponse['response']
-			}
-		: Response
+	Prettify<
+		{
+			200: Exclude<
+				Handle,
+				ElysiaCustomStatusResponse<any, any, any>
+			>
+		} & ExtractErrorFromHandle<Handle> &
+			({} extends Response ? {} : Omit<Response, 200>)
+	>
 >
+
+type ExtractErrorFromHandle<Handle> = {
+	[ErrorResponse in Extract<
+		Handle,
+		ElysiaCustomStatusResponse<any, any, any>
+	> as ErrorResponse extends ElysiaCustomStatusResponse<any, any, any>
+		? ErrorResponse['code']
+		: never]: ErrorResponse['response']
+}
 
 export type MergeElysiaInstances<
 	Instances extends AnyElysia[] = [],
