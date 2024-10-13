@@ -1,9 +1,21 @@
 import { Elysia, t } from '../src'
 
-const main = new Elysia().get('/', () => 'a', {
-	response: { 200: t.Number({
-		default: () => 'a'
-	}), 500: t.String() }
-})
+const app = new Elysia()
+	.derive(({ cookie: { test } }) => {
+		if (!test.value) {
+			test.value = 'Hello, world!'
+		}
 
-type A = (typeof main)['_routes']['index']['get']['response']
+		return {}
+	})
+	.get('/', () => 'Hello, world!')
+
+app.handle(
+	new Request('http://localhost:3000/', {
+		headers: {
+			cookie: 'test=Hello, world!'
+		}
+	})
+)
+	.then((x) => x.headers)
+	.then(console.log)

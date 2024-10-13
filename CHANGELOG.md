@@ -1,3 +1,7 @@
+# 1.1.22 - 13 Oct 2024
+Bug fix:
+- Fix `set-cookie` to resent if value is accessed even without set
+
 # 1.1.21 - 13 Oct 2024
 Improvement:
 - infer 200 response from handle if not specified
