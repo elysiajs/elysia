@@ -22,6 +22,7 @@ import {
 	coercePrimitiveRoot,
 	deduplicateChecksum,
 	fnToContainer,
+	getLoosePath,
 	localHookToLifeCycleStore,
 	mergeDeep,
 	mergeSchemaValidator,
@@ -270,7 +271,6 @@ export default class Elysia<
 					{
 						code: string
 						all?: string
-						static?: Function
 					}
 				>,
 				all: ''
@@ -488,10 +488,9 @@ export default class Elysia<
 			}
 
 		const models = this.definitions.type
-
-		// ? Clone is need because of JIT, so the context doesn't switch between instance
 		const dynamic = !this.config.aot
 
+		// ? Clone is need because of JIT, so the context doesn't switch between instance
 		const instanceValidator = { ...this.validator.getCandidate() }
 
 		const cloned = {
@@ -631,10 +630,6 @@ export default class Elysia<
 						}
 					} as any)
 
-		const loosePath = path.endsWith('/')
-			? path.slice(0, path.length - 1)
-			: path + '/'
-
 		// ! Init default [] for hooks if undefined
 		localHook = mergeHook(localHook, instanceValidator)
 
@@ -664,14 +659,13 @@ export default class Elysia<
 				handle
 			})
 
-			if (this.config.strictPath === false) {
-				this.router.dynamic.add(method, loosePath, {
+			if (this.config.strictPath === false)
+				this.router.dynamic.add(method, getLoosePath(path), {
 					validator,
 					hooks,
 					content: localHook?.type as string,
 					handle
 				})
-			}
 
 			this.router.history.push({
 				method,
@@ -752,7 +746,7 @@ export default class Elysia<
 			composed: mainHandler,
 			handler: handle,
 			hooks: hooks as any,
-			compile: () => compile(true)
+			compile: () => compile()
 		})
 
 		const staticRouter = this.router.static.http
@@ -813,34 +807,20 @@ export default class Elysia<
 				staticRouter.map[path].code =
 					`case '${method}': return st[${index}](${ctx})\n${staticRouter.map[path].code}`
 
-			if (!this.config.strictPath) {
-				if (!staticRouter.map[loosePath])
-					staticRouter.map[loosePath] = {
-						code: ''
-					}
-
-				if (
-					this.config.nativeStaticResponse === true &&
-					nativeStaticHandler &&
-					(method === 'GET' || method === 'ALL')
-				)
-					this.router.static.http.static[loosePath] =
-						nativeStaticHandler()
-
-				if (method === 'ALL')
-					staticRouter.map[loosePath].all =
-						`default: return st[${index}](${ctx})\n`
-				else
-					staticRouter.map[loosePath].code =
-						`case '${method}': return st[${index}](${ctx})\n${staticRouter.map[loosePath].code}`
-			}
+			if (
+				!this.config.strictPath &&
+				this.config.nativeStaticResponse === true &&
+				nativeStaticHandler &&
+				(method === 'GET' || method === 'ALL')
+			)
+				this.router.static.http.static[getLoosePath(path)] =
+					nativeStaticHandler()
 		} else {
+			// Dynamic path, best not to JIT
 			this.router.http.add(method, path, handler)
 
 			if (!this.config.strictPath) {
-				const loosePath = path.endsWith('/')
-					? path.slice(0, path.length - 1)
-					: path + '/'
+				const loosePath = getLoosePath(path)
 
 				if (
 					this.config.nativeStaticResponse === true &&
@@ -2917,9 +2897,7 @@ export default class Elysia<
 		Routes,
 		Ephemeral,
 		{
-			derive: Prettify<
-				Volatile['derive']
-			>
+			derive: Prettify<Volatile['derive']>
 			resolve: Prettify<
 				Volatile['resolve'] & ResolveResolutions<Resolutions>
 			>

@@ -11,6 +11,7 @@ import decodeURIComponent from 'fast-decode-uri-component'
 import {
 	ELYSIA_REQUEST_ID,
 	getCookieValidator,
+	getLoosePath,
 	lifeCycleToFn,
 	randomId,
 	redirect,
@@ -1064,7 +1065,7 @@ export const composeHandler = ({
 
 			if (transform.subType === 'mapDerive')
 				fnLiteral +=
-				`if(transformed instanceof ElysiaCustomStatusResponse)throw transformed\n` +
+					`if(transformed instanceof ElysiaCustomStatusResponse)throw transformed\n` +
 					`else{` +
 					`transformed.request=c.request\n` +
 					`transformed.store=c.store\n` +
@@ -1964,17 +1965,17 @@ export const composeGeneralHandler = (
 		`return (route.store.handler=route.store.compile())(c)\n`
 
 	let switchMap = ``
-	for (const [path, { code, all, static: staticFn }] of Object.entries(
+	for (const [path, { code, all }] of Object.entries(
 		router.static.http.map
 	)) {
-		if (staticFn)
-			switchMap += `case'${path}':switch(r.method){${code}\n${
-				all ?? `default:` + findDynamicRoute
-			}}`
-
-		switchMap += `case'${path}':switch(r.method){${code}${
+		switchMap += `case'${path}':switch(r.method){${code}\n${
 			all ?? `default:` + findDynamicRoute
 		}}`
+
+		if (app.config.strictPath !== true)
+			switchMap += `case'${getLoosePath(path)}':switch(r.method){${code}${
+				all ?? `default:` + findDynamicRoute
+			}}`
 	}
 
 	const maybeAsync = app.event.request.some(isAsync)

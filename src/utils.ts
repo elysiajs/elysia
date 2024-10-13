@@ -1581,3 +1581,10 @@ export const promoteEvent = (
 
 // 	return result as any
 // }
+
+export const getLoosePath = (path: string) => {
+	if (path.charCodeAt(path.length - 1) === 47)
+		return path.slice(0, path.length - 1)
+
+	return path + '/'
+}
