@@ -1970,7 +1970,9 @@ export const composeGeneralHandler = (
 	)) {
 		switchMap +=
 			`case'${path}':` +
-			(app.config.strictPath !== true ? `case'${getLoosePath(path)}':` : '') +
+			(app.config.strictPath !== true
+				? `case'${getLoosePath(path)}':`
+				: '') +
 			`switch(r.method){${code}\n` +
 			(all ?? `default:` + findDynamicRoute) +
 			'}'

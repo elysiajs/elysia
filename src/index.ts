@@ -413,9 +413,6 @@ export default class Elysia<
 		this.config = {
 			prefix: '',
 			aot: process.env.ELYSIA_AOT !== 'false',
-			strictPath: false,
-			global: false,
-			analytic: false,
 			normalize: true,
 			...config,
 			cookie: {
@@ -3505,14 +3502,8 @@ export default class Elysia<
 				return this
 
 			this.dependencies[name].push(
-				!this.config?.analytic
+				this.config?.analytic
 					? {
-							name: plugin.config.name,
-							seed: plugin.config.seed,
-							checksum: current,
-							dependencies: plugin.dependencies
-						}
-					: {
 							name: plugin.config.name,
 							seed: plugin.config.seed,
 							checksum: current,
@@ -3535,6 +3526,12 @@ export default class Elysia<
 									fn: x.toString(),
 									stack: new Error().stack ?? ''
 								}))
+						}
+					: {
+							name: plugin.config.name,
+							seed: plugin.config.seed,
+							checksum: current,
+							dependencies: plugin.dependencies
 						}
 			)
 
