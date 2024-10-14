@@ -204,4 +204,23 @@ describe('Handle Error', () => {
 			'APIError'
 		)
 	})
+
+	it('parse headers', async () => {
+		const headers = await new Elysia()
+			.get('/', ({ headers }) => headers)
+			.handle(
+				new Request('http://localhost:3000', {
+					headers: {
+						'Content-Type': 'application/json',
+						'X-Test': 'Nagi'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(headers).toEqual({
+			'content-type': 'application/json',
+			'x-test': 'Nagi'
+		})
+	})
 })

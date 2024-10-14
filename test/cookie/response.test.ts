@@ -363,9 +363,7 @@ describe('Cookie Response', () => {
 	})
 
 	it('set cookie attribute before value', async () => {
-		const date = new Date(
-			Date.now() + 1000 * 60 * 60 * 24
-		)
+		const date = new Date(Date.now() + 1000 * 60 * 60 * 24)
 
 		const app = new Elysia().get('/', ({ cookie }) => {
 			cookie.my_cookie.expires = date
@@ -381,5 +379,28 @@ describe('Cookie Response', () => {
 		expect(setCookie).toEqual([
 			`my_cookie=my_cookie_value; Path=/; Expires=${date.toUTCString()}`
 		])
+	})
+
+	it('should not set if value is duplicated', async () => {
+		const app = new Elysia()
+			.derive(({ cookie: { test } }) => {
+				if (!test.value) {
+					test.value = 'Hello, world!'
+				}
+
+				return {}
+			})
+			.get('/', () => 'Hello, world!')
+
+		const res = await app.handle(
+			new Request('http://localhost:3000/', {
+				headers: {
+					cookie: 'test=Hello, world!'
+				}
+			})
+		)
+			.then((x) => x.headers)
+
+		expect(res.getSetCookie()).toEqual([])
 	})
 })

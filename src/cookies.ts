@@ -133,9 +133,7 @@ export class Cookie<T> implements ElysiaCookie {
 	) {}
 
 	get cookie() {
-		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
-
-		return this.jar[this.name]
+		return this.jar[this.name] ?? this.initial
 	}
 
 	set cookie(jar: ElysiaCookie) {
@@ -144,12 +142,22 @@ export class Cookie<T> implements ElysiaCookie {
 		this.jar[this.name] = jar
 	}
 
+	protected get setCookie() {
+		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
+
+		return this.jar[this.name]
+	}
+
+	protected set setCookie(jar: ElysiaCookie) {
+		this.cookie = jar
+	}
+
 	get value(): T {
 		return this.cookie.value as T
 	}
 
 	set value(value: T) {
-		this.cookie.value = value
+		this.setCookie.value = value
 	}
 
 	get expires() {
@@ -157,9 +165,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set expires(expires) {
-		this.cookie.expires = expires
-
-		console.log(this.cookie)
+		this.setCookie.expires = expires
 	}
 
 	get maxAge() {
@@ -167,7 +173,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set maxAge(maxAge) {
-		this.cookie.maxAge = maxAge
+		this.setCookie.maxAge = maxAge
 	}
 
 	get domain() {
@@ -175,7 +181,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set domain(domain) {
-		this.cookie.domain = domain
+		this.setCookie.domain = domain
 	}
 
 	get path() {
@@ -183,7 +189,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set path(path) {
-		this.cookie.path = path
+		this.setCookie.path = path
 	}
 
 	get secure() {
@@ -191,7 +197,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set secure(secure) {
-		this.cookie.secure = secure
+		this.setCookie.secure = secure
 	}
 
 	get httpOnly() {
@@ -199,7 +205,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set httpOnly(httpOnly) {
-		this.cookie.httpOnly = httpOnly
+		this.setCookie.httpOnly = httpOnly
 	}
 
 	get sameSite() {
@@ -207,7 +213,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set sameSite(sameSite) {
-		this.cookie.sameSite = sameSite
+		this.setCookie.sameSite = sameSite
 	}
 
 	get priority() {
@@ -215,7 +221,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set priority(priority) {
-		this.cookie.priority = priority
+		this.setCookie.priority = priority
 	}
 
 	get partitioned() {
@@ -223,7 +229,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set partitioned(partitioned) {
-		this.cookie.partitioned = partitioned
+		this.setCookie.partitioned = partitioned
 	}
 
 	get secrets() {
@@ -231,11 +237,11 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set secrets(secrets) {
-		this.cookie.secrets = secrets
+		this.setCookie.secrets = secrets
 	}
 
 	update(config: Updater<Partial<ElysiaCookie>>) {
-		this.cookie = Object.assign(
+		this.setCookie = Object.assign(
 			this.cookie,
 			typeof config === 'function' ? config(this.cookie) : config
 		)
@@ -244,7 +250,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set(config: Updater<Partial<ElysiaCookie>>) {
-		this.cookie = Object.assign(
+		this.setCookie = Object.assign(
 			{
 				...this.initial,
 				value: this.value

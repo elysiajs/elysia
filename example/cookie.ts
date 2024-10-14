@@ -14,7 +14,17 @@ const app = new Elysia({
 					name: 'Rin',
 					affilation: 'Administration'
 				}
-			])
+			]),
+		{
+			cookie: t.Cookie({
+				council: t.Array(
+					t.Object({
+						name: t.String(),
+						affilation: t.String()
+					})
+				)
+			})
+		}
 	)
 	.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 	.get(

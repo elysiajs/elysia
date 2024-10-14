@@ -563,8 +563,8 @@ export const composeHandler = ({
 		fnLiteral += headersHasToJSON
 			? 'c.headers = c.request.headers.toJSON()\n'
 			: 'c.headers = {}\n' +
-				'for (const [key, value] of c.request.headers.entries())\n' +
-				'c.headers[key] = value'
+				'for (const [key, value] of c.request.headers.entries())' +
+				'c.headers[key] = value\n'
 	}
 
 	if (hasCookie) {
@@ -1862,7 +1862,7 @@ export const composeHandler = ({
 			getServer: () => app.getServer(),
 			TypeBoxError
 		})
-	} catch {
+	} catch (error) {
 		const debugHooks = lifeCycleToFn(hooks)
 
 		console.log('[Composer] failed to generate optimized handler')
@@ -1905,7 +1905,8 @@ export const composeHandler = ({
 			validator,
 			// @ts-expect-error
 			definitions: app.definitions.type,
-			fnLiteral
+			error,
+			fnLiteral,
 		})
 		console.log('---')
 
