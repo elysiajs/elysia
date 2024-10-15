@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'bun:test'
-import { mapEarlyResponse } from '../../src/handler'
+
+import { mapEarlyResponse } from '../../../src/adapter/web-standard/handler'
+import { form } from '../../../src/utils'
 import { Passthrough } from './utils'
-import { form } from '../../src'
 
 const defaultContext = {
 	headers: {},
@@ -30,7 +31,7 @@ class Student {
 
 class CustomResponse extends Response {}
 
-describe('Map Early Response', () => {
+describe('Web Standard - Map Early Response', () => {
 	it('map string', async () => {
 		const response = mapEarlyResponse('Shiroko', defaultContext)
 

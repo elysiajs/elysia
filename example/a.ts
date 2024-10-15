@@ -1,8 +1,19 @@
 import { Elysia } from '../src'
-import { ElysiaNodeContext, NodeAdapter } from '../src/adapter/node'
-import { WebStandardAdapter } from '../src/adapter/web-standard'
+import { NodeAdapter } from '../src/adapter/node'
 
-const app = new Elysia({ adapter: WebStandardAdapter })
+new Elysia({ adapter: NodeAdapter })
+	.get('/', ({ cookie: { a, b } }) => {
+		a.value = 'hi'
+		b.value = 'hi'
+
+		return 'hi'
+	})
+	.get('/stream', async function* () {
+		for (let i = 0; i < 10; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100))
+			yield i
+		}
+	})
 	.post('/', async ({ body, headers }) => {
 		return {
 			body,
@@ -10,9 +21,4 @@ const app = new Elysia({ adapter: WebStandardAdapter })
 			env: typeof Bun !== 'undefined' ? 'bun' : 'likely Node'
 		}
 	})
-	// .listen(3000)
-
-Bun.serve({
-	port: 3000,
-	fetch: app.fetch
-})
+	.listen(3000)

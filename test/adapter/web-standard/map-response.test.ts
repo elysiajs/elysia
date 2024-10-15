@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'bun:test'
-import { mapResponse } from '../../src/handler'
+
+import { Elysia } from '../../../src'
+
+import { mapResponse } from '../../../src/adapter/web-standard/handler'
+import { form } from '../../../src/utils'
 import { Passthrough } from './utils'
-import Elysia, { form } from '../../src'
-import { req } from '../utils'
+import { req } from '../../utils'
 
 const defaultContext = {
 	cookie: {},
@@ -31,7 +34,7 @@ class Student {
 
 class CustomResponse extends Response {}
 
-describe('Map Response', () => {
+describe('Web Standard - Map Response', () => {
 	it('map string', async () => {
 		const response = mapResponse('Shiroko', defaultContext)
 

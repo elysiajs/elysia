@@ -1,9 +1,21 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import { createServer, type IncomingMessage } from 'node:http'
+import {
+	createServer,
+	type IncomingMessage,
+	type ServerResponse
+} from 'node:http'
 import { Readable } from 'node:stream'
+
+import {
+	mapResponse,
+	mapEarlyResponse,
+	mapCompactResponse,
+	ElysiaNodeResponse
+} from './handler'
 
 import { isNumericString } from '../../utils'
 import type { ElysiaAdapter } from '../types'
+import { AnyElysia } from '../..'
 
 export const ElysiaNodeContext = Symbol('ElysiaNodeContext')
 
@@ -15,6 +27,51 @@ const getUrl = (req: IncomingMessage) => {
 
 	return `http://localhost${req.url}`
 }
+
+const createNodeHandler =
+	(app: AnyElysia) =>
+	async (
+		req: IncomingMessage,
+		res: ServerResponse<IncomingMessage> & {
+			req: IncomingMessage
+		}
+	) => {
+		let r = app.fetch(req as any) as unknown as ElysiaNodeResponse
+		if (r instanceof Promise) r = await r
+
+		if (r instanceof Response) {
+			for (const [name, value] of Object.entries(r.headers))
+				res.setHeader(name, value)
+
+			res.writeHead(r.status)
+			res.end(await r.text())
+
+			return
+		}
+
+		if (r[0] instanceof Promise) r[0] = await r[0]
+
+		// Web Standard
+		if (r[0] instanceof Response) {
+			for (const [name, value] of Object.entries(r[0].headers))
+				res.setHeader(name, value)
+
+			res.writeHead(r[0].status)
+			res.end(await r[0].text())
+
+			return
+		}
+
+		if (r[1].status) res.writeHead(r[1].status, r[1].headers)
+		else res.writeHead(200, r[1].headers)
+
+		if (r[0] instanceof Readable) {
+			r[0].pipe(res)
+			return
+		}
+
+		res.end(r[0])
+	}
 
 export const nodeRequestToWebstand = (
 	req: IncomingMessage,
@@ -46,11 +103,22 @@ export const nodeRequestToWebstand = (
 }
 
 export const NodeAdapter: ElysiaAdapter = {
+	handler: {
+		mapResponse,
+		mapEarlyResponse,
+		mapCompactResponse,
+		createStaticHandler: (value, _hook, defaultHeaders) =>
+			mapResponse(value, {
+				status: 200,
+				headers: defaultHeaders ?? {}
+			}) as any
+	},
 	composeHandler: {
 		inject: {
 			ElysiaNodeContext
 		},
 		declare: `const req = c[ElysiaNodeContext].req\n`,
+		abortSignal: 'req.signal',
 		headers: `c.headers = req.headers\n`,
 		parser: {
 			json() {
@@ -180,19 +248,14 @@ export const NodeAdapter: ElysiaAdapter = {
 				options = parseInt(options)
 			}
 
-			const server = createServer(async (req, res) => {
-				const response = await app.fetch(req as any)
-
-				for (const [name, value] of Object.entries(response.headers))
-					res.setHeader(name, value)
-
-				res.writeHead(response.status)
-				res.end(await response.text())
-			}).listen(options, () => {
-				if (callback)
-					// @ts-ignore
-					callback()
-			})
+			const server = createServer(createNodeHandler(app)).listen(
+				options,
+				() => {
+					if (callback)
+						// @ts-ignore
+						callback()
+				}
+			)
 
 			for (let i = 0; i < app.event.start.length; i++)
 				app.event.start[i].fn(this)

@@ -1,6 +1,5 @@
 import type { AnyElysia } from '.'
 
-import { mapEarlyResponse, mapResponse } from './handler'
 import {
 	ElysiaCustomStatusResponse,
 	ElysiaErrors,
@@ -9,7 +8,6 @@ import {
 } from './error'
 
 import type { Context } from './context'
-import { type error } from './error'
 
 import { parseQuery, parseQueryFromURL } from './fast-querystring'
 
@@ -26,9 +24,10 @@ export type DynamicHandler = {
 	validator?: SchemaValidator
 }
 
-export const createDynamicHandler =
-	(app: AnyElysia) =>
-	async (request: Request): Promise<Response> => {
+export const createDynamicHandler = (app: AnyElysia) => {
+	const { mapResponse, mapEarlyResponse } = app['~adapter'].handler
+
+	return async (request: Request): Promise<Response> => {
 		const url = request.url,
 			s = url.indexOf('/', 11),
 			qi = url.indexOf('?', s + 1),
@@ -323,6 +322,7 @@ export const createDynamicHandler =
 					}
 
 					const result = mapEarlyResponse(response, context.set)
+					// @ts-expect-error
 					if (result) return (context.response = result)
 				}
 			}
@@ -370,6 +370,7 @@ export const createDynamicHandler =
 					const result = mapEarlyResponse(newResponse, context.set)
 					if (result !== undefined) {
 						const responseValidator =
+							// @ts-expect-error
 							validator?.response?.[result.status]
 
 						if (responseValidator?.Check(result) === false)
@@ -381,6 +382,7 @@ export const createDynamicHandler =
 						else if (responseValidator?.Decode)
 							response = responseValidator.Decode(response)
 
+						// @ts-expect-error
 						return (context.response = result)
 					}
 				}
@@ -418,6 +420,7 @@ export const createDynamicHandler =
 				}
 			}
 
+			// @ts-expect-error
 			return (context.response = mapResponse(response, context.set))
 		} catch (error) {
 			if ((error as ElysiaErrors).status)
@@ -430,10 +433,12 @@ export const createDynamicHandler =
 				await afterResponse.fn(context as any)
 		}
 	}
+}
 
-export const createDynamicErrorHandler =
-	(app: AnyElysia) =>
-	async (
+export const createDynamicErrorHandler = (app: AnyElysia) => {
+	const { mapResponse } = app['~adapter'].handler
+
+	return async (
 		context: Context & {
 			response: unknown
 		},
@@ -458,3 +463,4 @@ export const createDynamicErrorHandler =
 			}
 		)
 	}
+}

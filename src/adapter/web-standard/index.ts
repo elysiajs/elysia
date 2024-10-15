@@ -1,12 +1,21 @@
-import type { Serve } from 'bun'
+import {
+	mapResponse,
+	mapEarlyResponse,
+	mapCompactResponse,
+	createStaticHandler
+} from './handler'
 
-import { isProduction } from '../../error'
-import { getLoosePath, isNumericString } from '../../utils'
-import { websocket } from '../../ws'
+import { getLoosePath } from '../../utils'
 
 import type { ElysiaAdapter } from '../types'
 
 export const WebStandardAdapter: ElysiaAdapter = {
+	handler: {
+		mapResponse,
+		mapEarlyResponse,
+		mapCompactResponse,
+		createStaticHandler
+	},
 	composeHandler: {
 		abortSignal: 'c.request.signal',
 		preferWebstandardHeaders: true,

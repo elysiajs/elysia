@@ -1,27 +1,30 @@
 /* eslint-disable sonarjs/no-nested-switch */
 /* eslint-disable sonarjs/no-duplicate-string */
 import { serialize } from 'cookie'
-import { StatusMap } from './utils'
 
-import { Cookie } from './cookies'
+import { Readable } from 'node:stream'
 
-import type { Context } from './context'
-import type { LocalHook } from './types'
-import { ElysiaCustomStatusResponse } from './error'
+import { isNotEmpty, hasHeaderShorthand, StatusMap } from '../../utils'
 
-const hasHeaderShorthand = 'toJSON' in new Headers()
+import { Cookie } from '../../cookies'
 
-type SetResponse = Omit<Context['set'], 'status'> & {
-	status: number
-}
+import type { Context } from '../../context'
+import type { HTTPHeaders, Prettify } from '../../types'
+import { ElysiaCustomStatusResponse } from '../../error'
 
-export const isNotEmpty = (obj?: Object) => {
-	if (!obj) return false
+type SetResponse = Prettify<
+	Omit<Context['set'], 'status'> & {
+		status: number
+	}
+>
 
-	for (const x in obj) return true
-
-	return false
-}
+export type ElysiaNodeResponse = [
+	response: unknown,
+	set: Omit<Context['set'], 'headers' | 'status'> & {
+		headers?: HTTPHeaders
+		status: number
+	}
+]
 
 const handleFile = (response: File | Blob, set?: Context['set']) => {
 	const size = response.size
@@ -67,25 +70,6 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 	return new Response(response as Blob)
 }
 
-export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
-	if (!headers) return headers
-
-	headers.delete('set-cookie')
-
-	for (let i = 0; i < setCookie.length; i++) {
-		const index = setCookie[i].indexOf('=')
-
-		headers.append(
-			'set-cookie',
-			`${setCookie[i].slice(0, index)}=${
-				setCookie[i].slice(index + 1) || ''
-			}`
-		)
-	}
-
-	return headers
-}
-
 export const serializeCookie = (cookies: Context['set']['cookie']) => {
 	if (!cookies || !isNotEmpty(cookies)) return undefined
 
@@ -112,86 +96,91 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 	return set
 }
 
-const handleStream = async (
+const handleStream = (
+	generator: Generator | AsyncGenerator,
+	set?: Context['set'],
+	abortSignal?: AbortSignal
+): ElysiaNodeResponse => {
+	if (!set)
+		set = {
+			status: 200,
+			headers: {
+				'transfer-encoding': 'chunked',
+				'content-type': 'text/event-stream;charset=utf-8'
+			}
+		}
+	else {
+		set.headers['transfer-encoding'] = 'chunked'
+		set.headers['content-type'] = 'text/event-stream;charset=utf-8'
+	}
+
+	return [
+		handleStreamResponse(generator, set, abortSignal),
+		set as SetResponse
+	]
+}
+
+export const handleStreamResponse = (
 	generator: Generator | AsyncGenerator,
 	set?: Context['set'],
 	abortSignal?: AbortSignal
 ) => {
-	let init = generator.next()
-	if (init instanceof Promise) init = await init
+	const readable = new Readable({
+		read() {}
+	})
 
-	if (init.done) {
-		if (set) return mapResponse(init.value, set, abortSignal)
-		return mapCompactResponse(init.value, abortSignal)
-	}
+	;(async () => {
+		let init = generator.next()
+		if (init instanceof Promise) init = await init
 
-	return new Response(
-		new ReadableStream({
-			async start(controller) {
-				let end = false
-
-				abortSignal?.addEventListener('abort', () => {
-					end = true
-
-					try {
-						controller.close()
-					} catch {
-						// nothing
-					}
-				})
-
-				if (init.value !== undefined && init.value !== null) {
-					if (typeof init.value === 'object')
-						try {
-							controller.enqueue(
-								Buffer.from(JSON.stringify(init.value))
-							)
-						} catch {
-							controller.enqueue(
-								Buffer.from(init.value.toString())
-							)
-						}
-					else controller.enqueue(Buffer.from(init.value.toString()))
-				}
-
-				for await (const chunk of generator) {
-					if (end) break
-					if (chunk === undefined || chunk === null) continue
-
-					if (typeof chunk === 'object')
-						try {
-							controller.enqueue(
-								Buffer.from(JSON.stringify(chunk))
-							)
-						} catch {
-							controller.enqueue(Buffer.from(chunk.toString()))
-						}
-					else controller.enqueue(Buffer.from(chunk.toString()))
-
-					// Wait for the next event loop
-					// Otherwise the data will be mixed up
-					await new Promise<void>((resolve) =>
-						setTimeout(() => resolve(), 0)
-					)
-				}
-
-				try {
-					controller.close()
-				} catch {
-					// nothing
-				}
-			}
-		}),
-		{
-			...(set as ResponseInit),
-			headers: {
-				// Manually set transfer-encoding for direct response, eg. app.handle, eden
-				'transfer-encoding': 'chunked',
-				'content-type': 'text/event-stream; charset=utf-8',
-				...set?.headers
-			}
+		if (init.done) {
+			if (set) return mapResponse(init.value, set, abortSignal)
+			return mapCompactResponse(init.value, abortSignal)
 		}
-	)
+
+		let end = false
+
+		abortSignal?.addEventListener('abort', () => {
+			end = true
+
+			try {
+				readable.push(null)
+			} catch {
+				// nothing
+			}
+		})
+
+		if (init.value !== undefined && init.value !== null) {
+			if (typeof init.value === 'object')
+				try {
+					readable.push(Buffer.from(JSON.stringify(init.value)))
+				} catch {
+					readable.push(Buffer.from(init.value.toString()))
+				}
+			else readable.push(Buffer.from(init.value.toString()))
+		}
+
+		for await (const chunk of generator) {
+			if (end) break
+			if (chunk === undefined || chunk === null) continue
+
+			if (typeof chunk === 'object')
+				try {
+					readable.push(Buffer.from(JSON.stringify(chunk)))
+				} catch {
+					readable.push(Buffer.from(chunk.toString()))
+				}
+			else readable.push(Buffer.from(chunk.toString()))
+
+			// Wait for the next event loop
+			// Otherwise the data will be mixed up
+			await new Promise<void>((resolve) => setTimeout(() => resolve(), 0))
+		}
+
+		readable.push(null)
+	})()
+
+	return readable
 }
 
 export async function* streamResponse(response: Response) {
@@ -218,7 +207,7 @@ export const mapResponse = (
 	response: unknown,
 	set: Context['set'],
 	abortSignal?: AbortSignal
-): Response => {
+): ElysiaNodeResponse => {
 	if (
 		isNotEmpty(set.headers) ||
 		set.status !== 200 ||
@@ -239,28 +228,20 @@ export const mapResponse = (
 			if (cookie) set.headers['set-cookie'] = cookie
 		}
 
-		if (
-			set.headers['set-cookie'] &&
-			Array.isArray(set.headers['set-cookie'])
-		) {
-			set.headers = parseSetCookies(
-				new Headers(set.headers) as Headers,
-				set.headers['set-cookie']
-			) as any
-		}
-
 		switch (response?.constructor?.name) {
 			case 'String':
-				return new Response(response as string, set as SetResponse)
+				set.headers['content-type'] = 'text/plain;charset=utf-8'
+
+				return [response, set as SetResponse]
 
 			case 'Blob':
-				return handleFile(response as File | Blob, set)
+				return [response as File | Blob, set as SetResponse]
 
 			case 'Array':
-				return Response.json(response, set as SetResponse)
-
 			case 'Object':
-				return Response.json(response, set as SetResponse)
+				set.headers['content-type'] = 'application/json;charset=utf-8'
+
+				return [JSON.stringify(response), set as SetResponse]
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -278,7 +259,7 @@ export const mapResponse = (
 					)
 				)
 					set.headers['content-type'] =
-						'text/event-stream; charset=utf-8'
+						'text/event-stream;charset=utf-8'
 
 				abortSignal?.addEventListener(
 					'abort',
@@ -293,15 +274,14 @@ export const mapResponse = (
 					}
 				)
 
-				return new Response(
-					response as ReadableStream,
-					set as SetResponse
-				)
+				return [response as ReadableStream, set as SetResponse]
 
 			case undefined:
-				if (!response) return new Response('', set as SetResponse)
+				if (!response) return ['', set as SetResponse]
 
-				return Response.json(response, set as SetResponse)
+				set.headers['content-type'] = 'application/json;charset=utf-8'
+
+				return [response, set as SetResponse]
 
 			case 'Response':
 				let isCookieSet = false
@@ -345,7 +325,7 @@ export const mapResponse = (
 						abortSignal
 					) as any
 
-				return response as Response
+				return [response as Response, set as SetResponse]
 
 			case 'Error':
 				return errorToResponse(response as Error, set)
@@ -360,19 +340,21 @@ export const mapResponse = (
 
 			case 'Number':
 			case 'Boolean':
-				return new Response(
+				set.headers['content-type'] = 'text/plain;charset=utf-8'
+
+				return [
 					(response as number | boolean).toString(),
 					set as SetResponse
-				)
+				]
 
 			case 'Cookie':
 				if (response instanceof Cookie)
-					return new Response(response.value, set as SetResponse)
+					return mapResponse(response.value, set)
 
-				return new Response(response?.toString(), set as SetResponse)
+				return mapResponse(response?.toString(), set)
 
 			case 'FormData':
-				return new Response(response as FormData, set as SetResponse)
+				return [response as FormData, set as SetResponse]
 
 			default:
 				if (response instanceof Response) {
@@ -414,7 +396,7 @@ export const mapResponse = (
 						).headers.entries())
 							if (key in set.headers) set.headers[key] = value
 
-					return response as Response
+					return [response as Response, set as SetResponse]
 				}
 
 				if (response instanceof Promise)
@@ -437,7 +419,6 @@ export const mapResponse = (
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
-					// @ts-expect-error
 					return handleStream(response as any, set, abortSignal)
 
 				if ('toResponse' in (response as any))
@@ -448,7 +429,8 @@ export const mapResponse = (
 
 					if (code === 123 || code === 91) {
 						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
+							set.headers['content-type'] =
+								'application/json;charset=utf-8'
 
 						return new Response(
 							JSON.stringify(response),
@@ -457,21 +439,26 @@ export const mapResponse = (
 					}
 				}
 
-				return new Response(response as any, set as SetResponse)
+				return [response as any, set as SetResponse]
 		}
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
-				return new Response(response as string)
+				set.headers['content-type'] = 'text/plain;charset=utf-8'
+
+				return [response, set as SetResponse]
 
 			case 'Blob':
-				return handleFile(response as File | Blob, set)
+				return [
+					handleFile(response as File | Blob, set),
+					set as SetResponse
+				]
 
 			case 'Array':
-				return Response.json(response)
-
 			case 'Object':
-				return Response.json(response, set as SetResponse)
+				set.headers['content-type'] = 'application/json;charset=utf-8'
+
+				return [JSON.stringify(response), set as SetResponse]
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -483,6 +470,8 @@ export const mapResponse = (
 				)
 
 			case 'ReadableStream':
+				set.headers['content-type'] = 'text/event-stream;charset=utf-8'
+
 				abortSignal?.addEventListener(
 					'abort',
 					{
@@ -496,20 +485,14 @@ export const mapResponse = (
 					}
 				)
 
-				return new Response(response as ReadableStream, {
-					headers: {
-						'Content-Type': 'text/event-stream; charset=utf-8'
-					}
-				})
+				return [response as ReadableStream, set as SetResponse]
 
 			case undefined:
-				if (!response) return new Response('')
+				if (!response) return ['', set as SetResponse]
 
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
-					}
-				})
+				set.headers['content-type'] = 'application/json;charset=utf-8'
+
+				return [response, set as SetResponse]
 
 			case 'Response':
 				if (
@@ -522,7 +505,7 @@ export const mapResponse = (
 						abortSignal
 					) as any
 
-				return response as Response
+				return [response as Response, set as SetResponse]
 
 			case 'Error':
 				return errorToResponse(response as Error, set)
@@ -543,19 +526,25 @@ export const mapResponse = (
 
 			case 'Number':
 			case 'Boolean':
-				return new Response((response as number | boolean).toString())
+				set.headers['content-type'] = 'text/plain;charset=utf-8'
+
+				return [
+					(response as number | boolean).toString(),
+					set as SetResponse
+				]
 
 			case 'Cookie':
 				if (response instanceof Cookie)
-					return new Response(response.value, set as SetResponse)
+					return mapResponse(response.value, set)
 
-				return new Response(response?.toString(), set as SetResponse)
+				return mapResponse(response?.toString(), set)
 
 			case 'FormData':
-				return new Response(response as FormData, set as SetResponse)
+				return [response as FormData, set as SetResponse]
 
 			default:
-				if (response instanceof Response) return response
+				if (response instanceof Response)
+					return [response, set as SetResponse]
 
 				if (response instanceof Promise)
 					return response.then((x) => mapResponse(x, set)) as any
@@ -577,7 +566,6 @@ export const mapResponse = (
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
-					// @ts-expect-error
 					return handleStream(response as any, set, abortSignal)
 
 				if ('toResponse' in (response as any))
@@ -588,7 +576,8 @@ export const mapResponse = (
 
 					if (code === 123 || code === 91) {
 						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
+							set.headers['content-type'] =
+								'application/json;charset=utf-8'
 
 						return new Response(
 							JSON.stringify(response),
@@ -597,7 +586,7 @@ export const mapResponse = (
 					}
 				}
 
-				return new Response(response as any)
+				return [response, set as SetResponse]
 		}
 }
 
@@ -605,7 +594,7 @@ export const mapEarlyResponse = (
 	response: unknown,
 	set: Context['set'],
 	abortSignal?: AbortSignal
-): Response | undefined => {
+): ElysiaNodeResponse | undefined => {
 	if (response === undefined || response === null) return
 
 	if (
@@ -629,27 +618,23 @@ export const mapEarlyResponse = (
 			if (cookie) set.headers['set-cookie'] = cookie
 		}
 
-		if (
-			set.headers['set-cookie'] &&
-			Array.isArray(set.headers['set-cookie'])
-		)
-			set.headers = parseSetCookies(
-				new Headers(set.headers) as Headers,
-				set.headers['set-cookie']
-			) as any
-
 		switch (response?.constructor?.name) {
 			case 'String':
-				return new Response(response as string, set as SetResponse)
+				set.headers['content-type'] = 'text/plain;charset=utf-8'
+
+				return [response, set as SetResponse]
 
 			case 'Blob':
-				return handleFile(response as File | Blob, set)
+				return [
+					handleFile(response as File | Blob, set),
+					set as SetResponse
+				]
 
 			case 'Array':
-				return Response.json(response, set as SetResponse)
-
 			case 'Object':
-				return Response.json(response, set as SetResponse)
+				set.headers['content-type'] = 'application/json;charset=utf-8'
+
+				return [JSON.stringify(response), set as SetResponse]
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -667,7 +652,7 @@ export const mapEarlyResponse = (
 					)
 				)
 					set.headers['content-type'] =
-						'text/event-stream; charset=utf-8'
+						'text/event-stream;charset=utf-8'
 
 				abortSignal?.addEventListener(
 					'abort',
@@ -682,15 +667,14 @@ export const mapEarlyResponse = (
 					}
 				)
 
-				return new Response(
-					response as ReadableStream,
-					set as SetResponse
-				)
+				return [response as ReadableStream, set as SetResponse]
 
 			case undefined:
 				if (!response) return
 
-				return Response.json(response, set as SetResponse)
+				set.headers['content-type'] = 'application/json;charset=utf-8'
+
+				return [response, set as SetResponse]
 
 			case 'Response':
 				let isCookieSet = false
@@ -734,7 +718,7 @@ export const mapEarlyResponse = (
 						abortSignal
 					) as any
 
-				return response as Response
+				return [response as Response, set as SetResponse]
 
 			case 'Promise':
 				// @ts-ignore
@@ -751,19 +735,21 @@ export const mapEarlyResponse = (
 
 			case 'Number':
 			case 'Boolean':
-				return new Response(
+				set.headers['content-type'] = 'text/plain;charset=utf-8'
+
+				return [
 					(response as number | boolean).toString(),
 					set as SetResponse
-				)
-
-			case 'FormData':
-				return new Response(response as FormData)
+				]
 
 			case 'Cookie':
 				if (response instanceof Cookie)
-					return new Response(response.value, set as SetResponse)
+					return mapEarlyResponse(response.value, set)
 
-				return new Response(response?.toString(), set as SetResponse)
+				return mapEarlyResponse(response?.toString(), set)
+
+			case 'FormData':
+				return [response as FormData, set as SetResponse]
 
 			default:
 				if (response instanceof Response) {
@@ -798,7 +784,7 @@ export const mapEarlyResponse = (
 					if ((response as Response).status !== set.status)
 						set.status = (response as Response).status
 
-					return response as Response
+					return [response as Response, set as SetResponse]
 				}
 
 				if (response instanceof Promise)
@@ -819,9 +805,8 @@ export const mapEarlyResponse = (
 					)
 				}
 
-				// @ts-expect-error
+				// @ts-ignore
 				if (typeof response?.next === 'function')
-					// @ts-expect-error
 					return handleStream(response as any, set, abortSignal)
 
 				if ('toResponse' in (response as any))
@@ -832,7 +817,8 @@ export const mapEarlyResponse = (
 
 					if (code === 123 || code === 91) {
 						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
+							set.headers['content-type'] =
+								'application/json;charset=utf-8'
 
 						return new Response(
 							JSON.stringify(response),
@@ -841,21 +827,26 @@ export const mapEarlyResponse = (
 					}
 				}
 
-				return new Response(response as any, set as SetResponse)
+				return [response, set as SetResponse]
 		}
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
-				return new Response(response as string)
+				set.headers['content-type'] = 'text/plain;charset=utf-8'
+
+				return [response, set as SetResponse]
 
 			case 'Blob':
-				return handleFile(response as File | Blob, set)
+				return [
+					handleFile(response as File | Blob, set),
+					set as SetResponse
+				]
 
 			case 'Array':
-				return Response.json(response)
-
 			case 'Object':
-				return Response.json(response, set as SetResponse)
+				set.headers['content-type'] = 'application/json;charset=utf-8'
+
+				return [JSON.stringify(response), set as SetResponse]
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -867,6 +858,8 @@ export const mapEarlyResponse = (
 				)
 
 			case 'ReadableStream':
+				set.headers['content-type'] = 'text/event-stream;charset=utf-8'
+
 				abortSignal?.addEventListener(
 					'abort',
 					{
@@ -880,20 +873,14 @@ export const mapEarlyResponse = (
 					}
 				)
 
-				return new Response(response as ReadableStream, {
-					headers: {
-						'Content-Type': 'text/event-stream; charset=utf-8'
-					}
-				})
+				return [response, set as SetResponse]
 
 			case undefined:
-				if (!response) return new Response('')
+				if (!response) return ['', set as SetResponse]
 
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
-					}
-				})
+				set.headers['content-type'] = 'application/json;charset=utf-8'
+
+				return [response, set as SetResponse]
 
 			case 'Response':
 				if (
@@ -904,7 +891,7 @@ export const mapEarlyResponse = (
 						streamResponse(response as Response)
 					) as any
 
-				return response as Response
+				return [response as Response, set as SetResponse]
 
 			case 'Promise':
 				// @ts-ignore
@@ -921,19 +908,28 @@ export const mapEarlyResponse = (
 
 			case 'Number':
 			case 'Boolean':
-				return new Response((response as number | boolean).toString())
+				set.headers['content-type'] = 'text/plain;charset=utf-8'
+
+				return [
+					(response as number | boolean).toString(),
+					set as SetResponse
+				]
 
 			case 'Cookie':
 				if (response instanceof Cookie)
-					return new Response(response.value, set as SetResponse)
+					return mapEarlyResponse(response.value, set as SetResponse)
 
-				return new Response(response?.toString(), set as SetResponse)
+				return mapEarlyResponse(
+					response?.toString(),
+					set as SetResponse
+				)
 
 			case 'FormData':
-				return new Response(response as FormData)
+				return [response as FormData, set as SetResponse]
 
 			default:
-				if (response instanceof Response) return response
+				if (response instanceof Response)
+					return [response, set as SetResponse]
 
 				if (response instanceof Promise)
 					return response.then((x) => mapEarlyResponse(x, set)) as any
@@ -955,7 +951,6 @@ export const mapEarlyResponse = (
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
-					// @ts-expect-error
 					return handleStream(response as any, set, abortSignal)
 
 				if ('toResponse' in (response as any))
@@ -966,7 +961,8 @@ export const mapEarlyResponse = (
 
 					if (code === 123 || code === 91) {
 						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
+							set.headers['content-type'] =
+								'application/json;charset=utf-8'
 
 						return new Response(
 							JSON.stringify(response),
@@ -975,26 +971,45 @@ export const mapEarlyResponse = (
 					}
 				}
 
-				return new Response(response as any)
+				return [response as any, set as SetResponse]
 		}
 }
 
 export const mapCompactResponse = (
 	response: unknown,
 	abortSignal?: AbortSignal
-): Response => {
+): ElysiaNodeResponse => {
 	switch (response?.constructor?.name) {
 		case 'String':
-			return new Response(response as string)
+			return [
+				new Response(response as string),
+				{
+					status: 200,
+					headers: {
+						'content-type': 'text/plain;charset=utf-8'
+					}
+				}
+			]
 
 		case 'Blob':
-			return handleFile(response as File | Blob)
+			return [
+				response as File | Blob,
+				{
+					status: 200
+				}
+			]
 
 		case 'Array':
-			return Response.json(response)
-
 		case 'Object':
-			return Response.json(response)
+			return [
+				JSON.stringify(response),
+				{
+					status: 200,
+					headers: {
+						'content-type': 'application/json;charset=utf-8'
+					}
+				}
+			]
 
 		case 'ElysiaCustomStatusResponse':
 			return mapResponse(
@@ -1019,20 +1034,34 @@ export const mapCompactResponse = (
 				}
 			)
 
-			return new Response(response as ReadableStream, {
-				headers: {
-					'Content-Type': 'text/event-stream; charset=utf-8'
+			return [
+				response as ReadableStream,
+				{
+					status: 200,
+					headers: {
+						'Content-Type': 'text/event-stream;charset=utf-8'
+					}
 				}
-			})
+			]
 
 		case undefined:
-			if (!response) return new Response('')
+			if (!response)
+				return [
+					'',
+					{
+						status: 200
+					}
+				]
 
-			return new Response(JSON.stringify(response), {
-				headers: {
-					'content-type': 'application/json'
+			return [
+				JSON.stringify(response),
+				{
+					status: 200,
+					headers: {
+						'content-type': 'application/json'
+					}
 				}
-			})
+			]
 
 		case 'Response':
 			if (
@@ -1041,7 +1070,12 @@ export const mapCompactResponse = (
 			)
 				return handleStream(streamResponse(response as Response)) as any
 
-			return response as Response
+			return [
+				response as Response,
+				{
+					status: 200
+				}
+			]
 
 		case 'Error':
 			return errorToResponse(response as Error)
@@ -1058,13 +1092,40 @@ export const mapCompactResponse = (
 
 		case 'Number':
 		case 'Boolean':
-			return new Response((response as number | boolean).toString())
+			return [
+				(response as number | boolean).toString(),
+				{
+					status: 200,
+					headers: {
+						'content-type': 'text/plain;charset=utf-8'
+					}
+				}
+			]
+
+		case 'Cookie':
+			if (response instanceof Cookie)
+				return mapCompactResponse(response.value)
+
+			return [
+				response?.toString(),
+				{
+					status: 200,
+					headers: {
+						'content-type': 'text/plain;charset=utf-8'
+					}
+				}
+			]
 
 		case 'FormData':
-			return new Response(response as FormData)
+			return [
+				response as FormData,
+				{
+					status: 200
+				}
+			]
 
 		default:
-			if (response instanceof Response) return response
+			if (response instanceof Response) return [response, { status: 200 }]
 
 			if (response instanceof Promise)
 				return response.then((x) =>
@@ -1086,7 +1147,6 @@ export const mapCompactResponse = (
 
 			// @ts-expect-error
 			if (typeof response?.next === 'function')
-				// @ts-expect-error
 				return handleStream(response as any, undefined, abortSignal)
 
 			if ('toResponse' in (response as any))
@@ -1104,12 +1164,12 @@ export const mapCompactResponse = (
 				}
 			}
 
-			return new Response(response as any)
+			return [response as any, { status: 200 }]
 	}
 }
 
 export const errorToResponse = (error: Error, set?: Context['set']) =>
-	new Response(
+	[
 		JSON.stringify({
 			name: error?.name,
 			message: error?.message,
@@ -1120,48 +1180,24 @@ export const errorToResponse = (error: Error, set?: Context['set']) =>
 				set?.status !== 200 ? ((set?.status as number) ?? 500) : 500,
 			headers: set?.headers
 		}
-	)
+	] as const satisfies ElysiaNodeResponse
 
-export const createStaticHandler = (
-	handle: unknown,
-	hooks: LocalHook<any, any, any, any, any, any, any>,
-	setHeaders: Context['set']['headers'] = {}
-): (() => Response) | undefined => {
-	if (typeof handle === 'function') return
+export const readableStreamToReadable = (webStream: ReadableStream) =>
+	new Readable({
+		async read() {
+			const reader = webStream.getReader()
 
-	const response = mapResponse(handle, {
-		headers: setHeaders
+			try {
+				// eslint-disable-next-line no-constant-condition
+				while (true) {
+					const { done, value } = await reader.read()
+
+					if (done) break
+
+					this.push(Buffer.from(value))
+				}
+			} catch (error) {
+				this.destroy(error as Error)
+			}
+		}
 	})
-
-	if (
-		hooks.parse.length === 0 &&
-		hooks.transform.length === 0 &&
-		hooks.beforeHandle.length === 0 &&
-		hooks.afterHandle.length === 0
-	)
-		return response.clone.bind(response)
-}
-
-export const createNativeStaticHandler = (
-	handle: unknown,
-	hooks: LocalHook<any, any, any, any, any, any, any>,
-	setHeaders: Context['set']['headers'] = {}
-): (() => Response) | undefined => {
-	if (typeof handle === 'function' || handle instanceof Blob) return
-
-	const response = mapResponse(handle, {
-		headers: setHeaders
-	})
-
-	if (
-		hooks.parse.length === 0 &&
-		hooks.transform.length === 0 &&
-		hooks.beforeHandle.length === 0 &&
-		hooks.afterHandle.length === 0
-	) {
-		if (!response.headers.has('content-type'))
-			response.headers.append('content-type', 'text/plain;charset=utf-8')
-
-		return response.clone.bind(response)
-	}
-}

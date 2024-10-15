@@ -1,21 +1,24 @@
 import type { Serve } from 'bun'
 
+import { createNativeStaticHandler } from './handler'
+
 import { isProduction } from '../../error'
-import { getLoosePath, isNumericString } from '../../utils'
+import { hasHeaderShorthand, isNumericString } from '../../utils'
 import { websocket } from '../../ws'
 
 import type { ElysiaAdapter } from '../types'
 
 import { WebStandardAdapter } from '../web-standard'
 
-const headersHasToJSON = (new Headers() as Headers).toJSON
-
 export const BunAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
+	handler: {
+		...WebStandardAdapter.handler,
+		createNativeStaticHandler
+	},
 	composeHandler: {
 		...WebStandardAdapter.composeHandler,
-		// @ts-ignore Bun specific
-		headers: headersHasToJSON
+		headers: hasHeaderShorthand
 			? 'c.headers = c.request.headers.toJSON()\n'
 			: 'c.headers = {}\n' +
 				'for (const [key, value] of c.request.headers.entries())' +

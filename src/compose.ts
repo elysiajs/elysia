@@ -15,16 +15,11 @@ import {
 	lifeCycleToFn,
 	randomId,
 	redirect,
-	signCookie
+	signCookie,
+	isNotEmpty
 } from './utils'
 import { ParseError, error } from './error'
 
-import {
-	mapEarlyResponse,
-	mapResponse,
-	mapCompactResponse,
-	isNotEmpty
-} from './handler'
 import {
 	NotFoundError,
 	ValidationError,
@@ -433,10 +428,11 @@ export const composeHandler = ({
 	asManifest?: boolean
 }): ComposedHandler => {
 	const adapter = app['~adapter'].composeHandler
+	const adapterHandler = app['~adapter'].handler
 	const isHandleFn = typeof handler === 'function'
 
 	if (!isHandleFn) {
-		handler = mapResponse(handler, {
+		handler = adapterHandler.mapResponse(handler, {
 			// @ts-expect-error private property
 			headers: app.setHeaders ?? {}
 		})
@@ -446,8 +442,15 @@ export const composeHandler = ({
 			hooks.transform.length === 0 &&
 			hooks.beforeHandle.length === 0 &&
 			hooks.afterHandle.length === 0
-		)
-			return Function('a', `return function(){return a.clone()}`)(handler)
+		) {
+			if (handler instanceof Response)
+				return Function(
+					'a',
+					`return function(){return a.clone()}`
+				)(handler)
+
+			return Function('a', 'return function(){return a}')(handler)
+		}
 	}
 
 	const handle = isHandleFn ? `handler(c)` : `handler`
@@ -1822,9 +1825,9 @@ export const composeHandler = ({
 			// @ts-expect-error
 			handleError: app.handleError,
 			utils: {
-				mapResponse,
-				mapCompactResponse,
-				mapEarlyResponse,
+				mapResponse: adapterHandler.mapResponse,
+				mapCompactResponse: adapterHandler.mapCompactResponse,
+				mapEarlyResponse: adapterHandler.mapEarlyResponse,
 				parseQuery,
 				parseQueryFromURL,
 				isNotEmpty
@@ -2081,7 +2084,7 @@ export const composeGeneralHandler = (
 		fnLiteral
 	)({
 		app,
-		mapEarlyResponse,
+		mapEarlyResponse: app['~adapter']['handler'].mapEarlyResponse,
 		NotFoundError,
 		randomId,
 		handleError,
@@ -2259,7 +2262,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		fnLiteral
 	)({
 		app,
-		mapResponse,
+		mapResponse: app['~adapter'].handler.mapResponse,
 		ERROR_CODE,
 		ElysiaCustomStatusResponse,
 		ELYSIA_TRACE,

@@ -43,11 +43,6 @@
 			"import": "./dist/error.mjs",
 			"require": "./dist/cjs/error.js"
 		},
-		"./handler": {
-			"types": "./dist/handler.d.ts",
-			"import": "./dist/handler.mjs",
-			"require": "./dist/cjs/handler.js"
-		},
 		"./sucrose": {
 			"types": "./dist/sucrose.d.ts",
 			"import": "./dist/sucrose.mjs",
@@ -77,6 +72,41 @@
 			"types": "./dist/fast-querystring.d.ts",
 			"import": "./dist/fast-querystring.mjs",
 			"require": "./dist/cjs/fast-querystring.js"
+		},
+		"./adapter": {
+			"types": "./dist/adapter/index.d.ts",
+			"import": "./dist/adapter/index.mjs",
+			"require": "./dist/cjs/adapter/index.js"
+		},
+		"./adapter/bun": {
+			"types": "./dist/adapter/bun/index.d.ts",
+			"import": "./dist/adapter/bun/index.mjs",
+			"require": "./dist/cjs/adapter/bun/index.js"
+		},
+		"./adapter/bun/handler": {
+			"types": "./dist/adapter/bun/handler.d.ts",
+			"import": "./dist/adapter/bun/handler.mjs",
+			"require": "./dist/cjs/adapter/bun/handler.js"
+		},
+		"./adapter/web-standard": {
+			"types": "./dist/adapter/web-standard/index.d.ts",
+			"import": "./dist/adapter/web-standard/index.mjs",
+			"require": "./dist/cjs/adapter/web-standard/index.js"
+		},
+		"./adapter/web-standard/handler": {
+			"types": "./dist/adapter/web-standard/handler.d.ts",
+			"import": "./dist/adapter/web-standard/handler.mjs",
+			"require": "./dist/cjs/adapter/web-standard/handler.js"
+		},
+		"./adapter/node": {
+			"types": "./dist/adapter/node/index.d.ts",
+			"import": "./dist/adapter/node/index.mjs",
+			"require": "./dist/cjs/adapter/node/index.js"
+		},
+		"./adapter/node/handler": {
+			"types": "./dist/adapter/node/handler.d.ts",
+			"import": "./dist/adapter/node/handler.mjs",
+			"require": "./dist/cjs/adapter/node/handler.js"
 		}
 	},
 	"repository": {

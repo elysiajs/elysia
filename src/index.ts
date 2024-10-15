@@ -16,12 +16,6 @@ import { WebStandardAdapter } from './adapter/web-standard'
 import type { ElysiaAdapter } from './adapter/types'
 
 import {
-	createNativeStaticHandler,
-	createStaticHandler,
-	isNotEmpty
-} from './handler'
-
-import {
 	cloneInference,
 	coercePrimitiveRoot,
 	deduplicateChecksum,
@@ -32,7 +26,8 @@ import {
 	mergeSchemaValidator,
 	PromiseGroup,
 	promoteEvent,
-	stringToStructureCoercions
+	stringToStructureCoercions,
+	isNotEmpty
 } from './utils'
 
 import {
@@ -330,9 +325,8 @@ export default class Elysia<
 		this.applyConfig(config ?? {})
 
 		this['~adapter'] =
-			(config.adapter ?? typeof Bun !== 'undefined')
-				? BunAdapter
-				: WebStandardAdapter
+			config.adapter ??
+			(typeof Bun !== 'undefined' ? BunAdapter : WebStandardAdapter)
 
 		if (config?.analytic && (config?.name || config?.seed !== undefined))
 			this.telemetry.stack = new Error().stack
@@ -693,14 +687,20 @@ export default class Elysia<
 
 		const inference = cloneInference(this.inference)
 
+		const adapter = this['~adapter'].handler
+
 		const staticHandler =
 			typeof handle !== 'function'
-				? createStaticHandler(handle, hooks, this.setHeaders)
+				? adapter.createStaticHandler(handle, hooks, this.setHeaders)
 				: undefined
 
 		const nativeStaticHandler =
 			typeof handle !== 'function'
-				? createNativeStaticHandler(handle, hooks, this.setHeaders)
+				? adapter.createNativeStaticHandler?.(
+						handle,
+						hooks,
+						this.setHeaders
+					)
 				: undefined
 
 		if (
@@ -813,7 +813,8 @@ export default class Elysia<
 					staticHandler &&
 					(method === 'GET' || method === 'ALL')
 				)
-					this.router.static.http.static[loosePath] = staticHandler()
+					this.router.static.http.static[loosePath] =
+						staticHandler() as Response
 
 				this.router.http.add(method, loosePath, handler)
 			}
@@ -5993,10 +5994,11 @@ export default class Elysia<
 			| ParseError
 			| NotFoundError
 			| InternalServerError
-	) =>
-		(this.handleError = this.config.aot
+	) => {
+		return (this.handleError = this.config.aot
 			? composeErrorHandler(this)
 			: createDynamicErrorHandler(this))(context, error)
+	}
 
 	private outerErrorHandler = (error: Error) =>
 		new Response(error.message || error.name || 'Error', {
@@ -6075,7 +6077,6 @@ export default class Elysia<
 
 export { Elysia }
 
-export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
 export { t } from './type-system'
 export { Cookie, type CookieOptions } from './cookies'
 export type { Context, PreContext, ErrorContext } from './context'

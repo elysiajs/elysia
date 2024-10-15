@@ -4,7 +4,6 @@ import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { t } from './type-system'
-import { isNotEmpty } from './handler'
 import type { Sucrose } from './sucrose'
 
 import type { TraceHandler } from './trace'
@@ -30,6 +29,8 @@ import type {
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
+
+export const hasHeaderShorthand = 'toJSON' in new Headers()
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -1587,4 +1588,12 @@ export const getLoosePath = (path: string) => {
 		return path.slice(0, path.length - 1)
 
 	return path + '/'
+}
+
+export const isNotEmpty = (obj?: Object) => {
+	if (!obj) return false
+
+	for (const x in obj) return true
+
+	return false
 }
