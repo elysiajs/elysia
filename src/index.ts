@@ -11,8 +11,8 @@ import { sucrose, type Sucrose } from './sucrose'
 import { ElysiaWS } from './ws/index'
 import type { WS } from './ws/types'
 
-import { BunAdapter } from './adapter/bun'
-import { WebStandardAdapter } from './adapter/web-standard'
+import { BunAdapter } from './adapter/bun/index'
+import { WebStandardAdapter } from './adapter/web-standard/index'
 import type { ElysiaAdapter } from './adapter/types'
 
 import {

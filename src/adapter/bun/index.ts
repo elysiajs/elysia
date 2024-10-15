@@ -4,11 +4,11 @@ import { createNativeStaticHandler } from './handler'
 
 import { isProduction } from '../../error'
 import { hasHeaderShorthand, isNumericString } from '../../utils'
-import { websocket } from '../../ws'
+import { websocket } from '../../ws/index'
 
 import type { ElysiaAdapter } from '../types'
 
-import { WebStandardAdapter } from '../web-standard'
+import { WebStandardAdapter } from '../web-standard/index'
 
 export const BunAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
