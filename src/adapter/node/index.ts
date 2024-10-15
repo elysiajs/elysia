@@ -1,21 +1,11 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import {
-	createServer,
-	type IncomingMessage,
-	type ServerResponse
-} from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
 import { Readable } from 'node:stream'
 
-import {
-	mapResponse,
-	mapEarlyResponse,
-	mapCompactResponse,
-	ElysiaNodeResponse
-} from './handler'
+import { mapResponse, mapEarlyResponse, mapCompactResponse } from './handler'
 
 import { isNumericString } from '../../utils'
 import type { ElysiaAdapter } from '../types'
-import { AnyElysia } from '../..'
 
 export const ElysiaNodeContext = Symbol('ElysiaNodeContext')
 
@@ -27,51 +17,6 @@ const getUrl = (req: IncomingMessage) => {
 
 	return `http://localhost${req.url}`
 }
-
-const createNodeHandler =
-	(app: AnyElysia) =>
-	async (
-		req: IncomingMessage,
-		res: ServerResponse<IncomingMessage> & {
-			req: IncomingMessage
-		}
-	) => {
-		let r = app.fetch(req as any) as unknown as ElysiaNodeResponse
-		if (r instanceof Promise) r = await r
-
-		if (r instanceof Response) {
-			for (const [name, value] of Object.entries(r.headers))
-				res.setHeader(name, value)
-
-			res.writeHead(r.status)
-			res.end(await r.text())
-
-			return
-		}
-
-		if (r[0] instanceof Promise) r[0] = await r[0]
-
-		// Web Standard
-		if (r[0] instanceof Response) {
-			for (const [name, value] of Object.entries(r[0].headers))
-				res.setHeader(name, value)
-
-			res.writeHead(r[0].status)
-			res.end(await r[0].text())
-
-			return
-		}
-
-		if (r[1].status) res.writeHead(r[1].status, r[1].headers)
-		else res.writeHead(200, r[1].headers)
-
-		if (r[0] instanceof Readable) {
-			r[0].pipe(res)
-			return
-		}
-
-		res.end(r[0])
-	}
 
 export const nodeRequestToWebstand = (
 	req: IncomingMessage,
@@ -103,6 +48,7 @@ export const nodeRequestToWebstand = (
 }
 
 export const NodeAdapter: ElysiaAdapter = {
+	name: 'node',
 	handler: {
 		mapResponse,
 		mapEarlyResponse,
@@ -114,12 +60,13 @@ export const NodeAdapter: ElysiaAdapter = {
 			}) as any
 	},
 	composeHandler: {
+		declare: `const req = c[ElysiaNodeContext].req\n`,
+		mapResponseContext: 'c[ElysiaNodeContext].res',
+		headers: `c.headers = req.headers\n`,
 		inject: {
 			ElysiaNodeContext
 		},
-		declare: `const req = c[ElysiaNodeContext].req\n`,
-		abortSignal: 'req.signal',
-		headers: `c.headers = req.headers\n`,
+		errorContext: `req,c[ElysiaNodeContext].res`,
 		parser: {
 			json() {
 				let fnLiteral =
@@ -169,13 +116,20 @@ export const NodeAdapter: ElysiaAdapter = {
 		}
 	},
 	composeGeneralHandler: {
+		parameters: 'r,res',
 		inject: {
 			nodeRequestToWebstand,
 			ElysiaNodeContext
 		},
 		createContext: (app) => {
 			let decoratorsLiteral = ''
-			let fnLiteral = 'const p=r.url\n'
+			let fnLiteral =
+				`const u=r.url,` +
+				`s=u.indexOf('/'),` +
+				`qi=u.indexOf('?', s + 1)\n` +
+				`let p\n` +
+				`if(qi===-1)p=u.substring(s)\n` +
+				`else p=u.substring(s, qi)\n`
 
 			// @ts-expect-error private
 			const defaultHeaders = app.setHeaders
@@ -196,7 +150,7 @@ export const NodeAdapter: ElysiaAdapter = {
 				`return _request = nodeRequestToWebstand(r) ` +
 				`},` +
 				`store,` +
-				`qi: -1,` +
+				`qi,` +
 				`path:p,` +
 				`url:r.url,` +
 				`redirect,` +
@@ -205,6 +159,7 @@ export const NodeAdapter: ElysiaAdapter = {
 			fnLiteral +=
 				'[ElysiaNodeContext]:{' +
 				'req:r,' +
+				'res,' +
 				'_signal:undefined,' +
 				'get signal(){' +
 				'if(this._signal) return this._signal\n' +
@@ -235,7 +190,44 @@ export const NodeAdapter: ElysiaAdapter = {
 		},
 		websocket() {
 			return '\n'
+		},
+		error404(hasEventHook, hasErrorHook) {
+			let findDynamicRoute = `if(route===null){`
+
+			if (hasErrorHook)
+				findDynamicRoute += `return app.handleError(c,notFound,false,${this.parameters})`
+			else
+				findDynamicRoute +=
+					`if(c.set.status===200)c.set.status=404\n` +
+					`res.writeHead(c.set.status, c.set.headers)\n` +
+					`res.end(error404Message)\n` +
+					`return [error404Message, c.set]`
+
+			findDynamicRoute += '}'
+
+			return {
+				declare: hasErrorHook
+					? ''
+					: `const error404Message=notFound.message.toString()\n`,
+				code: findDynamicRoute
+			}
 		}
+	},
+	composeError: {
+		inject: {
+			ElysiaNodeContext
+		},
+		mapResponseContext: ',context[ElysiaNodeContext].res',
+		validationError:
+			`c.set.headers['content-type'] = 'application/json;charset=utf-8'\n` +
+			`res.writeHead(c.set.status, c.set.headers)\n` +
+			`res.end(error404Message)\n` +
+			`return [error.message, c.set]`,
+		unknownError:
+			`c.set.status = error.status\n` +
+			`res.writeHead(c.set.status, c.set.headers)\n` +
+			`res.end(error.message)\n` +
+			`return [error.message, c.set]`
 	},
 	listen(app) {
 		return (options, callback) => {
@@ -248,14 +240,14 @@ export const NodeAdapter: ElysiaAdapter = {
 				options = parseInt(options)
 			}
 
-			const server = createServer(createNodeHandler(app)).listen(
-				options,
-				() => {
-					if (callback)
-						// @ts-ignore
-						callback()
-				}
-			)
+			const server = createServer(
+				// @ts-ignore private property
+				app._handle
+			).listen(options, () => {
+				if (callback)
+					// @ts-ignore
+					callback()
+			})
 
 			for (let i = 0; i < app.event.start.length; i++)
 				app.event.start[i].fn(this)

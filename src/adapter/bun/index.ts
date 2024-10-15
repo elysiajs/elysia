@@ -12,6 +12,7 @@ import { WebStandardAdapter } from '../web-standard/index'
 
 export const BunAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
+	name: 'bun',
 	handler: {
 		...WebStandardAdapter.handler,
 		createNativeStaticHandler

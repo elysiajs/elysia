@@ -5946,15 +5946,21 @@ export default class Elysia<
 	}
 
 	compile() {
-		this.fetch = this.config.aot
-			? composeGeneralHandler(this)
-			: createDynamicHandler(this)
+		if (this['~adapter'].isWebStandard) {
+			this.fetch = this.config.aot
+				? composeGeneralHandler(this)
+				: createDynamicHandler(this)
 
-		if (typeof this.server?.reload === 'function')
-			this.server.reload({
-				...(this.server || {}),
-				fetch: this.fetch
-			})
+			if (typeof this.server?.reload === 'function')
+				this.server.reload({
+					...(this.server || {}),
+					fetch: this.fetch
+				})
+
+			return this
+		}
+
+		this._handle = composeGeneralHandler(this)
 
 		return this
 	}
@@ -5972,7 +5978,12 @@ export default class Elysia<
 			: createDynamicHandler(this))(request)
 	}
 
-	private handleError = async (
+	/**
+	 * Custom handle written by adapter
+     */
+	protected _handle?(...a: unknown[]): unknown
+
+	protected handleError = async (
 		context: Partial<
 			Context<
 				MergeSchema<

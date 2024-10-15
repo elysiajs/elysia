@@ -10,6 +10,8 @@ import { getLoosePath } from '../../utils'
 import type { ElysiaAdapter } from '../types'
 
 export const WebStandardAdapter: ElysiaAdapter = {
+	name: 'web-standard',
+	isWebStandard: true,
 	handler: {
 		mapResponse,
 		mapEarlyResponse,
@@ -17,7 +19,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		createStaticHandler
 	},
 	composeHandler: {
-		abortSignal: 'c.request.signal',
+		mapResponseContext: 'c.request.signal',
 		preferWebstandardHeaders: true,
 		// @ts-ignore Bun specific
 		headers:
@@ -60,6 +62,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		}
 	},
 	composeGeneralHandler: {
+		parameters: 'r',
 		createContext(app) {
 			let decoratorsLiteral = ''
 			let fnLiteral = ''
@@ -145,7 +148,47 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			}
 
 			return fnLiteral
+		},
+		error404(hasEventHook, hasErrorHook) {
+			let findDynamicRoute = `if(route===null)return `
+
+			if (hasErrorHook)
+				findDynamicRoute += `app.handleError(c,notFound,false,${this.parameters})`
+			else
+				findDynamicRoute += hasEventHook
+					? `new Response(error404Message,{` +
+						`status:c.set.status===200?404:c.set.status,` +
+						`headers:c.set.headers` +
+						`})`
+					: `error404.clone()`
+
+			return {
+				declare: hasErrorHook
+					? ''
+					: `const error404Message=notFound.message.toString()\n` +
+						`const error404=new Response(error404Message,{status:404})\n`,
+				code: findDynamicRoute
+			}
 		}
+	},
+	composeError: {
+		mapResponseContext: '',
+		validationError:
+			`return new Response(` +
+			`error.message,` +
+			`{` +
+			`headers:Object.assign(` +
+			`{'content-type':'application/json'},` +
+			`set.headers` +
+			`),` +
+			`status:set.status` +
+			`}` +
+			`)`,
+		unknownError:
+			`return new Response(` +
+			`error.message,` +
+			`{headers:set.headers,status:error.status}` +
+			`)`
 	},
 	listen() {
 		return () => {

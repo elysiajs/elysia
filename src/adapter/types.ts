@@ -4,12 +4,14 @@ import type { Context } from '../context'
 import type { Prettify, LocalHook } from '../types'
 
 export interface ElysiaAdapter {
+	name: string
 	listen(
 		app: AnyElysia
 	): (
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback
 	) => void
+	isWebStandard?: boolean
 	handler: {
 		/**
 		 * Map return response on every case
@@ -17,7 +19,7 @@ export interface ElysiaAdapter {
 		mapResponse(
 			response: unknown,
 			set: Context['set'],
-			abortSignal?: AbortSignal
+			...params: unknown[]
 		): unknown
 		/**
 		 * Map response on truthy value
@@ -25,15 +27,12 @@ export interface ElysiaAdapter {
 		mapEarlyResponse(
 			response: unknown,
 			set: Context['set'],
-			abortSignal?: AbortSignal
+			...params: unknown[]
 		): unknown
 		/**
 		 * Map response without cookie, status or headers
 		 */
-		mapCompactResponse(
-			response: unknown,
-			abortSignal?: AbortSignal
-		): unknown,
+		mapCompactResponse(response: unknown, ...params: unknown[]): unknown
 		/**
 		 * Compile inline to value
 		 *
@@ -45,21 +44,23 @@ export interface ElysiaAdapter {
 		createStaticHandler(
 			handle: unknown,
 			hooks: LocalHook<any, any, any, any, any, any, any>,
-			setHeaders?: Context['set']['headers']
+			setHeaders?: Context['set']['headers'],
+			...params: unknown[]
 		): (() => unknown) | undefined
 		/**
 		 * If the runtime support cloning response
 		 *
 		 * eg. Bun.serve({ static })
-	     */
+		 */
 		createNativeStaticHandler?(
 			handle: unknown,
 			hooks: LocalHook<any, any, any, any, any, any, any>,
-			setHeaders?: Context['set']['headers']
+			setHeaders?: Context['set']['headers'],
+			...params: unknown[]
 		): (() => Response) | undefined
 	}
 	composeHandler: {
-		abortSignal?: string
+		mapResponseContext?: string
 		/**
 		 * Declare any variable that will be used in the general handler
 		 */
@@ -95,8 +96,14 @@ export interface ElysiaAdapter {
 				declare?: string
 			}
 		>
+		errorContext?: string
 	}
 	composeGeneralHandler: {
+		parameters?: string
+		error404(hasEventHook: boolean, hasErrorHook: boolean): {
+			declare: string
+			code: string
+		}
 		/**
 		 * fnLiteral of the general handler
 		 *
@@ -110,5 +117,11 @@ export interface ElysiaAdapter {
 		 * Inject variable to the general handler
 		 */
 		inject?: Record<string, unknown>
+	}
+	composeError: {
+		inject?: Record<string, unknown>
+		mapResponseContext: string
+		validationError: string
+		unknownError: string
 	}
 }

@@ -1,10 +1,11 @@
 import { Elysia } from '../src'
 import { NodeAdapter } from '../src/adapter/node'
 
-new Elysia({ adapter: NodeAdapter })
-	.get('/', ({ cookie: { a, b } }) => {
-		a.value = 'hi'
-		b.value = 'hi'
+import { createServer } from 'node:http'
+
+const app = new Elysia({ adapter: NodeAdapter })
+	.get('/', ({ query }) => {
+		console.log(query)
 
 		return 'hi'
 	})
