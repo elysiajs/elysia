@@ -16,6 +16,8 @@ export class ElysiaRequest implements WebStandardRequest {
 		private input: RequestInfo,
 		private init?: RequestInit
 	) {
+		console.log("Init")
+
 		if (typeof input === 'string') this.url = input
 		else if (input instanceof URL) this.url = input.href
 		else if (input instanceof Request) this.url = input.url
@@ -76,7 +78,6 @@ export class ElysiaRequest implements WebStandardRequest {
 		return (this._signal = new AbortController().signal)
 	}
 	readonly duplex = 'half' as RequestDuplex
-
 	readonly bodyUsed: boolean = false
 
 	get body(): ReadableStream | null {
@@ -170,7 +171,7 @@ export class ElysiaRequest implements WebStandardRequest {
 
 	async json() {
 		if (this.init?.body instanceof ReadableStream)
-			return readableStreamToString(this.init.body)
+			return JSON.parse(await readableStreamToString(this.init.body))
 
 		if (typeof this.init?.body === 'string')
 			return JSON.parse(this.init.body)

@@ -47,8 +47,6 @@ import type {
 } from './types'
 import type { TypeCheck } from './type-system'
 
-const headersHasToJSON = (new Headers() as Headers).toJSON
-
 const TypeBoxSymbol = {
 	optional: Symbol.for('TypeBox.Optional'),
 	kind: Symbol.for('TypeBox.Kind')
@@ -434,6 +432,7 @@ export const composeHandler = ({
 	inference: Sucrose.Inference
 	asManifest?: boolean
 }): ComposedHandler => {
+	const adapter = app['~adapter'].composeHandler
 	const isHandleFn = typeof handler === 'function'
 
 	if (!isHandleFn) {
@@ -456,6 +455,8 @@ export const composeHandler = ({
 
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
+
+	if (adapter.declare) fnLiteral += adapter.declare
 
 	inference = sucrose(
 		Object.assign(localHook, {
@@ -493,7 +494,10 @@ export const composeHandler = ({
 		defaultHeaders && !!Object.keys(defaultHeaders).length
 
 	// ? defaultHeaders doesn't imply that user will use headers in handler
-	const hasHeaders = inference.headers || validator.headers
+	const hasHeaders =
+		inference.headers ||
+		validator.headers ||
+		adapter.preferWebstandardHeaders !== true
 	const hasCookie = inference.cookie || !!validator.cookie
 
 	const cookieValidator = hasCookie
@@ -529,10 +533,7 @@ export const composeHandler = ({
 				? cookieMeta.secrets
 				: cookieMeta.secrets[0]
 
-		encodeCookie +=
-			'const _setCookie = c.set.cookie\n' +
-			//
-			'if(_setCookie){'
+		encodeCookie += 'const _setCookie = c.set.cookie\n' + 'if(_setCookie){'
 
 		if (cookieMeta.sign === true) {
 			encodeCookie +=
@@ -557,15 +558,7 @@ export const composeHandler = ({
 			validator
 		})
 
-	if (hasHeaders) {
-		// This function is Bun specific
-		// @ts-ignore
-		fnLiteral += headersHasToJSON
-			? 'c.headers = c.request.headers.toJSON()\n'
-			: 'c.headers = {}\n' +
-				'for (const [key, value] of c.request.headers.entries())' +
-				'c.headers[key] = value\n'
-	}
+	if (hasHeaders) fnLiteral += adapter.headers
 
 	if (hasCookie) {
 		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
@@ -861,7 +854,7 @@ export const composeHandler = ({
 		(isHandleFn && hasDefaultHeaders) ||
 		maybeStream
 
-	const requestMapper = `,c.request`
+	const abortSignal = adapter.abortSignal ? `,${adapter.abortSignal}` : ''
 	fnLiteral += `c.route=\`${path}\`\n`
 
 	const parseReporter = report('parse', {
@@ -869,53 +862,42 @@ export const composeHandler = ({
 	})
 
 	if (hasBody) {
+		const isOptionalBody = isOptional(validator.body)
+
 		const hasBodyInference =
 			hooks.parse.length || inference.body || validator.body
+
+		if (adapter.parser.declare) fnLiteral += adapter.parser.declare
 
 		fnLiteral += 'isParsing=true\n'
 		if (hooks.type && !hooks.parse.length) {
 			switch (hooks.type) {
 				case 'json':
 				case 'application/json':
-					if (isOptional(validator.body))
-						fnLiteral += `try{c.body=await c.request.json()}catch{}`
-					else fnLiteral += `c.body=await c.request.json()`
+					fnLiteral += adapter.parser.json(isOptionalBody)
 					break
 
 				case 'text':
 				case 'text/plain':
-					fnLiteral += `c.body=await c.request.text()\n`
+					fnLiteral += adapter.parser.text(isOptionalBody)
+
 					break
 
 				case 'urlencoded':
 				case 'application/x-www-form-urlencoded':
-					fnLiteral += `c.body=parseQuery(await c.request.text())\n`
+					fnLiteral += adapter.parser.urlencoded(isOptionalBody)
+
 					break
 
 				case 'arrayBuffer':
 				case 'application/octet-stream':
-					fnLiteral += `c.body=await c.request.arrayBuffer()\n`
+					fnLiteral += adapter.parser.arrayBuffer(isOptionalBody)
+
 					break
 
 				case 'formdata':
 				case 'multipart/form-data':
-					fnLiteral += `c.body={}\n`
-
-					// ? If formdata body is empty, mimetype is not set, might cause an error
-					if (isOptional(validator.body))
-						fnLiteral += `let form;try{form=await c.request.formData()}catch{}`
-					else fnLiteral += `const form=await c.request.formData()\n`
-
-					fnLiteral +=
-						`if(form)` +
-						`for(const key of form.keys()){` +
-						`if(c.body[key])` +
-						`continue\n` +
-						`const value=form.getAll(key)` +
-						`if(value.length === 1)` +
-						`c.body[key]=value[0]\n` +
-						`else c.body[key]=value` +
-						`}else form={}\n`
+					fnLiteral += adapter.parser.formData(isOptionalBody)
 					break
 			}
 		} else if (hasBodyInference) {
@@ -967,72 +949,50 @@ export const composeHandler = ({
 				switch (hooks.type) {
 					case 'json':
 					case 'application/json':
-						if (isOptional(validator.body))
-							fnLiteral += `try{c.body=await c.request.json()}catch{}`
-						else fnLiteral += `c.body=await c.request.json()\n`
+						fnLiteral += adapter.parser.json(isOptionalBody)
 						break
 
 					case 'text':
 					case 'text/plain':
-						fnLiteral += `c.body=await c.request.text()\n`
+						fnLiteral += adapter.parser.text(isOptionalBody)
 						break
 
 					case 'urlencoded':
 					case 'application/x-www-form-urlencoded':
-						fnLiteral += `c.body=parseQuery(await c.request.text())\n`
+						fnLiteral += adapter.parser.urlencoded(isOptionalBody)
 						break
 
 					case 'arrayBuffer':
 					case 'application/octet-stream':
-						fnLiteral += `c.body=await c.request.arrayBuffer()\n`
+						fnLiteral += adapter.parser.arrayBuffer(isOptionalBody)
 						break
 
 					case 'formdata':
 					case 'multipart/form-data':
-						fnLiteral +=
-							`c.body={}\n` +
-							`const form=await c.request.formData()` +
-							`for(const key of form.keys()){` +
-							`if(c.body[key])continue` +
-							`const value=form.getAll(key)` +
-							`if(value.length===1)` +
-							`c.body[key]=value[0]` +
-							`else c.body[key]=value` +
-							`}`
+						fnLiteral += adapter.parser.formData(isOptionalBody)
 						break
 				}
 			} else {
 				fnLiteral +=
 					`switch(contentType){` + `case 'application/json':\n`
 
-				fnLiteral += isOptional(validator.body)
-					? 'try { c.body = await c.request.json() } catch {}'
-					: 'c.body = await c.request.json()'
-
 				fnLiteral +=
-					`\nbreak\n` +
+					adapter.parser.json(isOptionalBody) +
+					`break\n` +
 					`case 'text/plain':` +
-					`c.body=await c.request.text()\n` +
+					adapter.parser.text(isOptionalBody) +
 					`break` +
 					'\n' +
 					`case 'application/x-www-form-urlencoded':` +
-					`c.body=parseQuery(await c.request.text())\n` +
+					adapter.parser.urlencoded(isOptionalBody) +
 					`break` +
 					'\n' +
 					`case 'application/octet-stream':` +
-					`c.body=await c.request.arrayBuffer();\n` +
+					adapter.parser.arrayBuffer(isOptionalBody) +
 					`break` +
 					'\n' +
 					`case 'multipart/form-data':` +
-					`c.body={}\n` +
-					`const form=await c.request.formData()\n` +
-					`for(const key of form.keys()){\n` +
-					`if(c.body[key])continue\n` +
-					`const value=form.getAll(key)\n` +
-					`if(value.length===1)` +
-					`c.body[key]=value[0]\n` +
-					`else c.body[key]=value\n` +
-					`}` +
+					adapter.parser.formData(isOptionalBody) +
 					`break` +
 					`}`
 			}
@@ -1446,7 +1406,9 @@ export const composeHandler = ({
 				mapResponseReporter.resolve()
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${requestMapper})}\n`
+				fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${
+					abortSignal
+				})}\n`
 			}
 		}
 
@@ -1538,9 +1500,13 @@ export const composeHandler = ({
 		mapResponseReporter.resolve()
 
 		if (hasSet)
-			fnLiteral += `return mapResponse(${saveResponse}r,c.set${requestMapper})\n`
+			fnLiteral += `return mapResponse(${saveResponse}r,c.set${
+				abortSignal
+			})\n`
 		else
-			fnLiteral += `return mapCompactResponse(${saveResponse}r${requestMapper})\n`
+			fnLiteral += `return mapCompactResponse(${saveResponse}r${
+				abortSignal
+			})\n`
 	} else {
 		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
@@ -1590,15 +1556,21 @@ export const composeHandler = ({
 						`isNotEmpty(c.set.headers)||` +
 						`c.set.status!==200||` +
 						`c.set.redirect||` +
-						`c.set.cookie)return mapResponse(${saveResponse}${handle}.clone(),c.set${requestMapper})` +
+						`c.set.cookie)return mapResponse(${saveResponse}${handle}.clone(),c.set${
+							abortSignal
+						})` +
 						`else return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse}r,c.set${requestMapper})\n`
+				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
+					abortSignal
+				})\n`
 			else
-				fnLiteral += `return mapCompactResponse(${saveResponse}r${requestMapper})\n`
+				fnLiteral += `return mapCompactResponse(${saveResponse}r${
+					abortSignal
+				})\n`
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r=await ${handle}\n`
@@ -1635,9 +1607,13 @@ export const composeHandler = ({
 			fnLiteral += encodeCookie
 
 			if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse}r,c.set${requestMapper})\n`
+				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
+					abortSignal
+				})\n`
 			else
-				fnLiteral += `return mapCompactResponse(${saveResponse}r${requestMapper})\n`
+				fnLiteral += `return mapCompactResponse(${saveResponse}r${
+					abortSignal
+				})\n`
 		} else {
 			handleReporter.resolve()
 
@@ -1651,13 +1627,19 @@ export const composeHandler = ({
 						`c.set.status!==200||` +
 						`c.set.redirect||` +
 						`c.set.cookie)` +
-						`return mapResponse(${saveResponse}${handle}.clone(),c.set${requestMapper})\n` +
+						`return mapResponse(${saveResponse}${handle}.clone(),c.set${
+							abortSignal
+						})\n` +
 						`else return ${handle}.clone()\n`
 					: `return ${handle}.clone()\n`
 			} else if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse}${handled},c.set${requestMapper})\n`
+				fnLiteral += `return mapResponse(${saveResponse}${handled},c.set${
+					abortSignal
+				})\n`
 			else
-				fnLiteral += `return mapCompactResponse(${saveResponse}${handled}${requestMapper})\n`
+				fnLiteral += `return mapCompactResponse(${saveResponse}${handled}${
+					abortSignal
+				})\n`
 		}
 	}
 
@@ -1724,7 +1706,7 @@ export const composeHandler = ({
 
 			mapResponseReporter.resolve()
 
-			fnLiteral += `er=mapEarlyResponse(er,set${requestMapper})\n`
+			fnLiteral += `er=mapEarlyResponse(er,set${abortSignal})\n`
 			fnLiteral += `if(er){`
 
 			if (hasTrace) {
@@ -1770,6 +1752,10 @@ export const composeHandler = ({
 		fnLiteral += `}`
 	}
 
+	const adapterVariables = adapter.inject
+		? Object.keys(adapter.inject).join(',') + ','
+		: ''
+
 	let init =
 		`const {` +
 		`handler,` +
@@ -1810,6 +1796,7 @@ export const composeHandler = ({
 		`ELYSIA_TRACE,` +
 		`ELYSIA_REQUEST_ID,` +
 		`getServer,` +
+		adapterVariables +
 		'TypeBoxError' +
 		`}=hooks\n` +
 		`const trace=_trace.map(x=>typeof x==='function'?x:x.fn)\n` +
@@ -1860,7 +1847,8 @@ export const composeHandler = ({
 			ELYSIA_REQUEST_ID,
 			// @ts-expect-error private property
 			getServer: () => app.getServer(),
-			TypeBoxError
+			TypeBoxError,
+			...adapter.inject
 		})
 	} catch (error) {
 		const debugHooks = lifeCycleToFn(hooks)
@@ -1906,7 +1894,7 @@ export const composeHandler = ({
 			// @ts-expect-error
 			definitions: app.definitions.type,
 			error,
-			fnLiteral,
+			fnLiteral
 		})
 		console.log('---')
 
@@ -1931,20 +1919,11 @@ export const composeGeneralHandler = (
 	app: AnyElysia,
 	{ asManifest = false }: { asManifest?: false } = {}
 ) => {
-	const standardHostname = app.config.handler?.standardHostname ?? true
+	const adapter = app['~adapter'].composeGeneralHandler
 
-	let decoratorsLiteral = ''
 	let fnLiteral = ''
 
-	// @ts-expect-error private
-	const defaultHeaders = app.setHeaders
-
-	// @ts-ignore
-	for (const key of Object.keys(app.singleton.decorator))
-		decoratorsLiteral += `,${key}: app.singleton.decorator.${key}`
-
 	const router = app.router
-	const hasTrace = app.event.trace.length > 0
 
 	let findDynamicRoute = `const route=router.find(r.method,p)`
 	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
@@ -1981,6 +1960,10 @@ export const composeGeneralHandler = (
 
 	const maybeAsync = app.event.request.some(isAsync)
 
+	const adapterVariables = adapter.inject
+		? Object.keys(adapter.inject).join(',') + ','
+		: ''
+
 	fnLiteral +=
 		`\nconst {` +
 		`app,` +
@@ -1992,6 +1975,7 @@ export const composeGeneralHandler = (
 		`redirect,` +
 		`ELYSIA_TRACE,` +
 		`ELYSIA_REQUEST_ID,` +
+		adapterVariables +
 		`getServer` +
 		`}=data\n` +
 		`const store=app.singleton.store\n` +
@@ -2023,37 +2007,7 @@ export const composeGeneralHandler = (
 
 	if (app.event.request.length) fnLiteral += `let re\n`
 
-	fnLiteral +=
-		`const u=r.url,` +
-		`s=u.indexOf('/',${standardHostname ? 11 : 7}),` +
-		`qi=u.indexOf('?', s + 1)\n` +
-		`let p\n` +
-		`if(qi===-1)p=u.substring(s)\n` +
-		`else p=u.substring(s, qi)\n`
-
-	if (hasTrace) fnLiteral += `const id=randomId()\n`
-
-	fnLiteral +=
-		`const c={request:r,` +
-		`store,` +
-		`qi,` +
-		`path:p,` +
-		`url:u,` +
-		`redirect,` +
-		`error,` +
-		`set:{headers:`
-
-	fnLiteral += Object.keys(defaultHeaders ?? {}).length
-		? 'Object.assign({}, app.setHeaders)'
-		: '{}'
-
-	fnLiteral += `,status:200}`
-
-	// @ts-expect-error private
-	if (app.inference.server) fnLiteral += `,get server(){return getServer()}`
-	if (hasTrace) fnLiteral += ',[ELYSIA_REQUEST_ID]:id'
-	fnLiteral += decoratorsLiteral
-	fnLiteral += `}\n`
+	fnLiteral += adapter.createContext(app)
 
 	if (app.event.trace.length)
 		fnLiteral +=
@@ -2102,39 +2056,10 @@ export const composeGeneralHandler = (
 
 	reporter.resolve()
 
-	const wsPaths = app.router.static.ws
-	const wsRouter = app.router.ws
-
-	if (Object.keys(wsPaths).length || wsRouter.history.length) {
-		fnLiteral += `if(r.method==='GET'){switch(p){`
-
-		for (const [path, index] of Object.entries(wsPaths)) {
-			fnLiteral +=
-				`case'${path}':` +
-				(app.config.strictPath !== true
-					? `case'${getLoosePath(path)}':`
-					: '') +
-				`if(r.headers.get('upgrade')==='websocket')` +
-				`return ht[${index}].composed(c)\n`
-		}
-
-		fnLiteral +=
-			`default:` +
-			`if(r.headers.get('upgrade')==='websocket'){` +
-			`const route=wsRouter.find('ws',p)\n` +
-			`if(route){` +
-			`c.params=route.params\n` +
-			`if(route.store.handler)return route.store.handler(c)\n` +
-			`return (route.store.handler=route.store.compile())(c)` +
-			`}` +
-			`}` +
-			`break` +
-			`}` +
-			`}`
-	}
+	fnLiteral += adapter.websocket(app)
 
 	fnLiteral +=
-		`switch(p){` + switchMap + `default:break}` + findDynamicRoute + `}`
+		`\nswitch(p){` + switchMap + `default:break}` + findDynamicRoute + `}`
 
 	// @ts-expect-error private property
 	if (app.extender.higherOrderFunctions.length) {
@@ -2165,7 +2090,8 @@ export const composeGeneralHandler = (
 		ELYSIA_TRACE,
 		ELYSIA_REQUEST_ID,
 		// @ts-expect-error private property
-		getServer: () => app.getServer()
+		getServer: () => app.getServer(),
+		...adapter.inject
 	})
 }
 

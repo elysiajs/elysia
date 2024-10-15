@@ -112,25 +112,17 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 	return set
 }
 
-// const concatUint8Array = (a: Uint8Array, b: Uint8Array) => {
-// 	const arr = new Uint8Array(a.length + b.length)
-// 	arr.set(a, 0)
-// 	arr.set(b, a.length)
-
-// 	return arr
-// }
-
 const handleStream = async (
 	generator: Generator | AsyncGenerator,
 	set?: Context['set'],
-	request?: Request
+	abortSignal?: AbortSignal
 ) => {
 	let init = generator.next()
 	if (init instanceof Promise) init = await init
 
 	if (init.done) {
-		if (set) return mapResponse(init.value, set, request)
-		return mapCompactResponse(init.value, request)
+		if (set) return mapResponse(init.value, set, abortSignal)
+		return mapCompactResponse(init.value, abortSignal)
 	}
 
 	return new Response(
@@ -138,7 +130,7 @@ const handleStream = async (
 			async start(controller) {
 				let end = false
 
-				request?.signal.addEventListener('abort', () => {
+				abortSignal?.addEventListener('abort', () => {
 					end = true
 
 					try {
@@ -225,7 +217,7 @@ export async function* streamResponse(response: Response) {
 export const mapResponse = (
 	response: unknown,
 	set: Context['set'],
-	request?: Request
+	abortSignal?: AbortSignal
 ): Response => {
 	if (
 		isNotEmpty(set.headers) ||
@@ -276,7 +268,7 @@ export const mapResponse = (
 				return mapResponse(
 					(response as ElysiaCustomStatusResponse<200>).response,
 					set,
-					request
+					abortSignal
 				)
 
 			case 'ReadableStream':
@@ -288,12 +280,12 @@ export const mapResponse = (
 					set.headers['content-type'] =
 						'text/event-stream; charset=utf-8'
 
-				request?.signal.addEventListener(
+				abortSignal?.addEventListener(
 					'abort',
 					{
 						handleEvent() {
-							if (!request?.signal.aborted)
-								(response as ReadableStream).cancel(request)
+							if (!abortSignal.aborted)
+								(response as ReadableStream).cancel()
 						}
 					},
 					{
@@ -350,7 +342,7 @@ export const mapResponse = (
 					return handleStream(
 						streamResponse(response as Response),
 						set,
-						request
+						abortSignal
 					) as any
 
 				return response as Response
@@ -439,14 +431,14 @@ export const mapResponse = (
 					return mapResponse(
 						(response as ElysiaCustomStatusResponse<200>).response,
 						set,
-						request
+						abortSignal
 					)
 				}
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					// @ts-expect-error
-					return handleStream(response as any, set, request)
+					return handleStream(response as any, set, abortSignal)
 
 				if ('toResponse' in (response as any))
 					return mapResponse((response as any).toResponse(), set)
@@ -487,16 +479,16 @@ export const mapResponse = (
 				return mapResponse(
 					(response as ElysiaCustomStatusResponse<200>).response,
 					set,
-					request
+					abortSignal
 				)
 
 			case 'ReadableStream':
-				request?.signal.addEventListener(
+				abortSignal?.addEventListener(
 					'abort',
 					{
 						handleEvent() {
-							if (!request?.signal.aborted)
-								(response as ReadableStream).cancel(request)
+							if (!abortSignal?.aborted)
+								(response as ReadableStream).cancel()
 						}
 					},
 					{
@@ -527,7 +519,7 @@ export const mapResponse = (
 					return handleStream(
 						streamResponse(response as Response),
 						set,
-						request
+						abortSignal
 					) as any
 
 				return response as Response
@@ -538,7 +530,7 @@ export const mapResponse = (
 			case 'Promise':
 				// @ts-ignore
 				return (response as any as Promise<unknown>).then((x) => {
-					const r = mapCompactResponse(x, request)
+					const r = mapCompactResponse(x, abortSignal)
 
 					if (r !== undefined) return r
 
@@ -547,7 +539,7 @@ export const mapResponse = (
 
 			// ? Maybe response or Blob
 			case 'Function':
-				return mapCompactResponse((response as Function)(), request)
+				return mapCompactResponse((response as Function)(), abortSignal)
 
 			case 'Number':
 			case 'Boolean':
@@ -579,14 +571,14 @@ export const mapResponse = (
 					return mapResponse(
 						(response as ElysiaCustomStatusResponse<200>).response,
 						set,
-						request
+						abortSignal
 					)
 				}
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					// @ts-expect-error
-					return handleStream(response as any, set, request)
+					return handleStream(response as any, set, abortSignal)
 
 				if ('toResponse' in (response as any))
 					return mapResponse((response as any).toResponse(), set)
@@ -612,7 +604,7 @@ export const mapResponse = (
 export const mapEarlyResponse = (
 	response: unknown,
 	set: Context['set'],
-	request?: Request
+	abortSignal?: AbortSignal
 ): Response | undefined => {
 	if (response === undefined || response === null) return
 
@@ -665,7 +657,7 @@ export const mapEarlyResponse = (
 				return mapEarlyResponse(
 					(response as ElysiaCustomStatusResponse<200>).response,
 					set,
-					request
+					abortSignal
 				)
 
 			case 'ReadableStream':
@@ -677,12 +669,12 @@ export const mapEarlyResponse = (
 					set.headers['content-type'] =
 						'text/event-stream; charset=utf-8'
 
-				request?.signal.addEventListener(
+				abortSignal?.addEventListener(
 					'abort',
 					{
 						handleEvent() {
-							if (!request?.signal.aborted)
-								(response as ReadableStream).cancel(request)
+							if (!abortSignal?.aborted)
+								(response as ReadableStream).cancel()
 						}
 					},
 					{
@@ -739,7 +731,7 @@ export const mapEarlyResponse = (
 					return handleStream(
 						streamResponse(response as Response),
 						set,
-						request
+						abortSignal
 					) as any
 
 				return response as Response
@@ -823,14 +815,14 @@ export const mapEarlyResponse = (
 					return mapEarlyResponse(
 						(response as ElysiaCustomStatusResponse<200>).response,
 						set,
-						request
+						abortSignal
 					)
 				}
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					// @ts-expect-error
-					return handleStream(response as any, set, request)
+					return handleStream(response as any, set, abortSignal)
 
 				if ('toResponse' in (response as any))
 					return mapEarlyResponse((response as any).toResponse(), set)
@@ -871,16 +863,16 @@ export const mapEarlyResponse = (
 				return mapEarlyResponse(
 					(response as ElysiaCustomStatusResponse<200>).response,
 					set,
-					request
+					abortSignal
 				)
 
 			case 'ReadableStream':
-				request?.signal.addEventListener(
+				abortSignal?.addEventListener(
 					'abort',
 					{
 						handleEvent() {
-							if (!request?.signal.aborted)
-								(response as ReadableStream).cancel(request)
+							if (!abortSignal?.aborted)
+								(response as ReadableStream).cancel()
 						}
 					},
 					{
@@ -925,7 +917,7 @@ export const mapEarlyResponse = (
 				return errorToResponse(response as Error, set)
 
 			case 'Function':
-				return mapCompactResponse((response as Function)(), request)
+				return mapCompactResponse((response as Function)(), abortSignal)
 
 			case 'Number':
 			case 'Boolean':
@@ -957,14 +949,14 @@ export const mapEarlyResponse = (
 					return mapEarlyResponse(
 						(response as ElysiaCustomStatusResponse<200>).response,
 						set,
-						request
+						abortSignal
 					)
 				}
 
 				// @ts-expect-error
 				if (typeof response?.next === 'function')
 					// @ts-expect-error
-					return handleStream(response as any, set, request)
+					return handleStream(response as any, set, abortSignal)
 
 				if ('toResponse' in (response as any))
 					return mapEarlyResponse((response as any).toResponse(), set)
@@ -989,7 +981,7 @@ export const mapEarlyResponse = (
 
 export const mapCompactResponse = (
 	response: unknown,
-	request?: Request
+	abortSignal?: AbortSignal
 ): Response => {
 	switch (response?.constructor?.name) {
 		case 'String':
@@ -1014,12 +1006,12 @@ export const mapCompactResponse = (
 			)
 
 		case 'ReadableStream':
-			request?.signal.addEventListener(
+			abortSignal?.addEventListener(
 				'abort',
 				{
 					handleEvent() {
-						if (!request?.signal.aborted)
-							(response as ReadableStream).cancel(request)
+						if (!abortSignal?.aborted)
+							(response as ReadableStream).cancel()
 					}
 				},
 				{
@@ -1057,12 +1049,12 @@ export const mapCompactResponse = (
 		case 'Promise':
 			// @ts-ignore
 			return (response as any as Promise<unknown>).then((x) =>
-				mapCompactResponse(x, request)
+				mapCompactResponse(x, abortSignal)
 			)
 
 		// ? Maybe response or Blob
 		case 'Function':
-			return mapCompactResponse((response as Function)(), request)
+			return mapCompactResponse((response as Function)(), abortSignal)
 
 		case 'Number':
 		case 'Boolean':
@@ -1076,7 +1068,7 @@ export const mapCompactResponse = (
 
 			if (response instanceof Promise)
 				return response.then((x) =>
-					mapCompactResponse(x, request)
+					mapCompactResponse(x, abortSignal)
 				) as any
 
 			if (response instanceof Error)
@@ -1095,7 +1087,7 @@ export const mapCompactResponse = (
 			// @ts-expect-error
 			if (typeof response?.next === 'function')
 				// @ts-expect-error
-				return handleStream(response as any, undefined, request)
+				return handleStream(response as any, undefined, abortSignal)
 
 			if ('toResponse' in (response as any))
 				return mapCompactResponse((response as any).toResponse())

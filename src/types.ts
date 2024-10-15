@@ -29,11 +29,17 @@ import type {
 } from './error'
 import type { ComposerGeneralHandlerOptions } from './compose'
 
+import type { ElysiaAdapter } from './adapter'
+
 type PartialServe = Partial<Serve>
 
 export type IsNever<T> = [T] extends [never] ? true : false
 
 export type ElysiaConfig<Prefix extends string | undefined> = {
+	/**
+	 * @default Bun Adapter
+     */
+	adapter?: ElysiaAdapter
 	/**
 	 * Path prefix of the instance
 	 *
