@@ -2343,9 +2343,10 @@ export const composeErrorHandler = (
 	}
 
 	fnLiteral += `if(error.constructor.name === "ValidationError" || error.constructor.name === "TransformDecodeError") {
-		set.status = error.status ?? 422
+	    const reportedError = error.error ?? error
+		set.status = reportedError.status ?? 422
 		return new Response(
-			error.message,
+			reportedError.message,
 			{
 				headers: Object.assign(
 					{ 'content-type': 'application/json'},
