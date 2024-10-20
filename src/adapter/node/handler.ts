@@ -3,9 +3,8 @@
 /* eslint-disable sonarjs/no-duplicate-string */
 import { serialize } from 'cookie'
 
-import { type IncomingMessage, type ServerResponse } from 'node:http'
-
-import { Readable } from 'node:stream'
+import { type IncomingMessage, type ServerResponse } from 'http'
+import { Readable } from 'stream'
 
 import { isNotEmpty, StatusMap } from '../../utils'
 
@@ -14,6 +13,9 @@ import { ElysiaCustomStatusResponse } from '../../error'
 
 import type { Context } from '../../context'
 import type { HTTPHeaders, Prettify } from '../../types'
+
+import type { ReadStream } from 'fs'
+import type { ElysiaFile } from '../../universal/file'
 
 type SetResponse = Prettify<
 	Omit<Context['set'], 'status'> & {
@@ -29,45 +31,86 @@ export type ElysiaNodeResponse = [
 	}
 ]
 
-const handleFile = (response: File | Blob, set?: Context['set']) => {
+const handleFile = (
+	response: File | Blob,
+	set?: Context['set'],
+	res?: HttpResponse
+) => {
 	const size = response.size
 
-	if (
-		(!set && size) ||
-		(size &&
-			set &&
-			set.status !== 206 &&
-			set.status !== 304 &&
-			set.status !== 412 &&
-			set.status !== 416)
-	) {
-		if (set && isNotEmpty(set.headers)) {
-			if (set.headers instanceof Headers)
-				for (const [key, value] of set.headers.entries())
-					if (key in set.headers) set.headers[key] = value
+	if (set) {
+		let setHeaders: Record<string, any>
 
-			return new Response(response as Blob, {
-				status: set.status as number,
-				headers: Object.assign(
-					{
-						'accept-ranges': 'bytes',
-						'content-range': `bytes 0-${size - 1}/${size}`
-					},
-					set.headers
-				)
-			})
-		}
-
-		return new Response(response as Blob, {
-			headers: {
+		if (set.headers instanceof Headers) {
+			setHeaders = {
 				'accept-ranges': 'bytes',
 				'content-range': `bytes 0-${size - 1}/${size}`,
 				'transfer-encoding': 'chunked'
 			}
-		})
+
+			for (const [key, value] of set.headers.entries())
+				if (key in set.headers) setHeaders[key] = value
+		} else if (isNotEmpty(set.headers)) {
+			Object.assign(
+				{
+					'accept-ranges': 'bytes',
+					'content-range': `bytes 0-${size - 1}/${size}`,
+					'transfer-encoding': 'chunked'
+				},
+				set.headers
+			)
+
+			setHeaders = set.headers
+		}
 	}
 
-	return new Response(response as Blob)
+	if (res) readableStreamToReadable(response.stream()).pipe(res)
+
+	return [response, set] as ElysiaNodeResponse
+}
+
+const handleElysiaFile = (
+	response: ElysiaFile,
+	set?: SetResponse,
+	res?: HttpResponse
+) => {
+	let headers
+	let status
+
+	if (!set) {
+		headers = {
+			'accept-range': 'bytes',
+			'content-type': (response as ElysiaFile).type,
+			'content-range': `bytes 0-${(response as ElysiaFile).length - 1}/${(response as ElysiaFile).length}`
+		}
+
+		if (res) res.writeHead(200, headers)
+
+		status = 200
+	} else {
+		Object.assign(set.headers, {
+			'accept-range': 'bytes',
+			'content-type': (response as ElysiaFile).type,
+			'content-range': `bytes 0-${(response as ElysiaFile).length - 1}/${(response as ElysiaFile).length}`
+		})
+
+		if (res) res.writeHead(set.status, set.headers)
+
+		status = set.status
+		headers = set.headers
+	}
+
+	if (res) {
+		;((response as ElysiaFile).value as ReadStream).pipe(res)
+	}
+
+	return [
+		response,
+		{
+			status,
+			headers
+		}
+	] satisfies ElysiaNodeResponse
 }
 
 export const serializeCookie = (cookies: Context['set']['cookie']) => {
@@ -242,19 +285,6 @@ export const mapResponse = (
 
 				return [response, set as SetResponse]
 
-			case 'Blob':
-				set.headers['content-length'] = (response as File | Blob)
-					.size as any
-
-				response = handleFile(response as File | Blob)
-
-				if (res) {
-					res.writeHead(set.status!, set.headers)
-					res.end(response)
-				}
-
-				return [response, set as SetResponse]
-
 			case 'Array':
 			case 'Object':
 				response = JSON.stringify(response)
@@ -269,6 +299,15 @@ export const mapResponse = (
 				}
 
 				return [response, set as SetResponse]
+
+			case 'ElysiaFile':
+				return handleElysiaFile(response as ElysiaFile, set as SetResponse, res)
+
+			case 'Blob':
+				set.headers['content-length'] = (response as File | Blob)
+					.size as any
+
+				return handleFile(response as File | Blob, set, res)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -534,19 +573,6 @@ export const mapResponse = (
 
 				return [response, set as SetResponse]
 
-			case 'Blob':
-				set.headers['content-length'] = (response as File | Blob)
-					.size as any
-
-				response = handleFile(response as File | Blob)
-
-				if (res) {
-					res.writeHead(set.status!, set.headers)
-					res.end(response)
-				}
-
-				return [response, set as SetResponse]
-
 			case 'Array':
 			case 'Object':
 				response = JSON.stringify(response)
@@ -561,6 +587,15 @@ export const mapResponse = (
 				}
 
 				return [response, set as SetResponse]
+
+			case 'ElysiaFile':
+				return handleElysiaFile(response as ElysiaFile, set as SetResponse, res)
+
+			case 'Blob':
+				set.headers['content-length'] = (response as File | Blob)
+					.size as any
+
+				return handleFile(response as File | Blob, set, res)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -791,18 +826,6 @@ export const mapEarlyResponse = (
 
 				return [response, set as SetResponse]
 
-			case 'Blob':
-				set.headers['content-length'] = (response as File | Blob)
-					.size as any
-				response = handleFile(response as File | Blob)
-
-				if (res) {
-					res.writeHead(set.status!, set.headers)
-					res.end(response)
-				}
-
-				return [response, set as SetResponse]
-
 			case 'Array':
 			case 'Object':
 				response = JSON.stringify(response)
@@ -817,6 +840,12 @@ export const mapEarlyResponse = (
 				}
 
 				return [response, set as SetResponse]
+
+			case 'ElysiaFile':
+				return handleElysiaFile(response as ElysiaFile, set as SetResponse, res)
+
+			case 'Blob':
+				return handleFile(response as File | Blob, set, res)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -1082,18 +1111,6 @@ export const mapEarlyResponse = (
 
 				return [response, set as SetResponse]
 
-			case 'Blob':
-				set.headers['content-length'] = (response as File | Blob)
-					.size as any
-				response = handleFile(response as File | Blob) as any
-
-				if (res) {
-					res.writeHead(set.status!, set.headers)
-					res.end(response)
-				}
-
-				return [response, set as SetResponse]
-
 			case 'Array':
 			case 'Object':
 				response = JSON.stringify(response)
@@ -1108,6 +1125,12 @@ export const mapEarlyResponse = (
 				}
 
 				return [response, set as SetResponse]
+
+			case 'ElysiaFile':
+				return handleElysiaFile(response as ElysiaFile, set as SetResponse, res)
+
+			case 'Blob':
+				return handleFile(response as File | Blob, set, res)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -1351,6 +1374,9 @@ export const mapCompactResponse = (
 					}
 				}
 			]
+
+		case 'ElysiaFile':
+			return handleElysiaFile(response as ElysiaFile, undefined, res)
 
 		case 'Blob':
 			if (res) {

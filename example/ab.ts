@@ -1,4 +1,4 @@
-import { createServer } from 'node:http'
+import { createServer } from 'http'
 
 createServer((req, res) => {
 	res.statusCode = 201

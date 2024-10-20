@@ -1,1 +1,1 @@
-
+export { file } from './file'

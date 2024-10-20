@@ -16,8 +16,6 @@ export class ElysiaRequest implements WebStandardRequest {
 		private input: RequestInfo,
 		private init?: RequestInit
 	) {
-		console.log("Init")
-
 		if (typeof input === 'string') this.url = input
 		else if (input instanceof URL) this.url = input.href
 		else if (input instanceof Request) this.url = input.url

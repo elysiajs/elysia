@@ -1,6 +1,6 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import { createServer, type IncomingMessage } from 'node:http'
-import { Readable } from 'node:stream'
+import { createServer, type IncomingMessage } from 'http'
+import { Readable } from 'stream'
 
 import { mapResponse, mapEarlyResponse, mapCompactResponse } from './handler'
 
@@ -80,40 +80,49 @@ export const NodeAdapter: ElysiaAdapter = {
 			declare: `const req=c[ElysiaNodeContext].req\n`,
 			json() {
 				let fnLiteral =
-					'c.body=await new Promise((resolve)=>{' +
-					`body=''\n` +
-					`req.on('data',(chunk)=>{body+=chunk.toString()})\n` +
+					'c.body=await new Promise((re)=>{' +
+					`let body\n` +
+					`req.on('data',(chunk)=>{` +
+					`if(body) body=Buffer.concat([body,chunk])\n` +
+					`else body=chunk` +
+					`})\n` +
 					`req.on('end',()=>{`
 
 				fnLiteral +=
-					`if(body.length===0) return resolve()\n` +
-					`else resolve(JSON.parse(body))`
+					`if(!body || !body.length)return re()\n` +
+					`else re(JSON.parse(body))`
 
 				return fnLiteral + `})` + '})\n'
 			},
 			text() {
 				let fnLiteral =
-					'c.body=await new Promise((resolve)=>{' +
-					`body=''\n` +
-					`req.on('data',(chunk)=>{body+=chunk.toString()})\n` +
+					'c.body=await new Promise((re)=>{' +
+					`let body\n` +
+					`req.on('data',(chunk)=>{` +
+					`if(body) body=Buffer.concat([body,chunk])\n` +
+					`else body=chunk` +
+					`})\n` +
 					`req.on('end',()=>{`
 
 				fnLiteral +=
-					`if(body.length===0) return resolve()\n` +
-					`else resolve(body)`
+					`if(!body || !body.length)return re()\n` +
+					`else re(body)`
 
 				return fnLiteral + `})` + '})\n'
 			},
 			urlencoded() {
 				let fnLiteral =
-					'c.body=await new Promise((resolve)=>{' +
-					`body=''\n` +
-					`req.on('data',(chunk)=>{body+=chunk.toString()})\n` +
+					'c.body=await new Promise((re)=>{' +
+					`let body\n` +
+					`req.on('data',(chunk)=>{` +
+					`if(body) body=Buffer.concat([body,chunk])\n` +
+					`else body=chunk` +
+					`})\n` +
 					`req.on('end',()=>{`
 
 				fnLiteral +=
-					`if(body.length===0) return resolve()\n` +
-					`else resolve(parseQuery(body))`
+					`if(!body || !body.length)return re()\n` +
+					`else re(parseQuery(body))`
 
 				return fnLiteral + `})` + '})\n'
 			},
