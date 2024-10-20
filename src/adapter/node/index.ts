@@ -60,14 +60,19 @@ export const NodeAdapter: ElysiaAdapter = {
 			}) as any
 	},
 	composeHandler: {
-		declare: `const req = c[ElysiaNodeContext].req\n`,
+		declare(inference) {
+			if (inference.request)
+				return `nodeRequestToWebstand(c[ElysiaNodeContext].req)\n`
+		},
 		mapResponseContext: 'c[ElysiaNodeContext].res',
-		headers: `c.headers = req.headers\n`,
+		headers: `c.headers=c[ElysiaNodeContext].req.headers\n`,
 		inject: {
-			ElysiaNodeContext
+			ElysiaNodeContext,
+			nodeRequestToWebstand
 		},
 		errorContext: `req,c[ElysiaNodeContext].res`,
 		parser: {
+			declare: `const req=c[ElysiaNodeContext].req\n`,
 			json() {
 				let fnLiteral =
 					'c.body=await new Promise((resolve)=>{' +
@@ -124,12 +129,9 @@ export const NodeAdapter: ElysiaAdapter = {
 		createContext: (app) => {
 			let decoratorsLiteral = ''
 			let fnLiteral =
-				`const u=r.url,` +
-				`s=u.indexOf('/'),` +
-				`qi=u.indexOf('?', s + 1)\n` +
-				`let p\n` +
-				`if(qi===-1)p=u.substring(s)\n` +
-				`else p=u.substring(s, qi)\n`
+				`const qi=r.url.indexOf('?')\n` +
+				`let p=r.url\n` +
+				`if(qi!==-1)p=r.url.substring(0,qi)\n`
 
 			// @ts-expect-error private
 			const defaultHeaders = app.setHeaders
@@ -142,13 +144,17 @@ export const NodeAdapter: ElysiaAdapter = {
 
 			if (hasTrace) fnLiteral += `const id=randomId()\n`
 
+			fnLiteral += `let _request\n` + `const c={`
+
+			// @ts-ignore protected
+			if (app.inference.request)
+				fnLiteral +=
+					`get request(){` +
+					`if(_request)return _request\n` +
+					`return _request = nodeRequestToWebstand(r)` +
+					`},`
+
 			fnLiteral +=
-				`let _request\n` +
-				`const c={` +
-				`get request(){` +
-				`if(_request)return _request\n` +
-				`return _request = nodeRequestToWebstand(r) ` +
-				`},` +
 				`store,` +
 				`qi,` +
 				`path:p,` +
@@ -159,15 +165,15 @@ export const NodeAdapter: ElysiaAdapter = {
 			fnLiteral +=
 				'[ElysiaNodeContext]:{' +
 				'req:r,' +
-				'res,' +
-				'_signal:undefined,' +
-				'get signal(){' +
-				'if(this._signal) return this._signal\n' +
-				'const controller = new AbortController()\n' +
-				'this._signal = controller.signal\n' +
-				// `req.once('close', () => { controller.abort() })\n` +
-				'return this._signal' +
-				'}' +
+				'res' +
+				// '_signal:undefined,' +
+				// 'get signal(){' +
+				// 'if(this._signal) return this._signal\n' +
+				// 'const controller = new AbortController()\n' +
+				// 'this._signal = controller.signal\n' +
+				// // `req.once('close', () => { controller.abort() })\n` +
+				// 'return this._signal' +
+				// '}' +
 				'},'
 
 			fnLiteral += `set:{headers:`
@@ -178,9 +184,10 @@ export const NodeAdapter: ElysiaAdapter = {
 
 			fnLiteral += `,status:200}`
 
-			// @ts-expect-error private
-			if (app.inference.server)
-				fnLiteral += `,get server(){return getServer()}`
+			// @ts-ignore private
+			// if (app.inference.server)
+			// 	fnLiteral += `,get server(){return getServer()}`
+
 			if (hasTrace) fnLiteral += ',[ELYSIA_REQUEST_ID]:id'
 
 			fnLiteral += decoratorsLiteral

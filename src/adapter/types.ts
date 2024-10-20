@@ -2,6 +2,7 @@ import type { Serve } from 'bun'
 import type { AnyElysia, ListenCallback } from '..'
 import type { Context } from '../context'
 import type { Prettify, LocalHook } from '../types'
+import type { Sucrose } from '../sucrose'
 
 export interface ElysiaAdapter {
 	name: string
@@ -64,7 +65,7 @@ export interface ElysiaAdapter {
 		/**
 		 * Declare any variable that will be used in the general handler
 		 */
-		declare?: string
+		declare?(inference: Sucrose.Inference): string | undefined
 		/**
 		 * Inject variable to the general handler
 		 */

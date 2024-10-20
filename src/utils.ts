@@ -1433,14 +1433,17 @@ export const lifeCycleToFn = (
 	}
 }
 
-export const cloneInference = (inference: Sucrose.Inference) => ({
-	body: inference.body,
-	cookie: inference.cookie,
-	headers: inference.headers,
-	query: inference.query,
-	set: inference.set,
-	server: inference.server
-})
+export const cloneInference = (inference: Sucrose.Inference) =>
+	({
+		body: inference.body,
+		cookie: inference.cookie,
+		headers: inference.headers,
+		query: inference.query,
+		set: inference.set,
+		server: inference.server,
+		request: inference.request,
+		route: inference.route
+	}) satisfies Sucrose.Inference
 
 /**
  *

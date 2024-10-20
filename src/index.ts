@@ -295,7 +295,9 @@ export default class Elysia<
 		headers: false,
 		query: false,
 		set: false,
-		server: false
+		server: false,
+		request: false,
+		route: false
 	}
 
 	private getServer() {
@@ -788,10 +790,10 @@ export default class Elysia<
 
 			if (method === 'ALL')
 				staticRouter.map[path].all =
-					`default: return ht[${index}].composed(${ctx})\n`
+					`default:return ht[${index}].composed(${ctx})\n`
 			else
 				staticRouter.map[path].code =
-					`case '${method}': return ht[${index}].composed(${ctx})\n${staticRouter.map[path].code}`
+					`case '${method}':return ht[${index}].composed(${ctx})\n${staticRouter.map[path].code}`
 
 			if (
 				!this.config.strictPath &&
@@ -3472,7 +3474,9 @@ export default class Elysia<
 			headers: this.inference.headers || plugin.inference.headers,
 			query: this.inference.query || plugin.inference.query,
 			set: this.inference.set || plugin.inference.set,
-			server: this.inference.server || plugin.inference.server
+			server: this.inference.server || plugin.inference.server,
+			request: this.inference.request || plugin.inference.request,
+			route: this.inference.route || plugin.inference.route
 		}
 
 		this.decorate(plugin.singleton.decorator)

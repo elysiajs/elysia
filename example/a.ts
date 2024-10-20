@@ -1,25 +1,17 @@
 import { Elysia } from '../src'
 import { NodeAdapter } from '../src/adapter/node'
 
-import { createServer } from 'node:http'
-
-const app = new Elysia({ adapter: NodeAdapter })
-	.get('/', ({ query }) => {
-		console.log(query)
-
-		return 'hi'
+const app = new Elysia({ adapter: NodeAdapter, precompile: true })
+	.post('/json', () => 'a', {
+		type: 'json'
 	})
-	.get('/stream', async function* () {
-		for (let i = 0; i < 10; i++) {
-			await new Promise((resolve) => setTimeout(resolve, 100))
-			yield i
-		}
+	.get('/', ({ request }) => {
+		return 'Hi'
 	})
-	.post('/', async ({ body, headers }) => {
-		return {
-			body,
-			headers,
-			env: typeof Bun !== 'undefined' ? 'bun' : 'likely Node'
-		}
+	.get('/ok', () => {
+		return 'Ok'
 	})
 	.listen(3000)
+
+console.log(app._handle.toString())
+console.log(app.routes[1].composed.toString())

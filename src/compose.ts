@@ -461,7 +461,11 @@ export const composeHandler = ({
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
 
-	if (adapter.declare) fnLiteral += adapter.declare
+	if (adapter.declare) {
+		const literal = adapter.declare(inference)
+
+		if (literal) fnLiteral += literal
+	}
 
 	inference = sucrose(
 		Object.assign(localHook, {
@@ -502,7 +506,8 @@ export const composeHandler = ({
 	const hasHeaders =
 		inference.headers ||
 		validator.headers ||
-		adapter.preferWebstandardHeaders !== true
+		(adapter.preferWebstandardHeaders !== true && inference.body)
+
 	const hasCookie = inference.cookie || !!validator.cookie
 
 	const cookieValidator = hasCookie
@@ -862,7 +867,8 @@ export const composeHandler = ({
 	const mapResponseContext = adapter.mapResponseContext
 		? `,${adapter.mapResponseContext}`
 		: ''
-	fnLiteral += `c.route=\`${path}\`\n`
+
+	if (inference.route) fnLiteral += `c.route=\`${path}\`\n`
 
 	const parseReporter = report('parse', {
 		total: hooks.parse.length
@@ -1950,14 +1956,13 @@ export const composeGeneralHandler = (
 	for (const [path, { code, all }] of Object.entries(
 		router.static.http.map
 	)) {
+		switchMap += `case'${path}':`
+
+		if (app.config.strictPath !== true)
+			switchMap += `case'${getLoosePath(path)}':`
+
 		switchMap +=
-			`case'${path}':` +
-			(app.config.strictPath !== true
-				? `case'${getLoosePath(path)}':`
-				: '') +
-			`switch(r.method){${code}\n` +
-			(all ?? `default:` + findDynamicRoute) +
-			'}'
+			`switch(r.method){${code}\n` + (all ?? `default: break map`) + '}'
 	}
 
 	const maybeAsync = app.event.request.some(isAsync)
@@ -2057,7 +2062,11 @@ export const composeGeneralHandler = (
 	fnLiteral += adapter.websocket(app)
 
 	fnLiteral +=
-		`\nswitch(p){` + switchMap + `default:break}` + findDynamicRoute + `}`
+		`\nmap:switch(p){\n` +
+		switchMap +
+		`default:break}` +
+		findDynamicRoute +
+		`}\n`
 
 	// @ts-expect-error private property
 	if (app.extender.higherOrderFunctions.length) {
