@@ -62,7 +62,13 @@ export const NodeAdapter: ElysiaAdapter = {
 	composeHandler: {
 		declare(inference) {
 			if (inference.request)
-				return `nodeRequestToWebstand(c[ElysiaNodeContext].req)\n`
+				return (
+					`Object.defineProperty(c,'request',{` +
+					`get(){` +
+					`return nodeRequestToWebstand(c[ElysiaNodeContext].req)` +
+					`}` +
+					`})\n`
+				)
 		},
 		mapResponseContext: 'c[ElysiaNodeContext].res',
 		headers: `c.headers=c[ElysiaNodeContext].req.headers\n`,
@@ -70,7 +76,6 @@ export const NodeAdapter: ElysiaAdapter = {
 			ElysiaNodeContext,
 			nodeRequestToWebstand
 		},
-		errorContext: `req,c[ElysiaNodeContext].res`,
 		parser: {
 			declare: `const req=c[ElysiaNodeContext].req\n`,
 			json() {
@@ -221,10 +226,11 @@ export const NodeAdapter: ElysiaAdapter = {
 		}
 	},
 	composeError: {
+		declare: `\nconst res = context[ElysiaNodeContext].res\n`,
 		inject: {
 			ElysiaNodeContext
 		},
-		mapResponseContext: ',context[ElysiaNodeContext].res',
+		mapResponseContext: ',res',
 		validationError:
 			`c.set.headers['content-type'] = 'application/json;charset=utf-8'\n` +
 			`res.writeHead(c.set.status, c.set.headers)\n` +

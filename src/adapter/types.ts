@@ -97,11 +97,13 @@ export interface ElysiaAdapter {
 				declare?: string
 			}
 		>
-		errorContext?: string
 	}
 	composeGeneralHandler: {
 		parameters?: string
-		error404(hasEventHook: boolean, hasErrorHook: boolean): {
+		error404(
+			hasEventHook: boolean,
+			hasErrorHook: boolean
+		): {
 			declare: string
 			code: string
 		}
@@ -120,6 +122,7 @@ export interface ElysiaAdapter {
 		inject?: Record<string, unknown>
 	}
 	composeError: {
+		declare?: string
 		inject?: Record<string, unknown>
 		mapResponseContext: string
 		validationError: string

@@ -491,10 +491,10 @@ export const inferBodyReference = (
 			if (!inference.query && parameters.includes('server'))
 				inference.server = true
 
-			if(!inference.request && parameters.includes('request'))
+			if (!inference.request && parameters.includes('request'))
 				inference.request = true
 
-			if(!inference.route && parameters.includes('route'))
+			if (!inference.route && parameters.includes('route'))
 				inference.route = true
 
 			continue

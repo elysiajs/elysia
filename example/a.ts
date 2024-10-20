@@ -2,16 +2,16 @@ import { Elysia } from '../src'
 import { NodeAdapter } from '../src/adapter/node'
 
 const app = new Elysia({ adapter: NodeAdapter, precompile: true })
-	.post('/json', ({ body }) => body, {
-		type: 'json'
-	})
+	// .post('/json', ({ body }) => body, {
+	// 	type: 'json'
+	// })
 	.get('/', ({ request }) => {
-		return 'Hi'
-	})
-	.get('/ok', () => {
-		return 'Ok'
-	})
-	.listen(3000)
+		throw new Error("AW")
 
-// console.log(app._handle.toString())
-console.log(app.routes[0].composed.toString())
+		return true
+	})
+	// .get('/ok', () => {
+	// 	return 'Ok'
+	// })
+	.compile()
+	.listen(3000)

@@ -461,18 +461,18 @@ export const composeHandler = ({
 	const hasTrace = hooks.trace.length > 0
 	let fnLiteral = ''
 
-	if (adapter.declare) {
-		const literal = adapter.declare(inference)
-
-		if (literal) fnLiteral += literal
-	}
-
 	inference = sucrose(
 		Object.assign(localHook, {
 			handler: handler as any
 		}),
 		inference
 	)
+
+	if (adapter.declare) {
+		const literal = adapter.declare(inference)
+
+		if (literal) fnLiteral += literal
+	}
 
 	if (inference.server)
 		fnLiteral +=
@@ -1735,7 +1735,7 @@ export const composeHandler = ({
 
 	errorReporter.resolve()
 
-	fnLiteral += `return handleError(c,error,true${adapter.errorContext ? ',' + adapter.errorContext : ''})`
+	fnLiteral += `return handleError(c,error,true)`
 	if (!maybeAsync) fnLiteral += '})()'
 	fnLiteral += '}'
 
@@ -2166,6 +2166,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`error.status = error.code\n` +
 		`error.message = error.response` +
 		`}`
+
+	if (adapter.declare) fnLiteral += adapter.declare
 
 	const saveResponse =
 		hasTrace ||
