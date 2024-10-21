@@ -448,7 +448,13 @@ export const mapResponse = (
 					// @ts-expect-error
 					return handleStream(response as any, set, request)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapResponse(x, set)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
@@ -588,7 +594,13 @@ export const mapResponse = (
 					// @ts-expect-error
 					return handleStream(response as any, set, request)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapResponse(x, set)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
@@ -832,8 +844,14 @@ export const mapEarlyResponse = (
 					// @ts-expect-error
 					return handleStream(response as any, set, request)
 
-				if ('toResponse' in (response as any))
-					return mapEarlyResponse((response as any).toResponse(), set)
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapResponse(x, set)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
+					return mapResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -966,8 +984,14 @@ export const mapEarlyResponse = (
 					// @ts-expect-error
 					return handleStream(response as any, set, request)
 
-				if ('toResponse' in (response as any))
-					return mapEarlyResponse((response as any).toResponse(), set)
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapResponse(x, set)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
+					return mapResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -1097,8 +1121,14 @@ export const mapCompactResponse = (
 				// @ts-expect-error
 				return handleStream(response as any, undefined, request)
 
-			if ('toResponse' in (response as any))
-				return mapCompactResponse((response as any).toResponse())
+			// @ts-expect-error
+			if (typeof response?.then === 'function')
+				// @ts-expect-error
+				return response.then((x) => mapResponse(x, set)) as any
+
+			// @ts-expect-error
+			if (typeof response?.toResponse === 'function')
+				return mapResponse((response as any).toResponse(), set)
 
 			if ('charCodeAt' in (response as any)) {
 				const code = (response as any).charCodeAt(0)

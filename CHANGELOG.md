@@ -1,3 +1,7 @@
+# 1.1.23 - 22 Oct 2024
+Bug fix:
+- Handle object with `.then` even if it's not promise (looking at you, Drizzle)
+
 # 1.1.22 - 13 Oct 2024
 Bug fix:
 - Fix `set-cookie` to resent if value is accessed even without set
