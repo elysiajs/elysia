@@ -589,7 +589,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
 
-  const references = Object.values(models)
+	const references = Object.values(models)
 	const cleaner = (value: unknown) => Value.Clean(schema, references, value)
 
 	if (dynamic) {
@@ -715,10 +715,10 @@ export const getResponseSchemaValidator = (
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		const cleaner = (value: unknown) => {
 			if (!value || typeof value !== 'object')
-        return Value.Clean(schema, references || [], value)
+				return Value.Clean(schema, references || [], value)
 
-      if (Array.isArray(value)) value = Value.Clean(schema, references || [], value)
-      else value = Value.Clean(schema, references || [], value)
+			if (Array.isArray(value)) value = Value.Clean(schema, references || [], value)
+			else value = Value.Clean(schema, references || [], value)
 
 			return value
 		}
@@ -1195,7 +1195,7 @@ export const createMacroManager =
 			| {
 					insert?: 'before' | 'after'
 					stack?: 'global' | 'local'
-			  }
+				}
 			| MaybeArray<HookContainer>,
 		fn?: MaybeArray<HookContainer>
 	) => {
