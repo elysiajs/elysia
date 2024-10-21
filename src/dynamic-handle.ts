@@ -294,6 +294,10 @@ export const createDynamicHandler =
 				let response = hook.fn(context)
 
 				if (hook.subType === 'resolve') {
+					if (response instanceof ElysiaCustomStatusResponse) {
+						const result = mapEarlyResponse(response, context.set)
+						if (result) return (context.response = result)
+					}
 					if (response instanceof Promise)
 						Object.assign(context, await response)
 					else Object.assign(context, response)
