@@ -450,7 +450,13 @@ export const mapResponse = (
 					// @ts-expect-error
 					return handleStream(response as any, set, abortSignal)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapResponse(x, set)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
@@ -591,7 +597,13 @@ export const mapResponse = (
 					// @ts-expect-error
 					return handleStream(response as any, set, abortSignal)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapResponse(x, set)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
@@ -836,7 +848,13 @@ export const mapEarlyResponse = (
 					// @ts-expect-error
 					return handleStream(response as any, set, abortSignal)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapEarlyResponse(x, set)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapEarlyResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
@@ -971,7 +989,13 @@ export const mapEarlyResponse = (
 					// @ts-expect-error
 					return handleStream(response as any, set, abortSignal)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapEarlyResponse(x, set)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapEarlyResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
@@ -1103,7 +1127,13 @@ export const mapCompactResponse = (
 				// @ts-expect-error
 				return handleStream(response as any, undefined, abortSignal)
 
-			if ('toResponse' in (response as any))
+			// @ts-expect-error
+			if (typeof response?.then === 'function')
+				// @ts-expect-error
+				return response.then((x) => mapResponse(x, set)) as any
+
+			// @ts-expect-error
+			if (typeof response?.toResponse === 'function')
 				return mapCompactResponse((response as any).toResponse())
 
 			if ('charCodeAt' in (response as any)) {

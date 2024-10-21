@@ -301,7 +301,11 @@ export const mapResponse = (
 				return [response, set as SetResponse]
 
 			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set as SetResponse, res)
+				return handleElysiaFile(
+					response as ElysiaFile,
+					set as SetResponse,
+					res
+				)
 
 			case 'Blob':
 				set.headers['content-length'] = (response as File | Blob)
@@ -524,7 +528,13 @@ export const mapResponse = (
 				if (typeof response?.next === 'function')
 					return handleStream(response as any, set, res)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapResponse(x, set, res)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapResponse((response as any).toResponse(), set, res)
 
 				if ('charCodeAt' in (response as any)) {
@@ -589,7 +599,11 @@ export const mapResponse = (
 				return [response, set as SetResponse]
 
 			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set as SetResponse, res)
+				return handleElysiaFile(
+					response as ElysiaFile,
+					set as SetResponse,
+					res
+				)
 
 			case 'Blob':
 				set.headers['content-length'] = (response as File | Blob)
@@ -748,7 +762,13 @@ export const mapResponse = (
 				if (typeof response?.next === 'function')
 					return handleStream(response as any, set, res)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) => mapResponse(x, set, res)) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapResponse((response as any).toResponse(), set, res)
 
 				if ('charCodeAt' in (response as any)) {
@@ -842,7 +862,11 @@ export const mapEarlyResponse = (
 				return [response, set as SetResponse]
 
 			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set as SetResponse, res)
+				return handleElysiaFile(
+					response as ElysiaFile,
+					set as SetResponse,
+					res
+				)
 
 			case 'Blob':
 				return handleFile(response as File | Blob, set, res)
@@ -1058,7 +1082,15 @@ export const mapEarlyResponse = (
 				if (typeof response?.next === 'function')
 					return handleStream(response as any, set, res)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) =>
+						mapEarlyResponse(x, set, res)
+					) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapEarlyResponse(
 						(response as any).toResponse(),
 						set,
@@ -1127,7 +1159,11 @@ export const mapEarlyResponse = (
 				return [response, set as SetResponse]
 
 			case 'ElysiaFile':
-				return handleElysiaFile(response as ElysiaFile, set as SetResponse, res)
+				return handleElysiaFile(
+					response as ElysiaFile,
+					set as SetResponse,
+					res
+				)
 
 			case 'Blob':
 				return handleFile(response as File | Blob, set, res)
@@ -1287,7 +1323,15 @@ export const mapEarlyResponse = (
 				if (typeof response?.next === 'function')
 					return handleStream(response as any, set, res)
 
-				if ('toResponse' in (response as any))
+				// @ts-expect-error
+				if (typeof response?.then === 'function')
+					// @ts-expect-error
+					return response.then((x) =>
+						mapEarlyResponse(x, set, res)
+					) as any
+
+				// @ts-expect-error
+				if (typeof response?.toResponse === 'function')
 					return mapEarlyResponse(
 						(response as any).toResponse(),
 						set,
@@ -1588,10 +1632,14 @@ export const mapCompactResponse = (
 			if (typeof response?.next === 'function')
 				return handleStream(response as any, undefined, res)
 
-			if ('toResponse' in (response as any))
-				return mapCompactResponse(
-					(response as any).toResponse() as Response
-				)
+			// @ts-expect-error
+			if (typeof response?.then === 'function')
+				// @ts-expect-error
+				return response.then((x) => mapCompactResponse(x, res)) as any
+
+			// @ts-expect-error
+			if (typeof response?.toResponse === 'function')
+				return mapCompactResponse((response as any).toResponse(), res)
 
 			if ('charCodeAt' in (response as any)) {
 				const code = (response as any).charCodeAt(0)
