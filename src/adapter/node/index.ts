@@ -241,15 +241,15 @@ export const NodeAdapter: ElysiaAdapter = {
 		},
 		mapResponseContext: ',res',
 		validationError:
-			`c.set.headers['content-type'] = 'application/json;charset=utf-8'\n` +
-			`res.writeHead(c.set.status, c.set.headers)\n` +
-			`res.end(error404Message)\n` +
-			`return [error.message, c.set]`,
+			`context.set.headers['content-type'] = 'application/json;charset=utf-8'\n` +
+			`res.writeHead(context.set.status, context.set.headers)\n` +
+			`res.end(error.message)\n` +
+			`return [error.message, context.set]`,
 		unknownError:
 			`c.set.status = error.status\n` +
-			`res.writeHead(c.set.status, c.set.headers)\n` +
+			`res.writeHead(context.set.status, context.set.headers)\n` +
 			`res.end(error.message)\n` +
-			`return [error.message, c.set]`
+			`return [error.message, context.set]`
 	},
 	listen(app) {
 		return (options, callback) => {
