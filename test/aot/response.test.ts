@@ -6,7 +6,6 @@ import { signCookie } from '../../src/utils'
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
 const getCookies = (response: Response) =>
-	// @ts-expect-error
 	response.headers.getAll('Set-Cookie').map((x) => {
 		return decodeURIComponent(x)
 	})
@@ -15,12 +14,12 @@ const app = new Elysia()
 	.get(
 		'/council',
 		({ cookie: { council } }) =>
-			(council.value = [
+			(council.value = JSON.stringify([
 				{
 					name: 'Rin',
-					affilation: 'Administration'
+					affiliation: 'Administration'
 				}
-			])
+			]))
 	)
 	.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
 	.get('/multiple', ({ cookie: { name, president } }) => {
@@ -64,14 +63,17 @@ describe('Dynamic Cookie Response', () => {
 	it('set multiple cookie', async () => {
 		const response = await app.handle(req('/multiple'))
 
-		expect(getCookies(response)).toEqual(['name=Himari; Path=/', 'president=Rio; Path=/'])
+		expect(getCookies(response)).toEqual([
+			'name=Himari; Path=/',
+			'president=Rio; Path=/'
+		])
 	})
 
 	it('set JSON cookie', async () => {
 		const response = await app.handle(req('/council'))
 
 		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
+			'council=[{"name":"Rin","affiliation":"Administration"}]; Path=/'
 		])
 	})
 
@@ -85,16 +87,17 @@ describe('Dynamic Cookie Response', () => {
 							JSON.stringify([
 								{
 									name: 'Aoi',
-									affilation: 'Financial'
+									affiliation: 'Financial'
 								}
 							])
-						) + '; Path=/'
+						) +
+						'; Path=/'
 				}
 			})
 		)
 
 		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
+			'council=[{"name":"Rin","affiliation":"Administration"}]; Path=/'
 		])
 	})
 
@@ -108,7 +111,7 @@ describe('Dynamic Cookie Response', () => {
 							JSON.stringify([
 								{
 									name: 'Rin',
-									affilation: 'Administration'
+									affiliation: 'Administration'
 								}
 							])
 						)
@@ -201,10 +204,9 @@ describe('Dynamic Cookie Response', () => {
 		const response = await app.handle(
 			req('/update', {
 				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}` + '; Path=/'
+					cookie:
+						`name=${await signCookie('seminar: Himari', secrets)}` +
+						'; Path=/'
 				}
 			})
 		)

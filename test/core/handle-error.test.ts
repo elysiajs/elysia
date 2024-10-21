@@ -70,9 +70,7 @@ describe('Handle Error', () => {
 	})
 
 	it('inject headers to error', async () => {
-		const app = new Elysia({
-			forceErrorEncapsulation: true
-		})
+		const app = new Elysia()
 			.onRequest(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})

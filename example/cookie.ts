@@ -12,7 +12,7 @@ const app = new Elysia({
 			(council.value = [
 				{
 					name: 'Rin',
-					affilation: 'Administration'
+					affiliation: 'Administration'
 				}
 			]),
 		{
@@ -20,7 +20,7 @@ const app = new Elysia({
 				council: t.Array(
 					t.Object({
 						name: t.String(),
-						affilation: t.String()
+						affiliation: t.String()
 					})
 				)
 			})
