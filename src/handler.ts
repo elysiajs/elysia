@@ -847,11 +847,11 @@ export const mapEarlyResponse = (
 				// @ts-expect-error
 				if (typeof response?.then === 'function')
 					// @ts-expect-error
-					return response.then((x) => mapResponse(x, set)) as any
+					return response.then((x) => mapEarlyResponse(x, set)) as any
 
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
-					return mapResponse((response as any).toResponse(), set)
+					return mapEarlyResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -987,11 +987,11 @@ export const mapEarlyResponse = (
 				// @ts-expect-error
 				if (typeof response?.then === 'function')
 					// @ts-expect-error
-					return response.then((x) => mapResponse(x, set)) as any
+					return response.then((x) => mapEarlyResponse(x, set)) as any
 
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
-					return mapResponse((response as any).toResponse(), set)
+					return mapEarlyResponse((response as any).toResponse(), set)
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -1128,7 +1128,7 @@ export const mapCompactResponse = (
 
 			// @ts-expect-error
 			if (typeof response?.toResponse === 'function')
-				return mapResponse((response as any).toResponse(), set)
+				return mapCompactResponse((response as any).toResponse())
 
 			if ('charCodeAt' in (response as any)) {
 				const code = (response as any).charCodeAt(0)
