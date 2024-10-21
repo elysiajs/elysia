@@ -102,7 +102,6 @@ export namespace ElysiaTypeOptions {
 
 	export type StrictFileType =
 		| 'image'
-		| 'image/*'
 		| 'image/jpeg'
 		| 'image/png'
 		| 'image/gif'
@@ -112,14 +111,12 @@ export namespace ElysiaTypeOptions {
 		| 'image/webp'
 		| 'image/avif'
 		| 'audio'
-		| 'audio/*'
 		| 'audio/aac'
 		| 'audio/mpeg'
 		| 'audio/x-ms-wma'
 		| 'audio/vnd.rn-realaudio'
 		| 'audio/x-wav'
 		| 'video'
-		| 'video/*'
 		| 'video/mpeg'
 		| 'video/mp4'
 		| 'video/quicktime'
@@ -128,7 +125,6 @@ export namespace ElysiaTypeOptions {
 		| 'video/x-flv'
 		| 'video/webm'
 		| 'text'
-		| 'text/*'
 		| 'text/css'
 		| 'text/csv'
 		| 'text/html'
@@ -136,7 +132,6 @@ export namespace ElysiaTypeOptions {
 		| 'text/plain'
 		| 'text/xml'
 		| 'application'
-		| 'application/*'
 		| 'application/graphql'
 		| 'application/graphql-response+json'
 		| 'application/ogg'
@@ -150,7 +145,6 @@ export namespace ElysiaTypeOptions {
 		| 'application/xml'
 		| 'application/zip'
 		| 'font'
-		| 'font/*'
 		| 'font/woff2'
 		| 'font/woff'
 		| 'font/ttf'
@@ -318,8 +312,11 @@ type NonEmptyArray<T> = [T, ...T[]]
 
 export type TEnumValue = number | string | null
 
-export interface TUnionEnum<T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]>
-	extends TSchema {
+export interface TUnionEnum<
+	T extends
+		| NonEmptyArray<TEnumValue>
+		| Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]
+> extends TSchema {
 	type?: 'number' | 'string' | 'null'
 	[Kind]: 'UnionEnum'
 	static: T[number]
@@ -593,7 +590,11 @@ export const ElysiaType = {
 		return v
 	},
 	// based on https://github.com/elysiajs/elysia/issues/512#issuecomment-1980134955
-	UnionEnum: <const T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>>>(
+	UnionEnum: <
+		const T extends
+			| NonEmptyArray<TEnumValue>
+			| Readonly<NonEmptyArray<TEnumValue>>
+	>(
 		values: T,
 		options: SchemaOptions = {}
 	) => {
