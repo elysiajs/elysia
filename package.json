@@ -123,18 +123,5 @@
 		"prettier": "^3.3.3",
 		"tsup": "^8.0.2",
 		"typescript": "^5.5.2"
-	},
-	"peerDependencies": {
-		"@sinclair/typebox": ">= 0.32.0",
-		"openapi-types": ">= 12.0.0",
-		"typescript": ">= 5.0.0"
-	},
-	"peerDependenciesMeta": {
-		"openapi-types": {
-			"optional": true
-		},
-		"typescript": {
-			"optional": true
-		}
 	}
 }
