@@ -104,7 +104,7 @@
 	},
 	"dependencies": {
 		"@sinclair/typebox": "0.32.34",
-		"cookie": "^0.6.0",
+		"cookie": "^0.7.0",
 		"fast-decode-uri-component": "^1.0.1",
 		"openapi-types": "^12.1.3"
 	},
