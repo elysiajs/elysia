@@ -53,10 +53,18 @@ describe('error', () => {
 				if (code === 'VALIDATION') {
 					set.status = 400
 
-					return error.all.map((i) => ({
-						filed: i.path.slice(1) || 'root',
-						reason: i.message
-					}))
+					return error.all.map((i) => {
+						if ('path' in i) {
+							return {
+								filed: i.path.slice(1) || 'root',
+								reason: i.message
+							}
+						}
+						return {
+							filed: 'root',
+							reason: i.summary
+						}
+					})
 				}
 			})
 			.post('/login', ({ body }) => body, {

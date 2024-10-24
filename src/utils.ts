@@ -1428,12 +1428,12 @@ type ElysiaFormData<T extends Record<string | number, unknown>> = FormData & {
 export const ELYSIA_REQUEST_ID = Symbol('ElysiaRequestId')
 export type ELYSIA_REQUEST_ID = typeof ELYSIA_REQUEST_ID
 
-export const form = <const T extends Record<string | number, unknown>>(
+export const form = <const T extends Record<string | number, string | Blob>>(
 	items: T
 ): ElysiaFormData<T> => {
 	const formData = new FormData()
 
-	for (const [key, value] of Object.entries(items)) {
+	for (const [key, value] of Object.entries<string | Blob>(items)) {
 		if (Array.isArray(value)) {
 			for (const v of value) {
 				if (value instanceof File)
@@ -1495,54 +1495,3 @@ export const promoteEvent = (
 
 	for (const event of events) if ('scope' in event) event.scope = 'global'
 }
-
-type PropertyKeys<T> = {
-	[K in keyof T]: T[K] extends (...args: any[]) => any ? never : K
-}[keyof T]
-
-type PropertiesOnly<T> = Pick<T, PropertyKeys<T>>
-
-// export const classToObject = <T>(
-// 	instance: T,
-// 	processed: WeakMap<object, object> = new WeakMap()
-// ): T extends object ? PropertiesOnly<T> : T => {
-// 	if (typeof instance !== 'object' || instance === null)
-// 		return instance as any
-
-// 	if (Array.isArray(instance))
-// 		return instance.map((x) => classToObject(x, processed)) as any
-
-// 	if (processed.has(instance)) return processed.get(instance) as any
-
-// 	const result: Partial<T> = {}
-
-// 	for (const key of Object.keys(instance) as Array<keyof T>) {
-// 		const value = instance[key]
-// 		if (typeof value === 'object' && value !== null)
-// 			result[key] = classToObject(value, processed) as T[keyof T]
-// 		else result[key] = value
-// 	}
-
-// 	const prototype = Object.getPrototypeOf(instance)
-// 	if (!prototype) return result as any
-
-// 	const properties = Object.getOwnPropertyNames(prototype)
-
-// 	for (const property of properties) {
-// 		const descriptor = Object.getOwnPropertyDescriptor(
-// 			Object.getPrototypeOf(instance),
-// 			property
-// 		)
-
-// 		if (descriptor && typeof descriptor.get === 'function') {
-// 			// ? Very important to prevent prototype pollution
-// 			if (property === '__proto__') continue
-
-// 			;(result as any)[property as keyof typeof instance] = classToObject(
-// 				instance[property as keyof typeof instance]
-// 			)
-// 		}
-// 	}
-
-// 	return result as any
-// }

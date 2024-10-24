@@ -269,8 +269,7 @@ export class ValidationError extends Error {
 	get all() {
 		return 'Errors' in this.validator
 			? [...this.validator.Errors(this.value)].map(mapValueError)
-			: // @ts-ignore
-				[...Value.Errors(this.validator, this.value)].map(mapValueError)
+			: [...Value.Errors(this.validator, this.value)].map(mapValueError)
 	}
 
 	static simplifyModel(validator: TSchema | TypeCheck<any>) {

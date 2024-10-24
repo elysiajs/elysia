@@ -6,16 +6,16 @@ import {
 	TArray,
 	TDate,
 	TUnsafe,
-	TypeRegistry
+	TypeRegistry,
+	type Static,
+	type TString,
+	type TTransform
 } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
 	type SchemaOptions,
-	// type TNull,
-	// type TUnion,
 	type TSchema,
-	// type TUndefined,
 	TProperties,
 	ObjectOptions,
 	TObject,
@@ -97,8 +97,6 @@ const t = Object.assign({}, Type)
 
 export namespace ElysiaTypeOptions {
 	export type Numeric = NumberOptions
-
-	export type FileUnit = number | `${number}${'k' | 'm'}`
 
 	export type StrictFileType =
 		| 'image'
@@ -186,6 +184,8 @@ export namespace ElysiaTypeOptions {
 		 */
 		sign?: Readonly<(keyof T | (string & {}))[]>
 	}
+
+	export type FileUnit = number | `${number}${'k' | 'm'}`
 }
 
 const parseFileUnit = (size: ElysiaTypeOptions.FileUnit) => {
@@ -318,8 +318,11 @@ type NonEmptyArray<T> = [T, ...T[]]
 
 export type TEnumValue = number | string | null
 
-export interface TUnionEnum<T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]>
-	extends TSchema {
+export interface TUnionEnum<
+	T extends
+		| NonEmptyArray<TEnumValue>
+		| Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]
+> extends TSchema {
 	type?: 'number' | 'string' | 'null'
 	[Kind]: 'UnionEnum'
 	static: T[number]
@@ -542,7 +545,7 @@ export const ElysiaType = {
 					throw new ValidationError('property', schema, value)
 
 				return JSON.stringify(value)
-			}) as any as TArray<T>
+			}) as any as TTransform<TString, Static<T>[]>
 	},
 	File,
 	Files: (options: ElysiaTypeOptions.Files = {}) =>
@@ -593,7 +596,11 @@ export const ElysiaType = {
 		return v
 	},
 	// based on https://github.com/elysiajs/elysia/issues/512#issuecomment-1980134955
-	UnionEnum: <const T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>>>(
+	UnionEnum: <
+		const T extends
+			| NonEmptyArray<TEnumValue>
+			| Readonly<NonEmptyArray<TEnumValue>>
+	>(
 		values: T,
 		options: SchemaOptions = {}
 	) => {
@@ -707,81 +714,3 @@ export {
 	TypeSystemDuplicateTypeKind
 } from '@sinclair/typebox/system'
 export { TypeCompiler, TypeCheck } from '@sinclair/typebox/compiler'
-
-// type Template =
-// 	| string
-// 	| number
-// 	| bigint
-// 	| boolean
-// 	| StringConstructor
-// 	| NumberConstructor
-// 	| undefined
-
-// type Join<A> = A extends Readonly<[infer First, ...infer Rest]>
-// 	? (
-// 			First extends Readonly<Template[]>
-// 				? First[number]
-// 				: First extends StringConstructor
-// 				? string
-// 				: First extends NumberConstructor
-// 				? `${number}`
-// 				: First
-// 	  ) extends infer A
-// 		? Rest extends []
-// 			? A extends undefined
-// 				? NonNullable<A> | ''
-// 				: A
-// 			: // @ts-ignore
-// 			A extends undefined
-// 			? `${NonNullable<A>}${Join<Rest>}` | ''
-// 			: // @ts-ignore
-// 			  `${A}${Join<Rest>}`
-// 		: ''
-// 	: ''
-
-// const template = <
-// 	const T extends Readonly<(Template | Readonly<Template[]>)[]>
-// >(
-// 	...p: T
-// ): Join<T> => {
-// 	return a as any
-// }
-
-// const create =
-// 	<const T extends string>(t: T): ((t: T) => void) =>
-// 	(t) =>
-// 		t
-
-// const optional = <
-// 	const T extends Readonly<(Template | Readonly<Template[]>)[]>
-// >(
-// 	...p: T
-// ): T | undefined => {
-// 	return undefined
-// }
-
-// template.optional = optional
-
-// const hi = create(
-// 	template(
-// 		['seminar', 'millennium'],
-// 		':',
-// 		['Rio', 'Yuuka', 'Noa', 'Koyuki'],
-// 		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki'])),
-// 		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki'])),
-// 		template.optional(template(',', ['Rio', 'Yuuka', 'Noa', 'Koyuki']))
-// 	)
-// )
-
-// hi(`seminar:Noa,Koyuki,Yuuka`)
-
-// const a = TypeCompiler.Compile(t.String())
-
-// console.log(v.Decode.toString())
-
-// const T = t.Transform(v.schema)
-// 	.Decode((value) => new Date(value)) // required: number to Date
-// 	.Encode((value) => value.getTime()) // required: Date to number
-
-// const decoded = Value.Decode(T, 0) // const decoded = Date(1970-01-01T00:00:00.000Z)
-// const encoded = Value.Encode(T, decoded)
