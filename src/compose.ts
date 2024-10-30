@@ -79,6 +79,7 @@ export const hasAdditionalProperties = (
 		const properties = schema.properties as Record<string, TAnySchema>
 
 		if ('additionalProperties' in schema) return schema.additionalProperties
+		if ('patternProperties' in schema) return false
 
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
