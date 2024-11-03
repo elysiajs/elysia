@@ -63,6 +63,11 @@ describe('TypeSystem - BooleanString', () => {
 		expect(() => Value.Decode(schema, null)).toThrow(error)
 	})
 
+	it('Convert', () => {
+		expect(Value.Convert(t.BooleanString(), 'true')).toBe(true)
+		expect(Value.Convert(t.BooleanString(), 'false')).toBe(false)
+	})
+
 	it('Integrate', async () => {
 		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Object({

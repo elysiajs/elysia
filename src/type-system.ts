@@ -397,11 +397,11 @@ export const ElysiaType = {
 			.Transform(
 				t.Union(
 					[
+						t.Boolean(property),
 						t.String({
 							format: 'boolean',
 							default: false
 						}),
-						t.Boolean(property)
 					],
 					property
 				)
