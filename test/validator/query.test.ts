@@ -200,6 +200,34 @@ describe('Query Validator', () => {
 		expect(await res.json()).toEqual({ param1: true })
 	})
 
+	it('parse optional boolean string with second parameter', async () => {
+		const schema = t.Object({
+			registered: t.Optional(t.Boolean()),
+			other: t.String(),
+		})
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: schema
+		})
+		const res = await app.handle(req('/?other=sucrose'))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ other: 'sucrose' })
+	})
+
+	it('parse optional boolean string with default value', async () => {
+		const schema = t.Object({
+			registered: t.Optional(t.Boolean({default: true})),
+			other: t.String(),
+		})
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: schema
+		})
+		const res = await app.handle(req('/?other=sucrose'))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ other: 'sucrose', registered: true })
+	})
+
 	it('validate optional object', async () => {
 		const app = new Elysia().get(
 			'/',
