@@ -15,6 +15,7 @@ import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
+import { TransformDecodeError } from '@sinclair/typebox/value'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -423,11 +424,13 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-expect-error
 			return (context.response = mapResponse(response, context.set))
 		} catch (error) {
-			if ((error as ElysiaErrors).status)
-				set.status = (error as ElysiaErrors).status
-
+			const reportedError = (error instanceof TransformDecodeError && error.error)
+				? error.error
+				: error
+			if ((reportedError as ElysiaErrors).status)
+				set.status = (reportedError as ElysiaErrors).status
 			// @ts-expect-error private
-			return app.handleError(context, error)
+			return app.handleError(context, reportedError)
 		} finally {
 			for (const afterResponse of app.event.afterResponse)
 				await afterResponse.fn(context as any)

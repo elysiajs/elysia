@@ -223,4 +223,29 @@ describe('Handle Error', () => {
 			'x-test': 'Nagi'
 		})
 	})
+
+	it('handle error in Transform', async () => {
+		const route = new Elysia().get('/', ({ query: { aid } }) => aid, {
+			query: t.Object({
+				aid: t
+					.Transform(t.String())
+					.Decode((value) => {
+						throw new NotFoundError('foo')
+					})
+					.Encode((value) => `1`)
+			})
+		})
+
+		let response = await new Elysia({ aot: false })
+			.use(route)
+			.handle(req('/?aid=a'))
+		expect(response.status).toEqual(404)
+		expect(await response.text()).toEqual('foo')
+
+		response = await new Elysia({ aot: true })
+			.use(route)
+			.handle(req('/?aid=a'))
+		expect(response.status).toEqual(404)
+		expect(await response.text()).toEqual('foo')
+	})
 })

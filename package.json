@@ -142,6 +142,7 @@
 	"devDependencies": {
 		"@types/benchmark": "^2.1.5",
 		"@types/bun": "^1.1.2",
+		"@types/cookie": "^1.0.0",
 		"@typescript-eslint/eslint-plugin": "^6.17.0",
 		"@typescript-eslint/parser": "^6.17.0",
 		"benchmark": "^2.1.4",

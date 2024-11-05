@@ -1,3 +1,11 @@
+# 1.1.24 - 31 Oct 2024
+Security:
+- [#891](https://github.com/elysiajs/elysia/pull/891) Upgrade Cookie to 0.7.x to fix CVE-2024-47764
+
+Bug fix:
+- [#885](https://github.com/elysiajs/elysia/pull/885) unwrap transform errors
+- [#903](https://github.com/elysiajs/elysia/pull/903) typebox object schemas without properties key
+
 # 1.1.23 - 22 Oct 2024
 Bug fix:
 - Handle object with `.then` even if it's not promise (looking at you, Drizzle)

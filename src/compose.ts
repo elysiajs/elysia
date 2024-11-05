@@ -73,6 +73,7 @@ export const hasAdditionalProperties = (
 		const properties = schema.properties as Record<string, TAnySchema>
 
 		if ('additionalProperties' in schema) return schema.additionalProperties
+		if ('patternProperties' in schema) return false
 
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
@@ -2226,6 +2227,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 	fnLiteral +=
 		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){` +
+		`if(error.error)error=error.error\n` +
 		`set.status = error.status??422\n` +
 		adapter.validationError +
 		`}else{` +
