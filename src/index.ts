@@ -5984,7 +5984,7 @@ export default class Elysia<
 
 	/**
 	 * Custom handle written by adapter
-     */
+	 */
 	protected _handle?(...a: unknown[]): unknown
 
 	protected handleError = async (
@@ -6188,6 +6188,7 @@ export type {
 } from './types'
 
 export { file } from './universal/file'
+export type { ElysiaAdapter } from './adapter'
 
 export { TypeSystemPolicy } from '@sinclair/typebox/system'
 export type { Static, TSchema } from '@sinclair/typebox'
