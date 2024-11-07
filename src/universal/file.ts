@@ -1,5 +1,5 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import { createReadStream, type ReadStream } from 'fs'
+import { createReadStream, statSync, type Stats, type ReadStream } from 'fs'
 
 import { isBun } from './utils'
 import { BunFile } from 'bun'
@@ -94,10 +94,14 @@ export const file = (path: string) => new ElysiaFile(path)
 
 export class ElysiaFile {
 	readonly value: unknown
+	readonly stats: Stats | undefined
 
 	constructor(public path: string) {
 		if (isBun) this.value = Bun.file(path)
-		else this.value = createReadStream(path)
+		else {
+			this.value = createReadStream(path)
+			this.stats = statSync(path)!
+		}
 	}
 
 	get type() {
@@ -110,6 +114,6 @@ export class ElysiaFile {
 	get length() {
 		if (isBun) return (this.value as BunFile).size
 
-		return (this.value as ReadStream).readableLength
+		return this.stats?.size
 	}
 }

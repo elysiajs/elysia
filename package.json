@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.2.0-exp.22",
+	"version": "1.2.0-exp.24",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -98,15 +98,15 @@
 			"import": "./dist/adapter/web-standard/handler.mjs",
 			"require": "./dist/cjs/adapter/web-standard/handler.js"
 		},
-		"./adapter/node": {
-			"types": "./dist/adapter/node/index.d.ts",
-			"import": "./dist/adapter/node/index.mjs",
-			"require": "./dist/cjs/adapter/node/index.js"
+		"./universal": {
+			"types": "./dist/universal/index.d.ts",
+			"import": "./dist/universal/index.mjs",
+			"require": "./dist/cjs/universal/index.js"
 		},
-		"./adapter/node/handler": {
-			"types": "./dist/adapter/node/handler.d.ts",
-			"import": "./dist/adapter/node/handler.mjs",
-			"require": "./dist/cjs/adapter/node/handler.js"
+		"./universal/file": {
+			"types": "./dist/universal/file.d.ts",
+			"import": "./dist/universal/file.mjs",
+			"require": "./dist/cjs/universal/file.js"
 		}
 	},
 	"repository": {
