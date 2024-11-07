@@ -1,7 +1,5 @@
 /* eslint-disable sonarjs/no-nested-switch */
 /* eslint-disable sonarjs/no-duplicate-string */
-import type { BunFile } from 'bun'
-
 import { serialize } from 'cookie'
 import { isNotEmpty, hasHeaderShorthand, StatusMap } from '../../utils'
 
@@ -197,7 +195,7 @@ const handleStream = async (
 				// Manually set transfer-encoding for direct response, eg. app.handle, eden
 				'transfer-encoding': 'chunked',
 				'content-type': 'text/event-stream; charset=utf-8',
-				...set?.headers
+				...set?.headers as any
 			}
 		}
 	)
