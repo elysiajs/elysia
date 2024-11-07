@@ -1651,7 +1651,7 @@ type SetContentType =
 	| 'model/gltf+json'
 	| 'model/gltf-binary'
 
-export type HTTPHeaders = Record<string, string> & {
+export type HTTPHeaders = Record<string, string | number> & {
 	// Authentication
 	'www-authenticate'?: string
 	authorization?: string

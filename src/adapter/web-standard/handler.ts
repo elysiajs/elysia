@@ -10,9 +10,9 @@ import type { LocalHook } from '../../types'
 import { ElysiaCustomStatusResponse } from '../../error'
 import { ElysiaFile } from '../../universal/file'
 
-type SetResponse = Omit<Context['set'], 'status'> & {
-	status: number
-}
+// type SetResponse = Omit<Context['set'], 'status'> & {
+// 	status: number
+// }
 
 const handleFile = (response: File | Blob, set?: Context['set']) => {
 	const size = response.size
@@ -56,7 +56,7 @@ const handleFile = (response: File | Blob, set?: Context['set']) => {
 							'accept-ranges': 'bytes',
 							'content-range': `bytes 0-${size - 1}/${size}`,
 							'transfer-encoding': 'chunked'
-						},
+						} as any,
 						set.headers
 					)
 				})
@@ -195,7 +195,7 @@ const handleStream = async (
 				// Manually set transfer-encoding for direct response, eg. app.handle, eden
 				'transfer-encoding': 'chunked',
 				'content-type': 'text/event-stream; charset=utf-8',
-				...set?.headers as any
+				...(set?.headers as any)
 			}
 		}
 	)
@@ -251,24 +251,24 @@ export const mapResponse = (
 			Array.isArray(set.headers['set-cookie'])
 		) {
 			set.headers = parseSetCookies(
-				new Headers(set.headers) as Headers,
+				new Headers(set.headers as any) as Headers,
 				set.headers['set-cookie']
 			) as any
 		}
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				return new Response(response as string, set as SetResponse)
+				return new Response(response as string, set as any)
 
 			case 'Array':
 			case 'Object':
-				return Response.json(response, set as SetResponse)
+				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
 
 			case 'Blob':
-				return handleFile(response as Blob, set as SetResponse)
+				return handleFile(response as Blob, set as any)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -301,15 +301,12 @@ export const mapResponse = (
 					}
 				)
 
-				return new Response(
-					response as ReadableStream,
-					set as SetResponse
-				)
+				return new Response(response as ReadableStream, set as any)
 
 			case undefined:
-				if (!response) return new Response('', set as SetResponse)
+				if (!response) return new Response('', set as any)
 
-				return Response.json(response, set as SetResponse)
+				return Response.json(response, set as any)
 
 			case 'Response':
 				let isCookieSet = false
@@ -337,7 +334,7 @@ export const mapResponse = (
 					for (const key in set.headers)
 						(response as Response).headers.append(
 							key,
-							set.headers[key]
+							set.headers[key] as any
 						)
 
 				if ((response as Response).status !== set.status)
@@ -370,17 +367,17 @@ export const mapResponse = (
 			case 'Boolean':
 				return new Response(
 					(response as number | boolean).toString(),
-					set as SetResponse
+					set as any
 				)
 
 			case 'Cookie':
 				if (response instanceof Cookie)
-					return new Response(response.value, set as SetResponse)
+					return new Response(response.value, set as any)
 
-				return new Response(response?.toString(), set as SetResponse)
+				return new Response(response?.toString(), set as any)
 
 			case 'FormData':
-				return new Response(response as FormData, set as SetResponse)
+				return new Response(response as FormData, set as any)
 
 			default:
 				if (response instanceof Response) {
@@ -409,7 +406,7 @@ export const mapResponse = (
 						for (const key in set.headers)
 							(response as Response).headers.append(
 								key,
-								set.headers[key]
+								set.headers[key] as any
 							)
 
 					if (hasHeaderShorthand)
@@ -466,12 +463,12 @@ export const mapResponse = (
 
 						return new Response(
 							JSON.stringify(response),
-							set as SetResponse
+							set as any
 						) as any
 					}
 				}
 
-				return new Response(response as any, set as SetResponse)
+				return new Response(response as any, set as any)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -480,7 +477,7 @@ export const mapResponse = (
 
 			case 'Array':
 			case 'Object':
-				return Response.json(response, set as SetResponse)
+				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
@@ -562,12 +559,12 @@ export const mapResponse = (
 
 			case 'Cookie':
 				if (response instanceof Cookie)
-					return new Response(response.value, set as SetResponse)
+					return new Response(response.value, set as any)
 
-				return new Response(response?.toString(), set as SetResponse)
+				return new Response(response?.toString(), set as any)
 
 			case 'FormData':
-				return new Response(response as FormData, set as SetResponse)
+				return new Response(response as FormData, set as any)
 
 			default:
 				if (response instanceof Response) return response
@@ -613,7 +610,7 @@ export const mapResponse = (
 
 						return new Response(
 							JSON.stringify(response),
-							set as SetResponse
+							set as any
 						) as any
 					}
 				}
@@ -655,17 +652,17 @@ export const mapEarlyResponse = (
 			Array.isArray(set.headers['set-cookie'])
 		)
 			set.headers = parseSetCookies(
-				new Headers(set.headers) as Headers,
+				new Headers(set.headers as any) as Headers,
 				set.headers['set-cookie']
 			) as any
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				return new Response(response as string, set as SetResponse)
+				return new Response(response as string, set as any)
 
 			case 'Array':
 			case 'Object':
-				return Response.json(response, set as SetResponse)
+				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
@@ -704,15 +701,12 @@ export const mapEarlyResponse = (
 					}
 				)
 
-				return new Response(
-					response as ReadableStream,
-					set as SetResponse
-				)
+				return new Response(response as ReadableStream, set as any)
 
 			case undefined:
 				if (!response) return
 
-				return Response.json(response, set as SetResponse)
+				return Response.json(response, set as any)
 
 			case 'Response':
 				let isCookieSet = false
@@ -740,7 +734,7 @@ export const mapEarlyResponse = (
 					for (const key in set.headers)
 						(response as Response).headers.append(
 							key,
-							set.headers[key]
+							set.headers[key] as any
 						)
 
 				if ((response as Response).status !== set.status)
@@ -775,7 +769,7 @@ export const mapEarlyResponse = (
 			case 'Boolean':
 				return new Response(
 					(response as number | boolean).toString(),
-					set as SetResponse
+					set as any
 				)
 
 			case 'FormData':
@@ -783,9 +777,9 @@ export const mapEarlyResponse = (
 
 			case 'Cookie':
 				if (response instanceof Cookie)
-					return new Response(response.value, set as SetResponse)
+					return new Response(response.value, set as any)
 
-				return new Response(response?.toString(), set as SetResponse)
+				return new Response(response?.toString(), set as any)
 
 			default:
 				if (response instanceof Response) {
@@ -814,7 +808,7 @@ export const mapEarlyResponse = (
 						for (const key in set.headers)
 							(response as Response).headers.append(
 								key,
-								set.headers[key]
+								set.headers[key] as any
 							)
 
 					if ((response as Response).status !== set.status)
@@ -864,12 +858,12 @@ export const mapEarlyResponse = (
 
 						return new Response(
 							JSON.stringify(response),
-							set as SetResponse
+							set as any
 						) as any
 					}
 				}
 
-				return new Response(response as any, set as SetResponse)
+				return new Response(response as any, set as any)
 		}
 	} else
 		switch (response?.constructor?.name) {
@@ -878,7 +872,7 @@ export const mapEarlyResponse = (
 
 			case 'Array':
 			case 'Object':
-				return Response.json(response, set as SetResponse)
+				return Response.json(response, set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
@@ -954,9 +948,9 @@ export const mapEarlyResponse = (
 
 			case 'Cookie':
 				if (response instanceof Cookie)
-					return new Response(response.value, set as SetResponse)
+					return new Response(response.value, set as any)
 
-				return new Response(response?.toString(), set as SetResponse)
+				return new Response(response?.toString(), set as any)
 
 			case 'FormData':
 				return new Response(response as FormData)
@@ -1005,7 +999,7 @@ export const mapEarlyResponse = (
 
 						return new Response(
 							JSON.stringify(response),
-							set as SetResponse
+							set as any
 						) as any
 					}
 				}
@@ -1160,7 +1154,7 @@ export const errorToResponse = (error: Error, set?: Context['set']) =>
 		{
 			status:
 				set?.status !== 200 ? ((set?.status as number) ?? 500) : 500,
-			headers: set?.headers
+			headers: set?.headers as any
 		}
 	)
 

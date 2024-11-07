@@ -114,6 +114,6 @@ export class ElysiaFile {
 	get length() {
 		if (isBun) return (this.value as BunFile).size
 
-		return this.stats?.size
+		return this.stats?.size ?? 0
 	}
 }
