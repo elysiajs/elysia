@@ -3,6 +3,7 @@ import type { AnyElysia, ListenCallback } from '..'
 import type { Context } from '../context'
 import type { Prettify, LocalHook } from '../types'
 import type { Sucrose } from '../sucrose'
+import { WSLocalHook } from '../ws/types'
 
 export interface ElysiaAdapter {
 	name: string
@@ -128,4 +129,9 @@ export interface ElysiaAdapter {
 		validationError: string
 		unknownError: string
 	}
+	ws?(
+		app: AnyElysia,
+		path: string,
+		handler: WSLocalHook<any, any, any, any, any, any, any>
+	): unknown
 }

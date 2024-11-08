@@ -1,9 +1,9 @@
-import { parse } from 'cookie'
+import { parse, serialize } from 'cookie'
 
 // @ts-ignore
 import decodeURIComponent from 'fast-decode-uri-component'
 
-import { unsignCookie } from './utils'
+import { isNotEmpty, unsignCookie } from './utils'
 import { InvalidCookieSignature } from './error'
 
 import type { Context } from './context'
@@ -358,4 +358,30 @@ export const parseCookie = async (
 	}
 
 	return createCookieJar(set, jar, initial)
+}
+
+export const serializeCookie = (cookies: Context['set']['cookie']) => {
+	if (!cookies || !isNotEmpty(cookies)) return undefined
+
+	const set: string[] = []
+
+	for (const [key, property] of Object.entries(cookies)) {
+		if (!key || !property) continue
+
+		const value = property.value
+		if (value === undefined || value === null) continue
+
+		set.push(
+			serialize(
+				key,
+				typeof value === 'object' ? JSON.stringify(value) : value + '',
+				property
+			)
+		)
+	}
+
+	if (set.length === 0) return undefined
+	if (set.length === 1) return set[0]
+
+	return set
 }

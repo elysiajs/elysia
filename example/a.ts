@@ -1,15 +1,25 @@
-import { Elysia, file } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new Elysia()
+new Elysia()
+	.decorate('a', 'a')
+	.state('b', 'b')
 	.ws('/', {
-		message(ws) {
-			ws.send('hello')
-		}
-	})
-	.post('/json', ({ body }) => body)
-	.get('/', () => file('./test/kyuukurarin.mp4'))
-	.get('/teapot', ({ set }) => {
-		set.status = 418
-		return file('./example/teapot.webp')
+		parse({ body }) {
+			if (typeof body === 'number') return { id: body }
+		},
+		resolve: () => ({
+			requestId: ~~(Math.random() * 1000000)
+		}),
+		message: function* ({ body: { id }, data: { requestId }, send }) {
+			yield { id }
+
+			send({ id: requestId }, true)
+		},
+		body: t.Object({
+			id: t.Number()
+		}),
+		response: t.Object({
+			id: t.Number()
+		})
 	})
 	.listen(3000)

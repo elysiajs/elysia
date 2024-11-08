@@ -30,6 +30,7 @@ import type {
 import type { ComposerGeneralHandlerOptions } from './compose'
 
 import type { ElysiaAdapter } from './adapter'
+import type { WSLocalHook } from './ws/types'
 
 type PartialServe = Partial<Serve>
 
@@ -38,7 +39,7 @@ export type IsNever<T> = [T] extends [never] ? true : false
 export type ElysiaConfig<Prefix extends string | undefined> = {
 	/**
 	 * @default Bun Adapter
-     */
+	 */
 	adapter?: ElysiaAdapter
 	/**
 	 * Path prefix of the instance
@@ -1029,6 +1030,8 @@ export type ResolveResolutionsArray<
 		: ResolveResolutionsArray<Rest, Carry>
 	: Prettify<Carry>
 
+export type AnyLocalHook = LocalHook<any, any, any, any, any, any, any, any>
+
 export type LocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
@@ -1145,6 +1148,7 @@ export type LocalHook<
 		 */
 		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 		tags?: DocumentDecoration['tags']
+		websocket?: WSLocalHook<any, any, any, any, any, any, any>
 	}
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
@@ -1156,6 +1160,7 @@ export interface InternalRoute {
 	handler: Handler
 	compile(): Function
 	hooks: LocalHook<any, any, any, any, any, any, any>
+	websocket?: WSLocalHook<any, any, any, any, any, any, any>
 }
 
 export type SchemaValidator = {
@@ -1429,10 +1434,7 @@ export type ComposeElysiaResponse<Response, Handle> = Handle extends (
 type _ComposeElysiaResponse<Response, Handle> = Prettify<
 	Prettify<
 		{
-			200: Exclude<
-				Handle,
-				ElysiaCustomStatusResponse<any, any, any>
-			>
+			200: Exclude<Handle, ElysiaCustomStatusResponse<any, any, any>>
 		} & ExtractErrorFromHandle<Handle> &
 			({} extends Response ? {} : Omit<Response, 200>)
 	>

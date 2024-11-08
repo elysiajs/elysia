@@ -1,4 +1,4 @@
-import type { Serve, Server, ServerWebSocket } from 'bun'
+import type { Serve, Server } from 'bun'
 
 import { Memoirist } from 'memoirist'
 import { type TObject, type Static, type TSchema } from '@sinclair/typebox'
@@ -8,8 +8,7 @@ import type { Context } from './context'
 import { t, TypeCheck } from './type-system'
 import { sucrose, type Sucrose } from './sucrose'
 
-import { ElysiaWS } from './ws/index'
-import type { WS } from './ws/types'
+import type { WSLocalHook } from './ws/types'
 
 import { BunAdapter } from './adapter/bun/index'
 import { WebStandardAdapter } from './adapter/web-standard/index'
@@ -78,6 +77,7 @@ import type {
 	ComposedHandler,
 	InputSchema,
 	LocalHook,
+	AnyLocalHook,
 	MergeSchema,
 	RouteSchema,
 	UnwrapRoute,
@@ -373,9 +373,7 @@ export default class Elysia<
 		return this
 	}
 
-	private applyMacro(
-		localHook: LocalHook<any, any, any, any, any, any, any>
-	) {
+	private applyMacro(localHook: AnyLocalHook) {
 		if (this.extender.macros.length) {
 			const manage = createMacroManager({
 				globalHook: this.event,
@@ -452,7 +450,7 @@ export default class Elysia<
 		method: HTTPMethod,
 		path: string,
 		handle: Handler<any, any, any> | any,
-		localHook?: LocalHook<any, any, any, any, any, any, any, any>,
+		localHook?: AnyLocalHook,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
 			skipPrefix: false as boolean | undefined
@@ -751,13 +749,16 @@ export default class Elysia<
 						ctx
 					)
 
+		const isWebSocket = method === '$INTERNALWS'
+
 		this.router.history.push({
 			method,
 			path,
 			composed: mainHandler,
 			handler: handle,
 			hooks: hooks as any,
-			compile: () => compile()
+			compile: () => compile(),
+			websocket: localHook.websocket as any
 		})
 
 		const staticRouter = this.router.static.http
@@ -767,7 +768,7 @@ export default class Elysia<
 			compile
 		}
 
-		if (method === '$INTERNALWS') {
+		if (isWebSocket) {
 			const loose = getLoosePath(path)
 
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
@@ -2635,9 +2636,7 @@ export default class Elysia<
 	 */
 	group(
 		prefix: string,
-		schemaOrRun:
-			| LocalHook<any, any, any, any, any, any, any, any>
-			| ((group: AnyElysia) => AnyElysia),
+		schemaOrRun: AnyLocalHook | ((group: AnyElysia) => AnyElysia),
 		run?: (group: AnyElysia) => AnyElysia
 	): AnyElysia {
 		const instance = new Elysia({
@@ -3031,7 +3030,7 @@ export default class Elysia<
 	 */
 	guard(
 		hook:
-			| (LocalHook<any, any, any, any, any, any, any> & {
+			| (AnyLocalHook & {
 					as: LifeCycleType
 			  })
 			| ((group: AnyElysia) => AnyElysia),
@@ -3494,12 +3493,9 @@ export default class Elysia<
 				method,
 				path,
 				handler,
-				mergeHook(
-					hooks as LocalHook<any, any, any, any, any, any, any>,
-					{
-						error: plugin.event.error
-					}
-				)
+				mergeHook(hooks as AnyLocalHook, {
+					error: plugin.event.error
+				})
 			)
 		}
 
@@ -4753,19 +4749,31 @@ export default class Elysia<
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema']
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
+		>,
+		const Macro extends Metadata['macro'],
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
 		>
 	>(
 		path: Path,
-		options: WS.LocalHook<
+		options: WSLocalHook<
 			LocalSchema,
 			Schema,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
-			},
-			Definitions['error'],
-			Metadata['macro'],
+			Singleton,
+			Macro,
+			Resolutions,
 			JoinPath<BasePath, Path>
 		>
 	): Elysia<
@@ -4795,118 +4803,8 @@ export default class Elysia<
 		Ephemeral,
 		Volatile
 	> {
-		const transform = options.transformMessage
-			? Array.isArray(options.transformMessage)
-				? options.transformMessage
-				: [options.transformMessage]
-			: undefined
-
-		let server: Server | null = null
-
-		const validateMessage = getSchemaValidator(options?.body, {
-			models: this.definitions.type as Record<string, TSchema>,
-			normalize: this.config.normalize
-		})
-
-		const validateResponse = getSchemaValidator(options?.response as any, {
-			models: this.definitions.type as Record<string, TSchema>,
-			normalize: this.config.normalize
-		})
-
-		const parseMessage = (message: any) => {
-			if (typeof message === 'string') {
-				const start = message?.charCodeAt(0)
-
-				if (start === 47 || start === 123)
-					try {
-						message = JSON.parse(message)
-					} catch {
-						// Not empty
-					}
-				else if (isNumericString(message)) message = +message
-			}
-
-			if (transform?.length)
-				for (let i = 0; i < transform.length; i++) {
-					const temp = transform[i](message)
-
-					if (temp !== undefined) message = temp
-				}
-
-			return message
-		}
-
-		this.route(
-			'$INTERNALWS',
-			path as any,
-			// @ts-expect-error
-			(context) => {
-				// ! Enable static code analysis just in case resolveUnknownFunction doesn't work, do not remove
-				// eslint-disable-next-line @typescript-eslint/no-unused-vars
-				const { set, path, qi, headers, query, params } = context
-
-				if (server === null) server = this.getServer()
-
-				if (
-					server?.upgrade<any>(context.request, {
-						headers: (typeof options.upgrade === 'function'
-							? options.upgrade(context as any as Context)
-							: options.upgrade) as Bun.HeadersInit,
-						data: {
-							validator: validateResponse,
-							open(ws: ServerWebSocket<any>) {
-								options.open?.(new ElysiaWS(ws, context as any))
-							},
-							message: (ws: ServerWebSocket<any>, msg: any) => {
-								const message = parseMessage(msg)
-
-								if (validateMessage?.Check(message) === false)
-									return void ws.send(
-										new ValidationError(
-											'message',
-											validateMessage,
-											message
-										).message as string
-									)
-
-								options.message?.(
-									new ElysiaWS(ws, context as any),
-									message as any
-								)
-							},
-							drain(ws: ServerWebSocket<any>) {
-								options.drain?.(
-									new ElysiaWS(ws, context as any)
-								)
-							},
-							close(
-								ws: ServerWebSocket<any>,
-								code: number,
-								reason: string
-							) {
-								options.close?.(
-									new ElysiaWS(ws, context as any),
-									code,
-									reason
-								)
-							}
-						}
-					})
-				)
-					return
-
-				set.status = 400
-
-				return 'Expected a websocket connection'
-			},
-			{
-				beforeHandle: options.beforeHandle,
-				transform: options.transform,
-				headers: options.headers,
-				params: options.params,
-				query: options.query
-			} as any
-		)
+		if (this['~adapter'].ws) this['~adapter'].ws(this, path, options as any)
+		else console.warn(`Current adapter doesn't support WebSocket`)
 
 		return this as any
 	}
@@ -6093,7 +5991,7 @@ export default class Elysia<
 export { Elysia }
 
 export { t } from './type-system'
-export { Cookie, type CookieOptions } from './cookies'
+export { serializeCookie, Cookie, type CookieOptions } from './cookies'
 export type { Context, PreContext, ErrorContext } from './context'
 export {
 	ELYSIA_TRACE,

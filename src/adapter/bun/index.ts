@@ -1,14 +1,23 @@
+/* eslint-disable sonarjs/no-duplicate-string */
 import type { Serve } from 'bun'
-
-import { createNativeStaticHandler } from './handler'
-
-import { isProduction } from '../../error'
-import { hasHeaderShorthand, isNumericString } from '../../utils'
-import { websocket } from '../../ws/index'
-
-import type { ElysiaAdapter } from '../types'
+import type { TSchema } from '@sinclair/typebox'
 
 import { WebStandardAdapter } from '../web-standard/index'
+import { parseSetCookies } from '../web-standard/handler'
+import type { ElysiaAdapter } from '../types'
+
+import { createNativeStaticHandler } from './handler'
+import { serializeCookie } from '../../cookies'
+import { isProduction, ValidationError } from '../../error'
+import {
+	getSchemaValidator,
+	hasHeaderShorthand,
+	isNotEmpty,
+	isNumericString
+} from '../../utils'
+
+import { ElysiaWebSocket, websocket } from '../../ws/index'
+import type { ServerWebSocket } from '../../ws/bun'
 
 export const BunAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
@@ -98,5 +107,272 @@ export const BunAdapter: ElysiaAdapter = {
 				Bun?.gc(false)
 			})
 		}
+	},
+	ws(app, path, options) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { parse, body, response, ...rest } = options
+
+		const parsers = typeof parse === 'function' ? [parse] : parse
+
+		const validateMessage = getSchemaValidator(body, {
+			// @ts-expect-error private property
+			models: app.definitions.type as Record<string, TSchema>,
+			normalize: app.config.normalize
+		})
+
+		const validateResponse = getSchemaValidator(response as any, {
+			// @ts-expect-error private property
+			models: app.definitions.type as Record<string, TSchema>,
+			normalize: app.config.normalize
+		})
+
+		const parseMessage = async (ws: ServerWebSocket<any>, message: any) => {
+			if (typeof message === 'string') {
+				const start = message?.charCodeAt(0)
+
+				if (start === 47 || start === 123)
+					try {
+						message = JSON.parse(message)
+					} catch {
+						// Not empty
+					}
+				else if (isNumericString(message)) message = +message
+			}
+
+			if (parsers)
+				for (let i = 0; i < parsers.length; i++) {
+					let temp = parsers[i](ws, message)
+					if (temp instanceof Promise) temp = await temp
+
+					if (temp !== undefined) return temp
+				}
+
+			return message
+		}
+
+		app.route(
+			'$INTERNALWS',
+			path as any,
+			async (context) => {
+				// ! Enable static code analysis just in case resolveUnknownFunction doesn't work, do not remove
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
+				const { set, path, qi, headers, query, params } = context
+
+				// @ts-expect-error private property
+				const server = app.getServer()
+
+				// @ts-ignore
+				context.validator = validateResponse
+
+				if (options.upgrade) {
+					if (typeof options.upgrade === 'function') {
+						const temp = options.upgrade(context as any)
+						if (temp instanceof Promise) await temp
+					} else if (options.upgrade)
+						Object.assign(
+							set.headers,
+							options.upgrade as Record<string, any>
+						)
+				}
+
+				if (set.cookie && isNotEmpty(set.cookie)) {
+					const cookie = serializeCookie(set.cookie)
+
+					if (cookie) set.headers['set-cookie'] = cookie
+				}
+
+				if (
+					set.headers['set-cookie'] &&
+					Array.isArray(set.headers['set-cookie'])
+				)
+					set.headers = parseSetCookies(
+						new Headers(set.headers as any) as Headers,
+						set.headers['set-cookie']
+					) as any
+
+				const handleResponse = (
+					ws: ServerWebSocket,
+					data: unknown
+				): unknown => {
+					if (data instanceof Promise)
+						return data.then((data) => handleResponse(ws, data))
+
+					if (Buffer.isBuffer(data)) return ws.send(data)
+
+					if (data === undefined) return
+
+					// @ts-ignore Generator function
+					if (typeof data?.next === 'function') {
+						// @ts-ignore Generator function
+						const init = data.next()
+						if (init instanceof Promise)
+							return (async () => {
+								const data = await init
+
+								if (validateResponse?.Check(data) === false)
+									return ws.send(
+										new ValidationError(
+											'message',
+											validateResponse,
+											data
+										).message
+									)
+
+								// @ts-ignore Generator function
+								if (typeof data.data === 'object')
+									// @ts-ignore Generator function
+									ws.send(JSON.stringify(data.data)) as any
+								// @ts-ignore Generator function
+								else ws.send(data.data as any)
+
+								// @ts-ignore Generator function
+								if (!data.done)
+									// @ts-ignore
+									for await (const datum of data) {
+										if (
+											validateResponse?.Check(datum) ===
+											false
+										)
+											return ws.send(
+												new ValidationError(
+													'message',
+													validateResponse,
+													datum
+												).message
+											)
+
+										if (typeof datum === 'object')
+											return ws.send(
+												JSON.stringify(datum)
+											) as any
+
+										ws.send(datum as any)
+									}
+							})()
+
+						if (typeof init.value === 'object')
+							ws.send(JSON.stringify(init.value)) as any
+						else ws.send(init.value)
+
+						if (!init.done)
+							// @ts-ignore
+							for (const datum of data) {
+								if (validateResponse?.Check(datum) === false)
+									return ws.send(
+										new ValidationError(
+											'message',
+											validateResponse,
+											datum
+										).message
+									)
+
+								if (typeof datum === 'object')
+									return ws.send(JSON.stringify(datum)) as any
+
+								ws.send(datum as any)
+							}
+
+						return
+					}
+
+					if (validateResponse?.Check(data) === false)
+						return ws.send(
+							new ValidationError(
+								'message',
+								validateResponse,
+								data
+							).message
+						)
+
+					if (typeof data === 'object')
+						return ws.send(JSON.stringify(data)) as any
+
+					if (response !== undefined) return ws.send(response)
+				}
+
+				if (
+					server?.upgrade<any>(context.request, {
+						headers: isNotEmpty(set.headers)
+							? (set.headers as Record<string, string>)
+							: undefined,
+						data: {
+							...context,
+							validator: validateResponse,
+							ping(data?: unknown) {
+								options.ping?.(data)
+							},
+							pong(data?: unknown) {
+								options.pong?.(data)
+							},
+							open(ws: ServerWebSocket<any>) {
+								handleResponse(
+									ws,
+									options.open?.(
+										new ElysiaWebSocket(ws, context as any)
+									)
+								)
+							},
+							message: async (
+								ws: ServerWebSocket<any>,
+								_message: any
+							) => {
+								const message = await parseMessage(ws, _message)
+
+								if (validateMessage?.Check(message) === false)
+									return void ws.send(
+										new ValidationError(
+											'message',
+											validateMessage,
+											message
+										).message as string
+									)
+
+								handleResponse(
+									ws,
+									options.message?.(
+										new ElysiaWebSocket(
+											ws,
+											context as any,
+											message
+										),
+										message as any
+									)
+								)
+							},
+							drain(ws: ServerWebSocket<any>) {
+								handleResponse(
+									ws,
+									options.drain?.(
+										new ElysiaWebSocket(ws, context as any)
+									)
+								)
+							},
+							close(
+								ws: ServerWebSocket<any>,
+								code: number,
+								reason: string
+							) {
+								handleResponse(
+									ws,
+									options.close?.(
+										new ElysiaWebSocket(ws, context as any),
+										code,
+										reason
+									)
+								)
+							}
+						}
+					})
+				)
+					return
+
+				set.status = 400
+				return 'Expected a websocket connection'
+			},
+			{
+				...rest,
+				websocket: options
+			} as any
+		)
 	}
 }
