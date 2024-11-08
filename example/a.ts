@@ -10,6 +10,9 @@ new Elysia()
 		resolve: () => ({
 			requestId: ~~(Math.random() * 1000000)
 		}),
+		open({ subscribe }) {
+			subscribe('a')
+		},
 		message: function* ({ body: { id }, data: { requestId }, send }) {
 			yield { id }
 

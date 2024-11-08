@@ -63,10 +63,10 @@ export class ElysiaWebSocket<Context = unknown, Route extends RouteSchema = {}>
 		this.terminate = raw.terminate.bind(this)
 		this.publishText = raw.publishText.bind(this)
 		this.publishBinary = raw.publishBinary.bind(this)
-		this.subscribe = raw.subscribe.bind(this)
-		this.unsubscribe = raw.unsubscribe.bind(this)
-		this.isSubscribed = raw.isSubscribed.bind(this)
-		this.cork = raw.cork.bind(this)
+		this.subscribe = raw.subscribe.bind(raw)
+		this.unsubscribe = raw.unsubscribe.bind(raw)
+		this.isSubscribed = raw.isSubscribed.bind(raw)
+		this.cork = raw.cork.bind(raw)
 		this.remoteAddress = raw.remoteAddress
 		this.binaryType = raw.binaryType
 		this.data = raw.data as any
