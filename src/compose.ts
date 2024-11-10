@@ -79,6 +79,7 @@ export const hasAdditionalProperties = (
 		const properties = schema.properties as Record<string, TAnySchema>
 
 		if ('additionalProperties' in schema) return schema.additionalProperties
+		if ('patternProperties' in schema) return false
 
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
@@ -2343,9 +2344,10 @@ export const composeErrorHandler = (
 	}
 
 	fnLiteral += `if(error.constructor.name === "ValidationError" || error.constructor.name === "TransformDecodeError") {
-		set.status = error.status ?? 422
+	    const reportedError = error.error ?? error
+		set.status = reportedError.status ?? 422
 		return new Response(
-			error.message,
+			reportedError.message,
 			{
 				headers: Object.assign(
 					{ 'content-type': 'application/json'},
