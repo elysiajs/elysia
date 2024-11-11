@@ -9,15 +9,20 @@ import type { ElysiaAdapter } from '../types'
 import { createNativeStaticHandler } from './handler'
 import { serializeCookie } from '../../cookies'
 import { isProduction, ValidationError } from '../../error'
-import type { TypeCheck } from '../../type-system'
 import {
 	getSchemaValidator,
 	hasHeaderShorthand,
 	isNotEmpty,
-	isNumericString
+	isNumericString,
+	randomId
 } from '../../utils'
 
-import { ElysiaWS, websocket } from '../../ws/index'
+import {
+	createHandleWSResponse,
+	createWSMessageParser,
+	ElysiaWS,
+	websocket
+} from '../../ws/index'
 import type { ServerWebSocket } from '../../ws/bun'
 
 export const BunAdapter: ElysiaAdapter = {
@@ -127,40 +132,16 @@ export const BunAdapter: ElysiaAdapter = {
 			normalize: app.config.normalize
 		})
 
-		const parseMessage = async (ws: ServerWebSocket<any>, message: any) => {
-			if (typeof message === 'string') {
-				const start = message?.charCodeAt(0)
-
-				if (start === 47 || start === 123)
-					try {
-						message = JSON.parse(message)
-					} catch {
-						// Not empty
-					}
-				else if (isNumericString(message)) message = +message
-			}
-
-			if (parsers)
-				for (let i = 0; i < parsers.length; i++) {
-					let temp = parsers[i](ws, message)
-					if (temp instanceof Promise) temp = await temp
-
-					if (temp !== undefined) return temp
-				}
-
-			return message
-		}
-
 		app.route(
 			'$INTERNALWS',
 			path as any,
 			async (context) => {
+				// @ts-expect-error private property
+				const server = app.getServer()
+
 				// ! Enable static code analysis just in case resolveUnknownFunction doesn't work, do not remove
 				// eslint-disable-next-line @typescript-eslint/no-unused-vars
 				const { set, path, qi, headers, query, params } = context
-
-				// @ts-expect-error private property
-				const server = app.getServer()
 
 				// @ts-ignore
 				context.validator = validateResponse
@@ -192,6 +173,9 @@ export const BunAdapter: ElysiaAdapter = {
 					) as any
 
 				const handleResponse = createHandleWSResponse(validateResponse)
+				const parseMessage = createWSMessageParser(parsers)
+
+				let _id: string | undefined
 
 				if (
 					server?.upgrade<any>(context.request, {
@@ -200,6 +184,11 @@ export const BunAdapter: ElysiaAdapter = {
 							: undefined,
 						data: {
 							...context,
+							get id() {
+								if (_id) return _id
+
+								return (_id = randomId())
+							},
 							validator: validateResponse,
 							ping(data?: unknown) {
 								options.ping?.(data)
@@ -278,80 +267,4 @@ export const BunAdapter: ElysiaAdapter = {
 			} as any
 		)
 	}
-}
-
-const createHandleWSResponse = (
-	validateResponse: TypeCheck<any> | undefined
-) => {
-	const handleWSResponse = (ws: ServerWebSocket, data: unknown): unknown => {
-		if (data instanceof Promise)
-			return data.then((data) => handleWSResponse(ws, data))
-
-		if (Buffer.isBuffer(data)) return ws.send(data)
-
-		if (data === undefined) return
-
-		const send = (ws: ServerWebSocket, datum: unknown) => {
-			if (validateResponse?.Check(datum) === false)
-				return ws.send(
-					new ValidationError('message', validateResponse, datum)
-						.message
-				)
-
-			if (typeof datum === 'object') return ws.send(JSON.stringify(datum))
-
-			ws.send(datum)
-		}
-
-		if (typeof (data as Generator)?.next === 'function') {
-			const init = (data as Generator | AsyncGenerator).next()
-
-			if (init instanceof Promise)
-				return (async () => {
-					const first = await init
-
-					if (validateResponse?.Check(first) === false)
-						return ws.send(
-							new ValidationError(
-								'message',
-								validateResponse,
-								first
-							).message
-						)
-
-					if (typeof first.value === 'object')
-						ws.send(JSON.stringify(first.value)) as any
-					else ws.send(first.value as any)
-
-					if (!first.done)
-						for await (const datum of data as Generator)
-							send(ws, datum)
-				})()
-
-			if (typeof init.value === 'object')
-				ws.send(JSON.stringify(init.value))
-			else ws.send(init.value)
-
-			if (!init.done)
-				for (const datum of data as Generator) {
-					send(ws, datum)
-
-					return
-				}
-
-			if (validateResponse?.Check(data) === false)
-				return ws.send(
-					new ValidationError('message', validateResponse, data)
-						.message
-				)
-
-			if (typeof data === 'object') return ws.send(JSON.stringify(data))
-
-			if (data !== undefined) return ws.send(data as any)
-		}
-
-		return handleWSResponse
-	}
-
-	return handleWSResponse
 }

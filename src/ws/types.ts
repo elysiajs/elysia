@@ -116,6 +116,11 @@ type TypedWebSocketHandler<Context, Route extends RouteSchema = {}> = Prettify<
 	}
 >
 
+export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
+	ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: unknown }>,
+	message: unknown
+) => MaybePromise<Route['body'] | void | undefined>
+
 export type WSLocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
@@ -153,15 +158,7 @@ export type WSLocalHook<
 		 * Headers to register to websocket before `upgrade`
 		 */
 		upgrade?: Record<string, unknown> | ((context: Context) => unknown)
-		parse?: MaybeArray<
-			(
-				ws: ElysiaWS<
-					Context,
-					Omit<TypedRoute, 'body'> & { body: unknown }
-				>,
-				message: unknown
-			) => MaybePromise<TypedRoute['body'] | void | undefined>
-		>
+		parse?: MaybeArray<WSParseHandler<TypedRoute>>
 
 		/**
 		 * Transform context's value

@@ -1,4 +1,4 @@
-import { randomId } from '../utils'
+import { isNumericString, randomId } from '../utils'
 
 import type {
 	ServerWebSocket,
@@ -10,9 +10,9 @@ import type {
 import type { TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '../type-system'
 
+import type { FlattenResponse, WSParseHandler } from './types'
 import type { Prettify, RouteSchema } from '../types'
 import { ValidationError } from '../error'
-import { FlattenResponse } from './types'
 
 export const websocket: WebSocketHandler<any> = {
 	open(ws) {
@@ -42,7 +42,10 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		validator: Prettify<Route>
 	}
 
-	id: string
+	get id() {
+		// @ts-ignore
+		return this.data.id
+	}
 
 	constructor(
 		public raw: ServerWebSocket<{
@@ -53,9 +56,6 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		public body: Route['body'] = undefined
 	) {
 		this.validator = raw.data?.validator
-
-		if (raw.data.id) this.id = raw.data.id
-		else this.id = randomId().toString()
 
 		this.sendText = raw.sendText.bind(this)
 		this.sendBinary = raw.sendBinary.bind(this)
@@ -188,3 +188,86 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 		return this.raw.readyState
 	}
 }
+
+export const createWSMessageParser = (parsers: WSParseHandler<any>[]) =>
+	async function parseMessage(ws: ServerWebSocket<any>, message: any) {
+		if (typeof message === 'string') {
+			const start = message?.charCodeAt(0)
+
+			if (start === 47 || start === 123)
+				try {
+					message = JSON.parse(message)
+				} catch {
+					// Not empty
+				}
+			else if (isNumericString(message)) message = +message
+		}
+
+		if (parsers)
+			for (let i = 0; i < parsers.length; i++) {
+				let temp = parsers[i](ws as any, message)
+				if (temp instanceof Promise) temp = await temp
+
+				if (temp !== undefined) return temp
+			}
+
+		return message
+	}
+
+export const createHandleWSResponse = (
+	validateResponse: TypeCheck<any> | undefined
+) => {
+	const handleWSResponse = (ws: ServerWebSocket, data: unknown): unknown => {
+		if (data instanceof Promise)
+			return data.then((data) => handleWSResponse(ws, data))
+
+		if (Buffer.isBuffer(data)) return ws.send(data)
+
+		if (data === undefined) return
+
+		const send = (ws: ServerWebSocket, datum: unknown) => {
+			console.log({
+				send: datum
+			})
+
+			if (validateResponse?.Check(datum) === false)
+				return ws.send(
+					new ValidationError('message', validateResponse, datum)
+						.message
+				)
+
+			if (typeof datum === 'object') return ws.send(JSON.stringify(datum))
+
+			ws.send(datum)
+		}
+
+		if (typeof (data as Generator)?.next !== 'function')
+			return handleWSResponse
+
+		const init = (data as Generator | AsyncGenerator).next()
+
+		if (init instanceof Promise)
+			return (async () => {
+				const first = await init
+
+				if (validateResponse?.Check(first) === false)
+					return ws.send(
+						new ValidationError('message', validateResponse, first)
+							.message
+					)
+
+				send(ws, first.value as any)
+
+				if (!first.done)
+					for await (const datum of data as Generator) send(ws, datum)
+			})()
+
+		send(ws, init.value)
+
+		if (!init.done) for (const datum of data as Generator) send(ws, datum)
+	}
+
+	return handleWSResponse
+}
+
+export type { WSLocalHook } from './types'

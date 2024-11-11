@@ -29,6 +29,7 @@ import type {
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
+import { platform } from 'benchmark'
 
 export const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -1491,7 +1492,15 @@ export const form = <const T extends Record<string | number, unknown>>(
 	return formData as any
 }
 
-export const randomId = () => crypto.getRandomValues(new Uint32Array(1))[0]
+export const randomId = () => {
+	const values = crypto.getRandomValues(new Uint32Array(2))
+
+	let randomHex = ''
+	for (let i = 0; i < values.length; i++)
+		randomHex += values[i].toString(16).padStart(8, '0')
+
+	return randomHex
+}
 
 // ! Deduplicate current instance
 export const deduplicateChecksum = <T extends Function>(
