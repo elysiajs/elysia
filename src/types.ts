@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Elysia, AnyElysia } from '.'
-import type { BunFile, Serve, Server, WebSocketHandler } from 'bun'
+import type { BunFile, Serve, Server } from 'bun'
 
 import type {
 	TSchema,
@@ -31,6 +31,7 @@ import type { ComposerGeneralHandlerOptions } from './compose'
 
 import type { ElysiaAdapter } from './adapter'
 import type { WSLocalHook } from './ws/types'
+import type { WebSocketHandler } from './ws/bun'
 
 type PartialServe = Partial<Serve>
 

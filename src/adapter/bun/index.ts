@@ -118,8 +118,6 @@ export const BunAdapter: ElysiaAdapter = {
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		const { parse, body, response, ...rest } = options
 
-		const parsers = typeof parse === 'function' ? [parse] : parse
-
 		const validateMessage = getSchemaValidator(body, {
 			// @ts-expect-error private property
 			models: app.definitions.type as Record<string, TSchema>,
@@ -173,7 +171,7 @@ export const BunAdapter: ElysiaAdapter = {
 					) as any
 
 				const handleResponse = createHandleWSResponse(validateResponse)
-				const parseMessage = createWSMessageParser(parsers)
+				const parseMessage = createWSMessageParser(parse)
 
 				let _id: string | undefined
 

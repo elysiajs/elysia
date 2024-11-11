@@ -5,17 +5,13 @@ new Elysia()
 	.decorate('a', 'a')
 	.state('b', 'b')
 	.ws('/', {
-		parse(ws, body) {
-			if (typeof body === 'number') return { id: body }
-		},
-		resolve: () => ({
-			requestId: ~~(Math.random() * 1000000)
-		}),
-		open({ subscribe, id }) {
-			subscribe('a')
-		},
-		message: function* ({ body: { id }, data: { requestId }, send, id: reId }) {
-			yield { id: requestId }
+		// parse(ws, body) {
+		// 	if (typeof body === 'number') return { id: body }
+		// },
+		message({ send, body }) {
+			// console.log({ body })
+
+			send(1)
 		},
 		body: t.Object({
 			id: t.Number()

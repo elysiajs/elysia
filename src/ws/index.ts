@@ -11,7 +11,7 @@ import type { TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '../type-system'
 
 import type { FlattenResponse, WSParseHandler } from './types'
-import type { Prettify, RouteSchema } from '../types'
+import type { MaybeArray, Prettify, RouteSchema } from '../types'
 import { ValidationError } from '../error'
 
 export const websocket: WebSocketHandler<any> = {
@@ -95,7 +95,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 			return this.raw.send(data as unknown as BufferSource, compress)
 
 		if (this.validator?.Check(data) === false)
-			throw new ValidationError('message', this.validator, data)
+			return this.raw.send(
+				new ValidationError('message', this.validator, data).message
+			)
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
 
@@ -114,7 +116,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 			return this.raw.ping(data as unknown as BufferSource)
 
 		if (this.validator?.Check(data) === false)
-			throw new ValidationError('message', this.validator, data)
+			return this.raw.send(
+				new ValidationError('message', this.validator, data).message
+			)
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
 
@@ -133,7 +137,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 			return this.raw.pong(data as unknown as BufferSource)
 
 		if (this.validator?.Check(data) === false)
-			throw new ValidationError('message', this.validator, data)
+			return this.raw.send(
+				new ValidationError('message', this.validator, data).message
+			)
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
 
@@ -164,7 +170,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 			)
 
 		if (this.validator?.Check(data) === false)
-			throw new ValidationError('message', this.validator, data)
+			return this.raw.send(
+				new ValidationError('message', this.validator, data).message
+			)
 
 		if (typeof data === 'object') data = JSON.stringify(data) as any
 
@@ -189,8 +197,12 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 	}
 }
 
-export const createWSMessageParser = (parsers: WSParseHandler<any>[]) =>
-	async function parseMessage(ws: ServerWebSocket<any>, message: any) {
+export const createWSMessageParser = (
+	parse: MaybeArray<WSParseHandler<any>>
+) => {
+	const parsers = typeof parse === 'function' ? [parse] : parse
+
+	return async function parseMessage(ws: ServerWebSocket<any>, message: any) {
 		if (typeof message === 'string') {
 			const start = message?.charCodeAt(0)
 
@@ -213,11 +225,15 @@ export const createWSMessageParser = (parsers: WSParseHandler<any>[]) =>
 
 		return message
 	}
+}
 
 export const createHandleWSResponse = (
 	validateResponse: TypeCheck<any> | undefined
 ) => {
-	const handleWSResponse = (ws: ServerWebSocket, data: unknown): unknown => {
+	const handleWSResponse = (
+		ws: ServerWebSocket<any>,
+		data: unknown
+	): unknown => {
 		if (data instanceof Promise)
 			return data.then((data) => handleWSResponse(ws, data))
 
@@ -225,11 +241,7 @@ export const createHandleWSResponse = (
 
 		if (data === undefined) return
 
-		const send = (ws: ServerWebSocket, datum: unknown) => {
-			console.log({
-				send: datum
-			})
-
+		const send = (datum: unknown) => {
 			if (validateResponse?.Check(datum) === false)
 				return ws.send(
 					new ValidationError('message', validateResponse, datum)
@@ -242,7 +254,7 @@ export const createHandleWSResponse = (
 		}
 
 		if (typeof (data as Generator)?.next !== 'function')
-			return handleWSResponse
+			return void send(data)
 
 		const init = (data as Generator | AsyncGenerator).next()
 
@@ -256,15 +268,15 @@ export const createHandleWSResponse = (
 							.message
 					)
 
-				send(ws, first.value as any)
+				send(first.value as any)
 
 				if (!first.done)
-					for await (const datum of data as Generator) send(ws, datum)
+					for await (const datum of data as Generator) send(datum)
 			})()
 
-		send(ws, init.value)
+		send(init.value)
 
-		if (!init.done) for (const datum of data as Generator) send(ws, datum)
+		if (!init.done) for (const datum of data as Generator) send(datum)
 	}
 
 	return handleWSResponse
