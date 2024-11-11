@@ -1,4 +1,4 @@
-import type { ElysiaWebSocket } from './index'
+import type { ElysiaWS } from './index'
 import { WebSocketHandler } from './bun'
 
 import type { Context } from '../context'
@@ -11,7 +11,6 @@ import {
 	ErrorHandler,
 	InputSchema,
 	Isolate,
-	LocalHook,
 	MapResponse,
 	MaybeArray,
 	MaybePromise,
@@ -39,10 +38,10 @@ export type FlattenResponse<Response extends RouteSchema['response']> =
 type TypedWebSocketHandler<Context, Route extends RouteSchema = {}> = Prettify<
 	Omit<WebSocketHandler<Context>, TypedWebSocketMethod> & {
 		open?(
-			ws: ElysiaWebSocket<Context, Omit<Route, 'body'> & { body: never }>
+			ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
 		): MaybePromise<FlattenResponse<Route['response']> | void>
 		message?(
-			ws: ElysiaWebSocket<Context, Route>,
+			ws: ElysiaWS<Context, Route>,
 			message: Route['body']
 		): MaybePromise<
 			| FlattenResponse<Route['response']>
@@ -57,7 +56,7 @@ type TypedWebSocketHandler<Context, Route extends RouteSchema = {}> = Prettify<
 			  >
 		>
 		drain?(
-			ws: ElysiaWebSocket<Context, Omit<Route, 'body'> & { body: never }>
+			ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
 		): MaybePromise<
 			| FlattenResponse<Route['response']>
 			| void
@@ -71,7 +70,7 @@ type TypedWebSocketHandler<Context, Route extends RouteSchema = {}> = Prettify<
 			  >
 		>
 		close?(
-			ws: ElysiaWebSocket<Context, Omit<Route, 'body'> & { body: never }>,
+			ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>,
 			code: number,
 			reason: string
 		): MaybePromise<
@@ -156,7 +155,7 @@ export type WSLocalHook<
 		upgrade?: Record<string, unknown> | ((context: Context) => unknown)
 		parse?: MaybeArray<
 			(
-				ws: ElysiaWebSocket<
+				ws: ElysiaWS<
 					Context,
 					Omit<TypedRoute, 'body'> & { body: unknown }
 				>,

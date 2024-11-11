@@ -9,6 +9,7 @@ import type { ElysiaAdapter } from '../types'
 import { createNativeStaticHandler } from './handler'
 import { serializeCookie } from '../../cookies'
 import { isProduction, ValidationError } from '../../error'
+import type { TypeCheck } from '../../type-system'
 import {
 	getSchemaValidator,
 	hasHeaderShorthand,
@@ -16,7 +17,7 @@ import {
 	isNumericString
 } from '../../utils'
 
-import { ElysiaWebSocket, websocket } from '../../ws/index'
+import { ElysiaWS, websocket } from '../../ws/index'
 import type { ServerWebSocket } from '../../ws/bun'
 
 export const BunAdapter: ElysiaAdapter = {
@@ -190,105 +191,7 @@ export const BunAdapter: ElysiaAdapter = {
 						set.headers['set-cookie']
 					) as any
 
-				const handleResponse = (
-					ws: ServerWebSocket,
-					data: unknown
-				): unknown => {
-					if (data instanceof Promise)
-						return data.then((data) => handleResponse(ws, data))
-
-					if (Buffer.isBuffer(data)) return ws.send(data)
-
-					if (data === undefined) return
-
-					// @ts-ignore Generator function
-					if (typeof data?.next === 'function') {
-						// @ts-ignore Generator function
-						const init = data.next()
-						if (init instanceof Promise)
-							return (async () => {
-								const data = await init
-
-								if (validateResponse?.Check(data) === false)
-									return ws.send(
-										new ValidationError(
-											'message',
-											validateResponse,
-											data
-										).message
-									)
-
-								// @ts-ignore Generator function
-								if (typeof data.data === 'object')
-									// @ts-ignore Generator function
-									ws.send(JSON.stringify(data.data)) as any
-								// @ts-ignore Generator function
-								else ws.send(data.data as any)
-
-								// @ts-ignore Generator function
-								if (!data.done)
-									// @ts-ignore
-									for await (const datum of data) {
-										if (
-											validateResponse?.Check(datum) ===
-											false
-										)
-											return ws.send(
-												new ValidationError(
-													'message',
-													validateResponse,
-													datum
-												).message
-											)
-
-										if (typeof datum === 'object')
-											return ws.send(
-												JSON.stringify(datum)
-											) as any
-
-										ws.send(datum as any)
-									}
-							})()
-
-						if (typeof init.value === 'object')
-							ws.send(JSON.stringify(init.value)) as any
-						else ws.send(init.value)
-
-						if (!init.done)
-							// @ts-ignore
-							for (const datum of data) {
-								if (validateResponse?.Check(datum) === false)
-									return ws.send(
-										new ValidationError(
-											'message',
-											validateResponse,
-											datum
-										).message
-									)
-
-								if (typeof datum === 'object')
-									return ws.send(JSON.stringify(datum)) as any
-
-								ws.send(datum as any)
-							}
-
-						return
-					}
-
-					if (validateResponse?.Check(data) === false)
-						return ws.send(
-							new ValidationError(
-								'message',
-								validateResponse,
-								data
-							).message
-						)
-
-					if (typeof data === 'object')
-						return ws.send(JSON.stringify(data)) as any
-
-					if (response !== undefined) return ws.send(response)
-				}
+				const handleResponse = createHandleWSResponse(validateResponse)
 
 				if (
 					server?.upgrade<any>(context.request, {
@@ -308,7 +211,7 @@ export const BunAdapter: ElysiaAdapter = {
 								handleResponse(
 									ws,
 									options.open?.(
-										new ElysiaWebSocket(ws, context as any)
+										new ElysiaWS(ws, context as any)
 									)
 								)
 							},
@@ -330,7 +233,7 @@ export const BunAdapter: ElysiaAdapter = {
 								handleResponse(
 									ws,
 									options.message?.(
-										new ElysiaWebSocket(
+										new ElysiaWS(
 											ws,
 											context as any,
 											message
@@ -343,7 +246,7 @@ export const BunAdapter: ElysiaAdapter = {
 								handleResponse(
 									ws,
 									options.drain?.(
-										new ElysiaWebSocket(ws, context as any)
+										new ElysiaWS(ws, context as any)
 									)
 								)
 							},
@@ -355,7 +258,7 @@ export const BunAdapter: ElysiaAdapter = {
 								handleResponse(
 									ws,
 									options.close?.(
-										new ElysiaWebSocket(ws, context as any),
+										new ElysiaWS(ws, context as any),
 										code,
 										reason
 									)
@@ -375,4 +278,80 @@ export const BunAdapter: ElysiaAdapter = {
 			} as any
 		)
 	}
+}
+
+const createHandleWSResponse = (
+	validateResponse: TypeCheck<any> | undefined
+) => {
+	const handleWSResponse = (ws: ServerWebSocket, data: unknown): unknown => {
+		if (data instanceof Promise)
+			return data.then((data) => handleWSResponse(ws, data))
+
+		if (Buffer.isBuffer(data)) return ws.send(data)
+
+		if (data === undefined) return
+
+		const send = (ws: ServerWebSocket, datum: unknown) => {
+			if (validateResponse?.Check(datum) === false)
+				return ws.send(
+					new ValidationError('message', validateResponse, datum)
+						.message
+				)
+
+			if (typeof datum === 'object') return ws.send(JSON.stringify(datum))
+
+			ws.send(datum)
+		}
+
+		if (typeof (data as Generator)?.next === 'function') {
+			const init = (data as Generator | AsyncGenerator).next()
+
+			if (init instanceof Promise)
+				return (async () => {
+					const first = await init
+
+					if (validateResponse?.Check(first) === false)
+						return ws.send(
+							new ValidationError(
+								'message',
+								validateResponse,
+								first
+							).message
+						)
+
+					if (typeof first.value === 'object')
+						ws.send(JSON.stringify(first.value)) as any
+					else ws.send(first.value as any)
+
+					if (!first.done)
+						for await (const datum of data as Generator)
+							send(ws, datum)
+				})()
+
+			if (typeof init.value === 'object')
+				ws.send(JSON.stringify(init.value))
+			else ws.send(init.value)
+
+			if (!init.done)
+				for (const datum of data as Generator) {
+					send(ws, datum)
+
+					return
+				}
+
+			if (validateResponse?.Check(data) === false)
+				return ws.send(
+					new ValidationError('message', validateResponse, data)
+						.message
+				)
+
+			if (typeof data === 'object') return ws.send(JSON.stringify(data))
+
+			if (data !== undefined) return ws.send(data as any)
+		}
+
+		return handleWSResponse
+	}
+
+	return handleWSResponse
 }

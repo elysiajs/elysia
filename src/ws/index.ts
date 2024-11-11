@@ -34,7 +34,7 @@ type ElysiaServerWebSocket = Omit<
 	'send' | 'ping' | 'pong' | 'publish'
 >
 
-export class ElysiaWebSocket<Context = unknown, Route extends RouteSchema = {}>
+export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 	implements ElysiaServerWebSocket
 {
 	validator?: TypeCheck<TSchema>;

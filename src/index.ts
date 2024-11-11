@@ -47,7 +47,6 @@ import {
 	asHookType,
 	traceBackMacro,
 	replaceUrlPath,
-	isNumericString,
 	createMacroManager,
 	getCookieValidator
 } from './utils'
