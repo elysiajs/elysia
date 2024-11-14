@@ -460,7 +460,7 @@ export const createDynamicErrorHandler =
 		return new Response(
 			typeof error.cause === 'string' ? error.cause : error.message,
 			{
-				headers: context.set.headers,
+				headers: context.set.headers as any,
 				status: error.status ?? 500
 			}
 		)
