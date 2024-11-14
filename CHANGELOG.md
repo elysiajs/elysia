@@ -1,3 +1,11 @@
+# 1.1.25 - 14 Nov 2024
+Bug fix:
+- [#908](https://github.com/elysiajs/elysia/pull/908) boolean-string converted to string
+- [#905](https://github.com/elysiajs/elysia/pull/905) avoid response normailization side effects
+
+Change:
+- don't minify identifiers in bun bundle
+
 # 1.1.24 - 31 Oct 2024
 Security:
 - [#891](https://github.com/elysiajs/elysia/pull/891) Upgrade Cookie to 0.7.x to fix CVE-2024-47764

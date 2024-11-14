@@ -1,5 +1,10 @@
 import type { BunFile } from 'bun'
-import { Kind, TransformKind, type TSchema } from '@sinclair/typebox'
+import {
+	Kind,
+	TAnySchema,
+	TransformKind,
+	type TSchema
+} from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
@@ -534,6 +539,21 @@ const _replaceSchemaType = (
 	return schema
 }
 
+const createCleaner = (schema: TAnySchema) => (value: unknown) => {
+	if (typeof value === 'object')
+		try {
+			return Value.Clean(schema, structuredClone(value))
+		} catch {
+			try {
+				return Value.Clean(schema, value)
+			} catch {
+				return value
+			}
+		}
+
+	return value
+}
+
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	s: T,
 	{
@@ -583,15 +603,9 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		}
 	}
 
-	// console.dir(schema, {
-	// 	depth: null
-	// })
-
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
-
-	const cleaner = (value: unknown) => Value.Clean(schema, value)
 
 	if (dynamic) {
 		const validator = {
@@ -609,7 +623,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 		if (normalize && schema.additionalProperties === false)
 			// @ts-ignore
-			validator.Clean = cleaner
+			validator.Clean = createCleaner(schema)
 
 		// @ts-ignore
 		if (schema.config) {
@@ -715,7 +729,18 @@ export const getResponseSchemaValidator = (
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		const cleaner = (value: unknown) => {
-			return Value.Clean(schema, structuredClone(value))
+			if (typeof value === 'object')
+				try {
+					return Value.Clean(schema, structuredClone(value))
+				} catch {
+					try {
+						return Value.Clean(schema, value)
+					} catch {
+						return value
+					}
+				}
+
+			return value
 		}
 
 		if (dynamic)
@@ -735,7 +760,7 @@ export const getResponseSchemaValidator = (
 
 		if (normalize && schema.additionalProperties === false)
 			// @ts-ignore
-			compiledValidator.Clean = cleaner
+			compiledValidator.Clean = createCleaner(schema)
 
 		return compiledValidator
 	}
