@@ -616,7 +616,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
 			Code: () => '',
-			Clean: cleaner,
+			Clean: createCleaner(schema),
 			Decode: (value: unknown) => Value.Decode(schema, value),
 			Encode: (value: unknown) => Value.Encode(schema, value)
 		} as unknown as TypeCheck<TSchema>
@@ -728,21 +728,6 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
-		const cleaner = (value: unknown) => {
-			if (typeof value === 'object')
-				try {
-					return Value.Clean(schema, structuredClone(value))
-				} catch {
-					try {
-						return Value.Clean(schema, value)
-					} catch {
-						return value
-					}
-				}
-
-			return value
-		}
-
 		if (dynamic)
 			return {
 				schema,
@@ -752,6 +737,7 @@ export const getResponseSchemaValidator = (
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
 				Code: () => '',
+				Clean: createCleaner(schema),
 				Decode: (value: unknown) => Value.Decode(schema, value),
 				Encode: (value: unknown) => Value.Encode(schema, value)
 			} as unknown as TypeCheck<TSchema>
