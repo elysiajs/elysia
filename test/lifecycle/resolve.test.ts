@@ -210,14 +210,19 @@ describe('resolve', () => {
 	})
 
 	it('handle error', async () => {
-		const app = new Elysia()
+		const route = new Elysia()
 			.resolve(() => {
 				return error(418)
 			})
 			.get('/', () => '')
 
-		const res = await app.handle(req('/')).then((x) => x.text())
+		const res = await (new Elysia({aot: true})).use(route).handle(req('/'))
+		expect(await res.status).toEqual(418)
+		expect(await res.text()).toEqual("I'm a teapot")
 
-		expect(res).toEqual("I'm a teapot")
+		const res2 = await (new Elysia({aot: false})).use(route).handle(req('/'))
+		expect(await res2.status).toEqual(418)
+		expect(await res2.text()).toEqual("I'm a teapot")
+
 	})
 })
