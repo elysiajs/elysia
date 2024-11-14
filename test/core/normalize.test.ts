@@ -432,6 +432,39 @@ describe('Normalize', () => {
 		expect(response.status).toBe(422)
 	})
 
+	it('response normalization does not mutate', async () => {
+		// Long-lived object has a `token` property
+		const service = {
+			name: 'nagisa',
+			status: 'online',
+			token: 'secret',
+		}
+
+		// ...but this property is hidden by the response schema
+		const responseSchema = t.Object({
+			name: t.String(),
+			status: t.String(),
+		})
+
+		const app = new Elysia({
+			normalize: true,
+		}).get('/test', () => service, {
+			response: responseSchema,
+		})
+
+		expect(service).toHaveProperty('token')
+		const origService = structuredClone(service)
+
+		const response = await app.handle(new Request('http://localhost/test'))
+		expect(response.body).not.toHaveProperty('token')
+
+		// Expect the `token` property to remain present after `service` object was used in a response
+		expect(service).toHaveProperty('token')
+
+		// In fact, expect the `service` to not be mutated at all
+		expect(service).toEqual(origService)
+	})
+
 	// it('normalize response with getter fields on class', async () => {
 	// 	const app = new Elysia({
 	// 		normalize: true
