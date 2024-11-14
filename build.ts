@@ -7,7 +7,7 @@ const tsupConfig: Options = {
 	sourcemap: false,
 	clean: true,
 	bundle: false,
-	minify: true
+	minify: false
 	// outExtension() {
 	// 	return {
 	// 		js: '.js'
@@ -68,7 +68,11 @@ await $`tsc --project tsconfig.dts.json`
 await Bun.build({
 	entrypoints: ['./src/index.ts'],
 	outdir: './dist/bun',
-	minify: true,
+	minify: {
+		whitespace: true,
+		syntax: true,
+		identifiers: false
+	},
 	target: 'bun',
 	sourcemap: 'external',
 	external: [

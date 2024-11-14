@@ -1,5 +1,10 @@
 import type { BunFile } from 'bun'
-import { Kind, TransformKind, type TSchema } from '@sinclair/typebox'
+import {
+	Kind,
+	TAnySchema,
+	TransformKind,
+	type TSchema
+} from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
@@ -549,6 +554,21 @@ const _replaceSchemaType = (
 	return schema
 }
 
+const createCleaner = (schema: TAnySchema) => (value: unknown) => {
+	if (typeof value === 'object')
+		try {
+			return Value.Clean(schema, structuredClone(value))
+		} catch {
+			try {
+				return Value.Clean(schema, value)
+			} catch {
+				return value
+			}
+		}
+
+	return value
+}
+
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	s: T,
 	{
@@ -598,15 +618,9 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		}
 	}
 
-	// console.dir(schema, {
-	// 	depth: null
-	// })
-
 	// @ts-ignore
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
 		schema.additionalProperties = additionalProperties
-
-	const cleaner = (value: unknown) => Value.Clean(schema, value)
 
 	if (dynamic) {
 		const validator = {
@@ -617,14 +631,14 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			Check: (value: unknown) => Value.Check(schema, value),
 			Errors: (value: unknown) => Value.Errors(schema, value),
 			Code: () => '',
-			Clean: cleaner,
+			Clean: createCleaner(schema),
 			Decode: (value: unknown) => Value.Decode(schema, value),
 			Encode: (value: unknown) => Value.Encode(schema, value)
 		} as unknown as TypeCheck<TSchema>
 
 		if (normalize && schema.additionalProperties === false)
 			// @ts-ignore
-			validator.Clean = cleaner
+			validator.Clean = createCleaner(schema)
 
 		// @ts-ignore
 		if (schema.config) {
@@ -729,16 +743,6 @@ export const getResponseSchemaValidator = (
 	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
-		const cleaner = (value: unknown) => {
-			if (!value || typeof value !== 'object')
-				return Value.Clean(schema, value)
-
-			if (Array.isArray(value)) value = Value.Clean(schema, value)
-			else value = Value.Clean(schema, value)
-
-			return value
-		}
-
 		if (dynamic)
 			return {
 				schema,
@@ -748,6 +752,7 @@ export const getResponseSchemaValidator = (
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
 				Code: () => '',
+				Clean: createCleaner(schema),
 				Decode: (value: unknown) => Value.Decode(schema, value),
 				Encode: (value: unknown) => Value.Encode(schema, value)
 			} as unknown as TypeCheck<TSchema>
@@ -756,7 +761,7 @@ export const getResponseSchemaValidator = (
 
 		if (normalize && schema.additionalProperties === false)
 			// @ts-ignore
-			compiledValidator.Clean = cleaner
+			compiledValidator.Clean = createCleaner(schema)
 
 		return compiledValidator
 	}
