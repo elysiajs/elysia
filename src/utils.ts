@@ -682,7 +682,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	const compiled = TypeCompiler.Compile(schema, Object.values(models))
 
 	// @ts-expect-error
-	compiled.Clean = cleaner
+	compiled.Clean = createCleaner(schema)
 
 	// @ts-ignore
 	if (schema.config) {
