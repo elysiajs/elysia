@@ -20,4 +20,4 @@ const a = new Elysia()
 	})
 	.listen(3000)
 
-a._routes.index.get.response
+a._routes.index.get.response[422].
