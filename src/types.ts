@@ -617,8 +617,8 @@ export type InlineHandler<
 									>
 								}
 									? key
-									: never]: ResolveResolutions<
-									// @ts-expect-error type is checked in key mapping
+									: never]: // @ts-expect-error type is checked in key mapping
+								ResolveResolutions<
 									// @ts-expect-error type is checked in key mapping
 									ReturnType<MacroFn[key]>['resolve']
 								>[key]
@@ -1455,15 +1455,19 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 			({} extends Schema['response']
 				? {}
 				: Omit<Schema['response'], 200>) &
-			(EmptyRouteSchema extends Schema ? {} : { 422: {
-				type: 'validation'
-				on: string
-				summary?: string
-				message?: string
-				found?: unknown
-				property?: string
-				expected?: string
-			} })
+			(EmptyRouteSchema extends Schema
+				? {}
+				: {
+						422: {
+							type: 'validation'
+							on: string
+							summary?: string
+							message?: string
+							found?: unknown
+							property?: string
+							expected?: string
+						}
+					})
 	>
 >
 

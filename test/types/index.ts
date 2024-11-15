@@ -612,6 +612,15 @@ app.use(plugin).group(
 		params: Record<never, string>
 		response: {
 			200: number
+			422: {
+				type: 'validation'
+				on: string
+				summary?: string
+				message?: string
+				found?: unknown
+				property?: string
+				expected?: string
+			}
 		}
 	}>()
 }
@@ -1208,6 +1217,15 @@ const a = app
 	expectTypeOf<app['index']['post']['response']>().toEqualTypeOf<{
 		200: string
 		readonly 201: string
+		422: {
+			type: 'validation'
+			on: string
+			summary?: string
+			message?: string
+			found?: unknown
+			property?: string
+			expected?: string
+		}
 	}>()
 
 	expectTypeOf<app['true']['get']['response']>().toEqualTypeOf<{
@@ -1217,6 +1235,15 @@ const a = app
 	expectTypeOf<app['true']['post']['response']>().toEqualTypeOf<{
 		200: boolean
 		readonly 202: boolean
+		422: {
+			type: 'validation'
+			on: string
+			summary?: string
+			message?: string
+			found?: unknown
+			property?: string
+			expected?: string
+		}
 	}>()
 
 	expectTypeOf<app['error']['get']['response']>().toEqualTypeOf<{
