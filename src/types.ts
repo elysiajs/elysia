@@ -34,6 +34,7 @@ import type { ComposerGeneralHandlerOptions } from './compose'
 import type { ElysiaAdapter } from './adapter'
 import type { WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
+import { TypeRegistryValidationFunction } from '@sinclair/typebox/build/cjs/type/registry/type'
 
 type PartialServe = Partial<Serve>
 
@@ -616,8 +617,8 @@ export type InlineHandler<
 									>
 								}
 									? key
-									: never]: // @ts-expect-error type is checked in key mapping
-								ResolveResolutions<
+									: never]: ResolveResolutions<
+									// @ts-expect-error type is checked in key mapping
 									// @ts-expect-error type is checked in key mapping
 									ReturnType<MacroFn[key]>['resolve']
 								>[key]
@@ -1430,18 +1431,39 @@ export type CreateEden<
 		? _CreateEden<'index', Property>
 		: _CreateEden<Path, Property>
 
-export type ComposeElysiaResponse<Response, Handle> = Handle extends (
-	...a: any[]
-) => infer A
-	? _ComposeElysiaResponse<Response, Replace<Awaited<A>, BunFile, File>>
-	: _ComposeElysiaResponse<Response, Replace<Awaited<Handle>, BunFile, File>>
+export type ComposeElysiaResponse<
+	Schema extends RouteSchema,
+	Handle
+> = Handle extends (...a: any[]) => infer A
+	? _ComposeElysiaResponse<Schema, Replace<Awaited<A>, BunFile, File>>
+	: _ComposeElysiaResponse<Schema, Replace<Awaited<Handle>, BunFile, File>>
 
-type _ComposeElysiaResponse<Response, Handle> = Prettify<
+export type EmptyRouteSchema = {
+	body: unknown
+	headers: unknown
+	query: unknown
+	params: unknown
+	cookie: unknown
+	response: {}
+}
+
+type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 	Prettify<
 		{
 			200: Exclude<Handle, ElysiaCustomStatusResponse<any, any, any>>
 		} & ExtractErrorFromHandle<Handle> &
-			({} extends Response ? {} : Omit<Response, 200>)
+			({} extends Schema['response']
+				? {}
+				: Omit<Schema['response'], 200>) &
+			(EmptyRouteSchema extends Schema ? {} : { 422: {
+				type: 'validation'
+				on: string
+				summary?: string
+				message?: string
+				found?: unknown
+				property?: string
+				expected?: string
+			} })
 	>
 >
 

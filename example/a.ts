@@ -6,6 +6,18 @@ const a = new Elysia()
 			a: t.Ref('a')
 		}),
 	})
-	.get('/', ({ body: { a: { a: { a } } } }) => a, {
-		body: 'a'
+	.model((model) => ({
+		...model,
+		b: t.Object({
+			a: model.a,
+			b: t.Ref('b')
+		})
+	}))
+	.get('/', () => 'a', {
+		query: t.Object({
+			a: t.String()
+		})
 	})
+	.listen(3000)
+
+a._routes.index.get.response

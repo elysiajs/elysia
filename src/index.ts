@@ -3859,7 +3859,7 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema['response'],
+							Schema,
 							Handle
 						>
 					}
