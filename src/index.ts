@@ -432,7 +432,9 @@ export default class Elysia<
 	}
 
 	get models(): {
-		[K in keyof Definitions['typebox']]: ModelValidator<UnwrapTypeModule<Definitions['typebox']>[K]>
+		[K in keyof Definitions['typebox']]: ModelValidator<
+			UnwrapTypeModule<Definitions['typebox']>[K]
+		>
 	} & {
 		modules: Definitions['typebox']
 	} {
@@ -3320,10 +3322,18 @@ export default class Elysia<
 						if (plugin instanceof Elysia)
 							return this._use(plugin).compile()
 
+						if (plugin.constructor.name === 'Elysia')
+							return this._use(
+								plugin as unknown as Elysia
+							).compile()
+
 						if (typeof plugin.default === 'function')
 							return plugin.default(this)
 
 						if (plugin.default instanceof Elysia)
+							return this._use(plugin.default)
+
+						if (plugin.constructor.name === 'Elysia')
 							return this._use(plugin.default)
 
 						throw new Error(

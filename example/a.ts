@@ -1,6 +1,6 @@
 import { Elysia, t } from '../src'
 
-new Elysia()
+const a = new Elysia()
 	.model({
 		a: t.Object({
 			a: t.Ref('a')
