@@ -10,7 +10,9 @@ import type {
 	TNull,
 	TUndefined,
 	StaticDecode,
-	OptionalKind
+	OptionalKind,
+	TModule,
+	Union
 } from '@sinclair/typebox'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
@@ -203,7 +205,9 @@ export type Prettify<T> = {
 } & {}
 
 export type Prettify2<T> = {
-	[K in keyof T]: T extends object ? Prettify<T[K]> : T[K]
+	[K in keyof T]: T extends Record<string | number | symbol, unknown>
+		? Prettify<T[K]>
+		: T[K]
 } & {}
 
 export type Partial2<T> = {
@@ -305,6 +309,7 @@ export interface EphemeralType {
 }
 
 export interface DefinitionBase {
+	typebox: TModule<any>
 	type: Record<string, unknown>
 	error: Record<string, Error>
 }
@@ -603,17 +608,24 @@ export type InlineHandler<
 			context: {} extends SelectedMacro
 				? Context<Route, Singleton, Path>
 				: Prettify<
-						Context<Route, Singleton, Path> &
-							(MacroFn[keyof SelectedMacro] extends infer Fn extends
-								(...v: any[]) => {
-									resolve: MaybeArray<
-										(
-											...v: any
-										) => Record<keyof any, unknown>
-									>
-								}
-								? ResolveResolutions<ReturnType<Fn>['resolve']>
-								: { a: 'a' })
+						Context<
+							Route,
+							Singleton & {
+								decorator: MacroFn[keyof SelectedMacro] extends infer Fn extends
+									(...v: any[]) => {
+										resolve: MaybeArray<
+											(
+												...v: any
+											) => Record<keyof any, unknown>
+										>
+									}
+									? ResolveResolutions<
+											ReturnType<Fn>['resolve']
+										>
+									: {}
+							},
+							Path
+						>
 					>
 	  ) =>
 			| Response
@@ -1455,6 +1467,7 @@ export type MergeElysiaInstances<
 		resolve: {}
 	},
 	Definitions extends DefinitionBase = {
+		typebox: TModule<{}>
 		type: {}
 		error: {}
 	},
@@ -1790,3 +1803,7 @@ export type JoinPath<
 	A extends string,
 	B extends string
 > = `${A}${B extends '/' ? '/index' : B extends '' ? B : B extends `/${string}` ? B : B}`
+
+export type UnwrapTypeModule<Module extends TModule<any>> = ReturnType<
+	Module['Defs']
+>['$defs']

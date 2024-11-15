@@ -179,10 +179,10 @@ export type Context<
 			: Route['response'][keyof Route['response']]
 	} & ({} extends Route['response']
 		? {
-				error: typeof error
+				[k in 'error' | 'status']: typeof error
 			}
 		: {
-				error: <
+				[k in 'error' | 'status']: <
 					const Code extends
 						| keyof Route['response']
 						| InvertedStatusMap[Extract<

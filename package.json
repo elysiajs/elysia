@@ -143,7 +143,7 @@
 		"release": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {
-		"@sinclair/typebox": "^0.33.12",
+		"@sinclair/typebox": "^0.34.0",
 		"cookie": "^1.0.1",
 		"elysia": "1.2.0-exp.29",
 		"fast-decode-uri-component": "^1.0.1",

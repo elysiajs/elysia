@@ -1,7 +1,13 @@
 import type { Serve, Server } from 'bun'
 
 import { Memoirist } from 'memoirist'
-import { type TObject, type Static, type TSchema } from '@sinclair/typebox'
+import {
+	type TObject,
+	type Static,
+	type TSchema,
+	TModule,
+	TImport
+} from '@sinclair/typebox'
 
 import type { Context } from './context'
 
@@ -126,7 +132,8 @@ import type {
 	MergeElysiaInstances,
 	HookMacroFn,
 	ResolveHandler,
-	ResolveResolutions
+	ResolveResolutions,
+	UnwrapTypeModule
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -154,6 +161,7 @@ export default class Elysia<
 		resolve: {}
 	},
 	const in out Definitions extends DefinitionBase = {
+		typebox: TModule<{}>
 		type: {}
 		error: {}
 	},
@@ -209,6 +217,7 @@ export default class Elysia<
 	}
 
 	protected definitions = {
+		typebox: t.Module({}),
 		type: {} as Record<string, TSchema>,
 		error: {} as Record<string, Error>
 	}
@@ -430,10 +439,9 @@ export default class Elysia<
 	}
 
 	get models(): {
-		[K in keyof Definitions['type']]: ModelValidator<
-			// @ts-ignore Trust me bro
-			Definitions['type'][K]
-		>
+		[K in keyof Definitions['type']]: ModelValidator<Definitions['type'][K]>
+	} & {
+		modules: Definitions['typebox']
 	} {
 		const models: Record<string, TypeCheck<TSchema>> = {}
 
@@ -441,6 +449,9 @@ export default class Elysia<
 			models[name] = getSchemaValidator(
 				schema as any
 			) as TypeCheck<TSchema>
+
+		// @ts-expect-error
+		models.modules = this.definitions.typebox
 
 		return models as any
 	}
@@ -1949,6 +1960,7 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
+			typebox: Definitions['typebox']
 			type: Definitions['type']
 			error: Definitions['error'] & {
 				[K in keyof Errors]: Errors[K] extends {
@@ -1994,6 +2006,7 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
+			typebox: Definitions['typebox']
 			type: Definitions['type']
 			error: Definitions['error'] & {
 				[name in Name]: CustomError extends {
@@ -2031,6 +2044,7 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
+			typebox: Definitions['typebox']
 			type: Definitions['type']
 			error: {
 				[K in keyof NewErrors]: NewErrors[K] extends {
@@ -5504,6 +5518,11 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
+			typebox: TModule<
+				UnwrapTypeModule<Definitions['typebox']> & {
+					[name in Name]: Model
+				}
+			>
 			type: Prettify<
 				Definitions['type'] & { [name in Name]: Static<Model> }
 			>
@@ -5521,6 +5540,9 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
+			typebox: TModule<
+				UnwrapTypeModule<Definitions['typebox']> & Recorder
+			>
 			type: Prettify<
 				Definitions['type'] & {
 					[key in keyof Recorder]: Static<Recorder[key]>
@@ -5535,15 +5557,20 @@ export default class Elysia<
 	>
 
 	model<const NewType extends Record<string, TSchema>>(
-		mapper: (decorators: {
-			[type in keyof Definitions['type']]: ReturnType<
-				typeof t.Unsafe<Definitions['type'][type]>
-			>
-		}) => NewType
+		mapper: (
+			decorators: UnwrapTypeModule<
+				Definitions['typebox']
+			> extends infer Models extends Record<string, TSchema>
+				? {
+						[type in keyof Models]: TImport<Models, type>
+					}
+				: {}
+		) => NewType
 	): Elysia<
 		BasePath,
 		Singleton,
 		{
+			typebox: TModule<NewType>
 			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
 		},
@@ -5560,16 +5587,26 @@ export default class Elysia<
 					if (!(key in this.definitions.type))
 						this.definitions.type[key] = value as TSchema
 				})
+				this.definitions.typebox = t.Module({
+					...this.definitions.typebox.Defs(),
+					...name
+				} as any)
 
 				return this
 
 			case 'function':
-				this.definitions.type = name(this.definitions.type)
+				const result = name(this.definitions.type)
+				this.definitions.type = result
+				this.definitions.typebox = t.Module(result)
 
 				return this as any
 		}
 
 		;(this.definitions.type as Record<string, TSchema>)[name] = model!
+		this.definitions.typebox = t.Module({
+			...this.definitions.typebox.Defs(),
+			[name]: model!
+		} as any)
 
 		return this as any
 	}
@@ -5749,6 +5786,28 @@ export default class Elysia<
 				: Singleton['resolve']
 		},
 		{
+			typebox: Type extends 'model' | 'all'
+				? 'prefix' extends Base
+					? Word extends `${string}${'_' | '-' | ' '}`
+						? TModule<
+								AddPrefix<
+									Word,
+									UnwrapTypeModule<Definitions['typebox']>
+								>
+							>
+						: TModule<
+								AddPrefixCapitalize<
+									Word,
+									UnwrapTypeModule<Definitions['typebox']>
+								>
+							>
+					: TModule<
+							AddSuffixCapitalize<
+								Word,
+								UnwrapTypeModule<Definitions['typebox']>
+							>
+						>
+				: Definitions['typebox']
 			type: Type extends 'model' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`

@@ -1,9 +1,19 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-new Elysia()
+const app = new Elysia()
+	.model({
+		a: t.String()
+	})
+	.model((model) => ({
+		...model,
+		b: t.Object({
+			string: model.a
+		})
+	}))
 	.macro({
 		user: (enabled: boolean) => ({
-			resolve: ({ query: { name } }) => ({
+			resolve: ({ query: { name = 'anon' } }) => ({
 				user: {
 					name
 				}
@@ -13,3 +23,5 @@ new Elysia()
 	.get('/', ({ user }) => user, {
 		user: true
 	})
+
+app.handle(req('/')).then(x => x.json()).then(console.log)

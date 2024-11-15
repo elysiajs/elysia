@@ -1209,12 +1209,12 @@ export const traceBackMacro = (
 		if (typeof v === 'function') {
 			const hook = v(value)
 
-			if (typeof hook === 'object')
-				// @ts-expect-error
-				for (const [k, v] of Object.values(hook))
-					manage(k)({
+			if (typeof hook === 'object') {
+				for (const [k, v] of Object.entries(hook))
+					manage(k as keyof LifeCycleStore)({
 						fn: v as any
 					})
+			}
 
 			delete property[key as unknown as keyof typeof extension]
 		}
