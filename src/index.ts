@@ -1,12 +1,12 @@
 import type { Serve, Server } from 'bun'
 
 import { Memoirist } from 'memoirist'
-import {
-	type TObject,
-	type Static,
-	type TSchema,
+import type {
+	TObject,
+	Static,
+	TSchema,
 	TModule,
-	TImport
+	TRef,
 } from '@sinclair/typebox'
 
 import type { Context } from './context'
@@ -2568,7 +2568,7 @@ export default class Elysia<
 			Extract<keyof Definitions['type'], string>
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['type']>,
+			UnwrapRoute<Input, Definitions['typebox']>,
 			Metadata['schema']
 		>,
 		const Resolutions extends MaybeArray<
@@ -2753,7 +2753,7 @@ export default class Elysia<
 			Extract<keyof Definitions['type'], string>
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			Metadata['schema']
 		>,
 		const Type extends LifeCycleType,
@@ -2800,7 +2800,7 @@ export default class Elysia<
 				{
 					schema: Prettify<
 						MergeSchema<
-							UnwrapRoute<LocalSchema, Definitions['type']>,
+							UnwrapRoute<LocalSchema, Definitions['typebox']>,
 							Metadata['schema']
 						>
 					>
@@ -2824,7 +2824,10 @@ export default class Elysia<
 							ResolveResolutions<Resolutions>
 						schema: Prettify<
 							MergeSchema<
-								UnwrapRoute<LocalSchema, Definitions['type']>,
+								UnwrapRoute<
+									LocalSchema,
+									Definitions['typebox']
+								>,
 								Metadata['schema'] & Ephemeral['schema']
 							>
 						>
@@ -2844,7 +2847,10 @@ export default class Elysia<
 							ResolveResolutions<Resolutions>
 						schema: Prettify<
 							MergeSchema<
-								UnwrapRoute<LocalSchema, Definitions['type']>,
+								UnwrapRoute<
+									LocalSchema,
+									Definitions['typebox']
+								>,
 								Metadata['schema'] &
 									Ephemeral['schema'] &
 									Volatile['schema']
@@ -2858,7 +2864,7 @@ export default class Elysia<
 			Extract<keyof Definitions['type'], string>
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			Metadata['schema']
 		>,
 		const Resolutions extends MaybeArray<
@@ -2904,7 +2910,7 @@ export default class Elysia<
 			>
 			schema: Prettify<
 				MergeSchema<
-					UnwrapRoute<LocalSchema, Definitions['type']>,
+					UnwrapRoute<LocalSchema, Definitions['typebox']>,
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -2920,7 +2926,7 @@ export default class Elysia<
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			Metadata['schema']
 		>
 	>(
@@ -2955,7 +2961,7 @@ export default class Elysia<
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			Metadata['schema']
 		>,
 		const Resolutions extends MaybeArray<
@@ -3792,7 +3798,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -3890,7 +3896,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -3986,7 +3992,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4082,7 +4088,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4178,7 +4184,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4274,7 +4280,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4370,7 +4376,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4466,7 +4472,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4562,7 +4568,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4659,7 +4665,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4761,7 +4767,7 @@ export default class Elysia<
 			keyof Definitions['type'] & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox']>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -5562,7 +5568,8 @@ export default class Elysia<
 				Definitions['typebox']
 			> extends infer Models extends Record<string, TSchema>
 				? {
-						[type in keyof Models]: TImport<Models, type>
+						[type in keyof Models]: TRef<// @ts-expect-error type is always string
+						type>
 					}
 				: {}
 		) => NewType
@@ -5570,7 +5577,11 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
-			typebox: TModule<NewType>
+			typebox: TModule<{
+				[key in keyof NewType]: NewType[key] extends TRef<key & string>
+					? UnwrapTypeModule<Definitions['typebox']>[key]
+					: NewType[key]
+			}>
 			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
 		},

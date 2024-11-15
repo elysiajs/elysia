@@ -12,7 +12,7 @@ import type {
 	StaticDecode,
 	OptionalKind,
 	TModule,
-	Union
+	TImport
 } from '@sinclair/typebox'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
@@ -337,7 +337,7 @@ type OptionalField = {
 
 export type UnwrapSchema<
 	Schema extends TSchema | string | undefined,
-	Definitions extends Record<string, unknown> = {}
+	Definitions extends DefinitionBase['typebox'] = TModule<{}>
 > = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
@@ -345,14 +345,12 @@ export type UnwrapSchema<
 			? Prettify<Partial<Static<Schema>>>
 			: StaticDecode<Schema>
 		: Schema extends string
-			? Definitions extends Record<Schema, infer NamedSchema>
-				? NamedSchema
-				: Definitions
+			? StaticDecode<TImport<UnwrapTypeModule<Definitions>, Schema>>
 			: unknown
 
 export type UnwrapBodySchema<
 	Schema extends TSchema | string | undefined,
-	Definitions extends Record<string, unknown> = {}
+	Definitions extends DefinitionBase['typebox'] = TModule<{}>
 > = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
@@ -360,14 +358,12 @@ export type UnwrapBodySchema<
 			? Prettify<Partial<Static<Schema>>> | null
 			: StaticDecode<Schema>
 		: Schema extends string
-			? Definitions extends Record<Schema, infer NamedSchema>
-				? NamedSchema
-				: Definitions
+			? StaticDecode<TImport<UnwrapTypeModule<Definitions>, Schema>>
 			: unknown
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
-	in out Definitions extends DefinitionBase['type'] = {}
+	in out Definitions extends DefinitionBase['typebox'] = TModule<{}>
 > {
 	body: UnwrapBodySchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<Schema['headers'], Definitions>
@@ -395,7 +391,7 @@ export interface UnwrapRoute<
 
 export interface UnwrapGroupGuardRoute<
 	in out Schema extends InputSchema<any>,
-	in out Definitions extends Record<string, unknown> = {},
+	Definitions extends DefinitionBase['typebox'] = TModule<{}>,
 	Path extends string | undefined = undefined
 > {
 	body: UnwrapBodySchema<Schema['body'], Definitions>
@@ -607,25 +603,28 @@ export type InlineHandler<
 	| ((
 			context: {} extends SelectedMacro
 				? Context<Route, Singleton, Path>
-				: Prettify<
-						Context<
-							Route,
-							Singleton & {
-								decorator: MacroFn[keyof SelectedMacro] extends infer Fn extends
-									(...v: any[]) => {
-										resolve: MaybeArray<
-											(
-												...v: any
-											) => Record<keyof any, unknown>
-										>
-									}
-									? ResolveResolutions<
-											ReturnType<Fn>['resolve']
-										>
-									: {}
-							},
-							Path
-						>
+				: Context<
+						Route,
+						Singleton & {
+							decorator: {
+								[key in keyof SelectedMacro as MacroFn[key] extends (
+									...v: any[]
+								) => {
+									resolve: MaybeArray<
+										(
+											...v: any
+										) => Record<keyof any, unknown>
+									>
+								}
+									? key
+									: never]: // @ts-expect-error type is checked in key mapping
+								ResolveResolutions<
+									// @ts-expect-error type is checked in key mapping
+									ReturnType<MacroFn[key]>['resolve']
+								>[key]
+							}
+						},
+						Path
 					>
 	  ) =>
 			| Response
