@@ -3605,7 +3605,7 @@ export default class Elysia<
 		Definitions,
 		{
 			schema: Metadata['schema']
-			macro: Metadata['macro'] & Partial<MacroToProperty<HookMacroFn>>
+			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
 			macroFn: Metadata['macroFn'] & NewMacro
 		},
 		Routes,
@@ -6084,7 +6084,7 @@ export type {
 	CoExist
 } from './types'
 
-export { file } from './universal/file'
+export { file, ElysiaFile } from './universal/file'
 export type { ElysiaAdapter } from './adapter'
 
 export { TypeSystemPolicy } from '@sinclair/typebox/system'

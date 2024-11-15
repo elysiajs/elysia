@@ -1498,13 +1498,8 @@ export const form = <const T extends Record<string | number, unknown>>(
 }
 
 export const randomId = () => {
-	const values = crypto.getRandomValues(new Uint32Array(2))
-
-	let randomHex = ''
-	for (let i = 0; i < values.length; i++)
-		randomHex += values[i].toString(16).padStart(8, '0')
-
-	return randomHex
+	const uuid = crypto.randomUUID()
+	return uuid.slice(0, 8) + uuid.slice(24, 32)
 }
 
 // ! Deduplicate current instance

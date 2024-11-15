@@ -605,19 +605,15 @@ export type InlineHandler<
 				: Prettify<
 						Context<Route, Singleton, Path> &
 							(MacroFn[keyof SelectedMacro] extends infer Fn extends
-								(
-									...v: any[]
-								) => Record<
-									string,
-									(...v: any[]) => Record<keyof any, unknown>
-								>
-								? ReturnType<Fn> extends {
-										derive: infer Derive extends
-											() => Record<keyof any, unknown>
-									}
-									? ReturnType<Derive>
-									: {}
-								: {})
+								(...v: any[]) => {
+									resolve: MaybeArray<
+										(
+											...v: any
+										) => Record<keyof any, unknown>
+									>
+								}
+								? ResolveResolutions<ReturnType<Fn>['resolve']>
+								: { a: 'a' })
 					>
 	  ) =>
 			| Response
@@ -1011,9 +1007,7 @@ export type ResolveDerivativesArray<
 		: ResolveDerivativesArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type ResolveResolutions<
-	T extends MaybeArray<ResolveHandler<any, any>> | undefined
-> =
+export type ResolveResolutions<T extends MaybeArray<Function> | undefined> =
 	IsNever<keyof T> extends true
 		? any[] extends T
 			? {}
@@ -1321,6 +1315,7 @@ export type HookMacroFn<
 		afterResponse?(
 			fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 		): unknown
+		resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
 	}
 >
 
