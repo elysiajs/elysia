@@ -1,13 +1,7 @@
 import type { Serve, Server } from 'bun'
 
 import { Memoirist } from 'memoirist'
-import type {
-	TObject,
-	Static,
-	TSchema,
-	TModule,
-	TRef,
-} from '@sinclair/typebox'
+import type { TObject, Static, TSchema, TModule, TRef } from '@sinclair/typebox'
 
 import type { Context } from './context'
 
@@ -162,7 +156,6 @@ export default class Elysia<
 	},
 	const in out Definitions extends DefinitionBase = {
 		typebox: TModule<{}>
-		type: {}
 		error: {}
 	},
 	const in out Metadata extends MetadataBase = {
@@ -439,7 +432,7 @@ export default class Elysia<
 	}
 
 	get models(): {
-		[K in keyof Definitions['type']]: ModelValidator<Definitions['type'][K]>
+		[K in keyof Definitions['typebox']]: ModelValidator<UnwrapTypeModule<Definitions['typebox']>[K]>
 	} & {
 		modules: Definitions['typebox']
 	} {
@@ -1961,7 +1954,6 @@ export default class Elysia<
 		Singleton,
 		{
 			typebox: Definitions['typebox']
-			type: Definitions['type']
 			error: Definitions['error'] & {
 				[K in keyof Errors]: Errors[K] extends {
 					prototype: infer LiteralError extends Error
@@ -2007,7 +1999,6 @@ export default class Elysia<
 		Singleton,
 		{
 			typebox: Definitions['typebox']
-			type: Definitions['type']
 			error: Definitions['error'] & {
 				[name in Name]: CustomError extends {
 					prototype: infer LiteralError extends Error
@@ -2045,7 +2036,6 @@ export default class Elysia<
 		Singleton,
 		{
 			typebox: Definitions['typebox']
-			type: Definitions['type']
 			error: {
 				[K in keyof NewErrors]: NewErrors[K] extends {
 					prototype: infer LiteralError extends Error
@@ -2565,7 +2555,7 @@ export default class Elysia<
 		const Prefix extends string,
 		const NewElysia extends AnyElysia,
 		const Input extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<Input, Definitions['typebox']>,
@@ -2750,7 +2740,7 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -2861,7 +2851,7 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -2922,7 +2912,7 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
@@ -2957,7 +2947,7 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
@@ -3542,7 +3532,6 @@ export default class Elysia<
 							routes: plugin.router.history,
 							decorators: plugin.singleton,
 							store: plugin.singleton.store,
-							type: plugin.definitions.type,
 							error: plugin.definitions.error,
 							derive: plugin.event.transform
 								.filter((x) => x?.subType === 'derive')
@@ -3795,7 +3784,7 @@ export default class Elysia<
 	get<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -3893,7 +3882,7 @@ export default class Elysia<
 	post<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -3989,7 +3978,7 @@ export default class Elysia<
 	put<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -4085,7 +4074,7 @@ export default class Elysia<
 	patch<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -4181,7 +4170,7 @@ export default class Elysia<
 	delete<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -4277,7 +4266,7 @@ export default class Elysia<
 	options<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -4373,7 +4362,7 @@ export default class Elysia<
 	all<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -4469,7 +4458,7 @@ export default class Elysia<
 	head<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -4565,7 +4554,7 @@ export default class Elysia<
 	connect<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -4662,7 +4651,7 @@ export default class Elysia<
 		const Method extends HTTPMethod,
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -4764,7 +4753,7 @@ export default class Elysia<
 	ws<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox']>,
@@ -5529,9 +5518,6 @@ export default class Elysia<
 					[name in Name]: Model
 				}
 			>
-			type: Prettify<
-				Definitions['type'] & { [name in Name]: Static<Model> }
-			>
 			error: Definitions['error']
 		},
 		Metadata,
@@ -5548,11 +5534,6 @@ export default class Elysia<
 		{
 			typebox: TModule<
 				UnwrapTypeModule<Definitions['typebox']> & Recorder
-			>
-			type: Prettify<
-				Definitions['type'] & {
-					[key in keyof Recorder]: Static<Recorder[key]>
-				}
 			>
 			error: Definitions['error']
 		},
@@ -5819,13 +5800,6 @@ export default class Elysia<
 							>
 						>
 				: Definitions['typebox']
-			type: Type extends 'model' | 'all'
-				? 'prefix' extends Base
-					? Word extends `${string}${'_' | '-' | ' '}`
-						? AddPrefix<Word, Definitions['type']>
-						: AddPrefixCapitalize<Word, Definitions['type']>
-					: AddSuffixCapitalize<Word, Definitions['type']>
-				: Definitions['type']
 			error: Type extends 'error' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`

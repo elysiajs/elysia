@@ -310,7 +310,6 @@ export interface EphemeralType {
 
 export interface DefinitionBase {
 	typebox: TModule<any>
-	type: Record<string, unknown>
 	error: Record<string, Error>
 }
 
@@ -1210,7 +1209,6 @@ export type Checksum = {
 	routes?: InternalRoute[]
 	decorators?: SingletonBase['decorator']
 	store?: SingletonBase['store']
-	type?: DefinitionBase['type']
 	error?: DefinitionBase['error']
 	dependencies?: Record<string, Checksum[]>
 	derive?: {
