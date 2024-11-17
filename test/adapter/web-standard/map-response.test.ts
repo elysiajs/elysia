@@ -3,7 +3,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../../src'
 
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
-import { form } from '../../../src/utils'
+import { form, redirect } from '../../../src/utils'
 import { Passthrough } from './utils'
 import { req } from '../../utils'
 
@@ -286,7 +286,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map redirect', async () => {
-		const response = mapResponse('Shiroko', {
+		const response = mapResponse(redirect('https://cunny.school', 302), {
 			status: "I'm a teapot",
 			headers: {
 				Name: 'Sorasaki Hina'
@@ -297,7 +297,7 @@ describe('Web Standard - Map Response', () => {
 
 		expect(response).toBeInstanceOf(Response)
 		expect(response.status).toBe(302)
-		expect(await response.text()).toEqual('Shiroko')
+		// expect(await response.text()).toEqual('Shiroko')
 		expect(response.headers.toJSON()).toEqual({
 			name: 'Sorasaki Hina',
 			location: 'https://cunny.school'

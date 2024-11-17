@@ -1,4 +1,4 @@
-import { isNumericString, randomId } from '../utils'
+import { isNumericString } from '../utils'
 
 import type {
 	ServerWebSocket,
@@ -57,12 +57,12 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 	) {
 		this.validator = raw.data?.validator
 
-		this.sendText = raw.sendText.bind(this)
-		this.sendBinary = raw.sendBinary.bind(this)
-		this.close = raw.close.bind(this)
-		this.terminate = raw.terminate.bind(this)
-		this.publishText = raw.publishText.bind(this)
-		this.publishBinary = raw.publishBinary.bind(this)
+		this.sendText = raw.sendText.bind(raw)
+		this.sendBinary = raw.sendBinary.bind(raw)
+		this.close = raw.close.bind(raw)
+		this.terminate = raw.terminate.bind(raw)
+		this.publishText = raw.publishText.bind(raw)
+		this.publishBinary = raw.publishBinary.bind(raw)
 		this.subscribe = raw.subscribe.bind(raw)
 		this.unsubscribe = raw.unsubscribe.bind(raw)
 		this.isSubscribed = raw.isSubscribed.bind(raw)

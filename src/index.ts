@@ -1,4 +1,4 @@
-import type { Serve, Server } from 'bun'
+import type { Serve, Server } from './universal/server'
 
 import { Memoirist } from 'memoirist'
 import type { TObject, Static, TSchema, TModule, TRef } from '@sinclair/typebox'

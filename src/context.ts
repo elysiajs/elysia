@@ -139,8 +139,6 @@ export type Context<
 			/**
 			 * @deprecated Use inline redirect instead
 			 *
-			 * Will be removed in 1.2.0
-			 *
 			 * @example Migration example
 			 * ```ts
 			 * new Elysia()
@@ -179,10 +177,10 @@ export type Context<
 			: Route['response'][keyof Route['response']]
 	} & ({} extends Route['response']
 		? {
-				[k in 'error' | 'status']: typeof error
+				error: typeof error
 			}
 		: {
-				[k in 'error' | 'status']: <
+				error: <
 					const Code extends
 						| keyof Route['response']
 						| InvertedStatusMap[Extract<

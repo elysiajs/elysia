@@ -560,6 +560,8 @@ export type Handler<
 		: Route['response'][keyof Route['response']]
 >
 
+export type IsAny<T> = 0 extends 1 & T ? true : false
+
 export type Replace<Original, Target, With> =
 	IsAny<Target> extends true
 		? Original
@@ -572,8 +574,6 @@ export type Replace<Original, Target, With> =
 			: Original extends Target
 				? With
 				: Original
-
-type IsAny<T> = 0 extends 1 & T ? true : false
 
 export type CoExist<Original, Target, With> =
 	IsAny<Target> extends true

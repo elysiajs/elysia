@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 
 import { mapEarlyResponse } from '../../../src/adapter/web-standard/handler'
-import { form } from '../../../src/utils'
+import { form, redirect } from '../../../src/utils'
 import { Passthrough } from './utils'
 
 const defaultContext = {
@@ -241,7 +241,7 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map redirect', async () => {
-		const response = mapEarlyResponse('Shiroko', {
+		const response = mapEarlyResponse(redirect('https://cunny.school'), {
 			status: "I'm a teapot",
 			cookie: {},
 			headers: {
@@ -250,7 +250,7 @@ describe('Web Standard - Map Early Response', () => {
 			redirect: 'https://cunny.school'
 		})
 		expect(response).toBeInstanceOf(Response)
-		expect(await response?.text()).toEqual('Shiroko')
+		// expect(await response?.text()).toEqual('Shiroko')
 		expect(response?.headers.toJSON()).toEqual({
 			name: 'Sorasaki Hina',
 			location: 'https://cunny.school'

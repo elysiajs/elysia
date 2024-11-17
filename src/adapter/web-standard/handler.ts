@@ -197,12 +197,6 @@ export async function* streamResponse(response: Response) {
 export const handleSet = (set: Context['set']) => {
 	if (typeof set.status === 'string') set.status = StatusMap[set.status]
 
-	if (set.redirect) {
-		set.headers.Location = set.redirect
-		if (!set.status || set.status < 300 || set.status >= 400)
-			set.status = 302
-	}
-
 	if (set.cookie && isNotEmpty(set.cookie)) {
 		const cookie = serializeCookie(set.cookie)
 
@@ -217,7 +211,7 @@ export const handleSet = (set: Context['set']) => {
 	}
 }
 
-const mergeResponseWithSetHeaders = (
+export const mergeResponseWithSetHeaders = (
 	response: Response,
 	set: Context['set']
 ) => {
@@ -247,12 +241,7 @@ export const mapResponse = (
 	set: Context['set'],
 	abortSignal?: AbortSignal
 ): Response => {
-	if (
-		isNotEmpty(set.headers) ||
-		set.status !== 200 ||
-		set.redirect ||
-		set.cookie
-	) {
+	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
 		handleSet(set)
 
 		switch (response?.constructor?.name) {
@@ -418,8 +407,14 @@ export const mapResponse = (
 	}
 
 	// Stream response defers a 'set' API, assume that it may include 'set'
-	// @ts-expect-error
-	if (typeof response?.next === 'function')
+	if (
+		// @ts-expect-error
+		typeof response?.next === 'function' ||
+		response instanceof ReadableStream ||
+		(response instanceof Response &&
+			(response as Response).headers.get('transfer-encoding') ===
+				'chunked')
+	)
 		// @ts-expect-error
 		return handleStream(response as any, set, abortSignal)
 
@@ -433,12 +428,7 @@ export const mapEarlyResponse = (
 ): Response | undefined => {
 	if (response === undefined || response === null) return
 
-	if (
-		isNotEmpty(set.headers) ||
-		set.status !== 200 ||
-		set.redirect ||
-		set.cookie
-	) {
+	if (isNotEmpty(set.headers) || set.status !== 200 || set.cookie) {
 		handleSet(set)
 
 		switch (response?.constructor?.name) {
@@ -510,10 +500,9 @@ export const mapEarlyResponse = (
 
 			case 'Promise':
 				// @ts-ignore
-				return (response as Promise<unknown>).then((x) => {
-					const r = mapEarlyResponse(x, set)
-					if (r !== undefined) return r
-				})
+				return (response as Promise<unknown>).then((x) =>
+					mapEarlyResponse(x, set)
+				)
 
 			case 'Error':
 				return errorToResponse(response as Error, set)
