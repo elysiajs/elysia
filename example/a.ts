@@ -13,10 +13,8 @@ const a = new Elysia()
 			b: t.Ref('b')
 		})
 	}))
-	.get('/', () => 'a', {
-		query: t.Object({
-			a: t.String()
-		})
+	.get('/', ({ body }) => 'a', {
+		body: 'b'
 	})
 	.listen(3000)
 

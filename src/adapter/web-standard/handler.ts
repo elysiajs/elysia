@@ -194,6 +194,54 @@ export async function* streamResponse(response: Response) {
 	}
 }
 
+export const handleSet = (set: Context['set']) => {
+	if (typeof set.status === 'string') set.status = StatusMap[set.status]
+
+	if (set.redirect) {
+		set.headers.Location = set.redirect
+		if (!set.status || set.status < 300 || set.status >= 400)
+			set.status = 302
+	}
+
+	if (set.cookie && isNotEmpty(set.cookie)) {
+		const cookie = serializeCookie(set.cookie)
+
+		if (cookie) set.headers['set-cookie'] = cookie
+	}
+
+	if (set.headers['set-cookie'] && Array.isArray(set.headers['set-cookie'])) {
+		set.headers = parseSetCookies(
+			new Headers(set.headers as any) as Headers,
+			set.headers['set-cookie']
+		) as any
+	}
+}
+
+const mergeResponseWithSetHeaders = (
+	response: Response,
+	set: Context['set']
+) => {
+	let isCookieSet = false
+
+	if (set.headers instanceof Headers)
+		for (const key of set.headers.keys()) {
+			if (key === 'set-cookie') {
+				if (isCookieSet) continue
+
+				isCookieSet = true
+
+				for (const cookie of set.headers.getSetCookie())
+					response.headers.append('set-cookie', cookie)
+			} else response.headers.append(key, set.headers?.get(key) ?? '')
+		}
+	else
+		for (const key in set.headers)
+			(response as Response).headers.append(key, set.headers[key] as any)
+
+	if ((response as Response).status !== set.status)
+		set.status = (response as Response).status
+}
+
 export const mapResponse = (
 	response: unknown,
 	set: Context['set'],
@@ -205,29 +253,7 @@ export const mapResponse = (
 		set.redirect ||
 		set.cookie
 	) {
-		if (typeof set.status === 'string') set.status = StatusMap[set.status]
-
-		if (set.redirect) {
-			set.headers.Location = set.redirect
-			if (!set.status || set.status < 300 || set.status >= 400)
-				set.status = 302
-		}
-
-		if (set.cookie && isNotEmpty(set.cookie)) {
-			const cookie = serializeCookie(set.cookie)
-
-			if (cookie) set.headers['set-cookie'] = cookie
-		}
-
-		if (
-			set.headers['set-cookie'] &&
-			Array.isArray(set.headers['set-cookie'])
-		) {
-			set.headers = parseSetCookies(
-				new Headers(set.headers as any) as Headers,
-				set.headers['set-cookie']
-			) as any
-		}
+		handleSet(set)
 
 		switch (response?.constructor?.name) {
 			case 'String':
@@ -282,36 +308,7 @@ export const mapResponse = (
 				return Response.json(response, set as any)
 
 			case 'Response':
-				let isCookieSet = false
-
-				if (set.headers instanceof Headers)
-					for (const key of set.headers.keys()) {
-						if (key === 'set-cookie') {
-							if (isCookieSet) continue
-
-							isCookieSet = true
-
-							for (const cookie of set.headers.getSetCookie()) {
-								;(response as Response).headers.append(
-									'set-cookie',
-									cookie
-								)
-							}
-						} else
-							(response as Response).headers.append(
-								key,
-								set.headers?.get(key) ?? ''
-							)
-					}
-				else
-					for (const key in set.headers)
-						(response as Response).headers.append(
-							key,
-							set.headers[key] as any
-						)
-
-				if ((response as Response).status !== set.status)
-					set.status = (response as Response).status
+				mergeResponseWithSetHeaders(response as Response, set)
 
 				if (
 					(response as Response).headers.get('transfer-encoding') ===
@@ -354,43 +351,18 @@ export const mapResponse = (
 
 			default:
 				if (response instanceof Response) {
-					let isCookieSet = false
+					mergeResponseWithSetHeaders(response as Response, set)
 
-					if (set.headers instanceof Headers)
-						for (const key of set.headers.keys()) {
-							if (key === 'set-cookie') {
-								if (isCookieSet) continue
-
-								isCookieSet = true
-
-								for (const cookie of set.headers.getSetCookie()) {
-									;(response as Response).headers.append(
-										'set-cookie',
-										cookie
-									)
-								}
-							} else
-								(response as Response).headers.append(
-									key,
-									set.headers?.get(key) ?? ''
-								)
-						}
-					else
-						for (const key in set.headers)
-							(response as Response).headers.append(
-								key,
-								set.headers[key] as any
-							)
-
-					if (hasHeaderShorthand)
-						set.headers = (
-							(response as Response).headers as Headers
-						).toJSON()
-					else
-						for (const [key, value] of (
-							response as Response
-						).headers.entries())
-							if (key in set.headers) set.headers[key] = value
+					if (
+						(response as Response).headers.get(
+							'transfer-encoding'
+						) === 'chunked'
+					)
+						return handleStream(
+							streamResponse(response as Response),
+							set,
+							abortSignal
+						) as any
 
 					return response as Response
 				}
@@ -443,153 +415,15 @@ export const mapResponse = (
 
 				return new Response(response as any, set as any)
 		}
-	} else
-		switch (response?.constructor?.name) {
-			case 'String':
-				return new Response(response as string)
+	}
 
-			case 'Array':
-			case 'Object':
-				return Response.json(response, set as any)
+	// Stream response defers a 'set' API, assume that it may include 'set'
+	// @ts-expect-error
+	if (typeof response?.next === 'function')
+		// @ts-expect-error
+		return handleStream(response as any, set, abortSignal)
 
-			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File)
-
-			case 'Blob':
-				return handleFile(response as Blob, set)
-
-			case 'ElysiaCustomStatusResponse':
-				set.status = (response as ElysiaCustomStatusResponse<200>).code
-
-				return mapResponse(
-					(response as ElysiaCustomStatusResponse<200>).response,
-					set,
-					abortSignal
-				)
-
-			case 'ReadableStream':
-				abortSignal?.addEventListener(
-					'abort',
-					{
-						handleEvent() {
-							if (!abortSignal?.aborted)
-								(response as ReadableStream).cancel()
-						}
-					},
-					{
-						once: true
-					}
-				)
-
-				return new Response(response as ReadableStream, {
-					headers: {
-						'Content-Type': 'text/event-stream; charset=utf-8'
-					}
-				})
-
-			case undefined:
-				if (!response) return new Response('')
-
-				return new Response(JSON.stringify(response), {
-					headers: {
-						'content-type': 'application/json'
-					}
-				})
-
-			case 'Response':
-				if (
-					(response as Response).headers.get('transfer-encoding') ===
-					'chunked'
-				)
-					return handleStream(
-						streamResponse(response as Response),
-						set,
-						abortSignal
-					) as any
-
-				return response as Response
-
-			case 'Error':
-				return errorToResponse(response as Error, set)
-
-			case 'Promise':
-				// @ts-ignore
-				return (response as any as Promise<unknown>).then((x) => {
-					const r = mapCompactResponse(x, abortSignal)
-
-					if (r !== undefined) return r
-
-					return new Response('')
-				})
-
-			// ? Maybe response or Blob
-			case 'Function':
-				return mapCompactResponse((response as Function)(), abortSignal)
-
-			case 'Number':
-			case 'Boolean':
-				return new Response((response as number | boolean).toString())
-
-			case 'Cookie':
-				if (response instanceof Cookie)
-					return new Response(response.value, set as any)
-
-				return new Response(response?.toString(), set as any)
-
-			case 'FormData':
-				return new Response(response as FormData, set as any)
-
-			default:
-				if (response instanceof Response) return response
-
-				if (response instanceof Promise)
-					return response.then((x) => mapResponse(x, set)) as any
-
-				if (response instanceof Error)
-					return errorToResponse(response as Error, set)
-
-				if (response instanceof ElysiaCustomStatusResponse) {
-					set.status = (
-						response as ElysiaCustomStatusResponse<200>
-					).code
-
-					return mapResponse(
-						(response as ElysiaCustomStatusResponse<200>).response,
-						set,
-						abortSignal
-					)
-				}
-
-				// @ts-expect-error
-				if (typeof response?.next === 'function')
-					// @ts-expect-error
-					return handleStream(response as any, set, abortSignal)
-
-				// @ts-expect-error
-				if (typeof response?.then === 'function')
-					// @ts-expect-error
-					return response.then((x) => mapResponse(x, set)) as any
-
-				// @ts-expect-error
-				if (typeof response?.toResponse === 'function')
-					return mapResponse((response as any).toResponse(), set)
-
-				if ('charCodeAt' in (response as any)) {
-					const code = (response as any).charCodeAt(0)
-
-					if (code === 123 || code === 91) {
-						if (!set.headers['Content-Type'])
-							set.headers['Content-Type'] = 'application/json'
-
-						return new Response(
-							JSON.stringify(response),
-							set as any
-						) as any
-					}
-				}
-
-				return new Response(response as any)
-		}
+	return mapCompactResponse(response, abortSignal)
 }
 
 export const mapEarlyResponse = (
@@ -605,29 +439,7 @@ export const mapEarlyResponse = (
 		set.redirect ||
 		set.cookie
 	) {
-		if (typeof set.status === 'string') set.status = StatusMap[set.status]
-
-		if (set.redirect) {
-			set.headers.Location = set.redirect
-
-			if (!set.status || set.status < 300 || set.status >= 400)
-				set.status = 302
-		}
-
-		if (set.cookie && isNotEmpty(set.cookie)) {
-			const cookie = serializeCookie(set.cookie)
-
-			if (cookie) set.headers['set-cookie'] = cookie
-		}
-
-		if (
-			set.headers['set-cookie'] &&
-			Array.isArray(set.headers['set-cookie'])
-		)
-			set.headers = parseSetCookies(
-				new Headers(set.headers as any) as Headers,
-				set.headers['set-cookie']
-			) as any
+		handleSet(set)
 
 		switch (response?.constructor?.name) {
 			case 'String':
@@ -682,36 +494,7 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as any)
 
 			case 'Response':
-				let isCookieSet = false
-
-				if (set.headers instanceof Headers)
-					for (const key of set.headers.keys()) {
-						if (key === 'set-cookie') {
-							if (isCookieSet) continue
-
-							isCookieSet = true
-
-							for (const cookie of set.headers.getSetCookie()) {
-								;(response as Response).headers.append(
-									'set-cookie',
-									cookie
-								)
-							}
-						} else
-							(response as Response).headers.append(
-								key,
-								set.headers?.get(key) ?? ''
-							)
-					}
-				else
-					for (const key in set.headers)
-						(response as Response).headers.append(
-							key,
-							set.headers[key] as any
-						)
-
-				if ((response as Response).status !== set.status)
-					set.status = (response as Response).status
+				mergeResponseWithSetHeaders(response as Response, set)
 
 				if (
 					(response as Response).headers.get('transfer-encoding') ===
@@ -756,36 +539,18 @@ export const mapEarlyResponse = (
 
 			default:
 				if (response instanceof Response) {
-					let isCookieSet = false
+					mergeResponseWithSetHeaders(response as Response, set)
 
-					if (set.headers instanceof Headers)
-						for (const key of set.headers.keys()) {
-							if (key === 'set-cookie') {
-								if (isCookieSet) continue
-
-								isCookieSet = true
-
-								for (const cookie of set.headers.getSetCookie()) {
-									;(response as Response).headers.append(
-										'set-cookie',
-										cookie
-									)
-								}
-							} else
-								(response as Response).headers.append(
-									key,
-									set.headers?.get(key) ?? ''
-								)
-						}
-					else
-						for (const key in set.headers)
-							(response as Response).headers.append(
-								key,
-								set.headers[key] as any
-							)
-
-					if ((response as Response).status !== set.status)
-						set.status = (response as Response).status
+					if (
+						(response as Response).headers.get(
+							'transfer-encoding'
+						) === 'chunked'
+					)
+						return handleStream(
+							streamResponse(response as Response),
+							set,
+							abortSignal
+						) as any
 
 					return response as Response
 				}
