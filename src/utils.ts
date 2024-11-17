@@ -34,7 +34,6 @@ import type {
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
-import { platform } from 'benchmark'
 
 export const hasHeaderShorthand = 'toJSON' in new Headers()
 

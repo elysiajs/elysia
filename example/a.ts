@@ -1,16 +1,9 @@
 import { Elysia, redirect, t } from '../src'
 import { mapResponse } from '../src/adapter/web-standard/handler'
 
-const response = mapResponse(redirect('https://cunny.school', 302), {
-	status: "I'm a teapot",
-	headers: {
-		Name: 'Sorasaki Hina'
-	},
-	redirect: 'https://cunny.school',
-	cookie: {}
-})
+const app = new Elysia()
 
-console.log(response.headers.toJSON())
+console.log(app.definitions.typebox.Defs)
 
 // const a = new Elysia()
 // 	.model({

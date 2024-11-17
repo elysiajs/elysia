@@ -5590,7 +5590,7 @@ export default class Elysia<
 						this.definitions.type[key] = value as TSchema
 				})
 				this.definitions.typebox = t.Module({
-					...this.definitions.typebox.Defs(),
+					...this.definitions.typebox['$defs'],
 					...name
 				} as any)
 
@@ -5606,7 +5606,7 @@ export default class Elysia<
 
 		;(this.definitions.type as Record<string, TSchema>)[name] = model!
 		this.definitions.typebox = t.Module({
-			...this.definitions.typebox.Defs(),
+			...this.definitions.typebox['$defs'],
 			[name]: model!
 		} as any)
 
