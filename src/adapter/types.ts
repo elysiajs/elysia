@@ -132,6 +132,6 @@ export interface ElysiaAdapter {
 	ws?(
 		app: AnyElysia,
 		path: string,
-		handler: WSLocalHook<any, any, any, any, any, any, any>
+		handler: WSLocalHook<any, any, any, any, any>
 	): unknown
 }

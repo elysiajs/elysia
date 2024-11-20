@@ -17,7 +17,6 @@ import {
 	OptionalHandler,
 	Prettify,
 	ResolveHandler,
-	ResolvePath,
 	ResolveResolutions,
 	RouteSchema,
 	SingletonBase,
@@ -126,19 +125,7 @@ export type WSLocalHook<
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Extension extends BaseMacro,
-	Resolutions extends MaybeArray<ResolveHandler<Schema, Singleton>>,
-	Path extends string = '',
-	TypedRoute extends RouteSchema = Prettify<
-		Schema extends {
-			params: Record<string, unknown>
-		}
-			? Schema
-			: Schema & {
-					params: undefined extends Schema['params']
-						? ResolvePath<Path>
-						: Schema['params']
-				}
-	>
+	Resolutions extends MaybeArray<ResolveHandler<Schema, Singleton>>
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**
@@ -158,35 +145,21 @@ export type WSLocalHook<
 		 * Headers to register to websocket before `upgrade`
 		 */
 		upgrade?: Record<string, unknown> | ((context: Context) => unknown)
-		parse?: MaybeArray<WSParseHandler<TypedRoute>>
+		parse?: MaybeArray<WSParseHandler<Schema>>
 
 		/**
 		 * Transform context's value
 		 */
-		transform?: MaybeArray<
-			TransformHandler<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: {}
-				}
-			>
-		>
+		transform?: MaybeArray<TransformHandler<Schema, Singleton>>
 		resolve?: Resolutions
 		/**
 		 * Execute before main handler
 		 */
 		beforeHandle?: MaybeArray<
 			OptionalHandler<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+				Schema,
+				Singleton & {
+					resolve: ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -195,13 +168,9 @@ export type WSLocalHook<
 		 */
 		afterHandle?: MaybeArray<
 			AfterHandler<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+				Schema,
+				Singleton & {
+					resolve: ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -210,13 +179,9 @@ export type WSLocalHook<
 		 */
 		mapResponse?: MaybeArray<
 			MapResponse<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+				Schema,
+				Singleton & {
+					resolve: ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -225,25 +190,21 @@ export type WSLocalHook<
 		 */
 		afterResponse?: MaybeArray<
 			AfterResponseHandler<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+				Schema,
+				Singleton & {
+					resolve: ResolveResolutions<Resolutions>
 				}
 			>
 		>
 		/**
 		 * Catch error
 		 */
-		error?: MaybeArray<ErrorHandler<{}, TypedRoute, Singleton>>
+		error?: MaybeArray<ErrorHandler<{}, Schema, Singleton>>
 		tags?: DocumentDecoration['tags']
 	} & TypedWebSocketHandler<
 		Omit<
 			Context<
-				TypedRoute,
+				Schema,
 				Singleton & {
 					resolve: ResolveResolutions<Resolutions>
 				}
@@ -252,5 +213,5 @@ export type WSLocalHook<
 		> & {
 			body: never
 		},
-		TypedRoute
+		Schema
 	>

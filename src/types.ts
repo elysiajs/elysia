@@ -992,7 +992,7 @@ export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
 
 export type ResolveHandler<
 	in out Route extends RouteSchema,
-	Singleton extends SingletonBase,
+	in out Singleton extends SingletonBase,
 	in out Derivative extends Record<string, unknown> | void = Record<
 		string,
 		unknown
@@ -1047,7 +1047,7 @@ export type LocalHook<
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
 	Extension extends BaseMacro,
-	Resolutions extends MaybeArray<ResolveHandler<Schema, Singleton>>
+	Resolutions extends MaybeArray<ResolveHandler<any, any>>
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**
@@ -1121,7 +1121,6 @@ export type LocalHook<
 		 */
 		error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
 		tags?: DocumentDecoration['tags']
-		websocket?: WSLocalHook<any, any, any, any, any, any, any>
 	}
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
@@ -1133,7 +1132,7 @@ export interface InternalRoute {
 	handler: Handler
 	compile(): Function
 	hooks: LocalHook<any, any, any, any, any, any>
-	websocket?: WSLocalHook<any, any, any, any, any, any, any>
+	websocket?: WSLocalHook<any, any, any, any, any>
 }
 
 export type SchemaValidator = {
