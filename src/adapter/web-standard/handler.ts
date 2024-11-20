@@ -887,7 +887,7 @@ export const errorToResponse = (error: Error, set?: Context['set']) =>
 
 export const createStaticHandler = (
 	handle: unknown,
-	hooks: LocalHook<any, any, any, any, any, any, any>,
+	hooks: LocalHook<any, any, any, any, any, any>,
 	setHeaders: Context['set']['headers'] = {}
 ): (() => Response) | undefined => {
 	if (typeof handle === 'function') return

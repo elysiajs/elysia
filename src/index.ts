@@ -2560,7 +2560,7 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox']>,
+			UnwrapRoute<Input, Definitions['typebox'], JoinPath<BasePath, Prefix>>,
 			Metadata['schema']
 		>,
 		const Resolutions extends MaybeArray<
@@ -2583,8 +2583,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			Resolutions,
-			`${BasePath}${Prefix}`
+			Resolutions
 		>,
 		run: (
 			group: Elysia<
@@ -2686,7 +2685,6 @@ export default class Elysia<
 						any,
 						any,
 						any,
-						any,
 						any
 					>
 
@@ -2715,16 +2713,7 @@ export default class Elysia<
 						path,
 						handler,
 						mergeHook(
-							hooks as LocalHook<
-								any,
-								any,
-								any,
-								any,
-								any,
-								any,
-								any,
-								any
-							>,
+							hooks as LocalHook<any, any, any, any, any, any>,
 							{
 								error: sandbox.event.error
 							}
@@ -2745,7 +2734,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				BasePath
+			>,
 			Metadata['schema']
 		>,
 		const Type extends LifeCycleType,
@@ -2775,8 +2768,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			Resolutions,
-			BasePath
+			Resolutions
 		>
 	): Type extends 'global'
 		? Elysia<
@@ -2792,7 +2784,11 @@ export default class Elysia<
 				{
 					schema: Prettify<
 						MergeSchema<
-							UnwrapRoute<LocalSchema, Definitions['typebox']>,
+							UnwrapRoute<
+								LocalSchema,
+								Definitions['typebox'],
+								BasePath
+							>,
 							Metadata['schema']
 						>
 					>
@@ -2856,7 +2852,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				BasePath
+			>,
 			Metadata['schema']
 		>,
 		const Resolutions extends MaybeArray<
@@ -2885,8 +2885,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			Resolutions,
-			BasePath
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -2902,7 +2901,11 @@ export default class Elysia<
 			>
 			schema: Prettify<
 				MergeSchema<
-					UnwrapRoute<LocalSchema, Definitions['typebox']>,
+					UnwrapRoute<
+						LocalSchema,
+						Definitions['typebox'],
+						BasePath
+					>,
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -2918,7 +2921,11 @@ export default class Elysia<
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				BasePath
+			>,
 			Metadata['schema']
 		>
 	>(
@@ -2953,7 +2960,11 @@ export default class Elysia<
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				BasePath
+			>,
 			Metadata['schema']
 		>,
 		const Resolutions extends MaybeArray<
@@ -2982,8 +2993,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			Resolutions,
-			''
+			Resolutions
 		>,
 		run: (
 			group: Elysia<
@@ -3139,41 +3149,27 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(
-						hook as LocalHook<
-							any,
-							any,
+					mergeHook(hook as LocalHook<any, any, any, any, any, any>, {
+						...((localHook || {}) as LocalHook<
 							any,
 							any,
 							any,
 							any,
 							any,
 							any
-						>,
-						{
-							...((localHook || {}) as LocalHook<
-								any,
-								any,
-								any,
-								any,
-								any,
-								any,
-								any,
-								any
-							>),
-							error: !localHook.error
-								? sandbox.event.error
-								: Array.isArray(localHook.error)
-									? [
-											...(localHook.error || {}),
-											...(sandbox.event.error || [])
-										]
-									: [
-											localHook.error,
-											...(sandbox.event.error || [])
-										]
-						}
-					)
+						>),
+						error: !localHook.error
+							? sandbox.event.error
+							: Array.isArray(localHook.error)
+								? [
+										...(localHook.error || {}),
+										...(sandbox.event.error || [])
+									]
+								: [
+										localHook.error,
+										...(sandbox.event.error || [])
+									]
+					})
 				)
 			}
 		)
@@ -3382,8 +3378,6 @@ export default class Elysia<
 										handler,
 										mergeHook(
 											hooks as LocalHook<
-												any,
-												any,
 												any,
 												any,
 												any,
@@ -3797,7 +3791,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -3839,8 +3837,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -3858,10 +3855,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -3895,7 +3889,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -3935,8 +3933,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -3954,10 +3951,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -3991,7 +3985,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4031,8 +4029,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -4050,10 +4047,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4087,7 +4081,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4127,8 +4125,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -4146,10 +4143,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4183,7 +4177,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4223,8 +4221,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -4242,10 +4239,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4279,7 +4273,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4319,8 +4317,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -4338,10 +4335,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4375,7 +4369,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4415,8 +4413,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -4434,10 +4431,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4471,7 +4465,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4511,8 +4509,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -4530,10 +4527,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4567,7 +4561,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4607,8 +4605,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		>
 	): Elysia<
 		BasePath,
@@ -4626,10 +4623,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4664,7 +4658,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4705,8 +4703,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
+			Resolutions
 		> & {
 			config: {
 				allowMeta?: boolean
@@ -4728,10 +4725,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema,
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4766,7 +4760,11 @@ export default class Elysia<
 			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -4786,14 +4784,7 @@ export default class Elysia<
 		>
 	>(
 		path: Path,
-		options: WSLocalHook<
-			LocalSchema,
-			Schema,
-			Singleton,
-			Macro,
-			Resolutions,
-			JoinPath<BasePath, Path>
-		>
+		options: WSLocalHook<LocalSchema, Schema, Singleton, Macro, Resolutions>
 	): Elysia<
 		BasePath,
 		Singleton,

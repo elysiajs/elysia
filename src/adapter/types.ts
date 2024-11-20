@@ -45,7 +45,7 @@ export interface ElysiaAdapter {
 		 */
 		createStaticHandler(
 			handle: unknown,
-			hooks: LocalHook<any, any, any, any, any, any, any>,
+			hooks: LocalHook<any, any, any, any, any, any>,
 			setHeaders?: Context['set']['headers'],
 			...params: unknown[]
 		): (() => unknown) | undefined
@@ -56,7 +56,7 @@ export interface ElysiaAdapter {
 		 */
 		createNativeStaticHandler?(
 			handle: unknown,
-			hooks: LocalHook<any, any, any, any, any, any, any>,
+			hooks: LocalHook<any, any, any, any, any, any>,
 			setHeaders?: Context['set']['headers'],
 			...params: unknown[]
 		): (() => Response) | undefined

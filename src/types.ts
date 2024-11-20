@@ -363,12 +363,15 @@ export type UnwrapBodySchema<
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
-	in out Definitions extends DefinitionBase['typebox'] = TModule<{}>
+	in out Definitions extends DefinitionBase['typebox'] = TModule<{}>,
+	Path extends string = ''
 > {
 	body: UnwrapBodySchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<Schema['headers'], Definitions>
 	query: UnwrapSchema<Schema['query'], Definitions>
-	params: UnwrapSchema<Schema['params'], Definitions>
+	params: {} extends Schema['params']
+		? ResolvePath<Path>
+		: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends TSchema | string
 		? {
@@ -617,8 +620,8 @@ export type InlineHandler<
 									>
 								}
 									? key
-									: never]: // @ts-expect-error type is checked in key mapping
-								ResolveResolutions<
+									: // @ts-expect-error type is checked in key mapping
+										never]: ResolveResolutions<
 									// @ts-expect-error type is checked in key mapping
 									ReturnType<MacroFn[key]>['resolve']
 								>[key]
@@ -1036,7 +1039,7 @@ export type ResolveResolutionsArray<
 		: ResolveResolutionsArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type AnyLocalHook = LocalHook<any, any, any, any, any, any, any, any>
+export type AnyLocalHook = LocalHook<any, any, any, any, any, any>
 
 export type LocalHook<
 	LocalSchema extends InputSchema,
@@ -1044,17 +1047,7 @@ export type LocalHook<
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
 	Extension extends BaseMacro,
-	Resolutions extends MaybeArray<ResolveHandler<Schema, Singleton>>,
-	Path extends string = '',
-	TypedRoute extends RouteSchema = Schema extends {
-		params: Record<string, unknown>
-	}
-		? Schema
-		: Schema & {
-				params: undefined extends Schema['params']
-					? ResolvePath<Path>
-					: Schema['params']
-			}
+	Resolutions extends MaybeArray<ResolveHandler<Schema, Singleton>>
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**
@@ -1073,34 +1066,20 @@ export type LocalHook<
 		/**
 		 * Custom body parser
 		 */
-		parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+		parse?: MaybeArray<BodyHandler<Schema, Singleton>>
 		/**
 		 * Transform context's value
 		 */
-		transform?: MaybeArray<
-			TransformHandler<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: {}
-				}
-			>
-		>
+		transform?: MaybeArray<TransformHandler<Schema, Singleton>>
 		resolve?: Resolutions
 		/**
 		 * Execute before main handler
 		 */
 		beforeHandle?: MaybeArray<
 			OptionalHandler<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+				Schema,
+				Singleton & {
+					resolve: ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -1109,13 +1088,9 @@ export type LocalHook<
 		 */
 		afterHandle?: MaybeArray<
 			AfterHandler<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+				Schema,
+				Singleton & {
+					resolve: ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -1124,13 +1099,9 @@ export type LocalHook<
 		 */
 		mapResponse?: MaybeArray<
 			MapResponse<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+				Schema,
+				Singleton & {
+					resolve: ResolveResolutions<Resolutions>
 				}
 			>
 		>
@@ -1139,20 +1110,16 @@ export type LocalHook<
 		 */
 		afterResponse?: MaybeArray<
 			AfterResponseHandler<
-				TypedRoute,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['decorator']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+				Schema,
+				Singleton & {
+					resolve: ResolveResolutions<Resolutions>
 				}
 			>
 		>
 		/**
 		 * Catch error
 		 */
-		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+		error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
 		tags?: DocumentDecoration['tags']
 		websocket?: WSLocalHook<any, any, any, any, any, any, any>
 	}
@@ -1165,7 +1132,7 @@ export interface InternalRoute {
 	composed: ComposedHandler | Response | null
 	handler: Handler
 	compile(): Function
-	hooks: LocalHook<any, any, any, any, any, any, any>
+	hooks: LocalHook<any, any, any, any, any, any>
 	websocket?: WSLocalHook<any, any, any, any, any, any, any>
 }
 
