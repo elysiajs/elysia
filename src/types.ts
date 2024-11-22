@@ -2,7 +2,7 @@
 import type { Elysia, AnyElysia } from '.'
 import type { BunFile, Serve, Server } from 'bun'
 
-import type {
+import {
 	TSchema,
 	TObject,
 	Static,
@@ -12,7 +12,8 @@ import type {
 	StaticDecode,
 	OptionalKind,
 	TModule,
-	TImport
+	TImport,
+	TProperties
 } from '@sinclair/typebox'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
@@ -34,7 +35,6 @@ import type { ComposerGeneralHandlerOptions } from './compose'
 import type { ElysiaAdapter } from './adapter'
 import type { WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
-import { TypeRegistryValidationFunction } from '@sinclair/typebox/build/cjs/type/registry/type'
 
 type PartialServe = Partial<Serve>
 
@@ -42,7 +42,8 @@ export type IsNever<T> = [T] extends [never] ? true : false
 
 export type ElysiaConfig<Prefix extends string | undefined> = {
 	/**
-	 * @default Bun Adapter
+	 * @default BunAdapter
+	 * @since 1.1.11
 	 */
 	adapter?: ElysiaAdapter
 	/**
@@ -310,7 +311,7 @@ export interface EphemeralType {
 }
 
 export interface DefinitionBase {
-	typebox: TModule<any>
+	typebox: TModule<any, any>
 	error: Record<string, Error>
 }
 
@@ -358,8 +359,16 @@ export type UnwrapBodySchema<
 			? Prettify<Partial<Static<Schema>>> | null
 			: StaticDecode<Schema>
 		: Schema extends string
-			? StaticDecode<TImport<UnwrapTypeModule<Definitions>, Schema>>
+			? Static<TImport<UnwrapTypeModule<Definitions>, Schema>>
 			: unknown
+
+export type IsNull<T> = [T] extends [null] ? true : false
+
+export type IsUnknown<T> = unknown extends T // `T` can be `unknown` or `any`
+	? IsNull<T> extends false // `any` can be `null`, but `unknown` can't be
+		? true
+		: false
+	: false
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
@@ -371,7 +380,9 @@ export interface UnwrapRoute<
 	query: UnwrapSchema<Schema['query'], Definitions>
 	params: {} extends Schema['params']
 		? ResolvePath<Path>
-		: UnwrapSchema<Schema['params'], Definitions>
+		: InputSchema<never> extends Schema
+			? ResolvePath<Path>
+			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
 	response: Schema['response'] extends TSchema | string
 		? {
@@ -529,13 +540,20 @@ export interface InputSchema<Name extends string = string> {
 }
 
 export interface MergeSchema<
-	in out A extends RouteSchema,
-	in out B extends RouteSchema
+	A extends RouteSchema,
+	B extends RouteSchema,
+	Path extends string = ''
 > {
 	body: undefined extends A['body'] ? B['body'] : A['body']
 	headers: undefined extends A['headers'] ? B['headers'] : A['headers']
 	query: undefined extends A['query'] ? B['query'] : A['query']
-	params: undefined extends A['params'] ? B['params'] : A['params']
+	params: IsNever<keyof A['params']> extends true
+		? IsNever<keyof B['params']> extends true
+			? ResolvePath<Path>
+			: B['params']
+		: IsNever<keyof B['params']> extends true
+			? A['params']
+			: Prettify<B['params'] & Omit<A['params'], keyof B['params']>>
 	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
 	response: {} extends A['response']
 		? {} extends B['response']
@@ -591,6 +609,39 @@ export type CoExist<Original, Target, With> =
 				? Original | With
 				: Original
 
+// These properties shall not be resolve in macro
+export type MacroContextBlacklistKey =
+	| 'type'
+	| 'detail'
+	| 'parse'
+	| 'transform'
+	| 'resolve'
+	| 'beforeHandle'
+	| 'afterHandle'
+	| 'mapResponse'
+	| 'afterResponse'
+	| 'error'
+	| 'tags'
+	| keyof RouteSchema
+
+export type MacroToContext<
+	MacroFn extends BaseMacroFn = {},
+	SelectedMacro extends MetadataBase['macro'] = {}
+> = {
+	[key in keyof SelectedMacro as MacroFn[key] extends (...v: any[]) => {
+		resolve: MaybeArray<(...v: any) => Record<keyof any, unknown>>
+	}
+		? key
+		: never]: ResolveResolutions<
+		// @ts-expect-error type is checked in key mapping
+		ReturnType<MacroFn[key]>['resolve']
+	>
+} extends infer A extends Record<string | number | symbol, unknown>
+	? IsNever<A[keyof A]> extends false
+		? A[keyof A]
+		: {}
+	: {}
+
 export type InlineHandler<
 	Route extends RouteSchema = {},
 	Singleton extends SingletonBase = {
@@ -600,36 +651,9 @@ export type InlineHandler<
 		resolve: {}
 	},
 	Path extends string | undefined = undefined,
-	MacroFn extends BaseMacroFn = {},
-	SelectedMacro extends MetadataBase['macro'] = {}
+	MacroContext = {}
 > =
-	| ((
-			context: {} extends SelectedMacro
-				? Context<Route, Singleton, Path>
-				: Context<
-						Route,
-						Singleton & {
-							decorator: {
-								[key in keyof SelectedMacro as MacroFn[key] extends (
-									...v: any[]
-								) => {
-									resolve: MaybeArray<
-										(
-											...v: any
-										) => Record<keyof any, unknown>
-									>
-								}
-									? key
-									: // @ts-expect-error type is checked in key mapping
-										never]: ResolveResolutions<
-									// @ts-expect-error type is checked in key mapping
-									ReturnType<MacroFn[key]>['resolve']
-								>[key]
-							}
-						},
-						Path
-					>
-	  ) =>
+	| ((context: Context<Route, Singleton, Path> & MacroContext) =>
 			| Response
 			| MaybePromise<
 					{} extends Route['response']
@@ -1408,7 +1432,7 @@ export type EmptyRouteSchema = {
 	body: unknown
 	headers: unknown
 	query: unknown
-	params: unknown
+	params: {}
 	cookie: unknown
 	response: {}
 }
@@ -1484,7 +1508,16 @@ export type MergeElysiaInstances<
 			Rest,
 			Prefix,
 			Singleton & Current['_types']['Singleton'],
-			Definitions & Current['_types']['Definitions'],
+			{
+				error: Prettify<
+					Definitions['error'] &
+						Current['_types']['Definitions']['error']
+				>
+				typebox: MergeTypeModule<
+					Definitions['typebox'],
+					Current['_types']['Definitions']['typebox']
+				>
+			},
 			Metadata & Current['_types']['Metadata'],
 			Ephemeral,
 			Volatile & Current['_ephemeral'],
@@ -1496,7 +1529,7 @@ export type MergeElysiaInstances<
 	: Elysia<
 			Prefix,
 			Prettify2<Singleton>,
-			Prettify2<Definitions>,
+			Definitions,
 			Prettify2<Metadata>,
 			Routes,
 			Ephemeral,
@@ -1793,6 +1826,10 @@ export type JoinPath<
 	B extends string
 > = `${A}${B extends '/' ? '/index' : B extends '' ? B : B extends `/${string}` ? B : B}`
 
-export type UnwrapTypeModule<Module extends TModule<any>> = ReturnType<
-	Module['Defs']
->['$defs']
+export type UnwrapTypeModule<Module extends TModule<any, any>> =
+	Module extends TModule<infer Type extends TProperties, any> ? Type : {}
+
+export type MergeTypeModule<
+	A extends TModule<any, any>,
+	B extends TModule<any, any>
+> = TModule<Prettify<UnwrapTypeModule<A> & UnwrapTypeModule<B>>>

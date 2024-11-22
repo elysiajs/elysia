@@ -168,3 +168,34 @@ import { expectTypeOf } from 'expect-type'
 		expectTypeOf<typeof name>().toEqualTypeOf<'hare'>()
 	})
 }
+
+// ? Macro resolve
+{
+	const macro = new Elysia()
+		.macro({
+			a: () => ({
+				resolve: () => ({
+					message: 'hello' as const
+				})
+			})
+		})
+		.get(
+			'/',
+			({ message }) => {
+				expectTypeOf<typeof message>().toEqualTypeOf<'hello'>()
+			},
+			{
+				a: true
+			}
+		)
+
+	const main = new Elysia().use(macro).get(
+		'/',
+		({ message }) => {
+			expectTypeOf<typeof message>().toEqualTypeOf<'hello'>()
+		},
+		{
+			a: true
+		}
+	)
+}

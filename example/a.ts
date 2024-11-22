@@ -1,12 +1,27 @@
-import { Elysia, redirect, t } from '../src'
-import { mapResponse } from '../src/adapter/web-standard/handler'
+import { Elysia, t } from '../src'
+import { UnwrapTypeModule } from '../src/types'
 
 const app = new Elysia()
-
-const a = new Elysia()
-	.get('/id/:id', ({ params }) => 'a', {
-		params: t.Object({
-			id: t.Number()
-		})
+	.macro({
+		a() {
+			return {
+				resolve() {
+					return {
+						a: 'a'
+					}
+				}
+			}
+		}
 	})
-	.listen(3000)
+	.get('/', ({ a }) => {
+
+	}, {
+		a: undefined
+	})
+
+const p = new Elysia().model({
+	salt: t.Object({
+		username: t.String(),
+		password: t.String()
+	})
+})

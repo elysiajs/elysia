@@ -1,7 +1,14 @@
 import type { Serve, Server } from './universal/server'
 
 import { Memoirist } from 'memoirist'
-import type { TObject, Static, TSchema, TModule, TRef } from '@sinclair/typebox'
+import type {
+	TObject,
+	Static,
+	TSchema,
+	TModule,
+	TRef,
+	TProperties
+} from '@sinclair/typebox'
 
 import type { Context } from './context'
 
@@ -127,7 +134,9 @@ import type {
 	HookMacroFn,
 	ResolveHandler,
 	ResolveResolutions,
-	UnwrapTypeModule
+	UnwrapTypeModule,
+	MacroToContext,
+	MergeTypeModule
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -924,7 +933,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				{
 					decorator: Singleton['decorator']
@@ -966,8 +976,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				'global' extends Type
 					? {
 							decorator: Singleton['decorator']
@@ -1034,7 +1050,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				{
 					decorator: Singleton['decorator']
@@ -1074,8 +1091,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				'global' extends Type
 					? {
 							decorator: Singleton['decorator']
@@ -1147,8 +1170,14 @@ export default class Elysia<
 				Context<
 					MergeSchema<
 						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+						BasePath
+					> &
+						'global' extends Type
+						? { params: Record<string, string> }
+						: 'scoped' extends Type
+							? { params: Record<string, string> }
+							: {},
 					Singleton &
 						('global' extends Type
 							? {
@@ -1253,7 +1282,8 @@ export default class Elysia<
 				Context<
 					MergeSchema<
 						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+						BasePath
 					>,
 					Singleton & {
 						derive: Ephemeral['derive'] & Volatile['derive']
@@ -1459,7 +1489,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -1500,8 +1531,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				Singleton &
 					('global' extends Type
 						? {
@@ -1567,7 +1604,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -1605,8 +1643,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				Singleton &
 					('global' extends Type
 						? {
@@ -1671,7 +1715,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -1706,8 +1751,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				Singleton &
 					('global' extends Type
 						? {
@@ -1769,7 +1820,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -1806,8 +1858,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				Singleton &
 					('global' extends Type
 						? {
@@ -2478,7 +2536,7 @@ export default class Elysia<
 		}
 	>
 
-	as(type: 'plugin'): Elysia<
+	as(type: 'plugin' | 'scoped'): Elysia<
 		BasePath,
 		Singleton,
 		Definitions,
@@ -2496,8 +2554,10 @@ export default class Elysia<
 		}
 	>
 
-	as(type: 'plugin' | 'global') {
-		const castType = ({ plugin: 'scoped', global: 'global' } as const)[type]
+	as(type: 'plugin' | 'global' | 'scoped') {
+		const castType = (
+			{ plugin: 'scoped', scoped: 'scoped', global: 'global' } as const
+		)[type]
 
 		promoteEvent(this.event.parse, castType)
 		promoteEvent(this.event.transform, castType)
@@ -2534,10 +2594,21 @@ export default class Elysia<
 		prefix: Prefix,
 		run: (
 			group: Elysia<
-				`${BasePath}${Prefix}`,
+				JoinPath<BasePath, Prefix>,
 				Singleton,
 				Definitions,
-				Metadata,
+				{
+					schema: MergeSchema<
+						UnwrapRoute<
+							{},
+							Definitions['typebox'],
+							JoinPath<BasePath, Prefix>
+						>,
+						Metadata['schema']
+					>
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+				},
 				{},
 				Ephemeral,
 				Volatile
@@ -2591,7 +2662,7 @@ export default class Elysia<
 		>,
 		run: (
 			group: Elysia<
-				`${BasePath}${Prefix}`,
+				JoinPath<BasePath, Prefix>,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -2609,7 +2680,7 @@ export default class Elysia<
 				},
 				Definitions,
 				{
-					schema: Schema
+					schema: Prettify<Schema>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 				},
@@ -3152,7 +3223,16 @@ export default class Elysia<
 		BasePath,
 		// @ts-expect-error - This is truly ideal
 		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-		Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+		{
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
+			>
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				NewElysia['_types']['Definitions']['typebox']
+			>
+		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 		BasePath extends ``
 			? Routes & NewElysia['_routes']
@@ -3170,7 +3250,16 @@ export default class Elysia<
 		BasePath,
 		// @ts-expect-error - This is truly ideal
 		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-		Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+		{
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
+			>
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				NewElysia['_types']['Definitions']['typebox']
+			>
+		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 		BasePath extends ``
 			? Routes & NewElysia['_routes']
@@ -3197,7 +3286,16 @@ export default class Elysia<
 		BasePath,
 		// @ts-expect-error - This is truly ideal
 		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-		Prettify2<Definitions & NewElysia['_types']['Definitions']>,
+		{
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
+			>
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				NewElysia['_types']['Definitions']['typebox']
+			>
+		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
 		BasePath extends ``
 			? Routes & NewElysia['_routes']
@@ -3217,7 +3315,16 @@ export default class Elysia<
 		BasePath,
 		// @ts-expect-error - This is truly ideal
 		Prettify2<Singleton & LazyLoadElysia['_types']['Singleton']>,
-		Prettify2<Definitions & LazyLoadElysia['_types']['Definitions']>,
+		{
+			error: Prettify<
+				Definitions['error'] &
+					LazyLoadElysia['_types']['Definitions']['error']
+			>
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				LazyLoadElysia['_types']['Definitions']['typebox']
+			>
+		},
 		Prettify2<Metadata & LazyLoadElysia['_types']['Metadata']>,
 		BasePath extends ``
 			? Routes & LazyLoadElysia['_routes']
@@ -3783,8 +3890,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -3874,12 +3980,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] &
-					Volatile['resolve']
+				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -3974,8 +4078,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -4070,8 +4173,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -4166,8 +4268,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -4262,8 +4363,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -4358,8 +4458,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -4454,8 +4553,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -4550,8 +4648,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		path: Path,
@@ -4647,8 +4744,7 @@ export default class Elysia<
 					ResolveResolutions<Resolutions>
 			},
 			JoinPath<BasePath, Path>,
-			Metadata['macroFn'],
-			Macro
+			MacroToContext<Metadata['macroFn'], Macro>
 		>
 	>(
 		method: Method,
@@ -5318,7 +5414,11 @@ export default class Elysia<
 		transform: (
 			context: Prettify<
 				Context<
-					{},
+					MergeSchema<
+						Volatile['schema'],
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+						BasePath
+					>,
 					Singleton & {
 						derive: Ephemeral['derive'] & Volatile['derive']
 						resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5368,7 +5468,16 @@ export default class Elysia<
 		transform: (
 			context: Prettify<
 				Context<
-					{},
+					MergeSchema<
+						Volatile['schema'],
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+						BasePath
+					> &
+						'global' extends Type
+						? { params: Record<string, string> }
+						: 'scoped' extends Type
+							? { params: Record<string, string> }
+							: {},
 					Singleton &
 						('global' extends Type
 							? {
@@ -5473,9 +5582,11 @@ export default class Elysia<
 		Singleton,
 		{
 			typebox: TModule<
-				UnwrapTypeModule<Definitions['typebox']> & {
-					[name in Name]: Model
-				}
+				Prettify<
+					UnwrapTypeModule<Definitions['typebox']> & {
+						[name in Name]: Model
+					}
+				>
 			>
 			error: Definitions['error']
 		},
@@ -5485,14 +5596,14 @@ export default class Elysia<
 		Volatile
 	>
 
-	model<const Recorder extends Record<string, TSchema>>(
+	model<const Recorder extends TProperties>(
 		record: Recorder
 	): Elysia<
 		BasePath,
 		Singleton,
 		{
 			typebox: TModule<
-				UnwrapTypeModule<Definitions['typebox']> & Recorder
+				Prettify<UnwrapTypeModule<Definitions['typebox']> & Recorder>
 			>
 			error: Definitions['error']
 		},
