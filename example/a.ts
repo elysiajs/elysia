@@ -1,27 +1,14 @@
 import { Elysia, t } from '../src'
-import { UnwrapTypeModule } from '../src/types'
 
 const app = new Elysia()
 	.macro({
-		a() {
-			return {
-				resolve() {
-					return {
-						a: 'a'
-					}
-				}
-			}
-		}
+		custom: (stuff: boolean) => ({
+			resolve: () => ({
+				a: 'a'
+			})
+		})
 	})
-	.get('/', ({ a }) => {
-
-	}, {
-		a: undefined
+	.get('/', ({ a, query }) => { }, {
+		query: t.Object({ a: t.String() }),
+		custom: true
 	})
-
-const p = new Elysia().model({
-	salt: t.Object({
-		username: t.String(),
-		password: t.String()
-	})
-})

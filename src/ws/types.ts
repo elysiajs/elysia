@@ -125,7 +125,7 @@ export type WSLocalHook<
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Extension extends BaseMacro,
-	Resolutions extends MaybeArray<ResolveHandler<Schema, Singleton>>
+	Resolutions extends MaybeArray<ResolveHandler<any, any>>
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**

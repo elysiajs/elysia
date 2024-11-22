@@ -3872,12 +3872,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -3887,10 +3890,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -3900,7 +3903,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -3967,12 +3973,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -3980,10 +3989,12 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -3993,7 +4004,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4060,12 +4074,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -4075,10 +4092,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -4088,7 +4105,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4155,12 +4175,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -4170,10 +4193,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -4183,7 +4206,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4250,12 +4276,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -4265,10 +4294,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -4278,7 +4307,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4345,12 +4377,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -4360,10 +4395,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -4373,7 +4408,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4440,12 +4478,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -4455,10 +4496,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -4468,7 +4509,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4535,12 +4579,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -4550,10 +4597,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -4563,7 +4610,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4630,12 +4680,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -4645,10 +4698,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		path: Path,
@@ -4658,7 +4711,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4726,12 +4782,15 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>,
@@ -4741,10 +4800,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					ResolveResolutions<Resolutions>
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
-			JoinPath<BasePath, Path>,
-			MacroToContext<Metadata['macroFn'], Macro>
+			JoinPath<BasePath, Path>
 		>
 	>(
 		method: Method,
@@ -4755,7 +4814,10 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
 			},
 			Definitions['error'],
 			Macro,
@@ -4827,18 +4889,33 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
+					resolve: Ephemeral['resolve'] &
+						Volatile['resolve'] &
+						MacroContext
 				}
 			>
 		>
 	>(
 		path: Path,
-		options: WSLocalHook<LocalSchema, Schema, Singleton, Macro, Resolutions>
+		options: WSLocalHook<
+			LocalSchema,
+			Schema,
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					ResolveResolutions<Resolutions> &
+					MacroContext
+			},
+			Macro,
+			Resolutions
+		>
 	): Elysia<
 		BasePath,
 		Singleton,

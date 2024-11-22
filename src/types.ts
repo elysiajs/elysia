@@ -206,10 +206,10 @@ export type Prettify<T> = {
 	[K in keyof T]: T[K]
 } & {}
 
+type RecordKey = string | number | symbol
+
 export type Prettify2<T> = {
-	[K in keyof T]: T extends Record<string | number | symbol, unknown>
-		? Prettify<T[K]>
-		: T[K]
+	[K in keyof T]: T extends Record<RecordKey, unknown> ? Prettify<T[K]> : T[K]
 } & {}
 
 export type Partial2<T> = {
@@ -221,8 +221,8 @@ export type NeverKey<T> = {
 } & {}
 
 type IsBothObject<A, B> =
-	A extends Record<string | number | symbol, unknown>
-		? B extends Record<string | number | symbol, unknown>
+	A extends Record<RecordKey, unknown>
+		? B extends Record<RecordKey, unknown>
 			? IsClass<A> extends false
 				? IsClass<B> extends false
 					? true
@@ -624,6 +624,7 @@ export type MacroContextBlacklistKey =
 	| 'tags'
 	| keyof RouteSchema
 
+// There's only resolve that can add new properties to Context
 export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
 	SelectedMacro extends MetadataBase['macro'] = {}
@@ -636,7 +637,7 @@ export type MacroToContext<
 		// @ts-expect-error type is checked in key mapping
 		ReturnType<MacroFn[key]>['resolve']
 	>
-} extends infer A extends Record<string | number | symbol, unknown>
+} extends infer A extends Record<RecordKey, unknown>
 	? IsNever<A[keyof A]> extends false
 		? A[keyof A]
 		: {}
@@ -653,7 +654,7 @@ export type InlineHandler<
 	Path extends string | undefined = undefined,
 	MacroContext = {}
 > =
-	| ((context: Context<Route, Singleton, Path> & MacroContext) =>
+	| ((context: Context<Route, Singleton, Path>) =>
 			| Response
 			| MaybePromise<
 					{} extends Route['response']
@@ -1045,18 +1046,21 @@ export type ResolveDerivativesArray<
 		: ResolveDerivativesArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type ResolveResolutions<T extends MaybeArray<Function> | undefined> =
-	IsNever<keyof T> extends true
-		? any[] extends T
-			? {}
-			: ReturnType<// @ts-ignore Trust me bro
+export type ResolveResolutions<T extends Function | Function[]> =
+	// If no macro are provided, it will be resolved as any
+	any[] extends T
+		? {}
+		: IsNever<keyof T> extends true
+			? any[] extends T
+				? {}
+				: ReturnType<// @ts-ignore Trust me bro
+					T>
+			: ResolveResolutionsArray<// @ts-ignore Trust me bro
 				T>
-		: ResolveResolutionsArray<// @ts-ignore Trust me bro
-			T>
 
 export type ResolveResolutionsArray<
 	T extends any[],
-	Carry extends Record<keyof any, unknown> = {}
+	Carry extends Record<RecordKey, unknown> = {}
 > = T extends [infer Fn extends AnyContextFn, ...infer Rest]
 	? ReturnType<Fn> extends infer Value extends Record<keyof any, unknown>
 		? ResolveResolutionsArray<Rest, Value & Carry>
@@ -1070,82 +1074,57 @@ export type LocalHook<
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
-	Extension extends BaseMacro,
-	Resolutions extends MaybeArray<ResolveHandler<any, any>>
-> = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
-	Extension & {
-		/**
-		 * Short for 'Content-Type'
-		 *
-		 * Available:
-		 * - 'none': do not parse body
-		 * - 'text' / 'text/plain': parse body as string
-		 * - 'json' / 'application/json': parse body as json
-		 * - 'formdata' / 'multipart/form-data': parse body as form-data
-		 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-		 * - 'arraybuffer': parse body as readable stream
-		 */
-		type?: ContentType
-		detail?: DocumentDecoration
-		/**
-		 * Custom body parser
-		 */
-		parse?: MaybeArray<BodyHandler<Schema, Singleton>>
-		/**
-		 * Transform context's value
-		 */
-		transform?: MaybeArray<TransformHandler<Schema, Singleton>>
-		resolve?: Resolutions
-		/**
-		 * Execute before main handler
-		 */
-		beforeHandle?: MaybeArray<
-			OptionalHandler<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>
-		>
-		/**
-		 * Execute after main handler
-		 */
-		afterHandle?: MaybeArray<
-			AfterHandler<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>
-		>
-		/**
-		 * Execute after main handler
-		 */
-		mapResponse?: MaybeArray<
-			MapResponse<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>
-		>
-		/**
-		 * Execute after response is sent
-		 */
-		afterResponse?: MaybeArray<
-			AfterResponseHandler<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>
-		>
-		/**
-		 * Catch error
-		 */
-		error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
-		tags?: DocumentDecoration['tags']
-	}
+	Macro extends BaseMacro,
+	Resolutions extends MaybeArray<ResolveHandler<any, any, any>>
+> =
+	// Kind of inference hack, I have no idea why it work either
+	(LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
+		Macro & {
+			resolve?: Resolutions
+		} & NoInfer<{
+			/**
+			 * Short for 'Content-Type'
+			 *
+			 * Available:
+			 * - 'none': do not parse body
+			 * - 'text' / 'text/plain': parse body as string
+			 * - 'json' / 'application/json': parse body as json
+			 * - 'formdata' / 'multipart/form-data': parse body as form-data
+			 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+			 * - 'arraybuffer': parse body as readable stream
+			 */
+			type?: ContentType
+			detail?: DocumentDecoration
+			/**
+			 * Custom body parser
+			 */
+			parse?: MaybeArray<BodyHandler<Schema, Singleton>>
+			/**
+			 * Transform context's value
+			 */
+			transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+			/**
+			 * Execute before main handler
+			 */
+			beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+			/**
+			 * Execute after main handler
+			 */
+			afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
+			/**
+			 * Execute after main handler
+			 */
+			mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
+			/**
+			 * Execute after response is sent
+			 */
+			afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
+			/**
+			 * Catch error
+			 */
+			error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
+			tags?: DocumentDecoration['tags']
+		}>
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
@@ -1606,7 +1585,7 @@ export type ResolveMacroContext<
 			? never
 			: K extends keyof MacroFn
 				? ReturnType<MacroFn[K]> extends infer A extends Record<
-						string | number | symbol,
+						RecordKey,
 						unknown
 					>
 					? A
