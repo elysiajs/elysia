@@ -1,5 +1,5 @@
 import type { Context } from '../../context'
-import type { LocalHook } from '../../types'
+import type { AnyLocalHook } from '../../types'
 
 import {
 	mapResponse,
@@ -10,7 +10,7 @@ import {
 
 export const createNativeStaticHandler = (
 	handle: unknown,
-	hooks: LocalHook<any, any, any, any, any, any>,
+	hooks: AnyLocalHook,
 	setHeaders: Context['set']['headers'] = {}
 ): (() => Response) | undefined => {
 	if (typeof handle === 'function' || handle instanceof Blob) return

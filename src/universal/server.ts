@@ -1,5 +1,5 @@
-import { Serve as BunServe } from 'bun'
-import type { IsAny } from '../types'
+import type { Serve as BunServe } from 'bun'
+import type { IsAny, MaybePromise } from '../types'
 
 export interface ErrorLike extends Error {
 	code?: string
@@ -344,3 +344,5 @@ export interface Server extends Disposable {
 	 */
 	readonly id: string
 }
+
+export type ListenCallback = (server: Server) => MaybePromise<void>

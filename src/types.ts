@@ -33,7 +33,7 @@ import type {
 import type { ComposerGeneralHandlerOptions } from './compose'
 
 import type { ElysiaAdapter } from './adapter'
-import type { WSLocalHook } from './ws/types'
+import type { AnyWSLocalHook, WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
 
 type PartialServe = Partial<Serve>
@@ -628,20 +628,26 @@ export type MacroContextBlacklistKey =
 export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
 	SelectedMacro extends MetadataBase['macro'] = {}
-> = {
-	[key in keyof SelectedMacro as MacroFn[key] extends (...v: any[]) => {
-		resolve: MaybeArray<(...v: any) => Record<keyof any, unknown>>
-	}
-		? key
-		: never]: ResolveResolutions<
-		// @ts-expect-error type is checked in key mapping
-		ReturnType<MacroFn[key]>['resolve']
-	>
-} extends infer A extends Record<RecordKey, unknown>
-	? IsNever<A[keyof A]> extends false
-		? A[keyof A]
-		: {}
-	: {}
+> = {} extends SelectedMacro
+	? { c: SelectedMacro }
+	: {
+				[key in keyof SelectedMacro as MacroFn[key] extends (
+					...v: any[]
+				) => {
+					resolve: MaybeArray<
+						(...v: any) => Record<keyof any, unknown>
+					>
+				}
+					? key
+					: never]: ResolveResolutions<
+					// @ts-expect-error type is checked in key mapping
+					ReturnType<MacroFn[key]>['resolve']
+				>
+		  } extends infer A extends Record<RecordKey, unknown>
+		? IsNever<A[keyof A]> extends false
+			? A[keyof A]
+			: { b: 'b' }
+		: { a: 'a' }
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
@@ -1018,7 +1024,7 @@ export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
 export type ResolveHandler<
 	in out Route extends RouteSchema,
 	in out Singleton extends SingletonBase,
-	in out Derivative extends Record<string, unknown> | void = Record<
+	Derivative extends Record<string, unknown> | void = Record<
 		string,
 		unknown
 	> | void
@@ -1046,7 +1052,7 @@ export type ResolveDerivativesArray<
 		: ResolveDerivativesArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type ResolveResolutions<T extends Function | Function[]> =
+export type ResolveResolutions<T extends MaybeArray<Function>> =
 	// If no macro are provided, it will be resolved as any
 	any[] extends T
 		? {}
@@ -1067,21 +1073,19 @@ export type ResolveResolutionsArray<
 		: ResolveResolutionsArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type AnyLocalHook = LocalHook<any, any, any, any, any, any>
+export type AnyLocalHook = LocalHook<any, any, any, any, any>
 
 export type LocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
-	Macro extends BaseMacro,
-	Resolutions extends MaybeArray<ResolveHandler<any, any, any>>
+	Macro extends BaseMacro
 > =
 	// Kind of inference hack, I have no idea why it work either
 	(LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
-		Macro & {
-			resolve?: Resolutions
-		} & NoInfer<{
+		Macro &
+		NoInfer<{
 			/**
 			 * Short for 'Content-Type'
 			 *
@@ -1134,8 +1138,8 @@ export interface InternalRoute {
 	composed: ComposedHandler | Response | null
 	handler: Handler
 	compile(): Function
-	hooks: LocalHook<any, any, any, any, any, any>
-	websocket?: WSLocalHook<any, any, any, any, any>
+	hooks: AnyLocalHook
+	websocket?: AnyWSLocalHook
 }
 
 export type SchemaValidator = {
@@ -1152,8 +1156,6 @@ export type SchemaValidator = {
 	cookie?: TypeCheck<any>
 	response?: Record<number, TypeCheck<any>>
 }
-
-export type ListenCallback = (server: Server) => MaybePromise<void>
 
 export type AddPrefix<Prefix extends string, T> = {
 	[K in keyof T as Prefix extends string ? `${Prefix}${K & string}` : K]: T[K]

@@ -1,14 +1,13 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia()
+new Elysia()
 	.macro({
-		custom: (stuff: boolean) => ({
+		custom: (_: boolean) => ({
 			resolve: () => ({
-				a: 'a'
+				a: 'a' as const
 			})
 		})
 	})
-	.get('/', ({ a, query }) => { }, {
-		query: t.Object({ a: t.String() }),
+	.get('/', ({ a }) => '', {
 		custom: true
 	})

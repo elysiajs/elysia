@@ -5,7 +5,7 @@ import { isNotEmpty, hasHeaderShorthand, StatusMap } from '../../utils'
 import { Cookie, serializeCookie } from '../../cookies'
 
 import type { Context } from '../../context'
-import type { LocalHook } from '../../types'
+import type { AnyLocalHook } from '../../types'
 import { ElysiaCustomStatusResponse } from '../../error'
 import { ElysiaFile } from '../../universal/file'
 
@@ -887,7 +887,7 @@ export const errorToResponse = (error: Error, set?: Context['set']) =>
 
 export const createStaticHandler = (
 	handle: unknown,
-	hooks: LocalHook<any, any, any, any, any, any>,
+	hooks: AnyLocalHook,
 	setHeaders: Context['set']['headers'] = {}
 ): (() => Response) | undefined => {
 	if (typeof handle === 'function') return

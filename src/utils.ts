@@ -30,7 +30,8 @@ import type {
 	ErrorHandler,
 	Replace,
 	AfterResponseHandler,
-	SchemaValidator
+	SchemaValidator,
+    AnyLocalHook
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
@@ -199,7 +200,7 @@ export const mergeSchemaValidator = (
 
 export const mergeHook = (
 	a?: LifeCycleStore,
-	b?: LocalHook<any, any, any, any, any, any>
+	b?: AnyLocalHook
 	// { allowMacro = false }: { allowMacro?: boolean } = {}
 ): LifeCycleStore => {
 	// In case if merging union is need
@@ -939,7 +940,7 @@ export const injectChecksum = (
 
 export const mergeLifeCycle = (
 	a: LifeCycleStore,
-	b: LifeCycleStore | LocalHook<any, any, any, any, any, any>,
+	b: LifeCycleStore | AnyLocalHook,
 	checksum?: number
 ): LifeCycleStore => {
 	return {
@@ -1053,8 +1054,8 @@ const filterGlobal = (fn: MaybeArray<HookContainer>) => {
 }
 
 export const filterGlobalHook = (
-	hook: LocalHook<any, any, any, any, any, any>
-): LocalHook<any, any, any, any, any, any> => {
+	hook: AnyLocalHook
+): AnyLocalHook => {
 	return {
 		// rest is validator
 		...hook,
@@ -1068,7 +1069,7 @@ export const filterGlobalHook = (
 		afterResponse: filterGlobal(hook?.afterResponse),
 		error: filterGlobal(hook?.error),
 		trace: filterGlobal(hook?.trace)
-	} as LocalHook<any, any, any, any, any, any>
+	}
 }
 
 export const StatusMap = {
@@ -1226,7 +1227,7 @@ export const createMacroManager =
 		localHook
 	}: {
 		globalHook: LifeCycleStore
-		localHook: LocalHook<any, any, any, any, any, any>
+		localHook: AnyLocalHook
 	}) =>
 	(stackName: keyof LifeCycleStore) =>
 	(
@@ -1401,7 +1402,7 @@ export const fnToContainer = (
 }
 
 export const localHookToLifeCycleStore = (
-	a: LocalHook<any, any, any, any, any, any>
+	a: AnyLocalHook
 ): LifeCycleStore => {
 	return {
 		...a,
@@ -1421,7 +1422,7 @@ export const localHookToLifeCycleStore = (
 
 export const lifeCycleToFn = (
 	a: LifeCycleStore
-): LocalHook<any, any, any, any, any, any> => {
+): AnyLocalHook => {
 	return {
 		...a,
 		start: a.start?.map((x) => x.fn),

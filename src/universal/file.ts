@@ -1,5 +1,5 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import { createReadStream, statSync, type Stats, type ReadStream } from 'fs'
+import { createReadStream, statSync, type Stats } from 'fs'
 
 import { isBun } from './utils'
 import { BunFile } from 'bun'

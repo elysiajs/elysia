@@ -1,9 +1,11 @@
-import type { Serve } from 'bun'
-import type { AnyElysia, ListenCallback } from '..'
+import type { Serve, ListenCallback } from '../universal/server'
+
+import type { AnyElysia } from '..'
 import type { Context } from '../context'
-import type { Prettify, LocalHook } from '../types'
 import type { Sucrose } from '../sucrose'
-import { WSLocalHook } from '../ws/types'
+
+import type { Prettify, AnyLocalHook } from '../types'
+import type { AnyWSLocalHook } from '../ws/types'
 
 export interface ElysiaAdapter {
 	name: string
@@ -45,7 +47,7 @@ export interface ElysiaAdapter {
 		 */
 		createStaticHandler(
 			handle: unknown,
-			hooks: LocalHook<any, any, any, any, any, any>,
+			hooks: AnyLocalHook,
 			setHeaders?: Context['set']['headers'],
 			...params: unknown[]
 		): (() => unknown) | undefined
@@ -56,7 +58,7 @@ export interface ElysiaAdapter {
 		 */
 		createNativeStaticHandler?(
 			handle: unknown,
-			hooks: LocalHook<any, any, any, any, any, any>,
+			hooks: AnyLocalHook,
 			setHeaders?: Context['set']['headers'],
 			...params: unknown[]
 		): (() => Response) | undefined
@@ -129,9 +131,5 @@ export interface ElysiaAdapter {
 		validationError: string
 		unknownError: string
 	}
-	ws?(
-		app: AnyElysia,
-		path: string,
-		handler: WSLocalHook<any, any, any, any, any>
-	): unknown
+	ws?(app: AnyElysia, path: string, handler: AnyWSLocalHook): unknown
 }

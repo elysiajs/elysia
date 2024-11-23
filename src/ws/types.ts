@@ -120,12 +120,13 @@ export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
 	message: unknown
 ) => MaybePromise<Route['body'] | void | undefined>
 
+export type AnyWSLocalHook = WSLocalHook<any, any, any, any>
+
 export type WSLocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
-	Extension extends BaseMacro,
-	Resolutions extends MaybeArray<ResolveHandler<any, any>>
+	Extension extends BaseMacro
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 	Extension & {
 		/**
@@ -151,66 +152,29 @@ export type WSLocalHook<
 		 * Transform context's value
 		 */
 		transform?: MaybeArray<TransformHandler<Schema, Singleton>>
-		resolve?: Resolutions
 		/**
 		 * Execute before main handler
 		 */
-		beforeHandle?: MaybeArray<
-			OptionalHandler<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>
-		>
+		beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
 		/**
 		 * Execute after main handler
 		 */
-		afterHandle?: MaybeArray<
-			AfterHandler<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>
-		>
+		afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
 		/**
 		 * Execute after main handler
 		 */
-		mapResponse?: MaybeArray<
-			MapResponse<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>
-		>
+		mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
 		/**
 		 * Execute after response is sent
 		 */
-		afterResponse?: MaybeArray<
-			AfterResponseHandler<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>
-		>
+		afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
 		/**
 		 * Catch error
 		 */
 		error?: MaybeArray<ErrorHandler<{}, Schema, Singleton>>
 		tags?: DocumentDecoration['tags']
 	} & TypedWebSocketHandler<
-		Omit<
-			Context<
-				Schema,
-				Singleton & {
-					resolve: ResolveResolutions<Resolutions>
-				}
-			>,
-			'body'
-		> & {
+		Omit<Context<Schema, Singleton>, 'body'> & {
 			body: never
 		},
 		Schema
