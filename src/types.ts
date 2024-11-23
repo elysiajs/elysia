@@ -629,7 +629,7 @@ export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
 	SelectedMacro extends MetadataBase['macro'] = {}
 > = {} extends SelectedMacro
-	? { c: SelectedMacro }
+	? {}
 	: {
 				[key in keyof SelectedMacro as MacroFn[key] extends (
 					...v: any[]
@@ -646,8 +646,8 @@ export type MacroToContext<
 		  } extends infer A extends Record<RecordKey, unknown>
 		? IsNever<A[keyof A]> extends false
 			? A[keyof A]
-			: { b: 'b' }
-		: { a: 'a' }
+			: {}
+		: {}
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
@@ -843,7 +843,7 @@ export type AfterResponseHandler<
 				: Route['response'][keyof Route['response']]
 		}
 	>
-) => MaybePromise<void>
+) => MaybePromise<unknown>
 
 export type GracefulHandler<in Instance extends AnyElysia> = (
 	data: Instance

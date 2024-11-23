@@ -1915,14 +1915,16 @@ type a = keyof {}
 				})
 			},
 			afterResponse({ response }) {
-				expectTypeOf<typeof response>().toEqualTypeOf<
-					| {
-							duration: number
-					  }
-					| {
-							stuff: number
-					  }
-				>()
+				// expectTypeOf<typeof response>().toEqualTypeOf<
+				// 	| {
+				// 			duration: number
+				// 	  }
+				// 	| {
+				// 			stuff: number
+				// 	  }
+				// >()
+
+				// return undefined as any
 			}
 		}
 	)

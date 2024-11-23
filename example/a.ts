@@ -1,13 +1,31 @@
 import { Elysia, t } from '../src'
 
-new Elysia()
-	.macro({
-		custom: (_: boolean) => ({
-			resolve: () => ({
-				a: 'a' as const
+const app = new Elysia().get(
+	'/',
+	() => {
+		return {
+			duration: 200
+		}
+	},
+	{
+		response: {
+			200: t.Object({
+				duration: t.Number()
+			}),
+			400: t.Object({
+				stuff: t.Number()
 			})
-		})
-	})
-	.get('/', ({ a }) => '', {
-		custom: true
-	})
+		},
+		afterResponse({ response }) {
+			// expectTypeOf<typeof response>().toEqualTypeOf<
+			// 	| {
+			// 			duration: number
+			// 	  }
+			// 	| {
+			// 			stuff: number
+			// 	  }
+			// >()
+			// return undefined as any
+		}
+	}
+)
