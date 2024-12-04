@@ -409,7 +409,7 @@ export const ElysiaType = {
 			.Decode((value) => {
 				if (typeof value === 'string') return value === 'true'
 
-				if (property && !Value.Check(schema, value))
+				if (value !== undefined && !Value.Check(schema, value))
 					throw new ValidationError('property', schema, value)
 
 				return value
