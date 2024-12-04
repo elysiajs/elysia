@@ -369,12 +369,22 @@ export const ElysiaType = {
 						t.String({
 							format: 'date-time',
 							default: new Date().toISOString()
-						})
+						}),
+						t.Number()
 					],
 					property
 				)
 			)
 			.Decode((value) => {
+				if(typeof value === "number") {
+					const date = new Date(value)
+
+					if (!Value.Check(schema, date))
+						throw new ValidationError('property', schema, date)
+
+					return date
+				}
+
 				if (value instanceof Date) return value
 
 				const date = new Date(value)
@@ -409,7 +419,7 @@ export const ElysiaType = {
 			.Decode((value) => {
 				if (typeof value === 'string') return value === 'true'
 
-				if (property && !Value.Check(schema, value))
+				if (value !== undefined && !Value.Check(schema, value))
 					throw new ValidationError('property', schema, value)
 
 				return value

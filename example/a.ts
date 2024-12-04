@@ -1,35 +1,5 @@
+import { Value } from '@sinclair/typebox/value'
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-new Request('', {
-	duplex: 'half',
-})
-
-const app = new Elysia().get(
-	'/',
-	() => {
-		return {
-			duration: 200
-		}
-	},
-	{
-		response: {
-			200: t.Object({
-				duration: t.Number()
-			}),
-			400: t.Object({
-				stuff: t.Number()
-			})
-		},
-		afterResponse({ response }) {
-			// expectTypeOf<typeof response>().toEqualTypeOf<
-			// 	| {
-			// 			duration: number
-			// 	  }
-			// 	| {
-			// 			stuff: number
-			// 	  }
-			// >()
-			// return undefined as any
-		}
-	}
-)
+console.log(Value.Create(t.Date()) instanceof Date)

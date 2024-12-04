@@ -200,6 +200,34 @@ describe('Query Validator', () => {
 		expect(await res.json()).toEqual({ param1: true })
 	})
 
+	it('parse optional boolean string with second parameter', async () => {
+		const schema = t.Object({
+			registered: t.Optional(t.Boolean()),
+			other: t.String()
+		})
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: schema
+		})
+		const res = await app.handle(req('/?other=sucrose'))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ other: 'sucrose' })
+	})
+
+	it('parse optional boolean string with default value', async () => {
+		const schema = t.Object({
+			registered: t.Optional(t.Boolean({ default: true })),
+			other: t.String()
+		})
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: schema
+		})
+		const res = await app.handle(req('/?other=sucrose'))
+
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ other: 'sucrose', registered: true })
+	})
+
 	it('validate optional object', async () => {
 		const app = new Elysia().get(
 			'/',
@@ -654,12 +682,11 @@ describe('Query Validator', () => {
 	})
 
 	it('parse + in query', async () => {
-		const api = new Elysia()
-			.get('', ({ query }) => query, {
-				query: t.Object({
-					keyword: t.String()
-				})
+		const api = new Elysia().get('', ({ query }) => query, {
+			query: t.Object({
+				keyword: t.String()
 			})
+		})
 
 		const url = new URL('http://localhost:3000/')
 		url.searchParams.append('keyword', 'hello world')
@@ -670,7 +697,41 @@ describe('Query Validator', () => {
 			.then((response) => response.json())
 
 		expect(result).toEqual({
-			'keyword': 'hello world'
+			keyword: 'hello world'
 		})
+	})
+
+	// https://github.com/elysiajs/elysia/issues/929
+	it('slice non-ASCII querystring offset correctly', async () => {
+		const app = new Elysia().get('/', () => 'ok', {
+			query: t.Object({
+				key1: t.Union([t.Array(t.String()), t.String()])
+			})
+		})
+
+		const response = await Promise.all(
+			[
+				'/?key1=ab&key1=cd&z=が',
+				'/?key1=ab&z=が',
+				'/?key1=ab&key1=cd&z=x',
+				'/?z=が&key1=ab&key1=cd',
+				'/?key1=で&key1=が&z=x'
+			].map((path) => app.handle(req(path)).then((x) => x.status))
+		).then((responses) => responses.every((status) => status === 200))
+
+		expect(response).toBeTrue()
+	})
+
+	// https://github.com/elysiajs/elysia/issues/912
+	it('handle JavaScript date numeric offset', () => {
+		const api = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				date: t.Date()
+			})
+		})
+
+		api.handle(req(`/?date=${Date.now()}`))
+			.then((x) => x.json())
+			.then(console.log)
 	})
 })
