@@ -704,7 +704,8 @@ export default class Elysia<
 		const adapter = this['~adapter'].handler
 
 		const staticHandler =
-			typeof handle !== 'function'
+			typeof handle !== 'function' &&
+			typeof adapter.createStaticHandler === 'function'
 				? adapter.createStaticHandler(handle, hooks, this.setHeaders)
 				: undefined
 
@@ -732,7 +733,11 @@ export default class Elysia<
 				localHook: mergeHook(localHook),
 				hooks,
 				validator,
-				handler: handle,
+				handler:
+					typeof handle !== 'function' &&
+					typeof adapter.createStaticHandler !== 'function'
+						? () => handle
+						: handle,
 				allowMeta,
 				inference,
 				asManifest
@@ -5835,6 +5840,9 @@ export default class Elysia<
 
 			return this
 		}
+
+		if (typeof this.server?.reload === 'function')
+			this.server.reload(this.server || {})
 
 		this._handle = composeGeneralHandler(this)
 

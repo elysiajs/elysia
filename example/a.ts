@@ -1,5 +1,9 @@
 import { Elysia, t } from '../src'
 
+new Request('', {
+	duplex: 'half',
+})
+
 const app = new Elysia().get(
 	'/',
 	() => {

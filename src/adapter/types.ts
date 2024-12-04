@@ -45,7 +45,7 @@ export interface ElysiaAdapter {
 		 * Elysia().get('/', 'static')
 		 * ```
 		 */
-		createStaticHandler(
+		createStaticHandler?(
 			handle: unknown,
 			hooks: AnyLocalHook,
 			setHeaders?: Context['set']['headers'],
