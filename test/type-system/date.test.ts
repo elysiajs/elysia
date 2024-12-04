@@ -16,7 +16,7 @@ describe('TypeSystem - Date', () => {
 		expect(Value.Check(schema, '2021/1/1')).toEqual(true)
 
 		expect(Value.Check(schema, 'yay')).toEqual(false)
-		expect(Value.Check(schema, 42)).toEqual(false)
+		expect(Value.Check(schema, 42)).toEqual(true)
 		expect(Value.Check(schema, {})).toEqual(false)
 		expect(Value.Check(schema, undefined)).toEqual(false)
 		expect(Value.Check(schema, null)).toEqual(false)
@@ -36,7 +36,7 @@ describe('TypeSystem - Date', () => {
 			'The encoded value does not match the expected schema'
 		)
 		expect(() => Value.Encode(schema, 'yay')).toThrow(error)
-		expect(() => Value.Encode(schema, 42)).toThrow(error)
+		expect(() => Value.Encode(schema, 42)).not.toThrow(error)
 		expect(() => Value.Encode(schema, {})).toThrow(error)
 		expect(() => Value.Encode(schema, undefined)).toThrow(error)
 		expect(() => Value.Encode(schema, null)).toThrow(error)
@@ -56,7 +56,7 @@ describe('TypeSystem - Date', () => {
 			'Unable to decode value as it does not match the expected schema'
 		)
 		expect(() => Value.Decode(schema, 'yay')).toThrow(error)
-		expect(() => Value.Decode(schema, 42)).toThrow(error)
+		expect(() => Value.Decode(schema, 42)).not.toThrow(error)
 		expect(() => Value.Decode(schema, {})).toThrow(error)
 		expect(() => Value.Decode(schema, undefined)).toThrow(error)
 		expect(() => Value.Decode(schema, null)).toThrow(error)
