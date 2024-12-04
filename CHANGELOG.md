@@ -1,3 +1,9 @@
+# 1.1.26 - 4 Dev 2024
+Bug fix:
+- [#907](https://github.com/elysiajs/elysia/issues/907), [#872](https://github.com/elysiajs/elysia/issues/872), [#926](https://github.com/elysiajs/elysia/issues/926) BooleanString is not behave correctly if property is not provided
+- [#929](https://github.com/elysiajs/elysia/issues/929) Non-ASCII characters cause querystring index to be incorrectly slice
+- [#912](https://github.com/elysiajs/elysia/issues/912) handle JavaScript date numeric offset
+
 # 1.1.25 - 14 Nov 2024
 Bug fix:
 - [#908](https://github.com/elysiajs/elysia/pull/908) boolean-string converted to string

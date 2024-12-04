@@ -694,7 +694,7 @@ export const composeHandler = ({
 			}`
 		} else {
 			fnLiteral += `if(c.qi !== -1) {
-				let url = '&' + c.url.slice(c.qi + 1)
+				let url = '&' + decodeURIComponent(c.url.slice(c.qi + 1))
 
 				${destructured
 					.map(
@@ -728,8 +728,8 @@ export const composeHandler = ({
 
 											let temp
 
-											if(memory === -1) temp = decodeURIComponent(url.slice(start).replace(/\\+/g, ' '))
-											else temp = decodeURIComponent(url.slice(start, memory).replace(/\\+/g, ' '))
+											if(memory === -1) temp = url.slice(start).replace(/\\+|%20/g, ' ')
+											else temp = url.slice(start, memory).replace(/\\+|%20/g, ' ')
 
 											const charCode = temp.charCodeAt(0)
 											if(charCode !== 91 && charCode !== 123)
@@ -757,10 +757,10 @@ export const composeHandler = ({
 												a${index} = []
 
 											if(memory === -1) {
-												a${index}.push(decodeURIComponent(url.slice(start)).replace(/\\+/g, ' '))
+												a${index}.push(url.slice(start).replace(/\\+|%20/g, ' '))
 												break
 											}
-											else a${index}.push(decodeURIComponent(url.slice(start, memory)).replace(/\\+/g, ' '))
+											else a${index}.push(url.slice(start, memory).replace(/\\+|%20/g, ' '))
 
 											memory = url.indexOf('&${key}=', memory)
 											if(memory === -1) break
@@ -774,8 +774,8 @@ export const composeHandler = ({
 										const start = memory + ${key.length + 2}
 										memory = url.indexOf('&', start)
 
-										if(memory === -1) a${index} = decodeURIComponent(url.slice(start).replace(/\\+/g, ' '))
-										else a${index} = decodeURIComponent(url.slice(start, memory).replace(/\\+/g, ' '))
+										if(memory === -1) a${index} = url.slice(start).replace(/\\+|%20/g, ' ')
+										else a${index} = url.slice(start, memory).replace(/\\+|%20/g, ' ')
 
 										if (a${index} !== undefined) {
 											try {
@@ -792,9 +792,9 @@ export const composeHandler = ({
 										const start = memory + ${key.length + 2}
 										memory = url.indexOf('&', start)
 
-										if(memory === -1) a${index} = decodeURIComponent(url.slice(start).replace(/\\+/g, ' '))
+										if(memory === -1) a${index} = url.slice(start).replace(/\\+|%20/g, ' ')
 										else {
-											a${index} = decodeURIComponent(url.slice(start, memory).replace(/\\+/g, ' '))
+											a${index} = url.slice(start, memory).replace(/\\+|%20/g, ' ')
 
 											${
 												anyOf
@@ -813,8 +813,8 @@ export const composeHandler = ({
 														deepMemory = url.indexOf('&', start)
 
 													let value
-													if(deepMemory === -1) value = decodeURIComponent(url.slice(start).replace(/\\+/g, ' '))
-													else value = decodeURIComponent(url.slice(start, deepMemory).replace(/\\+/g, ' '))
+													if(deepMemory === -1) value = url.slice(start).replace(/\\+|%20/g, ' ')
+													else value = url.slice(start, deepMemory).replace(/\\+|%20/g, ' ')
 
 													const vStart = value.charCodeAt(0)
 													const vEnd = value.charCodeAt(value.length - 1)
