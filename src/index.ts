@@ -5515,8 +5515,9 @@ export default class Elysia<
 					if (!(key in this.definitions.type))
 						this.definitions.type[key] = value as TSchema
 				})
+				// @ts-expect-error
 				this.definitions.typebox = t.Module({
-					...this.definitions.typebox['$defs'],
+					...this.definitions.typebox['$defs'] as TModule<{}>,
 					...name
 				} as any)
 

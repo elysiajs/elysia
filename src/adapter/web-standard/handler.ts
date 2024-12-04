@@ -124,14 +124,20 @@ const handleStream = async (
 					if (typeof init.value === 'object')
 						try {
 							controller.enqueue(
+								// @ts-expect-error this is a valid operation
 								Buffer.from(JSON.stringify(init.value))
 							)
 						} catch {
 							controller.enqueue(
+								// @ts-expect-error this is a valid operation
 								Buffer.from(init.value.toString())
 							)
 						}
-					else controller.enqueue(Buffer.from(init.value.toString()))
+					else
+						controller.enqueue(
+							// @ts-expect-error this is a valid operation
+							Buffer.from(init.value.toString())
+						)
 				}
 
 				for await (const chunk of generator) {
@@ -141,12 +147,20 @@ const handleStream = async (
 					if (typeof chunk === 'object')
 						try {
 							controller.enqueue(
+								// @ts-expect-error this is a valid operation
 								Buffer.from(JSON.stringify(chunk))
 							)
 						} catch {
-							controller.enqueue(Buffer.from(chunk.toString()))
+							controller.enqueue(
+								// @ts-expect-error this is a valid operation
+								Buffer.from(chunk.toString())
+							)
 						}
-					else controller.enqueue(Buffer.from(chunk.toString()))
+					else
+						controller.enqueue(
+							// @ts-expect-error this is a valid operation
+							Buffer.from(chunk.toString())
+						)
 
 					// Wait for the next event loop
 					// Otherwise the data will be mixed up

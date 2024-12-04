@@ -237,7 +237,7 @@ export const createHandleWSResponse = (
 		if (data instanceof Promise)
 			return data.then((data) => handleWSResponse(ws, data))
 
-		if (Buffer.isBuffer(data)) return ws.send(data)
+		if (Buffer.isBuffer(data)) return ws.send(data.toString())
 
 		if (data === undefined) return
 
