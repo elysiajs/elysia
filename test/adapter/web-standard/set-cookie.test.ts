@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { parseSetCookies } from '../../src/handler'
+import { parseSetCookies } from '../../../src/adapter/web-standard/handler'
 
-describe('Parse Set Cookie', () => {
+describe('Web Standard - Parse Set Cookie', () => {
 	it('should handle empty arrays', () => {
 		const headers = new Headers([])
 		const setCookie: string[] = []
