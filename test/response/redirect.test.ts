@@ -1,4 +1,4 @@
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -10,7 +10,6 @@ describe('Response Redirect', () => {
 		const { headers, status } = await app.handle(req('/'))
 
 		expect(status).toBe(302)
-		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi'
 		})
@@ -24,7 +23,6 @@ describe('Response Redirect', () => {
 		const { headers, status } = await app.handle(req('/'))
 
 		expect(status).toBe(301)
-		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi'
 		})
@@ -40,7 +38,6 @@ describe('Response Redirect', () => {
 		const { headers, status } = await app.handle(req('/'))
 
 		expect(status).toBe(302)
-		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi',
 			alias: 'Abyssal Hunter'
@@ -61,9 +58,9 @@ describe('Response Redirect', () => {
 		const { headers, status } = await app.handle(req('/'))
 
 		expect(status).toBe(302)
-		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi',
+			// @ts-expect-error - Unsure where this comes from, set cookie can return an array. Maybe the type is expecting comma separated values?
 			'set-cookie': ['name=a; Path=/', 'name2=b; Path=/']
 		})
 	})

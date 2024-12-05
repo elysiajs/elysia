@@ -1,12 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import {
-	Elysia,
-	InternalServerError,
-	ParseError,
-	ValidationError,
-	error,
-	t
-} from '../../src'
+import { Elysia, InternalServerError, ParseError, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
@@ -60,10 +53,18 @@ describe('error', () => {
 				if (code === 'VALIDATION') {
 					set.status = 400
 
-					return error.all.map((i) => ({
-						filed: i.path.slice(1) || 'root',
-						reason: i.message
-					}))
+					return error.all.map((i) => {
+						if ('path' in i) {
+							return {
+								filed: i.path.slice(1) || 'root',
+								reason: i.message
+							}
+						}
+						return {
+							filed: 'root',
+							reason: i.summary
+						}
+					})
 				}
 			})
 			.post('/login', ({ body }) => body, {

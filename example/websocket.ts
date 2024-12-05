@@ -12,7 +12,7 @@ const app = new Elysia()
 		},
 		message(ws, message) {
 			ws.publish('asdf', message)
-			ws.send('asdf', message)
+			ws.send(message)
 		}
 	})
 	.get('/publish/:publish', ({ params: { publish: text } }) => {

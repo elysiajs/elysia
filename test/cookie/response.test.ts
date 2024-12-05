@@ -20,7 +20,7 @@ const app = new Elysia()
 			(council.value = [
 				{
 					name: 'Rin',
-					affilation: 'Administration'
+					affiliation: 'Administration'
 				}
 			]),
 		{
@@ -29,7 +29,7 @@ const app = new Elysia()
 					t.Array(
 						t.Object({
 							name: t.String(),
-							affilation: t.String()
+							affiliation: t.String()
 						})
 					)
 				)
@@ -99,7 +99,7 @@ describe('Cookie Response', () => {
 		const response = await app.handle(req('/council'))
 
 		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
+			'council=[{"name":"Rin","affiliation":"Administration"}]; Path=/'
 		])
 	})
 
@@ -113,7 +113,7 @@ describe('Cookie Response', () => {
 							JSON.stringify([
 								{
 									name: 'Aoi',
-									affilation: 'Financial'
+									affiliation: 'Financial'
 								}
 							])
 						)
@@ -122,7 +122,7 @@ describe('Cookie Response', () => {
 		)
 
 		expect(getCookies(response)).toEqual([
-			'council=[{"name":"Rin","affilation":"Administration"}]; Path=/'
+			'council=[{"name":"Rin","affiliation":"Administration"}]; Path=/'
 		])
 	})
 
@@ -136,7 +136,7 @@ describe('Cookie Response', () => {
 							JSON.stringify([
 								{
 									name: 'Rin',
-									affilation: 'Administration'
+									affiliation: 'Administration'
 								}
 							])
 						)
@@ -271,7 +271,7 @@ describe('Cookie Response', () => {
 				cookie: t.Cookie({
 					council: t.Object({
 						name: t.String(),
-						affilation: t.String()
+						affiliation: t.String()
 					})
 				})
 			}
@@ -279,7 +279,7 @@ describe('Cookie Response', () => {
 
 		const expected = {
 			name: 'Rin',
-			affilation: 'Administration'
+			affiliation: 'Administration'
 		}
 
 		const response = await app.handle(
@@ -306,7 +306,7 @@ describe('Cookie Response', () => {
 
 		const expected = {
 			name: 'Rin',
-			affilation: 'Administration'
+			affiliation: 'Administration'
 		}
 
 		const response = await app.handle(
@@ -355,7 +355,6 @@ describe('Cookie Response', () => {
 			return 'a'
 		})
 
-		// @ts-expect-error
 		const res = app.handle(req('/')).then((x) => x.headers.toJSON())
 
 		// @ts-expect-error
@@ -392,13 +391,14 @@ describe('Cookie Response', () => {
 			})
 			.get('/', () => 'Hello, world!')
 
-		const res = await app.handle(
-			new Request('http://localhost:3000/', {
-				headers: {
-					cookie: 'test=Hello, world!'
-				}
-			})
-		)
+		const res = await app
+			.handle(
+				new Request('http://localhost:3000/', {
+					headers: {
+						cookie: 'test=Hello, world!'
+					}
+				})
+			)
 			.then((x) => x.headers)
 
 		expect(res.getSetCookie()).toEqual([])

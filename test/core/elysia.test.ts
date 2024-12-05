@@ -125,7 +125,6 @@ describe('Edge Case', () => {
 
 		const response = await app
 			.handle(req('/'))
-			// @ts-expect-error
 			.then((x) => x.headers.toJSON())
 
 		expect(response['set-cookie']).toHaveLength(1)

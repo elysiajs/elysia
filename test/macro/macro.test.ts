@@ -484,7 +484,6 @@ describe('Macro', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia().get('/hello', () => 'hello', {
-			// @ts-expect-error missing type reference
 			hello: 'nagisa'
 		})
 

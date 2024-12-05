@@ -3,7 +3,6 @@ import { expect } from 'bun:test'
 import { t, Elysia, RouteSchema, Cookie } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
-// ? ArrayString
 {
 	new Elysia().post(
 		'/',

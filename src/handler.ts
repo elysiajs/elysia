@@ -6,7 +6,7 @@ import { StatusMap } from './utils'
 import { Cookie } from './cookies'
 
 import type { Context } from './context'
-import type { LocalHook } from './types'
+import type { HTTPHeaders, LocalHook } from './types'
 import { ElysiaCustomStatusResponse } from './error'
 
 const hasHeaderShorthand = 'toJSON' in new Headers()
@@ -112,14 +112,6 @@ export const serializeCookie = (cookies: Context['set']['cookie']) => {
 	return set
 }
 
-// const concatUint8Array = (a: Uint8Array, b: Uint8Array) => {
-// 	const arr = new Uint8Array(a.length + b.length)
-// 	arr.set(a, 0)
-// 	arr.set(b, a.length)
-
-// 	return arr
-// }
-
 const handleStream = async (
 	generator: Generator | AsyncGenerator,
 	set?: Context['set'],
@@ -196,8 +188,8 @@ const handleStream = async (
 				// Manually set transfer-encoding for direct response, eg. app.handle, eden
 				'transfer-encoding': 'chunked',
 				'content-type': 'text/event-stream; charset=utf-8',
-				...set?.headers
-			}
+				...((set?.headers || {}) as HTTPHeaders)
+			} as Record<string, string> | [string, string][] | Headers
 		}
 	)
 }
