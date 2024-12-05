@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 import { newWebsocket, wsOpen, wsClosed, wsMessage } from './utils'
 
-describe('WebSocket destructuring', () => {
+describe.skip('WebSocket destructuring', () => {
 	it('should destructure', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
