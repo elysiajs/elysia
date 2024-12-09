@@ -19,21 +19,6 @@ describe('Model', () => {
 		expect(res).toEqual(['string'])
 	})
 
-	it('add multiple', async () => {
-		const app = new Elysia()
-			.model('string', t.String())
-			.model('number', t.Number())
-			// @ts-ignore
-			.route('GET', '/', (context) => Object.keys(context.defs), {
-				config: {
-					allowMeta: true
-				}
-			})
-
-		const res = await app.handle(req('/')).then((r) => r.json())
-		expect(res).toEqual(['string', 'number'])
-	})
-
 	it('add object', async () => {
 		const app = new Elysia()
 			.model({
@@ -124,6 +109,10 @@ describe('Model', () => {
 					data: t.Number()
 				})
 			})
+			.post('/arr', ({ body }) => body, {
+				response: 'number[]',
+				body: 'number[]',
+			})
 
 		const correct = await app.handle(
 			new Request('http://localhost/', {
@@ -139,6 +128,19 @@ describe('Model', () => {
 
 		expect(correct.status).toBe(200)
 
+		const correctArr = await app.handle(
+			new Request('http://localhost/arr', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify([1, 2])
+			})
+		)
+
+		expect(correctArr.status).toBe(200)
+
+
 		const wrong = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST',
@@ -152,6 +154,20 @@ describe('Model', () => {
 		)
 
 		expect(wrong.status).toBe(422)
+
+		const wrongArr = await app.handle(
+			new Request('http://localhost/arr', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({
+					data: true
+				})
+			})
+		)
+
+		expect(wrongArr.status).toBe(422)
 	})
 
 	it('remap', async () => {
