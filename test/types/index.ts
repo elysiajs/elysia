@@ -79,6 +79,28 @@ app.model({
 	}
 )
 
+app.model({
+	t: t.Object({
+		username: t.String(),
+		password: t.String()
+	})
+}).get(
+	'/',
+	({ body }) => {
+		// ? unwrap body type
+		expectTypeOf<{
+			username: string
+			password: string
+		}[]>().toEqualTypeOf<typeof body>()
+
+		return body
+	},
+	{
+		body: 't[]',
+		response: 't[]'
+	}
+)
+
 app.get('/id/:id', ({ params }) => {
 	// ? infer params name
 	expectTypeOf<{
@@ -183,6 +205,16 @@ app.model({
 				},
 				{
 					body: 'string'
+				}
+			)
+			.get(
+				'/',
+				({ body }) => {
+					expectTypeOf<typeof body>().not.toBeUnknown()
+					expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
+				},
+				{
+					body: 'string[]'
 				}
 			)
 			.model({
@@ -404,6 +436,14 @@ const b = app
 		{
 			body: 'b'
 		}
+	).post(
+		'/',
+		({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf<'c'[]>()
+		},
+		{
+			body: 'c[]'
+		}
 	)
 
 // ? It derive void
@@ -485,6 +525,16 @@ app.use(plugin).get(
 	{
 		body: 'string'
 	}
+).get(
+	'/',
+	({ body, decorate, store: { state } }) => {
+		expectTypeOf<typeof decorate>().toBeString()
+		expectTypeOf<typeof state>().toBeString()
+		expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
+	},
+	{
+		body: 'string[]'
+	}
 )
 
 export const asyncPlugin = async (app: Elysia) =>
@@ -502,6 +552,16 @@ app.use(asyncPlugin).get(
 	},
 	{
 		body: 'string'
+	}
+).get(
+	'/',
+	({ body, decorate, store: { state } }) => {
+		expectTypeOf<typeof decorate>().toBeString()
+		expectTypeOf<typeof state>().toBeString()
+		expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
+	},
+	{
+		body: 'string[]'
 	}
 )
 

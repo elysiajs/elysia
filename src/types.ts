@@ -337,11 +337,15 @@ export type UnwrapSchema<
 		? Schema extends OptionalField
 			? Prettify<Partial<Static<Schema>>>
 			: StaticDecode<Schema>
-		: Schema extends string
-			? Definitions extends Record<Schema, infer NamedSchema>
-				? NamedSchema
+		: Schema extends `${infer Key}[]`
+			? Definitions extends Record<Key, infer NamedSchema>
+				? Array<NamedSchema>
 				: Definitions
-			: unknown
+			: Schema extends string
+				? Definitions extends Record<Schema, infer NamedSchema>
+					? NamedSchema
+					: Definitions
+				: unknown
 
 export type UnwrapBodySchema<
 	Schema extends TSchema | string | undefined,
@@ -352,11 +356,15 @@ export type UnwrapBodySchema<
 		? Schema extends OptionalField
 			? Prettify<Partial<Static<Schema>>> | null
 			: StaticDecode<Schema>
-		: Schema extends string
-			? Definitions extends Record<Schema, infer NamedSchema>
-				? NamedSchema
+		: Schema extends `${infer Key}[]`
+			? Definitions extends Record<Key, infer NamedSchema>
+				? Array<NamedSchema>
 				: Definitions
-			: unknown
+			: Schema extends string
+				? Definitions extends Record<Schema, infer NamedSchema>
+					? NamedSchema
+					: Definitions
+				: unknown
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
@@ -510,7 +518,7 @@ export type HTTPMethod =
 	| 'ALL'
 
 export interface InputSchema<Name extends string = string> {
-	body?: TSchema | Name
+	body?: TSchema | Name | `${Name}[]`
 	headers?: TObject | TNull | TUndefined | Name
 	query?: TObject | TNull | TUndefined | Name
 	params?: TObject | TNull | TUndefined | Name
@@ -518,8 +526,8 @@ export interface InputSchema<Name extends string = string> {
 	response?:
 		| TSchema
 		| Record<number, TSchema>
-		| Name
-		| Record<number, Name | TSchema>
+		| `${Name}[]`| Name 
+		| Record<number, `${Name}[]` | Name | TSchema>
 }
 
 export interface MergeSchema<
