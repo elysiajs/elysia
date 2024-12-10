@@ -5593,23 +5593,29 @@ export default class Elysia<
 
 	model(name: string | Record<string, TSchema> | Function, model?: TSchema) {
 		switch (typeof name) {
-			case 'object':
-				Object.entries(name).forEach(([key, value]) => {
-					if (!(key in this.definitions.type))
-						this.definitions.type[key] = value as TSchema
+			case 'object': {
+				Object.keys(name).forEach((key) => {
+					if (!(key in this.definitions.type)) {
+						const value = name[key]
+						value.$id ??= `#/components/schemas/${key}`
+						this.definitions.type[key] = value
+					}
 				})
-
 				return this
-
-			case 'function':
+			}
+			case 'function': {
 				this.definitions.type = name(this.definitions.type)
-
+				return this as any
+			}
+			case 'string': {
+				if (!model) return this
+				model.$id ??= `#/components/schemas/${name}`
+				this.definitions.type[name] = model
+				return this as any
+			}
+			default: 
 				return this as any
 		}
-
-		;(this.definitions.type as Record<string, TSchema>)[name] = model!
-
-		return this as any
 	}
 
 	mapDerive<

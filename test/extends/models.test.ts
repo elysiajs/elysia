@@ -124,6 +124,10 @@ describe('Model', () => {
 					data: t.Number()
 				})
 			})
+			.post('/arr', ({ body }) => body, {
+				response: 'number[]',
+				body: 'number[]',
+			})
 
 		const correct = await app.handle(
 			new Request('http://localhost/', {
@@ -139,6 +143,19 @@ describe('Model', () => {
 
 		expect(correct.status).toBe(200)
 
+		const correctArr = await app.handle(
+			new Request('http://localhost/arr', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify([1, 2])
+			})
+		)
+
+		expect(correctArr.status).toBe(200)
+
+
 		const wrong = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST',
@@ -152,6 +169,20 @@ describe('Model', () => {
 		)
 
 		expect(wrong.status).toBe(422)
+
+		const wrongArr = await app.handle(
+			new Request('http://localhost/arr', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({
+					data: true
+				})
+			})
+		)
+
+		expect(wrongArr.status).toBe(422)
 	})
 
 	it('remap', async () => {
