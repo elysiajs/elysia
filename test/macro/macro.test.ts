@@ -555,4 +555,28 @@ describe('Macro', () => {
 		expect(a).toEqual({ user: { name: 'anon' } })
 		expect(b).toEqual({ user: { name: 'hoshino' } })
 	})
+
+	it('accept async resolve', async () => {
+		const app = new Elysia()
+			.macro({
+				user: (enabled: boolean) => ({
+					resolve: async ({ query: { name = 'anon' } }) => ({
+						user: {
+							name
+						}
+					})
+				})
+			})
+			.get('/', ({ user }) => user, {
+				user: true
+			})
+
+		const [a, b] = await Promise.all([
+			app.handle(req('/')).then((x) => x.json()),
+			app.handle(req('/?name=hoshino')).then((x) => x.json())
+		])
+
+		expect(a).toEqual({ user: { name: 'anon' } })
+		expect(b).toEqual({ user: { name: 'hoshino' } })
+	})
 })

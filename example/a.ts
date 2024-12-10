@@ -1,5 +1,15 @@
-import { Value } from '@sinclair/typebox/value'
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
-
-console.log(Value.Create(t.Date()) instanceof Date)
+new Elysia()
+	.macro({
+		auth(enabled: boolean) {
+			return {
+				async resolve() {
+					return {
+						user: 'saltyaom'
+					}
+				}
+			}
+		}
+	})
+	.get('/', ({ user }) => {}, {
+		auth: true
+	})

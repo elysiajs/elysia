@@ -635,17 +635,17 @@ export type MacroToContext<
 					...v: any[]
 				) => {
 					resolve: MaybeArray<
-						(...v: any) => Record<keyof any, unknown>
+						(...v: any) => MaybePromise<Record<keyof any, unknown>>
 					>
 				}
 					? key
 					: never]: ResolveResolutions<
 					// @ts-expect-error type is checked in key mapping
-					ReturnType<MacroFn[key]>['resolve']
+					Awaited<ReturnType<MacroFn[key]>['resolve']>
 				>
 		  } extends infer A extends Record<RecordKey, unknown>
 		? IsNever<A[keyof A]> extends false
-			? A[keyof A]
+			? Awaited<A[keyof A]>
 			: {}
 		: {}
 

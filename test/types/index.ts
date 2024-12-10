@@ -1923,7 +1923,6 @@ type a = keyof {}
 				// 			stuff: number
 				// 	  }
 				// >()
-
 				// return undefined as any
 			}
 		}
@@ -2116,4 +2115,51 @@ type a = keyof {}
 		},
 		response: t.String()
 	})
+}
+
+// ? Macro resolve
+{
+	const app = new Elysia()
+		.macro({
+			user: (enabled: boolean) => ({
+				resolve: async ({ query: { name = 'anon' } }) => ({
+					user: {
+						name,
+						async: false
+					} as const
+				})
+			}),
+			asyncUser: (enabled: boolean) => ({
+				resolve: async ({ query: { name = 'anon' } }) => ({
+					user: {
+						name,
+						async: true
+					} as const
+				})
+			})
+		})
+		.get(
+			'/',
+			({ user }) => {
+				expectTypeOf<typeof user>().toEqualTypeOf<{
+					readonly name: string
+					readonly async: false
+				}>()
+			},
+			{
+				user: true
+			}
+		)
+		.get(
+			'/',
+			({ user }) => {
+				expectTypeOf<typeof user>().toEqualTypeOf<{
+					readonly name: string
+					readonly async: true
+				}>()
+			},
+			{
+				asyncUser: true
+			}
+		)
 }
