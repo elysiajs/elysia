@@ -202,5 +202,6 @@ async function readableStreamToString(stream: ReadableStream) {
 	const chunks = <Uint8Array[]>[]
 	for await (const chunk of stream) chunks.push(chunk)
 
+	// @ts-ignore this is intentional, it works
 	return Buffer.from(Buffer.concat(chunks)).toString()
 }
