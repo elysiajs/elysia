@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test'
-import { mapCompactResponse } from '../../src/handler'
-import { form } from '../../src'
+
+import { mapCompactResponse } from '../../../src/adapter/web-standard/handler'
+import { form } from '../../../src/utils'
 import { Passthrough } from './utils'
 
 class Student {
@@ -15,7 +16,7 @@ class Student {
 
 class CustomResponse extends Response {}
 
-describe('Map Compact Response', () => {
+describe('Web Standard - Map Compact Response', () => {
 	it('map string', async () => {
 		const response = mapCompactResponse('Shiroko')
 
