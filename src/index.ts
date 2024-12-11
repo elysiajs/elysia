@@ -170,6 +170,7 @@ export default class Elysia<
 		schema: {}
 		macro: {}
 		macroFn: {}
+		parser: {}
 	},
 	const out Routes extends RouteBase = {},
 	// ? scoped
@@ -312,6 +313,8 @@ export default class Elysia<
 	private getServer() {
 		return this.server
 	}
+
+	parser: Record<string, BodyHandler<any, any>> = {}
 
 	private _promisedModules: PromiseGroup | undefined
 	private get promisedModules() {
@@ -1020,11 +1023,75 @@ export default class Elysia<
 		>
 	): this
 
+	/**
+	 * ### parse | Life cycle event
+	 * Callback function to handle body parsing
+	 *
+	 * If truthy value is returned, will be assigned to `context.body`
+	 * Otherwise will skip the callback and look for the next one.
+	 *
+	 * Equivalent to Express's body parser
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onParse((request, contentType) => {
+	 *         if(contentType === "application/json")
+	 *             return request.json()
+	 *     })
+	 * ```
+	 */
+	onParse<
+		const Parser extends string,
+		const Schema extends RouteSchema,
+		const Handler extends BodyHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			>,
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: Singleton['derive'] &
+					Ephemeral['derive'] &
+					Volatile['derive']
+				resolve: {}
+			}
+		>
+	>(
+		name: Parser,
+		parser: Handler
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			parser: Metadata['parser'] & { [K in Parser]: Handler }
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
 	onParse(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as?: LifeCycleType } | MaybeArray<Function> | string,
 		handler?: MaybeArray<Function>
-	) {
+	): unknown {
 		if (!handler) return this.on('parse', options as any)
+
+		if (typeof options === 'string') {
+			this.parser[options] = handler as any
+
+			return this
+		}
 
 		return this.on(
 			options as { as?: LifeCycleType },
@@ -2527,6 +2594,7 @@ export default class Elysia<
 			>
 			macro: Metadata['macro']
 			macroFn: Metadata['macroFn']
+			parser: Metadata['parser']
 		},
 		Routes,
 		{
@@ -2613,6 +2681,7 @@ export default class Elysia<
 					>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				{},
 				Ephemeral,
@@ -2662,7 +2731,8 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro']
+			Metadata['macro'],
+			keyof Metadata['parser'] & string
 		>,
 		run: (
 			group: Elysia<
@@ -2687,6 +2757,7 @@ export default class Elysia<
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				{},
 				Ephemeral,
@@ -2816,7 +2887,8 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro']
+			Metadata['macro'],
+			keyof Metadata['parser'] & string
 		>
 	): Type extends 'global'
 		? Elysia<
@@ -2841,6 +2913,7 @@ export default class Elysia<
 					>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				Routes,
 				Ephemeral,
@@ -2909,7 +2982,8 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro']
+			Metadata['macro'],
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -2952,6 +3026,7 @@ export default class Elysia<
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				{},
 				Ephemeral,
@@ -2995,7 +3070,8 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro']
+			Metadata['macro'],
+			keyof Metadata['parser'] & string
 		>,
 		run: (
 			group: Elysia<
@@ -3012,6 +3088,7 @@ export default class Elysia<
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				{},
 				Ephemeral,
@@ -3625,6 +3702,7 @@ export default class Elysia<
 			schema: Metadata['schema']
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
 			macroFn: Metadata['macroFn'] & NewMacro
+			parser: Metadata['parser']
 		},
 		Routes,
 		Ephemeral,
@@ -3641,6 +3719,7 @@ export default class Elysia<
 			schema: Metadata['schema']
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
 			macroFn: Metadata['macroFn'] & NewMacro
+			parser: Metadata['parser']
 		},
 		Routes,
 		Ephemeral,
@@ -3846,7 +3925,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -3932,7 +4012,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -4018,7 +4099,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -4104,7 +4186,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -4190,7 +4273,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -4276,7 +4360,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -4362,7 +4447,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -4448,7 +4534,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -4534,7 +4621,8 @@ export default class Elysia<
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
@@ -4623,7 +4711,8 @@ export default class Elysia<
 					MacroContext
 			},
 			Definitions['error'],
-			Macro
+			Macro,
+			keyof Metadata['parser'] & string
 		> & {
 			config: {
 				allowMeta?: boolean
@@ -5517,7 +5606,7 @@ export default class Elysia<
 				})
 				// @ts-expect-error
 				this.definitions.typebox = t.Module({
-					...this.definitions.typebox['$defs'] as TModule<{}>,
+					...(this.definitions.typebox['$defs'] as TModule<{}>),
 					...name
 				} as any)
 

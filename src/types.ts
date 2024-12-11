@@ -321,6 +321,7 @@ export interface MetadataBase {
 	schema: RouteSchema
 	macro: BaseMacro
 	macroFn: BaseMacroFn
+	parser: Record<string, BodyHandler<any, any>>
 }
 
 export interface RouteSchema {
@@ -475,7 +476,6 @@ export type LifeCycleEvent =
 	| 'stop'
 
 export type ContentType = MaybeArray<
-	| (string & {})
 	| 'none'
 	| 'text'
 	| 'json'
@@ -486,6 +486,7 @@ export type ContentType = MaybeArray<
 	| 'application/json'
 	| 'multipart/form-data'
 	| 'application/x-www-form-urlencoded'
+	| 'application/octet-stream'
 >
 
 export type HTTPMethod =
@@ -635,7 +636,13 @@ export type MacroToContext<
 					...v: any[]
 				) => {
 					resolve: MaybeArray<
-						(...v: any) => MaybePromise<Record<keyof any, unknown>>
+						(
+							...v: any
+						) => MaybePromise<
+							| Record<keyof any, unknown>
+							| void
+							| ElysiaCustomStatusResponse<any, any, any>
+						>
 					>
 				}
 					? key
@@ -645,7 +652,10 @@ export type MacroToContext<
 				>
 		  } extends infer A extends Record<RecordKey, unknown>
 		? IsNever<A[keyof A]> extends false
-			? Awaited<A[keyof A]>
+			? Exclude<
+					Awaited<A[keyof A]>,
+					ElysiaCustomStatusResponse<any, any, any> | void
+				>
 			: {}
 		: {}
 
@@ -1024,10 +1034,13 @@ export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
 export type ResolveHandler<
 	in out Route extends RouteSchema,
 	in out Singleton extends SingletonBase,
-	Derivative extends Record<string, unknown> | void = Record<
-		string,
-		unknown
-	> | void
+	Derivative extends
+		| Record<string, unknown>
+		| ElysiaCustomStatusResponse<any, any, any>
+		| void =
+		| Record<string, unknown>
+		| ElysiaCustomStatusResponse<any, any, any>
+		| void
 > = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
 
 type AnyContextFn = (context?: any) => any
@@ -1080,12 +1093,14 @@ export type LocalHook<
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
-	Macro extends BaseMacro
+	Macro extends BaseMacro,
+	Parser extends string = ''
 > =
 	// Kind of inference hack, I have no idea why it work either
 	(LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 		Macro &
 		NoInfer<{
+			detail?: DocumentDecoration
 			/**
 			 * Short for 'Content-Type'
 			 *
@@ -1097,12 +1112,9 @@ export type LocalHook<
 			 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
 			 * - 'arraybuffer': parse body as readable stream
 			 */
-			type?: ContentType
-			detail?: DocumentDecoration
-			/**
-			 * Custom body parser
-			 */
-			parse?: MaybeArray<BodyHandler<Schema, Singleton>>
+			parse?: MaybeArray<
+				BodyHandler<Schema, Singleton> | ContentType | Parser
+			>
 			/**
 			 * Transform context's value
 			 */
@@ -1469,6 +1481,7 @@ export type MergeElysiaInstances<
 		schema: {}
 		macro: {}
 		macroFn: {}
+		parser: {}
 	},
 	Ephemeral extends EphemeralType = {
 		derive: {}

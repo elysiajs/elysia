@@ -83,7 +83,7 @@ export class ParseError extends Error {
 	status = 400
 
 	constructor() {
-		super('Failed to parse body')
+		super('Bad Request')
 	}
 }
 

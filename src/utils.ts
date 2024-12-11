@@ -14,7 +14,6 @@ import type { Sucrose } from './sucrose'
 import type { TraceHandler } from './trace'
 import type {
 	LifeCycleStore,
-	LocalHook,
 	MaybeArray,
 	InputSchema,
 	BaseMacro,
@@ -31,7 +30,7 @@ import type {
 	Replace,
 	AfterResponseHandler,
 	SchemaValidator,
-    AnyLocalHook
+	AnyLocalHook
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
@@ -1053,9 +1052,7 @@ const filterGlobal = (fn: MaybeArray<HookContainer>) => {
 	return array
 }
 
-export const filterGlobalHook = (
-	hook: AnyLocalHook
-): AnyLocalHook => {
+export const filterGlobalHook = (hook: AnyLocalHook): AnyLocalHook => {
 	return {
 		// rest is validator
 		...hook,
@@ -1387,13 +1384,16 @@ export const fnToContainer = (
 	if (!fn) return fn
 
 	if (!Array.isArray(fn)) {
-		if (typeof fn === 'function') return subType ? { fn, subType } : { fn }
+		// parse can be a label since 1.2.0
+		if (typeof fn === 'function' || typeof fn === 'string')
+			return subType ? { fn, subType } : { fn }
 		else if ('fn' in fn) return fn
 	}
 
 	const fns = <HookContainer[]>[]
 	for (const x of fn) {
-		if (typeof x === 'function')
+		// parse can be a label since 1.2.0
+		if (typeof x === 'function' || typeof x === 'string')
 			fns.push(subType ? { fn: x, subType } : { fn: x })
 		else if ('fn' in x) fns.push(x)
 	}
@@ -1401,9 +1401,7 @@ export const fnToContainer = (
 	return fns
 }
 
-export const localHookToLifeCycleStore = (
-	a: AnyLocalHook
-): LifeCycleStore => {
+export const localHookToLifeCycleStore = (a: AnyLocalHook): LifeCycleStore => {
 	return {
 		...a,
 		start: fnToContainer(a?.start),
@@ -1420,9 +1418,7 @@ export const localHookToLifeCycleStore = (
 	}
 }
 
-export const lifeCycleToFn = (
-	a: LifeCycleStore
-): AnyLocalHook => {
+export const lifeCycleToFn = (a: LifeCycleStore): AnyLocalHook => {
 	return {
 		...a,
 		start: a.start?.map((x) => x.fn),

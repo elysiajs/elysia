@@ -237,13 +237,15 @@ describe('Parser', () => {
 
 	it('handle type with validator with custom parse', async () => {
 		const app = new Elysia().post('/json', ({ body: { name } }) => name, {
-			type: 'json',
 			body: t.Object({
 				name: t.String()
 			}),
-			parse({ contentType }) {
-				if (contentType === 'custom') return { name: 'Mutsuki' }
-			}
+			parse: [
+				({ contentType }) => {
+					if (contentType === 'custom') return { name: 'Mutsuki' }
+				},
+				'json'
+			]
 		})
 
 		const [correct, incorrect, custom] = await Promise.all([
@@ -267,5 +269,152 @@ describe('Parser', () => {
 		expect(correct).toBe('Aru')
 		expect(incorrect).toBe(422)
 		expect(custom).toBe('Mutsuki')
+	})
+
+	it('handle name parser', async () => {
+		const app = new Elysia().post('/json', ({ body }) => body, {
+			parse: ['json']
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost:3000/json', {
+					method: 'POST',
+					body: JSON.stringify({ name: 'Aru' })
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({ name: 'Aru' })
+	})
+
+	it('handle custom parser then fallback to named default', async () => {
+		const app = new Elysia()
+			.onParse('custom', ({ contentType, request }) => {
+				if (contentType.startsWith('application/x-elysia'))
+					return { name: 'Eden' }
+			})
+			.post('/json', ({ body }) => body, {
+				parse: ['custom', 'json']
+			})
+
+		const response = await Promise.all([
+			app
+				.handle(
+					new Request('http://localhost:3000/json', {
+						method: 'POST',
+						body: JSON.stringify({ name: 'Aru' })
+					})
+				)
+				.then((x) => x.json()),
+			app
+				.handle(
+					new Request('http://localhost:3000/json', {
+						method: 'POST',
+						headers: {
+							'content-type': 'application/x-elysia'
+						},
+						body: JSON.stringify({ name: 'Aru' })
+					})
+				)
+				.then((x) => x.json())
+		])
+
+		expect(response).toEqual([{ name: 'Aru' }, { name: 'Eden' }])
+	})
+
+	it('handle custom parser then fallback to unknown', async () => {
+		const app = new Elysia()
+			.onParse('custom', ({ contentType, request }) => {
+				if (contentType.startsWith('application/x-elysia'))
+					return { name: 'Eden' }
+			})
+			.post('/json', ({ body }) => body, {
+				parse: ['custom']
+			})
+
+		const response = await Promise.all([
+			app
+				.handle(
+					new Request('http://localhost:3000/json', {
+						method: 'POST',
+						headers: {
+							'content-type': 'application/json'
+						},
+						body: JSON.stringify({ name: 'Aru' })
+					})
+				)
+				.then((x) => x.json()),
+			app
+				.handle(
+					new Request('http://localhost:3000/json', {
+						method: 'POST',
+						headers: {
+							'content-type': 'application/x-elysia'
+						},
+						body: JSON.stringify({ name: 'Aru' })
+					})
+				)
+				.then((x) => x.json())
+		])
+
+		expect(response).toEqual([{ name: 'Aru' }, { name: 'Eden' }])
+	})
+
+	it('handle multiple custom parsers then fallback to unknown', async () => {
+		const app = new Elysia()
+			.onParse('custom', ({ contentType, request }) => {
+				if (contentType === 'application/x-elysia')
+					return { name: 'Eden' }
+			})
+			.onParse('custom2', ({ contentType, request }) => {
+				if (contentType === 'application/x-elysia-2')
+					return { name: 'Pardofelis' }
+			})
+			.post('/json', ({ body }) => body, {
+				parse: ['custom', 'custom2']
+			})
+
+		const response = await Promise.all([
+			app
+				.handle(
+					new Request('http://localhost:3000/json', {
+						method: 'POST',
+						headers: {
+							'content-type': 'application/json'
+						},
+						body: JSON.stringify({ name: 'Aru' })
+					})
+				)
+				.then((x) => x.json()),
+			app
+				.handle(
+					new Request('http://localhost:3000/json', {
+						method: 'POST',
+						headers: {
+							'content-type': 'application/x-elysia'
+						},
+						body: JSON.stringify({ name: 'Aru' })
+					})
+				)
+				.then((x) => x.json()),
+			app
+				.handle(
+					new Request('http://localhost:3000/json', {
+						method: 'POST',
+						headers: {
+							'content-type': 'application/x-elysia-2'
+						},
+						body: JSON.stringify({ name: 'Aru' })
+					})
+				)
+				.then((x) => x.json())
+		])
+
+		expect(response).toEqual([
+			{ name: 'Aru' },
+			{ name: 'Eden' },
+			{ name: 'Pardofelis' }
+		])
 	})
 })

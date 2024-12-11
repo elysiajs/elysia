@@ -56,6 +56,19 @@ const isOptional = (validator?: TypeCheck<any>) => {
 	return !!schema && TypeBoxSymbol.optional in schema
 }
 
+const defaultParsers = [
+	'json',
+	'text',
+	'urlencoded',
+	'arrayBuffer',
+	'formdata',
+	'application/json',
+	'text/plain',
+	'application/x-www-form-urlencoded',
+	'application/octet-stream',
+	'multipart/form-data'
+]
+
 export const hasAdditionalProperties = (
 	_schema: TAnySchema | TypeCheck<any>
 ) => {
@@ -481,7 +494,7 @@ export const composeHandler = ({
 			'get:function(){return getServer()}' +
 			'})\n'
 
-	if (inference.body) fnLiteral += `let isParsing = false\n`
+	if (inference.body) fnLiteral += `let isParsing=false\n`
 
 	validator.createBody?.()
 	validator.createQuery?.()
@@ -699,7 +712,8 @@ export const composeHandler = ({
 				'}'
 		} else {
 			fnLiteral +=
-				'if(c.qi!==-1){' + `let url = '&' + decodeURIComponent(c.url.slice(c.qi + 1))\n`
+				'if(c.qi!==-1){' +
+				`let url = '&' + decodeURIComponent(c.url.slice(c.qi + 1))\n`
 
 			let index = 0
 			for (const {
@@ -883,9 +897,23 @@ export const composeHandler = ({
 
 		if (adapter.parser.declare) fnLiteral += adapter.parser.declare
 
-		fnLiteral += 'isParsing=true\n'
-		if (hooks.type && !hooks.parse.length) {
-			switch (hooks.type) {
+		const parser =
+			typeof hooks.parse === 'string'
+				? hooks.parse
+				: Array.isArray(hooks.parse) && hooks.parse.length === 1
+					? typeof hooks.parse[0] === 'string'
+						? hooks.parse[0]
+						: typeof hooks.parse[0].fn === 'string'
+							? hooks.parse[0].fn
+							: undefined
+					: undefined
+
+		if (parser && parser in defaultParsers) {
+			const reporter = report('parse', {
+				total: hooks.parse.length
+			})
+
+			switch (parser) {
 				case 'json':
 				case 'application/json':
 					fnLiteral += adapter.parser.json(isOptionalBody)
@@ -913,7 +941,32 @@ export const composeHandler = ({
 				case 'multipart/form-data':
 					fnLiteral += adapter.parser.formData(isOptionalBody)
 					break
+
+				default:
+					if ((parser[0] as string) in app.parser) {
+						fnLiteral += hasHeaders
+							? `let contentType = c.headers['content-type']`
+							: `let contentType = c.request.headers.get('content-type')`
+
+						fnLiteral +=
+							`\nif(contentType){` +
+							`const index=contentType.indexOf(';')\n` +
+							`if(index!==-1)contentType=contentType.substring(0, index)}\n` +
+							`else{contentType=''}` +
+							`c.contentType=contentType\n`
+
+						fnLiteral +=
+							`let result=parser['${parser}'](c, contentType)\n` +
+							`if(result instanceof Promise)result=await result\n` +
+							`if(result instanceof ElysiaCustomStatusResponse)throw result\n` +
+							`if(result!==undefined)c.body=result\n` +
+							'delete c.contentType\n'
+					}
+
+					break
 			}
+
+			reporter.resolve()
 		} else if (hasBodyInference) {
 			fnLiteral += '\n'
 			fnLiteral += hasHeaders
@@ -923,74 +976,103 @@ export const composeHandler = ({
 			fnLiteral +=
 				`\nif(contentType){` +
 				`const index=contentType.indexOf(';')\n` +
-				`if(index!==-1)contentType=contentType.substring(0, index)\n` +
+				`if(index!==-1)contentType=contentType.substring(0, index)}\n` +
+				`else{contentType=''}` +
 				`c.contentType=contentType\n`
 
-			if (hooks.parse.length) {
-				fnLiteral += `let used=false\n`
+			if (hooks.parse.length) fnLiteral += `let used=false\n`
 
-				const reporter = report('parse', {
-					total: hooks.parse.length
-				})
+			const reporter = report('parse', {
+				total: hooks.parse.length
+			})
 
-				for (let i = 0; i < hooks.parse.length; i++) {
+			let hasDefaultParser = false
+			for (let i = 0; i < hooks.parse.length; i++) {
+				const name = `bo${i}`
+				if (i !== 0) fnLiteral += `\nif(!used){`
+
+				if (typeof hooks.parse[i].fn === 'string') {
+					const endUnit = reporter.resolveChild(
+						hooks.parse[i].fn as unknown as string
+					)
+
+					switch (hooks.parse[i].fn as unknown as string) {
+						case 'json':
+						case 'application/json':
+							hasDefaultParser = true
+							fnLiteral += adapter.parser.json(isOptionalBody)
+
+							break
+
+						case 'text':
+						case 'text/plain':
+							hasDefaultParser = true
+							fnLiteral += adapter.parser.text(isOptionalBody)
+
+							break
+
+						case 'urlencoded':
+						case 'application/x-www-form-urlencoded':
+							hasDefaultParser = true
+							fnLiteral +=
+								adapter.parser.urlencoded(isOptionalBody)
+
+							break
+
+						case 'arrayBuffer':
+						case 'application/octet-stream':
+							hasDefaultParser = true
+							fnLiteral +=
+								adapter.parser.arrayBuffer(isOptionalBody)
+
+							break
+
+						case 'formdata':
+						case 'multipart/form-data':
+							hasDefaultParser = true
+							fnLiteral += adapter.parser.formData(isOptionalBody)
+
+							break
+
+						default:
+							fnLiteral +=
+								`${name}=parser['${hooks.parse[i].fn}'](c,contentType)\n` +
+								`if(${name} instanceof Promise)${name}=await ${name}\n` +
+								`if(${name}!==undefined){c.body=${name};used=true}\n`
+					}
+
+					endUnit()
+				} else {
 					const endUnit = reporter.resolveChild(
 						hooks.parse[i].fn.name
 					)
 
-					const name = `bo${i}`
-
-					if (i !== 0) fnLiteral += `if(!used){`
-
 					fnLiteral +=
-						`let ${name}=parse[${i}](c,contentType)\n` +
+						`let ${name}=parse[${i}]\n` +
+						`${name}=${name}(c,contentType)\n` +
 						`if(${name} instanceof Promise)${name}=await ${name}\n` +
 						`if(${name}!==undefined){c.body=${name};used=true}`
 
 					endUnit()
-
-					if (i !== 0) fnLiteral += `}`
 				}
 
-				reporter.resolve()
+				if (i !== 0) fnLiteral += `}`
+
+				if (hasDefaultParser) break
 			}
 
-			fnLiteral += '\ndelete c.contentType\n'
+			reporter.resolve()
 
-			if (hooks.parse.length) fnLiteral += `if(!used){`
+			if (!hasDefaultParser) {
+				if (hooks.parse.length)
+					fnLiteral +=
+						`\nif(!used){\n` +
+						`if(!contentType) throw new ParseError()\n`
 
-			if (hooks.type && !Array.isArray(hooks.type)) {
-				switch (hooks.type) {
-					case 'json':
-					case 'application/json':
-						fnLiteral += adapter.parser.json(isOptionalBody)
-						break
-
-					case 'text':
-					case 'text/plain':
-						fnLiteral += adapter.parser.text(isOptionalBody)
-						break
-
-					case 'urlencoded':
-					case 'application/x-www-form-urlencoded':
-						fnLiteral += adapter.parser.urlencoded(isOptionalBody)
-						break
-
-					case 'arrayBuffer':
-					case 'application/octet-stream':
-						fnLiteral += adapter.parser.arrayBuffer(isOptionalBody)
-						break
-
-					case 'formdata':
-					case 'multipart/form-data':
-						fnLiteral += adapter.parser.formData(isOptionalBody)
-						break
-				}
-			} else {
-				fnLiteral +=
-					`switch(contentType){` + `case 'application/json':\n`
+				fnLiteral += `switch(contentType){`
 
 				fnLiteral +=
+					`case 'application/json':\n` +
 					adapter.parser.json(isOptionalBody) +
 					`break\n` +
 					`case 'text/plain':` +
@@ -1008,14 +1090,27 @@ export const composeHandler = ({
 					`case 'multipart/form-data':` +
 					adapter.parser.formData(isOptionalBody) +
 					`break` +
-					`}`
+					'\n'
+
+				for (const key of Object.keys(app.parser))
+					fnLiteral +=
+						`case '${key}':` +
+						`let bo${key}=parser['${key}'](c,contentType)\n` +
+						`if(bo${key} instanceof Promise)bo${key}=await bo${key}\n` +
+						`if(bo${key} instanceof ElysiaCustomStatusResponse)throw result\n` +
+						`if(bo${key}!==undefined)c.body=bo${key}\n` +
+						`break` +
+						'\n'
+
+				if (hooks.parse.length) fnLiteral += '}'
+
+				fnLiteral += '}'
 			}
 
-			if (hooks.parse.length) fnLiteral += `}`
-
-			fnLiteral += '}'
+			// fnLiteral += '}'
 		}
 
+		fnLiteral += '\ndelete c.contentType'
 		fnLiteral += '\nisParsing=false\n'
 	}
 
@@ -1809,6 +1904,7 @@ export const composeHandler = ({
 		`ElysiaCustomStatusResponse,` +
 		`ELYSIA_TRACE,` +
 		`ELYSIA_REQUEST_ID,` +
+		'parser,' +
 		`getServer,` +
 		adapterVariables +
 		'TypeBoxError' +
@@ -1862,15 +1958,13 @@ export const composeHandler = ({
 			// @ts-expect-error private property
 			getServer: () => app.getServer(),
 			TypeBoxError,
+			parser: app.parser,
 			...adapter.inject
 		})
 	} catch (error) {
 		const debugHooks = lifeCycleToFn(hooks)
 
 		console.log('[Composer] failed to generate optimized handler')
-		console.log(
-			'Please report the following to Elysia maintainers privately as it may include sensitive information about your codebase:'
-		)
 		console.log('---')
 		console.log({
 			handler:

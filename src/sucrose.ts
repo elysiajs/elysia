@@ -640,6 +640,9 @@ export const sucrose = (
 
 		const event = 'fn' in e ? e.fn : e
 
+		// parse can be either a function or string
+		if(typeof event !== "function") continue
+
 		const [parameter, body, { isArrowReturn }] = separateFunction(
 			event.toString()
 		)
