@@ -10,6 +10,8 @@ export namespace Sucrose {
 		cookie: boolean
 		set: boolean
 		server: boolean
+		route: boolean
+		request: boolean
 	}
 
 	export interface LifeCycle extends Partial<LifeCycleStore> {
@@ -55,7 +57,7 @@ export const separateFunction = (
 
 	let index = -1
 
-	// Starts with '(', is an arrow function
+	// JSC: Starts with '(', is an arrow function
 	if (code.charCodeAt(0) === 40) {
 		index = code.indexOf('=>', code.indexOf(')'))
 
@@ -70,6 +72,24 @@ export const separateFunction = (
 
 			return [
 				code.slice(1, bracketEndIndex),
+				body,
+				{
+					isArrowReturn: body.charCodeAt(0) !== 123
+				}
+			]
+		}
+	}
+
+	// V8: bracket is removed for 1 parameter arrow function
+	if (/^(\w+)=>/g.test(code)) {
+		index = code.indexOf('=>')
+
+		if (index !== -1) {
+			let body = code.slice(index + 2)
+			if (body.charCodeAt(0) === 32) body = body.trimStart()
+
+			return [
+				code.slice(0, index),
 				body,
 				{
 					isArrowReturn: body.charCodeAt(0) !== 123
@@ -236,7 +256,7 @@ export const retrieveRootParamters = (parameter: string) => {
 	}
 
 	parameter = removeColonAlias(parameter)
-	if (parameter) parameters = parameters.concat(parameter.split(','))	
+	if (parameter) parameters = parameters.concat(parameter.split(','))
 
 	const newParameters = []
 	for (const p of parameters) {
@@ -245,8 +265,7 @@ export const retrieveRootParamters = (parameter: string) => {
 			continue
 		}
 
-		for (const q of p.split(','))
-			newParameters.push(q.trim())
+		for (const q of p.split(',')) newParameters.push(q.trim())
 	}
 	parameters = newParameters
 
@@ -277,6 +296,9 @@ export const findParameterReference = (
 	if (!inference.set && parameters.includes('set')) inference.set = true
 	if (!inference.server && parameters.includes('server'))
 		inference.server = true
+	if (!inference.request && parameters.includes('request'))
+		inference.request = true
+	if (!inference.route && parameters.includes('route')) inference.route = true
 
 	if (hasParenthesis) return `{ ${parameters.join(', ')} }`
 
@@ -336,6 +358,8 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 
 	while (true) {
 		let index = findEndIndex(' = ' + type, content)
+		// V8 engine minified the code
+		if (index === -1) index = findEndIndex('=' + type, content)
 
 		if (index === -1) {
 			/**
@@ -346,7 +370,8 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 			 * 'const a = body' // true
 			 * ```
 			 **/
-			const lastIndex = content.indexOf(' = ' + type)
+			let lastIndex = content.indexOf(' = ' + type)
+			if (lastIndex === -1) lastIndex = content.indexOf('=' + type)
 
 			if (lastIndex + 3 + type.length !== content.length) break
 
@@ -354,6 +379,9 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 		}
 
 		const part = content.slice(0, index)
+
+		// V8 engine minified the code
+		const lastPart = part.lastIndexOf(' ')
 		/**
 		 * aliased variable last character
 		 *
@@ -362,7 +390,7 @@ export const findAlias = (type: string, body: string, depth = 0) => {
 		 * const { hello } = body // } is the last character
 		 * ```
 		 **/
-		let variable = part.slice(part.lastIndexOf(' ') + 1)
+		let variable = part.slice(lastPart !== -1 ? lastPart + 1 : -1)
 
 		// Variable is using object destructuring, find the bracket pair
 		if (variable === '}') {
@@ -463,6 +491,12 @@ export const inferBodyReference = (
 			if (!inference.query && parameters.includes('server'))
 				inference.server = true
 
+			if (!inference.request && parameters.includes('request'))
+				inference.request = true
+
+			if (!inference.route && parameters.includes('route'))
+				inference.route = true
+
 			continue
 		}
 
@@ -492,7 +526,9 @@ export const inferBodyReference = (
 			inference.body &&
 			inference.cookie &&
 			inference.set &&
-			inference.server
+			inference.server &&
+			inference.server &&
+			inference.route
 		)
 			break
 	}
@@ -552,6 +588,8 @@ export const isContextPassToFunction = (
 			inference.cookie = true
 			inference.set = true
 			inference.server = true
+			inference.route = true
+			inference.request = true
 
 			return true
 		}
@@ -578,7 +616,9 @@ export const sucrose = (
 		body: false,
 		cookie: false,
 		set: false,
-		server: false
+		server: false,
+		request: false,
+		route: false
 	}
 ): Sucrose.Inference => {
 	const events = []
@@ -599,6 +639,9 @@ export const sucrose = (
 		if (!e) continue
 
 		const event = 'fn' in e ? e.fn : e
+
+		// parse can be either a function or string
+		if(typeof event !== "function") continue
 
 		const [parameter, body, { isArrowReturn }] = separateFunction(
 			event.toString()
@@ -627,7 +670,9 @@ export const sucrose = (
 			inference.body &&
 			inference.cookie &&
 			inference.set &&
-			inference.server
+			inference.server &&
+			inference.request &&
+			inference.route
 		)
 			break
 	}

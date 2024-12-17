@@ -205,10 +205,30 @@ describe('Handle Error', () => {
 		)
 	})
 
+	it('parse headers', async () => {
+		const headers = await new Elysia()
+			.get('/', ({ headers }) => headers)
+			.handle(
+				new Request('http://localhost:3000', {
+					headers: {
+						'Content-Type': 'application/json',
+						'X-Test': 'Nagi'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(headers).toEqual({
+			'content-type': 'application/json',
+			'x-test': 'Nagi'
+		})
+	})
+
 	it('handle error in Transform', async () => {
-		const route = new Elysia().get('/', ({query: {aid}}) => aid, {
+		const route = new Elysia().get('/', ({ query: { aid } }) => aid, {
 			query: t.Object({
-				aid: t.Transform(t.String())
+				aid: t
+					.Transform(t.String())
 					.Decode((value) => {
 						throw new NotFoundError('foo')
 					})
@@ -216,13 +236,16 @@ describe('Handle Error', () => {
 			})
 		})
 
-		let response = await (new Elysia({ aot: false })).use(route).handle(req('/?aid=a'))
+		let response = await new Elysia({ aot: false })
+			.use(route)
+			.handle(req('/?aid=a'))
 		expect(response.status).toEqual(404)
 		expect(await response.text()).toEqual('foo')
 
-		response = await (new Elysia({aot: true})).use(route).handle(req('/?aid=a'))
+		response = await new Elysia({ aot: true })
+			.use(route)
+			.handle(req('/?aid=a'))
 		expect(response.status).toEqual(404)
 		expect(await response.text()).toEqual('foo')
 	})
-
 })

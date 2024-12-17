@@ -1,21 +1,52 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
-const api = new Elysia().get('/', ({ query }) => query, {
-	query: t.Object({
-		date: t.Date()
+const app = new Elysia()
+	.onParse('custom', ({ contentType, request }) => {
+		if (contentType.startsWith('application/x-elysia-1'))
+			return { name: 'Eden' }
 	})
-})
+	.onParse('custom2', ({ contentType, request }) => {
+		if (contentType.startsWith('application/x-elysia-2'))
+			return { name: 'Pardofelis' }
+	})
+	.post('/json', ({ body }) => body, {
+		parse: ['custom']
+	})
 
-api.handle(req(`/?date=${Date.now()}`)).then(x => x.json()).then(console.log)
+const response = await Promise.all([
+	app
+		.handle(
+			new Request('http://localhost:3000/json', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({ name: 'Aru' })
+			})
+		)
+		.then((x) => x.json()),
+	app
+		.handle(
+			new Request('http://localhost:3000/json', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/x-elysia-1'
+				},
+				body: JSON.stringify({ name: 'Aru' })
+			})
+		)
+		.then((x) => x.text()),
+	app
+		.handle(
+			new Request('http://localhost:3000/json', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/x-elysia-2'
+				},
+				body: JSON.stringify({ name: 'Aru' })
+			})
+		)
+		.then((x) => x.text())
+])
 
-// const app = new Elysia()
-// 	.get('/', () => 'ok', {
-// 		query: t.Object({
-// 			key1: t.Union([t.Array(t.String()), t.String()])
-// 		})
-// 	})
-
-// app.handle(req('/?key1=ab&key1=cd&z=が'))
-// 	.then((x) => x.status)
-// 	.then(console.log)
+console.log(response)
