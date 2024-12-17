@@ -314,7 +314,7 @@ export default class Elysia<
 		return this.server
 	}
 
-	parser: Record<string, BodyHandler<any, any>> = {}
+	'~parser': Record<string, BodyHandler<any, any>> = {}
 
 	private _promisedModules: PromiseGroup | undefined
 	private get promisedModules() {
@@ -1023,6 +1023,28 @@ export default class Elysia<
 		>
 	): this
 
+	onParse<const Parsers extends keyof Metadata['parser']>(
+		parser: Parsers
+	): this
+
+	onParse(
+		options: { as?: LifeCycleType } | MaybeArray<Function> | string,
+		handler?: MaybeArray<Function>
+	): unknown {
+		if (!handler) {
+			if (typeof options === 'string')
+				return this.on('parse', this['~parser'][options] as any)
+
+			return this.on('parse', options as any)
+		}
+
+		return this.on(
+			options as { as?: LifeCycleType },
+			'parse',
+			handler as any
+		)
+	}
+
 	/**
 	 * ### parse | Life cycle event
 	 * Callback function to handle body parsing
@@ -1042,7 +1064,7 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onParse<
+	parser<
 		const Parser extends string,
 		const Schema extends RouteSchema,
 		const Handler extends BodyHandler<
@@ -1079,25 +1101,10 @@ export default class Elysia<
 		Routes,
 		Ephemeral,
 		Volatile
-	>
+	> {
+		this['~parser'][name] = parser as any
 
-	onParse(
-		options: { as?: LifeCycleType } | MaybeArray<Function> | string,
-		handler?: MaybeArray<Function>
-	): unknown {
-		if (!handler) return this.on('parse', options as any)
-
-		if (typeof options === 'string') {
-			this.parser[options] = handler as any
-
-			return this
-		}
-
-		return this.on(
-			options as { as?: LifeCycleType },
-			'parse',
-			handler as any
-		)
+		return this as any
 	}
 
 	/**
@@ -3526,6 +3533,11 @@ export default class Elysia<
 		 */
 		plugin.model(this.definitions.type as any)
 		plugin.error(this.definitions.error as any)
+
+		this['~parser'] = {
+			...plugin['~parser'],
+			...this['~parser']
+		}
 
 		this.headers(plugin.setHeaders)
 

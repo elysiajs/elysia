@@ -943,7 +943,7 @@ export const composeHandler = ({
 					break
 
 				default:
-					if ((parser[0] as string) in app.parser) {
+					if ((parser[0] as string) in app['~parser']) {
 						fnLiteral += hasHeaders
 							? `let contentType = c.headers['content-type']`
 							: `let contentType = c.request.headers.get('content-type')`
@@ -1092,7 +1092,7 @@ export const composeHandler = ({
 					`break` +
 					'\n'
 
-				for (const key of Object.keys(app.parser))
+				for (const key of Object.keys(app['~parser']))
 					fnLiteral +=
 						`case '${key}':` +
 						`let bo${key}=parser['${key}'](c,contentType)\n` +
@@ -1958,7 +1958,7 @@ export const composeHandler = ({
 			// @ts-expect-error private property
 			getServer: () => app.getServer(),
 			TypeBoxError,
-			parser: app.parser,
+			parser: app['~parser'],
 			...adapter.inject
 		})
 	} catch (error) {
