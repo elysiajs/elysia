@@ -698,7 +698,7 @@ declare module '@sinclair/typebox' {
 /**
  * A Boolean string
  *
- * Will be parse to Boolean
+ * Will be parsed to a Boolean
  */
 t.BooleanString = ElysiaType.BooleanString
 t.ObjectString = ElysiaType.ObjectString
@@ -707,7 +707,7 @@ t.ArrayString = ElysiaType.ArrayString
 /**
  * A Numeric string
  *
- * Will be parse to Number
+ * Will be parsed to a Number
  */
 t.Numeric = ElysiaType.Numeric
 t.Integer = ElysiaType.Integer
