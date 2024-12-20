@@ -150,6 +150,49 @@ describe('Header Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('parse single integer', async () => {
+		const app = new Elysia().get('/', ({ headers }) => headers, {
+			headers: t.Object({
+				limit: t.Integer()
+			})
+		})
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					limit: '16'
+				}
+			})
+		)
+
+		expect(await res.json()).toEqual({
+			limit: 16
+		})
+		expect(res.status).toBe(200)
+	})
+
+	it('parse multiple integers', async () => {
+		const app = new Elysia().get('/', ({ headers }) => headers, {
+			headers: t.Object({
+				limit: t.Integer(),
+				offset: t.Integer()
+			})
+		})
+		const res = await app.handle(
+			req('/', {
+				headers: {
+					limit: '16',
+					offset: '4'
+				}
+			})
+		)
+
+		expect(await res.json()).toEqual({
+			limit: 16,
+			offset: 4
+		})
+		expect(res.status).toBe(200)
+	})
+
 	it('validate partial', async () => {
 		const app = new Elysia().get('/', ({ headers }) => headers, {
 			headers: t.Partial(
