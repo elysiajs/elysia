@@ -7,7 +7,8 @@ import {
 	TDate,
 	TUnsafe,
 	TypeRegistry,
-	TInteger
+	TInteger,
+    IntegerOptions
 } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
@@ -265,7 +266,7 @@ if (!FormatRegistry.Has('numeric'))
 if (!FormatRegistry.Has('integer'))
 	FormatRegistry.Set(
 		'integer',
-		(value) => !!value && !isNaN(+value) && Number.isInteger(+value)
+		(value) => !!value && Number.isInteger(+value)
 	)
 
 if (!FormatRegistry.Has('boolean'))
@@ -361,7 +362,7 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as any as TNumber
 	},
-	Integer: (property?: NumberOptions): TInteger => {
+	Integer: (property?: IntegerOptions): TInteger => {
 		const schema = Type.Integer(property)
 
 		return t
@@ -379,7 +380,6 @@ export const ElysiaType = {
 			)
 			.Decode((value) => {
 				const number = +value
-				if (isNaN(number)) return value
 
 				if (!Value.Check(schema, number))
 					throw new ValidationError('property', schema, number)
