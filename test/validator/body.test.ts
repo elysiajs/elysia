@@ -140,6 +140,60 @@ describe('Body Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('parse single integer', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({
+				name: t.String(),
+				job: t.String(),
+				trait: t.Optional(t.String()),
+				age: t.Integer()
+			})
+		})
+		const res = await app.handle(
+			post('/', {
+				name: 'sucrose',
+				job: 'alchemist',
+				age: '16'
+			})
+		)
+
+		expect(await res.json()).toEqual({
+			name: 'sucrose',
+			job: 'alchemist',
+			age: 16
+		})
+
+		expect(res.status).toBe(200)
+	})
+
+	it('parse multiple integers', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({
+				name: t.String(),
+				job: t.String(),
+				trait: t.Optional(t.String()),
+				age: t.Integer(),
+				rank: t.Integer()
+			})
+		})
+		const res = await app.handle(
+			post('/', {
+				name: 'sucrose',
+				job: 'alchemist',
+				age: '16',
+				rank: '4'
+			})
+		)
+
+		expect(await res.json()).toEqual({
+			name: 'sucrose',
+			job: 'alchemist',
+			age: 16,
+			rank: 4
+		})
+		expect(res.status).toBe(200)
+	})
+
 	it('validate empty body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Union([
@@ -416,7 +470,7 @@ describe('Body Validator', () => {
 		expect(value).toBe('number')
 	})
 
-	it("coerce number to numeric", async () => {
+	it('coerce number to numeric', async () => {
 		const app = new Elysia().post('/', ({ body }) => typeof body, {
 			body: t.Number()
 		})
@@ -450,7 +504,7 @@ describe('Body Validator', () => {
 		expect(response.status).toBe(422)
 	})
 
-	it("coerce string to boolean", async () => {
+	it('coerce string to boolean', async () => {
 		const app = new Elysia().post('/', ({ body }) => typeof body, {
 			body: t.Boolean()
 		})

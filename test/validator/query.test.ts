@@ -142,6 +142,29 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('parse single integer', async () => {
+		const app = new Elysia().get('/', ({ query: { limit } }) => limit, {
+			query: t.Object({
+				limit: t.Integer()
+			})
+		})
+		const res = await app.handle(req('/?limit=16'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('16')
+	})
+
+	it('parse multiple integer', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				limit: t.Integer(),
+				offset: t.Integer()
+			})
+		})
+		const res = await app.handle(req('/?limit=16&offset=0'))
+		expect(res.status).toBe(200)
+		expect(await res.json()).toEqual({ limit: 16, offset: 0 })
+	})
+
 	it('validate partial', async () => {
 		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Partial(
