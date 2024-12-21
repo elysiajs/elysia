@@ -2056,7 +2056,7 @@ export const composeGeneralHandler = (
 
 	if (app.event.request.length) fnLiteral += `let re`
 
-	fnLiteral += `\nconst url = request.url
+	fnLiteral += `\nconst url = decodeURI(request.url)
 		const s = url.indexOf('/', ${standardHostname ? 11 : 7})
 		const qi = url.indexOf('?', s + 1)
 		let path

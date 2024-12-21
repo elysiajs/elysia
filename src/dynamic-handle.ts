@@ -30,7 +30,7 @@ export type DynamicHandler = {
 export const createDynamicHandler =
 	(app: Elysia<any, any, any, any, any, any, any, any>) =>
 	async (request: Request): Promise<Response> => {
-		const url = request.url,
+		const url = decodeURI(request.url),
 			s = url.indexOf('/', 11),
 			qi = url.indexOf('?', s + 1),
 			path = qi === -1 ? url.substring(s) : url.substring(s, qi)
