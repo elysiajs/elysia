@@ -79,7 +79,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			const hasTrace = app.event.trace.length > 0
 
 			fnLiteral +=
-				`const u=r.url,` +
+				`const u=decodeURI(r.url),` +
 				`s=u.indexOf('/',${standardHostname ? 11 : 7}),` +
 				`qi=u.indexOf('?', s + 1)\n` +
 				`let p\n` +
