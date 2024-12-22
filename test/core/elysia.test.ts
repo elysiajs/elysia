@@ -1,4 +1,4 @@
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -172,5 +172,38 @@ describe('Edge Case', () => {
 
 		// @ts-expect-error private property
 		expect(main.getGlobalRoutes().length).toBe(2)
+	})
+
+	describe('value returned from transform has priority over the default value from schema', () => {
+		const route = new Elysia().get(
+			"/:propParams?",
+			({ params: { propParams } }) => propParams,
+			{
+				params: t.Object({
+					propParams: t.String({
+						default: "params-default",
+					}),
+				}),
+				transform({ params }) {
+					params.propParams = "params-transform"
+				}
+			}
+		)
+
+		it('aot is on', async () => {
+			const app = new Elysia().use(route);
+
+			const response = await app.handle(new Request('http://localhost')).then((x) => x.text());
+
+			expect(response).toBe('params-transform');
+		})
+
+		it('aot is off', async () => {
+			const app = new Elysia({ aot: false }).use(route);
+
+			const response = await app.handle(new Request('http://localhost')).then((x) => x.text());
+
+			expect(response).toBe('params-transform');
+		})
 	})
 })

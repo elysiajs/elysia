@@ -178,6 +178,34 @@ describe('Dynamic Mode', () => {
 		expect(res).toBe('me - v1,v2')
 	})
 
+	it('default value', async () => {
+		const app = new Elysia({ aot: false }).get(
+			"/:propParams?",
+			({ params: { propParams }, headers: { propHeader }, query: { propQuery } }) => `${propParams} ${propHeader} ${propQuery}`,
+			{
+				params: t.Object({
+					propParams: t.String({
+						default: "params-default",
+					}),
+				}),
+				headers: t.Object({
+					propHeader: t.String({
+						default: "header-default",
+					}),
+				}),
+				query: t.Object({
+					propQuery: t.String({
+						default: "query-default",
+					}),
+				}),
+			}
+		);
+
+		const response = await app.handle(new Request('http://localhost')).then((x) => x.text());
+
+		expect(response).toBe('params-default header-default query-default');
+	});
+
 	it('handle non query fallback', async () => {
 		const app = new Elysia({ aot: false }).get('/', () => 'hi', {
 			query: t.Object({
