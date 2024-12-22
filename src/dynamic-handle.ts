@@ -9,9 +9,8 @@ import {
 } from './error'
 
 import type { Context } from './context'
-import { type error } from './error'
 
-import { parseQuery, parseQueryFromURL } from './fast-querystring'
+import { parseQuery } from './fast-querystring'
 
 import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
@@ -177,7 +176,7 @@ export const createDynamicHandler =
 			context.body = body
 			context.params = handler?.params || undefined
 			context.query =
-				qi === -1 ? {} : parseQueryFromURL(url.substring(qi + 1))
+				qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
 			context.headers = {}
 			for (const [key, value] of request.headers.entries())
