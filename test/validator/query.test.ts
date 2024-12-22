@@ -703,7 +703,7 @@ describe('Query Validator', () => {
 		})
 	})
 
-	it('parse + in query', async () => {
+	it('parse query with space', async () => {
 		const api = new Elysia().get('', ({ query }) => query, {
 			query: t.Object({
 				keyword: t.String()
@@ -711,15 +711,35 @@ describe('Query Validator', () => {
 		})
 
 		const url = new URL('http://localhost:3000/')
-		url.searchParams.append('keyword', 'hello world')
-		console.log(url.href) //http://localhost:3000/?keyword=hello+world
+		url.searchParams.append('keyword', 'with space')
+		console.log(url.href) // http://localhost:3000/?keyword=with+space
 
 		const result = await api
 			.handle(new Request(url.href))
 			.then((response) => response.json())
 
 		expect(result).toEqual({
-			keyword: 'hello world'
+			keyword: 'with space'
+		})
+	})
+
+	it('parse query with +', async () => {
+		const api = new Elysia().get('', ({ query }) => query, {
+			query: t.Object({
+				keyword: t.String()
+			})
+		})
+
+		const url = new URL("http://localhost:3000/");
+		url.searchParams.append("keyword", "with+plus");
+		console.log(url.href) // http://localhost:3000/?keyword=with%2Bplus
+	
+		const result = await api
+			.handle(new Request(url.href))
+			.then((response) => response.json())
+
+		expect(result).toEqual({
+			keyword: 'with+plus'
 		})
 	})
 
