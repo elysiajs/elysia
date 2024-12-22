@@ -332,7 +332,6 @@ describe('Query Validator', () => {
 					check() {
 						const { state } = ctx.query
 
-						// @ts-expect-error
 						if (!checker.check(ctx, name, state ?? ctx.query.state))
 							throw new Error('State mismatch')
 					}
