@@ -678,15 +678,13 @@ export const composeHandler = ({
 	}
 
 	if (hasQuery) {
-		const destructured = <
-			{
-				key: string
-				isArray: boolean
-				isNestedObjectArray: boolean
-				isObject: boolean
-				anyOf: boolean
-			}[]
-		>[]
+		const destructured = [] as {
+			key: string
+			isArray: boolean
+			isNestedObjectArray: boolean
+			isObject: boolean
+			anyOf: boolean
+		}[]
 
 		// @ts-ignore
 		if (validator.query && validator.query.schema.type === 'object') {
