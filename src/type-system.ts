@@ -6,7 +6,9 @@ import {
 	TArray,
 	TDate,
 	TUnsafe,
-	TypeRegistry
+	TypeRegistry,
+	TInteger,
+    IntegerOptions
 } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
@@ -261,6 +263,12 @@ const Files: ElysiaFiles =
 if (!FormatRegistry.Has('numeric'))
 	FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
 
+if (!FormatRegistry.Has('integer'))
+	FormatRegistry.Set(
+		'integer',
+		(value) => !!value && Number.isInteger(+value)
+	)
+
 if (!FormatRegistry.Has('boolean'))
 	FormatRegistry.Set(
 		'boolean',
@@ -353,6 +361,32 @@ export const ElysiaType = {
 				return number
 			})
 			.Encode((value) => value) as any as TNumber
+	},
+	Integer: (property?: IntegerOptions): TInteger => {
+		const schema = Type.Integer(property)
+
+		return t
+			.Transform(
+				t.Union(
+					[
+						t.String({
+							format: 'integer',
+							default: 0
+						}),
+						t.Number(property)
+					],
+					property
+				)
+			)
+			.Decode((value) => {
+				const number = +value
+
+				if (!Value.Check(schema, number))
+					throw new ValidationError('property', schema, number)
+
+				return number
+			})
+			.Encode((value) => value) as any as TInteger
 	},
 	Date: (property?: DateOptions) => {
 		const schema = Type.Date(property)
@@ -637,6 +671,7 @@ declare module '@sinclair/typebox' {
 		ObjectString: typeof ElysiaType.ObjectString
 		ArrayString: typeof ElysiaType.ArrayString
 		Numeric: typeof ElysiaType.Numeric
+		Integer: typeof ElysiaType.Integer
 		File: typeof ElysiaType.File
 		Files: typeof ElysiaType.Files
 		Nullable: typeof ElysiaType.Nullable
@@ -663,7 +698,7 @@ declare module '@sinclair/typebox' {
 /**
  * A Boolean string
  *
- * Will be parse to Boolean
+ * Will be parsed to a Boolean
  */
 t.BooleanString = ElysiaType.BooleanString
 t.ObjectString = ElysiaType.ObjectString
@@ -672,9 +707,10 @@ t.ArrayString = ElysiaType.ArrayString
 /**
  * A Numeric string
  *
- * Will be parse to Number
+ * Will be parsed to a Number
  */
 t.Numeric = ElysiaType.Numeric
+t.Integer = ElysiaType.Integer
 
 t.File = (arg = {}) =>
 	ElysiaType.File({
