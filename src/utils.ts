@@ -9,13 +9,11 @@ import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { t } from './type-system'
-import { isNotEmpty } from './handler'
 import type { Sucrose } from './sucrose'
 
 import type { TraceHandler } from './trace'
 import type {
 	LifeCycleStore,
-	LocalHook,
 	MaybeArray,
 	InputSchema,
 	BaseMacro,
@@ -31,10 +29,13 @@ import type {
 	ErrorHandler,
 	Replace,
 	AfterResponseHandler,
-	SchemaValidator
+	SchemaValidator,
+	AnyLocalHook
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
+
+export const hasHeaderShorthand = 'toJSON' in new Headers()
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const urlObject = new URL(url)
@@ -198,7 +199,7 @@ export const mergeSchemaValidator = (
 
 export const mergeHook = (
 	a?: LifeCycleStore,
-	b?: LocalHook<any, any, any, any, any, any, any>
+	b?: AnyLocalHook
 	// { allowMacro = false }: { allowMacro?: boolean } = {}
 ): LifeCycleStore => {
 	// In case if merging union is need
@@ -230,9 +231,13 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
+	// @ts-expect-error
+	const { resolve: resolveA, ...restA } = a ?? {}
+	const { resolve: resolveB, ...restB } = b ?? {}
+
 	return {
-		...a,
-		...b,
+		...restA,
+		...restB,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -260,7 +265,16 @@ export const mergeHook = (
 		),
 		parse: mergeObjectArray(a?.parse as any, b?.parse),
 		transform: mergeObjectArray(a?.transform, b?.transform),
-		beforeHandle: mergeObjectArray(a?.beforeHandle, b?.beforeHandle),
+		beforeHandle: mergeObjectArray(
+			mergeObjectArray(
+				fnToContainer(resolveA, 'resolve'),
+				a?.beforeHandle
+			),
+			mergeObjectArray(
+				fnToContainer(resolveB, 'resolve'),
+				b?.beforeHandle
+			)
+		),
 		afterHandle: mergeObjectArray(a?.afterHandle, b?.afterHandle),
 		mapResponse: mergeObjectArray(a?.mapResponse, b?.mapResponse) as any,
 		afterResponse: mergeObjectArray(
@@ -925,7 +939,7 @@ export const injectChecksum = (
 
 export const mergeLifeCycle = (
 	a: LifeCycleStore,
-	b: LifeCycleStore | LocalHook<any, any, any, any, any, any, any>,
+	b: LifeCycleStore | AnyLocalHook,
 	checksum?: number
 ): LifeCycleStore => {
 	return {
@@ -948,8 +962,18 @@ export const mergeLifeCycle = (
 			injectChecksum(checksum, b?.transform)
 		) as HookContainer<TransformHandler<any, any>>[],
 		beforeHandle: mergeObjectArray(
-			a.beforeHandle,
-			injectChecksum(checksum, b?.beforeHandle)
+			mergeObjectArray(
+				// @ts-ignore
+				fnToContainer(a.resolve, 'resolve'),
+				a.beforeHandle
+			),
+			injectChecksum(
+				checksum,
+				mergeObjectArray(
+					fnToContainer(b?.resolve, 'resolve'),
+					b?.beforeHandle
+				)
+			)
 		) as HookContainer<OptionalHandler<any, any>>[],
 		afterHandle: mergeObjectArray(
 			a.afterHandle,
@@ -1028,9 +1052,7 @@ const filterGlobal = (fn: MaybeArray<HookContainer>) => {
 	return array
 }
 
-export const filterGlobalHook = (
-	hook: LocalHook<any, any, any, any, any, any, any>
-): LocalHook<any, any, any, any, any, any, any> => {
+export const filterGlobalHook = (hook: AnyLocalHook): AnyLocalHook => {
 	return {
 		// rest is validator
 		...hook,
@@ -1044,7 +1066,7 @@ export const filterGlobalHook = (
 		afterResponse: filterGlobal(hook?.afterResponse),
 		error: filterGlobal(hook?.error),
 		trace: filterGlobal(hook?.trace)
-	} as LocalHook<any, any, any, any, any, any, any>
+	}
 }
 
 export const StatusMap = {
@@ -1169,7 +1191,8 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 
 export const traceBackMacro = (
 	extension: unknown,
-	property: Record<string, unknown>
+	property: Record<string, unknown>,
+	manage: ReturnType<typeof createMacroManager>
 ) => {
 	if (!extension || typeof extension !== 'object' || !property) return
 
@@ -1181,7 +1204,15 @@ export const traceBackMacro = (
 		] as BaseMacro[string]
 
 		if (typeof v === 'function') {
-			v(value)
+			const hook = v(value)
+
+			if (typeof hook === 'object') {
+				for (const [k, v] of Object.entries(hook))
+					manage(k as keyof LifeCycleStore)({
+						fn: v as any
+					})
+			}
+
 			delete property[key as unknown as keyof typeof extension]
 		}
 	}
@@ -1193,7 +1224,7 @@ export const createMacroManager =
 		localHook
 	}: {
 		globalHook: LifeCycleStore
-		localHook: LocalHook<any, any, any, any, any, any, any>
+		localHook: AnyLocalHook
 	}) =>
 	(stackName: keyof LifeCycleStore) =>
 	(
@@ -1346,27 +1377,31 @@ export class PromiseGroup implements PromiseLike<void> {
 }
 
 export const fnToContainer = (
-	fn: MaybeArray<Function | HookContainer>
+	fn: MaybeArray<Function | HookContainer>,
+	/** Only add subType to non contained fn */
+	subType?: HookContainer['subType']
 ): MaybeArray<HookContainer> => {
 	if (!fn) return fn
 
 	if (!Array.isArray(fn)) {
-		if (typeof fn === 'function') return { fn }
+		// parse can be a label since 1.2.0
+		if (typeof fn === 'function' || typeof fn === 'string')
+			return subType ? { fn, subType } : { fn }
 		else if ('fn' in fn) return fn
 	}
 
 	const fns = <HookContainer[]>[]
 	for (const x of fn) {
-		if (typeof x === 'function') fns.push({ fn: x })
+		// parse can be a label since 1.2.0
+		if (typeof x === 'function' || typeof x === 'string')
+			fns.push(subType ? { fn: x, subType } : { fn: x })
 		else if ('fn' in x) fns.push(x)
 	}
 
 	return fns
 }
 
-export const localHookToLifeCycleStore = (
-	a: LocalHook<any, any, any, any, any>
-): LifeCycleStore => {
+export const localHookToLifeCycleStore = (a: AnyLocalHook): LifeCycleStore => {
 	return {
 		...a,
 		start: fnToContainer(a?.start),
@@ -1383,9 +1418,7 @@ export const localHookToLifeCycleStore = (
 	}
 }
 
-export const lifeCycleToFn = (
-	a: LifeCycleStore
-): LocalHook<any, any, any, any, any, any, any> => {
+export const lifeCycleToFn = (a: LifeCycleStore): AnyLocalHook => {
 	return {
 		...a,
 		start: a.start?.map((x) => x.fn),
@@ -1402,14 +1435,17 @@ export const lifeCycleToFn = (
 	}
 }
 
-export const cloneInference = (inference: Sucrose.Inference) => ({
-	body: inference.body,
-	cookie: inference.cookie,
-	headers: inference.headers,
-	query: inference.query,
-	set: inference.set,
-	server: inference.server
-})
+export const cloneInference = (inference: Sucrose.Inference) =>
+	({
+		body: inference.body,
+		cookie: inference.cookie,
+		headers: inference.headers,
+		query: inference.query,
+		set: inference.set,
+		server: inference.server,
+		request: inference.request,
+		route: inference.route
+	}) satisfies Sucrose.Inference
 
 /**
  *
@@ -1457,7 +1493,10 @@ export const form = <const T extends Record<string | number, unknown>>(
 	return formData as any
 }
 
-export const randomId = () => crypto.getRandomValues(new Uint32Array(1))[0]
+export const randomId = () => {
+	const uuid = crypto.randomUUID()
+	return uuid.slice(0, 8) + uuid.slice(24, 32)
+}
 
 // ! Deduplicate current instance
 export const deduplicateChecksum = <T extends Function>(
@@ -1501,11 +1540,11 @@ export const promoteEvent = (
 	for (const event of events) if ('scope' in event) event.scope = 'global'
 }
 
-type PropertyKeys<T> = {
-	[K in keyof T]: T[K] extends (...args: any[]) => any ? never : K
-}[keyof T]
+// type PropertyKeys<T> = {
+// 	[K in keyof T]: T[K] extends (...args: any[]) => any ? never : K
+// }[keyof T]
 
-type PropertiesOnly<T> = Pick<T, PropertyKeys<T>>
+// type PropertiesOnly<T> = Pick<T, PropertyKeys<T>>
 
 // export const classToObject = <T>(
 // 	instance: T,
@@ -1551,3 +1590,18 @@ type PropertiesOnly<T> = Pick<T, PropertyKeys<T>>
 
 // 	return result as any
 // }
+
+export const getLoosePath = (path: string) => {
+	if (path.charCodeAt(path.length - 1) === 47)
+		return path.slice(0, path.length - 1)
+
+	return path + '/'
+}
+
+export const isNotEmpty = (obj?: Object) => {
+	if (!obj) return false
+
+	for (const x in obj) return true
+
+	return false
+}

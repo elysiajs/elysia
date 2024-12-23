@@ -108,10 +108,12 @@ describe('Params Validator', () => {
 				id: t.Integer()
 			})
 		})
+
 		const res = await app.handle(req('/id/617.1234'))
 		expect(await res.json()).toEqual({
 			errors: [
 				{
+					errors: [],
 					message: 'Expected integer',
 					path: '',
 					schema: {

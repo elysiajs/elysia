@@ -83,7 +83,7 @@ export class ParseError extends Error {
 	status = 400
 
 	constructor() {
-		super('Failed to parse body')
+		super('Bad Request')
 	}
 }
 
@@ -249,7 +249,7 @@ export class ValidationError extends Error {
 				{
 					type: 'validation',
 					on: type,
-					summary: errors[0]?.summary,
+					summary: mapValueError(error).summary,
 					property: accessor,
 					message: error?.message,
 					expected,

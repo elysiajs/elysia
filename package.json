@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.1.27",
+	"version": "1.2.0",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -23,6 +23,16 @@
 			"import": "./dist/ws/index.mjs",
 			"require": "./dist/cjs/ws/index.js"
 		},
+		"./ws/types": {
+			"types": "./dist/ws/types.d.ts",
+			"import": "./dist/ws/types.mjs",
+			"require": "./dist/cjs/ws/types.js"
+		},
+		"./ws/bun": {
+			"types": "./dist/ws/bun.d.ts",
+			"import": "./dist/ws/bun.mjs",
+			"require": "./dist/cjs/ws/bun.js"
+		},
 		"./compose": {
 			"types": "./dist/compose.d.ts",
 			"import": "./dist/compose.mjs",
@@ -42,11 +52,6 @@
 			"types": "./dist/error.d.ts",
 			"import": "./dist/error.mjs",
 			"require": "./dist/cjs/error.js"
-		},
-		"./handler": {
-			"types": "./dist/handler.d.ts",
-			"import": "./dist/handler.mjs",
-			"require": "./dist/cjs/handler.js"
 		},
 		"./sucrose": {
 			"types": "./dist/sucrose.d.ts",
@@ -77,6 +82,51 @@
 			"types": "./dist/fast-querystring.d.ts",
 			"import": "./dist/fast-querystring.mjs",
 			"require": "./dist/cjs/fast-querystring.js"
+		},
+		"./adapter": {
+			"types": "./dist/adapter/index.d.ts",
+			"import": "./dist/adapter/index.mjs",
+			"require": "./dist/cjs/adapter/index.js"
+		},
+		"./adapter/bun": {
+			"types": "./dist/adapter/bun/index.d.ts",
+			"import": "./dist/adapter/bun/index.mjs",
+			"require": "./dist/cjs/adapter/bun/index.js"
+		},
+		"./adapter/bun/handler": {
+			"types": "./dist/adapter/bun/handler.d.ts",
+			"import": "./dist/adapter/bun/handler.mjs",
+			"require": "./dist/cjs/adapter/bun/handler.js"
+		},
+		"./adapter/web-standard": {
+			"types": "./dist/adapter/web-standard/index.d.ts",
+			"import": "./dist/adapter/web-standard/index.mjs",
+			"require": "./dist/cjs/adapter/web-standard/index.js"
+		},
+		"./adapter/web-standard/handler": {
+			"types": "./dist/adapter/web-standard/handler.d.ts",
+			"import": "./dist/adapter/web-standard/handler.mjs",
+			"require": "./dist/cjs/adapter/web-standard/handler.js"
+		},
+		"./universal": {
+			"types": "./dist/universal/index.d.ts",
+			"import": "./dist/universal/index.mjs",
+			"require": "./dist/cjs/universal/index.js"
+		},
+		"./universal/server": {
+			"types": "./dist/universal/server.d.ts",
+			"import": "./dist/universal/server.mjs",
+			"require": "./dist/cjs/universal/server.js"
+		},
+		"./universal/env": {
+			"types": "./dist/universal/env.d.ts",
+			"import": "./dist/universal/env.mjs",
+			"require": "./dist/cjs/universal/env.js"
+		},
+		"./universal/file": {
+			"types": "./dist/universal/file.d.ts",
+			"import": "./dist/universal/file.mjs",
+			"require": "./dist/cjs/universal/file.js"
 		}
 	},
 	"repository": {
@@ -103,9 +153,10 @@
 		"release": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {
-		"@sinclair/typebox": "0.32.34",
-		"cookie": "^1.0.1",
+		"@sinclair/typebox": "^0.34.13",
+		"cookie": "^1.0.2",
 		"fast-decode-uri-component": "^1.0.1",
+		"memoirist": "^0.2.0",
 		"openapi-types": "^12.1.3"
 	},
 	"devDependencies": {
@@ -119,13 +170,12 @@
 		"eslint-plugin-security": "^2.1.0",
 		"eslint-plugin-sonarjs": "^0.23.0",
 		"expect-type": "^0.16.0",
-		"memoirist": "^0.2.0",
 		"prettier": "^3.3.3",
-		"tsup": "^8.0.2",
-		"typescript": "^5.5.2"
+		"tsup": "^8.3.5",
+		"typescript": "^5.7.2"
 	},
 	"peerDependencies": {
-		"@sinclair/typebox": ">= 0.32.0",
+		"@sinclair/typebox": ">= 0.34.0",
 		"openapi-types": ">= 12.0.0",
 		"typescript": ">= 5.0.0"
 	},

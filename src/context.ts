@@ -139,8 +139,6 @@ export type Context<
 			/**
 			 * @deprecated Use inline redirect instead
 			 *
-			 * Will be removed in 1.2.0
-			 *
 			 * @example Migration example
 			 * ```ts
 			 * new Elysia()

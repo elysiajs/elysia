@@ -1,34 +1,40 @@
-import type { Serve, Server, ServerWebSocket } from 'bun'
-
 import { Memoirist } from 'memoirist'
-import { type TObject, type Static, type TSchema } from '@sinclair/typebox'
+import type {
+	TObject,
+	Static,
+	TSchema,
+	TModule,
+	TRef,
+	TProperties
+} from '@sinclair/typebox'
 
 import type { Context } from './context'
 
 import { t, TypeCheck } from './type-system'
 import { sucrose, type Sucrose } from './sucrose'
 
-import { ElysiaWS, websocket } from './ws'
-import type { WS } from './ws/types'
+import type { WSLocalHook } from './ws/types'
 
-import { version as _version } from '../package.json'
-import {
-	createNativeStaticHandler,
-	createStaticHandler,
-	isNotEmpty
-} from './handler'
+import { BunAdapter } from './adapter/bun/index'
+import { WebStandardAdapter } from './adapter/web-standard/index'
+import type { ElysiaAdapter } from './adapter/types'
+
+import { env } from './universal/env'
+import type { ListenCallback, Serve, Server } from './universal/server'
 
 import {
 	cloneInference,
 	coercePrimitiveRoot,
 	deduplicateChecksum,
 	fnToContainer,
+	getLoosePath,
 	localHookToLifeCycleStore,
 	mergeDeep,
 	mergeSchemaValidator,
 	PromiseGroup,
 	promoteEvent,
-	stringToStructureCoercions
+	stringToStructureCoercions,
+	isNotEmpty
 } from './utils'
 
 import {
@@ -49,7 +55,6 @@ import {
 	asHookType,
 	traceBackMacro,
 	replaceUrlPath,
-	isNumericString,
 	createMacroManager,
 	getCookieValidator
 } from './utils'
@@ -62,7 +67,6 @@ import {
 
 import {
 	ERROR_CODE,
-	isProduction,
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
@@ -80,6 +84,7 @@ import type {
 	ComposedHandler,
 	InputSchema,
 	LocalHook,
+	AnyLocalHook,
 	MergeSchema,
 	RouteSchema,
 	UnwrapRoute,
@@ -95,7 +100,6 @@ import type {
 	MaybePromise,
 	Prettify,
 	Prettify2,
-	ListenCallback,
 	AddPrefix,
 	AddSuffix,
 	AddPrefixCapitalize,
@@ -125,10 +129,17 @@ import type {
 	HigherOrderFunction,
 	ResolvePath,
 	JoinPath,
-	ValidatorLayer
+	ValidatorLayer,
+	MergeElysiaInstances,
+	HookMacroFn,
+	ResolveHandler,
+	ResolveResolutions,
+	UnwrapTypeModule,
+	MacroToContext,
+	MergeTypeModule
 } from './types'
 
-export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
+export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
 /**
  * ### Elysia Server
@@ -146,7 +157,6 @@ export type AnyElysia = Elysia<any, any, any, any, any, any, any, any>
  */
 export default class Elysia<
 	const in out BasePath extends string = '',
-	const in out Scoped extends boolean = false,
 	const in out Singleton extends SingletonBase = {
 		decorator: {}
 		store: {}
@@ -154,13 +164,14 @@ export default class Elysia<
 		resolve: {}
 	},
 	const in out Definitions extends DefinitionBase = {
-		type: {}
+		typebox: TModule<{}>
 		error: {}
 	},
 	const in out Metadata extends MetadataBase = {
 		schema: {}
 		macro: {}
 		macroFn: {}
+		parser: {}
 	},
 	const out Routes extends RouteBase = {},
 	// ? scoped
@@ -176,7 +187,7 @@ export default class Elysia<
 		schema: {}
 	}
 > {
-	config: ElysiaConfig<BasePath, Scoped>
+	config: ElysiaConfig<BasePath>
 
 	server: Server | null = null
 	private dependencies: Record<string, Checksum[]> = {}
@@ -185,7 +196,6 @@ export default class Elysia<
 
 	_types = {
 		Prefix: '' as BasePath,
-		Scoped: false as Scoped,
 		Singleton: {} as Singleton,
 		Definitions: {} as Definitions,
 		Metadata: {} as Metadata
@@ -193,9 +203,6 @@ export default class Elysia<
 
 	_ephemeral = {} as Ephemeral
 	_volatile = {} as Volatile
-
-	static version = _version
-	version = _version
 
 	protected singleton = {
 		decorator: {},
@@ -212,11 +219,8 @@ export default class Elysia<
 		return this.singleton.decorator
 	}
 
-	get _scoped() {
-		return this.config.scoped as Scoped
-	}
-
 	protected definitions = {
+		typebox: t.Module({}),
 		type: {} as Record<string, TSchema>,
 		error: {} as Record<string, Error>
 	}
@@ -270,13 +274,12 @@ export default class Elysia<
 		static: {
 			http: {
 				static: {} as Record<string, Response>,
-				handlers: [] as ComposedHandler[],
+				// handlers: [] as ComposedHandler[],
 				map: {} as Record<
 					string,
 					{
 						code: string
 						all?: string
-						static?: Function
 					}
 				>,
 				all: ''
@@ -303,12 +306,16 @@ export default class Elysia<
 		headers: false,
 		query: false,
 		set: false,
-		server: false
+		server: false,
+		request: false,
+		route: false
 	}
 
 	private getServer() {
 		return this.server
 	}
+
+	'~parser': Record<string, BodyHandler<any, any>> = {}
 
 	private _promisedModules: PromiseGroup | undefined
 	private get promisedModules() {
@@ -317,7 +324,7 @@ export default class Elysia<
 		return this._promisedModules
 	}
 
-	constructor(config: ElysiaConfig<BasePath, Scoped> = {}) {
+	constructor(config: ElysiaConfig<BasePath> = {}) {
 		if (config.tags) {
 			if (!config.detail)
 				config.detail = {
@@ -332,19 +339,25 @@ export default class Elysia<
 		this.config = {}
 		this.applyConfig(config ?? {})
 
+		this['~adapter'] =
+			config.adapter ??
+			(typeof Bun !== 'undefined' ? BunAdapter : WebStandardAdapter)
+
 		if (config?.analytic && (config?.name || config?.seed !== undefined))
 			this.telemetry.stack = new Error().stack
 	}
 
-	env(model: TObject<any>, env = Bun?.env ?? process.env) {
+	'~adapter': ElysiaAdapter
+
+	env(model: TObject<any>, _env = env) {
 		const validator = getSchemaValidator(model, {
 			dynamic: true,
 			additionalProperties: true,
 			coerce: true
 		})
 
-		if (validator.Check(env) === false) {
-			const error = new ValidationError('env', model, env)
+		if (validator.Check(_env) === false) {
+			const error = new ValidationError('env', model, _env)
 
 			throw new Error(error.all.map((x) => x.summary).join('\n'))
 		}
@@ -353,7 +366,8 @@ export default class Elysia<
 	}
 
 	/**
-	 * @private DO_NOT_USE_OR_YOU_WILL_BE_FIRE
+	 * @private DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+	 * @version 1.1.0
 	 *
 	 * ! Do not use unless you now exactly what you are doing
 	 * ? Add Higher order function to Elysia.fetch
@@ -373,9 +387,7 @@ export default class Elysia<
 		return this
 	}
 
-	private applyMacro(
-		localHook: LocalHook<any, any, any, any, any, any, any>
-	) {
+	private applyMacro(localHook: AnyLocalHook) {
 		if (this.extender.macros.length) {
 			const manage = createMacroManager({
 				globalHook: this.event,
@@ -387,27 +399,38 @@ export default class Elysia<
 					global: this.event,
 					local: localHook
 				},
-				onParse: manage('parse') as any,
-				onTransform: manage('transform') as any,
-				onBeforeHandle: manage('beforeHandle') as any,
-				onAfterHandle: manage('afterHandle') as any,
-				mapResponse: manage('mapResponse') as any,
-				onAfterResponse: manage('afterResponse') as any,
-				onError: manage('error') as any
+				get onParse() {
+					return manage('parse') as any
+				},
+				get onTransform() {
+					return manage('transform') as any
+				},
+				get onBeforeHandle() {
+					return manage('beforeHandle') as any
+				},
+				get onAfterHandle() {
+					return manage('afterHandle') as any
+				},
+				get mapResponse() {
+					return manage('mapResponse') as any
+				},
+				get onAfterResponse() {
+					return manage('afterResponse') as any
+				},
+				get onError() {
+					return manage('error') as any
+				}
 			}
 
 			for (const macro of this.extender.macros)
-				traceBackMacro(macro.fn(manager), localHook)
+				traceBackMacro(macro.fn(manager), localHook, manage)
 		}
 	}
 
-	applyConfig(config: ElysiaConfig<BasePath, Scoped>) {
+	applyConfig(config: ElysiaConfig<BasePath>) {
 		this.config = {
 			prefix: '',
-			aot: true,
-			strictPath: false,
-			global: false,
-			analytic: false,
+			aot: env.ELYSIA_AOT !== 'false',
 			normalize: true,
 			...config,
 			cookie: {
@@ -422,10 +445,11 @@ export default class Elysia<
 	}
 
 	get models(): {
-		[K in keyof Definitions['type']]: ModelValidator<
-			// @ts-ignore Trust me bro
-			Definitions['type'][K]
+		[K in keyof Definitions['typebox']]: ModelValidator<
+			UnwrapTypeModule<Definitions['typebox']>[K]
 		>
+	} & {
+		modules: Definitions['typebox']
 	} {
 		const models: Record<string, TypeCheck<TSchema>> = {}
 
@@ -434,6 +458,9 @@ export default class Elysia<
 				schema as any
 			) as TypeCheck<TSchema>
 
+		// @ts-expect-error
+		models.modules = this.definitions.typebox
+
 		return models as any
 	}
 
@@ -441,7 +468,7 @@ export default class Elysia<
 		method: HTTPMethod,
 		path: string,
 		handle: Handler<any, any, any> | any,
-		localHook?: LocalHook<any, any, any, any, any, any>,
+		localHook?: AnyLocalHook,
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
 			skipPrefix: false as boolean | undefined
@@ -451,8 +478,7 @@ export default class Elysia<
 
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
-		if (this.config.prefix && !skipPrefix && !this.config.scoped)
-			path = this.config.prefix + path
+		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
 
 		if (localHook?.type)
 			switch (localHook.type) {
@@ -481,10 +507,9 @@ export default class Elysia<
 			}
 
 		const models = this.definitions.type
-
-		// ? Clone is need because of JIT, so the context doesn't switch between instance
 		const dynamic = !this.config.aot
 
+		// ? Clone is need because of JIT, so the context doesn't switch between instance
 		const instanceValidator = { ...this.validator.getCandidate() }
 
 		const cloned = {
@@ -624,10 +649,6 @@ export default class Elysia<
 						}
 					} as any)
 
-		const loosePath = path.endsWith('/')
-			? path.slice(0, path.length - 1)
-			: path + '/'
-
 		// ! Init default [] for hooks if undefined
 		localHook = mergeHook(localHook, instanceValidator)
 
@@ -657,21 +678,21 @@ export default class Elysia<
 				handle
 			})
 
-			if (this.config.strictPath === false) {
-				this.router.dynamic.add(method, loosePath, {
+			if (this.config.strictPath === false)
+				this.router.dynamic.add(method, getLoosePath(path), {
 					validator,
 					hooks,
 					content: localHook?.type as string,
 					handle
 				})
-			}
 
 			this.router.history.push({
 				method,
 				path,
 				composed: null,
 				handler: handle,
-				hooks: hooks as any
+				hooks: hooks as any,
+				compile: handle
 			})
 
 			return
@@ -684,14 +705,21 @@ export default class Elysia<
 
 		const inference = cloneInference(this.inference)
 
+		const adapter = this['~adapter'].handler
+
 		const staticHandler =
-			typeof handle !== 'function'
-				? createStaticHandler(handle, hooks, this.setHeaders)
+			typeof handle !== 'function' &&
+			typeof adapter.createStaticHandler === 'function'
+				? adapter.createStaticHandler(handle, hooks, this.setHeaders)
 				: undefined
 
 		const nativeStaticHandler =
 			typeof handle !== 'function'
-				? createNativeStaticHandler(handle, hooks, this.setHeaders)
+				? adapter.createNativeStaticHandler?.(
+						handle,
+						hooks,
+						this.setHeaders
+					)
 				: undefined
 
 		if (
@@ -701,7 +729,7 @@ export default class Elysia<
 		)
 			this.router.static.http.static[path] = nativeStaticHandler()
 
-		const compile = () =>
+		const compile = (asManifest = false) =>
 			composeHandler({
 				app: this,
 				path,
@@ -709,18 +737,15 @@ export default class Elysia<
 				localHook: mergeHook(localHook),
 				hooks,
 				validator,
-				handler: handle,
+				handler:
+					typeof handle !== 'function' &&
+					typeof adapter.createStaticHandler !== 'function'
+						? () => handle
+						: handle,
 				allowMeta,
-				inference
+				inference,
+				asManifest
 			})
-
-		const mainHandler = shouldPrecompile
-			? compile()
-			: (((context: Context) => {
-					return compile()(context)
-				}) as ComposedHandler)
-
-		const routeIndex = this.router.history.length
 
 		if (this.routeTree.has(method + path))
 			for (let i = 0; i < this.router.history.length; i++) {
@@ -735,14 +760,28 @@ export default class Elysia<
 						this.routeTree.delete(removed.method + removed.path)
 				}
 			}
-		else this.routeTree.set(method + path, routeIndex)
+		else this.routeTree.set(method + path, this.router.history.length)
+
+		const history = this.router.history
+		const index = this.router.history.length
+
+		const mainHandler = shouldPrecompile
+			? compile()
+			: (ctx: Context) =>
+					((history[index].composed = compile()) as ComposedHandler)(
+						ctx
+					)
+
+		const isWebSocket = method === '$INTERNALWS'
 
 		this.router.history.push({
 			method,
 			path,
 			composed: mainHandler,
 			handler: handle,
-			hooks: hooks as any
+			hooks: hooks as any,
+			compile: () => compile(),
+			websocket: localHook.websocket as any
 		})
 
 		const staticRouter = this.router.static.http
@@ -752,24 +791,11 @@ export default class Elysia<
 			compile
 		}
 
-		if (method === '$INTERNALWS') {
-			const loose = this.config.strictPath
-				? undefined
-				: path.endsWith('/')
-					? path.slice(0, path.length - 1)
-					: path + '/'
+		if (isWebSocket) {
+			const loose = getLoosePath(path)
 
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-				const index = staticRouter.handlers.length
-				staticRouter.handlers.push((ctx) =>
-					(
-						(staticRouter.handlers[index] =
-							compile()) as ComposedHandler
-					)(ctx)
-				)
-
 				this.router.static.ws[path] = index
-				if (loose) this.router.static.ws[loose] = index
 			} else {
 				this.router.ws.add('ws', path, handler)
 				if (loose) this.router.ws.add('ws', loose, handler)
@@ -779,65 +805,42 @@ export default class Elysia<
 		}
 
 		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-			const index = staticRouter.handlers.length
-			staticRouter.handlers.push(
-				(staticHandler as any) ??
-					((ctx) =>
-						(
-							(staticRouter.handlers[index] =
-								compile()) as ComposedHandler
-						)(ctx))
-			)
-
 			if (!staticRouter.map[path])
 				staticRouter.map[path] = {
 					code: ''
 				}
 
-			const ctx = staticHandler ? '' : 'ctx'
+			const ctx = staticHandler ? '' : 'c'
 
 			if (method === 'ALL')
 				staticRouter.map[path].all =
-					`default: return st[${index}](${ctx})\n`
+					`default:return ht[${index}].composed(${ctx})\n`
 			else
 				staticRouter.map[path].code =
-					`case '${method}': return st[${index}](${ctx})\n${staticRouter.map[path].code}`
+					`case '${method}':return ht[${index}].composed(${ctx})\n${staticRouter.map[path].code}`
 
-			if (!this.config.strictPath) {
-				if (!staticRouter.map[loosePath])
-					staticRouter.map[loosePath] = {
-						code: ''
-					}
-
-				if (
-					this.config.nativeStaticResponse === true &&
-					nativeStaticHandler &&
-					(method === 'GET' || method === 'ALL')
-				)
-					this.router.static.http.static[loosePath] =
-						nativeStaticHandler()
-
-				if (method === 'ALL')
-					staticRouter.map[loosePath].all =
-						`default: return st[${index}](${ctx})\n`
-				else
-					staticRouter.map[loosePath].code =
-						`case '${method}': return st[${index}](${ctx})\n${staticRouter.map[loosePath].code}`
-			}
+			if (
+				!this.config.strictPath &&
+				this.config.nativeStaticResponse === true &&
+				nativeStaticHandler &&
+				(method === 'GET' || method === 'ALL')
+			)
+				this.router.static.http.static[getLoosePath(path)] =
+					nativeStaticHandler()
 		} else {
+			// Dynamic path, best not to JIT
 			this.router.http.add(method, path, handler)
 
 			if (!this.config.strictPath) {
-				const loosePath = path.endsWith('/')
-					? path.slice(0, path.length - 1)
-					: path + '/'
+				const loosePath = getLoosePath(path)
 
 				if (
 					this.config.nativeStaticResponse === true &&
 					staticHandler &&
 					(method === 'GET' || method === 'ALL')
 				)
-					this.router.static.http.static[loosePath] = staticHandler()
+					this.router.static.http.static[loosePath] =
+						staticHandler() as Response
 
 				this.router.http.add(method, loosePath, handler)
 			}
@@ -939,7 +942,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				{
 					decorator: Singleton['decorator']
@@ -981,8 +985,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				'global' extends Type
 					? {
 							decorator: Singleton['decorator']
@@ -1014,17 +1024,88 @@ export default class Elysia<
 		>
 	): this
 
+	onParse<const Parsers extends keyof Metadata['parser']>(
+		parser: Parsers
+	): this
+
 	onParse(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as?: LifeCycleType } | MaybeArray<Function> | string,
 		handler?: MaybeArray<Function>
-	) {
-		if (!handler) return this.on('parse', options as any)
+	): unknown {
+		if (!handler) {
+			if (typeof options === 'string')
+				return this.on('parse', this['~parser'][options] as any)
+
+			return this.on('parse', options as any)
+		}
 
 		return this.on(
 			options as { as?: LifeCycleType },
 			'parse',
 			handler as any
 		)
+	}
+
+	/**
+	 * ### parse | Life cycle event
+	 * Callback function to handle body parsing
+	 *
+	 * If truthy value is returned, will be assigned to `context.body`
+	 * Otherwise will skip the callback and look for the next one.
+	 *
+	 * Equivalent to Express's body parser
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onParse((request, contentType) => {
+	 *         if(contentType === "application/json")
+	 *             return request.json()
+	 *     })
+	 * ```
+	 */
+	parser<
+		const Parser extends string,
+		const Schema extends RouteSchema,
+		const Handler extends BodyHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			>,
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: Singleton['derive'] &
+					Ephemeral['derive'] &
+					Volatile['derive']
+				resolve: {}
+			}
+		>
+	>(
+		name: Parser,
+		parser: Handler
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			macro: Metadata['macro']
+			macroFn: Metadata['macroFn']
+			parser: Metadata['parser'] & { [K in Parser]: Handler }
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	> {
+		this['~parser'][name] = parser as any
+
+		return this as any
 	}
 
 	/**
@@ -1049,7 +1130,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				{
 					decorator: Singleton['decorator']
@@ -1089,8 +1171,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				'global' extends Type
 					? {
 							decorator: Singleton['decorator']
@@ -1162,8 +1250,14 @@ export default class Elysia<
 				Context<
 					MergeSchema<
 						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+						BasePath
+					> &
+						'global' extends Type
+						? { params: Record<string, string> }
+						: 'scoped' extends Type
+							? { params: Record<string, string> }
+							: {},
 					Singleton &
 						('global' extends Type
 							? {
@@ -1194,7 +1288,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -1212,7 +1305,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -1229,7 +1321,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -1271,7 +1362,8 @@ export default class Elysia<
 				Context<
 					MergeSchema<
 						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+						BasePath
 					>,
 					Singleton & {
 						derive: Ephemeral['derive'] & Volatile['derive']
@@ -1283,7 +1375,6 @@ export default class Elysia<
 		) => MaybePromise<Resolver | void>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -1335,7 +1426,6 @@ export default class Elysia<
 		) => MaybePromise<NewResolver | void>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -1389,7 +1479,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -1405,7 +1494,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -1422,7 +1510,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -1482,7 +1569,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -1523,8 +1611,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				Singleton &
 					('global' extends Type
 						? {
@@ -1590,7 +1684,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -1628,8 +1723,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				Singleton &
 					('global' extends Type
 						? {
@@ -1694,7 +1795,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -1729,8 +1831,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				Singleton &
 					('global' extends Type
 						? {
@@ -1792,7 +1900,8 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
+					>,
+					BasePath
 				>,
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
@@ -1829,8 +1938,14 @@ export default class Elysia<
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>,
+					>,
+					BasePath
+				> &
+					'global' extends Type
+					? { params: Record<string, string> }
+					: 'scoped' extends Type
+						? { params: Record<string, string> }
+						: {},
 				Singleton &
 					('global' extends Type
 						? {
@@ -1976,10 +2091,9 @@ export default class Elysia<
 		errors: Errors
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
-			type: Definitions['type']
+			typebox: Definitions['typebox']
 			error: Definitions['error'] & {
 				[K in keyof Errors]: Errors[K] extends {
 					prototype: infer LiteralError extends Error
@@ -2022,10 +2136,9 @@ export default class Elysia<
 		errors: CustomError
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
-			type: Definitions['type']
+			typebox: Definitions['typebox']
 			error: Definitions['error'] & {
 				[name in Name]: CustomError extends {
 					prototype: infer LiteralError extends Error
@@ -2060,10 +2173,9 @@ export default class Elysia<
 		mapper: (decorators: Definitions['error']) => NewErrors
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
-			type: Definitions['type']
+			typebox: Definitions['typebox']
 			error: {
 				[K in keyof NewErrors]: NewErrors[K] extends {
 					prototype: infer LiteralError extends Error
@@ -2352,11 +2464,15 @@ export default class Elysia<
 
 		const handles = handlers as HookContainer[]
 
-		for (const handle of handles)
+		for (const handle of handles) {
 			handle.scope =
 				typeof optionsOrType === 'string'
 					? 'local'
 					: (optionsOrType?.as ?? 'local')
+
+			// @ts-expect-error
+			if (type === 'resolve' || type === 'derive') handle.subType = type
+		}
 
 		if (type !== 'trace')
 			sucrose(
@@ -2386,8 +2502,23 @@ export default class Elysia<
 					this.event.transform.push(fn as any)
 					break
 
+				// @ts-expect-error
+				case 'derive':
+					this.event.transform.push(
+						fnToContainer(fn as any, 'derive') as any
+					)
+					break
+
 				case 'beforeHandle':
 					this.event.beforeHandle.push(fn as any)
+					break
+
+				// @ts-expect-error
+				// eslint-disable-next-line sonarjs/no-duplicated-branches
+				case 'resolve':
+					this.event.beforeHandle.push(
+						fnToContainer(fn as any, 'resolve') as any
+					)
 					break
 
 				case 'afterHandle':
@@ -2426,7 +2557,6 @@ export default class Elysia<
 	 */
 	propagate(): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2452,7 +2582,6 @@ export default class Elysia<
 
 	as(type: 'global'): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Singleton['store']
@@ -2473,6 +2602,7 @@ export default class Elysia<
 			>
 			macro: Metadata['macro']
 			macroFn: Metadata['macroFn']
+			parser: Metadata['parser']
 		},
 		Routes,
 		{
@@ -2487,9 +2617,8 @@ export default class Elysia<
 		}
 	>
 
-	as(type: 'plugin'): Elysia<
+	as(type: 'plugin' | 'scoped'): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2506,8 +2635,10 @@ export default class Elysia<
 		}
 	>
 
-	as(type: 'plugin' | 'global') {
-		const castType = ({ plugin: 'scoped', global: 'global' } as const)[type]
+	as(type: 'plugin' | 'global' | 'scoped') {
+		const castType = (
+			{ plugin: 'scoped', scoped: 'scoped', global: 'global' } as const
+		)[type]
 
 		promoteEvent(this.event.parse, castType)
 		promoteEvent(this.event.transform, castType)
@@ -2540,18 +2671,26 @@ export default class Elysia<
 		return this as any
 	}
 
-	group<
-		const Prefix extends string,
-		const NewElysia extends Elysia<any, any, any, any, any, any, any, any>
-	>(
+	group<const Prefix extends string, const NewElysia extends AnyElysia>(
 		prefix: Prefix,
 		run: (
 			group: Elysia<
-				`${BasePath}${Prefix}`,
-				Scoped,
+				JoinPath<BasePath, Prefix>,
 				Singleton,
 				Definitions,
-				Metadata,
+				{
+					schema: MergeSchema<
+						UnwrapRoute<
+							{},
+							Definitions['typebox'],
+							JoinPath<BasePath, Prefix>
+						>,
+						Metadata['schema']
+					>
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+				},
 				{},
 				Ephemeral,
 				Volatile
@@ -2559,7 +2698,6 @@ export default class Elysia<
 		) => NewElysia
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2572,11 +2710,24 @@ export default class Elysia<
 		const Prefix extends string,
 		const NewElysia extends AnyElysia,
 		const Input extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['type']>,
+			UnwrapRoute<
+				Input,
+				Definitions['typebox'],
+				JoinPath<BasePath, Prefix>
+			>,
 			Metadata['schema']
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
 		>
 	>(
 		prefix: Prefix,
@@ -2589,18 +2740,32 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			`${BasePath}${Prefix}`
+			keyof Metadata['parser'] & string
 		>,
 		run: (
 			group: Elysia<
-				`${BasePath}${Prefix}`,
-				false,
-				Singleton,
+				JoinPath<BasePath, Prefix>,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Prettify<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+					>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve'] &
+							ResolveResolutions<Resolutions>
+					>
+				},
 				Definitions,
 				{
-					schema: Schema
+					schema: Prettify<Schema>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				{},
 				Ephemeral,
@@ -2609,7 +2774,6 @@ export default class Elysia<
 		) => NewElysia
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2634,9 +2798,7 @@ export default class Elysia<
 	 */
 	group(
 		prefix: string,
-		schemaOrRun:
-			| LocalHook<any, any, any, any, any, any>
-			| ((group: AnyElysia) => AnyElysia),
+		schemaOrRun: AnyLocalHook | ((group: AnyElysia) => AnyElysia),
 		run?: (group: AnyElysia) => AnyElysia
 	): AnyElysia {
 		const instance = new Elysia({
@@ -2675,15 +2837,7 @@ export default class Elysia<
 
 				if (isSchema) {
 					const hook = schemaOrRun
-					const localHook = hooks as LocalHook<
-						any,
-						any,
-						any,
-						any,
-						any,
-						any,
-						any
-					>
+					const localHook = hooks as AnyLocalHook
 
 					this.add(
 						method,
@@ -2709,12 +2863,9 @@ export default class Elysia<
 						method,
 						path,
 						handler,
-						mergeHook(
-							hooks as LocalHook<any, any, any, any, any, any>,
-							{
-								error: sandbox.event.error
-							}
-						),
+						mergeHook(hooks as AnyLocalHook, {
+							error: sandbox.event.error
+						}),
 						{
 							skipPrefix: true
 						}
@@ -2728,10 +2879,10 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
 		>,
 		const Type extends LifeCycleType
@@ -2745,12 +2896,11 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			BasePath
+			keyof Metadata['parser'] & string
 		>
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -2761,12 +2911,17 @@ export default class Elysia<
 				{
 					schema: Prettify<
 						MergeSchema<
-							UnwrapRoute<LocalSchema, Definitions['type']>,
+							UnwrapRoute<
+								LocalSchema,
+								Definitions['typebox'],
+								BasePath
+							>,
 							Metadata['schema']
 						>
 					>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				Routes,
 				Ephemeral,
@@ -2775,7 +2930,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -2785,7 +2939,10 @@ export default class Elysia<
 						resolve: Volatile['resolve']
 						schema: Prettify<
 							MergeSchema<
-								UnwrapRoute<LocalSchema, Definitions['type']>,
+								UnwrapRoute<
+									LocalSchema,
+									Definitions['typebox']
+								>,
 								Metadata['schema'] & Ephemeral['schema']
 							>
 						>
@@ -2794,7 +2951,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -2805,7 +2961,10 @@ export default class Elysia<
 						resolve: Volatile['resolve']
 						schema: Prettify<
 							MergeSchema<
-								UnwrapRoute<LocalSchema, Definitions['type']>,
+								UnwrapRoute<
+									LocalSchema,
+									Definitions['typebox']
+								>,
 								Metadata['schema'] &
 									Ephemeral['schema'] &
 									Volatile['schema']
@@ -2816,10 +2975,10 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
 		>
 	>(
@@ -2832,11 +2991,10 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			BasePath
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2847,7 +3005,7 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Prettify<
 				MergeSchema<
-					UnwrapRoute<LocalSchema, Definitions['type']>,
+					UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -2859,24 +3017,24 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
 		>
 	>(
 		run: (
 			group: Elysia<
 				BasePath,
-				Scoped,
 				Singleton,
 				Definitions,
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				{},
 				Ephemeral,
@@ -2885,7 +3043,6 @@ export default class Elysia<
 		) => NewElysia
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2896,12 +3053,21 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			Extract<keyof Definitions['type'], string>
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
+		>,
+		const Resolutions extends MaybeArray<
+			ResolveHandler<
+				Schema,
+				Singleton & {
+					derive: Ephemeral['derive'] & Volatile['derive']
+					resolve: Ephemeral['resolve'] & Volatile['resolve']
+				}
+			>
 		>
 	>(
 		schema: LocalHook<
@@ -2913,18 +3079,24 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			''
+			keyof Metadata['parser'] & string
 		>,
 		run: (
 			group: Elysia<
 				BasePath,
-				Scoped,
-				Singleton,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Singleton['derive']
+					resolve: Singleton['resolve'] &
+						ResolveResolutions<Resolutions>
+				},
 				Definitions,
 				{
 					schema: Prettify<Schema>
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
 				},
 				{},
 				Ephemeral,
@@ -2933,7 +3105,6 @@ export default class Elysia<
 		) => NewElysia
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -2967,7 +3138,7 @@ export default class Elysia<
 	 */
 	guard(
 		hook:
-			| (LocalHook<any, any, any, any, any, any, any> & {
+			| (AnyLocalHook & {
 					as: LifeCycleType
 			  })
 			| ((group: AnyElysia) => AnyElysia),
@@ -2992,8 +3163,12 @@ export default class Elysia<
 				if (hook.parse) this.on({ as: type }, 'parse', hook.parse)
 				if (hook.transform)
 					this.on({ as: type }, 'transform', hook.transform)
+				// @ts-expect-error
+				if (hook.derive) this.on({ as: type }, 'derive', hook.derive)
 				if (hook.beforeHandle)
 					this.on({ as: type }, 'beforeHandle', hook.beforeHandle)
+				// @ts-expect-error
+				if (hook.resolve) this.on({ as: type }, 'resolve', hook.resolve)
 				if (hook.afterHandle)
 					this.on({ as: type }, 'afterHandle', hook.afterHandle)
 				if (hook.mapResponse)
@@ -3022,7 +3197,7 @@ export default class Elysia<
 				return this
 			}
 
-			return this.guard({}, hook)
+			return this.guard({} as any, hook)
 		}
 
 		const instance = new Elysia({
@@ -3061,14 +3236,8 @@ export default class Elysia<
 					method,
 					path,
 					handler,
-					mergeHook(hook as LocalHook<any, any, any, any, any>, {
-						...((localHook || {}) as LocalHook<
-							any,
-							any,
-							any,
-							any,
-							any
-						>),
+					mergeHook(hook as AnyLocalHook, {
+						...((localHook || {}) as AnyLocalHook),
 						error: !localHook.error
 							? sandbox.event.error
 							: Array.isArray(localHook.error)
@@ -3096,64 +3265,61 @@ export default class Elysia<
 		const Param extends AnyElysia = this
 	>(
 		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>
-	): NewElysia['_scoped'] extends false
-		? Elysia<
-				BasePath,
-				Scoped,
-				// @ts-expect-error - This is truly ideal
-				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
-				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
-				Prettify2<Volatile & NewElysia['_volatile']>
+	): Elysia<
+		BasePath,
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+		{
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
 			>
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Volatile
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				NewElysia['_types']['Definitions']['typebox']
 			>
+		},
+		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & NewElysia['_routes']
+			: Routes & CreateEden<BasePath, NewElysia['_routes']>,
+		Prettify2<Ephemeral & NewElysia['_ephemeral']>,
+		Prettify2<Volatile & NewElysia['_volatile']>
+	>
 
 	/**
 	 * Entire Instance
 	 **/
 	use<const NewElysia extends AnyElysia>(
 		instance: MaybePromise<NewElysia>
-	): NewElysia['_scoped'] extends false
-		? Elysia<
-				BasePath,
-				Scoped,
-				// @ts-expect-error - This is truly ideal
-				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
-				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Prettify2<Volatile & NewElysia['_ephemeral']>
+	): Elysia<
+		BasePath,
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+		{
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
 			>
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Volatile
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				NewElysia['_types']['Definitions']['typebox']
 			>
+		},
+		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & NewElysia['_routes']
+			: Routes & CreateEden<BasePath, NewElysia['_routes']>,
+		Ephemeral,
+		Prettify2<Volatile & NewElysia['_ephemeral']>
+	>
+
+	/**
+	 * Entire multiple Instance
+	 **/
+	use<const Instances extends AnyElysia[]>(
+		instance: MaybePromise<Instances>
+	): MergeElysiaInstances<Instances>
 
 	/**
 	 * Import fn
@@ -3162,32 +3328,27 @@ export default class Elysia<
 		plugin: Promise<{
 			default: (elysia: AnyElysia) => MaybePromise<NewElysia>
 		}>
-	): NewElysia['_scoped'] extends false
-		? Elysia<
-				BasePath,
-				Scoped,
-				// @ts-expect-error - This is truly ideal
-				Prettify2<Singleton & NewElysia['_types']['Singleton']>,
-				Prettify2<Definitions & NewElysia['_types']['Definitions']>,
-				Prettify2<Metadata & NewElysia['_types']['Metadata']>,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Prettify2<Ephemeral & NewElysia['_ephemeral']>,
-				Prettify2<Volatile & NewElysia['_volatile']>
+	): Elysia<
+		BasePath,
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & NewElysia['_types']['Singleton']>,
+		{
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
 			>
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				BasePath extends ``
-					? Routes & NewElysia['_routes']
-					: Routes & CreateEden<BasePath, NewElysia['_routes']>,
-				Ephemeral,
-				Volatile
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				NewElysia['_types']['Definitions']['typebox']
 			>
+		},
+		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & NewElysia['_routes']
+			: Routes & CreateEden<BasePath, NewElysia['_routes']>,
+		Prettify2<Ephemeral & NewElysia['_ephemeral']>,
+		Prettify2<Volatile & NewElysia['_volatile']>
+	>
 
 	/**
 	 * Import entire instance
@@ -3196,34 +3357,28 @@ export default class Elysia<
 		plugin: Promise<{
 			default: LazyLoadElysia
 		}>
-	): LazyLoadElysia['_scoped'] extends false
-		? Elysia<
-				BasePath,
-				Scoped,
-				// @ts-expect-error - This is truly ideal
-				Prettify2<Singleton & LazyLoadElysia['_types']['Singleton']>,
-				Prettify2<
-					Definitions & LazyLoadElysia['_types']['Definitions']
-				>,
-				Prettify2<Metadata & LazyLoadElysia['_types']['Metadata']>,
-				BasePath extends ``
-					? Routes & LazyLoadElysia['_routes']
-					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
-				Ephemeral,
-				Prettify2<Volatile & LazyLoadElysia['_ephemeral']>
+	): Elysia<
+		BasePath,
+		// @ts-expect-error - This is truly ideal
+		Prettify2<Singleton & LazyLoadElysia['_types']['Singleton']>,
+		{
+			error: Prettify<
+				Definitions['error'] &
+					LazyLoadElysia['_types']['Definitions']['error']
 			>
-		: Elysia<
-				BasePath,
-				Scoped,
-				Singleton,
-				Definitions,
-				Metadata,
-				BasePath extends ``
-					? Routes & LazyLoadElysia['_routes']
-					: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
-				Ephemeral,
-				Volatile
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				LazyLoadElysia['_types']['Definitions']['typebox']
 			>
+		},
+		Prettify2<Metadata & LazyLoadElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & LazyLoadElysia['_routes']
+			: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
+		Ephemeral,
+		Prettify2<Volatile & LazyLoadElysia['_ephemeral']>
+	>
+
 	/**
 	 * ### use
 	 * Merge separate logic of Elysia with current
@@ -3240,7 +3395,7 @@ export default class Elysia<
 	 */
 	use(
 		plugin:
-			| MaybePromise<AnyElysia>
+			| MaybeArray<MaybePromise<AnyElysia>>
 			| MaybePromise<
 					AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 			  >
@@ -3251,6 +3406,13 @@ export default class Elysia<
 			  }>,
 		options?: { scoped?: boolean }
 	): AnyElysia {
+		if (Array.isArray(plugin)) {
+			// eslint-disable-next-line @typescript-eslint/no-this-alias
+			let app = this
+			for (const p of plugin) app = app.use(p) as any
+			return app
+		}
+
 		if (options?.scoped)
 			return this.guard({}, (app) => app.use(plugin as any))
 
@@ -3272,10 +3434,18 @@ export default class Elysia<
 						if (plugin instanceof Elysia)
 							return this._use(plugin).compile()
 
+						if (plugin.constructor.name === 'Elysia')
+							return this._use(
+								plugin as unknown as Elysia
+							).compile()
+
 						if (typeof plugin.default === 'function')
 							return plugin.default(this)
 
 						if (plugin.default instanceof Elysia)
+							return this._use(plugin.default)
+
+						if (plugin.constructor.name === 'Elysia')
 							return this._use(plugin.default)
 
 						throw new Error(
@@ -3322,19 +3492,9 @@ export default class Elysia<
 										method,
 										path,
 										handler,
-										mergeHook(
-											hooks as LocalHook<
-												any,
-												any,
-												any,
-												any,
-												any,
-												any
-											>,
-											{
-												error: plugin.event.error
-											}
-										)
+										mergeHook(hooks as AnyLocalHook, {
+											error: plugin.event.error
+										})
 									)
 								}
 
@@ -3375,197 +3535,71 @@ export default class Elysia<
 		plugin.model(this.definitions.type as any)
 		plugin.error(this.definitions.error as any)
 
-		const isScoped = plugin.config.scoped as boolean
-		if (isScoped) {
-			if (name) {
-				if (!(name in this.dependencies)) this.dependencies[name] = []
+		this['~parser'] = {
+			...plugin['~parser'],
+			...this['~parser']
+		}
 
-				const current =
-					seed !== undefined
-						? checksum(name + JSON.stringify(seed))
-						: 0
+		this.headers(plugin.setHeaders)
 
-				if (
-					this.dependencies[name].some(
-						({ checksum }) => current === checksum
-					)
+		if (name) {
+			if (!(name in this.dependencies)) this.dependencies[name] = []
+
+			const current =
+				seed !== undefined ? checksum(name + JSON.stringify(seed)) : 0
+
+			if (
+				!this.dependencies[name].some(
+					({ checksum }) => current === checksum
 				)
-					return this
-
-				this.dependencies[name].push(
-					!this.config?.analytic
-						? {
-								name: plugin.config.name,
-								seed: plugin.config.seed,
-								checksum: current,
-								dependencies: plugin.dependencies
-							}
-						: {
-								name: plugin.config.name,
-								seed: plugin.config.seed,
-								checksum: current,
-								dependencies: plugin.dependencies,
-								stack: plugin.telemetry.stack,
-								routes: plugin.router.history,
-								decorators: plugin.singleton.decorator,
-								store: plugin.singleton.store,
-								type: plugin.definitions.type,
-								error: plugin.definitions.error,
-								derive: plugin.event.transform
-									.filter((x) => x.subType === 'derive')
-									.map((x) => ({
-										fn: x.fn.toString(),
-										stack: new Error().stack ?? ''
-									})),
-								resolve: plugin.event.transform
-									.filter((x) => x.subType === 'derive')
-									.map((x) => ({
-										fn: x.fn.toString(),
-										stack: new Error().stack ?? ''
-									}))
-							}
-				)
-			}
-
-			plugin.extender.macros = this.extender.macros.concat(
-				plugin.extender.macros
-			)
-
-			const macroHashes = <(number | undefined)[]>[]
-			for (let i = 0; i < plugin.extender.macros.length; i++) {
-				const macro = this.extender.macros[i]
-
-				if (macroHashes.includes(macro.checksum)) {
-					plugin.extender.macros.splice(i, 1)
-					i--
-				}
-
-				macroHashes.push(macro.checksum)
-			}
-
-			plugin.onRequest((context) => {
-				Object.assign(context, this.singleton.decorator)
-				Object.assign(context.store, this.singleton.store)
-			})
-
-			if (plugin.event.trace.length)
-				plugin.event.trace.push(...plugin.event.trace)
-
-			if (!plugin.config.prefix)
-				console.warn(
-					"It's recommended to use scoped instance with a prefix to prevent collision routing with other instance."
-				)
-
-			if (plugin.event.error.length)
-				plugin.event.error.push(...this.event.error)
-
-			if (plugin.config.aot) plugin.compile()
-
-			if (isScoped === true && plugin.config.prefix) {
-				this.mount(plugin.config.prefix + '/', plugin.fetch)
-
-				// Ensure that when using plugins routes are correctly showing up in the .routes property. Else plugins e.g. swagger will not correctly work.
-				// This also avoids adding routes multiple times.
-				for (const route of plugin.router.history) {
-					this.routeTree.set(
-						route.method + `${plugin.config.prefix}${route.path}`,
-						this.router.history.length
-					)
-
-					this.router.history.push({
-						...route,
-						path: `${plugin.config.prefix}${route.path}`,
-						hooks: mergeHook(route.hooks, {
-							error: this.event.error
-						})
-					})
-				}
-			} else {
-				this.mount(plugin.fetch)
-
-				for (const route of plugin.router.history) {
-					this.routeTree.set(
-						route.method + `${plugin.config.prefix}${route.path}`,
-						this.router.history.length
-					)
-
-					this.router.history.push({
-						...route,
-						path: `${plugin.config.prefix}${route.path}`,
-						hooks: mergeHook(route.hooks, {
-							error: this.event.error
-						})
-					})
-				}
-			}
-
-			return this
-		} else {
-			this.headers(plugin.setHeaders)
-
-			if (name) {
-				if (!(name in this.dependencies)) this.dependencies[name] = []
-
-				const current =
-					seed !== undefined
-						? checksum(name + JSON.stringify(seed))
-						: 0
-
-				if (
-					!this.dependencies[name].some(
-						({ checksum }) => current === checksum
-					)
-				) {
-					this.extender.macros = this.extender.macros.concat(
-						plugin.extender.macros
-					)
-
-					this.extender.higherOrderFunctions =
-						this.extender.higherOrderFunctions.concat(
-							plugin.extender.higherOrderFunctions
-						)
-				}
-			} else {
+			) {
 				this.extender.macros = this.extender.macros.concat(
 					plugin.extender.macros
 				)
+
 				this.extender.higherOrderFunctions =
 					this.extender.higherOrderFunctions.concat(
 						plugin.extender.higherOrderFunctions
 					)
 			}
+		} else {
+			this.extender.macros = this.extender.macros.concat(
+				plugin.extender.macros
+			)
+			this.extender.higherOrderFunctions =
+				this.extender.higherOrderFunctions.concat(
+					plugin.extender.higherOrderFunctions
+				)
+		}
 
-			// ! Deduplicate current instance
-			deduplicateChecksum(this.extender.macros)
-			deduplicateChecksum(this.extender.higherOrderFunctions)
+		// ! Deduplicate current instance
+		deduplicateChecksum(this.extender.macros)
+		deduplicateChecksum(this.extender.higherOrderFunctions)
 
-			// ! Deduplicate current instance
-			const hofHashes: number[] = []
-			for (
-				let i = 0;
-				i < this.extender.higherOrderFunctions.length;
-				i++
-			) {
-				const hof = this.extender.higherOrderFunctions[i]
+		// ! Deduplicate current instance
+		const hofHashes: number[] = []
+		for (let i = 0; i < this.extender.higherOrderFunctions.length; i++) {
+			const hof = this.extender.higherOrderFunctions[i]
 
-				if (hof.checksum) {
-					if (hofHashes.includes(hof.checksum)) {
-						this.extender.higherOrderFunctions.splice(i, 1)
-						i--
-					}
-
-					hofHashes.push(hof.checksum)
+			if (hof.checksum) {
+				if (hofHashes.includes(hof.checksum)) {
+					this.extender.higherOrderFunctions.splice(i, 1)
+					i--
 				}
-			}
 
-			this.inference = {
-				body: this.inference.body || plugin.inference.body,
-				cookie: this.inference.cookie || plugin.inference.cookie,
-				headers: this.inference.headers || plugin.inference.headers,
-				query: this.inference.query || plugin.inference.query,
-				set: this.inference.set || plugin.inference.set,
-				server: this.inference.server || plugin.inference.server
+				hofHashes.push(hof.checksum)
 			}
+		}
+
+		this.inference = {
+			body: this.inference.body || plugin.inference.body,
+			cookie: this.inference.cookie || plugin.inference.cookie,
+			headers: this.inference.headers || plugin.inference.headers,
+			query: this.inference.query || plugin.inference.query,
+			set: this.inference.set || plugin.inference.set,
+			server: this.inference.server || plugin.inference.server,
+			request: this.inference.request || plugin.inference.request,
+			route: this.inference.route || plugin.inference.route
 		}
 
 		this.decorate(plugin.singleton.decorator)
@@ -3583,81 +3617,74 @@ export default class Elysia<
 				method,
 				path,
 				handler,
-				mergeHook(
-					hooks as LocalHook<any, any, any, any, any, any, any>,
-					{
-						error: plugin.event.error
-					}
-				)
+				mergeHook(hooks as AnyLocalHook, {
+					error: plugin.event.error
+				})
 			)
 		}
 
-		if (!isScoped)
-			if (name) {
-				if (!(name in this.dependencies)) this.dependencies[name] = []
+		if (name) {
+			if (!(name in this.dependencies)) this.dependencies[name] = []
 
-				const current =
-					seed !== undefined
-						? checksum(name + JSON.stringify(seed))
-						: 0
+			const current =
+				seed !== undefined ? checksum(name + JSON.stringify(seed)) : 0
 
-				if (
-					this.dependencies[name].some(
-						({ checksum }) => current === checksum
-					)
+			if (
+				this.dependencies[name].some(
+					({ checksum }) => current === checksum
 				)
-					return this
+			)
+				return this
 
-				this.dependencies[name].push(
-					!this.config?.analytic
-						? {
-								name: plugin.config.name,
-								seed: plugin.config.seed,
-								checksum: current,
-								dependencies: plugin.dependencies
-							}
-						: {
-								name: plugin.config.name,
-								seed: plugin.config.seed,
-								checksum: current,
-								dependencies: plugin.dependencies,
-								stack: plugin.telemetry.stack,
-								routes: plugin.router.history,
-								decorators: plugin.singleton,
-								store: plugin.singleton.store,
-								type: plugin.definitions.type,
-								error: plugin.definitions.error,
-								derive: plugin.event.transform
-									.filter((x) => x?.subType === 'derive')
-									.map((x) => ({
-										fn: x.toString(),
-										stack: new Error().stack ?? ''
-									})),
-								resolve: plugin.event.transform
-									.filter((x) => x?.subType === 'resolve')
-									.map((x) => ({
-										fn: x.toString(),
-										stack: new Error().stack ?? ''
-									}))
-							}
-				)
+			this.dependencies[name].push(
+				this.config?.analytic
+					? {
+							name: plugin.config.name,
+							seed: plugin.config.seed,
+							checksum: current,
+							dependencies: plugin.dependencies,
+							stack: plugin.telemetry.stack,
+							routes: plugin.router.history,
+							decorators: plugin.singleton,
+							store: plugin.singleton.store,
+							error: plugin.definitions.error,
+							derive: plugin.event.transform
+								.filter((x) => x?.subType === 'derive')
+								.map((x) => ({
+									fn: x.toString(),
+									stack: new Error().stack ?? ''
+								})),
+							resolve: plugin.event.transform
+								.filter((x) => x?.subType === 'resolve')
+								.map((x) => ({
+									fn: x.toString(),
+									stack: new Error().stack ?? ''
+								}))
+						}
+					: {
+							name: plugin.config.name,
+							seed: plugin.config.seed,
+							checksum: current,
+							dependencies: plugin.dependencies
+						}
+			)
 
-				this.event = mergeLifeCycle(
-					this.event,
-					filterGlobalHook(plugin.event),
-					current
-				)
-			} else {
-				this.event = mergeLifeCycle(
-					this.event,
-					filterGlobalHook(plugin.event)
-				)
-			}
+			this.event = mergeLifeCycle(
+				this.event,
+				filterGlobalHook(plugin.event),
+				current
+			)
+		} else {
+			this.event = mergeLifeCycle(
+				this.event,
+				filterGlobalHook(plugin.event)
+			)
+		}
 
 		// @ts-ignore
 		this.validator.global = mergeHook(this.validator.global, {
 			...plugin.validator.global
-		})
+		}) as any
 		// @ts-ignore
 		this.validator.local = mergeHook(this.validator.local, {
 			...plugin.validator.scoped
@@ -3682,30 +3709,66 @@ export default class Elysia<
 		) => NewMacro
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		{
 			schema: Metadata['schema']
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
 			macroFn: Metadata['macroFn'] & NewMacro
+			parser: Metadata['parser']
 		},
 		Routes,
 		Ephemeral,
 		Volatile
-	> {
-		const hook: MacroQueue = {
-			checksum: checksum(
-				JSON.stringify({
-					name: this.config.name,
-					seed: this.config.seed,
-					content: macro.toString()
-				})
-			),
-			fn: macro as any
-		}
+	>
 
-		this.extender.macros.push(hook)
+	macro<const NewMacro extends HookMacroFn>(
+		macro: NewMacro
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
+			macroFn: Metadata['macroFn'] & NewMacro
+			parser: Metadata['parser']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro(macro: Function | Record<keyof any, Function>) {
+		if (typeof macro === 'function') {
+			const hook: MacroQueue = {
+				checksum: checksum(
+					JSON.stringify({
+						name: this.config.name,
+						seed: this.config.seed,
+						content: macro.toString()
+					})
+				),
+				fn: macro as any
+			}
+
+			this.extender.macros.push(hook)
+		} else if (typeof macro === 'object') {
+			const hook: MacroQueue = {
+				checksum: checksum(
+					JSON.stringify({
+						name: this.config.name,
+						seed: this.config.seed,
+						content: Object.entries(macro)
+							.map(([k, v]) => `${k}+${v}`)
+							.join(',')
+					})
+				),
+				fn: () => macro
+			}
+
+			this.extender.macros.push(hook)
+		}
 
 		return this as any
 	}
@@ -3838,10 +3901,14 @@ export default class Elysia<
 	get<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -3852,7 +3919,9 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -3864,15 +3933,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			JoinPath<BasePath, Path>
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -3887,10 +3957,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -3921,20 +3988,27 @@ export default class Elysia<
 	post<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -3946,15 +4020,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -3969,10 +4044,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4003,20 +4075,27 @@ export default class Elysia<
 	put<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4028,15 +4107,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4051,10 +4131,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4085,20 +4162,27 @@ export default class Elysia<
 	patch<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4110,15 +4194,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4133,10 +4218,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4167,20 +4249,27 @@ export default class Elysia<
 	delete<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4192,15 +4281,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4215,10 +4305,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4249,20 +4336,27 @@ export default class Elysia<
 	options<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4274,15 +4368,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4297,10 +4392,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4331,20 +4423,27 @@ export default class Elysia<
 	all<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4356,15 +4455,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4379,10 +4479,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4413,20 +4510,27 @@ export default class Elysia<
 	head<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4438,15 +4542,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4461,10 +4566,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4495,20 +4597,27 @@ export default class Elysia<
 	connect<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4520,15 +4629,16 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4543,10 +4653,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4578,20 +4685,28 @@ export default class Elysia<
 		const Method extends HTTPMethod,
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroContext
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4604,11 +4719,13 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroContext
 			},
 			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro,
+			keyof Metadata['parser'] & string
 		> & {
 			config: {
 				allowMeta?: boolean
@@ -4616,7 +4733,6 @@ export default class Elysia<
 		}
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4631,10 +4747,7 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<
-							Schema['response'],
-							Handle
-						>
+						response: ComposeElysiaResponse<Schema, Handle>
 					}
 				}
 			>,
@@ -4666,28 +4779,36 @@ export default class Elysia<
 	ws<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof Definitions['type'] & string
+			keyof UnwrapTypeModule<Definitions['typebox']> & string
 		>,
 		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['type']>,
-			Metadata['schema']
-		>
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
+		>,
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
 	>(
 		path: Path,
-		options: WS.LocalHook<
+		options: WSLocalHook<
 			LocalSchema,
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroContext
 			},
-			Definitions['error'],
-			Metadata['macro'],
-			JoinPath<BasePath, Path>
+			Macro
 		>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -4713,118 +4834,8 @@ export default class Elysia<
 		Ephemeral,
 		Volatile
 	> {
-		const transform = options.transformMessage
-			? Array.isArray(options.transformMessage)
-				? options.transformMessage
-				: [options.transformMessage]
-			: undefined
-
-		let server: Server | null = null
-
-		const validateMessage = getSchemaValidator(options?.body, {
-			models: this.definitions.type as Record<string, TSchema>,
-			normalize: this.config.normalize
-		})
-
-		const validateResponse = getSchemaValidator(options?.response as any, {
-			models: this.definitions.type as Record<string, TSchema>,
-			normalize: this.config.normalize
-		})
-
-		const parseMessage = (message: any) => {
-			if (typeof message === 'string') {
-				const start = message?.charCodeAt(0)
-
-				if (start === 47 || start === 123)
-					try {
-						message = JSON.parse(message)
-					} catch {
-						// Not empty
-					}
-				else if (isNumericString(message)) message = +message
-			}
-
-			if (transform?.length)
-				for (let i = 0; i < transform.length; i++) {
-					const temp = transform[i](message)
-
-					if (temp !== undefined) message = temp
-				}
-
-			return message
-		}
-
-		this.route(
-			'$INTERNALWS',
-			path as any,
-			// @ts-expect-error
-			(context) => {
-				// ! Enable static code analysis just in case resolveUnknownFunction doesn't work, do not remove
-				// eslint-disable-next-line @typescript-eslint/no-unused-vars
-				const { set, path, qi, headers, query, params } = context
-
-				if (server === null) server = this.getServer()
-
-				if (
-					server?.upgrade<any>(context.request, {
-						headers: (typeof options.upgrade === 'function'
-							? options.upgrade(context as any as Context)
-							: options.upgrade) as Bun.HeadersInit,
-						data: {
-							validator: validateResponse,
-							open(ws: ServerWebSocket<any>) {
-								options.open?.(new ElysiaWS(ws, context as any))
-							},
-							message: (ws: ServerWebSocket<any>, msg: any) => {
-								const message = parseMessage(msg)
-
-								if (validateMessage?.Check(message) === false)
-									return void ws.send(
-										new ValidationError(
-											'message',
-											validateMessage,
-											message
-										).message as string
-									)
-
-								options.message?.(
-									new ElysiaWS(ws, context as any),
-									message as any
-								)
-							},
-							drain(ws: ServerWebSocket<any>) {
-								options.drain?.(
-									new ElysiaWS(ws, context as any)
-								)
-							},
-							close(
-								ws: ServerWebSocket<any>,
-								code: number,
-								reason: string
-							) {
-								options.close?.(
-									new ElysiaWS(ws, context as any),
-									code,
-									reason
-								)
-							}
-						}
-					})
-				)
-					return
-
-				set.status = 400
-
-				return 'Expected a websocket connection'
-			},
-			{
-				beforeHandle: options.beforeHandle,
-				transform: options.transform,
-				headers: options.headers,
-				params: options.params,
-				query: options.query
-			} as any
-		)
+		if (this['~adapter'].ws) this['~adapter'].ws(this, path, options as any)
+		else console.warn(`Current adapter doesn't support WebSocket`)
 
 		return this as any
 	}
@@ -4846,7 +4857,6 @@ export default class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Reconcile<
@@ -4881,7 +4891,6 @@ export default class Elysia<
 		store: Store
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Reconcile<Singleton['store'], Store>
@@ -4917,7 +4926,6 @@ export default class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Reconcile<
@@ -4957,7 +4965,6 @@ export default class Elysia<
 		store: Store
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: Reconcile<
@@ -4979,7 +4986,6 @@ export default class Elysia<
 		mapper: (decorators: Singleton['store']) => NewStore
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Singleton['decorator']
 			store: NewStore
@@ -5106,7 +5112,6 @@ export default class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Reconcile<
 				Singleton['decorator'],
@@ -5141,7 +5146,6 @@ export default class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Reconcile<Singleton['decorator'], NewDecorators>
 			store: Singleton['store']
@@ -5159,7 +5163,6 @@ export default class Elysia<
 		mapper: (decorators: Singleton['decorator']) => NewDecorators
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: NewDecorators
 			store: Singleton['store']
@@ -5195,7 +5198,6 @@ export default class Elysia<
 		value: Value
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Reconcile<
 				Singleton['decorator'],
@@ -5235,7 +5237,6 @@ export default class Elysia<
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Reconcile<
 				Singleton['decorator'],
@@ -5381,7 +5382,11 @@ export default class Elysia<
 		transform: (
 			context: Prettify<
 				Context<
-					{},
+					MergeSchema<
+						Volatile['schema'],
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+						BasePath
+					>,
 					Singleton & {
 						derive: Ephemeral['derive'] & Volatile['derive']
 						resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5391,7 +5396,6 @@ export default class Elysia<
 		) => MaybePromise<Derivative>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -5432,7 +5436,16 @@ export default class Elysia<
 		transform: (
 			context: Prettify<
 				Context<
-					{},
+					MergeSchema<
+						Volatile['schema'],
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
+						BasePath
+					> &
+						'global' extends Type
+						? { params: Record<string, string> }
+						: 'scoped' extends Type
+							? { params: Record<string, string> }
+							: {},
 					Singleton &
 						('global' extends Type
 							? {
@@ -5464,7 +5477,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -5482,7 +5494,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -5499,7 +5510,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -5537,11 +5547,14 @@ export default class Elysia<
 		model: Model
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
-			type: Prettify<
-				Definitions['type'] & { [name in Name]: Static<Model> }
+			typebox: TModule<
+				Prettify<
+					UnwrapTypeModule<Definitions['typebox']> & {
+						[name in Name]: Model
+					}
+				>
 			>
 			error: Definitions['error']
 		},
@@ -5551,17 +5564,14 @@ export default class Elysia<
 		Volatile
 	>
 
-	model<const Recorder extends Record<string, TSchema>>(
+	model<const Recorder extends TProperties>(
 		record: Recorder
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
-			type: Prettify<
-				Definitions['type'] & {
-					[key in keyof Recorder]: Static<Recorder[key]>
-				}
+			typebox: TModule<
+				Prettify<UnwrapTypeModule<Definitions['typebox']> & Recorder>
 			>
 			error: Definitions['error']
 		},
@@ -5572,16 +5582,25 @@ export default class Elysia<
 	>
 
 	model<const NewType extends Record<string, TSchema>>(
-		mapper: (decorators: {
-			[type in keyof Definitions['type']]: ReturnType<
-				typeof t.Unsafe<Definitions['type'][type]>
-			>
-		}) => NewType
+		mapper: (
+			decorators: UnwrapTypeModule<
+				Definitions['typebox']
+			> extends infer Models extends Record<string, TSchema>
+				? {
+						[type in keyof Models]: TRef<// @ts-expect-error type is always string
+						type>
+					}
+				: {}
+		) => NewType
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		{
+			typebox: TModule<{
+				[key in keyof NewType]: NewType[key] extends TRef<key & string>
+					? UnwrapTypeModule<Definitions['typebox']>[key]
+					: NewType[key]
+			}>
 			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
 		},
@@ -5598,16 +5617,27 @@ export default class Elysia<
 					if (!(key in this.definitions.type))
 						this.definitions.type[key] = value as TSchema
 				})
+				// @ts-expect-error
+				this.definitions.typebox = t.Module({
+					...(this.definitions.typebox['$defs'] as TModule<{}>),
+					...name
+				} as any)
 
 				return this
 
 			case 'function':
-				this.definitions.type = name(this.definitions.type)
+				const result = name(this.definitions.type)
+				this.definitions.type = result
+				this.definitions.typebox = t.Module(result)
 
 				return this as any
 		}
 
 		;(this.definitions.type as Record<string, TSchema>)[name] = model!
+		this.definitions.typebox = t.Module({
+			...this.definitions.typebox['$defs'],
+			[name]: model!
+		} as any)
 
 		return this as any
 	}
@@ -5629,7 +5659,6 @@ export default class Elysia<
 		) => MaybePromise<NewDerivative>
 	): Elysia<
 		BasePath,
-		Scoped,
 		Singleton,
 		Definitions,
 		Metadata,
@@ -5681,7 +5710,6 @@ export default class Elysia<
 	): Type extends 'global'
 		? Elysia<
 				BasePath,
-				Scoped,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -5700,7 +5728,6 @@ export default class Elysia<
 		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -5717,7 +5744,6 @@ export default class Elysia<
 				>
 			: Elysia<
 					BasePath,
-					Scoped,
 					Singleton,
 					Definitions,
 					Metadata,
@@ -5760,7 +5786,6 @@ export default class Elysia<
 		word: Word
 	): Elysia<
 		BasePath,
-		Scoped,
 		{
 			decorator: Type extends 'decorator' | 'all'
 				? 'prefix' extends Base
@@ -5792,13 +5817,28 @@ export default class Elysia<
 				: Singleton['resolve']
 		},
 		{
-			type: Type extends 'model' | 'all'
+			typebox: Type extends 'model' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`
-						? AddPrefix<Word, Definitions['type']>
-						: AddPrefixCapitalize<Word, Definitions['type']>
-					: AddSuffixCapitalize<Word, Definitions['type']>
-				: Definitions['type']
+						? TModule<
+								AddPrefix<
+									Word,
+									UnwrapTypeModule<Definitions['typebox']>
+								>
+							>
+						: TModule<
+								AddPrefixCapitalize<
+									Word,
+									UnwrapTypeModule<Definitions['typebox']>
+								>
+							>
+					: TModule<
+							AddSuffixCapitalize<
+								Word,
+								UnwrapTypeModule<Definitions['typebox']>
+							>
+						>
+				: Definitions['typebox']
 			error: Type extends 'error' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`
@@ -5890,15 +5930,24 @@ export default class Elysia<
 	}
 
 	compile() {
-		this.fetch = this.config.aot
-			? composeGeneralHandler(this)
-			: createDynamicHandler(this)
+		if (this['~adapter'].isWebStandard) {
+			this.fetch = this.config.aot
+				? composeGeneralHandler(this)
+				: createDynamicHandler(this)
+
+			if (typeof this.server?.reload === 'function')
+				this.server.reload({
+					...(this.server || {}),
+					fetch: this.fetch
+				})
+
+			return this
+		}
 
 		if (typeof this.server?.reload === 'function')
-			this.server.reload({
-				...(this.server || {}),
-				fetch: this.fetch
-			})
+			this.server.reload(this.server || {})
+
+		this._handle = composeGeneralHandler(this)
 
 		return this
 	}
@@ -5916,7 +5965,12 @@ export default class Elysia<
 			: createDynamicHandler(this))(request)
 	}
 
-	private handleError = async (
+	/**
+	 * Custom handle written by adapter
+	 */
+	protected _handle?(...a: unknown[]): unknown
+
+	protected handleError = async (
 		context: Partial<
 			Context<
 				MergeSchema<
@@ -5938,10 +5992,11 @@ export default class Elysia<
 			| ParseError
 			| NotFoundError
 			| InternalServerError
-	) =>
-		(this.handleError = this.config.aot
+	) => {
+		return (this.handleError = this.config.aot
 			? composeErrorHandler(this)
 			: createDynamicErrorHandler(this))(context, error)
+	}
 
 	private outerErrorHandler = (error: Error) =>
 		new Response(error.message || error.name || 'Error', {
@@ -5965,73 +6020,7 @@ export default class Elysia<
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback
 	) => {
-		if (typeof Bun === 'undefined')
-			throw new Error(
-				'.listen() is designed to run on Bun only. If you are running Elysia in other environment please use a dedicated plugin or export the handler via Elysia.fetch'
-			)
-
-		this.compile()
-
-		if (typeof options === 'string') {
-			if (!isNumericString(options))
-				throw new Error('Port must be a numeric value')
-
-			options = parseInt(options)
-		}
-
-		const fetch = this.fetch
-
-		const serve =
-			typeof options === 'object'
-				? ({
-						development: !isProduction,
-						reusePort: true,
-						...(this.config.serve || {}),
-						...(options || {}),
-						// @ts-ignore
-						static: this.router.static.http.static,
-						websocket: {
-							...(this.config.websocket || {}),
-							...(websocket || {})
-						},
-						fetch,
-						error: this.outerErrorHandler
-					} as Serve)
-				: ({
-						development: !isProduction,
-						reusePort: true,
-						...(this.config.serve || {}),
-						// @ts-ignore
-						static: this.router.static.http.static,
-						websocket: {
-							...(this.config.websocket || {}),
-							...(websocket || {})
-						},
-						port: options,
-						fetch,
-						error: this.outerErrorHandler
-					} as Serve)
-
-		this.server = Bun?.serve(serve)
-
-		for (let i = 0; i < this.event.start.length; i++)
-			this.event.start[i].fn(this)
-
-		if (callback) callback(this.server!)
-
-		process.on('beforeExit', () => {
-			if (this.server) {
-				this.server.stop()
-				this.server = null
-
-				for (let i = 0; i < this.event.stop.length; i++)
-					this.event.stop[i].fn(this)
-			}
-		})
-
-		this.promisedModules.then(() => {
-			Bun?.gc(false)
-		})
+		this['~adapter'].listen(this)(options, callback)
 
 		return this
 	}
@@ -6086,9 +6075,8 @@ export default class Elysia<
 
 export { Elysia }
 
-export { mapResponse, mapCompactResponse, mapEarlyResponse } from './handler'
 export { t } from './type-system'
-export { Cookie, type CookieOptions } from './cookies'
+export { serializeCookie, Cookie, type CookieOptions } from './cookies'
 export type { Context, PreContext, ErrorContext } from './context'
 export {
 	ELYSIA_TRACE,
@@ -6157,7 +6145,6 @@ export type {
 	LifeCycleStore,
 	LifeCycleType,
 	MaybePromise,
-	ListenCallback,
 	UnwrapSchema,
 	Checksum,
 	DocumentDecoration,
@@ -6181,6 +6168,10 @@ export type {
 	ExcludeElysiaResponse,
 	CoExist
 } from './types'
+
+export { env } from './universal/env'
+export { file, ElysiaFile } from './universal/file'
+export type { ElysiaAdapter } from './adapter'
 
 export { TypeSystemPolicy } from '@sinclair/typebox/system'
 export type { Static, TSchema } from '@sinclair/typebox'

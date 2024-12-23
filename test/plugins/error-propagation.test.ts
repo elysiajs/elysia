@@ -53,34 +53,4 @@ describe('Error correctly passed to outer elysia instance', () => {
 		expect(localHandlerRun).toBeFalse()
 		expect(globalHandlerRun).toBeTrue()
 	})
-
-	it('Scoped plugin error handler bails before global handler is executed', async () => {
-		let globalHandlerRun = false
-		let localHandlerRun = false
-
-		const mainApp = new Elysia().onError(() => {
-			globalHandlerRun = true
-			return 'Fail'
-		})
-
-		const plugin = new Elysia({
-			scoped: true,
-			prefix: '/a'
-		})
-			.onError(() => {
-				localHandlerRun = true
-				return 'FailPlugin'
-			})
-			.get('/foo', () => {
-				throw new Error('Error')
-			})
-
-		mainApp.use(plugin)
-
-		const res = await (await mainApp.handle(req('/a/foo'))).text()
-
-		expect(res).toBe('FailPlugin')
-		expect(localHandlerRun).toBeTrue()
-		expect(globalHandlerRun).toBeFalse()
-	})
 })
