@@ -144,15 +144,14 @@ describe('Dynamic Mode', () => {
 	})
 
 	it('validate', async () => {
-		const app = new Elysia({
-			// aot: false
-		}).post('/', ({ query: { id } }) => id.toString(), {
+		const app = new Elysia({ aot: false }).post('/', ({ query: { id, arr } }) => `${id} - ${arr}`, {
 			body: t.Object({
 				username: t.String(),
 				password: t.String()
 			}),
 			query: t.Object({
-				id: t.String()
+				id: t.String(),
+				arr: t.Array(t.String()),
 			}),
 			response: {
 				200: t.String()
@@ -161,13 +160,14 @@ describe('Dynamic Mode', () => {
 
 		const res = await app
 			.handle(
-				post('/?id=me', {
+				post('/?id=me&arr=v1&arr=v2', {
 					username: 'username',
 					password: 'password'
 				})
 			)
 			.then((x) => x.text())
-		expect(res).toBe('me')
+
+		expect(res).toBe('me - v1,v2')
 	})
 
 	it('handle non query fallback', async () => {
