@@ -2,7 +2,9 @@ import type * as Fs from 'fs'
 import { env } from './env'
 
 const fs: typeof Fs =
-	typeof process !== 'undefined' && env.NODE_ENV ? require('fs') : {}
+	typeof process !== 'undefined' && env.NODE_ENV
+		? require('fs')
+		: {}
 
 const noop = () => {}
 

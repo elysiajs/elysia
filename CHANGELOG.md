@@ -1,3 +1,7 @@
+# 1.2.2 - 24 Dec 2024
+Bug fix:
+- conditional import and require
+
 # 1.2.1 - 23 Dec 2024
 Bug fix:
 - conditional import for fs
