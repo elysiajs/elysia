@@ -175,6 +175,8 @@ export const createDynamicHandler =
 
 			context.body = body
 			context.params = handler?.params || undefined
+
+			// @ts-ignore
 			context.query =
 				qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
