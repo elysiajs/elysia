@@ -1,3 +1,8 @@
+# 1.1.27 - 23 Dec 2024
+Bug fix:
+- [#963](https://github.com/elysiajs/elysia/pull/963) array parser on query string when AOT is off
+- [#961](https://github.com/elysiajs/elysia/pull/961) literal handler when AOT is off
+
 # 1.1.26 - 4 Dev 2024
 Bug fix:
 - [#907](https://github.com/elysiajs/elysia/issues/907), [#872](https://github.com/elysiajs/elysia/issues/872), [#926](https://github.com/elysiajs/elysia/issues/926) BooleanString is not behave correctly if property is not provided
