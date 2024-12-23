@@ -128,8 +128,8 @@ const handleStream = async (
 	let init = generator.next()
 	if (init instanceof Promise) init = await init
 
-	if (init.done) {
-		if (set) return mapResponse(init.value, set, request)
+	if (init?.done) {
+		if (set) return await mapResponse(init.value, set, request)
 		return mapCompactResponse(init.value, request)
 	}
 
