@@ -3722,7 +3722,13 @@ export default class Elysia<
 		Volatile
 	>
 
-	macro<const NewMacro extends HookMacroFn>(
+	macro<
+		const NewMacro extends HookMacroFn<
+			Metadata['schema'],
+			Singleton,
+			Definitions['error']
+		>
+	>(
 		macro: NewMacro
 	): Elysia<
 		BasePath,

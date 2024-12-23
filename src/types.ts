@@ -1290,36 +1290,26 @@ export type HookMacroFn<
 > = Record<
 	keyof any,
 	(...a: any) => {
-		parse?(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
-		transform?(fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>): unknown
-		// derive?(fn: DeriveHandler<Singleton>): unknown
-		beforeHandle?(
-			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-		): unknown
-		afterHandle?(
-			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-		): unknown
-		error?(
-			fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-		): unknown
-		mapResponse?(
-			fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
-		): unknown
-		afterResponse?(
-			fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
-		): unknown
+		parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+		transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+		afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 		resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-	}
+	} | void
 >
 
-export type MacroToProperty<in out T extends BaseMacroFn | HookMacroFn> =
-	Prettify<{
-		[K in keyof T]: T[K] extends Function
-			? T[K] extends (a: infer Params) => any
-				? Params | undefined
-				: T[K]
+export type MacroToProperty<
+	in out T extends BaseMacroFn | HookMacroFn<any, any, any>
+> = Prettify<{
+	[K in keyof T]: T[K] extends Function
+		? T[K] extends (a: infer Params) => any
+			? Params | undefined
 			: T[K]
-	}>
+		: T[K]
+}>
 
 interface MacroOptions {
 	insert?: 'before' | 'after'

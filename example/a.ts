@@ -1,20 +1,35 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-export const auth = new Elysia().macro({
-	isAuth(isAuth: boolean) {
-		return {
-			resolve() {
-				return {
-					user: 'saltyaom'
+export const userService = new Elysia({ name: 'user/service' })
+	.macro({
+		isSignIn(enabled: boolean) {
+			if (!enabled) return
+
+			return {
+				beforeHandle({ error, cookie: { token }, store: { session } }) {
+					if (!token.value)
+						return error(401, {
+							success: false,
+							message: 'Unauthorized'
+						})
+
+					const username = session[token.value as unknown as number]
+
+					if (!username)
+						return error(401, {
+							success: false,
+							message: 'Unauthorized'
+						})
 				}
 			}
 		}
-	},
-	role(role: 'admin' | 'user') {
-		return {}
-	}
-})
+	})
+	.get('/', () => 'a', {
+		isSignIn: false
+	})
 
-new Elysia().ws('/ws', {
-	ping: (message) => message
-})
+userService
+	.handle(req('/'))
+	.then((x) => x.text())
+	.then(console.log)

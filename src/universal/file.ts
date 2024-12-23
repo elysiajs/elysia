@@ -1,8 +1,9 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import { createReadStream, statSync, type Stats } from 'fs'
+import { type Stats } from 'fs'
+import { createReadStream, statSync } from './fs'
 
 import { isBun } from './utils'
-import { BunFile } from 'bun'
+import type { BunFile } from 'bun'
 
 export const mime = {
 	aac: 'audio/aac',

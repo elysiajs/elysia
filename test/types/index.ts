@@ -2163,3 +2163,59 @@ type a = keyof {}
 			}
 		)
 }
+
+// Macro
+{
+	const userService = new Elysia({ name: 'user/service' })
+		.state({
+			user: {} as Record<string, string>,
+			session: {} as Record<number, string>
+		})
+		.model({
+			signIn: t.Object({
+				username: t.String({ minLength: 1 }),
+				password: t.String({ minLength: 8 })
+			}),
+			session: t.Cookie(
+				{
+					token: t.Number()
+				},
+				{
+					secrets: 'seia'
+				}
+			),
+			optionalSession: t.Optional(t.Ref('session'))
+		})
+		.macro({
+			isSignIn(enabled: boolean) {
+				if (!enabled) return {}
+
+				return {
+					beforeHandle({
+						error,
+						cookie: { token },
+						store: { session }
+					}) {
+						if (!token.value)
+							return error(401, {
+								success: false,
+								message: 'Unauthorized'
+							})
+
+						expectTypeOf<typeof session>().toEqualTypeOf<
+							Record<number, string>
+						>()
+
+						const username =
+							session[token.value as unknown as number]
+
+						if (!username)
+							return error(401, {
+								success: false,
+								message: 'Unauthorized'
+							})
+					}
+				}
+			}
+		})
+}

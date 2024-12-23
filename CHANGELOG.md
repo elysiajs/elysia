@@ -1,3 +1,49 @@
+# 1.2.1 - 23 Dec 2024
+Bug fix:
+- conditional import for fs
+- object macro parameter maybe array
+- optional return for macro
+
+# 1.2.0 - 23 Dec 2024
+Feature:
+- Commitment to Universal Runtime Support
+    - Node Adapter
+    - Web Standard Adapter
+    - Bun Adapter
+    - Universal Utilities
+- Name parser
+- Add resolve support to Macro
+- Improve WebSocket
+    - Support ping, pong and latest Bun feature
+    - Match type declaration with Bun
+    - Support for return, yield
+    - Match Context type
+    - Performance Improvement
+        - Entire rewrite
+        - bind over getter return
+- Infer 422 validation
+- Compilation minification
+- Validation Stuff
+    - t.MaybeArray
+- Typebox Module & Nested model
+    - Inline module
+
+Improvement:
+- Memory Usage
+    - [Internal] Register loosePath in compilation process to reduce memory usage and reduce registration time from O(2n) to O(n)
+- Try to accept and coerce different version of Elysia plugin
+- Event Listener now infers path parameter automatically based on scope
+- Add ‘scoped’ to bulk `as` for casting type to ‘scoped’ similar to ‘plugin’
+
+Change:
+- Update `cookie` to 1.0.1
+- Update TypeBox to 0.33
+- `content-length` now accept number
+
+Breaking Change:
+- [Internal] Remove router internal property static.http.staticHandlers
+- [Internal] Router history compile now link with history composed
+
 # 1.1.27 - 23 Dec 2024
 Bug fix:
 - [#963](https://github.com/elysiajs/elysia/pull/963) array parser on query string when AOT is off
