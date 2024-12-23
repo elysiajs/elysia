@@ -1,3 +1,4 @@
+export { env } from './env'
 export { file } from './file'
 export type {
 	ErrorLike,

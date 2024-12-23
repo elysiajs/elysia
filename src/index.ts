@@ -19,6 +19,7 @@ import { BunAdapter } from './adapter/bun/index'
 import { WebStandardAdapter } from './adapter/web-standard/index'
 import type { ElysiaAdapter } from './adapter/types'
 
+import { env } from './universal/env'
 import type { ListenCallback, Serve, Server } from './universal/server'
 
 import {
@@ -348,15 +349,15 @@ export default class Elysia<
 
 	'~adapter': ElysiaAdapter
 
-	env(model: TObject<any>, env = Bun?.env ?? process.env) {
+	env(model: TObject<any>, _env = env) {
 		const validator = getSchemaValidator(model, {
 			dynamic: true,
 			additionalProperties: true,
 			coerce: true
 		})
 
-		if (validator.Check(env) === false) {
-			const error = new ValidationError('env', model, env)
+		if (validator.Check(_env) === false) {
+			const error = new ValidationError('env', model, _env)
 
 			throw new Error(error.all.map((x) => x.summary).join('\n'))
 		}
@@ -429,7 +430,7 @@ export default class Elysia<
 	applyConfig(config: ElysiaConfig<BasePath>) {
 		this.config = {
 			prefix: '',
-			aot: process.env.ELYSIA_AOT !== 'false',
+			aot: env.ELYSIA_AOT !== 'false',
 			normalize: true,
 			...config,
 			cookie: {
@@ -6168,6 +6169,7 @@ export type {
 	CoExist
 } from './types'
 
+export { env } from './universal/env'
 export { file, ElysiaFile } from './universal/file'
 export type { ElysiaAdapter } from './adapter'
 
