@@ -89,6 +89,71 @@ describe('Params Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('parse single integer', async () => {
+		const app = new Elysia().get('/id/:id', ({ params }) => params, {
+			params: t.Object({
+				id: t.Integer()
+			})
+		})
+		const res = await app.handle(req('/id/617'))
+		expect(await res.json()).toEqual({
+			id: 617
+		})
+		expect(res.status).toBe(200)
+	})
+
+	it('parse malformed integer', async () => {
+		const app = new Elysia().get('/id/:id', ({ params }) => params, {
+			params: t.Object({
+				id: t.Integer()
+			})
+		})
+
+		const res = await app.handle(req('/id/617.1234'))
+		expect(await res.json()).toEqual({
+			errors: [
+				{
+					errors: [],
+					message: 'Expected integer',
+					path: '',
+					schema: {
+						type: 'integer'
+					},
+					summary: 'Expected integer',
+					type: 27,
+					value: 617.1234
+				}
+			],
+			expected: 0,
+			found: 617.1234,
+			message: 'Expected integer',
+			on: 'property',
+			property: 'root',
+			summary: 'Expected integer',
+			type: 'validation'
+		})
+		expect(res.status).toBe(422)
+	})
+
+	it('parse multiple integer', async () => {
+		const app = new Elysia().get(
+			'/id/:id/chapter/:chapterId',
+			({ params }) => params,
+			{
+				params: t.Object({
+					id: t.Integer(),
+					chapterId: t.Integer()
+				})
+			}
+		)
+		const res = await app.handle(req('/id/617/chapter/12'))
+		expect(await res.json()).toEqual({
+			id: 617,
+			chapterId: 12
+		})
+		expect(res.status).toBe(200)
+	})
+
 	it('create default string params', async () => {
 		const app = new Elysia().get('/:name', ({ params }) => params, {
 			params: t.Object({

@@ -9,7 +9,7 @@ import {
 
 import type { Context } from './context'
 
-import { parseQuery, parseQueryFromURL } from './fast-querystring'
+import { parseQuery } from './fast-querystring'
 
 import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
@@ -19,7 +19,7 @@ import { TransformDecodeError } from '@sinclair/typebox/value'
 
 // JIT Handler
 export type DynamicHandler = {
-	handle: Handler<any, any>
+	handle: unknown | Handler<any, any>
 	content?: string
 	hooks: LifeCycleStore
 	validator?: SchemaValidator
@@ -175,8 +175,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			context.body = body
 			context.params = handler?.params || undefined
+
+			// @ts-ignore
 			context.query =
-				qi === -1 ? {} : parseQueryFromURL(url.substring(qi + 1))
+				qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
 			context.headers = {}
 			for (const [key, value] of request.headers.entries())
@@ -332,7 +334,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				}
 			}
 
-			let response = handle(context)
+			let response = typeof handle === 'function' ? handle(context) : handle
 			if (response instanceof Promise) response = await response
 
 			if (!hooks.afterHandle.length) {
