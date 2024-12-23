@@ -173,4 +173,26 @@ describe('Edge Case', () => {
 		// @ts-expect-error private property
 		expect(main.getGlobalRoutes().length).toBe(2)
 	})
+
+	describe('handle path with spaces', () => {
+		it('when AOT is on', async () => {
+			const PATH = "/y a y";
+
+			const app = new Elysia().get(PATH, () => "result from a path wirh spaces");
+
+			const response = await app.handle(new Request(`http://localhost${PATH}`));
+
+			expect(response.status).toBe(200);
+		})
+
+		it('when AOT is off', async () => {
+			const PATH = "/y a y";
+
+			const app = new Elysia({ aot: false }).get(PATH, () => "result from a path wirh spaces");
+
+			const response = await app.handle(new Request(`http://localhost${PATH}`));
+
+			expect(response.status).toBe(200);
+		})
+	})
 })

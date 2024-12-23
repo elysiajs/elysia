@@ -29,7 +29,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 	const { mapResponse, mapEarlyResponse } = app['~adapter'].handler
 
 	return async (request: Request): Promise<Response> => {
-		const url = request.url,
+		const url = decodeURI(request.url),
 			s = url.indexOf('/', 11),
 			qi = url.indexOf('?', s + 1),
 			path = qi === -1 ? url.substring(s) : url.substring(s, qi)
