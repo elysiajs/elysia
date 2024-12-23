@@ -20,7 +20,7 @@ import { TransformDecodeError } from '@sinclair/typebox/value'
 
 // JIT Handler
 export type DynamicHandler = {
-	handle: Handler<any, any>
+	handle: unknown | Handler<any, any>
 	content?: string
 	hooks: LifeCycleStore
 	validator?: SchemaValidator
@@ -331,7 +331,7 @@ export const createDynamicHandler =
 				}
 			}
 
-			let response = handle(context)
+			let response = typeof handle === 'function' ? handle(context) : handle
 			if (response instanceof Promise) response = await response
 
 			if (!hooks.afterHandle.length) {

@@ -13,6 +13,14 @@ describe('Dynamic Mode', () => {
 		expect(res).toBe('Hi')
 	})
 
+	it('handle literal', async () => {
+		const app = new Elysia({ aot: false }).get('/', 'Hi');
+
+		const response = await app.handle(req('/')).then((x) => x.text());
+
+		expect(response).toBe('Hi');
+	})
+
 	it('handle body', async () => {
 		const app = new Elysia({
 			aot: false
