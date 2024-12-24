@@ -4,6 +4,7 @@ Bug fix:
 - [#971](https://github.com/elysiajs/elysia/issues/971) remove top level import, use dynamic import instead
 - [#969](https://github.com/elysiajs/elysia/issues/969) Invalid context on `.onStart`, `.onStop`
 - [#965](https://github.com/elysiajs/elysia/issues/965) [Composer] failed to generate optimized handler. Unexpected identifier 'mapCompactResponse'
+- decorator name with space is not working
 
 # 1.2.2 - 24 Dec 2024
 Bug fix:

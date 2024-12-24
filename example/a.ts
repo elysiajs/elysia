@@ -2,18 +2,12 @@ import { Elysia, file, getSchemaValidator, t } from '../src'
 import { post, req } from '../test/utils'
 
 const app = new Elysia()
-	.onAfterHandle(() => {
-		console.log('after handle')
-	})
-	.mapResponse((context) => {
-		return context.response
-	})
-	.get('/', async () => {
-		return 'ok'
+	.get('/image', async () => {
+		return file('test/kyuukurarin.mp4')
 	})
 	.listen(3000)
 
-console.log(app.routes[0].compile().toString())
+// console.log(app.routes[0].compile().toString())
 
 // app.handle(req('/'))
 

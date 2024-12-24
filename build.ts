@@ -90,8 +90,8 @@ await Promise.all([
 
 await $`cp dist/index*.d.ts dist/bun`
 
-const fsMjs = Bun.file('dist/universal/fs.mjs')
-const fsMjsContent = await fsMjs.text()
-Bun.write(fsMjs, fsMjsContent.replace(`require("fs")`, `await import("fs")`))
+// const fsMjs = Bun.file('dist/universal/fs.mjs')
+// const fsMjsContent = await fsMjs.text()
+// Bun.write(fsMjs, fsMjsContent.replace(`require("fs")`, `await import("fs")`))
 
 process.exit()

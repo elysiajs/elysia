@@ -4,7 +4,7 @@ import { type stat as Stat } from 'fs/promises'
 
 import { isBun } from './utils'
 import type { BunFile } from 'bun'
-import { MaybePromise } from '../types'
+import type { MaybePromise } from '../types'
 
 export const mime = {
 	aac: 'audio/aac',
@@ -115,7 +115,7 @@ export class ElysiaFile {
 
 						return fs.createReadStream(path)
 					})
-					this.value = import('fs/promises').then((fs) => {
+					this.stats = import('fs/promises').then((fs) => {
 						stat = fs.stat
 
 						return fs.stat(path)
