@@ -369,7 +369,7 @@ export default class Elysia<
 	 * @private DO_NOT_USE_OR_YOU_WILL_BE_FIRED
 	 * @version 1.1.0
 	 *
-	 * ! Do not use unless you now exactly what you are doing
+	 * ! Do not use unless you know exactly what you are doing
 	 * ? Add Higher order function to Elysia.fetch
 	 */
 	wrap(fn: HigherOrderFunction) {
