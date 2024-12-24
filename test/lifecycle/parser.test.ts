@@ -457,4 +457,31 @@ describe('Parser', () => {
 
 		expect(response).toEqual([{ name: 'Aru' }, { name: 'Eden' }])
 	})
+
+	it('should get parse error', async () => {
+		let code: string | undefined
+
+		const app = new Elysia()
+			.onError((ctx) => {
+				code = ctx.code
+			})
+			.post('/', () => '', {
+				body: t.Object({
+					test: t.String()
+				})
+			})
+
+		await app.modules
+
+		const response = await app.handle(
+			new Request(`http://localhost`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: ''
+			})
+		)
+
+		expect(code).toBe('PARSE')
+		expect(response.status).toBe(400)
+	})
 })

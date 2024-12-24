@@ -72,7 +72,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 
 			// @ts-ignore
 			for (const key of Object.keys(app.singleton.decorator))
-				decoratorsLiteral += `,${key}: app.singleton.decorator.${key}`
+				decoratorsLiteral += `,${key}: decorator['${key}']`
 
 			const standardHostname =
 				app.config.handler?.standardHostname ?? true

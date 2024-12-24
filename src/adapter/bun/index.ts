@@ -94,7 +94,7 @@ export const BunAdapter: ElysiaAdapter = {
 			app.server = Bun?.serve(serve)
 
 			for (let i = 0; i < app.event.start.length; i++)
-				app.event.start[i].fn(this)
+				app.event.start[i].fn(app)
 
 			if (callback) callback(app.server!)
 
@@ -104,7 +104,7 @@ export const BunAdapter: ElysiaAdapter = {
 					app.server = null
 
 					for (let i = 0; i < app.event.stop.length; i++)
-						app.event.stop[i].fn(this)
+						app.event.stop[i].fn(app)
 				}
 			})
 

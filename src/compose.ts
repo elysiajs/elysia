@@ -494,8 +494,6 @@ export const composeHandler = ({
 			'get:function(){return getServer()}' +
 			'})\n'
 
-	if (inference.body) fnLiteral += `let isParsing=false\n`
-
 	validator.createBody?.()
 	validator.createQuery?.()
 	validator.createHeaders?.()
@@ -510,6 +508,8 @@ export const composeHandler = ({
 		method !== 'GET' &&
 		method !== 'HEAD' &&
 		(inference.body || !!validator.body || hooks.parse.length)
+
+	if (hasBody) fnLiteral += `let isParsing=false\n`
 
 	// @ts-expect-error private
 	const defaultHeaders = app.setHeaders
@@ -896,6 +896,8 @@ export const composeHandler = ({
 			hooks.parse.length || inference.body || validator.body
 
 		if (adapter.parser.declare) fnLiteral += adapter.parser.declare
+
+		fnLiteral += '\nisParsing=true'
 
 		const parser =
 			typeof hooks.parse === 'string'
@@ -1601,7 +1603,7 @@ export const composeHandler = ({
 					`mr=${
 						isAsyncName(mapResponse) ? 'await' : ''
 					} onMapResponse[${i}](c)\n` +
-					`if(mr!==undefined)r=c.response=mr`
+					`if(mr!==undefined)r=c.response=mr\n`
 
 				endUnit()
 			}
@@ -1969,6 +1971,7 @@ export const composeHandler = ({
 		console.log({
 			handler:
 				typeof handler === 'function' ? handler.toString() : handler,
+			instruction: init,
 			hooks: {
 				...debugHooks,
 				// @ts-expect-error
@@ -2081,6 +2084,7 @@ export const composeGeneralHandler = (
 		`getServer` +
 		`}=data\n` +
 		`const store=app.singleton.store\n` +
+		`const decorator=app.singleton.decorator\n` +
 		`const staticRouter=app.router.static.http\n` +
 		`const ht=app.router.history\n` +
 		`const wsRouter=app.router.ws\n` +

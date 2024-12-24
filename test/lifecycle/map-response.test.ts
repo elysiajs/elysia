@@ -258,4 +258,18 @@ describe('Map Response', () => {
 
 		expect(response).toBe('aru')
 	})
+
+	// https://github.com/elysiajs/elysia/issues/965
+	it('mapResponse with after handle', async () => {
+		const app = new Elysia()
+			.onAfterHandle(() => {})
+			.mapResponse((context) => {
+				return context.response
+			})
+			.get('/', async () => 'aru')
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toBe('aru')
+	})
 })

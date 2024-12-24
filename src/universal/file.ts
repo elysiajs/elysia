@@ -1,9 +1,10 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import { type Stats } from 'fs'
-import { createReadStream, statSync } from './fs'
+import { type createReadStream as CreateReadStream } from 'fs'
+import { type stat as Stat } from 'fs/promises'
 
 import { isBun } from './utils'
 import type { BunFile } from 'bun'
+import { MaybePromise } from '../types'
 
 export const mime = {
 	aac: 'audio/aac',
@@ -93,15 +94,37 @@ export const getFileExtension = (path: string) => {
 
 export const file = (path: string) => new ElysiaFile(path)
 
+let createReadStream: typeof CreateReadStream
+let stat: typeof Stat
+
 export class ElysiaFile {
-	readonly value: unknown
-	readonly stats: Stats | undefined
+	readonly value: MaybePromise<unknown>
+	readonly stats: ReturnType<typeof Stat> | undefined
 
 	constructor(public path: string) {
 		if (isBun) this.value = Bun.file(path)
 		else {
-			this.value = createReadStream(path)
-			this.stats = statSync(path)!
+			// Browser
+			// @ts-ignore
+			if (typeof window !== 'undefined') {
+				console.warn('Browser environment does not support file')
+			} else {
+				if (!createReadStream || !stat) {
+					this.value = import('fs').then((fs) => {
+						createReadStream = fs.createReadStream
+
+						return fs.createReadStream(path)
+					})
+					this.value = import('fs/promises').then((fs) => {
+						stat = fs.stat
+
+						return fs.stat(path)
+					})
+				} else {
+					this.value = createReadStream(path)
+					this.stats = stat(path)!
+				}
+			}
 		}
 	}
 
@@ -115,6 +138,6 @@ export class ElysiaFile {
 	get length() {
 		if (isBun) return (this.value as BunFile).size
 
-		return this.stats?.size ?? 0
+		return this.stats?.then((x) => x.size) ?? 0
 	}
 }
