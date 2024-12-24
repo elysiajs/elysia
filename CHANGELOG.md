@@ -1,3 +1,7 @@
+# 1.2.6 - 25 Dec 2024
+Bug fix:
+- mapResponse with onError caused compilation error
+
 # 1.2.5 - 25 Dec 2024
 Bug fix:
 - define universal/file in package export

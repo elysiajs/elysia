@@ -272,4 +272,15 @@ describe('Map Response', () => {
 
 		expect(response).toBe('aru')
 	})
+
+	it('mapResponse with onError', async () => {
+		const app = new Elysia()
+			.onError(() => {})
+			.mapResponse(() => {})
+			.get('/', () => 'ok')
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toBe('ok')
+	})
 })

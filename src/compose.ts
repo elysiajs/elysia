@@ -571,7 +571,7 @@ export const composeHandler = ({
 					`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')` +
 					'}'
 
-		encodeCookie += '}'
+		encodeCookie += '}\n'
 	}
 
 	const normalize = app.config.normalize
@@ -1706,7 +1706,7 @@ export const composeHandler = ({
 
 					fnLiteral +=
 						`if(mr===undefined){` +
-						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](c)` +
+						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](c)\n` +
 						`if(mr!==undefined)r=c.response=mr` +
 						`}`
 
@@ -1808,8 +1808,8 @@ export const composeHandler = ({
 
 					fnLiteral +=
 						`c.response=er\n` +
-						`er=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](c)\n` +
-						`if(er instanceof Promise)er=await er`
+						`er=onMapResponse[${i}](c)\n` +
+						`if(er instanceof Promise)er=await er\n`
 
 					endUnit()
 				}
