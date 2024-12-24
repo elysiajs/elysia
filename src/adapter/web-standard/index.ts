@@ -19,7 +19,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		createStaticHandler
 	},
 	composeHandler: {
-		mapResponseContext: 'c.request.signal',
+		mapResponseContext: 'c.request',
 		preferWebstandardHeaders: true,
 		// @ts-ignore Bun specific
 		headers:

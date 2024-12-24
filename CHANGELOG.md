@@ -1,3 +1,7 @@
+# 1.2.4 - 25 Dec 2024
+Bug fix:
+- performance regression from eager access abortSignal
+
 # 1.2.3 - 25 Dec 2024
 Bug fix:
 - [#973](https://github.com/elysiajs/elysia/issues/973) Parsing malformed body results in `UNKNOWN`-Error instead of `ParseError`
