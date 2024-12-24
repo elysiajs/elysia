@@ -16,6 +16,7 @@ import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import { TransformDecodeError } from '@sinclair/typebox/value'
+import { TypeCheck } from './type-system'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -23,6 +24,14 @@ export type DynamicHandler = {
 	content?: string
 	hooks: LifeCycleStore
 	validator?: SchemaValidator
+}
+
+const injectDefaultValues = (typeChecker: TypeCheck<any>, obj: Record<string, any>) => {
+	// @ts-expect-error private
+	for (const [key, keySchema] of Object.entries(typeChecker.schema.properties)) {
+		// @ts-expect-error private
+		obj[key] ??= keySchema.default
+	}
 }
 
 export const createDynamicHandler = (app: AnyElysia) => {
@@ -220,6 +229,18 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					: undefined
 			)) as any
 
+			const headerValidator = validator?.createHeaders?.()
+			if (headerValidator)
+				injectDefaultValues(headerValidator, context.headers)
+
+			const paramsValidator = validator?.createParams?.()
+			if (paramsValidator)
+				injectDefaultValues(paramsValidator, context.params)
+
+			const queryValidator = validator?.createQuery?.()
+			if (queryValidator)
+				injectDefaultValues(queryValidator, context.query)
+
 			for (let i = 0; i < hooks.transform.length; i++) {
 				const hook = hooks.transform[i]
 				const operation = hook.fn(context)
@@ -232,10 +253,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			}
 
 			if (validator) {
-				if (validator.createHeaders?.()) {
-					const _header: Record<string, string> = {}
-					for (const key in request.headers)
-						_header[key] = request.headers.get(key)!
+				if (headerValidator) {
+					const _header = structuredClone(context.headers)
+					for (const [key, value] of request.headers)
+						_header[key] = value
 
 					if (validator.headers!.Check(_header) === false)
 						throw new ValidationError(
@@ -247,9 +268,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					// @ts-ignore
 					context.headers = validator.headers.Decode(context.headers)
 
-				if (
-					validator.createParams?.()?.Check(context.params) === false
-				) {
+				if (paramsValidator?.Check(context.params) === false) {
 					throw new ValidationError(
 						'params',
 						validator.params!,
@@ -259,7 +278,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					// @ts-ignore
 					context.params = validator.params.Decode(context.params)
 
-				if (validator.createQuery?.()?.Check(context.query) === false)
+				if (queryValidator?.Check(context.query) === false)
 					throw new ValidationError(
 						'query',
 						validator.query!,
