@@ -122,11 +122,6 @@
 			"types": "./dist/universal/env.d.ts",
 			"import": "./dist/universal/env.mjs",
 			"require": "./dist/cjs/universal/env.js"
-		},
-		"./universal/file": {
-			"types": "./dist/universal/file.d.ts",
-			"import": "./dist/universal/file.mjs",
-			"require": "./dist/cjs/universal/file.js"
 		}
 	},
 	"repository": {
