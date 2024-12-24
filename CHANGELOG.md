@@ -1,3 +1,7 @@
+# 1.2.5 - 25 Dec 2024
+Bug fix:
+- define universal/file in package export
+
 # 1.2.4 - 25 Dec 2024
 Bug fix:
 - performance regression from eager access abortSignal
