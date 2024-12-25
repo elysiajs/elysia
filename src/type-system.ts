@@ -765,6 +765,7 @@ export {
 	TypeSystemDuplicateFormat,
 	TypeSystemDuplicateTypeKind
 } from '@sinclair/typebox/system'
+export { TypeRegistry, FormatRegistry } from '@sinclair/typebox'
 export { TypeCompiler, TypeCheck } from '@sinclair/typebox/compiler'
 
 // type Template =
