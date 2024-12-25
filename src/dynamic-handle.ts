@@ -3,6 +3,7 @@ import type { AnyElysia } from '.'
 import {
 	ElysiaCustomStatusResponse,
 	ElysiaErrors,
+	error,
 	NotFoundError,
 	ValidationError
 } from './error'
@@ -60,6 +61,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				request,
 				path,
 				qi,
+				error,
 				redirect
 			}
 		) as unknown as Context & {
