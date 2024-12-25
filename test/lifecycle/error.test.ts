@@ -272,4 +272,84 @@ describe('error', () => {
 			somePretty: 'json'
 		})
 	})
+
+	describe('handle scoped error', async () => {
+		await Bun.sleep(200)
+
+		describe('when calling "error" function from "beforeHandle"', () => {
+			const route = new Elysia()
+				.get("/", () => "it won't run", {
+					beforeHandle({ error }) {
+						return error(401)
+					},
+					error({ error }) {
+						return `scoped error: ${(error as any).code}`
+					},
+				}).onError(() => {
+					return "global error handler won't be used"
+				})
+
+			it('when aot is on', async () => {
+				const api = new Elysia().use(route)
+
+				const result = await api.handle(new Request('http://localhost/'))
+
+				expect(await result.text()).toBe('scoped error: 401')
+				expect(result.status).toBe(401)
+			})
+
+			it.only('when aot is off', async () => {
+				const api = new Elysia({ aot: false }).use(route)
+
+				const result = await api.handle(new Request('http://localhost/'))
+
+				expect(await result.text()).toBe('scoped error: 401')
+				expect(result.status).toBe(401)
+			})
+		})
+
+		describe('when calling "error" function from "afterHandle"', () => {
+			const route = new Elysia()
+				.get("/", () => "it runs", {
+					afterHandle({ error }) {
+						return error(401)
+					},
+					error({ error }) {
+						return `scoped error: ${(error as any).code}`
+					},
+				}).onError(() => {
+					return "global error handler won't be used"
+				})
+
+			it('when aot is off', async () => {
+				const api = new Elysia({ aot: false }).use(route)
+
+				const result = await api.handle(new Request('http://localhost/')).then((r) => r.text())
+
+				expect(result).toBe('scoped error: 401')
+			})
+		})
+
+		describe('when calling "error" function from the path handler', () => {
+			const route = new Elysia()
+				.get("/", ({ error }) => {
+					return error(401)
+				}, {
+					error({ error }) {
+						// @ts-expect-error
+						return `scoped error: ${error.code}`
+					},
+				}).onError(() => {
+					return "global error handler won't be used"
+				})
+
+			it('when aot is off', async () => {
+				const api = new Elysia({ aot: false }).use(route)
+
+				const result = await api.handle(new Request('http://localhost/')).then((r) => r.text())
+
+				expect(result).toBe('scoped error: 401')
+			})
+		})
+	})
 })

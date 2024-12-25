@@ -3,6 +3,7 @@ import type { AnyElysia } from '.'
 import {
 	ElysiaCustomStatusResponse,
 	ElysiaErrors,
+	error,
 	NotFoundError,
 	ValidationError
 } from './error'
@@ -14,7 +15,7 @@ import { parseQuery } from './fast-querystring'
 import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
 
-import type { Handler, LifeCycleStore, SchemaValidator } from './types'
+import type { Handler, HookContainer, LifeCycleStore, SchemaValidator } from './types'
 import { TransformDecodeError } from '@sinclair/typebox/value'
 import { TypeCheck } from './type-system'
 
@@ -60,10 +61,23 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				request,
 				path,
 				qi,
-				redirect
+				redirect,
+				error,
 			}
 		) as unknown as Context & {
 			response: unknown
+		}
+
+		const getLocalError = (response: unknown, hookError: HookContainer[]): Result | undefined => {
+			if (response instanceof ElysiaCustomStatusResponse) {
+				for (let i = 0; i < hookError.length; i++) {
+					const errorResponse = hookError[i].fn({ ...context, error: response })
+					if (errorResponse) return errorResponse
+				}
+			
+				const result = mapEarlyResponse(response, context.set)
+				if (result) return result as Result
+			}
 		}
 
 		try {
@@ -314,11 +328,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				const hook = hooks.beforeHandle[i]
 				let response = hook.fn(context)
 
-				if (hook.subType === 'resolve') {
-					if (response instanceof ElysiaCustomStatusResponse) {
-						const result = mapEarlyResponse(response, context.set)
-						if (result) return (context.response = result) as Response
-					}
+				const localError = getLocalError(response, hooks.error)
+				if (localError) {
+					response = localError
+				} else if (hook.subType === 'resolve') {
 					if (response instanceof Promise)
 						Object.assign(context, await response)
 					else Object.assign(context, response)
@@ -355,6 +368,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			let response = typeof handle === 'function' ? handle(context) : handle
 			if (response instanceof Promise) response = await response
+
+			const localError = getLocalError(response, hooks.error)
+			if (localError) response = localError
 
 			if (!hooks.afterHandle.length) {
 				const status =
@@ -393,23 +409,21 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					if (newResponse instanceof Promise)
 						newResponse = await newResponse
 
-					const result = mapEarlyResponse(newResponse, context.set)
-					if (result !== undefined) {
+					const localError = getLocalError(newResponse, hooks.error)
+					if (localError !== undefined) {
 						const responseValidator =
 							// @ts-expect-error
 							validator?.response?.[result.status]
 
-						if (responseValidator?.Check(result) === false)
+						if (responseValidator?.Check(localError) === false)
 							throw new ValidationError(
 								'response',
 								responseValidator,
-								result
+								localError
 							)
 						else if (responseValidator?.Decode)
 							response = responseValidator.Decode(response)
-
-						// @ts-expect-error
-						return (context.response = result)
+						else response = localError
 					}
 				}
 			}

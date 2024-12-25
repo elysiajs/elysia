@@ -1,4 +1,4 @@
-import type { AnyElysia } from '.'
+import type { AnyElysia, Context } from '.'
 
 import { Value } from '@sinclair/typebox/value'
 import { TypeBoxError, type TAnySchema, type TSchema } from '@sinclair/typebox'
@@ -1517,7 +1517,7 @@ export const composeHandler = ({
 				mapResponseReporter.resolve()
 
 				fnLiteral += encodeCookie
-				fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${
+				fnLiteral += `return mapEarlyResponse(handleErrors,${saveResponse}be,c.set${
 					mapResponseContext
 				})}\n`
 			}
@@ -1782,7 +1782,7 @@ export const composeHandler = ({
 			`c.code=error.code??error[ERROR_CODE]??"UNKNOWN"}` +
 			`let er\n`
 
-		for (let i = 0; i < hooks.error.length; i++) {
+		for (let i = 0; i < hooks.error.length; i++) { //
 			const endUnit = errorReporter.resolveChild(hooks.error[i].fn.name)
 
 			if (isAsync(hooks.error[i]))
@@ -1817,7 +1817,7 @@ export const composeHandler = ({
 
 			mapResponseReporter.resolve()
 
-			fnLiteral += `er=mapEarlyResponse(er,set${mapResponseContext})\n`
+			fnLiteral += `er=mapEarlyResponse(handleErrors,er,set${mapResponseContext})\n`
 			fnLiteral += `if(er){`
 
 			if (hasTrace) {
@@ -1921,6 +1921,8 @@ export const composeHandler = ({
 
 	init += fnLiteral + '}'
 
+	console.log(init)
+
 	try {
 		if (asManifest) return Function('hooks', init) as any
 
@@ -1936,7 +1938,16 @@ export const composeHandler = ({
 			utils: {
 				mapResponse: adapterHandler.mapResponse,
 				mapCompactResponse: adapterHandler.mapCompactResponse,
-				mapEarlyResponse: adapterHandler.mapEarlyResponse,
+				mapEarlyResponse: (handleErrors: any, response: unknown, set: Context['set'], ...params: unknown[]) => {
+					if (response instanceof ElysiaCustomStatusResponse) {
+						for (let i = 0; i < handleErrors.length; i++) {
+							const errorResponse = handleErrors[i]({ error: response })
+							if (errorResponse) return new Response(errorResponse)
+						}
+					}
+
+					return adapterHandler.mapEarlyResponse(response, set, ...params)
+				},
 				parseQuery,
 				parseQueryFromURL,
 				isNotEmpty
@@ -2141,7 +2152,7 @@ export const composeGeneralHandler = (
 
 			if (withReturn) {
 				fnLiteral +=
-					`re=mapEarlyResponse(` +
+					`re=mapEarlyResponse(handleErrors,` +
 					`${maybeAsync ? 'await ' : ''}onRequest[${i}](c),` +
 					`c.set)\n`
 
