@@ -3522,6 +3522,15 @@ export default class Elysia<
 			}
 
 			return instance
+		} else if (plugin.promisedModules.size > 0) {
+			for (const promise of plugin.promisedModules.promises)
+				this.promisedModules.add(promise)
+
+			this.promisedModules
+				.then(() => this._use(plugin))
+				.then((x) => x.compile())
+
+			return this
 		}
 
 		const { name, seed } = plugin.config
