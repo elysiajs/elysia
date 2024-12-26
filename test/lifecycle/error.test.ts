@@ -159,7 +159,7 @@ describe('error', () => {
 	)
 
 	it.each([true, false])(
-		'return correct named status without value on error function',
+		'return correct named status without value on error function with aot: %p',
 		async (aot) => {
 			const app = new Elysia({ aot }).get('/', ({ error }) =>
 				error("I'm a teapot")
