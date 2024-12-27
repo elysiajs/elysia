@@ -7,6 +7,7 @@ Bug fix:
 - [#952](https://github.com/elysiajs/elysia/issues/952) onAfterResponse does not provide mapped response value unless aot is disabled
 - `mapResponse.response` is `{}` if no response schema is provided
 - Response doesn't reconcile when handler return `Response` is used with `mapResponse`
+- `onError` now accept `error` as `number` when `Elysia.error` is thrown (but not return)
 
 # 1.2.6 - 25 Dec 2024
 Bug fix:

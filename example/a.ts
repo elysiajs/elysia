@@ -1,17 +1,11 @@
 import { Elysia, t, error } from '../src'
 import { req } from '../test/utils'
 
-const res = await new Elysia({
-	aot: false
-})
-	.get('/', () => 'Hi')
-	.onError(({ code }) => {
-		if (code === 'NOT_FOUND')
-			return new Response("I'm a teapot", {
-				status: 418
-			})
+const app = new Elysia()
+	.get('/', () => {
+		throw error("I'm a teapot")
 	})
-	.handle(req('/not-found'))
+	.listen(3000)
 
 // console.log(await res.text())
 // console.log(res.status)

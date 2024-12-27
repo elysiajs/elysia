@@ -1003,6 +1003,23 @@ export type ErrorHandler<
 			  >
 			| Prettify<
 					{
+						request: Request
+						code: number
+						error: Readonly<ElysiaCustomStatusResponse<number>>
+						set: Context['set']
+					} & Partial<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+					> &
+						Partial<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
+			  >
+			| Prettify<
+					{
 						[K in keyof T]: {
 							request: Request
 							code: K
