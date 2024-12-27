@@ -750,17 +750,29 @@ export type MapResponse<
 		resolve: {}
 	},
 	Path extends string | undefined = undefined
-> = Handler<
-	Omit<Route, 'response'> & {
-		response: {} extends Route['response'] ? unknown : Route['response']
-	},
-	Singleton & {
-		derive: {
-			response: Route['response']
-		}
-	},
-	Path
->
+> = (
+	context: Context<
+		Omit<Route, 'response'> & {},
+		Singleton & {
+			derive: {
+				response: {} extends Route['response']
+					? unknown
+					: Route['response']
+			}
+		},
+		Path
+	>
+) => MaybePromise<Response | void>
+
+// Handler<
+// 	Omit<Route, 'response'> & {},
+// 	Singleton & {
+// 		derive: {
+// 			response: {} extends Route['response'] ? unknown : Route['response']
+// 		}
+// 	},
+// 	Path
+// >
 
 export type VoidHandler<
 	in out Route extends RouteSchema = {},

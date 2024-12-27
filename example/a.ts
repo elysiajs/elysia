@@ -1,13 +1,17 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, error } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia({ aot: false })
-	.onAfterResponse(({ response }) => {
-		console.log('Response:', response)
+const res = await new Elysia({
+	aot: false
+})
+	.get('/', () => 'Hi')
+	.onError(({ code }) => {
+		if (code === 'NOT_FOUND')
+			return new Response("I'm a teapot", {
+				status: 418
+			})
 	})
-	.get('/', async () => {
-		return { ok: true }
-	})
-	.listen(3000)
+	.handle(req('/not-found'))
 
-app.handle(req('/'))
+// console.log(await res.text())
+// console.log(res.status)

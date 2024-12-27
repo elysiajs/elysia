@@ -229,6 +229,17 @@ export const mergeResponseWithSetHeaders = (
 	response: Response,
 	set: Context['set']
 ) => {
+	if (
+		(response as Response).status !== set.status &&
+		set.status !== 200 &&
+		((response.status as number) <= 300 ||
+			(response.status as number) > 400)
+	)
+		response = new Response(response.body, {
+			headers: response.headers,
+			status: set.status as number
+		})
+
 	let isCookieSet = false
 
 	if (set.headers instanceof Headers)
@@ -246,8 +257,7 @@ export const mergeResponseWithSetHeaders = (
 		for (const key in set.headers)
 			(response as Response).headers.append(key, set.headers[key] as any)
 
-	if ((response as Response).status !== set.status)
-		set.status = (response as Response).status
+	return response
 }
 
 export const mapResponse = (
@@ -311,7 +321,10 @@ export const mapResponse = (
 				return Response.json(response, set as any)
 
 			case 'Response':
-				mergeResponseWithSetHeaders(response as Response, set)
+				response = mergeResponseWithSetHeaders(
+					response as Response,
+					set
+				)
 
 				if (
 					(response as Response).headers.get('transfer-encoding') ===
@@ -354,7 +367,10 @@ export const mapResponse = (
 
 			default:
 				if (response instanceof Response) {
-					mergeResponseWithSetHeaders(response as Response, set)
+					response = mergeResponseWithSetHeaders(
+						response as Response,
+						set
+					)
 
 					if (
 						(response as Response).headers.get(
@@ -496,7 +512,10 @@ export const mapEarlyResponse = (
 				return Response.json(response, set as any)
 
 			case 'Response':
-				mergeResponseWithSetHeaders(response as Response, set)
+				response = mergeResponseWithSetHeaders(
+					response as Response,
+					set
+				)
 
 				if (
 					(response as Response).headers.get('transfer-encoding') ===
@@ -540,7 +559,10 @@ export const mapEarlyResponse = (
 
 			default:
 				if (response instanceof Response) {
-					mergeResponseWithSetHeaders(response as Response, set)
+					response = mergeResponseWithSetHeaders(
+						response as Response,
+						set
+					)
 
 					if (
 						(response as Response).headers.get(

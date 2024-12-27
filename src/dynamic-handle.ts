@@ -30,8 +30,8 @@ const injectDefaultValues = (
 	typeChecker: TypeCheck<any>,
 	obj: Record<string, any>
 ) => {
-	// @ts-expect-error private
 	for (const [key, keySchema] of Object.entries(
+		// @ts-expect-error private
 		typeChecker.schema.properties
 	)) {
 		// @ts-expect-error private
@@ -459,8 +459,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				error instanceof TransformDecodeError && error.error
 					? error.error
 					: error
-			if ((reportedError as ElysiaErrors).status)
-				set.status = (reportedError as ElysiaErrors).status
+
+			// ? Since error is reconciled in mergeResponseWithHeaders, this is not needed (if I'm not drunk)
+			// if ((reportedError as ElysiaErrors).status)
+			// 	set.status = (reportedError as ElysiaErrors).status
+
 			// @ts-expect-error private
 			return app.handleError(context, reportedError)
 		} finally {

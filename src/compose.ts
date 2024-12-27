@@ -2279,13 +2279,13 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	})
 
 	fnLiteral +=
-		`const set = context.set\n` +
+		`const set=context.set\n` +
 		`let _r\n` +
 		`if(!context.code)context.code=error.code??error[ERROR_CODE]\n` +
-		`if(!(context.error instanceof Error))context.error = error\n` +
+		`if(!(context.error instanceof Error))context.error=error\n` +
 		`if(error instanceof ElysiaCustomStatusResponse){` +
-		`error.status = error.code\n` +
-		`error.message = error.response` +
+		`set.status=error.status=error.code\n` +
+		`error.message=error.response` +
 		`}`
 
 	if (adapter.declare) fnLiteral += adapter.declare
@@ -2314,7 +2314,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 				`error.status=error.code\n` +
 				`error.message = error.response` +
 				`}` +
-				`if(set.status === 200) set.status = error.status\n`
+				`if(set.status===200||!set.status)set.status=error.status\n`
 
 			const mapResponseReporter = report('mapResponse', {
 				total: hooks.mapResponse.length,
@@ -2348,19 +2348,23 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	fnLiteral +=
 		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){` +
 		`if(error.error)error=error.error\n` +
-		`set.status = error.status??422\n` +
+		`set.status=error.status??422\n` +
 		adapter.validationError +
-		`}else{` +
-		`if(error.code&&typeof error.status==="number"){` +
-		adapter.unknownError +
-		'}'
+		`}`
+
+	fnLiteral += `if(error instanceof Error){` + adapter.unknownError + `}`
 
 	const mapResponseReporter = report('mapResponse', {
 		total: hooks.mapResponse.length,
 		name: 'context'
 	})
 
+	fnLiteral +=
+		'\nif(!context.response)context.response=error.message??error\n'
+
 	if (hooks.mapResponse.length) {
+		fnLiteral += 'let mr\n'
+
 		for (let i = 0; i < hooks.mapResponse.length; i++) {
 			const mapResponse = hooks.mapResponse[i]
 
@@ -2369,10 +2373,10 @@ export const composeErrorHandler = (app: AnyElysia) => {
 			)
 
 			fnLiteral +=
-				`context.response=error\n` +
-				`error=${
-					isAsyncName(mapResponse) ? 'await ' : ''
-				}onMapResponse[${i}](context)\n`
+				`if(mr===undefined){` +
+				`mr=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n` +
+				`if(mr!==undefined)error=context.response=mr` +
+				'}'
 
 			endUnit()
 		}
@@ -2380,7 +2384,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 	mapResponseReporter.resolve()
 
-	fnLiteral += `\nreturn mapResponse(${saveResponse}error,set${adapter.mapResponseContext})}}`
+	fnLiteral += `\nreturn mapResponse(${saveResponse}error,set${adapter.mapResponseContext})}`
 
 	return Function(
 		'inject',

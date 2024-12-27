@@ -129,6 +129,12 @@ export interface ElysiaAdapter {
 		inject?: Record<string, unknown>
 		mapResponseContext: string
 		validationError: string
+		/**
+		 * Handle thrown error which is instance of Error
+		 *
+		 * Despite its name of `unknownError`, it also handle named error like `NOT_FOUND`, `VALIDATION_ERROR`
+		 * It's named `unknownError` because it also catch unknown error
+		 */
 		unknownError: string
 	}
 	ws?(app: AnyElysia, path: string, handler: AnyWSLocalHook): unknown
