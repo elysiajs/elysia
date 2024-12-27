@@ -484,7 +484,6 @@ describe('Macro', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia().get('/hello', () => 'hello', {
-			// @ts-expect-error missing type reference
 			hello: 'nagisa'
 		})
 
@@ -578,5 +577,221 @@ describe('Macro', () => {
 
 		expect(a).toEqual({ user: { name: 'anon' } })
 		expect(b).toEqual({ user: { name: 'hoshino' } })
+	})
+
+	it('guard handle resolve macro', async () => {
+		const plugin = new Elysia()
+			.macro({
+				account: (a: boolean) => ({
+					resolve: ({ error }) => ({
+						account: 'A'
+					})
+				})
+			})
+			.guard({
+				account: true
+			})
+			.get('/local', ({ account }) => account === 'A')
+
+		const parent = new Elysia()
+			.use(plugin)
+			.get('/plugin', (context) => !('account' in context))
+
+		const app = new Elysia()
+			.use(parent)
+			.get('/global', (context) => !('account' in context))
+
+		expect(
+			await Promise.all(
+				['/local', '/plugin', '/global'].map((path) =>
+					app
+						.handle(req(path))
+						.then((x) => x.text())
+						.then((x) => x === 'true')
+				)
+			)
+		).toEqual([true, true, true])
+	})
+
+	it('guard handle resolve macro with scoped', async () => {
+		const plugin = new Elysia()
+			.macro({
+				account: (a: boolean) => ({
+					resolve: ({ error }) => ({
+						account: 'A'
+					})
+				})
+			})
+			.guard({
+				as: 'scoped',
+				account: true
+			})
+			.get('/local', ({ account }) => account === 'A')
+
+		const parent = new Elysia()
+			.use(plugin)
+			.get('/plugin', ({ account }) => account === 'A')
+
+		const app = new Elysia()
+			.use(parent)
+			.get('/global', (context) => !('account' in context))
+
+		expect(
+			await Promise.all(
+				['/local', '/plugin', '/global'].map((path) =>
+					app
+						.handle(req(path))
+						.then((x) => x.text())
+						.then((x) => x === 'true')
+				)
+			)
+		).toEqual([true, true, true])
+	})
+
+	it('guard handle resolve macro with global', async () => {
+		const plugin = new Elysia()
+			.macro({
+				account: (a: boolean) => ({
+					resolve: ({ error }) => ({
+						account: 'A'
+					})
+				})
+			})
+			.guard({
+				as: 'global',
+				account: true
+			})
+			.get('/local', ({ account }) => account === 'A')
+
+		const parent = new Elysia()
+			.use(plugin)
+			.get('/plugin', ({ account }) => account === 'A')
+
+		const app = new Elysia()
+			.use(parent)
+			.get('/global', ({ account }) => account === 'A')
+
+		expect(
+			await Promise.all(
+				['/local', '/plugin', '/global'].map((path) =>
+					app
+						.handle(req(path))
+						.then((x) => x.text())
+						.then((x) => x === 'true')
+				)
+			)
+		).toEqual([true, true, true])
+	})
+
+	it('guard handle resolve macro with local', async () => {
+		const plugin = new Elysia()
+			.macro({
+				account: (a: boolean) => ({
+					resolve: ({ error }) => ({
+						account: 'A'
+					})
+				})
+			})
+			.guard({
+				as: 'local',
+				account: true
+			})
+			.get('/local', ({ account }) => account === 'A')
+
+		const parent = new Elysia()
+			.use(plugin)
+			.get('/plugin', (context) => !('account' in context))
+
+		const app = new Elysia()
+			.use(parent)
+			.get('/global', (context) => !('account' in context))
+
+		expect(
+			await Promise.all(
+				['/local', '/plugin', '/global'].map((path) =>
+					app
+						.handle(req(path))
+						.then((x) => x.text())
+						.then((x) => x === 'true')
+				)
+			)
+		).toEqual([true, true, true])
+	})
+
+	it('guard handle resolve macro with error', async () => {
+		const plugin = new Elysia()
+			.macro({
+				account: (a: boolean) => ({
+					resolve: ({ error }) => {
+						if (Math.random() > 2) return error(401)
+
+						return {
+							account: 'A'
+						}
+					}
+				})
+			})
+			.guard({
+				account: true
+			})
+			.get('/local', ({ account }) => account === 'A')
+
+		const parent = new Elysia()
+			.use(plugin)
+			.get('/plugin', (context) => !('account' in context))
+
+		const app = new Elysia()
+			.use(parent)
+			.get('/global', (context) => !('account' in context))
+
+		expect(
+			await Promise.all(
+				['/local', '/plugin', '/global'].map((path) =>
+					app
+						.handle(req(path))
+						.then((x) => x.text())
+						.then((x) => x === 'true')
+				)
+			)
+		).toEqual([true, true, true])
+	})
+
+	it('guard handle resolve macro with async', async () => {
+		const plugin = new Elysia()
+			.macro({
+				account: (a: boolean) => ({
+					resolve: async ({ error }) => {
+						if (Math.random() > 2) return error(401)
+
+						return {
+							account: 'A'
+						}
+					}
+				})
+			})
+			.guard({
+				as: 'scoped',
+				account: true
+			})
+			.get('/local', ({ account }) => account === 'A')
+
+		const parent = new Elysia()
+			.use(plugin)
+			.get('/plugin', ({ account }) => account === 'A')
+
+		const app = new Elysia()
+			.use(parent)
+			.get('/global', (context) => !('account' in context))
+
+		expect(
+			await Promise.all(
+				['/local', '/plugin', '/global'].map((path) =>
+					app
+						.handle(req(path))
+						.then((x) => x.text())
+						.then((x) => x === 'true')
+				)
+			)
+		).toEqual([true, true, true])
 	})
 })

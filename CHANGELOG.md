@@ -1,3 +1,7 @@
+# 1.2.7 - 27 Dec 2024
+Bug fix:
+- macro doesn't work with guard
+
 # 1.2.6 - 25 Dec 2024
 Bug fix:
 - mapResponse with onError caused compilation error

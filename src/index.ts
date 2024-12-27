@@ -2885,7 +2885,9 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
 		>,
-		const Type extends LifeCycleType
+		const Type extends LifeCycleType,
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
 	>(
 		hook: { as: Type } & LocalHook<
 			LocalSchema,
@@ -2895,7 +2897,7 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
 			keyof Metadata['parser'] & string
 		>
 	): Type extends 'global'
@@ -2905,7 +2907,7 @@ export default class Elysia<
 					decorator: Singleton['decorator']
 					store: Singleton['store']
 					derive: Singleton['derive']
-					resolve: Singleton['resolve']
+					resolve: Prettify<Singleton['resolve'] & MacroContext>
 				},
 				Definitions,
 				{
@@ -2936,7 +2938,7 @@ export default class Elysia<
 					Routes,
 					{
 						derive: Volatile['derive']
-						resolve: Volatile['resolve']
+						resolve: Prettify<Volatile['resolve'] & MacroContext>
 						schema: Prettify<
 							MergeSchema<
 								UnwrapRoute<
@@ -2958,7 +2960,7 @@ export default class Elysia<
 					Ephemeral,
 					{
 						derive: Volatile['derive']
-						resolve: Volatile['resolve']
+						resolve: Prettify<Volatile['resolve'] & MacroContext>
 						schema: Prettify<
 							MergeSchema<
 								UnwrapRoute<
@@ -2980,17 +2982,21 @@ export default class Elysia<
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
-		>
+		>,
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
 	>(
 		hook: LocalHook<
 			LocalSchema,
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroContext
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -3002,7 +3008,7 @@ export default class Elysia<
 		Ephemeral,
 		{
 			derive: Volatile['derive']
-			resolve: Volatile['resolve']
+			resolve: Prettify<Volatile['resolve'] & MacroContext>
 			schema: Prettify<
 				MergeSchema<
 					UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
@@ -3023,12 +3029,19 @@ export default class Elysia<
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
-		>
+		>,
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
 	>(
 		run: (
 			group: Elysia<
 				BasePath,
-				Singleton,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Singleton['derive']
+					resolve: Singleton['resolve'] & MacroContext
+				},
 				Definitions,
 				{
 					schema: Prettify<Schema>
@@ -3060,15 +3073,8 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
 		>,
-		const Resolutions extends MaybeArray<
-			ResolveHandler<
-				Schema,
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
-			>
-		>
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
 	>(
 		schema: LocalHook<
 			LocalSchema,
@@ -3078,7 +3084,7 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
 			keyof Metadata['parser'] & string
 		>,
 		run: (
@@ -3088,8 +3094,7 @@ export default class Elysia<
 					decorator: Singleton['decorator']
 					store: Singleton['store']
 					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+					resolve: Prettify<Singleton['resolve'] & MacroContext>
 				},
 				Definitions,
 				{
@@ -3110,7 +3115,11 @@ export default class Elysia<
 		Metadata,
 		Prettify<Routes & NewElysia['_routes']>,
 		Ephemeral,
-		Volatile
+		{
+			derive: Volatile['derive']
+			resolve: Prettify<Volatile['resolve'] & MacroContext>
+			schema: Volatile['schema']
+		}
 	>
 
 	/**

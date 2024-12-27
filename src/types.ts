@@ -1096,7 +1096,7 @@ export type LocalHook<
 	Macro extends BaseMacro,
 	Parser extends string = ''
 > =
-	// Kind of inference hack, I have no idea why it work either
+	// Kind of an inference hack, I have no idea why it work either
 	(LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 		Macro &
 		NoInfer<{

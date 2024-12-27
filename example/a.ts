@@ -1,20 +1,29 @@
-import { Elysia, file, getSchemaValidator, t } from '../src'
-import { post, req } from '../test/utils'
+import { Elysia } from '../src'
+import { req } from '../test/utils'
 
-const app = new Elysia()
-	.onError(() => {})
-	.mapResponse(() => {
-		if (Math.random() > 2) return new Response('error', { status: 500 })
+const plugin = new Elysia()
+	.macro({
+		account: (a: boolean) => ({
+			resolve: ({ error }) => ({
+				account: 'A'
+			})
+		})
 	})
-	.get('/', async () => {
-		return 'ok'
+	.guard({
+		account: true
 	})
-	.listen(3000)
+	.get('/local', ({ account }) => {
+		console.log(account)
+	})
 
-// console.log(app.routes[0].compile().toString())
+const parent = new Elysia().use(plugin).get('/plugin', (context) => {
+	console.log(context.account)
+})
 
-app.handle(req('/')).then(x => x.text()).then(console.log)
+const app = new Elysia().use(parent).get('/global', (context) => {
+	console.log(context.account)
+})
 
-// console.log(
-// 	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-// )
+await Promise.all(
+	['/local', '/plugin', '/global'].map((path) => app.handle(req(path)))
+)
