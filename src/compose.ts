@@ -53,6 +53,9 @@ const isOptional = (validator?: TypeCheck<any>) => {
 	// @ts-expect-error
 	const schema = validator?.schema
 
+	if (schema?.[TypeBoxSymbol.kind] === 'Import')
+		return validator.References().some(isOptional as any)
+
 	return !!schema && TypeBoxSymbol.optional in schema
 }
 
@@ -63,9 +66,13 @@ const defaultParsers = [
 	'arrayBuffer',
 	'formdata',
 	'application/json',
+	// eslint-disable-next-line sonarjs/no-duplicate-string
 	'text/plain',
+	// eslint-disable-next-line sonarjs/no-duplicate-string
 	'application/x-www-form-urlencoded',
+	// eslint-disable-next-line sonarjs/no-duplicate-string
 	'application/octet-stream',
+	// eslint-disable-next-line sonarjs/no-duplicate-string
 	'multipart/form-data'
 ]
 
@@ -76,6 +83,11 @@ export const hasAdditionalProperties = (
 
 	// @ts-expect-error private property
 	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? _schema
+
+	// @ts-expect-error private property
+	if (schema[TypeBoxSymbol.kind] === 'Import' && _schema.References()) {
+		return _schema.References().some(hasAdditionalProperties)
+	}
 
 	if (schema.anyOf) return schema.anyOf.some(hasAdditionalProperties)
 	if (schema.someOf) return schema.someOf.some(hasAdditionalProperties)
@@ -287,8 +299,19 @@ export const hasType = (type: string, schema: TAnySchema) => {
 	)
 }
 
-export const hasProperty = (expectedProperty: string, schema: TAnySchema) => {
-	if (!schema) return
+export const hasProperty = (
+	expectedProperty: string,
+	_schema: TAnySchema | TypeCheck<any>
+) => {
+	if (!_schema) return
+
+	// @ts-expect-error private property
+	const schema = _schema.schema ?? _schema
+
+	if (schema[TypeBoxSymbol.kind] === 'Import')
+		return _schema
+			.References()
+			.some((schema: TAnySchema) => hasProperty(expectedProperty, schema))
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
@@ -526,6 +549,8 @@ export const composeHandler = ({
 
 	const cookieValidator = hasCookie
 		? getCookieValidator({
+				// @ts-expect-error private property
+				modules: app.definitions.typebox,
 				validator: validator.cookie as any,
 				defaultConfig: app.config.cookie,
 				dynamic: !!app.config.aot,
@@ -1168,8 +1193,7 @@ export const composeHandler = ({
 			)
 				fnLiteral += 'c.headers=validator.headers.Clean(c.headers);\n'
 
-			// @ts-ignore
-			if (hasProperty('default', validator.headers.schema))
+			if (hasProperty('default', validator.headers))
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1204,8 +1228,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.params) {
-			// @ts-ignore
-			if (hasProperty('default', validator.params.schema))
+			if (hasProperty('default', validator.params))
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1242,8 +1265,7 @@ export const composeHandler = ({
 			)
 				fnLiteral += 'c.query=validator.query.Clean(c.query)\n'
 
-			// @ts-ignore
-			if (hasProperty('default', validator.query.schema))
+			if (hasProperty('default', validator.query))
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1291,8 +1313,7 @@ export const composeHandler = ({
 			if (doesHaveTransform || isOptional(validator.body))
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
-			// @ts-ignore
-			if (hasProperty('default', validator.body.schema)) {
+			if (hasProperty('default', validator.body)) {
 				const value = Value.Default(
 					// @ts-expect-error private property
 					validator.body.schema,
@@ -1343,6 +1364,7 @@ export const composeHandler = ({
 		}
 
 		if (
+			cookieValidator &&
 			isNotEmpty(
 				// @ts-ignore
 				cookieValidator?.schema?.properties ??
@@ -1356,8 +1378,7 @@ export const composeHandler = ({
 				`for(const [key,value] of Object.entries(c.cookie))` +
 				`cookieValue[key]=value.value\n`
 
-			// @ts-ignore
-			if (hasProperty('default', cookieValidator.schema))
+			if (hasProperty('default', cookieValidator))
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore

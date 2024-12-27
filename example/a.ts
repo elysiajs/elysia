@@ -1,29 +1,24 @@
-import { Elysia } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
+import { post, req } from '../test/utils'
 
-const plugin = new Elysia()
-	.macro({
-		account: (a: boolean) => ({
-			resolve: ({ error }) => ({
-				account: 'A'
-			})
-		})
+const app = new Elysia()
+	.onError(({ error }) => {
+		console.log({ error })
 	})
-	.guard({
-		account: true
+	.model({
+		session: t.Cookie({ token: t.Number() }),
+		optionalSession: t.Optional(t.Ref('session'))
 	})
-	.get('/local', ({ account }) => {
-		console.log(account)
+	.get('/', () => 'Hello Elysia', {
+		cookie: 'optionalSession'
 	})
 
-const parent = new Elysia().use(plugin).get('/plugin', (context) => {
-	console.log(context.account)
-})
-
-const app = new Elysia().use(parent).get('/global', (context) => {
-	console.log(context.account)
-})
-
-await Promise.all(
-	['/local', '/plugin', '/global'].map((path) => app.handle(req(path)))
+const correct = await app.handle(
+	new Request('http://localhost/', {
+		headers: {
+			cookie: 'token=1'
+		}
+	})
 )
+
+console.log(correct)

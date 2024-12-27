@@ -2,6 +2,7 @@ import type { BunFile } from 'bun'
 import {
 	Kind,
 	TAnySchema,
+	TModule,
 	TransformKind,
 	type TSchema
 } from '@sinclair/typebox'
@@ -573,27 +574,40 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	{
 		models = {},
 		dynamic = false,
+		modules,
 		normalize = false,
 		additionalProperties = false,
 		coerce = false,
 		additionalCoerce = []
 	}: {
 		models?: Record<string, TSchema>
+		modules: TModule<any, any>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: boolean
 		coerce?: boolean
 		additionalCoerce?: MaybeArray<ReplaceSchemaTypeOptions>
-	} = {}
+	} = {
+		modules: t.Module({})
+	}
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
 	if (typeof s === 'string' && !(s in models)) return undefined as any
 
-	let schema: TSchema = typeof s === 'string' ? models[s] : s
+	let schema: TSchema =
+		typeof s === 'string'
+			? // @ts-expect-error
+				((modules as TModule<{}, {}>).Import(s) ?? models[s])
+			: s
 
 	if (coerce || additionalCoerce) {
 		if (coerce)
 			schema = replaceSchemaType(schema, [
+				{
+					from: t.Ref(''),
+					// @ts-expect-error
+					to: (options) => modules.Import(options['$ref'])
+				},
 				{
 					from: t.Number(),
 					to: (options) => t.Numeric(options),
@@ -610,6 +624,11 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			])
 		else {
 			schema = replaceSchemaType(schema, [
+				{
+					from: t.Ref(''),
+					// @ts-expect-error
+					to: (options) => modules.Import(options['$ref'])
+				},
 				...(Array.isArray(additionalCoerce)
 					? additionalCoerce
 					: [additionalCoerce])
@@ -726,10 +745,12 @@ export const getResponseSchemaValidator = (
 	s: InputSchema['response'] | undefined,
 	{
 		models = {},
+		modules,
 		dynamic = false,
 		normalize = false,
 		additionalProperties = false
 	}: {
+		modules: TModule<any, any>
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
@@ -739,7 +760,11 @@ export const getResponseSchemaValidator = (
 	if (!s) return
 	if (typeof s === 'string' && !(s in models)) return
 
-	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
+	const maybeSchemaOrRecord =
+		typeof s === 'string'
+			? // @ts-ignore
+				((modules as TModule<{}, {}>).Import(s) ?? models[s])
+			: s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		if (dynamic)
@@ -867,18 +892,21 @@ export const coercePrimitiveRoot = () => {
 
 export const getCookieValidator = ({
 	validator,
+	modules,
 	defaultConfig = {},
 	config,
 	dynamic,
 	models
 }: {
 	validator: TSchema | string | undefined
+	modules: TModule<any, any>
 	defaultConfig: CookieOptions | undefined
 	config: CookieOptions
 	dynamic: boolean
 	models: Record<string, TSchema> | undefined
 }) => {
 	let cookieValidator = getSchemaValidator(validator, {
+		modules,
 		dynamic,
 		models,
 		additionalProperties: true,
@@ -896,6 +924,7 @@ export const getCookieValidator = ({
 			)
 		} else {
 			cookieValidator = getSchemaValidator(t.Cookie({}), {
+				modules,
 				dynamic,
 				models,
 				additionalProperties: true

@@ -120,11 +120,15 @@ export const BunAdapter: ElysiaAdapter = {
 
 		const validateMessage = getSchemaValidator(body, {
 			// @ts-expect-error private property
+			modules: app.definitions.typebox,
+			// @ts-expect-error private property
 			models: app.definitions.type as Record<string, TSchema>,
 			normalize: app.config.normalize
 		})
 
 		const validateResponse = getSchemaValidator(response as any, {
+			// @ts-expect-error private property
+			modules: app.definitions.typebox,
 			// @ts-expect-error private property
 			models: app.definitions.type as Record<string, TSchema>,
 			normalize: app.config.normalize

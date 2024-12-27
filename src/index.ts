@@ -34,7 +34,8 @@ import {
 	PromiseGroup,
 	promoteEvent,
 	stringToStructureCoercions,
-	isNotEmpty
+	isNotEmpty,
+	replaceSchemaType
 } from './utils'
 
 import {
@@ -351,6 +352,7 @@ export default class Elysia<
 
 	env(model: TObject<any>, _env = env) {
 		const validator = getSchemaValidator(model, {
+			modules: this.definitions.typebox,
 			dynamic: true,
 			additionalProperties: true,
 			coerce: true
@@ -453,9 +455,10 @@ export default class Elysia<
 	} {
 		const models: Record<string, TypeCheck<TSchema>> = {}
 
-		for (const [name, schema] of Object.entries(this.definitions.type))
+		for (const name of Object.keys(this.definitions.type))
 			models[name] = getSchemaValidator(
-				schema as any
+				// @ts-expect-error
+				this.definitions.typebox.Import(name)
 			) as TypeCheck<TSchema>
 
 		// @ts-expect-error
@@ -525,6 +528,7 @@ export default class Elysia<
 		const cookieValidator = () =>
 			cloned.cookie
 				? getCookieValidator({
+						modules,
 						validator: cloned.cookie,
 						defaultConfig: this.config.cookie,
 						config: cloned.cookie?.config ?? {},
@@ -534,6 +538,7 @@ export default class Elysia<
 				: undefined
 
 		const normalize = this.config.normalize
+		const modules = this.definitions.typebox
 
 		const validator =
 			this.config.precompile === true ||
@@ -541,12 +546,14 @@ export default class Elysia<
 				this.config.precompile.schema === true)
 				? {
 						body: getSchemaValidator(cloned.body, {
+							modules,
 							dynamic,
 							models,
 							normalize,
 							additionalCoerce: coercePrimitiveRoot()
 						}),
 						headers: getSchemaValidator(cloned.headers, {
+							modules,
 							dynamic,
 							models,
 							additionalProperties: !this.config.normalize,
@@ -554,12 +561,14 @@ export default class Elysia<
 							additionalCoerce: stringToStructureCoercions()
 						}),
 						params: getSchemaValidator(cloned.params, {
+							modules,
 							dynamic,
 							models,
 							coerce: true,
 							additionalCoerce: stringToStructureCoercions()
 						}),
 						query: getSchemaValidator(cloned.query, {
+							modules,
 							dynamic,
 							models,
 							normalize,
@@ -568,6 +577,7 @@ export default class Elysia<
 						}),
 						cookie: cookieValidator(),
 						response: getResponseSchemaValidator(cloned.response, {
+							modules,
 							dynamic,
 							models,
 							normalize
@@ -580,6 +590,7 @@ export default class Elysia<
 							return (this.body = getSchemaValidator(
 								cloned.body,
 								{
+									modules,
 									dynamic,
 									models,
 									normalize,
@@ -593,6 +604,7 @@ export default class Elysia<
 							return (this.headers = getSchemaValidator(
 								cloned.headers,
 								{
+									modules,
 									dynamic,
 									models,
 									additionalProperties: !normalize,
@@ -608,6 +620,7 @@ export default class Elysia<
 							return (this.params = getSchemaValidator(
 								cloned.params,
 								{
+									modules,
 									dynamic,
 									models,
 									coerce: true,
@@ -622,6 +635,7 @@ export default class Elysia<
 							return (this.query = getSchemaValidator(
 								cloned.query,
 								{
+									modules,
 									dynamic,
 									models,
 									coerce: true,
@@ -641,6 +655,7 @@ export default class Elysia<
 							return (this.response = getResponseSchemaValidator(
 								cloned.response,
 								{
+									modules,
 									dynamic,
 									models,
 									normalize
@@ -5626,24 +5641,41 @@ export default class Elysia<
 	>
 
 	model(name: string | Record<string, TSchema> | Function, model?: TSchema) {
+		const coerce = (schema: TSchema) =>
+			replaceSchemaType(schema, [
+				{
+					from: t.Number(),
+					to: (options) => t.Numeric(options),
+					untilObjectFound: true
+				},
+				{
+					from: t.Boolean(),
+					to: (options) => t.BooleanString(options),
+					untilObjectFound: true
+				}
+			])
+
 		switch (typeof name) {
 			case 'object':
+				const parsedSchemas = {} as Record<string, TSchema>
+
 				Object.entries(name).forEach(([key, value]) => {
 					if (!(key in this.definitions.type))
-						this.definitions.type[key] = value as TSchema
+						parsedSchemas[key] = this.definitions.type[key] =
+							coerce(value) as TSchema
 				})
 				// @ts-expect-error
 				this.definitions.typebox = t.Module({
 					...(this.definitions.typebox['$defs'] as TModule<{}>),
-					...name
+					...parsedSchemas
 				} as any)
 
 				return this
 
 			case 'function':
-				const result = name(this.definitions.type)
+				const result = coerce(name(this.definitions.type))
 				this.definitions.type = result
-				this.definitions.typebox = t.Module(result)
+				this.definitions.typebox = t.Module(result as any)
 
 				return this as any
 		}
