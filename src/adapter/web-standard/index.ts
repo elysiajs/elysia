@@ -187,7 +187,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		unknownError:
 			`return new Response(` +
 			`error.message,` +
-			`{headers:set.headers,status:error.status}` +
+			`{headers:set.headers,status:error.status??set.status??500}` +
 			`)`
 	},
 	listen() {

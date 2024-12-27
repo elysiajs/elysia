@@ -1,3 +1,7 @@
+# 1.2.8 - 27 Dec 2024
+Bug fix:
+- [#966](https://github.com/elysiajs/elysia/issues/966) generic error somehow return 200
+
 # 1.2.7 - 27 Dec 2024
 Bug fix:
 - macro doesn't work with guard
@@ -7,7 +11,7 @@ Bug fix:
 - [#952](https://github.com/elysiajs/elysia/issues/952) onAfterResponse does not provide mapped response value unless aot is disabled
 - `mapResponse.response` is `{}` if no response schema is provided
 - Response doesn't reconcile when handler return `Response` is used with `mapResponse`
-- `onError` now accept `error` as `number` when `Elysia.error` is thrown (but not return)
+- `onError` now accepts `error` as `number` when `Elysia.error` is thrown (but not returned)
 
 # 1.2.6 - 25 Dec 2024
 Bug fix:

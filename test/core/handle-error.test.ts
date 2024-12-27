@@ -306,4 +306,34 @@ describe('Handle Error', () => {
 		expect(response.headers.get('content-type')).toStartWith('text/plain')
 		expect(response.status).toEqual(422)
 	})
+
+	it('handle generic error', async () => {
+		const res = await new Elysia()
+			.get('/', () => 'Hi')
+			// @ts-expect-error private
+			.handleError(
+				{
+					request,
+					set: {
+						headers: {}
+					}
+				},
+				// https://youtube.com/shorts/PbIWVPKHfrQ
+				new Error('a')
+			)
+
+		expect(await res.text()).toBe('a')
+		expect(res.status).toBe(500)
+	})
+
+	it('handle generic error when thrown in handler', async () => {
+		const app = new Elysia().get('/', () => {
+			throw new Error('a')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('a')
+		expect(res.status).toBe(500)
+	})
 })

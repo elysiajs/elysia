@@ -1,9 +1,9 @@
-import { Elysia, t, error } from '../src'
+import { Elysia, t, error, StatusMap } from '../src'
 import { req } from '../test/utils'
 
 const app = new Elysia()
 	.get('/', () => {
-		throw error("I'm a teapot")
+		throw new Error("A")
 	})
 	.listen(3000)
 
