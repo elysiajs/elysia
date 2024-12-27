@@ -609,6 +609,8 @@ export const composeHandler = ({
 
 	if (hasHeaders) fnLiteral += adapter.headers
 
+	fnLiteral += 'try{'
+
 	if (hasCookie) {
 		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
 			// @ts-ignore
@@ -873,7 +875,6 @@ export const composeHandler = ({
 		}
 	})
 
-	fnLiteral += 'try{'
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 
 	const saveResponse =
