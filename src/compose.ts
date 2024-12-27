@@ -609,6 +609,15 @@ export const composeHandler = ({
 
 	if (hasHeaders) fnLiteral += adapter.headers
 
+	if (hasTrace) fnLiteral += 'const id=c[ELYSIA_REQUEST_ID]\n'
+
+	const report = createReport({
+		trace: hooks.trace,
+		addFn: (word) => {
+			fnLiteral += word
+		}
+	})
+
 	fnLiteral += 'try{'
 
 	if (hasCookie) {
@@ -865,15 +874,6 @@ export const composeHandler = ({
 			fnLiteral += `} else c.query = {}\n`
 		}
 	}
-
-	if (hasTrace) fnLiteral += 'const id=c[ELYSIA_REQUEST_ID]\n'
-
-	const report = createReport({
-		trace: hooks.trace,
-		addFn: (word) => {
-			fnLiteral += word
-		}
-	})
 
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 

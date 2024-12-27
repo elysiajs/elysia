@@ -2,6 +2,8 @@
 Bug fix:
 - macro doesn't work with guard
 - [#981](https://github.com/elysiajs/elysia/issues/981) unable to deference schema, create default, and coerce value
+- [#964](https://github.com/elysiajs/elysia/issues/964) InvalidCookieSignature errors are not caught by onError
+- [#952](https://github.com/elysiajs/elysia/issues/952) onAfterResponse does not provide mapped response value unless aot is disabled
 
 # 1.2.6 - 25 Dec 2024
 Bug fix:

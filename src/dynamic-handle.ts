@@ -26,9 +26,14 @@ export type DynamicHandler = {
 	validator?: SchemaValidator
 }
 
-const injectDefaultValues = (typeChecker: TypeCheck<any>, obj: Record<string, any>) => {
+const injectDefaultValues = (
+	typeChecker: TypeCheck<any>,
+	obj: Record<string, any>
+) => {
 	// @ts-expect-error private
-	for (const [key, keySchema] of Object.entries(typeChecker.schema.properties)) {
+	for (const [key, keySchema] of Object.entries(
+		typeChecker.schema.properties
+	)) {
 		// @ts-expect-error private
 		obj[key] ??= keySchema.default
 	}
@@ -186,8 +191,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			context.params = handler?.params || undefined
 
 			// @ts-ignore
-			context.query =
-				qi === -1 ? {} : parseQuery(url.substring(qi + 1))
+			context.query = qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
 			context.headers = {}
 			for (const [key, value] of request.headers.entries())
@@ -317,7 +321,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				if (hook.subType === 'resolve') {
 					if (response instanceof ElysiaCustomStatusResponse) {
 						const result = mapEarlyResponse(response, context.set)
-						if (result) return (context.response = result) as Response
+						if (result)
+							return (context.response = result) as Response
 					}
 					if (response instanceof Promise)
 						Object.assign(context, await response)
@@ -353,7 +358,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				}
 			}
 
-			let response = typeof handle === 'function' ? handle(context) : handle
+			let response =
+				typeof handle === 'function' ? handle(context) : handle
 			if (response instanceof Promise) response = await response
 
 			if (!hooks.afterHandle.length) {
@@ -447,11 +453,12 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			}
 
 			// @ts-expect-error
-			return (context.response = mapResponse(response, context.set))
+			return mapResponse((context.response = response), context.set)
 		} catch (error) {
-			const reportedError = (error instanceof TransformDecodeError && error.error)
-				? error.error
-				: error
+			const reportedError =
+				error instanceof TransformDecodeError && error.error
+					? error.error
+					: error
 			if ((reportedError as ElysiaErrors).status)
 				set.status = (reportedError as ElysiaErrors).status
 			// @ts-expect-error private

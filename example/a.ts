@@ -1,26 +1,13 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const app = new Elysia()
-	.onError(({ code }) => {
-		console.log('[onError]', code)
-		return { error: { code } }
+const app = new Elysia({ aot: false })
+	.onAfterResponse(({ response }) => {
+		console.log('Response:', response)
 	})
-	.get(
-		'/bug',
-		async ({ cookie }) => {
-			if (!cookie.bug.value) {
-				cookie.bug.value = new Date().toISOString()
-			}
-			return { value: cookie.bug.value }
-		},
-		{
-			cookie: t.Cookie(
-				{ bug: t.Optional(t.String()) },
-				{ secrets: crypto.randomUUID(), sign: ['bug'] }
-			)
-		}
-	)
-	.get('/crash', async () => {
-		throw new Error('something')
+	.get('/', async () => {
+		return { ok: true }
 	})
 	.listen(3000)
+
+app.handle(req('/'))
