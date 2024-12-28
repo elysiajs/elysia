@@ -410,8 +410,6 @@ describe('Macro', () => {
 		})
 
 		await app.handle(req('/'))
-
-		console.log(called)
 	})
 
 	it('inherits macro in group', async () => {
@@ -551,8 +549,8 @@ describe('Macro', () => {
 			app.handle(req('/?name=hoshino')).then((x) => x.json())
 		])
 
-		expect(a).toEqual({ user: { name: 'anon' } })
-		expect(b).toEqual({ user: { name: 'hoshino' } })
+		expect(a).toEqual({ name: 'anon' })
+		expect(b).toEqual({ name: 'hoshino' })
 	})
 
 	it('accept async resolve', async () => {
@@ -575,8 +573,8 @@ describe('Macro', () => {
 			app.handle(req('/?name=hoshino')).then((x) => x.json())
 		])
 
-		expect(a).toEqual({ user: { name: 'anon' } })
-		expect(b).toEqual({ user: { name: 'hoshino' } })
+		expect(a).toEqual({ name: 'anon' })
+		expect(b).toEqual({ name: 'hoshino' })
 	})
 
 	it('guard handle resolve macro', async () => {
@@ -793,5 +791,38 @@ describe('Macro', () => {
 				)
 			)
 		).toEqual([true, true, true])
+	})
+
+	// It may look duplicate to the test case above, but it occurs for some reason
+	it('handle macro resolve', async () => {
+		const app = new Elysia()
+			.macro({
+				user: (enabled: true) => ({
+					resolve() {
+						if (!enabled) return
+
+						return {
+							user: 'a'
+						}
+					}
+				})
+			})
+			.get(
+				'/',
+				({ user, error }) => {
+					if (!user) return error(401)
+
+					return { hello: 'hanabi' }
+				},
+				{
+					user: true
+				}
+			)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			hello: 'hanabi'
+		})
 	})
 })

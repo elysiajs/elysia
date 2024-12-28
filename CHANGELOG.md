@@ -1,3 +1,7 @@
+# 1.2.9 - 28 Dec 2024
+Bug fix:
+- Resolve macro unintentionally return instead of assign new context
+
 # 1.2.8 - 27 Dec 2024
 Bug fix:
 - [#966](https://github.com/elysiajs/elysia/issues/966) generic error somehow return 200

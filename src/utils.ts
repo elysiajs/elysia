@@ -1236,10 +1236,11 @@ export const traceBackMacro = (
 			const hook = v(value)
 
 			if (typeof hook === 'object') {
-				for (const [k, v] of Object.entries(hook))
+				for (const [k, v] of Object.entries(hook)) {
 					manage(k as keyof LifeCycleStore)({
 						fn: v as any
 					})
+				}
 			}
 
 			delete property[key as unknown as keyof typeof extension]
@@ -1269,6 +1270,14 @@ export const createMacroManager =
 			type = {
 				fn: type
 			}
+
+		// @ts-expect-error this is available in macro v2
+		if(stackName === "resolve") {
+			type = {
+				...type,
+				subType: 'resolve'
+			}
+		}
 
 		if ('fn' in type || Array.isArray(type)) {
 			if (!localHook[stackName]) localHook[stackName] = []
