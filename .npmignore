@@ -10,7 +10,7 @@
 .husky
 .eslintrc.json
 
-bun.lockb
+bun.lock
 node_modules
 tsconfig.json
 CHANGELOG.md
