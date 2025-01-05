@@ -172,3 +172,61 @@ import { expectTypeOf } from 'expect-type'
 		expectTypeOf(context).not.toHaveProperty('account')
 	})
 }
+
+// Handle ephemeral and volatile property
+{
+	const app = new Elysia()
+		.resolve(() => {
+			return {
+				hello: 'world'
+			}
+		})
+		.macro({
+			user: (enabled: boolean) => ({
+				resolve: ({ hello, query: { name = 'anon' } }) => {
+					expectTypeOf(hello).toEqualTypeOf<'world' | undefined>()
+
+					return {
+						user: {
+							name
+						}
+					}
+				}
+			})
+		})
+		.get('/', ({ user }) => user, {
+			user: true
+		})
+}
+
+// Handle shorthand function macro
+{
+	const app = new Elysia()
+		.macro({
+			user: {
+				resolve: ({ query: { name = 'anon' } }) => ({
+					user: {
+						name
+					}
+				})
+			}
+		})
+		.get(
+			'/',
+			({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<{ name: string }>()
+			},
+			{
+				user: true
+			}
+		)
+		.get(
+			'/no',
+			(context) => {
+				expectTypeOf(context).not.toHaveProperty('user')
+			},
+			{
+				user: false
+			}
+		)
+}

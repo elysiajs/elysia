@@ -1,3 +1,14 @@
+# 1.2.10 - 5 Jan 2025
+Feature:
+- add shorthand property for macro function
+
+Improvement:
+- use `deuri` instead of `fast-decode-uri-component`
+- [#985](https://github.com/elysiajs/elysia/issues/985) MaybeEmpty and Nullable should have options args
+
+Bug fix:
+- Macro function doesn't inherits local/scoped derive and resolve in type-level
+
 # 1.2.9 - 28 Dec 2024
 Bug fix:
 - Resolve macro unintentionally return instead of assign new context

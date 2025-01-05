@@ -825,4 +825,36 @@ describe('Macro', () => {
 			hello: 'hanabi'
 		})
 	})
+
+	it('handle function macro shorthand property', async () => {
+		const app = new Elysia()
+			.macro({
+				user: {
+					resolve: ({ query: { name = 'anon' } }) => ({
+						user: {
+							name
+						}
+					})
+				}
+			})
+			.get('/', ({ user }) => user, {
+				user: true
+			})
+			// @ts-expect-error
+			.get('/no-macro', (context) => context?.user ?? { name: 'none' }, {
+				user: false
+			})
+
+		const [a, b, c, d] = await Promise.all([
+			app.handle(req('/')).then((x) => x.json()),
+			app.handle(req('/?name=hoshino')).then((x) => x.json()),
+			app.handle(req('/no-macro')).then((x) => x.json()),
+			app.handle(req('/no-macro?name=hoshino')).then((x) => x.json())
+		])
+
+		expect(a).toEqual({ name: 'anon' })
+		expect(b).toEqual({ name: 'hoshino' })
+		expect(c).toEqual({ name: 'none' })
+		expect(d).toEqual({ name: 'none' })
+	})
 })

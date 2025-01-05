@@ -8,7 +8,7 @@ import {
 	TUnsafe,
 	TypeRegistry,
 	TInteger,
-    IntegerOptions
+	IntegerOptions
 } from '@sinclair/typebox'
 import { TypeSystem } from '@sinclair/typebox/system'
 import {
@@ -326,8 +326,11 @@ type NonEmptyArray<T> = [T, ...T[]]
 
 export type TEnumValue = number | string | null
 
-export interface TUnionEnum<T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]>
-	extends TSchema {
+export interface TUnionEnum<
+	T extends
+		| NonEmptyArray<TEnumValue>
+		| Readonly<NonEmptyArray<TEnumValue>> = [TEnumValue]
+> extends TSchema {
 	type?: 'number' | 'string' | 'null'
 	[Kind]: 'UnionEnum'
 	static: T[number]
@@ -410,7 +413,7 @@ export const ElysiaType = {
 				)
 			)
 			.Decode((value) => {
-				if(typeof value === "number") {
+				if (typeof value === 'number') {
 					const date = new Date(value)
 
 					if (!Value.Check(schema, date))
@@ -445,7 +448,7 @@ export const ElysiaType = {
 						t.String({
 							format: 'boolean',
 							default: false
-						}),
+						})
 					],
 					property
 				)
@@ -597,12 +600,13 @@ export const ElysiaType = {
 				return [value]
 			})
 			.Encode((value) => value),
-	Nullable: <T extends TSchema>(schema: T) => t.Union([schema, t.Null()]),
+	Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
+		t.Union([schema, t.Null()], options),
 	/**
 	 * Allow Optional, Nullable and Undefined
 	 */
-	MaybeEmpty: <T extends TSchema>(schema: T) =>
-		t.Union([schema, t.Null(), t.Undefined()]),
+	MaybeEmpty: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
+		t.Union([schema, t.Null(), t.Undefined()], options),
 	Cookie: <T extends TProperties>(
 		properties: T,
 		{
@@ -637,7 +641,11 @@ export const ElysiaType = {
 		return v
 	},
 	// based on https://github.com/elysiajs/elysia/issues/512#issuecomment-1980134955
-	UnionEnum: <const T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>>>(
+	UnionEnum: <
+		const T extends
+			| NonEmptyArray<TEnumValue>
+			| Readonly<NonEmptyArray<TEnumValue>>
+	>(
 		values: T,
 		options: SchemaOptions = {}
 	) => {

@@ -3749,7 +3749,10 @@ export default class Elysia<
 	macro<
 		const NewMacro extends HookMacroFn<
 			Metadata['schema'],
-			Singleton,
+			Singleton & {
+				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+			},
 			Definitions['error']
 		>
 	>(
@@ -3784,6 +3787,15 @@ export default class Elysia<
 
 			this.extender.macros.push(hook)
 		} else if (typeof macro === 'object') {
+			for (const name of Object.keys(macro))
+				if (typeof macro[name] === 'object') {
+					const actualValue = { ...(macro[name] as Object) }
+
+					macro[name] = (v: boolean) => {
+						if (v === true) return actualValue
+					}
+				}
+
 			const hook: MacroQueue = {
 				checksum: checksum(
 					JSON.stringify({

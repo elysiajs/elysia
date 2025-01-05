@@ -625,6 +625,10 @@ export type MacroContextBlacklistKey =
 	| 'tags'
 	| keyof RouteSchema
 
+type ReturnTypeIfPossible<T> = T extends (...args: any) => any
+	? ReturnType<T>
+	: T
+
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
@@ -646,9 +650,27 @@ export type MacroToContext<
 					>
 				}
 					? key
-					: never]: ResolveResolutions<
+					: MacroFn[key] extends {
+								resolve: MaybeArray<
+									(
+										...v: any
+									) => MaybePromise<
+										| Record<keyof any, unknown>
+										| void
+										| ElysiaCustomStatusResponse<
+												any,
+												any,
+												any
+										  >
+									>
+								>
+						  }
+						? true extends SelectedMacro[key]
+							? key
+							: never
+						: never]: ResolveResolutions<
 					// @ts-expect-error type is checked in key mapping
-					Awaited<ReturnType<MacroFn[key]>['resolve']>
+					Awaited<ReturnTypeIfPossible<MacroFn[key]>['resolve']>
 				>
 		  } extends infer A extends Record<RecordKey, unknown>
 		? IsNever<A[keyof A]> extends false
@@ -1318,16 +1340,30 @@ export type HookMacroFn<
 	in out Errors extends Record<string, Error> = {}
 > = Record<
 	keyof any,
-	(...a: any) => {
-		parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-		transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
-		afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
-		resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-	} | void
+	| {
+			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+			afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+			error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+			mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+			afterResponse?: MaybeArray<
+				AfterResponseHandler<TypedRoute, Singleton>
+			>
+			resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+	  }
+	| ((...a: any) => {
+			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+			afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+			error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+			mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+			afterResponse?: MaybeArray<
+				AfterResponseHandler<TypedRoute, Singleton>
+			>
+			resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+	  } | void)
 >
 
 export type MacroToProperty<
@@ -1335,9 +1371,9 @@ export type MacroToProperty<
 > = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
-			? Params | undefined
-			: T[K]
-		: T[K]
+			? Params
+			: boolean
+		: boolean
 }>
 
 interface MacroOptions {
