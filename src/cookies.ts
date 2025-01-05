@@ -1,6 +1,6 @@
 import { parse, serialize } from 'cookie'
 
-import { decode as decodeURIComponent } from 'deuri'
+import { decode as decodeURIComponent } from './deuri'
 
 import { isNotEmpty, unsignCookie } from './utils'
 import { InvalidCookieSignature } from './error'

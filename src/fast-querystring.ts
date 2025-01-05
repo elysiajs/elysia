@@ -34,7 +34,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
-import { decode as fastDecode } from 'deuri'
+import { decode as fastDecode } from './deuri'
 
 const plusRegex = /\+/g
 

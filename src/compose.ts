@@ -5,7 +5,7 @@ import { TypeBoxError, type TAnySchema, type TSchema } from '@sinclair/typebox'
 
 import { parseQuery, parseQueryFromURL } from './fast-querystring'
 
-import { decode as decodeURIComponent } from 'deuri'
+import { decode as decodeURIComponent } from './deuri'
 
 import {
 	ELYSIA_REQUEST_ID,

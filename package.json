@@ -83,6 +83,11 @@
 			"import": "./dist/fast-querystring.mjs",
 			"require": "./dist/cjs/fast-querystring.js"
 		},
+		"./deuri": {
+			"types": "./dist/deuri.d.ts",
+			"import": "./dist/deuri.mjs",
+			"require": "./dist/cjs/deuri.js"
+		},
 		"./adapter": {
 			"types": "./dist/adapter/index.d.ts",
 			"import": "./dist/adapter/index.mjs",
@@ -155,7 +160,6 @@
 	"dependencies": {
 		"@sinclair/typebox": "^0.34.13",
 		"cookie": "^1.0.2",
-		"deuri": "^0.0.5",
 		"memoirist": "^0.2.0",
 		"openapi-types": "^12.1.3"
 	},
