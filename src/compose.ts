@@ -746,7 +746,7 @@ export const composeHandler = ({
 		} else {
 			fnLiteral +=
 				'if(c.qi!==-1){' +
-				`let url = '&' + decodeURIComponent(c.url.slice(c.qi + 1).replaceAll('+', ' '))\n`
+				`let url = '&' + decodeURIComponent(c.url.slice(c.qi + 1).replace(/\\+/g,' '))\n`
 
 			let index = 0
 			for (const {
