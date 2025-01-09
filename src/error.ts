@@ -193,7 +193,7 @@ export class ValidationError extends Error {
 				: Value.Errors(validator, value).First()
 
 		const customError =
-			error.schema.message || error?.schema.error !== undefined
+			error?.schema.message || error?.schema.error !== undefined
 				? typeof error.schema.error === 'function'
 					? error.schema.error({
 							type,
