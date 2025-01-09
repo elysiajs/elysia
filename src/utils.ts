@@ -96,15 +96,13 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 	a: A,
 	b: B
 ): A & B => {
-	// @ts-ignore
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const { properties: _, ...target } = a ?? {}
+	const v = mergeDeep(Object.assign({}, a), b, {
+		skipKeys: ['properties']
+	}) as A & B
 
-	// @ts-ignore
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const { properties: __, ...source } = b ?? {}
+	if ('properties' in v) delete v.properties
 
-	return mergeDeep(target, source) as A & B
+	return v
 }
 
 export const mergeObjectArray = <T extends HookContainer>(
@@ -231,7 +229,13 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
-	const hook = Object.assign({}, a, b, {
+	// @ts-expect-error
+	const { resolve: resolveA, ...restA } = a ?? {}
+	const { resolve: resolveB, ...restB } = b ?? {}
+
+	return {
+		...restA,
+		...restB,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -261,12 +265,11 @@ export const mergeHook = (
 		transform: mergeObjectArray(a?.transform, b?.transform),
 		beforeHandle: mergeObjectArray(
 			mergeObjectArray(
-				// @ts-expect-error
-				fnToContainer(a?.resolve, 'resolve'),
+				fnToContainer(resolveA, 'resolve'),
 				a?.beforeHandle
 			),
 			mergeObjectArray(
-				fnToContainer(b?.resolve, 'resolve'),
+				fnToContainer(resolveB, 'resolve'),
 				b?.beforeHandle
 			)
 		),
@@ -278,11 +281,7 @@ export const mergeHook = (
 		) as any,
 		trace: mergeObjectArray(a?.trace, b?.trace) as any,
 		error: mergeObjectArray(a?.error, b?.error)
-	})
-
-	if (hook.resolve) delete hook.resolve
-
-	return hook
+	}
 }
 
 interface ReplaceSchemaTypeOptions {
@@ -969,7 +968,7 @@ export const mergeLifeCycle = (
 	b: Partial<LifeCycleStore | AnyLocalHook>,
 	checksum?: number
 ): LifeCycleStore => {
-	return Object.assign({}, a, b, {
+	return {
 		start: mergeObjectArray(
 			a.start,
 			injectChecksum(checksum, b?.start)
@@ -1025,7 +1024,7 @@ export const mergeLifeCycle = (
 			a.stop,
 			injectChecksum(checksum, b?.stop)
 		) as HookContainer<GracefulHandler<any>>[]
-	})
+	}
 }
 
 export const asHookType = (

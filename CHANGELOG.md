@@ -1,6 +1,7 @@
 # 1.2.11
 Feature:
 - Compressed lifecycle event
+- Lazily build radix tree for dynamic router
 
 # 1.2.10 - 5 Jan 2025
 Feature:

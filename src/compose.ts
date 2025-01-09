@@ -2052,6 +2052,7 @@ export const composeGeneralHandler = (
 	{ asManifest = false }: { asManifest?: false } = {}
 ) => {
 	const adapter = app['~adapter'].composeGeneralHandler
+	app.router.http.build()
 	const error404 = adapter.error404(
 		!!app.event.request?.length,
 		!!app.event.error?.length

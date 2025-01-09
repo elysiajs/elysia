@@ -1,6 +1,6 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia().get('/', 'Static Content')
+const app = new Elysia().get('/', () => 'Static Content')
 
-console.log(app.router.static.http.static['/'])
+console.dir(app, { depth: 10 })

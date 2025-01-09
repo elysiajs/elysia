@@ -254,7 +254,7 @@ export default class Elysia<
 		http: new Memoirist<{
 			compile: Function
 			handler?: ComposedHandler
-		}>(),
+		}>({ lazy: true }),
 		ws: new Memoirist<{
 			compile: Function
 			handler?: ComposedHandler
@@ -3474,9 +3474,16 @@ export default class Elysia<
 						if (plugin.constructor.name === 'Elysia')
 							return this._use(plugin.default)
 
-						throw new Error(
-							'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
-						)
+						if (plugin.constructor.name === '_Elysia')
+							return this._use(plugin.default)
+
+						try {
+							return this._use(plugin.default)
+						} catch {
+							throw new Error(
+								'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
+							)
+						}
 					})
 					.then((x) => x.compile())
 			)
