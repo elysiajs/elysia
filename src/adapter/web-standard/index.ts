@@ -76,7 +76,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 
 			const standardHostname =
 				app.config.handler?.standardHostname ?? true
-			const hasTrace = app.event.trace.length > 0
+			const hasTrace = !!app.event.trace?.length
 
 			fnLiteral +=
 				`const u=r.url,` +

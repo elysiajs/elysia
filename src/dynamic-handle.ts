@@ -22,7 +22,7 @@ import { TypeCheck } from './type-system'
 export type DynamicHandler = {
 	handle: unknown | Handler<any, any>
 	content?: string
-	hooks: LifeCycleStore
+	hooks: Partial<LifeCycleStore>
 	validator?: SchemaValidator
 }
 
@@ -72,14 +72,15 @@ export const createDynamicHandler = (app: AnyElysia) => {
 		}
 
 		try {
-			for (let i = 0; i < app.event.request.length; i++) {
-				const onRequest = app.event.request[i].fn
-				let response = onRequest(context as any)
-				if (response instanceof Promise) response = await response
+			if (app.event.request)
+				for (let i = 0; i < app.event.request.length; i++) {
+					const onRequest = app.event.request[i].fn
+					let response = onRequest(context as any)
+					if (response instanceof Promise) response = await response
 
-				response = mapEarlyResponse(response, set)
-				if (response) return (context.response = response)
-			}
+					response = mapEarlyResponse(response, set)
+					if (response) return (context.response = response)
+				}
 
 			const handler =
 				app.router.dynamic.find(request.method, path) ??
@@ -134,16 +135,17 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						// @ts-expect-error
 						context.contentType = contentType
 
-						for (let i = 0; i < hooks.parse.length; i++) {
-							const hook = hooks.parse[i].fn
-							let temp = hook(context as any, contentType)
-							if (temp instanceof Promise) temp = await temp
+						if (hooks.parse)
+							for (let i = 0; i < hooks.parse.length; i++) {
+								const hook = hooks.parse[i].fn
+								let temp = hook(context as any, contentType)
+								if (temp instanceof Promise) temp = await temp
 
-							if (temp) {
-								body = temp
-								break
+								if (temp) {
+									body = temp
+									break
+								}
 							}
-						}
 
 						// @ts-expect-error
 						delete context.contentType
@@ -245,16 +247,17 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			if (queryValidator)
 				injectDefaultValues(queryValidator, context.query)
 
-			for (let i = 0; i < hooks.transform.length; i++) {
-				const hook = hooks.transform[i]
-				const operation = hook.fn(context)
+			if (hooks.transform)
+				for (let i = 0; i < hooks.transform.length; i++) {
+					const hook = hooks.transform[i]
+					const operation = hook.fn(context)
 
-				if (hook.subType === 'derive') {
-					if (operation instanceof Promise)
-						Object.assign(context, await operation)
-					else Object.assign(context, operation)
-				} else if (operation instanceof Promise) await operation
-			}
+					if (hook.subType === 'derive') {
+						if (operation instanceof Promise)
+							Object.assign(context, await operation)
+						else Object.assign(context, operation)
+					} else if (operation instanceof Promise) await operation
+				}
 
 			if (validator) {
 				if (headerValidator) {
@@ -314,26 +317,82 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					context.body = validator.body.Decode(body) as any
 			}
 
-			for (let i = 0; i < hooks.beforeHandle.length; i++) {
-				const hook = hooks.beforeHandle[i]
-				let response = hook.fn(context)
+			if (hooks.beforeHandle)
+				for (let i = 0; i < hooks.beforeHandle.length; i++) {
+					const hook = hooks.beforeHandle[i]
+					let response = hook.fn(context)
 
-				if (hook.subType === 'resolve') {
-					if (response instanceof ElysiaCustomStatusResponse) {
+					if (hook.subType === 'resolve') {
+						if (response instanceof ElysiaCustomStatusResponse) {
+							const result = mapEarlyResponse(
+								response,
+								context.set
+							)
+							if (result)
+								return (context.response = result) as Response
+						}
+						if (response instanceof Promise)
+							Object.assign(context, await response)
+						else Object.assign(context, response)
+
+						continue
+					} else if (response instanceof Promise)
+						response = await response
+
+					// `false` is a falsey value, check for undefined instead
+					if (response !== undefined) {
+						;(
+							context as Context & {
+								response: unknown
+							}
+						).response = response
+
+						if (hooks.afterHandle)
+							for (let i = 0; i < hooks.afterHandle.length; i++) {
+								let newResponse = hooks.afterHandle[i].fn(
+									context as Context & {
+										response: unknown
+									}
+								)
+								if (newResponse instanceof Promise)
+									newResponse = await newResponse
+
+								if (newResponse) response = newResponse
+							}
+
 						const result = mapEarlyResponse(response, context.set)
-						if (result)
-							return (context.response = result) as Response
+						// @ts-expect-error
+						if (result) return (context.response = result)
 					}
-					if (response instanceof Promise)
-						Object.assign(context, await response)
-					else Object.assign(context, response)
+				}
 
-					continue
-				} else if (response instanceof Promise)
-					response = await response
+			let response =
+				typeof handle === 'function' ? handle(context) : handle
+			if (response instanceof Promise) response = await response
 
-				// `false` is a falsey value, check for undefined instead
-				if (response !== undefined) {
+			if (hooks.afterHandle)
+				if (!hooks.afterHandle.length) {
+					const status =
+						response instanceof ElysiaCustomStatusResponse
+							? response.code
+							: set.status
+								? typeof set.status === 'string'
+									? StatusMap[set.status]
+									: set.status
+								: 200
+
+					const responseValidator =
+						validator?.createResponse?.()?.[status]
+
+					if (responseValidator?.Check(response) === false)
+						throw new ValidationError(
+							'response',
+							responseValidator,
+							response
+						)
+					else if (responseValidator?.Decode)
+						response = responseValidator.Decode(response)
+				} else {
 					;(
 						context as Context & {
 							response: unknown
@@ -349,76 +408,29 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						if (newResponse instanceof Promise)
 							newResponse = await newResponse
 
-						if (newResponse) response = newResponse
-					}
+						const result = mapEarlyResponse(
+							newResponse,
+							context.set
+						)
+						if (result !== undefined) {
+							const responseValidator =
+								// @ts-expect-error
+								validator?.response?.[result.status]
 
-					const result = mapEarlyResponse(response, context.set)
-					// @ts-expect-error
-					if (result) return (context.response = result)
-				}
-			}
+							if (responseValidator?.Check(result) === false)
+								throw new ValidationError(
+									'response',
+									responseValidator,
+									result
+								)
+							else if (responseValidator?.Decode)
+								response = responseValidator.Decode(response)
 
-			let response =
-				typeof handle === 'function' ? handle(context) : handle
-			if (response instanceof Promise) response = await response
-
-			if (!hooks.afterHandle.length) {
-				const status =
-					response instanceof ElysiaCustomStatusResponse
-						? response.code
-						: set.status
-							? typeof set.status === 'string'
-								? StatusMap[set.status]
-								: set.status
-							: 200
-
-				const responseValidator =
-					validator?.createResponse?.()?.[status]
-
-				if (responseValidator?.Check(response) === false)
-					throw new ValidationError(
-						'response',
-						responseValidator,
-						response
-					)
-				else if (responseValidator?.Decode)
-					response = responseValidator.Decode(response)
-			} else {
-				;(
-					context as Context & {
-						response: unknown
-					}
-				).response = response
-
-				for (let i = 0; i < hooks.afterHandle.length; i++) {
-					let newResponse = hooks.afterHandle[i].fn(
-						context as Context & {
-							response: unknown
-						}
-					)
-					if (newResponse instanceof Promise)
-						newResponse = await newResponse
-
-					const result = mapEarlyResponse(newResponse, context.set)
-					if (result !== undefined) {
-						const responseValidator =
 							// @ts-expect-error
-							validator?.response?.[result.status]
-
-						if (responseValidator?.Check(result) === false)
-							throw new ValidationError(
-								'response',
-								responseValidator,
-								result
-							)
-						else if (responseValidator?.Decode)
-							response = responseValidator.Decode(response)
-
-						// @ts-expect-error
-						return (context.response = result)
+							return (context.response = result)
+						}
 					}
 				}
-			}
 
 			if (context.set.cookie && cookieMeta?.sign) {
 				const secret = !cookieMeta.secrets
@@ -467,8 +479,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-expect-error private
 			return app.handleError(context, reportedError)
 		} finally {
-			for (const afterResponse of app.event.afterResponse)
-				await afterResponse.fn(context as any)
+			if (app.event.afterResponse)
+				for (const afterResponse of app.event.afterResponse)
+					await afterResponse.fn(context as any)
 		}
 	}
 }
@@ -485,13 +498,17 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
-		for (let i = 0; i < app.event.error.length; i++) {
-			const hook = app.event.error[i]
-			let response = hook.fn(errorContext as any)
-			if (response instanceof Promise) response = await response
-			if (response !== undefined && response !== null)
-				return (context.response = mapResponse(response, context.set))
-		}
+		if (app.event.error)
+			for (let i = 0; i < app.event.error.length; i++) {
+				const hook = app.event.error[i]
+				let response = hook.fn(errorContext as any)
+				if (response instanceof Promise) response = await response
+				if (response !== undefined && response !== null)
+					return (context.response = mapResponse(
+						response,
+						context.set
+					))
+			}
 
 		return new Response(
 			typeof error.cause === 'string' ? error.cause : error.message,

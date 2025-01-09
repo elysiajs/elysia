@@ -20,10 +20,10 @@ export const createNativeStaticHandler = (
 	})
 
 	if (
-		hooks.parse.length === 0 &&
-		hooks.transform.length === 0 &&
-		hooks.beforeHandle.length === 0 &&
-		hooks.afterHandle.length === 0
+		!hooks.parse?.length &&
+		!hooks.transform?.length &&
+		!hooks.beforeHandle?.length &&
+		!hooks.afterHandle?.length
 	) {
 		if (!response.headers.has('content-type'))
 			response.headers.append('content-type', 'text/plain;charset=utf-8')

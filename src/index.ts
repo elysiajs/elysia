@@ -35,7 +35,8 @@ import {
 	promoteEvent,
 	stringToStructureCoercions,
 	isNotEmpty,
-	replaceSchemaType
+	replaceSchemaType,
+	compressHistoryHook
 } from './utils'
 
 import {
@@ -243,19 +244,7 @@ export default class Elysia<
 		}
 	}
 
-	event: LifeCycleStore = {
-		start: [],
-		request: [],
-		parse: [],
-		transform: [],
-		beforeHandle: [],
-		afterHandle: [],
-		mapResponse: [],
-		afterResponse: [],
-		trace: [],
-		error: [],
-		stop: []
-	}
+	event: Partial<LifeCycleStore> = {}
 
 	protected telemetry = {
 		stack: undefined as string | undefined
@@ -477,7 +466,7 @@ export default class Elysia<
 			skipPrefix: false as boolean | undefined
 		}
 	) {
-		localHook = localHookToLifeCycleStore(localHook)
+		localHook = compressHistoryHook(localHookToLifeCycleStore(localHook))
 
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
@@ -664,8 +653,10 @@ export default class Elysia<
 						}
 					} as any)
 
-		// ! Init default [] for hooks if undefined
-		localHook = mergeHook(localHook, instanceValidator)
+		localHook = mergeHook(
+			localHook,
+			compressHistoryHook(instanceValidator as any)
+		)
 
 		if (localHook.tags) {
 			if (!localHook.detail)
@@ -682,8 +673,7 @@ export default class Elysia<
 			)
 
 		this.applyMacro(localHook)
-
-		const hooks = mergeHook(this.event, localHook)
+		const hooks = compressHistoryHook(mergeHook(this.event, localHook))
 
 		if (this.config.aot === false) {
 			this.router.dynamic.add(method, path, {
@@ -706,7 +696,7 @@ export default class Elysia<
 				path,
 				composed: null,
 				handler: handle,
-				hooks: hooks as any,
+				hooks: hooks,
 				compile: handle
 			})
 
@@ -749,7 +739,6 @@ export default class Elysia<
 				app: this,
 				path,
 				method,
-				localHook: mergeHook(localHook),
 				hooks,
 				validator,
 				handler:
@@ -794,7 +783,7 @@ export default class Elysia<
 			path,
 			composed: mainHandler,
 			handler: handle,
-			hooks: hooks as any,
+			hooks,
 			compile: () => compile(),
 			websocket: localHook.websocket as any
 		})
@@ -2502,61 +2491,74 @@ export default class Elysia<
 
 			switch (type) {
 				case 'start':
+					this.event.start ??= []
 					this.event.start.push(fn as any)
 					break
 
 				case 'request':
+					this.event.request ??= []
 					this.event.request.push(fn as any)
 					break
 
 				case 'parse':
+					this.event.parse ??= []
 					this.event.parse.push(fn as any)
 					break
 
 				case 'transform':
+					this.event.transform ??= []
 					this.event.transform.push(fn as any)
 					break
 
 				// @ts-expect-error
 				case 'derive':
+					this.event.transform ??= []
 					this.event.transform.push(
 						fnToContainer(fn as any, 'derive') as any
 					)
 					break
 
 				case 'beforeHandle':
+					this.event.beforeHandle ??= []
 					this.event.beforeHandle.push(fn as any)
 					break
 
 				// @ts-expect-error
 				// eslint-disable-next-line sonarjs/no-duplicated-branches
 				case 'resolve':
+					this.event.beforeHandle ??= []
 					this.event.beforeHandle.push(
 						fnToContainer(fn as any, 'resolve') as any
 					)
 					break
 
 				case 'afterHandle':
+					this.event.afterHandle ??= []
 					this.event.afterHandle.push(fn as any)
 					break
 
 				case 'mapResponse':
+					this.event.mapResponse ??= []
 					this.event.mapResponse.push(fn as any)
 					break
 
 				case 'afterResponse':
+					this.event.afterResponse ??= []
 					this.event.afterResponse.push(fn as any)
 					break
 
 				case 'trace':
+					this.event.trace ??= []
 					this.event.trace.push(fn as any)
 					break
 
 				case 'error':
+					this.event.error ??= []
 					this.event.error.push(fn as any)
 					break
 
 				case 'stop':
+					this.event.stop ??= []
 					this.event.stop.push(fn as any)
 					break
 			}
@@ -2832,13 +2834,13 @@ export default class Elysia<
 		this.singleton = mergeDeep(this.singleton, instance.singleton) as any
 		this.definitions = mergeDeep(this.definitions, instance.definitions)
 
-		if (sandbox.event.request.length)
+		if (sandbox.event.request?.length)
 			this.event.request = [
 				...(this.event.request || []),
 				...((sandbox.event.request || []) as any)
 			]
 
-		if (sandbox.event.mapResponse.length)
+		if (sandbox.event.mapResponse?.length)
 			this.event.mapResponse = [
 				...(this.event.mapResponse || []),
 				...((sandbox.event.mapResponse || []) as any)
@@ -3240,13 +3242,13 @@ export default class Elysia<
 		// ? Inject getServer for websocket and trace (important, do not remove)
 		sandbox.getServer = () => this.server
 
-		if (sandbox.event.request.length)
+		if (sandbox.event.request?.length)
 			this.event.request = [
 				...(this.event.request || []),
 				...(sandbox.event.request || [])
 			]
 
-		if (sandbox.event.mapResponse.length)
+		if (sandbox.event.mapResponse?.length)
 			this.event.mapResponse = [
 				...(this.event.mapResponse || []),
 				...(sandbox.event.mapResponse || [])
@@ -3673,13 +3675,13 @@ export default class Elysia<
 							store: plugin.singleton.store,
 							error: plugin.definitions.error,
 							derive: plugin.event.transform
-								.filter((x) => x?.subType === 'derive')
+								?.filter((x) => x?.subType === 'derive')
 								.map((x) => ({
 									fn: x.toString(),
 									stack: new Error().stack ?? ''
 								})),
 							resolve: plugin.event.transform
-								.filter((x) => x?.subType === 'resolve')
+								?.filter((x) => x?.subType === 'resolve')
 								.map((x) => ({
 									fn: x.toString(),
 									stack: new Error().stack ?? ''
@@ -6118,7 +6120,7 @@ export default class Elysia<
 			this.server.stop(closeActiveConnections)
 			this.server = null
 
-			if (this.event.stop.length)
+			if (this.event.stop?.length)
 				for (let i = 0; i < this.event.stop.length; i++)
 					this.event.stop[i].fn(this)
 		}

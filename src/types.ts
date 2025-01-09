@@ -1440,8 +1440,8 @@ export interface MacroManager<
 	): unknown
 
 	events: {
-		global: Prettify<LifeCycleStore & RouteSchema>
-		local: Prettify<LifeCycleStore & RouteSchema>
+		global: Partial<Prettify<LifeCycleStore & RouteSchema>>
+		local: Partial<Prettify<LifeCycleStore & RouteSchema>>
 	}
 }
 

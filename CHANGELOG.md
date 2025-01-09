@@ -1,3 +1,7 @@
+# 1.2.11
+Feature:
+- Compressed lifecycle event
+
 # 1.2.10 - 5 Jan 2025
 Feature:
 - add shorthand property for macro function

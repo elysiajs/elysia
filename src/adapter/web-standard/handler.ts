@@ -917,7 +917,7 @@ export const errorToResponse = (error: Error, set?: Context['set']) =>
 
 export const createStaticHandler = (
 	handle: unknown,
-	hooks: AnyLocalHook,
+	hooks: Partial<AnyLocalHook>,
 	setHeaders: Context['set']['headers'] = {}
 ): (() => Response) | undefined => {
 	if (typeof handle === 'function') return
@@ -927,10 +927,10 @@ export const createStaticHandler = (
 	})
 
 	if (
-		hooks.parse.length === 0 &&
-		hooks.transform.length === 0 &&
-		hooks.beforeHandle.length === 0 &&
-		hooks.afterHandle.length === 0
+		!hooks.parse?.length &&
+		!hooks.transform?.length &&
+		!hooks.beforeHandle?.length &&
+		!hooks.afterHandle?.length
 	)
 		return response.clone.bind(response)
 }
