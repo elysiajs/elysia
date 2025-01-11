@@ -552,18 +552,19 @@ const _replaceSchemaType = (
 }
 
 const createCleaner = (schema: TAnySchema) => (value: unknown) => {
-	if (typeof value === 'object')
-		try {
-			return Value.Clean(schema, structuredClone(value))
-		} catch {
-			try {
-				return Value.Clean(schema, value)
-			} catch {
-				return value
-			}
-		}
+	if (typeof value !== 'object') {
+		return value
+	}
 
-	return value
+	try {
+		return Value.Clean(schema, structuredClone(value))
+	} catch {
+		try {
+			return Value.Clean(schema, value)
+		} catch {
+			return value
+		}
+	}
 }
 
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
