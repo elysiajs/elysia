@@ -62,6 +62,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				set,
 				// @ts-expect-error
 				store: app.singleton.store,
+				route: app._route,
 				request,
 				path,
 				qi,
