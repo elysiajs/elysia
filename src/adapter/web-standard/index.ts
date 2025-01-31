@@ -193,7 +193,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 	listen() {
 		return () => {
 			throw new Error(
-				'WebStandard does not support listen, you might want to export default Elysia.fetch instead'
+				'WebStandard does not support listen, you might want to export default Elysia.fetch instead\nIf you want to use listen in node, you can install @elysiajs/node'
 			)
 		}
 	}
