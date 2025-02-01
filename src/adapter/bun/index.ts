@@ -66,7 +66,10 @@ export const BunAdapter: ElysiaAdapter = {
 							...(app.config.serve || {}),
 							...(options || {}),
 							// @ts-ignore
-							static: app.router.static.http.static,
+							static: {
+								...app.router.static.http.static,
+								...app.config.serve?.static
+							},
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {})
@@ -101,7 +104,7 @@ export const BunAdapter: ElysiaAdapter = {
 
 			process.on('beforeExit', () => {
 				if (app.server) {
-					app.server.stop()
+					app.server.stop?.()
 					app.server = null
 
 					if (app.event.stop)

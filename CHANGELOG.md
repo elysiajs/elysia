@@ -1,7 +1,18 @@
 # 1.2.11
 Feature:
-- Compressed lifecycle event
-- Lazily build radix tree for dynamic router
+- Reduce memory usage:
+	- Compressed lifecycle event
+	- Avoid unnecessary declaration in compose.ts
+	- Lazily build radix tree for dynamic router
+
+Change:
+- Update TypeBox to 0.34.15
+
+Bug fix:
+- [#1039](vhttps://github.com/elysiajs/elysia/issues/1039) Elysia fails to start with an error inside its own code when using decorate twice with Object.create(null)
+- [#1005](https://github.com/elysiajs/elysia/issues/1005) Parsing malformed body with NODE_ENV 'production' results in UNKNOWN error
+- [#1037](https://github.com/elysiajs/elysia/issues/1037) Validation errors in production throw undefined is not an object (evaluating 'error2.schema')
+- [#1036](https://github.com/elysiajs/elysia/issues/1036) Support Bun HTML import
 
 # 1.2.10 - 5 Jan 2025
 Feature:

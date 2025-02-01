@@ -58,6 +58,9 @@ const isOptional = (validator?: TypeCheck<any>) => {
 	return !!schema && TypeBoxSymbol.optional in schema
 }
 
+const allocateIf = (value: string, condition: unknown) =>
+	condition ? value : ''
+
 const defaultParsers = [
 	'json',
 	'text',
@@ -520,6 +523,14 @@ export const composeHandler = ({
 	validator.createParams?.()
 	validator.createCookie?.()
 	validator.createResponse?.()
+
+	const hasValidation =
+		validator.body ||
+		validator.headers ||
+		validator.params ||
+		validator.query ||
+		validator.cookie ||
+		validator.response
 
 	const hasQuery = inference.query || !!validator.query
 
@@ -1075,7 +1086,7 @@ export const composeHandler = ({
 						)
 
 						fnLiteral +=
-							`let ${name}=parse[${i}]\n` +
+							`let ${name}=e.parse[${i}]\n` +
 							`${name}=${name}(c,contentType)\n` +
 							`if(${name} instanceof Promise)${name}=await ${name}\n` +
 							`if(${name}!==undefined){c.body=${name};used=true}`
@@ -1156,8 +1167,8 @@ export const composeHandler = ({
 			const endUnit = reporter.resolveChild(transform.fn.name)
 
 			fnLiteral += isAsync(transform)
-				? `transformed=await transform[${i}](c)\n`
-				: `transformed=transform[${i}](c)\n`
+				? `transformed=await e.transform[${i}](c)\n`
+				: `transformed=e.transform[${i}](c)\n`
 
 			if (transform.subType === 'mapDerive')
 				fnLiteral +=
@@ -1435,8 +1446,8 @@ export const composeHandler = ({
 				}
 
 				fnLiteral += isAsync(beforeHandle)
-					? `resolved=await beforeHandle[${i}](c);\n`
-					: `resolved=beforeHandle[${i}](c);\n`
+					? `resolved=await e.beforeHandle[${i}](c);\n`
+					: `resolved=e.beforeHandle[${i}](c);\n`
 
 				if (beforeHandle.subType === 'mapResolve')
 					fnLiteral +=
@@ -1459,14 +1470,14 @@ export const composeHandler = ({
 						`else Object.assign(c, resolved)\n`
 			} else if (!returning) {
 				fnLiteral += isAsync(beforeHandle)
-					? `await beforeHandle[${i}](c)\n`
-					: `beforeHandle[${i}](c)\n`
+					? `await e.beforeHandle[${i}](c)\n`
+					: `e.beforeHandle[${i}](c)\n`
 
 				endUnit()
 			} else {
 				fnLiteral += isAsync(beforeHandle)
-					? `be=await beforeHandle[${i}](c)\n`
-					: `be=beforeHandle[${i}](c)\n`
+					? `be=await e.beforeHandle[${i}](c)\n`
+					: `be=e.beforeHandle[${i}](c)\n`
 
 				endUnit('be')
 
@@ -1493,12 +1504,12 @@ export const composeHandler = ({
 
 						if (!returning) {
 							fnLiteral += isAsync(hook.fn)
-								? `await afterHandle[${i}](c, be)\n`
-								: `afterHandle[${i}](c, be)\n`
+								? `await e.afterHandle[${i}](c, be)\n`
+								: `e.afterHandle[${i}](c, be)\n`
 						} else {
 							fnLiteral += isAsync(hook.fn)
-								? `af = await afterHandle[${i}](c)\n`
-								: `af = afterHandle[${i}](c)\n`
+								? `af = await e.afterHandle[${i}](c)\n`
+								: `af = e.afterHandle[${i}](c)\n`
 
 							fnLiteral += `if(af!==undefined) c.response=be=af\n`
 						}
@@ -1527,7 +1538,7 @@ export const composeHandler = ({
 
 						fnLiteral +=
 							`if(mr===undefined){` +
-							`mr=${isAsyncName(mapResponse) ? 'await' : ''} onMapResponse[${i}](c)\n` +
+							`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
 							`if(mr!==undefined)be=c.response=mr` +
 							'}'
 
@@ -1574,14 +1585,14 @@ export const composeHandler = ({
 
 			if (!returning) {
 				fnLiteral += isAsync(hook.fn)
-					? `await afterHandle[${i}](c)\n`
-					: `afterHandle[${i}](c)\n`
+					? `await e.afterHandle[${i}](c)\n`
+					: `e.afterHandle[${i}](c)\n`
 
 				endUnit()
 			} else {
 				fnLiteral += isAsync(hook.fn)
-					? `af=await afterHandle[${i}](c)\n`
-					: `af=afterHandle[${i}](c)\n`
+					? `af=await e.afterHandle[${i}](c)\n`
+					: `af=e.afterHandle[${i}](c)\n`
 
 				endUnit('af')
 
@@ -1622,8 +1633,8 @@ export const composeHandler = ({
 
 				fnLiteral +=
 					`mr=${
-						isAsyncName(mapResponse) ? 'await' : ''
-					} onMapResponse[${i}](c)\n` +
+						isAsyncName(mapResponse) ? 'await ' : ''
+					}e.mapResponse[${i}](c)\n` +
 					`if(mr!==undefined)r=c.response=mr\n`
 
 				endUnit()
@@ -1671,7 +1682,7 @@ export const composeHandler = ({
 
 					fnLiteral +=
 						`\nif(mr===undefined){` +
-						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](c)\n` +
+						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
 						`if(mr!==undefined)r=c.response=mr` +
 						`}\n`
 
@@ -1727,7 +1738,7 @@ export const composeHandler = ({
 
 					fnLiteral +=
 						`if(mr===undefined){` +
-						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](c)\n` +
+						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
 						`if(mr!==undefined)r=c.response=mr` +
 						`}`
 
@@ -1794,23 +1805,27 @@ export const composeHandler = ({
 	})
 
 	if (hooks.error?.length) {
-		fnLiteral +=
-			`c.error=error\n` +
-			`if(error instanceof TypeBoxError){` +
-			'c.code="VALIDATION"\n' +
-			'c.set.status=422' +
-			'}else{' +
-			`c.code=error.code??error[ERROR_CODE]??"UNKNOWN"}` +
-			`let er\n`
+		fnLiteral += `c.error=error\n`
+
+		if (hasValidation)
+			fnLiteral +=
+				`if(error instanceof TypeBoxError){` +
+				'c.code="VALIDATION"\n' +
+				'c.set.status=422' +
+				'}else{' +
+				`c.code=error.code??error[ERROR_CODE]??"UNKNOWN"}`
+		else fnLiteral += `c.code=error.code??error[ERROR_CODE]??"UNKNOWN"\n`
+
+		fnLiteral += `let er\n`
 
 		for (let i = 0; i < hooks.error.length; i++) {
 			const endUnit = errorReporter.resolveChild(hooks.error[i].fn.name)
 
 			if (isAsync(hooks.error[i]))
-				fnLiteral += `er=await handleErrors[${i}](c)\n`
+				fnLiteral += `er=await e.error[${i}](c)\n`
 			else
 				fnLiteral +=
-					`er=handleErrors[${i}](c)\n` +
+					`er=e.error[${i}](c)\n` +
 					`if(er instanceof Promise)er=await er\n`
 
 			endUnit()
@@ -1829,7 +1844,7 @@ export const composeHandler = ({
 
 					fnLiteral +=
 						`c.response=er\n` +
-						`er=onMapResponse[${i}](c)\n` +
+						`er=e.mapResponse[${i}](c)\n` +
 						`if(er instanceof Promise)er=await er\n`
 
 					endUnit()
@@ -1872,7 +1887,7 @@ export const composeHandler = ({
 				const endUnit = reporter.resolveChild(
 					hooks.afterResponse[i].fn.name
 				)
-				fnLiteral += `\nawait afterResponse[${i}](c)\n`
+				fnLiteral += `\nawait e.afterResponse[${i}](c)\n`
 				endUnit()
 			}
 		}
@@ -1892,47 +1907,36 @@ export const composeHandler = ({
 		`const {` +
 		`handler,` +
 		`handleError,` +
-		`hooks: {` +
-		`transform,` +
-		`resolve,` +
-		`beforeHandle,` +
-		`afterHandle,` +
-		`mapResponse: onMapResponse,` +
-		`parse,` +
-		`error: handleErrors,` +
-		`afterResponse,` +
-		`trace: _trace` +
-		`},` +
-		`validator,` +
-		`utils: {` +
+		`hooks:e, ` +
+		allocateIf(`validator,`, hasValidation) +
 		`mapResponse,` +
 		`mapCompactResponse,` +
 		`mapEarlyResponse,` +
-		`parseQuery,` +
-		`parseQueryFromURL,` +
-		`isNotEmpty` +
+		`isNotEmpty,` +
+		`utils:{` +
+		allocateIf(`parseQuery,`, hasBody) +
+		allocateIf(`parseQueryFromURL,`, hasQuery) +
 		`},` +
-		`error: {` +
-		`NotFoundError,` +
-		`ValidationError,` +
+		`error:{` +
+		allocateIf(`ValidationError,`, hasValidation) +
 		`InternalServerError,` +
-		`ParseError` +
+		allocateIf(`ParseError`, hasBody) +
 		`},` +
 		`schema,` +
 		`definitions,` +
 		`ERROR_CODE,` +
-		`parseCookie,` +
-		`signCookie,` +
-		`decodeURIComponent,` +
+		allocateIf(`parseCookie,`, hasCookie) +
+		allocateIf(`signCookie,`, hasCookie) +
+		allocateIf(`decodeURIComponent,`, hasQuery) +
 		`ElysiaCustomStatusResponse,` +
-		`ELYSIA_TRACE,` +
-		`ELYSIA_REQUEST_ID,` +
-		'parser,' +
-		`getServer,` +
+		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
+		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
+		allocateIf('parser,', hooks.parse?.length) +
+		allocateIf(`getServer,`, inference.server) +
 		adapterVariables +
-		'TypeBoxError' +
+		allocateIf('TypeBoxError', hasValidation) +
 		`}=hooks\n` +
-		`const trace=_trace?.map(x=>typeof x==='function'?x:x.fn)??[]\n` +
+		`const trace=e.trace?.map(x=>typeof x==='function'?x:x.fn)??[]\n` +
 		`return ${maybeAsync ? 'async ' : ''}function handle(c){`
 
 	if (hooks.beforeHandle?.length) init += 'let be\n'
@@ -1951,36 +1955,35 @@ export const composeHandler = ({
 		)({
 			handler,
 			hooks: lifeCycleToFn(hooks),
-			validator,
+			validator: hasValidation ? validator : undefined,
 			// @ts-expect-error
 			handleError: app.handleError,
+			mapResponse: adapterHandler.mapResponse,
+			mapCompactResponse: adapterHandler.mapCompactResponse,
+			mapEarlyResponse: adapterHandler.mapEarlyResponse,
+			isNotEmpty,
 			utils: {
-				mapResponse: adapterHandler.mapResponse,
-				mapCompactResponse: adapterHandler.mapCompactResponse,
-				mapEarlyResponse: adapterHandler.mapEarlyResponse,
-				parseQuery,
-				parseQueryFromURL,
-				isNotEmpty
+				parseQuery: hasBody ? parseQuery : undefined,
+				parseQueryFromURL: hasQuery ? parseQueryFromURL : undefined
 			},
 			error: {
-				NotFoundError,
-				ValidationError,
+				ValidationError: hasValidation ? ValidationError : undefined,
 				InternalServerError,
-				ParseError
+				ParseError: hasBody ? ParseError : undefined
 			},
 			schema: app.router.history,
 			// @ts-expect-error
 			definitions: app.definitions.type,
 			ERROR_CODE,
-			parseCookie,
-			signCookie,
-			decodeURIComponent,
+			parseCookie: hasCookie ? parseCookie : undefined,
+			signCookie: hasCookie ? signCookie : undefined,
+			decodeURIComponent: hasQuery ? decodeURIComponent : undefined,
 			ElysiaCustomStatusResponse,
-			ELYSIA_TRACE,
-			ELYSIA_REQUEST_ID,
+			ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
+			ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 			// @ts-expect-error private property
 			getServer: () => app.getServer(),
-			TypeBoxError,
+			TypeBoxError: hasValidation ? TypeBoxError : undefined,
 			parser: app['~parser'],
 			...adapter.inject
 		})
@@ -2058,6 +2061,8 @@ export const composeGeneralHandler = (
 		!!app.event.error?.length
 	)
 
+	const hasTrace = app.event.trace?.length
+
 	let fnLiteral = ''
 
 	const router = app.router
@@ -2100,16 +2105,14 @@ export const composeGeneralHandler = (
 		`handleError,` +
 		`error,` +
 		`redirect,` +
-		`ELYSIA_TRACE,` +
-		`ELYSIA_REQUEST_ID,` +
+		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
+		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		adapterVariables +
-		`getServer` +
 		`}=data\n` +
 		`const store=app.singleton.store\n` +
 		`const decorator=app.singleton.decorator\n` +
 		`const staticRouter=app.router.static.http\n` +
 		`const ht=app.router.history\n` +
-		`const wsRouter=app.router.ws\n` +
 		`const router=app.router.http\n` +
 		`const trace=app.event.trace?.map(x=>typeof x==='function'?x:x.fn)??[]\n` +
 		`const notFound=new NotFoundError()\n` +
@@ -2215,10 +2218,8 @@ export const composeGeneralHandler = (
 		handleError,
 		error,
 		redirect,
-		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID,
-		// @ts-expect-error private property
-		getServer: () => app.getServer(),
+		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
+		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 		...adapter.inject
 	})
 }
@@ -2231,6 +2232,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	const adapterVariables = adapter.inject
 		? Object.keys(adapter.inject).join(',') + ','
 		: ''
+
+	const hasTrace = !!app.event.trace?.length
 
 	fnLiteral +=
 		`const {` +
@@ -2245,9 +2248,9 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`mapResponse,` +
 		`ERROR_CODE,` +
 		`ElysiaCustomStatusResponse,` +
-		`ELYSIA_TRACE,` +
+		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
+		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		adapterVariables +
-		`ELYSIA_REQUEST_ID` +
 		`}=inject\n`
 
 	fnLiteral +=
@@ -2264,8 +2267,6 @@ export const composeErrorHandler = (app: AnyElysia) => {
 				? 'async '
 				: ''
 		}function(context,error,skipGlobal){`
-
-	const hasTrace = !!app.event.trace?.length
 
 	fnLiteral += ''
 
@@ -2396,8 +2397,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		mapResponse: app['~adapter'].handler.mapResponse,
 		ERROR_CODE,
 		ElysiaCustomStatusResponse,
-		ELYSIA_TRACE,
-		ELYSIA_REQUEST_ID,
+		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
+		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 		...adapter.inject
 	})
 }

@@ -117,9 +117,15 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			let fnLiteral = ''
 
 			const wsPaths = app.router.static.ws
-			const wsRouter = app.router.ws
+			const router = app.router.http
 
-			if (Object.keys(wsPaths).length || wsRouter.history.length) {
+			router.build()
+
+			if (
+				Object.keys(wsPaths).length ||
+				router.root.ws ||
+				router.history.find((x) => x['0'] === 'ws')
+			) {
 				fnLiteral += `if(r.method==='GET'){switch(p){`
 
 				for (const [path, index] of Object.entries(wsPaths)) {
@@ -135,7 +141,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 				fnLiteral +=
 					`default:` +
 					`if(r.headers.get('upgrade')==='websocket'){` +
-					`const route=wsRouter.find('ws',p)\n` +
+					`const route=router.find('ws',p)\n` +
 					`if(route){` +
 					`c.params=route.params\n` +
 					`if(route.store.handler)return route.store.handler(c)\n` +

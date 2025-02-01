@@ -251,16 +251,24 @@ export default class Elysia<
 	}
 
 	router = {
-		http: new Memoirist<{
-			compile: Function
-			handler?: ComposedHandler
-		}>({ lazy: true }),
-		ws: new Memoirist<{
-			compile: Function
-			handler?: ComposedHandler
-		}>(),
+		'~http': undefined as
+			| Memoirist<{
+					compile: Function
+					handler?: ComposedHandler
+			  }>
+			| undefined,
+		get http() {
+			if (!this['~http']) this['~http'] = new Memoirist({ lazy: true })
+
+			return this['~http']
+		},
+		'~dynamic': undefined as Memoirist<DynamicHandler> | undefined,
 		// Use in non-AOT mode
-		dynamic: new Memoirist<DynamicHandler>(),
+		get dynamic() {
+			if (!this['~dynamic']) this['~dynamic'] = new Memoirist()
+
+			return this['~dynamic']
+		},
 		static: {
 			http: {
 				static: {} as Record<string, Response>,
@@ -696,8 +704,7 @@ export default class Elysia<
 				path,
 				composed: null,
 				handler: handle,
-				hooks: hooks,
-				compile: handle
+				hooks
 			})
 
 			return
@@ -734,7 +741,9 @@ export default class Elysia<
 		)
 			this.router.static.http.static[path] = nativeStaticHandler()
 
-		const compile = (asManifest = false) =>
+		let compile: ((asManifest?: boolean) => ComposedHandler) | undefined = (
+			asManifest = false
+		) =>
 			composeHandler({
 				app: this,
 				path,
@@ -771,28 +780,44 @@ export default class Elysia<
 
 		const mainHandler = shouldPrecompile
 			? compile()
-			: (ctx: Context) =>
-					((history[index].composed = compile()) as ComposedHandler)(
-						ctx
-					)
+			: (ctx: Context) => {
+					const temp = (
+						(history[index].composed =
+							compile!()) as ComposedHandler
+					)(ctx)
+
+					compile = undefined
+
+					return temp
+				}
+
+		if (shouldPrecompile) compile = undefined
 
 		const isWebSocket = method === '$INTERNALWS'
 
-		this.router.history.push({
-			method,
-			path,
-			composed: mainHandler,
-			handler: handle,
-			hooks,
-			compile: () => compile(),
-			websocket: localHook.websocket as any
-		})
+		this.router.history.push(
+			// @ts-ignore
+			Object.assign(
+				{
+					method,
+					path,
+					composed: mainHandler,
+					handler: handle,
+					hooks
+				},
+				localHook.webSocket
+					? { websocket: localHook.websocket as any }
+					: {}
+			)
+		)
 
 		const staticRouter = this.router.static.http
 
 		const handler = {
 			handler: shouldPrecompile ? mainHandler : undefined,
-			compile
+			compile() {
+				return this.handler = compile!()
+			}
 		}
 
 		if (isWebSocket) {
@@ -801,8 +826,8 @@ export default class Elysia<
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 				this.router.static.ws[path] = index
 			} else {
-				this.router.ws.add('ws', path, handler)
-				if (loose) this.router.ws.add('ws', loose, handler)
+				this.router.http.add('ws', path, handler)
+				if (loose) this.router.http.add('ws', loose, handler)
 			}
 
 			return
@@ -3479,10 +3504,12 @@ export default class Elysia<
 
 						try {
 							return this._use(plugin.default)
-						} catch {
-							throw new Error(
+						} catch (error) {
+							console.error(
 								'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
 							)
+
+							throw error
 						}
 					})
 					.then((x) => x.compile())
@@ -3520,7 +3547,7 @@ export default class Elysia<
 									path,
 									handler,
 									hooks
-								} of Object.values(plugin.router.history)) {
+								} of Object.values(plugin.router.history))
 									this.add(
 										method,
 										path,
@@ -3529,7 +3556,6 @@ export default class Elysia<
 											error: plugin.event.error
 										})
 									)
-								}
 
 								plugin.compile()
 

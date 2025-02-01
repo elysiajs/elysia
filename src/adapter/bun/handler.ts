@@ -15,6 +15,13 @@ export const createNativeStaticHandler = (
 ): (() => Response) | undefined => {
 	if (typeof handle === 'function' || handle instanceof Blob) return
 
+	if (
+		typeof handle === 'object' &&
+		handle?.toString() === '[object HTMLBundle]'
+	)
+		// Bun HTMLBundle
+		return () => handle as any
+
 	const response = mapResponse(handle, {
 		headers: setHeaders
 	})

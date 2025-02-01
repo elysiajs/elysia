@@ -1200,7 +1200,6 @@ export interface InternalRoute {
 	path: string
 	composed: ComposedHandler | Response | null
 	handler: Handler
-	compile(): Function
 	hooks: AnyLocalHook
 	websocket?: AnyWSLocalHook
 }

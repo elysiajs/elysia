@@ -1,13 +1,19 @@
 import { Elysia, t } from '../../src'
+import { generateHeapSnapshot } from 'bun'
 
-const total = 100
+const total = 500
+
+const apps = []
 
 const setup = (n = 0) => {
-	const app = new Elysia()
+	let app = new Elysia()
 
-	for(let i = 0; i < 10; i++) {
-		app.get(`/:a/${i + (n * total)}`, () => i)
+	for (let i = 0; i < 2; i++) {
+		// app = app.decorate(`a/${i + n * total}`, () => i)
+		app.get(`/a/${i + n * total}`, () => i)
 	}
+
+	apps.push(app)
 
 	return app
 }
@@ -30,3 +36,8 @@ console.log(
 )
 console.log('Average', +(took / total).toFixed(4), 'ms / route')
 console.log(memoryAfter - memory, 'MB memory used')
+
+const snapshot = generateHeapSnapshot()
+await Bun.write('heap.json', JSON.stringify(snapshot, null, 2))
+
+// console.log(app.router.history)
