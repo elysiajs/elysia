@@ -931,7 +931,7 @@ export const composeHandler = ({
 
 		if (adapter.parser.declare) fnLiteral += adapter.parser.declare
 
-		fnLiteral += '\nisParsing=true'
+		fnLiteral += '\nisParsing=true\n'
 
 		const parser =
 			typeof hooks.parse === 'string'
@@ -944,7 +944,7 @@ export const composeHandler = ({
 							: undefined
 					: undefined
 
-		if (parser && parser in defaultParsers) {
+		if (parser && defaultParsers.includes(parser)) {
 			const reporter = report('parse', {
 				total: hooks.parse?.length
 			})

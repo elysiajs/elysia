@@ -1137,7 +1137,19 @@ export type ResolveResolutionsArray<
 		: ResolveResolutionsArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type AnyLocalHook = LocalHook<any, any, any, any, any>
+export type AnyLocalHook = LocalHook<any, any, any, any, any, any>
+
+type LocalHookKey =
+	| keyof InputSchema<any>
+	| 'detail'
+	| 'parse'
+	| 'transform'
+	| 'beforeHandle'
+	| 'afterHandle'
+	| 'mapResponse'
+	| 'afterResponse'
+	| 'error'
+	| 'tags'
 
 export type LocalHook<
 	LocalSchema extends InputSchema,
@@ -1145,12 +1157,24 @@ export type LocalHook<
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
 	Macro extends BaseMacro,
+	MacroKey extends keyof any,
 	Parser extends string = ''
 > =
 	// Kind of an inference hack, I have no idea why it work either
 	(LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 		Macro &
+		NoInfer<
+			keyof Macro extends ''
+				? {}
+				: {
+						[K in Exclude<
+							keyof Macro,
+							MacroKey | LocalHookKey
+						>]: never
+					}
+		> &
 		NoInfer<{
+			// a?(a: keyof Macro): void
 			detail?: DocumentDecoration
 			/**
 			 * Short for 'Content-Type'

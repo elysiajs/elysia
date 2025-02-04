@@ -816,7 +816,7 @@ export default class Elysia<
 		const handler = {
 			handler: shouldPrecompile ? mainHandler : undefined,
 			compile() {
-				return this.handler = compile!()
+				return (this.handler = compile!())
 			}
 		}
 
@@ -2782,6 +2782,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>,
 		run: (
@@ -2929,7 +2930,10 @@ export default class Elysia<
 		>,
 		const Type extends LifeCycleType,
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>
 	>(
 		hook: { as: Type } & LocalHook<
 			LocalSchema,
@@ -2940,6 +2944,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'] | 'as',
 			keyof Metadata['parser'] & string
 		>
 	): Type extends 'global'
@@ -3026,7 +3031,10 @@ export default class Elysia<
 			Metadata['schema']
 		>,
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>
 	>(
 		hook: LocalHook<
 			LocalSchema,
@@ -3039,6 +3047,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -3073,7 +3082,10 @@ export default class Elysia<
 			Metadata['schema']
 		>,
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>
 	>(
 		run: (
 			group: Elysia<
@@ -3116,7 +3128,10 @@ export default class Elysia<
 			Metadata['schema']
 		>,
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>
 	>(
 		schema: LocalHook<
 			LocalSchema,
@@ -3127,6 +3142,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>,
 		run: (
@@ -3998,7 +4014,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4012,10 +4028,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4085,7 +4102,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4099,10 +4116,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4172,7 +4190,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4186,10 +4204,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4259,7 +4278,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4273,10 +4292,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4346,7 +4366,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4360,10 +4380,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4433,7 +4454,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4447,10 +4468,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4520,7 +4542,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4534,10 +4556,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4607,7 +4630,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4621,10 +4644,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4694,7 +4718,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4708,10 +4732,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4776,7 +4801,10 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
@@ -4802,6 +4830,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		> & {
 			config: {
@@ -4870,7 +4899,10 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -4882,7 +4914,8 @@ export default class Elysia<
 					Volatile['resolve'] &
 					MacroContext
 			},
-			Macro
+			Macro,
+			keyof Macro
 		>
 	): Elysia<
 		BasePath,

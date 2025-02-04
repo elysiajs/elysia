@@ -1,4 +1,9 @@
-# 1.2.11
+# 1.2.12 - 4 Feb 2025
+Bug fix:
+- warn when non-existing macro is used
+- parser doesn't generate optimize instruction
+
+# 1.2.11 - 1 Feb 2025
 Feature:
 - Reduce memory usage:
 	- Compressed lifecycle event

@@ -6,7 +6,6 @@ import {
 	AfterHandler,
 	AfterResponseHandler,
 	BaseMacro,
-	ContentType,
 	DocumentDecoration,
 	ErrorHandler,
 	InputSchema,
@@ -16,8 +15,6 @@ import {
 	MaybePromise,
 	OptionalHandler,
 	Prettify,
-	ResolveHandler,
-	ResolveResolutions,
 	RouteSchema,
 	SingletonBase,
 	TransformHandler
@@ -120,27 +117,33 @@ export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
 	message: unknown
 ) => MaybePromise<Route['body'] | void | undefined>
 
-export type AnyWSLocalHook = WSLocalHook<any, any, any, any>
+export type AnyWSLocalHook = WSLocalHook<any, any, any, any, any>
+
+type WSLocalHookKey =
+	| keyof TypedWebSocketHandler<any, any>
+	| 'detail'
+	| 'upgrade'
+	| 'parse'
+	| 'transform'
+	| 'beforeHandle'
+	| 'afterHandle'
+	| 'mapResponse'
+	| 'afterResponse'
+	| 'error'
+	| 'tags'
+	| keyof InputSchema<any>
 
 export type WSLocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
-	Extension extends BaseMacro
+	Macro extends BaseMacro,
+	MacroKey extends keyof any
 > = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
-	Extension & {
-		/**
-		 * Short for 'Content-Type'
-		 *
-		 * Available:
-		 * - 'none': do not parse body
-		 * - 'text' / 'text/plain': parse body as string
-		 * - 'json' / 'application/json': parse body as json
-		 * - 'formdata' / 'multipart/form-data': parse body as form-data
-		 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-		 * - 'arraybuffer': parse body as readable stream
-		 */
-		type?: ContentType
+	Macro &
+	NoInfer<{
+		[K in Exclude<keyof Macro, MacroKey | WSLocalHookKey>]: never
+	}> & {
 		detail?: DocumentDecoration
 		/**
 		 * Headers to register to websocket before `upgrade`
