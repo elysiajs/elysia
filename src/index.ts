@@ -138,7 +138,8 @@ import type {
 	ResolveResolutions,
 	UnwrapTypeModule,
 	MacroToContext,
-	MergeTypeModule
+	MergeTypeModule,
+	NoInfer
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>

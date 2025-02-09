@@ -39,6 +39,7 @@ import type { WebSocketHandler } from './ws/bun'
 type PartialServe = Partial<Serve>
 
 export type IsNever<T> = [T] extends [never] ? true : false
+export type NoInfer<T> = T extends infer U ? U : never;
 
 export type ElysiaConfig<Prefix extends string | undefined> = {
 	/**
