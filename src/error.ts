@@ -186,9 +186,7 @@ export class ValidationError extends Error {
 		)
 			value = value.response
 
-		const error = isProduction
-			? undefined
-			: 'Errors' in validator
+		const error = 'Errors' in validator
 				? validator.Errors(value).First()
 				: Value.Errors(validator, value).First()
 
