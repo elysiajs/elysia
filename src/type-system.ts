@@ -393,7 +393,9 @@ export const ElysiaType = {
 	},
 	Date: (property?: DateOptions) => {
 		const schema = Type.Date(property)
-
+		const _default = property?.default ?
+			new Date(property.default) : // in case the default is an ISO string or milliseconds from epoch
+			undefined;
 		return t
 			.Transform(
 				t.Union(
@@ -401,13 +403,13 @@ export const ElysiaType = {
 						Type.Date(property),
 						t.String({
 							format: 'date',
-							default: new Date().toISOString()
+							default: _default?.toISOString()
 						}),
 						t.String({
 							format: 'date-time',
-							default: new Date().toISOString()
+							default: _default?.toISOString()
 						}),
-						t.Number()
+						t.Number({ default: _default?.getTime() })
 					],
 					property
 				)
