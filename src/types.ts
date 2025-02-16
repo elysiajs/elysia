@@ -337,6 +337,9 @@ type OptionalField = {
 	[OptionalKind]: 'Optional'
 }
 
+type TrimArrayName<T extends string> =
+	T extends `${infer Name}[]` ? Name : T
+
 export type UnwrapSchema<
 	Schema extends TSchema | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = TModule<{}>
@@ -346,9 +349,17 @@ export type UnwrapSchema<
 		? Schema extends OptionalField
 			? Prettify<Partial<Static<Schema>>>
 			: StaticDecode<Schema>
-		: Schema extends string
-			? StaticDecode<TImport<UnwrapTypeModule<Definitions>, Schema>>
-			: unknown
+		: Schema extends `${infer Key}[]`
+			? Definitions extends Record<Key, infer NamedSchema>
+				? Array<NamedSchema>
+				: StaticDecode<TImport<UnwrapTypeModule<Definitions>, TrimArrayName<Schema>>>[]
+			: Schema extends string
+				? Definitions extends Record<Schema, infer NamedSchema>
+					? NamedSchema
+					: StaticDecode<
+							TImport<UnwrapTypeModule<Definitions>, Schema>
+						>
+				: unknown
 
 export type UnwrapBodySchema<
 	Schema extends TSchema | string | undefined,
@@ -359,9 +370,15 @@ export type UnwrapBodySchema<
 		? Schema extends OptionalField
 			? Prettify<Partial<Static<Schema>>> | null
 			: StaticDecode<Schema>
-		: Schema extends string
-			? Static<TImport<UnwrapTypeModule<Definitions>, Schema>>
-			: unknown
+		: Schema extends `${infer Key}[]`
+			? Definitions extends Record<Key, infer NamedSchema>
+				? Array<NamedSchema>
+				: Static<TImport<UnwrapTypeModule<Definitions>, TrimArrayName<Schema>>>[]
+			: Schema extends string
+				? Definitions extends Record<Schema, infer NamedSchema>
+					? NamedSchema
+					: Static<TImport<UnwrapTypeModule<Definitions>, Schema>>
+				: unknown
 
 export type IsNull<T> = [T] extends [null] ? true : false
 
@@ -528,7 +545,7 @@ export type HTTPMethod =
 	| 'ALL'
 
 export interface InputSchema<Name extends string = string> {
-	body?: TSchema | Name
+	body?: TSchema | Name | `${Name}[]`
 	headers?: TObject | TNull | TUndefined | Name
 	query?: TObject | TNull | TUndefined | Name
 	params?: TObject | TNull | TUndefined | Name
@@ -536,8 +553,9 @@ export interface InputSchema<Name extends string = string> {
 	response?:
 		| TSchema
 		| Record<number, TSchema>
+		| `${Name}[]`
 		| Name
-		| Record<number, Name | TSchema>
+		| Record<number, `${Name}[]` | Name | TSchema>
 }
 
 export interface MergeSchema<

@@ -5748,11 +5748,18 @@ export default class Elysia<
 			case 'object':
 				const parsedSchemas = {} as Record<string, TSchema>
 
-				Object.entries(name).forEach(([key, value]) => {
-					if (!(key in this.definitions.type))
-						parsedSchemas[key] = this.definitions.type[key] =
-							coerce(value) as TSchema
-				})
+				const kvs = Object.entries(name)
+
+				for (const [key, value] of kvs) {
+					if (key in this.definitions.type) continue
+
+					parsedSchemas[key] = this.definitions.type[key] = coerce(
+						value
+					) as TSchema
+
+					parsedSchemas[key].$id ??= `#/components/schemas/${key}`
+				}
+
 				// @ts-expect-error
 				this.definitions.typebox = t.Module({
 					...(this.definitions.typebox['$defs'] as TModule<{}>),
@@ -5766,6 +5773,21 @@ export default class Elysia<
 				this.definitions.type = result
 				this.definitions.typebox = t.Module(result as any)
 
+				return this as any
+
+			case 'string':
+				if (!model) break
+
+				const newModel = {
+					...model,
+					id: model.$id ?? `#/components/schemas/${name}`
+				}
+
+				this.definitions.type[name] = model
+				this.definitions.typebox = t.Module({
+					...(this.definitions.typebox['$defs'] as TModule<{}>),
+					...newModel
+				} as any)
 				return this as any
 		}
 

@@ -1,3 +1,4 @@
+import { TypeRegistry, Type, FormatRegistry } from '@sinclair/typebox'
 import {
 	ArrayOptions,
 	DateOptions,
@@ -6,24 +7,17 @@ import {
 	TArray,
 	TDate,
 	TUnsafe,
-	TypeRegistry,
 	TInteger,
 	IntegerOptions,
-	Unsafe
-} from '@sinclair/typebox'
-import {
-	Type,
-	type SchemaOptions,
-	// type TNull,
-	// type TUnion,
-	type TSchema,
-	// type TUndefined,
+	Unsafe,
+	Static,
+	SchemaOptions,
+	TSchema,
 	TProperties,
 	ObjectOptions,
 	TObject,
 	TNumber,
-	TBoolean,
-	FormatRegistry
+	TBoolean
 } from '@sinclair/typebox'
 
 import {
@@ -391,9 +385,9 @@ export const ElysiaType = {
 	},
 	Date: (property?: DateOptions) => {
 		const schema = Type.Date(property)
-		const _default = property?.default ?
-			new Date(property.default) : // in case the default is an ISO string or milliseconds from epoch
-			undefined;
+		const _default = property?.default
+			? new Date(property.default) // in case the default is an ISO string or milliseconds from epoch
+			: undefined
 		return t
 			.Transform(
 				t.Union(
@@ -743,6 +737,9 @@ t.Files = (arg = {}) =>
 			format: 'binary'
 		}
 	})
+
+// t.Ref = <T extends TSchema>(schema: T) =>
+// 	Type.Unsafe<Static<T>>(Type.Ref(schema.$id!))
 
 t.Nullable = (schema) => ElysiaType.Nullable(schema)
 t.MaybeEmpty = ElysiaType.MaybeEmpty as any

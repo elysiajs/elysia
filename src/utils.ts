@@ -591,13 +591,16 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	}
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
-	if (typeof s === 'string' && !(s in models)) return undefined as any
 
 	let schema: TSchema =
 		typeof s === 'string'
-			? // @ts-expect-error
-				((modules as TModule<{}, {}>).Import(s) ?? models[s])
+			? s.endsWith('[]') ?
+				t.Array(t.Ref(models[s.substring(0, s.length - 2)])) :
+					// @ts-expect-error
+					((modules as TModule<{}, {}>).Import(s) ?? models[s])
 			: s
+
+	if (!schema) return undefined as any
 
 	if (coerce || additionalCoerce) {
 		if (coerce)
@@ -757,13 +760,15 @@ export const getResponseSchemaValidator = (
 	}
 ): Record<number, TypeCheck<any>> | undefined => {
 	if (!s) return
-	if (typeof s === 'string' && !(s in models)) return
 
 	const maybeSchemaOrRecord =
 		typeof s === 'string'
-			? // @ts-ignore
+			?
+		s.endsWith('[]') ? t.Array(t.Ref(models[s.substring(0, s.length - 2)])) : // @ts-ignore
 				((modules as TModule<{}, {}>).Import(s) ?? models[s])
 			: s
+
+	if (!maybeSchemaOrRecord) return
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		if (dynamic)
@@ -789,12 +794,14 @@ export const getResponseSchemaValidator = (
 		return compiledValidator
 	}
 
+	const modelValues = Object.values(models)
+
 	if (Kind in maybeSchemaOrRecord) {
 		if ('additionalProperties' in maybeSchemaOrRecord === false)
 			maybeSchemaOrRecord.additionalProperties = additionalProperties
 
 		return {
-			200: compile(maybeSchemaOrRecord, Object.values(models))
+			200: compile(maybeSchemaOrRecord, modelValues)
 		}
 	}
 
@@ -812,7 +819,7 @@ export const getResponseSchemaValidator = (
 				// Inherits model maybe already compiled
 				record[+status] =
 					Kind in schema
-						? compile(schema, Object.values(models))
+						? compile(schema, modelValues)
 						: schema
 			}
 
@@ -828,7 +835,7 @@ export const getResponseSchemaValidator = (
 		// Inherits model maybe already compiled
 		record[+status] =
 			Kind in maybeNameOrSchema
-				? compile(maybeNameOrSchema, Object.values(models))
+				? compile(maybeNameOrSchema, modelValues)
 				: maybeNameOrSchema
 	})
 
