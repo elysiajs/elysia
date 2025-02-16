@@ -688,15 +688,13 @@ export const composeHandler = ({
 	}
 
 	if (hasQuery) {
-		const destructured = <
-			{
-				key: string
-				isArray: boolean
-				isNestedObjectArray: boolean
-				isObject: boolean
-				anyOf: boolean
-			}[]
-		>[]
+		const destructured = [] as {
+			key: string
+			isArray: boolean
+			isNestedObjectArray: boolean
+			isObject: boolean
+			anyOf: boolean
+		}[]
 
 		// @ts-ignore
 		if (validator.query && validator.query.schema.type === 'object') {
@@ -758,7 +756,7 @@ export const composeHandler = ({
 		} else {
 			fnLiteral +=
 				'if(c.qi!==-1){' +
-				`let url = '&' + decodeURIComponent(c.url.slice(c.qi + 1))\n`
+				`let url = '&' + decodeURIComponent(c.url.slice(c.qi + 1).replace(/\\+/g,' '))\n`
 
 			let index = 0
 			for (const {
@@ -786,8 +784,8 @@ export const composeHandler = ({
 							`else\n` +
 							`a${index}+=','\n` +
 							`let temp\n` +
-							`if(memory===-1)temp=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-							`else temp=decodeURIComponent(url.slice(start, memory).replace(/\\+/g,' '))\n` +
+							`if(memory===-1)temp=decodeURIComponent(url.slice(start))\n` +
+							`else temp=decodeURIComponent(url.slice(start, memory))\n` +
 							`const charCode = temp.charCodeAt(0)\n` +
 							`if(charCode !== 91 && charCode !== 123)\n` +
 							`temp='"'+temp+'"'\n` +
@@ -810,10 +808,10 @@ export const composeHandler = ({
 							`if(a${index}===undefined)` +
 							`a${index}=[]\n` +
 							`if(memory===-1){` +
-							`a${index}.push(decodeURIComponent(url.slice(start)).replace(/\\+/g,' '))\n` +
+							`a${index}.push(decodeURIComponent(url.slice(start)))\n` +
 							`break` +
 							`}` +
-							`else a${index}.push(decodeURIComponent(url.slice(start, memory)).replace(/\\+/g,' '))\n` +
+							`else a${index}.push(decodeURIComponent(url.slice(start, memory)))\n` +
 							`memory=url.indexOf('&${key}=',memory)\n` +
 							`if(memory===-1) break\n` +
 							`}`
@@ -823,8 +821,8 @@ export const composeHandler = ({
 						`if(memory!==-1){` +
 						`const start=memory+${key.length + 2}\n` +
 						`memory=url.indexOf('&',start)\n` +
-						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))` +
-						`else a${index}=decodeURIComponent(url.slice(start,memory).replace(/\\+/g,' '))` +
+						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start))` +
+						`else a${index}=decodeURIComponent(url.slice(start,memory))` +
 						`if(a${index}!==undefined)` +
 						`try{` +
 						`a${index}=JSON.parse(a${index})` +
@@ -837,9 +835,9 @@ export const composeHandler = ({
 						`if(memory!==-1){` +
 						`const start=memory+${key.length + 2}\n` +
 						`memory=url.indexOf('&',start)\n` +
-						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
+						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start))\n` +
 						`else{` +
-						`a${index}=decodeURIComponent(url.slice(start,memory).replace(/\\+/g,' '))`
+						`a${index}=decodeURIComponent(url.slice(start,memory))`
 
 					if (anyOf)
 						fnLiteral +=
@@ -852,8 +850,8 @@ export const composeHandler = ({
 							`if(first)first=false\n` +
 							`else deepMemory = url.indexOf('&', start)\n` +
 							`let value\n` +
-							`if(deepMemory===-1)value=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-							`else value=decodeURIComponent(url.slice(start, deepMemory).replace(/\\+/g,' '))\n` +
+							`if(deepMemory===-1)value=decodeURIComponent(url.slice(start))\n` +
+							`else value=decodeURIComponent(url.slice(start, deepMemory))\n` +
 							`const vStart=value.charCodeAt(0)\n` +
 							`const vEnd=value.charCodeAt(value.length - 1)\n` +
 							`if((vStart===91&&vEnd===93)||(vStart===123&&vEnd===125))\n` +
