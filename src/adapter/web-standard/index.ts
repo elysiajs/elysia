@@ -106,7 +106,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 
 			// @ts-expect-error private
 			if (app.inference.server)
-				fnLiteral += `,get server(){return getServer()}`
+				fnLiteral += `,get server(){return app.getServer()}`
 			if (hasTrace) fnLiteral += ',[ELYSIA_REQUEST_ID]:id'
 			fnLiteral += decoratorsLiteral
 			fnLiteral += `}\n`

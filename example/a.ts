@@ -1,21 +1,16 @@
 import { Elysia, t } from '../src'
 
-const PATH = '/y a y'
-
 const app = new Elysia({ precompile: true })
-	.post('/a', ({ body: { image } }) => image, {
-		parse: 'formdata',
-		body: t.Object({
-			image: t.File({ maxSize: 10000000, type: 'image/*' })
-		}),
-		transform({ body }) {
-			console.log({ body })
-		}
+	.onRequest((ctx) => {
+		console.log(ctx.server?.requestIP(ctx.request))
 	})
+	.get('/', () => 'Hello, World!')
 	.listen(3000)
 
-// console.log(response.status)
-// console.log(await response.text())
+console.log(`Listening on http://${app.server!.hostname}:${app.server!.port}`)
 
-// expect(response.status).toBe(200)
-// expect(await response.text()).toBe('1')
+async function test() {
+	const response = await fetch('http://localhost:3000')
+	console.log(await response.text())
+}
+test()

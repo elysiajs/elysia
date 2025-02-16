@@ -269,4 +269,14 @@ describe('sucrose', () => {
 			route: false
 		})
 	})
+
+	it('infer server', async () => {
+		const app = new Elysia({ precompile: true })
+			.onRequest(({ server }) => {})
+			.get('/', () => 'Hello, World!')
+
+		const response = await app.handle(new Request('http://localhost:3000'))
+
+		expect(response.status).toBe(200)
+	})
 })

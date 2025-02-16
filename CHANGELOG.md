@@ -1,9 +1,16 @@
 # 1.2.13 - 16 Feb 2025
 Improvement:
+- [#977](https://github.com/elysiajs/elysia/pull/977) use Registry instead of TypeSystem
 - remove redundant switch-case for path mapping when strictPath is disabled and path is overlapped
 - remove redundant allocation for nativeStaticHanlder when strictPath path is overlapped
 
 Bug fix:
+- [#1062](https://github.com/elysiajs/elysia/pull/1062) correctly set t.Date() defaults
+- [#1050](https://github.com/elysiajs/elysia/issues/1050) app.onRequest(ctx => {ctx.server}): Can't find variable: getServer
+- [#1040](https://github.com/elysiajs/elysia/pull/1040) undefined route context on aot=false
+- [#1017](https://github.com/elysiajs/elysia/pull/1017) replace t.Number() for Type.Integer()
+- [#976](https://github.com/elysiajs/elysia/pull/976) error responses with aot: false
+- [#975](https://github.com/elysiajs/elysia/pull/975) await nested async plugins
 - [discord](https://discord.com/channels/1044804142461362206/1289400305506844672/1289400305506844672) file format doesn't check for '*' format
 
 # 1.2.12 - 4 Feb 2025
