@@ -3,8 +3,6 @@ import { Elysia, t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
-import { AsyncLocalStorage } from 'async_hooks'
-
 describe('Edge Case', () => {
 	it('handle state', async () => {
 		const app = new Elysia()
@@ -176,34 +174,38 @@ describe('Edge Case', () => {
 
 	describe('value returned from transform has priority over the default value from schema', () => {
 		const route = new Elysia().get(
-			"/:propParams?",
+			'/:propParams?',
 			({ params: { propParams } }) => propParams,
 			{
 				params: t.Object({
 					propParams: t.String({
-						default: "params-default",
-					}),
+						default: 'params-default'
+					})
 				}),
 				transform({ params }) {
-					params.propParams = "params-transform"
+					params.propParams = 'params-transform'
 				}
 			}
 		)
 
 		it('aot is on', async () => {
-			const app = new Elysia().use(route);
+			const app = new Elysia().use(route)
 
-			const response = await app.handle(new Request('http://localhost')).then((x) => x.text());
+			const response = await app
+				.handle(new Request('http://localhost'))
+				.then((x) => x.text())
 
-			expect(response).toBe('params-transform');
+			expect(response).toBe('params-transform')
 		})
 
 		it('aot is off', async () => {
-			const app = new Elysia({ aot: false }).use(route);
+			const app = new Elysia({ aot: false }).use(route)
 
-			const response = await app.handle(new Request('http://localhost')).then((x) => x.text());
+			const response = await app
+				.handle(new Request('http://localhost'))
+				.then((x) => x.text())
 
-			expect(response).toBe('params-transform');
+			expect(response).toBe('params-transform')
 		})
 	})
 })

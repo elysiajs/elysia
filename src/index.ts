@@ -36,7 +36,8 @@ import {
 	stringToStructureCoercions,
 	isNotEmpty,
 	replaceSchemaType,
-	compressHistoryHook
+	compressHistoryHook,
+	encodePath
 } from './utils'
 
 import {
@@ -692,14 +693,37 @@ export default class Elysia<
 				route: path
 			})
 
-			if (this.config.strictPath === false)
-				this.router.dynamic.add(method, getLoosePath(path), {
+			const encoded = encodePath(path, { dynamic: true })
+			if (path !== encoded) {
+				this.router.dynamic.add(method, encoded, {
 					validator,
 					hooks,
 					content: localHook?.type as string,
 					handle,
 					route: path
 				})
+			}
+
+			if (this.config.strictPath === false) {
+				const loosePath = getLoosePath(path)
+				this.router.dynamic.add(method, loosePath, {
+					validator,
+					hooks,
+					content: localHook?.type as string,
+					handle,
+					route: path
+				})
+
+				const encoded = encodePath(loosePath)
+				if (loosePath !== encoded)
+					this.router.dynamic.add(method, loosePath, {
+						validator,
+						hooks,
+						content: localHook?.type as string,
+						handle,
+						route: path
+					})
+			}
 
 			this.router.history.push({
 				method,
@@ -823,14 +847,13 @@ export default class Elysia<
 		}
 
 		if (isWebSocket) {
-			const loose = getLoosePath(path)
+			this.router.http.add('ws', path, handler)
 
-			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-				this.router.static.ws[path] = index
-			} else {
-				this.router.http.add('ws', path, handler)
-				if (loose) this.router.http.add('ws', loose, handler)
-			}
+			if (!this.config.strictPath)
+				this.router.http.add('ws', getLoosePath(path), handler)
+
+			const encoded = encodePath(path, { dynamic: true })
+			if (encoded !== path) this.router.http.add('ws', encoded, handler)
 
 			return
 		}
@@ -864,7 +887,6 @@ export default class Elysia<
 
 			if (!this.config.strictPath) {
 				const loosePath = getLoosePath(path)
-
 				if (
 					this.config.nativeStaticResponse === true &&
 					staticHandler &&
@@ -874,6 +896,21 @@ export default class Elysia<
 						staticHandler() as Response
 
 				this.router.http.add(method, loosePath, handler)
+			}
+
+			const encoded = encodePath(path, { dynamic: true })
+			if (path !== encoded) {
+				this.router.http.add(method, encoded, handler)
+
+				if (
+					this.config.nativeStaticResponse === true &&
+					staticHandler &&
+					(method === 'GET' || method === 'ALL')
+				)
+					this.router.static.http.static[encoded] =
+						staticHandler() as Response
+
+				this.router.http.add(method, encoded, handler)
 			}
 		}
 	}

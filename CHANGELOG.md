@@ -1,3 +1,8 @@
+# 1.2.13 - 16 Feb 2025
+Improvement:
+- remove redundant switch-case for path mapping when strictPath is disabled and path is overlapped
+- remove redundant allocation for nativeStaticHanlder when strictPath path is overlapped
+
 # 1.2.12 - 4 Feb 2025
 Bug fix:
 - warn when non-existing macro is used

@@ -15,7 +15,8 @@ import {
 	randomId,
 	redirect,
 	signCookie,
-	isNotEmpty
+	isNotEmpty,
+	encodePath
 } from './utils'
 import { ParseError, error } from './error'
 
@@ -2078,16 +2079,19 @@ export const composeGeneralHandler = (
 		`return (route.store.handler=route.store.compile())(c)\n`
 
 	let switchMap = ``
-	for (const [path, { code, all }] of Object.entries(
-		router.static.http.map
-	)) {
+	for (const [path, v] of Object.entries(router.static.http.map)) {
 		switchMap += `case'${path}':`
 
 		if (app.config.strictPath !== true)
 			switchMap += `case'${getLoosePath(path)}':`
 
+		const encoded = encodePath(path)
+		if (path !== encoded) switchMap += `case'${encoded}':`
+
 		switchMap +=
-			`switch(r.method){${code}\n` + (all ?? `default: break map`) + '}'
+			`switch(r.method){${v.code}\n` +
+			(v.all ?? `default: break map`) +
+			'}'
 	}
 
 	const maybeAsync = !!app.event.request?.some(isAsync)

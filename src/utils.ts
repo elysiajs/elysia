@@ -594,9 +594,9 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 	let schema: TSchema =
 		typeof s === 'string'
-			? s.endsWith('[]') ?
-				t.Array(t.Ref(models[s.substring(0, s.length - 2)])) :
-					// @ts-expect-error
+			? s.endsWith('[]')
+				? t.Array(t.Ref(models[s.substring(0, s.length - 2)]))
+				: // @ts-expect-error
 					((modules as TModule<{}, {}>).Import(s) ?? models[s])
 			: s
 
@@ -763,9 +763,9 @@ export const getResponseSchemaValidator = (
 
 	const maybeSchemaOrRecord =
 		typeof s === 'string'
-			?
-		s.endsWith('[]') ? t.Array(t.Ref(models[s.substring(0, s.length - 2)])) : // @ts-ignore
-				((modules as TModule<{}, {}>).Import(s) ?? models[s])
+			? s.endsWith('[]')
+				? t.Array(t.Ref(models[s.substring(0, s.length - 2)])) // @ts-ignore
+				: ((modules as TModule<{}, {}>).Import(s) ?? models[s])
 			: s
 
 	if (!maybeSchemaOrRecord) return
@@ -818,9 +818,7 @@ export const getResponseSchemaValidator = (
 
 				// Inherits model maybe already compiled
 				record[+status] =
-					Kind in schema
-						? compile(schema, modelValues)
-						: schema
+					Kind in schema ? compile(schema, modelValues) : schema
 			}
 
 			return undefined
@@ -1735,4 +1733,12 @@ export const decompressHistoryHook = (hook: Partial<LifeCycleStore>) => {
 	if (!history.response) history.response = undefined
 
 	return history
+}
+
+export const encodePath = (path: string, { dynamic = false } = {}) => {
+	let encoded = encodeURIComponent(path).replace(/%2F/g, '/')
+
+	if (dynamic) encoded = encoded.replace(/%3A/g, ':').replace(/%3F/g, '?')
+
+	return encoded
 }
