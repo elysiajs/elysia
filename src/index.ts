@@ -195,7 +195,6 @@ export default class Elysia<
 	private dependencies: Record<string, Checksum[]> = {}
 
 	_routes: Routes = {} as any
-	_route: string = ""
 
 	_types = {
 		Prefix: '' as BasePath,
@@ -690,6 +689,7 @@ export default class Elysia<
 				hooks,
 				content: localHook?.type as string,
 				handle,
+				route: path
 			})
 
 			if (this.config.strictPath === false)
@@ -697,7 +697,8 @@ export default class Elysia<
 					validator,
 					hooks,
 					content: localHook?.type as string,
-					handle
+					handle,
+					route: path
 				})
 
 			this.router.history.push({
@@ -707,7 +708,6 @@ export default class Elysia<
 				handler: handle,
 				hooks
 			})
-			this._route = path
 
 			return
 		}

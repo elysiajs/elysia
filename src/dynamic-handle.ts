@@ -25,6 +25,7 @@ export type DynamicHandler = {
 	content?: string
 	hooks: Partial<LifeCycleStore>
 	validator?: SchemaValidator
+	route: string
 }
 
 const injectDefaultValues = (
@@ -63,7 +64,6 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				set,
 				// @ts-expect-error
 				store: app.singleton.store,
-				route: app._route,
 				request,
 				path,
 				qi,
@@ -91,7 +91,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			if (!handler) throw new NotFoundError()
 
-			const { handle, hooks, validator, content } = handler.store
+			const { handle, hooks, validator, content, route } = handler.store
 
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -192,6 +192,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				}
 			}
 
+			context.route = route
 			context.body = body
 			context.params = handler?.params || undefined
 
