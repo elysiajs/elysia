@@ -8,9 +8,9 @@ import {
 	TUnsafe,
 	TypeRegistry,
 	TInteger,
-	IntegerOptions
+	IntegerOptions,
+	Unsafe
 } from '@sinclair/typebox'
-import { TypeSystem } from '@sinclair/typebox/system'
 import {
 	Type,
 	type SchemaOptions,
@@ -49,7 +49,7 @@ const _validateDate = fullFormats.date
 const _validateDateTime = fullFormats['date-time']
 
 if (!FormatRegistry.Has('date'))
-	TypeSystem.Format('date', (value: string) => {
+	FormatRegistry.Set('date', (value: string) => {
 		// Remove quote from stringified date
 		const temp = value.replace(/"/g, '')
 
@@ -67,7 +67,7 @@ if (!FormatRegistry.Has('date'))
 	})
 
 if (!FormatRegistry.Has('date-time'))
-	TypeSystem.Format('date-time', (value: string) => {
+	FormatRegistry.Set('date-time', (value: string) => {
 		// Remove quote from stringified date
 		const temp = value.replace(/"/g, '')
 
@@ -89,9 +89,9 @@ Object.entries(fullFormats).forEach((formatEntry) => {
 
 	if (!FormatRegistry.Has(formatName)) {
 		if (formatValue instanceof RegExp)
-			TypeSystem.Format(formatName, (value) => formatValue.test(value))
+			FormatRegistry.Set(formatName, (value) => formatValue.test(value))
 		else if (typeof formatValue === 'function')
-			TypeSystem.Format(formatName, formatValue)
+			FormatRegistry.Set(formatName, formatValue)
 	}
 })
 
@@ -232,33 +232,30 @@ type ElysiaFile = (
 	options?: Partial<ElysiaTypeOptions.Files> | undefined
 ) => TUnsafe<File>
 
-const File: ElysiaFile =
-	(TypeRegistry.Get('Files') as unknown as ElysiaFile) ??
-	TypeSystem.Type<File, ElysiaTypeOptions.File>('File', validateFile)
+const File: ElysiaFile = getOrSetType<ElysiaTypeOptions.File, ElysiaFile>(
+	'File',
+	validateFile
+)
 
 type ElysiaFiles = (
 	options?: Partial<ElysiaTypeOptions.Files> | undefined
 ) => TUnsafe<File[]>
 
-const Files: ElysiaFiles =
-	(TypeRegistry.Get('Files') as unknown as ElysiaFiles) ??
-	TypeSystem.Type<File[], ElysiaTypeOptions.Files>(
-		'Files',
-		(options, value) => {
-			if (!Array.isArray(value)) return validateFile(options, value)
+const Files: ElysiaFiles = getOrSetType<ElysiaTypeOptions.Files, ElysiaFiles>(
+	'Files',
+	(options, value) => {
+		if (!Array.isArray(value)) return validateFile(options, value)
 
-			if (options.minItems && value.length < options.minItems)
-				return false
+		if (options.minItems && value.length < options.minItems) return false
 
-			if (options.maxItems && value.length > options.maxItems)
-				return false
+		if (options.maxItems && value.length > options.maxItems) return false
 
-			for (let i = 0; i < value.length; i++)
-				if (!validateFile(options, value[i])) return false
+		for (let i = 0; i < value.length; i++)
+			if (!validateFile(options, value[i])) return false
 
-			return true
-		}
-	)
+		return true
+	}
+)
 
 if (!FormatRegistry.Has('numeric'))
 	FormatRegistry.Set('numeric', (value) => !!value && !isNaN(+value))
@@ -313,14 +310,15 @@ if (!FormatRegistry.Has('ArrayString'))
 		}
 	})
 
-TypeRegistry.Set<TUnionEnum>('UnionEnum', (schema, value) => {
-	return (
-		(typeof value === 'number' ||
-			typeof value === 'string' ||
-			value === null) &&
-		schema.enum.includes(value as never)
-	)
-})
+if (!TypeRegistry.Has('UnionEnum'))
+	TypeRegistry.Set<TUnionEnum>('UnionEnum', (schema, value) => {
+		return (
+			(typeof value === 'number' ||
+				typeof value === 'string' ||
+				value === null) &&
+			schema.enum.includes(value as never)
+		)
+	})
 
 type NonEmptyArray<T> = [T, ...T[]]
 
@@ -754,6 +752,18 @@ t.Date = ElysiaType.Date
 
 t.UnionEnum = ElysiaType.UnionEnum
 
+function getOrSetType<TSchema = unknown, TReturn = unknown>(
+	kind: string,
+	func: TypeRegistry.TypeRegistryValidationFunction<TSchema>
+): TReturn {
+	if (!TypeRegistry.Has(kind)) {
+		TypeRegistry.Set<TSchema>(kind, func)
+	}
+
+	return ((options = {}) =>
+		Unsafe({ ...options, [Kind]: kind })) as unknown as TReturn
+}
+
 export { t }
 
 export {
@@ -762,6 +772,7 @@ export {
 	TypeSystemDuplicateFormat,
 	TypeSystemDuplicateTypeKind
 } from '@sinclair/typebox/system'
+export { TypeRegistry, FormatRegistry } from '@sinclair/typebox'
 export { TypeCompiler, TypeCheck } from '@sinclair/typebox/compiler'
 
 // type Template =
