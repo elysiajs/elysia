@@ -115,11 +115,15 @@ export class ElysiaFile {
 
 						return fs.createReadStream(path)
 					})
-					this.stats = import('fs/promises').then((fs) => {
-						stat = fs.stat
+					try {
+						this.stats = import('fs/promises').then((fs) => {
+							stat = fs.stat
 
-						return fs.stat(path)
-					})
+							return fs.stat(path)
+						})
+					} catch {
+						// not empty
+					}
 				} else {
 					this.value = createReadStream(path)
 					this.stats = stat(path)!

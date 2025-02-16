@@ -11,6 +11,7 @@ Bug fix:
 - [#1017](https://github.com/elysiajs/elysia/pull/1017) replace t.Number() for Type.Integer()
 - [#976](https://github.com/elysiajs/elysia/pull/976) error responses with aot: false
 - [#975](https://github.com/elysiajs/elysia/pull/975) await nested async plugins
+- [#971](https://github.com/elysiajs/elysia/issues/971) wrap import("fs/promises") in try-catch to avoid error
 - [discord](https://discord.com/channels/1044804142461362206/1289400305506844672/1289400305506844672) file format doesn't check for '*' format
 
 # 1.2.12 - 4 Feb 2025
