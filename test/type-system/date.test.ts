@@ -1,12 +1,33 @@
 import Elysia, { t } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { Value } from '@sinclair/typebox/value'
-import { TBoolean, TDate, TypeBoxError } from '@sinclair/typebox'
+import { TBoolean, TDate, TUnion, TypeBoxError } from '@sinclair/typebox'
 import { post } from '../utils'
 
 describe('TypeSystem - Date', () => {
 	it('Create', () => {
 		expect(Value.Create(t.Date())).toBeInstanceOf(Date)
+	})
+
+	it('No default date provided', () => {
+		const schema = t.Date()
+		expect(schema.default).toBeUndefined();
+
+		const unionSchema = schema as unknown as TUnion
+		for (const type of unionSchema.anyOf) {
+			expect(type.default).toBeUndefined();
+		}
+	})
+
+	it('Default date provided', () => {
+		const given = new Date("2025-01-01T00:00:00.000Z")
+		const schema = t.Date({ default: given })
+		expect(schema.default).toEqual(given);
+
+		const unionSchema = schema as unknown as TUnion
+		for (const type of unionSchema.anyOf) {
+			expect(new Date(type.default)).toEqual(given);
+		}
 	})
 
 	it('Check', () => {
