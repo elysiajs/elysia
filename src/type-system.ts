@@ -376,7 +376,7 @@ export const ElysiaType = {
 							format: 'integer',
 							default: 0
 						}),
-						t.Number(property)
+						Type.Integer(property)
 					],
 					property
 				)
