@@ -1,3 +1,54 @@
+# 1.2.12 - 4 Feb 2025
+Bug fix:
+- warn when non-existing macro is used
+- parser doesn't generate optimize instruction
+
+# 1.2.11 - 1 Feb 2025
+Feature:
+- Reduce memory usage:
+	- Compressed lifecycle event
+	- Avoid unnecessary declaration in compose.ts
+	- Lazily build radix tree for dynamic router
+
+Change:
+- Update TypeBox to 0.34.15
+
+Bug fix:
+- [#1039](vhttps://github.com/elysiajs/elysia/issues/1039) Elysia fails to start with an error inside its own code when using decorate twice with Object.create(null)
+- [#1005](https://github.com/elysiajs/elysia/issues/1005) Parsing malformed body with NODE_ENV 'production' results in UNKNOWN error
+- [#1037](https://github.com/elysiajs/elysia/issues/1037) Validation errors in production throw undefined is not an object (evaluating 'error2.schema')
+- [#1036](https://github.com/elysiajs/elysia/issues/1036) Support Bun HTML import
+
+# 1.2.10 - 5 Jan 2025
+Feature:
+- add shorthand property for macro function
+
+Improvement:
+- use `deuri` instead of `fast-decode-uri-component`
+- [#985](https://github.com/elysiajs/elysia/issues/985) MaybeEmpty and Nullable should have options args
+
+Bug fix:
+- Macro function doesn't inherits local/scoped derive and resolve in type-level
+
+# 1.2.9 - 28 Dec 2024
+Bug fix:
+- Resolve macro unintentionally return instead of assign new context
+
+# 1.2.8 - 27 Dec 2024
+Bug fix:
+- [#966](https://github.com/elysiajs/elysia/issues/966) generic error somehow return 200
+
+# 1.2.7 - 27 Dec 2024
+Bug fix:
+- macro doesn't work with guard
+- [#981](https://github.com/elysiajs/elysia/issues/981) unable to deference schema, create default, and coerce value
+- [#966](https://github.com/elysiajs/elysia/issues/966) `error`'s value return as-if when thrown
+- [#964](https://github.com/elysiajs/elysia/issues/964) InvalidCookieSignature errors are not caught by onError
+- [#952](https://github.com/elysiajs/elysia/issues/952) onAfterResponse does not provide mapped response value unless aot is disabled
+- `mapResponse.response` is `{}` if no response schema is provided
+- Response doesn't reconcile when handler return `Response` is used with `mapResponse`
+- `onError` now accepts `error` as `number` when `Elysia.error` is thrown (but not returned)
+
 # 1.2.6 - 25 Dec 2024
 Bug fix:
 - mapResponse with onError caused compilation error

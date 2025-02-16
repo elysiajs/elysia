@@ -34,8 +34,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
-// @ts-ignore
-import fastDecode from 'fast-decode-uri-component'
+import { decode as fastDecode } from './deuri'
 
 const plusRegex = /\+/g
 

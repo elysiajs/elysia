@@ -1,21 +1,22 @@
-import { Elysia, t } from '../../src'
-import { generateHeapSnapshot } from 'bun'
+import { t } from '../../src'
+import { Memoirist } from 'memoirist'
 
 const total = 1000
+const stack: Memoirist<any>[] = []
 
 {
-	console.log('Elysia')
-
-	const app = new Elysia({ precompile: true })
 	const t1 = performance.now()
 	const memory = process.memoryUsage().heapTotal / 1024 / 1024
 
-	for (let i = 0; i < total; i++)
-		app.onBeforeHandle(() => {
-			return { a: 'ok' }
-		}).get(`/id/${i}`, () => 'hello', {
-			body: t.String()
-		})
+	for (let i = 0; i < total; i++) {
+		for (let i = 0; i < 2; i++) {
+			const router = new Memoirist()
+			router.add('GET', '/a', () => 'Hello, World!')
+			router.add('GET', '/b', () => 'Hello, World!')
+
+			stack.push(router)
+		}
+	}
 
 	const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024
 	const took = performance.now() - t1
@@ -27,9 +28,6 @@ const total = 1000
 		'ms'
 	)
 	console.log('Average', +(took / total).toFixed(4), 'ms / route')
-
-	const snapshot = generateHeapSnapshot()
-	await Bun.write('heap.json', JSON.stringify(snapshot, null, 2))
 
 	console.log(memoryAfter - memory, 'MB memory used')
 }

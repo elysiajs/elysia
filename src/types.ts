@@ -625,6 +625,10 @@ export type MacroContextBlacklistKey =
 	| 'tags'
 	| keyof RouteSchema
 
+type ReturnTypeIfPossible<T> = T extends (...args: any) => any
+	? ReturnType<T>
+	: T
+
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
@@ -646,9 +650,27 @@ export type MacroToContext<
 					>
 				}
 					? key
-					: never]: ResolveResolutions<
+					: MacroFn[key] extends {
+								resolve: MaybeArray<
+									(
+										...v: any
+									) => MaybePromise<
+										| Record<keyof any, unknown>
+										| void
+										| ElysiaCustomStatusResponse<
+												any,
+												any,
+												any
+										  >
+									>
+								>
+						  }
+						? true extends SelectedMacro[key]
+							? key
+							: never
+						: never]: ResolveResolutions<
 					// @ts-expect-error type is checked in key mapping
-					Awaited<ReturnType<MacroFn[key]>['resolve']>
+					Awaited<ReturnTypeIfPossible<MacroFn[key]>['resolve']>
 				>
 		  } extends infer A extends Record<RecordKey, unknown>
 		? IsNever<A[keyof A]> extends false
@@ -750,17 +772,29 @@ export type MapResponse<
 		resolve: {}
 	},
 	Path extends string | undefined = undefined
-> = Handler<
-	Omit<Route, 'response'> & {
-		response: {} extends Route['response'] ? unknown : Route['response']
-	},
-	Singleton & {
-		derive: {
-			response: Route['response']
-		}
-	},
-	Path
->
+> = (
+	context: Context<
+		Omit<Route, 'response'> & {},
+		Singleton & {
+			derive: {
+				response: {} extends Route['response']
+					? unknown
+					: Route['response']
+			}
+		},
+		Path
+	>
+) => MaybePromise<Response | void>
+
+// Handler<
+// 	Omit<Route, 'response'> & {},
+// 	Singleton & {
+// 		derive: {
+// 			response: {} extends Route['response'] ? unknown : Route['response']
+// 		}
+// 	},
+// 	Path
+// >
 
 export type VoidHandler<
 	in out Route extends RouteSchema = {},
@@ -991,6 +1025,23 @@ export type ErrorHandler<
 			  >
 			| Prettify<
 					{
+						request: Request
+						code: number
+						error: Readonly<ElysiaCustomStatusResponse<number>>
+						set: Context['set']
+					} & Partial<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+					> &
+						Partial<
+							Singleton['derive'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
+			  >
+			| Prettify<
+					{
 						[K in keyof T]: {
 							request: Request
 							code: K
@@ -1086,7 +1137,19 @@ export type ResolveResolutionsArray<
 		: ResolveResolutionsArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type AnyLocalHook = LocalHook<any, any, any, any, any>
+export type AnyLocalHook = LocalHook<any, any, any, any, any, any>
+
+type LocalHookKey =
+	| keyof InputSchema<any>
+	| 'detail'
+	| 'parse'
+	| 'transform'
+	| 'beforeHandle'
+	| 'afterHandle'
+	| 'mapResponse'
+	| 'afterResponse'
+	| 'error'
+	| 'tags'
 
 export type LocalHook<
 	LocalSchema extends InputSchema,
@@ -1094,12 +1157,24 @@ export type LocalHook<
 	Singleton extends SingletonBase,
 	Errors extends Record<string, Error>,
 	Macro extends BaseMacro,
+	MacroKey extends keyof any,
 	Parser extends string = ''
 > =
-	// Kind of inference hack, I have no idea why it work either
+	// Kind of an inference hack, I have no idea why it work either
 	(LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
 		Macro &
+		NoInfer<
+			keyof Macro extends ''
+				? {}
+				: {
+						[K in Exclude<
+							keyof Macro,
+							MacroKey | LocalHookKey
+						>]: never
+					}
+		> &
 		NoInfer<{
+			// a?(a: keyof Macro): void
 			detail?: DocumentDecoration
 			/**
 			 * Short for 'Content-Type'
@@ -1149,7 +1224,6 @@ export interface InternalRoute {
 	path: string
 	composed: ComposedHandler | Response | null
 	handler: Handler
-	compile(): Function
 	hooks: AnyLocalHook
 	websocket?: AnyWSLocalHook
 }
@@ -1289,16 +1363,30 @@ export type HookMacroFn<
 	in out Errors extends Record<string, Error> = {}
 > = Record<
 	keyof any,
-	(...a: any) => {
-		parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-		transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-		beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-		afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-		error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-		mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
-		afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
-		resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-	} | void
+	| {
+			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+			afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+			error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+			mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+			afterResponse?: MaybeArray<
+				AfterResponseHandler<TypedRoute, Singleton>
+			>
+			resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+	  }
+	| ((...a: any) => {
+			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+			afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+			error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+			mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+			afterResponse?: MaybeArray<
+				AfterResponseHandler<TypedRoute, Singleton>
+			>
+			resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+	  } | void)
 >
 
 export type MacroToProperty<
@@ -1306,9 +1394,9 @@ export type MacroToProperty<
 > = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
-			? Params | undefined
-			: T[K]
-		: T[K]
+			? Params
+			: boolean
+		: boolean
 }>
 
 interface MacroOptions {
@@ -1375,8 +1463,8 @@ export interface MacroManager<
 	): unknown
 
 	events: {
-		global: Prettify<LifeCycleStore & RouteSchema>
-		local: Prettify<LifeCycleStore & RouteSchema>
+		global: Partial<Prettify<LifeCycleStore & RouteSchema>>
+		local: Partial<Prettify<LifeCycleStore & RouteSchema>>
 	}
 }
 

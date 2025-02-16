@@ -374,7 +374,7 @@ export const ElysiaType = {
 							format: 'integer',
 							default: 0
 						}),
-						t.Number(property)
+						Type.Integer(property)
 					],
 					property
 				)
@@ -391,7 +391,9 @@ export const ElysiaType = {
 	},
 	Date: (property?: DateOptions) => {
 		const schema = Type.Date(property)
-
+		const _default = property?.default ?
+			new Date(property.default) : // in case the default is an ISO string or milliseconds from epoch
+			undefined;
 		return t
 			.Transform(
 				t.Union(
@@ -399,19 +401,19 @@ export const ElysiaType = {
 						Type.Date(property),
 						t.String({
 							format: 'date',
-							default: new Date().toISOString()
+							default: _default?.toISOString()
 						}),
 						t.String({
 							format: 'date-time',
-							default: new Date().toISOString()
+							default: _default?.toISOString()
 						}),
-						t.Number()
+						t.Number({ default: _default?.getTime() })
 					],
 					property
 				)
 			)
 			.Decode((value) => {
-				if(typeof value === "number") {
+				if (typeof value === 'number') {
 					const date = new Date(value)
 
 					if (!Value.Check(schema, date))
@@ -446,7 +448,7 @@ export const ElysiaType = {
 						t.String({
 							format: 'boolean',
 							default: false
-						}),
+						})
 					],
 					property
 				)
@@ -598,12 +600,13 @@ export const ElysiaType = {
 				return [value]
 			})
 			.Encode((value) => value),
-	Nullable: <T extends TSchema>(schema: T) => t.Union([schema, t.Null()]),
+	Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
+		t.Union([schema, t.Null()], options),
 	/**
 	 * Allow Optional, Nullable and Undefined
 	 */
-	MaybeEmpty: <T extends TSchema>(schema: T) =>
-		t.Union([schema, t.Null(), t.Undefined()]),
+	MaybeEmpty: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
+		t.Union([schema, t.Null(), t.Undefined()], options),
 	Cookie: <T extends TProperties>(
 		properties: T,
 		{
@@ -638,7 +641,11 @@ export const ElysiaType = {
 		return v
 	},
 	// based on https://github.com/elysiajs/elysia/issues/512#issuecomment-1980134955
-	UnionEnum: <const T extends NonEmptyArray<TEnumValue> | Readonly<NonEmptyArray<TEnumValue>>>(
+	UnionEnum: <
+		const T extends
+			| NonEmptyArray<TEnumValue>
+			| Readonly<NonEmptyArray<TEnumValue>>
+	>(
 		values: T,
 		options: SchemaOptions = {}
 	) => {

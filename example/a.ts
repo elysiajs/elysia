@@ -1,20 +1,21 @@
-import { Elysia, file, getSchemaValidator, t } from '../src'
-import { post, req } from '../test/utils'
+import { Elysia } from '../src'
 
-const app = new Elysia()
-	.onError(() => {})
-	.mapResponse(() => {
-		if (Math.random() > 2) return new Response('error', { status: 500 })
-	})
-	.get('/', async () => {
-		return 'ok'
+const app = new Elysia({ precompile: true })
+	.post('/json', ({ body }) => body, {
+		parse: 'json'
 	})
 	.listen(3000)
 
-// console.log(app.routes[0].compile().toString())
+console.log(app.routes[0].composed.toString())
 
-app.handle(req('/')).then(x => x.text()).then(console.log)
+const response = await app
+	.handle(
+		new Request('http://localhost:3000/json', {
+			method: 'POST',
+			body: JSON.stringify({ name: 'Aru' })
+		})
+	)
+	.then((x) => x.json())
 
-// console.log(
-// 	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-// )
+
+// console.log(app.fetch.toString())

@@ -2,6 +2,7 @@ import type { BunFile } from 'bun'
 import {
 	Kind,
 	TAnySchema,
+	TModule,
 	TransformKind,
 	type TSchema
 } from '@sinclair/typebox'
@@ -45,10 +46,12 @@ export const replaceUrlPath = (url: string, pathname: string) => {
 
 export const isClass = (v: Object) =>
 	(typeof v === 'function' && /^\s*class\s+/.test(v.toString())) ||
-	// Handle import * as Sentry from '@sentry/bun'
-	// This also handle [object Date], [object Array]
-	// and FFI value like [object Prisma]
-	(v.toString().startsWith('[object ') &&
+	// Handle Object.create(null)
+	(v.toString &&
+		// Handle import * as Sentry from '@sentry/bun'
+		// This also handle [object Date], [object Array]
+		// and FFI value like [object Prisma]
+		v.toString().startsWith('[object ') &&
 		v.toString() !== '[object Object]') ||
 	// If object prototype is not pure, then probably a class-like object
 	isNotEmpty(Object.getPrototypeOf(v))
@@ -95,22 +98,20 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 	a: A,
 	b: B
 ): A & B => {
-	// @ts-ignore
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const { properties: _, ...target } = a ?? {}
+	const v = mergeDeep(Object.assign({}, a), b, {
+		skipKeys: ['properties']
+	}) as A & B
 
-	// @ts-ignore
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const { properties: __, ...source } = b ?? {}
+	if ('properties' in v) delete v.properties
 
-	return mergeDeep(target, source) as A & B
+	return v
 }
 
 export const mergeObjectArray = <T extends HookContainer>(
 	a: T | T[] = [],
 	b: T | T[] = []
-): T[] => {
-	if (!a) return []
+): T[] | undefined => {
+	if (!a) return undefined
 	if (!b) return a as any
 
 	// ! Must copy to remove side-effect
@@ -169,10 +170,9 @@ export const mergeResponse = (
 	const isRecordNumber = (x: typeof a | typeof b): x is RecordNumber =>
 		typeof x === 'object' && Object.keys(x).every(isNumericString)
 
-	if (isRecordNumber(a) && isRecordNumber(b))
-		return { ...(a as RecordNumber), ...(b as RecordNumber) }
+	if (isRecordNumber(a) && isRecordNumber(b)) return Object.assign(a, b)
 	else if (a && !isRecordNumber(a) && isRecordNumber(b))
-		return { 200: a, ...(b as RecordNumber) }
+		return Object.assign({ 200: a }, b)
 
 	return b ?? a
 }
@@ -198,7 +198,7 @@ export const mergeSchemaValidator = (
 }
 
 export const mergeHook = (
-	a?: LifeCycleStore,
+	a?: Partial<LifeCycleStore>,
 	b?: AnyLocalHook
 	// { allowMacro = false }: { allowMacro?: boolean } = {}
 ): LifeCycleStore => {
@@ -573,27 +573,40 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	{
 		models = {},
 		dynamic = false,
+		modules,
 		normalize = false,
 		additionalProperties = false,
 		coerce = false,
 		additionalCoerce = []
 	}: {
 		models?: Record<string, TSchema>
+		modules: TModule<any, any>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: boolean
 		coerce?: boolean
 		additionalCoerce?: MaybeArray<ReplaceSchemaTypeOptions>
-	} = {}
+	} = {
+		modules: t.Module({})
+	}
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
 	if (typeof s === 'string' && !(s in models)) return undefined as any
 
-	let schema: TSchema = typeof s === 'string' ? models[s] : s
+	let schema: TSchema =
+		typeof s === 'string'
+			? // @ts-expect-error
+				((modules as TModule<{}, {}>).Import(s) ?? models[s])
+			: s
 
 	if (coerce || additionalCoerce) {
 		if (coerce)
 			schema = replaceSchemaType(schema, [
+				{
+					from: t.Ref(''),
+					// @ts-expect-error
+					to: (options) => modules.Import(options['$ref'])
+				},
 				{
 					from: t.Number(),
 					to: (options) => t.Numeric(options),
@@ -610,6 +623,11 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			])
 		else {
 			schema = replaceSchemaType(schema, [
+				{
+					from: t.Ref(''),
+					// @ts-expect-error
+					to: (options) => modules.Import(options['$ref'])
+				},
 				...(Array.isArray(additionalCoerce)
 					? additionalCoerce
 					: [additionalCoerce])
@@ -726,10 +744,12 @@ export const getResponseSchemaValidator = (
 	s: InputSchema['response'] | undefined,
 	{
 		models = {},
+		modules,
 		dynamic = false,
 		normalize = false,
 		additionalProperties = false
 	}: {
+		modules: TModule<any, any>
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
@@ -739,7 +759,11 @@ export const getResponseSchemaValidator = (
 	if (!s) return
 	if (typeof s === 'string' && !(s in models)) return
 
-	const maybeSchemaOrRecord = typeof s === 'string' ? models[s] : s
+	const maybeSchemaOrRecord =
+		typeof s === 'string'
+			? // @ts-ignore
+				((modules as TModule<{}, {}>).Import(s) ?? models[s])
+			: s
 
 	const compile = (schema: TSchema, references?: TSchema[]) => {
 		if (dynamic)
@@ -867,18 +891,21 @@ export const coercePrimitiveRoot = () => {
 
 export const getCookieValidator = ({
 	validator,
+	modules,
 	defaultConfig = {},
 	config,
 	dynamic,
 	models
 }: {
 	validator: TSchema | string | undefined
+	modules: TModule<any, any>
 	defaultConfig: CookieOptions | undefined
 	config: CookieOptions
 	dynamic: boolean
 	models: Record<string, TSchema> | undefined
 }) => {
 	let cookieValidator = getSchemaValidator(validator, {
+		modules,
 		dynamic,
 		models,
 		additionalProperties: true,
@@ -896,6 +923,7 @@ export const getCookieValidator = ({
 			)
 		} else {
 			cookieValidator = getSchemaValidator(t.Cookie({}), {
+				modules,
 				dynamic,
 				models,
 				additionalProperties: true
@@ -938,13 +966,11 @@ export const injectChecksum = (
 }
 
 export const mergeLifeCycle = (
-	a: LifeCycleStore,
-	b: LifeCycleStore | AnyLocalHook,
+	a: Partial<LifeCycleStore>,
+	b: Partial<LifeCycleStore | AnyLocalHook>,
 	checksum?: number
 ): LifeCycleStore => {
 	return {
-		// ...a,
-		// ...b,
 		start: mergeObjectArray(
 			a.start,
 			injectChecksum(checksum, b?.start)
@@ -1207,14 +1233,15 @@ export const traceBackMacro = (
 			const hook = v(value)
 
 			if (typeof hook === 'object') {
-				for (const [k, v] of Object.entries(hook))
+				for (const [k, v] of Object.entries(hook)) {
 					manage(k as keyof LifeCycleStore)({
 						fn: v as any
 					})
+				}
 			}
-
-			delete property[key as unknown as keyof typeof extension]
 		}
+
+		delete property[key as unknown as keyof typeof extension]
 	}
 }
 
@@ -1223,8 +1250,8 @@ export const createMacroManager =
 		globalHook,
 		localHook
 	}: {
-		globalHook: LifeCycleStore
-		localHook: AnyLocalHook
+		globalHook: Partial<LifeCycleStore>
+		localHook: Partial<AnyLocalHook>
 	}) =>
 	(stackName: keyof LifeCycleStore) =>
 	(
@@ -1240,6 +1267,14 @@ export const createMacroManager =
 			type = {
 				fn: type
 			}
+
+		// @ts-expect-error this is available in macro v2
+		if (stackName === 'resolve') {
+			type = {
+				...type,
+				subType: 'resolve'
+			}
+		}
 
 		if ('fn' in type || Array.isArray(type)) {
 			if (!localHook[stackName]) localHook[stackName] = []
@@ -1418,21 +1453,34 @@ export const localHookToLifeCycleStore = (a: AnyLocalHook): LifeCycleStore => {
 	}
 }
 
-export const lifeCycleToFn = (a: LifeCycleStore): AnyLocalHook => {
-	return {
-		...a,
-		start: a.start?.map((x) => x.fn),
-		request: a.request?.map((x) => x.fn),
-		parse: a.parse?.map((x) => x.fn),
-		transform: a.transform?.map((x) => x.fn),
-		beforeHandle: a.beforeHandle?.map((x) => x.fn),
-		afterHandle: a.afterHandle?.map((x) => x.fn),
-		afterResponse: a.afterResponse?.map((x) => x.fn),
-		mapResponse: a.mapResponse?.map((x) => x.fn),
-		trace: a.trace?.map((x) => x.fn),
-		error: a.error?.map((x) => x.fn),
-		stop: a.stop?.map((x) => x.fn)
-	}
+export const lifeCycleToFn = (a: Partial<LifeCycleStore>): AnyLocalHook => {
+	const hook: Partial<HookContainer> = {}
+
+	// @ts-expect-error
+	if (a.start?.map) hook.start = a.start.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.request?.map) hook.request = a.request.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.parse?.map) hook.parse = a.parse.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.transform?.map) hook.transform = a.transform.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.beforeHandle?.map) hook.beforeHandle = a.beforeHandle.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.afterHandle?.map) hook.afterHandle = a.afterHandle.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.mapResponse?.map) hook.mapResponse = a.mapResponse.map((x) => x.fn)
+	if (a.afterResponse?.map)
+		// @ts-expect-error
+		hook.afterResponse = a.afterResponse.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.trace?.map) hook.trace = a.trace.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.error?.map) hook.error = a.error.map((x) => x.fn)
+	// @ts-expect-error
+	if (a.stop?.map) hook.stop = a.stop.map((x) => x.fn)
+
+	return hook
 }
 
 export const cloneInference = (inference: Sucrose.Inference) =>
@@ -1526,9 +1574,11 @@ export const deduplicateChecksum = <T extends Function>(
  * We can just promote back without worry
  */
 export const promoteEvent = (
-	events: (HookContainer | Function)[],
+	events?: (HookContainer | Function)[],
 	as: 'scoped' | 'global' = 'scoped'
 ): void => {
+	if (!events) return
+
 	if (as === 'scoped') {
 		for (const event of events)
 			if ('scope' in event && event.scope === 'local')
@@ -1604,4 +1654,78 @@ export const isNotEmpty = (obj?: Object) => {
 	for (const x in obj) return true
 
 	return false
+}
+
+const isEmptyHookProperty = (prop: unknown) => {
+	if (Array.isArray(prop)) return prop.length === 0
+
+	return !prop
+}
+
+export const compressHistoryHook = (hook: LifeCycleStore) => {
+	const history: Partial<LifeCycleStore> = { ...hook }
+
+	if (isEmptyHookProperty(hook.afterHandle)) delete history.afterHandle
+	if (isEmptyHookProperty(hook.afterResponse)) delete history.afterResponse
+	if (isEmptyHookProperty(hook.beforeHandle)) delete history.beforeHandle
+	if (isEmptyHookProperty(hook.error)) delete history.error
+	if (isEmptyHookProperty(hook.mapResponse)) delete history.mapResponse
+	if (isEmptyHookProperty(hook.parse)) delete history.parse
+	if (isEmptyHookProperty(hook.request)) delete history.request
+	if (isEmptyHookProperty(hook.start)) delete history.start
+	if (isEmptyHookProperty(hook.stop)) delete history.stop
+	if (isEmptyHookProperty(hook.trace)) delete history.trace
+	if (isEmptyHookProperty(hook.transform)) delete history.transform
+
+	if (!history.type) delete history.type
+	// @ts-expect-error
+	if (history.detail && !Object.keys(history.detail).length)
+		// @ts-expect-error
+		delete history.detail
+
+	// @ts-expect-error
+	if (!history.body) delete history.body
+	// @ts-expect-error
+	if (!history.cookie) delete history.cookie
+	// @ts-expect-error
+	if (!history.headers) delete history.headers
+	// @ts-expect-error
+	if (!history.query) delete history.query
+	// @ts-expect-error
+	if (!history.params) delete history.params
+	// @ts-expect-error
+	if (!history.response) delete history.response
+
+	return history
+}
+
+export const decompressHistoryHook = (hook: Partial<LifeCycleStore>) => {
+	const history = { ...hook } as LifeCycleStore
+
+	if (!history.afterHandle) history.afterHandle = []
+	if (!history.afterResponse) history.afterResponse = []
+	if (!history.beforeHandle) history.beforeHandle = []
+	if (!history.error) history.error = []
+	if (!history.mapResponse) history.mapResponse = []
+	if (!history.parse) history.parse = []
+	if (!history.request) history.request = []
+	if (!history.start) history.start = []
+	if (!history.stop) history.stop = []
+	if (!history.trace) history.trace = []
+	if (!history.transform) history.transform = []
+
+	// @ts-expect-error
+	if (!history.body) history.body = undefined
+	// @ts-expect-error
+	if (!history.cookie) history.cookie = undefined
+	// @ts-expect-error
+	if (!history.headers) history.headers = undefined
+	// @ts-expect-error
+	if (!history.query) history.query = undefined
+	// @ts-expect-error
+	if (!history.params) history.params = undefined
+	// @ts-expect-error
+	if (!history.response) history.response = undefined
+
+	return history
 }

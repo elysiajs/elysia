@@ -34,7 +34,9 @@ import {
 	PromiseGroup,
 	promoteEvent,
 	stringToStructureCoercions,
-	isNotEmpty
+	isNotEmpty,
+	replaceSchemaType,
+	compressHistoryHook
 } from './utils'
 
 import {
@@ -242,35 +244,31 @@ export default class Elysia<
 		}
 	}
 
-	event: LifeCycleStore = {
-		start: [],
-		request: [],
-		parse: [],
-		transform: [],
-		beforeHandle: [],
-		afterHandle: [],
-		mapResponse: [],
-		afterResponse: [],
-		trace: [],
-		error: [],
-		stop: []
-	}
+	event: Partial<LifeCycleStore> = {}
 
 	protected telemetry = {
 		stack: undefined as string | undefined
 	}
 
 	router = {
-		http: new Memoirist<{
-			compile: Function
-			handler?: ComposedHandler
-		}>(),
-		ws: new Memoirist<{
-			compile: Function
-			handler?: ComposedHandler
-		}>(),
+		'~http': undefined as
+			| Memoirist<{
+					compile: Function
+					handler?: ComposedHandler
+			  }>
+			| undefined,
+		get http() {
+			if (!this['~http']) this['~http'] = new Memoirist({ lazy: true })
+
+			return this['~http']
+		},
+		'~dynamic': undefined as Memoirist<DynamicHandler> | undefined,
 		// Use in non-AOT mode
-		dynamic: new Memoirist<DynamicHandler>(),
+		get dynamic() {
+			if (!this['~dynamic']) this['~dynamic'] = new Memoirist()
+
+			return this['~dynamic']
+		},
 		static: {
 			http: {
 				static: {} as Record<string, Response>,
@@ -351,6 +349,7 @@ export default class Elysia<
 
 	env(model: TObject<any>, _env = env) {
 		const validator = getSchemaValidator(model, {
+			modules: this.definitions.typebox,
 			dynamic: true,
 			additionalProperties: true,
 			coerce: true
@@ -453,9 +452,10 @@ export default class Elysia<
 	} {
 		const models: Record<string, TypeCheck<TSchema>> = {}
 
-		for (const [name, schema] of Object.entries(this.definitions.type))
+		for (const name of Object.keys(this.definitions.type))
 			models[name] = getSchemaValidator(
-				schema as any
+				// @ts-expect-error
+				this.definitions.typebox.Import(name)
 			) as TypeCheck<TSchema>
 
 		// @ts-expect-error
@@ -474,7 +474,7 @@ export default class Elysia<
 			skipPrefix: false as boolean | undefined
 		}
 	) {
-		localHook = localHookToLifeCycleStore(localHook)
+		localHook = compressHistoryHook(localHookToLifeCycleStore(localHook))
 
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
@@ -525,6 +525,7 @@ export default class Elysia<
 		const cookieValidator = () =>
 			cloned.cookie
 				? getCookieValidator({
+						modules,
 						validator: cloned.cookie,
 						defaultConfig: this.config.cookie,
 						config: cloned.cookie?.config ?? {},
@@ -534,6 +535,7 @@ export default class Elysia<
 				: undefined
 
 		const normalize = this.config.normalize
+		const modules = this.definitions.typebox
 
 		const validator =
 			this.config.precompile === true ||
@@ -541,12 +543,14 @@ export default class Elysia<
 				this.config.precompile.schema === true)
 				? {
 						body: getSchemaValidator(cloned.body, {
+							modules,
 							dynamic,
 							models,
 							normalize,
 							additionalCoerce: coercePrimitiveRoot()
 						}),
 						headers: getSchemaValidator(cloned.headers, {
+							modules,
 							dynamic,
 							models,
 							additionalProperties: !this.config.normalize,
@@ -554,12 +558,14 @@ export default class Elysia<
 							additionalCoerce: stringToStructureCoercions()
 						}),
 						params: getSchemaValidator(cloned.params, {
+							modules,
 							dynamic,
 							models,
 							coerce: true,
 							additionalCoerce: stringToStructureCoercions()
 						}),
 						query: getSchemaValidator(cloned.query, {
+							modules,
 							dynamic,
 							models,
 							normalize,
@@ -568,6 +574,7 @@ export default class Elysia<
 						}),
 						cookie: cookieValidator(),
 						response: getResponseSchemaValidator(cloned.response, {
+							modules,
 							dynamic,
 							models,
 							normalize
@@ -580,6 +587,7 @@ export default class Elysia<
 							return (this.body = getSchemaValidator(
 								cloned.body,
 								{
+									modules,
 									dynamic,
 									models,
 									normalize,
@@ -593,6 +601,7 @@ export default class Elysia<
 							return (this.headers = getSchemaValidator(
 								cloned.headers,
 								{
+									modules,
 									dynamic,
 									models,
 									additionalProperties: !normalize,
@@ -608,6 +617,7 @@ export default class Elysia<
 							return (this.params = getSchemaValidator(
 								cloned.params,
 								{
+									modules,
 									dynamic,
 									models,
 									coerce: true,
@@ -622,6 +632,7 @@ export default class Elysia<
 							return (this.query = getSchemaValidator(
 								cloned.query,
 								{
+									modules,
 									dynamic,
 									models,
 									coerce: true,
@@ -641,6 +652,7 @@ export default class Elysia<
 							return (this.response = getResponseSchemaValidator(
 								cloned.response,
 								{
+									modules,
 									dynamic,
 									models,
 									normalize
@@ -649,8 +661,10 @@ export default class Elysia<
 						}
 					} as any)
 
-		// ! Init default [] for hooks if undefined
-		localHook = mergeHook(localHook, instanceValidator)
+		localHook = mergeHook(
+			localHook,
+			compressHistoryHook(instanceValidator as any)
+		)
 
 		if (localHook.tags) {
 			if (!localHook.detail)
@@ -667,8 +681,7 @@ export default class Elysia<
 			)
 
 		this.applyMacro(localHook)
-
-		const hooks = mergeHook(this.event, localHook)
+		const hooks = compressHistoryHook(mergeHook(this.event, localHook))
 
 		if (this.config.aot === false) {
 			this.router.dynamic.add(method, path, {
@@ -691,8 +704,7 @@ export default class Elysia<
 				path,
 				composed: null,
 				handler: handle,
-				hooks: hooks as any,
-				compile: handle
+				hooks
 			})
 
 			return
@@ -729,12 +741,13 @@ export default class Elysia<
 		)
 			this.router.static.http.static[path] = nativeStaticHandler()
 
-		const compile = (asManifest = false) =>
+		let compile: ((asManifest?: boolean) => ComposedHandler) | undefined = (
+			asManifest = false
+		) =>
 			composeHandler({
 				app: this,
 				path,
 				method,
-				localHook: mergeHook(localHook),
 				hooks,
 				validator,
 				handler:
@@ -767,28 +780,44 @@ export default class Elysia<
 
 		const mainHandler = shouldPrecompile
 			? compile()
-			: (ctx: Context) =>
-					((history[index].composed = compile()) as ComposedHandler)(
-						ctx
-					)
+			: (ctx: Context) => {
+					const temp = (
+						(history[index].composed =
+							compile!()) as ComposedHandler
+					)(ctx)
+
+					compile = undefined
+
+					return temp
+				}
+
+		if (shouldPrecompile) compile = undefined
 
 		const isWebSocket = method === '$INTERNALWS'
 
-		this.router.history.push({
-			method,
-			path,
-			composed: mainHandler,
-			handler: handle,
-			hooks: hooks as any,
-			compile: () => compile(),
-			websocket: localHook.websocket as any
-		})
+		this.router.history.push(
+			// @ts-ignore
+			Object.assign(
+				{
+					method,
+					path,
+					composed: mainHandler,
+					handler: handle,
+					hooks
+				},
+				localHook.webSocket
+					? { websocket: localHook.websocket as any }
+					: {}
+			)
+		)
 
 		const staticRouter = this.router.static.http
 
 		const handler = {
 			handler: shouldPrecompile ? mainHandler : undefined,
-			compile
+			compile() {
+				return (this.handler = compile!())
+			}
 		}
 
 		if (isWebSocket) {
@@ -797,8 +826,8 @@ export default class Elysia<
 			if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
 				this.router.static.ws[path] = index
 			} else {
-				this.router.ws.add('ws', path, handler)
-				if (loose) this.router.ws.add('ws', loose, handler)
+				this.router.http.add('ws', path, handler)
+				if (loose) this.router.http.add('ws', loose, handler)
 			}
 
 			return
@@ -2487,61 +2516,74 @@ export default class Elysia<
 
 			switch (type) {
 				case 'start':
+					this.event.start ??= []
 					this.event.start.push(fn as any)
 					break
 
 				case 'request':
+					this.event.request ??= []
 					this.event.request.push(fn as any)
 					break
 
 				case 'parse':
+					this.event.parse ??= []
 					this.event.parse.push(fn as any)
 					break
 
 				case 'transform':
+					this.event.transform ??= []
 					this.event.transform.push(fn as any)
 					break
 
 				// @ts-expect-error
 				case 'derive':
+					this.event.transform ??= []
 					this.event.transform.push(
 						fnToContainer(fn as any, 'derive') as any
 					)
 					break
 
 				case 'beforeHandle':
+					this.event.beforeHandle ??= []
 					this.event.beforeHandle.push(fn as any)
 					break
 
 				// @ts-expect-error
 				// eslint-disable-next-line sonarjs/no-duplicated-branches
 				case 'resolve':
+					this.event.beforeHandle ??= []
 					this.event.beforeHandle.push(
 						fnToContainer(fn as any, 'resolve') as any
 					)
 					break
 
 				case 'afterHandle':
+					this.event.afterHandle ??= []
 					this.event.afterHandle.push(fn as any)
 					break
 
 				case 'mapResponse':
+					this.event.mapResponse ??= []
 					this.event.mapResponse.push(fn as any)
 					break
 
 				case 'afterResponse':
+					this.event.afterResponse ??= []
 					this.event.afterResponse.push(fn as any)
 					break
 
 				case 'trace':
+					this.event.trace ??= []
 					this.event.trace.push(fn as any)
 					break
 
 				case 'error':
+					this.event.error ??= []
 					this.event.error.push(fn as any)
 					break
 
 				case 'stop':
+					this.event.stop ??= []
 					this.event.stop.push(fn as any)
 					break
 			}
@@ -2740,6 +2782,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>,
 		run: (
@@ -2817,13 +2860,13 @@ export default class Elysia<
 		this.singleton = mergeDeep(this.singleton, instance.singleton) as any
 		this.definitions = mergeDeep(this.definitions, instance.definitions)
 
-		if (sandbox.event.request.length)
+		if (sandbox.event.request?.length)
 			this.event.request = [
 				...(this.event.request || []),
 				...((sandbox.event.request || []) as any)
 			]
 
-		if (sandbox.event.mapResponse.length)
+		if (sandbox.event.mapResponse?.length)
 			this.event.mapResponse = [
 				...(this.event.mapResponse || []),
 				...((sandbox.event.mapResponse || []) as any)
@@ -2885,7 +2928,12 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
 		>,
-		const Type extends LifeCycleType
+		const Type extends LifeCycleType,
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>
 	>(
 		hook: { as: Type } & LocalHook<
 			LocalSchema,
@@ -2895,7 +2943,8 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			keyof Metadata['macro'] | 'as',
 			keyof Metadata['parser'] & string
 		>
 	): Type extends 'global'
@@ -2905,7 +2954,7 @@ export default class Elysia<
 					decorator: Singleton['decorator']
 					store: Singleton['store']
 					derive: Singleton['derive']
-					resolve: Singleton['resolve']
+					resolve: Prettify<Singleton['resolve'] & MacroContext>
 				},
 				Definitions,
 				{
@@ -2936,7 +2985,7 @@ export default class Elysia<
 					Routes,
 					{
 						derive: Volatile['derive']
-						resolve: Volatile['resolve']
+						resolve: Prettify<Volatile['resolve'] & MacroContext>
 						schema: Prettify<
 							MergeSchema<
 								UnwrapRoute<
@@ -2958,7 +3007,7 @@ export default class Elysia<
 					Ephemeral,
 					{
 						derive: Volatile['derive']
-						resolve: Volatile['resolve']
+						resolve: Prettify<Volatile['resolve'] & MacroContext>
 						schema: Prettify<
 							MergeSchema<
 								UnwrapRoute<
@@ -2980,6 +3029,11 @@ export default class Elysia<
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
+		>,
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
 		>
 	>(
 		hook: LocalHook<
@@ -2987,10 +3041,13 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroContext
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -3002,7 +3059,7 @@ export default class Elysia<
 		Ephemeral,
 		{
 			derive: Volatile['derive']
-			resolve: Volatile['resolve']
+			resolve: Prettify<Volatile['resolve'] & MacroContext>
 			schema: Prettify<
 				MergeSchema<
 					UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
@@ -3023,12 +3080,22 @@ export default class Elysia<
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
+		>,
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
 		>
 	>(
 		run: (
 			group: Elysia<
 				BasePath,
-				Singleton,
+				{
+					decorator: Singleton['decorator']
+					store: Singleton['store']
+					derive: Singleton['derive']
+					resolve: Singleton['resolve'] & MacroContext
+				},
 				Definitions,
 				{
 					schema: Prettify<Schema>
@@ -3060,14 +3127,10 @@ export default class Elysia<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
 			Metadata['schema']
 		>,
-		const Resolutions extends MaybeArray<
-			ResolveHandler<
-				Schema,
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
-			>
+		const Macro extends Metadata['macro'],
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
 		>
 	>(
 		schema: LocalHook<
@@ -3078,7 +3141,8 @@ export default class Elysia<
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
 			Definitions['error'],
-			Metadata['macro'],
+			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>,
 		run: (
@@ -3088,8 +3152,7 @@ export default class Elysia<
 					decorator: Singleton['decorator']
 					store: Singleton['store']
 					derive: Singleton['derive']
-					resolve: Singleton['resolve'] &
-						ResolveResolutions<Resolutions>
+					resolve: Prettify<Singleton['resolve'] & MacroContext>
 				},
 				Definitions,
 				{
@@ -3110,7 +3173,11 @@ export default class Elysia<
 		Metadata,
 		Prettify<Routes & NewElysia['_routes']>,
 		Ephemeral,
-		Volatile
+		{
+			derive: Volatile['derive']
+			resolve: Prettify<Volatile['resolve'] & MacroContext>
+			schema: Volatile['schema']
+		}
 	>
 
 	/**
@@ -3216,13 +3283,13 @@ export default class Elysia<
 		// ? Inject getServer for websocket and trace (important, do not remove)
 		sandbox.getServer = () => this.server
 
-		if (sandbox.event.request.length)
+		if (sandbox.event.request?.length)
 			this.event.request = [
 				...(this.event.request || []),
 				...(sandbox.event.request || [])
 			]
 
-		if (sandbox.event.mapResponse.length)
+		if (sandbox.event.mapResponse?.length)
 			this.event.mapResponse = [
 				...(this.event.mapResponse || []),
 				...(sandbox.event.mapResponse || [])
@@ -3448,9 +3515,18 @@ export default class Elysia<
 						if (plugin.constructor.name === 'Elysia')
 							return this._use(plugin.default)
 
-						throw new Error(
-							'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
-						)
+						if (plugin.constructor.name === '_Elysia')
+							return this._use(plugin.default)
+
+						try {
+							return this._use(plugin.default)
+						} catch (error) {
+							console.error(
+								'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
+							)
+
+							throw error
+						}
 					})
 					.then((x) => x.compile())
 			)
@@ -3487,7 +3563,7 @@ export default class Elysia<
 									path,
 									handler,
 									hooks
-								} of Object.values(plugin.router.history)) {
+								} of Object.values(plugin.router.history))
 									this.add(
 										method,
 										path,
@@ -3496,7 +3572,6 @@ export default class Elysia<
 											error: plugin.event.error
 										})
 									)
-								}
 
 								plugin.compile()
 
@@ -3649,13 +3724,13 @@ export default class Elysia<
 							store: plugin.singleton.store,
 							error: plugin.definitions.error,
 							derive: plugin.event.transform
-								.filter((x) => x?.subType === 'derive')
+								?.filter((x) => x?.subType === 'derive')
 								.map((x) => ({
 									fn: x.toString(),
 									stack: new Error().stack ?? ''
 								})),
 							resolve: plugin.event.transform
-								.filter((x) => x?.subType === 'resolve')
+								?.filter((x) => x?.subType === 'resolve')
 								.map((x) => ({
 									fn: x.toString(),
 									stack: new Error().stack ?? ''
@@ -3725,7 +3800,10 @@ export default class Elysia<
 	macro<
 		const NewMacro extends HookMacroFn<
 			Metadata['schema'],
-			Singleton,
+			Singleton & {
+				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+			},
 			Definitions['error']
 		>
 	>(
@@ -3760,6 +3838,15 @@ export default class Elysia<
 
 			this.extender.macros.push(hook)
 		} else if (typeof macro === 'object') {
+			for (const name of Object.keys(macro))
+				if (typeof macro[name] === 'object') {
+					const actualValue = { ...(macro[name] as Object) }
+
+					macro[name] = (v: boolean) => {
+						if (v === true) return actualValue
+					}
+				}
+
 			const hook: MacroQueue = {
 				checksum: checksum(
 					JSON.stringify({
@@ -3927,7 +4014,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -3941,10 +4028,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4014,7 +4102,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4028,10 +4116,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4101,7 +4190,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4115,10 +4204,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4188,7 +4278,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4202,10 +4292,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4275,7 +4366,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4289,10 +4380,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4362,7 +4454,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4376,10 +4468,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4449,7 +4542,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4463,10 +4556,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4536,7 +4630,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4550,10 +4644,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4623,7 +4718,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4637,10 +4732,11 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
+					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		>
 	): Elysia<
@@ -4705,7 +4801,10 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>,
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>,
 		const Handle extends InlineHandler<
 			Schema,
 			Singleton & {
@@ -4731,6 +4830,7 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
+			keyof Metadata['macro'],
 			keyof Metadata['parser'] & string
 		> & {
 			config: {
@@ -4799,7 +4899,10 @@ export default class Elysia<
 			>
 		>,
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<Metadata['macroFn'], Macro>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			NoInfer<Macro>
+		>
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -4811,7 +4914,8 @@ export default class Elysia<
 					Volatile['resolve'] &
 					MacroContext
 			},
-			Macro
+			Macro,
+			keyof Macro
 		>
 	): Elysia<
 		BasePath,
@@ -5617,24 +5721,41 @@ export default class Elysia<
 	>
 
 	model(name: string | Record<string, TSchema> | Function, model?: TSchema) {
+		const coerce = (schema: TSchema) =>
+			replaceSchemaType(schema, [
+				{
+					from: t.Number(),
+					to: (options) => t.Numeric(options),
+					untilObjectFound: true
+				},
+				{
+					from: t.Boolean(),
+					to: (options) => t.BooleanString(options),
+					untilObjectFound: true
+				}
+			])
+
 		switch (typeof name) {
 			case 'object':
+				const parsedSchemas = {} as Record<string, TSchema>
+
 				Object.entries(name).forEach(([key, value]) => {
 					if (!(key in this.definitions.type))
-						this.definitions.type[key] = value as TSchema
+						parsedSchemas[key] = this.definitions.type[key] =
+							coerce(value) as TSchema
 				})
 				// @ts-expect-error
 				this.definitions.typebox = t.Module({
 					...(this.definitions.typebox['$defs'] as TModule<{}>),
-					...name
+					...parsedSchemas
 				} as any)
 
 				return this
 
 			case 'function':
-				const result = name(this.definitions.type)
+				const result = coerce(name(this.definitions.type))
 				this.definitions.type = result
-				this.definitions.typebox = t.Module(result)
+				this.definitions.typebox = t.Module(result as any)
 
 				return this as any
 		}
@@ -6065,7 +6186,7 @@ export default class Elysia<
 			this.server.stop(closeActiveConnections)
 			this.server = null
 
-			if (this.event.stop.length)
+			if (this.event.stop?.length)
 				for (let i = 0; i < this.event.stop.length; i++)
 					this.event.stop[i].fn(this)
 		}

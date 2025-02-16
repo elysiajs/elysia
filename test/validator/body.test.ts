@@ -194,6 +194,40 @@ describe('Body Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('rejects malformed integer from array object', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Array(
+				t.Object({
+					name: t.String(),
+					job: t.String(),
+					trait: t.Optional(t.String()),
+					age: t.Integer(),
+					rank: t.Integer()
+				})
+			)
+		})
+		const res = await app.handle(
+			post('/', [
+				{
+					name: 'sucrose',
+					job: 'alchemist',
+					age: 16.4,
+					rank: 4
+				}
+			])
+		)
+
+		expect(res.status).toBe(422)
+	})
+
+	it('rejects malformed integer directly in array', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Array(t.Integer())
+		})
+		const res = await app.handle(post('/', [1, 2, 3, 4.2]))
+
+		expect(res.status).toBe(422)
+	})
 	it('validate empty body', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Union([

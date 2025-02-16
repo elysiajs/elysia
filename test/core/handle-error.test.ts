@@ -70,9 +70,7 @@ describe('Handle Error', () => {
 	})
 
 	it('inject headers to error', async () => {
-		const app = new Elysia({
-			forceErrorEncapsulation: true
-		})
+		const app = new Elysia()
 			.onRequest(({ set }) => {
 				set.headers['Access-Control-Allow-Origin'] = '*'
 			})
@@ -247,5 +245,95 @@ describe('Handle Error', () => {
 			.handle(req('/?aid=a'))
 		expect(response.status).toEqual(404)
 		expect(await response.text()).toEqual('foo')
+	})
+
+	it('map status error to response', async () => {
+		const value = { message: 'meow!' }
+
+		const response: Response = await new Elysia()
+			.get('/', () => 'Hello', {
+				beforeHandle({ error }) {
+					throw error("I'm a teapot", { message: 'meow!' })
+				}
+			})
+			// @ts-expect-error private property
+			.handleError(
+				{
+					request: new Request('http://localhost/'),
+					set: {
+						headers: {}
+					}
+				},
+				error(422, value) as any
+			)
+
+		expect(await response.json()).toEqual(value)
+		expect(response.headers.get('content-type')).toStartWith(
+			'application/json'
+		)
+		expect(response.status).toEqual(422)
+	})
+
+	it('map status error with custom mapResponse', async () => {
+		const value = { message: 'meow!' }
+
+		const response: Response = await new Elysia()
+			.mapResponse(({ response }) => {
+				if (typeof response === 'object')
+					return new Response('Don Quixote', {
+						headers: {
+							'content-type': 'text/plain'
+						}
+					})
+			})
+			.get('/', () => 'Hello', {
+				beforeHandle({ error }) {
+					throw error("I'm a teapot", { message: 'meow!' })
+				}
+			})
+			// @ts-expect-error private property
+			.handleError(
+				{
+					request: new Request('http://localhost/'),
+					set: {
+						headers: {}
+					}
+				},
+				error(422, value) as any
+			)
+
+		expect(await response.text()).toBe('Don Quixote')
+		expect(response.headers.get('content-type')).toStartWith('text/plain')
+		expect(response.status).toEqual(422)
+	})
+
+	it('handle generic error', async () => {
+		const res = await new Elysia()
+			.get('/', () => 'Hi')
+			// @ts-expect-error private
+			.handleError(
+				{
+					request,
+					set: {
+						headers: {}
+					}
+				},
+				// https://youtube.com/shorts/PbIWVPKHfrQ
+				new Error('a')
+			)
+
+		expect(await res.text()).toBe('a')
+		expect(res.status).toBe(500)
+	})
+
+	it('handle generic error when thrown in handler', async () => {
+		const app = new Elysia().get('/', () => {
+			throw new Error('a')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.text()).toBe('a')
+		expect(res.status).toBe(500)
 	})
 })

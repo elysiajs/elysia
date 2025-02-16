@@ -110,27 +110,40 @@ describe('Params Validator', () => {
 		})
 
 		const res = await app.handle(req('/id/617.1234'))
-		expect(await res.json()).toEqual({
+		expect(await res.json()).toMatchObject({
+			type: 'validation',
+			on: 'params',
+			summary: "Property 'id' should be one of: 'integer', 'integer'",
+			property: '/id',
+			message: 'Expected union value',
+			expected: {
+				id: 0
+			},
+			found: {
+				id: '617.1234'
+			},
 			errors: [
 				{
-					errors: [],
-					message: 'Expected integer',
-					path: '',
+					type: 62,
 					schema: {
-						type: 'integer'
+						anyOf: [
+							{
+								format: 'integer',
+								default: 0,
+								type: 'string'
+							},
+							{
+								type: 'integer'
+							}
+						]
 					},
-					summary: 'Expected integer',
-					type: 27,
-					value: 617.1234
+					path: '/id',
+					value: '617.1234',
+					message: 'Expected union value',
+					summary:
+						"Property 'id' should be one of: 'integer', 'integer'"
 				}
-			],
-			expected: 0,
-			found: 617.1234,
-			message: 'Expected integer',
-			on: 'property',
-			property: 'root',
-			summary: 'Expected integer',
-			type: 'validation'
+			]
 		})
 		expect(res.status).toBe(422)
 	})

@@ -66,7 +66,10 @@ export const BunAdapter: ElysiaAdapter = {
 							...(app.config.serve || {}),
 							...(options || {}),
 							// @ts-ignore
-							static: app.router.static.http.static,
+							static: {
+								...app.router.static.http.static,
+								...app.config.serve?.static
+							},
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {})
@@ -93,18 +96,20 @@ export const BunAdapter: ElysiaAdapter = {
 
 			app.server = Bun?.serve(serve)
 
-			for (let i = 0; i < app.event.start.length; i++)
-				app.event.start[i].fn(app)
+			if (app.event.start)
+				for (let i = 0; i < app.event.start.length; i++)
+					app.event.start[i].fn(app)
 
 			if (callback) callback(app.server!)
 
 			process.on('beforeExit', () => {
 				if (app.server) {
-					app.server.stop()
+					app.server.stop?.()
 					app.server = null
 
-					for (let i = 0; i < app.event.stop.length; i++)
-						app.event.stop[i].fn(app)
+					if (app.event.stop)
+						for (let i = 0; i < app.event.stop.length; i++)
+							app.event.stop[i].fn(app)
 				}
 			})
 
@@ -120,11 +125,15 @@ export const BunAdapter: ElysiaAdapter = {
 
 		const validateMessage = getSchemaValidator(body, {
 			// @ts-expect-error private property
+			modules: app.definitions.typebox,
+			// @ts-expect-error private property
 			models: app.definitions.type as Record<string, TSchema>,
 			normalize: app.config.normalize
 		})
 
 		const validateResponse = getSchemaValidator(response as any, {
+			// @ts-expect-error private property
+			modules: app.definitions.typebox,
 			// @ts-expect-error private property
 			models: app.definitions.type as Record<string, TSchema>,
 			normalize: app.config.normalize
