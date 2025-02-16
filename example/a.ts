@@ -1,16 +1,21 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const PATH = '/y a y'
 
-const app = new Elysia({ precompile: true }).get('/y a y/:id', ({ params: { id } }) => id).compile()
+const app = new Elysia({ precompile: true })
+	.post('/a', ({ body: { image } }) => image, {
+		parse: 'formdata',
+		body: t.Object({
+			image: t.File({ maxSize: 10000000, type: 'image/*' })
+		}),
+		transform({ body }) {
+			console.log({ body })
+		}
+	})
+	.listen(3000)
 
-app.router.http.build()
-console.log(app.router.http)
-
-const response = await app.handle(new Request(`http://localhost/y a y/1`))
-
-console.log(response.status)
-console.log(await response.text())
+// console.log(response.status)
+// console.log(await response.text())
 
 // expect(response.status).toBe(200)
 // expect(await response.text()).toBe('1')

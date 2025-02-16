@@ -10,7 +10,6 @@ import {
 	TInteger,
 	IntegerOptions,
 	Unsafe,
-	Static,
 	SchemaOptions,
 	TSchema,
 	TProperties,
@@ -200,6 +199,18 @@ const parseFileUnit = (size: ElysiaTypeOptions.FileUnit) => {
 	return size
 }
 
+const checkFileExtension = (type: string, extension: string) => {
+	console.log({ type, extension })
+
+	if (type.startsWith(extension)) return true
+
+	return (
+		extension.charCodeAt(extension.length - 1) === 42 &&
+		extension.charCodeAt(extension.length - 2) === 47 &&
+		type.startsWith(extension.slice(0, -1))
+	)
+}
+
 const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 	if (!(value instanceof Blob)) return false
 
@@ -209,15 +220,14 @@ const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 	if (options.maxSize && value.size > parseFileUnit(options.maxSize))
 		return false
 
-	if (options.extension)
-		if (typeof options.extension === 'string') {
-			if (!value.type.startsWith(options.extension)) return false
-		} else {
-			for (let i = 0; i < options.extension.length; i++)
-				if (value.type.startsWith(options.extension[i])) return true
+	if (options.extension) {
+		if (typeof options.extension === 'string')
+			return checkFileExtension(value.type, options.extension)
 
-			return false
-		}
+		for (let i = 0; i < options.extension.length; i++)
+			if (checkFileExtension(value.type, options.extension[i]))
+				return true
+	}
 
 	return true
 }
