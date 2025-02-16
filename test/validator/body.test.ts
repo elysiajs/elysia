@@ -613,4 +613,34 @@ describe('Body Validator', () => {
 		})
 		expect(res.status).toBe(200)
 	})
+
+	it('validate references', async () => {
+		const job = t.Object(
+			{
+				name: t.String()
+			},
+			{ $id: 'job' }
+		)
+
+		const person = t.Object({
+			name: t.String(),
+			job: t.Ref(job)
+		})
+
+		const app = new Elysia()
+			.model({ job, person })
+			.post('/', ({ body: { name, job } }) => `${name} - ${job.name}`, {
+				body: person
+			})
+
+		const res = await app.handle(
+			post('/', {
+				name: 'sucrose',
+				job: { name: 'alchemist' }
+			})
+		)
+
+		expect(await res.text()).toBe('sucrose - alchemist')
+		expect(res.status).toBe(200)
+	})
 })

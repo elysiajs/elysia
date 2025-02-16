@@ -3,6 +3,9 @@ Improvement:
 - remove redundant switch-case for path mapping when strictPath is disabled and path is overlapped
 - remove redundant allocation for nativeStaticHanlder when strictPath path is overlapped
 
+Bug fix:
+- [discord](https://discord.com/channels/1044804142461362206/1289400305506844672/1289400305506844672) file format doesn't check for '*' format
+
 # 1.2.12 - 4 Feb 2025
 Bug fix:
 - warn when non-existing macro is used
