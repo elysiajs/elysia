@@ -1,3 +1,7 @@
+# 1.2.14
+Improvement:
+- response streaming now handle proxy
+
 # 1.2.13 - 16 Feb 2025
 Improvement:
 - [#977](https://github.com/elysiajs/elysia/pull/977) use Registry instead of TypeSystem
