@@ -6,7 +6,7 @@ import { req } from '../utils'
 describe('Plugin', () => {
 	it('await async nested plugin', async () => {
 		const yay = async () => {
-			await Bun.sleep(1_000)
+			await Bun.sleep(2)
 
 			return new Elysia({ name: 'yay' }).get('/yay', 'yay')
 		}
