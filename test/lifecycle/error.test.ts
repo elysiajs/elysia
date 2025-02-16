@@ -60,10 +60,14 @@ describe('error', () => {
 				if (code === 'VALIDATION') {
 					set.status = 400
 
-					return error.all.map((i) => ({
-						filed: i.path.slice(1) || 'root',
-						reason: i.message
-					}))
+					return error.all.map((i) =>
+						i.summary
+							? {
+									filed: i.path.slice(1) || 'root',
+									reason: i.message
+								}
+							: {}
+					)
 				}
 			})
 			.post('/login', ({ body }) => body, {
@@ -285,5 +289,27 @@ describe('error', () => {
 		expect(body).toEqual({
 			somePretty: 'json'
 		})
+	})
+
+	it('handle cookie signature error', async () => {
+		const app = new Elysia({
+			cookie: { secrets: 'secrets', sign: ['session'] }
+		})
+			.onError(({ code, error }) => {
+				if (code === 'INVALID_COOKIE_SIGNATURE')
+					return 'Where is the signature?'
+			})
+			.get('/', ({ cookie: { session } }) => '')
+
+		const root = await app.handle(
+			new Request('http://localhost/', {
+				headers: {
+					Cookie: 'session=1234'
+				}
+			})
+		)
+
+		expect(await root.text()).toBe('Where is the signature?')
+		expect(root.status).toBe(400)
 	})
 })
