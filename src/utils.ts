@@ -527,7 +527,7 @@ const _replaceSchemaType = (
 					break
 
 				default:
-					if (value.items)
+					if (Array.isArray(value.items)) {
 						for (let i = 0; i < value.items.length; i++) {
 							value.items[i] = _replaceSchemaType(
 								value.items[i],
@@ -535,7 +535,7 @@ const _replaceSchemaType = (
 								false
 							)
 						}
-					else if (
+					} else if (
 						value.anyOf ||
 						value.oneOf ||
 						value.allOf ||
@@ -546,6 +546,14 @@ const _replaceSchemaType = (
 							options,
 							false
 						)
+					else if (value.type === 'array') {
+						value.items = _replaceSchemaType(
+							value.items,
+							options,
+							false
+						)
+					}
+
 					break
 			}
 		}

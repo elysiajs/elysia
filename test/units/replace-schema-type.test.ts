@@ -145,7 +145,7 @@ describe('Replace Schema Type', () => {
 				}),
 				{
 					from: t.Object({}),
-                    to: () => t.ObjectString({}),
+					to: () => t.ObjectString({}),
 					excludeRoot: true,
 					untilObjectFound: false
 				}
@@ -167,7 +167,7 @@ describe('Replace Schema Type', () => {
 				}),
 				{
 					from: t.Object({}),
-                    to: () => t.ObjectString({}),
+					to: () => t.ObjectString({}),
 					excludeRoot: true
 				}
 			)
@@ -178,7 +178,7 @@ describe('Replace Schema Type', () => {
 		)
 	})
 
-	it('replace recalculate transform', async () => {
+	it('replace re-calculate transform', async () => {
 		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Object({
 				pagination: t.Object({
@@ -193,5 +193,24 @@ describe('Replace Schema Type', () => {
 			.then((x) => x.status)
 
 		expect(status).toBe(422)
+	})
+
+	it('replace item in Array', () => {
+		expect(
+			replaceSchemaType(
+				t.Object({
+					arr: t.Array(t.Number())
+				}),
+				{
+					from: t.Number(),
+					to: () => t.Numeric(),
+					excludeRoot: true
+				}
+			)
+		).toMatchObject(
+			t.Object({
+				arr: t.Array(t.Numeric())
+			})
+		)
 	})
 })

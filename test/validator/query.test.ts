@@ -786,7 +786,7 @@ describe('Query Validator', () => {
 		})
 	})
 
-	it('handle nuqs format when specified as number', async () => {
+	it('handle nuqs format when specified as boolean', async () => {
 		const app = new Elysia().get('/', ({ query }) => query, {
 			query: t.Object({
 				a: t.Array(t.BooleanString())

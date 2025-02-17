@@ -7,6 +7,15 @@ const app = new Elysia().get('/', ({ query }) => query, {
 	})
 })
 
-const response = await app.handle(req('/?a=1,2')).then((x) => x.json())
+// console.log(
+// 	t.Object({
+// 		a: t.Array(t.Numeric())
+// 	}),
+// 	{
+// 		depth: null
+// 	}
+// )
 
-// console.log(response)
+const response = await app.handle(req('/?a=1,2')).then((x) => x.status)
+
+console.log(response)

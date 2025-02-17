@@ -6,6 +6,7 @@ Improvement:
 - handle recursive nested async plugin
 - Response now handle proxy streaming
 - [#971](https://github.com/elysiajs/elysia/issues/971) wrap import("fs/promises") AND wrap import("fs") in try-catch to avoid error (silly me, tee-hee~)
+- handle nested array property swap for `replaceSchemaType`
 
 Breaking Change:
 - [Internal] `Elysia.modules` now return void
