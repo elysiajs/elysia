@@ -1,32 +1,21 @@
 import { Elysia } from '../src'
 import { req } from '../test/utils'
 
-const yay = async () => {
-	await Bun.sleep(2)
+const delay = <T extends (...args: any) => any>(
+	callback: T,
+	ms = 617
+): Promise<ReturnType<T>> => Bun.sleep(ms).then(() => callback())
 
-	return new Elysia({ name: 'yay' }).get('/yay', 'yay')
-}
+const yay = () => delay(() => new Elysia().get('/nested', 'hi!'), 1)
+const yay2 = () => delay(() => new Elysia().use(yay), 5)
+const yay3 = () => delay(() => new Elysia().use(yay2), 10)
+const wrapper = new Elysia().use(async () => delay(() => yay3(), 6.17))
 
-const yay2 = async () => {
-	await Bun.sleep(2)
-
-	return new Elysia({ name: 'yay2' }).use(yay)
-}
-
-const yay3 = async () => {
-	await Bun.sleep(2)
-
-	return new Elysia({ name: 'yay3' }).use(yay2)
-}
-
-const wrapper = new Elysia({ name: 'wrapper' }).use(async (app) => {
-	return app.use(yay3)
-})
-
-const app = new Elysia({ name: 'main' }).use(wrapper)
+const app = new Elysia().use(wrapper)
 
 await app.modules
 
-const response = await app.handle(req('/yay'))
-
-console.log(await response.text())
+// should works
+app.handle(req('/nested'))
+	.then((x) => x.text())
+	.then(console.log)

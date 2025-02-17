@@ -3,19 +3,11 @@ import { req } from '../test/utils'
 
 const app = new Elysia().get('/', ({ query }) => query, {
 	query: t.Object({
-		a: t.Array(t.Number())
+		strs: t.Array(t.String()),
+		nums: t.Array(t.Number())
 	})
 })
 
-// console.log(
-// 	t.Object({
-// 		a: t.Array(t.Numeric())
-// 	}),
-// 	{
-// 		depth: null
-// 	}
-// )
-
-const response = await app.handle(req('/?a=1,2')).then((x) => x.status)
-
-console.log(response)
+app.handle(req('/?strs=a,b&nums=3,4'))
+	.then((x) => x.json())
+	.then(console.log)
