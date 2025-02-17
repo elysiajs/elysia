@@ -314,6 +314,10 @@ export default class Elysia<
 		return this.server
 	}
 
+	private getParent(): Elysia | null {
+		return null
+	}
+
 	'~parser': Record<string, BodyHandler<any, any>> = {}
 
 	private _promisedModules: PromiseGroup | undefined
@@ -3533,41 +3537,37 @@ export default class Elysia<
 
 		if (plugin instanceof Promise) {
 			this.promisedModules.add(
-				plugin
-					.then((plugin) => {
-						if (typeof plugin === 'function') return plugin(this)
+				plugin.then((plugin) => {
+					if (typeof plugin === 'function') return plugin(this)
 
-						if (plugin instanceof Elysia)
-							return this._use(plugin).compile()
+					if (plugin instanceof Elysia)
+						return this._use(plugin).compile()
 
-						if (plugin.constructor.name === 'Elysia')
-							return this._use(
-								plugin as unknown as Elysia
-							).compile()
+					if (plugin.constructor.name === 'Elysia')
+						return this._use(plugin as unknown as Elysia).compile()
 
-						if (typeof plugin.default === 'function')
-							return plugin.default(this)
+					if (typeof plugin.default === 'function')
+						return plugin.default(this)
 
-						if (plugin.default instanceof Elysia)
-							return this._use(plugin.default)
+					if (plugin.default instanceof Elysia)
+						return this._use(plugin.default)
 
-						if (plugin.constructor.name === 'Elysia')
-							return this._use(plugin.default)
+					if (plugin.constructor.name === 'Elysia')
+						return this._use(plugin.default)
 
-						if (plugin.constructor.name === '_Elysia')
-							return this._use(plugin.default)
+					if (plugin.constructor.name === '_Elysia')
+						return this._use(plugin.default)
 
-						try {
-							return this._use(plugin.default)
-						} catch (error) {
-							console.error(
-								'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
-							)
+					try {
+						return this._use(plugin.default)
+					} catch (error) {
+						console.error(
+							'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
+						)
 
-							throw error
-						}
-					})
-					.then((x) => x.compile())
+						throw error
+					}
+				})
 			)
 
 			return this
@@ -3576,11 +3576,25 @@ export default class Elysia<
 		return this._use(plugin)
 	}
 
+	private propagatePromiseModules(plugin: Elysia) {
+		if (plugin.promisedModules.size <= 0) return this
+
+		for (const promise of plugin.promisedModules.promises)
+			this.promisedModules.add(
+				promise.then((value) => {
+					if (value) return this._use(value)
+				})
+			)
+
+		return this
+	}
+
 	private _use(
 		plugin: AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 	) {
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
+
 			if (instance instanceof Promise) {
 				this.promisedModules.add(
 					instance
@@ -3614,6 +3628,10 @@ export default class Elysia<
 
 								plugin.compile()
 
+								if (plugin === this) return
+
+								this.propagatePromiseModules(plugin)
+
 								return plugin
 							}
 
@@ -3627,28 +3645,21 @@ export default class Elysia<
 									this as unknown as any
 								) as unknown as Elysia
 
-							// @ts-ignore
 							return this._use(plugin)
 						})
-						.then((x) => x.compile())
+						.then((v) => v?.compile())
 				)
 				return this as unknown as any
 			}
 
 			return instance
-		} else if (plugin.promisedModules.size > 0) {
-			for (const promise of plugin.promisedModules.promises)
-				this.promisedModules.add(promise)
-
-			this.promisedModules
-				.then(() => this._use(plugin))
-				.then((x) => x.compile())
-
-			return this
 		}
+
+		this.propagatePromiseModules(plugin)
 
 		const { name, seed } = plugin.config
 
+		plugin.getParent = () => this as any
 		plugin.getServer = () => this.getServer()
 		plugin.getGlobalRoutes = () => this.getGlobalRoutes()
 
@@ -6266,7 +6277,7 @@ export default class Elysia<
 	 * Wait until all lazy loaded modules all load is fully
 	 */
 	get modules() {
-		return Promise.all(this.promisedModules.promises)
+		return this.promisedModules
 	}
 }
 

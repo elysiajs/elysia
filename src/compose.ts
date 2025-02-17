@@ -810,10 +810,15 @@ export const composeHandler = ({
 							`if(a${index}===undefined)` +
 							`a${index}=[]\n` +
 							`if(memory===-1){` +
-							`a${index}.push(decodeURIComponent(url.slice(start)).replace(/\\+/g,' '))\n` +
+							`const temp=decodeURIComponent(url.slice(start)).replace(/\\+/g,' ')\n` +
+							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
+							`else{a${index}.push(decodeURIComponent(url.slice(start)).replace(/\\+/g,' '))}\n` +
 							`break` +
+							`}else{` +
+							`const temp=decodeURIComponent(url.slice(start, memory)).replace(/\\+/g,' ')\n` +
+							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
+							`else{a${index}.push(temp)}\n` +
 							`}` +
-							`else a${index}.push(decodeURIComponent(url.slice(start, memory)).replace(/\\+/g,' '))\n` +
 							`memory=url.indexOf('&${key}=',memory)\n` +
 							`if(memory===-1) break\n` +
 							`}`
@@ -2053,6 +2058,7 @@ export interface ComposerGeneralHandlerOptions {
 
 export const composeGeneralHandler = (
 	app: AnyElysia,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	{ asManifest = false }: { asManifest?: false } = {}
 ) => {
 	const adapter = app['~adapter'].composeGeneralHandler

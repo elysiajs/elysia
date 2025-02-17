@@ -105,36 +105,47 @@ const responseToSetHeaders = (response: Response, set?: Context['set']) => {
 
 		if (set.status === 200) set.status = response.status
 
+		// ? `content-encoding` prevent response streaming
+		if (set.headers['content-encoding'])
+			delete set.headers['content-encoding']
+
 		return set
 	}
 
-	if (response) {
-		if (hasHeaderShorthand)
-			set = {
-				// @ts-expect-error
-				headers: response.headers.toJSON(),
-				status: set?.status ?? 200
-			}
-		else {
-			set = {
-				headers: {},
-				status: set?.status ?? 200
-			}
-
-			for (const [key, value] of response.headers.entries())
-				if (key in set.headers) set.headers[key] = value
+	if (!response)
+		return {
+			headers: {},
+			status: set?.status ?? 200
 		}
 
+	if (hasHeaderShorthand) {
+		set = {
+			// @ts-expect-error
+			headers: response.headers.toJSON(),
+			status: set?.status ?? 200
+		}
+
+		// ? `content-encoding` prevent response streaming
+		if (set.headers['content-encoding'])
+			delete set.headers['content-encoding']
+
 		return set
 	}
 
-	return {
-		headers: {
-			'content-type': 'text/event-stream; charset=utf-8',
-			'transfer-encoding': 'chunked'
-		},
+	set = {
+		headers: {},
 		status: set?.status ?? 200
 	}
+
+	for (const [key, value] of response.headers.entries()) {
+		// ? `content-encoding` prevent response streaming
+
+		if (key === 'content-encoding') continue
+
+		if (key in set.headers) set.headers[key] = value
+	}
+
+	return set
 }
 
 const handleStream = async (
@@ -164,9 +175,6 @@ const handleStream = async (
 			}
 		}
 	}
-
-	// ? This prevent streaming
-	if (set?.headers['content-encoding']) delete set.headers['content-encoding']
 
 	return new Response(
 		new ReadableStream({

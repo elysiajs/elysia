@@ -107,7 +107,7 @@ export type Context<
 	{
 		body: Route['body']
 		query: undefined extends Route['query']
-			? Record<string, string | undefined>
+			? Record<string, string>
 			: Route['query']
 		params: undefined extends Route['params']
 			? undefined extends Path

@@ -110,12 +110,12 @@ export class ElysiaFile {
 				console.warn('Browser environment does not support file')
 			} else {
 				if (!createReadStream || !stat) {
-					this.value = import('fs').then((fs) => {
-						createReadStream = fs.createReadStream
-
-						return fs.createReadStream(path)
-					})
 					try {
+						this.value = import('fs').then((fs) => {
+							createReadStream = fs.createReadStream
+
+							return fs.createReadStream(path)
+						})
 						this.stats = import('fs/promises').then((fs) => {
 							stat = fs.stat
 

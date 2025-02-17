@@ -85,17 +85,6 @@ describe('Modules', () => {
 		expect(res.status).toEqual(200)
 	})
 
-	it('count lazy module correctly', async () => {
-		const app = new Elysia()
-			.use(import('../modules'))
-			.use(asyncPlugin)
-			.get('/', () => 'hi')
-
-		const awaited = await app.modules
-
-		expect(awaited.length).toBe(2)
-	})
-
 	it('handle other routes while lazy load', async () => {
 		const app = new Elysia().use(import('../timeout')).get('/', () => 'hi')
 
@@ -180,5 +169,55 @@ describe('Modules', () => {
 		await app.handle(req('/'))
 
 		expect(fired).toBe(1)
+	})
+
+	it('handle nested async plugin', async () => {
+		const yay = async () => {
+			await Bun.sleep(2)
+
+			return new Elysia({ name: 'yay' }).get('/yay', 'yay')
+		}
+
+		const wrapper = new Elysia({ name: 'wrapper' }).use(yay())
+
+		const app = new Elysia().use(wrapper)
+
+		await app.modules
+
+		const response = await app.handle(req('/yay'))
+
+		expect(response.status).toBe(200)
+	})
+
+	it('handle recursive nested async plugins', async () => {
+		const yay = async () => {
+			await Bun.sleep(2)
+
+			return new Elysia({ name: 'yay' }).get('/yay', 'yay')
+		}
+
+		const yay2 = async () => {
+			await Bun.sleep(2)
+
+			return new Elysia({ name: 'yay2' }).use(yay)
+		}
+
+		const yay3 = async () => {
+			await Bun.sleep(2)
+
+			return new Elysia({ name: 'yay3' }).use(yay2)
+		}
+
+		const wrapper = new Elysia({ name: 'wrapper' }).use(async (app) => {
+			return app.use(yay3)
+		})
+
+		const app = new Elysia({ name: 'main' }).use(wrapper)
+
+		await app.modules
+
+		const response = await app.handle(req('/yay'))
+
+		expect(response.status).toBe(200)
 	})
 })

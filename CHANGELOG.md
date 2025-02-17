@@ -1,6 +1,14 @@
-# 1.2.14
+# 1.2.14 - 17 Feb 2025
+Feature:
+- parse nuqs string array format if query is specified as `t.Array(t.String())`
+
 Improvement:
-- response streaming now handle proxy
+- handle recursive nested async plugin
+- Response now handle proxy streaming
+- [#971](https://github.com/elysiajs/elysia/issues/971) wrap import("fs/promises") AND wrap import("fs") in try-catch to avoid error (silly me, tee-hee~)
+
+Breaking Change:
+- [Internal] `Elysia.modules` now return void
 
 # 1.2.13 - 16 Feb 2025
 Improvement:

@@ -15,10 +15,8 @@ app.get('/', ({ headers, query, params, body, store }) => {
 		Record<string, string | undefined>
 	>()
 
-	// ? default query should be Record<string, unknown>
-	expectTypeOf<typeof query>().toEqualTypeOf<
-		Record<string, string | undefined>
-	>()
+	// ? default query should be Record<string, string>
+	expectTypeOf<typeof query>().toEqualTypeOf<Record<string, string>>()
 
 	// ? default body should be unknown
 	expectTypeOf<typeof body>().toBeUnknown()
@@ -88,10 +86,12 @@ app.model({
 	'/',
 	({ body }) => {
 		// ? unwrap body type
-		expectTypeOf<{
-			username: string
-			password: string
-		}[]>().toEqualTypeOf<typeof body>()
+		expectTypeOf<
+			{
+				username: string
+				password: string
+			}[]
+		>().toEqualTypeOf<typeof body>()
 
 		return body
 	},
@@ -436,7 +436,8 @@ const b = app
 		{
 			body: 'b'
 		}
-	).post(
+	)
+	.post(
 		'/',
 		({ body }) => {
 			expectTypeOf<typeof body>().toEqualTypeOf<'c'[]>()
@@ -515,27 +516,29 @@ const plugin = (app: Elysia) =>
 	})
 
 // ? inherits plugin type
-app.use(plugin).get(
-	'/',
-	({ body, decorate, store: { state } }) => {
-		expectTypeOf<typeof decorate>().toBeString()
-		expectTypeOf<typeof state>().toBeString()
-		expectTypeOf<typeof body>().toBeString()
-	},
-	{
-		body: 'string'
-	}
-).get(
-	'/',
-	({ body, decorate, store: { state } }) => {
-		expectTypeOf<typeof decorate>().toBeString()
-		expectTypeOf<typeof state>().toBeString()
-		expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
-	},
-	{
-		body: 'string[]'
-	}
-)
+app.use(plugin)
+	.get(
+		'/',
+		({ body, decorate, store: { state } }) => {
+			expectTypeOf<typeof decorate>().toBeString()
+			expectTypeOf<typeof state>().toBeString()
+			expectTypeOf<typeof body>().toBeString()
+		},
+		{
+			body: 'string'
+		}
+	)
+	.get(
+		'/',
+		({ body, decorate, store: { state } }) => {
+			expectTypeOf<typeof decorate>().toBeString()
+			expectTypeOf<typeof state>().toBeString()
+			expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
+		},
+		{
+			body: 'string[]'
+		}
+	)
 
 export const asyncPlugin = async (app: Elysia) =>
 	app.decorate('decorate', 'a').state('state', 'a').model({
@@ -543,27 +546,29 @@ export const asyncPlugin = async (app: Elysia) =>
 	})
 
 // ? inherits async plugin type
-app.use(asyncPlugin).get(
-	'/',
-	({ body, decorate, store: { state } }) => {
-		expectTypeOf<typeof decorate>().toBeString()
-		expectTypeOf<typeof state>().toBeString()
-		expectTypeOf<typeof body>().toBeString()
-	},
-	{
-		body: 'string'
-	}
-).get(
-	'/',
-	({ body, decorate, store: { state } }) => {
-		expectTypeOf<typeof decorate>().toBeString()
-		expectTypeOf<typeof state>().toBeString()
-		expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
-	},
-	{
-		body: 'string[]'
-	}
-)
+app.use(asyncPlugin)
+	.get(
+		'/',
+		({ body, decorate, store: { state } }) => {
+			expectTypeOf<typeof decorate>().toBeString()
+			expectTypeOf<typeof state>().toBeString()
+			expectTypeOf<typeof body>().toBeString()
+		},
+		{
+			body: 'string'
+		}
+	)
+	.get(
+		'/',
+		({ body, decorate, store: { state } }) => {
+			expectTypeOf<typeof decorate>().toBeString()
+			expectTypeOf<typeof state>().toBeString()
+			expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
+		},
+		{
+			body: 'string[]'
+		}
+	)
 
 // ? inherits lazy loading plugin type
 app.use(import('./plugins')).get(

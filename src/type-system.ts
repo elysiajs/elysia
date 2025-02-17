@@ -1,4 +1,4 @@
-import { TypeRegistry, Type, FormatRegistry } from '@sinclair/typebox'
+import { TypeRegistry, Type, FormatRegistry, TString } from '@sinclair/typebox'
 import {
 	ArrayOptions,
 	DateOptions,
@@ -200,8 +200,6 @@ const parseFileUnit = (size: ElysiaTypeOptions.FileUnit) => {
 }
 
 const checkFileExtension = (type: string, extension: string) => {
-	console.log({ type, extension })
-
 	if (type.startsWith(extension)) return true
 
 	return (
@@ -531,8 +529,8 @@ export const ElysiaType = {
 				return JSON.stringify(value)
 			}) as any as TObject<T>
 	},
-	ArrayString: <T extends TSchema>(
-		children: T = {} as T,
+	ArrayString: <T extends TSchema = TString>(
+		children: T = t.String() as any,
 		options?: ArrayOptions
 	) => {
 		const schema = t.Array(children, options)
@@ -543,6 +541,49 @@ export const ElysiaType = {
 			compiler = TypeCompiler.Compile(schema)
 		} catch {
 			// Nothing
+		}
+
+		const decode = (value: string, isProperty = false) => {
+			if (value.charCodeAt(0) === 91) {
+				try {
+					value = JSON.parse(value as string)
+				} catch {
+					throw new ValidationError('property', schema, value)
+				}
+
+				if (compiler) {
+					if (!compiler.Check(value))
+						throw new ValidationError('property', schema, value)
+
+					return compiler.Decode(value)
+				}
+
+				if (!Value.Check(schema, value))
+					throw new ValidationError('property', schema, value)
+
+				return Value.Decode(schema, value)
+			}
+
+			// has , (as used in nuqs)
+			if (value.indexOf(',') !== -1) {
+				const newValue = value.split(',').map((v) => v.trim())
+
+				if (compiler) {
+					if (!compiler.Check(newValue))
+						throw new ValidationError('property', schema, value)
+
+					return compiler.Decode(newValue)
+				}
+
+				if (!Value.Check(schema, newValue))
+					throw new ValidationError('property', schema, newValue)
+
+				return Value.Decode(schema, newValue)
+			}
+
+			if (isProperty) return value
+
+			throw new ValidationError('property', schema, value)
 		}
 
 		return t
@@ -556,30 +597,28 @@ export const ElysiaType = {
 				])
 			)
 			.Decode((value) => {
-				if (typeof value === 'string') {
-					if (value.charCodeAt(0) !== 91)
-						throw new ValidationError('property', schema, value)
+				if (Array.isArray(value)) {
+					let values = <unknown[]>[]
 
-					try {
-						value = JSON.parse(value as string)
-					} catch {
-						throw new ValidationError('property', schema, value)
+					for (let i = 0; i < value.length; i++) {
+						const v = value[i]
+						if (typeof v === 'string') {
+							const t = decode(v, true)
+							if (Array.isArray(t)) values = values.concat(t)
+							else values.push(t)
+
+							continue
+						}
+
+						values.push(v)
 					}
 
-					if (compiler) {
-						if (!compiler.Check(value))
-							throw new ValidationError('property', schema, value)
-
-						return compiler.Decode(value)
-					}
-
-					if (!Value.Check(schema, value))
-						throw new ValidationError('property', schema, value)
-
-					return Value.Decode(schema, value)
+					return values
 				}
 
-				return value
+				if (typeof value === 'string') return decode(value)
+
+				throw new ValidationError('property', schema, value)
 			})
 			.Encode((value) => {
 				if (typeof value === 'string')

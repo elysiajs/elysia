@@ -757,4 +757,48 @@ describe('Query Validator', () => {
 			.then((x) => x.json())
 			.then(console.log)
 	})
+
+	it('handle nuqs format when specified as Array', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				a: t.Array(t.String())
+			})
+		})
+
+		const response = await app.handle(req('/?a=a,b')).then((x) => x.json())
+
+		expect(response).toEqual({
+			a: ['a', 'b']
+		})
+	})
+
+	it('handle nuqs format when specified as number', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				a: t.Array(t.Numeric())
+			})
+		})
+
+		const response = await app.handle(req('/?a=1,2')).then((x) => x.json())
+
+		expect(response).toEqual({
+			a: [1, 2]
+		})
+	})
+
+	it('handle nuqs format when specified as number', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				a: t.Array(t.BooleanString())
+			})
+		})
+
+		const response = await app
+			.handle(req('/?a=true,false'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			a: [true, false]
+		})
+	})
 })
