@@ -1,13 +1,6 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
 
-const app = new Elysia({ precompile: true })
-	.get('/', ({ query }) => {
-		return query
-	}, {
-		query: t.Object({
-			a: t.String()
-		})
-	})
+new Elysia()
 	.all('/*', ({ request, params, query }) =>
 		fetch({
 			...request,
@@ -15,5 +8,3 @@ const app = new Elysia({ precompile: true })
 		})
 	)
 	.listen(3000)
-
-// console.log(app.routes[0].composed.toString())
