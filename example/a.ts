@@ -1,13 +1,19 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia } from '../src'
 
-const app = new Elysia().get('/', ({ query }) => query, {
-	query: t.Object({
-		strs: t.Array(t.String()),
-		nums: t.Array(t.Number())
-	})
+const barService = new Elysia().use(async (app) => {
+	const bar = await Promise.resolve(10)
+
+	return app.decorate('barService', bar)
 })
 
-app.handle(req('/?strs=a,b&nums=3,4'))
-	.then((x) => x.json())
-	.then(console.log)
+const fooService = new Elysia().use(barService).decorate((d) => {
+	console.log(d.barService)
+
+	return d
+})
+
+const app = new Elysia().use(fooService).listen(3000)
+
+console.log(
+	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+)

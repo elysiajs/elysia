@@ -3388,7 +3388,7 @@ export default class Elysia<
 		const NewElysia extends AnyElysia,
 		const Param extends AnyElysia = this
 	>(
-		plugin: MaybePromise<(app: Param) => MaybePromise<NewElysia>>
+		plugin: (app: Param) => NewElysia
 	): Elysia<
 		BasePath,
 		// @ts-expect-error - This is truly ideal
@@ -3409,6 +3409,76 @@ export default class Elysia<
 			: Routes & CreateEden<BasePath, NewElysia['_routes']>,
 		Prettify2<Ephemeral & NewElysia['_ephemeral']>,
 		Prettify2<Volatile & NewElysia['_volatile']>
+	>
+
+	/**
+	 * Inline async fn
+	 */
+	use<
+		const NewElysia extends AnyElysia,
+		const Param extends AnyElysia = this
+	>(
+		plugin:
+			| ((app: Param) => Promise<NewElysia>)
+			| Promise<(app: Param) => NewElysia>
+	): Elysia<
+		BasePath,
+		{
+			decorator: Prettify<
+				Singleton['decorator'] &
+					Partial<NewElysia['_types']['Singleton']['decorator']>
+			>
+			store: Prettify<
+				Singleton['store'] &
+					Partial<NewElysia['_types']['Singleton']['store']>
+			>
+			derive: Prettify<
+				Singleton['derive'] &
+					Partial<NewElysia['_types']['Singleton']['derive']>
+			>
+			resolve: Prettify<
+				Singleton['resolve'] &
+					Partial<NewElysia['_types']['Singleton']['resolve']>
+			>
+		},
+		{
+			error: Prettify<
+				Definitions['error'] &
+					NewElysia['_types']['Definitions']['error']
+			>
+			typebox: MergeTypeModule<
+				Definitions['typebox'],
+				NewElysia['_types']['Definitions']['typebox']
+			>
+		},
+		// @ts-expect-error this is truly ideal
+		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
+		BasePath extends ``
+			? Routes & NewElysia['_routes']
+			: Routes & CreateEden<BasePath, NewElysia['_routes']>,
+		{
+			schema: Prettify<
+				Ephemeral['schema'] & Partial<NewElysia['_ephemeral']['schema']>
+			>
+			resolve: Prettify<
+				Ephemeral['resolve'] &
+					Partial<NewElysia['_ephemeral']['resolve']>
+			>
+			derive: Prettify<
+				Ephemeral['derive'] & Partial<NewElysia['_ephemeral']['derive']>
+			>
+		},
+		{
+			schema: Prettify<
+				Volatile['schema'] & Partial<NewElysia['_volatile']['schema']>
+			>
+			resolve: Prettify<
+				Volatile['resolve'] & Partial<NewElysia['_volatile']['resolve']>
+			>
+			derive: Prettify<
+				Volatile['derive'] & Partial<NewElysia['_volatile']['derive']>
+			>
+		}
 	>
 
 	/**
