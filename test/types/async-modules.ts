@@ -245,3 +245,18 @@ import { Elysia } from '../../src'
 			return v
 		})
 }
+
+{
+	// ? inherits lazy loading plugin type
+	new Elysia().use(import('./plugins')).get(
+		'/',
+		({ body, decorate, store: { state } }) => {
+			expectTypeOf<typeof decorate>().toBeString()
+			expectTypeOf<typeof state>().toBeString()
+			expectTypeOf<typeof body>().toBeString()
+		},
+		{
+			body: 'string'
+		}
+	)
+}

@@ -2,6 +2,7 @@ import type { BunFile } from 'bun'
 import {
 	Kind,
 	TAnySchema,
+	TImport,
 	TModule,
 	TransformKind,
 	type TSchema
@@ -576,6 +577,18 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	return value
 }
 
+// const unwrapImport = (schema: TImport<any, any>) => {
+// 	if (
+// 		!schema ||
+// 		!schema.$defs ||
+// 		!schema.$ref ||
+// 		!(schema.$ref in schema.$defs)
+// 	)
+// 		return schema
+
+// 	return schema.$defs[schema.$ref]
+// }
+
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	s: T,
 	{
@@ -600,13 +613,26 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
 
-	let schema: TSchema =
-		typeof s === 'string'
-			? s.endsWith('[]')
-				? t.Array(t.Ref(models[s.substring(0, s.length - 2)]))
-				: // @ts-expect-error
-					((modules as TModule<{}, {}>).Import(s) ?? models[s])
-			: s
+	// let schema: TSchema =
+	// 	typeof s === 'string'
+	// 		? s.endsWith('[]')
+	// 			? t.Array(t.Ref(models[s.substring(0, s.length - 2)]))
+	// 			: // @ts-expect-error
+	// 				((modules as TModule<{}, {}>).Import(s) ?? models[s])
+	// 		: s
+
+	let schema: TSchema
+
+	if (typeof s !== 'string') schema = s
+	else {
+		const isArray = s.endsWith('[]')
+		const key = isArray ? s.substring(0, s.length - 2) : s
+
+		schema =
+			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
+
+		if (isArray) schema = t.Array(schema)
+	}
 
 	if (!schema) return undefined as any
 
@@ -769,12 +795,19 @@ export const getResponseSchemaValidator = (
 ): Record<number, TypeCheck<any>> | undefined => {
 	if (!s) return
 
-	const maybeSchemaOrRecord =
-		typeof s === 'string'
-			? s.endsWith('[]')
-				? t.Array(t.Ref(models[s.substring(0, s.length - 2)])) // @ts-ignore
-				: ((modules as TModule<{}, {}>).Import(s) ?? models[s])
-			: s
+	let maybeSchemaOrRecord: TSchema | Record<number, string | TSchema>
+
+	if (typeof s !== 'string') maybeSchemaOrRecord = s
+	else {
+		const isArray = s.endsWith('[]')
+		const key = isArray ? s.substring(0, s.length - 2) : s
+
+		maybeSchemaOrRecord =
+			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
+
+		if (isArray)
+			maybeSchemaOrRecord = t.Array(maybeSchemaOrRecord as TSchema)
+	}
 
 	if (!maybeSchemaOrRecord) return
 

@@ -545,44 +545,6 @@ export const asyncPlugin = async (app: Elysia) =>
 		string: t.String()
 	})
 
-// ? inherits async plugin type
-app.use(asyncPlugin)
-	.get(
-		'/',
-		({ body, decorate, store: { state } }) => {
-			expectTypeOf<typeof decorate>().toBeString()
-			expectTypeOf<typeof state>().toBeString()
-			expectTypeOf<typeof body>().toBeString()
-		},
-		{
-			body: 'string'
-		}
-	)
-	.get(
-		'/',
-		({ body, decorate, store: { state } }) => {
-			expectTypeOf<typeof decorate>().toBeString()
-			expectTypeOf<typeof state>().toBeString()
-			expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
-		},
-		{
-			body: 'string[]'
-		}
-	)
-
-// ? inherits lazy loading plugin type
-app.use(import('./plugins')).get(
-	'/',
-	({ body, decorate, store: { state } }) => {
-		expectTypeOf<typeof decorate>().toBeString()
-		expectTypeOf<typeof state>().toBeString()
-		expectTypeOf<typeof body>().toBeString()
-	},
-	{
-		body: 'string'
-	}
-)
-
 // ? group inherits type
 app.use(plugin).group('/', (app) =>
 	app.get(

@@ -3553,8 +3553,24 @@ export default class Elysia<
 		}>
 	): Elysia<
 		BasePath,
-		// @ts-expect-error - This is truly ideal
-		Prettify2<Singleton & LazyLoadElysia['_types']['Singleton']>,
+		{
+			decorator: Prettify<
+				Singleton['decorator'] &
+					Partial<LazyLoadElysia['_types']['Singleton']['decorator']>
+			>
+			store: Prettify<
+				Singleton['store'] &
+					Partial<LazyLoadElysia['_types']['Singleton']['store']>
+			>
+			derive: Prettify<
+				Singleton['derive'] &
+					Partial<LazyLoadElysia['_types']['Singleton']['derive']>
+			>
+			resolve: Prettify<
+				Singleton['resolve'] &
+					Partial<LazyLoadElysia['_types']['Singleton']['resolve']>
+			>
+		},
 		{
 			error: Prettify<
 				Definitions['error'] &
@@ -3565,12 +3581,26 @@ export default class Elysia<
 				LazyLoadElysia['_types']['Definitions']['typebox']
 			>
 		},
+		// @ts-expect-error - This is truly ideal
 		Prettify2<Metadata & LazyLoadElysia['_types']['Metadata']>,
 		BasePath extends ``
 			? Routes & LazyLoadElysia['_routes']
 			: Routes & CreateEden<BasePath, LazyLoadElysia['_routes']>,
 		Ephemeral,
-		Prettify2<Volatile & LazyLoadElysia['_ephemeral']>
+		Prettify2<{
+			schema: Prettify<
+				Volatile['schema'] &
+					Partial<LazyLoadElysia['_ephemeral']['schema']>
+			>
+			resolve: Prettify<
+				Volatile['resolve'] &
+					Partial<LazyLoadElysia['_ephemeral']['resolve']>
+			>
+			derive: Prettify<
+				Volatile['derive'] &
+					Partial<LazyLoadElysia['_ephemeral']['derive']>
+			>
+		}>
 	>
 
 	/**

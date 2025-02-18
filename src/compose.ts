@@ -344,8 +344,11 @@ export const hasProperty = (
 
 const TransformSymbol = Symbol.for('TypeBox.Transform')
 
-export const hasTransform = (schema: TAnySchema) => {
-	if (!schema) return
+export const hasTransform = (schema: TAnySchema): boolean => {
+	if (!schema) return false
+
+	if (schema.$ref && schema.$defs && schema.$ref in schema.$defs)
+		return hasTransform(schema.$defs[schema.$ref])
 
 	if (schema.type === 'object' && schema.properties) {
 		const properties = schema.properties as Record<string, TAnySchema>

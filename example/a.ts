@@ -1,19 +1,48 @@
-import { Elysia } from '../src'
+import { Type } from '@sinclair/typebox'
+import { TypeCompiler } from '@sinclair/typebox/compiler'
 
-const barService = new Elysia().use(async (app) => {
-	const bar = await Promise.resolve(10)
+const numeric = Type.Transform(Type.String())
+	.Decode((v) => +v)
+	.Encode((v) => v + '')
 
-	return app.decorate('barService', bar)
+const inline = TypeCompiler.Compile(numeric)
+// console.log(typeof inline.Decode('1')) // number
+
+console.log(inline.Check(1)) // true
+
+const Module = Type.Module({
+	numeric
 })
 
-const fooService = new Elysia().use(barService).decorate((d) => {
-	console.log(d.barService)
+const importedNumeric = Module.Import('numeric')
+const imported = TypeCompiler.Compile(importedNumeric)
 
-	return d
-})
+// console.log(typeof imported.Decode('1')) // string
 
-const app = new Elysia().use(fooService).listen(3000)
+console.log(imported.Check(1)) // true
 
-console.log(
-	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-)
+// const app = new Elysia({ precompile: true })
+// 	.model({
+// 		myModel: t.Object({ num: t.Number() })
+// 	})
+// 	.get(
+// 		'/',
+// 		({ query: { num } }) => {
+// 			console.log({ num })
+// 			return { num }
+// 		},
+// 		{
+// 			query: 'myModel'
+// 		}
+// 	)
+// 	.compile()
+
+// app.handle(req('/?num=1'))
+// 	.then((x) => x.json())
+// 	.then(console.log)
+
+// console.log(app.routes[0].composed?.toString())
+
+// console.log(
+// 	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+// )
