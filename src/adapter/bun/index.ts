@@ -14,6 +14,7 @@ import {
 	hasHeaderShorthand,
 	isNotEmpty,
 	isNumericString,
+	mergeHook,
 	randomId
 } from '../../utils'
 
@@ -184,6 +185,31 @@ export const BunAdapter: ElysiaAdapter = {
 
 				let _id: string | undefined
 
+				const errorHandlers = [
+					...(Array.isArray(options.error)
+						? options.error
+						: [options.error]),
+					...(app.event.error ?? []).map((x) =>
+						typeof x === 'function' ? x : x.fn
+					)
+				]
+
+				const handleErrors = !errorHandlers.length
+					? () => {}
+					: async (ws: ServerWebSocket<any>, error: unknown) => {
+							for (const handleError of errorHandlers) {
+								let response = handleError(
+									Object.assign(context, { error })
+								)
+								if (response instanceof Promise)
+									response = await response
+
+								await handleResponse(ws, response)
+
+								if (response) break
+							}
+						}
+
 				if (
 					server?.upgrade<any>(context.request, {
 						headers: isNotEmpty(set.headers)
@@ -204,12 +230,16 @@ export const BunAdapter: ElysiaAdapter = {
 								options.pong?.(data)
 							},
 							open(ws: ServerWebSocket<any>) {
-								handleResponse(
-									ws,
-									options.open?.(
-										new ElysiaWS(ws, context as any)
+								try {
+									handleResponse(
+										ws,
+										options.open?.(
+											new ElysiaWS(ws, context as any)
+										)
 									)
-								)
+								} catch (error) {
+									handleErrors(ws, error)
+								}
 							},
 							message: async (
 								ws: ServerWebSocket<any>,
@@ -226,39 +256,51 @@ export const BunAdapter: ElysiaAdapter = {
 										).message as string
 									)
 
-								handleResponse(
-									ws,
-									options.message?.(
-										new ElysiaWS(
-											ws,
-											context as any,
-											message
-										),
-										message as any
+								try {
+									handleResponse(
+										ws,
+										options.message?.(
+											new ElysiaWS(
+												ws,
+												context as any,
+												message
+											),
+											message as any
+										)
 									)
-								)
+								} catch (error) {
+									handleErrors(ws, error)
+								}
 							},
 							drain(ws: ServerWebSocket<any>) {
-								handleResponse(
-									ws,
-									options.drain?.(
-										new ElysiaWS(ws, context as any)
+								try {
+									handleResponse(
+										ws,
+										options.drain?.(
+											new ElysiaWS(ws, context as any)
+										)
 									)
-								)
+								} catch (error) {
+									handleErrors(ws, error)
+								}
 							},
 							close(
 								ws: ServerWebSocket<any>,
 								code: number,
 								reason: string
 							) {
-								handleResponse(
-									ws,
-									options.close?.(
-										new ElysiaWS(ws, context as any),
-										code,
-										reason
+								try {
+									handleResponse(
+										ws,
+										options.close?.(
+											new ElysiaWS(ws, context as any),
+											code,
+											reason
+										)
 									)
-								)
+								} catch (error) {
+									handleErrors(ws, error)
+								}
 							}
 						}
 					})

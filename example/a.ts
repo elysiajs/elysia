@@ -1,27 +1,21 @@
 import { Elysia } from '../src'
 
-const asyncPlugin = Promise.resolve(new Elysia({ name: 'AsyncPlugin' }))
-
-const plugin = new Elysia({ name: 'Plugin' })
-	.use(asyncPlugin)
-	.get('/plugin', () => {
-		console.log('PLUGIN')
-		return 'GET /plugin'
+const app = new Elysia()
+	.onError(({ error }) => {
+		console.error(error)
 	})
-
-const app = new Elysia({ name: 'App' })
-	.use(plugin)
-	.get('/foo', ({ path }) => {
-		console.log('FOO')
-		return 'GET /foo'
+	.ws('/', {
+		error: ({ error }) => {
+			console.error(error)
+		},
+		message(ws) {
+			throw new Error('test')
+		}
 	})
-	.listen(3000)
+	.listen(4000)
 
-await app.modules
-
-// console.log(app.routes.map((x) => [x.path, x.handler.toString()]))
 // console.log(app.fetch.toString())
 
-const response = await app.handle(new Request('http://localhost/plugin'))
-const text = await response.text()
-console.log('?', text)
+console.log(
+	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+)
