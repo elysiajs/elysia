@@ -35,6 +35,7 @@ import type {
 } from './types'
 import type { CookieOptions } from './cookies'
 import { mapValueError } from './error'
+import { hasRef } from './compose'
 
 export const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -612,14 +613,6 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 ): T extends TSchema ? TypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
 
-	// let schema: TSchema =
-	// 	typeof s === 'string'
-	// 		? s.endsWith('[]')
-	// 			? t.Array(t.Ref(models[s.substring(0, s.length - 2)]))
-	// 			: // @ts-expect-error
-	// 				((modules as TModule<{}, {}>).Import(s) ?? models[s])
-	// 		: s
-
 	let schema: TSchema
 
 	if (typeof s !== 'string') schema = s
@@ -629,6 +622,14 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 		schema =
 			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
+
+		/**
+		 * ? https://github.com/elysiajs/elysia/issues/1015
+		 *
+		 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
+		 * see test/validator/query.test.ts
+	 	 **/
+		if (!hasRef(schema)) schema = models[key]
 
 		if (isArray) schema = t.Array(schema)
 	}

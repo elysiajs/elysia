@@ -801,4 +801,33 @@ describe('Query Validator', () => {
 			a: [true, false]
 		})
 	})
+
+	/**
+	 * ? https://github.com/elysiajs/elysia/issues/1015
+	 *
+	 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
+	 * see `getSchemaValidator` in `src/utils.ts`
+	 **/
+	it('handle ref transform', async () => {
+		const app = new Elysia()
+			.model({
+				myModel: t.Object({ num: t.Number() })
+			})
+			.get(
+				'/',
+				({ query: { num } }) => ({
+					num,
+					type: typeof num
+				}),
+				{
+					query: 'myModel'
+				}
+			)
+
+		const response = await app
+			.handle(new Request('http://localhost?num=1&a=2'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({ num: 1, type: 'number' })
+	})
 })

@@ -1,20 +1,17 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.onError(({ error }) => {
-		console.error(error)
+	.model({
+		myModel: t.Object({ num: t.Number() })
 	})
-	.ws('/', {
-		error: ({ error }) => {
-			console.error(error)
-		},
-		message(ws) {
-			throw new Error('test')
+	.get(
+		'/',
+		({ query: { num } }) => ({ num, type: typeof num }),
+		{
+			query: 'myModel'
 		}
-	})
-	.listen(4000)
-
-// console.log(app.fetch.toString())
+	)
+	.listen(3000)
 
 console.log(
 	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
