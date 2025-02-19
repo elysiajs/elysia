@@ -1,14 +1,16 @@
 # 1.2.15
 Bug fix:
 - [#1067](https://github.com/elysiajs/elysia/issues/1067) recompile async plugin once registered
-- [#1052](https://github.com/elysiajs/elysia/issues/1052) WebSocket errors not getting catched by error handler
+- [#1052](https://github.com/elysiajs/elysia/issues/1052) webSocket errors not getting catched by error handler
 - [#1038](https://github.com/elysiajs/elysia/issues/1038) incorrect type inference with deferred modules leads to TypeErrors in runtime
 - [#1015](https://github.com/elysiajs/elysia/issues/1015) using a model by name in route query leads to type mispatch, yet validation succeeds if doesn't use Ref
+- [#1047](https://github.com/elysiajs/elysia/issues/1047) ampersand in URL search params is discarded
 - detect `Transform` inside `t.Array` in `hasTransform`
 
 Improvement:
 - add test cases for `hasTransform`
 - `hasTransform` now supports Union, Intersect
+- remove redundant `decodeURIComponent` in nested query
 
 # 1.2.14 - 17 Feb 2025
 Feature:

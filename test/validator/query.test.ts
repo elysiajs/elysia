@@ -691,8 +691,6 @@ describe('Query Validator', () => {
 			})
 		})
 
-		// console.log(app.routes[0].composed?.toString())
-
 		const response = await app
 			.handle(req('/?leading=foo&arr=bar&arr=baz&trailing=qux&arr=xd'))
 			.then((x) => x.json())
@@ -713,7 +711,7 @@ describe('Query Validator', () => {
 
 		const url = new URL('http://localhost:3000/')
 		url.searchParams.append('keyword', 'hello world')
-		console.log(url.href) //http://localhost:3000/?keyword=hello+world
+		// console.log(url.href) //http://localhost:3000/?keyword=hello+world
 
 		const result = await api
 			.handle(new Request(url.href))
@@ -732,17 +730,29 @@ describe('Query Validator', () => {
 			})
 		})
 
-		const response = await Promise.all(
-			[
-				'/?key1=ab&key1=cd&z=が',
-				'/?key1=ab&z=が',
-				'/?key1=ab&key1=cd&z=x',
-				'/?z=が&key1=ab&key1=cd',
-				'/?key1=で&key1=が&z=x'
-			].map((path) => app.handle(req(path)).then((x) => x.status))
-		).then((responses) => responses.every((status) => status === 200))
+		expect(
+			await app
+				.handle(req('/?key1=ab&key1=cd&z=が'))
+				.then((x) => x.status)
+		).toEqual(200)
 
-		expect(response).toBeTrue()
+		expect(
+			await app.handle(req('/?key1=ab&z=が')).then((x) => x.status)
+		).toEqual(200)
+
+		expect(
+			await app.handle(req('/?key1=ab&key1=cd&z=x')).then((x) => x.status)
+		).toEqual(200)
+
+		expect(
+			await app
+				.handle(req('/?z=が&key1=ab&key1=cd'))
+				.then((x) => x.status)
+		).toEqual(200)
+
+		expect(
+			await app.handle(req('/?key1=で&key1=が&z=x')).then((x) => x.status)
+		).toEqual(200)
 	})
 
 	// https://github.com/elysiajs/elysia/issues/912
@@ -753,9 +763,7 @@ describe('Query Validator', () => {
 			})
 		})
 
-		api.handle(req(`/?date=${Date.now()}`))
-			.then((x) => x.json())
-			.then(console.log)
+		api.handle(req(`/?date=${Date.now()}`)).then((x) => x.json())
 	})
 
 	it('handle nuqs format when specified as Array', async () => {
@@ -829,5 +837,35 @@ describe('Query Validator', () => {
 			.then((x) => x.json())
 
 		expect(response).toEqual({ num: 1, type: 'number' })
+	})
+
+	it('handle "&" inside a query value', async () => {
+		const app = new Elysia().get(
+			'*',
+			({ query, request }) => ({
+				query,
+				url: {
+					test: new URL(request.url).searchParams.get('test')
+				}
+			}),
+			{
+				query: t.Object({
+					test: t.String()
+				})
+			}
+		)
+
+		const url = "https://localhost/?test=Test1%20%26%20Test2'"
+
+		const value = await app.handle(new Request(url)).then((x) => x.json())
+
+		expect(value).toEqual({
+			query: {
+				test: "Test1 & Test2'"
+			},
+			url: {
+				test: new URL(url).searchParams.get('test')
+			}
+		})
 	})
 })

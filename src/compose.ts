@@ -818,6 +818,14 @@ export const composeHandler = ({
 				for (let [key, _value] of Object.entries(properties)) {
 					let value = _value as TAnySchema
 
+					const isArray =
+						value.type === 'array' ||
+						!!value.anyOf?.some(
+							(v: TSchema) =>
+								v.type === 'string' &&
+								v.format === 'ArrayString'
+						)
+
 					// @ts-ignore
 					if (
 						value &&
@@ -829,13 +837,6 @@ export const composeHandler = ({
 
 					// @ts-ignore unknown
 					const { type, anyOf } = value
-					const isArray =
-						type === 'array' ||
-						anyOf?.some(
-							(v: TSchema) =>
-								v.type === 'string' &&
-								v.format === 'ArrayString'
-						)
 
 					destructured.push({
 						key,
@@ -867,8 +868,7 @@ export const composeHandler = ({
 				'}'
 		} else {
 			fnLiteral +=
-				'if(c.qi!==-1){' +
-				`let url = '&' + decodeURIComponent(c.url.slice(c.qi + 1))\n`
+				'if(c.qi!==-1){' + `let url = '&' + c.url.slice(c.qi + 1)\n`
 
 			let index = 0
 			for (const {
@@ -898,16 +898,16 @@ export const composeHandler = ({
 							`let temp\n` +
 							`if(memory===-1)temp=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
 							`else temp=decodeURIComponent(url.slice(start, memory).replace(/\\+/g,' '))\n` +
-							`const charCode = temp.charCodeAt(0)\n` +
-							`if(charCode !== 91 && charCode !== 123)\n` +
+							`const charCode=temp.charCodeAt(0)\n` +
+							`if(charCode!==91&&charCode !== 123)\n` +
 							`temp='"'+temp+'"'\n` +
-							`a${index} += temp\n` +
-							`if(memory === -1)break\n` +
+							`a${index}+=temp\n` +
+							`if(memory===-1)break\n` +
 							`memory=url.indexOf('&${key}=',memory)\n` +
-							`if(memory === -1)break` +
+							`if(memory===-1)break` +
 							`}` +
 							`try{` +
-							`if(a${index}.charCodeAt(0) === 91)` +
+							`if(a${index}.charCodeAt(0)===91)` +
 							`a${index} = JSON.parse(a${index})\n` +
 							`else\n` +
 							`a${index}=JSON.parse('['+a${index}+']')` +
@@ -967,8 +967,10 @@ export const composeHandler = ({
 							`if(first)first=false\n` +
 							`else deepMemory = url.indexOf('&', start)\n` +
 							`let value\n` +
-							`if(deepMemory===-1)value=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-							`else value=decodeURIComponent(url.slice(start, deepMemory).replace(/\\+/g,' '))\n` +
+							`if(deepMemory===-1)value=url.slice(start).replace(/\\+/g,' ')\n` +
+							`else value=url.slice(start, deepMemory).replace(/\\+/g,' ')\n` +
+							`value=decodeURIComponent(value)\n` +
+							`if(value===null){if(deepMemory===-1){break}else{continue}}\n` +
 							`const vStart=value.charCodeAt(0)\n` +
 							`const vEnd=value.charCodeAt(value.length - 1)\n` +
 							`if((vStart===91&&vEnd===93)||(vStart===123&&vEnd===125))\n` +
