@@ -805,6 +805,14 @@ export const getResponseSchemaValidator = (
 		maybeSchemaOrRecord =
 			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
 
+		/**
+		 * ? https://github.com/elysiajs/elysia/issues/1015
+		 *
+		 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
+		 * see test/validator/query.test.ts
+	 	 **/
+		if (!hasRef(schema)) schema = models[key]
+
 		if (isArray)
 			maybeSchemaOrRecord = t.Array(maybeSchemaOrRecord as TSchema)
 	}

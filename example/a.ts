@@ -1,22 +1,20 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia().get(
-	'*',
-	async ({ query, request }) => {
-		return {
-			query,
-			url: new URL(request.url).searchParams
-		}
-	},
-	{
-		query: t.Object({
-			test: t.Union([t.Array(t.String()), t.String()])
+const app = new Elysia()
+	.model({
+		string: t.String()
+	})
+	.get('/', () => ({ a: 'a' }), {
+		response: t.Object({
+			a: t.Ref('string')
 		})
-	}
-)
+	})
+	.listen(3000)
 
-app.handle(req('/?test=Test1%20%26%20Test2'))
+// console.log(app.models)
+
+app.handle(req('/'))
 	.then((x) => x.json())
 	.then(console.log)
 
