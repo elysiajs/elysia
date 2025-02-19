@@ -3695,8 +3695,17 @@ export default class Elysia<
 
 		for (const promise of plugin.promisedModules.promises)
 			this.promisedModules.add(
-				promise.then((value) => {
-					if (value) return this._use(value)
+				promise.then((v) => {
+					if (!v) return
+
+					const t = this._use(v)
+					if (t instanceof Promise)
+						return t.then((v2) => {
+							if (v2) v2.compile()
+							else v.compile()
+						})
+
+					return v.compile()
 				})
 			)
 

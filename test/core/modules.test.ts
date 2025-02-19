@@ -208,4 +208,25 @@ describe('Modules', () => {
 
 		expect(response.status).toBe(200)
 	})
+
+	it('recompile async plugin once registered', async () => {
+		const asyncPlugin = Promise.resolve(new Elysia({ name: 'AsyncPlugin' }))
+
+		const plugin = new Elysia({ name: 'Plugin' })
+			.use(asyncPlugin)
+			.get('/plugin', () => 'GET /plugin')
+
+		const app = new Elysia({ name: 'App' })
+			.use(plugin)
+			.get('/foo', () => 'GET /foo')
+
+		const response = await app
+			.handle(new Request('http://localhost/plugin'))
+			.then((x) => x.text())
+
+		// https://github.com/elysiajs/elysia/issues/1067
+		// If the plugin doesn't recompile, route index
+		// would be pointed to /foo instead of /plugin
+		expect(response).toEqual('GET /plugin')
+	})
 })
