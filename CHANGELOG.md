@@ -1,6 +1,7 @@
 # 1.2.15
 Bug fix:
 - [#1038](https://github.com/elysiajs/elysia/issues/1038) incorrect type inference with deferred modules leads to TypeErrors in runtime
+- [#1067](https://github.com/elysiajs/elysia/issues/1067) recompile async plugin once registered
 
 # 1.2.14 - 17 Feb 2025
 Feature:
