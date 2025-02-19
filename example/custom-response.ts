@@ -1,17 +1,11 @@
 import { Elysia, t } from '../src'
 
 const prettyJson = new Elysia()
-	.guard({
-		response: {
-			200: t.String()
-		}
-	})
-	.onAfterHandle(({ response }) => {
+	.mapResponse(({ response }) => {
 		if (response instanceof Object)
-			try {
-				return JSON.stringify(response, null, 4)
-			} catch {}
+			return new Response(JSON.stringify(response, null, 4))
 	})
+	.as('plugin')
 
 new Elysia()
 	.use(prettyJson)
