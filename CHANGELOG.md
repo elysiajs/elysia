@@ -1,4 +1,4 @@
-# 1.2.15
+# 1.2.15 - 19 Feb 2025
 Bug fix:
 - [#1067](https://github.com/elysiajs/elysia/issues/1067) recompile async plugin once registered
 - [#1052](https://github.com/elysiajs/elysia/issues/1052) webSocket errors not getting catched by error handler
