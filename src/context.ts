@@ -172,7 +172,7 @@ export type Context<
 		route: string
 		request: Request
 		store: Singleton['store']
-		response?: undefined extends Route['response']
+		response?: never extends keyof Route['response']
 			? unknown
 			: Route['response'][keyof Route['response']]
 	} & ({} extends Route['response']

@@ -2,7 +2,5 @@ import { Elysia } from '../src'
 
 new Elysia()
 	.get('/', () => 'Hi')
-	.get('/redirect', ({ set }) => {
-		set.redirect = '/'
-	})
+	.get('/redirect', ({ redirect }) => redirect('/'))
 	.listen(3000)

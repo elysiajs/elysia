@@ -12,8 +12,6 @@ const app = new Elysia()
 	})
 	.listen(3000)
 
-// console.log(app.models)
-
 app.handle(req('/'))
 	.then((x) => x.json())
 	.then(console.log)

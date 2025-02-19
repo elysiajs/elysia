@@ -1,4 +1,4 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
 const a0 = new Elysia().get('/a0', () => 'a')
 const a1 = new Elysia().get('/a1', () => 'a')

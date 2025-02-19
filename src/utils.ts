@@ -628,7 +628,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		 *
 		 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
 		 * see test/validator/query.test.ts
-	 	 **/
+		 **/
 		if (!hasRef(schema)) schema = models[key]
 
 		if (isArray) schema = t.Array(schema)
@@ -810,8 +810,9 @@ export const getResponseSchemaValidator = (
 		 *
 		 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
 		 * see test/validator/query.test.ts
-	 	 **/
-		if (!hasRef(schema)) schema = models[key]
+		 **/
+		// @ts-expect-error
+		if (!hasRef(maybeSchemaOrRecord)) maybeSchemaOrRecord = models[key]
 
 		if (isArray)
 			maybeSchemaOrRecord = t.Array(maybeSchemaOrRecord as TSchema)

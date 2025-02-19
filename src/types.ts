@@ -337,8 +337,7 @@ type OptionalField = {
 	[OptionalKind]: 'Optional'
 }
 
-type TrimArrayName<T extends string> =
-	T extends `${infer Name}[]` ? Name : T
+type TrimArrayName<T extends string> = T extends `${infer Name}[]` ? Name : T
 
 export type UnwrapSchema<
 	Schema extends TSchema | string | undefined,
@@ -352,7 +351,12 @@ export type UnwrapSchema<
 		: Schema extends `${infer Key}[]`
 			? Definitions extends Record<Key, infer NamedSchema>
 				? Array<NamedSchema>
-				: StaticDecode<TImport<UnwrapTypeModule<Definitions>, TrimArrayName<Schema>>>[]
+				: StaticDecode<
+						TImport<
+							UnwrapTypeModule<Definitions>,
+							TrimArrayName<Schema>
+						>
+					>[]
 			: Schema extends string
 				? Definitions extends Record<Schema, infer NamedSchema>
 					? NamedSchema
@@ -373,7 +377,12 @@ export type UnwrapBodySchema<
 		: Schema extends `${infer Key}[]`
 			? Definitions extends Record<Key, infer NamedSchema>
 				? Array<NamedSchema>
-				: Static<TImport<UnwrapTypeModule<Definitions>, TrimArrayName<Schema>>>[]
+				: Static<
+						TImport<
+							UnwrapTypeModule<Definitions>,
+							TrimArrayName<Schema>
+						>
+					>[]
 			: Schema extends string
 				? Definitions extends Record<Schema, infer NamedSchema>
 					? NamedSchema
@@ -772,13 +781,7 @@ export type AfterHandler<
 	Handler<Route, Singleton, Path> extends (
 		context: infer Context
 	) => infer Returned
-		? (
-				context: Prettify<
-					{
-						response: Route['response'][keyof Route['response']]
-					} & Context
-				>
-			) => Returned | MaybePromise<void>
+		? (context: Context) => Returned | MaybePromise<void>
 		: never
 
 export type MapResponse<

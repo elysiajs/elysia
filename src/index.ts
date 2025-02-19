@@ -138,8 +138,7 @@ import type {
 	ResolveHandler,
 	ResolveResolutions,
 	UnwrapTypeModule,
-	MacroToContext,
-	MergeTypeModule
+	MacroToContext
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -3398,9 +3397,13 @@ export default class Elysia<
 				Definitions['error'] &
 					NewElysia['_types']['Definitions']['error']
 			>
-			typebox: MergeTypeModule<
-				Definitions['typebox'],
-				NewElysia['_types']['Definitions']['typebox']
+			typebox: TModule<
+				Prettify<
+					UnwrapTypeModule<Definitions['typebox']> &
+						UnwrapTypeModule<
+							NewElysia['_types']['Definitions']['typebox']
+						>
+				>
 			>
 		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
@@ -3446,9 +3449,13 @@ export default class Elysia<
 				Definitions['error'] &
 					NewElysia['_types']['Definitions']['error']
 			>
-			typebox: MergeTypeModule<
-				Definitions['typebox'],
-				NewElysia['_types']['Definitions']['typebox']
+			typebox: TModule<
+				Prettify<
+					UnwrapTypeModule<Definitions['typebox']> &
+						UnwrapTypeModule<
+							NewElysia['_types']['Definitions']['typebox']
+						>
+				>
 			>
 		},
 		// @ts-expect-error this is truly ideal
@@ -3495,9 +3502,11 @@ export default class Elysia<
 				Definitions['error'] &
 					NewElysia['_types']['Definitions']['error']
 			>
-			typebox: MergeTypeModule<
-				Definitions['typebox'],
-				NewElysia['_types']['Definitions']['typebox']
+			typebox: TModule<
+				UnwrapTypeModule<Definitions['typebox']> &
+					UnwrapTypeModule<
+						NewElysia['_types']['Definitions']['typebox']
+					>
 			>
 		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
@@ -3531,9 +3540,13 @@ export default class Elysia<
 				Definitions['error'] &
 					NewElysia['_types']['Definitions']['error']
 			>
-			typebox: MergeTypeModule<
-				Definitions['typebox'],
-				NewElysia['_types']['Definitions']['typebox']
+			typebox: TModule<
+				Prettify<
+					UnwrapTypeModule<Definitions['typebox']> &
+						UnwrapTypeModule<
+							NewElysia['_types']['Definitions']['typebox']
+						>
+				>
 			>
 		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
@@ -3576,9 +3589,13 @@ export default class Elysia<
 				Definitions['error'] &
 					LazyLoadElysia['_types']['Definitions']['error']
 			>
-			typebox: MergeTypeModule<
-				Definitions['typebox'],
-				LazyLoadElysia['_types']['Definitions']['typebox']
+			typebox: TModule<
+				Prettify<
+					UnwrapTypeModule<Definitions['typebox']> &
+						UnwrapTypeModule<
+							LazyLoadElysia['_types']['Definitions']['typebox']
+						>
+				>
 			>
 		},
 		// @ts-expect-error - This is truly ideal
