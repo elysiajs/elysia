@@ -134,7 +134,7 @@ describe('Response Validator', () => {
 	})
 
 	it('allow undefined', async () => {
-		const app = new Elysia().get('/', () => { }, {
+		const app = new Elysia().get('/', () => {}, {
 			body: t.Union([
 				t.Undefined(),
 				t.Object({

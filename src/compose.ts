@@ -2518,7 +2518,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		'inject',
 		fnLiteral
 	)({
-		app, 
+		app,
 		mapResponse: app['~adapter'].handler.mapResponse,
 		ERROR_CODE,
 		ElysiaCustomStatusResponse,
