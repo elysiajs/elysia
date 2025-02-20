@@ -259,6 +259,9 @@ const composeValidationFactory = ({
 				!hasAdditionalProperties(value as any)
 			)
 				code += `${name}=validator.response['${status}'].Clean(${name})\n`
+			
+			code += `try{${name}=validator.response['${status}'].Encode(${name})\n}\n`
+			code += `catch(e){throw new ValidationError('response',validator.response['${status}'],${name})}`
 
 			code +=
 				`if(validator.response['${status}'].Check(${name})===false){` +
@@ -2515,7 +2518,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		'inject',
 		fnLiteral
 	)({
-		app,
+		app, 
 		mapResponse: app['~adapter'].handler.mapResponse,
 		ERROR_CODE,
 		ElysiaCustomStatusResponse,

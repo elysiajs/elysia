@@ -134,7 +134,7 @@ describe('Response Validator', () => {
 	})
 
 	it('allow undefined', async () => {
-		const app = new Elysia().get('/', () => {}, {
+		const app = new Elysia().get('/', () => { }, {
 			body: t.Union([
 				t.Undefined(),
 				t.Object({
@@ -445,5 +445,34 @@ describe('Response Validator', () => {
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
+	})
+
+	it('validate response with encoded schema', async () => {
+		const schema = t.Transform(t.String()).Decode((x) => x.toUpperCase()).Encode((x) => x.toLowerCase());
+		const app = new Elysia()
+			.get('/ok', ({ query: { response } }) => response, {
+				query: t.Object({
+					response: schema
+				}),
+				response: {
+					200: schema
+				}
+			})
+			// @ts-expect-error The response is obviously incorrect and should be rejected
+			.get('/bad', ({ query: { response } }) => 42, {
+				query: t.Object({
+					response: schema
+				}),
+				response: {
+					200: schema
+				}
+			})
+
+		const resOk = await app.handle(req('/ok?response=Hello'))
+		expect(resOk.status).toBe(200)
+		expect(await resOk.text()).toBe('hello')
+
+		const resBad = await app.handle(req('/bad?response=hello'))
+		expect(resBad.status).toBe(422)
 	})
 })
