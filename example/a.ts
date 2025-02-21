@@ -1,19 +1,18 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const app = new Elysia().mount(async (request) => {
-	// const body = await request.json()
-	// console.log({ body })
-	return new Response("OK")
-})
-
-app.handle(
-	new Request('http://localhost', {
-		method: 'GET',
-		// headers: {
-		// 	'Content-Type': 'application/json'
-		// },
-		// body: JSON.stringify({ hello: 'world' })
+const Auth = new Elysia({ name: 'auth' })
+	.mount('/ba', (request) => {
+		console.log('BA', request.url)
+		return new Response('A')
 	})
-)
-	.then((x) => x.text())
-	.then(console.log)
+	.mount('/auth', (request) => {
+		console.log('AUTH', request.url)
+		return new Response('AUTH')
+	})
+
+const Module = new Elysia().use(Auth)
+
+const app = new Elysia({ name: 'main' }).use(Auth).use(Module).listen(3000)
+
+app.handle(req('/auth')).then((x) => x.text())

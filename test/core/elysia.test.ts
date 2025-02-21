@@ -208,4 +208,24 @@ describe('Edge Case', () => {
 			expect(response).toBe('params-transform')
 		})
 	})
+
+	it('handle duplicated static route may cause index conflict correctly', async () => {
+		const Path = new Elysia({ name: 'auth' })
+			.mount('/AB', (request) => new Response('AB'))
+			.mount('/BA', (request) => new Response('BA'))
+
+		const Module = new Elysia().use(Path)
+
+		const app = new Elysia({ name: 'main' })
+			.use(Path)
+			.use(Module)
+			.listen(3000)
+
+		const responses = await Promise.all([
+			app.handle(req('/AB')).then((x) => x.text()),
+			app.handle(req('/BA')).then((x) => x.text())
+		])
+
+		expect(responses).toEqual(['AB', 'BA'])
+	})
 })

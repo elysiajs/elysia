@@ -1,3 +1,6 @@
+# 1.2.18 - 22 Feb 2025
+- duplicated static route may cause index conflict resulting in incorrect route
+
 # 1.2.17 - 21 Feb 2025
 Bug fix:
 - `.mount` doesn't return pass entire request

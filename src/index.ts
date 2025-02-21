@@ -803,23 +803,25 @@ export default class Elysia<
 				asManifest
 			})
 
+		let oldIndex: number | undefined
 		if (this.routeTree.has(method + path))
 			for (let i = 0; i < this.router.history.length; i++) {
 				const route = this.router.history[i]
 				if (route.path === path && route.method === method) {
-					const removed = this.router.history.splice(i, 1)[0]
+					oldIndex = i
+					break
 
-					if (
-						removed &&
-						this.routeTree.has(removed?.method + removed?.path)
-					)
-						this.routeTree.delete(removed.method + removed.path)
+					// if (
+					// 	removed &&
+					// 	this.routeTree.has(removed?.method + removed?.path)
+					// )
+					// 	this.routeTree.delete(removed.method + removed.path)
 				}
 			}
 		else this.routeTree.set(method + path, this.router.history.length)
 
 		const history = this.router.history
-		const index = this.router.history.length
+		const index = oldIndex ?? this.router.history.length
 
 		const mainHandler = shouldPrecompile
 			? compile()
@@ -838,21 +840,37 @@ export default class Elysia<
 
 		const isWebSocket = method === '$INTERNALWS'
 
-		this.router.history.push(
-			// @ts-ignore
-			Object.assign(
-				{
-					method,
-					path,
-					composed: mainHandler,
-					handler: handle,
-					hooks
-				},
-				localHook.webSocket
-					? { websocket: localHook.websocket as any }
-					: {}
+		if (oldIndex !== undefined)
+			this.router.history[oldIndex] =
+				// @ts-ignore
+				Object.assign(
+					{
+						method,
+						path,
+						composed: mainHandler,
+						handler: handle,
+						hooks
+					},
+					localHook.webSocket
+						? { websocket: localHook.websocket as any }
+						: {}
+				)
+		else
+			this.router.history.push(
+				// @ts-ignore
+				Object.assign(
+					{
+						method,
+						path,
+						composed: mainHandler,
+						handler: handle,
+						hooks
+					},
+					localHook.webSocket
+						? { websocket: localHook.websocket as any }
+						: {}
+				)
 			)
-		)
 
 		const staticRouter = this.router.static.http
 
@@ -4110,7 +4128,7 @@ export default class Elysia<
 
 			const handler: Handler = ({ request, path }) =>
 				run(
-					new Request(replaceUrlPath(request.url, path || '/'), {
+					new Request(replaceUrlPath(request.url, path), {
 						method: request.method,
 						headers: request.headers,
 						signal: request.signal,
@@ -4158,13 +4176,9 @@ export default class Elysia<
 				)
 			)
 
-		this.all(
-			path,
-			handler as any,
-			{
-				type: 'none'
-			} as any
-		)
+		this.all(path, handler as any, {
+			parse: 'none'
+		})
 
 		this.all(path + (path.endsWith('/') ? '*' : '/*'), handler as any, {
 			parse: 'none'
