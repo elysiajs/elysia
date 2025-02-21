@@ -810,12 +810,7 @@ describe('Query Validator', () => {
 		})
 	})
 
-	/**
-	 * ? https://github.com/elysiajs/elysia/issues/1015
-	 *
-	 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
-	 * see `getSchemaValidator` in `src/utils.ts`
-	 **/
+	// https://github.com/elysiajs/elysia/issues/1015
 	it('handle ref transform', async () => {
 		const app = new Elysia()
 			.model({
@@ -837,6 +832,38 @@ describe('Query Validator', () => {
 			.then((x) => x.json())
 
 		expect(response).toEqual({ num: 1, type: 'number' })
+	})
+
+	// https://github.com/elysiajs/elysia/issues/1068
+	it('handle ref transform with ref inside reference model', async () => {
+		const app = new Elysia()
+			.model({
+				num2: t.Number(),
+				myModel: t.Object({ num: t.Number(), num2: t.Ref('num2') })
+			})
+			.get(
+				'/',
+				({ query: { num, num2 } }) => ({
+					num,
+					numType: typeof num,
+					num2,
+					num2Type: typeof num2
+				}),
+				{
+					query: 'myModel'
+				}
+			)
+
+		const response = await app
+			.handle(new Request('http://localhost?num=1&num2=2'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			num: 1,
+			numType: 'number',
+			num2: 2,
+			num2Type: 'number'
+		})
 	})
 
 	it('handle "&" inside a query value', async () => {

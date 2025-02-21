@@ -12,7 +12,11 @@ import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 import { t } from './type-system'
 import type { Sucrose } from './sucrose'
 
+import { mapValueError } from './error'
+
 import type { TraceHandler } from './trace'
+import type { CookieOptions } from './cookies'
+
 import type {
 	LifeCycleStore,
 	MaybeArray,
@@ -33,9 +37,6 @@ import type {
 	SchemaValidator,
 	AnyLocalHook
 } from './types'
-import type { CookieOptions } from './cookies'
-import { mapValueError } from './error'
-import { hasRef } from './compose'
 
 export const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -623,14 +624,6 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		schema =
 			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
 
-		/**
-		 * ? https://github.com/elysiajs/elysia/issues/1015
-		 *
-		 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
-		 * see test/validator/query.test.ts
-		 **/
-		if (!hasRef(schema)) schema = models[key]
-
 		if (isArray) schema = t.Array(schema)
 	}
 
@@ -804,15 +797,6 @@ export const getResponseSchemaValidator = (
 
 		maybeSchemaOrRecord =
 			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
-
-		/**
-		 * ? https://github.com/elysiajs/elysia/issues/1015
-		 *
-		 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
-		 * see test/validator/query.test.ts
-		 **/
-		// @ts-expect-error
-		if (!hasRef(maybeSchemaOrRecord)) maybeSchemaOrRecord = models[key]
 
 		if (isArray)
 			maybeSchemaOrRecord = t.Array(maybeSchemaOrRecord as TSchema)

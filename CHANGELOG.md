@@ -2,10 +2,13 @@
 Improvement:
 - `AfterHandler` infer response type
 
+Change:
+- [#1068](https://github.com/elysiajs/elysia/issues/1068) update `@sinclair/typebox` to `0.34.27`
+
 Bug fix:
 - [#1075](https://github.com/elysiajs/elysia/issues/1075) nested async plugins mismatch routes to handlers
-- [#1070](https://github.com/elysiajs/elysia/issues/1070) .mount is mutating the incoming request method
 - [#1073](https://github.com/elysiajs/elysia/issues/1073) file type validation not working
+- [#1070](https://github.com/elysiajs/elysia/issues/1070) .mount is mutating the incoming request method
 
 # 1.2.15 - 19 Feb 2025
 Bug fix:
