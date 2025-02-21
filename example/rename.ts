@@ -17,7 +17,7 @@ new Elysia()
 			// map model, rename "salt" to "pepper"
 			.model(({ salt, ...models }) => ({
 				...models,
-				pepper: salt
+				pepper: t.String()
 			}))
 			// Add prefix
 			.prefix('decorator', 'unstable')
@@ -28,5 +28,5 @@ new Elysia()
 	)
 	.post('/pepper', ({ body }) => body, {
 		body: 'pepper',
-		response: t.String()
+		// response: t.String()
 	})

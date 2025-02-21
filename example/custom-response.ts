@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
 
 const prettyJson = new Elysia()
 	.mapResponse(({ response }) => {

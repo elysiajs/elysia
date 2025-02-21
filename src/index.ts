@@ -3668,37 +3668,45 @@ export default class Elysia<
 
 		if (plugin instanceof Promise) {
 			this.promisedModules.add(
-				plugin.then((plugin) => {
-					if (typeof plugin === 'function') return plugin(this)
+				plugin
+					.then((plugin) => {
+						if (typeof plugin === 'function') return plugin(this)
 
-					if (plugin instanceof Elysia)
-						return this._use(plugin).compile()
+						if (plugin instanceof Elysia)
+							return this._use(plugin).compile()
 
-					if (plugin.constructor.name === 'Elysia')
-						return this._use(plugin as unknown as Elysia).compile()
+						if (plugin.constructor.name === 'Elysia')
+							return this._use(
+								plugin as unknown as Elysia
+							).compile()
 
-					if (typeof plugin.default === 'function')
-						return plugin.default(this)
+						if (typeof plugin.default === 'function')
+							return plugin.default(this)
 
-					if (plugin.default instanceof Elysia)
-						return this._use(plugin.default)
+						if (plugin.default instanceof Elysia)
+							return this._use(plugin.default)
 
-					if (plugin.constructor.name === 'Elysia')
-						return this._use(plugin.default)
+						if (plugin.constructor.name === 'Elysia')
+							return this._use(plugin.default)
 
-					if (plugin.constructor.name === '_Elysia')
-						return this._use(plugin.default)
+						if (plugin.constructor.name === '_Elysia')
+							return this._use(plugin.default)
 
-					try {
-						return this._use(plugin.default)
-					} catch (error) {
-						console.error(
-							'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
-						)
+						try {
+							return this._use(plugin.default)
+						} catch (error) {
+							console.error(
+								'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
+							)
 
-						throw error
-					}
-				})
+							throw error
+						}
+					})
+					.then((v) => {
+						if (v && typeof v.compile === 'function') v.compile()
+
+						return v
+					})
 			)
 
 			return this
@@ -3787,7 +3795,12 @@ export default class Elysia<
 
 							return this._use(plugin)
 						})
-						.then((v) => v?.compile())
+						.then((v) => {
+							if (v && typeof v.compile === 'function')
+								v.compile()
+
+							return v
+						})
 				)
 				return this as unknown as any
 			}
