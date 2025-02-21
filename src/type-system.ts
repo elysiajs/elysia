@@ -225,6 +225,8 @@ const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 		for (let i = 0; i < options.extension.length; i++)
 			if (checkFileExtension(value.type, options.extension[i]))
 				return true
+
+		return false
 	}
 
 	return true

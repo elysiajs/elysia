@@ -1,14 +1,27 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia().mount('/v1/*', (request) => {
-	return Response.json({
-		method: request.method,
-		path: request.url
-	})
+export const IMPORT_SCHEMA = t.Object({
+	file: t.File({ error: 'File tidak valid', type: ['text/csv'] })
 })
 
-const response = await app
-	.handle(new Request('http://localhost/v1/hello'))
-	.then((x) => x.json())
+export const IMPORT_DETAIL = {
+	summary: 'Import',
+	description: 'Impor data pengguna dari file CSV'
+}
 
-// console.log(app.routes[0].composed.toString())
+new Elysia()
+	.post(
+		'/import',
+		({ body }) => {
+			const { file } = body
+			console.debug('Uploaded file: ', file)
+			return {
+				message: 'File upload'
+			}
+		},
+		{
+			body: IMPORT_SCHEMA,
+			detail: IMPORT_DETAIL
+		}
+	)
+	.listen(3000)
