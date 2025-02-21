@@ -645,11 +645,17 @@ export const composeHandler = ({
 
 	const hasQuery = inference.query || !!validator.query
 
+	const requestNoBody =
+		hooks.parse?.length === 1 &&
+		// @ts-expect-error
+		hooks.parse[0].fn === 'none'
+
 	const hasBody =
 		method !== '$INTERNALWS' &&
 		method !== 'GET' &&
 		method !== 'HEAD' &&
-		(inference.body || !!validator.body || !!hooks.parse?.length)
+		(inference.body || !!validator.body || !!hooks.parse?.length) &&
+		!requestNoBody
 
 	if (hasBody) fnLiteral += `let isParsing=false\n`
 

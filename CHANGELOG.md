@@ -1,9 +1,10 @@
-# 1.2.16
+# 1.2.16 - 21 Feb 2025
 Improvement:
 - `AfterHandler` infer response type
 
 Bug fix:
-- [#1075](https://github.com/elysiajs/elysia/issues/1075)
+- [#1075](https://github.com/elysiajs/elysia/issues/1075) nested async plugins mismatch routes to handlers
+- [#1070](https://github.com/elysiajs/elysia/issues/1070) .mount is mutating the incoming request method
 
 # 1.2.15 - 19 Feb 2025
 Bug fix:

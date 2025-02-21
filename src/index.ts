@@ -4115,32 +4115,29 @@ export default class Elysia<
 					!request.headers.get('content-type')
 				)
 					return run(
-						new Request(
-							replaceUrlPath(request.url, path || '/'),
-							request
-						)
+						new Request(replaceUrlPath(request.url, path || '/'), {
+							...request,
+							method: request.method
+						})
 					)
 
 				return run(
 					new Request(replaceUrlPath(request.url, path || '/'), {
 						...request,
+						method: request.method,
 						body: await request.arrayBuffer()
 					})
 				)
 			}
 
-			this.all(
-				'/*',
-				handler as any,
-				{
-					type: 'none'
-				} as any
-			)
+			this.all('/*', handler as any, {
+				parse: 'none'
+			})
 
 			return this
 		}
 
-		const length = path.length
+		const length = path.length - (path.endsWith('*') ? 1 : 0)
 
 		if (handle instanceof Elysia) handle = handle.compile().fetch
 
@@ -4153,7 +4150,10 @@ export default class Elysia<
 				return (handle as Function)(
 					new Request(
 						replaceUrlPath(request.url, path.slice(length) || '/'),
-						request
+						{
+							...request,
+							method: request.method
+						}
 					)
 				)
 
@@ -4162,6 +4162,7 @@ export default class Elysia<
 					replaceUrlPath(request.url, path.slice(length) || '/'),
 					{
 						...request,
+						method: request.method,
 						body: await request.arrayBuffer()
 					}
 				)
@@ -4176,13 +4177,9 @@ export default class Elysia<
 			} as any
 		)
 
-		this.all(
-			path + (path.endsWith('/') ? '*' : '/*'),
-			handler as any,
-			{
-				type: 'none'
-			} as any
-		)
+		this.all(path + (path.endsWith('/') ? '*' : '/*'), handler as any, {
+			parse: 'none'
+		})
 
 		return this
 	}
