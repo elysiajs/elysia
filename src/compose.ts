@@ -426,6 +426,12 @@ export const hasRef = (schema: TAnySchema): boolean => {
 export const hasTransform = (schema: TAnySchema): boolean => {
 	if (!schema) return false
 
+	if (
+		TransformSymbol in schema ||
+		(schema.properties && TransformSymbol in schema.properties)
+	)
+		return true
+
 	if (schema.$ref && schema.$defs && schema.$ref in schema.$defs)
 		return hasTransform(schema.$defs[schema.$ref])
 
@@ -480,17 +486,12 @@ export const hasTransform = (schema: TAnySchema): boolean => {
 				if (TransformSymbol in item) return true
 			}
 		}
-
-		return false
 	}
 
 	if (schema.type === 'array' && schema.items)
 		return hasTransform(schema.items)
 
-	return (
-		TransformSymbol in schema ||
-		(schema.properties && TransformSymbol in schema.properties)
-	)
+	return false;
 }
 
 /**
