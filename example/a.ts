@@ -1,18 +1,19 @@
-import { TypeCompiler } from '@sinclair/typebox/compiler'
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
-const app = new Elysia({
-	experimental: {
-		encodeSchema: true
-	}
-}).get('/', () => 'hello world', {
-	response: t
-		.Transform(t.String())
-		.Decode((v) => v)
-		.Encode(() => 'encoded')
+const app = new Elysia().mount(async (request) => {
+	// const body = await request.json()
+	// console.log({ body })
+	return new Response("OK")
 })
 
-app.handle(req('/'))
-	.then((x) => x.json())
+app.handle(
+	new Request('http://localhost', {
+		method: 'GET',
+		// headers: {
+		// 	'Content-Type': 'application/json'
+		// },
+		// body: JSON.stringify({ hello: 'world' })
+	})
+)
+	.then((x) => x.text())
 	.then(console.log)

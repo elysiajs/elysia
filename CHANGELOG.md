@@ -1,3 +1,7 @@
+# 1.2.17 - 21 Feb 2025
+Bug fix:
+- `.mount` doesn't return pass entire request
+
 # 1.2.16 - 21 Feb 2025
 Improvement:
 - `AfterHandler` infer response type

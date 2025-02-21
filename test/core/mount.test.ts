@@ -116,4 +116,26 @@ describe('Mount', () => {
 			path: 'http://localhost/hello'
 		})
 	})
+
+	it('preserve headers', async () => {
+		const app = new Elysia().mount((request) => {
+			// @ts-expect-error Bun has toJSON
+			return Response.json(request.headers.toJSON())
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/v1/hello', {
+					method: 'PUT',
+					headers: {
+						'x-test': 'test'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			'x-test': 'test'
+		})
+	})
 })

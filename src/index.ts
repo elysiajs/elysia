@@ -4108,27 +4108,22 @@ export default class Elysia<
 							? handle.compile().fetch
 							: handle!
 
-			const handler: Handler<any, any> = async ({ request, path }) => {
-				if (
-					request.method === 'GET' ||
-					request.method === 'HEAD' ||
-					!request.headers.get('content-type')
-				)
-					return run(
-						new Request(replaceUrlPath(request.url, path || '/'), {
-							...request,
-							method: request.method
-						})
-					)
-
-				return run(
+			const handler: Handler = ({ request, path }) =>
+				run(
 					new Request(replaceUrlPath(request.url, path || '/'), {
-						...request,
 						method: request.method,
-						body: await request.arrayBuffer()
+						headers: request.headers,
+						signal: request.signal,
+						credentials: request.credentials,
+						referrerPolicy: request.referrerPolicy as any,
+						duplex: request.duplex,
+						redirect: request.redirect,
+						mode: request.mode,
+						keepalive: request.keepalive,
+						integrity: request.integrity,
+						body: request.body
 					})
 				)
-			}
 
 			this.all('/*', handler as any, {
 				parse: 'none'
@@ -4137,37 +4132,31 @@ export default class Elysia<
 			return this
 		}
 
+		if (!handle) return this
+
 		const length = path.length - (path.endsWith('*') ? 1 : 0)
 
 		if (handle instanceof Elysia) handle = handle.compile().fetch
 
-		const handler: Handler<any, any> = async ({ request, path }) => {
-			if (
-				request.method === 'GET' ||
-				request.method === 'HEAD' ||
-				!request.headers.get('content-type')
-			)
-				return (handle as Function)(
-					new Request(
-						replaceUrlPath(request.url, path.slice(length) || '/'),
-						{
-							...request,
-							method: request.method
-						}
-					)
-				)
-
-			return (handle as Function)(
+		const handler: Handler = ({ request, path }) =>
+			handle(
 				new Request(
 					replaceUrlPath(request.url, path.slice(length) || '/'),
 					{
-						...request,
 						method: request.method,
-						body: await request.arrayBuffer()
+						headers: request.headers,
+						signal: request.signal,
+						credentials: request.credentials,
+						referrerPolicy: request.referrerPolicy as any,
+						duplex: request.duplex,
+						redirect: request.redirect,
+						mode: request.mode,
+						keepalive: request.keepalive,
+						integrity: request.integrity,
+						body: request.body
 					}
 				)
 			)
-		}
 
 		this.all(
 			path,
