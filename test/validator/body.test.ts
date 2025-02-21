@@ -643,4 +643,18 @@ describe('Body Validator', () => {
 		expect(await res.text()).toBe('sucrose - alchemist')
 		expect(res.status).toBe(200)
 	})
+
+	it('validate transform', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Transform(t.Object({
+				name: t.String()
+			})).Decode((x) => x.name).Encode((x) => ({ name: x })),
+			response: t.String()
+		})
+
+		const res = await app.handle(post('/', { name: 'difhel' }))
+
+		expect(await res.text()).toBe('difhel')
+		expect(res.status).toBe(200)
+	})
 })
