@@ -145,7 +145,14 @@ export type ElysiaConfig<Prefix extends string | undefined> = {
 	/**
 	 * Enable experimental features
 	 */
-	experimental?: {}
+	experimental?: {
+		/**
+		 * If enabled, the schema with `t.Transform` will call `Encode` before sending the response
+		 *
+		 * @since 1.2.16
+		 **/
+		encodeSchema?: boolean
+	}
 	/**
 	 * If enabled, the handlers will run a [clean](https://github.com/sinclairzx81/typebox?tab=readme-ov-file#clean) on incoming and outgoing bodies instead of failing directly.
 	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.

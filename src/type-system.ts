@@ -398,6 +398,7 @@ export const ElysiaType = {
 		const _default = property?.default
 			? new Date(property.default) // in case the default is an ISO string or milliseconds from epoch
 			: undefined
+
 		return t
 			.Transform(
 				t.Union(
@@ -430,16 +431,15 @@ export const ElysiaType = {
 
 				const date = new Date(value)
 
+				if(!date || isNaN(date.getTime()))
+					throw new ValidationError('property', schema, date)
+
 				if (!Value.Check(schema, date))
 					throw new ValidationError('property', schema, date)
 
 				return date
 			})
-			.Encode((value) => {
-				if (typeof value === 'string') return new Date(value)
-
-				return value
-			}) as any as TDate
+			.Encode((value) => value.toISOString()) as any as TDate
 	},
 	BooleanString: (property?: SchemaOptions) => {
 		const schema = Type.Boolean(property)

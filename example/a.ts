@@ -1,25 +1,18 @@
+import { TypeCompiler } from '@sinclair/typebox/compiler'
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia()
-	.model({
-		a: t.String(),
-		myModel: t.Object({ num: t.Number(), a: t.Ref('a') })
-	})
-	.get(
-		'/',
-		({ query }) => {
-			return query
-		},
-		{
-			query: 'myModel'
-		}
-	)
+const app = new Elysia({
+	experimental: {
+		encodeSchema: true
+	}
+}).get('/', () => 'hello world', {
+	response: t
+		.Transform(t.String())
+		.Decode((v) => v)
+		.Encode(() => 'encoded')
+})
 
-app.handle(req('/?num=1&a=a'))
-	.then((x) => x.text())
+app.handle(req('/'))
+	.then((x) => x.json())
 	.then(console.log)
-
-console.log(
-	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-)

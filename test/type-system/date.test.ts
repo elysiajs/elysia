@@ -11,22 +11,22 @@ describe('TypeSystem - Date', () => {
 
 	it('No default date provided', () => {
 		const schema = t.Date()
-		expect(schema.default).toBeUndefined();
+		expect(schema.default).toBeUndefined()
 
 		const unionSchema = schema as unknown as TUnion
 		for (const type of unionSchema.anyOf) {
-			expect(type.default).toBeUndefined();
+			expect(type.default).toBeUndefined()
 		}
 	})
 
 	it('Default date provided', () => {
-		const given = new Date("2025-01-01T00:00:00.000Z")
+		const given = new Date('2025-01-01T00:00:00.000Z')
 		const schema = t.Date({ default: given })
-		expect(schema.default).toEqual(given);
+		expect(schema.default).toEqual(given)
 
 		const unionSchema = schema as unknown as TUnion
 		for (const type of unionSchema.anyOf) {
-			expect(new Date(type.default)).toEqual(given);
+			expect(new Date(type.default)).toEqual(given)
 		}
 	})
 
@@ -46,21 +46,19 @@ describe('TypeSystem - Date', () => {
 	it('Encode', () => {
 		const schema = t.Date()
 
-		expect(Value.Encode<TDate, Date>(schema, new Date())).toBeInstanceOf(
-			Date
-		)
-		expect(Value.Encode<TDate, Date>(schema, '2021/1/1')).toBeInstanceOf(
-			Date
+		const date = new Date()
+
+		expect(Value.Encode<TDate, string>(schema, date)).toBe(
+			date.toISOString()
 		)
 
-		const error = new TypeBoxError(
-			'The encoded value does not match the expected schema'
-		)
-		expect(() => Value.Encode(schema, 'yay')).toThrow(error)
-		expect(() => Value.Encode(schema, 42)).not.toThrow(error)
-		expect(() => Value.Encode(schema, {})).toThrow(error)
-		expect(() => Value.Encode(schema, undefined)).toThrow(error)
-		expect(() => Value.Encode(schema, null)).toThrow(error)
+		expect(() => Value.Encode(schema, 'yay')).toThrowError()
+		expect(() =>
+			Value.Encode(schema, Value.Decode(schema, 42))
+		).not.toThrowError()
+		expect(() => Value.Encode(schema, {})).toThrowError()
+		expect(() => Value.Encode(schema, undefined)).toThrowError()
+		expect(() => Value.Encode(schema, null)).toThrowError()
 	})
 
 	it('Decode', () => {

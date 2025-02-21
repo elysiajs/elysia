@@ -229,11 +229,13 @@ const createReport = ({
 const composeValidationFactory = ({
 	injectResponse = '',
 	normalize = false,
-	validator
+	validator,
+	encodeSchema = false
 }: {
 	injectResponse?: string
 	normalize?: boolean
 	validator: SchemaValidator
+	encodeSchema?: boolean
 }) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
 		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
@@ -266,8 +268,17 @@ const composeValidationFactory = ({
 				`throw new ValidationError('response',validator.response['${status}'],${name})` +
 				'}' +
 				`c.set.status = ${status}` +
-				'}' +
-				'break\n'
+				'}\n'
+
+			if (
+				encodeSchema &&
+				// @ts-expect-error hasTransform is appended by getResponseSchemaValidator
+				(value.hasTransform || typeof value.Decode === 'function')
+			) {
+				code += `${name}=validator.response['${status}'].Encode(${name})\n`
+			}
+
+			code += 'break\n'
 		}
 
 		return code + '}'
@@ -725,11 +736,13 @@ export const composeHandler = ({
 	}
 
 	const normalize = app.config.normalize
+	const encodeSchema = app.config.experimental?.encodeSchema
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory({
 			normalize,
-			validator
+			validator,
+			encodeSchema
 		})
 
 	if (hasHeaders) fnLiteral += adapter.headers
