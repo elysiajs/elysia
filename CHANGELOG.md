@@ -1,3 +1,6 @@
+# 1.2.19 - 22 Feb 2025
+- [#1078](https://github.com/elysiajs/elysia/issues/1078) array string default to '[]' instead of undefined
+
 # 1.2.18 - 22 Feb 2025
 Bug fix:
 - duplicated static route may cause index conflict resulting in incorrect route

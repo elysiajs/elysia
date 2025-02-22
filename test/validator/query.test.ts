@@ -895,4 +895,28 @@ describe('Query Validator', () => {
 			}
 		})
 	})
+
+	it('handle array string correctly', async () => {
+		const app = new Elysia({ precompile: true }).get(
+			'/',
+			({ query }) => query,
+			{
+				query: t.Object({
+					status: t.Optional(t.Array(t.String()))
+				})
+			}
+		)
+
+		const response = await Promise.all([
+			app.handle(req('/?')).then((x) => x.json()),
+			app.handle(req('/?status=a')).then((x) => x.json()),
+			app.handle(req('/?status=a&status=b')).then((x) => x.json())
+		])
+
+		expect(response).toEqual([
+			{},
+			{ status: ['a'] },
+			{ status: ['a', 'b'] }
+		])
+	})
 })

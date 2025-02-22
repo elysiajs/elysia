@@ -431,7 +431,7 @@ export const ElysiaType = {
 
 				const date = new Date(value)
 
-				if(!date || isNaN(date.getTime()))
+				if (!date || isNaN(date.getTime()))
 					throw new ValidationError('property', schema, date)
 
 				if (!Value.Check(schema, date))
@@ -536,7 +536,6 @@ export const ElysiaType = {
 		options?: ArrayOptions
 	) => {
 		const schema = t.Array(children, options)
-		const defaultValue = JSON.stringify(Value.Create(schema))
 
 		let compiler: TypeCheck<TArray<T>>
 		try {
@@ -593,7 +592,7 @@ export const ElysiaType = {
 				t.Union([
 					t.String({
 						format: 'ArrayString',
-						default: defaultValue
+						default: options?.default
 					}),
 					schema
 				])

@@ -21,7 +21,8 @@ import {
 	redirect,
 	signCookie,
 	isNotEmpty,
-	encodePath
+	encodePath,
+	replaceSchemaType
 } from './utils'
 import { ParseError, error } from './error'
 
@@ -45,7 +46,7 @@ import type {
 	LifeCycleStore,
 	SchemaValidator
 } from './types'
-import type { TypeCheck } from './type-system'
+import { t, type TypeCheck } from './type-system'
 
 const TypeBoxSymbol = {
 	optional: Symbol.for('TypeBox.Optional'),
@@ -887,7 +888,7 @@ export const composeHandler = ({
 				'}'
 		} else {
 			fnLiteral +=
-				'if(c.qi!==-1){' + `let url = '&' + c.url.slice(c.qi + 1)\n`
+				'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi + 1)\n`
 
 			let index = 0
 			for (const {
