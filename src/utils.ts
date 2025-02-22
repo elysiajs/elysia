@@ -366,7 +366,7 @@ const _replaceSchemaType = (
 		const { anyOf, oneOf, allOf, not, properties, items, ...rest } = schema
 		const to = options.to(rest)
 
-		if(!to) return schema
+		if (!to) return schema
 
 		// If t.Transform is used, we need to re-calculate Encode, Decode
 		let transform
@@ -513,7 +513,7 @@ const _replaceSchemaType = (
 					const { anyOf, oneOf, allOf, not, type, ...rest } = value
 					const to = options.to(rest)
 
-					if(!to) return schema
+					if (!to) return schema
 
 					if (to.anyOf)
 						for (let i = 0; i < to.anyOf.length; i++)

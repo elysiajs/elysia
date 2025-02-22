@@ -633,20 +633,6 @@ export default class Elysia<
 						createQuery() {
 							if (this.query) return this.query
 
-							// console.dir(
-							// 	getSchemaValidator(cloned.query, {
-							// 		modules,
-							// 		dynamic,
-							// 		models,
-							// 		coerce: true,
-							// 		additionalCoerce:
-							// 			stringToStructureCoercions()
-							// 	}).schema,
-							// 	{
-							// 		depth: null
-							// 	}
-							// )
-
 							return (this.query = getSchemaValidator(
 								cloned.query,
 								{

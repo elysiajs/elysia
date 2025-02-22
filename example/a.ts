@@ -1,18 +1,27 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const p1 = new Elysia().model({
-	a: t.String()
-})
+const app = new Elysia().get(
+	'/test',
+	({ query: { id } }) => ({
+		id,
+		type: typeof id
+	}),
+	{
+		query: t.Object({
+			id: t
+				.Transform(t.Array(t.UnionEnum(['test', 'foo'])))
+				.Decode((id) => ({ value: id }))
+				.Encode((id) => id.value)
+		})
+	}
+)
 
-const p2 = new Elysia().model({
-	b: t.Number()
-})
-
-const app = new Elysia()
-	.use([p1, p2])
-	.model({
-		c: t.String()
-	})
-
-console.log(app.models)
+app.handle(req('/test?id=test'))
+	.then((x) =>
+	x.json().then((v) =>
+		console.dir(v, {
+			depth: null
+		})
+	)
+)

@@ -919,4 +919,33 @@ describe('Query Validator', () => {
 			{ status: ['a', 'b'] }
 		])
 	})
+
+	it('handle Transform query', async () => {
+		const app = new Elysia().get(
+			'/test',
+			({ query: { id } }) => ({
+				id,
+				type: typeof id
+			}),
+			{
+				query: t.Object({
+					id: t
+						.Transform(t.Array(t.UnionEnum(['test', 'foo'])))
+						.Decode((id) => ({ value: id }))
+						.Encode((id) => id.value)
+				})
+			}
+		)
+
+		const response = await app
+			.handle(req('/test?id=test'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			id: {
+				value: ['test']
+			},
+			type: 'object'
+		})
+	})
 })

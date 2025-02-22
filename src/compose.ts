@@ -21,8 +21,7 @@ import {
 	redirect,
 	signCookie,
 	isNotEmpty,
-	encodePath,
-	replaceSchemaType
+	encodePath
 } from './utils'
 import { ParseError, error } from './error'
 
@@ -46,7 +45,7 @@ import type {
 	LifeCycleStore,
 	SchemaValidator
 } from './types'
-import { t, type TypeCheck } from './type-system'
+import { type TypeCheck } from './type-system'
 
 const TypeBoxSymbol = {
 	optional: Symbol.for('TypeBox.Optional'),

@@ -1,5 +1,6 @@
 # 1.2.20 - 22 Feb 2025
 Bug fix:
+- [#671](https://github.com/elysiajs/elysia/issues/671#issuecomment-2675777040) Transform query schema check fails
 - model type
 
 # 1.2.19 - 22 Feb 2025
