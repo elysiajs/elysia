@@ -1,3 +1,7 @@
+# 1.2.20 - 22 Feb 2025
+Bug fix:
+- model type
+
 # 1.2.19 - 22 Feb 2025
 Bug fix:
 - [#1078](https://github.com/elysiajs/elysia/issues/1078) array string default to '[]' instead of undefined

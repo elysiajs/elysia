@@ -1,12 +1,18 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia({ precompile: true }).get('/', ({ query }) => query, {
-	query: t.Object({
-		status: t.Optional(t.Union([t.String(), t.Array(t.String())]))
-	})
+const p1 = new Elysia().model({
+	a: t.String()
 })
 
-app.handle(req('/?status=a&'))
-	.then((x) => x.json())
-	.then(console.log)
+const p2 = new Elysia().model({
+	b: t.Number()
+})
+
+const app = new Elysia()
+	.use([p1, p2])
+	.model({
+		c: t.String()
+	})
+
+console.log(app.models)

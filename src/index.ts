@@ -448,7 +448,7 @@ export default class Elysia<
 	}
 
 	get models(): {
-		[K in keyof Definitions['typebox']]: ModelValidator<
+		[K in keyof UnwrapTypeModule<Definitions['typebox']>]: ModelValidator<
 			UnwrapTypeModule<Definitions['typebox']>[K]
 		>
 	} & {
