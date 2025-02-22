@@ -100,4 +100,49 @@ describe('has transform', () => {
 			)
 		).toBe(true)
 	})
+
+	it('return true if Transform is inside Intersect', () => {
+		expect(
+			hasTransform(
+				t.Intersect([
+					t.Object({ foo: t.String() }),
+					t.Object({
+						field: t
+							.Transform(t.String())
+							.Decode((decoded) => ({ decoded }))
+							.Encode((v) => v.decoded)
+					})
+				])
+			)
+		).toEqual(true)
+	})
+
+	it('return true if Transform is inside Union', () => {
+		expect(
+			hasTransform(
+				t.Union([
+					t.Object({ foo: t.String() }),
+					t.Object({
+						field: t
+							.Transform(t.String())
+							.Decode((decoded) => ({ decoded }))
+							.Encode((v) => v.decoded)
+					})
+				])
+			)
+		).toEqual(true)
+	})
+
+	it('return true when Transform is the root', () => {
+		expect(
+			hasTransform(
+				t
+					.Transform(t.Object({ id: t.Integer() }))
+					.Decode((value) => value.id)
+					.Encode((value) => ({
+						id: value
+					}))
+			)
+		).toBe(true)
+	})
 })

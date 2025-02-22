@@ -363,62 +363,45 @@ const TransformSymbol = Symbol.for('TypeBox.Transform')
 export const hasRef = (schema: TAnySchema): boolean => {
 	if (!schema) return false
 
+	if (schema.oneOf)
+		for (let i = 0; i < schema.oneOf.length; i++)
+			if (hasRef(schema.oneOf[i])) return true
+
+	if (schema.anyOf)
+		for (let i = 0; i < schema.anyOf.length; i++)
+			if (hasRef(schema.anyOf[i])) return true
+
+	if (schema.oneOf)
+		for (let i = 0; i < schema.oneOf.length; i++)
+			if (hasRef(schema.oneOf[i])) return true
+
+	if (schema.allOf)
+		for (let i = 0; i < schema.allOf.length; i++)
+			if (hasRef(schema.allOf[i])) return true
+
+	if (schema.not && hasRef(schema.not)) return true
+
 	if (schema.type === 'object' && schema.properties) {
 		const properties = schema.properties as Record<string, TAnySchema>
+
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
 
-			if (property.type === 'object') {
-				if (hasRef(property)) return true
-			} else {
-				if (property.anyOf) {
-					for (let i = 0; i < property.anyOf.length; i++)
-						if (hasRef(property.anyOf[i])) return true
-				}
+			if (hasRef(property)) return true
 
-				if (property.oneOf) {
-					for (let i = 0; i < property.oneOf.length; i++)
-						if (hasRef(property.oneOf[i])) return true
-				}
-
-				if (property.allOf) {
-					for (let i = 0; i < property.allOf.length; i++)
-						if (hasRef(property.allOf[i])) return true
-				}
-			}
-
-			if (property[Kind] === 'Ref' && '$ref' in property) return true
-
-			if (property.type === 'array' && property.items) {
-				const item = property.items
-
-				if (item.type === 'object') {
-					if (hasRef(item)) return true
-				} else {
-					if (item.anyOf) {
-						for (let i = 0; i < item.anyOf.length; i++)
-							if (hasRef(item.anyOf[i])) return true
-					}
-
-					if (item.oneOf) {
-						for (let i = 0; i < item.oneOf.length; i++)
-							if (hasRef(item.oneOf[i])) return true
-					}
-
-					if (item.allOf) {
-						for (let i = 0; i < item.allOf.length; i++)
-							if (hasRef(item.allOf[i])) return true
-					}
-				}
-
-				if (item[Kind] === 'Ref' && '$ref' in item) return true
-			}
+			if (
+				property.type === 'array' &&
+				property.items &&
+				hasRef(property.items)
+			)
+				return true
 		}
 
 		return false
 	}
 
-	if (schema.type === 'array' && schema.items) return hasRef(schema.items)
+	if (schema.type === 'array' && schema.items && hasRef(schema.items))
+		return true
 
 	return schema[Kind] === 'Ref' && '$ref' in schema
 }
@@ -429,67 +412,46 @@ export const hasTransform = (schema: TAnySchema): boolean => {
 	if (schema.$ref && schema.$defs && schema.$ref in schema.$defs)
 		return hasTransform(schema.$defs[schema.$ref])
 
+	if (schema.oneOf)
+		for (let i = 0; i < schema.oneOf.length; i++)
+			if (hasTransform(schema.oneOf[i])) return true
+
+	if (schema.anyOf) {
+		for (let i = 0; i < schema.anyOf.length; i++)
+			if (hasTransform(schema.anyOf[i])) return true
+	}
+
+	if (schema.allOf)
+		for (let i = 0; i < schema.allOf.length; i++)
+			if (hasTransform(schema.allOf[i])) return true
+
+	if (schema.not && hasTransform(schema.not)) return true
+
 	if (schema.type === 'object' && schema.properties) {
 		const properties = schema.properties as Record<string, TAnySchema>
+
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
 
-			if (property.type === 'object') {
-				if (hasTransform(property)) return true
-			} else {
-				if (property.anyOf) {
-					for (let i = 0; i < property.anyOf.length; i++)
-						if (hasTransform(property.anyOf[i])) return true
-				}
+			if (hasTransform(property)) return true
 
-				if (property.allOf) {
-					for (let i = 0; i < property.allOf.length; i++)
-						if (hasTransform(property.allOf[i])) return true
-				}
-
-				if (property.oneOf) {
-					for (let i = 0; i < property.oneOf.length; i++)
-						if (hasTransform(property.oneOf[i])) return true
-				}
-			}
-
-			if (TransformSymbol in property) return true
-
-			if (property.type === 'array' && property.items) {
-				const item = property.items
-
-				if (item.type === 'object') {
-					if (hasTransform(item)) return true
-				} else {
-					if (item.anyOf) {
-						for (let i = 0; i < item.anyOf.length; i++)
-							if (hasTransform(item.anyOf[i])) return true
-					}
-
-					if (item.oneOf) {
-						for (let i = 0; i < item.oneOf.length; i++)
-							if (hasTransform(item.oneOf[i])) return true
-					}
-
-					if (item.allOf) {
-						for (let i = 0; i < item.allOf.length; i++)
-							if (hasTransform(item.allOf[i])) return true
-					}
-				}
-
-				if (TransformSymbol in item) return true
-			}
+			if (
+				property.type === 'array' &&
+				property.items &&
+				hasTransform(property.items)
+			)
+				return true
 		}
 
 		return false
 	}
 
-	if (schema.type === 'array' && schema.items)
-		return hasTransform(schema.items)
+	if (schema.type === 'array' && schema.items && hasTransform(schema.items))
+		return true
 
 	return (
 		TransformSymbol in schema ||
-		(schema.properties && TransformSymbol in schema.properties)
+		(!!schema.properties && TransformSymbol in schema.properties)
 	)
 }
 

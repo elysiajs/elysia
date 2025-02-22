@@ -1,27 +1,27 @@
 import { Elysia, t } from '../src'
+import { hasRef, hasTransform } from '../src/compose'
 import { req } from '../test/utils'
 
-const app = new Elysia().get(
-	'/test',
-	({ query: { id } }) => ({
-		id,
-		type: typeof id
-	}),
-	{
-		query: t.Object({
-			id: t
-				.Transform(t.Array(t.UnionEnum(['test', 'foo'])))
-				.Decode((id) => ({ value: id }))
-				.Encode((id) => id.value)
+const app = new Elysia().post('/test', ({ body }) => body, {
+	body: t.Intersect([
+		t.Object({ foo: t.String() }),
+		t.Object({
+			field: t
+				.Transform(t.String())
+				.Decode((decoded) => ({ decoded }))
+				.Encode((v) => v.decoded)
 		})
-	}
-)
+	])
+})
 
-app.handle(req('/test?id=test'))
-	.then((x) =>
-	x.json().then((v) =>
-		console.dir(v, {
-			depth: null
-		})
-	)
+app.handle(
+	new Request('http://localhost/test', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ field: 'bar', foo: 'test' })
+	})
 )
+	.then((x) => x.json())
+	.then(console.log)

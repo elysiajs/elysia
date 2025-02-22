@@ -1,3 +1,7 @@
+# 1.2.21 - 22 Feb 2025
+Bug fix:
+- [#671](https://github.com/elysiajs/elysia/issues/671#issuecomment-2676263442) Transform inside t.Intersect isn't detected
+
 # 1.2.20 - 22 Feb 2025
 Bug fix:
 - [#671](https://github.com/elysiajs/elysia/issues/671#issuecomment-2675777040) Transform query schema check fails

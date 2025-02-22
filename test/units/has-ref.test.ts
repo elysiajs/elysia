@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { hasRef } from '../../src/compose'
 
-describe('has transform', () => {
+describe('has Ref', () => {
 	it('return true if object property has ref', () => {
 		expect(
 			hasRef(
@@ -99,5 +99,48 @@ describe('has transform', () => {
 				})
 			)
 		).toBe(true)
+	})
+
+	it('return true if Ref is inside Union', () => {
+		expect(
+			hasRef(
+				t.Union([
+					t.Object({ foo: t.String() }),
+					t.Object({
+						field: t.Ref('b')
+					})
+				])
+			)
+		).toEqual(true)
+	})
+
+	it('return true if Ref is inside Intersect', () => {
+		expect(
+			hasRef(
+				t.Intersect([
+					t.Object({ foo: t.String() }),
+					t.Object({
+						field: t.Ref('b')
+					})
+				])
+			)
+		).toEqual(true)
+	})
+
+	it('return true if Ref is inside Transform', () => {
+		expect(
+			hasRef(
+				t
+					.Transform(t.Object({ id: t.Ref('b') }))
+					.Decode((value) => value.id)
+					.Encode((value) => ({
+						id: value
+					}))
+			)
+		).toBe(true)
+	})
+
+	it('return true if Ref is the root', () => {
+		expect(hasRef(t.Ref('b'))).toBe(true)
 	})
 })

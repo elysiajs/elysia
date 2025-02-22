@@ -767,4 +767,32 @@ describe('Body Validator', () => {
 			expect(status).toBe(422)
 		}
 	})
+
+	it('handle body using Transform with Intersect ', async () => {
+		const app = new Elysia().post('/test', ({ body }) => body, {
+			body: t.Intersect([
+				t.Object({ foo: t.String() }),
+				t.Object({
+					field: t
+						.Transform(t.String())
+						.Decode((decoded) => ({ decoded }))
+						.Encode((v) => v.decoded)
+				})
+			])
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/test', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({ field: 'bar', foo: 'test' })
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({ field: { decoded: 'bar' }, foo: 'test' })
+	})
 })

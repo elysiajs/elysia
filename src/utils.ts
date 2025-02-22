@@ -352,12 +352,7 @@ const _replaceSchemaType = (
 		return schema
 	}
 
-	if (schema.not) {
-		for (let i = 0; i < schema.not.length; i++)
-			schema.not[i] = _replaceSchemaType(schema.not[i], options, root)
-
-		return schema
-	}
+	if (schema.not) return _replaceSchemaType(schema.not, options, root)
 
 	const isRoot = root && !!options.excludeRoot
 
@@ -466,9 +461,7 @@ const _replaceSchemaType = (
 		else if (to.allOf)
 			for (let i = 0; i < to.allOf.length; i++)
 				to.allOf[i] = composeProperties(to.allOf[i])
-		else if (to.not)
-			for (let i = 0; i < to.not.length; i++)
-				to.not[i] = composeProperties(to.not[i])
+		else if (to.not) to.not = composeProperties(to.not)
 
 		if (transform) to[TransformKind as any] = transform[TransformKind]
 
@@ -524,9 +517,7 @@ const _replaceSchemaType = (
 					else if (to.allOf)
 						for (let i = 0; i < to.allOf.length; i++)
 							to.allOf[i] = { ...rest, ...to.allOf[i] }
-					else if (to.not)
-						for (let i = 0; i < to.not.length; i++)
-							to.not[i] = { ...rest, ...to.not[i] }
+					else if (to.not) to.not = { ...rest, ...to.not }
 
 					properties[key] = {
 						...rest,
