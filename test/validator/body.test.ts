@@ -768,6 +768,130 @@ describe('Body Validator', () => {
 		}
 	})
 
+	it('handle file upload', async () => {
+		const app = new Elysia().post(
+			'/single',
+			({ body: { file } }) => file.size,
+			{
+				body: t.Object({
+					file: t.File()
+				})
+			}
+		)
+
+		const { request, size } = upload('/single', {
+			file: 'millenium.jpg'
+		})
+
+		const response = await app.handle(request).then((r) => r.text())
+
+		expect(+response).toBe(size)
+	})
+
+	it('handle file prefix', async () => {
+		const app = new Elysia()
+			.post('/pass1', ({ body: { file } }) => file.size, {
+				body: t.Object({
+					file: t.File({
+						type: 'image/*'
+					})
+				})
+			})
+			.post('/pass2', ({ body: { file } }) => file.size, {
+				body: t.Object({
+					file: t.File({
+						type: ['application/*', 'image/*']
+					})
+				})
+			})
+			.post('/fail', ({ body: { file } }) => file.size, {
+				body: t.Object({
+					file: t.File({
+						type: 'application/*'
+					})
+				})
+			})
+
+		{
+			const { request, size } = upload('/pass1', {
+				file: 'millenium.jpg'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request, size } = upload('/pass2', {
+				file: 'millenium.jpg'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request } = upload('/fail', {
+				file: 'millenium.jpg'
+			})
+
+			const status = await app.handle(request).then((r) => r.status)
+			expect(status).toBe(422)
+		}
+	})
+
+	it('handle file type', async () => {
+		const app = new Elysia()
+			.post('/pass1', ({ body: { file } }) => file.size, {
+				body: t.Object({
+					file: t.File({
+						type: 'image/jpeg'
+					})
+				})
+			})
+			.post('/pass2', ({ body: { file } }) => file.size, {
+				body: t.Object({
+					file: t.File({
+						type: ['image/png', 'image/jpeg']
+					})
+				})
+			})
+			.post('/fail', ({ body: { file } }) => file.size, {
+				body: t.Object({
+					file: t.File({
+						type: 'image/png'
+					})
+				})
+			})
+
+		{
+			const { request, size } = upload('/pass1', {
+				file: 'millenium.jpg'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request, size } = upload('/pass2', {
+				file: 'millenium.jpg'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request } = upload('/fail', {
+				file: 'millenium.jpg'
+			})
+
+			const status = await app.handle(request).then((r) => r.status)
+			expect(status).toBe(422)
+		}
+	})
+
 	it('validate t.Transform()-body decoding', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Transform(t.Object({
