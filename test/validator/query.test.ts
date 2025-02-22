@@ -810,12 +810,7 @@ describe('Query Validator', () => {
 		})
 	})
 
-	/**
-	 * ? https://github.com/elysiajs/elysia/issues/1015
-	 *
-	 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
-	 * see `getSchemaValidator` in `src/utils.ts`
-	 **/
+	// https://github.com/elysiajs/elysia/issues/1015
 	it('handle ref transform', async () => {
 		const app = new Elysia()
 			.model({
@@ -837,6 +832,38 @@ describe('Query Validator', () => {
 			.then((x) => x.json())
 
 		expect(response).toEqual({ num: 1, type: 'number' })
+	})
+
+	// https://github.com/elysiajs/elysia/issues/1068
+	it('handle ref transform with ref inside reference model', async () => {
+		const app = new Elysia()
+			.model({
+				num2: t.Number(),
+				myModel: t.Object({ num: t.Number(), num2: t.Ref('num2') })
+			})
+			.get(
+				'/',
+				({ query: { num, num2 } }) => ({
+					num,
+					numType: typeof num,
+					num2,
+					num2Type: typeof num2
+				}),
+				{
+					query: 'myModel'
+				}
+			)
+
+		const response = await app
+			.handle(new Request('http://localhost?num=1&num2=2'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			num: 1,
+			numType: 'number',
+			num2: 2,
+			num2Type: 'number'
+		})
 	})
 
 	it('handle "&" inside a query value', async () => {
@@ -866,6 +893,59 @@ describe('Query Validator', () => {
 			url: {
 				test: new URL(url).searchParams.get('test')
 			}
+		})
+	})
+
+	it('handle array string correctly', async () => {
+		const app = new Elysia({ precompile: true }).get(
+			'/',
+			({ query }) => query,
+			{
+				query: t.Object({
+					status: t.Optional(t.Array(t.String()))
+				})
+			}
+		)
+
+		const response = await Promise.all([
+			app.handle(req('/?')).then((x) => x.json()),
+			app.handle(req('/?status=a')).then((x) => x.json()),
+			app.handle(req('/?status=a&status=b')).then((x) => x.json())
+		])
+
+		expect(response).toEqual([
+			{},
+			{ status: ['a'] },
+			{ status: ['a', 'b'] }
+		])
+	})
+
+	it('handle Transform query', async () => {
+		const app = new Elysia().get(
+			'/test',
+			({ query: { id } }) => ({
+				id,
+				type: typeof id
+			}),
+			{
+				query: t.Object({
+					id: t
+						.Transform(t.Array(t.UnionEnum(['test', 'foo'])))
+						.Decode((id) => ({ value: id }))
+						.Encode((id) => id.value)
+				})
+			}
+		)
+
+		const response = await app
+			.handle(req('/test?id=test'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			id: {
+				value: ['test']
+			},
+			type: 'object'
 		})
 	})
 })

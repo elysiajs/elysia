@@ -1,6 +1,33 @@
-# 1.2.16
+# 1.2.20 - 22 Feb 2025
+Bug fix:
+- [#671](https://github.com/elysiajs/elysia/issues/671#issuecomment-2675777040) Transform query schema check fails
+- model type
+
+# 1.2.19 - 22 Feb 2025
+Bug fix:
+- [#1078](https://github.com/elysiajs/elysia/issues/1078) array string default to '[]' instead of undefined
+
+# 1.2.18 - 22 Feb 2025
+Bug fix:
+- duplicated static route may cause index conflict resulting in incorrect route
+
+# 1.2.17 - 21 Feb 2025
+Bug fix:
+- `.mount` doesn't return pass entire request
+
+# 1.2.16 - 21 Feb 2025
 Improvement:
 - `AfterHandler` infer response type
+
+Change:
+- [#1068](https://github.com/elysiajs/elysia/issues/1068) update `@sinclair/typebox` to `0.34.27`
+
+Bug fix:
+- [#1075](https://github.com/elysiajs/elysia/issues/1075) nested async plugins mismatch routes to handlers
+- [#1073](https://github.com/elysiajs/elysia/issues/1073) file type validation not working
+- [#1070](https://github.com/elysiajs/elysia/issues/1070) .mount is mutating the incoming request method
+- mount path is incorrect when using prefix with trailing `*`
+- [#873](https://github.com/elysiajs/elysia/issues/873) add `experimental.encodeSchema` for custom `Transform` Encode type
 
 # 1.2.15 - 19 Feb 2025
 Bug fix:

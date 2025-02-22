@@ -448,7 +448,7 @@ export default class Elysia<
 	}
 
 	get models(): {
-		[K in keyof Definitions['typebox']]: ModelValidator<
+		[K in keyof UnwrapTypeModule<Definitions['typebox']>]: ModelValidator<
 			UnwrapTypeModule<Definitions['typebox']>[K]
 		>
 	} & {
@@ -633,20 +633,6 @@ export default class Elysia<
 						createQuery() {
 							if (this.query) return this.query
 
-							// console.dir(
-							// 	getSchemaValidator(cloned.query, {
-							// 		modules,
-							// 		dynamic,
-							// 		models,
-							// 		coerce: true,
-							// 		additionalCoerce:
-							// 			stringToStructureCoercions()
-							// 	}).schema,
-							// 	{
-							// 		depth: null
-							// 	}
-							// )
-
 							return (this.query = getSchemaValidator(
 								cloned.query,
 								{
@@ -803,23 +789,25 @@ export default class Elysia<
 				asManifest
 			})
 
+		let oldIndex: number | undefined
 		if (this.routeTree.has(method + path))
 			for (let i = 0; i < this.router.history.length; i++) {
 				const route = this.router.history[i]
 				if (route.path === path && route.method === method) {
-					const removed = this.router.history.splice(i, 1)[0]
+					oldIndex = i
+					break
 
-					if (
-						removed &&
-						this.routeTree.has(removed?.method + removed?.path)
-					)
-						this.routeTree.delete(removed.method + removed.path)
+					// if (
+					// 	removed &&
+					// 	this.routeTree.has(removed?.method + removed?.path)
+					// )
+					// 	this.routeTree.delete(removed.method + removed.path)
 				}
 			}
 		else this.routeTree.set(method + path, this.router.history.length)
 
 		const history = this.router.history
-		const index = this.router.history.length
+		const index = oldIndex ?? this.router.history.length
 
 		const mainHandler = shouldPrecompile
 			? compile()
@@ -838,21 +826,37 @@ export default class Elysia<
 
 		const isWebSocket = method === '$INTERNALWS'
 
-		this.router.history.push(
-			// @ts-ignore
-			Object.assign(
-				{
-					method,
-					path,
-					composed: mainHandler,
-					handler: handle,
-					hooks
-				},
-				localHook.webSocket
-					? { websocket: localHook.websocket as any }
-					: {}
+		if (oldIndex !== undefined)
+			this.router.history[oldIndex] =
+				// @ts-ignore
+				Object.assign(
+					{
+						method,
+						path,
+						composed: mainHandler,
+						handler: handle,
+						hooks
+					},
+					localHook.webSocket
+						? { websocket: localHook.websocket as any }
+						: {}
+				)
+		else
+			this.router.history.push(
+				// @ts-ignore
+				Object.assign(
+					{
+						method,
+						path,
+						composed: mainHandler,
+						handler: handle,
+						hooks
+					},
+					localHook.webSocket
+						? { websocket: localHook.websocket as any }
+						: {}
+				)
 			)
-		)
 
 		const staticRouter = this.router.static.http
 
@@ -3668,37 +3672,45 @@ export default class Elysia<
 
 		if (plugin instanceof Promise) {
 			this.promisedModules.add(
-				plugin.then((plugin) => {
-					if (typeof plugin === 'function') return plugin(this)
+				plugin
+					.then((plugin) => {
+						if (typeof plugin === 'function') return plugin(this)
 
-					if (plugin instanceof Elysia)
-						return this._use(plugin).compile()
+						if (plugin instanceof Elysia)
+							return this._use(plugin).compile()
 
-					if (plugin.constructor.name === 'Elysia')
-						return this._use(plugin as unknown as Elysia).compile()
+						if (plugin.constructor.name === 'Elysia')
+							return this._use(
+								plugin as unknown as Elysia
+							).compile()
 
-					if (typeof plugin.default === 'function')
-						return plugin.default(this)
+						if (typeof plugin.default === 'function')
+							return plugin.default(this)
 
-					if (plugin.default instanceof Elysia)
-						return this._use(plugin.default)
+						if (plugin.default instanceof Elysia)
+							return this._use(plugin.default)
 
-					if (plugin.constructor.name === 'Elysia')
-						return this._use(plugin.default)
+						if (plugin.constructor.name === 'Elysia')
+							return this._use(plugin.default)
 
-					if (plugin.constructor.name === '_Elysia')
-						return this._use(plugin.default)
+						if (plugin.constructor.name === '_Elysia')
+							return this._use(plugin.default)
 
-					try {
-						return this._use(plugin.default)
-					} catch (error) {
-						console.error(
-							'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
-						)
+						try {
+							return this._use(plugin.default)
+						} catch (error) {
+							console.error(
+								'Invalid plugin type. Expected Elysia instance, function, or module with "default" as Elysia instance or function that returns Elysia instance.'
+							)
 
-						throw error
-					}
-				})
+							throw error
+						}
+					})
+					.then((v) => {
+						if (v && typeof v.compile === 'function') v.compile()
+
+						return v
+					})
 			)
 
 			return this
@@ -3787,7 +3799,12 @@ export default class Elysia<
 
 							return this._use(plugin)
 						})
-						.then((v) => v?.compile())
+						.then((v) => {
+							if (v && typeof v.compile === 'function')
+								v.compile()
+
+							return v
+						})
 				)
 				return this as unknown as any
 			}
@@ -4095,81 +4112,63 @@ export default class Elysia<
 							? handle.compile().fetch
 							: handle!
 
-			const handler: Handler<any, any> = async ({ request, path }) => {
-				if (
-					request.method === 'GET' ||
-					request.method === 'HEAD' ||
-					!request.headers.get('content-type')
-				)
-					return run(
-						new Request(
-							replaceUrlPath(request.url, path || '/'),
-							request
-						)
-					)
-
-				return run(
-					new Request(replaceUrlPath(request.url, path || '/'), {
-						...request,
-						body: await request.arrayBuffer()
+			const handler: Handler = ({ request, path }) =>
+				run(
+					new Request(replaceUrlPath(request.url, path), {
+						method: request.method,
+						headers: request.headers,
+						signal: request.signal,
+						credentials: request.credentials,
+						referrerPolicy: request.referrerPolicy as any,
+						duplex: request.duplex,
+						redirect: request.redirect,
+						mode: request.mode,
+						keepalive: request.keepalive,
+						integrity: request.integrity,
+						body: request.body
 					})
 				)
-			}
 
-			this.all(
-				'/*',
-				handler as any,
-				{
-					type: 'none'
-				} as any
-			)
+			this.all('/*', handler as any, {
+				parse: 'none'
+			})
 
 			return this
 		}
 
-		const length = path.length
+		if (!handle) return this
+
+		const length = path.length - (path.endsWith('*') ? 1 : 0)
 
 		if (handle instanceof Elysia) handle = handle.compile().fetch
 
-		const handler: Handler<any, any> = async ({ request, path }) => {
-			if (
-				request.method === 'GET' ||
-				request.method === 'HEAD' ||
-				!request.headers.get('content-type')
-			)
-				return (handle as Function)(
-					new Request(
-						replaceUrlPath(request.url, path.slice(length) || '/'),
-						request
-					)
-				)
-
-			return (handle as Function)(
+		const handler: Handler = ({ request, path }) =>
+			handle(
 				new Request(
 					replaceUrlPath(request.url, path.slice(length) || '/'),
 					{
-						...request,
-						body: await request.arrayBuffer()
+						method: request.method,
+						headers: request.headers,
+						signal: request.signal,
+						credentials: request.credentials,
+						referrerPolicy: request.referrerPolicy as any,
+						duplex: request.duplex,
+						redirect: request.redirect,
+						mode: request.mode,
+						keepalive: request.keepalive,
+						integrity: request.integrity,
+						body: request.body
 					}
 				)
 			)
-		}
 
-		this.all(
-			path,
-			handler as any,
-			{
-				type: 'none'
-			} as any
-		)
+		this.all(path, handler as any, {
+			parse: 'none'
+		})
 
-		this.all(
-			path + (path.endsWith('/') ? '*' : '/*'),
-			handler as any,
-			{
-				type: 'none'
-			} as any
-		)
+		this.all(path + (path.endsWith('/') ? '*' : '/*'), handler as any, {
+			parse: 'none'
+		})
 
 		return this
 	}

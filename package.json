@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.2.15",
+	"version": "1.2.20",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -158,7 +158,7 @@
 		"release": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {
-		"@sinclair/typebox": "^0.34.15",
+		"@sinclair/typebox": "^0.34.27",
 		"cookie": "^1.0.2",
 		"memoirist": "^0.3.0",
 		"openapi-types": "^12.1.3"

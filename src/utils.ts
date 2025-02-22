@@ -12,7 +12,11 @@ import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 import { t } from './type-system'
 import type { Sucrose } from './sucrose'
 
+import { mapValueError } from './error'
+
 import type { TraceHandler } from './trace'
+import type { CookieOptions } from './cookies'
+
 import type {
 	LifeCycleStore,
 	MaybeArray,
@@ -33,9 +37,6 @@ import type {
 	SchemaValidator,
 	AnyLocalHook
 } from './types'
-import type { CookieOptions } from './cookies'
-import { mapValueError } from './error'
-import { hasRef } from './compose'
 
 export const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -289,9 +290,10 @@ export const mergeHook = (
 
 interface ReplaceSchemaTypeOptions {
 	from: TSchema
-	to(options: Object): TSchema
+	to(options: Object): TSchema | null
 	excludeRoot?: boolean
 	rootOnly?: boolean
+	original?: TAnySchema
 	/**
 	 * Traverse until object is found except root object
 	 **/
@@ -303,11 +305,17 @@ export const replaceSchemaType = (
 	options: MaybeArray<ReplaceSchemaTypeOptions>,
 	root = true
 ) => {
-	if (!Array.isArray(options))
-		return _replaceSchemaType(schema, options, root)
+	if (!Array.isArray(options)) {
+		options.original = schema
 
-	for (const option of options)
+		return _replaceSchemaType(schema, options, root)
+	}
+
+	for (const option of options) {
+		option.original = schema
+
 		schema = _replaceSchemaType(schema, option, root)
+	}
 
 	return schema
 }
@@ -357,6 +365,8 @@ const _replaceSchemaType = (
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		const { anyOf, oneOf, allOf, not, properties, items, ...rest } = schema
 		const to = options.to(rest)
+
+		if (!to) return schema
 
 		// If t.Transform is used, we need to re-calculate Encode, Decode
 		let transform
@@ -503,6 +513,8 @@ const _replaceSchemaType = (
 					const { anyOf, oneOf, allOf, not, type, ...rest } = value
 					const to = options.to(rest)
 
+					if (!to) return schema
+
 					if (to.anyOf)
 						for (let i = 0; i < to.anyOf.length; i++)
 							to.anyOf[i] = { ...rest, ...to.anyOf[i] }
@@ -622,14 +634,6 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 		schema =
 			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
-
-		/**
-		 * ? https://github.com/elysiajs/elysia/issues/1015
-		 *
-		 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
-		 * see test/validator/query.test.ts
-		 **/
-		if (!hasRef(schema)) schema = models[key]
 
 		if (isArray) schema = t.Array(schema)
 	}
@@ -804,15 +808,6 @@ export const getResponseSchemaValidator = (
 
 		maybeSchemaOrRecord =
 			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
-
-		/**
-		 * ? https://github.com/elysiajs/elysia/issues/1015
-		 *
-		 * keep this until https://github.com/sinclairzx81/typebox/issues/1178 is resolved
-		 * see test/validator/query.test.ts
-		 **/
-		// @ts-expect-error
-		if (!hasRef(maybeSchemaOrRecord)) maybeSchemaOrRecord = models[key]
 
 		if (isArray)
 			maybeSchemaOrRecord = t.Array(maybeSchemaOrRecord as TSchema)

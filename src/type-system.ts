@@ -30,6 +30,7 @@ import { fullFormats } from './formats'
 import type { CookieOptions } from './cookies'
 import { ValidationError } from './error'
 import type { MaybeArray } from './types'
+import { hasTransform } from './compose'
 
 const isISO8601 =
 	/(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z))/
@@ -225,6 +226,8 @@ const validateFile = (options: ElysiaTypeOptions.File, value: any) => {
 		for (let i = 0; i < options.extension.length; i++)
 			if (checkFileExtension(value.type, options.extension[i]))
 				return true
+
+		return false
 	}
 
 	return true
@@ -396,6 +399,7 @@ export const ElysiaType = {
 		const _default = property?.default
 			? new Date(property.default) // in case the default is an ISO string or milliseconds from epoch
 			: undefined
+
 		return t
 			.Transform(
 				t.Union(
@@ -428,16 +432,15 @@ export const ElysiaType = {
 
 				const date = new Date(value)
 
+				if (!date || isNaN(date.getTime()))
+					throw new ValidationError('property', schema, date)
+
 				if (!Value.Check(schema, date))
 					throw new ValidationError('property', schema, date)
 
 				return date
 			})
-			.Encode((value) => {
-				if (typeof value === 'string') return new Date(value)
-
-				return value
-			}) as any as TDate
+			.Encode((value) => value.toISOString()) as any as TDate
 	},
 	BooleanString: (property?: SchemaOptions) => {
 		const schema = Type.Boolean(property)
@@ -534,7 +537,6 @@ export const ElysiaType = {
 		options?: ArrayOptions
 	) => {
 		const schema = t.Array(children, options)
-		const defaultValue = JSON.stringify(Value.Create(schema))
 
 		let compiler: TypeCheck<TArray<T>>
 		try {
@@ -591,7 +593,7 @@ export const ElysiaType = {
 				t.Union([
 					t.String({
 						format: 'ArrayString',
-						default: defaultValue
+						default: options?.default
 					}),
 					schema
 				])
@@ -618,7 +620,8 @@ export const ElysiaType = {
 
 				if (typeof value === 'string') return decode(value)
 
-				throw new ValidationError('property', schema, value)
+				// Is probably transformed, unable to check schema
+				return value
 			})
 			.Encode((value) => {
 				if (typeof value === 'string')

@@ -55,4 +55,87 @@ describe('Mount', () => {
 
 		expect(res).toEqual(['sucrose', 'sucrose'])
 	})
+
+	it('remove wildcard path', async () => {
+		const app = new Elysia().mount('/v1/*', (request) => {
+			return Response.json({
+				path: request.url
+			})
+		})
+
+		const response = await app
+			.handle(new Request('http://localhost/v1/hello'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			path: 'http://localhost/hello'
+		})
+	})
+
+	it('preserve method', async () => {
+		const app = new Elysia().mount((request) => {
+			return Response.json({
+				method: request.method,
+				path: request.url
+			})
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/v1/hello', {
+					method: 'PUT'
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			method: 'PUT',
+			path: 'http://localhost/v1/hello'
+		})
+	})
+
+	// https://github.com/elysiajs/elysia/issues/1070
+	it('preserve method with prefix', async () => {
+		const app = new Elysia().mount('/v1/*', (request) => {
+			return Response.json({
+				method: request.method,
+				path: request.url
+			})
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/v1/hello', {
+					method: 'PUT'
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			method: 'PUT',
+			path: 'http://localhost/hello'
+		})
+	})
+
+	it('preserve headers', async () => {
+		const app = new Elysia().mount((request) => {
+			// @ts-expect-error Bun has toJSON
+			return Response.json(request.headers.toJSON())
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/v1/hello', {
+					method: 'PUT',
+					headers: {
+						'x-test': 'test'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			'x-test': 'test'
+		})
+	})
 })
