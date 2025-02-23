@@ -262,6 +262,13 @@ const composeValidationFactory = ({
 			)
 				code += `${name}=validator.response['${status}'].Clean(${name})\n`
 
+			if (
+				encodeSchema &&
+				// @ts-expect-error hasTransform is appended by getResponseSchemaValidator
+				(value.hasTransform || typeof value.Decode === 'function')
+			)
+				code += `${name}=validator.response['${status}'].Encode(${name})\n`
+
 			code +=
 				`if(validator.response['${status}'].Check(${name})===false){` +
 				'c.set.status=422\n' +
@@ -269,14 +276,6 @@ const composeValidationFactory = ({
 				'}' +
 				`c.set.status = ${status}` +
 				'}\n'
-
-			if (
-				encodeSchema &&
-				// @ts-expect-error hasTransform is appended by getResponseSchemaValidator
-				(value.hasTransform || typeof value.Decode === 'function')
-			) {
-				code += `${name}=validator.response['${status}'].Encode(${name})\n`
-			}
 
 			code += 'break\n'
 		}

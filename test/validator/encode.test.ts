@@ -76,4 +76,48 @@ describe('Encode response', () => {
 			id: 'encoded 418'
 		})
 	})
+
+	it('Encode before type check', async () => {
+		const dto = t.Object({
+			value: t
+				.Transform(t.String())
+				.Decode((value) => parseFloat(value))
+				.Encode((value) => value.toString())
+		})
+
+		let bodyType = ''
+
+		const elysia = new Elysia({
+			experimental: {
+				encodeSchema: true //open the flag!
+			}
+		}).post(
+			'/',
+			({ body }) => {
+				bodyType = typeof body.value
+
+				return body
+			},
+			{
+				body: dto,
+				response: dto
+			}
+		)
+
+		const response = await elysia
+			.handle(
+				new Request('http://localhost:3000/', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({ value: '1.1' })
+				})
+			)
+			.then((res) => res)
+
+		expect(bodyType).toBe('number')
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ value: '1.1' })
+	})
 })
