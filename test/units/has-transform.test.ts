@@ -137,7 +137,7 @@ describe('has transform', () => {
 		expect(
 			hasTransform(
 				t
-					.Transform(t.Object({ id: t.Integer() }))
+					.Transform(t.Object({ id: t.String() }))
 					.Decode((value) => value.id)
 					.Encode((value) => ({
 						id: value

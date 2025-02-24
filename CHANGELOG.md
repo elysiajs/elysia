@@ -1,5 +1,6 @@
-# 1.2.22 - 23 Feb 2025
+# 1.2.22 - 24 Feb 2025
 Bug fix
+- [#1074](https://github.com/elysiajs/elysia/pull/1074) hasTransform doesn't detect Transform on root
 - [#873](https://github.com/elysiajs/elysia/issues/873#issuecomment-2676628776) encode before type check
 
 # 1.2.21 - 22 Feb 2025
