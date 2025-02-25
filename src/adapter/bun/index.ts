@@ -38,8 +38,8 @@ export const BunAdapter: ElysiaAdapter = {
 		headers: hasHeaderShorthand
 			? 'c.headers = c.request.headers.toJSON()\n'
 			: 'c.headers = {}\n' +
-				'for (const [key, value] of c.request.headers.entries())' +
-				'c.headers[key] = value\n'
+			'for (const [key, value] of c.request.headers.entries())' +
+			'c.headers[key] = value\n'
 	},
 	listen(app) {
 		return (options, callback) => {
@@ -62,38 +62,38 @@ export const BunAdapter: ElysiaAdapter = {
 			const serve =
 				typeof options === 'object'
 					? ({
-							development: !isProduction,
-							reusePort: true,
-							...(app.config.serve || {}),
-							...(options || {}),
-							// @ts-ignore
-							static: {
-								...app.router.static.http.static,
-								...app.config.serve?.static
-							},
-							websocket: {
-								...(app.config.websocket || {}),
-								...(websocket || {})
-							},
-							fetch,
-							// @ts-expect-error private property
-							error: app.outerErrorHandler
-						} as Serve)
+						development: !isProduction,
+						reusePort: true,
+						...(app.config.serve || {}),
+						...(options || {}),
+						// @ts-ignore
+						static: {
+							...app.router.static.http.static,
+							...app.config.serve?.static
+						},
+						websocket: {
+							...(app.config.websocket || {}),
+							...(websocket || {})
+						},
+						fetch,
+						// @ts-expect-error private property
+						error: app.outerErrorHandler
+					} as Serve)
 					: ({
-							development: !isProduction,
-							reusePort: true,
-							...(app.config.serve || {}),
-							// @ts-ignore
-							static: app.router.static.http.static,
-							websocket: {
-								...(app.config.websocket || {}),
-								...(websocket || {})
-							},
-							port: options,
-							fetch,
-							// @ts-expect-error private property
-							error: app.outerErrorHandler
-						} as Serve)
+						development: !isProduction,
+						reusePort: true,
+						...(app.config.serve || {}),
+						// @ts-ignore
+						static: app.router.static.http.static,
+						websocket: {
+							...(app.config.websocket || {}),
+							...(websocket || {})
+						},
+						port: options,
+						fetch,
+						// @ts-expect-error private property
+						error: app.outerErrorHandler
+					} as Serve)
 
 			app.server = Bun?.serve(serve)
 
@@ -118,6 +118,21 @@ export const BunAdapter: ElysiaAdapter = {
 			app.promisedModules.then(() => {
 				Bun?.gc(false)
 			})
+		}
+	},
+	async stop(app, closeActiveConnections) {
+		if (!app.server)
+			throw new Error(
+				"Elysia isn't running. Call `app.listen` to start the server."
+			)
+
+		if (app.server) {
+			app.server.stop(closeActiveConnections)
+			app.server = null
+
+			if (app.event.stop?.length)
+				for (let i = 0; i < app.event.stop.length; i++)
+					app.event.stop[i].fn(app)
 		}
 	},
 	ws(app, path, options) {
@@ -195,20 +210,20 @@ export const BunAdapter: ElysiaAdapter = {
 				]
 
 				const handleErrors = !errorHandlers.length
-					? () => {}
+					? () => { }
 					: async (ws: ServerWebSocket<any>, error: unknown) => {
-							for (const handleError of errorHandlers) {
-								let response = handleError(
-									Object.assign(context, { error })
-								)
-								if (response instanceof Promise)
-									response = await response
+						for (const handleError of errorHandlers) {
+							let response = handleError(
+								Object.assign(context, { error })
+							)
+							if (response instanceof Promise)
+								response = await response
 
-								await handleResponse(ws, response)
+							await handleResponse(ws, response)
 
-								if (response) break
-							}
+							if (response) break
 						}
+					}
 
 				if (
 					server?.upgrade<any>(context.request, {
