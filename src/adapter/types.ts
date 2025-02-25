@@ -15,6 +15,21 @@ export interface ElysiaAdapter {
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback
 	) => void
+	/**
+	 * Stop server from serving
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * app.stop()
+	 * ```
+	 *
+	 * @example
+	 * ```typescript
+	 * app.stop(true) // Abruptly any requests inflight
+	 * ```
+	 */
+	stop(app: AnyElysia, closeActiveConnections?: boolean): Promise<void>
 	isWebStandard?: boolean
 	handler: {
 		/**
