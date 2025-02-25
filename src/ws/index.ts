@@ -206,7 +206,7 @@ export const createWSMessageParser = (
 		if (typeof message === 'string') {
 			const start = message?.charCodeAt(0)
 
-			if (start === 34 || start === 91 || start === 123)
+			if (start === 34 || start === 47 || start === 91 || start === 123)
 				try {
 					message = JSON.parse(message)
 				} catch {

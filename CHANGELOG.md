@@ -1,5 +1,9 @@
+# 1.2.23 - 25 Feb 2025
+Bug fix:
+- [#1087](https://github.com/elysiajs/elysia/pull/1087) websocket to parse string array
+
 # 1.2.22 - 24 Feb 2025
-Bug fix
+Bug fix:
 - [#1074](https://github.com/elysiajs/elysia/pull/1074) hasTransform doesn't detect Transform on root
 - [#873](https://github.com/elysiajs/elysia/issues/873#issuecomment-2676628776) encode before type check
 
