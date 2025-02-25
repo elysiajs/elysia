@@ -186,6 +186,206 @@ describe('WebSocket message', () => {
 		await wsClosed(ws)
 		app.stop()
 	})
+	
+	it('should parse objects', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(raw)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify({ message: 'Hello!' }))
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toInclude('{"message":"Hello!"}')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should parse arrays', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(JSON.stringify(raw))
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify([{ message: 'Hello!' }]))
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toInclude('[{"message":"Hello!"}]')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should parse strings', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(JSON.stringify(raw))
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify("Hello!"))
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toInclude('"Hello!"')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should parse numbers', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(JSON.stringify(raw))
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify(1234567890))
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toInclude('1234567890')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should parse true', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(JSON.stringify(raw))
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify(true))
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toInclude('true')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should parse false', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(JSON.stringify(raw))
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify(false))
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toInclude('false')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should parse null', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(JSON.stringify(raw))
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify(null))
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toInclude('null')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should parse not parse /hello', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				message(ws, raw) {
+					ws.send(JSON.stringify(raw))
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify("/hello"))
+
+		const { type, data } = await message
+		expect(type).toBe('message')
+		expect(data).toInclude('/hello')
+
+		await wsClosed(ws)
+		app.stop()
+	})
 
 	it('should send from plugin', async () => {
 		const plugin = new Elysia().ws('/ws', {
