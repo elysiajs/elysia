@@ -279,4 +279,14 @@ describe('sucrose', () => {
 
 		expect(response.status).toBe(200)
 	})
+
+	it('not death lock on empty', async () => {
+		const app = new Elysia({ precompile: true })
+			.onRequest((c) => {})
+			.get('/', () => 'Hello, World!')
+
+		const response = await app.handle(new Request('http://localhost:3000'))
+
+		expect(response.status).toBe(200)
+	})
 })

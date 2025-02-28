@@ -641,7 +641,7 @@ export const sucrose = (
 		const event = 'fn' in e ? e.fn : e
 
 		// parse can be either a function or string
-		if(typeof event !== "function") continue
+		if (typeof event !== 'function') continue
 
 		const [parameter, body, { isArrowReturn }] = separateFunction(
 			event.toString()
@@ -651,15 +651,23 @@ export const sucrose = (
 		const mainParameter = extractMainParameter(rootParameters)
 
 		if (mainParameter) {
-			const aliases = findAlias(mainParameter, body)
+			const aliases = findAlias(mainParameter, body.slice(1, -1))
 			aliases.splice(0, -1, mainParameter)
 
-			if (!isContextPassToFunction(mainParameter, body, inference))
-				inferBodyReference(body, aliases, inference)
+			let code = body
+
+			if (
+				code.charCodeAt(0) === 123 &&
+				code.charCodeAt(body.length - 1) === 125
+			)
+				code = code.slice(1, -1)
+
+			if (!isContextPassToFunction(mainParameter, code, inference))
+				inferBodyReference(code, aliases, inference)
 
 			if (
 				!inference.query &&
-				body.includes('return ' + mainParameter + '.query')
+				code.includes('return ' + mainParameter + '.query')
 			)
 				inference.query = true
 		}
@@ -676,6 +684,5 @@ export const sucrose = (
 		)
 			break
 	}
-
 	return inference
 }

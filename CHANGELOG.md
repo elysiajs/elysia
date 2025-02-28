@@ -1,6 +1,7 @@
 # 1.2.23 - 25 Feb 2025
 Bug fix:
 - [#1087](https://github.com/elysiajs/elysia/pull/1087) websocket to parse string array
+- [#1088](https://github.com/elysiajs/elysia/pull/1088) infinite loop when inference body is empty
 
 # 1.2.22 - 24 Feb 2025
 Bug fix:
