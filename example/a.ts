@@ -1,21 +1,24 @@
-import { Elysia, error, t } from '../src'
+import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
 const app = new Elysia().get(
 	'/',
 	() => {
 		return {
-			name: 'a',
-			a: 'b'
+			message: 'Hello World!'
 		}
 	},
 	{
 		response: t.Object({
-			name: t.String()
+			message: t.String()
 		})
 	}
 )
 
-app.handle(req('/'))
-	.then((x) => x.json())
+app.listen(3000, ({ hostname, port }) => {
+	console.log(`🦊 running at http://${hostname}:${port}`)
+})
+  // Trigger the request
+	.handle(req('/'))
+	.then((res) => res.json())
 	.then(console.log)
