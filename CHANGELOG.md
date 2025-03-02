@@ -1,7 +1,7 @@
 # 1.2.24 - 2 Mar 2025
 Bug fix:
 - 200 object response is not inferring type in type-level
--
+- [#1091](https://github.com/elysiajs/elysia/issues/1091) route is not defined when using trace
 
 # 1.2.23 - 25 Feb 2025
 Bug fix:

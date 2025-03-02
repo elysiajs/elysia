@@ -1013,7 +1013,7 @@ export const composeHandler = ({
 		? `,${adapter.mapResponseContext}`
 		: ''
 
-	if (inference.route) fnLiteral += `c.route=\`${path}\`\n`
+	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
 
 	const parseReporter = report('parse', {
 		total: hooks.parse?.length

@@ -422,4 +422,25 @@ describe('trace', () => {
 
 		expect(isCalled).toBeTrue()
 	})
+
+	it('report route when using trace', async () => {
+		let route: string | undefined
+
+		const app = new Elysia()
+			.trace(({ onHandle, context }) => {
+				onHandle(({ onStop }) => {
+					onStop(({ error }) => {
+						route = context.route
+						expect(error).toBeInstanceOf(Error)
+					})
+				})
+			})
+			.get('/id/:id', () => {
+				throw new Error('A')
+			})
+
+		await app.handle(req('/id/1'))
+
+		expect(route).toBe('/id/:id')
+	})
 })

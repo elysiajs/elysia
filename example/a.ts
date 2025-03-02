@@ -10,11 +10,9 @@ const app = new Elysia().get(
 		}
 	},
 	{
-		response: {
-			200: t.Object({
-				name: t.String()
-			})
-		}
+		response: t.Object({
+			name: t.String()
+		})
 	}
 )
 
