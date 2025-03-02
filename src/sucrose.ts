@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import type { Handler, HookContainer, LifeCycleStore } from './types'
+import { checksum, cloneInference } from './utils'
+import type {
+	Handler,
+	HookContainer,
+	LifeCycleStore,
+	LifeCycleType
+} from './types'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -608,6 +614,34 @@ export const isContextPassToFunction = (
 	}
 }
 
+let pendingGC: number | undefined
+let lifeCycleCache = <Record<number, Sucrose.Inference>>{}
+let caches = <Record<number, Sucrose.Inference>>{}
+
+export const clearSucroseCache = (delay = 0) => {
+	if (pendingGC) clearTimeout(pendingGC)
+
+	pendingGC = setTimeout(() => {
+		lifeCycleCache = {}
+		caches = {}
+
+		pendingGC = undefined
+	}, delay) as unknown as number
+}
+
+export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
+	return {
+		body: a.body || b.body,
+		cookie: a.cookie || b.cookie,
+		headers: a.headers || b.headers,
+		query: a.query || b.query,
+		set: a.set || b.set,
+		server: a.server || b.server,
+		request: a.request || b.request,
+		route: a.route || b.route
+	}
+}
+
 export const sucrose = (
 	lifeCycle: Sucrose.LifeCycle,
 	inference: Sucrose.Inference = {
@@ -621,10 +655,7 @@ export const sucrose = (
 		route: false
 	}
 ): Sucrose.Inference => {
-	const events = []
-
-	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
-		events.push(lifeCycle.handler)
+	let events = <(Handler | HookContainer)[]>[]
 
 	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
 	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
@@ -635,7 +666,75 @@ export const sucrose = (
 	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
 	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
 
+	const inferenceKey = `${
+		//
+		inference.set
+	}
+		${
+			//
+			inference.server
+		}
+		${
+			//
+			inference.route
+		}
+		${
+			//
+			inference.request
+		}
+		${
+			//
+			inference.query
+		}
+		${
+			//
+			inference.headers
+		}
+		${
+			//
+			inference.cookie
+		}
+		${
+			//
+			inference.body
+		}`
+
+	let lifeCycleBody = ''
 	for (const e of events) {
+		if (!e) continue
+
+		const event = 'fn' in e ? e.fn : e
+
+		lifeCycleBody += event.toString() + '_'
+	}
+
+	let body = lifeCycleBody
+	const hasBody = lifeCycle.handler && typeof lifeCycle.handler === 'function'
+
+	if (hasBody) {
+		events.push(lifeCycle.handler as Handler)
+		body += (lifeCycle.handler as Handler).toString()
+	}
+
+	const key = checksum(body + inferenceKey)
+	if (key in caches) return caches[key]
+
+	const lifeCycleCacheKey = checksum(lifeCycleBody)
+	if (lifeCycleCacheKey in lifeCycleCache) {
+		inference = mergeInference(inference, lifeCycleCache[lifeCycleCacheKey])
+
+		if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
+			events = [lifeCycle.handler]
+		else events = []
+	}
+
+	for (let i = 0; i < events.length; i++) {
+		const isBody = hasBody ? i === events.length - 1 : false
+		const e = events[i]
+
+		if (isBody)
+			lifeCycleCache[lifeCycleCacheKey] = cloneInference(inference)
+
 		if (!e) continue
 
 		const event = 'fn' in e ? e.fn : e
@@ -684,5 +783,8 @@ export const sucrose = (
 		)
 			break
 	}
+
+	caches[key] = cloneInference(inference)
+
 	return inference
 }

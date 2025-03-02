@@ -6,7 +6,9 @@ import { WebStandardAdapter } from '../web-standard/index'
 import { parseSetCookies } from '../web-standard/handler'
 import type { ElysiaAdapter } from '../types'
 
+import { createBunRouteHandler } from './compose'
 import { createNativeStaticHandler } from './handler'
+
 import { serializeCookie } from '../../cookies'
 import { isProduction, ValidationError } from '../../error'
 import {
@@ -14,7 +16,6 @@ import {
 	hasHeaderShorthand,
 	isNotEmpty,
 	isNumericString,
-	mergeHook,
 	randomId
 } from '../../utils'
 
@@ -48,6 +49,56 @@ export const BunAdapter: ElysiaAdapter = {
 					'.listen() is designed to run on Bun only. If you are running Elysia in other environment please use a dedicated plugin or export the handler via Elysia.fetch'
 				)
 
+			const routes = app.config.aot
+				? <Record<string, Function | Record<string, unknown>>>{}
+				: undefined
+
+			if (routes && app.config.systemRouter)
+				// @ts-expect-error private property
+				for (const r of app.routeTree) {
+					const route = app.router.history[r[1]]
+
+					if (
+						typeof route.handler !== 'function' ||
+						route.method === '$INTERNALWS'
+					)
+						continue
+
+					if (route.method === 'ALL') {
+						routes[route.path] = route.handler
+
+						continue
+					}
+
+					let compiled: Function
+
+					const handler = app.config.precompile
+						? createBunRouteHandler(app, route)
+						: (request: Request) => {
+								if (compiled) return compiled(request)
+
+								return (compiled = createBunRouteHandler(
+									app,
+									route
+								))(request)
+							}
+
+					if (!(route.path in routes)) {
+						routes[route.path] = {
+							[route.method]: handler
+						}
+
+						continue
+					}
+
+					if (
+						!(route.method in routes[route.path]) &&
+						typeof routes[route.path] === 'object'
+					)
+						// @ts-expect-error is object
+						routes[route.path][route.method] = route.handler
+				}
+
 			app.compile()
 
 			if (typeof options === 'string') {
@@ -69,10 +120,17 @@ export const BunAdapter: ElysiaAdapter = {
 							// @ts-ignore
 							static: {
 								...app.router.static.http.static,
+								// @ts-expect-error
 								...app.config.serve?.static
+							},
+							routes: {
+								...routes,
+								// @ts-expect-error
+								...app.config.serve?.routes
 							},
 							websocket: {
 								...(app.config.websocket || {}),
+								...routes,
 								...(websocket || {})
 							},
 							fetch,
@@ -85,6 +143,11 @@ export const BunAdapter: ElysiaAdapter = {
 							...(app.config.serve || {}),
 							// @ts-ignore
 							static: app.router.static.http.static,
+							routes: {
+								...routes,
+								// @ts-expect-error
+								...app.config.serve?.routes
+							},
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {})
@@ -95,7 +158,7 @@ export const BunAdapter: ElysiaAdapter = {
 							error: app.outerErrorHandler
 						} as Serve)
 
-			app.server = Bun?.serve(serve)
+			app.server = Bun.serve(serve as any) as any
 
 			if (app.event.start)
 				for (let i = 0; i < app.event.start.length; i++)

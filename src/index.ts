@@ -11,7 +11,12 @@ import type {
 import type { Context } from './context'
 
 import { t, TypeCheck } from './type-system'
-import { sucrose, type Sucrose } from './sucrose'
+import {
+	clearSucroseCache,
+	mergeInference,
+	sucrose,
+	type Sucrose
+} from './sucrose'
 
 import type { WSLocalHook } from './ws/types'
 
@@ -337,6 +342,8 @@ export default class Elysia<
 
 		if (config.nativeStaticResponse === undefined)
 			config.nativeStaticResponse = true
+
+		if (config.systemRouter === undefined) config.systemRouter = true
 
 		this.config = {}
 		this.applyConfig(config ?? {})
@@ -733,6 +740,7 @@ export default class Elysia<
 				path,
 				composed: null,
 				handler: handle,
+				compile: undefined as any,
 				hooks
 			})
 
@@ -790,7 +798,7 @@ export default class Elysia<
 			})
 
 		let oldIndex: number | undefined
-		if (this.routeTree.has(method + path))
+		if (this.routeTree.has(method + '_' + path))
 			for (let i = 0; i < this.router.history.length; i++) {
 				const route = this.router.history[i]
 				if (route.path === path && route.method === method) {
@@ -804,7 +812,7 @@ export default class Elysia<
 					// 	this.routeTree.delete(removed.method + removed.path)
 				}
 			}
-		else this.routeTree.set(method + path, this.router.history.length)
+		else this.routeTree.set(method + '_' + path, this.router.history.length)
 
 		const history = this.router.history
 		const index = oldIndex ?? this.router.history.length
@@ -827,20 +835,19 @@ export default class Elysia<
 		const isWebSocket = method === '$INTERNALWS'
 
 		if (oldIndex !== undefined)
-			this.router.history[oldIndex] =
-				// @ts-ignore
-				Object.assign(
-					{
-						method,
-						path,
-						composed: mainHandler,
-						handler: handle,
-						hooks
-					},
-					localHook.webSocket
-						? { websocket: localHook.websocket as any }
-						: {}
-				)
+			this.router.history[oldIndex] = Object.assign(
+				{
+					method,
+					path,
+					composed: mainHandler,
+					compile: compile!,
+					handler: handle,
+					hooks
+				},
+				localHook.webSocket
+					? { websocket: localHook.websocket as any }
+					: {}
+			)
 		else
 			this.router.history.push(
 				// @ts-ignore
@@ -849,6 +856,7 @@ export default class Elysia<
 						method,
 						path,
 						composed: mainHandler,
+						compile,
 						handler: handle,
 						hooks
 					},
@@ -3882,16 +3890,7 @@ export default class Elysia<
 			}
 		}
 
-		this.inference = {
-			body: this.inference.body || plugin.inference.body,
-			cookie: this.inference.cookie || plugin.inference.cookie,
-			headers: this.inference.headers || plugin.inference.headers,
-			query: this.inference.query || plugin.inference.query,
-			set: this.inference.set || plugin.inference.set,
-			server: this.inference.server || plugin.inference.server,
-			request: this.inference.request || plugin.inference.request,
-			route: this.inference.route || plugin.inference.route
-		}
+		this.inference = mergeInference(this.inference, plugin.inference)
 
 		this.decorate(plugin.singleton.decorator)
 		this.state(plugin.singleton.store)
@@ -6368,6 +6367,12 @@ export default class Elysia<
 		callback?: ListenCallback
 	) => {
 		this['~adapter'].listen(this)(options, callback)
+
+		if (this.promisedModules.size) clearSucroseCache(5000)
+
+		this.promisedModules.then(() => {
+			clearSucroseCache(1000)
+		})
 
 		return this
 	}

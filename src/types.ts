@@ -170,6 +170,12 @@ export type ElysiaConfig<Prefix extends string | undefined> = {
 	 * @since 1.1.11
 	 */
 	nativeStaticResponse?: boolean
+	/**
+	 * Use runtime/framework provided router if possible
+	 *
+	 * @default true
+	 */
+	systemRouter?: boolean
 }
 
 export type ValidatorLayer = {
@@ -1250,6 +1256,7 @@ export interface InternalRoute {
 	method: HTTPMethod
 	path: string
 	composed: ComposedHandler | Response | null
+	compile(): ComposedHandler
 	handler: Handler
 	hooks: AnyLocalHook
 	websocket?: AnyWSLocalHook

@@ -226,6 +226,8 @@ const createReport = ({
 	}
 }
 
+type Report = ReturnType<typeof createReport>
+
 const composeValidationFactory = ({
 	injectResponse = '',
 	normalize = false,
@@ -2038,7 +2040,7 @@ export const composeHandler = ({
 	if (hooks.beforeHandle?.length) init += 'let be\n'
 	if (hooks.afterHandle?.length) init += 'let af\n'
 	if (hooks.mapResponse?.length) init += 'let mr\n'
-	if (allowMeta) init += 'c.schema = schema\nc.defs = definitions\n'
+	if (allowMeta) init += 'c.schema=schema\nc.defs=definitions\n'
 
 	init += fnLiteral + '}'
 
@@ -2146,6 +2148,73 @@ export interface ComposerGeneralHandlerOptions {
 	standardHostname?: boolean
 }
 
+export const createOnRequestHandler = (
+	app: AnyElysia,
+	addFn?: (word: string) => void
+) => {
+	let fnLiteral = ''
+
+	const report = createReport({
+		trace: app.event.trace,
+		addFn:
+			addFn ??
+			((word) => {
+				fnLiteral += word
+			})
+	})
+
+	const reporter = report('request', {
+		total: app.event.request?.length
+	})
+
+	if (app.event.request?.length) {
+		fnLiteral += `try{`
+
+		for (let i = 0; i < app.event.request.length; i++) {
+			const hook = app.event.request[i]
+			const withReturn = hasReturn(hook)
+			const maybeAsync = isAsync(hook)
+
+			const endUnit = reporter.resolveChild(app.event.request[i].fn.name)
+
+			if (withReturn) {
+				fnLiteral +=
+					`re=mapEarlyResponse(` +
+					`${maybeAsync ? 'await ' : ''}onRequest[${i}](c),` +
+					`c.set)\n`
+
+				endUnit('re')
+				fnLiteral += `if(re!==undefined)return re\n`
+			} else {
+				fnLiteral += `${maybeAsync ? 'await ' : ''}onRequest[${i}](c)\n`
+				endUnit()
+			}
+		}
+
+		fnLiteral += `}catch(error){return app.handleError(c,error,false)}`
+	}
+
+	reporter.resolve()
+
+	return fnLiteral
+}
+
+export const createHoc = (app: AnyElysia, fnName = 'map') => {
+	// @ts-expect-error private property
+	const hoc = app.extender.higherOrderFunctions
+
+	if (!hoc.length) return 'return ' + fnName
+
+	const adapter = app['~adapter'].composeGeneralHandler
+
+	let handler = fnName
+
+	for (let i = 0; i < hoc.length; i++)
+		handler = `hoc[${i}](${handler},${adapter.parameters})`
+
+	return `return function hocMap(${adapter.parameters}){return ${handler}(${adapter.parameters})}`
+}
+
 export const composeGeneralHandler = (
 	app: AnyElysia,
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2153,6 +2222,7 @@ export const composeGeneralHandler = (
 ) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
+
 	const error404 = adapter.error404(
 		!!app.event.request?.length,
 		!!app.event.error?.length
@@ -2243,45 +2313,7 @@ export const composeGeneralHandler = (
 			app.event.trace.map((_, i) => `tr${i}(c)`).join(',') +
 			`]\n`
 
-	const report = createReport({
-		trace: app.event.trace,
-		addFn(word) {
-			fnLiteral += word
-		}
-	})
-
-	const reporter = report('request', {
-		total: app.event.request?.length
-	})
-
-	if (app.event.request?.length) {
-		fnLiteral += `try{`
-
-		for (let i = 0; i < app.event.request.length; i++) {
-			const hook = app.event.request[i]
-			const withReturn = hasReturn(hook)
-			const maybeAsync = isAsync(hook)
-
-			const endUnit = reporter.resolveChild(app.event.request[i].fn.name)
-
-			if (withReturn) {
-				fnLiteral +=
-					`re=mapEarlyResponse(` +
-					`${maybeAsync ? 'await ' : ''}onRequest[${i}](c),` +
-					`c.set)\n`
-
-				endUnit('re')
-				fnLiteral += `if(re!==undefined)return re\n`
-			} else {
-				fnLiteral += `${maybeAsync ? 'await ' : ''}onRequest[${i}](c)\n`
-				endUnit()
-			}
-		}
-
-		fnLiteral += `}catch(error){return app.handleError(c,error,false)}`
-	}
-
-	reporter.resolve()
+	fnLiteral += createOnRequestHandler(app)
 
 	fnLiteral += adapter.websocket(app)
 
@@ -2292,20 +2324,10 @@ export const composeGeneralHandler = (
 		findDynamicRoute +
 		`}\n`
 
+	fnLiteral += createHoc(app)
+
 	// @ts-expect-error private property
-	if (app.extender.higherOrderFunctions.length) {
-		let handler = 'map'
-		// @ts-expect-error private property
-		for (let i = 0; i < app.extender.higherOrderFunctions.length; i++)
-			handler = `hoc[${i}](${handler},${adapter.parameters})`
-
-		fnLiteral += `return function hocMap(${adapter.parameters}){return ${handler}(${adapter.parameters})}`
-	} else fnLiteral += `return map`
-
-	const handleError = composeErrorHandler(app) as any
-
-	// @ts-expect-error
-	app.handleError = handleError
+	app.handleError = composeErrorHandler(app) as any
 
 	return Function(
 		'data',
@@ -2315,7 +2337,8 @@ export const composeGeneralHandler = (
 		mapEarlyResponse: app['~adapter']['handler'].mapEarlyResponse,
 		NotFoundError,
 		randomId,
-		handleError,
+		// @ts-expect-error private property
+		handleError: app.handleError,
 		error,
 		redirect,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,

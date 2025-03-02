@@ -1,21 +1,10 @@
 import { Elysia, error, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia().get(
-	'/',
-	() => {
-		return {
-			name: 'a',
-			a: 'b'
-		}
-	},
-	{
-		response: t.Object({
-			name: t.String()
-		})
-	}
-)
+const app = new Elysia()
+	.get('/', ({ path, request }) => {
+		console.log(request)
 
-app.handle(req('/'))
-	.then((x) => x.json())
-	.then(console.log)
+		return path
+	})
+	.listen(3000)
