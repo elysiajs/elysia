@@ -219,7 +219,6 @@ describe('Edge Case', () => {
 		const app = new Elysia({ name: 'main' })
 			.use(Path)
 			.use(Module)
-			.listen(3000)
 
 		const responses = await Promise.all([
 			app.handle(req('/AB')).then((x) => x.text()),
