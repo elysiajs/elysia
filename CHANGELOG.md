@@ -1,3 +1,11 @@
+# 1.3.0
+Feature:
+- add `systemRouter` config
+- add sucrose cache
+
+Improvement:
+- reduce redundant type check when using Encode
+
 # 1.2.24 - 2 Mar 2025
 Bug fix:
 - 200 object response is not inferring type in type-level

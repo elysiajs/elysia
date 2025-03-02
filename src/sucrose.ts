@@ -18,6 +18,7 @@ export namespace Sucrose {
 		server: boolean
 		route: boolean
 		request: boolean
+		path: boolean
 	}
 
 	export interface LifeCycle extends Partial<LifeCycleStore> {
@@ -305,6 +306,7 @@ export const findParameterReference = (
 	if (!inference.request && parameters.includes('request'))
 		inference.request = true
 	if (!inference.route && parameters.includes('route')) inference.route = true
+	if (!inference.path && parameters.includes('path')) inference.path = true
 
 	if (hasParenthesis) return `{ ${parameters.join(', ')} }`
 
@@ -503,6 +505,9 @@ export const inferBodyReference = (
 			if (!inference.route && parameters.includes('route'))
 				inference.route = true
 
+			if (!inference.path && parameters.includes('path'))
+				inference.path = true
+
 			continue
 		}
 
@@ -596,6 +601,7 @@ export const isContextPassToFunction = (
 			inference.server = true
 			inference.route = true
 			inference.request = true
+			inference.path = true
 
 			return true
 		}
@@ -638,7 +644,8 @@ export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
 		set: a.set || b.set,
 		server: a.server || b.server,
 		request: a.request || b.request,
-		route: a.route || b.route
+		route: a.route || b.route,
+		path: a.path || b.path
 	}
 }
 
@@ -652,7 +659,8 @@ export const sucrose = (
 		set: false,
 		server: false,
 		request: false,
-		route: false
+		route: false,
+		path: false
 	}
 ): Sucrose.Inference => {
 	let events = <(Handler | HookContainer)[]>[]
@@ -697,6 +705,10 @@ export const sucrose = (
 		${
 			//
 			inference.body
+		}
+		${
+			//
+			inference.path
 		}`
 
 	let lifeCycleBody = ''
@@ -779,7 +791,8 @@ export const sucrose = (
 			inference.set &&
 			inference.server &&
 			inference.request &&
-			inference.route
+			inference.route &&
+			inference.path
 		)
 			break
 	}

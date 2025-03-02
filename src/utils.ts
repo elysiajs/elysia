@@ -1533,7 +1533,8 @@ export const cloneInference = (inference: Sucrose.Inference) =>
 		set: inference.set,
 		server: inference.server,
 		request: inference.request,
-		route: inference.route
+		route: inference.route,
+		path: inference.path
 	}) satisfies Sucrose.Inference
 
 /**

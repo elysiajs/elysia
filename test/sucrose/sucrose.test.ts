@@ -43,7 +43,8 @@ describe('sucrose', () => {
 			set: false,
 			server: false,
 			request: false,
-			route: false
+			route: false,
+			path: false
 		})
 	})
 
@@ -74,7 +75,8 @@ describe('sucrose', () => {
 			set: true,
 			server: false,
 			request: false,
-			route: false
+			route: false,
+			path: false
 		})
 	})
 
@@ -176,7 +178,8 @@ describe('sucrose', () => {
 			set: false,
 			server: false,
 			request: false,
-			route: false
+			route: false,
+			path: false
 		})
 	})
 
@@ -206,7 +209,8 @@ describe('sucrose', () => {
 			set: true,
 			server: true,
 			request: true,
-			route: true
+			route: true,
+			path: true
 		})
 	})
 
@@ -236,7 +240,8 @@ describe('sucrose', () => {
 			set: true,
 			server: true,
 			request: true,
-			route: true
+			route: true,
+			path: true
 		})
 	})
 
@@ -266,7 +271,8 @@ describe('sucrose', () => {
 			set: false,
 			server: true,
 			request: false,
-			route: false
+			route: false,
+			path: false
 		})
 	})
 

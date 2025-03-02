@@ -148,8 +148,8 @@ const createReport = ({
 
 	for (let i = 0; i < trace.length; i++)
 		addFn(
-			`let report${i}, reportChild${i}, reportErr${i}, reportErrChild${i};` +
-				`let trace${i} = ${context}[ELYSIA_TRACE]?.[${i}] ?? trace[${i}](${context});\n`
+			`let report${i},reportChild${i},reportErr${i},reportErrChild${i};` +
+				`let trace${i}=${context}[ELYSIA_TRACE]?.[${i}]??trace[${i}](${context});\n`
 		)
 
 	return (
@@ -226,8 +226,6 @@ const createReport = ({
 	}
 }
 
-type Report = ReturnType<typeof createReport>
-
 const composeValidationFactory = ({
 	injectResponse = '',
 	normalize = false,
@@ -264,20 +262,27 @@ const composeValidationFactory = ({
 			)
 				code += `${name}=validator.response['${status}'].Clean(${name})\n`
 
+			// Encode call TypeCheck.Check internally
 			if (
 				encodeSchema &&
 				// @ts-expect-error hasTransform is appended by getResponseSchemaValidator
-				(value.hasTransform || typeof value.Decode === 'function')
+				(value.hasTransform || typeof value.Encode === 'function')
 			)
-				code += `${name}=validator.response['${status}'].Encode(${name})\n`
-
-			code +=
-				`if(validator.response['${status}'].Check(${name})===false){` +
-				'c.set.status=422\n' +
-				`throw new ValidationError('response',validator.response['${status}'],${name})` +
-				'}' +
-				`c.set.status = ${status}` +
-				'}\n'
+				code +=
+					`try{` +
+					`${name}=validator.response['${status}'].Encode(${name})\n` +
+					`c.set.status=${status}` +
+					`}catch{` +
+					`throw new ValidationError('response',validator.response['${status}'],${name})` +
+					`}}`
+			else
+				code +=
+					`if(validator.response['${status}'].Check(${name})===false){` +
+					'c.set.status=422\n' +
+					`throw new ValidationError('response',validator.response['${status}'],${name})` +
+					'}' +
+					`c.set.status=${status}` +
+					'}\n'
 
 			code += 'break\n'
 		}
