@@ -723,8 +723,7 @@ export type InlineHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string | undefined = undefined,
-	MacroContext = {}
+	Path extends string | undefined = undefined
 > =
 	| ((context: Context<Route, Singleton, Path>) =>
 			| Response
@@ -733,8 +732,9 @@ export type InlineHandler<
 						? unknown
 						:
 								| (Route['response'] extends { 200: any }
-										? Route['response']
+										? Route['response'][200]
 										: string | number | boolean | Object)
+								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
 								| {
 										[Status in keyof Route['response']]: ElysiaCustomStatusResponse<
@@ -748,9 +748,8 @@ export type InlineHandler<
 			? string | number | boolean | Object
 			:
 					| (Route['response'] extends { 200: any }
-							? Route['response']
+							? Route['response'][200]
 							: string | number | boolean | Object)
-					| Route['response'][keyof Route['response']]
 					| {
 							[Status in keyof Route['response']]: ElysiaCustomStatusResponse<
 								// @ts-ignore Status is always a number

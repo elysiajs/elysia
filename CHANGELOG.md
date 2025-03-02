@@ -1,3 +1,8 @@
+# 1.2.24 - 2 Mar 2025
+Bug fix:
+- 200 object response is not inferring type in type-level
+-
+
 # 1.2.23 - 25 Feb 2025
 Bug fix:
 - [#1087](https://github.com/elysiajs/elysia/pull/1087) websocket to parse string array
