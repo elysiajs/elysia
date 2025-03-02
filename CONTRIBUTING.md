@@ -12,9 +12,13 @@ The Elysia.js repo is using [bun](https://bun.sh). Make sure you have the [lates
 
 1. Clone this repository
 
-2. In the root of this project, run `bun install` to install all of the necessary dependencies
+2. In the root of this project, run `bun install` to install dependencies
 
-3. To run the development version, run `bun run dev`
+3. Run `bun test` to run unit tests
+
+4. (optional) Run `bun build` to locally build files and `bun run test` to run a full test
+
+5. Run `bun run dev` to start an example application :fox_face:
 
 ### Unit Testing
 
