@@ -621,14 +621,12 @@ export const isContextPassToFunction = (
 }
 
 let pendingGC: number | undefined
-let lifeCycleCache = <Record<number, Sucrose.Inference>>{}
 let caches = <Record<number, Sucrose.Inference>>{}
 
 export const clearSucroseCache = (delay = 0) => {
 	if (pendingGC) clearTimeout(pendingGC)
 
 	pendingGC = setTimeout(() => {
-		lifeCycleCache = {}
 		caches = {}
 
 		pendingGC = undefined
@@ -663,7 +661,7 @@ export const sucrose = (
 		path: false
 	}
 ): Sucrose.Inference => {
-	let events = <(Handler | HookContainer)[]>[]
+	const events = <(Handler | HookContainer)[]>[]
 
 	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
 	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
@@ -674,79 +672,11 @@ export const sucrose = (
 	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
 	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
 
-	const inferenceKey = `${
-		//
-		inference.set
-	}
-		${
-			//
-			inference.server
-		}
-		${
-			//
-			inference.route
-		}
-		${
-			//
-			inference.request
-		}
-		${
-			//
-			inference.query
-		}
-		${
-			//
-			inference.headers
-		}
-		${
-			//
-			inference.cookie
-		}
-		${
-			//
-			inference.body
-		}
-		${
-			//
-			inference.path
-		}`
-
-	let lifeCycleBody = ''
-	for (const e of events) {
-		if (!e) continue
-
-		const event = 'fn' in e ? e.fn : e
-
-		lifeCycleBody += event.toString() + '_'
-	}
-
-	let body = lifeCycleBody
-	const hasBody = lifeCycle.handler && typeof lifeCycle.handler === 'function'
-
-	if (hasBody) {
+	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
 		events.push(lifeCycle.handler as Handler)
-		body += (lifeCycle.handler as Handler).toString()
-	}
-
-	const key = checksum(body + inferenceKey)
-	if (key in caches) return caches[key]
-
-	const lifeCycleCacheKey = checksum(lifeCycleBody)
-	if (lifeCycleCacheKey in lifeCycleCache) {
-		inference = mergeInference(inference, lifeCycleCache[lifeCycleCacheKey])
-
-		if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
-			events = [lifeCycle.handler]
-		else events = []
-	}
 
 	for (let i = 0; i < events.length; i++) {
-		const isBody = hasBody ? i === events.length - 1 : false
 		const e = events[i]
-
-		if (isBody)
-			lifeCycleCache[lifeCycleCacheKey] = cloneInference(inference)
-
 		if (!e) continue
 
 		const event = 'fn' in e ? e.fn : e
@@ -754,11 +684,29 @@ export const sucrose = (
 		// parse can be either a function or string
 		if (typeof event !== 'function') continue
 
-		const [parameter, body, { isArrowReturn }] = separateFunction(
-			event.toString()
-		)
+		const content = event.toString()
+		const key = checksum(content)
+		if (key in caches) {
+			const fnInference = caches[key]
+			inference = mergeInference(inference, fnInference)
+			continue
+		}
 
-		const rootParameters = findParameterReference(parameter, inference)
+		const fnInference: Sucrose.Inference = {
+			query: false,
+			headers: false,
+			body: false,
+			cookie: false,
+			set: false,
+			server: false,
+			request: false,
+			route: false,
+			path: false
+		}
+
+		const [parameter, body] = separateFunction(content)
+
+		const rootParameters = findParameterReference(parameter, fnInference)
 		const mainParameter = extractMainParameter(rootParameters)
 
 		if (mainParameter) {
@@ -773,15 +721,19 @@ export const sucrose = (
 			)
 				code = code.slice(1, -1)
 
-			if (!isContextPassToFunction(mainParameter, code, inference))
-				inferBodyReference(code, aliases, inference)
+			if (!isContextPassToFunction(mainParameter, code, fnInference))
+				inferBodyReference(code, aliases, fnInference)
 
 			if (
-				!inference.query &&
+				!fnInference.query &&
 				code.includes('return ' + mainParameter + '.query')
 			)
-				inference.query = true
+				fnInference.query = true
 		}
+
+		if (!(key in caches)) caches[key] = fnInference
+
+		inference = mergeInference(inference, fnInference)
 
 		if (
 			inference.query &&
@@ -796,8 +748,6 @@ export const sucrose = (
 		)
 			break
 	}
-
-	caches[key] = cloneInference(inference)
 
 	return inference
 }

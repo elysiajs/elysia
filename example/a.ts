@@ -1,10 +1,15 @@
-import { Elysia, error, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
+import { sucrose } from '../src/sucrose'
 
-const app = new Elysia()
-	.get('/id/:id', (c) => {
-		c.set.headers['x-powered-by'] = 'benchmark'
+const plugin = new Elysia().derive(({ headers: { authorization } }) => {
+	return {
+		get auth() {
+			return authorization
+		}
+	}
+})
 
-		return `${c.params.id} ${c.query.name}`
-	})
-	.listen(3000)
+const a = new WeakMap()
+
+const b = () => { }
+const c = () => { }

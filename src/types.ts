@@ -1619,9 +1619,13 @@ export type MergeElysiaInstances<
 					Definitions['error'] &
 						Current['_types']['Definitions']['error']
 				>
-				typebox: MergeTypeModule<
-					Definitions['typebox'],
-					Current['_types']['Definitions']['typebox']
+				typebox: TModule<
+					Prettify<
+						UnwrapTypeModule<Definitions['typebox']> &
+							UnwrapTypeModule<
+								Current['_types']['Definitions']['typebox']
+							>
+					>
 				>
 			},
 			Metadata & Current['_types']['Metadata'],

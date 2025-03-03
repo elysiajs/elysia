@@ -2573,7 +2573,7 @@ export default class Elysia<
 		}
 
 		if (type !== 'trace')
-			sucrose(
+			this.inference = sucrose(
 				{
 					[type]: handles.map((x) => x.fn)
 				},
@@ -3516,10 +3516,12 @@ export default class Elysia<
 					NewElysia['_types']['Definitions']['error']
 			>
 			typebox: TModule<
-				UnwrapTypeModule<Definitions['typebox']> &
-					UnwrapTypeModule<
-						NewElysia['_types']['Definitions']['typebox']
-					>
+				Prettify<
+					UnwrapTypeModule<Definitions['typebox']> &
+						UnwrapTypeModule<
+							NewElysia['_types']['Definitions']['typebox']
+						>
+				>
 			>
 		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,

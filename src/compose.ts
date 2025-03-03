@@ -2039,7 +2039,7 @@ export const composeHandler = ({
 		adapterVariables +
 		allocateIf('TypeBoxError', hasValidation) +
 		`}=hooks\n` +
-		`const trace=e.trace?.map(x=>typeof x==='function'?x:x.fn)??[]\n` +
+		`const trace=e.trace\n` +
 		`return ${maybeAsync ? 'async ' : ''}function handle(c){`
 
 	if (hooks.beforeHandle?.length) init += 'let be\n'

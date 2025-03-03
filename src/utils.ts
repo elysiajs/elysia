@@ -1516,6 +1516,7 @@ export const lifeCycleToFn = (a: Partial<LifeCycleStore>): AnyLocalHook => {
 		hook.afterResponse = a.afterResponse.map((x) => x.fn)
 	// @ts-expect-error
 	if (a.trace?.map) hook.trace = a.trace.map((x) => x.fn)
+	else a.trace = []
 	// @ts-expect-error
 	if (a.error?.map) hook.error = a.error.map((x) => x.fn)
 	// @ts-expect-error
