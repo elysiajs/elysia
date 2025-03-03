@@ -2,7 +2,7 @@ import { t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 
-import { hasRef } from '../../src/compose'
+import { hasRef } from '../../src/schema'
 
 describe('has Ref', () => {
 	it('return true if object property has ref', () => {

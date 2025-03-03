@@ -3,6 +3,7 @@ import { Value } from '@sinclair/typebox/value'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import { StatusMap, InvertedStatusMap } from './utils'
+import type { ElysiaTypeCheck } from './schema'
 
 // ? Cloudflare worker support
 const env =
@@ -176,7 +177,7 @@ export class ValidationError extends Error {
 
 	constructor(
 		public type: string,
-		public validator: TSchema | TypeCheck<any>,
+		public validator: TSchema | TypeCheck<any> | ElysiaTypeCheck<any>,
 		public value: unknown
 	) {
 		if (
@@ -273,7 +274,9 @@ export class ValidationError extends Error {
 				[...Value.Errors(this.validator, this.value)].map(mapValueError)
 	}
 
-	static simplifyModel(validator: TSchema | TypeCheck<any>) {
+	static simplifyModel(
+		validator: TSchema | TypeCheck<any> | ElysiaTypeCheck<any>
+	) {
 		// @ts-ignore
 		const model = 'schema' in validator ? validator.schema : validator
 

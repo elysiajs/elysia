@@ -11,7 +11,12 @@ import type {
 import type { Context } from './context'
 
 import { t, TypeCheck } from './type-system'
-import { sucrose, type Sucrose } from './sucrose'
+import {
+	clearSucroseCache,
+	mergeInference,
+	sucrose,
+	type Sucrose
+} from './sucrose'
 
 import type { WSLocalHook } from './ws/types'
 
@@ -24,7 +29,6 @@ import type { ListenCallback, Serve, Server } from './universal/server'
 
 import {
 	cloneInference,
-	coercePrimitiveRoot,
 	deduplicateChecksum,
 	fnToContainer,
 	getLoosePath,
@@ -33,13 +37,20 @@ import {
 	mergeSchemaValidator,
 	PromiseGroup,
 	promoteEvent,
-	stringToStructureCoercions,
 	isNotEmpty,
-	replaceSchemaType,
 	compressHistoryHook,
 	encodePath
 } from './utils'
 
+import {
+	coercePrimitiveRoot,
+	stringToStructureCoercions,
+	replaceSchemaType,
+	getSchemaValidator,
+	getResponseSchemaValidator,
+	getCookieValidator,
+    ElysiaTypeCheck
+} from './schema'
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -50,16 +61,13 @@ import { createTracer } from './trace'
 
 import {
 	mergeHook,
-	getSchemaValidator,
-	getResponseSchemaValidator,
 	checksum,
 	mergeLifeCycle,
 	filterGlobalHook,
 	asHookType,
 	traceBackMacro,
 	replaceUrlPath,
-	createMacroManager,
-	getCookieValidator
+	createMacroManager
 } from './utils'
 
 import {
@@ -306,7 +314,8 @@ export default class Elysia<
 		set: false,
 		server: false,
 		request: false,
-		route: false
+		route: false,
+		path: false
 	}
 
 	private getServer() {
@@ -337,6 +346,9 @@ export default class Elysia<
 
 		if (config.nativeStaticResponse === undefined)
 			config.nativeStaticResponse = true
+
+		if (config.systemRouter === undefined) config.systemRouter = true
+		if (config.jsonAccelerator === undefined) config.jsonAccelerator = true
 
 		this.config = {}
 		this.applyConfig(config ?? {})
@@ -454,13 +466,12 @@ export default class Elysia<
 	} & {
 		modules: Definitions['typebox']
 	} {
-		const models: Record<string, TypeCheck<TSchema>> = {}
+		const models: Record<string, ElysiaTypeCheck<TSchema>> = {}
 
 		for (const name of Object.keys(this.definitions.type))
 			models[name] = getSchemaValidator(
-				// @ts-expect-error
-				this.definitions.typebox.Import(name)
-			) as TypeCheck<TSchema>
+				this.definitions.typebox.Import(name as never)
+			)
 
 		// @ts-expect-error
 		models.modules = this.definitions.typebox
@@ -514,7 +525,7 @@ export default class Elysia<
 		const dynamic = !this.config.aot
 
 		// ? Clone is need because of JIT, so the context doesn't switch between instance
-		const instanceValidator = { ...this.validator.getCandidate() }
+		const instanceValidator = this.validator.getCandidate()
 
 		const cloned = {
 			body: localHook?.body ?? (instanceValidator?.body as any),
@@ -733,6 +744,7 @@ export default class Elysia<
 				path,
 				composed: null,
 				handler: handle,
+				compile: undefined as any,
 				hooks
 			})
 
@@ -790,7 +802,7 @@ export default class Elysia<
 			})
 
 		let oldIndex: number | undefined
-		if (this.routeTree.has(method + path))
+		if (this.routeTree.has(method + '_' + path))
 			for (let i = 0; i < this.router.history.length; i++) {
 				const route = this.router.history[i]
 				if (route.path === path && route.method === method) {
@@ -804,7 +816,7 @@ export default class Elysia<
 					// 	this.routeTree.delete(removed.method + removed.path)
 				}
 			}
-		else this.routeTree.set(method + path, this.router.history.length)
+		else this.routeTree.set(method + '_' + path, this.router.history.length)
 
 		const history = this.router.history
 		const index = oldIndex ?? this.router.history.length
@@ -827,20 +839,19 @@ export default class Elysia<
 		const isWebSocket = method === '$INTERNALWS'
 
 		if (oldIndex !== undefined)
-			this.router.history[oldIndex] =
-				// @ts-ignore
-				Object.assign(
-					{
-						method,
-						path,
-						composed: mainHandler,
-						handler: handle,
-						hooks
-					},
-					localHook.webSocket
-						? { websocket: localHook.websocket as any }
-						: {}
-				)
+			this.router.history[oldIndex] = Object.assign(
+				{
+					method,
+					path,
+					composed: mainHandler,
+					compile: compile!,
+					handler: handle,
+					hooks
+				},
+				localHook.webSocket
+					? { websocket: localHook.websocket as any }
+					: {}
+			)
 		else
 			this.router.history.push(
 				// @ts-ignore
@@ -849,6 +860,7 @@ export default class Elysia<
 						method,
 						path,
 						composed: mainHandler,
+						compile,
 						handler: handle,
 						hooks
 					},
@@ -2564,7 +2576,7 @@ export default class Elysia<
 		}
 
 		if (type !== 'trace')
-			sucrose(
+			this.inference = sucrose(
 				{
 					[type]: handles.map((x) => x.fn)
 				},
@@ -3507,10 +3519,12 @@ export default class Elysia<
 					NewElysia['_types']['Definitions']['error']
 			>
 			typebox: TModule<
-				UnwrapTypeModule<Definitions['typebox']> &
-					UnwrapTypeModule<
-						NewElysia['_types']['Definitions']['typebox']
-					>
+				Prettify<
+					UnwrapTypeModule<Definitions['typebox']> &
+						UnwrapTypeModule<
+							NewElysia['_types']['Definitions']['typebox']
+						>
+				>
 			>
 		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
@@ -3882,16 +3896,7 @@ export default class Elysia<
 			}
 		}
 
-		this.inference = {
-			body: this.inference.body || plugin.inference.body,
-			cookie: this.inference.cookie || plugin.inference.cookie,
-			headers: this.inference.headers || plugin.inference.headers,
-			query: this.inference.query || plugin.inference.query,
-			set: this.inference.set || plugin.inference.set,
-			server: this.inference.server || plugin.inference.server,
-			request: this.inference.request || plugin.inference.request,
-			route: this.inference.route || plugin.inference.route
-		}
+		this.inference = mergeInference(this.inference, plugin.inference)
 
 		this.decorate(plugin.singleton.decorator)
 		this.state(plugin.singleton.store)
@@ -6369,6 +6374,12 @@ export default class Elysia<
 	) => {
 		this['~adapter'].listen(this)(options, callback)
 
+		if (this.promisedModules.size) clearSucroseCache(5000)
+
+		this.promisedModules.then(() => {
+			clearSucroseCache(1000)
+		})
+
 		return this
 	}
 
@@ -6436,14 +6447,17 @@ export {
 
 export {
 	getSchemaValidator,
+	getResponseSchemaValidator,
+	replaceSchemaType
+} from './schema'
+
+export {
 	mergeHook,
 	mergeObjectArray,
-	getResponseSchemaValidator,
 	redirect,
 	StatusMap,
 	InvertedStatusMap,
 	form,
-	replaceSchemaType,
 	replaceUrlPath,
 	checksum,
 	cloneInference,
