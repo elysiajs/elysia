@@ -29,7 +29,6 @@ import type { ListenCallback, Serve, Server } from './universal/server'
 
 import {
 	cloneInference,
-	coercePrimitiveRoot,
 	deduplicateChecksum,
 	fnToContainer,
 	getLoosePath,
@@ -38,13 +37,20 @@ import {
 	mergeSchemaValidator,
 	PromiseGroup,
 	promoteEvent,
-	stringToStructureCoercions,
 	isNotEmpty,
-	replaceSchemaType,
 	compressHistoryHook,
 	encodePath
 } from './utils'
 
+import {
+	coercePrimitiveRoot,
+	stringToStructureCoercions,
+	replaceSchemaType,
+	getSchemaValidator,
+	getResponseSchemaValidator,
+	getCookieValidator,
+    ElysiaTypeCheck
+} from './schema'
 import {
 	composeHandler,
 	composeGeneralHandler,
@@ -55,16 +61,13 @@ import { createTracer } from './trace'
 
 import {
 	mergeHook,
-	getSchemaValidator,
-	getResponseSchemaValidator,
 	checksum,
 	mergeLifeCycle,
 	filterGlobalHook,
 	asHookType,
 	traceBackMacro,
 	replaceUrlPath,
-	createMacroManager,
-	getCookieValidator
+	createMacroManager
 } from './utils'
 
 import {
@@ -462,13 +465,12 @@ export default class Elysia<
 	} & {
 		modules: Definitions['typebox']
 	} {
-		const models: Record<string, TypeCheck<TSchema>> = {}
+		const models: Record<string, ElysiaTypeCheck<TSchema>> = {}
 
 		for (const name of Object.keys(this.definitions.type))
 			models[name] = getSchemaValidator(
-				// @ts-expect-error
-				this.definitions.typebox.Import(name)
-			) as TypeCheck<TSchema>
+				this.definitions.typebox.Import(name as never)
+			)
 
 		// @ts-expect-error
 		models.modules = this.definitions.typebox
@@ -522,7 +524,7 @@ export default class Elysia<
 		const dynamic = !this.config.aot
 
 		// ? Clone is need because of JIT, so the context doesn't switch between instance
-		const instanceValidator = { ...this.validator.getCandidate() }
+		const instanceValidator = this.validator.getCandidate()
 
 		const cloned = {
 			body: localHook?.body ?? (instanceValidator?.body as any),
@@ -6444,14 +6446,17 @@ export {
 
 export {
 	getSchemaValidator,
+	getResponseSchemaValidator,
+	replaceSchemaType
+} from './schema'
+
+export {
 	mergeHook,
 	mergeObjectArray,
-	getResponseSchemaValidator,
 	redirect,
 	StatusMap,
 	InvertedStatusMap,
 	form,
-	replaceSchemaType,
 	replaceUrlPath,
 	checksum,
 	cloneInference,

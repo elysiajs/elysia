@@ -2,7 +2,7 @@ import type { AnyElysia } from '.'
 
 import { Value } from '@sinclair/typebox/value'
 import {
-	Kind,
+	OptionalKind,
 	TypeBoxError,
 	type TAnySchema,
 	type TSchema
@@ -14,7 +14,6 @@ import { decode as decodeURIComponent } from './deuri'
 
 import {
 	ELYSIA_REQUEST_ID,
-	getCookieValidator,
 	getLoosePath,
 	lifeCycleToFn,
 	randomId,
@@ -34,6 +33,7 @@ import {
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
+import { getCookieValidator } from './schema'
 import { Sucrose, hasReturn, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 
@@ -45,24 +45,6 @@ import type {
 	LifeCycleStore,
 	SchemaValidator
 } from './types'
-import { type TypeCheck } from './type-system'
-
-const TypeBoxSymbol = {
-	optional: Symbol.for('TypeBox.Optional'),
-	kind: Symbol.for('TypeBox.Kind')
-} as const
-
-const isOptional = (validator?: TypeCheck<any>) => {
-	if (!validator) return false
-
-	// @ts-expect-error
-	const schema = validator?.schema
-
-	if (schema?.[TypeBoxSymbol.kind] === 'Import')
-		return validator.References().some(isOptional as any)
-
-	return !!schema && TypeBoxSymbol.optional in schema
-}
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -83,49 +65,6 @@ const defaultParsers = [
 	// eslint-disable-next-line sonarjs/no-duplicate-string
 	'multipart/form-data'
 ]
-
-export const hasAdditionalProperties = (
-	_schema: TAnySchema | TypeCheck<any>
-) => {
-	if (!_schema) return false
-
-	// @ts-expect-error private property
-	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? _schema
-
-	// @ts-expect-error private property
-	if (schema[TypeBoxSymbol.kind] === 'Import' && _schema.References()) {
-		return _schema.References().some(hasAdditionalProperties)
-	}
-
-	if (schema.anyOf) return schema.anyOf.some(hasAdditionalProperties)
-	if (schema.someOf) return schema.someOf.some(hasAdditionalProperties)
-	if (schema.allOf) return schema.allOf.some(hasAdditionalProperties)
-	if (schema.not) return schema.not.some(hasAdditionalProperties)
-
-	if (schema.type === 'object') {
-		const properties = schema.properties as Record<string, TAnySchema>
-
-		if ('additionalProperties' in schema) return schema.additionalProperties
-		if ('patternProperties' in schema) return false
-
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (property.type === 'object') {
-				if (hasAdditionalProperties(property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++)
-					if (hasAdditionalProperties(property.anyOf[i])) return true
-			}
-
-			return property.additionalProperties
-		}
-
-		return false
-	}
-
-	return false
-}
 
 const createReport = ({
 	context = 'c',
@@ -250,23 +189,21 @@ const composeValidationFactory = ({
 			`const isResponse=${name} instanceof Response\n` +
 			`switch(c.set.status){`
 
-		for (const [status, value] of Object.entries(
-			validator.response as Record<string, TypeCheck<any>>
-		)) {
+		for (const [status, value] of Object.entries(validator.response!)) {
 			code += `\ncase ${status}:if(!isResponse){`
 
 			if (
 				normalize &&
-				'Clean' in value &&
-				!hasAdditionalProperties(value as any)
+				value.Clean &&
+				!value.sucrose.hasAdditionalProperties
 			)
 				code += `${name}=validator.response['${status}'].Clean(${name})\n`
 
 			// Encode call TypeCheck.Check internally
 			if (
 				encodeSchema &&
-				// @ts-expect-error hasTransform is appended by getResponseSchemaValidator
-				(value.hasTransform || typeof value.Encode === 'function')
+				(value.sucrose.hasTransform ||
+					typeof value.Encode === 'function')
 			)
 				code +=
 					`try{` +
@@ -291,215 +228,6 @@ const composeValidationFactory = ({
 	}
 })
 
-const KindSymbol = Symbol.for('TypeBox.Kind')
-
-export const hasType = (type: string, schema: TAnySchema) => {
-	if (!schema) return
-
-	if (KindSymbol in schema && schema[KindSymbol] === type) return true
-
-	if (schema.type === 'object') {
-		const properties = schema.properties as Record<string, TAnySchema>
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (property.type === 'object') {
-				if (hasType(type, property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++)
-					if (hasType(type, property.anyOf[i])) return true
-			}
-
-			if (KindSymbol in property && property[KindSymbol] === type)
-				return true
-		}
-
-		return false
-	}
-
-	return (
-		schema.properties &&
-		KindSymbol in schema.properties &&
-		schema.properties[KindSymbol] === type
-	)
-}
-
-export const hasProperty = (
-	expectedProperty: string,
-	_schema: TAnySchema | TypeCheck<any>
-) => {
-	if (!_schema) return
-
-	// @ts-expect-error private property
-	const schema = _schema.schema ?? _schema
-
-	if (schema[TypeBoxSymbol.kind] === 'Import')
-		return _schema
-			.References()
-			.some((schema: TAnySchema) => hasProperty(expectedProperty, schema))
-
-	if (schema.type === 'object') {
-		const properties = schema.properties as Record<string, TAnySchema>
-
-		if (!properties) return false
-
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (expectedProperty in property) return true
-
-			if (property.type === 'object') {
-				if (hasProperty(expectedProperty, property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++) {
-					if (hasProperty(expectedProperty, property.anyOf[i]))
-						return true
-				}
-			}
-		}
-
-		return false
-	}
-
-	return expectedProperty in schema
-}
-
-const TransformSymbol = Symbol.for('TypeBox.Transform')
-
-export const hasRef = (schema: TAnySchema): boolean => {
-	if (!schema) return false
-
-	if (schema.oneOf)
-		for (let i = 0; i < schema.oneOf.length; i++)
-			if (hasRef(schema.oneOf[i])) return true
-
-	if (schema.anyOf)
-		for (let i = 0; i < schema.anyOf.length; i++)
-			if (hasRef(schema.anyOf[i])) return true
-
-	if (schema.oneOf)
-		for (let i = 0; i < schema.oneOf.length; i++)
-			if (hasRef(schema.oneOf[i])) return true
-
-	if (schema.allOf)
-		for (let i = 0; i < schema.allOf.length; i++)
-			if (hasRef(schema.allOf[i])) return true
-
-	if (schema.not && hasRef(schema.not)) return true
-
-	if (schema.type === 'object' && schema.properties) {
-		const properties = schema.properties as Record<string, TAnySchema>
-
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (hasRef(property)) return true
-
-			if (
-				property.type === 'array' &&
-				property.items &&
-				hasRef(property.items)
-			)
-				return true
-		}
-	}
-
-	if (schema.type === 'array' && schema.items && hasRef(schema.items))
-		return true
-
-	return schema[Kind] === 'Ref' && '$ref' in schema
-}
-
-export const hasTransform = (schema: TAnySchema): boolean => {
-	if (!schema) return false
-
-	if (
-		schema.$ref &&
-		schema.$defs &&
-		schema.$ref in schema.$defs &&
-		hasTransform(schema.$defs[schema.$ref])
-	)
-		return true
-
-	if (schema.oneOf)
-		for (let i = 0; i < schema.oneOf.length; i++)
-			if (hasTransform(schema.oneOf[i])) return true
-
-	if (schema.anyOf) {
-		for (let i = 0; i < schema.anyOf.length; i++)
-			if (hasTransform(schema.anyOf[i])) return true
-	}
-
-	if (schema.allOf)
-		for (let i = 0; i < schema.allOf.length; i++)
-			if (hasTransform(schema.allOf[i])) return true
-
-	if (schema.not && hasTransform(schema.not)) return true
-
-	if (schema.type === 'object' && schema.properties) {
-		const properties = schema.properties as Record<string, TAnySchema>
-
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (hasTransform(property)) return true
-
-			if (
-				property.type === 'array' &&
-				property.items &&
-				hasTransform(property.items)
-			)
-				return true
-		}
-	}
-
-	if (schema.type === 'array' && schema.items && hasTransform(schema.items))
-		return true
-
-	return TransformSymbol in schema
-}
-
-/**
- * This function will return the type of unioned if all unioned type is the same.
- * It's intent to use for content-type mapping only
- *
- * ```ts
- * t.Union([
- *   t.Object({
- *     password: t.String()
- *   }),
- *   t.Object({
- *     token: t.String()
- *   })
- * ])
- * ```
- */
-// const getUnionedType = (validator: TypeCheck<any> | undefined) => {
-// 	if (!validator) return
-
-// 	// @ts-ignore
-// 	const schema = validator?.schema
-
-// 	if (schema && 'anyOf' in schema) {
-// 		let foundDifference = false
-// 		const type: string = schema.anyOf[0].type
-
-// 		for (const validator of schema.anyOf as { type: string }[]) {
-// 			if (validator.type !== type) {
-// 				foundDifference = true
-// 				break
-// 			}
-// 		}
-
-// 		if (!foundDifference) return type
-// 	}
-
-// 	// @ts-ignore
-// 	return validator.schema?.type
-// }
-
-const matchFnReturn = /(?:return|=>) \S+\(/g
-
 export const isAsyncName = (v: Function | HookContainer) => {
 	// @ts-ignore
 	const fn = v?.fn ?? v
@@ -507,20 +235,31 @@ export const isAsyncName = (v: Function | HookContainer) => {
 	return fn.constructor.name === 'AsyncFunction'
 }
 
+const matchResponseClone = /=>\s?response\.clone\(/
+const matchFnReturn = /(?:return|=>)\s?\S+\(|a(?:sync|wait)/
+
 export const isAsync = (v: Function | HookContainer) => {
-	// @ts-ignore
-	const fn = v?.fn ?? v
+	const isObject = typeof v === 'object'
+
+	if (isObject && v.isAsync !== undefined) return v.isAsync
+
+	const fn = isObject ? v.fn : v
 
 	if (fn.constructor.name === 'AsyncFunction') return true
 
-	const literal = fn.toString()
-	if (literal.includes('=> response.clone(')) return false
-	if (literal.includes('await')) return true
-	if (literal.includes('async')) return true
-	// v8 minified
-	if (literal.includes('=>response.clone(')) return false
+	const literal: string = fn.toString()
 
-	return !!literal.match(matchFnReturn)
+	if (matchResponseClone.test(literal)) {
+		if (isObject) v.isAsync = false
+
+		return false
+	}
+
+	const result = matchFnReturn.test(literal)
+
+	if (isObject) v.isAsync = result
+
+	return result
 }
 
 export const isGenerator = (v: Function | HookContainer) => {
@@ -649,21 +388,18 @@ export const composeHandler = ({
 
 	const hasCookie = inference.cookie || !!validator.cookie
 
-	const cookieValidator = hasCookie
-		? getCookieValidator({
-				// @ts-expect-error private property
-				modules: app.definitions.typebox,
-				validator: validator.cookie as any,
-				defaultConfig: app.config.cookie,
-				dynamic: !!app.config.aot,
-				// @ts-expect-error
-				config: validator.cookie?.config ?? {},
-				// @ts-expect-error
-				models: app.definitions.type
-			})
-		: undefined
+	// ! Get latest app.config.cookie
+	const cookieValidator = getCookieValidator({
+		// @ts-expect-error private property
+		modules: app.definitions.typebox,
+		validator: validator.cookie as any,
+		defaultConfig: app.config.cookie,
+		dynamic: !!app.config.aot,
+		config: validator.cookie?.config ?? {},
+		// @ts-expect-error
+		models: app.definitions.type
+	})!
 
-	// @ts-ignore private property
 	const cookieMeta = cookieValidator?.config as {
 		secrets?: string | string[]
 		sign: string[] | true
@@ -793,14 +529,11 @@ export const composeHandler = ({
 			}[]
 		>[]
 
-		// @ts-ignore
 		if (validator.query && validator.query.schema.type === 'object') {
-			// @ts-expect-error private property
 			const properties = validator.query.schema.properties
 
-			if (!hasAdditionalProperties(validator.query as any))
-				// eslint-disable-next-line prefer-const
-				for (let [key, _value] of Object.entries(properties)) {
+			if (!validator.query.sucrose.hasAdditionalProperties)
+				for (const [key, _value] of Object.entries(properties)) {
 					let value = _value as TAnySchema
 
 					const isArray =
@@ -814,13 +547,12 @@ export const composeHandler = ({
 					// @ts-ignore
 					if (
 						value &&
-						TypeBoxSymbol.optional in value &&
+						OptionalKind in value &&
 						value.type === 'array' &&
 						value.items
 					)
 						value = value.items
 
-					// @ts-ignore unknown
 					const { type, anyOf } = value
 
 					destructured.push({
@@ -829,8 +561,8 @@ export const composeHandler = ({
 						isNestedObjectArray:
 							(isArray && value.items?.type === 'object') ||
 							!!value.items?.anyOf?.some(
-								// @ts-expect-error
-								(x) => x.type === 'object' || x.type === 'array'
+								(x: TSchema) =>
+									x.type === 'object' || x.type === 'array'
 							),
 						isObject:
 							type === 'object' ||
@@ -1027,8 +759,6 @@ export const composeHandler = ({
 	})
 
 	if (hasBody) {
-		const isOptionalBody = isOptional(validator.body)
-
 		const hasBodyInference =
 			!!hooks.parse?.length || inference.body || validator.body
 
@@ -1051,6 +781,8 @@ export const composeHandler = ({
 			const reporter = report('parse', {
 				total: hooks.parse?.length
 			})
+
+			const isOptionalBody = !!validator.body?.sucrose.isOptional
 
 			switch (parser) {
 				case 'json':
@@ -1136,6 +868,9 @@ export const composeHandler = ({
 							hooks.parse[i].fn as unknown as string
 						)
 
+						const isOptionalBody =
+							!!validator.body?.sucrose.isOptional
+
 						switch (hooks.parse[i].fn as unknown as string) {
 							case 'json':
 							case 'application/json':
@@ -1205,6 +940,8 @@ export const composeHandler = ({
 			reporter.resolve()
 
 			if (!hasDefaultParser) {
+				const isOptionalBody = !!validator.body?.sucrose.isOptional
+
 				if (hooks.parse?.length)
 					fnLiteral +=
 						`\nif(!used){\n` +
@@ -1247,8 +984,6 @@ export const composeHandler = ({
 
 				fnLiteral += '}'
 			}
-
-			// fnLiteral += '}'
 		}
 
 		fnLiteral += '\ndelete c.contentType'
@@ -1302,12 +1037,12 @@ export const composeHandler = ({
 		if (validator.headers) {
 			if (
 				normalize &&
-				'Clean' in validator.headers &&
-				!hasAdditionalProperties(validator.headers as any)
+				validator.headers.Clean &&
+				!validator.headers.sucrose.hasAdditionalProperties
 			)
 				fnLiteral += 'c.headers=validator.headers.Clean(c.headers);\n'
 
-			if (hasProperty('default', validator.headers))
+			if (validator.headers.sucrose.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1326,7 +1061,7 @@ export const composeHandler = ({
 						fnLiteral += `c.headers['${key}']??=${parsed}\n`
 				}
 
-			if (isOptional(validator.headers))
+			if (validator.headers.sucrose.isOptional)
 				fnLiteral += `if(isNotEmpty(c.headers)){`
 
 			fnLiteral +=
@@ -1334,15 +1069,14 @@ export const composeHandler = ({
 				composeValidation('headers') +
 				'}'
 
-			// @ts-expect-error private property
-			if (hasTransform(validator.headers.schema))
+			if (validator.headers.sucrose.hasTransform)
 				fnLiteral += `c.headers=validator.headers.Decode(c.headers)\n`
 
-			if (isOptional(validator.headers)) fnLiteral += '}'
+			if (validator.headers.sucrose.isOptional) fnLiteral += '}'
 		}
 
 		if (validator.params) {
-			if (hasProperty('default', validator.params))
+			if (validator.params.sucrose.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1366,20 +1100,19 @@ export const composeHandler = ({
 				composeValidation('params') +
 				'}'
 
-			// @ts-expect-error private property
-			if (hasTransform(validator.params.schema))
+			if (validator.params.sucrose.hasTransform)
 				fnLiteral += `c.params=validator.params.Decode(c.params)\n`
 		}
 
 		if (validator.query) {
 			if (
 				normalize &&
-				'Clean' in validator.query &&
-				!hasAdditionalProperties(validator.query as any)
+				validator.query.Clean &&
+				!validator.query.sucrose.hasAdditionalProperties
 			)
 				fnLiteral += 'c.query=validator.query.Clean(c.query)\n'
 
-			if (hasProperty('default', validator.query))
+			if (validator.query.sucrose.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1398,7 +1131,7 @@ export const composeHandler = ({
 						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
 				}
 
-			if (isOptional(validator.query))
+			if (validator.query.sucrose.isOptional)
 				fnLiteral += `if(isNotEmpty(c.query)){`
 
 			fnLiteral +=
@@ -1406,32 +1139,29 @@ export const composeHandler = ({
 				composeValidation('query') +
 				`}`
 
-			// @ts-expect-error private property
-			if (hasTransform(validator.query.schema))
+			if (validator.query.sucrose.hasTransform)
 				fnLiteral += `c.query=validator.query.Decode(Object.assign({},c.query))\n`
 
-			if (isOptional(validator.query)) fnLiteral += `}`
+			if (validator.query.sucrose.isOptional) fnLiteral += `}`
 		}
 
 		if (validator.body) {
 			if (
 				normalize &&
-				'Clean' in validator.body &&
-				!hasAdditionalProperties(validator.body as any)
+				validator.body.Clean &&
+				!validator.body.sucrose.hasAdditionalProperties
 			)
 				fnLiteral += 'c.body=validator.body.Clean(c.body)\n'
 
-			// @ts-expect-error private property
-			const doesHaveTransform = hasTransform(validator.body.schema)
-
-			if (doesHaveTransform || isOptional(validator.body))
+			if (
+				validator.body.sucrose.hasTransform ||
+				validator.body.sucrose.isOptional
+			)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
-			if (hasProperty('default', validator.body)) {
+			if (validator.body.sucrose.hasDefault) {
 				const value = Value.Default(
-					// @ts-expect-error private property
 					validator.body.schema,
-					// @ts-expect-error private property
 					validator.body.schema.type === 'object' ? {} : undefined
 				)
 
@@ -1448,7 +1178,7 @@ export const composeHandler = ({
 					`c.body=Object.assign(${parsed},c.body)\n` +
 					`else c.body=${parsed}\n`
 
-				if (isOptional(validator.body))
+				if (validator.body.sucrose.isOptional)
 					fnLiteral +=
 						`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
 						composeValidation('body') +
@@ -1461,7 +1191,7 @@ export const composeHandler = ({
 
 				fnLiteral += '}'
 			} else {
-				if (isOptional(validator.body))
+				if (validator.body.sucrose.isOptional)
 					fnLiteral +=
 						`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
 						composeValidation('body') +
@@ -1473,17 +1203,15 @@ export const composeHandler = ({
 						'}'
 			}
 
-			if (doesHaveTransform)
+			if (validator.body.sucrose.hasTransform)
 				fnLiteral += `if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`
 		}
 
 		if (
 			cookieValidator &&
 			isNotEmpty(
-				// @ts-ignore
-				cookieValidator?.schema?.properties ??
-					// @ts-ignore
-					cookieValidator?.schema?.schema ??
+				cookieValidator.schema.properties ??
+					cookieValidator.schema?.schema ??
 					{}
 			)
 		) {
@@ -1492,13 +1220,9 @@ export const composeHandler = ({
 				`for(const [key,value] of Object.entries(c.cookie))` +
 				`cookieValue[key]=value.value\n`
 
-			if (hasProperty('default', cookieValidator))
+			if (cookieValidator.sucrose.hasDefault)
 				for (const [key, value] of Object.entries(
-					Value.Default(
-						// @ts-ignore
-						cookieValidator.schema,
-						{}
-					) as Object
+					Value.Default(cookieValidator.schema, {}) as Object
 				)) {
 					fnLiteral += `cookieValue['${key}'] = ${
 						typeof value === 'object'
@@ -1507,7 +1231,7 @@ export const composeHandler = ({
 					}\n`
 				}
 
-			if (isOptional(validator.cookie))
+			if (cookieValidator.sucrose.isOptional)
 				fnLiteral += `if(isNotEmpty(c.cookie)){`
 
 			fnLiteral +=
@@ -1515,13 +1239,12 @@ export const composeHandler = ({
 				composeValidation('cookie', 'cookieValue') +
 				'}'
 
-			// @ts-expect-error private property
-			if (hasTransform(validator.cookie.schema))
+			if (cookieValidator.sucrose.hasTransform)
 				fnLiteral +=
 					`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue)))` +
 					`c.cookie[key].value=value\n`
 
-			if (isOptional(validator.cookie)) fnLiteral += `}`
+			if (cookieValidator.sucrose.isOptional) fnLiteral += `}`
 		}
 	}
 

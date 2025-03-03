@@ -4,17 +4,17 @@ import { generateHeapSnapshot } from 'bun'
 const total = 1000
 
 {
-	console.log('Elysia')
-
 	const app = new Elysia({ precompile: true })
+
 	const t1 = performance.now()
 	const memory = process.memoryUsage().heapTotal / 1024 / 1024
 
 	for (let i = 0; i < total; i++)
-		app.onBeforeHandle(() => {
-			return { a: 'ok' }
-		}).get(`/id/${i}`, () => 'hello', {
-			body: t.String()
+		app.get(`/id/${i}`, () => 'hello', {
+			body: t.String(),
+			beforeHandle() {
+				return { a: 'ok' }
+			}
 		})
 
 	const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024

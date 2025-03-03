@@ -26,13 +26,16 @@ export namespace Sucrose {
 	}
 }
 
-export const hasReturn = (fn: string | HookContainer<any> | Function) => {
-	const fnLiteral =
-		typeof fn === 'object'
-			? fn.fn.toString()
-			: typeof fn === 'string'
-				? fn.toString()
-				: fn
+export const hasReturn = (v: string | HookContainer<any> | Function) => {
+	const isObject = typeof v === 'object'
+
+	if (isObject && v.hasReturn !== undefined) return v.hasReturn
+
+	const fnLiteral = isObject
+		? v.fn.toString()
+		: typeof v === 'string'
+			? v.toString()
+			: v
 
 	const parenthesisEnd = fnLiteral.indexOf(')')
 
@@ -41,10 +44,16 @@ export const hasReturn = (fn: string | HookContainer<any> | Function) => {
 		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
 		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
 	) {
+		if (isObject) v.hasReturn = true
+
 		return true
 	}
 
-	return fnLiteral.includes('return')
+	const result = fnLiteral.includes('return')
+
+	if (isObject) v.hasReturn = result
+
+	return result
 }
 
 /**

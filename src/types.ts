@@ -35,6 +35,7 @@ import type { ComposerGeneralHandlerOptions } from './compose'
 import type { ElysiaAdapter } from './adapter'
 import type { AnyWSLocalHook, WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
+import { ElysiaTypeCheck } from './schema'
 
 type PartialServe = Partial<Serve>
 
@@ -486,6 +487,8 @@ export type HookContainer<T extends Function = Function> = {
 	scope?: LifeCycleType
 	subType?: 'derive' | 'resolve' | 'mapDerive' | 'mapResolve' | (string & {})
 	fn: T
+	isAsync?: boolean
+	hasReturn?: boolean
 }
 
 export interface LifeCycleStore {
@@ -1263,18 +1266,18 @@ export interface InternalRoute {
 }
 
 export type SchemaValidator = {
-	createBody?(): TypeCheck<any>
-	createHeaders?(): TypeCheck<any>
-	createQuery?(): TypeCheck<any>
-	createParams?(): TypeCheck<any>
-	createCookie?(): TypeCheck<any>
-	createResponse?(): Record<number, TypeCheck<any>>
-	body?: TypeCheck<any>
-	headers?: TypeCheck<any>
-	query?: TypeCheck<any>
-	params?: TypeCheck<any>
-	cookie?: TypeCheck<any>
-	response?: Record<number, TypeCheck<any>>
+	createBody?(): ElysiaTypeCheck<any>
+	createHeaders?(): ElysiaTypeCheck<any>
+	createQuery?(): ElysiaTypeCheck<any>
+	createParams?(): ElysiaTypeCheck<any>
+	createCookie?(): ElysiaTypeCheck<any>
+	createResponse?(): Record<number, ElysiaTypeCheck<any>>
+	body?: ElysiaTypeCheck<any>
+	headers?: ElysiaTypeCheck<any>
+	query?: ElysiaTypeCheck<any>
+	params?: ElysiaTypeCheck<any>
+	cookie?: ElysiaTypeCheck<any>
+	response?: Record<number, ElysiaTypeCheck<any>>
 }
 
 export type AddPrefix<Prefix extends string, T> = {

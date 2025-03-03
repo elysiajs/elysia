@@ -1,15 +1,20 @@
 import { Elysia, t } from '../src'
 import { sucrose } from '../src/sucrose'
+import { req } from '../test/utils'
 
-const plugin = new Elysia().derive(({ headers: { authorization } }) => {
-	return {
-		get auth() {
-			return authorization
+const app = new Elysia().get(
+	'/',
+	({ error }) => error(418, { name: 'Nagisa', hifumi: 'daisuki' }),
+	{
+		response: {
+			200: t.Object({
+				hello: t.String()
+			}),
+			418: t.Object({
+				name: t.Literal('Nagisa')
+			})
 		}
 	}
-})
+)
 
-const a = new WeakMap()
-
-const b = () => { }
-const c = () => { }
+const response = await app.handle(req('/')).then((x) => x.json())

@@ -11,8 +11,8 @@ import { createNativeStaticHandler } from './handler'
 
 import { serializeCookie } from '../../cookies'
 import { isProduction, ValidationError } from '../../error'
+import { getSchemaValidator, } from '../../schema'
 import {
-	getSchemaValidator,
 	hasHeaderShorthand,
 	isNotEmpty,
 	isNumericString,
