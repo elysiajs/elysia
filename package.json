@@ -170,6 +170,7 @@
 	"dependencies": {
 		"@sinclair/typebox": "^0.34.27",
 		"cookie": "^1.0.2",
+		"json-accelerator": "^0.1.0",
 		"memoirist": "^0.3.0",
 		"openapi-types": "^12.1.3"
 	},

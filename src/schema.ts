@@ -9,6 +9,9 @@ import {
 } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
+
+import { createAccelerator } from 'json-accelerator'
+
 import { t, type TypeCheck } from './type-system'
 
 import { isNotEmpty, mergeCookie } from './utils'
@@ -1048,3 +1051,17 @@ export const getCookieValidator = ({
 // 	// @ts-ignore
 // 	return validator.schema?.type
 // }
+
+export const createAccelerators = (
+	records: Record<number, ElysiaTypeCheck<any>>
+) => {
+	const accelerators = <Record<number, Function>>{}
+
+	for (const [id, validator] of Object.entries(records)) {
+		if (!validator) continue
+
+		accelerators[+id] = createAccelerator(validator.schema)
+	}
+
+	return accelerators
+}

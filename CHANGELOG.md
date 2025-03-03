@@ -1,7 +1,7 @@
 # 1.3.0
 Feature:
+- add `jsonAccelerator`
 - add `systemRouter` config
-- add sucrose cache
 - add sucrose cache
 
 Improvement:

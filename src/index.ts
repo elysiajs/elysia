@@ -348,6 +348,7 @@ export default class Elysia<
 			config.nativeStaticResponse = true
 
 		if (config.systemRouter === undefined) config.systemRouter = true
+		if (config.jsonAccelerator === undefined) config.jsonAccelerator = true
 
 		this.config = {}
 		this.applyConfig(config ?? {})

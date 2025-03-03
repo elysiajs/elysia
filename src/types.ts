@@ -175,8 +175,18 @@ export type ElysiaConfig<Prefix extends string | undefined> = {
 	 * Use runtime/framework provided router if possible
 	 *
 	 * @default true
+	 * @since 1.3.0
 	 */
 	systemRouter?: boolean
+	/**
+	 * When response schema is provided
+	 * Use Elysia custom JSON encoder to optimize encode process
+	 *
+	 *
+	 * @default true
+	 * @since 1.3.0
+	 */
+	jsonAccelerator?: boolean
 }
 
 export type ValidatorLayer = {

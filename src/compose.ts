@@ -33,7 +33,7 @@ import {
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
-import { getCookieValidator } from './schema'
+import { createAccelerators, getCookieValidator } from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 
@@ -381,6 +381,9 @@ export const composeHandler = ({
 	validator.createCookie?.()
 	validator.createResponse?.()
 
+	const jsonAccelerator =
+		(app.config.jsonAccelerator ?? true) && validator.response
+
 	const hasValidation =
 		validator.body ||
 		validator.headers ||
@@ -413,7 +416,7 @@ export const composeHandler = ({
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders =
 		inference.headers ||
-		validator.headers ||
+		!!validator.headers ||
 		(adapter.preferWebstandardHeaders !== true && inference.body)
 
 	const hasCookie = inference.cookie || !!validator.cookie
@@ -774,7 +777,7 @@ export const composeHandler = ({
 		inference.set ||
 		hasHeaders ||
 		hasTrace ||
-		validator.response ||
+		!!validator.response ||
 		(isHandleFn && hasDefaultHeaders) ||
 		maybeStream
 
@@ -1562,14 +1565,35 @@ export const composeHandler = ({
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
-			} else if (hasSet)
+			} else if (hasSet) {
+				if (jsonAccelerator) {
+					fnLiteral +=
+						`${saveResponse}r\n` +
+						`if(typeof r==='object'&&c.set.status in accelerate){\n` +
+						`c.set.headers['content-type']='application/json'\n` +
+						`return mapResponse(accelerate[c.set.status](r),c.set${
+							mapResponseContext
+						})}\n`
+				}
+
 				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
 					mapResponseContext
 				})\n`
-			else
+			} else {
+				if (jsonAccelerator) {
+					fnLiteral +=
+						`${saveResponse}r\n` +
+						`if(typeof r==='object'&&c.set.status in accelerate){\n` +
+						`c.set.headers['content-type']='application/json'\n` +
+						`return mapResponse(accelerate[c.set.status](r),c.set${
+							mapResponseContext
+						})}\n`
+				}
+
 				fnLiteral += `return mapCompactResponse(${saveResponse}r${
 					mapResponseContext
 				})\n`
+			}
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r=await ${handle}\n`
@@ -1605,6 +1629,16 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie
 
+			if (jsonAccelerator) {
+				fnLiteral +=
+					`${saveResponse}r\n` +
+					`if(typeof r==='object'&&c.set.status in accelerate){\n` +
+					`c.set.headers['content-type']='application/json'\n` +
+					`return mapResponse(accelerate[c.set.status](r),c.set${
+						mapResponseContext
+					})}\n`
+			}
+
 			if (hasSet)
 				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
 					mapResponseContext
@@ -1631,14 +1665,35 @@ export const composeHandler = ({
 						})\n` +
 						`else return ${handle}.clone()\n`
 					: `return ${handle}.clone()\n`
-			} else if (hasSet)
+			} else if (hasSet) {
+				if (jsonAccelerator) {
+					fnLiteral +=
+						`${saveResponse}${handled}\n` +
+						`if(typeof ${handled}==='object'&&c.set.status in accelerate){\n` +
+						`c.set.headers['content-type']='application/json'\n` +
+						`return mapResponse(accelerate[c.set.status](${handled}),c.set${
+							mapResponseContext
+						})}\n`
+				}
+
 				fnLiteral += `return mapResponse(${saveResponse}${handled},c.set${
 					mapResponseContext
 				})\n`
-			else
+			} else {
+				if (jsonAccelerator) {
+					fnLiteral +=
+						`${saveResponse}${handled}\n` +
+						`if(typeof ${handled}==='object'&&c.set.status in accelerate){\n` +
+						`c.set.headers['content-type']='application/json'\n` +
+						`return mapResponse(accelerate[c.set.status](${handled}),c.set${
+							mapResponseContext
+						})}\n`
+				}
+
 				fnLiteral += `return mapCompactResponse(${saveResponse}${handled}${
 					mapResponseContext
 				})\n`
+			}
 		}
 	}
 
@@ -1789,6 +1844,7 @@ export const composeHandler = ({
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		allocateIf('parser,', hooks.parse?.length) +
 		allocateIf(`getServer,`, inference.server) +
+		allocateIf('accelerate,', jsonAccelerator) +
 		adapterVariables +
 		allocateIf('TypeBoxError', hasValidation) +
 		`}=hooks\n` +
@@ -1841,6 +1897,9 @@ export const composeHandler = ({
 			getServer: () => app.getServer(),
 			TypeBoxError: hasValidation ? TypeBoxError : undefined,
 			parser: app['~parser'],
+			accelerate: jsonAccelerator
+				? createAccelerators(validator.response!)
+				: undefined,
 			...adapter.inject
 		})
 	} catch (error) {
