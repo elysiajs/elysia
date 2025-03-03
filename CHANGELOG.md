@@ -2,9 +2,11 @@
 Feature:
 - add `systemRouter` config
 - add sucrose cache
+- add sucrose cache
 
 Improvement:
 - reduce redundant type check when using Encode
+- optimize isAsync
 
 # 1.2.24 - 2 Mar 2025
 Bug fix:

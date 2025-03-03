@@ -26,36 +26,6 @@ export namespace Sucrose {
 	}
 }
 
-export const hasReturn = (v: string | HookContainer<any> | Function) => {
-	const isObject = typeof v === 'object'
-
-	if (isObject && v.hasReturn !== undefined) return v.hasReturn
-
-	const fnLiteral = isObject
-		? v.fn.toString()
-		: typeof v === 'string'
-			? v.toString()
-			: v
-
-	const parenthesisEnd = fnLiteral.indexOf(')')
-
-	// Is direct arrow function return eg. () => 1
-	if (
-		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
-		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
-	) {
-		if (isObject) v.hasReturn = true
-
-		return true
-	}
-
-	const result = fnLiteral.includes('return')
-
-	if (isObject) v.hasReturn = result
-
-	return result
-}
-
 /**
  * Separate stringified function body and paramter
  *
@@ -688,7 +658,7 @@ export const sucrose = (
 		const e = events[i]
 		if (!e) continue
 
-		const event = 'fn' in e ? e.fn : e
+		const event = typeof e === 'object' ? e.fn : e
 
 		// parse can be either a function or string
 		if (typeof event !== 'function') continue

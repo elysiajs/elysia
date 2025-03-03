@@ -34,7 +34,7 @@ import {
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
 import { getCookieValidator } from './schema'
-import { Sucrose, hasReturn, sucrose } from './sucrose'
+import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 
 import type { TraceEvent } from './trace'
@@ -228,7 +228,7 @@ const composeValidationFactory = ({
 	}
 })
 
-export const isAsyncName = (v: Function | HookContainer) => {
+const isAsyncName = (v: Function | HookContainer) => {
 	// @ts-ignore
 	const fn = v?.fn ?? v
 
@@ -238,7 +238,7 @@ export const isAsyncName = (v: Function | HookContainer) => {
 const matchResponseClone = /=>\s?response\.clone\(/
 const matchFnReturn = /(?:return|=>)\s?\S+\(|a(?:sync|wait)/
 
-export const isAsync = (v: Function | HookContainer) => {
+const isAsync = (v: Function | HookContainer) => {
 	const isObject = typeof v === 'object'
 
 	if (isObject && v.isAsync !== undefined) return v.isAsync
@@ -262,7 +262,37 @@ export const isAsync = (v: Function | HookContainer) => {
 	return result
 }
 
-export const isGenerator = (v: Function | HookContainer) => {
+const hasReturn = (v: string | HookContainer<any> | Function) => {
+	const isObject = typeof v === 'object'
+
+	if (isObject && v.hasReturn !== undefined) return v.hasReturn
+
+	const fnLiteral = isObject
+		? v.fn.toString()
+		: typeof v === 'string'
+			? v.toString()
+			: v
+
+	const parenthesisEnd = fnLiteral.indexOf(')')
+
+	// Is direct arrow function return eg. () => 1
+	if (
+		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
+		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
+	) {
+		if (isObject) v.hasReturn = true
+
+		return true
+	}
+
+	const result = fnLiteral.includes('return')
+
+	if (isObject) v.hasReturn = result
+
+	return result
+}
+
+const isGenerator = (v: Function | HookContainer) => {
 	// @ts-ignore
 	const fn = v?.fn ?? v
 
