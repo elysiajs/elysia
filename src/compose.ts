@@ -207,28 +207,31 @@ const composeValidationFactory = ({
 	injectResponse = '',
 	normalize = false,
 	validator,
-	encodeSchema = false
+	encodeSchema = false,
+	accelerators
 }: {
 	injectResponse?: string
 	normalize?: ElysiaConfig<''>['normalize']
 	validator: SchemaValidator
 	encodeSchema?: boolean
+	accelerators?: ReturnType<typeof createAccelerators>
 }) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
 		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
 	composeResponseValidation: (name = 'r') => {
 		let code = injectResponse + '\n'
 
+		if (accelerators) code += `let accelerate\n`
+
 		code +=
 			`if(${name} instanceof ElysiaCustomStatusResponse){` +
 			`c.set.status=${name}.code\n` +
 			`${name}=${name}.response` +
 			`}` +
-			`const isResponse=${name} instanceof Response\n` +
 			`switch(c.set.status){`
 
 		for (const [status, value] of Object.entries(validator.response!)) {
-			code += `\ncase ${status}:if(!isResponse){`
+			code += `\ncase ${status}:if(${name} instanceof Response)break\n`
 
 			code += composeCleaner({
 				name,
@@ -246,19 +249,25 @@ const composeValidationFactory = ({
 			)
 				code +=
 					`try{` +
-					`${name}=validator.response['${status}'].Encode(${name})\n` +
+					`${name}=validator.response[${status}].Encode(${name})\n` +
 					`c.set.status=${status}` +
 					`}catch{` +
-					`throw new ValidationError('response',validator.response['${status}'],${name})` +
-					`}}`
+					`throw new ValidationError('response',validator.response[${status}],${name})` +
+					`}`
 			else
 				code +=
-					`if(validator.response['${status}'].Check(${name})===false){` +
+					`if(validator.response[${status}].Check(${name})===false){` +
 					'c.set.status=422\n' +
-					`throw new ValidationError('response',validator.response['${status}'],${name})` +
+					`throw new ValidationError('response',validator.response[${status}],${name})` +
 					'}' +
-					`c.set.status=${status}` +
-					'}\n'
+					`c.set.status=${status}\n`
+
+			if (
+				accelerators?.[+status] &&
+				(value.schema.type === 'object' ||
+					value.schema.type === 'array')
+			)
+				code += `accelerate=accelerators[${status}]\n`
 
 			code += 'break\n'
 		}
@@ -511,12 +520,16 @@ export const composeHandler = ({
 
 	const normalize = app.config.normalize
 	const encodeSchema = app.config.experimental?.encodeSchema
+	const accelerators = jsonAccelerator
+		? createAccelerators(validator.response!)
+		: undefined
 
 	const { composeValidation, composeResponseValidation } =
 		composeValidationFactory({
 			normalize,
 			validator,
-			encodeSchema
+			encodeSchema,
+			accelerators
 		})
 
 	if (hasHeaders) fnLiteral += adapter.headers
@@ -811,18 +824,35 @@ export const composeHandler = ({
 		!!hooks.afterHandle?.some(isGenerator) ||
 		!!hooks.transform?.some(isGenerator)
 
+	const responseKeys = Object.keys(validator.response ?? {})
+	const hasMultipleResponses = responseKeys.length > 1
+	const hasSingle200 =
+		responseKeys.length === 0 ||
+		(responseKeys.length === 1 && responseKeys[0] === '200')
+
 	const hasSet =
 		inference.cookie ||
 		inference.set ||
 		hasHeaders ||
 		hasTrace ||
-		!!validator.response ||
+		hasMultipleResponses ||
+		!hasSingle200 ||
 		(isHandleFn && hasDefaultHeaders) ||
 		maybeStream
 
 	const mapResponseContext = adapter.mapResponseContext
 		? `,${adapter.mapResponseContext}`
 		: ''
+
+	const mapAccelerate = (response = 'r', compact = false) =>
+		jsonAccelerator
+			? (saveResponse ? `${saveResponse}${response}\n` : '') +
+				`if(accelerate){\n` +
+				`c.set.headers['content-type']='application/json'\n` +
+				(compact
+					? `return mapCompactResponse(accelerate(${response})${mapResponseContext})}\n`
+					: `return mapResponse(accelerate(${response}),c.set${mapResponseContext})}\n`)
+			: ''
 
 	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
 
@@ -1544,6 +1574,8 @@ export const composeHandler = ({
 		}
 		mapResponseReporter.resolve()
 
+		fnLiteral += mapAccelerate('r', !hasSet)
+
 		if (hasSet)
 			fnLiteral += `return mapResponse(${saveResponse}r,c.set${
 				mapResponseContext
@@ -1609,29 +1641,13 @@ export const composeHandler = ({
 
 				fnLiteral += '\n'
 			} else if (hasSet) {
-				if (jsonAccelerator) {
-					fnLiteral +=
-						`${saveResponse}r\n` +
-						`if(typeof r==='object'&&c.set.status in accelerate){\n` +
-						`c.set.headers['content-type']='application/json'\n` +
-						`return mapResponse(accelerate[c.set.status](r),c.set${
-							mapResponseContext
-						})}\n`
-				}
+				fnLiteral += mapAccelerate()
 
 				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
 					mapResponseContext
 				})\n`
 			} else {
-				if (jsonAccelerator) {
-					fnLiteral +=
-						`${saveResponse}r\n` +
-						`if(typeof r==='object'&&c.set.status in accelerate){\n` +
-						`c.set.headers['content-type']='application/json'\n` +
-						`return mapResponse(accelerate[c.set.status](r),c.set${
-							mapResponseContext
-						})}\n`
-				}
+				fnLiteral += mapAccelerate('r', true)
 
 				fnLiteral += `return mapCompactResponse(${saveResponse}r${
 					mapResponseContext
@@ -1671,16 +1687,7 @@ export const composeHandler = ({
 			mapResponseReporter.resolve()
 
 			fnLiteral += encodeCookie
-
-			if (jsonAccelerator) {
-				fnLiteral +=
-					`${saveResponse}r\n` +
-					`if(typeof r==='object'&&c.set.status in accelerate){\n` +
-					`c.set.headers['content-type']='application/json'\n` +
-					`return mapResponse(accelerate[c.set.status](r),c.set${
-						mapResponseContext
-					})}\n`
-			}
+			fnLiteral += mapAccelerate('r', !hasSet)
 
 			if (hasSet)
 				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
@@ -1709,29 +1716,13 @@ export const composeHandler = ({
 						`else return ${handle}.clone()\n`
 					: `return ${handle}.clone()\n`
 			} else if (hasSet) {
-				if (jsonAccelerator) {
-					fnLiteral +=
-						`${saveResponse}${handled}\n` +
-						`if(typeof ${handled}==='object'&&c.set.status in accelerate){\n` +
-						`c.set.headers['content-type']='application/json'\n` +
-						`return mapResponse(accelerate[c.set.status](${handled}),c.set${
-							mapResponseContext
-						})}\n`
-				}
+				fnLiteral += mapAccelerate(handled)
 
 				fnLiteral += `return mapResponse(${saveResponse}${handled},c.set${
 					mapResponseContext
 				})\n`
 			} else {
-				if (jsonAccelerator) {
-					fnLiteral +=
-						`${saveResponse}${handled}\n` +
-						`if(typeof ${handled}==='object'&&c.set.status in accelerate){\n` +
-						`c.set.headers['content-type']='application/json'\n` +
-						`return mapResponse(accelerate[c.set.status](${handled}),c.set${
-							mapResponseContext
-						})}\n`
-				}
+				fnLiteral += mapAccelerate(handled, true)
 
 				fnLiteral += `return mapCompactResponse(${saveResponse}${handled}${
 					mapResponseContext
@@ -1887,7 +1878,7 @@ export const composeHandler = ({
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		allocateIf('parser,', hooks.parse?.length) +
 		allocateIf(`getServer,`, inference.server) +
-		allocateIf('accelerate,', jsonAccelerator) +
+		allocateIf('accelerators,', jsonAccelerator) +
 		adapterVariables +
 		allocateIf('TypeBoxError', hasValidation) +
 		`}=hooks\n` +
@@ -1940,9 +1931,7 @@ export const composeHandler = ({
 			getServer: () => app.getServer(),
 			TypeBoxError: hasValidation ? TypeBoxError : undefined,
 			parser: app['~parser'],
-			accelerate: jsonAccelerator
-				? createAccelerators(validator.response!)
-				: undefined,
+			accelerators,
 			...adapter.inject
 		})
 	} catch (error) {

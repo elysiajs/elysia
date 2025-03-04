@@ -1,15 +1,23 @@
 import { Elysia, t } from '../src'
 import { post, req } from '../test/utils'
 
-const app = new Elysia().get('/', ({ query }) => query, {
-	query: t.Object({
-		username: t.String(),
-		password: t.String()
-	})
-})
+const app = new Elysia()
+	.get(
+		'/',
+		() => {
+			return {
+				username: 'a',
+				password: 'b',
+				alias: 'saltyaom'
+			}
+		},
+		{
+			response: t.Object({
+				username: t.String(),
+				password: t.String()
+			})
+		}
+	)
+	.listen(3000)
 
-const value = await app
-	.handle(req('/?username=nagisa&password=hifumi_daisuki&c=a'))
-	.then((x) => x.json())
-
-console.log(value)
+console.log(app.routes[0].compile().toString())
