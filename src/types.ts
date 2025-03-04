@@ -35,6 +35,7 @@ import type { ComposerGeneralHandlerOptions } from './compose'
 import type { ElysiaAdapter } from './adapter'
 import type { AnyWSLocalHook, WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
+import { ElysiaTypeCheck } from './schema'
 
 type PartialServe = Partial<Serve>
 
@@ -154,14 +155,21 @@ export type ElysiaConfig<Prefix extends string | undefined> = {
 		encodeSchema?: boolean
 	}
 	/**
-	 * If enabled, the handlers will run a [clean](https://github.com/sinclairzx81/typebox?tab=readme-ov-file#clean) on incoming and outgoing bodies instead of failing directly.
+	 * If enabled, Elysia will attempt to coerce value to defined type on incoming and outgoing bodies.
+	 *
 	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.
 	 * This has no effect when the schemas allow additional properties.
 	 * Since this uses dynamic schema it may have an impact on performance.
 	 *
+	 * options:
+	 * - true: use 'exactMirror'
+	 * - false: do not normalize the value
+	 * - 'exactMirror': use Elysia's custom exact-mirror which precompile a schema
+	 * - 'typebox': Since this uses dynamic Value.Clean, it have performance impact
+	 *
 	 * @default true
 	 */
-	normalize?: boolean
+	normalize?: boolean | 'exactMirror' | 'typebox'
 	handler?: ComposerGeneralHandlerOptions
 	/**
 	 * Enable Bun static response
@@ -170,6 +178,22 @@ export type ElysiaConfig<Prefix extends string | undefined> = {
 	 * @since 1.1.11
 	 */
 	nativeStaticResponse?: boolean
+	/**
+	 * Use runtime/framework provided router if possible
+	 *
+	 * @default true
+	 * @since 1.3.0
+	 */
+	systemRouter?: boolean
+	/**
+	 * When response schema is provided
+	 * Use Elysia custom JSON encoder to optimize encode process
+	 *
+	 *
+	 * @default true
+	 * @since 1.3.0
+	 */
+	jsonAccelerator?: boolean
 }
 
 export type ValidatorLayer = {
@@ -480,6 +504,8 @@ export type HookContainer<T extends Function = Function> = {
 	scope?: LifeCycleType
 	subType?: 'derive' | 'resolve' | 'mapDerive' | 'mapResolve' | (string & {})
 	fn: T
+	isAsync?: boolean
+	hasReturn?: boolean
 }
 
 export interface LifeCycleStore {
@@ -1250,24 +1276,25 @@ export interface InternalRoute {
 	method: HTTPMethod
 	path: string
 	composed: ComposedHandler | Response | null
+	compile(): ComposedHandler
 	handler: Handler
 	hooks: AnyLocalHook
 	websocket?: AnyWSLocalHook
 }
 
 export type SchemaValidator = {
-	createBody?(): TypeCheck<any>
-	createHeaders?(): TypeCheck<any>
-	createQuery?(): TypeCheck<any>
-	createParams?(): TypeCheck<any>
-	createCookie?(): TypeCheck<any>
-	createResponse?(): Record<number, TypeCheck<any>>
-	body?: TypeCheck<any>
-	headers?: TypeCheck<any>
-	query?: TypeCheck<any>
-	params?: TypeCheck<any>
-	cookie?: TypeCheck<any>
-	response?: Record<number, TypeCheck<any>>
+	createBody?(): ElysiaTypeCheck<any>
+	createHeaders?(): ElysiaTypeCheck<any>
+	createQuery?(): ElysiaTypeCheck<any>
+	createParams?(): ElysiaTypeCheck<any>
+	createCookie?(): ElysiaTypeCheck<any>
+	createResponse?(): Record<number, ElysiaTypeCheck<any>>
+	body?: ElysiaTypeCheck<any>
+	headers?: ElysiaTypeCheck<any>
+	query?: ElysiaTypeCheck<any>
+	params?: ElysiaTypeCheck<any>
+	cookie?: ElysiaTypeCheck<any>
+	response?: Record<number, ElysiaTypeCheck<any>>
 }
 
 export type AddPrefix<Prefix extends string, T> = {
@@ -1612,9 +1639,13 @@ export type MergeElysiaInstances<
 					Definitions['error'] &
 						Current['_types']['Definitions']['error']
 				>
-				typebox: MergeTypeModule<
-					Definitions['typebox'],
-					Current['_types']['Definitions']['typebox']
+				typebox: TModule<
+					Prettify<
+						UnwrapTypeModule<Definitions['typebox']> &
+							UnwrapTypeModule<
+								Current['_types']['Definitions']['typebox']
+							>
+					>
 				>
 			},
 			Metadata & Current['_types']['Metadata'],

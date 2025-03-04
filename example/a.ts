@@ -1,21 +1,15 @@
-import { Elysia, error, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
+import { post, req } from '../test/utils'
 
-const app = new Elysia().get(
-	'/',
-	() => {
-		return {
-			name: 'a',
-			a: 'b'
-		}
-	},
-	{
-		response: t.Object({
-			name: t.String()
-		})
-	}
-)
+const app = new Elysia().get('/', ({ query }) => query, {
+	query: t.Object({
+		username: t.String(),
+		password: t.String()
+	})
+})
 
-app.handle(req('/'))
+const value = await app
+	.handle(req('/?username=nagisa&password=hifumi_daisuki&c=a'))
 	.then((x) => x.json())
-	.then(console.log)
+
+console.log(value)

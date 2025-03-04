@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 
 import { t } from '../../src'
-import { hasType } from '../../src/compose'
+import { hasType } from '../../src/schema'
 
 describe('Has Transform', () => {
 	it('find primitive', () => {

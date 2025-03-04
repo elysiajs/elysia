@@ -155,7 +155,6 @@ describe('Model', () => {
 
 		expect(correctArr.status).toBe(200)
 
-
 		const wrong = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST',
