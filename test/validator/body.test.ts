@@ -795,4 +795,25 @@ describe('Body Validator', () => {
 
 		expect(response).toEqual({ field: { decoded: 'bar' }, foo: 'test' })
 	})
+
+	it('right rejects missed field with model', async () => {
+		const model = new Elysia().model(
+			'user',
+			t.Object({
+				username: t.String(),
+				age: t.Integer()
+			})
+		)
+
+		const app = new Elysia().use(model).post('/', ({ body }) => body, {
+			body: 'user'
+		})
+		const res = await app.handle(
+			post('/', {
+				name: 'sucrose'
+			})
+		)
+
+		expect(res.status).toBe(422)
+	})
 })
