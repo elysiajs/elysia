@@ -33,13 +33,18 @@ import {
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
-import { createAccelerators, getCookieValidator } from './schema'
+import {
+	createAccelerators,
+	ElysiaTypeCheck,
+	getCookieValidator
+} from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 
 import type { TraceEvent } from './trace'
 import type {
 	ComposedHandler,
+	ElysiaConfig,
 	Handler,
 	HookContainer,
 	LifeCycleStore,
@@ -165,6 +170,39 @@ const createReport = ({
 	}
 }
 
+const composeCleaner = ({
+	schema,
+	name,
+	type,
+	typeAlias = type,
+	normalize
+}: {
+	schema: ElysiaTypeCheck<any>
+	name: string
+	type: keyof SchemaValidator
+	typeAlias?: string
+	normalize: ElysiaConfig<''>['normalize']
+}) => {
+	if (!normalize || !schema.Clean || schema.sucrose.hasAdditionalProperties)
+		return ''
+
+	if (normalize === true || normalize === 'exactMirror')
+		return (
+			`try{` +
+			`${name}=validator.${typeAlias}.Clean(${name})\n` +
+			`}catch{` +
+			(schema.sucrose.isOptional
+				? ''
+				: `throw new ValidationError('${type}',validator.${typeAlias},${name})`) +
+			`}`
+		)
+
+	if (normalize === 'typebox')
+		return `${name}=validator.${typeAlias}.Clean(${name})\n`
+
+	return ''
+}
+
 const composeValidationFactory = ({
 	injectResponse = '',
 	normalize = false,
@@ -172,7 +210,7 @@ const composeValidationFactory = ({
 	encodeSchema = false
 }: {
 	injectResponse?: string
-	normalize?: boolean
+	normalize?: ElysiaConfig<''>['normalize']
 	validator: SchemaValidator
 	encodeSchema?: boolean
 }) => ({
@@ -192,12 +230,13 @@ const composeValidationFactory = ({
 		for (const [status, value] of Object.entries(validator.response!)) {
 			code += `\ncase ${status}:if(!isResponse){`
 
-			if (
-				normalize &&
-				value.Clean &&
-				!value.sucrose.hasAdditionalProperties
-			)
-				code += `${name}=validator.response['${status}'].Clean(${name})\n`
+			code += composeCleaner({
+				name,
+				schema: value,
+				type: 'response',
+				typeAlias: `response['${status}']`,
+				normalize
+			})
 
 			// Encode call TypeCheck.Check internally
 			if (
@@ -1068,13 +1107,6 @@ export const composeHandler = ({
 
 	if (validator) {
 		if (validator.headers) {
-			if (
-				normalize &&
-				validator.headers.Clean &&
-				!validator.headers.sucrose.hasAdditionalProperties
-			)
-				fnLiteral += 'c.headers=validator.headers.Clean(c.headers);\n'
-
 			if (validator.headers.sucrose.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
@@ -1093,6 +1125,13 @@ export const composeHandler = ({
 					if (parsed !== undefined)
 						fnLiteral += `c.headers['${key}']??=${parsed}\n`
 				}
+
+			fnLiteral += composeCleaner({
+				name: 'c.headers',
+				schema: validator.headers,
+				type: 'headers',
+				normalize
+			})
 
 			if (validator.headers.sucrose.isOptional)
 				fnLiteral += `if(isNotEmpty(c.headers)){`
@@ -1138,13 +1177,6 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
-			if (
-				normalize &&
-				validator.query.Clean &&
-				!validator.query.sucrose.hasAdditionalProperties
-			)
-				fnLiteral += 'c.query=validator.query.Clean(c.query)\n'
-
 			if (validator.query.sucrose.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
@@ -1162,6 +1194,13 @@ export const composeHandler = ({
 
 					if (parsed !== undefined)
 						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
+
+					fnLiteral += composeCleaner({
+						name: 'c.query',
+						schema: validator.query,
+						type: 'query',
+						normalize
+					})
 				}
 
 			if (validator.query.sucrose.isOptional)
@@ -1179,13 +1218,6 @@ export const composeHandler = ({
 		}
 
 		if (validator.body) {
-			if (
-				normalize &&
-				validator.body.Clean &&
-				!validator.body.sucrose.hasAdditionalProperties
-			)
-				fnLiteral += 'c.body=validator.body.Clean(c.body)\n'
-
 			if (
 				validator.body.sucrose.hasTransform ||
 				validator.body.sucrose.isOptional
@@ -1206,10 +1238,16 @@ export const composeHandler = ({
 							: value
 
 				fnLiteral +=
-					`if(validator.body.Check(c.body)===false){` +
 					`if(typeof c.body==='object')` +
 					`c.body=Object.assign(${parsed},c.body)\n` +
 					`else c.body=${parsed}\n`
+
+				fnLiteral += composeCleaner({
+					name: 'c.body',
+					schema: validator.body,
+					type: 'body',
+					normalize
+				})
 
 				if (validator.body.sucrose.isOptional)
 					fnLiteral +=
@@ -1221,9 +1259,14 @@ export const composeHandler = ({
 						`if(validator.body.Check(c.body)===false){` +
 						composeValidation('body') +
 						`}`
-
-				fnLiteral += '}'
 			} else {
+				fnLiteral += composeCleaner({
+					name: 'c.body',
+					schema: validator.body,
+					type: 'body',
+					normalize
+				})
+
 				if (validator.body.sucrose.isOptional)
 					fnLiteral +=
 						`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +

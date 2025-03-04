@@ -1,6 +1,7 @@
 # 1.3.0
 Feature:
 - add `jsonAccelerator`
+- add `exactMirror`
 - add `systemRouter` config
 - add sucrose cache
 

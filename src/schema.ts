@@ -11,6 +11,7 @@ import { Value } from '@sinclair/typebox/value'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { createAccelerator } from 'json-accelerator'
+import { createMirror } from 'exact-mirror'
 
 import { t, type TypeCheck } from './type-system'
 
@@ -18,7 +19,7 @@ import { isNotEmpty, mergeCookie } from './utils'
 import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
-import type { InputSchema, MaybeArray } from './types'
+import type { ElysiaConfig, InputSchema, MaybeArray } from './types'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
@@ -590,7 +591,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		modules: TModule<any, any>
 		additionalProperties?: boolean
 		dynamic?: boolean
-		normalize?: boolean
+		normalize?: ElysiaConfig<''>['normalize']
 		coerce?: boolean
 		additionalCoerce?: MaybeArray<ReplaceSchemaTypeOptions>
 	} = {
@@ -706,8 +707,24 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			if (validator?.schema?.config) delete validator.schema.config
 		}
 
-		if (normalize && schema.additionalProperties === false)
-			validator.Clean = createCleaner(schema)
+		if (normalize && schema.additionalProperties === false) {
+			if (
+				(normalize === true || normalize === 'exactMirror') &&
+				!hasRef(schema)
+			) {
+				try {
+					validator.Clean = createMirror(schema, {
+						TypeCompiler
+					})
+				} catch {
+					console.warn(
+						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+					)
+					console.warn(schema)
+					validator.Clean = createCleaner(schema)
+				}
+			} else validator.Clean = createCleaner(schema)
+		}
 
 		validator.parse = (v) => {
 			try {
@@ -748,7 +765,22 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		if (compiled?.schema?.config) delete compiled.schema.config
 	}
 
-	compiled.Clean = createCleaner(schema)
+	if (
+		(normalize === true || normalize === 'exactMirror') &&
+		!hasRef(schema)
+	) {
+		try {
+			compiled.Clean = createMirror(schema, {
+				TypeCompiler
+			})
+		} catch {
+			console.warn(
+				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+			)
+			console.warn(schema)
+			compiled.Clean = createMirror(schema)
+		}
+	} else compiled.Clean = createCleaner(schema)
 
 	compiled.parse = (v) => {
 		try {
@@ -816,7 +848,7 @@ export const getResponseSchemaValidator = (
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
-		normalize?: boolean
+		normalize?: ElysiaConfig<''>['normalize']
 	}
 ): Record<number, ElysiaTypeCheck<any>> | undefined => {
 	if (!s) return
@@ -836,30 +868,6 @@ export const getResponseSchemaValidator = (
 	}
 
 	if (!maybeSchemaOrRecord) return
-
-	// const compile = (schema: TSchema, references?: TSchema[]) => {
-	// 	if (dynamic)
-	// 		return {
-	// 			schema,
-	// 			references: '',
-	// 			checkFunc: () => {},
-	// 			code: '',
-	// 			Check: (value: unknown) => Value.Check(schema, value),
-	// 			Errors: (value: unknown) => Value.Errors(schema, value),
-	// 			Code: () => '',
-	// 			Clean: createCleaner(schema),
-	// 			Decode: (value: unknown) => Value.Decode(schema, value),
-	// 			Encode: (value: unknown) => Value.Encode(schema, value)
-	// 		} as unknown as TypeCheck<TSchema>
-
-	// 	const compiledValidator = TypeCompiler.Compile(schema, references)
-
-	// 	if (normalize && schema.additionalProperties === false)
-	// 		// @ts-ignore
-	// 		compiledValidator.Clean = createCleaner(schema)
-
-	// 	return compiledValidator
-	// }
 
 	if (Kind in maybeSchemaOrRecord) {
 		if ('additionalProperties' in maybeSchemaOrRecord === false)
@@ -1060,7 +1068,11 @@ export const createAccelerators = (
 	for (const [id, validator] of Object.entries(records)) {
 		if (!validator) continue
 
-		accelerators[+id] = createAccelerator(validator.schema)
+		try {
+			accelerators[+id] = createAccelerator(validator.schema)
+		} catch (err) {
+			console.log(validator.schema)
+		}
 	}
 
 	return accelerators

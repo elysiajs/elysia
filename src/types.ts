@@ -155,14 +155,21 @@ export type ElysiaConfig<Prefix extends string | undefined> = {
 		encodeSchema?: boolean
 	}
 	/**
-	 * If enabled, the handlers will run a [clean](https://github.com/sinclairzx81/typebox?tab=readme-ov-file#clean) on incoming and outgoing bodies instead of failing directly.
+	 * If enabled, Elysia will attempt to coerce value to defined type on incoming and outgoing bodies.
+	 *
 	 * This allows for sending unknown or disallowed properties in the bodies. These will simply be filtered out instead of failing the request.
 	 * This has no effect when the schemas allow additional properties.
 	 * Since this uses dynamic schema it may have an impact on performance.
 	 *
+	 * options:
+	 * - true: use 'exactMirror'
+	 * - false: do not normalize the value
+	 * - 'exactMirror': use Elysia's custom exact-mirror which precompile a schema
+	 * - 'typebox': Since this uses dynamic Value.Clean, it have performance impact
+	 *
 	 * @default true
 	 */
-	normalize?: boolean
+	normalize?: boolean | 'exactMirror' | 'typebox'
 	handler?: ComposerGeneralHandlerOptions
 	/**
 	 * Enable Bun static response
