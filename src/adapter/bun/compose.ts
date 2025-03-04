@@ -1,15 +1,13 @@
-import {
-	error,
-	redirect,
-	ELYSIA_TRACE,
-	type InternalRoute,
-	type AnyElysia
-} from '../../index'
 
-import { createHoc, createOnRequestHandler } from '../../compose'
 import { sucrose, type Sucrose } from '../../sucrose'
+import { createHoc, createOnRequestHandler } from '../../compose'
 
-import { randomId, ELYSIA_REQUEST_ID } from '../../utils'
+import { randomId, ELYSIA_REQUEST_ID, redirect } from '../../utils'
+import { error } from '../../error'
+import { ELYSIA_TRACE } from '../../trace'
+
+import type { AnyElysia } from '../..'
+import type { InternalRoute } from '../../types'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
