@@ -1421,11 +1421,16 @@ export const composeHandler = ({
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
 			if (hasProperty('default', validator.body)) {
+				// @ts-expect-error private property
+				const schema = validator.body.schema
 				const value = Value.Default(
-					// @ts-expect-error private property
-					validator.body.schema,
-					// @ts-expect-error private property
-					validator.body.schema.type === 'object' ? {} : undefined
+					schema,
+					schema.type === 'object' ||
+						(schema[TypeBoxSymbol.kind] === 'Import' &&
+							schema.$defs[schema.$ref][TypeBoxSymbol.kind] ===
+								'Object')
+						? {}
+						: undefined
 				)
 
 				const parsed =
