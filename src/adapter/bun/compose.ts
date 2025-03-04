@@ -4,7 +4,7 @@ import {
 	ELYSIA_TRACE,
 	type InternalRoute,
 	type AnyElysia
-} from '../..'
+} from '../../index'
 
 import { createHoc, createOnRequestHandler } from '../../compose'
 import { sucrose, type Sucrose } from '../../sucrose'
