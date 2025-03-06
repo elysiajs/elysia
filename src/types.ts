@@ -1538,7 +1538,7 @@ export type EmptyRouteSchema = {
 type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 	Prettify<
 		{
-			200: Exclude<Handle, ElysiaCustomStatusResponse<any, any, any>>
+			200: EmptyRouteSchema extends Schema ? Exclude<Handle, ElysiaCustomStatusResponse<any, any, any>> : Schema['response'][200]
 		} & ExtractErrorFromHandle<Handle> &
 			({} extends Schema['response']
 				? {}
