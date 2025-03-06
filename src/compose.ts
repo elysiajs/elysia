@@ -1440,11 +1440,13 @@ export const composeHandler = ({
 							? `'${value}'`
 							: value
 
-				fnLiteral +=
-					`if(validator.body.Check(c.body)===false){` +
-					`if(typeof c.body==='object')` +
-					`c.body=Object.assign(${parsed},c.body)\n` +
-					`else c.body=${parsed}\n`
+				fnLiteral += `if(validator.body.Check(c.body)===false){`
+
+				if (value !== undefined && value !== null)
+					fnLiteral +=
+						`if(typeof c.body==='object')` +
+						`c.body=Object.assign(${parsed},c.body)\n` +
+						`else c.body=${parsed}\n`
 
 				if (isOptional(validator.body))
 					fnLiteral +=

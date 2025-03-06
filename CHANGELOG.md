@@ -1,6 +1,7 @@
 # 1.2.25 - 6 Mar 2025
 Bug fix:
 - [#1108](https://github.com/elysiajs/elysia/issues/1108) use validation response instead of return type when schema is provided
+- [#1105](https://github.com/elysiajs/elysia/pull/1105), [#1003](https://github.com/elysiajs/elysia/issues/1003) invalid parsing body with missed fields if used object model
 
 # 1.2.24 - 2 Mar 2025
 Bug fix:
