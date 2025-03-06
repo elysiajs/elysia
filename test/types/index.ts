@@ -2246,3 +2246,55 @@ type a = keyof {}
 			}
 		})
 }
+
+// Use validation response instead of return type
+{
+	const app = new Elysia().get(
+		'/',
+		() => {
+			return {
+				name: 'a',
+				a: 'b'
+			}
+		},
+		{
+			response: {
+				200: t.Object({
+					name: t.String()
+				}),
+				400: t.Object({
+					name: t.String()
+				})
+			}
+		}
+	)
+
+	expectTypeOf<(typeof app._routes.index.get.response)[200]>().toEqualTypeOf<{
+		name: string
+	}>()
+}
+
+// Use return type when validation is not provided
+{
+	const app = new Elysia().get(
+		'/',
+		() => {
+			return {
+				name: 'a',
+				a: 'b'
+			}
+		},
+		{
+			response: {
+				400: t.Object({
+					name: t.String()
+				})
+			}
+		}
+	)
+
+	expectTypeOf<(typeof app._routes.index.get.response)[200]>().toEqualTypeOf<{
+		name: string
+		a: string
+	}>()
+}

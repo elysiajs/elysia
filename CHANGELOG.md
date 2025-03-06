@@ -1,3 +1,7 @@
+# 1.2.25 - 6 Mar 2025
+Bug fix:
+- [#1108](https://github.com/elysiajs/elysia/issues/1108) use validation response instead of return type when schema is provided
+
 # 1.2.24 - 2 Mar 2025
 Bug fix:
 - 200 object response is not inferring type in type-level
