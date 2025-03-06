@@ -1,3 +1,14 @@
+# 1.3.0
+Feature:
+- add `jsonAccelerator`
+- add `exactMirror`
+- add `systemRouter` config
+- add sucrose cache
+
+Improvement:
+- reduce redundant type check when using Encode
+- optimize isAsync
+
 # 1.2.25 - 6 Mar 2025
 Bug fix:
 - [#1108](https://github.com/elysiajs/elysia/issues/1108) use validation response instead of return type when schema is provided

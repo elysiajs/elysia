@@ -1,5 +1,11 @@
 import type { AnyElysia } from '.'
 
+import { TransformDecodeError } from '@sinclair/typebox/value'
+import { TypeCheck } from './type-system'
+
+import type { Context } from './context'
+import type { ElysiaTypeCheck } from './schema'
+
 import {
 	ElysiaCustomStatusResponse,
 	ElysiaErrors,
@@ -8,7 +14,6 @@ import {
 	ValidationError
 } from './error'
 
-import type { Context } from './context'
 
 import { parseQuery } from './fast-querystring'
 
@@ -16,8 +21,6 @@ import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
-import { TransformDecodeError } from '@sinclair/typebox/value'
-import { TypeCheck } from './type-system'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -29,7 +32,7 @@ export type DynamicHandler = {
 }
 
 const injectDefaultValues = (
-	typeChecker: TypeCheck<any>,
+	typeChecker: TypeCheck<any> | ElysiaTypeCheck<any>,
 	obj: Record<string, any>
 ) => {
 	for (const [key, keySchema] of Object.entries(
@@ -206,7 +209,6 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			const cookieMeta = Object.assign(
 				{},
 				app.config?.cookie,
-				// @ts-expect-error
 				validator?.cookie?.config
 			) as {
 				secrets?: string | string[]
@@ -452,7 +454,6 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							'${secret}'
 						)
 				else {
-					// @ts-expect-error private
 					const properties = validator?.cookie?.schema?.properties
 
 					for (const name of cookieMeta.sign) {

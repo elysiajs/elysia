@@ -138,4 +138,14 @@ export interface ElysiaAdapter {
 		unknownError: string
 	}
 	ws?(app: AnyElysia, path: string, handler: AnyWSLocalHook): unknown
+	/**
+	 * Whether or not the runtime or framework the is built on top on has a router
+	 * eg. Bun.serve.routes, uWebSocket
+	 **/
+	createSystemRouterHandler?(
+		method: string,
+		path: string,
+		hook: AnyLocalHook,
+		app: AnyElysia
+	): void
 }

@@ -1,24 +1,23 @@
-import { Elysia, error, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
+import { post, req } from '../test/utils'
 
-const app = new Elysia().mount(
-	'/test',
-	async (req) => new Response(await req.text())
-)
-
-const testBody = JSON.stringify({ hello: 'world' })
-const response = await app.handle(
-	new Request('http://localhost/test', {
-		method: 'POST',
-		body: testBody,
-		headers: {
-			'Content-Type': 'application/json'
+const app = new Elysia()
+	.get(
+		'/',
+		() => {
+			return {
+				username: 'a',
+				password: 'b',
+				alias: 'saltyaom'
+			}
+		},
+		{
+			response: t.Object({
+				username: t.String(),
+				password: t.String()
+			})
 		}
-	})
-)
+	)
+	.listen(3000)
 
-const responseBody = await response.text()
-console.log(responseBody)
-console.log(response.status)
-// expect(response.status).toBe(200)
-// expect(responseBody).toBe(testBody)
+console.log(app.routes[0].compile().toString())
