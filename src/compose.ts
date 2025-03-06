@@ -2,6 +2,7 @@ import type { AnyElysia } from '.'
 
 import { Value } from '@sinclair/typebox/value'
 import {
+	Kind,
 	OptionalKind,
 	TypeBoxError,
 	type TAnySchema,
@@ -1257,7 +1258,13 @@ export const composeHandler = ({
 			if (validator.body.sucrose.hasDefault) {
 				const value = Value.Default(
 					validator.body.schema,
-					validator.body.schema.type === 'object' ? {} : undefined
+					validator.body.schema.type === 'object' ||
+						(validator.body.schema[Kind] === 'Import' &&
+							validator.body.schema.$defs[
+								validator.body.schema.$ref
+							][Kind] === 'Object')
+						? {}
+						: undefined
 				)
 
 				const parsed =
@@ -1267,10 +1274,11 @@ export const composeHandler = ({
 							? `'${value}'`
 							: value
 
-				fnLiteral +=
-					`if(typeof c.body==='object')` +
-					`c.body=Object.assign(${parsed},c.body)\n` +
-					`else c.body=${parsed}\n`
+				if (value !== undefined && value !== null) {
+					if (typeof value === 'object')
+						fnLiteral += `c.body=Object.assign(${parsed},c.body)\n`
+					else fnLiteral += `c.body=${parsed}\n`
+				}
 
 				fnLiteral += composeCleaner({
 					name: 'c.body',
