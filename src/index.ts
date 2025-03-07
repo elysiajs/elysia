@@ -6397,19 +6397,9 @@ export default class Elysia<
 	 * ```
 	 */
 	stop = async (closeActiveConnections?: boolean) => {
-		if (!this.server)
-			throw new Error(
-				"Elysia isn't running. Call `app.listen` to start the server."
-			)
+		await this['~adapter'].stop(this, closeActiveConnections)
 
-		if (this.server) {
-			this.server.stop(closeActiveConnections)
-			this.server = null
-
-			if (this.event.stop?.length)
-				for (let i = 0; i < this.event.stop.length; i++)
-					this.event.stop[i].fn(this)
-		}
+		return this
 	}
 
 	/**
