@@ -228,4 +228,30 @@ describe('Edge Case', () => {
 
 		expect(responses).toEqual(['AB', 'BA'])
 	})
+
+	describe("aot configuration should not change the default setting", () => {
+		const route = new Elysia({ prefix: '/api' }).get(
+			'/',
+			() => 'pong',
+		)
+		it('aot is on', async () => {
+			const app = new Elysia().use(route)
+
+			const response = await Promise.resolve( app
+				.fetch(new Request('http://localhost/api')) )
+				.then((x) => x.text())
+
+			expect(response).toBe('pong')
+		})
+
+		it('aot is off', async () => {
+			const app = new Elysia({ aot: false }).use(route)
+
+			const response = await Promise.resolve(app
+				.fetch(new Request('http://localhost/api')))
+				.then((x) => x.text())
+
+			expect(response).toBe('pong')
+		})
+	})
 })
