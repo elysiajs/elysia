@@ -707,7 +707,7 @@ export default class Elysia<
 				})
 			}
 
-			if (this.config.strictPath === false) {
+			if (!this.config.strictPath) {
 				const loosePath = getLoosePath(path)
 				this.router.dynamic.add(method, loosePath, {
 					validator,
