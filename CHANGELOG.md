@@ -4,6 +4,7 @@ Feature:
 - add `exactMirror`
 - add `systemRouter` config
 - add sucrose cache
+- add `noValidate`
 - support Ref inside inline schema
 
 Improvement:

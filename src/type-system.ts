@@ -1,4 +1,4 @@
-import { TypeRegistry, Type, FormatRegistry, TString } from '@sinclair/typebox'
+import { TypeRegistry, Type, FormatRegistry, TString, TAnySchema } from '@sinclair/typebox'
 import {
 	ArrayOptions,
 	DateOptions,
@@ -713,7 +713,12 @@ export const ElysiaType = {
 			...type,
 			enum: values
 		} as any as TUnionEnum<T>
-	}
+	},
+	NoValidate: <T extends TAnySchema>(v: T, enabled = true) => {
+		v.noValidate = enabled
+
+		return v
+	},
 } as const
 
 export type TCookie = (typeof ElysiaType)['Cookie']
@@ -731,6 +736,7 @@ declare module '@sinclair/typebox' {
 		MaybeEmpty: typeof ElysiaType.MaybeEmpty
 		Cookie: typeof ElysiaType.Cookie
 		UnionEnum: typeof ElysiaType.UnionEnum
+		NoValidate: typeof ElysiaType.NoValidate
 	}
 
 	interface SchemaOptions {
@@ -799,6 +805,8 @@ t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date
 
 t.UnionEnum = ElysiaType.UnionEnum
+
+t.NoValidate = ElysiaType.NoValidate
 
 function getOrSetType<TSchema = unknown, TReturn = unknown>(
 	kind: string,

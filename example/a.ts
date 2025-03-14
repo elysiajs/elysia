@@ -1,23 +1,20 @@
 import { Elysia, t } from '../src'
 import { post, req } from '../test/utils'
 
-const model = new Elysia().model({
-	number: t.Number({ default: 0 })
-})
+const app = new Elysia().get(
+	'/',
+	() => ({
+		message: 'Hi' as const
+	}),
+	{
+		response: t.NoValidate(
+			t.Object({
+				message: t.Literal('Hi')
+			})
+		)
+	}
+)
 
-const app = new Elysia().use(model).post('/', ({ body }) => body, {
-	body: t.Object({
-		name: t.String(),
-		age: t.Optional(model.Ref('number'))
-	})
-})
+const result = await app.handle(req('/')).then((x) => x.json())
 
-const result = await app
-	.handle(
-		post('/', {
-			name: 'Jane Doe'
-		})
-	)
-	.then((x) => x.json())
-
-console.log(result)
+console.log(app.routes[0].compile().toString())
