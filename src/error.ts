@@ -146,12 +146,11 @@ export const mapValueError = (error: ValueError | undefined) => {
 		case 54:
 			return {
 				...error,
-				summary: `${message.slice(
-					0,
-					9
-				)} property '${property}' to be ${message.slice(
-					8
-				)} but found: ${value}`
+				summary: `${message
+					.slice(0, 9)
+					.trim()} property '${property}' to be ${message
+					.slice(8)
+					.trim()} but found: ${value}`
 			}
 
 		case 62:

@@ -10,7 +10,7 @@ import type {
 
 import type { Context } from './context'
 
-import { t, TypeCheck } from './type-system'
+import { t } from './type-system'
 import {
 	clearSucroseCache,
 	mergeInference,
@@ -49,7 +49,7 @@ import {
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	getCookieValidator,
-    ElysiaTypeCheck
+	ElysiaTypeCheck
 } from './schema'
 import {
 	composeHandler,
@@ -5924,20 +5924,6 @@ export default class Elysia<
 	>
 
 	model(name: string | Record<string, TSchema> | Function, model?: TSchema) {
-		const coerce = (schema: TSchema) =>
-			replaceSchemaType(schema, [
-				{
-					from: t.Number(),
-					to: (options) => t.Numeric(options),
-					untilObjectFound: true
-				},
-				{
-					from: t.Boolean(),
-					to: (options) => t.BooleanString(options),
-					untilObjectFound: true
-				}
-			])
-
 		switch (typeof name) {
 			case 'object':
 				const parsedSchemas = {} as Record<string, TSchema>
@@ -5947,10 +5933,7 @@ export default class Elysia<
 				for (const [key, value] of kvs) {
 					if (key in this.definitions.type) continue
 
-					parsedSchemas[key] = this.definitions.type[key] = coerce(
-						value
-					) as TSchema
-
+					parsedSchemas[key] = this.definitions.type[key] = value
 					parsedSchemas[key].$id ??= `#/components/schemas/${key}`
 				}
 
@@ -5963,7 +5946,7 @@ export default class Elysia<
 				return this
 
 			case 'function':
-				const result = coerce(name(this.definitions.type))
+				const result = name(this.definitions.type)
 				this.definitions.type = result
 				this.definitions.typebox = t.Module(result as any)
 
@@ -5992,6 +5975,12 @@ export default class Elysia<
 		} as any)
 
 		return this as any
+	}
+
+	Ref<K extends keyof UnwrapTypeModule<Definitions['typebox']> & string>(
+		key: K
+	) {
+		return t.Ref(key)
 	}
 
 	mapDerive<

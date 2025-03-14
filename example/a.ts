@@ -1,23 +1,40 @@
 import { Elysia, t } from '../src'
 import { post, req } from '../test/utils'
 
-const app = new Elysia()
-	.get(
-		'/',
-		() => {
-			return {
-				username: 'a',
-				password: 'b',
-				alias: 'saltyaom'
-			}
-		},
-		{
-			response: t.Object({
-				username: t.String(),
-				password: t.String()
-			})
-		}
-	)
-	.listen(3000)
+const model = new Elysia()
+	.model({
+		number: t.Number({ default: 0 })
+	})
 
-console.log(app.routes[0].compile().toString())
+const app = new Elysia()
+	.use(model)
+	.post('/', ({ body }) => body, {
+		body: t.Object({
+			name: t.String(),
+			amount: t.Optional(model.Ref('number'))
+		})
+	})
+
+const result = await app
+	.handle(
+		post('/', {
+			name: 'Jane Doe'
+		})
+	)
+	.then((x) => x.json())
+
+console.log(result)
+
+// console.dir(
+// 	t
+// 		.Module({
+// 			number: t.Numeric(),
+// 			optionalNumber: t.Optional(t.Ref('number'))
+// 		})
+// 		.Import('optionalNumber'),
+// 	{
+// 		depth: null
+// 	}
+// )
+
+// console.log(correct)

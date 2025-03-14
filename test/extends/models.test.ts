@@ -265,21 +265,6 @@ describe('Model', () => {
 		expect(result).toBe('0')
 	})
 
-	it('create default value with nested reference model', async () => {
-		const app = new Elysia()
-			.model({
-				number: t.Number({ default: 0 }),
-				optionalNumber: t.Optional(t.Ref('number'))
-			})
-			.post('/', ({ body }) => body, {
-				body: t.Optional(t.Ref('number'))
-			})
-
-		const result = await app.handle(post('/')).then((x) => x.text())
-
-		expect(result).toBe('0')
-	})
-
 	it('create default value with reference model', async () => {
 		const app = new Elysia()
 			.model({

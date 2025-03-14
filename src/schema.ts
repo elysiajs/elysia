@@ -15,7 +15,7 @@ import { createMirror } from 'exact-mirror'
 
 import { t, type TypeCheck } from './type-system'
 
-import { isNotEmpty, mergeCookie } from './utils'
+import { isNotEmpty, mergeCookie, randomId } from './utils'
 import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
@@ -46,6 +46,8 @@ export interface ElysiaTypeCheck<T extends TSchema>
 		'~isOptional'?: boolean
 		hasTransform: boolean
 		'~hasTransform'?: boolean
+		hasRef: boolean
+		'~hasRef'?: boolean
 	}
 }
 
@@ -282,21 +284,51 @@ interface ReplaceSchemaTypeOptions {
 	untilObjectFound?: boolean
 }
 
+interface ReplaceSchemaTypeConfig {
+	root: boolean
+	definitions?: Record<string, TSchema> | undefined
+}
+
 export const replaceSchemaType = (
 	schema: TSchema,
 	options: MaybeArray<ReplaceSchemaTypeOptions>,
-	root = true
+	_config: Partial<Omit<ReplaceSchemaTypeConfig, 'root'>> = {}
 ) => {
+	const config = _config as ReplaceSchemaTypeConfig
+	config.root = true
+
+	// if (schema.$defs)
+	// 	config.definitions = {
+	// 		...config.definitions,
+	// 		...schema.$defs
+	// 	}
+
+	// const corceDefinitions = (option: ReplaceSchemaTypeOptions) => {
+	// 	if (!config.definitions) return
+
+	// 	for (const [key, value] of Object.entries(config.definitions)) {
+	// 		const fromSymbol = option.from[Kind]
+
+	// 		if (fromSymbol === 'Ref') continue
+
+	// 		config.definitions[key] = _replaceSchemaType(value, option, config)
+	// 	}
+	// }
+
 	if (!Array.isArray(options)) {
 		options.original = schema
 
-		return _replaceSchemaType(schema, options, root)
+		// corceDefinitions(options)
+
+		return _replaceSchemaType(schema, options, config)
 	}
 
 	for (const option of options) {
 		option.original = schema
 
-		schema = _replaceSchemaType(schema, option, root)
+		// corceDefinitions(option)
+
+		schema = _replaceSchemaType(schema, option, config)
 	}
 
 	return schema
@@ -305,42 +337,75 @@ export const replaceSchemaType = (
 const _replaceSchemaType = (
 	schema: TSchema,
 	options: ReplaceSchemaTypeOptions,
-	root = true
-) => {
+	config: ReplaceSchemaTypeConfig
+): TSchema => {
 	if (!schema) return schema
+
+	const root = config.root
+
 	if (options.untilObjectFound && !root && schema.type === 'object')
 		return schema
 
 	const fromSymbol = options.from[Kind]
 
+	// if (schema.$ref) {
+	// 	if (schema.$defs && schema.$ref in schema.$defs) {
+	// 		const definitions: Record<string, TSchema> = {}
+
+	// 		for (const [key, value] of Object.entries(schema.$defs))
+	// 			definitions[key] = _replaceSchemaType(
+	// 				value as TSchema,
+	// 				options,
+	// 				config
+	// 			)
+
+	// 		config.definitions = { ...config.definitions, ...definitions }
+	// 	}
+
+	// 	return schema
+	// }
+
 	if (schema.oneOf) {
 		for (let i = 0; i < schema.oneOf.length; i++)
-			schema.oneOf[i] = _replaceSchemaType(schema.oneOf[i], options, root)
+			schema.oneOf[i] = _replaceSchemaType(
+				schema.oneOf[i],
+				options,
+				config
+			)
 
 		return schema
 	}
 
 	if (schema.anyOf) {
 		for (let i = 0; i < schema.anyOf.length; i++)
-			schema.anyOf[i] = _replaceSchemaType(schema.anyOf[i], options, root)
+			schema.anyOf[i] = _replaceSchemaType(
+				schema.anyOf[i],
+				options,
+				config
+			)
 
 		return schema
 	}
 
 	if (schema.allOf) {
 		for (let i = 0; i < schema.allOf.length; i++)
-			schema.allOf[i] = _replaceSchemaType(schema.allOf[i], options, root)
+			schema.allOf[i] = _replaceSchemaType(
+				schema.allOf[i],
+				options,
+				config
+			)
 
 		return schema
 	}
 
-	if (schema.not) return _replaceSchemaType(schema.not, options, root)
+	if (schema.not) return _replaceSchemaType(schema.not, options, config)
 
 	const isRoot = root && !!options.excludeRoot
 
 	if (schema[Kind] === fromSymbol) {
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		const { anyOf, oneOf, allOf, not, properties, items, ...rest } = schema
+
 		const to = options.to(rest)
 
 		if (!to) return schema
@@ -348,14 +413,26 @@ const _replaceSchemaType = (
 		// If t.Transform is used, we need to re-calculate Encode, Decode
 		let transform
 
-		const composeProperties = (v: TSchema) => {
+		const composeProperties = (schema: TSchema) => {
+			const v = _composeProperties(schema)
+
+			// $id is removed because it's used in Union inside an Import
+			if (v.$id) delete v.$id
+
+			return v
+		}
+
+		const _composeProperties = (v: TSchema) => {
 			if (properties && v.type === 'object') {
 				const newProperties = <Record<string, unknown>>{}
 				for (const [key, value] of Object.entries(properties))
 					newProperties[key] = _replaceSchemaType(
 						value as TSchema,
 						options,
-						false
+						{
+							...config,
+							root: false
+						}
 					)
 
 				return {
@@ -369,7 +446,10 @@ const _replaceSchemaType = (
 				return {
 					...rest,
 					...v,
-					items: _replaceSchemaType(items, options, false)
+					items: _replaceSchemaType(items, options, {
+						...config,
+						root: false
+					})
 				}
 
 			const value = {
@@ -416,7 +496,10 @@ const _replaceSchemaType = (
 					newProperties[key] = _replaceSchemaType(
 						value as TSchema,
 						options,
-						false
+						{
+							...config,
+							root: false
+						}
 					)
 
 				return {
@@ -427,7 +510,10 @@ const _replaceSchemaType = (
 				return {
 					...rest,
 					items: items.map((v: TSchema) =>
-						_replaceSchemaType(v, options, false)
+						_replaceSchemaType(v, options, {
+							...config,
+							root: false
+						})
 					)
 				}
 
@@ -455,7 +541,10 @@ const _replaceSchemaType = (
 				newProperties[key] = _replaceSchemaType(
 					value as TSchema,
 					options,
-					false
+					{
+						...config,
+						root: false
+					}
 				)
 
 			return {
@@ -468,7 +557,10 @@ const _replaceSchemaType = (
 				...rest,
 				...to,
 				items: items.map((v: TSchema) =>
-					_replaceSchemaType(v, options, false)
+					_replaceSchemaType(v, options, {
+						...config,
+						root: false
+					})
 				)
 			}
 
@@ -503,13 +595,19 @@ const _replaceSchemaType = (
 
 					properties[key] = {
 						...rest,
-						..._replaceSchemaType(rest, options, false)
+						..._replaceSchemaType(rest, options, {
+							...config,
+							root: false
+						})
 					}
 					break
 
 				case 'Object':
 				case 'Union':
-					properties[key] = _replaceSchemaType(value, options, false)
+					properties[key] = _replaceSchemaType(value, options, {
+						...config,
+						root: false
+					})
 					break
 
 				default:
@@ -518,7 +616,10 @@ const _replaceSchemaType = (
 							value.items[i] = _replaceSchemaType(
 								value.items[i],
 								options,
-								false
+								{
+									...config,
+									root: false
+								}
 							)
 						}
 					} else if (
@@ -527,17 +628,15 @@ const _replaceSchemaType = (
 						value.allOf ||
 						value.not
 					)
-						properties[key] = _replaceSchemaType(
-							value,
-							options,
-							false
-						)
+						properties[key] = _replaceSchemaType(value, options, {
+							...config,
+							root: false
+						})
 					else if (value.type === 'array') {
-						value.items = _replaceSchemaType(
-							value.items,
-							options,
-							false
-						)
+						value.items = _replaceSchemaType(value.items, options, {
+							...config,
+							root: false
+						})
 					}
 
 					break
@@ -574,7 +673,7 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	return value
 }
 
-// const caches = <Record<string, ElysiaTypeCheck<any>>>{}
+const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	s: T,
@@ -601,13 +700,10 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (!s) return undefined as any
 
 	let schema: TSchema
-	let cacheKey: string | undefined
 
 	if (typeof s !== 'string') schema = s
 	else {
-		// if (s in caches) return caches[s] as any
-
-		cacheKey = s
+		if (s in caches) return caches[s] as any
 
 		const isArray = s.endsWith('[]')
 		const key = isArray ? s.substring(0, s.length - 2) : s
@@ -620,14 +716,9 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 	if (!schema) return undefined as any
 
-	if (coerce || additionalCoerce) {
+	const replaceSchema = (schema: TAnySchema): TAnySchema => {
 		if (coerce)
-			schema = replaceSchemaType(schema, [
-				{
-					from: t.Ref(''),
-					// @ts-expect-error
-					to: (options) => modules.Import(options['$ref'])
-				},
+			return replaceSchemaType(schema, [
 				{
 					from: t.Number(),
 					to: (options) => t.Numeric(options),
@@ -642,18 +733,34 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 					? additionalCoerce
 					: [additionalCoerce])
 			])
-		else {
-			schema = replaceSchemaType(schema, [
-				{
-					from: t.Ref(''),
-					// @ts-expect-error
-					to: (options) => modules.Import(options['$ref'])
-				},
-				...(Array.isArray(additionalCoerce)
-					? additionalCoerce
-					: [additionalCoerce])
-			])
-		}
+
+		return replaceSchemaType(schema, additionalCoerce)
+	}
+
+	let doesHaveRef: boolean | undefined
+
+	if (schema[Kind] !== 'Import' && (doesHaveRef = hasRef(schema))) {
+		const id = randomId()
+
+		const model: any = t.Module({
+			// @ts-expect-error private property
+			...modules.$defs,
+			[id]: schema
+		})
+
+		schema = model.Import(id)
+	}
+
+	if (schema[Kind] === 'Import') {
+		const newDefs: Record<string, TSchema> = {}
+
+		for (const [key, value] of Object.entries(schema.$defs))
+			newDefs[key] = replaceSchema(value as TSchema)
+
+		const key = schema.$ref
+		schema = t.Module(newDefs).Import(key)
+	} else if (coerce || additionalCoerce) {
+		schema = replaceSchema(schema)
 	}
 
 	if (schema.type === 'object' && 'additionalProperties' in schema === false)
@@ -697,6 +804,12 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 					if ('~hasTransform' in this) return this['~hasTransform']!
 
 					return (this['~hasTransform'] = hasTransform(schema))
+				},
+				'~hasRef': doesHaveRef,
+				get hasRef() {
+					if ('~hasRef' in this) return this['~hasRef']!
+
+					return (this['~hasRef'] = hasTransform(schema))
 				}
 			}
 		}
@@ -708,10 +821,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		}
 
 		if (normalize && schema.additionalProperties === false) {
-			if (
-				(normalize === true || normalize === 'exactMirror') &&
-				!hasRef(schema)
-			) {
+			if (normalize === true || normalize === 'exactMirror') {
 				try {
 					validator.Clean = createMirror(schema, {
 						TypeCompiler
@@ -765,10 +875,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		if (compiled?.schema?.config) delete compiled.schema.config
 	}
 
-	if (
-		(normalize === true || normalize === 'exactMirror') &&
-		!hasRef(schema)
-	) {
+	if (normalize === true || normalize === 'exactMirror') {
 		try {
 			compiled.Clean = createMirror(schema, {
 				TypeCompiler
@@ -827,7 +934,13 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			if ('~hasTransform' in this) return this['~hasTransform']!
 
 			return (this['~hasTransform'] = hasTransform(schema))
-		}
+		},
+		get hasRef() {
+			if ('~hasRef' in this) return this['~hasRef']!
+
+			return (this['~hasRef'] = hasRef(schema))
+		},
+		'~hasRef': doesHaveRef
 	}
 
 	// if (cacheKey) caches[cacheKey] = compiled
