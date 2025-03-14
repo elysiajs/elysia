@@ -174,7 +174,7 @@ export default class Elysia<
 		resolve: {}
 	},
 	const in out Definitions extends DefinitionBase = {
-		typebox: TModule<{}>
+		typebox: {}
 		error: {}
 	},
 	const in out Metadata extends MetadataBase = {
@@ -460,11 +460,11 @@ export default class Elysia<
 	}
 
 	get models(): {
-		[K in keyof UnwrapTypeModule<Definitions['typebox']>]: ModelValidator<
-			UnwrapTypeModule<Definitions['typebox']>[K]
+		[K in keyof Definitions['typebox']]: ModelValidator<
+			Definitions['typebox'][K]
 		>
 	} & {
-		modules: Definitions['typebox']
+		modules: TModule<Definitions['typebox']>
 	} {
 		const models: Record<string, ElysiaTypeCheck<TSchema>> = {}
 
@@ -2823,9 +2823,7 @@ export default class Elysia<
 	group<
 		const Prefix extends string,
 		const NewElysia extends AnyElysia,
-		const Input extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
-		>,
+		const Input extends InputSchema<keyof Definitions['typebox'] & string>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
 				Input,
@@ -2994,7 +2992,7 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
@@ -3096,7 +3094,7 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
@@ -3146,7 +3144,7 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
@@ -3192,7 +3190,7 @@ export default class Elysia<
 
 	guard<
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
@@ -3413,13 +3411,9 @@ export default class Elysia<
 				Definitions['error'] &
 					NewElysia['_types']['Definitions']['error']
 			>
-			typebox: TModule<
-				Prettify<
-					UnwrapTypeModule<Definitions['typebox']> &
-						UnwrapTypeModule<
-							NewElysia['_types']['Definitions']['typebox']
-						>
-				>
+			typebox: Prettify<
+				Definitions['typebox'] &
+					NewElysia['_types']['Definitions']['typebox']
 			>
 		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
@@ -3465,13 +3459,9 @@ export default class Elysia<
 				Definitions['error'] &
 					NewElysia['_types']['Definitions']['error']
 			>
-			typebox: TModule<
-				Prettify<
-					UnwrapTypeModule<Definitions['typebox']> &
-						UnwrapTypeModule<
-							NewElysia['_types']['Definitions']['typebox']
-						>
-				>
+			typebox: Prettify<
+				Definitions['typebox'] &
+					NewElysia['_types']['Definitions']['typebox']
 			>
 		},
 		// @ts-expect-error this is truly ideal
@@ -3518,13 +3508,9 @@ export default class Elysia<
 				Definitions['error'] &
 					NewElysia['_types']['Definitions']['error']
 			>
-			typebox: TModule<
-				Prettify<
-					UnwrapTypeModule<Definitions['typebox']> &
-						UnwrapTypeModule<
-							NewElysia['_types']['Definitions']['typebox']
-						>
-				>
+			typebox: Prettify<
+				Definitions['typebox'] &
+					NewElysia['_types']['Definitions']['typebox']
 			>
 		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
@@ -3558,13 +3544,9 @@ export default class Elysia<
 				Definitions['error'] &
 					NewElysia['_types']['Definitions']['error']
 			>
-			typebox: TModule<
-				Prettify<
-					UnwrapTypeModule<Definitions['typebox']> &
-						UnwrapTypeModule<
-							NewElysia['_types']['Definitions']['typebox']
-						>
-				>
+			typebox: Prettify<
+				Definitions['typebox'] &
+					NewElysia['_types']['Definitions']['typebox']
 			>
 		},
 		Prettify2<Metadata & NewElysia['_types']['Metadata']>,
@@ -3607,13 +3589,9 @@ export default class Elysia<
 				Definitions['error'] &
 					LazyLoadElysia['_types']['Definitions']['error']
 			>
-			typebox: TModule<
-				Prettify<
-					UnwrapTypeModule<Definitions['typebox']> &
-						UnwrapTypeModule<
-							LazyLoadElysia['_types']['Definitions']['typebox']
-						>
-				>
+			typebox: Prettify<
+				Definitions['typebox'] &
+					LazyLoadElysia['_types']['Definitions']['typebox']
 			>
 		},
 		// @ts-expect-error - This is truly ideal
@@ -4197,7 +4175,7 @@ export default class Elysia<
 	get<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4285,7 +4263,7 @@ export default class Elysia<
 	post<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4373,7 +4351,7 @@ export default class Elysia<
 	put<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4461,7 +4439,7 @@ export default class Elysia<
 	patch<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4549,7 +4527,7 @@ export default class Elysia<
 	delete<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4637,7 +4615,7 @@ export default class Elysia<
 	options<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4725,7 +4703,7 @@ export default class Elysia<
 	all<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4813,7 +4791,7 @@ export default class Elysia<
 	head<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4901,7 +4879,7 @@ export default class Elysia<
 	connect<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -4990,7 +4968,7 @@ export default class Elysia<
 		const Method extends HTTPMethod,
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -5088,7 +5066,7 @@ export default class Elysia<
 	ws<
 		const Path extends string,
 		const LocalSchema extends InputSchema<
-			keyof UnwrapTypeModule<Definitions['typebox']> & string
+			keyof Definitions['typebox'] & string
 		>,
 		const Schema extends MergeSchema<
 			UnwrapRoute<
@@ -5862,13 +5840,9 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
-			typebox: TModule<
-				Prettify<
-					UnwrapTypeModule<Definitions['typebox']> & {
-						[name in Name]: Model
-					}
-				>
-			>
+			typebox: Definitions['typebox'] & {
+				[name in Name]: Model
+			}
 			error: Definitions['error']
 		},
 		Metadata,
@@ -5883,9 +5857,7 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
-			typebox: TModule<
-				Prettify<UnwrapTypeModule<Definitions['typebox']> & Recorder>
-			>
+			typebox: Definitions['typebox'] & Recorder
 			error: Definitions['error']
 		},
 		Metadata,
@@ -5896,9 +5868,8 @@ export default class Elysia<
 
 	model<const NewType extends Record<string, TSchema>>(
 		mapper: (
-			decorators: UnwrapTypeModule<
-				Definitions['typebox']
-			> extends infer Models extends Record<string, TSchema>
+			decorators: Definitions['typebox'] extends infer Models extends
+				Record<string, TSchema>
 				? {
 						[type in keyof Models]: TRef<// @ts-expect-error type is always string
 						type>
@@ -5909,11 +5880,12 @@ export default class Elysia<
 		BasePath,
 		Singleton,
 		{
-			typebox: TModule<{
+			typebox: {
 				[key in keyof NewType]: NewType[key] extends TRef<key & string>
-					? UnwrapTypeModule<Definitions['typebox']>[key]
+					? // @ts-expect-error
+						Definitions['typebox'][key]
 					: NewType[key]
-			}>
+			}
 			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
 		},
@@ -5977,9 +5949,7 @@ export default class Elysia<
 		return this as any
 	}
 
-	Ref<K extends keyof UnwrapTypeModule<Definitions['typebox']> & string>(
-		key: K
-	) {
+	Ref<K extends keyof Definitions['typebox'] & string>(key: K) {
 		return t.Ref(key)
 	}
 
@@ -6161,24 +6131,9 @@ export default class Elysia<
 			typebox: Type extends 'model' | 'all'
 				? 'prefix' extends Base
 					? Word extends `${string}${'_' | '-' | ' '}`
-						? TModule<
-								AddPrefix<
-									Word,
-									UnwrapTypeModule<Definitions['typebox']>
-								>
-							>
-						: TModule<
-								AddPrefixCapitalize<
-									Word,
-									UnwrapTypeModule<Definitions['typebox']>
-								>
-							>
-					: TModule<
-							AddSuffixCapitalize<
-								Word,
-								UnwrapTypeModule<Definitions['typebox']>
-							>
-						>
+						? AddPrefix<Word, Definitions['typebox']>
+						: AddPrefixCapitalize<Word, Definitions['typebox']>
+					: AddSuffixCapitalize<Word, Definitions['typebox']>
 				: Definitions['typebox']
 			error: Type extends 'error' | 'all'
 				? 'prefix' extends Base

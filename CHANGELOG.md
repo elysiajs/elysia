@@ -9,6 +9,7 @@ Feature:
 Improvement:
 - reduce redundant type check when using Encode
 - optimize isAsync
+- unwrap Definition['typebox'] by default to prevent unnecessary UnwrapTypeModule call
 
 # 1.2.25 - 6 Mar 2025
 Bug fix:

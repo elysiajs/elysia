@@ -342,7 +342,7 @@ export interface EphemeralType {
 }
 
 export interface DefinitionBase {
-	typebox: TModule<any, any>
+	typebox: Record<string, TAnySchema>
 	error: Record<string, Error>
 }
 
@@ -372,52 +372,76 @@ type TrimArrayName<T extends string> = T extends `${infer Name}[]` ? Name : T
 
 export type UnwrapSchema<
 	Schema extends TSchema | string | undefined,
-	Definitions extends DefinitionBase['typebox'] = TModule<{}>
+	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
 		? Schema extends OptionalField
-			? Prettify<Partial<Static<Schema>>>
-			: StaticDecode<Schema>
+			? Partial<
+					TImport<
+						Definitions & {
+							readonly __elysia: Schema
+						},
+						'__elysia'
+					>['static']
+				>
+			: TImport<
+					Definitions & {
+						readonly __elysia: Schema
+					},
+					'__elysia'
+				>['static']
 		: Schema extends `${infer Key}[]`
-			? Definitions extends Record<Key, infer NamedSchema>
-				? Array<NamedSchema>
-				: StaticDecode<
-						TImport<
-							UnwrapTypeModule<Definitions>,
-							TrimArrayName<Schema>
-						>
-					>[]
+			? Definitions extends Record<
+					Key,
+					infer NamedSchema extends TAnySchema
+				>
+				? StaticDecode<NamedSchema>[]
+				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
 			: Schema extends string
-				? Definitions extends Record<Schema, infer NamedSchema>
-					? NamedSchema
-					: StaticDecode<
-							TImport<UnwrapTypeModule<Definitions>, Schema>
-						>
+				? Definitions extends Record<
+						Schema,
+						infer NamedSchema extends TAnySchema
+					>
+					? StaticDecode<NamedSchema>
+					: TImport<Definitions, Schema>['static']
 				: unknown
 
 export type UnwrapBodySchema<
 	Schema extends TSchema | string | undefined,
-	Definitions extends DefinitionBase['typebox'] = TModule<{}>
+	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
 	: Schema extends TSchema
 		? Schema extends OptionalField
-			? Prettify<Partial<Static<Schema>>> | null
-			: StaticDecode<Schema>
+			? Partial<
+					TImport<
+						Definitions & {
+							readonly __elysia: Schema
+						},
+						'__elysia'
+					>['static']
+				> | null
+			: TImport<
+					Definitions & {
+						readonly __elysia: Schema
+					},
+					'__elysia'
+				>['static']
 		: Schema extends `${infer Key}[]`
-			? Definitions extends Record<Key, infer NamedSchema>
-				? Array<NamedSchema>
-				: Static<
-						TImport<
-							UnwrapTypeModule<Definitions>,
-							TrimArrayName<Schema>
-						>
-					>[]
+			? Definitions extends Record<
+					Key,
+					infer NamedSchema extends TAnySchema
+				>
+				? StaticDecode<NamedSchema>[]
+				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
 			: Schema extends string
-				? Definitions extends Record<Schema, infer NamedSchema>
-					? NamedSchema
-					: Static<TImport<UnwrapTypeModule<Definitions>, Schema>>
+				? Definitions extends Record<
+						Schema,
+						infer NamedSchema extends TAnySchema
+					>
+					? StaticDecode<NamedSchema>
+					: TImport<Definitions, Schema>['static']
 				: unknown
 
 export type IsNull<T> = [T] extends [null] ? true : false
@@ -430,7 +454,7 @@ export type IsUnknown<T> = unknown extends T // `T` can be `unknown` or `any`
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
-	in out Definitions extends DefinitionBase['typebox'] = TModule<{}>,
+	in out Definitions extends DefinitionBase['typebox'] = {},
 	Path extends string = ''
 > {
 	body: UnwrapBodySchema<Schema['body'], Definitions>
@@ -463,7 +487,7 @@ export interface UnwrapRoute<
 
 export interface UnwrapGroupGuardRoute<
 	in out Schema extends InputSchema<any>,
-	Definitions extends DefinitionBase['typebox'] = TModule<{}>,
+	Definitions extends DefinitionBase['typebox'] = {},
 	Path extends string | undefined = undefined
 > {
 	body: UnwrapBodySchema<Schema['body'], Definitions>
@@ -1609,7 +1633,7 @@ export type MergeElysiaInstances<
 		resolve: {}
 	},
 	Definitions extends DefinitionBase = {
-		typebox: TModule<{}>
+		typebox: {}
 		type: {}
 		error: {}
 	},
@@ -1643,13 +1667,9 @@ export type MergeElysiaInstances<
 					Definitions['error'] &
 						Current['_types']['Definitions']['error']
 				>
-				typebox: TModule<
-					Prettify<
-						UnwrapTypeModule<Definitions['typebox']> &
-							UnwrapTypeModule<
-								Current['_types']['Definitions']['typebox']
-							>
-					>
+				typebox: Prettify<
+					Definitions['typebox'] &
+						Current['_types']['Definitions']['typebox']
 				>
 			},
 			Metadata & Current['_types']['Metadata'],
