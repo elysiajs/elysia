@@ -233,7 +233,7 @@ describe('Params Validator', () => {
 		expect(value).toBe('boolean')
 	})
 
-	it('create default value on optional params', () => {
+	describe('create default value on optional params', () => {
 		it('parse multiple optional params', async () => {
 			const app = new Elysia().get(
 				'/name/:last?/:first?',
