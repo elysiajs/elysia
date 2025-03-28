@@ -363,6 +363,7 @@ export default class Elysia<
 
 		if (config.systemRouter === undefined) config.systemRouter = true
 		if (config.jsonAccelerator === undefined) config.jsonAccelerator = true
+		if (config.encodeSchema === undefined) config.encodeSchema = true
 
 		this.config = {}
 		this.applyConfig(config ?? {})

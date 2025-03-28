@@ -1,11 +1,12 @@
 # 1.3.0
 Feature:
-- add `jsonAccelerator`
-- add `exactMirror`
+- add `jsonAccelerator`,`exactMirror`
 - add `systemRouter` config
+- `encodeSchema` now stable
 - add sucrose cache
 - add `noValidate`
 - support Ref inside inline schema
+- `standalone Validator`
 
 Improvement:
 - reduce redundant type check when using Encode

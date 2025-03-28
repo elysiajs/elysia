@@ -524,7 +524,7 @@ export const composeHandler = ({
 	}
 
 	const normalize = app.config.normalize
-	const encodeSchema = app.config.experimental?.encodeSchema
+	const encodeSchema = app.config.encodeSchema
 	const accelerators = jsonAccelerator
 		? createAccelerators(validator.response!)
 		: undefined

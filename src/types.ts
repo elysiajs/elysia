@@ -145,16 +145,17 @@ export type ElysiaConfig<Prefix extends string | undefined> = {
 	 */
 	analytic?: boolean
 	/**
+	 * If enabled, the schema with `t.Transform` will call `Encode` before sending the response
+	 *
+	 * @default true
+	 * @since 1.3.0
+	 * @since 1.2.16 (experimental)
+	 **/
+	encodeSchema?: boolean
+	/**
 	 * Enable experimental features
 	 */
-	experimental?: {
-		/**
-		 * If enabled, the schema with `t.Transform` will call `Encode` before sending the response
-		 *
-		 * @since 1.2.16
-		 **/
-		encodeSchema?: boolean
-	}
+	experimental?: {}
 	/**
 	 * If enabled, Elysia will attempt to coerce value to defined type on incoming and outgoing bodies.
 	 *
