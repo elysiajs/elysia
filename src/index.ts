@@ -2895,7 +2895,6 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Metadata['macro'],
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>,
 		run: (
@@ -3069,7 +3068,6 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'] | 'as' | 'schema',
 			keyof Metadata['parser']
 		>
 	): Or<
@@ -3257,7 +3255,6 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -3354,7 +3351,6 @@ export default class Elysia<
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>,
 		run: (
@@ -4373,7 +4369,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4387,11 +4383,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -4464,7 +4459,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4478,11 +4473,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -4544,15 +4538,18 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4566,11 +4563,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -4632,15 +4628,18 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4654,11 +4653,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -4720,15 +4718,18 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4742,11 +4743,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -4808,15 +4808,18 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4830,11 +4833,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -4896,15 +4898,18 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -4918,11 +4923,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -4984,15 +4988,18 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -5006,11 +5013,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -5072,15 +5078,18 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -5094,11 +5103,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], NoInfer<Macro>>
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		>
 	): Elysia<
@@ -5161,19 +5169,18 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<
-			Metadata['macroFn'],
-			NoInfer<Macro>
-		>,
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroContext
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			JoinPath<BasePath, Path>
 		>
@@ -5188,11 +5195,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroContext
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Definitions['error'],
 			Macro,
-			keyof Metadata['macro'],
 			keyof Metadata['parser']
 		> & {
 			config: {
@@ -5276,8 +5282,7 @@ export default class Elysia<
 					Volatile['resolve'] &
 					MacroContext
 			},
-			Macro,
-			keyof Macro
+			Macro
 		>
 	): Elysia<
 		BasePath,

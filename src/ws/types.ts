@@ -116,7 +116,7 @@ export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
 	message: unknown
 ) => MaybePromise<Route['body'] | void | undefined>
 
-export type AnyWSLocalHook = WSLocalHook<any, any, any, any, any>
+export type AnyWSLocalHook = WSLocalHook<any, any, any, any>
 
 type WSLocalHookKey =
 	| keyof TypedWebSocketHandler<any, any>
@@ -136,13 +136,9 @@ export type WSLocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
-	Macro extends BaseMacro,
-	MacroKey extends keyof any
+	Macro extends BaseMacro
 > = (LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) &
-	Macro &
-	NoInfer<{
-		[K in Exclude<keyof Macro, MacroKey | WSLocalHookKey>]: never
-	}> & {
+	Macro & {
 		detail?: DocumentDecoration
 		/**
 		 * Headers to register to websocket before `upgrade`

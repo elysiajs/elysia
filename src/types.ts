@@ -480,7 +480,7 @@ export interface UnwrapRoute<
 				200: CoExist<
 					UnwrapSchema<Schema['response'], Definitions>,
 					File,
-					ElysiaFile
+					ElysiaFile | Blob
 				>
 			}
 		: Schema['response'] extends { [status in number]: TAnySchema | string }
@@ -488,7 +488,7 @@ export interface UnwrapRoute<
 					[k in keyof Schema['response']]: CoExist<
 						UnwrapSchema<Schema['response'][k], Definitions>,
 						File,
-						ElysiaFile
+						ElysiaFile | Blob
 					>
 				}
 			: unknown | void
@@ -621,15 +621,15 @@ export type HTTPMethod =
 
 export interface InputSchema<Name extends string = string> {
 	body?: TSchema | Name | `${Name}[]`
-	headers?: TObject | TNull | TUndefined | Name
-	query?: TObject | TNull | TUndefined | Name
-	params?: TObject | TNull | TUndefined | Name
-	cookie?: TObject | TNull | TUndefined | Name
+	headers?: TSchema | Name | `${Name}[]`
+	query?: TSchema | Name | `${Name}[]`
+	params?: TSchema | Name | `${Name}[]`
+	cookie?: TSchema | Name | `${Name}[]`
 	response?:
 		| TSchema
 		| { [status in number]: TSchema }
-		| `${Name}[]`
 		| Name
+		| `${Name}[]`
 		| { [status in number]: `${Name}[]` | Name | TSchema }
 }
 
@@ -841,7 +841,7 @@ export type InlineHandler<
 						:
 								| (Route['response'] extends { 200: any }
 										? Route['response'][200]
-										: string | number | boolean | Object)
+										: string | number | boolean | object)
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
 								| {
@@ -853,11 +853,11 @@ export type InlineHandler<
 								  }[keyof Route['response']]
 			  >)
 	| ({} extends Route['response']
-			? string | number | boolean | Object
+			? string | number | boolean | object
 			:
 					| (Route['response'] extends { 200: any }
 							? Route['response'][200]
-							: string | number | boolean | Object)
+							: string | number | boolean | object)
 					| {
 							[Status in keyof Route['response']]: ElysiaCustomStatusResponse<
 								// @ts-ignore Status is always a number
@@ -950,19 +950,17 @@ export type TransformHandler<
 		resolve: {}
 	},
 	Path extends string | undefined = undefined
-> = {
-	(
-		context: Prettify<
-			Context<
-				Route,
-				Omit<Singleton, 'resolve'> & {
-					resolve: {}
-				},
-				Path
-			>
+> = (
+	context: Prettify<
+		Context<
+			Route,
+			Omit<Singleton, 'resolve'> & {
+				resolve: {}
+			},
+			Path
 		>
-	): MaybePromise<void>
-}
+	>
+) => MaybePromise<void>
 
 export type BodyHandler<
 	in out Route extends RouteSchema = {},
@@ -1281,71 +1279,60 @@ type LocalHookKey =
 	| 'error'
 	| 'tags'
 
+type A = 'A' extends any ? 'A' : 'B'
+
 export type LocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Errors extends { [key in string]: Error },
 	Macro extends BaseMacro,
-	MacroKey extends keyof any,
 	Parser extends keyof any = ''
-> =
+> = Macro &
 	// Kind of an inference hack, I have no idea why it work either
 	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) &
-		Macro &
-		NoInfer<
-			{} extends Macro
-				? {}
-				: {
-						[K in Exclude<
-							keyof Macro,
-							MacroKey | LocalHookKey
-						>]: never
-					}
-		> &
-		NoInfer<{
-			// a?(a: keyof Macro): void
-			detail?: DocumentDecoration
-			/**
-			 * Short for 'Content-Type'
-			 *
-			 * Available:
-			 * - 'none': do not parse body
-			 * - 'text' / 'text/plain': parse body as string
-			 * - 'json' / 'application/json': parse body as json
-			 * - 'formdata' / 'multipart/form-data': parse body as form-data
-			 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-			 * - 'arraybuffer': parse body as readable stream
-			 */
-			parse?: MaybeArray<
-				BodyHandler<Schema, Singleton> | ContentType | Parser
-			>
-			/**
-			 * Transform context's value
-			 */
-			transform?: MaybeArray<TransformHandler<Schema, Singleton>>
-			/**
-			 * Execute before main handler
-			 */
-			beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
-			/**
-			 * Execute after main handler
-			 */
-			afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
-			/**
-			 * Execute after main handler
-			 */
-			mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
-			/**
-			 * Execute after response is sent
-			 */
-			afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
-			/**
-			 * Catch error
-			 */
-			error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
-			tags?: DocumentDecoration['tags']
-		}>
+	NoInfer<{
+		detail?: DocumentDecoration
+		/**
+		 * Short for 'Content-Type'
+		 *
+		 * Available:
+		 * - 'none': do not parse body
+		 * - 'text' / 'text/plain': parse body as string
+		 * - 'json' / 'application/json': parse body as json
+		 * - 'formdata' / 'multipart/form-data': parse body as form-data
+		 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+		 * - 'arraybuffer': parse body as readable stream
+		 */
+		parse?: MaybeArray<
+			BodyHandler<Schema, Singleton> | ContentType | Parser
+		>
+		/**
+		 * Transform context's value
+		 */
+		transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+		/**
+		 * Execute before main handler
+		 */
+		beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+		/**
+		 * Execute after main handler
+		 */
+		afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
+		/**
+		 * Execute after main handler
+		 */
+		mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
+		/**
+		 * Execute after response is sent
+		 */
+		afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
+		/**
+		 * Catch error
+		 */
+		error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
+		tags?: DocumentDecoration['tags']
+	}>
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
@@ -1630,8 +1617,8 @@ export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
 	Handle
 > = Handle extends (...a: any[]) => infer A
-	? _ComposeElysiaResponse<Schema, Replace<Awaited<A>, ElysiaFile, File>>
-	: _ComposeElysiaResponse<Schema, Replace<Awaited<Handle>, ElysiaFile, File>>
+	? _ComposeElysiaResponse<Schema, Replace<Awaited<A>, Blob, File>>
+	: _ComposeElysiaResponse<Schema, Replace<Awaited<Handle>, Blob, File>>
 
 export type EmptyRouteSchema = {
 	body: unknown
@@ -1643,28 +1630,26 @@ export type EmptyRouteSchema = {
 }
 
 type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
-	Prettify<
-		(Schema['response'] extends { 200: any }
+	(Schema['response'] extends { 200: any }
+		? {}
+		: {
+				200: Exclude<Handle, AnyElysiaCustomStatusResponse>
+			}) &
+		ExtractErrorFromHandle<Handle> &
+		({} extends Schema['response'] ? {} : Schema['response']) &
+		(EmptyRouteSchema extends Schema
 			? {}
 			: {
-					200: Exclude<Handle, AnyElysiaCustomStatusResponse>
-				}) &
-			ExtractErrorFromHandle<Handle> &
-			({} extends Schema['response'] ? {} : Schema['response']) &
-			(EmptyRouteSchema extends Schema
-				? {}
-				: {
-						422: {
-							type: 'validation'
-							on: string
-							summary?: string
-							message?: string
-							found?: unknown
-							property?: string
-							expected?: string
-						}
-					})
-	>
+					422: {
+						type: 'validation'
+						on: string
+						summary?: string
+						message?: string
+						found?: unknown
+						property?: string
+						expected?: string
+					}
+				})
 >
 
 type ExtractErrorFromHandle<Handle> = {

@@ -206,7 +206,7 @@ export const BunAdapter: ElysiaAdapter = {
 		app.route(
 			'$INTERNALWS',
 			path as any,
-			async (context) => {
+			async (context: any) => {
 				// @ts-expect-error private property
 				const server = app.getServer()
 
