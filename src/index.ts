@@ -4352,22 +4352,20 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			keyof Definitions['typebox'] & string
 		>,
-		const Schema extends PrettifySchema<
+		const Schema extends MergeSchema<
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
-				UnwrapRoute<
-					LocalSchema,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
-			> &
-				Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
-		>,
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
@@ -4445,22 +4443,20 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			keyof Definitions['typebox'] & string
 		>,
-		const Schema extends PrettifySchema<
+		const Schema extends MergeSchema<
+			UnwrapRoute<
+				LocalSchema,
+				Definitions['typebox'],
+				JoinPath<BasePath, Path>
+			>,
 			MergeSchema<
-				UnwrapRoute<
-					LocalSchema,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
-			> &
-				Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
-		>,
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,

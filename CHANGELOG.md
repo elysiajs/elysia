@@ -14,6 +14,7 @@ Improvement:
 
 Breaking Change:
 - remove `as('plugin')` in favor of `as('scoped')`
+- remove root `index`
 
 # 1.2.25 - 6 Mar 2025
 Bug fix:

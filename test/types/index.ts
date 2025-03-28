@@ -668,7 +668,7 @@ app.use(plugin).group(
 		.get('/', () => 1)
 
 	type App = (typeof server)['_routes']
-	type Route = App['index']['get']
+	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -728,7 +728,7 @@ app.use(plugin).group(
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
 	type App = (typeof server)['_routes']
-	type Route = App['index']['get']
+	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -934,7 +934,7 @@ app.group(
 	const server = app.use(plugin)
 
 	type App = (typeof server)['_routes']
-	type Route = App['index']['get']
+	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -1240,11 +1240,11 @@ const a = app
 
 	type app = typeof app._routes
 
-	expectTypeOf<app['index']['get']['response']>().toEqualTypeOf<{
+	expectTypeOf<app['get']['response']>().toEqualTypeOf<{
 		200: string
 	}>()
 
-	expectTypeOf<app['index']['post']['response']>().toEqualTypeOf<{
+	expectTypeOf<app['post']['response']>().toEqualTypeOf<{
 		200: string
 		readonly 201: string
 		422: {
@@ -2268,7 +2268,7 @@ type a = keyof {}
 		}
 	)
 
-	expectTypeOf<(typeof app._routes.index.get.response)[200]>().toEqualTypeOf<{
+	expectTypeOf<(typeof app._routes.get.response)[200]>().toEqualTypeOf<{
 		name: string
 	}>()
 }
@@ -2292,7 +2292,7 @@ type a = keyof {}
 		}
 	)
 
-	expectTypeOf<(typeof app._routes.index.get.response)[200]>().toEqualTypeOf<{
+	expectTypeOf<(typeof app._routes.get.response)[200]>().toEqualTypeOf<{
 		name: string
 		a: string
 	}>()

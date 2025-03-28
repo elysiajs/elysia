@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Elysia, AnyElysia } from '.'
-import type { BunFile, Serve, Server } from 'bun'
+import type { BunFile, Serve } from 'bun'
 
 import {
 	TSchema,
@@ -632,7 +632,7 @@ export interface InputSchema<Name extends string = string> {
 		| { [status in number]: `${Name}[]` | Name | TSchema }
 }
 
-export type PrettifySchema<A extends RouteSchema> = Prettify<{
+export interface PrettifySchema<A extends RouteSchema> {
 	body: unknown extends A['body'] ? A['body'] : Prettify<A['body']>
 	headers: unknown extends A['headers']
 		? A['headers']
@@ -643,7 +643,7 @@ export type PrettifySchema<A extends RouteSchema> = Prettify<{
 	response: unknown extends A['response']
 		? A['response']
 		: Prettify<A['response']>
-}>
+}
 
 export interface MergeSchema<
 	A extends RouteSchema,
@@ -1616,14 +1616,14 @@ type _CreateEden<
 			[x in Path]: Property
 		}
 
+type RemoveStartinSlash<T> = T extends `/${infer Rest}` ? Rest : T
+
 export type CreateEden<
 	Path extends string,
 	Property extends Record<string, unknown> = {}
-> = Path extends `/${infer Rest}`
-	? _CreateEden<Rest, Property>
-	: Path extends ''
-		? _CreateEden<'index', Property>
-		: _CreateEden<Path, Property>
+> = Path extends '' | '/'
+	? Property
+	: _CreateEden<RemoveStartinSlash<Path>, Property>
 
 export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
@@ -2030,7 +2030,7 @@ export type HTTPHeaders = Record<string, string | number> & {
 export type JoinPath<
 	A extends string,
 	B extends string
-> = `${A}${B extends '/' ? '/index' : B extends '' ? B : B extends `/${string}` ? B : B}`
+> = `${A}${B}`
 
 export type UnwrapTypeModule<Module extends TModule<any, any>> =
 	Module extends TModule<infer Type extends TProperties, any> ? Type : {}
