@@ -196,11 +196,17 @@ export type ElysiaConfig<Prefix extends string | undefined> = {
 	jsonAccelerator?: boolean
 }
 
-export type ValidatorLayer = {
+export interface ValidatorLayer {
 	global: SchemaValidator | null
 	scoped: SchemaValidator | null
 	local: SchemaValidator | null
 	getCandidate(): SchemaValidator
+}
+
+export interface StandaloneValidator {
+	global: InputSchema[] | null
+	scoped: InputSchema[] | null
+	local: InputSchema[] | null
 }
 
 export type MaybeArray<T> = T | T[]
@@ -231,6 +237,12 @@ export type ResolvePath<Path extends string> = Prettify<
 			: never]?: string
 	}
 >
+
+export type Or<T1 extends boolean, T2 extends boolean> = T1 extends true
+	? true
+	: T2 extends true
+		? true
+		: false
 
 // https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
 export type Prettify<T> = {
@@ -339,6 +351,7 @@ export interface EphemeralType {
 	derive: SingletonBase['derive']
 	resolve: SingletonBase['resolve']
 	schema: MetadataBase['schema']
+	standaloneSchema: MetadataBase['schema']
 }
 
 export interface DefinitionBase {
@@ -350,6 +363,7 @@ export type RouteBase = Record<string, unknown>
 
 export interface MetadataBase {
 	schema: RouteSchema
+	standaloneSchema: MetadataBase['schema']
 	macro: BaseMacro
 	macroFn: BaseMacroFn
 	parser: Record<string, BodyHandler<any, any>>
@@ -624,6 +638,15 @@ export interface InputSchema<Name extends string = string> {
 		| Record<number, `${Name}[]` | Name | TSchema>
 }
 
+export type PrettifySchema<A extends RouteSchema> = Prettify<{
+	body: undefined extends A['body'] ? A['body'] : Prettify<A['body']>
+	headers: undefined extends A['headers'] ? A['headers'] : Prettify<A['headers']>
+	query: undefined extends A['query'] ? A['query'] : Prettify<A['query']>
+	params: undefined extends A['params'] ? A['params'] : Prettify<A['params']>
+	cookie: undefined extends A['cookie'] ? A['cookie'] : Prettify<A['cookie']>
+	response: undefined extends A['response'] ? A['response'] : Prettify<A['response']>
+}>
+
 export interface MergeSchema<
 	A extends RouteSchema,
 	B extends RouteSchema,
@@ -647,6 +670,55 @@ export interface MergeSchema<
 		: {} extends B['response']
 			? A['response']
 			: A['response'] & Omit<B['response'], keyof A['response']>
+}
+
+export interface MergeStandaloneSchema<
+	A extends RouteSchema,
+	B extends RouteSchema,
+	Path extends string = ''
+> {
+	body: undefined extends A['body']
+		? undefined extends B['body']
+			? undefined
+			: B['body']
+		: undefined extends B['body']
+			? A['body']
+			: Prettify<A['body'] & B['body']>
+	headers: undefined extends A['headers']
+		? undefined extends B['headers']
+			? undefined
+			: B['headers']
+		: undefined extends B['headers']
+			? A['headers']
+			: Prettify<A['headers'] & B['headers']>
+	query: undefined extends A['query']
+		? undefined extends B['query']
+			? undefined
+			: B['query']
+		: undefined extends B['query']
+			? A['query']
+			: Prettify<A['query'] & B['query']>
+	params: IsNever<keyof A['params']> extends true
+		? IsNever<keyof B['params']> extends true
+			? ResolvePath<Path>
+			: B['params']
+		: IsNever<keyof B['params']> extends true
+			? A['params']
+			: Prettify<A['params'] & B['params']>
+	cookie: undefined extends A['cookie']
+		? undefined extends B['cookie']
+			? undefined
+			: B['cookie']
+		: undefined extends B['cookie']
+			? A['cookie']
+			: Prettify<A['cookie'] & B['cookie']>
+	response: {} extends A['response']
+		? {} extends B['response']
+			? {}
+			: B['response']
+		: {} extends B['response']
+			? A['response']
+			: Prettify<A['response'] & B['response']>
 }
 
 export type Handler<
@@ -984,12 +1056,14 @@ export type ErrorHandler<
 		derive: {}
 		resolve: {}
 		schema: {}
+		standaloneSchema: {}
 	},
 	// ? local
 	in out Volatile extends EphemeralType = {
 		derive: {}
 		resolve: {}
 		schema: {}
+		standaloneSchema: {}
 	}
 > = (
 	context: ErrorContext<
@@ -1238,10 +1312,10 @@ export type LocalHook<
 	Parser extends string = ''
 > =
 	// Kind of an inference hack, I have no idea why it work either
-	(LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
+	(LocalSchema extends any ? LocalSchema : Isolate<LocalSchema>) &
 		Macro &
 		NoInfer<
-			keyof Macro extends ''
+			{} extends Macro
 				? {}
 				: {
 						[K in Exclude<
@@ -1639,19 +1713,23 @@ export type MergeElysiaInstances<
 	},
 	Metadata extends MetadataBase = {
 		schema: {}
+		standaloneSchema: {}
 		macro: {}
 		macroFn: {}
 		parser: {}
+		extension: {}
 	},
 	Ephemeral extends EphemeralType = {
 		derive: {}
 		resolve: {}
 		schema: {}
+		standaloneSchema: {}
 	},
 	Volatile extends EphemeralType = {
 		derive: {}
 		resolve: {}
 		schema: {}
+		standaloneSchema: {}
 	},
 	Routes extends RouteBase = {}
 > = Instances extends [
@@ -1691,6 +1769,7 @@ export type MergeElysiaInstances<
 		>
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
+export type GuardSchemaType = 'override' | 'standalone'
 
 // Exclude return error()
 export type ExcludeElysiaResponse<T> = Exclude<

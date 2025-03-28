@@ -3,14 +3,14 @@ import { Elysia, t } from '../../src'
 import { req } from '../utils'
 
 describe('as', () => {
-	it('plugin', async () => {
+	it('scoped', async () => {
 		const subPlugin1 = new Elysia()
 			.derive(() => {
 				return {
 					hi: 'hi'
 				}
 			})
-			.as('plugin')
+			.as('scoped')
 
 		const plugin = new Elysia()
 			.use(subPlugin1)
@@ -181,7 +181,7 @@ describe('as', () => {
 		expect(response).toEqual([422, 200, 200])
 	})
 
-	it('handle as plugin', async () => {
+	it('handle as scoped', async () => {
 		let called = 0
 
 		const inner = new Elysia()
@@ -193,7 +193,7 @@ describe('as', () => {
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('plugin')
+			.as('scoped')
 
 		const plugin = new Elysia()
 			.use(inner)
@@ -212,7 +212,7 @@ describe('as', () => {
 		expect(response).toEqual([422, 422, 200])
 	})
 
-	it('handle as propagate twice', async () => {
+	it('handle as scoped twice', async () => {
 		let called = 0
 
 		const inner = new Elysia()
@@ -224,13 +224,13 @@ describe('as', () => {
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('plugin')
+			.as('scoped')
 
 		const plugin = new Elysia()
 			.use(inner)
 			// @ts-expect-error
 			.get('/plugin', () => true)
-			.as('plugin')
+			.as('scoped')
 
 		// @ts-expect-error
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')

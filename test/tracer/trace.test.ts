@@ -208,14 +208,14 @@ describe('trace', () => {
 		expect(called).toBe(true)
 	})
 
-	it('handle propagate', async () => {
+	it('handle as cast', async () => {
 		let called = false
 
 		const plugin = new Elysia().trace({ as: 'scoped' }, () => {
 			called = true
 		})
 
-		const parent = new Elysia().use(plugin).propagate()
+		const parent = new Elysia().use(plugin).as('scoped')
 		const main = new Elysia().use(parent).get('/', () => 'h')
 
 		await main.handle(req('/'))

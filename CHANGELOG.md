@@ -12,6 +12,9 @@ Improvement:
 - optimize isAsync
 - unwrap Definition['typebox'] by default to prevent unnecessary UnwrapTypeModule call
 
+Breaking Change:
+- remove `as('plugin')` in favor of `as('scoped')`
+
 # 1.2.25 - 6 Mar 2025
 Bug fix:
 - [#1108](https://github.com/elysiajs/elysia/issues/1108) use validation response instead of return type when schema is provided

@@ -55,7 +55,7 @@ import { Elysia } from '../../src'
 			.resolve(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('plugin')
+			.as('scoped')
 	})
 
 	new Elysia()
@@ -96,7 +96,7 @@ import { Elysia } from '../../src'
 			.resolve(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('plugin')
+			.as('scoped')
 	}
 
 	new Elysia()
@@ -137,7 +137,7 @@ import { Elysia } from '../../src'
 			.resolve(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('plugin')
+			.as('scoped')
 	})
 
 	new Elysia()

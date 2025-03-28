@@ -718,7 +718,7 @@ export const ElysiaType = {
 		v.noValidate = enabled
 
 		return v
-	},
+	}
 } as const
 
 export type TCookie = (typeof ElysiaType)['Cookie']

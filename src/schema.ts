@@ -19,7 +19,12 @@ import { isNotEmpty, mergeCookie, randomId } from './utils'
 import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
-import type { ElysiaConfig, InputSchema, MaybeArray } from './types'
+import type {
+	ElysiaConfig,
+	InputSchema,
+	MaybeArray,
+	SchemaValidator
+} from './types'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
@@ -684,7 +689,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		normalize = false,
 		additionalProperties = false,
 		coerce = false,
-		additionalCoerce = []
+		additionalCoerce = [],
+		validators
 	}: {
 		models?: Record<string, TSchema>
 		modules: TModule<any, any>
@@ -693,28 +699,14 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		normalize?: ElysiaConfig<''>['normalize']
 		coerce?: boolean
 		additionalCoerce?: MaybeArray<ReplaceSchemaTypeOptions>
+		validators?: InputSchema['body'][]
 	} = {
 		modules: t.Module({})
 	}
 ): T extends TSchema ? ElysiaTypeCheck<TSchema> : undefined => {
 	if (!s) return undefined as any
 
-	let schema: TSchema
-
-	if (typeof s !== 'string') schema = s
-	else {
-		if (s in caches) return caches[s] as any
-
-		const isArray = s.endsWith('[]')
-		const key = isArray ? s.substring(0, s.length - 2) : s
-
-		schema =
-			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
-
-		if (isArray) schema = t.Array(schema)
-	}
-
-	if (!schema) return undefined as any
+	let doesHaveRef: boolean | undefined = undefined
 
 	const replaceSchema = (schema: TAnySchema): TAnySchema => {
 		if (coerce)
@@ -737,34 +729,89 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		return replaceSchemaType(schema, additionalCoerce)
 	}
 
-	let doesHaveRef: boolean | undefined
+	const mapSchema = (s: string | TSchema | undefined): TSchema => {
+		let schema: TSchema
 
-	if (schema[Kind] !== 'Import' && (doesHaveRef = hasRef(schema))) {
-		const id = randomId()
+		if (!s) return undefined as any
 
-		const model: any = t.Module({
-			// @ts-expect-error private property
-			...modules.$defs,
-			[id]: schema
-		})
+		if (typeof s !== 'string') schema = s
+		else {
+			if (s in caches) return caches[s] as any
 
-		schema = model.Import(id)
+			const isArray = s.endsWith('[]')
+			const key = isArray ? s.substring(0, s.length - 2) : s
+
+			schema =
+				(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
+
+			if (isArray) schema = t.Array(schema)
+		}
+
+		if (!schema) return undefined as any
+
+		let _doesHaveRef: boolean
+		if (schema[Kind] !== 'Import' && (_doesHaveRef = hasRef(schema))) {
+			const id = randomId()
+
+			if (doesHaveRef === undefined) doesHaveRef = _doesHaveRef
+
+			const model: any = t.Module({
+				// @ts-expect-error private property
+				...modules.$defs,
+				[id]: schema
+			})
+
+			schema = model.Import(id)
+		}
+
+		if (schema[Kind] === 'Import') {
+			const newDefs: Record<string, TSchema> = {}
+
+			for (const [key, value] of Object.entries(schema.$defs))
+				newDefs[key] = replaceSchema(value as TSchema)
+
+			const key = schema.$ref
+			schema = t.Module(newDefs).Import(key)
+		} else if (coerce || additionalCoerce) schema = replaceSchema(schema)
+
+		return schema
 	}
 
-	if (schema[Kind] === 'Import') {
-		const newDefs: Record<string, TSchema> = {}
+	let schema = mapSchema(s)
 
-		for (const [key, value] of Object.entries(schema.$defs))
-			newDefs[key] = replaceSchema(value as TSchema)
+	if (validators?.length) {
+		let hasAdditional = false
 
-		const key = schema.$ref
-		schema = t.Module(newDefs).Import(key)
-	} else if (coerce || additionalCoerce) {
-		schema = replaceSchema(schema)
+		schema = t.Intersect([
+			schema,
+			...validators
+				.filter((x) => x)
+				.map((x) => {
+					const schema = mapSchema(x)
+
+					if (
+						schema.type === 'object' &&
+						'additionalProperties' in schema
+					) {
+						if (!hasAdditional)
+							hasAdditional = schema.additionalProperties
+
+						delete schema.additionalProperties
+					}
+
+					return schema
+				})
+		])
+
+		if (schema.type === 'object' && hasAdditional)
+			schema.additionalProperties = additionalProperties
+	} else {
+		if (
+			schema.type === 'object' &&
+			'additionalProperties' in schema === false
+		)
+			schema.additionalProperties = additionalProperties
 	}
-
-	if (schema.type === 'object' && 'additionalProperties' in schema === false)
-		schema.additionalProperties = additionalProperties
 
 	if (dynamic) {
 		const validator: ElysiaTypeCheck<any> = {
@@ -955,13 +1002,15 @@ export const getResponseSchemaValidator = (
 		modules,
 		dynamic = false,
 		normalize = false,
-		additionalProperties = false
+		additionalProperties = false,
+		validators
 	}: {
 		modules: TModule<any, any>
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
+		validators?: InputSchema['response'][]
 	}
 ): Record<number, ElysiaTypeCheck<any>> | undefined => {
 	if (!s) return
@@ -1098,7 +1147,8 @@ export const getCookieValidator = ({
 	defaultConfig = {},
 	config,
 	dynamic,
-	models
+	models,
+	validators
 }: {
 	validator: TSchema | string | undefined
 	modules: TModule<any, any>
@@ -1106,6 +1156,7 @@ export const getCookieValidator = ({
 	config: CookieOptions
 	dynamic: boolean
 	models: Record<string, TSchema> | undefined
+	validators?: InputSchema['cookie'][]
 }) => {
 	let cookieValidator = getSchemaValidator(validator, {
 		modules,
@@ -1113,7 +1164,8 @@ export const getCookieValidator = ({
 		models,
 		additionalProperties: true,
 		coerce: true,
-		additionalCoerce: stringToStructureCoercions()
+		additionalCoerce: stringToStructureCoercions(),
+		validators
 	})
 
 	if (isNotEmpty(defaultConfig)) {

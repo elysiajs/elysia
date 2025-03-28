@@ -1,20 +1,27 @@
 import { Elysia, t } from '../src'
-import { post, req } from '../test/utils'
 
-const app = new Elysia().get(
-	'/',
-	() => ({
-		message: 'Hi' as const
-	}),
-	{
-		response: t.NoValidate(
-			t.Object({
-				message: t.Literal('Hi')
-			})
-		)
-	}
-)
+const app = new Elysia({ precompile: true })
+	.guard({
+		schema: 'standalone',
+		body: t.Object({ id: t.Number() }),
+		response: t.Object({ success: t.Boolean() })
+	})
+	.guard({
+		schema: 'standalone',
+		body: t.Object({ separated: t.Literal(true) })
+	})
+	.post(
+		'/',
+		({ body }) => ({
+			success: true,
+			id: 1,
+			name: body.name
+		}),
+		{
+			body: t.Object({ name: t.Literal('saltyaom') }),
+			response: t.Object({ id: t.Number() })
+		}
+	)
+	.listen(3000)
 
-const result = await app.handle(req('/')).then((x) => x.json())
-
-console.log(app.routes[0].compile().toString())
+app._ephemeral

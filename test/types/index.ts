@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { expect } from 'bun:test'
 import { t, Elysia, RouteSchema, Cookie, error } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
@@ -357,10 +356,10 @@ app.decorate('a', 'b')
 			}
 		)
 
-	expect(app.decorator.hello).toEqual({
-		world: 'Ina',
-		cookie: 'wah!'
-	})
+	expectTypeOf<typeof app.decorator.hello>().toEqualTypeOf<{
+		readonly world: 'Ina'
+		readonly cookie: 'wah!'
+	}>()
 }
 
 // ? Reconcile deep using name
@@ -404,10 +403,10 @@ app.decorate('a', 'b')
 			}
 		)
 
-	expect(app.store.hello).toEqual({
-		world: 'Ina',
-		cookie: 'wah!'
-	})
+	expectTypeOf<typeof app.store.hello>().toEqualTypeOf<{
+		world: string
+		cookie: string
+	}>()
 }
 
 const b = app
@@ -1540,7 +1539,7 @@ type a = keyof {}
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('plugin')
+			.as('scoped')
 
 		const plugin = new Elysia()
 			.use(inner)
@@ -1558,13 +1557,13 @@ type a = keyof {}
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('plugin')
+			.as('scoped')
 
 		const plugin = new Elysia()
 			.use(inner)
 			// @ts-expect-error
 			.get('/plugin', () => true)
-			.as('plugin')
+			.as('scoped')
 
 		// @ts-expect-error
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
@@ -1916,7 +1915,7 @@ type a = keyof {}
 			myPluginMethod: pluginMethod,
 			...rest
 		}))
-		.as('plugin')
+		.as('scoped')
 
 	expectTypeOf<typeof plugin._ephemeral.derive>().toHaveProperty(
 		'pluginMethod'
