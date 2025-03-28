@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Elysia, AnyElysia } from '.'
-import type { BunFile, Serve } from 'bun'
+import type { ElysiaFile } from './universal/file'
+import type { Serve } from './universal/server'
 
 import {
 	TSchema,
@@ -479,7 +480,7 @@ export interface UnwrapRoute<
 				200: CoExist<
 					UnwrapSchema<Schema['response'], Definitions>,
 					File,
-					BunFile
+					ElysiaFile
 				>
 			}
 		: Schema['response'] extends { [status in number]: TAnySchema | string }
@@ -487,7 +488,7 @@ export interface UnwrapRoute<
 					[k in keyof Schema['response']]: CoExist<
 						UnwrapSchema<Schema['response'][k], Definitions>,
 						File,
-						BunFile
+						ElysiaFile
 					>
 				}
 			: unknown | void
@@ -1629,8 +1630,8 @@ export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
 	Handle
 > = Handle extends (...a: any[]) => infer A
-	? _ComposeElysiaResponse<Schema, Replace<Awaited<A>, BunFile, File>>
-	: _ComposeElysiaResponse<Schema, Replace<Awaited<Handle>, BunFile, File>>
+	? _ComposeElysiaResponse<Schema, Replace<Awaited<A>, ElysiaFile, File>>
+	: _ComposeElysiaResponse<Schema, Replace<Awaited<Handle>, ElysiaFile, File>>
 
 export type EmptyRouteSchema = {
 	body: unknown
@@ -2027,10 +2028,7 @@ export type HTTPHeaders = Record<string, string | number> & {
 	'x-ua-compatible'?: string
 }
 
-export type JoinPath<
-	A extends string,
-	B extends string
-> = `${A}${B}`
+export type JoinPath<A extends string, B extends string> = `${A}${B}`
 
 export type UnwrapTypeModule<Module extends TModule<any, any>> =
 	Module extends TModule<infer Type extends TProperties, any> ? Type : {}
