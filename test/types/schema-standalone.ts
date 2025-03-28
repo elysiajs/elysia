@@ -33,7 +33,7 @@ import { expectTypeOf } from 'expect-type'
 			})
 			.post(
 				'/',
-				({ body }) => {
+				({ body, headers }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
 						id: number
 						name: string

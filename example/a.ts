@@ -23,5 +23,3 @@ const app = new Elysia({ precompile: true })
 		}
 	)
 	.listen(3000)
-
-app._ephemeral

@@ -252,7 +252,9 @@ export type Prettify<T> = {
 type RecordKey = string | number | symbol
 
 export type Prettify2<T> = {
-	[K in keyof T]: T extends Record<RecordKey, unknown> ? Prettify<T[K]> : T[K]
+	[K in keyof T]: T extends { [key in RecordKey]: unknown }
+		? Prettify<T[K]>
+		: T[K]
 } & {}
 
 export type Partial2<T> = {
@@ -264,8 +266,8 @@ export type NeverKey<T> = {
 } & {}
 
 type IsBothObject<A, B> =
-	A extends Record<RecordKey, unknown>
-		? B extends Record<RecordKey, unknown>
+	A extends Record<RecordKey, any>
+		? B extends Record<RecordKey, any>
 			? IsClass<A> extends false
 				? IsClass<B> extends false
 					? true
@@ -458,14 +460,6 @@ export type UnwrapBodySchema<
 					: TImport<Definitions, Schema>['static']
 				: unknown
 
-export type IsNull<T> = [T] extends [null] ? true : false
-
-export type IsUnknown<T> = unknown extends T // `T` can be `unknown` or `any`
-	? IsNull<T> extends false // `any` can be `null`, but `unknown` can't be
-		? true
-		: false
-	: false
-
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['typebox'] = {},
@@ -488,7 +482,7 @@ export interface UnwrapRoute<
 					BunFile
 				>
 			}
-		: Schema['response'] extends Record<number, TAnySchema | string>
+		: Schema['response'] extends { [status in number]: TAnySchema | string }
 			? {
 					[k in keyof Schema['response']]: CoExist<
 						UnwrapSchema<Schema['response'][k], Definitions>,
@@ -508,21 +502,21 @@ export interface UnwrapGroupGuardRoute<
 	headers: UnwrapSchema<
 		Schema['headers'],
 		Definitions
-	> extends infer A extends Record<string, unknown>
+	> extends infer A extends Record<string, any>
 		? A
 		: undefined
 	query: UnwrapSchema<Schema['query'], Definitions> extends infer A extends
-		Record<string, unknown>
+		Record<string, any>
 		? A
 		: undefined
 	params: UnwrapSchema<Schema['params'], Definitions> extends infer A extends
-		Record<string, unknown>
+		Record<string, any>
 		? A
 		: Path extends `${string}/${':' | '*'}${string}`
 			? Record<GetPathParameter<Path>, string>
 			: never
 	cookie: UnwrapSchema<Schema['cookie'], Definitions> extends infer A extends
-		Record<string, unknown>
+		Record<string, any>
 		? A
 		: undefined
 	response: Schema['response'] extends TSchema | string
@@ -632,19 +626,23 @@ export interface InputSchema<Name extends string = string> {
 	cookie?: TObject | TNull | TUndefined | Name
 	response?:
 		| TSchema
-		| Record<number, TSchema>
+		| { [status in number]: TSchema }
 		| `${Name}[]`
 		| Name
-		| Record<number, `${Name}[]` | Name | TSchema>
+		| { [status in number]: `${Name}[]` | Name | TSchema }
 }
 
 export type PrettifySchema<A extends RouteSchema> = Prettify<{
-	body: undefined extends A['body'] ? A['body'] : Prettify<A['body']>
-	headers: undefined extends A['headers'] ? A['headers'] : Prettify<A['headers']>
-	query: undefined extends A['query'] ? A['query'] : Prettify<A['query']>
-	params: undefined extends A['params'] ? A['params'] : Prettify<A['params']>
-	cookie: undefined extends A['cookie'] ? A['cookie'] : Prettify<A['cookie']>
-	response: undefined extends A['response'] ? A['response'] : Prettify<A['response']>
+	body: unknown extends A['body'] ? A['body'] : Prettify<A['body']>
+	headers: unknown extends A['headers']
+		? A['headers']
+		: Prettify<A['headers']>
+	query: unknown extends A['query'] ? A['query'] : Prettify<A['query']>
+	params: unknown extends A['params'] ? A['params'] : Prettify<A['params']>
+	cookie: unknown extends A['cookie'] ? A['cookie'] : Prettify<A['cookie']>
+	response: unknown extends A['response']
+		? A['response']
+		: Prettify<A['response']>
 }>
 
 export interface MergeSchema<
@@ -785,6 +783,16 @@ type ReturnTypeIfPossible<T> = T extends (...args: any) => any
 	? ReturnType<T>
 	: T
 
+type AnyElysiaCustomStatusResponse = ElysiaCustomStatusResponse<any, any, any>
+
+type MacroResolveLike = MaybeArray<
+	(
+		...v: any
+	) => MaybePromise<
+		Record<keyof any, unknown> | void | AnyElysiaCustomStatusResponse
+	>
+>
+
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
@@ -795,31 +803,11 @@ export type MacroToContext<
 				[key in keyof SelectedMacro as MacroFn[key] extends (
 					...v: any[]
 				) => {
-					resolve: MaybeArray<
-						(
-							...v: any
-						) => MaybePromise<
-							| Record<keyof any, unknown>
-							| void
-							| ElysiaCustomStatusResponse<any, any, any>
-						>
-					>
+					resolve: MacroResolveLike
 				}
 					? key
 					: MacroFn[key] extends {
-								resolve: MaybeArray<
-									(
-										...v: any
-									) => MaybePromise<
-										| Record<keyof any, unknown>
-										| void
-										| ElysiaCustomStatusResponse<
-												any,
-												any,
-												any
-										  >
-									>
-								>
+								resolve: MacroResolveLike
 						  }
 						? true extends SelectedMacro[key]
 							? key
@@ -828,12 +816,9 @@ export type MacroToContext<
 					// @ts-expect-error type is checked in key mapping
 					Awaited<ReturnTypeIfPossible<MacroFn[key]>['resolve']>
 				>
-		  } extends infer A extends Record<RecordKey, unknown>
+		  } extends infer A extends Record<RecordKey, any>
 		? IsNever<A[keyof A]> extends false
-			? Exclude<
-					Awaited<A[keyof A]>,
-					ElysiaCustomStatusResponse<any, any, any> | void
-				>
+			? Exclude<Awaited<A[keyof A]>, AnyElysiaCustomStatusResponse | void>
 			: {}
 		: {}
 
@@ -923,7 +908,7 @@ export type MapResponse<
 	Path extends string | undefined = undefined
 > = (
 	context: Context<
-		Omit<Route, 'response'> & {},
+		Omit<Route, 'response'>,
 		Singleton & {
 			derive: {
 				response: {} extends Route['response']
@@ -1214,10 +1199,6 @@ export type ErrorHandler<
 		)
 ) => any | Promise<any>
 
-export type Isolate<T> = {
-	[P in keyof T]: T[P]
-}
-
 export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
 	/**
 	 * Pass `true` to hide route from OpenAPI/swagger document
@@ -1238,11 +1219,8 @@ export type ResolveHandler<
 	in out Singleton extends SingletonBase,
 	Derivative extends
 		| Record<string, unknown>
-		| ElysiaCustomStatusResponse<any, any, any>
-		| void =
-		| Record<string, unknown>
-		| ElysiaCustomStatusResponse<any, any, any>
-		| void
+		| AnyElysiaCustomStatusResponse
+		| void = Record<string, unknown> | AnyElysiaCustomStatusResponse | void
 > = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
 
 type AnyContextFn = (context?: any) => any
@@ -1306,13 +1284,13 @@ export type LocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
-	Errors extends Record<string, Error>,
+	Errors extends { [key in string]: Error },
 	Macro extends BaseMacro,
 	MacroKey extends keyof any,
-	Parser extends string = ''
+	Parser extends keyof any = ''
 > =
 	// Kind of an inference hack, I have no idea why it work either
-	(LocalSchema extends any ? LocalSchema : Isolate<LocalSchema>) &
+	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) &
 		Macro &
 		NoInfer<
 			{} extends Macro
@@ -1445,9 +1423,8 @@ export type BaseMacroFn<
 		resolve: {}
 	},
 	in out Errors extends Record<string, Error> = {}
-> = Record<
-	keyof any,
-	(...a: any) => void | {
+> = {
+	[K in keyof any]: (...a: any) => void | {
 		onParse?(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
 		onParse?(
 			options: MacroOptions,
@@ -1502,7 +1479,7 @@ export type BaseMacroFn<
 			fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 		): unknown
 	}
->
+}
 
 export type HookMacroFn<
 	in out TypedRoute extends RouteSchema = {},
@@ -1513,33 +1490,37 @@ export type HookMacroFn<
 		resolve: {}
 	},
 	in out Errors extends Record<string, Error> = {}
-> = Record<
-	keyof any,
-	| {
-			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-			afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-			error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-			mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
-			afterResponse?: MaybeArray<
-				AfterResponseHandler<TypedRoute, Singleton>
-			>
-			resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-	  }
-	| ((...a: any) => {
-			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-			afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-			error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-			mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
-			afterResponse?: MaybeArray<
-				AfterResponseHandler<TypedRoute, Singleton>
-			>
-			resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-	  } | void)
->
+> = {
+	[K in keyof any]:
+		| {
+				parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+				transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+				beforeHandle?: MaybeArray<
+					OptionalHandler<TypedRoute, Singleton>
+				>
+				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+				afterResponse?: MaybeArray<
+					AfterResponseHandler<TypedRoute, Singleton>
+				>
+				resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+		  }
+		| ((...a: any) => {
+				parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+				transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+				beforeHandle?: MaybeArray<
+					OptionalHandler<TypedRoute, Singleton>
+				>
+				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+				afterResponse?: MaybeArray<
+					AfterResponseHandler<TypedRoute, Singleton>
+				>
+				resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+		  } | void)
+}
 
 export type MacroToProperty<
 	in out T extends BaseMacroFn | HookMacroFn<any, any, any>
@@ -1665,10 +1646,7 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 		(Schema['response'] extends { 200: any }
 			? {}
 			: {
-					200: Exclude<
-						Handle,
-						ElysiaCustomStatusResponse<any, any, any>
-					>
+					200: Exclude<Handle, AnyElysiaCustomStatusResponse>
 				}) &
 			ExtractErrorFromHandle<Handle> &
 			({} extends Schema['response'] ? {} : Schema['response']) &
@@ -1691,8 +1669,8 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 type ExtractErrorFromHandle<Handle> = {
 	[ErrorResponse in Extract<
 		Handle,
-		ElysiaCustomStatusResponse<any, any, any>
-	> as ErrorResponse extends ElysiaCustomStatusResponse<any, any, any>
+		AnyElysiaCustomStatusResponse
+	> as ErrorResponse extends AnyElysiaCustomStatusResponse
 		? ErrorResponse['code']
 		: never]: ErrorResponse['response']
 }
@@ -1774,11 +1752,7 @@ export type GuardSchemaType = 'override' | 'standalone'
 // Exclude return error()
 export type ExcludeElysiaResponse<T> = Exclude<
 	undefined extends Awaited<T> ? Partial<Awaited<T>> : Awaited<T>,
-	ElysiaCustomStatusResponse<any, any, any>
->
-
-type B = ExcludeElysiaResponse<
-	ElysiaCustomStatusResponse<'Unauthorized', 'Unauthorized'> | { a: 'b' }
+	AnyElysiaCustomStatusResponse
 >
 
 export type InferContext<
@@ -1838,10 +1812,9 @@ export type ResolveMacroContext<
 		[K in keyof Macro]-?: undefined extends Macro[K]
 			? never
 			: K extends keyof MacroFn
-				? ReturnType<MacroFn[K]> extends infer A extends Record<
-						RecordKey,
-						unknown
-					>
+				? ReturnType<MacroFn[K]> extends infer A extends {
+						[K in RecordKey]: any
+					}
 					? A
 					: never
 				: never

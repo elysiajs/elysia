@@ -9,7 +9,6 @@ import {
 	DocumentDecoration,
 	ErrorHandler,
 	InputSchema,
-	Isolate,
 	MapResponse,
 	MaybeArray,
 	MaybePromise,
@@ -139,7 +138,7 @@ export type WSLocalHook<
 	Singleton extends SingletonBase,
 	Macro extends BaseMacro,
 	MacroKey extends keyof any
-> = (LocalSchema extends {} ? LocalSchema : Isolate<LocalSchema>) &
+> = (LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) &
 	Macro &
 	NoInfer<{
 		[K in Exclude<keyof Macro, MacroKey | WSLocalHookKey>]: never

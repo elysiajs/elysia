@@ -26,11 +26,11 @@ export type ElysiaErrors =
 	| InvalidCookieSignature
 
 export class ElysiaCustomStatusResponse<
-	const Code extends number | keyof StatusMap,
-	const T = Code extends keyof InvertedStatusMap
+	in out const Code extends number | keyof StatusMap,
+	in out const T = Code extends keyof InvertedStatusMap
 		? InvertedStatusMap[Code]
 		: Code,
-	const Status extends Code extends keyof StatusMap
+	in out const Status extends Code extends keyof StatusMap
 		? StatusMap[Code]
 		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
 > {

@@ -175,30 +175,29 @@ export type Context<
 		response?: never extends keyof Route['response']
 			? unknown
 			: Route['response'][keyof Route['response']]
-	} & ({} extends Route['response']
-		? {
-				error: typeof error
-			}
-		: {
-				error: <
-					const Code extends
-						| keyof Route['response']
-						| InvertedStatusMap[Extract<
-								InvertedStatusMapKey,
-								keyof Route['response']
-						  >],
-					const T extends Code extends keyof Route['response']
-						? Route['response'][Code]
-						: Code extends keyof StatusMap
-							? // @ts-ignore StatusMap[Code] always valid because Code generic check
-								Route['response'][StatusMap[Code]]
-							: never
-				>(
-					code: Code,
-					response: T
-					// @ts-ignore trust me bro
-				) => ElysiaCustomStatusResponse<Code, T>
-			}) &
+
+			error: ({} extends Route['response']
+				? typeof error
+				: <
+							const Code extends
+								| keyof Route['response']
+								| InvertedStatusMap[Extract<
+										InvertedStatusMapKey,
+										keyof Route['response']
+								  >],
+							const T extends Code extends keyof Route['response']
+								? Route['response'][Code]
+								: Code extends keyof StatusMap
+									? // @ts-ignore StatusMap[Code] always valid because Code generic check
+										Route['response'][StatusMap[Code]]
+									: never
+						>(
+							code: Code,
+							response: T
+							// @ts-ignore trust me bro
+						) => ElysiaCustomStatusResponse<Code, T>
+					)
+	} &
 		Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']

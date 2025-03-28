@@ -2896,7 +2896,7 @@ export default class Elysia<
 			Definitions['error'],
 			Metadata['macro'],
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>,
 		run: (
 			group: Elysia<
@@ -3070,7 +3070,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'] | 'as' | 'schema',
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Or<
 		GuardSchemaType extends GuardType ? true : false,
@@ -3258,7 +3258,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -3355,7 +3355,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>,
 		run: (
 			group: Elysia<
@@ -4352,23 +4352,25 @@ export default class Elysia<
 		const LocalSchema extends InputSchema<
 			keyof Definitions['typebox'] & string
 		>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				LocalSchema,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends PrettifySchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				UnwrapRoute<
+					LocalSchema,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
@@ -4392,7 +4394,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -4461,7 +4463,7 @@ export default class Elysia<
 		>,
 		const Macro extends Metadata['macro'],
 		const Handle extends InlineHandler<
-			Schema,
+			NoInfer<Schema>,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
@@ -4485,7 +4487,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -4573,7 +4575,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -4661,7 +4663,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -4749,7 +4751,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -4837,7 +4839,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -4925,7 +4927,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -5013,7 +5015,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -5101,7 +5103,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		>
 	): Elysia<
 		BasePath,
@@ -5195,7 +5197,7 @@ export default class Elysia<
 			Definitions['error'],
 			Macro,
 			keyof Metadata['macro'],
-			keyof Metadata['parser'] & string
+			keyof Metadata['parser']
 		> & {
 			config: {
 				allowMeta?: boolean
