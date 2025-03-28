@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { t, Elysia, RouteSchema, Cookie, error } from '../../src'
+import { t, Elysia, RouteSchema, Cookie, error, file } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -1346,7 +1346,7 @@ app.get('/', ({ set }) => {
 	const child = new Elysia().get(
 		'/',
 		() => {
-			return Bun.file('test/kyuukurarin.mp4')
+			return file('test/kyuukurarin.mp4')
 		},
 		{
 			response: t.File()
@@ -1360,7 +1360,7 @@ app.get('/', ({ set }) => {
 		'/',
 		() => {
 			return {
-				a: Bun.file('test/kyuukurarin.mp4')
+				a: file('test/kyuukurarin.mp4')
 			}
 		},
 		{
