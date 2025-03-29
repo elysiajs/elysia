@@ -1,7 +1,7 @@
 import { Elysia, t } from '../../src'
 import { describe, it, expect } from 'bun:test'
 
-describe('Coercion - Numberic -> Number', () => {
+describe('Coercion - Numeric -> Number', () => {
 	it('work', async () => {
 		const app = new Elysia().get(
 			'/:entityType',

@@ -1,6 +1,10 @@
 import type { TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
-import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
+import type {
+	TypeCheck,
+	ValueError,
+	ValueErrorIterator
+} from '@sinclair/typebox/compiler'
 
 import { StatusMap, InvertedStatusMap } from './utils'
 import type { ElysiaTypeCheck } from './schema'
@@ -26,11 +30,11 @@ export type ElysiaErrors =
 	| InvalidCookieSignature
 
 export class ElysiaCustomStatusResponse<
-	in out const Code extends number | keyof StatusMap,
-	in out const T = Code extends keyof InvertedStatusMap
+	const in out Code extends number | keyof StatusMap,
+	const in out T = Code extends keyof InvertedStatusMap
 		? InvertedStatusMap[Code]
 		: Code,
-	in out const Status extends Code extends keyof StatusMap
+	const in out Status extends Code extends keyof StatusMap
 		? StatusMap[Code]
 		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
 > {
@@ -177,7 +181,8 @@ export class ValidationError extends Error {
 	constructor(
 		public type: string,
 		public validator: TSchema | TypeCheck<any> | ElysiaTypeCheck<any>,
-		public value: unknown
+		public value: unknown,
+		errors?: ValueErrorIterator
 	) {
 		if (
 			value &&
@@ -186,11 +191,13 @@ export class ValidationError extends Error {
 		)
 			value = value.response
 
-		const error = isProduction
-			? undefined
-			: 'Errors' in validator
-				? validator.Errors(value).First()
-				: Value.Errors(validator, value).First()
+		const error =
+			errors?.First() ||
+			(isProduction
+				? undefined
+				: 'Errors' in validator
+					? validator.Errors(value).First()
+					: Value.Errors(validator, value).First())
 
 		const customError =
 			error?.schema?.message || error?.schema?.error !== undefined

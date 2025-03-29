@@ -209,17 +209,21 @@ const composeValidationFactory = ({
 	normalize = false,
 	validator,
 	encodeSchema = false,
-	accelerators
+	accelerators,
+	isStaticResponse = false
 }: {
 	injectResponse?: string
 	normalize?: ElysiaConfig<''>['normalize']
 	validator: SchemaValidator
 	encodeSchema?: boolean
 	accelerators?: ReturnType<typeof createAccelerators>
+	isStaticResponse?: boolean
 }) => ({
 	composeValidation: (type: string, value = `c.${type}`) =>
 		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
 	composeResponseValidation: (name = 'r') => {
+		if (isStaticResponse) return ''
+
 		let code = injectResponse + '\n'
 
 		if (accelerators) code += `let accelerate\n`
@@ -534,7 +538,8 @@ export const composeHandler = ({
 			normalize,
 			validator,
 			encodeSchema,
-			accelerators
+			accelerators,
+			isStaticResponse: handler instanceof Response
 		})
 
 	if (hasHeaders) fnLiteral += adapter.headers

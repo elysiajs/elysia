@@ -37,6 +37,7 @@ import type { ElysiaAdapter } from './adapter'
 import type { AnyWSLocalHook, WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
 import { ElysiaTypeCheck } from './schema'
+import { ElysiaFormData } from './utils'
 
 type PartialServe = Partial<Serve>
 
@@ -1632,12 +1633,16 @@ export type EmptyRouteSchema = {
 
 type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 	(Schema['response'] extends { 200: any }
-		? {}
+		? {
+				200: Replace<Schema['response'][200], ElysiaFile | Blob, File>
+			}
 		: {
 				200: Exclude<Handle, AnyElysiaCustomStatusResponse>
 			}) &
 		ExtractErrorFromHandle<Handle> &
-		({} extends Schema['response'] ? {} : Schema['response']) &
+		({} extends Omit<Schema['response'], 200>
+			? {}
+			: Omit<Schema['response'], 200>) &
 		(EmptyRouteSchema extends Schema
 			? {}
 			: {

@@ -7,11 +7,15 @@ Feature:
 - add `noValidate`
 - support Ref inside inline schema
 - `standalone Validator`
+- `t.Form`
 
 Improvement:
 - reduce redundant type check when using Encode
 - optimize isAsync
 - unwrap Definition['typebox'] by default to prevent unnecessary UnwrapTypeModule call
+- Elysia.form can now be type check
+- refactor type-system
+- using aot compilation to check for custom Elysia type, eg. Numeric
 
 Breaking Change:
 - remove `as('plugin')` in favor of `as('scoped')`

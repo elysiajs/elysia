@@ -33,7 +33,7 @@ export const createNativeStaticHandler = (
 		!hooks.afterHandle?.length
 	) {
 		if (!response.headers.has('content-type'))
-			response.headers.append('content-type', 'text/plain;charset=utf-8')
+			response.headers.append('content-type', 'text/plain')
 
 		return response.clone.bind(response)
 	}

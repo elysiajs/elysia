@@ -1,13 +1,10 @@
-import { Elysia, file, t } from '../src'
+import { Elysia, t, file, form } from '../src'
+import { req } from '../test/utils'
 
 const app = new Elysia()
-	.post(
-		'/',
-		({ body }) => Bun.file('a'),
-		{
-			response: t.File({
-				a: t.File()
-			})
-		}
-	)
+	.get('/', 'a', {
+		response: t.String()
+	})
 	.listen(3000)
+
+// app._routes.post.response

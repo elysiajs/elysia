@@ -1,5 +1,3 @@
-import type { BunFile } from 'bun'
-
 import type { Sucrose } from './sucrose'
 import type { TraceHandler } from './trace'
 
@@ -23,6 +21,7 @@ import type {
 	SchemaValidator,
 	AnyLocalHook
 } from './types'
+import { ElysiaFile } from './universal/file'
 
 export const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -275,18 +274,19 @@ export const mergeHook = (
 }
 
 const isBun = typeof Bun !== 'undefined'
-const hasHash = isBun && typeof Bun.hash === 'function'
+const hasBunHash = isBun && typeof Bun.hash === 'function'
 
 // https://stackoverflow.com/a/52171480
-export const checksum = (s: string) => {
-	if (hasHash) return Bun.hash(s) as number
+export const checksum = hasBunHash
+	? (s: string) => Bun.hash(s) as number
+	: (s: string) => {
+			let h = 9
 
-	let h = 9
+			for (let i = 0; i < s.length; )
+				h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
 
-	for (let i = 0; i < s.length; ) h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
-
-	return (h = h ^ (h >>> 9))
-}
+			return (h = h ^ (h >>> 9))
+		}
 
 export const injectChecksum = (
 	checksum: number | undefined,
@@ -863,33 +863,49 @@ export type redirect = typeof redirect
 export const ELYSIA_FORM_DATA = Symbol('ElysiaFormData')
 export type ELYSIA_FORM_DATA = typeof ELYSIA_FORM_DATA
 
-type ElysiaFormData<T extends Record<string | number, unknown>> = FormData & {
-	[ELYSIA_FORM_DATA]: Replace<T, BunFile, File>
+export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {
+	[ELYSIA_FORM_DATA]: Replace<T, Blob | ElysiaFile, File>
 }
 
 export const ELYSIA_REQUEST_ID = Symbol('ElysiaRequestId')
 export type ELYSIA_REQUEST_ID = typeof ELYSIA_REQUEST_ID
 
-export const form = <const T extends Record<string | number, unknown>>(
-	items: T
+export const form = <const T extends Record<keyof any, unknown>>(
+	items?: T
 ): ElysiaFormData<T> => {
 	const formData = new FormData()
+	// @ts-ignore
+	formData[ELYSIA_FORM_DATA] = {}
 
-	for (const [key, value] of Object.entries(items)) {
-		if (Array.isArray(value)) {
-			for (const v of value) {
-				if (value instanceof File)
-					formData.append(key, value, value.name)
+	if (items)
+		for (const [key, value] of Object.entries(items)) {
+			if (Array.isArray(value)) {
+				// @ts-expect-error
+				formData[ELYSIA_FORM_DATA][key] = []
 
-				formData.append(key, v)
+				for (const v of value) {
+					if (value instanceof File)
+						formData.append(key, value, value.name)
+					else if (value instanceof ElysiaFile)
+						// @ts-expect-error
+						formData.append(key, value.value, value.value?.name)
+					else formData.append(key, value)
+
+					// @ts-expect-error
+					formData[ELYSIA_FORM_DATA][key].push(value)
+				}
+
+				continue
 			}
 
-			continue
+			if (value instanceof File) formData.append(key, value, value.name)
+			else if (value instanceof ElysiaFile)
+				// @ts-expect-error
+				formData.append(key, value.value, value.value?.name)
+			else formData.append(key, value)
+			// @ts-expect-error
+			formData[ELYSIA_FORM_DATA][key] = value
 		}
-
-		if (value instanceof File) formData.append(key, value, value.name)
-		formData.append(key, value)
-	}
 
 	return formData as any
 }

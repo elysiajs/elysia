@@ -1,5 +1,5 @@
-import { TypeCompiler } from '../dist/type-system'
 import { Elysia, t } from '../src'
+import { TypeCompiler } from '@sinclair/typebox/compiler'
 
 const model = t.Object({
 	id: t.Number(),
