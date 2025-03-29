@@ -5259,11 +5259,7 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
-		const Macro extends Metadata['macro'],
-		const MacroContext extends MacroToContext<
-			Metadata['macroFn'],
-			NoInfer<Macro>
-		>
+		const Macro extends Metadata['macro']
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -5273,7 +5269,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroContext
+					MacroToContext<Metadata['macroFn'], Macro>
 			},
 			Macro
 		>
@@ -5295,7 +5291,7 @@ export default class Elysia<
 						headers: Schema['headers']
 						response: {} extends Schema['response']
 							? unknown
-							: Schema['response'] extends Record<200, unknown>
+							: Schema['response'] extends { [200]: any }
 								? Schema['response'][200]
 								: unknown
 					}

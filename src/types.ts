@@ -851,10 +851,9 @@ export type InlineHandler<
 			  >)
 	| ({} extends Route['response']
 			? string | number | boolean | object
-			:
-					| (Route['response'] extends { 200: any }
-							? Route['response'][200]
-							: string | number | boolean | object))
+			: Route['response'] extends { 200: any }
+				? Route['response'][200]
+				: string | number | boolean | object)
 	| ElysiaCustomStatusResponse<any, any>
 
 export type OptionalHandler<
@@ -1240,8 +1239,7 @@ export type LocalHook<
 	Parser extends keyof any = ''
 > = Macro &
 	// Kind of an inference hack, I have no idea why it work either
-	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) &
-	NoInfer<{
+	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) & {
 		detail?: DocumentDecoration
 		/**
 		 * Short for 'Content-Type'
@@ -1282,7 +1280,7 @@ export type LocalHook<
 		 */
 		error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
 		tags?: DocumentDecoration['tags']
-	}>
+	}
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 

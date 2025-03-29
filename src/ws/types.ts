@@ -29,86 +29,87 @@ type TypedWebSocketMethod =
 export type FlattenResponse<Response extends RouteSchema['response']> =
 	{} extends Response ? unknown : Response[keyof Response]
 
-type TypedWebSocketHandler<Context, Route extends RouteSchema = {}> = Prettify<
-	Omit<WebSocketHandler<Context>, TypedWebSocketMethod> & {
-		open?(
-			ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
-		): MaybePromise<FlattenResponse<Route['response']> | void>
-		message?(
-			ws: ElysiaWS<Context, Route>,
-			message: Route['body']
-		): MaybePromise<
-			| FlattenResponse<Route['response']>
-			| void
-			| Generator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-			| AsyncGenerator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-		>
-		drain?(
-			ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
-		): MaybePromise<
-			| FlattenResponse<Route['response']>
-			| void
-			| Generator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-			| AsyncGenerator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-		>
-		close?(
-			ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>,
-			code: number,
-			reason: string
-		): MaybePromise<
-			| FlattenResponse<Route['response']>
-			| void
-			| Generator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-			| AsyncGenerator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-		>
-		ping?(
-			message: Route['body']
-		): MaybePromise<
-			| FlattenResponse<Route['response']>
-			| void
-			| Generator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-			| AsyncGenerator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-		>
-		pong?(
-			message: Route['body']
-		): MaybePromise<
-			| FlattenResponse<Route['response']>
-			| void
-			| Generator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-			| AsyncGenerator<
-					FlattenResponse<Route['response']>,
-					void | FlattenResponse<Route['response']>
-			  >
-		>
-	}
->
+interface TypedWebSocketHandler<
+	in out Context,
+	in out Route extends RouteSchema = {}
+> extends Omit<WebSocketHandler<Context>, TypedWebSocketMethod> {
+	open?(
+		ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
+	): MaybePromise<FlattenResponse<Route['response']> | void>
+	message?(
+		ws: ElysiaWS<Context, Route>,
+		message: Route['body']
+	): MaybePromise<
+		| FlattenResponse<Route['response']>
+		| void
+		| Generator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+		| AsyncGenerator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+	>
+	drain?(
+		ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
+	): MaybePromise<
+		| FlattenResponse<Route['response']>
+		| void
+		| Generator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+		| AsyncGenerator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+	>
+	close?(
+		ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>,
+		code: number,
+		reason: string
+	): MaybePromise<
+		| FlattenResponse<Route['response']>
+		| void
+		| Generator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+		| AsyncGenerator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+	>
+	ping?(
+		message: Route['body']
+	): MaybePromise<
+		| FlattenResponse<Route['response']>
+		| void
+		| Generator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+		| AsyncGenerator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+	>
+	pong?(
+		message: Route['body']
+	): MaybePromise<
+		| FlattenResponse<Route['response']>
+		| void
+		| Generator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+		| AsyncGenerator<
+				FlattenResponse<Route['response']>,
+				void | FlattenResponse<Route['response']>
+		  >
+	>
+}
 
 export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
 	ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: unknown }>,
@@ -136,8 +137,8 @@ export type WSLocalHook<
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Macro extends BaseMacro
-> = (LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) &
-	Macro & {
+> = Macro &
+	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) & {
 		detail?: DocumentDecoration
 		/**
 		 * Headers to register to websocket before `upgrade`
