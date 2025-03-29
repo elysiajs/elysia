@@ -1617,74 +1617,17 @@ type ExtractErrorFromHandle<Handle> = {
 
 export type MergeElysiaInstances<
 	Instances extends AnyElysia[] = [],
-	Prefix extends string = '',
-	Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
-	Definitions extends DefinitionBase = {
-		typebox: {}
-		type: {}
-		error: {}
-	},
-	Metadata extends MetadataBase = {
-		schema: {}
-		standaloneSchema: {}
-		macro: {}
-		macroFn: {}
-		parser: {}
-		extension: {}
-	},
-	Ephemeral extends EphemeralType = {
-		derive: {}
-		resolve: {}
-		schema: {}
-		standaloneSchema: {}
-	},
-	Volatile extends EphemeralType = {
-		derive: {}
-		resolve: {}
-		schema: {}
-		standaloneSchema: {}
-	},
-	Routes extends RouteBase = {}
-> = Instances extends [
-	infer Current extends AnyElysia,
-	...infer Rest extends AnyElysia[]
-]
-	? MergeElysiaInstances<
-			Rest,
-			Prefix,
-			Singleton & Current['_types']['Singleton'],
-			{
-				error: Prettify<
-					Definitions['error'] &
-						Current['_types']['Definitions']['error']
-				>
-				typebox: Prettify<
-					Definitions['typebox'] &
-						Current['_types']['Definitions']['typebox']
-				>
-			},
-			Metadata & Current['_types']['Metadata'],
-			Ephemeral,
-			Volatile & Current['_ephemeral'],
-			Routes &
-				(Prefix extends ``
-					? Current['_routes']
-					: AddPrefix<Prefix, Current['_routes']>)
-		>
-	: Elysia<
-			Prefix,
-			Prettify2<Singleton>,
-			Definitions,
-			Prettify2<Metadata>,
-			Routes,
-			Ephemeral,
-			Prettify2<Volatile>
-		>
+	Prefix extends string = ''
+> = Elysia<
+	Prefix,
+	// @ts-expect-error
+	UnionToIntersect<Instances[number]['_types']['Singleton']>,
+	UnionToIntersect<Instances[number]['_types']['Definitions']>,
+	UnionToIntersect<Instances[number]['_types']['Metadata']>,
+	UnionToIntersect<Instances[number]['_routes']>,
+	UnionToIntersect<Instances[number]['_ephemeral']>,
+	UnionToIntersect<Instances[number]['_volatile']>
+>
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
 export type GuardSchemaType = 'override' | 'standalone'

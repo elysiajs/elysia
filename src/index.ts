@@ -3692,7 +3692,7 @@ export default class Elysia<
 	 **/
 	use<const Instances extends AnyElysia[]>(
 		instance: MaybePromise<Instances>
-	): MergeElysiaInstances<Instances>
+	): MergeElysiaInstances<Instances, BasePath>
 
 	/**
 	 * Import fn
