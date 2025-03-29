@@ -3,7 +3,6 @@ import { WebSocketHandler } from './bun'
 
 import type { Context } from '../context'
 import {
-	AfterHandler,
 	AfterResponseHandler,
 	BaseMacro,
 	DocumentDecoration,
@@ -157,7 +156,7 @@ export type WSLocalHook<
 		/**
 		 * Execute after main handler
 		 */
-		afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
+		afterHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
 		/**
 		 * Execute after main handler
 		 */

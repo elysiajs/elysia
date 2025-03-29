@@ -13,7 +13,6 @@ import type {
 	BodyHandler,
 	TransformHandler,
 	OptionalHandler,
-	AfterHandler,
 	MapResponse,
 	ErrorHandler,
 	Replace,
@@ -355,7 +354,7 @@ export const mergeLifeCycle = (
 		afterHandle: mergeObjectArray(
 			a.afterHandle,
 			injectChecksum(checksum, b?.afterHandle)
-		) as HookContainer<AfterHandler<any, any>>[],
+		) as HookContainer<OptionalHandler<any, any>>[],
 		mapResponse: mergeObjectArray(
 			a.mapResponse,
 			injectChecksum(checksum, b?.mapResponse)

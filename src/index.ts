@@ -105,7 +105,6 @@ import type {
 	PreHandler,
 	BodyHandler,
 	OptionalHandler,
-	AfterHandler,
 	ErrorHandler,
 	LifeCycleStore,
 	MaybePromise,
@@ -1841,7 +1840,7 @@ export default class Elysia<
 	 */
 	onAfterHandle<const Schema extends RouteSchema>(
 		handler: MaybeArray<
-			AfterHandler<
+			OptionalHandler<
 				MergeSchema<
 					Schema,
 					MergeSchema<
@@ -1880,7 +1879,7 @@ export default class Elysia<
 	>(
 		options: { as?: LifeCycleType },
 		handler: MaybeArray<
-			AfterHandler<
+			OptionalHandler<
 				MergeSchema<
 					Schema,
 					MergeSchema<
@@ -6631,7 +6630,6 @@ export type {
 	OptionalHandler,
 	AfterResponseHandler,
 	ErrorHandler,
-	AfterHandler,
 	LifeCycleEvent,
 	LifeCycleStore,
 	LifeCycleType,

@@ -544,7 +544,7 @@ export interface LifeCycleStore {
 	parse: HookContainer<BodyHandler<any, any>>[]
 	transform: HookContainer<TransformHandler<any, any>>[]
 	beforeHandle: HookContainer<OptionalHandler<any, any>>[]
-	afterHandle: HookContainer<AfterHandler<any, any>>[]
+	afterHandle: HookContainer<OptionalHandler<any, any>>[]
 	mapResponse: HookContainer<MapResponse<any, any>>[]
 	afterResponse: HookContainer<AfterResponseHandler<any, any>>[]
 	trace: HookContainer<TraceHandler<any, any>>[]
@@ -642,11 +642,9 @@ export interface PrettifySchema<A extends RouteSchema> {
 		: Prettify<A['response']>
 }
 
-type A = keyof {}
-
 export interface MergeSchema<
-	A extends RouteSchema,
-	B extends RouteSchema,
+	in out A extends RouteSchema,
+	in out B extends RouteSchema,
 	Path extends string = ''
 > {
 	body: undefined extends A['body'] ? B['body'] : A['body']
@@ -670,8 +668,8 @@ export interface MergeSchema<
 }
 
 export interface MergeStandaloneSchema<
-	A extends RouteSchema,
-	B extends RouteSchema,
+	in out A extends RouteSchema,
+	in out B extends RouteSchema,
 	Path extends string = ''
 > {
 	body: undefined extends A['body']
@@ -778,9 +776,7 @@ export type MacroContextBlacklistKey =
 	| 'tags'
 	| keyof RouteSchema
 
-type ReturnTypeIfPossible<T> = T extends (...args: any) => any
-	? ReturnType<T>
-	: T
+type ReturnTypeIfPossible<T> = T extends AnyContextFn ? ReturnType<T> : T
 
 type AnyElysiaCustomStatusResponse = ElysiaCustomStatusResponse<any, any, any>
 
@@ -792,34 +788,35 @@ type MacroResolveLike = MaybeArray<
 	>
 >
 
+type ResolveMacroPropertyLike = {
+	resolve: MacroResolveLike
+}
+
+type ResolveMacroFnLike = (...v: any[]) => ResolveMacroPropertyLike
+
+type InnerMacroToContext<A> =
+	IsNever<A[keyof A]> extends false
+		? Exclude<Awaited<A[keyof A]>, AnyElysiaCustomStatusResponse | void>
+		: {}
+
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
 	SelectedMacro extends MetadataBase['macro'] = {}
 > = {} extends SelectedMacro
 	? {}
-	: {
-				[key in keyof SelectedMacro as MacroFn[key] extends (
-					...v: any[]
-				) => {
-					resolve: MacroResolveLike
-				}
-					? key
-					: MacroFn[key] extends {
-								resolve: MacroResolveLike
-						  }
-						? true extends SelectedMacro[key]
-							? key
-							: never
-						: never]: ResolveResolutions<
-					// @ts-expect-error type is checked in key mapping
-					Awaited<ReturnTypeIfPossible<MacroFn[key]>['resolve']>
-				>
-		  } extends infer A extends Record<keyof any, any>
-		? IsNever<A[keyof A]> extends false
-			? Exclude<Awaited<A[keyof A]>, AnyElysiaCustomStatusResponse | void>
-			: {}
-		: {}
+	: InnerMacroToContext<{
+			[key in keyof SelectedMacro as MacroFn[key] extends ResolveMacroFnLike
+				? key
+				: MacroFn[key] extends ResolveMacroPropertyLike
+					? true extends SelectedMacro[key]
+						? key
+						: never
+					: never]: ResolveResolutions<
+				// @ts-expect-error type is checked in key mapping
+				ReturnTypeIfPossible<MacroFn[key]>['resolve']
+			>
+		}>
 
 type InlineHandlerResponse<Route extends RouteSchema['response']> = {
 	[Status in keyof Route]: ElysiaCustomStatusResponse<
@@ -857,8 +854,8 @@ export type InlineHandler<
 			:
 					| (Route['response'] extends { 200: any }
 							? Route['response'][200]
-							: string | number | boolean | object)
-					| InlineHandlerResponse<Route['response']>)
+							: string | number | boolean | object))
+	| ElysiaCustomStatusResponse<any, any>
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
@@ -869,28 +866,13 @@ export type OptionalHandler<
 		resolve: {}
 	},
 	Path extends string | undefined = undefined
-> =
-	Handler<Route, Singleton, Path> extends (
-		context: infer Context
-	) => infer Returned
-		? (context: Context) => Returned | MaybePromise<void>
-		: never
-
-export type AfterHandler<
-	in out Route extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
-	Path extends string | undefined = undefined
-> =
-	Handler<Route, Singleton, Path> extends (
-		context: infer Context
-	) => infer Returned
-		? (context: Context) => Returned | MaybePromise<void>
-		: never
+> = (
+	context: Context<Route, Singleton, Path>
+) => MaybePromise<
+	{} extends Route['response']
+		? unknown
+		: Route['response'][keyof Route['response']] | void
+>
 
 export type MapResponse<
 	in out Route extends RouteSchema = {},
@@ -1063,13 +1045,11 @@ export type ErrorHandler<
 					} & Partial<
 						Singleton['derive'] &
 							Ephemeral['derive'] &
-							Volatile['derive']
-					> &
-						Partial<
-							Singleton['derive'] &
-								Ephemeral['resolve'] &
-								Volatile['resolve']
-						>
+							Volatile['derive'] &
+							Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					>
 			  >
 			| Prettify<
 					{
@@ -1081,7 +1061,7 @@ export type ErrorHandler<
 						Ephemeral['derive'] &
 						Volatile['derive'] &
 						NeverKey<
-							Singleton['derive'] &
+							Singleton['resolve'] &
 								Ephemeral['resolve'] &
 								Volatile['resolve']
 						>
@@ -1095,13 +1075,11 @@ export type ErrorHandler<
 					} & NeverKey<
 						Singleton['derive'] &
 							Ephemeral['derive'] &
-							Volatile['derive']
-					> &
-						NeverKey<
-							Singleton['derive'] &
-								Ephemeral['resolve'] &
-								Volatile['resolve']
-						>
+							Volatile['derive'] &
+							Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					>
 			  >
 			| Prettify<
 					{
@@ -1113,7 +1091,7 @@ export type ErrorHandler<
 						Ephemeral['derive'] &
 						Volatile['derive'] &
 						NeverKey<
-							Singleton['derive'] &
+							Singleton['resolve'] &
 								Ephemeral['resolve'] &
 								Volatile['resolve']
 						>
@@ -1127,13 +1105,11 @@ export type ErrorHandler<
 					} & Partial<
 						Singleton['derive'] &
 							Ephemeral['derive'] &
-							Volatile['derive']
-					> &
-						Partial<
-							Singleton['derive'] &
-								Ephemeral['resolve'] &
-								Volatile['resolve']
-						>
+							Volatile['derive'] &
+							Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					>
 			  >
 			| Prettify<
 					{
@@ -1144,13 +1120,11 @@ export type ErrorHandler<
 					} & NeverKey<
 						Singleton['derive'] &
 							Ephemeral['derive'] &
-							Volatile['derive']
-					> &
-						NeverKey<
-							Singleton['derive'] &
-								Ephemeral['resolve'] &
-								Volatile['resolve']
-						>
+							Volatile['derive'] &
+							Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					>
 			  >
 			| Prettify<
 					{
@@ -1161,13 +1135,11 @@ export type ErrorHandler<
 					} & Partial<
 						Singleton['derive'] &
 							Ephemeral['derive'] &
-							Volatile['derive']
-					> &
-						Partial<
-							Singleton['derive'] &
-								Ephemeral['resolve'] &
-								Volatile['resolve']
-						>
+							Volatile['derive'] &
+							Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					>
 			  >
 			| Prettify<
 					{
@@ -1181,10 +1153,8 @@ export type ErrorHandler<
 						Partial<
 							Singleton['derive'] &
 								Ephemeral['derive'] &
-								Volatile['derive']
-						> &
-						Partial<
-							Singleton['derive'] &
+								Volatile['derive'] &
+								Singleton['resolve'] &
 								Ephemeral['resolve'] &
 								Volatile['resolve']
 						>
@@ -1238,7 +1208,7 @@ export type ResolveDerivativesArray<
 		: ResolveDerivativesArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type ResolveResolutions<T extends MaybeArray<Function>> =
+export type ResolveResolutions<T extends MaybeArray<unknown>> =
 	// If no macro are provided, it will be resolved as any
 	any[] extends T
 		? {}
@@ -1298,7 +1268,7 @@ export type LocalHook<
 		/**
 		 * Execute after main handler
 		 */
-		afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
+		afterHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
 		/**
 		 * Execute after main handler
 		 */
@@ -1416,11 +1386,11 @@ export type BaseMacroFn<
 		): unknown
 
 		onAfterHandle?(
-			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 		): unknown
 		onAfterHandle?(
 			options: MacroOptions,
-			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 		): unknown
 
 		onError?(
@@ -1466,7 +1436,7 @@ export type HookMacroFn<
 				beforeHandle?: MaybeArray<
 					OptionalHandler<TypedRoute, Singleton>
 				>
-				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+				afterHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 				afterResponse?: MaybeArray<
@@ -1480,7 +1450,7 @@ export type HookMacroFn<
 				beforeHandle?: MaybeArray<
 					OptionalHandler<TypedRoute, Singleton>
 				>
-				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+				afterHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 				afterResponse?: MaybeArray<
@@ -1535,10 +1505,12 @@ export interface MacroManager<
 		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 
-	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>): unknown
+	onAfterHandle(
+		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+	): unknown
 	onAfterHandle(
 		options: MacroOptions,
-		fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onError(

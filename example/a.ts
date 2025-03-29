@@ -1,18 +1,25 @@
-import { Elysia, t, form, file } from '../src'
+import { Elysia, t, form, file, error } from '../src'
 
 const app = new Elysia()
+	.macro({
+		a: {
+			resolve() {
+				return {
+					a: 'b'
+				}
+			}
+		}
+	})
 	.get(
 		'/',
-		() =>
-			form({
-				name: 'Misono Mika',
-				file: file('example/kyuukurarin.mp4')
-			}),
+		error(418, "I'm a teapot"),
 		{
-			response: t.Form({
-				name: t.String(),
-				file: t.File()
-			})
+			response: {
+				200: t.Form({
+					name: t.String(),
+					file: t.File()
+				}),
+			}
 		}
 	)
 	.listen(3000)

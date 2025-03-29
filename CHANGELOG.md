@@ -4,10 +4,10 @@ Feature:
 - add `systemRouter` config
 - `encodeSchema` now stable
 - add sucrose cache
-- add `noValidate`
+- add `Elysia.Ref` for referencing schema with autocompletion instead of `t.Ref`
 - support Ref inside inline schema
 - `standalone Validator`
-- `t.Form`
+- new validation `t.Form`, `t.NoValidate`
 
 Improvement:
 - reduce redundant type check when using Encode
