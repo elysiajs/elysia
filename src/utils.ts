@@ -871,7 +871,7 @@ export const ELYSIA_REQUEST_ID = Symbol('ElysiaRequestId')
 export type ELYSIA_REQUEST_ID = typeof ELYSIA_REQUEST_ID
 
 export const form = <const T extends Record<keyof any, unknown>>(
-	items?: T
+	items: T
 ): ElysiaFormData<T> => {
 	const formData = new FormData()
 	// @ts-ignore

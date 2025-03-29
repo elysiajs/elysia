@@ -134,22 +134,6 @@ export type TForm<T extends TProperties = TProperties> = TUnsafe<
 >
 
 declare module '@sinclair/typebox' {
-	interface JavaScriptTypeBuilder {
-		BooleanString: typeof ElysiaType.BooleanString
-		ObjectString: typeof ElysiaType.ObjectString
-		ArrayString: typeof ElysiaType.ArrayString
-		Numeric: typeof ElysiaType.Numeric
-		Integer: typeof ElysiaType.Integer
-		File: typeof ElysiaType.File
-		Files: typeof ElysiaType.Files
-		Nullable: typeof ElysiaType.Nullable
-		MaybeEmpty: typeof ElysiaType.MaybeEmpty
-		Cookie: typeof ElysiaType.Cookie
-		UnionEnum: typeof ElysiaType.UnionEnum
-		NoValidate: typeof ElysiaType.NoValidate
-		Form: typeof ElysiaType.Form
-	}
-
 	interface SchemaOptions {
 		error?:
 			| string

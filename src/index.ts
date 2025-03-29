@@ -151,7 +151,8 @@ import type {
 	GuardSchemaType,
 	Or,
 	PrettifySchema,
-	MergeStandaloneSchema
+	MergeStandaloneSchema,
+	IsNever
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -4364,14 +4365,15 @@ export default class Elysia<
 			Ephemeral['standaloneSchema'] &
 			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+			resolve: Ephemeral['resolve'] &
+				Volatile['resolve'] &
+				MacroToContext<Metadata['macroFn'], Macro>
+		},
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] &
-					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
-			},
+			Decorator,
 			JoinPath<BasePath, Path>
 		>
 	>(
@@ -4380,12 +4382,7 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] &
-					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
-			},
+			Decorator,
 			Definitions['error'],
 			Macro,
 			keyof Metadata['parser']
@@ -4401,7 +4398,7 @@ export default class Elysia<
 				{
 					get: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -4454,14 +4451,15 @@ export default class Elysia<
 			Ephemeral['standaloneSchema'] &
 			Volatile['standaloneSchema'],
 		const Macro extends Metadata['macro'],
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+			resolve: Ephemeral['resolve'] &
+				Volatile['resolve'] &
+				MacroToContext<Metadata['macroFn'], Macro>
+		},
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] &
-					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
-			},
+			Decorator,
 			JoinPath<BasePath, Path>
 		>
 	>(
@@ -4470,12 +4468,7 @@ export default class Elysia<
 		hook?: LocalHook<
 			LocalSchema,
 			Schema,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] &
-					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
-			},
+			Decorator,
 			Definitions['error'],
 			Macro,
 			keyof Metadata['parser']
@@ -4491,7 +4484,7 @@ export default class Elysia<
 				{
 					post: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -4581,7 +4574,7 @@ export default class Elysia<
 				{
 					put: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -4671,7 +4664,7 @@ export default class Elysia<
 				{
 					patch: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -4761,7 +4754,7 @@ export default class Elysia<
 				{
 					delete: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -4851,7 +4844,7 @@ export default class Elysia<
 				{
 					options: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -4941,7 +4934,7 @@ export default class Elysia<
 				{
 					[method in string]: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -5031,7 +5024,7 @@ export default class Elysia<
 				{
 					head: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -5121,7 +5114,7 @@ export default class Elysia<
 				{
 					connect: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -5217,7 +5210,7 @@ export default class Elysia<
 				{
 					[method in Method]: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']
@@ -5296,7 +5289,7 @@ export default class Elysia<
 				{
 					subscribe: {
 						body: Schema['body']
-						params: undefined extends Schema['params']
+						params: IsNever<keyof Schema['params']> extends true
 							? ResolvePath<Path>
 							: Schema['params']
 						query: Schema['query']

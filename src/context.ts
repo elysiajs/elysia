@@ -12,7 +12,8 @@ import type {
 	Prettify,
 	ResolvePath,
 	SingletonBase,
-	HTTPHeaders
+	HTTPHeaders,
+	IsNever
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
@@ -172,9 +173,10 @@ export type Context<
 		route: string
 		request: Request
 		store: Singleton['store']
-		response?: never extends keyof Route['response']
-			? unknown
-			: Route['response'][keyof Route['response']]
+
+		// response?: IsNever<keyof Route['response']> extends true
+		// 	? unknown
+		// 	: Route['response'][keyof Route['response']]
 
 		error: {} extends Route['response']
 			? typeof error

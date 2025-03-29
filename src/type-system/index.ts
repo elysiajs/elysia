@@ -16,7 +16,8 @@ import type {
 	TProperties,
 	TSchema,
 	TString,
-	NumberOptions
+	NumberOptions,
+	JavaScriptTypeBuilder
 } from '@sinclair/typebox'
 
 import './format'
@@ -35,7 +36,7 @@ import {
 import { ELYSIA_FORM_DATA, form } from '../utils'
 import { ValidationError } from '../error'
 
-const t = Object.assign({}, Type)
+const t = Object.assign({}, Type) as JavaScriptTypeBuilder & typeof ElysiaType
 
 createType<TUnionEnum>(
 	'UnionEnum',
@@ -442,7 +443,7 @@ export const ElysiaType = {
 			})
 		])
 	}
-} as const
+}
 
 t.BooleanString = ElysiaType.BooleanString
 t.ObjectString = ElysiaType.ObjectString

@@ -6,10 +6,7 @@ import type { Serve } from './universal/server'
 import {
 	TSchema,
 	TObject,
-	Static,
 	TAnySchema,
-	TNull,
-	TUndefined,
 	StaticDecode,
 	OptionalKind,
 	TModule,
@@ -37,7 +34,6 @@ import type { ElysiaAdapter } from './adapter'
 import type { AnyWSLocalHook, WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
 import { ElysiaTypeCheck } from './schema'
-import { ElysiaFormData } from './utils'
 
 type PartialServe = Partial<Serve>
 
@@ -252,10 +248,8 @@ export type Prettify<T> = {
 	[K in keyof T]: T[K]
 } & {}
 
-type RecordKey = string | number | symbol
-
 export type Prettify2<T> = {
-	[K in keyof T]: T extends { [key in RecordKey]: unknown }
+	[K in keyof T]: T extends { [key in keyof any]: unknown }
 		? Prettify<T[K]>
 		: T[K]
 } & {}
@@ -269,8 +263,8 @@ export type NeverKey<T> = {
 } & {}
 
 type IsBothObject<A, B> =
-	A extends Record<RecordKey, any>
-		? B extends Record<RecordKey, any>
+	A extends Record<keyof any, any>
+		? B extends Record<keyof any, any>
 			? IsClass<A> extends false
 				? IsClass<B> extends false
 					? true
@@ -648,6 +642,8 @@ export interface PrettifySchema<A extends RouteSchema> {
 		: Prettify<A['response']>
 }
 
+type A = keyof {}
+
 export interface MergeSchema<
 	A extends RouteSchema,
 	B extends RouteSchema,
@@ -819,11 +815,19 @@ export type MacroToContext<
 					// @ts-expect-error type is checked in key mapping
 					Awaited<ReturnTypeIfPossible<MacroFn[key]>['resolve']>
 				>
-		  } extends infer A extends Record<RecordKey, any>
+		  } extends infer A extends Record<keyof any, any>
 		? IsNever<A[keyof A]> extends false
 			? Exclude<Awaited<A[keyof A]>, AnyElysiaCustomStatusResponse | void>
 			: {}
 		: {}
+
+type InlineHandlerResponse<Route extends RouteSchema['response']> = {
+	[Status in keyof Route]: ElysiaCustomStatusResponse<
+		// @ts-ignore Status is always a number
+		Status,
+		Route[Status]
+	>
+}[keyof Route]
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
@@ -843,16 +847,10 @@ export type InlineHandler<
 						:
 								| (Route['response'] extends { 200: any }
 										? Route['response'][200]
-										: string | number | boolean | object)
+										: unknown)
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
-								| {
-										[Status in keyof Route['response']]: ElysiaCustomStatusResponse<
-											// @ts-ignore Status is always a number
-											Status,
-											Route['response'][Status]
-										>
-								  }[keyof Route['response']]
+								| InlineHandlerResponse<Route['response']>
 			  >)
 	| ({} extends Route['response']
 			? string | number | boolean | object
@@ -860,13 +858,7 @@ export type InlineHandler<
 					| (Route['response'] extends { 200: any }
 							? Route['response'][200]
 							: string | number | boolean | object)
-					| {
-							[Status in keyof Route['response']]: ElysiaCustomStatusResponse<
-								// @ts-ignore Status is always a number
-								Status,
-								Route['response'][Status]
-							>
-					  }[keyof Route['response']])
+					| InlineHandlerResponse<Route['response']>)
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
@@ -1260,7 +1252,7 @@ export type ResolveResolutions<T extends MaybeArray<Function>> =
 
 export type ResolveResolutionsArray<
 	T extends any[],
-	Carry extends Record<RecordKey, unknown> = {}
+	Carry extends Record<keyof any, unknown> = {}
 > = T extends [infer Fn extends AnyContextFn, ...infer Rest]
 	? ReturnType<Fn> extends infer Value extends Record<keyof any, unknown>
 		? ResolveResolutionsArray<Rest, Value & Carry>
@@ -1268,20 +1260,6 @@ export type ResolveResolutionsArray<
 	: Prettify<Carry>
 
 export type AnyLocalHook = LocalHook<any, any, any, any, any, any>
-
-type LocalHookKey =
-	| keyof InputSchema<any>
-	| 'detail'
-	| 'parse'
-	| 'transform'
-	| 'beforeHandle'
-	| 'afterHandle'
-	| 'mapResponse'
-	| 'afterResponse'
-	| 'error'
-	| 'tags'
-
-type A = 'A' extends any ? 'A' : 'B'
 
 export type LocalHook<
 	LocalSchema extends InputSchema,
@@ -1805,7 +1783,7 @@ export type ResolveMacroContext<
 			? never
 			: K extends keyof MacroFn
 				? ReturnType<MacroFn[K]> extends infer A extends {
-						[K in RecordKey]: any
+						[K in keyof any]: any
 					}
 					? A
 					: never

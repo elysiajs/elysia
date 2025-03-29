@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { expect } from 'bun:test'
-import { t, Elysia, RouteSchema, Cookie } from '../../src'
+import { t, Elysia, RouteSchema, Cookie, form, file } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 // ? ArrayString
@@ -14,4 +14,37 @@ import { expectTypeOf } from 'expect-type'
 			body: t.ArrayString(t.String())
 		}
 	)
+}
+
+// ? Form
+{
+	new Elysia()
+		.get(
+			'/',
+			() =>
+				form({
+					name: 'Misono Mika',
+					file: file('example/kyuukurarin.mp4')
+				}),
+			{
+				response: t.Form({
+					name: t.String(),
+					file: t.File()
+				})
+			}
+		)
+		.get(
+			'/',
+			// @ts-expect-error
+			() =>
+				form({
+					file: 'a'
+				}),
+			{
+				response: t.Form({
+					name: t.String(),
+					file: t.File()
+				})
+			}
+		)
 }
