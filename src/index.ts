@@ -1,11 +1,12 @@
 import { Memoirist } from 'memoirist'
-import type {
-	TObject,
-	Static,
-	TSchema,
-	TModule,
-	TRef,
-	TProperties
+import {
+	type TObject,
+	type Static,
+	type TSchema,
+	type TModule,
+	type TRef,
+	type TProperties,
+	Kind
 } from '@sinclair/typebox'
 
 import type { Context } from './context'
@@ -45,7 +46,6 @@ import {
 import {
 	coercePrimitiveRoot,
 	stringToStructureCoercions,
-	replaceSchemaType,
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	getCookieValidator,
@@ -3442,8 +3442,6 @@ export default class Elysia<
 						}
 					else this.config.detail.tags = hook.tags
 				}
-				if (hook.schema === 'standalone') {
-				}
 
 				const type: LifeCycleType = hook.as ?? 'local'
 
@@ -3451,12 +3449,21 @@ export default class Elysia<
 					if (!this.standaloneValidator[type])
 						this.standaloneValidator[type] = []
 
+					const response =
+						hook?.response ||
+						typeof hook?.response === 'string' ||
+						(hook?.response && Kind in hook.response)
+							? {
+									200: hook.response
+								}
+							: hook?.response
+
 					this.standaloneValidator[type].push({
 						body: hook.body,
 						headers: hook.headers,
 						params: hook.params,
 						query: hook.query,
-						response: hook.response,
+						response,
 						cookie: hook.cookie
 					})
 

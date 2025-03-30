@@ -23,8 +23,10 @@ import type {
 	ElysiaConfig,
 	InputSchema,
 	MaybeArray,
-	SchemaValidator
+	SchemaValidator,
+	StandaloneInputSchema
 } from './types'
+import { req } from '../test/utils'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
@@ -704,7 +706,14 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		modules: t.Module({})
 	}
 ): T extends TSchema ? ElysiaTypeCheck<TSchema> : undefined => {
-	if (!s) return undefined as any
+	validators = validators?.filter((x) => x)
+
+	if (!s) {
+		if (!validators?.length) return undefined as any
+
+		s = validators[0] as any
+		validators = validators.slice(1)
+	}
 
 	let doesHaveRef: boolean | undefined = undefined
 
@@ -793,8 +802,12 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 						schema.type === 'object' &&
 						'additionalProperties' in schema
 					) {
-						if (!hasAdditional)
-							hasAdditional = schema.additionalProperties
+						if (
+							!hasAdditional &&
+							schema.additionalProperties === false
+						) {
+							hasAdditional = true
+						}
 
 						delete schema.additionalProperties
 					}
@@ -802,9 +815,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 					return schema
 				})
 		])
-
 		if (schema.type === 'object' && hasAdditional)
-			schema.additionalProperties = additionalProperties
+			schema.additionalProperties = false
 	} else {
 		if (
 			schema.type === 'object' &&
@@ -1003,21 +1015,28 @@ export const getResponseSchemaValidator = (
 		dynamic = false,
 		normalize = false,
 		additionalProperties = false,
-		validators
+		validators = []
 	}: {
 		modules: TModule<any, any>
 		models?: Record<string, TSchema>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
-		validators?: InputSchema['response'][]
+		validators?: NonNullable<StandaloneInputSchema['response']>[]
 	}
 ): Record<number, ElysiaTypeCheck<any>> | undefined => {
-	if (!s) return
+	validators = validators.filter((x) => x)
+
+	if (!s) {
+		if (!validators?.length) return undefined as any
+
+		s = validators[0] as any
+		validators = validators.slice(1)
+	}
 
 	let maybeSchemaOrRecord: TSchema | Record<number, string | TSchema>
 
-	if (typeof s !== 'string') maybeSchemaOrRecord = s
+	if (typeof s !== 'string') maybeSchemaOrRecord = s!
 	else {
 		const isArray = s.endsWith('[]')
 		const key = isArray ? s.substring(0, s.length - 2) : s
@@ -1032,8 +1051,14 @@ export const getResponseSchemaValidator = (
 	if (!maybeSchemaOrRecord) return
 
 	if (Kind in maybeSchemaOrRecord) {
-		if ('additionalProperties' in maybeSchemaOrRecord === false)
-			maybeSchemaOrRecord.additionalProperties = additionalProperties
+		if (
+			validators.length &&
+			'additionalProperties' in maybeSchemaOrRecord
+		) {
+			additionalProperties =
+				maybeSchemaOrRecord.additionalProperties as boolean
+			delete maybeSchemaOrRecord.additionalProperties
+		}
 
 		return {
 			200: getSchemaValidator(maybeSchemaOrRecord, {
@@ -1043,7 +1068,8 @@ export const getResponseSchemaValidator = (
 				dynamic,
 				normalize,
 				coerce: false,
-				additionalCoerce: []
+				additionalCoerce: [],
+				validators: validators.map((x) => x[200])
 			})
 		}
 	}
@@ -1056,8 +1082,15 @@ export const getResponseSchemaValidator = (
 		if (typeof maybeNameOrSchema === 'string') {
 			if (maybeNameOrSchema in models) {
 				const schema = models[maybeNameOrSchema]
-				schema.type === 'object' &&
-					'additionalProperties' in schema === false
+
+				if (
+					validators.length &&
+					'additionalProperties' in maybeSchemaOrRecord
+				) {
+					additionalProperties =
+						maybeSchemaOrRecord.additionalProperties as boolean
+					delete maybeSchemaOrRecord.additionalProperties
+				}
 
 				// Inherits model maybe already compiled
 				record[+status] =
@@ -1069,7 +1102,8 @@ export const getResponseSchemaValidator = (
 								dynamic,
 								normalize,
 								coerce: false,
-								additionalCoerce: []
+								additionalCoerce: [],
+								validators: validators.map((x) => x[+status])
 							})
 						: schema
 			}
@@ -1078,10 +1112,13 @@ export const getResponseSchemaValidator = (
 		}
 
 		if (
-			maybeNameOrSchema.type === 'object' &&
-			'additionalProperties' in maybeNameOrSchema === false
-		)
-			maybeNameOrSchema.additionalProperties = additionalProperties
+			validators.length &&
+			'additionalProperties' in maybeSchemaOrRecord
+		) {
+			additionalProperties =
+				maybeSchemaOrRecord.additionalProperties as boolean
+			delete maybeSchemaOrRecord.additionalProperties
+		}
 
 		// Inherits model maybe already compiled
 		record[+status] =
@@ -1093,7 +1130,8 @@ export const getResponseSchemaValidator = (
 						dynamic,
 						normalize,
 						coerce: false,
-						additionalCoerce: []
+						additionalCoerce: [],
+						validators: validators.map((x) => x[+status])
 					})
 				: maybeNameOrSchema
 	})

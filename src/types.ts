@@ -202,6 +202,15 @@ export interface ValidatorLayer {
 	getCandidate(): SchemaValidator
 }
 
+export interface StandaloneInputSchema<Name extends string = string> {
+	body?: TSchema | Name | `${Name}[]`
+	headers?: TSchema | Name | `${Name}[]`
+	query?: TSchema | Name | `${Name}[]`
+	params?: TSchema | Name | `${Name}[]`
+	cookie?: TSchema | Name | `${Name}[]`
+	response?: { [status in number]: `${Name}[]` | Name | TSchema }
+}
+
 export interface StandaloneValidator {
 	global: InputSchema[] | null
 	scoped: InputSchema[] | null
