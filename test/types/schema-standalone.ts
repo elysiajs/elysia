@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Cookie, Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 // local
@@ -826,6 +826,419 @@ import { expectTypeOf } from 'expect-type'
 			{
 				body: t.Object({ name: t.Literal('saltyaom') }),
 				response: t.Object({ id: t.Number() })
+			}
+		)
+	}
+}
+
+// handle every schema type on local
+{
+	// ? handle local
+	{
+		const local = new Elysia()
+			.guard({
+				schema: 'standalone',
+				body: t.Object({ family: t.String() }),
+				headers: t.Object({ family: t.String() }),
+				query: t.Object({ family: t.String() }),
+				params: t.Object({ family: t.String() }),
+				response: t.Object({ family: t.String() }),
+				cookie: t.Object({ family: t.String() })
+			})
+			.post(
+				'/:family',
+				({ body, query, params, headers, cookie }) => {
+					expectTypeOf<typeof body>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof query>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof params>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof headers>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof cookie>().toEqualTypeOf<
+						Record<string, Cookie<string | undefined>> & {
+							family: Cookie<string>
+							name: Cookie<string>
+						}
+					>()
+
+					return body
+				},
+				{
+					body: t.Object({ name: t.String() }),
+					headers: t.Object({ name: t.String() }),
+					query: t.Object({ name: t.String() }),
+					params: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() }),
+					cookie: t.Object({ name: t.String() })
+				}
+			)
+
+		const parent = new Elysia().use(local).post(
+			'/family/:family/:name',
+			({ body, query, params, headers, cookie }) => {
+				expectTypeOf<typeof body>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof query>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof headers>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof cookie>().toEqualTypeOf<
+					Record<string, Cookie<string | undefined>> & {
+						name: Cookie<string>
+					}
+				>()
+
+				return body
+			},
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			}
+		)
+
+		const app = new Elysia().use(parent).post(
+			'/:family/:name',
+			({ body, query, params, headers, cookie }) => {
+				expectTypeOf<typeof body>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof query>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof headers>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof cookie>().toEqualTypeOf<
+					Record<string, Cookie<string | undefined>> & {
+						name: Cookie<string>
+					}
+				>()
+
+				return body
+			},
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			}
+		)
+	}
+}
+
+// handle every schema type on scoped
+{
+	// ? handle local
+	{
+		const local = new Elysia()
+			.guard({
+				schema: 'standalone',
+				as: 'scoped',
+				body: t.Object({ family: t.String() }),
+				headers: t.Object({ family: t.String() }),
+				query: t.Object({ family: t.String() }),
+				params: t.Object({ family: t.String() }),
+				response: t.Object({ family: t.String() }),
+				cookie: t.Object({ family: t.String() })
+			})
+			.post(
+				'/:family',
+				({ body, query, params, headers, cookie }) => {
+					expectTypeOf<typeof body>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof query>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof params>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof headers>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof cookie>().toEqualTypeOf<
+						Record<string, Cookie<string | undefined>> & {
+							family: Cookie<string>
+							name: Cookie<string>
+						}
+					>()
+
+					return body
+				},
+				{
+					body: t.Object({ name: t.String() }),
+					headers: t.Object({ name: t.String() }),
+					query: t.Object({ name: t.String() }),
+					params: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() }),
+					cookie: t.Object({ name: t.String() })
+				}
+			)
+
+		const parent = new Elysia().use(local).post(
+			'/family/:family/:name',
+			({ body, query, params, headers, cookie }) => {
+				expectTypeOf<typeof body>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof query>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof headers>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof cookie>().toEqualTypeOf<
+					Record<string, Cookie<string | undefined>> & {
+						family: Cookie<string>
+						name: Cookie<string>
+					}
+				>()
+
+				return body
+			},
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			}
+		)
+
+		const app = new Elysia().use(parent).post(
+			'/:family/:name',
+			({ body, query, params, headers, cookie }) => {
+				expectTypeOf<typeof body>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof query>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof headers>().toEqualTypeOf<{
+					name: string
+				}>()
+
+				expectTypeOf<typeof cookie>().toEqualTypeOf<
+					Record<string, Cookie<string | undefined>> & {
+						name: Cookie<string>
+					}
+				>()
+
+				return body
+			},
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			}
+		)
+	}
+}
+
+// handle every schema type on global
+{
+	// ? handle local
+	{
+		const local = new Elysia()
+			.guard({
+				schema: 'standalone',
+				as: 'global',
+				body: t.Object({ family: t.String() }),
+				headers: t.Object({ family: t.String() }),
+				query: t.Object({ family: t.String() }),
+				params: t.Object({ family: t.String() }),
+				response: t.Object({ family: t.String() }),
+				cookie: t.Object({ family: t.String() })
+			})
+			.post(
+				'/:family',
+				({ body, query, params, headers, cookie }) => {
+					expectTypeOf<typeof body>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof query>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof params>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof headers>().toEqualTypeOf<{
+						family: string
+						name: string
+					}>()
+
+					expectTypeOf<typeof cookie>().toEqualTypeOf<
+						Record<string, Cookie<string | undefined>> & {
+							family: Cookie<string>
+							name: Cookie<string>
+						}
+					>()
+
+					return body
+				},
+				{
+					body: t.Object({ name: t.String() }),
+					headers: t.Object({ name: t.String() }),
+					query: t.Object({ name: t.String() }),
+					params: t.Object({ name: t.String() }),
+					response: t.Object({ name: t.String() }),
+					cookie: t.Object({ name: t.String() })
+				}
+			)
+
+		const parent = new Elysia().use(local).post(
+			'/family/:family/:name',
+			({ body, query, params, headers, cookie }) => {
+				expectTypeOf<typeof body>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof query>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof headers>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof cookie>().toEqualTypeOf<
+					Record<string, Cookie<string | undefined>> & {
+						family: Cookie<string>
+						name: Cookie<string>
+					}
+				>()
+
+				return body
+			},
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
+			}
+		)
+
+		const app = new Elysia().use(parent).post(
+			'/:family/:name',
+			({ body, query, params, headers, cookie }) => {
+				expectTypeOf<typeof body>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof query>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof params>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof headers>().toEqualTypeOf<{
+					family: string
+					name: string
+				}>()
+
+				expectTypeOf<typeof cookie>().toEqualTypeOf<
+					Record<string, Cookie<string | undefined>> & {
+						family: Cookie<string>
+						name: Cookie<string>
+					}
+				>()
+
+				return body
+			},
+			{
+				body: t.Object({ name: t.String() }),
+				headers: t.Object({ name: t.String() }),
+				query: t.Object({ name: t.String() }),
+				params: t.Object({ name: t.String() }),
+				response: t.Object({ name: t.String() }),
+				cookie: t.Object({ name: t.String() })
 			}
 		)
 	}

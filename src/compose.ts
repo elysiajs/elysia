@@ -254,11 +254,7 @@ const composeValidationFactory = ({
 				})
 
 			// Encode call TypeCheck.Check internally
-			if (
-				encodeSchema &&
-				(value.sucrose.hasTransform ||
-					typeof value.Encode === 'function')
-			)
+			if (encodeSchema && value.sucrose.hasTransform)
 				code +=
 					`try{` +
 					`${name}=validator.response[${status}].Encode(${name})\n` +

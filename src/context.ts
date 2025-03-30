@@ -18,10 +18,6 @@ import type {
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
 
-type WithoutNullableKeys<Type> = {
-	[Key in keyof Type]-?: NonNullable<Type[Key]>
-}
-
 export type ErrorContext<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -47,14 +43,9 @@ export type ErrorContext<
 			: Route['headers']
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<string | undefined>>
-			: Record<string, Cookie<string | undefined>> &
-					Prettify<
-						WithoutNullableKeys<{
-							[key in keyof Route['cookie']]: Cookie<
-								Route['cookie'][key]
-							>
-						}>
-					>
+			: Record<string, Cookie<string | undefined>> & {
+					[key in keyof Route['cookie']]-?: NonNullable<Cookie<Route['cookie'][key]>>
+				}
 
 		server: Server | null
 		redirect: Redirect
@@ -124,12 +115,9 @@ export type Context<
 			: PrettifyIfObject<Route['headers']>
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<string | undefined>>
-			: Record<string, Cookie<string | undefined>> &
-					WithoutNullableKeys<{
-						[key in keyof Route['cookie']]: Cookie<
-							Route['cookie'][key]
-						>
-					}>
+			: Record<string, Cookie<string | undefined>> & {
+					[key in keyof Route['cookie']]-?: Cookie<Route['cookie'][key]>
+				}
 
 		server: Server | null
 		redirect: Redirect

@@ -3,6 +3,7 @@ import {
 	Kind,
 	OptionalKind,
 	TModule,
+	TObject,
 	TransformKind,
 	TSchema,
 	type TAnySchema
@@ -23,10 +24,8 @@ import type {
 	ElysiaConfig,
 	InputSchema,
 	MaybeArray,
-	SchemaValidator,
 	StandaloneInputSchema
 } from './types'
-import { req } from '../test/utils'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
@@ -791,11 +790,15 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (validators?.length) {
 		let hasAdditional = false
 
-		schema = t.Intersect([
+		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas([
 			schema,
-			...validators
-				.filter((x) => x)
-				.map((x) => {
+			...validators.map(mapSchema)
+		])
+
+		if (notObjects) {
+			schema = t.Intersect([
+				...(mergedObjectSchema ? [mergedObjectSchema] : []),
+				...notObjects.map((x) => {
 					const schema = mapSchema(x)
 
 					if (
@@ -814,10 +817,14 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 					return schema
 				})
-		])
-		if (schema.type === 'object' && hasAdditional)
-			schema.additionalProperties = false
+			])
+
+			if (schema.type === 'object' && hasAdditional)
+				schema.additionalProperties = false
+		}
 	} else {
+		// console.log("A", schema)
+
 		if (
 			schema.type === 'object' &&
 			'additionalProperties' in schema === false
@@ -1007,6 +1014,79 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	return compiled as any
 }
 
+export const mergeObjectSchemas = (
+	schemas: TSchema[]
+): {
+	schema: TObject | undefined
+	notObjects: TSchema[]
+} => {
+	if (schemas.length === 0) {
+		return {
+			schema: undefined,
+			notObjects: []
+		}
+	}
+	if (schemas.length === 1)
+		return schemas[0].type === 'object'
+			? {
+					schema: schemas[0] as TObject,
+					notObjects: []
+				}
+			: {
+					schema: undefined,
+					notObjects: schemas
+				}
+
+	let newSchema: TObject
+	const notObjects = <TSchema[]>[]
+
+	let additionalPropertiesIsTrue = false
+	let additionalPropertiesIsFalse = false
+
+	for (const schema of schemas) {
+		if (schema.type !== 'object') {
+			notObjects.push(schema)
+			continue
+		}
+
+		if ('additionalProperties' in schema) {
+			if (schema.additionalProperties === true)
+				additionalPropertiesIsTrue = true
+			else if (schema.additionalProperties === false)
+				additionalPropertiesIsFalse = true
+		}
+
+		if (!newSchema!) {
+			newSchema = schema as TObject
+			continue
+		}
+
+		newSchema = {
+			...newSchema,
+			...schema,
+			properties: {
+				...newSchema.properties,
+				...schema.properties
+			},
+			required: [...(newSchema?.required ?? []), ...schema.required]
+		} as TObject
+	}
+
+	if (newSchema!) {
+		if (newSchema.required)
+			newSchema.required = [...new Set(newSchema.required)]
+
+		if (additionalPropertiesIsFalse) newSchema.additionalProperties = false
+		else if (additionalPropertiesIsTrue)
+			newSchema.additionalProperties = true
+	}
+
+	return {
+		schema: newSchema!,
+		notObjects
+	}
+}
+
 export const getResponseSchemaValidator = (
 	s: InputSchema['response'] | undefined,
 	{
@@ -1022,7 +1102,7 @@ export const getResponseSchemaValidator = (
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
-		validators?: NonNullable<StandaloneInputSchema['response']>[]
+		validators?: StandaloneInputSchema['response'][]
 	}
 ): Record<number, ElysiaTypeCheck<any>> | undefined => {
 	validators = validators.filter((x) => x)
@@ -1051,15 +1131,6 @@ export const getResponseSchemaValidator = (
 	if (!maybeSchemaOrRecord) return
 
 	if (Kind in maybeSchemaOrRecord) {
-		if (
-			validators.length &&
-			'additionalProperties' in maybeSchemaOrRecord
-		) {
-			additionalProperties =
-				maybeSchemaOrRecord.additionalProperties as boolean
-			delete maybeSchemaOrRecord.additionalProperties
-		}
-
 		return {
 			200: getSchemaValidator(maybeSchemaOrRecord, {
 				modules,
@@ -1069,7 +1140,7 @@ export const getResponseSchemaValidator = (
 				normalize,
 				coerce: false,
 				additionalCoerce: [],
-				validators: validators.map((x) => x[200])
+				validators: validators.map((x) => x![200])
 			})
 		}
 	}
@@ -1083,15 +1154,6 @@ export const getResponseSchemaValidator = (
 			if (maybeNameOrSchema in models) {
 				const schema = models[maybeNameOrSchema]
 
-				if (
-					validators.length &&
-					'additionalProperties' in maybeSchemaOrRecord
-				) {
-					additionalProperties =
-						maybeSchemaOrRecord.additionalProperties as boolean
-					delete maybeSchemaOrRecord.additionalProperties
-				}
-
 				// Inherits model maybe already compiled
 				record[+status] =
 					Kind in schema
@@ -1103,21 +1165,12 @@ export const getResponseSchemaValidator = (
 								normalize,
 								coerce: false,
 								additionalCoerce: [],
-								validators: validators.map((x) => x[+status])
+								validators: validators.map((x) => x![+status])
 							})
 						: schema
 			}
 
 			return undefined
-		}
-
-		if (
-			validators.length &&
-			'additionalProperties' in maybeSchemaOrRecord
-		) {
-			additionalProperties =
-				maybeSchemaOrRecord.additionalProperties as boolean
-			delete maybeSchemaOrRecord.additionalProperties
 		}
 
 		// Inherits model maybe already compiled
@@ -1131,7 +1184,7 @@ export const getResponseSchemaValidator = (
 						normalize,
 						coerce: false,
 						additionalCoerce: [],
-						validators: validators.map((x) => x[+status])
+						validators: validators.map((x) => x![+status])
 					})
 				: maybeNameOrSchema
 	})
@@ -1214,7 +1267,8 @@ export const getCookieValidator = ({
 				modules,
 				dynamic,
 				models,
-				additionalProperties: true
+				additionalProperties: true,
+				validators
 			})
 
 			cookieValidator.config = defaultConfig

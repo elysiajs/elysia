@@ -502,7 +502,18 @@ export default class Elysia<
 		{ allowMeta = false, skipPrefix = false } = {
 			allowMeta: false as boolean | undefined,
 			skipPrefix: false as boolean | undefined
-		}
+		},
+		standaloneValidators = [
+			...(this.standaloneValidator.local
+				? this.standaloneValidator.local
+				: []),
+			...(this.standaloneValidator.scoped
+				? this.standaloneValidator.scoped
+				: []),
+			...(this.standaloneValidator.global
+				? this.standaloneValidator.global
+				: [])
+		]
 	) {
 		localHook = compressHistoryHook(localHookToLifeCycleStore(localHook))
 
@@ -552,33 +563,23 @@ export default class Elysia<
 				localHook?.response ?? (instanceValidator?.response as any)
 		}
 
-		const cookieValidator = () =>
-			cloned.cookie
-				? getCookieValidator({
-						modules,
-						validator: cloned.cookie,
-						defaultConfig: this.config.cookie,
-						config: cloned.cookie?.config ?? {},
-						dynamic,
-						models,
-						validators: standaloneValidators.map((x) => x.cookie)
-					})
-				: undefined
+		const cookieValidator = () => {
+			const validators = standaloneValidators.map((x) => x.cookie)
+
+			if (cloned.cookie || validators.length)
+				return getCookieValidator({
+					modules,
+					validator: cloned.cookie,
+					defaultConfig: this.config.cookie,
+					config: cloned.cookie?.config ?? {},
+					dynamic,
+					models,
+					validators: standaloneValidators.map((x) => x.cookie)
+				})
+		}
 
 		const normalize = this.config.normalize
 		const modules = this.definitions.typebox
-
-		const standaloneValidators = [
-			...(this.standaloneValidator.local
-				? this.standaloneValidator.local
-				: []),
-			...(this.standaloneValidator.scoped
-				? this.standaloneValidator.scoped
-				: []),
-			...(this.standaloneValidator.global
-				? this.standaloneValidator.global
-				: [])
-		]
 
 		const validator =
 			this.config.precompile === true ||
@@ -799,7 +800,8 @@ export default class Elysia<
 				composed: null,
 				handler: handle,
 				compile: undefined as any,
-				hooks
+				hooks,
+				standaloneValidators
 			})
 
 			return
@@ -916,7 +918,8 @@ export default class Elysia<
 						composed: mainHandler,
 						compile,
 						handler: handle,
-						hooks
+						hooks,
+						standaloneValidators
 					},
 					localHook.webSocket
 						? { websocket: localHook.websocket as any }
@@ -2968,6 +2971,12 @@ export default class Elysia<
 		instance.getServer = () => this.getServer()
 		instance.inference = cloneInference(this.inference)
 		instance.extender = { ...this.extender }
+		instance['~parser'] = this['~parser']
+		instance.standaloneValidator = {
+			local: [...(this.standaloneValidator.local ?? [])],
+			scoped: [...(this.standaloneValidator.scoped ?? [])],
+			global: [...(this.standaloneValidator.global ?? [])]
+		}
 
 		const isSchema = typeof schemaOrRun === 'object'
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
@@ -2989,7 +2998,7 @@ export default class Elysia<
 		this.model(sandbox.definitions.type)
 
 		Object.values(instance.router.history).forEach(
-			({ method, path, handler, hooks }) => {
+			({ method, path, handler, hooks, standaloneValidators }) => {
 				path = (isSchema ? '' : this.config.prefix) + prefix + path
 
 				if (isSchema) {
@@ -3013,7 +3022,9 @@ export default class Elysia<
 											localHook.error,
 											...(sandbox.event.error || {})
 										]
-						})
+						}),
+						undefined,
+						standaloneValidators
 					)
 				} else {
 					this.add(
@@ -3025,7 +3036,8 @@ export default class Elysia<
 						}),
 						{
 							skipPrefix: true
-						}
+						},
+						standaloneValidators
 					)
 				}
 			}
@@ -3172,10 +3184,8 @@ export default class Elysia<
 						derive: Volatile['derive']
 						resolve: Prettify<Volatile['resolve'] & MacroContext>
 						schema: Volatile['schema']
-						standaloneSchema: PrettifySchema<
-							Volatile['standaloneSchema'] &
-								UnwrapRoute<LocalSchema, Definitions['typebox']>
-						>
+						standaloneSchema: Volatile['standaloneSchema'] &
+							UnwrapRoute<LocalSchema, Definitions['typebox']>
 					}
 				>
 			: AsType extends 'global'
@@ -3192,14 +3202,12 @@ export default class Elysia<
 						Definitions,
 						{
 							schema: Metadata['schema']
-							standaloneSchema: PrettifySchema<
-								UnwrapRoute<
-									LocalSchema,
-									Definitions['typebox'],
-									BasePath
-								> &
-									Metadata['standaloneSchema']
-							>
+							standaloneSchema: UnwrapRoute<
+								LocalSchema,
+								Definitions['typebox'],
+								BasePath
+							> &
+								Metadata['standaloneSchema']
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
@@ -3220,13 +3228,8 @@ export default class Elysia<
 								Ephemeral['resolve'] & MacroContext
 							>
 							schema: Ephemeral['schema']
-							standaloneSchema: PrettifySchema<
-								Ephemeral['standaloneSchema'] &
-									UnwrapRoute<
-										LocalSchema,
-										Definitions['typebox']
-									>
-							>
+							standaloneSchema: Ephemeral['standaloneSchema'] &
+								UnwrapRoute<LocalSchema, Definitions['typebox']>
 						},
 						Volatile
 					>
@@ -3936,7 +3939,8 @@ export default class Elysia<
 									method,
 									path,
 									handler,
-									hooks
+									hooks,
+									standaloneValidators
 								} of Object.values(plugin.router.history))
 									this.add(
 										method,
@@ -3944,7 +3948,9 @@ export default class Elysia<
 										handler,
 										mergeHook(hooks as AnyLocalHook, {
 											error: plugin.event.error
-										})
+										}),
+										undefined,
+										standaloneValidators
 									)
 
 								plugin.compile()
@@ -3988,6 +3994,18 @@ export default class Elysia<
 		plugin.getParent = () => this as any
 		plugin.getServer = () => this.getServer()
 		plugin.getGlobalRoutes = () => this.getGlobalRoutes()
+
+		this.standaloneValidator = {
+			local: [
+				...(plugin.standaloneValidator.scoped ?? []),
+				...(this.standaloneValidator.local ?? [])
+			],
+			scoped: this.standaloneValidator.scoped,
+			global: [
+				...(plugin.standaloneValidator.global ?? []),
+				...(this.standaloneValidator.global ?? [])
+			]
+		}
 
 		/**
 		 * Model and error is required for Swagger generation
@@ -4061,16 +4079,22 @@ export default class Elysia<
 			plugin.extender.macros
 		)
 
-		for (const { method, path, handler, hooks } of Object.values(
-			plugin.router.history
-		)) {
+		for (const {
+			method,
+			path,
+			handler,
+			hooks,
+			standaloneValidators
+		} of Object.values(plugin.router.history)) {
 			this.add(
 				method,
 				path,
 				handler,
 				mergeHook(hooks as AnyLocalHook, {
 					error: plugin.event.error
-				})
+				}),
+				undefined,
+				standaloneValidators
 			)
 		}
 

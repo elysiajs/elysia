@@ -1301,6 +1301,7 @@ export interface InternalRoute {
 	handler: Handler
 	hooks: AnyLocalHook
 	websocket?: AnyWSLocalHook
+	standaloneValidators?: InputSchema[]
 }
 
 export type SchemaValidator = {

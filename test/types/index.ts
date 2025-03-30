@@ -2297,3 +2297,72 @@ type a = keyof {}
 		a: string
 	}>()
 }
+
+// ? cookie sample
+{
+	const app = new Elysia()
+		.get(
+			'/council',
+			({ cookie: { council } }) =>
+				(council.value = [
+					{
+						name: 'Rin',
+						affilation: 'Administration'
+					}
+				]),
+			{
+				cookie: t.Cookie({
+					council: t.Optional(
+						t.Array(
+							t.Object({
+								name: t.String(),
+								affilation: t.String()
+							})
+						)
+					)
+				})
+			}
+		)
+		.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
+		.get('/multiple', ({ cookie: { name, president } }) => {
+			name.value = 'Himari'
+			president.value = 'Rio'
+
+			return 'ok'
+		})
+		.get(
+			'/update',
+			({ cookie: { name } }) => {
+				name.value = 'seminar: Himari'
+
+				return name.value
+			},
+			{
+				cookie: t.Cookie(
+					{
+						name: t.Optional(t.String())
+					},
+					{
+						secrets: 'a',
+						sign: ['name']
+					}
+				)
+			}
+		)
+		.get('/remove', ({ cookie }) => {
+			for (const self of Object.values(cookie)) self.remove()
+
+			return 'Deleted'
+		})
+		.get('/remove-with-options', ({ cookie }) => {
+			for (const self of Object.values(cookie)) self.remove()
+
+			return 'Deleted'
+		})
+		.get('/set', ({ cookie: { session } }) => {
+			session.value = 'rin'
+			session.set({
+				path: '/'
+			})
+		})
+}
