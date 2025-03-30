@@ -1627,17 +1627,63 @@ type ExtractErrorFromHandle<Handle> = {
 
 export type MergeElysiaInstances<
 	Instances extends AnyElysia[] = [],
-	Prefix extends string = ''
-> = Elysia<
-	Prefix,
-	// @ts-expect-error
-	UnionToIntersect<Instances[number]['_types']['Singleton']>,
-	UnionToIntersect<Instances[number]['_types']['Definitions']>,
-	UnionToIntersect<Instances[number]['_types']['Metadata']>,
-	UnionToIntersect<Instances[number]['_routes']>,
-	UnionToIntersect<Instances[number]['_ephemeral']>,
-	UnionToIntersect<Instances[number]['_volatile']>
->
+	Prefix extends string = '',
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Definitions extends DefinitionBase = {
+		typebox: {}
+		error: {}
+	},
+	Metadata extends MetadataBase = {
+		schema: {}
+		standaloneSchema: {}
+		macro: {}
+		macroFn: {}
+		parser: {}
+	},
+	Ephemeral extends EphemeralType = {
+		derive: {}
+		resolve: {}
+		schema: {}
+		standaloneSchema: {}
+	},
+	Volatile extends EphemeralType = {
+		derive: {}
+		resolve: {}
+		schema: {}
+		standaloneSchema: {}
+	},
+	Routes extends RouteBase = {}
+> = Instances extends [
+	infer Current extends AnyElysia,
+	...infer Rest extends AnyElysia[]
+]
+	? MergeElysiaInstances<
+			Rest,
+			Prefix,
+			Singleton & Current['~Singleton'],
+			Definitions & Current['~Definitions'],
+			Metadata & Current['~Metadata'],
+			Ephemeral,
+			Volatile & Current['~Ephemeral'],
+			Routes &
+				(Prefix extends ``
+					? Current['~Routes']
+					: AddPrefix<Prefix, Current['~Routes']>)
+		>
+	: Elysia<
+			Prefix,
+			Prettify2<Singleton>,
+			Definitions,
+			Prettify2<Metadata>,
+			Routes,
+			Ephemeral,
+			Prettify2<Volatile>
+		>
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
 export type GuardSchemaType = 'override' | 'standalone'
@@ -1650,26 +1696,26 @@ export type ExcludeElysiaResponse<T> = Exclude<
 
 export type InferContext<
 	T extends AnyElysia,
-	Path extends string = T['_types']['Prefix'],
-	Schema extends RouteSchema = T['_types']['Metadata']['schema']
+	Path extends string = T['~Prefix'],
+	Schema extends RouteSchema = T['~Metadata']['schema']
 > = Context<
-	MergeSchema<Schema, T['_types']['Metadata']['schema']>,
-	T['_types']['Singleton'] & {
-		derive: T['_ephemeral']['derive'] & T['_volatile']['derive']
-		resolve: T['_ephemeral']['resolve'] & T['_volatile']['resolve']
+	MergeSchema<Schema, T['~Metadata']['schema']>,
+	T['~Singleton'] & {
+		derive: T['~Ephemeral']['derive'] & T['~Volatile']['derive']
+		resolve: T['~Ephemeral']['resolve'] & T['~Volatile']['resolve']
 	},
 	Path
 >
 
 export type InferHandler<
 	T extends AnyElysia,
-	Path extends string = T['_types']['Prefix'],
-	Schema extends RouteSchema = T['_types']['Metadata']['schema']
+	Path extends string = T['~Prefix'],
+	Schema extends RouteSchema = T['~Metadata']['schema']
 > = InlineHandler<
-	MergeSchema<Schema, T['_types']['Metadata']['schema']>,
-	T['_types']['Singleton'] & {
-		derive: T['_ephemeral']['derive'] & T['_volatile']['derive']
-		resolve: T['_ephemeral']['resolve'] & T['_volatile']['resolve']
+	MergeSchema<Schema, T['~Metadata']['schema']>,
+	T['~Singleton'] & {
+		derive: T['~Ephemeral']['derive'] & T['~Volatile']['derive']
+		resolve: T['~Ephemeral']['resolve'] & T['~Volatile']['resolve']
 	},
 	Path
 >

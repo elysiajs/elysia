@@ -583,7 +583,7 @@ app.use(plugin).group(
 		})
 	},
 	(app) => {
-		app._types.Metadata.schema
+		app['~Metadata'].schema
 
 		return app.get(
 			'/',
@@ -627,7 +627,7 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['_routes']
+	type App = (typeof server)['~Routes']
 	type Route = App['v1']['a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -667,7 +667,7 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['_routes']
+	type App = (typeof server)['~Routes']
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -708,7 +708,7 @@ app.use(plugin).group(
 					})
 			)
 	)
-	type App = (typeof server)['_routes']
+	type App = (typeof server)['~Routes']
 	type Route = App['v1']['a']['subscribe']
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: string
@@ -727,7 +727,7 @@ app.use(plugin).group(
 {
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
-	type App = (typeof server)['_routes']
+	type App = (typeof server)['~Routes']
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -933,7 +933,7 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['_routes']
+	type App = (typeof server)['~Routes']
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -954,7 +954,7 @@ app.group(
 
 	const app = new Elysia().use(test)
 
-	type App = (typeof app)['_routes']
+	type App = (typeof app)['~Routes']
 	type Routes = keyof App['app']['test']['get']
 
 	expectTypeOf<Routes>().not.toBeUnknown()
@@ -1028,11 +1028,11 @@ app.group(
 		.get('/child', () => 'Hello from child route')
 	const main = new Elysia().use(child)
 
-	type App = (typeof main)['_routes']
+	type App = (typeof main)['~Routes']
 
-	expectTypeOf<keyof (typeof main)['_routes']>().toEqualTypeOf<'child'>()
+	expectTypeOf<keyof (typeof main)['~Routes']>().toEqualTypeOf<'child'>()
 	expectTypeOf<
-		keyof (typeof main)['_types']['Singleton']['decorator']
+		keyof (typeof main)['~Singleton']['decorator']
 	>().not.toEqualTypeOf<{
 		request: {
 			b: 'b'
@@ -1160,7 +1160,7 @@ const a = app
 
 	const app = new Elysia().group('/api', (app) => app.use(testController))
 
-	expectTypeOf<(typeof app)['_routes']>().toEqualTypeOf<{
+	expectTypeOf<(typeof app)['~Routes']>().toEqualTypeOf<{
 		api: {
 			test: {
 				'could-be-error': {
@@ -1238,7 +1238,7 @@ const a = app
 			return 'Hifumi'
 		})
 
-	type app = typeof app._routes
+	type app = typeof app['~Routes']
 
 	expectTypeOf<app['get']['response']>().toEqualTypeOf<{
 		200: string
@@ -1917,7 +1917,7 @@ type a = keyof {}
 		}))
 		.as('scoped')
 
-	expectTypeOf<typeof plugin._ephemeral.derive>().toHaveProperty(
+	expectTypeOf<typeof plugin['~Ephemeral']['derive']>().toHaveProperty(
 		'pluginMethod'
 	)
 }
@@ -2268,7 +2268,7 @@ type a = keyof {}
 		}
 	)
 
-	expectTypeOf<(typeof app._routes.get.response)[200]>().toEqualTypeOf<{
+	expectTypeOf<typeof app['~Routes']['get']['response'][200]>().toEqualTypeOf<{
 		name: string
 	}>()
 }
@@ -2292,7 +2292,7 @@ type a = keyof {}
 		}
 	)
 
-	expectTypeOf<(typeof app._routes.get.response)[200]>().toEqualTypeOf<{
+	expectTypeOf<typeof app['~Routes']['get']['response'][200]>().toEqualTypeOf<{
 		name: string
 		a: string
 	}>()

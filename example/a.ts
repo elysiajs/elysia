@@ -1,19 +1,14 @@
 import { Elysia, t, form, file, error } from '../src'
 import { post, req } from '../test/utils'
 
-const local = new Elysia()
-	.guard({
-		schema: 'standalone',
-		cookie: t.Object({
-			a: t.String()
-		})
-	})
-	.get('/', ({ cookie }) => {}, {
-		cookie: t.Object({
-			a: t.Optional(t.String())
-		})
-	})
+const app1 = new Elysia()
+	.state('A', 'A')
+	.error('A', Error)
+	.parser('b', () => {})
 
-const a = await local.handle(req('/'))
+const app2 = new Elysia()
+	.state('B', 'B')
+	.error('B', Error)
+	.parser('b', () => {})
 
-console.log(a.status)
+const app = new Elysia().use(app1).use(app2)
