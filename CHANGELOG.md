@@ -10,12 +10,14 @@ Feature:
 - new validation `t.Form`, `t.NoValidate`
 
 Improvement:
+- optimize types
 - reduce redundant type check when using Encode
 - optimize isAsync
 - unwrap Definition['typebox'] by default to prevent unnecessary UnwrapTypeModule call
 - Elysia.form can now be type check
 - refactor type-system
-- using aot compilation to check for custom Elysia type, eg. Numeric
+- refactor `_types` into `~Types`
+- using aot compilation to check for custom Elysia type, eg. Numeric]
 
 Breaking Change:
 - remove `as('plugin')` in favor of `as('scoped')`
