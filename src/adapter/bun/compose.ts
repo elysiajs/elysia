@@ -1,4 +1,3 @@
-
 import { sucrose, type Sucrose } from '../../sucrose'
 import { createHoc, createOnRequestHandler } from '../../compose'
 
@@ -102,6 +101,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 	let fnLiteral =
 		'const handler=data.handler,' +
 		'store=data.store,' +
+		`decorator=data.decorator,` +
 		'redirect=data.redirect,' +
 		allocateIf('route=data.route,', inference.route || hasTrace) +
 		allocateIf('randomId=data.randomId,', hasTrace) +
@@ -134,6 +134,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		// @ts-expect-error private property
 		hoc: app.extender.higherOrderFunctions.map((x) => x.fn),
 		store: app.store,
+		decorator: app.decorator,
 		route: inference.route || hasTrace ? route.path : undefined,
 		randomId: hasTrace ? randomId : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,

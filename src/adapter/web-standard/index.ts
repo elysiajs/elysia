@@ -70,8 +70,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			// @ts-expect-error private
 			const defaultHeaders = app.setHeaders
 
-			// @ts-ignore
-			for (const key of Object.keys(app.singleton.decorator))
+			for (const key of Object.keys(app.decorator))
 				decoratorsLiteral += `,${key}:decorator['${key}']`
 
 			const standardHostname =
