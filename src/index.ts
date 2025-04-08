@@ -5327,12 +5327,9 @@ export default class Elysia<
 		BasePath,
 		{
 			decorator: Singleton['decorator']
-			store: Reconcile<
-				Singleton['store'],
-				{
-					[name in Name]: Value
-				}
-			>
+			store: Singleton['store'] & {
+				[name in Name]: Value
+			}
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
@@ -5361,7 +5358,7 @@ export default class Elysia<
 		BasePath,
 		{
 			decorator: Singleton['decorator']
-			store: Reconcile<Singleton['store'], Store>
+			store: Singleton['store'] & Store
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
@@ -5396,13 +5393,17 @@ export default class Elysia<
 		BasePath,
 		{
 			decorator: Singleton['decorator']
-			store: Reconcile<
-				Singleton['store'],
-				{
-					[name in Name]: Value
-				},
-				Type extends 'override' ? true : false
-			>
+			store: Type extends 'override'
+				? Reconcile<
+						Singleton['store'],
+						{
+							[name in Name]: Value
+						},
+						true
+					>
+				: Singleton['store'] & {
+						[name in Name]: Value
+					}
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
@@ -5435,11 +5436,9 @@ export default class Elysia<
 		BasePath,
 		{
 			decorator: Singleton['decorator']
-			store: Reconcile<
-				Singleton['store'],
-				Store,
-				Type extends 'override' ? true : false
-			>
+			store: Type extends 'override'
+				? Reconcile<Singleton['store'], Store>
+				: Singleton['store'] & Store
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
 		},
@@ -5581,12 +5580,9 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		{
-			decorator: Reconcile<
-				Singleton['decorator'],
-				{
-					[name in Name]: Value
-				}
-			>
+			decorator: Singleton['decorator'] & {
+				[name in Name]: Value
+			}
 			store: Singleton['store']
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
@@ -5615,7 +5611,7 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		{
-			decorator: Reconcile<Singleton['decorator'], NewDecorators>
+			decorator: Singleton['decorator'] & NewDecorators
 			store: Singleton['store']
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
@@ -5667,13 +5663,17 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		{
-			decorator: Reconcile<
-				Singleton['decorator'],
-				{
-					[name in Name]: Value
-				},
-				Type extends 'override' ? true : false
-			>
+			decorator: Type extends 'override'
+				? Reconcile<
+						Singleton['decorator'],
+						{
+							[name in Name]: Value
+						},
+						true
+					>
+				: Singleton['decorator'] & {
+						[name in Name]: Value
+					}
 			store: Singleton['store']
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']
@@ -5706,11 +5706,9 @@ export default class Elysia<
 	): Elysia<
 		BasePath,
 		{
-			decorator: Reconcile<
-				Singleton['decorator'],
-				NewDecorators,
-				Type extends 'override' ? true : false
-			>
+			decorator: Type extends 'override'
+				? Reconcile<Singleton['decorator'], NewDecorators, true>
+				: Singleton['decorator'] & NewDecorators
 			store: Singleton['store']
 			derive: Singleton['derive']
 			resolve: Singleton['resolve']

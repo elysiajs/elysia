@@ -1,17 +1,14 @@
-import { Elysia, t } from '../src'
-import { post, req } from '../test/utils'
+import { Elysia, error, t } from '../src'
+import { req } from '../test/utils'
 
 const app = new Elysia()
-	.decorate('hi', 1)
-	.get('/', ({ hi }) => {
-		return hi
-	}, {
-		error({ error }) {
-			console.log(error)
+	.post(
+		'/login',
+		async function* ({ body: { username, password } }) {
+			for (let i = 0; i < 1000; i++) yield 'A\n'
+		},
+		{
+			body: t.Object({ username: t.String(), password: t.String() })
 		}
-	})
+	)
 	.listen(3000)
-
-// app.handle(req('/'))
-// 	.then((x) => x.text())
-// 	.then(console.log)

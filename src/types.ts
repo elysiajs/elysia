@@ -17,9 +17,12 @@ import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
 import type { OpenAPIV3 } from 'openapi-types'
 
+import type { ElysiaAdapter } from './adapter'
+import type { ElysiaTypeCheck } from './schema'
+import type { Context, ErrorContext, PreContext } from './context'
+import type { ComposerGeneralHandlerOptions } from './compose'
 import type { CookieOptions } from './cookies'
 import type { TraceHandler } from './trace'
-import type { Context, ErrorContext, PreContext } from './context'
 import type {
 	ElysiaCustomStatusResponse,
 	InternalServerError,
@@ -28,18 +31,15 @@ import type {
 	ParseError,
 	ValidationError
 } from './error'
-import type { ComposerGeneralHandlerOptions } from './compose'
 
-import type { ElysiaAdapter } from './adapter'
 import type { AnyWSLocalHook, WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
-import { ElysiaTypeCheck } from './schema'
 
 type PartialServe = Partial<Serve>
 
 export type IsNever<T> = [T] extends [never] ? true : false
 
-export type ElysiaConfig<Prefix extends string | undefined> = {
+export interface ElysiaConfig<Prefix extends string | undefined> {
 	/**
 	 * @default BunAdapter
 	 * @since 1.1.11
@@ -386,7 +386,7 @@ export interface RouteSchema {
 	response?: unknown
 }
 
-type OptionalField = {
+interface OptionalField {
 	[OptionalKind]: 'Optional'
 }
 
@@ -501,7 +501,7 @@ export interface UnwrapRoute<
 
 export interface UnwrapGroupGuardRoute<
 	in out Schema extends InputSchema<any>,
-	Definitions extends DefinitionBase['typebox'] = {},
+	in out Definitions extends DefinitionBase['typebox'] = {},
 	Path extends string | undefined = undefined
 > {
 	body: UnwrapBodySchema<Schema['body'], Definitions>
@@ -638,7 +638,7 @@ export interface InputSchema<Name extends string = string> {
 		| { [status in number]: `${Name}[]` | Name | TSchema }
 }
 
-export interface PrettifySchema<A extends RouteSchema> {
+export interface PrettifySchema<in out A extends RouteSchema> {
 	body: unknown extends A['body'] ? A['body'] : Prettify<A['body']>
 	headers: unknown extends A['headers']
 		? A['headers']
@@ -1304,7 +1304,7 @@ export interface InternalRoute {
 	standaloneValidators?: InputSchema[]
 }
 
-export type SchemaValidator = {
+export interface SchemaValidator {
 	createBody?(): ElysiaTypeCheck<any>
 	createHeaders?(): ElysiaTypeCheck<any>
 	createQuery?(): ElysiaTypeCheck<any>
@@ -1335,7 +1335,7 @@ export type AddSuffixCapitalize<Suffix extends string, T> = {
 	[K in keyof T as `${K & string}${Capitalize<Suffix>}`]: T[K]
 }
 
-export type Checksum = {
+export interface Checksum {
 	name?: string
 	seed?: unknown
 	checksum: number
