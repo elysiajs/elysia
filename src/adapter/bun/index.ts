@@ -3,7 +3,7 @@ import type { Serve } from 'bun'
 import type { TSchema } from '@sinclair/typebox'
 
 import { WebStandardAdapter } from '../web-standard/index'
-import { parseSetCookies } from '../web-standard/handler'
+import { parseSetCookies } from '../utils'
 import type { ElysiaAdapter } from '../types'
 
 import { createBunRouteHandler } from './compose'
@@ -57,6 +57,9 @@ export const BunAdapter: ElysiaAdapter = {
 				// @ts-expect-error private property
 				for (const r of app.routeTree) {
 					const route = app.router.history[r[1]]
+
+					if(route.path in app.router.static.ws)
+						continue
 
 					if (
 						typeof route.handler !== 'function' ||

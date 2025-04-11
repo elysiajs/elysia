@@ -246,7 +246,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map Response with custom context', async () => {
-		const response = mapResponse(new Response('Shiroko'), context)
+		const response = await mapResponse(new Response('Shiroko'), context)
 		const headers = response.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
@@ -255,7 +255,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map Response and merge Headers', async () => {
-		const response = mapResponse(
+		const response = await mapResponse(
 			new Response('Shiroko', {
 				headers: {
 					Name: 'Himari'

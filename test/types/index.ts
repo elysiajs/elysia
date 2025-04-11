@@ -330,12 +330,18 @@ app.decorate('a', 'b')
 			}
 		})
 
-	expectTypeOf<(typeof app)['decorator']['a']>().toEqualTypeOf<{
-		readonly hello: {
-			readonly cookie: 'wah!'
-			readonly world: 'Tako'
+	expectTypeOf<(typeof app)['decorator']['a']>().toEqualTypeOf<
+		{
+			readonly hello: {
+				readonly world: 'Tako'
+			}
+		} & {
+			readonly hello: {
+				readonly world: 'Ina'
+				readonly cookie: 'wah!'
+			}
 		}
-	}>()
+	>()
 }
 
 // ? Reconcile deep using value
@@ -377,12 +383,18 @@ app.decorate('a', 'b')
 			}
 		})
 
-	expectTypeOf<(typeof app)['store']['a']>().toEqualTypeOf<{
-		hello: {
-			world: string
-			cookie: string
+	expectTypeOf<(typeof app)['store']['a']>().toEqualTypeOf<
+		{
+			hello: {
+				world: string
+			}
+		} & {
+			hello: {
+				world: string
+				cookie: string
+			}
 		}
-	}>()
+	>()
 }
 
 // ? Reconcile deep using value
@@ -1238,7 +1250,7 @@ const a = app
 			return 'Hifumi'
 		})
 
-	type app = typeof app['~Routes']
+	type app = (typeof app)['~Routes']
 
 	expectTypeOf<app['get']['response']>().toEqualTypeOf<{
 		200: string
@@ -1917,7 +1929,7 @@ type a = keyof {}
 		}))
 		.as('scoped')
 
-	expectTypeOf<typeof plugin['~Ephemeral']['derive']>().toHaveProperty(
+	expectTypeOf<(typeof plugin)['~Ephemeral']['derive']>().toHaveProperty(
 		'pluginMethod'
 	)
 }
@@ -2268,7 +2280,9 @@ type a = keyof {}
 		}
 	)
 
-	expectTypeOf<typeof app['~Routes']['get']['response'][200]>().toEqualTypeOf<{
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<{
 		name: string
 	}>()
 }
@@ -2292,7 +2306,9 @@ type a = keyof {}
 		}
 	)
 
-	expectTypeOf<typeof app['~Routes']['get']['response'][200]>().toEqualTypeOf<{
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<{
 		name: string
 		a: string
 	}>()

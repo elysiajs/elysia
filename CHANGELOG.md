@@ -19,6 +19,9 @@ Improvement:
 - refactor `_types` into `~Types`
 - using aot compilation to check for custom Elysia type, eg. Numeric]
 
+Bug fix:
+- `Response` returned from `onError` is using octet stream
+
 Breaking Change:
 - remove `as('plugin')` in favor of `as('scoped')`
 - remove root `index`
