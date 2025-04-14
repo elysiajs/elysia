@@ -898,12 +898,12 @@ export const composeHandler = ({
 							`if(a${index}===undefined)` +
 							`a${index}=[]\n` +
 							`if(memory===-1){` +
-							`const temp=decodeURIComponent(url.slice(start)).replace(/\\+/g,' ')\n` +
+							`const temp=decodeURIComponent(url.slice(start))\n` +
 							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
-							`else{a${index}.push(decodeURIComponent(url.slice(start)).replace(/\\+/g,' '))}\n` +
+							`else{a${index}.push(decodeURIComponent(url.slice(start)))}\n` +
 							`break` +
 							`}else{` +
-							`const temp=decodeURIComponent(url.slice(start, memory)).replace(/\\+/g,' ')\n` +
+							`const temp=decodeURIComponent(url.slice(start, memory))\n` +
 							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
 							`else{a${index}.push(temp)}\n` +
 							`}` +
