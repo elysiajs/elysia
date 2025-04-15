@@ -23,9 +23,9 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		preferWebstandardHeaders: true,
 		// @ts-ignore Bun specific
 		headers:
-			'c.headers = {}\n' +
-			'for (const [key, value] of c.request.headers.entries())' +
-			'c.headers[key] = value\n',
+			'c.headers={}\n' +
+			'for(const [k,v] of c.request.headers.entries())' +
+			'c.headers[k]=v\n',
 		parser: {
 			json(isOptional) {
 				if (isOptional)

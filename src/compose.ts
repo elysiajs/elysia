@@ -1409,15 +1409,15 @@ export const composeHandler = ({
 						`if(resolved instanceof ElysiaCustomStatusResponse)` +
 						`throw resolved\n` +
 						`else{` +
-						`resolved.request = c.request\n` +
-						`resolved.store = c.store\n` +
-						`resolved.qi = c.qi\n` +
-						`resolved.path = c.path\n` +
-						`resolved.url = c.url\n` +
-						`resolved.redirect = c.redirect\n` +
-						`resolved.set = c.set\n` +
-						`resolved.error = c.error\n` +
-						`c = resolved` +
+						`resolved.request=c.request\n` +
+						`resolved.store=c.store\n` +
+						`resolved.qi=c.qi\n` +
+						`resolved.path=c.path\n` +
+						`resolved.url=c.url\n` +
+						`resolved.redirect=c.redirect\n` +
+						`resolved.set=c.set\n` +
+						`resolved.error=c.error\n` +
+						`c=resolved` +
 						`}`
 				else
 					fnLiteral +=
@@ -1463,8 +1463,8 @@ export const composeHandler = ({
 								: `e.afterHandle[${i}](c, be)\n`
 						} else {
 							fnLiteral += isAsync(hook.fn)
-								? `af = await e.afterHandle[${i}](c)\n`
-								: `af = e.afterHandle[${i}](c)\n`
+								? `af=await e.afterHandle[${i}](c)\n`
+								: `af=e.afterHandle[${i}](c)\n`
 
 							fnLiteral += `if(af!==undefined) c.response=be=af\n`
 						}
