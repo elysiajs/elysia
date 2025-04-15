@@ -490,29 +490,39 @@ export default class Elysia<
 			allowMeta?: boolean
 			skipPrefix?: boolean
 		},
-		standaloneValidators?: InputSchema<string>[]
+		standaloneValidators = [
+			...(this.standaloneValidator.local
+				? this.standaloneValidator.local
+				: []),
+			...(this.standaloneValidator.scoped
+				? this.standaloneValidator.scoped
+				: []),
+			...(this.standaloneValidator.global
+				? this.standaloneValidator.global
+				: [])
+		]
 	) {
 		const skipPrefix = options?.skipPrefix ?? false
 		const allowMeta = options?.allowMeta ?? false
 
-		if (!standaloneValidators) {
-			standaloneValidators = []
+		// if (!standaloneValidators) {
+		// 	standaloneValidators = []
 
-			if (this.standaloneValidator.local)
-				standaloneValidators = standaloneValidators.concat(
-					this.standaloneValidator.local
-				)
+		// 	if (this.standaloneValidator.local)
+		// 		standaloneValidators = standaloneValidators.concat(
+		// 			this.standaloneValidator.local
+		// 		)
 
-			if (this.standaloneValidator.scoped)
-				standaloneValidators = standaloneValidators.concat(
-					this.standaloneValidator.scoped
-				)
+		// 	if (this.standaloneValidator.scoped)
+		// 		standaloneValidators = standaloneValidators.concat(
+		// 			this.standaloneValidator.scoped
+		// 		)
 
-			if (this.standaloneValidator.global)
-				standaloneValidators = standaloneValidators.concat(
-					this.standaloneValidator.global
-				)
-		}
+		// 	if (this.standaloneValidator.global)
+		// 		standaloneValidators = standaloneValidators.concat(
+		// 			this.standaloneValidator.global
+		// 		)
+		// }
 
 		localHook = localHookToLifeCycleStore(localHook)
 
