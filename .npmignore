@@ -14,6 +14,7 @@ bun.lockb
 node_modules
 tsconfig.json
 CHANGELOG.md
+heap.json
 
 example
 tests
