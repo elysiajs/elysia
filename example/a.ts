@@ -1,11 +1,23 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia()
-	.get('/ws', () => 'hi')
-	.ws('/ws', {
-		message() {}
-	})
-	.listen(3000)
+const params = new URLSearchParams()
+params.append('keys', JSON.stringify({ a: 'hello' }))
+params.append('keys', JSON.stringify({ a: 'hi' }))
 
-console.log(app.routes[0].compile().toString())
+console.log(params)
+
+const response = await new Elysia()
+	.get('/', ({ query }) => query, {
+		query: t.Object({
+			keys: t.Array(
+				t.Object({
+					a: t.String()
+				})
+			)
+		})
+	})
+	.handle(new Request(`http://localhost/?${params.toString()}`))
+	.then((res) => res.json())
+
+console.log(response)

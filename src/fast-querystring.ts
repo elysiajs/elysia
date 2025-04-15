@@ -34,7 +34,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
-import { decode as fastDecode } from './deuri'
+import decode from 'fast-decode-uri-component'
 
 const plusRegex = /\+/g
 
@@ -62,7 +62,7 @@ export function parseQueryFromURL(input: string) {
 
 				if (hasBothKeyValuePair || key.length > 0) {
 					if (flags & 0b0000_0001) key = key.replace(plusRegex, ' ')
-					if (flags & 0b0000_0010) key = fastDecode(key) || key
+					if (flags & 0b0000_0010) key = decode(key) || key
 
 					if (!result[key]) {
 						if (hasBothKeyValuePair) {
@@ -71,7 +71,7 @@ export function parseQueryFromURL(input: string) {
 							if (flags & 0b0000_0100)
 								value = value.replace(plusRegex, ' ')
 							if (flags & 0b0000_1000)
-								value = fastDecode(value) || value
+								value = decode(value) || value
 						}
 
 						result[key] = value
@@ -111,7 +111,7 @@ export function parseQueryFromURL(input: string) {
 
 		if (hasBothKeyValuePair || key.length > 0) {
 			if (flags & 0b0000_0001) key = key.replace(plusRegex, ' ')
-			if (flags & 0b0000_0010) key = fastDecode(key) || key
+			if (flags & 0b0000_0010) key = decode(key) || key
 
 			if (!result[key]) {
 				if (hasBothKeyValuePair) {
@@ -119,7 +119,7 @@ export function parseQueryFromURL(input: string) {
 
 					if (flags & 0b0000_0100)
 						value = value.replace(plusRegex, ' ')
-					if (flags & 0b0000_1000) value = fastDecode(value) || value
+					if (flags & 0b0000_1000) value = decode(value) || value
 				}
 
 				result[key] = value
@@ -134,7 +134,7 @@ export function parseQueryFromURL(input: string) {
  * @callback parse
  * @param {string} input
  */
-export const parseQuery = (input: string) => {
+export function parseQuery(input: string) {
 	const result: Record<string, string[]> = {}
 
 	if (typeof input !== 'string') return result
@@ -172,15 +172,14 @@ export const parseQuery = (input: string) => {
 					if (keyHasPlus) key = key.replace(plusRegex, ' ')
 
 					// Optimization: Do not decode if it's not necessary.
-					if (shouldDecodeKey) key = fastDecode(key) || key
+					if (shouldDecodeKey) key = decode(key) || key
 
 					if (hasBothKeyValuePair) {
 						value = input.slice(equalityIndex + 1, i)
 
 						if (valueHasPlus) value = value.replace(plusRegex, ' ')
 
-						if (shouldDecodeValue)
-							value = fastDecode(value) || value
+						if (shouldDecodeValue) value = decode(value) || value
 					}
 
 					const currentValue = result[key]

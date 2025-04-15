@@ -103,11 +103,6 @@
 			"import": "./dist/fast-querystring.mjs",
 			"require": "./dist/cjs/fast-querystring.js"
 		},
-		"./deuri": {
-			"types": "./dist/deuri.d.ts",
-			"import": "./dist/deuri.mjs",
-			"require": "./dist/cjs/deuri.js"
-		},
 		"./adapter": {
 			"types": "./dist/adapter/index.d.ts",
 			"import": "./dist/adapter/index.mjs",
@@ -189,6 +184,7 @@
 	"devDependencies": {
 		"@types/bun": "^1.2.4",
 		"@types/cookie": "^1.0.0",
+		"@types/fast-decode-uri-component": "^1.0.0",
 		"@typescript-eslint/eslint-plugin": "^6.17.0",
 		"@typescript-eslint/parser": "^6.17.0",
 		"cookie": "^1.0.2",
@@ -197,6 +193,7 @@
 		"eslint-plugin-sonarjs": "^3.0.2",
 		"exact-mirror": "^0.0.6",
 		"expect-type": "^1.2.0",
+		"fast-decode-uri-component": "^1.0.1",
 		"json-accelerator": "^0.1.4",
 		"memoirist": "^0.3.0",
 		"mitata": "^1.0.34",

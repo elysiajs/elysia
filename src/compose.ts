@@ -11,7 +11,7 @@ import {
 
 import { parseQuery, parseQueryFromURL } from './fast-querystring'
 
-import { decode as decodeURIComponent } from './deuri'
+import decode from 'fast-decode-uri-component'
 
 import {
 	ELYSIA_REQUEST_ID,
@@ -1946,7 +1946,7 @@ export const composeHandler = ({
 			ERROR_CODE,
 			parseCookie: hasCookie ? parseCookie : undefined,
 			signCookie: hasCookie ? signCookie : undefined,
-			decodeURIComponent: hasQuery ? decodeURIComponent : undefined,
+			decodeURIComponent: hasQuery ? decode : undefined,
 			ElysiaCustomStatusResponse,
 			ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 			ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
