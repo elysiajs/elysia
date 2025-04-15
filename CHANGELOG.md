@@ -25,6 +25,7 @@ Bug fix:
 
 Change:
 - only provide `c.request` to mapResponse when `maybeStream` is true
+- use plain object for `routeTree` instead of `Map`
 
 Breaking Change:
 - Minimum Node version is now `node22` LTS

@@ -140,9 +140,9 @@ describe('Edge Case', () => {
 			.get('/4', () => '4')
 
 		// @ts-expect-error
-		expect(app.routeTree.get('GET_/0')).toEqual(0)
+		expect(app.routeTree['GET_/0']).toEqual(0)
 		// @ts-expect-error
-		expect(app.routeTree.get('GET_/4')).toEqual(4)
+		expect(app.routeTree['GET_/4']).toEqual(4)
 	})
 
 	it('preserve correct index order of routes if duplicated from plugin', () => {
@@ -158,9 +158,9 @@ describe('Edge Case', () => {
 			.use(plugin)
 
 		// @ts-expect-error
-		expect(app.routeTree.get('GET_/0')).toEqual(0)
+		expect(app.routeTree['GET_/0']).toEqual(0)
 		// @ts-expect-error
-		expect(app.routeTree.get('GET_/4')).toEqual(4)
+		expect(app.routeTree['GET_/4']).toEqual(4)
 	})
 
 	it('get getGlobalRoutes', () => {

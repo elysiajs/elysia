@@ -211,12 +211,12 @@ export default class Elysia<
 	private dependencies: { [key in string]: Checksum[] } = {}
 
 	'~Prefix' = '' as BasePath
-	'~Singleton' = {} as Singleton
-	'~Definitions' = {} as Definitions
-	'~Metadata' = {} as Metadata
-	'~Ephemeral' = {} as Ephemeral
-	'~Volatile' = {} as Volatile
-	'~Routes': Routes = {} as any
+	'~Singleton' = null as unknown as Singleton
+	'~Definitions' = null as unknown as Definitions
+	'~Metadata' = null as unknown as Metadata
+	'~Ephemeral' = null as unknown as Ephemeral
+	'~Volatile' = null as unknown as Volatile
+	'~Routes' = null as unknown as Routes
 
 	protected singleton = {
 		decorator: {},
@@ -264,9 +264,11 @@ export default class Elysia<
 
 	event: Partial<LifeCycleStore> = {}
 
-	protected telemetry = {
-		stack: undefined as string | undefined
-	}
+	protected telemetry:
+		| undefined
+		| {
+				stack: string | undefined
+		  }
 
 	router = {
 		'~http': undefined as
@@ -294,7 +296,7 @@ export default class Elysia<
 		history: [] as InternalRoute[]
 	}
 
-	protected routeTree = new Map<string, number>()
+	protected routeTree: Record<string, number> = {}
 
 	get routes(): InternalRoute[] {
 		return this.router.history
@@ -357,7 +359,9 @@ export default class Elysia<
 			(typeof Bun !== 'undefined' ? BunAdapter : WebStandardAdapter)
 
 		if (config?.analytic && (config?.name || config?.seed !== undefined))
-			this.telemetry.stack = new Error().stack
+			this.telemetry = {
+				stack: new Error().stack
+			}
 	}
 
 	'~adapter': ElysiaAdapter
@@ -845,7 +849,7 @@ export default class Elysia<
 			})
 
 		let oldIndex: number | undefined
-		if (this.routeTree.has(`${method}_${path}`))
+		if (`${method}_${path}` in this.routeTree)
 			for (let i = 0; i < this.router.history.length; i++) {
 				const route = this.router.history[i]
 				if (route.path === path && route.method === method) {
@@ -853,11 +857,7 @@ export default class Elysia<
 					break
 				}
 			}
-		else
-			this.routeTree.set(
-				`${method}_${path}`,
-				this.router.history.length
-			)
+		else this.routeTree[`${method}_${path}`] = this.router.history.length
 
 		const history = this.router.history
 		const index = oldIndex ?? this.router.history.length
@@ -885,31 +885,39 @@ export default class Elysia<
 					composed: mainHandler,
 					compile: compile!,
 					handler: handle,
-					hooks,
-					standaloneValidators
+					hooks
 				},
+				standaloneValidators.length
+					? {
+							standaloneValidators
+						}
+					: {},
 				localHook.webSocket
 					? { websocket: localHook.websocket as any }
 					: {}
 			)
-		else
+		else {
 			this.router.history.push(
-				// @ts-ignore
 				Object.assign(
 					{
 						method,
 						path,
 						composed: mainHandler,
-						compile,
+						compile: compile!,
 						handler: handle,
-						hooks,
-						standaloneValidators
+						hooks
 					},
+					standaloneValidators.length
+						? {
+								standaloneValidators
+							}
+						: {},
 					localHook.webSocket
 						? { websocket: localHook.websocket as any }
 						: {}
 				)
 			)
+		}
 
 		const handler = {
 			handler: shouldPrecompile ? mainHandler : undefined,
@@ -4085,7 +4093,7 @@ export default class Elysia<
 							seed: plugin.config.seed,
 							checksum: current,
 							dependencies: plugin.dependencies,
-							stack: plugin.telemetry.stack,
+							stack: plugin.telemetry?.stack,
 							routes: plugin.router.history,
 							decorators: plugin.singleton,
 							store: plugin.singleton.store,
@@ -6478,12 +6486,6 @@ export default class Elysia<
 			? composeErrorHandler(this)
 			: createDynamicErrorHandler(this))(context, error)
 	}
-
-	private outerErrorHandler = (error: Error) =>
-		new Response(error.message || error.name || 'Error', {
-			// @ts-ignore
-			status: error?.status ?? 500
-		})
 
 	/**
 	 * ### listen

@@ -61,7 +61,7 @@ export const BunAdapter: ElysiaAdapter = {
 					const method = route.method
 
 					if (
-						(method === 'GET' && tree.has(`WS_${route.path}`)) ||
+						(method === 'GET' && `WS_${route.path}` in tree) ||
 						method === 'WS'
 					)
 						continue
@@ -69,7 +69,7 @@ export const BunAdapter: ElysiaAdapter = {
 					if (typeof route.handler !== 'function') continue
 
 					if (method === 'ALL') {
-						if (!tree.has(`WS_${route.path}`))
+						if (!(`WS_${route.path}` in tree))
 							routes[route.path] = route.handler
 
 						continue
@@ -109,6 +109,12 @@ export const BunAdapter: ElysiaAdapter = {
 
 			const fetch = app.fetch
 
+			const outerErrorHandler = (error: Error) =>
+				new Response(error.message || error.name || 'Error', {
+					// @ts-ignore
+					status: error?.status ?? 500
+				})
+
 			const serve =
 				typeof options === 'object'
 					? ({
@@ -133,8 +139,7 @@ export const BunAdapter: ElysiaAdapter = {
 								...(websocket || {})
 							},
 							fetch,
-							// @ts-expect-error private property
-							error: app.outerErrorHandler
+							error: outerErrorHandler
 						} as Serve)
 					: ({
 							development: !isProduction,
@@ -153,8 +158,7 @@ export const BunAdapter: ElysiaAdapter = {
 							},
 							port: options,
 							fetch,
-							// @ts-expect-error private property
-							error: app.outerErrorHandler
+							error: outerErrorHandler
 						} as Serve)
 
 			app.server = Bun.serve(serve as any) as any

@@ -1,5 +1,6 @@
 import { Elysia, t } from '../../src'
 import { generateHeapSnapshot } from 'bun'
+import v8 from 'node:v8'
 
 const total = 1000
 
@@ -32,4 +33,8 @@ const total = 1000
 	await Bun.write('heap.json', JSON.stringify(snapshot, null, 2))
 
 	console.log(memoryAfter - memory, 'MB memory used')
+
+	// Creates a heap snapshot file with an auto-generated name
+	const snapshotPath = v8.writeHeapSnapshot()
+	console.log(`Heap snapshot written to: ${snapshotPath}`)
 }

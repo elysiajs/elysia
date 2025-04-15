@@ -1,5 +1,6 @@
 import { Elysia, t } from '../../src'
 import { generateHeapSnapshot } from 'bun'
+import v8 from 'node:v8'
 
 const total = 500
 
@@ -27,6 +28,8 @@ const t1 = performance.now()
 
 for (let i = 0; i < total; i++) app.use(setup(i))
 
+apps.length = 0
+
 const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024
 const took = performance.now() - t1
 
@@ -39,7 +42,11 @@ console.log(
 console.log('Average', +(took / total).toFixed(4), 'ms / route')
 console.log(memoryAfter - memory, 'MB memory used')
 
-const snapshot = generateHeapSnapshot()
-await Bun.write('heap.json', JSON.stringify(snapshot, null, 2))
+// const snapshot = generateHeapSnapshot()
+// await Bun.write('heap.json', JSON.stringify(snapshot, null, 2))
 
 // console.log(app.router.history)
+
+// Creates a heap snapshot file with an auto-generated name
+const snapshotPath = v8.writeHeapSnapshot()
+console.log(`Heap snapshot written to: ${snapshotPath}`)
