@@ -27,6 +27,7 @@ Change:
 - only provide `c.request` to mapResponse when `maybeStream` is true
 
 Breaking Change:
+- Minimum Node version is now `node22` LTS
 - remove `as('plugin')` in favor of `as('scoped')`
 - remove root `index`
 - remove `websocket` from `ElysiaAdapter`

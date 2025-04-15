@@ -6,8 +6,12 @@ const tsupConfig: Options = {
 	splitting: false,
 	sourcemap: false,
 	clean: true,
-	bundle: false,
-	minify: false
+	bundle: true,
+	minifySyntax: true,
+	minifyWhitespace: false,
+	minifyIdentifiers: false,
+	target: 'node22',
+	external: ['@sinclair/typebox']
 	// outExtension() {
 	// 	return {
 	// 		js: '.js'
@@ -20,7 +24,6 @@ await Promise.all([
 	build({
 		outDir: 'dist',
 		format: 'esm',
-		target: 'node20',
 		cjsInterop: false,
 		...tsupConfig
 	}),
@@ -28,7 +31,6 @@ await Promise.all([
 	build({
 		outDir: 'dist/cjs',
 		format: 'cjs',
-		target: 'node20',
 		// dts: true,
 		...tsupConfig
 	})
@@ -75,12 +77,7 @@ await Bun.build({
 	},
 	target: 'bun',
 	sourcemap: 'external',
-	external: [
-		'@sinclair/typebox',
-		'cookie',
-		'fast-decode-uri-component',
-		'memoirist'
-	]
+	external: ['@sinclair/typebox']
 })
 
 await Promise.all([
