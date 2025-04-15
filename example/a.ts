@@ -1,17 +1,26 @@
-import { Elysia, t } from '../src'
+import Elysia from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia().post('/sign-in', ({ body }) => body, {
-	parse: 'json'
-})
+const orders: number[] = []
 
-const post = new Request('http://localhost/sign-in', {
-	method: 'POST',
-})
+const app = new Elysia()
+	.macro(({ onBeforeHandle }) => ({
+		hi(fn: () => any) {
+			onBeforeHandle({ insert: 'after', stack: 'local' }, fn)
+		}
+	}))
+	.onBeforeHandle(() => {
+		orders.push(1)
+	})
+	.get('/', () => 'Hello World', {
+		beforeHandle() {
+			orders.push(2)
+		},
+		hi: () => {
+			orders.push(3)
+		}
+	})
 
-console.log(app.routes[0].compile().toString())
+await app.handle(req('/'))
 
-app.handle(post.clone())
-	.then((x) => x.json())
-	.then(console.log)
-	.catch(console.warn)
+console.log(orders)

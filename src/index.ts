@@ -39,7 +39,6 @@ import {
 	PromiseGroup,
 	promoteEvent,
 	isNotEmpty,
-	compressHistoryHook,
 	encodePath
 } from './utils'
 
@@ -487,23 +486,35 @@ export default class Elysia<
 		path: string,
 		handle: Handler<any, any, any> | any,
 		localHook?: AnyLocalHook,
-		{ allowMeta = false, skipPrefix = false } = {
-			allowMeta: false as boolean | undefined,
-			skipPrefix: false as boolean | undefined
+		options?: {
+			allowMeta?: boolean
+			skipPrefix?: boolean
 		},
-		standaloneValidators = [
-			...(this.standaloneValidator.local
-				? this.standaloneValidator.local
-				: []),
-			...(this.standaloneValidator.scoped
-				? this.standaloneValidator.scoped
-				: []),
-			...(this.standaloneValidator.global
-				? this.standaloneValidator.global
-				: [])
-		]
+		standaloneValidators?: InputSchema<string>[]
 	) {
-		localHook = compressHistoryHook(localHookToLifeCycleStore(localHook))
+		const skipPrefix = options?.skipPrefix ?? false
+		const allowMeta = options?.allowMeta ?? false
+
+		if (!standaloneValidators) {
+			standaloneValidators = []
+
+			if (this.standaloneValidator.local)
+				standaloneValidators = standaloneValidators.concat(
+					this.standaloneValidator.local
+				)
+
+			if (this.standaloneValidator.scoped)
+				standaloneValidators = standaloneValidators.concat(
+					this.standaloneValidator.scoped
+				)
+
+			if (this.standaloneValidator.global)
+				standaloneValidators = standaloneValidators.concat(
+					this.standaloneValidator.global
+				)
+		}
+
+		localHook = localHookToLifeCycleStore(localHook)
 
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 
@@ -562,7 +573,7 @@ export default class Elysia<
 					config: cloned.cookie?.config ?? {},
 					dynamic,
 					models,
-					validators: standaloneValidators.map((x) => x.cookie)
+					validators
 				})
 		}
 
@@ -719,10 +730,15 @@ export default class Elysia<
 						}
 					} as any)
 
-		localHook = mergeHook(
-			localHook,
-			compressHistoryHook(instanceValidator as any)
+		if (
+			instanceValidator.body ||
+			instanceValidator.cookie ||
+			instanceValidator.headers ||
+			instanceValidator.params ||
+			instanceValidator.query ||
+			instanceValidator.response
 		)
+			localHook = mergeHook(localHook, instanceValidator)
 
 		if (localHook.tags) {
 			if (!localHook.detail)
@@ -739,7 +755,7 @@ export default class Elysia<
 			)
 
 		this.applyMacro(localHook)
-		const hooks = compressHistoryHook(mergeHook(this.event, localHook))
+		const hooks = mergeHook(this.event, localHook)
 
 		if (this.config.aot === false) {
 			this.router.dynamic.add(method, path, {
@@ -4060,7 +4076,7 @@ export default class Elysia<
 			handler,
 			hooks,
 			standaloneValidators
-		} of Object.values(plugin.router.history)) {
+		} of Object.values(plugin.router.history))
 			this.add(
 				method,
 				path,
@@ -4071,7 +4087,6 @@ export default class Elysia<
 				undefined,
 				standaloneValidators
 			)
-		}
 
 		if (name) {
 			if (!(name in this.dependencies)) this.dependencies[name] = []
@@ -4119,26 +4134,31 @@ export default class Elysia<
 						}
 			)
 
-			this.event = mergeLifeCycle(
-				this.event,
-				filterGlobalHook(plugin.event),
-				current
-			)
+			if (Object.keys(plugin.event).length)
+				this.event = mergeLifeCycle(
+					this.event,
+					filterGlobalHook(plugin.event),
+					current
+				)
 		} else {
-			this.event = mergeLifeCycle(
-				this.event,
-				filterGlobalHook(plugin.event)
-			)
+			if (Object.keys(plugin.event).length)
+				this.event = mergeLifeCycle(
+					this.event,
+					filterGlobalHook(plugin.event)
+				)
 		}
 
-		// @ts-ignore
-		this.validator.global = mergeHook(this.validator.global, {
-			...plugin.validator.global
-		}) as any
-		// @ts-ignore
-		this.validator.local = mergeHook(this.validator.local, {
-			...plugin.validator.scoped
-		})
+		if (plugin.validator.global)
+			// @ts-ignore
+			this.validator.global = mergeHook(this.validator.global, {
+				...plugin.validator.global
+			}) as any
+
+		if (plugin.validator.scoped)
+			// @ts-ignore
+			this.validator.local = mergeHook(this.validator.local, {
+				...plugin.validator.scoped
+			})
 
 		return this
 	}
@@ -5532,6 +5552,8 @@ export default class Elysia<
 
 		switch (typeof value) {
 			case 'object':
+				if (!value || !Object.keys(value).length) return this
+
 				if (name) {
 					if (name in this.singleton.store)
 						this.singleton.store[name] = mergeDeep(
@@ -6091,6 +6113,8 @@ export default class Elysia<
 				const parsedSchemas = {} as Record<string, TSchema>
 
 				const kvs = Object.entries(name)
+
+				if (!kvs.length) return this
 
 				for (const [key, value] of kvs) {
 					if (key in this.definitions.type) continue

@@ -10,7 +10,7 @@ const setup = (n = 0) => {
 	let app = new Elysia()
 
 	for (let i = 0; i < 2; i++) {
-		app.decorate(`a/${i + n * total}`, () => i).get(
+		app.decorate(`a${i + n * total}`, () => i).get(
 			`/a/${i + n * total}`,
 			() => i
 		)
@@ -48,5 +48,5 @@ console.log(memoryAfter - memory, 'MB memory used')
 // console.log(app.router.history)
 
 // Creates a heap snapshot file with an auto-generated name
-const snapshotPath = v8.writeHeapSnapshot()
-console.log(`Heap snapshot written to: ${snapshotPath}`)
+// const snapshotPath = v8.writeHeapSnapshot()
+// console.log(`Heap snapshot written to: ${snapshotPath}`)

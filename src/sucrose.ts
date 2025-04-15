@@ -7,6 +7,7 @@ import type {
 	LifeCycleStore,
 	LifeCycleType
 } from './types'
+import { isBun } from './universal/utils'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -609,6 +610,7 @@ export const clearSucroseCache = (delay = 0) => {
 		caches = {}
 
 		pendingGC = undefined
+		if (isBun) Bun.gc(false)
 	}, delay) as unknown as number
 }
 

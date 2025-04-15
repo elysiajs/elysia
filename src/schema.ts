@@ -790,10 +790,9 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (validators?.length) {
 		let hasAdditional = false
 
-		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas([
-			schema,
-			...validators.map(mapSchema)
-		])
+		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas(
+			schema.concat(validators.map(mapSchema))
+		)
 
 		if (notObjects) {
 			schema = t.Intersect([
@@ -823,8 +822,6 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 				schema.additionalProperties = false
 		}
 	} else {
-		// console.log("A", schema)
-
 		if (
 			schema.type === 'object' &&
 			'additionalProperties' in schema === false

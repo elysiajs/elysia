@@ -71,7 +71,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			const defaultHeaders = app.setHeaders
 
 			for (const key of Object.keys(app.decorator))
-				decoratorsLiteral += `,${key}:decorator['${key}']`
+				decoratorsLiteral += `,'${key}':decorator['${key}']`
 
 			const standardHostname =
 				app.config.handler?.standardHostname ?? true

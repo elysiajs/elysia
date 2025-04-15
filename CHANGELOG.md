@@ -19,13 +19,16 @@ Improvement:
 - refactor `_types` into `~Types`
 - using aot compilation to check for custom Elysia type, eg. Numeric
 - refactor `app.router.static`, and move static router code generation to compile phase
+- optimize memory usage on `add`, `_use`, and some utility functions
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream
+- unintentional memory allocation when using `mergeObjectArray`
 
 Change:
 - only provide `c.request` to mapResponse when `maybeStream` is true
 - use plain object for `routeTree` instead of `Map`
+- remove `compressHistoryHook` and `decompressHistoryHook`
 
 Breaking Change:
 - Minimum Node version is now `node22` LTS

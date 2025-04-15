@@ -29,12 +29,12 @@ const total = 1000
 	)
 	console.log('Average', +(took / total).toFixed(4), 'ms / route')
 
+	console.log(memoryAfter - memory, 'MB memory used')
+
 	const snapshot = generateHeapSnapshot()
 	await Bun.write('heap.json', JSON.stringify(snapshot, null, 2))
 
-	console.log(memoryAfter - memory, 'MB memory used')
-
 	// Creates a heap snapshot file with an auto-generated name
-	const snapshotPath = v8.writeHeapSnapshot()
-	console.log(`Heap snapshot written to: ${snapshotPath}`)
+	// const snapshotPath = v8.writeHeapSnapshot()
+	// console.log(`Heap snapshot written to: ${snapshotPath}`)
 }

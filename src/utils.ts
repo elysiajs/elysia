@@ -51,14 +51,14 @@ export const mergeDeep = <
 >(
 	target: A,
 	source: B,
-	{
-		skipKeys,
-		override = true
-	}: {
+	options?: {
 		skipKeys?: string[]
 		override?: boolean
-	} = {}
+	}
 ): A & B => {
+	const skipKeys = options?.skipKeys
+	const override = options?.override ?? true
+
 	if (!isObject(target) || !isObject(source)) return target as A & B
 
 	for (const [key, value] of Object.entries(source)) {
@@ -94,27 +94,29 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 }
 
 export const mergeObjectArray = <T extends HookContainer>(
-	a: T | T[] = [],
-	b: T | T[] = []
+	a: T | T[] | undefined,
+	b: T | T[] | undefined
 ): T[] | undefined => {
-	if (!a) return undefined
 	if (!b) return a as any
 
 	// ! Must copy to remove side-effect
 	const array = <T[]>[]
 	const checksums = <(number | undefined)[]>[]
 
-	if (!Array.isArray(a)) a = [a]
-	if (!Array.isArray(b)) b = [b]
+	if (a) {
+		if (!Array.isArray(a)) a = [a]
+		for (const item of a) {
+			array.push(item)
 
-	for (const item of a) {
-		array.push(item)
-
-		if (item.checksum) checksums.push(item.checksum)
+			if (item.checksum) checksums.push(item.checksum)
+		}
 	}
 
-	for (const item of b)
-		if (!checksums.includes(item.checksum)) array.push(item)
+	if (b) {
+		if (!Array.isArray(b)) b = [b]
+		for (const item of b)
+			if (!checksums.includes(item.checksum)) array.push(item)
+	}
 
 	return array
 }
@@ -217,13 +219,14 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
-	// @ts-expect-error
-	const { resolve: resolveA, ...restA } = a ?? {}
-	const { resolve: resolveB, ...restB } = b ?? {}
+	if (!Object.values(b).find((x) => x !== undefined && x !== null))
+		return {
+			...a
+		} as any
 
-	return {
-		...restA,
-		...restB,
+	const hook = {
+		...a,
+		...b,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -253,11 +256,12 @@ export const mergeHook = (
 		transform: mergeObjectArray(a?.transform, b?.transform),
 		beforeHandle: mergeObjectArray(
 			mergeObjectArray(
-				fnToContainer(resolveA, 'resolve'),
+				// @ts-ignore
+				fnToContainer(a?.resolve, 'resolve'),
 				a?.beforeHandle
 			),
 			mergeObjectArray(
-				fnToContainer(resolveB, 'resolve'),
+				fnToContainer(b.resolve, 'resolve'),
 				b?.beforeHandle
 			)
 		),
@@ -270,6 +274,10 @@ export const mergeHook = (
 		trace: mergeObjectArray(a?.trace, b?.trace) as any,
 		error: mergeObjectArray(a?.error, b?.error)
 	}
+
+	if (hook.resolve) delete hook.resolve
+
+	return hook
 }
 
 const isBun = typeof Bun !== 'undefined'
@@ -382,7 +390,7 @@ export const mergeLifeCycle = (
 export const asHookType = (
 	fn: HookContainer,
 	inject: LifeCycleType,
-	{ skipIfHasType = false }: { skipIfHasType?: boolean } = {}
+	{ skipIfHasType = false }: { skipIfHasType?: boolean }
 ) => {
 	if (!fn) return fn
 
@@ -586,13 +594,11 @@ export const traceBackMacro = (
 		if (typeof v === 'function') {
 			const hook = v(value)
 
-			if (typeof hook === 'object') {
-				for (const [k, v] of Object.entries(hook)) {
+			if (typeof hook === 'object')
+				for (const [k, v] of Object.entries(hook))
 					manage(k as keyof LifeCycleStore)({
 						fn: v as any
 					})
-				}
-			}
 		}
 
 		delete property[key as unknown as keyof typeof extension]
@@ -630,11 +636,13 @@ export const createMacroManager =
 			}
 		}
 
-		if ('fn' in type || Array.isArray(type)) {
-			if (!localHook[stackName]) localHook[stackName] = []
-			if (typeof localHook[stackName] === 'function')
-				localHook[stackName] = [localHook[stackName]]
+		if (!localHook[stackName]) localHook[stackName] = []
+		if (typeof localHook[stackName] === 'function')
+			localHook[stackName] = [localHook[stackName]]
+		if (!Array.isArray(localHook[stackName]))
+			localHook[stackName] = [localHook[stackName]]
 
+		if ('fn' in type || Array.isArray(type)) {
 			if (Array.isArray(type))
 				localHook[stackName] = (
 					localHook[stackName] as unknown[]
@@ -667,10 +675,6 @@ export const createMacroManager =
 				}
 			}
 		} else {
-			if (!localHook[stackName]) localHook[stackName] = []
-			if (typeof localHook[stackName] === 'function')
-				localHook[stackName] = [localHook[stackName]]
-
 			if (!Array.isArray(fn)) {
 				if (insert === 'before') {
 					;(localHook[stackName] as any[]).unshift(fn)
@@ -1033,74 +1037,6 @@ const isEmptyHookProperty = (prop: unknown) => {
 	if (Array.isArray(prop)) return prop.length === 0
 
 	return !prop
-}
-
-export const compressHistoryHook = (hook: LifeCycleStore) => {
-	const history: Partial<LifeCycleStore> = { ...hook }
-
-	if (isEmptyHookProperty(hook.afterHandle)) delete history.afterHandle
-	if (isEmptyHookProperty(hook.afterResponse)) delete history.afterResponse
-	if (isEmptyHookProperty(hook.beforeHandle)) delete history.beforeHandle
-	if (isEmptyHookProperty(hook.error)) delete history.error
-	if (isEmptyHookProperty(hook.mapResponse)) delete history.mapResponse
-	if (isEmptyHookProperty(hook.parse)) delete history.parse
-	if (isEmptyHookProperty(hook.request)) delete history.request
-	if (isEmptyHookProperty(hook.start)) delete history.start
-	if (isEmptyHookProperty(hook.stop)) delete history.stop
-	if (isEmptyHookProperty(hook.trace)) delete history.trace
-	if (isEmptyHookProperty(hook.transform)) delete history.transform
-
-	if (!history.type) delete history.type
-	// @ts-expect-error
-	if (history.detail && !Object.keys(history.detail).length)
-		// @ts-expect-error
-		delete history.detail
-
-	// @ts-expect-error
-	if (!history.body) delete history.body
-	// @ts-expect-error
-	if (!history.cookie) delete history.cookie
-	// @ts-expect-error
-	if (!history.headers) delete history.headers
-	// @ts-expect-error
-	if (!history.query) delete history.query
-	// @ts-expect-error
-	if (!history.params) delete history.params
-	// @ts-expect-error
-	if (!history.response) delete history.response
-
-	return history
-}
-
-export const decompressHistoryHook = (hook: Partial<LifeCycleStore>) => {
-	const history = { ...hook } as LifeCycleStore
-
-	if (!history.afterHandle) history.afterHandle = []
-	if (!history.afterResponse) history.afterResponse = []
-	if (!history.beforeHandle) history.beforeHandle = []
-	if (!history.error) history.error = []
-	if (!history.mapResponse) history.mapResponse = []
-	if (!history.parse) history.parse = []
-	if (!history.request) history.request = []
-	if (!history.start) history.start = []
-	if (!history.stop) history.stop = []
-	if (!history.trace) history.trace = []
-	if (!history.transform) history.transform = []
-
-	// @ts-expect-error
-	if (!history.body) history.body = undefined
-	// @ts-expect-error
-	if (!history.cookie) history.cookie = undefined
-	// @ts-expect-error
-	if (!history.headers) history.headers = undefined
-	// @ts-expect-error
-	if (!history.query) history.query = undefined
-	// @ts-expect-error
-	if (!history.params) history.params = undefined
-	// @ts-expect-error
-	if (!history.response) history.response = undefined
-
-	return history
 }
 
 export const encodePath = (path: string, { dynamic = false } = {}) => {
