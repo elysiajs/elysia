@@ -641,7 +641,7 @@ export const createStaticHandler = (
 		!hooks.beforeHandle?.length &&
 		!hooks.afterHandle?.length
 	)
-		return response.clone.bind(response)
+		return response.clone.bind(response) as any
 }
 
 const handleResponse = createResponseHandler({

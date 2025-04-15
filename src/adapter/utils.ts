@@ -83,11 +83,13 @@ export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
 	return headers
 }
 
-export const responseToSetHeaders = (response: Response, set?: Context['set']) => {
+export const responseToSetHeaders = (
+	response: Response,
+	set?: Context['set']
+) => {
 	if (set?.headers) {
 		if (response) {
 			if (hasHeaderShorthand)
-				// @ts-expect-error
 				Object.assign(set.headers, response.headers.toJSON())
 			else
 				for (const [key, value] of response.headers.entries())
@@ -111,7 +113,6 @@ export const responseToSetHeaders = (response: Response, set?: Context['set']) =
 
 	if (hasHeaderShorthand) {
 		set = {
-			// @ts-expect-error
 			headers: response.headers.toJSON(),
 			status: set?.status ?? 200
 		}
@@ -197,18 +198,15 @@ export const createStreamHandler =
 						if (typeof init.value === 'object')
 							try {
 								controller.enqueue(
-									// @ts-expect-error this is a valid operation
 									Buffer.from(JSON.stringify(init.value))
 								)
 							} catch {
 								controller.enqueue(
-									// @ts-expect-error this is a valid operation
 									Buffer.from(init.value.toString())
 								)
 							}
 						else
 							controller.enqueue(
-								// @ts-expect-error this is a valid operation
 								Buffer.from(init.value.toString())
 							)
 					}
@@ -220,18 +218,15 @@ export const createStreamHandler =
 						if (typeof chunk === 'object')
 							try {
 								controller.enqueue(
-									// @ts-expect-error this is a valid operation
 									Buffer.from(JSON.stringify(chunk))
 								)
 							} catch {
 								controller.enqueue(
-									// @ts-expect-error this is a valid operation
 									Buffer.from(chunk.toString())
 								)
 							}
 						else
 							controller.enqueue(
-								// @ts-expect-error this is a valid operation
 								Buffer.from(chunk.toString())
 							)
 

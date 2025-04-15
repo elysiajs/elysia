@@ -193,6 +193,7 @@ export class ElysiaRequest implements WebStandardRequest {
 		return Buffer.from(buffer).toString()
 	}
 
+	// @ts-ignore
 	clone(): ElysiaRequest {
 		return new ElysiaRequest(this.input, this.init)
 	}
