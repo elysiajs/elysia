@@ -112,48 +112,6 @@ export const WebStandardAdapter: ElysiaAdapter = {
 
 			return fnLiteral
 		},
-		websocket(app) {
-			let fnLiteral = ''
-
-			const wsPaths = app.router.static.ws
-			const router = app.router.http
-
-			router.build()
-
-			if (
-				Object.keys(wsPaths).length ||
-				router.root.ws ||
-				router.history.find((x) => x['0'] === 'ws')
-			) {
-				fnLiteral += `if(r.method==='GET'){switch(p){`
-
-				for (const [path, index] of Object.entries(wsPaths)) {
-					fnLiteral +=
-						`case'${path}':` +
-						(app.config.strictPath !== true
-							? `case'${getLoosePath(path)}':`
-							: '') +
-						`if(r.headers.get('upgrade')==='websocket')` +
-						`return ht[${index}].composed(c)\n`
-				}
-
-				fnLiteral +=
-					`default:` +
-					`if(r.headers.get('upgrade')==='websocket'){` +
-					`const route=router.find('ws',p)\n` +
-					`if(route){` +
-					`c.params=route.params\n` +
-					`if(route.store.handler)return route.store.handler(c)\n` +
-					`return (route.store.handler=route.store.compile())(c)` +
-					`}` +
-					`}` +
-					`break` +
-					`}` +
-					`}`
-			}
-
-			return fnLiteral
-		},
 		error404(hasEventHook, hasErrorHook) {
 			let findDynamicRoute = `if(route===null)return `
 

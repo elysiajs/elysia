@@ -17,14 +17,19 @@ Improvement:
 - Elysia.form can now be type check
 - refactor type-system
 - refactor `_types` into `~Types`
-- using aot compilation to check for custom Elysia type, eg. Numeric]
+- using aot compilation to check for custom Elysia type, eg. Numeric
+- refactor `app.router.static`, and move static router code generation to compile phase
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream
 
+Change:
+- only provide `c.request` to mapResponse when `maybeStream` is true
+
 Breaking Change:
 - remove `as('plugin')` in favor of `as('scoped')`
 - remove root `index`
+- remove `websocket` from `ElysiaAdapter`
 
 # 1.2.25 - 6 Mar 2025
 Bug fix:

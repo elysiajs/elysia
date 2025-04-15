@@ -9,8 +9,10 @@ const setup = (n = 0) => {
 	let app = new Elysia()
 
 	for (let i = 0; i < 2; i++) {
-		// app = app.decorate(`a/${i + n * total}`, () => i)
-		app.get(`/a/${i + n * total}`, () => i)
+		app.decorate(`a/${i + n * total}`, () => i).get(
+			`/a/${i + n * total}`,
+			() => i
+		)
 	}
 
 	apps.push(app)

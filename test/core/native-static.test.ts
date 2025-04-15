@@ -5,10 +5,8 @@ describe('Native Static Response', () => {
 	it('work', async () => {
 		const app = new Elysia().get('/', 'Static Content')
 
-		expect(app.router.static.http.static['/']).toBeInstanceOf(Response)
-		expect(await app.router.static.http.static['/'].text()).toEqual(
-			'Static Content'
-		)
+		expect(app.router.response['/']).toBeInstanceOf(Response)
+		expect(await app.router.response['/'].text()).toEqual('Static Content')
 	})
 
 	it('handle plugin', async () => {
@@ -16,17 +14,11 @@ describe('Native Static Response', () => {
 
 		const app = new Elysia().use(plugin).get('/', 'Static Content')
 
-		expect(app.router.static.http.static['/']).toBeInstanceOf(Response)
-		expect(await app.router.static.http.static['/'].text()).toEqual(
-			'Static Content'
-		)
+		expect(app.router.response['/']).toBeInstanceOf(Response)
+		expect(await app.router.response['/'].text()).toEqual('Static Content')
 
-		expect(app.router.static.http.static['/plugin']).toBeInstanceOf(
-			Response
-		)
-		expect(await app.router.static.http.static['/plugin'].text()).toEqual(
-			'Plugin'
-		)
+		expect(app.router.response['/plugin']).toBeInstanceOf(Response)
+		expect(await app.router.response['/plugin'].text()).toEqual('Plugin')
 	})
 
 	it('handle default header', async () => {
@@ -37,27 +29,19 @@ describe('Native Static Response', () => {
 			.use(plugin)
 			.get('/', 'Static Content')
 
-		expect(app.router.static.http.static['/']).toBeInstanceOf(Response)
-		expect(app.router.static.http.static['/'].headers.toJSON()).toEqual({
+		expect(app.router.response['/']).toBeInstanceOf(Response)
+		expect(app.router.response['/'].headers.toJSON()).toEqual({
 			'content-type': 'text/plain',
 			server: 'Elysia'
 		})
-		expect(await app.router.static.http.static['/'].text()).toEqual(
-			'Static Content'
-		)
+		expect(await app.router.response['/'].text()).toEqual('Static Content')
 
-		expect(app.router.static.http.static['/plugin']).toBeInstanceOf(
-			Response
-		)
-		expect(
-			app.router.static.http.static['/plugin'].headers.toJSON()
-		).toEqual({
+		expect(app.router.response['/plugin']).toBeInstanceOf(Response)
+		expect(app.router.response['/plugin'].headers.toJSON()).toEqual({
 			'content-type': 'text/plain',
 			server: 'Elysia'
 		})
-		expect(await app.router.static.http.static['/plugin'].text()).toEqual(
-			'Plugin'
-		)
+		expect(await app.router.response['/plugin'].text()).toEqual('Plugin')
 	})
 
 	it('turn off by config', async () => {
@@ -66,7 +50,7 @@ describe('Native Static Response', () => {
 			'Static Content'
 		)
 
-		expect(app.router.static.http.static).not.toHaveProperty('/')
+		expect(app.router.response).not.toHaveProperty('/')
 	})
 
 	it('handle loose path', async () => {
@@ -74,46 +58,30 @@ describe('Native Static Response', () => {
 
 		const app = new Elysia().use(plugin).get('/', 'Static Content')
 
-		expect(app.router.static.http.static['/']).toBeInstanceOf(Response)
-		expect(await app.router.static.http.static['/'].text()).toEqual(
-			'Static Content'
-		)
+		expect(app.router.response['/']).toBeInstanceOf(Response)
+		expect(await app.router.response['/'].text()).toEqual('Static Content')
 
-		expect(app.router.static.http.static['']).toBeInstanceOf(Response)
-		expect(await app.router.static.http.static[''].text()).toEqual(
-			'Static Content'
-		)
+		expect(app.router.response['']).toBeInstanceOf(Response)
+		expect(await app.router.response[''].text()).toEqual('Static Content')
 
-		expect(app.router.static.http.static['/plugin']).toBeInstanceOf(
-			Response
-		)
-		expect(await app.router.static.http.static['/plugin'].text()).toEqual(
-			'Plugin'
-		)
+		expect(app.router.response['/plugin']).toBeInstanceOf(Response)
+		expect(await app.router.response['/plugin'].text()).toEqual('Plugin')
 
-		expect(app.router.static.http.static['/plugin/']).toBeInstanceOf(
-			Response
-		)
-		expect(await app.router.static.http.static['/plugin/'].text()).toEqual(
-			'Plugin'
-		)
+		expect(app.router.response['/plugin/']).toBeInstanceOf(Response)
+		expect(await app.router.response['/plugin/'].text()).toEqual('Plugin')
 
 		const loose = new Elysia({ strictPath: true })
 			.use(plugin)
 			.get('/', 'Static Content')
 
-		expect(loose.router.static.http.static['/']).toBeInstanceOf(Response)
-		expect(await loose.router.static.http.static['/'].text()).toEqual(
+		expect(loose.router.response['/']).toBeInstanceOf(Response)
+		expect(await loose.router.response['/'].text()).toEqual(
 			'Static Content'
 		)
-		expect(loose.router.static.http.static).not.toHaveProperty('')
+		expect(loose.router.response).not.toHaveProperty('')
 
-		expect(loose.router.static.http.static['/plugin']).toBeInstanceOf(
-			Response
-		)
-		expect(await loose.router.static.http.static['/plugin'].text()).toEqual(
-			'Plugin'
-		)
-		expect(loose.router.static.http.static).not.toHaveProperty('/plugin/')
+		expect(loose.router.response['/plugin']).toBeInstanceOf(Response)
+		expect(await loose.router.response['/plugin'].text()).toEqual('Plugin')
+		expect(loose.router.response).not.toHaveProperty('/plugin/')
 	})
 })

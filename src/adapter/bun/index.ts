@@ -11,7 +11,7 @@ import { createNativeStaticHandler } from './handler'
 
 import { serializeCookie } from '../../cookies'
 import { isProduction, ValidationError } from '../../error'
-import { getSchemaValidator, } from '../../schema'
+import { getSchemaValidator } from '../../schema'
 import {
 	hasHeaderShorthand,
 	isNotEmpty,
@@ -53,22 +53,24 @@ export const BunAdapter: ElysiaAdapter = {
 				? <Record<string, Function | Record<string, unknown>>>{}
 				: undefined
 
-			if (routes && app.config.systemRouter)
-				// @ts-expect-error private property
-				for (const r of app.routeTree) {
-					const route = app.router.history[r[1]]
+			if (routes && app.config.systemRouter) {
+				// @ts-expect-error
+				const tree = app.routeTree
 
-					if(route.path in app.router.static.ws)
-						continue
+				for (const route of app.router.history) {
+					const method = route.method
 
 					if (
-						typeof route.handler !== 'function' ||
-						route.method === '$INTERNALWS'
+						(method === 'GET' && tree.has(`WS_${route.path}`)) ||
+						method === 'WS'
 					)
 						continue
 
-					if (route.method === 'ALL') {
-						routes[route.path] = route.handler
+					if (typeof route.handler !== 'function') continue
+
+					if (method === 'ALL') {
+						if (!tree.has(`WS_${route.path}`))
+							routes[route.path] = route.handler
 
 						continue
 					}
@@ -93,14 +95,8 @@ export const BunAdapter: ElysiaAdapter = {
 
 						continue
 					}
-
-					if (
-						!(route.method in routes[route.path]) &&
-						typeof routes[route.path] === 'object'
-					)
-						// @ts-expect-error is object
-						routes[route.path][route.method] = route.handler
 				}
+			}
 
 			app.compile()
 
@@ -122,7 +118,7 @@ export const BunAdapter: ElysiaAdapter = {
 							...(options || {}),
 							// @ts-ignore
 							static: {
-								...app.router.static.http.static,
+								...app.router.static.response,
 								// @ts-expect-error
 								...app.config.serve?.static
 							},
@@ -145,7 +141,7 @@ export const BunAdapter: ElysiaAdapter = {
 							reusePort: true,
 							...(app.config.serve || {}),
 							// @ts-ignore
-							static: app.router.static.http.static,
+							static: app.router.static.response,
 							routes: {
 								...routes,
 								// @ts-expect-error
@@ -207,7 +203,7 @@ export const BunAdapter: ElysiaAdapter = {
 		})
 
 		app.route(
-			'$INTERNALWS',
+			'WS',
 			path as any,
 			async (context: any) => {
 				// @ts-expect-error private property

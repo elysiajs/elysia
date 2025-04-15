@@ -453,7 +453,7 @@ export const composeHandler = ({
 		hooks.parse[0].fn === 'none'
 
 	const hasBody =
-		method !== '$INTERNALWS' &&
+		method !== '' &&
 		method !== 'GET' &&
 		method !== 'HEAD' &&
 		(inference.body || !!validator.body || !!hooks.parse?.length) &&
@@ -846,9 +846,10 @@ export const composeHandler = ({
 		(isHandleFn && hasDefaultHeaders) ||
 		maybeStream
 
-	const mapResponseContext = adapter.mapResponseContext
-		? `,${adapter.mapResponseContext}`
-		: ''
+	const mapResponseContext =
+		maybeStream && adapter.mapResponseContext
+			? `,${adapter.mapResponseContext}`
+			: ''
 
 	const mapAccelerate = (response = 'r', compact = false) =>
 		jsonAccelerator
@@ -2105,7 +2106,9 @@ export const composeGeneralHandler = (
 
 	const router = app.router
 
-	let findDynamicRoute = `const route=router.find(r.method,p)`
+	let findDynamicRoute = router.http.root.WS
+		? `const route=router.find(r.method === "GET" && r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
+		: `const route=router.find(r.method,p)`
 	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
 
 	findDynamicRoute += error404.code
@@ -2115,8 +2118,8 @@ export const composeGeneralHandler = (
 		`if(route.store.handler)return route.store.handler(c)\n` +
 		`return (route.store.handler=route.store.compile())(c)\n`
 
-	let switchMap = ``
-	for (const [path, v] of Object.entries(router.static.http.map)) {
+	let switchMap = ''
+	for (const [path, methods] of Object.entries(router.static)) {
 		switchMap += `case'${path}':`
 
 		if (app.config.strictPath !== true)
@@ -2125,10 +2128,32 @@ export const composeGeneralHandler = (
 		const encoded = encodePath(path)
 		if (path !== encoded) switchMap += `case'${encoded}':`
 
-		switchMap +=
-			`switch(r.method){${v.code}\n` +
-			(v.all ?? `default: break map`) +
-			'}'
+		switchMap += 'switch(r.method){'
+
+		if ('GET' in methods || 'WS' in methods) {
+			switchMap += `case 'GET':`
+
+			if ('WS' in methods)
+				switchMap +=
+					`if(r.headers.get('upgrade')==='websocket')` +
+					`return ht[${methods.WS}].handler(c)\n`
+
+			if ('GET' in methods)
+				switchMap += `return ht[${methods.GET}].composed(c)\n`
+		}
+
+		for (const [method, index] of Object.entries(methods)) {
+			if (method === 'ALL' || method === 'GET' || method === 'WS')
+				continue
+
+			switchMap += `case '${method}':return ht[${index}].composed(c)\n`
+		}
+
+		if ('ALL' in methods) {
+			switchMap += `default:return ht[${methods.ALL}].composed(c)\n`
+		}
+
+		switchMap += '}'
 	}
 
 	const maybeAsync = !!app.event.request?.some(isAsync)
@@ -2186,14 +2211,7 @@ export const composeGeneralHandler = (
 
 	fnLiteral += createOnRequestHandler(app)
 
-	fnLiteral += adapter.websocket(app)
-
-	fnLiteral +=
-		`\nmap:switch(p){\n` +
-		switchMap +
-		`default:break}` +
-		findDynamicRoute +
-		`}\n`
+	fnLiteral += `\nswitch(p){\n` + switchMap + `}` + findDynamicRoute + `}\n`
 
 	fnLiteral += createHoc(app)
 

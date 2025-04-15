@@ -118,7 +118,6 @@ export interface ElysiaAdapter {
 		 * p: pathname
 		 */
 		createContext(app: AnyElysia): string
-		websocket(app: AnyElysia): string
 		/**
 		 * Inject variable to the general handler
 		 */

@@ -287,22 +287,10 @@ export default class Elysia<
 
 			return this['~dynamic']
 		},
-		static: {
-			http: {
-				static: {} as Record<string, Response>,
-				// handlers: [] as ComposedHandler[],
-				map: {} as Record<
-					string,
-					{
-						code: string
-						all?: string
-					}
-				>,
-				all: ''
-			},
-			// Static WS Router is consists of pathname and websocket handler index to compose
-			ws: {} as Record<string, number>
-		},
+		// Static Router
+		static: {} as { [path in string]: { [method in string]: number } },
+		// Native Static Response
+		response: {} as Record<string, Response>,
 		history: [] as InternalRoute[]
 	}
 
@@ -827,12 +815,15 @@ export default class Elysia<
 					)
 				: undefined
 
+		const useNativeStaticResponse =
+			this.config.nativeStaticResponse === true
+
 		if (
-			this.config.nativeStaticResponse === true &&
+			useNativeStaticResponse &&
 			nativeStaticHandler &&
 			(method === 'GET' || method === 'ALL')
 		)
-			this.router.static.http.static[path] = nativeStaticHandler()
+			this.router.response[path] = nativeStaticHandler()
 
 		let compile: ((asManifest?: boolean) => ComposedHandler) | undefined = (
 			asManifest = false
@@ -854,21 +845,19 @@ export default class Elysia<
 			})
 
 		let oldIndex: number | undefined
-		if (this.routeTree.has(method + '_' + path))
+		if (this.routeTree.has(`${method}_${path}`))
 			for (let i = 0; i < this.router.history.length; i++) {
 				const route = this.router.history[i]
 				if (route.path === path && route.method === method) {
 					oldIndex = i
 					break
-
-					// if (
-					// 	removed &&
-					// 	this.routeTree.has(removed?.method + removed?.path)
-					// )
-					// 	this.routeTree.delete(removed.method + removed.path)
 				}
 			}
-		else this.routeTree.set(method + '_' + path, this.router.history.length)
+		else
+			this.routeTree.set(
+				`${method}_${path}`,
+				this.router.history.length
+			)
 
 		const history = this.router.history
 		const index = oldIndex ?? this.router.history.length
@@ -888,8 +877,6 @@ export default class Elysia<
 
 		if (shouldPrecompile) compile = undefined
 
-		const isWebSocket = method === '$INTERNALWS'
-
 		if (oldIndex !== undefined)
 			this.router.history[oldIndex] = Object.assign(
 				{
@@ -898,7 +885,8 @@ export default class Elysia<
 					composed: mainHandler,
 					compile: compile!,
 					handler: handle,
-					hooks
+					hooks,
+					standaloneValidators
 				},
 				localHook.webSocket
 					? { websocket: localHook.websocket as any }
@@ -923,8 +911,6 @@ export default class Elysia<
 				)
 			)
 
-		const staticRouter = this.router.static.http
-
 		const handler = {
 			handler: shouldPrecompile ? mainHandler : undefined,
 			compile() {
@@ -932,55 +918,62 @@ export default class Elysia<
 			}
 		}
 
-		if (isWebSocket) {
-			this.router.http.add('ws', path, handler)
+		const staticRouter = this.router.static
+		const isStaticPath =
+			path.indexOf(':') === -1 && path.indexOf('*') === -1
 
-			this.router.static.ws[path] = index
+		if (method === 'WS') {
+			if (isStaticPath) {
+				if (path in staticRouter) staticRouter[path][method] = index
+				else
+					staticRouter[path] = {
+						[method]: index
+					}
+
+				return
+			}
+
+			this.router.http.add('WS', path, handler)
 
 			if (!this.config.strictPath)
-				this.router.http.add('ws', getLoosePath(path), handler)
+				this.router.http.add('WS', getLoosePath(path), handler)
 
 			const encoded = encodePath(path, { dynamic: true })
-			if (encoded !== path) this.router.http.add('ws', encoded, handler)
+			if (path !== encoded) this.router.http.add('WS', encoded, handler)
+
+			// Static path doesn't need encode as it's done in compilation process
 
 			return
 		}
 
-		if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-			if (!staticRouter.map[path])
-				staticRouter.map[path] = {
-					code: ''
-				}
-
-			const ctx = staticHandler ? '' : 'c'
-
-			if (method === 'ALL')
-				staticRouter.map[path].all =
-					`default:return ht[${index}].composed(${ctx})\n`
+		if (isStaticPath) {
+			if (path in staticRouter) staticRouter[path][method] = index
 			else
-				staticRouter.map[path].code =
-					`case '${method}':return ht[${index}].composed(${ctx})\n${staticRouter.map[path].code}`
+				staticRouter[path] = {
+					[method]: index
+				}
 
 			if (
 				!this.config.strictPath &&
-				this.config.nativeStaticResponse === true &&
+				useNativeStaticResponse &&
 				nativeStaticHandler &&
 				(method === 'GET' || method === 'ALL')
 			)
-				this.router.static.http.static[getLoosePath(path)] =
-					nativeStaticHandler()
+				this.router.response[getLoosePath(path)] = nativeStaticHandler()
+
+			// Static path doesn't need encode as it's done in compilation process
 		} else {
-			// Dynamic path, best not to JIT
 			this.router.http.add(method, path, handler)
 
 			if (!this.config.strictPath) {
 				const loosePath = getLoosePath(path)
+
 				if (
-					this.config.nativeStaticResponse === true &&
+					useNativeStaticResponse &&
 					staticHandler &&
 					(method === 'GET' || method === 'ALL')
 				)
-					this.router.static.http.static[loosePath] =
+					this.router.response[loosePath] =
 						staticHandler() as Response
 
 				this.router.http.add(method, loosePath, handler)
@@ -991,14 +984,15 @@ export default class Elysia<
 				this.router.http.add(method, encoded, handler)
 
 				if (
-					this.config.nativeStaticResponse === true &&
+					useNativeStaticResponse &&
 					staticHandler &&
 					(method === 'GET' || method === 'ALL')
-				)
-					this.router.static.http.static[encoded] =
-						staticHandler() as Response
+				) {
+					this.router.response[encoded] = staticHandler() as Response
 
-				this.router.http.add(method, encoded, handler)
+					this.router.response[getLoosePath(encoded)] =
+						staticHandler() as Response
+				}
 			}
 		}
 	}
