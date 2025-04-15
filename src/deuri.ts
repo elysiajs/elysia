@@ -154,7 +154,7 @@ export const decode = (url: string): string | null => {
 			start = percentPosition + 3
 
 			percentPosition = url.indexOf('%', start)
-			if (percentPosition === -1) {console.log("ccc", decoded + url.substring(start)); return decoded + url.substring(start)}
+			if (percentPosition === -1) return decoded + url.substring(start)
 
 			// Ensure percentPosition always has 2 chars after
 			if (percentPosition > end) return null
