@@ -88,7 +88,8 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 		skipKeys: ['properties']
 	}) as A & B
 
-	if ('properties' in v) delete v.properties
+	// @ts-expect-error
+	if (v.properties) delete v.properties
 
 	return v
 }
@@ -585,7 +586,7 @@ export const traceBackMacro = (
 	if (!extension || typeof extension !== 'object' || !property) return
 
 	for (const [key, value] of Object.entries(property)) {
-		if (key in primitiveHookMap || !(key in extension)) continue
+		if (primitiveHookMap[key] || !(key in extension)) continue
 
 		const v = extension[
 			key as unknown as keyof typeof extension

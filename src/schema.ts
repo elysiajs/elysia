@@ -652,18 +652,6 @@ const _replaceSchemaType = (
 	return schema
 }
 
-// const unwrapImport = (schema: TImport<any, any>) => {
-// 	if (
-// 		!schema ||
-// 		!schema.$defs ||
-// 		!schema.$ref ||
-// 		!(schema.$ref in schema.$defs)
-// 	)
-// 		return schema
-
-// 	return schema.$defs[schema.$ref]
-// }
-
 const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	if (typeof value === 'object')
 		try {

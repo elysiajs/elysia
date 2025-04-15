@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
 import { checksum, cloneInference } from './utils'
+import { isBun } from './universal/utils'
+
 import type {
 	Handler,
 	HookContainer,
 	LifeCycleStore,
 	LifeCycleType
 } from './types'
-import { isBun } from './universal/utils'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -667,9 +668,9 @@ export const sucrose = (
 
 		const content = event.toString()
 		const key = checksum(content)
-		if (key in caches) {
-			const fnInference = caches[key]
-			inference = mergeInference(inference, fnInference)
+		const cachedInference = caches[key]
+		if (cachedInference) {
+			inference = mergeInference(inference, cachedInference)
 			continue
 		}
 
@@ -712,7 +713,7 @@ export const sucrose = (
 				fnInference.query = true
 		}
 
-		if (!(key in caches)) caches[key] = fnInference
+		if (!caches[key]) caches[key] = fnInference
 
 		inference = mergeInference(inference, fnInference)
 

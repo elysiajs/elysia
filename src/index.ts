@@ -495,6 +495,18 @@ export default class Elysia<
 		const skipPrefix = options?.skipPrefix ?? false
 		const allowMeta = options?.allowMeta ?? false
 
+		// standaloneValidators = [
+		// 	...(this.standaloneValidator.local
+		// 		? this.standaloneValidator.local
+		// 		: []),
+		// 	...(this.standaloneValidator.scoped
+		// 		? this.standaloneValidator.scoped
+		// 		: []),
+		// 	...(this.standaloneValidator.global
+		// 		? this.standaloneValidator.global
+		// 		: [])
+		// ]
+
 		if (!standaloneValidators) {
 			standaloneValidators = []
 
@@ -3980,36 +3992,48 @@ export default class Elysia<
 
 		this.propagatePromiseModules(plugin)
 
-		const { name, seed } = plugin.config
+		const name = plugin.config.name
+		const seed = plugin.config.seed
 
 		plugin.getParent = () => this as any
 		plugin.getServer = () => this.getServer()
 		plugin.getGlobalRoutes = () => this.getGlobalRoutes()
 
-		this.standaloneValidator = {
-			local: [
-				...(plugin.standaloneValidator.scoped ?? []),
-				...(this.standaloneValidator.local ?? [])
-			],
-			scoped: this.standaloneValidator.scoped,
-			global: [
-				...(plugin.standaloneValidator.global ?? []),
-				...(this.standaloneValidator.global ?? [])
-			]
+		if (plugin.standaloneValidator?.scoped) {
+			if (this.standaloneValidator.local)
+				this.standaloneValidator.local =
+					this.standaloneValidator.local.concat(
+						plugin.standaloneValidator.scoped
+					)
+			else
+				this.standaloneValidator.local =
+					plugin.standaloneValidator.scoped
+		}
+
+		if (plugin.standaloneValidator?.global) {
+			if (this.standaloneValidator.global)
+				this.standaloneValidator.global =
+					this.standaloneValidator.global.concat(
+						plugin.standaloneValidator.global
+					)
+			else
+				this.standaloneValidator.global =
+					plugin.standaloneValidator.global
 		}
 
 		/**
 		 * Model and error is required for Swagger generation
 		 */
-		plugin.model(this.definitions.type as any)
-		plugin.error(this.definitions.error as any)
+		// plugin.model(this.definitions.type as any)
+		// plugin.error(this.definitions.error as any)
 
-		this['~parser'] = {
-			...plugin['~parser'],
-			...this['~parser']
-		}
+		if (Object.keys(plugin['~parser']).length)
+			this['~parser'] = {
+				...plugin['~parser'],
+				...this['~parser']
+			}
 
-		this.headers(plugin.setHeaders)
+		if (plugin.setHeaders) this.headers(plugin.setHeaders)
 
 		if (name) {
 			if (!(name in this.dependencies)) this.dependencies[name] = []
@@ -4032,13 +4056,16 @@ export default class Elysia<
 					)
 			}
 		} else {
-			this.extender.macros = this.extender.macros.concat(
-				plugin.extender.macros
-			)
-			this.extender.higherOrderFunctions =
-				this.extender.higherOrderFunctions.concat(
-					plugin.extender.higherOrderFunctions
+			if (plugin.extender.macros.length)
+				this.extender.macros = this.extender.macros.concat(
+					plugin.extender.macros
 				)
+
+			if (plugin.extender.higherOrderFunctions.length)
+				this.extender.higherOrderFunctions =
+					this.extender.higherOrderFunctions.concat(
+						plugin.extender.higherOrderFunctions
+					)
 		}
 
 		// ! Deduplicate current instance
@@ -4059,6 +4086,7 @@ export default class Elysia<
 				hofHashes.push(hof.checksum)
 			}
 		}
+		hofHashes.length = 0
 
 		this.inference = mergeInference(this.inference, plugin.inference)
 
