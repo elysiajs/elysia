@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.3.0-exp.24",
+	"version": "1.3.0-exp.26",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -178,28 +178,28 @@
 		"release": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {
-		"@sinclair/typebox": "^0.34.27",
+		"@sinclair/typebox": "^0.34.33",
 		"openapi-types": "^12.1.3"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.2.4",
+		"@types/bun": "^1.2.9",
 		"@types/cookie": "^1.0.0",
 		"@types/fast-decode-uri-component": "^1.0.0",
-		"@typescript-eslint/eslint-plugin": "^6.17.0",
-		"@typescript-eslint/parser": "^6.17.0",
+		"@typescript-eslint/eslint-plugin": "^8.30.1",
+		"@typescript-eslint/parser": "^8.30.1",
 		"cookie": "^1.0.2",
-		"eslint": "^9.21.0",
+		"eslint": "^9.24.0",
 		"eslint-plugin-security": "^3.0.1",
 		"eslint-plugin-sonarjs": "^3.0.2",
 		"exact-mirror": "^0.0.6",
-		"expect-type": "^1.2.0",
+		"expect-type": "^1.2.1",
 		"fast-decode-uri-component": "^1.0.1",
 		"json-accelerator": "^0.1.4",
 		"memoirist": "^0.3.0",
 		"mitata": "^1.0.34",
 		"prettier": "^3.5.3",
 		"tsup": "^8.4.0",
-		"typescript": "^5.8.2"
+		"typescript": "^5.8.3"
 	},
 	"peerDependencies": {
 		"@sinclair/typebox": ">= 0.34.0",

@@ -886,6 +886,8 @@ export const composeHandler = ({
 							: undefined
 					: undefined
 
+		let hasContentType = false
+
 		if (parser && defaultParsers.includes(parser)) {
 			const reporter = report('parse', {
 				total: hooks.parse?.length
@@ -933,9 +935,7 @@ export const composeHandler = ({
 							`const index=contentType.indexOf(';')\n` +
 							`if(index!==-1)contentType=contentType.substring(0, index)}\n` +
 							`else{contentType=''}` +
-							`c.contentType=contentType\n`
-
-						fnLiteral +=
+							`c.contentType=contentType\n` +
 							`let result=parser['${parser}'](c, contentType)\n` +
 							`if(result instanceof Promise)result=await result\n` +
 							`if(result instanceof ElysiaCustomStatusResponse)throw result\n` +
@@ -1093,9 +1093,10 @@ export const composeHandler = ({
 
 				fnLiteral += '}'
 			}
+
+			fnLiteral += '\ndelete c.contentType'
 		}
 
-		fnLiteral += '\ndelete c.contentType'
 		fnLiteral += '\nisParsing=false\n'
 	}
 

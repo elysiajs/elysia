@@ -1,23 +1,17 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const params = new URLSearchParams()
-params.append('keys', JSON.stringify({ a: 'hello' }))
-params.append('keys', JSON.stringify({ a: 'hi' }))
+const app = new Elysia().post('/sign-in', ({ body }) => body, {
+	parse: 'json'
+})
 
-console.log(params)
+const post = new Request('http://localhost/sign-in', {
+	method: 'POST',
+})
 
-const response = await new Elysia()
-	.get('/', ({ query }) => query, {
-		query: t.Object({
-			keys: t.Array(
-				t.Object({
-					a: t.String()
-				})
-			)
-		})
-	})
-	.handle(new Request(`http://localhost/?${params.toString()}`))
-	.then((res) => res.json())
+console.log(app.routes[0].compile().toString())
 
-console.log(response)
+app.handle(post.clone())
+	.then((x) => x.json())
+	.then(console.log)
+	.catch(console.warn)
