@@ -790,9 +790,10 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (validators?.length) {
 		let hasAdditional = false
 
-		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas(
-			schema.concat(validators.map(mapSchema))
-		)
+		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas([
+			schema,
+			...validators.map(mapSchema)
+		])
 
 		if (notObjects) {
 			schema = t.Intersect([

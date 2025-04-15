@@ -1,26 +1,36 @@
-import Elysia from '../src'
-import { req } from '../test/utils'
-
-const orders: number[] = []
+import { Elysia, t } from '../src'
+import { post, req } from '../test/utils'
 
 const app = new Elysia()
-	.macro(({ onBeforeHandle }) => ({
-		hi(fn: () => any) {
-			onBeforeHandle({ insert: 'after', stack: 'local' }, fn)
-		}
-	}))
-	.onBeforeHandle(() => {
-		orders.push(1)
+	.guard({
+		schema: 'standalone',
+		body: t.Object({ id: t.Number() }),
+		response: t.Object({ name: t.Literal('cantarella') })
 	})
-	.get('/', () => 'Hello World', {
-		beforeHandle() {
-			orders.push(2)
-		},
-		hi: () => {
-			orders.push(3)
+	.post(
+		'/name/:name',
+		({ body, params: { name } }) => ({
+			...body,
+			name: name as 'cantarella'
+		}),
+		{
+			response: t.Object({ id: t.Number() })
 		}
+	)
+
+const correct = await app.handle(
+	post('/name/cantarella', {
+		id: 1
 	})
+)
 
-await app.handle(req('/'))
+console.log(correct.status) // .toBe(200)
+console.log(await correct.json()) // .toEqual({ id: 1, name: 'cantarella' })
 
-console.log(orders)
+const incorrect = await app.handle(
+	post('/name/jinhsi', {
+		id: 1
+	})
+)
+
+console.log(incorrect.status) // .toBe(422)
