@@ -844,6 +844,10 @@ export const getResponseSchemaValidator = (
 	const record: Record<number, TypeCheck<any>> = {}
 
 	Object.keys(maybeSchemaOrRecord).forEach((status): TSchema | undefined => {
+		if (isNaN(+status)) {
+			return undefined;
+		}
+		
 		const maybeNameOrSchema = maybeSchemaOrRecord[+status]
 
 		if (typeof maybeNameOrSchema === 'string') {

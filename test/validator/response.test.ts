@@ -257,7 +257,8 @@ describe('Response Validator', () => {
 				}),
 				response: {
 					200: t.String(),
-					201: t.Number()
+					201: t.Number(),
+					default: t.String()
 				}
 			}
 		)
