@@ -665,7 +665,7 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	return value
 }
 
-const caches = <Record<string, ElysiaTypeCheck<any>>>{}
+// const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	s: T,
@@ -730,7 +730,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 		if (typeof s !== 'string') schema = s
 		else {
-			if (s in caches) return caches[s] as any
+			// if (s in caches) return caches[s] as any
 
 			const isArray = s.endsWith('[]')
 			const key = isArray ? s.substring(0, s.length - 2) : s

@@ -14,7 +14,6 @@ import {
 	ValidationError
 } from './error'
 
-
 import { parseQuery } from './fast-querystring'
 
 import { redirect, signCookie, StatusMap } from './utils'

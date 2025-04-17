@@ -3,18 +3,12 @@ import { Elysia } from '../../src'
 const total = 500
 
 {
-	const app = new Elysia({ precompile: true })
+	const app = new Elysia()
 
 	const t1 = performance.now()
 	const memory = process.memoryUsage().heapTotal / 1024 / 1024
 
-	for (let i = 0; i < total; i++)
-		app.get(`/id/${i}`, () => 'hello', {
-			// body: t.String(),
-			// beforeHandle() {
-			// 	return { a: 'ok' }
-			// }
-		})
+	for (let i = 0; i < total; i++) app.get(`/id/${i}`, () => 'hello')
 
 	const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024
 	const took = performance.now() - t1
@@ -28,5 +22,5 @@ const total = 500
 	console.log('Average', +(took / total).toFixed(4), 'ms / route')
 
 	console.log(memoryAfter - memory, 'MB memory used')
-	console.log((memoryAfter - memory) / total * 1024, 'KB memory used')
+	console.log(((memoryAfter - memory) / total) * 1024, 'KB memory used')
 }

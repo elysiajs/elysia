@@ -1,3 +1,4 @@
+import { Union } from '@sinclair/typebox'
 import type { Sucrose } from './sucrose'
 import type { TraceHandler } from './trace'
 
@@ -277,6 +278,55 @@ export const mergeHook = (
 	if (hook.resolve) delete hook.resolve
 
 	return hook
+}
+
+export const lifeCycleToArray = (a: LifeCycleStore) => {
+	if (a.parse && !Array.isArray(a.parse)) a.parse = [a.parse]
+
+	if (a.transform && !Array.isArray(a.transform)) a.transform = [a.transform]
+
+	if (a.afterHandle && !Array.isArray(a.afterHandle))
+		a.afterHandle = [a.afterHandle]
+
+	if (a.mapResponse && !Array.isArray(a.mapResponse))
+		a.mapResponse = [a.mapResponse]
+
+	if (a.afterResponse && !Array.isArray(a.afterResponse))
+		a.afterResponse = [a.afterResponse]
+
+	if (a.trace && !Array.isArray(a.trace)) a.trace = [a.trace]
+	if (a.error && !Array.isArray(a.error)) a.error = [a.error]
+
+	let beforeHandle = []
+
+	// @ts-expect-error
+	if (a.resolve) {
+		beforeHandle = fnToContainer(
+			// @ts-expect-error
+			Array.isArray(a.resolve) ? a.resolve : [a.resolve],
+			'resolve'
+		) as any[]
+
+		// @ts-expect-error
+		delete a.resolve
+	}
+
+	if (a.beforeHandle) {
+		if (beforeHandle.length)
+			beforeHandle = beforeHandle.concat(
+				Array.isArray(a.beforeHandle)
+					? a.beforeHandle
+					: [a.beforeHandle]
+			)
+		else
+			beforeHandle = Array.isArray(a.beforeHandle)
+				? a.beforeHandle
+				: [a.beforeHandle]
+	}
+
+	if (beforeHandle.length) a.beforeHandle = beforeHandle
+
+	return a
 }
 
 const isBun = typeof Bun !== 'undefined'
@@ -800,20 +850,19 @@ export const fnToContainer = (
 }
 
 export const localHookToLifeCycleStore = (a: AnyLocalHook): LifeCycleStore => {
-	return {
-		...a,
-		start: fnToContainer(a?.start),
-		request: fnToContainer(a?.request),
-		parse: fnToContainer(a?.parse),
-		transform: fnToContainer(a?.transform),
-		beforeHandle: fnToContainer(a?.beforeHandle),
-		afterHandle: fnToContainer(a?.afterHandle),
-		mapResponse: fnToContainer(a?.mapResponse),
-		afterResponse: fnToContainer(a?.afterResponse),
-		trace: fnToContainer(a?.trace),
-		error: fnToContainer(a?.error),
-		stop: fnToContainer(a?.stop)
-	}
+	if (a.start) a.start = fnToContainer(a.start)
+	if (a.request) a.request = fnToContainer(a.request)
+	if (a.parse) a.parse = fnToContainer(a.parse)
+	if (a.transform) a.transform = fnToContainer(a.transform)
+	if (a.beforeHandle) a.beforeHandle = fnToContainer(a.beforeHandle)
+	if (a.afterHandle) a.afterHandle = fnToContainer(a.afterHandle)
+	if (a.mapResponse) a.mapResponse = fnToContainer(a.mapResponse)
+	if (a.afterResponse) a.afterResponse = fnToContainer(a.afterResponse)
+	if (a.trace) a.trace = fnToContainer(a.trace)
+	if (a.error) a.error = fnToContainer(a.error)
+	if (a.stop) a.stop = fnToContainer(a.stop)
+
+	return a
 }
 
 export const lifeCycleToFn = (a: Partial<LifeCycleStore>): AnyLocalHook => {

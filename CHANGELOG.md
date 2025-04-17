@@ -32,6 +32,7 @@ Change:
 - only provide `c.request` to mapResponse when `maybeStream` is true
 - use plain object for `routeTree` instead of `Map`
 - remove `compressHistoryHook` and `decompressHistoryHook`
+- webstandard handler now return `text/plain` if not on Bun
 
 Breaking Change:
 - Minimum Node version is now `node22` LTS

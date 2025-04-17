@@ -39,7 +39,8 @@ import {
 	PromiseGroup,
 	promoteEvent,
 	isNotEmpty,
-	encodePath
+	encodePath,
+	lifeCycleToArray
 } from './utils'
 
 import {
@@ -495,6 +496,8 @@ export default class Elysia<
 		const skipPrefix = options?.skipPrefix ?? false
 		const allowMeta = options?.allowMeta ?? false
 
+		localHook ??= {}
+
 		if (!standaloneValidators) {
 			standaloneValidators = []
 
@@ -514,10 +517,7 @@ export default class Elysia<
 				)
 		}
 
-		localHook = localHookToLifeCycleStore(localHook)
-
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
-
 		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
 
 		if (localHook?.type)
@@ -561,10 +561,11 @@ export default class Elysia<
 				localHook?.response ?? (instanceValidator?.response as any)
 		}
 
-		const cookieValidator = () => {
-			const validators = standaloneValidators.map((x) => x.cookie)
+		const normalize = this.config.normalize
+		const modules = this.definitions.typebox
 
-			if (cloned.cookie || validators.length)
+		const cookieValidator = () => {
+			if (cloned.cookie || standaloneValidators.find((x) => x.cookie))
 				return getCookieValidator({
 					modules,
 					validator: cloned.cookie,
@@ -572,14 +573,11 @@ export default class Elysia<
 					config: cloned.cookie?.config ?? {},
 					dynamic,
 					models,
-					validators
+					validators: standaloneValidators.map((x) => x.cookie)
 				})
 		}
 
-		const normalize = this.config.normalize
-		const modules = this.definitions.typebox
-
-		const validator =
+		const createValiator = () =>
 			this.config.precompile === true ||
 			(typeof this.config.precompile === 'object' &&
 				this.config.precompile.schema === true)
@@ -754,9 +752,13 @@ export default class Elysia<
 			)
 
 		this.applyMacro(localHook)
-		const hooks = mergeHook(this.event, localHook)
+		const hooks = isNotEmpty(this.event)
+			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
+			: lifeCycleToArray(localHookToLifeCycleStore(localHook))
 
 		if (this.config.aot === false) {
+			const validator = createValiator()
+
 			this.router.dynamic.add(method, path, {
 				validator,
 				hooks,
@@ -810,14 +812,7 @@ export default class Elysia<
 			return
 		}
 
-		const inference = cloneInference(this.inference)
 		const adapter = this['~adapter'].handler
-
-		const staticHandler =
-			typeof handle !== 'function' &&
-			typeof adapter.createStaticHandler === 'function'
-				? adapter.createStaticHandler(handle, hooks, this.setHeaders)
-				: undefined
 
 		const nativeStaticHandler =
 			typeof handle !== 'function'
@@ -844,14 +839,14 @@ export default class Elysia<
 				path,
 				method,
 				hooks,
-				validator,
+				validator: createValiator(),
 				handler:
 					typeof handle !== 'function' &&
 					typeof adapter.createStaticHandler !== 'function'
 						? () => handle
 						: handle,
 				allowMeta,
-				inference
+				inference: this.inference
 			})
 
 		let oldIndex: number | undefined
@@ -865,7 +860,6 @@ export default class Elysia<
 			}
 		else this.routeTree[`${method}_${path}`] = this.router.history.length
 
-		const history = this.router.history
 		const index = oldIndex ?? this.router.history.length
 
 		const shouldPrecompile =
@@ -876,9 +870,10 @@ export default class Elysia<
 		const mainHandler = shouldPrecompile
 			? compile()
 			: (ctx: Context) =>
-					((history[index].composed = compile!()) as ComposedHandler)(
-						ctx
-					)
+					(
+						(this.router.history[index].composed =
+							compile!()) as ComposedHandler
+					)(ctx)
 
 		if (oldIndex !== undefined)
 			this.router.history[oldIndex] = Object.assign(
@@ -961,7 +956,7 @@ export default class Elysia<
 			else
 				staticRouter[path] = {
 					[method]: index
-				}
+				} as const
 
 			if (
 				!this.config.strictPath &&
@@ -974,6 +969,16 @@ export default class Elysia<
 			// Static path doesn't need encode as it's done in compilation process
 		} else {
 			this.router.http.add(method, path, handler)
+
+			const staticHandler =
+				typeof handle !== 'function' &&
+				typeof adapter.createStaticHandler === 'function'
+					? adapter.createStaticHandler(
+							handle,
+							hooks,
+							this.setHeaders
+						)
+					: undefined
 
 			if (!this.config.strictPath) {
 				const loosePath = getLoosePath(path)
@@ -4001,7 +4006,7 @@ export default class Elysia<
 		// plugin.model(this.definitions.type as any)
 		// plugin.error(this.definitions.error as any)
 
-		if (Object.keys(plugin['~parser']).length)
+		if (isNotEmpty(plugin['~parser']))
 			this['~parser'] = {
 				...plugin['~parser'],
 				...this['~parser']
@@ -4136,14 +4141,14 @@ export default class Elysia<
 						}
 			)
 
-			if (Object.keys(plugin.event).length)
+			if (isNotEmpty(plugin.event))
 				this.event = mergeLifeCycle(
 					this.event,
 					filterGlobalHook(plugin.event),
 					current
 				)
 		} else {
-			if (Object.keys(plugin.event).length)
+			if (isNotEmpty(plugin.event))
 				this.event = mergeLifeCycle(
 					this.event,
 					filterGlobalHook(plugin.event)
@@ -5554,7 +5559,7 @@ export default class Elysia<
 
 		switch (typeof value) {
 			case 'object':
-				if (!value || !Object.keys(value).length) return this
+				if (!value || !isNotEmpty(value)) return this
 
 				if (name) {
 					if (name in this.singleton.store)
