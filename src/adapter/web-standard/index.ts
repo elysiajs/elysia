@@ -5,8 +5,6 @@ import {
 	createStaticHandler
 } from './handler'
 
-import { getLoosePath } from '../../utils'
-
 import type { ElysiaAdapter } from '../types'
 
 export const WebStandardAdapter: ElysiaAdapter = {

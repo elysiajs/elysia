@@ -52,6 +52,7 @@ import type {
 	LifeCycleStore,
 	SchemaValidator
 } from './types'
+import { isBun } from '../dist/universal/utils'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -185,8 +186,7 @@ const composeCleaner = ({
 	typeAlias?: string
 	normalize: ElysiaConfig<''>['normalize']
 }) => {
-	if (!normalize || !schema.Clean || schema.hasAdditionalProperties)
-		return ''
+	if (!normalize || !schema.Clean || schema.hasAdditionalProperties) return ''
 
 	if (normalize === true || normalize === 'exactMirror')
 		return (
@@ -486,7 +486,7 @@ export const composeHandler = ({
 
 	let _encodeCookie = ''
 	const encodeCookie = () => {
-		if(_encodeCookie) return _encodeCookie
+		if (_encodeCookie) return _encodeCookie
 
 		if (cookieMeta?.sign) {
 			if (!cookieMeta.secrets)
@@ -527,14 +527,13 @@ export const composeHandler = ({
 		? createAccelerators(validator.response!)
 		: undefined
 
-	const validation =
-		composeValidationFactory({
-			normalize,
-			validator,
-			encodeSchema,
-			accelerators,
-			isStaticResponse: handler instanceof Response
-		})
+	const validation = composeValidationFactory({
+		normalize,
+		validator,
+		encodeSchema,
+		accelerators,
+		isStaticResponse: handler instanceof Response
+	})
 
 	if (hasHeaders) fnLiteral += adapter.headers
 
@@ -973,8 +972,7 @@ export const composeHandler = ({
 							hooks.parse[i].fn as unknown as string
 						)
 
-						const isOptionalBody =
-							!!validator.body?.isOptional
+						const isOptionalBody = !!validator.body?.isOptional
 
 						switch (hooks.parse[i].fn as unknown as string) {
 							case 'json':
@@ -1255,10 +1253,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.body) {
-			if (
-				validator.body.hasTransform ||
-				validator.body.isOptional
-			)
+			if (validator.body.hasTransform || validator.body.isOptional)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
 			if (validator.body.hasDefault) {
@@ -1476,8 +1471,7 @@ export const composeHandler = ({
 					reporter.resolve()
 				}
 
-				if (validator.response)
-					fnLiteral += validation.response('be')
+				if (validator.response) fnLiteral += validation.response('be')
 
 				const mapResponseReporter = report('mapResponse', {
 					total: hooks.mapResponse?.length
@@ -2218,7 +2212,7 @@ export const composeGeneralHandler = (
 	// @ts-expect-error private property
 	app.handleError = composeErrorHandler(app) as any
 
-	return Function(
+	const fn = Function(
 		'data',
 		fnLiteral
 	)({
@@ -2234,6 +2228,10 @@ export const composeGeneralHandler = (
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 		...adapter.inject
 	})
+
+	if (isBun) Bun.gc(false)
+
+	return fn
 }
 
 export const composeErrorHandler = (app: AnyElysia) => {

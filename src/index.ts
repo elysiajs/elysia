@@ -344,15 +344,22 @@ export default class Elysia<
 			else config.detail.tags = config.tags
 		}
 
-		if (config.nativeStaticResponse === undefined)
-			config.nativeStaticResponse = true
-
-		if (config.systemRouter === undefined) config.systemRouter = true
-		if (config.jsonAccelerator === undefined) config.jsonAccelerator = true
-		if (config.encodeSchema === undefined) config.encodeSchema = true
-
-		this.config = {}
-		this.applyConfig(config ?? {})
+		this.config = {
+			prefix: '' as any,
+			aot: env.ELYSIA_AOT !== 'false',
+			nativeStaticResponse: true,
+			systemRouter: true,
+			jsonAccelerator: true,
+			encodeSchema: true,
+			normalize: true,
+			...config,
+			cookie: {
+				path: '/',
+				...config?.cookie
+			},
+			experimental: config?.experimental ?? {},
+			seed: config?.seed === undefined ? '' : config?.seed
+		}
 
 		this['~adapter'] =
 			config.adapter ??
@@ -445,23 +452,6 @@ export default class Elysia<
 		}
 	}
 
-	applyConfig(config: ElysiaConfig<BasePath>) {
-		this.config = {
-			prefix: '',
-			aot: env.ELYSIA_AOT !== 'false',
-			normalize: true,
-			...config,
-			cookie: {
-				path: '/',
-				...config?.cookie
-			},
-			experimental: config?.experimental ?? {},
-			seed: config?.seed === undefined ? '' : config?.seed
-		} as any
-
-		return this
-	}
-
 	get models(): {
 		[K in keyof Definitions['typebox']]: ModelValidator<
 			Definitions['typebox'][K]
@@ -498,7 +488,7 @@ export default class Elysia<
 
 		localHook ??= {}
 
-		if (!standaloneValidators) {
+		if (standaloneValidators === undefined) {
 			standaloneValidators = []
 
 			if (this.standaloneValidator.local)
@@ -546,9 +536,6 @@ export default class Elysia<
 					break
 			}
 
-		const models = this.definitions.type
-		const dynamic = !this.config.aot
-
 		const instanceValidator = this.validator.getCandidate()
 
 		const cloned = {
@@ -561,26 +548,32 @@ export default class Elysia<
 				localHook?.response ?? (instanceValidator?.response as any)
 		}
 
-		const normalize = this.config.normalize
-		const modules = this.definitions.typebox
-
-		const cookieValidator = () => {
-			if (cloned.cookie || standaloneValidators.find((x) => x.cookie))
-				return getCookieValidator({
-					modules,
-					validator: cloned.cookie,
-					defaultConfig: this.config.cookie,
-					config: cloned.cookie?.config ?? {},
-					dynamic,
-					models,
-					validators: standaloneValidators.map((x) => x.cookie)
-				})
-		}
-
-		const createValiator = () =>
+		const shouldPrecompile =
 			this.config.precompile === true ||
 			(typeof this.config.precompile === 'object' &&
-				this.config.precompile.schema === true)
+				this.config.precompile.compose === true)
+
+		const createValidator = () => {
+			const models = this.definitions.type
+			const dynamic = !this.config.aot
+
+			const normalize = this.config.normalize
+			const modules = this.definitions.typebox
+
+			const cookieValidator = () => {
+				if (cloned.cookie || standaloneValidators.find((x) => x.cookie))
+					return getCookieValidator({
+						modules,
+						validator: cloned.cookie,
+						defaultConfig: this.config.cookie,
+						config: cloned.cookie?.config ?? {},
+						dynamic,
+						models,
+						validators: standaloneValidators.map((x) => x.cookie)
+					})
+			}
+
+			return shouldPrecompile
 				? {
 						body: getSchemaValidator(cloned.body, {
 							modules,
@@ -726,6 +719,7 @@ export default class Elysia<
 							))
 						}
 					} as any)
+		}
 
 		if (
 			instanceValidator.body ||
@@ -757,7 +751,7 @@ export default class Elysia<
 			: lifeCycleToArray(localHookToLifeCycleStore(localHook))
 
 		if (this.config.aot === false) {
-			const validator = createValiator()
+			const validator = createValidator()
 
 			this.router.dynamic.add(method, path, {
 				validator,
@@ -839,7 +833,7 @@ export default class Elysia<
 				path,
 				method,
 				hooks,
-				validator: createValiator(),
+				validator: createValidator(),
 				handler:
 					typeof handle !== 'function' &&
 					typeof adapter.createStaticHandler !== 'function'
@@ -861,11 +855,6 @@ export default class Elysia<
 		else this.routeTree[`${method}_${path}`] = this.router.history.length
 
 		const index = oldIndex ?? this.router.history.length
-
-		const shouldPrecompile =
-			this.config.precompile === true ||
-			(typeof this.config.precompile === 'object' &&
-				this.config.precompile.compose === true)
 
 		const mainHandler = shouldPrecompile
 			? compile()
@@ -3928,9 +3917,11 @@ export default class Elysia<
 										method,
 										path,
 										handler,
-										mergeHook(hooks as AnyLocalHook, {
-											error: plugin.event.error
-										}),
+										isNotEmpty(plugin.event.error)
+											? mergeHook(hooks as AnyLocalHook, {
+													error: plugin.event.error
+												})
+											: hooks,
 										undefined,
 										standaloneValidators
 									)
@@ -4069,13 +4060,22 @@ export default class Elysia<
 
 		this.inference = mergeInference(this.inference, plugin.inference)
 
-		this.decorate(plugin.singleton.decorator)
-		this.state(plugin.singleton.store)
-		this.model(plugin.definitions.type)
-		this.error(plugin.definitions.error as any)
-		plugin.extender.macros = this.extender.macros.concat(
-			plugin.extender.macros
-		)
+		if (isNotEmpty(plugin.singleton.decorator))
+			this.decorate(plugin.singleton.decorator)
+
+		if (isNotEmpty(plugin.singleton.store))
+			this.state(plugin.singleton.store)
+
+		if (isNotEmpty(plugin.definitions.type))
+			this.model(plugin.definitions.type)
+
+		if (isNotEmpty(plugin.definitions.error))
+			this.error(plugin.definitions.error as any)
+
+		if (isNotEmpty(plugin.definitions.error))
+			plugin.extender.macros = this.extender.macros.concat(
+				plugin.extender.macros
+			)
 
 		for (const {
 			method,
@@ -4083,17 +4083,20 @@ export default class Elysia<
 			handler,
 			hooks,
 			standaloneValidators
-		} of Object.values(plugin.router.history))
+		} of Object.values(plugin.router.history)) {
 			this.add(
 				method,
 				path,
 				handler,
-				mergeHook(hooks as AnyLocalHook, {
-					error: plugin.event.error
-				}),
+				isNotEmpty(plugin.event.error)
+					? mergeHook(hooks as AnyLocalHook, {
+							error: plugin.event.error
+						})
+					: hooks,
 				undefined,
 				standaloneValidators
 			)
+		}
 
 		if (name) {
 			if (!(name in this.dependencies)) this.dependencies[name] = []
