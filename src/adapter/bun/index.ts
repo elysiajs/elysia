@@ -107,8 +107,6 @@ export const BunAdapter: ElysiaAdapter = {
 				options = parseInt(options)
 			}
 
-			const fetch = app.fetch
-
 			const outerErrorHandler = (error: Error) =>
 				new Response(error.message || error.name || 'Error', {
 					// @ts-ignore
@@ -138,7 +136,7 @@ export const BunAdapter: ElysiaAdapter = {
 								...routes,
 								...(websocket || {})
 							},
-							fetch,
+							fetch: app.fetch,
 							error: outerErrorHandler
 						} as Serve)
 					: ({
@@ -157,7 +155,7 @@ export const BunAdapter: ElysiaAdapter = {
 								...(websocket || {})
 							},
 							port: options,
-							fetch,
+							fetch: app.fetch,
 							error: outerErrorHandler
 						} as Serve)
 

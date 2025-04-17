@@ -1,13 +1,13 @@
 const memory = process.memoryUsage().heapTotal / 1024 / 1024
+const t1 = performance.now()
 
 import { Elysia, t } from '../../src'
 
-const total = 500
-const sub = 2
+const total = 100
+const sub = 5
 
 const app = new Elysia()
 
-const t1 = performance.now()
 for (let i = 0; i < total; i++) {
 	const plugin = new Elysia()
 	for (let j = 0; j < sub; j++)

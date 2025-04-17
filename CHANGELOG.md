@@ -21,6 +21,8 @@ Improvement:
 - refactor `app.router.static`, and move static router code generation to compile phase
 - optimize memory usage on `add`, `_use`, and some utility functions
 - improve start up time on multiple route
+- dynamically create cookie validator as needed in compilation process
+- reduce object cloning
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream

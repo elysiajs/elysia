@@ -221,9 +221,7 @@ export const mergeHook = (
 	// 	)
 
 	if (!Object.values(b).find((x) => x !== undefined && x !== null))
-		return {
-			...a
-		} as any
+		return { ...a } as any
 
 	const hook = {
 		...a,
@@ -559,6 +557,12 @@ export const signCookie = async (val: string, secret: string | null) => {
 		encoder.encode(val)
 	)
 
+	// console.log({
+	// 	val,
+	// 	secret,
+	// 	hash: removeTrailingEquals(Buffer.from(hmacBuffer).toString('base64'))
+	// })
+
 	return (
 		val +
 		'.' +
@@ -813,34 +817,33 @@ export const localHookToLifeCycleStore = (a: AnyLocalHook): LifeCycleStore => {
 }
 
 export const lifeCycleToFn = (a: Partial<LifeCycleStore>): AnyLocalHook => {
-	const hook: Partial<HookContainer> = {}
-
 	// @ts-expect-error
-	if (a.start?.map) hook.start = a.start.map((x) => x.fn)
+	if (a.start?.map) a.start = a.start.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.request?.map) hook.request = a.request.map((x) => x.fn)
+	if (a.request?.map) a.request = a.request.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.parse?.map) hook.parse = a.parse.map((x) => x.fn)
+	if (a.parse?.map) a.parse = a.parse.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.transform?.map) hook.transform = a.transform.map((x) => x.fn)
+	if (a.transform?.map) a.transform = a.transform.map((x) => x.fn)
+	if (a.beforeHandle?.map)
+		// @ts-expect-error
+		a.beforeHandle = a.beforeHandle.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.beforeHandle?.map) hook.beforeHandle = a.beforeHandle.map((x) => x.fn)
+	if (a.afterHandle?.map) a.afterHandle = a.afterHandle.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.afterHandle?.map) hook.afterHandle = a.afterHandle.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.mapResponse?.map) hook.mapResponse = a.mapResponse.map((x) => x.fn)
+	if (a.mapResponse?.map) a.mapResponse = a.mapResponse.map((x) => x.fn)
 	if (a.afterResponse?.map)
 		// @ts-expect-error
-		hook.afterResponse = a.afterResponse.map((x) => x.fn)
+		a.afterResponse = a.afterResponse.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.trace?.map) hook.trace = a.trace.map((x) => x.fn)
+	if (a.trace?.map) a.trace = a.trace.map((x) => x.fn)
 	else a.trace = []
 	// @ts-expect-error
-	if (a.error?.map) hook.error = a.error.map((x) => x.fn)
+	if (a.error?.map) a.error = a.error.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.stop?.map) hook.stop = a.stop.map((x) => x.fn)
+	if (a.stop?.map) a.stop = a.stop.map((x) => x.fn)
 
-	return hook
+	return a
 }
 
 export const cloneInference = (inference: Sucrose.Inference) =>

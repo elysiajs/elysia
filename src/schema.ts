@@ -43,18 +43,16 @@ export interface ElysiaTypeCheck<T extends TSchema>
 				error: string | undefined
 				errors: MapValueError[]
 		  }
-	sucrose: {
-		hasAdditionalProperties: boolean
-		'~hasAdditionalProperties'?: boolean
-		hasDefault: boolean
-		'~hasDefault'?: boolean
-		isOptional: boolean
-		'~isOptional'?: boolean
-		hasTransform: boolean
-		'~hasTransform'?: boolean
-		hasRef: boolean
-		'~hasRef'?: boolean
-	}
+	hasAdditionalProperties: boolean
+	'~hasAdditionalProperties'?: boolean
+	hasDefault: boolean
+	'~hasDefault'?: boolean
+	isOptional: boolean
+	'~isOptional'?: boolean
+	hasTransform: boolean
+	'~hasTransform'?: boolean
+	hasRef: boolean
+	'~hasRef'?: boolean
 }
 
 export const isOptional = (
@@ -831,38 +829,33 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			Clean: createCleaner(schema),
 			Decode: (value: unknown) => Value.Decode(schema, value),
 			Encode: (value: unknown) => Value.Encode(schema, value),
-			sucrose: {
-				get hasAdditionalProperties() {
-					if ('~hasAdditionalProperties' in this)
-						return this['~hasAdditionalProperties']
+			get hasAdditionalProperties() {
+				if ('~hasAdditionalProperties' in this)
+					return this['~hasAdditionalProperties']
 
-					return (this['~hasAdditionalProperties'] =
-						hasAdditionalProperties(schema))
-				},
-				get hasDefault() {
-					if ('~hasDefault' in this) return this['~hasDefault']
+				return (this['~hasAdditionalProperties'] =
+					hasAdditionalProperties(schema))
+			},
+			get hasDefault() {
+				if ('~hasDefault' in this) return this['~hasDefault']
 
-					return (this['~hasDefault'] = hasProperty(
-						'default',
-						schema
-					))
-				},
-				get isOptional() {
-					if ('~isOptional' in this) return this['~isOptional']!
+				return (this['~hasDefault'] = hasProperty('default', schema))
+			},
+			get isOptional() {
+				if ('~isOptional' in this) return this['~isOptional']!
 
-					return (this['~isOptional'] = isOptional(schema))
-				},
-				get hasTransform() {
-					if ('~hasTransform' in this) return this['~hasTransform']!
+				return (this['~isOptional'] = isOptional(schema))
+			},
+			get hasTransform() {
+				if ('~hasTransform' in this) return this['~hasTransform']!
 
-					return (this['~hasTransform'] = hasTransform(schema))
-				},
-				'~hasRef': doesHaveRef,
-				get hasRef() {
-					if ('~hasRef' in this) return this['~hasRef']!
+				return (this['~hasTransform'] = hasTransform(schema))
+			},
+			'~hasRef': doesHaveRef,
+			get hasRef() {
+				if ('~hasRef' in this) return this['~hasRef']!
 
-					return (this['~hasRef'] = hasTransform(schema))
-				}
+				return (this['~hasRef'] = hasTransform(schema))
 			}
 		}
 
@@ -964,7 +957,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		}
 	}
 
-	compiled.sucrose = {
+	Object.assign(compiled, {
 		get hasAdditionalProperties() {
 			if ('~hasAdditionalProperties' in this)
 				return this['~hasAdditionalProperties']
@@ -993,7 +986,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			return (this['~hasRef'] = hasRef(schema))
 		},
 		'~hasRef': doesHaveRef
-	}
+	} as ElysiaTypeCheck<any>)
 
 	// if (cacheKey) caches[cacheKey] = compiled
 
@@ -1245,20 +1238,18 @@ export const getCookieValidator = ({
 		validators
 	})
 
-	if (isNotEmpty(defaultConfig)) {
-		if (cookieValidator)
-			cookieValidator.config = mergeCookie(cookieValidator.config, config)
-		else {
-			cookieValidator = getSchemaValidator(t.Cookie({}), {
-				modules,
-				dynamic,
-				models,
-				additionalProperties: true,
-				validators
-			})
+	if (cookieValidator)
+		cookieValidator.config = mergeCookie(cookieValidator.config, config)
+	else {
+		cookieValidator = getSchemaValidator(t.Cookie(t.Any()), {
+			modules,
+			dynamic,
+			models,
+			additionalProperties: true,
+			validators
+		})
 
-			cookieValidator.config = defaultConfig
-		}
+		cookieValidator.config = defaultConfig
 	}
 
 	return cookieValidator

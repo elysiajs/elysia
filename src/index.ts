@@ -495,18 +495,6 @@ export default class Elysia<
 		const skipPrefix = options?.skipPrefix ?? false
 		const allowMeta = options?.allowMeta ?? false
 
-		// standaloneValidators = [
-		// 	...(this.standaloneValidator.local
-		// 		? this.standaloneValidator.local
-		// 		: []),
-		// 	...(this.standaloneValidator.scoped
-		// 		? this.standaloneValidator.scoped
-		// 		: []),
-		// 	...(this.standaloneValidator.global
-		// 		? this.standaloneValidator.global
-		// 		: [])
-		// ]
-
 		if (!standaloneValidators) {
 			standaloneValidators = []
 
@@ -561,7 +549,6 @@ export default class Elysia<
 		const models = this.definitions.type
 		const dynamic = !this.config.aot
 
-		// ? Clone is need because of JIT, so the context doesn't switch between instance
 		const instanceValidator = this.validator.getCandidate()
 
 		const cloned = {
@@ -823,13 +810,7 @@ export default class Elysia<
 			return
 		}
 
-		const shouldPrecompile =
-			this.config.precompile === true ||
-			(typeof this.config.precompile === 'object' &&
-				this.config.precompile.compose === true)
-
 		const inference = cloneInference(this.inference)
-
 		const adapter = this['~adapter'].handler
 
 		const staticHandler =
@@ -857,9 +838,7 @@ export default class Elysia<
 		)
 			this.router.response[path] = nativeStaticHandler()
 
-		let compile: ((asManifest?: boolean) => ComposedHandler) | undefined = (
-			asManifest = false
-		) =>
+		const compile = () =>
 			composeHandler({
 				app: this,
 				path,
@@ -872,8 +851,7 @@ export default class Elysia<
 						? () => handle
 						: handle,
 				allowMeta,
-				inference,
-				asManifest
+				inference
 			})
 
 		let oldIndex: number | undefined
@@ -890,20 +868,17 @@ export default class Elysia<
 		const history = this.router.history
 		const index = oldIndex ?? this.router.history.length
 
+		const shouldPrecompile =
+			this.config.precompile === true ||
+			(typeof this.config.precompile === 'object' &&
+				this.config.precompile.compose === true)
+
 		const mainHandler = shouldPrecompile
 			? compile()
-			: (ctx: Context) => {
-					const temp = (
-						(history[index].composed =
-							compile!()) as ComposedHandler
-					)(ctx)
-
-					compile = undefined
-
-					return temp
-				}
-
-		if (shouldPrecompile) compile = undefined
+			: (ctx: Context) =>
+					((history[index].composed = compile!()) as ComposedHandler)(
+						ctx
+					)
 
 		if (oldIndex !== undefined)
 			this.router.history[oldIndex] = Object.assign(
@@ -919,12 +894,12 @@ export default class Elysia<
 					? {
 							standaloneValidators
 						}
-					: {},
+					: undefined,
 				localHook.webSocket
 					? { websocket: localHook.websocket as any }
-					: {}
+					: undefined
 			)
-		else {
+		else
 			this.router.history.push(
 				Object.assign(
 					{
@@ -939,13 +914,12 @@ export default class Elysia<
 						? {
 								standaloneValidators
 							}
-						: {},
+						: undefined,
 					localHook.webSocket
 						? { websocket: localHook.websocket as any }
-						: {}
+						: undefined
 				)
 			)
-		}
 
 		const handler = {
 			handler: shouldPrecompile ? mainHandler : undefined,

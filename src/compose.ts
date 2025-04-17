@@ -21,7 +21,8 @@ import {
 	redirect,
 	signCookie,
 	isNotEmpty,
-	encodePath
+	encodePath,
+	mergeCookie
 } from './utils'
 import { ParseError, error } from './error'
 
@@ -184,7 +185,7 @@ const composeCleaner = ({
 	typeAlias?: string
 	normalize: ElysiaConfig<''>['normalize']
 }) => {
-	if (!normalize || !schema.Clean || schema.sucrose.hasAdditionalProperties)
+	if (!normalize || !schema.Clean || schema.hasAdditionalProperties)
 		return ''
 
 	if (normalize === true || normalize === 'exactMirror')
@@ -192,7 +193,7 @@ const composeCleaner = ({
 			`try{` +
 			`${name}=validator.${typeAlias}.Clean(${name})\n` +
 			`}catch{` +
-			(schema.sucrose.isOptional
+			(schema.isOptional
 				? ''
 				: `throw new ValidationError('${type}',validator.${typeAlias},${name})`) +
 			`}`
@@ -219,9 +220,9 @@ const composeValidationFactory = ({
 	accelerators?: ReturnType<typeof createAccelerators>
 	isStaticResponse?: boolean
 }) => ({
-	composeValidation: (type: string, value = `c.${type}`) =>
+	validate: (type: string, value = `c.${type}`) =>
 		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
-	composeResponseValidation: (name = 'r') => {
+	response: (name = 'r') => {
 		if (isStaticResponse) return ''
 
 		let code = injectResponse + '\n'
@@ -254,7 +255,7 @@ const composeValidationFactory = ({
 				})
 
 			// Encode call TypeCheck.Check internally
-			if (encodeSchema && value.sucrose.hasTransform)
+			if (encodeSchema && value.hasTransform)
 				code +=
 					`try{` +
 					`${name}=validator.response[${status}].Encode(${name})\n` +
@@ -408,10 +409,11 @@ export const composeHandler = ({
 	const hasTrace = !!hooks.trace?.length
 	let fnLiteral = ''
 
+	inference = sucrose(hooks, inference)
 	inference = sucrose(
-		Object.assign({}, hooks, {
+		{
 			handler: handler as any
-		}),
+		},
 		inference
 	)
 
@@ -474,53 +476,49 @@ export const composeHandler = ({
 
 	const hasCookie = inference.cookie || !!validator.cookie
 
-	// ! Get latest app.config.cookie
-	const cookieValidator = getCookieValidator({
-		// @ts-expect-error private property
-		modules: app.definitions.typebox,
-		validator: validator.cookie as any,
-		defaultConfig: app.config.cookie,
-		dynamic: !!app.config.aot,
-		config: validator.cookie?.config ?? {},
-		// @ts-expect-error
-		models: app.definitions.type
-	})!
-
-	const cookieMeta = cookieValidator?.config as {
+	const cookieMeta: {
 		secrets?: string | string[]
 		sign: string[] | true
 		properties: { [x: string]: Object }
-	}
+	} = validator.cookie?.config
+		? mergeCookie(validator?.cookie?.config, app.config.cookie as any)
+		: app.config.cookie
 
-	let encodeCookie = ''
+	let _encodeCookie = ''
+	const encodeCookie = () => {
+		if(_encodeCookie) return _encodeCookie
 
-	if (cookieMeta?.sign) {
-		if (!cookieMeta.secrets)
-			throw new Error(
-				`t.Cookie required secret which is not set in (${method}) ${path}.`
-			)
+		if (cookieMeta?.sign) {
+			if (!cookieMeta.secrets)
+				throw new Error(
+					`t.Cookie required secret which is not set in (${method}) ${path}.`
+				)
 
-		const secret = !cookieMeta.secrets
-			? undefined
-			: typeof cookieMeta.secrets === 'string'
-				? cookieMeta.secrets
-				: cookieMeta.secrets[0]
+			const secret = !cookieMeta.secrets
+				? undefined
+				: typeof cookieMeta.secrets === 'string'
+					? cookieMeta.secrets
+					: cookieMeta.secrets[0]
 
-		encodeCookie += 'const _setCookie = c.set.cookie\n' + 'if(_setCookie){'
+			_encodeCookie +=
+				'const _setCookie = c.set.cookie\n' + 'if(_setCookie){'
 
-		if (cookieMeta.sign === true) {
-			encodeCookie +=
-				'for(const [key, cookie] of Object.entries(_setCookie)){' +
-				`c.set.cookie[key].value=await signCookie(cookie.value,'${secret}')` +
-				'}'
-		} else
-			for (const name of cookieMeta.sign)
-				encodeCookie +=
-					`if(_setCookie['${name}']?.value){` +
-					`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')` +
+			if (cookieMeta.sign === true) {
+				_encodeCookie +=
+					'for(const [key, cookie] of Object.entries(_setCookie)){' +
+					`c.set.cookie[key].value=await signCookie(cookie.value,'${secret}')` +
 					'}'
+			} else
+				for (const name of cookieMeta.sign)
+					_encodeCookie +=
+						`if(_setCookie['${name}']?.value){` +
+						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')` +
+						'}'
 
-		encodeCookie += '}\n'
+			_encodeCookie += '}\n'
+		}
+
+		return _encodeCookie
 	}
 
 	const normalize = app.config.normalize
@@ -529,7 +527,7 @@ export const composeHandler = ({
 		? createAccelerators(validator.response!)
 		: undefined
 
-	const { composeValidation, composeResponseValidation } =
+	const validation =
 		composeValidationFactory({
 			normalize,
 			validator,
@@ -623,7 +621,7 @@ export const composeHandler = ({
 		if (validator.query && validator.query.schema.type === 'object') {
 			const properties = validator.query.schema.properties
 
-			if (!validator.query.sucrose.hasAdditionalProperties)
+			if (!validator.query.hasAdditionalProperties)
 				for (const [key, _value] of Object.entries(properties)) {
 					let value = _value as TAnySchema
 
@@ -886,14 +884,12 @@ export const composeHandler = ({
 							: undefined
 					: undefined
 
-		let hasContentType = false
-
 		if (parser && defaultParsers.includes(parser)) {
 			const reporter = report('parse', {
 				total: hooks.parse?.length
 			})
 
-			const isOptionalBody = !!validator.body?.sucrose.isOptional
+			const isOptionalBody = !!validator.body?.isOptional
 
 			switch (parser) {
 				case 'json':
@@ -978,7 +974,7 @@ export const composeHandler = ({
 						)
 
 						const isOptionalBody =
-							!!validator.body?.sucrose.isOptional
+							!!validator.body?.isOptional
 
 						switch (hooks.parse[i].fn as unknown as string) {
 							case 'json':
@@ -1049,7 +1045,7 @@ export const composeHandler = ({
 			reporter.resolve()
 
 			if (!hasDefaultParser) {
-				const isOptionalBody = !!validator.body?.sucrose.isOptional
+				const isOptionalBody = !!validator.body?.isOptional
 
 				if (hooks.parse?.length)
 					fnLiteral +=
@@ -1145,7 +1141,7 @@ export const composeHandler = ({
 
 	if (validator) {
 		if (validator.headers) {
-			if (validator.headers.sucrose.hasDefault)
+			if (validator.headers.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1171,23 +1167,23 @@ export const composeHandler = ({
 				normalize
 			})
 
-			if (validator.headers.sucrose.isOptional)
+			if (validator.headers.isOptional)
 				fnLiteral += `if(isNotEmpty(c.headers)){`
 
 			if (validator.body?.schema.noValidate !== true)
 				fnLiteral +=
 					`if(validator.headers.Check(c.headers) === false){` +
-					composeValidation('headers') +
+					validation.validate('headers') +
 					'}'
 
-			if (validator.headers.sucrose.hasTransform)
+			if (validator.headers.hasTransform)
 				fnLiteral += `c.headers=validator.headers.Decode(c.headers)\n`
 
-			if (validator.headers.sucrose.isOptional) fnLiteral += '}'
+			if (validator.headers.isOptional) fnLiteral += '}'
 		}
 
 		if (validator.params) {
-			if (validator.params.sucrose.hasDefault)
+			if (validator.params.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1209,15 +1205,15 @@ export const composeHandler = ({
 			if (validator.params?.schema.noValidate !== true)
 				fnLiteral +=
 					`if(validator.params.Check(c.params)===false){` +
-					composeValidation('params') +
+					validation.validate('params') +
 					'}'
 
-			if (validator.params.sucrose.hasTransform)
+			if (validator.params.hasTransform)
 				fnLiteral += `c.params=validator.params.Decode(c.params)\n`
 		}
 
 		if (validator.query) {
-			if (validator.query.sucrose.hasDefault)
+			if (validator.query.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1243,29 +1239,29 @@ export const composeHandler = ({
 					})
 				}
 
-			if (validator.query.sucrose.isOptional)
+			if (validator.query.isOptional)
 				fnLiteral += `if(isNotEmpty(c.query)){`
 
 			if (validator.query?.schema.noValidate !== true)
 				fnLiteral +=
 					`if(validator.query.Check(c.query)===false){` +
-					composeValidation('query') +
+					validation.validate('query') +
 					`}`
 
-			if (validator.query.sucrose.hasTransform)
+			if (validator.query.hasTransform)
 				fnLiteral += `c.query=validator.query.Decode(Object.assign({},c.query))\n`
 
-			if (validator.query.sucrose.isOptional) fnLiteral += `}`
+			if (validator.query.isOptional) fnLiteral += `}`
 		}
 
 		if (validator.body) {
 			if (
-				validator.body.sucrose.hasTransform ||
-				validator.body.sucrose.isOptional
+				validator.body.hasTransform ||
+				validator.body.isOptional
 			)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
-			if (validator.body.sucrose.hasDefault) {
+			if (validator.body.hasDefault) {
 				const value = Value.Default(
 					validator.body.schema,
 					validator.body.schema.type === 'object' ||
@@ -1298,15 +1294,15 @@ export const composeHandler = ({
 				})
 
 				if (validator.body?.schema.noValidate !== true) {
-					if (validator.body.sucrose.isOptional)
+					if (validator.body.isOptional)
 						fnLiteral +=
 							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
-							composeValidation('body') +
+							validation.validate('body') +
 							'}'
 					else
 						fnLiteral +=
 							`if(validator.body.Check(c.body)===false){` +
-							composeValidation('body') +
+							validation.validate('body') +
 							`}`
 				}
 			} else {
@@ -1318,37 +1314,42 @@ export const composeHandler = ({
 				})
 
 				if (validator.body?.schema.noValidate !== true) {
-					if (validator.body.sucrose.isOptional)
+					if (validator.body.isOptional)
 						fnLiteral +=
 							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
-							composeValidation('body') +
+							validation.validate('body') +
 							'}'
 					else
 						fnLiteral +=
 							`if(validator.body.Check(c.body)===false){` +
-							composeValidation('body') +
+							validation.validate('body') +
 							'}'
 				}
 			}
 
-			if (validator.body.sucrose.hasTransform)
+			if (validator.body.hasTransform)
 				fnLiteral += `if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`
 		}
 
-		if (
-			cookieValidator &&
-			isNotEmpty(
-				cookieValidator.schema.properties ??
-					cookieValidator.schema?.schema ??
-					{}
-			)
-		) {
+		if (validator.cookie) {
+			// ! Get latest app.config.cookie
+			const cookieValidator = getCookieValidator({
+				// @ts-expect-error private property
+				modules: app.definitions.typebox,
+				validator: validator.cookie as any,
+				defaultConfig: app.config.cookie,
+				dynamic: !!app.config.aot,
+				config: validator.cookie?.config ?? {},
+				// @ts-expect-error
+				models: app.definitions.type
+			})!
+
 			fnLiteral +=
 				`const cookieValue={}\n` +
 				`for(const [key,value] of Object.entries(c.cookie))` +
 				`cookieValue[key]=value.value\n`
 
-			if (cookieValidator.sucrose.hasDefault)
+			if (cookieValidator.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(cookieValidator.schema, {}) as Object
 				)) {
@@ -1359,22 +1360,22 @@ export const composeHandler = ({
 					}\n`
 				}
 
-			if (cookieValidator.sucrose.isOptional)
+			if (cookieValidator.isOptional)
 				fnLiteral += `if(isNotEmpty(c.cookie)){`
 
 			if (validator.body?.schema.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
-					composeValidation('cookie', 'cookieValue') +
+					validation.validate('cookie', 'cookieValue') +
 					'}'
 			}
 
-			if (cookieValidator.sucrose.hasTransform)
+			if (cookieValidator.hasTransform)
 				fnLiteral +=
 					`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue)))` +
 					`c.cookie[key].value=value\n`
 
-			if (cookieValidator.sucrose.isOptional) fnLiteral += `}`
+			if (cookieValidator.isOptional) fnLiteral += `}`
 		}
 	}
 
@@ -1476,7 +1477,7 @@ export const composeHandler = ({
 				}
 
 				if (validator.response)
-					fnLiteral += composeResponseValidation('be')
+					fnLiteral += validation.response('be')
 
 				const mapResponseReporter = report('mapResponse', {
 					total: hooks.mapResponse?.length
@@ -1504,7 +1505,7 @@ export const composeHandler = ({
 
 				mapResponseReporter.resolve()
 
-				fnLiteral += encodeCookie
+				fnLiteral += encodeCookie()
 				fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${
 					mapResponseContext
 				})}\n`
@@ -1556,7 +1557,7 @@ export const composeHandler = ({
 					fnLiteral += `if(af!==undefined){`
 					reporter.resolve()
 
-					fnLiteral += composeResponseValidation('af')
+					fnLiteral += validation.response('af')
 
 					fnLiteral += `c.response=af}`
 				} else {
@@ -1572,9 +1573,9 @@ export const composeHandler = ({
 
 		fnLiteral += `r=c.response\n`
 
-		if (validator.response) fnLiteral += composeResponseValidation()
+		if (validator.response) fnLiteral += validation.response()
 
-		fnLiteral += encodeCookie
+		fnLiteral += encodeCookie()
 
 		const mapResponseReporter = report('mapResponse', {
 			total: hooks.mapResponse?.length
@@ -1620,7 +1621,7 @@ export const composeHandler = ({
 
 			handleReporter.resolve()
 
-			if (validator.response) fnLiteral += composeResponseValidation()
+			if (validator.response) fnLiteral += validation.response()
 
 			report('afterHandle').resolve()
 
@@ -1649,7 +1650,7 @@ export const composeHandler = ({
 			}
 			mapResponseReporter.resolve()
 
-			fnLiteral += encodeCookie
+			fnLiteral += encodeCookie()
 
 			if (handler instanceof Response) {
 				fnLiteral += inference.set
@@ -1710,7 +1711,7 @@ export const composeHandler = ({
 			}
 			mapResponseReporter.resolve()
 
-			fnLiteral += encodeCookie
+			fnLiteral += encodeCookie()
 			fnLiteral += mapAccelerate('r', !hasSet)
 
 			if (hasSet)
@@ -1888,7 +1889,6 @@ export const composeHandler = ({
 		`},` +
 		`error:{` +
 		allocateIf(`ValidationError,`, hasValidation) +
-		`InternalServerError,` +
 		allocateIf(`ParseError`, hasBody) +
 		`},` +
 		`schema,` +
@@ -1914,14 +1914,15 @@ export const composeHandler = ({
 	if (hooks.mapResponse?.length) init += 'let mr\n'
 	if (allowMeta) init += 'c.schema=schema\nc.defs=definitions\n'
 
-	init += fnLiteral + '}'
+	fnLiteral = init + fnLiteral + '}'
+	init = ''
 
 	try {
 		if (asManifest) return Function('hooks', init) as any
 
 		return Function(
 			'hooks',
-			init
+			fnLiteral
 		)({
 			handler,
 			hooks: lifeCycleToFn(hooks),
@@ -1938,7 +1939,6 @@ export const composeHandler = ({
 			},
 			error: {
 				ValidationError: hasValidation ? ValidationError : undefined,
-				InternalServerError,
 				ParseError: hasBody ? ParseError : undefined
 			},
 			schema: app.router.history,
@@ -1966,7 +1966,7 @@ export const composeHandler = ({
 		console.log({
 			handler:
 				typeof handler === 'function' ? handler.toString() : handler,
-			instruction: init,
+			instruction: fnLiteral,
 			hooks: {
 				...debugHooks,
 				// @ts-expect-error
@@ -1999,8 +1999,7 @@ export const composeHandler = ({
 			validator,
 			// @ts-expect-error
 			definitions: app.definitions.type,
-			error,
-			fnLiteral
+			error
 		})
 		console.log('---')
 
