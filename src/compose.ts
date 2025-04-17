@@ -24,6 +24,7 @@ import {
 	encodePath,
 	mergeCookie
 } from './utils'
+import { isBun } from './universal/utils'
 import { ParseError, error } from './error'
 
 import {
@@ -52,7 +53,6 @@ import type {
 	LifeCycleStore,
 	SchemaValidator
 } from './types'
-import { isBun } from '../dist/universal/utils'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
