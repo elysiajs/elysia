@@ -8,6 +8,7 @@ Feature:
 - support Ref inside inline schema
 - `standalone Validator`
 - new validation `t.Form`, `t.NoValidate`
+- use `file-type` to check file type
 
 Improvement:
 - optimize types

@@ -7,11 +7,11 @@ import {
 } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
+import type { fileTypeFromBlob as FileTypeFromBlob } from 'file-type'
 
+import { ElysiaFile } from '../universal/file'
 import { InvalidFileType, ValidationError } from '../error'
 import type { FileOptions, FileUnit } from './types'
-import { ElysiaFile } from '../universal/file'
-import { fileTypeFromBlob } from 'file-type'
 
 export const tryParse = (v: unknown, schema: TAnySchema) => {
 	try {
@@ -93,6 +93,16 @@ export const checkFileExtension = (type: string, extension: string) => {
 	)
 }
 
+let _fileTypeFromBlob: typeof FileTypeFromBlob
+export const fileTypeFromBlob = (file: Blob | File) => {
+	if (_fileTypeFromBlob) return _fileTypeFromBlob(file)
+
+	return import('file-type').then((x) => {
+		_fileTypeFromBlob = x.fileTypeFromBlob
+		return _fileTypeFromBlob(file)
+	})
+}
+
 export const validateFileExtension = async (
 	file: Blob | File | undefined,
 	extension: string | string[],
@@ -125,6 +135,8 @@ export const validateFile = (options: FileOptions, value: any) => {
 	if (options.maxSize && value.size > parseFileUnit(options.maxSize))
 		return false
 
+	// This only check file extension based on it's name / mimetype
+	// to actual check the file type, use `validateFileExtension` instead
 	if (options.extension) {
 		if (typeof options.extension === 'string')
 			return checkFileExtension(value.type, options.extension)

@@ -1364,7 +1364,8 @@ export const composeHandler = ({
 						i++
 					}
 
-				fnLiteral += '\n'
+				if (i) fnLiteral += '\n'
+
 				if (i === 1) fnLiteral += `await ${validateFile}\n`
 				else if (i > 1)
 					fnLiteral += `await Promise.all([${validateFile}])\n`
