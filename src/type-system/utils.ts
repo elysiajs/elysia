@@ -115,7 +115,7 @@ export const fileTypeFromBlob = (file: Blob | File) => {
 	if (_fileTypeFromBlob) return _fileTypeFromBlob(file)
 
 	return loadFileType().then((mod) => {
-		if (mod) mod(file)
+		if (mod) return mod(file)
 	})
 }
 
