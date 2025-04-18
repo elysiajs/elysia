@@ -827,8 +827,11 @@ export default class Elysia<
 		)
 			this.router.response[path] = nativeStaticHandler()
 
-		const compile = () =>
-			composeHandler({
+		let _compiled: ComposedHandler
+		const compile = () => {
+			if (_compiled) return _compiled
+
+			return (_compiled = composeHandler({
 				app: this,
 				path,
 				method,
@@ -841,7 +844,8 @@ export default class Elysia<
 						: handle,
 				allowMeta,
 				inference: this.inference
-			})
+			}))
+		}
 
 		let oldIndex: number | undefined
 		if (`${method}_${path}` in this.routeTree)

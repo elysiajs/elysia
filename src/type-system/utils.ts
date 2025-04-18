@@ -7,7 +7,6 @@ import {
 } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
-import type { fileTypeFromBlob as FileTypeFromBlob } from 'file-type'
 
 import { ElysiaFile } from '../universal/file'
 import { InvalidFileType, ValidationError } from '../error'
@@ -93,14 +92,29 @@ export const checkFileExtension = (type: string, extension: string) => {
 	)
 }
 
-let _fileTypeFromBlob: typeof FileTypeFromBlob
+let _fileTypeFromBlobWarn = false
+const warnIfFileTypeIsNotInstalled = () => {
+	if (!_fileTypeFromBlobWarn) {
+		console.warn(
+			"[Elysia] Attempt to validate file type without 'file-type'. This may lead to security risks. We recommend installing 'file-type' to properly validate file extension."
+		)
+		_fileTypeFromBlobWarn = true
+	}
+}
+
+let _fileTypeFromBlob: Function
 export const fileTypeFromBlob = (file: Blob | File) => {
 	if (_fileTypeFromBlob) return _fileTypeFromBlob(file)
 
-	return import('file-type').then((x) => {
-		_fileTypeFromBlob = x.fileTypeFromBlob
-		return _fileTypeFromBlob(file)
-	})
+	// @ts-ignore
+	return import('file-type')
+		.then((x) => {
+			_fileTypeFromBlob = x.fileTypeFromBlob
+			return _fileTypeFromBlob(file)
+		})
+		.catch((err) => {
+			warnIfFileTypeIsNotInstalled()
+		})
 }
 
 export const validateFileExtension = async (
