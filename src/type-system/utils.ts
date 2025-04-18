@@ -102,19 +102,21 @@ const warnIfFileTypeIsNotInstalled = () => {
 	}
 }
 
+export const loadFileType = async () =>
+	import('file-type')
+		.then((x) => {
+			_fileTypeFromBlob = x.fileTypeFromBlob
+			return _fileTypeFromBlob
+		})
+		.catch(warnIfFileTypeIsNotInstalled)
+
 let _fileTypeFromBlob: Function
 export const fileTypeFromBlob = (file: Blob | File) => {
 	if (_fileTypeFromBlob) return _fileTypeFromBlob(file)
 
-	// @ts-ignore
-	return import('file-type')
-		.then((x) => {
-			_fileTypeFromBlob = x.fileTypeFromBlob
-			return _fileTypeFromBlob(file)
-		})
-		.catch((err) => {
-			warnIfFileTypeIsNotInstalled()
-		})
+	return loadFileType().then((mod) => {
+		if (mod) mod(file)
+	})
 }
 
 export const validateFileExtension = async (

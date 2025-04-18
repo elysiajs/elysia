@@ -21,7 +21,13 @@ import type {
 } from '@sinclair/typebox'
 
 import './format'
-import { compile, createType, tryParse, validateFile } from './utils'
+import {
+	compile,
+	createType,
+	loadFileType,
+	tryParse,
+	validateFile
+} from './utils'
 import {
 	CookieValidatorOptions,
 	TFile,
@@ -450,16 +456,23 @@ t.ObjectString = ElysiaType.ObjectString
 t.ArrayString = ElysiaType.ArrayString
 t.Numeric = ElysiaType.Numeric
 t.Integer = ElysiaType.Integer
-t.File = (arg = {}) =>
-	ElysiaType.File({
+
+t.File = (arg) => {
+	if (arg?.type) loadFileType()
+
+	return ElysiaType.File({
 		default: 'File',
 		...arg,
 		extension: arg?.type,
 		type: 'string',
 		format: 'binary'
 	})
-t.Files = (arg = {}) =>
-	ElysiaType.Files({
+}
+
+t.Files = (arg) => {
+	if (arg?.type) loadFileType()
+
+	return ElysiaType.Files({
 		...arg,
 		elysiaMeta: 'Files',
 		default: 'Files',
@@ -472,6 +485,8 @@ t.Files = (arg = {}) =>
 			format: 'binary'
 		}
 	})
+}
+
 t.Nullable = (schema) => ElysiaType.Nullable(schema)
 t.MaybeEmpty = ElysiaType.MaybeEmpty as any
 t.Cookie = ElysiaType.Cookie
