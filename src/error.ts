@@ -55,7 +55,7 @@ export class ElysiaCustomStatusResponse<
 	}
 }
 
-export const error = <
+export const status = <
 	const Code extends number | keyof StatusMap,
 	const T = Code extends keyof InvertedStatusMap
 		? InvertedStatusMap[Code]
@@ -64,6 +64,11 @@ export const error = <
 	code: Code,
 	response?: T
 ) => new ElysiaCustomStatusResponse<Code, T>(code, response as any)
+
+/**
+* @deprecated use `Elysia.status` instead
+*/
+export const error = status
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'

@@ -6636,6 +6636,7 @@ export {
 } from './utils'
 
 export {
+	status,
 	error,
 	mapValueError,
 	ParseError,
