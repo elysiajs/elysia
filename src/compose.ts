@@ -45,10 +45,7 @@ import {
 } from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
-import {
-	validateFileExtension,
-	warnIfFileTypeIsNotInstalled
-} from './type-system/utils'
+import { validateFileExtension } from './type-system/utils'
 
 import type { TraceEvent } from './trace'
 import type {
@@ -383,7 +380,6 @@ export const composeHandler = ({
 	inference: Sucrose.Inference
 	asManifest?: boolean
 }): ComposedHandler => {
-	console.log("COM")
 	const adapter = app['~adapter'].composeHandler
 	const adapterHandler = app['~adapter'].handler
 	const isHandleFn = typeof handler === 'function'
