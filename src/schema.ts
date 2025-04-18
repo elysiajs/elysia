@@ -16,7 +16,7 @@ import { createMirror } from 'exact-mirror'
 
 import { t, type TypeCheck } from './type-system'
 
-import { isNotEmpty, mergeCookie, randomId } from './utils'
+import { mergeCookie, randomId } from './utils'
 import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
@@ -60,7 +60,7 @@ export const isOptional = (
 ) => {
 	if (!schema) return false
 
-	// @ts-expect-error private property
+	// @ts-ignore
 	if (schema?.[Kind] === 'Import' && schema.References)
 		return schema.References().some(isOptional as any)
 
@@ -120,6 +120,8 @@ export const hasType = (type: string, schema: TAnySchema) => {
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
+		if(!properties) return false
+
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
 
@@ -169,12 +171,10 @@ export const hasProperty = (
 
 			if (property.type === 'object') {
 				if (hasProperty(expectedProperty, property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++) {
+			} else if (property.anyOf)
+				for (let i = 0; i < property.anyOf.length; i++)
 					if (hasProperty(expectedProperty, property.anyOf[i]))
 						return true
-				}
-			}
 		}
 
 		return false
@@ -242,10 +242,9 @@ export const hasTransform = (schema: TAnySchema): boolean => {
 		for (let i = 0; i < schema.oneOf.length; i++)
 			if (hasTransform(schema.oneOf[i])) return true
 
-	if (schema.anyOf) {
+	if (schema.anyOf)
 		for (let i = 0; i < schema.anyOf.length; i++)
 			if (hasTransform(schema.anyOf[i])) return true
-	}
 
 	if (schema.allOf)
 		for (let i = 0; i < schema.allOf.length; i++)
@@ -992,6 +991,9 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 	return compiled as any
 }
+
+export const isUnion = (schema: TSchema) =>
+	schema[Kind] === 'Union' || (!schema.schema && !!schema.anyOf)
 
 export const mergeObjectSchemas = (
 	schemas: TSchema[]

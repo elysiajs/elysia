@@ -39,10 +39,13 @@ import { ELYSIA_TRACE, type TraceHandler } from './trace'
 import {
 	createAccelerators,
 	ElysiaTypeCheck,
-	getCookieValidator
+	getCookieValidator,
+	hasType,
+	isUnion
 } from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
+import { validateFileExtension } from './type-system/utils'
 
 import type { TraceEvent } from './trace'
 import type {
@@ -1256,8 +1259,13 @@ export const composeHandler = ({
 			if (validator.body.hasTransform || validator.body.isOptional)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
+			const hasFile =
+				!isUnion(validator.body.schema) &&
+				(hasType('File', validator.body.schema) ||
+					hasType('Files', validator.body.schema))
+
 			if (validator.body.hasDefault) {
-				const value = Value.Default(
+				let value = Value.Default(
 					validator.body.schema,
 					validator.body.schema.type === 'object' ||
 						(validator.body.schema[Kind] === 'Import' &&
@@ -1267,6 +1275,16 @@ export const composeHandler = ({
 						? {}
 						: undefined
 				)
+
+				// remove default value of t.File / t.Files
+				if (hasFile && value && typeof value === 'object') {
+					for (const [k, v] of Object.entries(value))
+						if (v === 'File' || v === 'Files')
+							// @ts-ignore
+							delete value[k]
+
+					if (!isNotEmpty(value)) value = undefined
+				}
 
 				const parsed =
 					typeof value === 'object'
@@ -1324,6 +1342,33 @@ export const composeHandler = ({
 
 			if (validator.body.hasTransform)
 				fnLiteral += `if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`
+
+			if (hasFile) {
+				let validateFile = ''
+
+				let i = 0
+
+				if (validator.body.schema.properties)
+					for (const [k, v] of Object.entries(
+						validator.body.schema.properties
+					) as [string, TSchema][]) {
+						if (
+							!v.extension ||
+							(v[Kind] !== 'File' && v[Kind] !== 'Files')
+						)
+							continue
+
+						if (i) validateFile += ','
+						validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+
+						i++
+					}
+
+				fnLiteral += '\n'
+				if (i === 1) fnLiteral += `await ${validateFile}\n`
+				else if (i > 1)
+					fnLiteral += `await Promise.all([${validateFile}])\n`
+			}
 		}
 
 		if (validator.cookie) {
@@ -1885,6 +1930,7 @@ export const composeHandler = ({
 		allocateIf(`ValidationError,`, hasValidation) +
 		allocateIf(`ParseError`, hasBody) +
 		`},` +
+		`validateFileExtension,` +
 		`schema,` +
 		`definitions,` +
 		`ERROR_CODE,` +
@@ -1935,6 +1981,7 @@ export const composeHandler = ({
 				ValidationError: hasValidation ? ValidationError : undefined,
 				ParseError: hasBody ? ParseError : undefined
 			},
+			validateFileExtension,
 			schema: app.router.history,
 			// @ts-expect-error
 			definitions: app.definitions.type,
@@ -1963,31 +2010,31 @@ export const composeHandler = ({
 			instruction: fnLiteral,
 			hooks: {
 				...debugHooks,
-				// @ts-expect-error
+				// @ts-ignore
 				transform: debugHooks?.transform?.map?.((x) => x.toString()),
-				// @ts-expect-error
+				// @ts-ignore
 				resolve: debugHooks?.resolve?.map?.((x) => x.toString()),
-				// @ts-expect-error
+				// @ts-ignore
 				beforeHandle: debugHooks?.beforeHandle?.map?.((x) =>
 					x.toString()
 				),
-				// @ts-expect-error
+				// @ts-ignore
 				afterHandle: debugHooks?.afterHandle?.map?.((x) =>
 					x.toString()
 				),
-				// @ts-expect-error
+				// @ts-ignore
 				mapResponse: debugHooks?.mapResponse?.map?.((x) =>
 					x.toString()
 				),
-				// @ts-expect-error
+				// @ts-ignore
 				parse: debugHooks?.parse?.map?.((x) => x.toString()),
-				// @ts-expect-error
+				// @ts-ignore
 				error: debugHooks?.error?.map?.((x) => x.toString()),
-				// @ts-expect-error
+				// @ts-ignore
 				afterResponse: debugHooks?.afterResponse?.map?.((x) =>
 					x.toString()
 				),
-				// @ts-expect-error
+				// @ts-ignore
 				stop: debugHooks?.stop?.map?.((x) => x.toString())
 			},
 			validator,

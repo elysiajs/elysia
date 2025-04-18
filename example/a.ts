@@ -1,7 +1,13 @@
-import { isNotEmpty } from '../dist/utils'
 import { Elysia, t } from '../src'
-import { post, req } from '../test/utils'
 
 const app = new Elysia()
-	.get('/a', ({ server }) => server)
-	.get('/b', ({ query }) => query)
+	.post('/', ({ body: { file } }) => file?.size ?? 'no file', {
+		body: t.Object({
+			file: t.Optional(
+				t.File({
+					type: 'application/pdf'
+				})
+			)
+		})
+	})
+	.listen(3000)

@@ -27,6 +27,7 @@ import type {
 	ElysiaCustomStatusResponse,
 	InternalServerError,
 	InvalidCookieSignature,
+	InvalidFileType,
 	NotFoundError,
 	ParseError,
 	ValidationError
@@ -1133,6 +1134,21 @@ export type ErrorHandler<
 							Ephemeral['resolve'] &
 							Volatile['resolve']
 					>
+			  >
+			| Prettify<
+					{
+						request: Request
+						code: 'INVALID_FILE_TYPE'
+						error: Readonly<InvalidFileType>
+						set: Context['set']
+					} & Singleton['derive'] &
+						Ephemeral['derive'] &
+						Volatile['derive'] &
+						NeverKey<
+							Singleton['resolve'] &
+								Ephemeral['resolve'] &
+								Volatile['resolve']
+						>
 			  >
 			| Prettify<
 					{

@@ -174,6 +174,18 @@ export const mapValueError = (error: ValueError | undefined) => {
 	}
 }
 
+export class InvalidFileType extends Error {
+	code = 'INVALID_FILE_TYPE'
+	status = 401
+
+	constructor(
+		public key: string,
+		message?: string
+	) {
+		super(message ?? `"${key}" has invalid file type`)
+	}
+}
+
 export class ValidationError extends Error {
 	code = 'VALIDATION'
 	status = 422

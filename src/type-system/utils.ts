@@ -8,9 +8,10 @@ import {
 import { Value } from '@sinclair/typebox/value'
 import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 
-import { ValidationError } from '../error'
+import { InvalidFileType, ValidationError } from '../error'
 import type { FileOptions, FileUnit } from './types'
 import { ElysiaFile } from '../universal/file'
+import { fileTypeFromBlob } from 'file-type'
 
 export const tryParse = (v: unknown, schema: TAnySchema) => {
 	try {
@@ -90,6 +91,27 @@ export const checkFileExtension = (type: string, extension: string) => {
 		extension.charCodeAt(extension.length - 2) === 47 &&
 		type.startsWith(extension.slice(0, -1))
 	)
+}
+
+export const validateFileExtension = async (
+	file: Blob | File | undefined,
+	extension: string | string[],
+	// @ts-ignore
+	name = file?.name ?? ''
+) => {
+	if (!file) return
+
+	const result = await fileTypeFromBlob(file)
+	if (!result) throw new InvalidFileType(name)
+
+	if (typeof extension === 'string')
+		if (!checkFileExtension(result.mime, extension))
+			throw new InvalidFileType(name)
+
+	for (let i = 0; i < extension.length; i++)
+		if (checkFileExtension(result.mime, extension[i])) return true
+
+	throw new InvalidFileType(name)
 }
 
 export const validateFile = (options: FileOptions, value: any) => {

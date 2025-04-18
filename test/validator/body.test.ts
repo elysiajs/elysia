@@ -768,6 +768,38 @@ describe('Body Validator', () => {
 		}
 	})
 
+	it('handle actual file', async () => {
+		const app = new Elysia().post(
+			'/upload',
+			({ body: { file } }) => file.size,
+			{
+				body: t.Object({
+					file: t.File({
+						type: 'image'
+					})
+				})
+			}
+		)
+
+		{
+			const { request, size } = upload('/upload', {
+				file: 'millenium.jpg'
+			})
+
+			const response = await app.handle(request).then((r) => r.text())
+			expect(+response).toBe(size)
+		}
+
+		{
+			const { request, size } = upload('/upload', {
+				file: 'fake.jpg'
+			})
+
+			const status = await app.handle(request).then((r) => r.status)
+			expect(status).toBe(401)
+		}
+	})
+
 	it('handle body using Transform with Intersect ', async () => {
 		const app = new Elysia().post('/test', ({ body }) => body, {
 			body: t.Intersect([

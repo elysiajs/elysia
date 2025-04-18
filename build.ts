@@ -1,6 +1,8 @@
 import { $ } from 'bun'
 import { build, type Options } from 'tsup'
 
+const external = ['@sinclair/typebox', 'file-type']
+
 const tsupConfig: Options = {
 	entry: ['src/**/*.ts'],
 	splitting: false,
@@ -11,7 +13,7 @@ const tsupConfig: Options = {
 	minifyWhitespace: false,
 	minifyIdentifiers: false,
 	target: 'node22',
-	external: ['@sinclair/typebox']
+	external
 	// outExtension() {
 	// 	return {
 	// 		js: '.js'
@@ -76,8 +78,8 @@ await Bun.build({
 		identifiers: false
 	},
 	target: 'bun',
-	sourcemap: 'external',
-	external: ['@sinclair/typebox']
+	sourcemap: 'linked',
+	external
 })
 
 await Promise.all([
