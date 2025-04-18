@@ -1,6 +1,6 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia({ precompile: true })
+const app = new Elysia()
 	.post('/', ({ body: { file } }) => file?.size ?? 'no file', {
 		body: t.Object({
 			file: t.Optional(

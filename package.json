@@ -194,6 +194,7 @@
 		"exact-mirror": "^0.0.6",
 		"expect-type": "^1.2.1",
 		"fast-decode-uri-component": "^1.0.1",
+		"file-type": "^20.4.1",
 		"json-accelerator": "^0.1.4",
 		"memoirist": "^0.3.0",
 		"mitata": "^1.0.34",
@@ -203,7 +204,7 @@
 	},
 	"peerDependencies": {
 		"@sinclair/typebox": ">= 0.34.0",
-		"file-type": "",
+		"file-type": ">= 20.0.0",
 		"openapi-types": ">= 12.0.0",
 		"typescript": ">= 5.0.0"
 	},
