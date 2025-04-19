@@ -1,24 +1,13 @@
 import { Elysia, t } from '../src'
 import { Memoirist } from 'memoirist'
 
-const app = new Elysia({
-	systemRouter: true
-})
-	.onRequest(() => {
-		console.log('hi')
+const app = new Elysia()
+	.post('/json', (c) => c.body, {
+		parse: 'json',
+		response: t.Object({
+				hello: t.Literal('world')
+			})
 	})
-	.get('/', 'hi')
-	.get('/id', ({ params }) => 'ok')
-	.post('/id', 'a')
 	.listen(3000)
 
-Bun.serve({
-	static: {
-		'/': new Response("A")
-	},
-	routes: {},
-	port: 3001,
-	fetch(request) {
-		return new Response("B")
-	}
-})
+console.log(app.routes[0].compile().toString())

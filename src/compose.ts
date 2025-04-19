@@ -850,14 +850,12 @@ export const composeHandler = ({
 			? `,${adapter.mapResponseContext}`
 			: ''
 
-	const mapAccelerate = (response = 'r', compact = false) =>
+	const mapAccelerate = (response = 'r') =>
 		jsonAccelerator
 			? (saveResponse ? `${saveResponse}${response}\n` : '') +
 				`if(accelerate){\n` +
 				`c.set.headers['content-type']='application/json'\n` +
-				(compact
-					? `return mapCompactResponse(accelerate(${response})${mapResponseContext})}\n`
-					: `return mapResponse(accelerate(${response}),c.set${mapResponseContext})}\n`)
+				`return mapResponse(accelerate(${response}),c.set${mapResponseContext})}\n`
 			: ''
 
 	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
@@ -1638,7 +1636,7 @@ export const composeHandler = ({
 		}
 		mapResponseReporter.resolve()
 
-		fnLiteral += mapAccelerate('r', !hasSet)
+		fnLiteral += mapAccelerate('r')
 
 		if (hasSet)
 			fnLiteral += `return mapResponse(${saveResponse}r,c.set${
@@ -1711,7 +1709,7 @@ export const composeHandler = ({
 					mapResponseContext
 				})\n`
 			} else {
-				fnLiteral += mapAccelerate('r', true)
+				fnLiteral += mapAccelerate('r')
 
 				fnLiteral += `return mapCompactResponse(${saveResponse}r${
 					mapResponseContext
@@ -1751,7 +1749,7 @@ export const composeHandler = ({
 			mapResponseReporter.resolve()
 
 			fnLiteral += encodeCookie()
-			fnLiteral += mapAccelerate('r', !hasSet)
+			fnLiteral += mapAccelerate('r')
 
 			if (hasSet)
 				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
@@ -1786,7 +1784,7 @@ export const composeHandler = ({
 					mapResponseContext
 				})\n`
 			} else {
-				fnLiteral += mapAccelerate(handled, true)
+				fnLiteral += mapAccelerate(handled)
 
 				fnLiteral += `return mapCompactResponse(${saveResponse}${handled}${
 					mapResponseContext
