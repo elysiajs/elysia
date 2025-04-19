@@ -169,12 +169,8 @@ export const BunAdapter: ElysiaAdapter = {
 							...(app.config.serve || {}),
 							...(options || {}),
 							// @ts-ignore
-							static: {
-								...app.router.response,
-								// @ts-expect-error
-								...app.config.serve?.static
-							},
 							routes: {
+								...app.router.response,
 								...routes,
 								// @ts-expect-error
 								...app.config.serve?.routes
@@ -192,8 +188,8 @@ export const BunAdapter: ElysiaAdapter = {
 							reusePort: true,
 							...(app.config.serve || {}),
 							// @ts-ignore
-							static: app.router.response,
 							routes: {
+								...app.router.response,
 								...routes,
 								// @ts-expect-error
 								...app.config.serve?.routes
