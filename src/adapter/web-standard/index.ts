@@ -92,7 +92,8 @@ export const WebStandardAdapter: ElysiaAdapter = {
 				`path:p,` +
 				`url:u,` +
 				`redirect,` +
-				`error,` +
+				`error:status,` +
+				`status,` +
 				`set:{headers:`
 
 			fnLiteral += Object.keys(defaultHeaders ?? {}).length

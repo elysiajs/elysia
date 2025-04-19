@@ -1,10 +1,11 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import type { Serve } from 'bun'
+import { Memoirist } from 'memoirist'
 import type { TSchema } from '@sinclair/typebox'
 
 import { WebStandardAdapter } from '../web-standard/index'
 import { parseSetCookies } from '../utils'
 import type { ElysiaAdapter } from '../types'
+import type { Serve } from '../../universal/server'
 
 import { createBunRouteHandler } from './compose'
 import { createNativeStaticHandler } from './handler'
@@ -26,6 +27,34 @@ import {
 	websocket
 } from '../../ws/index'
 import type { ServerWebSocket } from '../../ws/bun'
+
+const optionalParam = /:.+?\?(?=\/|$)/
+
+const getPossibleParams = (path: string) => {
+	const match = optionalParam.exec(path)
+
+	if (!match) return [path]
+
+	const routes: string[] = []
+
+	const head = path.slice(0, match.index)
+	const param = match[0].slice(0, -1)
+	const tail = path.slice(match.index + match[0].length)
+
+	routes.push(head.slice(0, -1))
+	routes.push(head + param)
+
+	for (const fragment of getPossibleParams(tail)) {
+		if (!fragment) continue
+
+		if (!fragment.startsWith('/:'))
+			routes.push(head.slice(0, -1) + fragment)
+
+		routes.push(head + param + fragment)
+	}
+
+	return routes
+}
 
 export const BunAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
@@ -54,6 +83,24 @@ export const BunAdapter: ElysiaAdapter = {
 				: undefined
 
 			if (routes && app.config.systemRouter) {
+				const add = (
+					route: {
+						path: string
+						method: string
+					},
+					handler: Function
+				) => {
+					if (routes[route.path]) {
+						// @ts-ignore
+						if (!routes[route.path][route.method])
+							// @ts-ignore
+							routes[route.path][route.method] = handler
+					} else
+						routes[route.path] = {
+							[route.method]: handler
+						}
+				}
+
 				// @ts-expect-error
 				const tree = app.routeTree
 
@@ -88,16 +135,18 @@ export const BunAdapter: ElysiaAdapter = {
 								))(request)
 							}
 
-					if (!(route.path in routes)) {
-						routes[route.path] = {
-							[route.method]: handler
-						}
-
-						continue
-					}
+					for (const path of getPossibleParams(route.path))
+						add(
+							{
+								method,
+								path
+							},
+							handler
+						)
 				}
 			}
 
+			console.log(routes)
 			app.compile()
 
 			if (typeof options === 'string') {

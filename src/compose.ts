@@ -25,7 +25,7 @@ import {
 	mergeCookie
 } from './utils'
 import { isBun } from './universal/utils'
-import { ParseError, error } from './error'
+import { ParseError, status } from './error'
 
 import {
 	NotFoundError,
@@ -514,9 +514,8 @@ export const composeHandler = ({
 			} else
 				for (const name of cookieMeta.sign)
 					_encodeCookie +=
-						`if(_setCookie['${name}']?.value){` +
-						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')` +
-						'}'
+						`if(_setCookie['${name}']?.value)` +
+						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')\n`
 
 			_encodeCookie += '}\n'
 		}
@@ -2211,7 +2210,7 @@ export const composeGeneralHandler = (
 		`NotFoundError,` +
 		`randomId,` +
 		`handleError,` +
-		`error,` +
+		`status,` +
 		`redirect,` +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
@@ -2270,7 +2269,7 @@ export const composeGeneralHandler = (
 		randomId,
 		// @ts-expect-error private property
 		handleError: app.handleError,
-		error,
+		status,
 		redirect,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,

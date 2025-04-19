@@ -2,7 +2,7 @@ import { sucrose, type Sucrose } from '../../sucrose'
 import { createHoc, createOnRequestHandler } from '../../compose'
 
 import { randomId, ELYSIA_REQUEST_ID, redirect } from '../../utils'
-import { error } from '../../error'
+import { status } from '../../error'
 import { ELYSIA_TRACE } from '../../trace'
 
 import type { AnyElysia } from '../..'
@@ -58,7 +58,8 @@ const createContext = (
 		getPath +
 		`url:request.url,` +
 		`redirect,` +
-		`error,` +
+		`error:status,` +
+		`status,` +
 		`set:{headers:`
 
 	fnLiteral += Object.keys(defaultHeaders ?? {}).length
@@ -100,6 +101,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 
 	let fnLiteral =
 		'const handler=data.handler,' +
+		`app=data.app,` +
 		'store=data.store,' +
 		`decorator=data.decorator,` +
 		'redirect=data.redirect,' +
@@ -109,8 +111,12 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		allocateIf(`ELYSIA_TRACE=data.ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`trace=data.trace,`, hasTrace) +
 		allocateIf(`hoc=data.hoc,`, hasHoc) +
-		'error=data.error\n' +
-		'function map(request){'
+		'status=data.status\n'
+
+	if (app.event.request?.length)
+		fnLiteral += `const onRequest=app.event.request.map(x=>x.fn)\n`
+
+	fnLiteral += 'function map(request){'
 
 	// inference.query require declaring const 'qi'
 	if (hasTrace || inference.query || app.event.request?.length) {
@@ -118,9 +124,8 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		fnLiteral += createOnRequestHandler(app)
 
 		fnLiteral += 'return handler(c)}'
-	} else {
+	} else
 		fnLiteral += `return handler(${createContext(app, route, inference, true)})}`
-	}
 
 	fnLiteral += createHoc(app)
 
@@ -128,9 +133,10 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		'data',
 		fnLiteral
 	)({
+		app,
 		handler: route.compile?.() ?? route.composed,
 		redirect,
-		error,
+		status,
 		// @ts-expect-error private property
 		hoc: app.extender.higherOrderFunctions.map((x) => x.fn),
 		store: app.store,
