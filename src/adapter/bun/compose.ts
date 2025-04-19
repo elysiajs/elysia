@@ -91,12 +91,16 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 	// @ts-expect-error private property
 	const hasHoc = !!app.extender.higherOrderFunctions.length
 
-	const inference = sucrose(
-		Object.assign({}, route.hooks, {
-			handler: route.handler
-		}),
+	let inference = sucrose(
+		route.hooks,
 		// @ts-expect-error
 		app.inference
+	)
+	inference = sucrose(
+		{
+			handler: route.handler
+		},
+		inference
 	)
 
 	let fnLiteral =

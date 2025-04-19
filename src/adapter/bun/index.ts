@@ -105,6 +105,8 @@ export const BunAdapter: ElysiaAdapter = {
 				const tree = app.routeTree
 
 				for (const route of app.router.history) {
+					if (typeof route.handler !== 'function') continue
+
 					const method = route.method
 
 					if (
@@ -112,8 +114,6 @@ export const BunAdapter: ElysiaAdapter = {
 						method === 'WS'
 					)
 						continue
-
-					if (typeof route.handler !== 'function') continue
 
 					if (method === 'ALL') {
 						if (!(`WS_${route.path}` in tree))
@@ -170,7 +170,7 @@ export const BunAdapter: ElysiaAdapter = {
 							...(options || {}),
 							// @ts-ignore
 							static: {
-								...app.router.static.response,
+								...app.router.response,
 								// @ts-expect-error
 								...app.config.serve?.static
 							},
@@ -192,7 +192,7 @@ export const BunAdapter: ElysiaAdapter = {
 							reusePort: true,
 							...(app.config.serve || {}),
 							// @ts-ignore
-							static: app.router.static.response,
+							static: app.router.response,
 							routes: {
 								...routes,
 								// @ts-expect-error
