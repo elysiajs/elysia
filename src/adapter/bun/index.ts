@@ -146,7 +146,6 @@ export const BunAdapter: ElysiaAdapter = {
 				}
 			}
 
-			console.log(routes)
 			app.compile()
 
 			if (typeof options === 'string') {
