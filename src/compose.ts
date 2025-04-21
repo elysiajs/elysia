@@ -506,12 +506,12 @@ export const composeHandler = ({
 			_encodeCookie +=
 				'const _setCookie = c.set.cookie\n' + 'if(_setCookie){'
 
-			if (cookieMeta.sign === true) {
+			if (cookieMeta.sign === true)
 				_encodeCookie +=
 					'for(const [key, cookie] of Object.entries(_setCookie)){' +
 					`c.set.cookie[key].value=await signCookie(cookie.value,'${secret}')` +
 					'}'
-			} else
+			else
 				for (const name of cookieMeta.sign)
 					_encodeCookie +=
 						`if(_setCookie['${name}']?.value)` +
@@ -945,17 +945,39 @@ export const composeHandler = ({
 		} else if (hasBodyInference) {
 			fnLiteral += '\n'
 			fnLiteral += hasHeaders
-				? `let contentType = c.headers['content-type']`
-				: `let contentType = c.request.headers.get('content-type')`
+				? `let contentType=c.headers['content-type']`
+				: `let contentType=c.request.headers.get('content-type')`
+
+			const setIndex = (index: number) =>
+				`index=contentType.indexOf(';'${index === -1 ? '' : `,${index})\n`}`
 
 			fnLiteral +=
-				`\nif(contentType){` +
-				`const index=contentType.indexOf(';')\n` +
-				`if(index!==-1)contentType=contentType.substring(0, index)}\n` +
-				`else{contentType=''}` +
-				`c.contentType=contentType\n`
+				`\nif(contentType){\n` +
+				(hooks.parse
+					? `let index=contentType.indexOf(';')\n`
+					: `let index\n` +
+						`switch(contentType.charCodeAt(0)){` +
+						// text/plain
+						`case 116:` +
+						setIndex(10) +
+						`break\n` +
+						// application/json
+						`case 97:` +
+						setIndex(16) +
+						`break\n` +
+						// multipart/form-data
+						`case 109:` +
+						setIndex(19) +
+						`break\n` +
+						`default:` +
+						`index=-1\n` +
+						`break\n` +
+						`}`) +
+				`\nif(index!==-1)contentType=contentType.substring(0,index)}\n` +
+				`else{contentType=''}`
 
-			if (hooks.parse?.length) fnLiteral += `let used=false\n`
+			if (hooks.parse?.length)
+				fnLiteral += `let used=false\n` + `c.contentType=contentType\n`
 
 			const reporter = report('parse', {
 				total: hooks.parse?.length
@@ -1088,7 +1110,7 @@ export const composeHandler = ({
 				fnLiteral += '}'
 			}
 
-			fnLiteral += '\ndelete c.contentType'
+			if (hooks.parse?.length) fnLiteral += '\ndelete c.contentType'
 		}
 
 		fnLiteral += '\nisParsing=false\n'
@@ -1291,7 +1313,9 @@ export const composeHandler = ({
 							: value
 
 				if (value !== undefined && value !== null) {
-					if (typeof value === 'object')
+					if (Array.isArray(value))
+						fnLiteral += `if(!c.body)c.body=${parsed}\n`
+					else if (typeof value === 'object')
 						fnLiteral += `c.body=Object.assign(${parsed},c.body)\n`
 					else fnLiteral += `c.body=${parsed}\n`
 				}

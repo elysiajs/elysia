@@ -1,4 +1,3 @@
-import { Union } from '@sinclair/typebox'
 import type { Sucrose } from './sucrose'
 import type { TraceHandler } from './trace'
 

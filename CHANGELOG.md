@@ -24,6 +24,7 @@ Improvement:
 - improve start up time on multiple route
 - dynamically create cookie validator as needed in compilation process
 - reduce object cloning
+- optimize start index for finding delimiter of a content type header
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream
