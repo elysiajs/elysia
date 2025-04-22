@@ -31,6 +31,7 @@ Improvement:
 Bug fix:
 - `Response` returned from `onError` is using octet stream
 - unintentional memory allocation when using `mergeObjectArray`
+- handle empty space on Date query
 
 Change:
 - only provide `c.request` to mapResponse when `maybeStream` is true

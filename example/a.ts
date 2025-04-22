@@ -1,18 +1,24 @@
 import { Elysia, form, t } from '../src'
 import { mapResponse } from '../src/adapter/bun/handler'
+import { req } from '../test/utils'
 
-const plugin = new Elysia()
-	.get('/', ({ body }) => {
-		body.images
-	}, {
-		body: t.Object({
-			images: t.Files({
-				maxSize: '4m',
-				type: 'image'
-			})
+const app = new Elysia().get(
+	'/',
+	({ query: { date } }) => {
+		console.log(date)
+
+		return date.toISOString()
+	},
+	{
+		query: t.Object({
+			date: t.Date()
 		})
-	})
-	.listen(3000)
+	}
+)
+
+app.handle(req(`/?date=2023-04-05T12:30:00+01:00`))
+	.then((x) => x.text())
+	.then(console.log)
 
 // const app = new Elysia().use(plugin).listen(3000)
 

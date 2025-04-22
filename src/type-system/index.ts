@@ -43,6 +43,7 @@ import {
 
 import { ELYSIA_FORM_DATA, form } from '../utils'
 import { ValidationError } from '../error'
+import { parseDateTimeEmptySpace } from './format'
 
 const t = Object.assign({}, Type) as Omit<JavaScriptTypeBuilder, 'String'> &
 	typeof ElysiaType
@@ -175,11 +176,11 @@ export const ElysiaType = {
 					[
 						Type.Date(property),
 						t.String({
-							format: 'date',
+							format: 'date-time',
 							default: _default?.toISOString()
 						}),
 						t.String({
-							format: 'date-time',
+							format: 'date',
 							default: _default?.toISOString()
 						}),
 						t.Number({ default: _default?.getTime() })
@@ -198,7 +199,7 @@ export const ElysiaType = {
 
 				if (value instanceof Date) return value
 
-				const date = new Date(value)
+				const date = new Date(parseDateTimeEmptySpace(value))
 
 				if (!date || isNaN(date.getTime()))
 					throw new ValidationError('property', schema, date)

@@ -137,6 +137,13 @@ function getTime(strictTimeZone?: boolean): (str: string) => boolean {
 	}
 }
 
+export const parseDateTimeEmptySpace = (str: string) => {
+	if (str.charCodeAt(str.length - 6) === 32)
+		return str.slice(0, -6) + '+' + str.slice(-5)
+
+	return str
+}
+
 const DATE_TIME_SEPARATOR = /t|\s/i
 function getDateTime(strictTimeZone?: boolean): (str: string) => boolean {
 	const time = getTime(strictTimeZone)
@@ -144,6 +151,7 @@ function getDateTime(strictTimeZone?: boolean): (str: string) => boolean {
 	return function date_time(str: string): boolean {
 		// http://tools.ietf.org/html/rfc3339#section-5.6
 		const dateTime: string[] = str.split(DATE_TIME_SEPARATOR)
+
 		return dateTime.length === 2 && date(dateTime[0]) && time(dateTime[1])
 	}
 }
@@ -233,7 +241,7 @@ const _validateDateTime = fullFormats['date-time']
 if (!FormatRegistry.Has('date'))
 	FormatRegistry.Set('date', (value: string) => {
 		// Remove quote from stringified date
-		const temp = value.replace(/"/g, '')
+		const temp = parseDateTimeEmptySpace(value).replace(/"/g, '')
 
 		if (
 			isISO8601.test(temp) ||
