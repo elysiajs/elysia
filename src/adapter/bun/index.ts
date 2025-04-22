@@ -155,12 +155,6 @@ export const BunAdapter: ElysiaAdapter = {
 				options = parseInt(options)
 			}
 
-			const outerErrorHandler = (error: Error) =>
-				new Response(error.message || error.name || 'Error', {
-					// @ts-ignore
-					status: error?.status ?? 500
-				})
-
 			const serve =
 				typeof options === 'object'
 					? ({
@@ -181,7 +175,7 @@ export const BunAdapter: ElysiaAdapter = {
 								...(websocket || {})
 							},
 							fetch: app.fetch,
-							error: outerErrorHandler
+							// error: outerErrorHandler
 						} as Serve)
 					: ({
 							development: !isProduction,
@@ -200,7 +194,7 @@ export const BunAdapter: ElysiaAdapter = {
 							},
 							port: options,
 							fetch: app.fetch,
-							error: outerErrorHandler
+							// error: outerErrorHandler
 						} as Serve)
 
 			app.server = Bun.serve(serve as any) as any

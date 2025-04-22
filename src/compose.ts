@@ -439,8 +439,13 @@ export const composeHandler = ({
 	validator.createCookie?.()
 	validator.createResponse?.()
 
-	const jsonAccelerator =
-		(app.config.jsonAccelerator ?? true) && validator.response
+	let jsonAccelerator =
+		(app.config.jsonAccelerator ?? true) && !!validator.response
+	const accelerators = jsonAccelerator
+		? createAccelerators(validator.response!)
+		: undefined
+
+	if (!isNotEmpty(accelerators)) jsonAccelerator = false
 
 	const hasValidation =
 		validator.body ||
@@ -464,7 +469,7 @@ export const composeHandler = ({
 		(inference.body || !!validator.body || !!hooks.parse?.length) &&
 		!requestNoBody
 
-	if (hasBody) fnLiteral += `let isParsing=false\n`
+	if (hasBody && hooks.parse?.length) fnLiteral += `let isParsing=false\n`
 
 	// @ts-expect-error private
 	const defaultHeaders = app.setHeaders
@@ -525,9 +530,6 @@ export const composeHandler = ({
 
 	const normalize = app.config.normalize
 	const encodeSchema = app.config.encodeSchema
-	const accelerators = jsonAccelerator
-		? createAccelerators(validator.response!)
-		: undefined
 
 	const validation = composeValidationFactory({
 		normalize,
@@ -850,13 +852,24 @@ export const composeHandler = ({
 			? `,${adapter.mapResponseContext}`
 			: ''
 
-	const mapAccelerate = (response = 'r') =>
-		jsonAccelerator
-			? (saveResponse ? `${saveResponse}${response}\n` : '') +
+	const mapAccelerate = (response = 'r', isCompact: boolean) => {
+		if (!jsonAccelerator) return ''
+
+		let map = saveResponse ? `\n${saveResponse}${response}\n` : '\n'
+		map += `if(accelerate){\n`
+
+		if (isCompact && app['~adapter'].isWebStandard)
+			map += `return Response.json(${response})`
+		else
+			map +=
 				`if(accelerate){\n` +
 				`c.set.headers['content-type']='application/json'\n` +
-				`return mapResponse(accelerate(${response}),c.set${mapResponseContext})}\n`
-			: ''
+				`return mapResponse(accelerate(${response}),c.set${mapResponseContext})`
+
+		map += '\n}\n'
+
+		return map
+	}
 
 	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
 
@@ -947,8 +960,8 @@ export const composeHandler = ({
 
 			const declaration = hooks.parse?.length ? 'let' : 'const'
 			fnLiteral += hasHeaders
-				? `let contentType=c.headers['content-type']\n`
-				: `let contentType=c.request.headers.get('content-type')\n`
+				? `${declaration} contentType=c.headers['content-type']\n`
+				: `${declaration} contentType=c.request.headers.get('content-type')\n`
 
 			let hasDefaultParser = false
 			if (hooks.parse?.length)
@@ -968,19 +981,19 @@ export const composeHandler = ({
 					`switch(contentType.charCodeAt(12)){` +
 					`\ncase 106:` +
 					adapter.parser.json(isOptionalBody) +
-					'\nbreak' +
+					'break' +
 					`\n` +
 					`case 120:` +
 					adapter.parser.urlencoded(isOptionalBody) +
-					`\nbreak` +
+					`break` +
 					`\n` +
 					`case 111:` +
 					adapter.parser.arrayBuffer(isOptionalBody) +
-					`\nbreak` +
+					`break` +
 					`\n` +
 					`case 114:` +
 					adapter.parser.formData(isOptionalBody) +
-					`\nbreak` +
+					`break` +
 					`\n` +
 					`default:` +
 					`if(contentType.charCodeAt(0)===116){` +
@@ -1087,22 +1100,22 @@ export const composeHandler = ({
 				fnLiteral +=
 					`case 'application/json':\n` +
 					adapter.parser.json(isOptionalBody) +
-					`\nbreak\n` +
+					`break\n` +
 					`case 'text/plain':` +
 					adapter.parser.text(isOptionalBody) +
-					`\nbreak` +
+					`break` +
 					'\n' +
 					`case 'application/x-www-form-urlencoded':` +
 					adapter.parser.urlencoded(isOptionalBody) +
-					`\nbreak` +
+					`break` +
 					'\n' +
 					`case 'application/octet-stream':` +
 					adapter.parser.arrayBuffer(isOptionalBody) +
-					`\nbreak` +
+					`break` +
 					'\n' +
 					`case 'multipart/form-data':` +
 					adapter.parser.formData(isOptionalBody) +
-					`\nbreak` +
+					`break` +
 					'\n'
 
 				for (const key of Object.keys(app['~parser']))
@@ -1670,7 +1683,7 @@ export const composeHandler = ({
 		}
 		mapResponseReporter.resolve()
 
-		fnLiteral += mapAccelerate('r')
+		fnLiteral += mapAccelerate('r', !hasSet)
 
 		if (hasSet)
 			fnLiteral += `return mapResponse(${saveResponse}r,c.set${
@@ -1737,13 +1750,13 @@ export const composeHandler = ({
 
 				fnLiteral += '\n'
 			} else if (hasSet) {
-				fnLiteral += mapAccelerate()
+				fnLiteral += mapAccelerate('r', !hasSet)
 
 				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
 					mapResponseContext
 				})\n`
 			} else {
-				fnLiteral += mapAccelerate('r')
+				fnLiteral += mapAccelerate('r', !hasSet)
 
 				fnLiteral += `return mapCompactResponse(${saveResponse}r${
 					mapResponseContext
@@ -1783,7 +1796,7 @@ export const composeHandler = ({
 			mapResponseReporter.resolve()
 
 			fnLiteral += encodeCookie()
-			fnLiteral += mapAccelerate('r')
+			fnLiteral += mapAccelerate('r', !hasSet)
 
 			if (hasSet)
 				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
@@ -1812,13 +1825,13 @@ export const composeHandler = ({
 						`else return ${handle}.clone()\n`
 					: `return ${handle}.clone()\n`
 			} else if (hasSet) {
-				fnLiteral += mapAccelerate(handled)
+				fnLiteral += mapAccelerate(handled, !hasSet)
 
 				fnLiteral += `return mapResponse(${saveResponse}${handled},c.set${
 					mapResponseContext
 				})\n`
 			} else {
-				fnLiteral += mapAccelerate(handled)
+				fnLiteral += mapAccelerate(handled, true)
 
 				fnLiteral += `return mapCompactResponse(${saveResponse}${handled}${
 					mapResponseContext

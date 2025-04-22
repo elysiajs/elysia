@@ -21,7 +21,7 @@
         "expect-type": "^1.2.1",
         "fast-decode-uri-component": "^1.0.1",
         "file-type": "^20.4.1",
-        "json-accelerator": "^0.1.4",
+        "json-accelerator": "^0.1.5",
         "memoirist": "^0.3.0",
         "mitata": "^1.0.34",
         "prettier": "^3.5.3",
@@ -486,7 +486,7 @@
 
     "js-yaml": ["js-yaml@4.1.0", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA=="],
 
-    "json-accelerator": ["json-accelerator@0.1.4", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.31" }, "optionalPeers": ["@sinclair/typebox"] }, "sha512-UA6+MXfrBss4ogU/wKvm9UTx8BpXg4rVlc7+EcnXHEP/G1QD0Wi3EiDle5h0n299Ulk/cdQiObmve7fYRVsiwQ=="],
+    "json-accelerator": ["json-accelerator@0.1.5", "", { "peerDependencies": { "@sinclair/typebox": ">= 0.34.0" }, "optionalPeers": ["@sinclair/typebox"] }, "sha512-Ah5PrgqsNfDbxRUqqDchw2pZpzsCAegGc6Vk8E9FbEt9ecIt+pTTTgpz3aXuFaVcWQ7K82Nrmt6Z3FxnZGXbjA=="],
 
     "json-buffer": ["json-buffer@3.0.1", "", {}, "sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ=="],
 

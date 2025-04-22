@@ -120,7 +120,7 @@ export const hasType = (type: string, schema: TAnySchema) => {
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
-		if(!properties) return false
+		if (!properties) return false
 
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
@@ -1272,29 +1272,29 @@ export const getCookieValidator = ({
  * ])
  * ```
  */
-// const getUnionedType = (validator: TypeCheck<any> | undefined) => {
-// 	if (!validator) return
+const getUnionedType = (validator: TypeCheck<any> | undefined) => {
+	if (!validator) return
 
-// 	// @ts-ignore
-// 	const schema = validator?.schema
+	// @ts-ignore
+	const schema = validator?.schema ?? validator
 
-// 	if (schema && 'anyOf' in schema) {
-// 		let foundDifference = false
-// 		const type: string = schema.anyOf[0].type
+	if (schema && 'anyOf' in schema) {
+		let foundDifference = false
+		const type: string = schema.anyOf[0].type
 
-// 		for (const validator of schema.anyOf as { type: string }[]) {
-// 			if (validator.type !== type) {
-// 				foundDifference = true
-// 				break
-// 			}
-// 		}
+		for (const validator of schema.anyOf as { type: string }[]) {
+			if (validator.type !== type) {
+				foundDifference = true
+				break
+			}
+		}
 
-// 		if (!foundDifference) return type
-// 	}
+		if (!foundDifference) return type
+	}
 
-// 	// @ts-ignore
-// 	return validator.schema?.type
-// }
+	// @ts-ignore
+	return validator.schema?.type
+}
 
 export const createAccelerators = (
 	records: Record<number, ElysiaTypeCheck<any>>
@@ -1303,6 +1303,14 @@ export const createAccelerators = (
 
 	for (const [id, validator] of Object.entries(records)) {
 		if (!validator) continue
+
+		if (validator.schema !== 'object' && validator.schema !== 'array') {
+			if (validator.schema.anyOf) {
+				const type = getUnionedType(validator.schema)
+
+				if (!type || (type !== 'object' && type !== 'array')) continue
+			} else continue
+		}
 
 		try {
 			accelerators[+id] = createAccelerator(validator.schema)

@@ -17,7 +17,8 @@ import type {
 	TSchema,
 	TString,
 	NumberOptions,
-	JavaScriptTypeBuilder
+	JavaScriptTypeBuilder,
+	StringOptions
 } from '@sinclair/typebox'
 
 import './format'
@@ -42,7 +43,8 @@ import {
 import { ELYSIA_FORM_DATA, form } from '../utils'
 import { ValidationError } from '../error'
 
-const t = Object.assign({}, Type) as JavaScriptTypeBuilder & typeof ElysiaType
+const t = Object.assign({}, Type) as Omit<JavaScriptTypeBuilder, 'String'> &
+	typeof ElysiaType
 
 createType<TUnionEnum>(
 	'UnionEnum',
@@ -86,7 +88,22 @@ const internalFormData = createType<TForm, FormData>(
 	}
 ) as unknown as TForm
 
+interface ElysiaStringOptions extends StringOptions {
+	/**
+	* Whether the value include JSON escape sequences or not
+	*
+	* When using JSON Accelerator, this will bypass the JSON escape sequence validation
+	*
+	* Set to `true` if the value doesn't include JSON escape sequences
+	*
+	* @default false
+	*/
+	trusted?: boolean
+}
+
 export const ElysiaType = {
+	// @ts-ignore
+	String: (property?: ElysiaStringOptions) => Type.String(property),
 	Numeric: (property?: NumberOptions) => {
 		const schema = Type.Number(property)
 		const compiler = compile(schema)

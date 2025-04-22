@@ -24,7 +24,9 @@ describe('Accelerate', () => {
 
 		expect(response.status).toBe(200)
 		expect(await response.json()).toEqual({ hello: 'accelerate' })
-		expect(response.headers.get('content-type')).toBe('application/json')
+		expect(response.headers.get('content-type')).toBe(
+			'application/json;charset=utf-8'
+		)
 	})
 
 	it('works with multiple status', async () => {
@@ -57,10 +59,38 @@ describe('Accelerate', () => {
 		expect(responses[0].status).toBe(200)
 		expect(await responses[0].json()).toEqual({ hello: 'accelerate' })
 		expect(responses[0].headers.get('content-type')).toBe(
-			'application/json'
+			'application/json;charset=utf-8'
 		)
 
 		expect(responses[1].status).toBe(400)
 		expect(await responses[1].text()).toBe('Bad Request')
+	})
+
+	it('handle array', async () => {
+		const app = new Elysia({
+			jsonAccelerator: true
+		}).get('/', () => ['hi'], {
+			response: t.Array(t.String())
+		})
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual(['hi'])
+		expect(response.headers.get('content-type')).toBe('application/json;charset=utf-8')
+	})
+
+	it('handle non-object', async () => {
+		const app = new Elysia({
+			jsonAccelerator: true
+		}).get('/', () => 'hi', {
+			response: t.String()
+		})
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(200)
+		expect(await response.text()).toBe('hi')
+		expect(response.headers.get('content-type')).toBe('text/plain')
 	})
 })
