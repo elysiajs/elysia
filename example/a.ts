@@ -1,11 +1,14 @@
-import { Elysia, t } from '../src'
+import { Elysia, form, t } from '../src'
+import { mapResponse } from '../src/adapter/bun/handler'
 
-const app = new Elysia()
-	.get('/id/:id', ({ request }) => {
-		console.log(request)
+const response = mapResponse(
+	form({
+		a: Bun.file('test/kyuukurarin.mp4')
+	}),
+	{
+		status: 200,
+		headers: {}
+	}
+)
 
-		return 'a'
-	})
-	.listen(3000)
-
-console.log(app.routes[0].compile().toString())
+console.log((await response.formData()) instanceof FormData)

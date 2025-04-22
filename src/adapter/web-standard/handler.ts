@@ -37,6 +37,7 @@ export const mapResponse = (
 
 			case 'Array':
 			case 'Object':
+				set.headers['content-type'] = 'application/json'
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
@@ -208,6 +209,7 @@ export const mapEarlyResponse = (
 
 			case 'Array':
 			case 'Object':
+				set.headers['content-type'] = 'application/json'
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
@@ -345,6 +347,7 @@ export const mapEarlyResponse = (
 
 			case 'Array':
 			case 'Object':
+				set.headers['content-type'] = 'application/json'
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
@@ -499,7 +502,11 @@ export const mapCompactResponse = (
 
 		case 'Object':
 		case 'Array':
-			return Response.json(response)
+			return new Response(JSON.stringify(response), {
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			})
 
 		case 'ElysiaFile':
 			return handleFile((response as ElysiaFile).value as File)

@@ -191,7 +191,7 @@
 		"eslint": "^9.24.0",
 		"eslint-plugin-security": "^3.0.1",
 		"eslint-plugin-sonarjs": "^3.0.2",
-		"exact-mirror": "^0.0.6",
+		"exact-mirror": "^0.0.7",
 		"expect-type": "^1.2.1",
 		"fast-decode-uri-component": "^1.0.1",
 		"file-type": "^20.4.1",

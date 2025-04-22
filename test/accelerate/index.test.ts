@@ -24,9 +24,7 @@ describe('Accelerate', () => {
 
 		expect(response.status).toBe(200)
 		expect(await response.json()).toEqual({ hello: 'accelerate' })
-		expect(response.headers.get('content-type')).toBe(
-			'application/json;charset=utf-8'
-		)
+		expect(response.headers.get('content-type')).toBe('application/json')
 	})
 
 	it('works with multiple status', async () => {
@@ -59,7 +57,7 @@ describe('Accelerate', () => {
 		expect(responses[0].status).toBe(200)
 		expect(await responses[0].json()).toEqual({ hello: 'accelerate' })
 		expect(responses[0].headers.get('content-type')).toBe(
-			'application/json;charset=utf-8'
+			'application/json'
 		)
 
 		expect(responses[1].status).toBe(400)
@@ -77,7 +75,7 @@ describe('Accelerate', () => {
 
 		expect(response.status).toBe(200)
 		expect(await response.json()).toEqual(['hi'])
-		expect(response.headers.get('content-type')).toBe('application/json;charset=utf-8')
+		expect(response.headers.get('content-type')).toBe('application/json')
 	})
 
 	it('handle non-object', async () => {
