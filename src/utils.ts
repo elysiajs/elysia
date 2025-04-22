@@ -590,7 +590,6 @@ export const signCookie = async (val: string, secret: string | null) => {
 
 	if (secret === null) throw new TypeError('Secret key must be provided.')
 
-	// @ts-expect-error
 	const secretKey = await crypto.subtle.importKey(
 		'raw',
 		encoder.encode(secret),
@@ -599,7 +598,6 @@ export const signCookie = async (val: string, secret: string | null) => {
 		['sign']
 	)
 
-	// @ts-expect-error
 	const hmacBuffer = await crypto.subtle.sign(
 		'HMAC',
 		secretKey,
@@ -970,7 +968,6 @@ export const form = <const T extends Record<keyof any, unknown>>(
 }
 
 export const randomId = () => {
-	// @ts-expect-error
 	const uuid = crypto.randomUUID()
 	return uuid.slice(0, 8) + uuid.slice(24, 32)
 }
