@@ -76,7 +76,7 @@ const createContext = (
 		let decoratorsLiteral = ''
 		// @ts-expect-error private
 		for (const key of Object.keys(app.singleton.decorator))
-			decoratorsLiteral += `,${key}:decorator['${key}']`
+			decoratorsLiteral += `,'${key}':decorator['${key}']`
 
 		fnLiteral += decoratorsLiteral
 	}
@@ -130,6 +130,8 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		fnLiteral += 'return handler(c)}'
 	} else
 		fnLiteral += `return handler(${createContext(app, route, inference, true)})}`
+
+	console.log(fnLiteral)
 
 	fnLiteral += createHoc(app)
 

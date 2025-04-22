@@ -253,7 +253,7 @@ const composeValidationFactory = ({
 					name,
 					schema: value,
 					type: 'response',
-					typeAlias: `response['${status}']`,
+					typeAlias: `response[${status}]`,
 					normalize
 				})
 
@@ -885,7 +885,7 @@ export const composeHandler = ({
 
 		fnLiteral += '\nisParsing=true\n'
 
-		const parser =
+		let parser: string | undefined =
 			typeof hooks.parse === 'string'
 				? hooks.parse
 				: Array.isArray(hooks.parse) && hooks.parse.length === 1
@@ -895,6 +895,18 @@ export const composeHandler = ({
 							? hooks.parse[0].fn
 							: undefined
 					: undefined
+
+		if (!parser && validator.body && !hooks.parse?.length) {
+			const schema = validator.body.schema
+			if (
+				schema &&
+				schema.anyOf &&
+				schema[Kind] === 'Union' &&
+				schema.anyOf?.length === 2 &&
+				schema.anyOf?.find((x: TAnySchema) => x[Kind] === 'ElysiaForm')
+			)
+				parser = 'formdata'
+		}
 
 		if (parser && defaultParsers.includes(parser)) {
 			const reporter = report('parse', {

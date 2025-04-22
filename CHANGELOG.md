@@ -9,6 +9,7 @@ Feature:
 - `standalone Validator`
 - new validation `t.Form`, `t.NoValidate`
 - use `file-type` to check file type
+- add `INVALID_FILE_TYPE` error
 
 Improvement:
 - optimize types
@@ -35,6 +36,7 @@ Change:
 - use plain object for `routeTree` instead of `Map`
 - remove `compressHistoryHook` and `decompressHistoryHook`
 - webstandard handler now return `text/plain` if not on Bun
+- use non const value for `decorate` unless explicitly specified
 
 Breaking Change:
 - Minimum Node version is now `node22` LTS

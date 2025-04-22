@@ -308,10 +308,10 @@ app.decorate('a', 'b')
 			c: typeof c
 			d: typeof d
 		}>().toEqualTypeOf<{
-			a: 'b'
-			b: 'c'
-			c: 'd'
-			d: 'e'
+			a: string
+			b: string
+			c: string
+			d: string
 		}>()
 	})
 
@@ -332,13 +332,13 @@ app.decorate('a', 'b')
 
 	expectTypeOf<(typeof app)['decorator']['a']>().toEqualTypeOf<
 		{
-			readonly hello: {
-				readonly world: 'Tako'
+			hello: {
+				world: string
 			}
 		} & {
-			readonly hello: {
-				readonly world: 'Ina'
-				readonly cookie: 'wah!'
+			hello: {
+				world: string
+				cookie: string
 			}
 		}
 	>()
@@ -363,8 +363,8 @@ app.decorate('a', 'b')
 		)
 
 	expectTypeOf<typeof app.decorator.hello>().toEqualTypeOf<{
-		readonly world: 'Ina'
-		readonly cookie: 'wah!'
+		world: string
+		cookie: string
 	}>()
 }
 

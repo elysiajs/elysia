@@ -29,12 +29,12 @@ describe('Decorate', () => {
 				name: 'Ina',
 				job: 'artist'
 			})
-			.decorate({
+			.decorate({ as: 'override' }, {
 				name: 'Fubuki'
 			})
 
 		expect(app.decorator).toEqual({
-			name: 'Ina',
+			name: 'Fubuki',
 			job: 'artist'
 		})
 	})
@@ -222,5 +222,12 @@ describe('Decorate', () => {
 			world: 'Ina',
 			cookie: 'wah!'
 		})
+	})
+
+	it('handle escaped name', async () => {
+		const app = new Elysia()
+			.decorate('name ina', 'Ina')
+
+		expect(app.decorator['name ina']).toBe('Ina')
 	})
 })

@@ -5618,7 +5618,7 @@ export default class Elysia<
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
-	decorate<const Name extends string, const Value>(
+	decorate<const Name extends string, Value>(
 		name: Name,
 		value: Value
 	): Elysia<
@@ -5652,7 +5652,7 @@ export default class Elysia<
 	 *     .get('/', (({ getDate }) => getDate())
 	 * ```
 	 */
-	decorate<const NewDecorators extends Record<string, unknown>>(
+	decorate<NewDecorators extends Record<string, unknown>>(
 		decorators: NewDecorators
 	): Elysia<
 		BasePath,
@@ -5669,7 +5669,7 @@ export default class Elysia<
 		Volatile
 	>
 
-	decorate<const NewDecorators extends Record<string, unknown>>(
+	decorate<NewDecorators extends Record<string, unknown>>(
 		mapper: (decorators: Singleton['decorator']) => NewDecorators
 	): Elysia<
 		BasePath,
@@ -5701,7 +5701,7 @@ export default class Elysia<
 	decorate<
 		const Type extends ContextAppendType,
 		const Name extends string,
-		const Value
+		Value
 	>(
 		options: { as: Type },
 		name: Name,
@@ -5747,7 +5747,7 @@ export default class Elysia<
 	 */
 	decorate<
 		const Type extends ContextAppendType,
-		const NewDecorators extends Record<string, unknown>
+		NewDecorators extends Record<string, unknown>
 	>(
 		options: { as: Type },
 		decorators: NewDecorators
