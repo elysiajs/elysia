@@ -1,23 +1,22 @@
 import { Elysia, t } from '../src'
-import { Memoirist } from 'memoirist'
 
-const app = new Elysia().post('/', ({ body }) => {
-	return body
+const app = new Elysia().post('/', ({ body }) => body, {
+	body: t.Union([
+		t.Undefined(),
+		t.Object({
+			name: t.String(),
+			job: t.String(),
+			trait: t.Optional(t.String())
+		})
+	])
 })
-
-const body = {
-	username: 'salty aom',
-	password: '12345678'
-}
 
 const res = await app.handle(
 	new Request('http://localhost/', {
-		method: 'POST',
-		body: JSON.stringify(body),
-		headers: {
-			'content-type': 'application/json;charset=utf-8'
-		}
+		method: 'POST'
 	})
 )
+
+console.log(await res.text())
 
 console.log(app.routes[0].compile().toString())

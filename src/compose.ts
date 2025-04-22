@@ -944,46 +944,56 @@ export const composeHandler = ({
 			reporter.resolve()
 		} else if (hasBodyInference) {
 			fnLiteral += '\n'
+
+			const declaration = hooks.parse?.length ? 'let' : 'const'
 			fnLiteral += hasHeaders
-				? `let contentType=c.headers['content-type']`
-				: `let contentType=c.request.headers.get('content-type')`
+				? `let contentType=c.headers['content-type']\n`
+				: `let contentType=c.request.headers.get('content-type')\n`
 
-			const setIndex = (index: number) =>
-				`index=contentType.indexOf(';'${index === -1 ? '' : `,${index})\n`}`
-
-			fnLiteral +=
-				`\nif(contentType){\n` +
-				(hooks.parse
-					? `let index=contentType.indexOf(';')\n`
-					: `let index\n` +
-						`switch(contentType.charCodeAt(0)){` +
-						// text/plain
-						`case 116:` +
-						setIndex(10) +
-						`break\n` +
-						// application/json
-						`case 97:` +
-						setIndex(16) +
-						`break\n` +
-						// multipart/form-data
-						`case 109:` +
-						setIndex(19) +
-						`break\n` +
-						`default:` +
-						`index=-1\n` +
-						`break\n` +
-						`}`) +
-				`\nif(index!==-1)contentType=contentType.substring(0,index)}\n` +
-				`else{contentType=''}`
-
+			let hasDefaultParser = false
 			if (hooks.parse?.length)
-				fnLiteral += `let used=false\n` + `c.contentType=contentType\n`
+				fnLiteral +=
+					`if(contentType){\n` +
+					`const index=contentType.indexOf(';')\n` +
+					`\nif(index!==-1)contentType=contentType.substring(0,index)` +
+					`}else{contentType=''}` +
+					`let used=false\n` +
+					`c.contentType=contentType\n`
+			else {
+				hasDefaultParser = true
+				const isOptionalBody = !!validator.body?.isOptional
+
+				fnLiteral +=
+					`if(contentType)` +
+					`switch(contentType.charCodeAt(12)){` +
+					`\ncase 106:` +
+					adapter.parser.json(isOptionalBody) +
+					'\nbreak' +
+					`\n` +
+					`case 120:` +
+					adapter.parser.urlencoded(isOptionalBody) +
+					`\nbreak` +
+					`\n` +
+					`case 111:` +
+					adapter.parser.arrayBuffer(isOptionalBody) +
+					`\nbreak` +
+					`\n` +
+					`case 114:` +
+					adapter.parser.formData(isOptionalBody) +
+					`\nbreak` +
+					`\n` +
+					`default:` +
+					`if(contentType.charCodeAt(0)===116){` +
+					adapter.parser.text(isOptionalBody) +
+					`}` +
+					`break\n` +
+					`}`
+			}
 
 			const reporter = report('parse', {
 				total: hooks.parse?.length
 			})
 
-			let hasDefaultParser = false
 			if (hooks.parse)
 				for (let i = 0; i < hooks.parse.length; i++) {
 					const name = `bo${i}`
@@ -1077,22 +1087,22 @@ export const composeHandler = ({
 				fnLiteral +=
 					`case 'application/json':\n` +
 					adapter.parser.json(isOptionalBody) +
-					`break\n` +
+					`\nbreak\n` +
 					`case 'text/plain':` +
 					adapter.parser.text(isOptionalBody) +
-					`break` +
+					`\nbreak` +
 					'\n' +
 					`case 'application/x-www-form-urlencoded':` +
 					adapter.parser.urlencoded(isOptionalBody) +
-					`break` +
+					`\nbreak` +
 					'\n' +
 					`case 'application/octet-stream':` +
 					adapter.parser.arrayBuffer(isOptionalBody) +
-					`break` +
+					`\nbreak` +
 					'\n' +
 					`case 'multipart/form-data':` +
 					adapter.parser.formData(isOptionalBody) +
-					`break` +
+					`\nbreak` +
 					'\n'
 
 				for (const key of Object.keys(app['~parser']))
