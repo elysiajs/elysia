@@ -309,9 +309,11 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 					set.headers[key] as any
 				)
 
+		const status = set.status ?? 200
+
 		if (
-			(response as Response).status !== set.status &&
-			set.status !== 200 &&
+			(response as Response).status !== status &&
+			(status !== 200) &&
 			((response.status as number) <= 300 ||
 				(response.status as number) > 400)
 		)

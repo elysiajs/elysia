@@ -155,6 +155,17 @@ export const BunAdapter: ElysiaAdapter = {
 				options = parseInt(options)
 			}
 
+			const staticRoutes = <Record<string, Response>>{}
+			const asyncStaticRoutes = <Promise<Response | undefined>[]>[]
+			const asyncStaticRoutesPath = <string[]>[]
+
+			for (const [path, route] of Object.entries(app.router.response)) {
+				if (route instanceof Promise) {
+					asyncStaticRoutes.push(route)
+					asyncStaticRoutesPath.push(path)
+				} else if (route) staticRoutes[path] = route
+			}
+
 			const serve =
 				typeof options === 'object'
 					? ({
@@ -164,7 +175,7 @@ export const BunAdapter: ElysiaAdapter = {
 							...(options || {}),
 							// @ts-ignore
 							routes: {
-								...app.router.response,
+								...staticRoutes,
 								...routes,
 								// @ts-expect-error
 								...app.config.serve?.routes
@@ -174,7 +185,7 @@ export const BunAdapter: ElysiaAdapter = {
 								...routes,
 								...(websocket || {})
 							},
-							fetch: app.fetch,
+							fetch: app.fetch
 							// error: outerErrorHandler
 						} as Serve)
 					: ({
@@ -183,7 +194,7 @@ export const BunAdapter: ElysiaAdapter = {
 							...(app.config.serve || {}),
 							// @ts-ignore
 							routes: {
-								...app.router.response,
+								...staticRoutes,
 								...routes,
 								// @ts-expect-error
 								...app.config.serve?.routes
@@ -193,7 +204,7 @@ export const BunAdapter: ElysiaAdapter = {
 								...(websocket || {})
 							},
 							port: options,
-							fetch: app.fetch,
+							fetch: app.fetch
 							// error: outerErrorHandler
 						} as Serve)
 
@@ -204,6 +215,31 @@ export const BunAdapter: ElysiaAdapter = {
 					app.event.start[i].fn(app)
 
 			if (callback) callback(app.server!)
+
+			Promise.all(asyncStaticRoutes).then((asyncRoute) => {
+				const asyncRouteMap = <Record<string, Response>>{}
+
+				for (let i = 0; i < asyncRoute.length; i++) {
+					const path = asyncStaticRoutesPath[i]
+					const route = asyncRoute[i]
+
+					if (route) asyncRouteMap[path] = route
+				}
+
+				if (!app.server && !isNotEmpty(asyncRouteMap)) return
+
+				app.server?.reload({
+					...serve,
+					// @ts-ignore
+					routes: {
+						...staticRoutes,
+						...asyncRouteMap,
+						...routes,
+						// @ts-expect-error
+						...app.config.serve?.routes
+					}
+				})
+			})
 
 			process.on('beforeExit', () => {
 				if (app.server) {

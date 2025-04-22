@@ -4,7 +4,7 @@ import type { AnyElysia } from '..'
 import type { Context } from '../context'
 import type { Sucrose } from '../sucrose'
 
-import type { Prettify, AnyLocalHook } from '../types'
+import type { Prettify, AnyLocalHook, MaybePromise } from '../types'
 import type { AnyWSLocalHook } from '../ws/types'
 
 export interface ElysiaAdapter {
@@ -61,7 +61,7 @@ export interface ElysiaAdapter {
 			hooks: AnyLocalHook,
 			setHeaders?: Context['set']['headers'],
 			...params: unknown[]
-		): (() => Response) | undefined
+		): (() => MaybePromise<Response>) | undefined
 	}
 	composeHandler: {
 		mapResponseContext?: string

@@ -1,5 +1,5 @@
 import type { Context } from '../../context'
-import type { AnyLocalHook } from '../../types'
+import type { AnyLocalHook, MaybePromise } from '../../types'
 
 import {
 	mapResponse,
@@ -12,7 +12,7 @@ export const createNativeStaticHandler = (
 	handle: unknown,
 	hooks: AnyLocalHook,
 	setHeaders: Context['set']['headers'] = {}
-): (() => Response) | undefined => {
+): (() => MaybePromise<Response>) | undefined => {
 	if (typeof handle === 'function' || handle instanceof Blob) return
 
 	if (
@@ -32,6 +32,16 @@ export const createNativeStaticHandler = (
 		!hooks.beforeHandle?.length &&
 		!hooks.afterHandle?.length
 	) {
+		if (response instanceof Promise)
+			return response.then((response) => {
+				if (!response) return
+
+				if (!response.headers.has('content-type'))
+					response.headers.append('content-type', 'text/plain')
+
+				return response.clone()
+			}) as any as () => Promise<Response>
+
 		if (!response.headers.has('content-type'))
 			response.headers.append('content-type', 'text/plain')
 

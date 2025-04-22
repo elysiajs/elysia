@@ -292,7 +292,7 @@ export default class Elysia<
 		// Static Router
 		static: {} as { [path in string]: { [method in string]: number } },
 		// Native Static Response
-		response: {} as Record<string, Response>,
+		response: {} as Record<string, MaybePromise<Response | undefined>>,
 		history: [] as InternalRoute[]
 	}
 
@@ -810,11 +810,19 @@ export default class Elysia<
 
 		const nativeStaticHandler =
 			typeof handle !== 'function'
-				? adapter.createNativeStaticHandler?.(
-						handle,
-						hooks,
-						this.setHeaders
-					)
+				? () => {
+						const fn = adapter.createNativeStaticHandler?.(
+							handle,
+							hooks,
+							this.setHeaders
+						)
+
+						return fn instanceof Promise
+							? fn.then((fn) => {
+									if (fn) return fn
+								})
+							: fn?.()
+					}
 				: undefined
 
 		const useNativeStaticResponse =

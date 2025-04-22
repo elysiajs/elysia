@@ -99,4 +99,27 @@ describe('Bun router', () => {
 
 		expect(query).toEqual([{}, { id: '1' }, { id: '1', name: 'saltyaom' }])
 	})
+
+	it('handle async static route', async () => {
+		const app = new Elysia()
+			.get(
+				'/',
+				Promise.resolve(
+					new Response(`<h1>Hello World</h1>`, {
+						headers: {
+							'Content-Type': 'text/html'
+						}
+					})
+				)
+			)
+			.listen(0)
+
+		await Bun.sleep(20)
+
+		const response = await fetch(
+			`http://localhost:${app.server!.port}`
+		).then((x) => x.text())
+
+		expect(response).toEqual('<h1>Hello World</h1>')
+	})
 })

@@ -1,14 +1,19 @@
 import { Elysia, form, t } from '../src'
 import { mapResponse } from '../src/adapter/bun/handler'
 
-const response = mapResponse(
-	form({
-		a: Bun.file('test/kyuukurarin.mp4')
-	}),
-	{
-		status: 200,
-		headers: {}
-	}
-)
+const plugin = new Elysia()
+	.get(
+		'/',
+		Promise.resolve(
+			new Response(`<h1>Hello World</h1>`, {
+				headers: {
+					'Content-Type': 'text/html'
+				}
+			})
+		)
+	)
+	.listen(3000)
 
-console.log((await response.formData()) instanceof FormData)
+// const app = new Elysia().use(plugin).listen(3000)
+
+// console.log('Server started on http://localhost:3000')

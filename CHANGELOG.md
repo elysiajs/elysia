@@ -26,6 +26,7 @@ Improvement:
 - dynamically create cookie validator as needed in compilation process
 - reduce object cloning
 - optimize start index for finding delimiter of a content type header
+- Promise can now be a static response
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream
