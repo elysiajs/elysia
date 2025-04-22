@@ -1,7 +1,7 @@
 import { sucrose, type Sucrose } from '../../sucrose'
 import { createHoc, createOnRequestHandler } from '../../compose'
 
-import { randomId, ELYSIA_REQUEST_ID, redirect } from '../../utils'
+import { randomId, ELYSIA_REQUEST_ID, redirect, isNotEmpty } from '../../utils'
 import { status } from '../../error'
 import { ELYSIA_TRACE } from '../../trace'
 
@@ -44,8 +44,8 @@ const createContext = (
 			? `path:'${path}',`
 			: `get path(){` +
 				(inference.query ? '' : getQi) +
-				`if(qi===-1) return u.substring(s)\n` +
-				`return u.substring(s, qi)\n` +
+				`if(qi===-1)return u.substring(s)\n` +
+				`return u.substring(s,qi)\n` +
 				`},`
 
 	fnLiteral +=
@@ -130,8 +130,6 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		fnLiteral += 'return handler(c)}'
 	} else
 		fnLiteral += `return handler(${createContext(app, route, inference, true)})}`
-
-	console.log(fnLiteral)
 
 	fnLiteral += createHoc(app)
 

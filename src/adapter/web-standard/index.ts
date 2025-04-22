@@ -78,7 +78,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			fnLiteral +=
 				`const u=r.url,` +
 				`s=u.indexOf('/',${standardHostname ? 11 : 7}),` +
-				`qi=u.indexOf('?', s + 1)\n` +
+				`qi=u.indexOf('?',s+1)\n` +
 				`let p\n` +
 				`if(qi===-1)p=u.substring(s)\n` +
 				`else p=u.substring(s, qi)\n`

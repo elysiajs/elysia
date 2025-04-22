@@ -37,7 +37,7 @@ export const mapResponse = (
 
 			case 'Array':
 			case 'Object':
-				return Response.json(response, set as any)
+				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
@@ -81,7 +81,7 @@ export const mapResponse = (
 			case undefined:
 				if (!response) return new Response('', set as any)
 
-				return Response.json(response, set as any)
+				return new Response(JSON.stringify(response), set as any)
 
 			case 'Response':
 				return handleResponse(response as Response, set, request)
@@ -208,7 +208,7 @@ export const mapEarlyResponse = (
 
 			case 'Array':
 			case 'Object':
-				return Response.json(response, set as any)
+				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
@@ -252,7 +252,7 @@ export const mapEarlyResponse = (
 			case undefined:
 				if (!response) return
 
-				return Response.json(response, set as any)
+				return new Response(JSON.stringify(response), set as any)
 
 			case 'Response':
 				return handleResponse(response as Response, set, request)
@@ -339,14 +339,13 @@ export const mapEarlyResponse = (
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
-				if (isNotBun && !set.headers['content-type'])
-					set.headers['content-type'] = 'text/plain'
+				if (isNotBun) set.headers['content-type'] = 'text/plain'
 
 				return new Response(response as string)
 
 			case 'Array':
 			case 'Object':
-				return Response.json(response, set as any)
+				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
@@ -386,7 +385,7 @@ export const mapEarlyResponse = (
 			case undefined:
 				if (!response) return new Response('')
 
-				return new Response(JSON.stringify(response), {
+				return Response.json(JSON.stringify(response), {
 					headers: {
 						'content-type': 'application/json'
 					}

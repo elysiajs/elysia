@@ -673,11 +673,11 @@ export const composeHandler = ({
 				'if(c.qi===-1){' +
 				'c.query={}' +
 				'}else{' +
-				'c.query=parseQueryFromURL(c.url.slice(c.qi + 1))' +
+				'c.query=parseQueryFromURL(c.url.slice(c.qi+1))' +
 				'}'
 		} else {
 			fnLiteral +=
-				'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi + 1)\n`
+				'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi+1)\n`
 
 			let index = 0
 			for (const {
@@ -953,7 +953,7 @@ export const composeHandler = ({
 						fnLiteral +=
 							`\nif(contentType){` +
 							`const index=contentType.indexOf(';')\n` +
-							`if(index!==-1)contentType=contentType.substring(0, index)}\n` +
+							`if(index!==-1)contentType=contentType.substring(0,index)}\n` +
 							`else{contentType=''}` +
 							`c.contentType=contentType\n` +
 							`let result=parser['${parser}'](c, contentType)\n` +
@@ -1856,7 +1856,7 @@ export const composeHandler = ({
 
 	if (hasBody) fnLiteral += `if(isParsing)error=new ParseError()\n`
 
-	if (!maybeAsync) fnLiteral += `return(async()=>{`
+	if (!maybeAsync && hooks.error?.length) fnLiteral += `return(async()=>{`
 	fnLiteral +=
 		`const set=c.set\n` +
 		`if(!set.status||set.status<300)set.status=error?.status||500\n`
@@ -1936,7 +1936,7 @@ export const composeHandler = ({
 	errorReporter.resolve()
 
 	fnLiteral += `return handleError(c,error,true)`
-	if (!maybeAsync) fnLiteral += '})()'
+	if (!maybeAsync && hooks.error?.length) fnLiteral += '})()'
 	fnLiteral += '}'
 
 	if (hasAfterResponse || hasTrace) {
@@ -2214,7 +2214,7 @@ export const composeGeneralHandler = (
 	findDynamicRoute +=
 		`\nc.params=route.params\n` +
 		`if(route.store.handler)return route.store.handler(c)\n` +
-		`return (route.store.handler=route.store.compile())(c)\n`
+		`return route.store.compile()(c)\n`
 
 	let switchMap = ''
 	for (const [path, methods] of Object.entries(router.static)) {
