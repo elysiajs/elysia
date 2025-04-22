@@ -18,7 +18,8 @@ import type {
 	TString,
 	NumberOptions,
 	JavaScriptTypeBuilder,
-	StringOptions
+	StringOptions,
+	TUnsafe
 } from '@sinclair/typebox'
 
 import './format'
@@ -90,14 +91,14 @@ const internalFormData = createType<TForm, FormData>(
 
 interface ElysiaStringOptions extends StringOptions {
 	/**
-	* Whether the value include JSON escape sequences or not
-	*
-	* When using JSON Accelerator, this will bypass the JSON escape sequence validation
-	*
-	* Set to `true` if the value doesn't include JSON escape sequences
-	*
-	* @default false
-	*/
+	 * Whether the value include JSON escape sequences or not
+	 *
+	 * When using JSON Accelerator, this will bypass the JSON escape sequence validation
+	 *
+	 * Set to `true` if the value doesn't include JSON escape sequences
+	 *
+	 * @default false
+	 */
 	trusted?: boolean
 }
 
@@ -361,14 +362,14 @@ export const ElysiaType = {
 		validateFile
 	) as unknown as TFile,
 
-	Files: (options: FilesOptions = {}) =>
+	Files: (options: FilesOptions = {}): TUnsafe<File[]> =>
 		t
 			.Transform(internalFiles(options))
 			.Decode((value) => {
 				if (Array.isArray(value)) return value
 				return [value]
 			})
-			.Encode((value) => value) as unknown as TFiles,
+			.Encode((value) => value) as unknown as TUnsafe<File[]>,
 
 	Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
 		t.Union([schema, t.Null()], options),

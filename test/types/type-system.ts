@@ -48,3 +48,24 @@ import { expectTypeOf } from 'expect-type'
 			}
 		)
 }
+
+// Files
+{
+	new Elysia().get(
+		'/',
+		({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf<{
+				images: File[]
+			}>()
+
+		},
+		{
+			body: t.Object({
+				images: t.Files({
+					maxSize: '4m',
+					type: 'image'
+				})
+			})
+		}
+	)
+}
