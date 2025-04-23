@@ -1,34 +1,20 @@
 import { Elysia, t } from '../src'
 import { post } from '../test/utils'
 
-const plugin = new Elysia({
-	sanitize: (value) => {
-		if (value === 'b') return 'ok'
-		return value
-	}
+const app = new Elysia({
+	sanitize: Bun.escapeHTML
 }).post('/', ({ body }) => body, {
-	body: t.Object({
-		a: t.String(),
-		b: t.String(),
-		c: t.String()
-	})
+	body: t.String()
 })
 
-const app = new Elysia({
-	sanitize: (value) => {
-		if (value === 'a') return 'ok'
-		return value
-	}
-}).use(plugin)
-
-const response = await app
-	.handle(
-		post('/', {
-			a: 'a',
-			b: 'b',
-			c: 'c'
-		})
-	)
-	.then((x) => x.json())
-
-console.log(response)
+app.handle(
+	new Request('http://localhost', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'text/plain'
+		},
+		body: "Hello <script>alert('XSS')</script>"
+	})
+)
+	.then((x) => x.text())
+	.then(console.log)

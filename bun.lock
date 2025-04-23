@@ -17,7 +17,7 @@
         "eslint": "^9.24.0",
         "eslint-plugin-security": "^3.0.1",
         "eslint-plugin-sonarjs": "^3.0.2",
-        "exact-mirror": "^0.0.8",
+        "exact-mirror": "^0.0.9",
         "expect-type": "^1.2.1",
         "fast-decode-uri-component": "^1.0.1",
         "file-type": "^20.4.1",
@@ -338,7 +338,7 @@
 
     "esutils": ["esutils@2.0.3", "", {}, "sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g=="],
 
-    "exact-mirror": ["exact-mirror@0.0.8", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.15" }, "optionalPeers": ["@sinclair/typebox"] }, "sha512-dXlFZMYlwQRWzAKKoybH74GnRrK/jk2wsi3Wo4xuU4dTB1KPGFlIHfCpxfYqQ3agafFa6SIs/gsimi15d0M7VQ=="],
+    "exact-mirror": ["exact-mirror@0.0.9", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.15" }, "optionalPeers": ["@sinclair/typebox"] }, "sha512-eaBCB5hJeG21lp3SeCiWzDOZiAnxzvOizcCqhRsftrlGbbBzGfwj79QTeFngugfFQ6OkVicfxGmeUXp5DYdPIg=="],
 
     "expect-type": ["expect-type@1.2.1", "", {}, "sha512-/kP8CAwxzLVEeFrMm4kMmy4CCDlpipyA7MYLVrdJIkV0fYF0UaigQHRsxHiuY/GEea+bh4KSv3TIlgr+2UL6bw=="],
 
