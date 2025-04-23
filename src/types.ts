@@ -35,6 +35,7 @@ import type {
 
 import type { AnyWSLocalHook, WSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
+import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 
 type PartialServe = Partial<Serve>
 
@@ -194,6 +195,17 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	 * @since 1.3.0
 	 */
 	jsonAccelerator?: boolean
+	/**
+	 * Array of callback function to transform a string value defined in a schema
+	 *
+	 * This option works when `exactMirror` is `true`
+	 *
+	 * This only works when set on the main instance
+	 *
+	 * @default true
+	 * @since 1.3.0
+	 */
+	sanitize?: ExactMirrorInstruction['sanitize']
 }
 
 export interface ValidatorLayer {

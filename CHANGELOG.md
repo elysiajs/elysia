@@ -2,16 +2,17 @@
 Feature:
 - add `jsonAccelerator`,`exactMirror`
 - add `systemRouter` config
-- `encodeSchema` now stable
-- add sucrose cache
+- `standalone Validator`
 - add `Elysia.Ref` for referencing schema with autocompletion instead of `t.Ref`
 - support Ref inside inline schema
-- `standalone Validator`
+- add sucrose cache
 - new validation `t.Form`, `t.NoValidate`
 - use `file-type` to check file type
 - add `INVALID_FILE_TYPE` error
+- add `sanitize` options
 
 Improvement:
+- `encodeSchema` now stable and enabled by default
 - optimize types
 - reduce redundant type check when using Encode
 - optimize isAsync

@@ -12,7 +12,10 @@ import { Value } from '@sinclair/typebox/value'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
 
 import { createAccelerator } from 'json-accelerator'
-import { createMirror } from 'exact-mirror'
+import {
+	createMirror,
+	type Instruction as ExactMirrorInstruction
+} from 'exact-mirror'
 
 import { t, type TypeCheck } from './type-system'
 
@@ -671,24 +674,24 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	{
 		models = {},
 		dynamic = false,
-		modules,
+		modules = t.Module({}),
 		normalize = false,
 		additionalProperties = false,
 		coerce = false,
 		additionalCoerce = [],
-		validators
+		validators,
+		sanitize
 	}: {
 		models?: Record<string, TSchema>
-		modules: TModule<any, any>
+		modules?: TModule<any, any>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
 		coerce?: boolean
 		additionalCoerce?: MaybeArray<ReplaceSchemaTypeOptions>
 		validators?: InputSchema['body'][]
-	} = {
-		modules: t.Module({})
-	}
+		sanitize?: () => ExactMirrorInstruction['sanitize']
+	} = {}
 ): T extends TSchema ? ElysiaTypeCheck<TSchema> : undefined => {
 	validators = validators?.filter((x) => x)
 
@@ -868,7 +871,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			if (normalize === true || normalize === 'exactMirror') {
 				try {
 					validator.Clean = createMirror(schema, {
-						TypeCompiler
+						TypeCompiler,
+						sanitize: sanitize?.()
 					})
 				} catch {
 					console.warn(
@@ -922,14 +926,17 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	if (normalize === true || normalize === 'exactMirror') {
 		try {
 			compiled.Clean = createMirror(schema, {
-				TypeCompiler
+				TypeCompiler,
+				sanitize: sanitize?.()
 			})
 		} catch {
 			console.warn(
 				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
 			)
 			console.warn(schema)
-			compiled.Clean = createMirror(schema)
+			compiled.Clean = createMirror(schema, {
+				sanitize: sanitize?.()
+			})
 		}
 	} else compiled.Clean = createCleaner(schema)
 
@@ -1076,7 +1083,8 @@ export const getResponseSchemaValidator = (
 		dynamic = false,
 		normalize = false,
 		additionalProperties = false,
-		validators = []
+		validators = [],
+		sanitize
 	}: {
 		modules: TModule<any, any>
 		models?: Record<string, TSchema>
@@ -1084,6 +1092,7 @@ export const getResponseSchemaValidator = (
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
 		validators?: StandaloneInputSchema['response'][]
+		sanitize?: () => ExactMirrorInstruction['sanitize']
 	}
 ): Record<number, ElysiaTypeCheck<any>> | undefined => {
 	validators = validators.filter((x) => x)
@@ -1121,7 +1130,8 @@ export const getResponseSchemaValidator = (
 				normalize,
 				coerce: false,
 				additionalCoerce: [],
-				validators: validators.map((x) => x![200])
+				validators: validators.map((x) => x![200]),
+				sanitize
 			})
 		}
 	}
@@ -1146,7 +1156,8 @@ export const getResponseSchemaValidator = (
 								normalize,
 								coerce: false,
 								additionalCoerce: [],
-								validators: validators.map((x) => x![+status])
+								validators: validators.map((x) => x![+status]),
+								sanitize
 							})
 						: schema
 			}
@@ -1165,7 +1176,8 @@ export const getResponseSchemaValidator = (
 						normalize,
 						coerce: false,
 						additionalCoerce: [],
-						validators: validators.map((x) => x![+status])
+						validators: validators.map((x) => x![+status]),
+						sanitize
 					})
 				: maybeNameOrSchema
 	})
@@ -1220,7 +1232,8 @@ export const getCookieValidator = ({
 	config,
 	dynamic,
 	models,
-	validators
+	validators,
+	sanitize
 }: {
 	validator: TSchema | string | undefined
 	modules: TModule<any, any>
@@ -1229,6 +1242,7 @@ export const getCookieValidator = ({
 	dynamic: boolean
 	models: Record<string, TSchema> | undefined
 	validators?: InputSchema['cookie'][]
+	sanitize?: () => ExactMirrorInstruction['sanitize']
 }) => {
 	let cookieValidator = getSchemaValidator(validator, {
 		modules,
@@ -1237,7 +1251,8 @@ export const getCookieValidator = ({
 		additionalProperties: true,
 		coerce: true,
 		additionalCoerce: stringToStructureCoercions(),
-		validators
+		validators,
+		sanitize
 	})
 
 	if (cookieValidator)
@@ -1248,7 +1263,8 @@ export const getCookieValidator = ({
 			dynamic,
 			models,
 			additionalProperties: true,
-			validators
+			validators,
+			sanitize
 		})
 
 		cookieValidator.config = defaultConfig

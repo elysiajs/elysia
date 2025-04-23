@@ -1,25 +1,34 @@
-import { Elysia, form, t } from '../src'
-import { mapResponse } from '../src/adapter/bun/handler'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
+import { post } from '../test/utils'
 
-const app = new Elysia().get(
-	'/',
-	({ query: { date } }) => {
-		console.log(date)
-
-		return date.toISOString()
-	},
-	{
-		query: t.Object({
-			date: t.Date()
-		})
+const plugin = new Elysia({
+	sanitize: (value) => {
+		if (value === 'b') return 'ok'
+		return value
 	}
-)
+}).post('/', ({ body }) => body, {
+	body: t.Object({
+		a: t.String(),
+		b: t.String(),
+		c: t.String()
+	})
+})
 
-app.handle(req(`/?date=2023-04-05T12:30:00+01:00`))
-	.then((x) => x.text())
-	.then(console.log)
+const app = new Elysia({
+	sanitize: (value) => {
+		if (value === 'a') return 'ok'
+		return value
+	}
+}).use(plugin)
 
-// const app = new Elysia().use(plugin).listen(3000)
+const response = await app
+	.handle(
+		post('/', {
+			a: 'a',
+			b: 'b',
+			c: 'c'
+		})
+	)
+	.then((x) => x.json())
 
-// console.log('Server started on http://localhost:3000')
+console.log(response)

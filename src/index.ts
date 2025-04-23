@@ -378,7 +378,8 @@ export default class Elysia<
 			modules: this.definitions.typebox,
 			dynamic: true,
 			additionalProperties: true,
-			coerce: true
+			coerce: true,
+			sanitize: () => this.config.sanitize
 		})
 
 		if (validator.Check(_env) === false) {
@@ -560,6 +561,8 @@ export default class Elysia<
 			const normalize = this.config.normalize
 			const modules = this.definitions.typebox
 
+			const sanitize = () => this.config.sanitize
+
 			const cookieValidator = () => {
 				if (cloned.cookie || standaloneValidators.find((x) => x.cookie))
 					return getCookieValidator({
@@ -569,7 +572,8 @@ export default class Elysia<
 						config: cloned.cookie?.config ?? {},
 						dynamic,
 						models,
-						validators: standaloneValidators.map((x) => x.cookie)
+						validators: standaloneValidators.map((x) => x.cookie),
+						sanitize
 					})
 			}
 
@@ -581,7 +585,8 @@ export default class Elysia<
 							models,
 							normalize,
 							additionalCoerce: coercePrimitiveRoot(),
-							validators: standaloneValidators.map((x) => x.body)
+							validators: standaloneValidators.map((x) => x.body),
+							sanitize
 						}),
 						headers: getSchemaValidator(cloned.headers, {
 							modules,
@@ -592,7 +597,8 @@ export default class Elysia<
 							additionalCoerce: stringToStructureCoercions(),
 							validators: standaloneValidators.map(
 								(x) => x.headers
-							)
+							),
+							sanitize
 						}),
 						params: getSchemaValidator(cloned.params, {
 							modules,
@@ -602,7 +608,8 @@ export default class Elysia<
 							additionalCoerce: stringToStructureCoercions(),
 							validators: standaloneValidators.map(
 								(x) => x.params
-							)
+							),
+							sanitize
 						}),
 						query: getSchemaValidator(cloned.query, {
 							modules,
@@ -611,7 +618,10 @@ export default class Elysia<
 							normalize,
 							coerce: true,
 							additionalCoerce: stringToStructureCoercions(),
-							validators: standaloneValidators.map((x) => x.query)
+							validators: standaloneValidators.map(
+								(x) => x.query
+							),
+							sanitize
 						}),
 						cookie: cookieValidator(),
 						response: getResponseSchemaValidator(cloned.response, {
@@ -621,7 +631,8 @@ export default class Elysia<
 							normalize,
 							validators: standaloneValidators.map(
 								(x) => x.response
-							)
+							),
+							sanitize
 						})
 					}
 				: ({
@@ -638,7 +649,8 @@ export default class Elysia<
 									additionalCoerce: coercePrimitiveRoot(),
 									validators: standaloneValidators.map(
 										(x) => x.body
-									)
+									),
+									sanitize
 								}
 							))
 						},
@@ -657,7 +669,8 @@ export default class Elysia<
 										stringToStructureCoercions(),
 									validators: standaloneValidators.map(
 										(x) => x.headers
-									)
+									),
+									sanitize
 								}
 							))
 						},
@@ -675,7 +688,8 @@ export default class Elysia<
 										stringToStructureCoercions(),
 									validators: standaloneValidators.map(
 										(x) => x.params
-									)
+									),
+									sanitize
 								}
 							))
 						},
@@ -693,7 +707,8 @@ export default class Elysia<
 										stringToStructureCoercions(),
 									validators: standaloneValidators.map(
 										(x) => x.query
-									)
+									),
+									sanitize
 								}
 							))
 						},
@@ -714,7 +729,8 @@ export default class Elysia<
 									normalize,
 									validators: standaloneValidators.map(
 										(x) => x.response
-									)
+									),
+									sanitize
 								}
 							))
 						}
@@ -3980,6 +3996,46 @@ export default class Elysia<
 		plugin.getParent = () => this as any
 		plugin.getServer = () => this.getServer()
 		plugin.getGlobalRoutes = () => this.getGlobalRoutes()
+
+		// if (this.config.sanitize) {
+		// 	const isArray = (v: unknown): v is any[] => Array.isArray(v)
+
+		// 	if (plugin.config.sanitize) {
+		// 		if (isArray(this.config.sanitize)) {
+		// 			if (isArray(plugin.config.sanitize)) {
+		// 				plugin.config.sanitize = this.config.sanitize.concat(
+		// 					plugin.config.sanitize
+		// 				)
+		// 			} else {
+		// 				if (isArray(plugin.config.sanitize)) {
+		// 					plugin.config.sanitize =
+		// 						this.config.sanitize.concat(
+		// 							plugin.config.sanitize
+		// 						)
+		// 				} else {
+		// 					if (this.config.sanitize)
+		// 						plugin.config.sanitize = [
+		// 							...this.config.sanitize,
+		// 							plugin.config.sanitize
+		// 						]
+		// 				}
+		// 			}
+		// 		} else {
+		// 			if (isArray(plugin.config.sanitize)) {
+		// 				plugin.config.sanitize = [
+		// 					this.config.sanitize,
+		// 					...plugin.config.sanitize
+		// 				]
+		// 			} else {
+		// 				if (this.config.sanitize)
+		// 					plugin.config.sanitize = [
+		// 						this.config.sanitize,
+		// 						plugin.config.sanitize
+		// 					]
+		// 			}
+		// 		}
+		// 	} else plugin.config.sanitize = this.config.sanitize
+		// }
 
 		if (plugin.standaloneValidator?.scoped) {
 			if (this.standaloneValidator.local)
