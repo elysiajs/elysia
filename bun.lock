@@ -5,6 +5,8 @@
       "name": "elysia",
       "dependencies": {
         "@sinclair/typebox": "^0.34.33",
+        "exact-mirror": "^0.1.0",
+        "json-accelerator": "^0.1.5",
         "openapi-types": "^12.1.3",
       },
       "devDependencies": {
@@ -17,11 +19,9 @@
         "eslint": "^9.24.0",
         "eslint-plugin-security": "^3.0.1",
         "eslint-plugin-sonarjs": "^3.0.2",
-        "exact-mirror": "^0.0.9",
         "expect-type": "^1.2.1",
         "fast-decode-uri-component": "^1.0.1",
         "file-type": "^20.4.1",
-        "json-accelerator": "^0.1.5",
         "memoirist": "^0.3.0",
         "mitata": "^1.0.34",
         "prettier": "^3.5.3",
@@ -30,12 +30,16 @@
       },
       "peerDependencies": {
         "@sinclair/typebox": ">= 0.34.0",
+        "exact-mirror": ">= 0.0.9",
         "file-type": ">= 20.0.0",
+        "json-accelerator": ">= 0.1.5",
         "openapi-types": ">= 12.0.0",
         "typescript": ">= 5.0.0",
       },
       "optionalPeers": [
+        "exact-mirror",
         "file-type",
+        "json-accelerator",
         "openapi-types",
         "typescript",
       ],
@@ -338,7 +342,7 @@
 
     "esutils": ["esutils@2.0.3", "", {}, "sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g=="],
 
-    "exact-mirror": ["exact-mirror@0.0.9", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.15" }, "optionalPeers": ["@sinclair/typebox"] }, "sha512-eaBCB5hJeG21lp3SeCiWzDOZiAnxzvOizcCqhRsftrlGbbBzGfwj79QTeFngugfFQ6OkVicfxGmeUXp5DYdPIg=="],
+    "exact-mirror": ["exact-mirror@0.1.0", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.15" }, "optionalPeers": ["@sinclair/typebox"] }, "sha512-mvgp/qEg27/LrDCRJw13Un8MF1iLIWNNr0p79toOGaZmrOPpgp6VM1gMO5+CH+DQ+wkS43h36qUCqLGqwoKuiw=="],
 
     "expect-type": ["expect-type@1.2.1", "", {}, "sha512-/kP8CAwxzLVEeFrMm4kMmy4CCDlpipyA7MYLVrdJIkV0fYF0UaigQHRsxHiuY/GEea+bh4KSv3TIlgr+2UL6bw=="],
 

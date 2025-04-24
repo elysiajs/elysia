@@ -198,7 +198,7 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	/**
 	 * Array of callback function to transform a string value defined in a schema
 	 *
-	 * This option works when `exactMirror` is `true`
+	 * This option only works when `sanitlize` is `exactMirror`
 	 *
 	 * This only works when set on the main instance
 	 *
@@ -434,11 +434,9 @@ export type UnwrapSchema<
 				? StaticDecode<NamedSchema>[]
 				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
 			: Schema extends string
-				? Definitions extends Record<
-						Schema,
-						infer NamedSchema extends TAnySchema
-					>
-					? StaticDecode<NamedSchema>
+				? Definitions extends keyof Schema
+					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
+						StaticDecode<NamedSchema>
 					: TImport<Definitions, Schema>['static']
 				: unknown
 
@@ -471,11 +469,9 @@ export type UnwrapBodySchema<
 				? StaticDecode<NamedSchema>[]
 				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
 			: Schema extends string
-				? Definitions extends Record<
-						Schema,
-						infer NamedSchema extends TAnySchema
-					>
-					? StaticDecode<NamedSchema>
+				? Definitions extends keyof Schema
+					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
+						StaticDecode<NamedSchema>
 					: TImport<Definitions, Schema>['static']
 				: unknown
 

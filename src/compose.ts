@@ -196,9 +196,9 @@ const composeCleaner = ({
 			`try{` +
 			`${name}=validator.${typeAlias}.Clean(${name})\n` +
 			`}catch{` +
-			(schema.isOptional
-				? ''
-				: `throw new ValidationError('${type}',validator.${typeAlias},${name})`) +
+			// (schema.isOptional
+			// 	? ''
+			// 	: `throw new ValidationError('${type}',validator.${typeAlias},${name})`) +
 			`}`
 		)
 
@@ -448,12 +448,12 @@ export const composeHandler = ({
 	if (!isNotEmpty(accelerators)) jsonAccelerator = false
 
 	const hasValidation =
-		validator.body ||
-		validator.headers ||
-		validator.params ||
-		validator.query ||
-		validator.cookie ||
-		validator.response
+		!!validator.body ||
+		!!validator.headers ||
+		!!validator.params ||
+		!!validator.query ||
+		!!validator.cookie ||
+		!!validator.response
 
 	const hasQuery = inference.query || !!validator.query
 
@@ -469,7 +469,15 @@ export const composeHandler = ({
 		(inference.body || !!validator.body || !!hooks.parse?.length) &&
 		!requestNoBody
 
-	if (hasBody && hooks.parse?.length) fnLiteral += `let isParsing=false\n`
+	if (hasValidation && app.config.normalize) fnLiteral += `let mirroring\n`
+	if (hasBody) fnLiteral += `let isParsing=false\n`
+
+	let mirrorError: Partial<Record<string, string>> | undefined = undefined
+
+	const appendMirrorError = (k: string, v: string) => {
+		if (!mirrorError) mirrorError = {}
+		mirrorError[k] = v
+	}
 
 	// @ts-expect-error private
 	const defaultHeaders = app.setHeaders
@@ -676,8 +684,7 @@ export const composeHandler = ({
 				'c.query=parseQueryFromURL(c.url.slice(c.qi+1))' +
 				'}'
 		} else {
-			fnLiteral +=
-				'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi+1)\n`
+			fnLiteral += 'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi+1)\n`
 
 			let index = 0
 			for (const {

@@ -669,12 +669,20 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
+const moduleToDefinitions = (module: TModule<any, any>) => {
+	const definitions: Record<string, TSchema> = {}
+
+	console.log(module)
+
+	return definitions
+}
+
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	s: T,
 	{
 		models = {},
 		dynamic = false,
-		modules = t.Module({}),
+		modules,
 		normalize = false,
 		additionalProperties = false,
 		coerce = false,
@@ -738,7 +746,9 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			const key = isArray ? s.substring(0, s.length - 2) : s
 
 			schema =
-				(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
+				(modules as TModule<{}, {}> | undefined)?.Import(
+					key as never
+				) ?? models[key]
 
 			if (isArray) schema = t.Array(schema)
 		}
@@ -753,7 +763,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 			const model: any = t.Module({
 				// @ts-expect-error private property
-				...modules.$defs,
+				...modules?.$defs,
 				[id]: schema
 			})
 
@@ -872,7 +882,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 				try {
 					validator.Clean = createMirror(schema, {
 						TypeCompiler,
-						sanitize: sanitize?.()
+						sanitize: sanitize?.(),
+						modules
 					})
 				} catch {
 					console.warn(
@@ -927,9 +938,10 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		try {
 			compiled.Clean = createMirror(schema, {
 				TypeCompiler,
-				sanitize: sanitize?.()
+				sanitize: sanitize?.(),
+				modules
 			})
-		} catch {
+		} catch (error) {
 			console.warn(
 				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
 			)

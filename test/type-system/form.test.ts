@@ -5,9 +5,9 @@ import { describe, expect, it } from 'bun:test'
 import { Value } from '@sinclair/typebox/value'
 import { req } from '../utils'
 
-describe('TypeSystem - ArrayString', () => {
+describe('TypeSystem - Form', () => {
 	it('Create', () => {
-		expect(Value.Create(t.Form({}))).toEqual(form())
+		expect(Value.Create(t.Form({}))).toEqual(form({}))
 
 		expect(
 			Value.Create(
