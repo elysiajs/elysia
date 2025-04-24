@@ -655,7 +655,7 @@ const _replaceSchemaType = (
 const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	if (typeof value === 'object')
 		try {
-			return Value.Clean(schema, structuredClone(value))
+			return Value.Clean(schema, value)
 		} catch {
 			try {
 				return Value.Clean(schema, value)
@@ -668,14 +668,6 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 }
 
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
-
-const moduleToDefinitions = (module: TModule<any, any>) => {
-	const definitions: Record<string, TSchema> = {}
-
-	console.log(module)
-
-	return definitions
-}
 
 export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	s: T,
@@ -946,9 +938,8 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
 			)
 			console.warn(schema)
-			compiled.Clean = createMirror(schema, {
-				sanitize: sanitize?.()
-			})
+
+			compiled.Clean = createCleaner(schema)
 		}
 	} else compiled.Clean = createCleaner(schema)
 

@@ -216,9 +216,7 @@ describe('Edge Case', () => {
 
 		const Module = new Elysia().use(Path)
 
-		const app = new Elysia({ name: 'main' })
-			.use(Path)
-			.use(Module)
+		const app = new Elysia({ name: 'main' }).use(Path).use(Module)
 
 		const responses = await Promise.all([
 			app.handle(req('/AB')).then((x) => x.text()),
@@ -226,5 +224,56 @@ describe('Edge Case', () => {
 		])
 
 		expect(responses).toEqual(['AB', 'BA'])
+	})
+
+	it('handle complex union with json accelerate, exact mirror, and sanitize', async () => {
+		const app = new Elysia({
+			sanitize: (v) => v && 'Elysia'
+		}).get(
+			'/',
+			() => ({
+				type: 'ok',
+				data: [
+					{
+						type: 'cool',
+						data: null
+					},
+					{
+						type: 'yea',
+						data: {
+							type: 'aight',
+							data: null
+						}
+					}
+				]
+			}),
+			{
+				response: t.Recursive((This) =>
+					t.Object({
+						type: t.String(),
+						data: t.Union([t.Nullable(This), t.Array(This)])
+					})
+				)
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			type: 'Elysia',
+			data: [
+				{
+					type: 'Elysia',
+					data: null
+				},
+				{
+					type: 'Elysia',
+					data: {
+						type: 'Elysia',
+						data: null
+					}
+				}
+			]
+		})
 	})
 })
