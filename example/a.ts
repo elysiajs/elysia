@@ -1,38 +1,26 @@
 import { Elysia, t } from '../src'
+import { sucrose } from '../src/sucrose'
 import { post, req } from '../test/utils'
 
-const app = new Elysia({
-	sanitize: (v) => v && 'Elysia'
-})
-	.get(
-		'/',
-		() => ({
-			type: 'ok',
-			data: [
+new Elysia({ precompile: true })
+	.get('/', ({ cookie: { token: A }, jwt: F, headers: D }) => {
+		let w = D.authorization
+		if (!w) return { userInfo: null }
+		let [B, q] = await ND(
+			IA.post(
+				'https://ones.huyooo.com/restfulApi/users/profile',
+				{},
 				{
-					type: 'cool',
-					data: null
-				},
-				{
-					type: 'yea',
-					data: {
-						type: 'aight',
-						data: null
+					headers: {
+						accept: 'application/json',
+						authorization: `${w}`
 					}
 				}
-			]
-		}),
-		{
-			response: t.Recursive((This) =>
-				t.Object({
-					type: t.String(),
-					data: t.Union([t.Nullable(This), t.Array(This)])
-				})
 			)
-		}
-	)
-	.listen(3000)
-
-app.handle(req('/'))
-	.then((x) => x.json())
-	.then((x) => console.dir(x, { depth: null }))
+		)
+		if ((console.log(B, 'userInfoError'), B)) return { userInfo: null }
+		let z = q.data.data
+		if (!z) return { userInfo: null }
+		return { userInfo: { userId: z.id, ...z } }
+	})
+	.compile()
