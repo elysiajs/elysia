@@ -36,13 +36,7 @@ import {
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
-import {
-	createAccelerators,
-	ElysiaTypeCheck,
-	getCookieValidator,
-	hasType,
-	isUnion
-} from './schema'
+import { ElysiaTypeCheck, getCookieValidator, hasType, isUnion } from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 import { validateFileExtension } from './type-system/utils'
@@ -215,7 +209,6 @@ const composeValidationFactory = ({
 	normalize = false,
 	validator,
 	encodeSchema = false,
-	accelerators,
 	isStaticResponse = false,
 	hasSanitize = false
 }: {
@@ -223,7 +216,6 @@ const composeValidationFactory = ({
 	normalize?: ElysiaConfig<''>['normalize']
 	validator: SchemaValidator
 	encodeSchema?: boolean
-	accelerators?: ReturnType<typeof createAccelerators>
 	isStaticResponse?: boolean
 	hasSanitize?: boolean
 }) => ({
@@ -233,8 +225,6 @@ const composeValidationFactory = ({
 		if (isStaticResponse) return ''
 
 		let code = injectResponse + '\n'
-
-		if (accelerators) code += `let accelerate\n`
 
 		code +=
 			`if(${name} instanceof ElysiaCustomStatusResponse){` +
@@ -247,15 +237,8 @@ const composeValidationFactory = ({
 			code += `\ncase ${status}:if(${name} instanceof Response)break\n`
 
 			const noValidate = value.schema.noValidate === true
-			const withAccelerator =
-				!!accelerators?.[+status] &&
-				(value.schema.type === 'object' ||
-					value.schema.type === 'array')
 
-			const appliedCleaner =
-				!withAccelerator ||
-				(noValidate && withAccelerator) ||
-				hasSanitize
+			const appliedCleaner = noValidate || hasSanitize
 
 			const clean = ({ ignoreTryCatch = false } = {}) =>
 				composeCleaner({
@@ -270,7 +253,7 @@ const composeValidationFactory = ({
 			if (appliedCleaner) code += clean()
 
 			const applyErrorCleaner =
-				!appliedCleaner && withAccelerator && normalize && !noValidate
+				!appliedCleaner && normalize && !noValidate
 
 			// Encode call TypeCheck.Check internally
 			if (encodeSchema && value.hasTransform)
@@ -301,8 +284,6 @@ const composeValidationFactory = ({
 						'}' +
 						`c.set.status=${status}\n`
 			}
-
-			if (withAccelerator) code += `accelerate=accelerators[${status}]\n`
 
 			code += 'break\n'
 		}
@@ -465,15 +446,6 @@ export const composeHandler = ({
 	validator.createCookie?.()
 	validator.createResponse?.()
 
-	let jsonAccelerator =
-		(app.config.jsonAccelerator ?? false) && !!validator.response
-
-	const accelerators = jsonAccelerator
-		? createAccelerators(validator.response!)
-		: undefined
-
-	if (!isNotEmpty(accelerators)) jsonAccelerator = false
-
 	const hasValidation =
 		!!validator.body ||
 		!!validator.headers ||
@@ -562,7 +534,6 @@ export const composeHandler = ({
 		normalize,
 		validator,
 		encodeSchema,
-		accelerators,
 		isStaticResponse: handler instanceof Response,
 		hasSanitize: !!app.config.sanitize
 	})
@@ -874,27 +845,13 @@ export const composeHandler = ({
 		(isHandleFn && hasDefaultHeaders) ||
 		maybeStream
 
+	const mapResponse = (r = 'r') =>
+		`return ${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
+
 	const mapResponseContext =
 		maybeStream && adapter.mapResponseContext
 			? `,${adapter.mapResponseContext}`
 			: ''
-
-	const mapAccelerate = (response = 'r', isCompact: boolean) => {
-		if (!jsonAccelerator) return ''
-
-		let map = saveResponse ? `\n${saveResponse}${response}\n` : '\n'
-
-		if (isCompact && app['~adapter'].isWebStandard)
-			map += `if(accelerate)return new Response(accelerate(${response}),{headers:{'content-type':'application/json'}})\n`
-		else
-			map +=
-				`if(accelerate){\n` +
-				`c.set.headers['content-type']='application/json'\n` +
-				`return mapResponse(accelerate(${response}),c.set${mapResponseContext})\n` +
-				'}\n'
-
-		return map
-	}
 
 	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
 
@@ -1720,16 +1677,7 @@ export const composeHandler = ({
 		}
 		mapResponseReporter.resolve()
 
-		fnLiteral += mapAccelerate('r', !hasSet)
-
-		if (hasSet)
-			fnLiteral += `return mapResponse(${saveResponse}r,c.set${
-				mapResponseContext
-			})\n`
-		else
-			fnLiteral += `return mapCompactResponse(${saveResponse}r${
-				mapResponseContext
-			})\n`
+		fnLiteral += mapResponse()
 	} else {
 		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
@@ -1786,19 +1734,7 @@ export const composeHandler = ({
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
-			} else if (hasSet) {
-				fnLiteral += mapAccelerate('r', !hasSet)
-
-				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
-					mapResponseContext
-				})\n`
-			} else {
-				fnLiteral += mapAccelerate('r', !hasSet)
-
-				fnLiteral += `return mapCompactResponse(${saveResponse}r${
-					mapResponseContext
-				})\n`
-			}
+			} else fnLiteral += mapResponse()
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r=await ${handle}\n`
@@ -1832,17 +1768,7 @@ export const composeHandler = ({
 			}
 			mapResponseReporter.resolve()
 
-			fnLiteral += encodeCookie()
-			fnLiteral += mapAccelerate('r', !hasSet)
-
-			if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
-					mapResponseContext
-				})\n`
-			else
-				fnLiteral += `return mapCompactResponse(${saveResponse}r${
-					mapResponseContext
-				})\n`
+			fnLiteral += encodeCookie() + mapResponse()
 		} else {
 			handleReporter.resolve()
 
@@ -1861,19 +1787,7 @@ export const composeHandler = ({
 						})\n` +
 						`else return ${handle}.clone()\n`
 					: `return ${handle}.clone()\n`
-			} else if (hasSet) {
-				fnLiteral += mapAccelerate(handled, !hasSet)
-
-				fnLiteral += `return mapResponse(${saveResponse}${handled},c.set${
-					mapResponseContext
-				})\n`
-			} else {
-				fnLiteral += mapAccelerate(handled, true)
-
-				fnLiteral += `return mapCompactResponse(${saveResponse}${handled}${
-					mapResponseContext
-				})\n`
-			}
+			} else fnLiteral += mapResponse(handled)
 		}
 	}
 
@@ -2024,7 +1938,6 @@ export const composeHandler = ({
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		allocateIf('parser,', hooks.parse?.length) +
 		allocateIf(`getServer,`, inference.server) +
-		allocateIf('accelerators,', jsonAccelerator) +
 		adapterVariables +
 		allocateIf('TypeBoxError', hasValidation) +
 		`}=hooks\n` +
@@ -2078,7 +1991,6 @@ export const composeHandler = ({
 			getServer: () => app.getServer(),
 			TypeBoxError: hasValidation ? TypeBoxError : undefined,
 			parser: app['~parser'],
-			accelerators,
 			...adapter.inject
 		})
 	} catch (error) {

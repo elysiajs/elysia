@@ -349,7 +349,6 @@ export default class Elysia<
 			aot: env.ELYSIA_AOT !== 'false',
 			nativeStaticResponse: true,
 			systemRouter: true,
-			jsonAccelerator: false,
 			encodeSchema: true,
 			normalize: true,
 			...config,

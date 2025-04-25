@@ -11,7 +11,6 @@ import {
 import { Value } from '@sinclair/typebox/value'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
 
-import { createAccelerator } from 'json-accelerator'
 import {
 	createMirror,
 	type Instruction as ExactMirrorInstruction
@@ -1291,51 +1290,26 @@ export const getCookieValidator = ({
  * ])
  * ```
  */
-const getUnionedType = (validator: TypeCheck<any> | undefined) => {
-	if (!validator) return
+// const getUnionedType = (validator: TypeCheck<any> | undefined) => {
+// 	if (!validator) return
 
-	// @ts-ignore
-	const schema = validator?.schema ?? validator
+// 	// @ts-ignore
+// 	const schema = validator?.schema ?? validator
 
-	if (schema && 'anyOf' in schema) {
-		let foundDifference = false
-		const type: string = schema.anyOf[0].type
+// 	if (schema && 'anyOf' in schema) {
+// 		let foundDifference = false
+// 		const type: string = schema.anyOf[0].type
 
-		for (const validator of schema.anyOf as { type: string }[]) {
-			if (validator.type !== type) {
-				foundDifference = true
-				break
-			}
-		}
+// 		for (const validator of schema.anyOf as { type: string }[]) {
+// 			if (validator.type !== type) {
+// 				foundDifference = true
+// 				break
+// 			}
+// 		}
 
-		if (!foundDifference) return type
-	}
+// 		if (!foundDifference) return type
+// 	}
 
-	// @ts-ignore
-	return validator.schema?.type
-}
-
-export const createAccelerators = (
-	records: Record<number, ElysiaTypeCheck<any>>
-) => {
-	const accelerators = <Record<number, Function>>{}
-
-	for (const [id, validator] of Object.entries(records)) {
-		if (!validator) continue
-
-		if (validator.schema.type !== 'object' && validator.schema.type !== 'array') {
-			if (validator.schema.anyOf) {
-				const type = getUnionedType(validator.schema)
-
-				if (!type || (type !== 'object' && type !== 'array')) continue
-			} else continue
-		}
-
-		try {
-			accelerators[+id] = createAccelerator(validator.schema)
-		} catch {
-		}
-	}
-
-	return accelerators
-}
+// 	// @ts-ignore
+// 	return validator.schema?.type
+// }

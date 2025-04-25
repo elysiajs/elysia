@@ -187,15 +187,6 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	 */
 	systemRouter?: boolean
 	/**
-	 * When response schema is provided
-	 * Use Elysia custom JSON encoder to optimize encode process
-	 *
-	 *
-	 * @default true
-	 * @since 1.3.0
-	 */
-	jsonAccelerator?: boolean
-	/**
 	 * Array of callback function to transform a string value defined in a schema
 	 *
 	 * This option only works when `sanitlize` is `exactMirror`
