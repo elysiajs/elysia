@@ -388,7 +388,11 @@ export const mapEarlyResponse = (
 			case undefined:
 				if (!response) return new Response('')
 
-				return Response.json(JSON.stringify(response))
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'content-type': 'application/json'
+					}
+				})
 
 			case 'Response':
 				if (

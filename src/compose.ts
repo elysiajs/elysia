@@ -214,7 +214,8 @@ const composeValidationFactory = ({
 	validator,
 	encodeSchema = false,
 	accelerators,
-	isStaticResponse = false
+	isStaticResponse = false,
+	hasSanitize = false
 }: {
 	injectResponse?: string
 	normalize?: ElysiaConfig<''>['normalize']
@@ -222,6 +223,7 @@ const composeValidationFactory = ({
 	encodeSchema?: boolean
 	accelerators?: ReturnType<typeof createAccelerators>
 	isStaticResponse?: boolean
+	hasSanitize?: boolean
 }) => ({
 	validate: (type: string, value = `c.${type}`) =>
 		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
@@ -244,18 +246,25 @@ const composeValidationFactory = ({
 
 			const noValidate = value.schema.noValidate === true
 			const withAccelerator =
-				accelerators?.[+status] &&
+				!!accelerators?.[+status] &&
 				(value.schema.type === 'object' ||
 					value.schema.type === 'array')
 
-			if (!noValidate || (noValidate && !withAccelerator))
-				code += composeCleaner({
+			const appliedCleaner =
+				!withAccelerator ||
+				(noValidate && withAccelerator) ||
+				hasSanitize
+
+			const clean = () =>
+				composeCleaner({
 					name,
 					schema: value,
 					type: 'response',
 					typeAlias: `response[${status}]`,
 					normalize
 				})
+
+			if (appliedCleaner) code += clean()
 
 			// Encode call TypeCheck.Check internally
 			if (encodeSchema && value.hasTransform)
@@ -264,13 +273,24 @@ const composeValidationFactory = ({
 					`${name}=validator.response[${status}].Encode(${name})\n` +
 					`c.set.status=${status}` +
 					`}catch{` +
-					`throw new ValidationError('response',validator.response[${status}],${name})` +
+					(appliedCleaner && withAccelerator
+						? `try{${clean()}\n` +
+							`${name}=validator.response[${status}].Encode(${name})\n` +
+							`}catch{` +
+							`throw new ValidationError('response',validator.response[${status}],${name})` +
+							`}`
+						: `throw new ValidationError('response',validator.response[${status}],${name})`) +
 					`}`
 			else {
 				if (!noValidate)
 					code +=
 						`if(validator.response[${status}].Check(${name})===false){` +
 						'c.set.status=422\n' +
+						`try{${clean()}` +
+						`}catch{` +
+						`throw new ValidationError('response',validator.response[${status}],${name})` +
+						`}` +
+						`if(validator.response[${status}].Check(${name})===false)` +
 						`throw new ValidationError('response',validator.response[${status}],${name})` +
 						'}' +
 						`c.set.status=${status}\n`
@@ -469,15 +489,7 @@ export const composeHandler = ({
 		(inference.body || !!validator.body || !!hooks.parse?.length) &&
 		!requestNoBody
 
-	if (hasValidation && app.config.normalize) fnLiteral += `let mirroring\n`
 	if (hasBody) fnLiteral += `let isParsing=false\n`
-
-	let mirrorError: Partial<Record<string, string>> | undefined = undefined
-
-	const appendMirrorError = (k: string, v: string) => {
-		if (!mirrorError) mirrorError = {}
-		mirrorError[k] = v
-	}
 
 	// @ts-expect-error private
 	const defaultHeaders = app.setHeaders
@@ -544,7 +556,8 @@ export const composeHandler = ({
 		validator,
 		encodeSchema,
 		accelerators,
-		isStaticResponse: handler instanceof Response
+		isStaticResponse: handler instanceof Response,
+		hasSanitize: !!app.config.sanitize
 	})
 
 	if (hasHeaders) fnLiteral += adapter.headers
@@ -863,17 +876,15 @@ export const composeHandler = ({
 		if (!jsonAccelerator) return ''
 
 		let map = saveResponse ? `\n${saveResponse}${response}\n` : '\n'
-		map += `if(accelerate){\n`
 
 		if (isCompact && app['~adapter'].isWebStandard)
-			map += `return Response.json(${response})`
+			map += `if(accelerate)return new Response(accelerate(${response}),{headers:{'content-type':'application/json'}})\n`
 		else
 			map +=
 				`if(accelerate){\n` +
 				`c.set.headers['content-type']='application/json'\n` +
-				`return mapResponse(accelerate(${response}),c.set${mapResponseContext})`
-
-		map += '\n}\n'
+				`return mapResponse(accelerate(${response}),c.set${mapResponseContext})\n` +
+				'}\n'
 
 		return map
 	}

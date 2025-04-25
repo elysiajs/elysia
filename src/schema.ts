@@ -1323,7 +1323,7 @@ export const createAccelerators = (
 	for (const [id, validator] of Object.entries(records)) {
 		if (!validator) continue
 
-		if (validator.schema !== 'object' && validator.schema !== 'array') {
+		if (validator.schema.type !== 'object' && validator.schema.type !== 'array') {
 			if (validator.schema.anyOf) {
 				const type = getUnionedType(validator.schema)
 
@@ -1333,8 +1333,7 @@ export const createAccelerators = (
 
 		try {
 			accelerators[+id] = createAccelerator(validator.schema)
-		} catch (err) {
-			console.log(validator.schema)
+		} catch {
 		}
 	}
 
