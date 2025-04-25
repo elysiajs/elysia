@@ -468,8 +468,6 @@ export const composeHandler = ({
 		(inference.body || !!validator.body || !!hooks.parse?.length) &&
 		!requestNoBody
 
-	if (hasBody) fnLiteral += `let isParsing=false\n`
-
 	// @ts-expect-error private
 	const defaultHeaders = app.setHeaders
 	const hasDefaultHeaders =
@@ -865,7 +863,7 @@ export const composeHandler = ({
 
 		if (adapter.parser.declare) fnLiteral += adapter.parser.declare
 
-		fnLiteral += '\nisParsing=true\n'
+		fnLiteral += '\ntry{'
 
 		let parser: string | undefined =
 			typeof hooks.parse === 'string'
@@ -1130,7 +1128,7 @@ export const composeHandler = ({
 			if (hooks.parse?.length) fnLiteral += '\ndelete c.contentType'
 		}
 
-		fnLiteral += '\nisParsing=false\n'
+		fnLiteral += '}catch(error){throw new ParseError(error)}'
 	}
 
 	parseReporter.resolve()
@@ -1291,7 +1289,7 @@ export const composeHandler = ({
 			if (validator.query.isOptional) fnLiteral += `}`
 		}
 
-		if (validator.body) {
+		if (hasBody && validator.body) {
 			if (validator.body.hasTransform || validator.body.isOptional)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
@@ -1792,8 +1790,6 @@ export const composeHandler = ({
 	}
 
 	fnLiteral += `\n}catch(error){`
-
-	if (hasBody) fnLiteral += `if(isParsing)error=new ParseError()\n`
 
 	if (!maybeAsync && hooks.error?.length) fnLiteral += `return(async()=>{`
 	fnLiteral +=

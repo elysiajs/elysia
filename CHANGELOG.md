@@ -28,6 +28,7 @@ Improvement:
 - reduce object cloning
 - optimize start index for finding delimiter of a content type header
 - Promise can now be a static response
+- `ParseError` now keeps stack trace
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream

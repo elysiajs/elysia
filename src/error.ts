@@ -66,8 +66,8 @@ export const status = <
 ) => new ElysiaCustomStatusResponse<Code, T>(code, response as any)
 
 /**
-* @deprecated use `Elysia.status` instead
-*/
+ * @deprecated use `Elysia.status` instead
+ */
 export const error = status
 
 export class InternalServerError extends Error {
@@ -92,8 +92,10 @@ export class ParseError extends Error {
 	code = 'PARSE'
 	status = 400
 
-	constructor() {
-		super('Bad Request')
+	constructor(cause?: Error) {
+		super('Bad Request', {
+			cause
+		})
 	}
 }
 
