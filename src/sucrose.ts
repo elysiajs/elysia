@@ -1,14 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
-import { checksum, cloneInference } from './utils'
+import { checksum } from './utils'
 import { isBun } from './universal/utils'
 
-import type {
-	Handler,
-	HookContainer,
-	LifeCycleStore,
-	LifeCycleType
-} from './types'
+import type { Handler, HookContainer, LifeCycleStore } from './types'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -19,7 +14,7 @@ export namespace Sucrose {
 		set: boolean
 		server: boolean
 		route: boolean
-		request: boolean
+		url: boolean
 		path: boolean
 	}
 
@@ -284,9 +279,8 @@ export const findParameterReference = (
 	if (!inference.set && parameters.includes('set')) inference.set = true
 	if (!inference.server && parameters.includes('server'))
 		inference.server = true
-	if (!inference.request && parameters.includes('request'))
-		inference.request = true
 	if (!inference.route && parameters.includes('route')) inference.route = true
+	if (!inference.url && parameters.includes('url')) inference.url = true
 	if (!inference.path && parameters.includes('path')) inference.path = true
 
 	if (hasParenthesis) return `{ ${parameters.join(', ')} }`
@@ -480,8 +474,8 @@ export const inferBodyReference = (
 			if (!inference.query && parameters.includes('server'))
 				inference.server = true
 
-			if (!inference.request && parameters.includes('request'))
-				inference.request = true
+			if (!inference.url && parameters.includes('url'))
+				inference.url = true
 
 			if (!inference.route && parameters.includes('route'))
 				inference.route = true
@@ -519,8 +513,8 @@ export const inferBodyReference = (
 			inference.cookie &&
 			inference.set &&
 			inference.server &&
-			inference.server &&
-			inference.route
+			inference.route &&
+			inference.url
 		)
 			break
 	}
@@ -580,8 +574,8 @@ export const isContextPassToFunction = (
 			inference.cookie = true
 			inference.set = true
 			inference.server = true
+			inference.url = true
 			inference.route = true
-			inference.request = true
 			inference.path = true
 
 			return true
@@ -623,7 +617,7 @@ export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
 		query: a.query || b.query,
 		set: a.set || b.set,
 		server: a.server || b.server,
-		request: a.request || b.request,
+		url: a.url || b.url,
 		route: a.route || b.route,
 		path: a.path || b.path
 	}
@@ -638,7 +632,7 @@ export const sucrose = (
 		cookie: false,
 		set: false,
 		server: false,
-		request: false,
+		url: false,
 		route: false,
 		path: false
 	}
@@ -681,7 +675,7 @@ export const sucrose = (
 			cookie: false,
 			set: false,
 			server: false,
-			request: false,
+			url: false,
 			route: false,
 			path: false
 		}
@@ -724,7 +718,7 @@ export const sucrose = (
 			inference.cookie &&
 			inference.set &&
 			inference.server &&
-			inference.request &&
+			inference.url &&
 			inference.route &&
 			inference.path
 		)

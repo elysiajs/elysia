@@ -48,6 +48,7 @@ Breaking Change:
 - remove `as('plugin')` in favor of `as('scoped')`
 - remove root `index`
 - remove `websocket` from `ElysiaAdapter`
+- remove `inference.request`
 
 # 1.2.25 - 6 Mar 2025
 Bug fix:

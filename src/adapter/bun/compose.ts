@@ -7,6 +7,7 @@ import { ELYSIA_TRACE } from '../../trace'
 
 import type { AnyElysia } from '../..'
 import type { InternalRoute } from '../../types'
+import { isDeno } from '../../universal/utils'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -53,20 +54,17 @@ const createContext = (
 		`{request,` +
 		`store,` +
 		allocateIf(`qi,`, inference.query) +
-		allocateIf(`route,`, inference.route || hasTrace) +
-		`params:request.params,` +
+		allocateIf(`params:request.params,`, isDynamic) +
 		getPath +
-		`url:request.url,` +
+		allocateIf(`url:request.url,`, inference.url || inference.query) +
 		`redirect,` +
 		`error:status,` +
 		`status,` +
-		`set:{headers:`
-
-	fnLiteral += Object.keys(defaultHeaders ?? {}).length
-		? 'Object.assign({},app.setHeaders)'
-		: '{}'
-
-	fnLiteral += `,status:200}`
+		`set:{headers:` +
+		(isNotEmpty(defaultHeaders)
+			? 'Object.assign({},app.setHeaders)'
+			: '{}') +
+		`,status:200}`
 
 	if (inference.server) fnLiteral += `,get server(){return app.getServer()}`
 
@@ -109,7 +107,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		'store=data.store,' +
 		`decorator=data.decorator,` +
 		'redirect=data.redirect,' +
-		allocateIf('route=data.route,', inference.route || hasTrace) +
+		'route=data.route,' +
 		allocateIf('randomId=data.randomId,', hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID=data.ELYSIA_REQUEST_ID,`, hasTrace) +
 		allocateIf(`ELYSIA_TRACE=data.ELYSIA_TRACE,`, hasTrace) +
@@ -145,7 +143,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		hoc: app.extender.higherOrderFunctions.map((x) => x.fn),
 		store: app.store,
 		decorator: app.decorator,
-		route: inference.route || hasTrace ? route.path : undefined,
+		route: route.path,
 		randomId: hasTrace ? randomId : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,

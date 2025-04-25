@@ -313,9 +313,9 @@ export default class Elysia<
 		query: false,
 		set: false,
 		server: false,
-		request: false,
+		path: false,
 		route: false,
-		path: false
+		url: false
 	}
 
 	private getServer() {

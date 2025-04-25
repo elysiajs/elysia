@@ -900,9 +900,9 @@ export const cloneInference = (inference: Sucrose.Inference) =>
 		query: inference.query,
 		set: inference.set,
 		server: inference.server,
-		request: inference.request,
+		path: inference.path,
 		route: inference.route,
-		path: inference.path
+		url: inference.url
 	}) satisfies Sucrose.Inference
 
 /**
