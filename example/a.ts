@@ -1,6 +1,12 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia().post('/', (body) => body).listen(3000)
+const app = new Elysia()
+	.post('/', ({ query: { a } }) => a, {
+		query: t.Object({
+			a: t.String()
+		})
+	})
+	.listen(3000)
 
 app.handle(
 	new Request('http://localhost/', {

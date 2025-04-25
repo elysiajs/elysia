@@ -9,12 +9,12 @@ import type { ElysiaTypeCheck } from './schema'
 import {
 	ElysiaCustomStatusResponse,
 	ElysiaErrors,
-	error,
+	status,
 	NotFoundError,
 	ValidationError
 } from './error'
 
-import { parseQuery } from './fast-querystring'
+import { parseQuery } from './parse-query'
 
 import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
@@ -69,7 +69,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				request,
 				path,
 				qi,
-				error,
+				error: status,
+				status,
 				redirect
 			}
 		) as unknown as Context & {

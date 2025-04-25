@@ -10,7 +10,7 @@ import {
 } from '@sinclair/typebox'
 
 import decode from 'fast-decode-uri-component'
-import { parseQuery, parseQueryFromURL } from './fast-querystring'
+import { parseQuery, parseQueryFromURL } from './parse-query'
 
 import {
 	ELYSIA_REQUEST_ID,
@@ -29,7 +29,6 @@ import { ParseError, status } from './error'
 import {
 	NotFoundError,
 	ValidationError,
-	InternalServerError,
 	ERROR_CODE,
 	ElysiaCustomStatusResponse
 } from './error'
@@ -669,7 +668,7 @@ export const composeHandler = ({
 				'if(c.qi===-1){' +
 				'c.query={}' +
 				'}else{' +
-				'c.query=parseQueryFromURL(c.url.slice(c.qi+1))' +
+				'c.query=parseQueryFromURL(c.url,c.qi+1)' +
 				'}'
 		} else {
 			fnLiteral += 'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi+1)\n`
