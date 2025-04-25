@@ -266,6 +266,9 @@ const composeValidationFactory = ({
 
 			if (appliedCleaner) code += clean()
 
+			const applyErrorCleaner =
+				!appliedCleaner && withAccelerator && normalize && !noValidate
+
 			// Encode call TypeCheck.Check internally
 			if (encodeSchema && value.hasTransform)
 				code +=
@@ -273,8 +276,8 @@ const composeValidationFactory = ({
 					`${name}=validator.response[${status}].Encode(${name})\n` +
 					`c.set.status=${status}` +
 					`}catch{` +
-					(!appliedCleaner && withAccelerator && normalize
-						? `try{${clean()}\n` +
+					(applyErrorCleaner
+						? `${clean()}\ntry{\n` +
 							`${name}=validator.response[${status}].Encode(${name})\n` +
 							`}catch{` +
 							`throw new ValidationError('response',validator.response[${status}],${name})` +
@@ -286,11 +289,8 @@ const composeValidationFactory = ({
 					code +=
 						`if(validator.response[${status}].Check(${name})===false){` +
 						'c.set.status=422\n' +
-						(!appliedCleaner && withAccelerator && normalize
-							? `try{${clean()}` +
-								`}catch{` +
-								`throw new ValidationError('response',validator.response[${status}],${name})` +
-								`}` +
+						(applyErrorCleaner
+							? `${clean()}\n` +
 								`if(validator.response[${status}].Check(${name})===false)`
 							: '') +
 						`throw new ValidationError('response',validator.response[${status}],${name})` +
