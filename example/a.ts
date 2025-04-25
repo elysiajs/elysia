@@ -28,6 +28,5 @@ const app = new Elysia()
 	.listen(3000)
 
 const response = await app.handle(req('/')).then((x) => x.json())
-console.log(response)
 
 console.log(app.routes[0].compile().toString())

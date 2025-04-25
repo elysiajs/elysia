@@ -181,17 +181,19 @@ const composeCleaner = ({
 	name,
 	type,
 	typeAlias = type,
-	normalize
+	normalize,
+	ignoreTryCatch = false
 }: {
 	schema: ElysiaTypeCheck<any>
 	name: string
 	type: keyof SchemaValidator
 	typeAlias?: string
 	normalize: ElysiaConfig<''>['normalize']
+	ignoreTryCatch?: boolean
 }) => {
 	if (!normalize || !schema.Clean || schema.hasAdditionalProperties) return ''
 
-	if (normalize === true || normalize === 'exactMirror')
+	if (!ignoreTryCatch && (normalize === true || normalize === 'exactMirror'))
 		return (
 			`try{` +
 			`${name}=validator.${typeAlias}.Clean(${name})\n` +
@@ -255,13 +257,14 @@ const composeValidationFactory = ({
 				(noValidate && withAccelerator) ||
 				hasSanitize
 
-			const clean = () =>
+			const clean = ({ ignoreTryCatch = false } = {}) =>
 				composeCleaner({
 					name,
 					schema: value,
 					type: 'response',
 					typeAlias: `response[${status}]`,
-					normalize
+					normalize,
+					ignoreTryCatch
 				})
 
 			if (appliedCleaner) code += clean()
@@ -277,7 +280,8 @@ const composeValidationFactory = ({
 					`c.set.status=${status}` +
 					`}catch{` +
 					(applyErrorCleaner
-						? `${clean()}\ntry{\n` +
+						? `try{\n` +
+							clean({ ignoreTryCatch: true }) +
 							`${name}=validator.response[${status}].Encode(${name})\n` +
 							`}catch{` +
 							`throw new ValidationError('response',validator.response[${status}],${name})` +
@@ -462,7 +466,8 @@ export const composeHandler = ({
 	validator.createResponse?.()
 
 	let jsonAccelerator =
-		(app.config.jsonAccelerator ?? true) && !!validator.response
+		(app.config.jsonAccelerator ?? false) && !!validator.response
+
 	const accelerators = jsonAccelerator
 		? createAccelerators(validator.response!)
 		: undefined
