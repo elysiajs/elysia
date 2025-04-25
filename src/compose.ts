@@ -9,9 +9,8 @@ import {
 	type TSchema
 } from '@sinclair/typebox'
 
-import { parseQuery, parseQueryFromURL } from './fast-querystring'
-
 import decode from 'fast-decode-uri-component'
+import { parseQuery, parseQueryFromURL } from './fast-querystring'
 
 import {
 	ELYSIA_REQUEST_ID,
@@ -2180,9 +2179,9 @@ export const composeGeneralHandler = (
 			switchMap += `case '${method}':return ht[${index}].composed(c)\n`
 		}
 
-		if ('ALL' in methods) {
+		if ('ALL' in methods)
 			switchMap += `default:return ht[${methods.ALL}].composed(c)\n`
-		}
+		else switchMap += `default:break map\n`
 
 		switchMap += '}'
 	}
@@ -2242,9 +2241,9 @@ export const composeGeneralHandler = (
 
 	fnLiteral += createOnRequestHandler(app)
 
-	fnLiteral += `\nswitch(p){\n` + switchMap + `}` + findDynamicRoute + `}\n`
+	if (switchMap) fnLiteral += `\nmap: switch(p){\n` + switchMap + `}`
 
-	fnLiteral += createHoc(app)
+	fnLiteral += findDynamicRoute + `}\n` + createHoc(app)
 
 	// @ts-expect-error private property
 	app.handleError = composeErrorHandler(app) as any

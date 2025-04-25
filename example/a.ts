@@ -12,4 +12,4 @@ app.handle(
 	})
 ).then((x) => x.json())
 
-console.log(app.routes[0].compile().toString())
+console.log(app.fetch.toString())
