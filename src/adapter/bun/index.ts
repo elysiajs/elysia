@@ -21,6 +21,13 @@ import {
 } from '../../utils'
 
 import {
+	mapResponse,
+	mapEarlyResponse,
+	mapCompactResponse,
+	createStaticHandler
+} from './handler'
+
+import {
 	createHandleWSResponse,
 	createWSMessageParser,
 	ElysiaWS,
@@ -60,7 +67,10 @@ export const BunAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
 	name: 'bun',
 	handler: {
-		...WebStandardAdapter.handler,
+		mapResponse,
+		mapEarlyResponse,
+		mapCompactResponse,
+		createStaticHandler,
 		createNativeStaticHandler
 	},
 	composeHandler: {
