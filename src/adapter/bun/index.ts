@@ -8,7 +8,7 @@ import type { ElysiaAdapter } from '../types'
 import type { Serve } from '../../universal/server'
 
 import { createBunRouteHandler } from './compose'
-import { createNativeStaticHandler } from './handler'
+import { createNativeStaticHandler } from './handler-native'
 
 import { serializeCookie } from '../../cookies'
 import { isProduction, ValidationError } from '../../error'

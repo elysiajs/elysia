@@ -16,9 +16,6 @@ import { ElysiaCustomStatusResponse } from '../../error'
 
 import type { Context } from '../../context'
 import type { AnyLocalHook } from '../../types'
-import { isBun } from '../../universal/utils'
-
-const isNotBun = !isBun
 
 export const mapResponse = (
 	response: unknown,
@@ -30,9 +27,7 @@ export const mapResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				if (isNotBun && !set.headers['content-type'])
-					set.headers['content-type'] = 'text/plain'
-
+				set.headers['content-type'] = 'text/plain'
 				return new Response(response as string, set as any)
 
 			case 'Array':
@@ -202,9 +197,7 @@ export const mapEarlyResponse = (
 
 		switch (response?.constructor?.name) {
 			case 'String':
-				if (isNotBun && !set.headers['content-type'])
-					set.headers['content-type'] = 'text/plain'
-
+				set.headers['content-type'] = 'text/plain'
 				return new Response(response as string, set as any)
 
 			case 'Array':
@@ -341,8 +334,7 @@ export const mapEarlyResponse = (
 	} else
 		switch (response?.constructor?.name) {
 			case 'String':
-				if (isNotBun) set.headers['content-type'] = 'text/plain'
-
+				set.headers['content-type'] = 'text/plain'
 				return new Response(response as string)
 
 			case 'Array':
@@ -492,8 +484,6 @@ export const mapCompactResponse = (
 ): Response => {
 	switch (response?.constructor?.name) {
 		case 'String':
-			if (isNotBun) return new Response(response as string)
-
 			return new Response(response as string, {
 				headers: {
 					'Content-Type': 'text/plain'
