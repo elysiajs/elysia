@@ -273,7 +273,7 @@ const composeValidationFactory = ({
 					`${name}=validator.response[${status}].Encode(${name})\n` +
 					`c.set.status=${status}` +
 					`}catch{` +
-					(appliedCleaner && withAccelerator
+					(!appliedCleaner && withAccelerator && normalize
 						? `try{${clean()}\n` +
 							`${name}=validator.response[${status}].Encode(${name})\n` +
 							`}catch{` +
@@ -286,11 +286,13 @@ const composeValidationFactory = ({
 					code +=
 						`if(validator.response[${status}].Check(${name})===false){` +
 						'c.set.status=422\n' +
-						`try{${clean()}` +
-						`}catch{` +
-						`throw new ValidationError('response',validator.response[${status}],${name})` +
-						`}` +
-						`if(validator.response[${status}].Check(${name})===false)` +
+						(!appliedCleaner && withAccelerator && normalize
+							? `try{${clean()}` +
+								`}catch{` +
+								`throw new ValidationError('response',validator.response[${status}],${name})` +
+								`}` +
+								`if(validator.response[${status}].Check(${name})===false)`
+							: '') +
 						`throw new ValidationError('response',validator.response[${status}],${name})` +
 						'}' +
 						`c.set.status=${status}\n`

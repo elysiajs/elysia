@@ -1,31 +1,22 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia()
-	.get(
-		'/',
-		() => ({
-			type: 'stuff',
-			data: {
-				type: 'stuff',
-				data: {
-					type: 'stuff',
-					data: null
-				}
-			}
-		}),
-		{
-			response: t.Recursive((This) =>
-				t.Object({
-					type: t.String(),
-					data: t.Nullable(This)
-				})
-			)
+const app = new Elysia().get(
+	'/',
+	() => {
+		return {
+			hello: 'world',
+			a: 'b'
 		}
-	)
-	.listen(3000)
+	},
+	{
+		response: t.Object({
+			hello: t.String()
+		})
+	}
+)
 
-// const res = await app.handle(req('/')).then((x) => x.json())
-// console.log(res)
+const response = await app.handle(req('/')).then((x) => x.json())
+console.log(response)
 
 console.log(app.routes[0].compile().toString())
