@@ -1,12 +1,7 @@
 import { $ } from 'bun'
 import { build, type Options } from 'tsup'
 
-const external = [
-	'@sinclair/typebox',
-	'exact-mirror',
-	'file-type',
-	'json-accelerator'
-]
+const external = ['@sinclair/typebox', 'file-type']
 
 const tsupConfig: Options = {
 	entry: ['src/**/*.ts'],
@@ -17,7 +12,7 @@ const tsupConfig: Options = {
 	minifySyntax: true,
 	minifyWhitespace: false,
 	minifyIdentifiers: false,
-	target: 'node22',
+	target: 'node20',
 	external
 	// outExtension() {
 	// 	return {
