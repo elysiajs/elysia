@@ -98,7 +98,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 
 			fnLiteral += Object.keys(defaultHeaders ?? {}).length
 				? 'Object.assign({},app.setHeaders)'
-				: '{}'
+				: 'Object.create(null)'
 
 			fnLiteral += `,status:200}`
 

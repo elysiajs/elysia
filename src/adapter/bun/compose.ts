@@ -26,9 +26,7 @@ const createContext = (
 	const hasTrace = !!app.event.trace?.length
 	if (hasTrace) fnLiteral += `const id=randomId()\n`
 
-	const path = route.path
-
-	const isDynamic = path.includes(':') || path.includes('*')
+	const isDynamic = /[:*]/.test(route.path)
 
 	const standardHostname = app.config.handler?.standardHostname ?? true
 
@@ -42,7 +40,7 @@ const createContext = (
 	const getPath = !inference.path
 		? ''
 		: !isDynamic
-			? `path:'${path}',`
+			? `path:'${route.path}',`
 			: `get path(){` +
 				(inference.query ? '' : getQi) +
 				`if(qi===-1)return u.substring(s)\n` +
@@ -63,7 +61,7 @@ const createContext = (
 		`set:{headers:` +
 		(isNotEmpty(defaultHeaders)
 			? 'Object.assign({},app.setHeaders)'
-			: '{}') +
+			: 'Object.create(null)') +
 		`,status:200}`
 
 	if (inference.server) fnLiteral += `,get server(){return app.getServer()}`

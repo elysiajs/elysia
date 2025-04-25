@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.post('/', ({ body }) => body, {
+const app = new Elysia({ precompile: true })
+	.post('/', (c) => c.body, {
 		parse: 'json'
 	})
 	.listen(3000)
