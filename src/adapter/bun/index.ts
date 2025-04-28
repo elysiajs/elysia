@@ -127,8 +127,14 @@ export const BunAdapter: ElysiaAdapter = {
 
 					if (method === 'ALL') {
 						if (!(`WS_${route.path}` in tree))
-							routes[route.path] =
-								route.hooks?.config?.mount ?? route.handler
+							routes[route.path] = route.hooks?.config?.mount
+								? route.hooks.trace ||
+									app.event.trace ||
+									// @ts-expect-error private property
+									app.extender.higherOrderFunctions
+									? createBunRouteHandler(app, route)
+									: route.hooks.mount || route.handler
+								: route.handler
 
 						continue
 					}

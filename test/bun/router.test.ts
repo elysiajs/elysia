@@ -160,4 +160,83 @@ describe('Bun router', () => {
 		expect(url).toBe(`http://localhost:${app.server!.port}/`)
 		expect(hasRequestId).toBe(true)
 	})
+
+	it('handle wrap in mount', async () => {
+		let url = ''
+		let hasWrap = false
+
+		const app = new Elysia()
+			.wrap((fn) => {
+				hasWrap = true
+
+				return fn
+			})
+			.mount('/', (request) => new Response((url = request.url)))
+			.listen(0)
+
+		await fetch(`http://localhost:${app.server!.port}/`)
+
+		expect(url).toBe(`http://localhost:${app.server!.port}/`)
+		expect(hasWrap).toBe(true)
+	})
+
+	it('handle trace url with wrap', async () => {
+		let url = ''
+		let hasRequestId = false
+		let hasWrap = false
+
+		const app = new Elysia()
+			.wrap((fn) => {
+				hasWrap = true
+
+				return fn
+			})
+			.trace((a) => {
+				a.onHandle(() => {
+					// @ts-expect-error private property
+					url = a.context.url
+
+					// @ts-expect-error private property
+					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
+				})
+			})
+			.get('/', () => 'ok')
+			.listen(0)
+
+		await fetch(`http://localhost:${app.server!.port}/`)
+
+		expect(url).toBe(`http://localhost:${app.server!.port}/`)
+		expect(hasWrap).toBe(true)
+		expect(hasRequestId).toBe(true)
+	})
+
+	it('handle mount', async () => {
+		let url = ''
+		let hasRequestId = false
+		let hasWrap = false
+
+		const app = new Elysia()
+			.wrap((fn) => {
+				hasWrap = true
+
+				return fn
+			})
+			.trace((a) => {
+				a.onHandle(() => {
+					// @ts-expect-error private property
+					url = a.context.url
+
+					// @ts-expect-error private property
+					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
+				})
+			})
+			.get('/', () => 'ok')
+			.listen(0)
+
+		await fetch(`http://localhost:${app.server!.port}/`)
+
+		expect(url).toBe(`http://localhost:${app.server!.port}/`)
+		expect(hasWrap).toBe(true)
+		expect(hasRequestId).toBe(true)
+	})
 })

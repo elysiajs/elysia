@@ -2,14 +2,16 @@ import { Elysia, t } from '../src'
 
 const a = (request: Request) => new Response(request.url)
 
-const app = new Elysia({ systemRouter: false })
-	.trace((a) => {
-		a.onHandle(() => {
-			// @ts-expect-error private property
-			a.context.url
-		})
+let url = ''
+let hasWrap = false
+
+const app = new Elysia()
+	.wrap((fn) => {
+		console.log('A')
+
+		return fn
 	})
-	.get('/', () => 'ok')
+	.mount('/', () => new Response('OK'))
 	.listen(3000)
 
 fetch('http://localhost:3000/a')
