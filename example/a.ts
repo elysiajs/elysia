@@ -1,24 +1,18 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia({ precompile: true })
-	.post('/', (c) => c.body, {
-		parse: 'json'
+const a = (request: Request) => new Response(request.url)
+
+const app = new Elysia({ systemRouter: false })
+	.trace((a) => {
+		a.onHandle(() => {
+			// @ts-expect-error private property
+			a.context.url
+		})
 	})
+	.get('/', () => 'ok')
 	.listen(3000)
 
-Bun.serve({
-	port: 3001,
-	routes: {
-		'/': async (request) =>
-			new Response(JSON.stringify(await request.json()), {
-				headers: {
-					'content-type': 'application/json'
-				}
-			})
-	}
-})
-
-console.log(app.routes[0].compile().toString())
+fetch('http://localhost:3000/a')
 
 // app.handle(
 // 	new Request('http://localhost/', {

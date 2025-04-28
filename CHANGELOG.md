@@ -30,6 +30,7 @@ Improvement:
 - Promise can now be a static response
 - `ParseError` now keeps stack trace
 - refactor `parseQuery` and `parseQueryFromURL`
+- add `config` options to `mount`
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream
@@ -42,6 +43,7 @@ Change:
 - remove `compressHistoryHook` and `decompressHistoryHook`
 - webstandard handler now return `text/plain` if not on Bun
 - use non const value for `decorate` unless explicitly specified
+- `Elysia.mount` now set `detail.hide = true` by default
 
 Breaking Change:
 - Minimum Node version is now `node22` LTS

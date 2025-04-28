@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia, t } from '../../src'
+import { Elysia, ELYSIA_REQUEST_ID, t } from '../../src'
 import { req } from '../utils'
 
 describe('Bun router', () => {
@@ -121,5 +121,43 @@ describe('Bun router', () => {
 		).then((x) => x.text())
 
 		expect(response).toEqual('<h1>Hello World</h1>')
+	})
+
+	it('handle mount', async () => {
+		const app = new Elysia()
+			.mount((request: Request) => new Response(request.url))
+			.mount('/prefix', (request: Request) => new Response(request.url))
+			.listen(0)
+
+		const response = await Promise.all([
+			fetch(`http://localhost:${app.server?.port}/a`),
+			fetch(`http://localhost:${app.server?.port}/prefix/a`)
+		])
+
+		expect(response[0].status).toBe(200)
+		expect(response[1].status).toBe(200)
+	})
+
+	it('handle trace url', async () => {
+		let url = ''
+		let hasRequestId = false
+
+		const app = new Elysia()
+			.trace((a) => {
+				a.onHandle(() => {
+					// @ts-expect-error private property
+					url = a.context.url
+
+					// @ts-expect-error private property
+					hasRequestId = !!a.context[ELYSIA_REQUEST_ID]
+				})
+			})
+			.get('/', () => 'ok')
+			.listen(0)
+
+		await fetch(`http://localhost:${app.server!.port}/`)
+
+		expect(url).toBe(`http://localhost:${app.server!.port}/`)
+		expect(hasRequestId).toBe(true)
 	})
 })

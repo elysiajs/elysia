@@ -151,7 +151,8 @@ import type {
 	Or,
 	PrettifySchema,
 	MergeStandaloneSchema,
-	IsNever
+	IsNever,
+	DocumentDecoration
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -4341,11 +4342,13 @@ export default class Elysia<
 	}
 
 	mount(
-		handle: ((request: Request) => MaybePromise<Response>) | AnyElysia
+		handle: ((request: Request) => MaybePromise<Response>) | AnyElysia,
+		detail?: { detail?: DocumentDecoration }
 	): this
 	mount(
 		path: string,
-		handle: ((request: Request) => MaybePromise<Response>) | AnyElysia
+		handle: ((request: Request) => MaybePromise<Response>) | AnyElysia,
+		detail?: { detail?: DocumentDecoration }
 	): this
 
 	mount(
@@ -4353,7 +4356,11 @@ export default class Elysia<
 			| string
 			| ((request: Request) => MaybePromise<Response>)
 			| AnyElysia,
-		handle?: ((request: Request) => MaybePromise<Response>) | AnyElysia
+		handleOrConfig?:
+			| ((request: Request) => MaybePromise<Response>)
+			| AnyElysia
+			| { detail?: DocumentDecoration },
+		config?: { detail?: DocumentDecoration }
 	) {
 		if (
 			path instanceof Elysia ||
@@ -4366,9 +4373,13 @@ export default class Elysia<
 					? path
 					: path instanceof Elysia
 						? path.compile().fetch
-						: handle instanceof Elysia
-							? handle.compile().fetch
-							: handle!
+						: handleOrConfig instanceof Elysia
+							? handleOrConfig.compile().fetch
+							: typeof handleOrConfig === 'function'
+								? handleOrConfig
+								: (() => {
+										throw new Error('Invalid handler')
+									})()
 
 			const handler: Handler = ({ request, path }) =>
 				run(
@@ -4387,18 +4398,31 @@ export default class Elysia<
 					})
 				)
 
-			this.all('/*', handler as any, {
-				parse: 'none'
+			this.route('ALL', '/*', handler as any, {
+				parse: 'none',
+				...config,
+				detail: {
+					...config?.detail,
+					hide: true
+				},
+				config: {
+					mount: run
+				}
 			})
 
 			return this
 		}
 
-		if (!handle) return this
+		const handle =
+			handleOrConfig instanceof Elysia
+				? handleOrConfig.compile().fetch
+				: typeof handleOrConfig === 'function'
+					? handleOrConfig
+					: (() => {
+							throw new Error('Invalid handler')
+						})()
 
 		const length = path.length - (path.endsWith('*') ? 1 : 0)
-
-		if (handle instanceof Elysia) handle = handle.compile().fetch
 
 		const handler: Handler = ({ request, path }) =>
 			handle(
@@ -4420,13 +4444,34 @@ export default class Elysia<
 				)
 			)
 
-		this.all(path, handler as any, {
-			parse: 'none'
+		this.route('ALL', path, handler as any, {
+			parse: 'none',
+			...config,
+			detail: {
+				...config?.detail,
+				hide: true
+			},
+			config: {
+				mount: handle
+			}
 		})
 
-		this.all(path + (path.endsWith('/') ? '*' : '/*'), handler as any, {
-			parse: 'none'
-		})
+		this.route(
+			'ALL',
+			path + (path.endsWith('/') ? '*' : '/*'),
+			handler as any,
+			{
+				parse: 'none',
+				...config,
+				detail: {
+					...config?.detail,
+					hide: true
+				},
+				config: {
+					mount: handle
+				}
+			}
+		)
 
 		return this
 	}
@@ -5297,8 +5342,9 @@ export default class Elysia<
 			Macro,
 			keyof Metadata['parser']
 		> & {
-			config: {
+			config?: {
 				allowMeta?: boolean
+				mount?: Function
 			}
 		}
 	): Elysia<

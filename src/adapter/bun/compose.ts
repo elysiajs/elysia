@@ -54,7 +54,10 @@ const createContext = (
 		allocateIf(`qi,`, inference.query) +
 		allocateIf(`params:request.params,`, isDynamic) +
 		getPath +
-		allocateIf(`url:request.url,`, inference.url || inference.query) +
+		allocateIf(
+			`url:request.url,`,
+			hasTrace || inference.url || inference.query
+		) +
 		`redirect,` +
 		`error:status,` +
 		`status,` +
