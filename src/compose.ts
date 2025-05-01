@@ -300,7 +300,7 @@ const isAsyncName = (v: Function | HookContainer) => {
 const matchResponseClone = /=>\s?response\.clone\(/
 const matchFnReturn = /(?:return|=>)\s?\S+\(|a(?:sync|wait)/
 
-const isAsync = (v: Function | HookContainer) => {
+export const isAsync = (v: Function | HookContainer) => {
 	const isObject = typeof v === 'object'
 
 	if (isObject && v.isAsync !== undefined) return v.isAsync

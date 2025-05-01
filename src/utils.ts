@@ -775,7 +775,10 @@ export class PromiseGroup implements PromiseLike<void> {
 	root: Promise<any> | null = null
 	promises: Promise<any>[] = []
 
-	constructor(public onError: (error: any) => void = console.error) {}
+	constructor(
+		public onError: (error: any) => void = console.error,
+		public onFinally: () => void = () => {}
+	) {}
 
 	/**
 	 * The number of promises still being awaited.
@@ -791,6 +794,8 @@ export class PromiseGroup implements PromiseLike<void> {
 	add<T>(promise: Promise<T>) {
 		this.promises.push(promise)
 		this.root ||= this.drain()
+
+		if (this.promises.length === 1) this.then(this.onFinally)
 		return promise
 	}
 

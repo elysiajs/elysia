@@ -331,7 +331,10 @@ export default class Elysia<
 
 	private _promisedModules: PromiseGroup | undefined
 	private get promisedModules() {
-		if (!this._promisedModules) this._promisedModules = new PromiseGroup()
+		if (!this._promisedModules)
+			this._promisedModules = new PromiseGroup(console.error, () => {
+				// this.compile()
+			})
 
 		return this._promisedModules
 	}
@@ -3953,8 +3956,6 @@ export default class Elysia<
 										undefined,
 										standaloneValidators
 									)
-
-								plugin.compile()
 
 								if (plugin === this) return
 

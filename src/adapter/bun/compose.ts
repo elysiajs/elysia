@@ -1,5 +1,5 @@
 import { sucrose, type Sucrose } from '../../sucrose'
-import { createHoc, createOnRequestHandler } from '../../compose'
+import { createHoc, createOnRequestHandler, isAsync } from '../../compose'
 
 import { randomId, ELYSIA_REQUEST_ID, redirect, isNotEmpty } from '../../utils'
 import { status } from '../../error'
@@ -7,7 +7,6 @@ import { ELYSIA_TRACE } from '../../trace'
 
 import type { AnyElysia } from '../..'
 import type { InternalRoute } from '../../types'
-import { isDeno } from '../../universal/utils'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -119,7 +118,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 	if (app.event.request?.length)
 		fnLiteral += `const onRequest=app.event.request.map(x=>x.fn)\n`
 
-	fnLiteral += 'function map(request){'
+	fnLiteral += `${app.event.request?.find(isAsync) ? 'async' : ''} function map(request){`
 
 	// inference.query require declaring const 'qi'
 	if (hasTrace || inference.query || app.event.request?.length) {

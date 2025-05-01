@@ -34,6 +34,8 @@ import {
 	websocket
 } from '../../ws/index'
 import type { ServerWebSocket } from '../../ws/bun'
+import { AnyElysia } from '../..'
+import { Static } from '@sinclair/typebox/parser'
 
 const optionalParam = /:.+?\?(?=\/|$)/
 
@@ -63,6 +65,108 @@ const getPossibleParams = (path: string) => {
 	return routes
 }
 
+const mapRoutes = (app: AnyElysia) => {
+	if (!app.config.aot || !app.config.systemRouter) return undefined
+
+	const routes = <Record<string, Function | Record<string, unknown>>>{}
+
+	const add = (
+		route: {
+			path: string
+			method: string
+		},
+		handler: Function
+	) => {
+		if (routes[route.path]) {
+			// @ts-ignore
+			if (!routes[route.path][route.method])
+				// @ts-ignore
+				routes[route.path][route.method] = handler
+		} else
+			routes[route.path] = {
+				[route.method]: handler
+			}
+	}
+
+	// @ts-expect-error
+	const tree = app.routeTree
+
+	for (const route of app.router.history) {
+		if (typeof route.handler !== 'function') continue
+
+		const method = route.method
+
+		if ((method === 'GET' && `WS_${route.path}` in tree) || method === 'WS')
+			continue
+
+		if (method === 'ALL') {
+			if (!(`WS_${route.path}` in tree))
+				routes[route.path] = route.hooks?.config?.mount
+					? route.hooks.trace ||
+						app.event.trace ||
+						// @ts-expect-error private property
+						app.extender.higherOrderFunctions
+						? createBunRouteHandler(app, route)
+						: route.hooks.mount || route.handler
+					: route.handler
+
+			continue
+		}
+
+		let compiled: Function
+
+		const handler = app.config.precompile
+			? createBunRouteHandler(app, route)
+			: (request: Request) => {
+					if (compiled) return compiled(request)
+
+					return (compiled = createBunRouteHandler(app, route))(
+						request
+					)
+				}
+
+		for (const path of getPossibleParams(route.path))
+			add(
+				{
+					method,
+					path
+				},
+				handler
+			)
+	}
+
+	return routes
+}
+
+type Routes = Record<string, Function | Response | Record<string, unknown>>
+
+const mergeRoutes = (r1: Routes, r2?: Routes) => {
+	if (!r2) return r1
+
+	for (const key of Object.keys(r2)) {
+		if (r1[key] === r2[key]) continue
+
+		if (!r1[key]) {
+			r1[key] = r2[key]
+			continue
+		}
+
+		if (r1[key] && r2[key]) {
+			if (typeof r1[key] === 'function' || r1[key] instanceof Response) {
+				r1[key] = r2[key]
+				continue
+			}
+
+			r1[key] = {
+				...r1[key],
+				...r2[key]
+			}
+		}
+	}
+
+	return r1
+}
+
 export const BunAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
 	name: 'bun',
@@ -88,81 +192,6 @@ export const BunAdapter: ElysiaAdapter = {
 					'.listen() is designed to run on Bun only. If you are running Elysia in other environment please use a dedicated plugin or export the handler via Elysia.fetch'
 				)
 
-			const routes = app.config.aot
-				? <Record<string, Function | Record<string, unknown>>>{}
-				: undefined
-
-			if (routes && app.config.systemRouter) {
-				const add = (
-					route: {
-						path: string
-						method: string
-					},
-					handler: Function
-				) => {
-					if (routes[route.path]) {
-						// @ts-ignore
-						if (!routes[route.path][route.method])
-							// @ts-ignore
-							routes[route.path][route.method] = handler
-					} else
-						routes[route.path] = {
-							[route.method]: handler
-						}
-				}
-
-				// @ts-expect-error
-				const tree = app.routeTree
-
-				for (const route of app.router.history) {
-					if (typeof route.handler !== 'function') continue
-
-					const method = route.method
-
-					if (
-						(method === 'GET' && `WS_${route.path}` in tree) ||
-						method === 'WS'
-					)
-						continue
-
-					if (method === 'ALL') {
-						if (!(`WS_${route.path}` in tree))
-							routes[route.path] = route.hooks?.config?.mount
-								? route.hooks.trace ||
-									app.event.trace ||
-									// @ts-expect-error private property
-									app.extender.higherOrderFunctions
-									? createBunRouteHandler(app, route)
-									: route.hooks.mount || route.handler
-								: route.handler
-
-						continue
-					}
-
-					let compiled: Function
-
-					const handler = app.config.precompile
-						? createBunRouteHandler(app, route)
-						: (request: Request) => {
-								if (compiled) return compiled(request)
-
-								return (compiled = createBunRouteHandler(
-									app,
-									route
-								))(request)
-							}
-
-					for (const path of getPossibleParams(route.path))
-						add(
-							{
-								method,
-								path
-							},
-							handler
-						)
-				}
-			}
-
 			app.compile()
 
 			if (typeof options === 'string') {
@@ -173,15 +202,10 @@ export const BunAdapter: ElysiaAdapter = {
 			}
 
 			const staticRoutes = <Record<string, Response>>{}
-			const asyncStaticRoutes = <Promise<Response | undefined>[]>[]
-			const asyncStaticRoutesPath = <string[]>[]
 
-			for (const [path, route] of Object.entries(app.router.response)) {
-				if (route instanceof Promise) {
-					asyncStaticRoutes.push(route)
-					asyncStaticRoutesPath.push(path)
-				} else if (route) staticRoutes[path] = route
-			}
+			for (const [path, route] of Object.entries(app.router.response))
+				if (route && !(route instanceof Promise))
+					staticRoutes[path] = route
 
 			const serve =
 				typeof options === 'object'
@@ -193,13 +217,12 @@ export const BunAdapter: ElysiaAdapter = {
 							// @ts-ignore
 							routes: {
 								...staticRoutes,
-								...routes,
+								...mapRoutes(app),
 								// @ts-expect-error
 								...app.config.serve?.routes
 							},
 							websocket: {
 								...(app.config.websocket || {}),
-								...routes,
 								...(websocket || {})
 							},
 							fetch: app.fetch
@@ -210,12 +233,11 @@ export const BunAdapter: ElysiaAdapter = {
 							reusePort: true,
 							...(app.config.serve || {}),
 							// @ts-ignore
-							routes: {
-								...staticRoutes,
-								...routes,
-								// @ts-expect-error
-								...app.config.serve?.routes
-							},
+							routes: mergeRoutes(
+								mergeRoutes(staticRoutes, mapRoutes(app)),
+								// @ts-expect-error private property
+								app.config.serve?.routes
+							),
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {})
@@ -233,31 +255,6 @@ export const BunAdapter: ElysiaAdapter = {
 
 			if (callback) callback(app.server!)
 
-			Promise.all(asyncStaticRoutes).then((asyncRoute) => {
-				const asyncRouteMap = <Record<string, Response>>{}
-
-				for (let i = 0; i < asyncRoute.length; i++) {
-					const path = asyncStaticRoutesPath[i]
-					const route = asyncRoute[i]
-
-					if (route) asyncRouteMap[path] = route
-				}
-
-				if (!app.server && !isNotEmpty(asyncRouteMap)) return
-
-				app.server?.reload({
-					...serve,
-					// @ts-ignore
-					routes: {
-						...staticRoutes,
-						...asyncRouteMap,
-						...routes,
-						// @ts-expect-error
-						...app.config.serve?.routes
-					}
-				})
-			})
-
 			process.on('beforeExit', () => {
 				if (app.server) {
 					app.server.stop?.()
@@ -270,8 +267,39 @@ export const BunAdapter: ElysiaAdapter = {
 			})
 
 			// @ts-expect-error private
-			app.promisedModules.then(() => {
+			app.promisedModules.then(async () => {
 				Bun?.gc(false)
+
+				const staticRoutes = <Record<string, Response>>{}
+				const asyncStaticRoutes = <Promise<Response | undefined>[]>[]
+				const asyncStaticRoutesPath = <string[]>[]
+
+				for (const [path, route] of Object.entries(app.router.response))
+					if (route instanceof Promise) {
+						asyncStaticRoutes.push(route)
+						asyncStaticRoutesPath.push(path)
+					} else if (route) staticRoutes[path] = route
+
+				if (!app.server && !isNotEmpty(asyncStaticRoutes)) return
+
+				const promises = await Promise.all(asyncStaticRoutes)
+				for (let i = 0; i < promises.length; i++) {
+					const route = promises[i]
+					const path = asyncStaticRoutesPath[i]
+
+					if (route) staticRoutes[path] = route
+				}
+
+				app.server?.reload({
+					...serve,
+					fetch: app.fetch,
+					// @ts-ignore
+					routes: mergeRoutes(
+						mergeRoutes(staticRoutes, mapRoutes(app)),
+						// @ts-expect-error private property
+						app.config.serve?.routes
+					)
+				})
 			})
 		}
 	},

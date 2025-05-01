@@ -239,4 +239,38 @@ describe('Bun router', () => {
 		expect(hasWrap).toBe(true)
 		expect(hasRequestId).toBe(true)
 	})
+
+	it('handle async plugin', async () => {
+		const asyncPlugin = async () =>
+			new Elysia({ name: 'async' })
+				.get('/router', () => 'OK')
+				.get('/static', 'OK')
+
+		const app = new Elysia({ name: 'main' }).use(asyncPlugin).listen(3000)
+
+		const [router, _static] = await Promise.all([
+			fetch(`http://localhost:${app.server?.port}/router`).then((x) =>
+				x.text()
+			),
+			fetch(`http://localhost:${app.server?.port}/static`).then((x) =>
+				x.text()
+			)
+		])
+
+		expect(router).toBe('OK')
+		expect(_static).toBe('OK')
+	})
+
+	it('handle async request', async () => {
+		const app = new Elysia()
+			.onRequest(async () => {})
+			.mount('/auth', () => new Response('OK'))
+			.listen(0)
+
+		const response = await fetch(
+			`http://localhost:${app.server?.port}/auth`
+		).then((x) => x.text())
+
+		expect(response).toBe('OK')
+	})
 })

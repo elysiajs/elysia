@@ -31,6 +31,7 @@ Improvement:
 - `ParseError` now keeps stack trace
 - refactor `parseQuery` and `parseQueryFromURL`
 - add `config` options to `mount`
+- recompile automatically after async modules is mounted
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream
