@@ -307,6 +307,10 @@ export default class Elysia<
 		return this.router.history
 	}
 
+	protected getGlobalDefinitions() {
+		return this.definitions
+	}
+
 	protected inference: Sucrose.Inference = {
 		body: false,
 		cookie: false,
@@ -3929,6 +3933,8 @@ export default class Elysia<
 								plugin.getServer = () => this.getServer()
 								plugin.getGlobalRoutes = () =>
 									this.getGlobalRoutes()
+								plugin.getGlobalDefinitions = () =>
+									this.getGlobalDefinitions()
 
 								/**
 								 * Model and error is required for Swagger generation
@@ -3997,6 +4003,7 @@ export default class Elysia<
 		plugin.getParent = () => this as any
 		plugin.getServer = () => this.getServer()
 		plugin.getGlobalRoutes = () => this.getGlobalRoutes()
+		plugin.getGlobalDefinitions = () => this.getGlobalDefinitions()
 
 		// if (this.config.sanitize) {
 		// 	const isArray = (v: unknown): v is any[] => Array.isArray(v)
