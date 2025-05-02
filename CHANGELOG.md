@@ -1,6 +1,6 @@
 # 1.3.0
 Feature:
-- add `jsonAccelerator`,`exactMirror`
+- add `jsonAccelerator`, `exactMirror`
 - add `systemRouter` config
 - `standalone Validator`
 - add `Elysia.Ref` for referencing schema with autocompletion instead of `t.Ref`

@@ -13,6 +13,7 @@ export const upload = (
 			| 'midori.png'
 			| 'millenium.jpg'
 			| 'fake.jpg'
+			| 'kozeki-ui.webp'
 		>
 	>
 ) => {

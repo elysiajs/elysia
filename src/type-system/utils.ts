@@ -128,16 +128,16 @@ export const validateFileExtension = async (
 	if (!file) return
 
 	const result = await fileTypeFromBlob(file)
-	if (!result) throw new InvalidFileType(name)
+	if (!result) throw new InvalidFileType(name, extension)
 
 	if (typeof extension === 'string')
 		if (!checkFileExtension(result.mime, extension))
-			throw new InvalidFileType(name)
+			throw new InvalidFileType(name, extension)
 
 	for (let i = 0; i < extension.length; i++)
 		if (checkFileExtension(result.mime, extension[i])) return true
 
-	throw new InvalidFileType(name)
+	throw new InvalidFileType(name, extension)
 }
 
 export const validateFile = (options: FileOptions, value: any) => {

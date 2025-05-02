@@ -183,13 +183,51 @@ export const mapValueError = (error: ValueError | undefined) => {
 
 export class InvalidFileType extends Error {
 	code = 'INVALID_FILE_TYPE'
-	status = 401
+	status = 422
 
 	constructor(
-		public key: string,
-		message?: string
+		public property: string,
+		public expected: string | string[],
+		public message = `"${property}" has invalid file type`
 	) {
-		super(message ?? `"${key}" has invalid file type`)
+		super(message)
+
+		Object.setPrototypeOf(this, InvalidFileType.prototype)
+	}
+
+	toResponse(headers?: Record<string, any>) {
+		if (isProduction)
+			return new Response(
+				JSON.stringify({
+					type: 'validation',
+					on: 'body'
+				}),
+				{
+					status: 422,
+					headers: {
+						...headers,
+						'content-type': 'application/json'
+					}
+				}
+			)
+
+		return new Response(
+			JSON.stringify({
+				type: 'validation',
+				on: 'body',
+				summary: 'Invalid file type',
+				message: this.message,
+				property: this.property,
+				expected: this.expected
+			}),
+			{
+				status: 422,
+				headers: {
+					...headers,
+					'content-type': 'application/json'
+				}
+			}
+		)
 	}
 }
 

@@ -34,7 +34,14 @@ import {
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
-import { ElysiaTypeCheck, getCookieValidator, hasType, isUnion } from './schema'
+import {
+	coercePrimitiveRoot,
+	ElysiaTypeCheck,
+	getCookieValidator,
+	getSchemaValidator,
+	hasType,
+	isUnion
+} from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
 import { validateFileExtension } from './type-system/utils'
@@ -1172,6 +1179,8 @@ export const composeHandler = ({
 		reporter.resolve()
 	}
 
+	const fileUnions = <ElysiaTypeCheck<any>[]>[]
+
 	if (validator) {
 		if (validator.headers) {
 			if (validator.headers.hasDefault)
@@ -1291,10 +1300,8 @@ export const composeHandler = ({
 			if (validator.body.hasTransform || validator.body.isOptional)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
-			const hasFile =
-				!isUnion(validator.body.schema) &&
-				(hasType('File', validator.body.schema) ||
-					hasType('Files', validator.body.schema))
+			const hasUnion = isUnion(validator.body.schema)
+			let hasNonUnionFileWithDefault = false
 
 			if (validator.body.hasDefault) {
 				let value = Value.Default(
@@ -1308,8 +1315,15 @@ export const composeHandler = ({
 						: undefined
 				)
 
-				// remove default value of t.File / t.Files
-				if (hasFile && value && typeof value === 'object') {
+				if (
+					!hasUnion &&
+					value &&
+					typeof value === 'object' &&
+					(hasType('File', validator.body.schema) ||
+						hasType('Files', validator.body.schema))
+				) {
+					hasNonUnionFileWithDefault = true
+
 					for (const [k, v] of Object.entries(value))
 						if (v === 'File' || v === 'Files')
 							// @ts-ignore
@@ -1377,26 +1391,90 @@ export const composeHandler = ({
 			if (validator.body.hasTransform)
 				fnLiteral += `if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`
 
-			if (hasFile) {
+			if (hasUnion && validator.body.schema.anyOf?.length) {
+				const iterator = Object.values(
+					validator.body.schema.anyOf
+				) as TAnySchema[]
+
+				for (let i = 0; i < iterator.length; i++) {
+					const type = iterator[i]
+
+					if (hasType('File', type) || hasType('Files', type)) {
+						const candidate = getSchemaValidator(type, {
+							// @ts-expect-error private property
+							modules: app.definitions.typebox,
+							dynamic: !app.config.aot,
+							// @ts-expect-error private property
+							models: app.definitions.type,
+							normalize: app.config.normalize,
+							additionalCoerce: coercePrimitiveRoot(),
+							sanitize: () => app.config.sanitize
+						})
+
+						if (candidate) {
+							const isFirst = fileUnions.length === 0
+
+							const iterator = Object.entries(
+								type.properties
+							) as [string, TSchema][]
+
+							let validator = isFirst ? '\n' : ' else '
+							validator += `if(fileUnions[${fileUnions.length}].Check(c.body)){`
+
+							let validateFile = ''
+							let validatorLength = 0
+							for (let i = 0; i < iterator.length; i++) {
+								const [k, v] = iterator[i]
+
+								if (
+									!v.extension ||
+									(v[Kind] !== 'File' && v[Kind] !== 'Files')
+								)
+									continue
+
+								if (validatorLength) validateFile += ','
+								validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+
+								validatorLength++
+							}
+
+							if (validateFile) {
+								if (validatorLength === 1)
+									validator += `await ${validateFile}\n`
+								else if (validatorLength > 1)
+									validator += `await Promise.all([${validateFile}])\n`
+
+								validator += '}'
+
+								fnLiteral += validator
+								fileUnions.push(candidate)
+							}
+						}
+					}
+				}
+			} else if (
+				hasNonUnionFileWithDefault ||
+				(!hasUnion &&
+					(hasType('File', validator.body.schema) ||
+						hasType('Files', validator.body.schema)))
+			) {
 				let validateFile = ''
 
 				let i = 0
+				for (const [k, v] of Object.entries(
+					validator.body.schema.properties
+				) as [string, TSchema][]) {
+					if (
+						!v.extension ||
+						(v[Kind] !== 'File' && v[Kind] !== 'Files')
+					)
+						continue
 
-				if (validator.body.schema.properties)
-					for (const [k, v] of Object.entries(
-						validator.body.schema.properties
-					) as [string, TSchema][]) {
-						if (
-							!v.extension ||
-							(v[Kind] !== 'File' && v[Kind] !== 'Files')
-						)
-							continue
+					if (i) validateFile += ','
+					validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
 
-						if (i) validateFile += ','
-						validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
-
-						i++
-					}
+					i++
+				}
 
 				if (i) fnLiteral += '\n'
 
@@ -1932,6 +2010,7 @@ export const composeHandler = ({
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		allocateIf('parser,', hooks.parse?.length) +
 		allocateIf(`getServer,`, inference.server) +
+		allocateIf(`fileUnions,`, fileUnions.length) +
 		adapterVariables +
 		allocateIf('TypeBoxError', hasValidation) +
 		`}=hooks\n` +
@@ -1983,6 +2062,7 @@ export const composeHandler = ({
 			ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 			// @ts-expect-error private property
 			getServer: () => app.getServer(),
+			fileUnions: fileUnions.length ? fileUnions : undefined,
 			TypeBoxError: hasValidation ? TypeBoxError : undefined,
 			parser: app['~parser'],
 			...adapter.inject
@@ -2394,13 +2474,17 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		}
 
 	fnLiteral +=
-		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){` +
+		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){\n` +
 		`if(error.error)error=error.error\n` +
 		`set.status=error.status??422\n` +
 		adapter.validationError +
-		`}`
+		`\n}\n`
 
-	fnLiteral += `if(error instanceof Error){` + adapter.unknownError + `}`
+	fnLiteral +=
+		`if(error instanceof Error){` +
+		`\nif(typeof error.toResponse==='function')return context.response=error.toResponse()\n` +
+		adapter.unknownError +
+		`\n}`
 
 	const mapResponseReporter = report('mapResponse', {
 		total: hooks.mapResponse?.length,

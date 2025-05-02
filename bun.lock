@@ -4,11 +4,9 @@
     "": {
       "name": "elysia",
       "dependencies": {
-        "@sinclair/typebox": "^0.34.33",
         "cookie": "^1.0.2",
         "exact-mirror": "0.1.1",
         "fast-decode-uri-component": "^1.0.1",
-        "openapi-types": "^12.1.3",
       },
       "devDependencies": {
         "@types/bun": "^1.2.9",
@@ -27,6 +25,10 @@
         "tsup": "^8.4.0",
         "typescript": "^5.8.3",
       },
+      "optionalDependencies": {
+        "@sinclair/typebox": "^0.34.33",
+        "openapi-types": "^12.1.3",
+      },
       "peerDependencies": {
         "@sinclair/typebox": ">= 0.34.0",
         "exact-mirror": ">= 0.0.9",
@@ -34,12 +36,6 @@
         "openapi-types": ">= 12.0.0",
         "typescript": ">= 5.0.0",
       },
-      "optionalPeers": [
-        "exact-mirror",
-        "file-type",
-        "openapi-types",
-        "typescript",
-      ],
     },
   },
   "packages": {

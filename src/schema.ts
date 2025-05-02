@@ -116,7 +116,7 @@ export const hasAdditionalProperties = (
 }
 
 export const hasType = (type: string, schema: TAnySchema) => {
-	if (!schema) return
+	if (!schema) return false
 
 	if (Kind in schema && schema[Kind] === type) return true
 
@@ -141,7 +141,7 @@ export const hasType = (type: string, schema: TAnySchema) => {
 	}
 
 	return (
-		schema.properties &&
+		!!schema.properties &&
 		Kind in schema.properties &&
 		schema.properties[Kind] === type
 	)
