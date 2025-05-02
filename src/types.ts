@@ -113,9 +113,9 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 				schema?: boolean
 		  }
 	/**
-	 * Disable Ahead of Time compliation
+	 * Enable Ahead of Time compilation
 	 *
-	 * Reduced performance but faster startup time
+	 * Trade significant performance with slightly faster startup time and reduced memory usage
 	 */
 	aot?: boolean
 	/**

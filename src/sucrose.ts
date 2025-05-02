@@ -241,20 +241,19 @@ export const retrieveRootParamters = (parameter: string) => {
 	parameter = removeColonAlias(parameter)
 	if (parameter) parameters = parameters.concat(parameter.split(','))
 
-	const newParameters = []
+	const parameterMap: Record<string, true> = Object.create(null)
 	for (const p of parameters) {
 		if (p.indexOf(',') === -1) {
-			newParameters.push(p)
+			parameterMap[p] = true
 			continue
 		}
 
-		for (const q of p.split(',')) newParameters.push(q.trim())
+		for (const q of p.split(',')) parameterMap[q.trim()] = true
 	}
-	parameters = newParameters
 
 	return {
 		hasParenthesis,
-		parameters
+		parameters: parameterMap
 	}
 }
 
@@ -270,22 +269,19 @@ export const findParameterReference = (
 	const { parameters, hasParenthesis } = retrieveRootParamters(parameter)
 
 	// Check if root is an object destructuring
-	if (!inference.query && parameters.includes('query')) inference.query = true
-	if (!inference.headers && parameters.includes('headers'))
-		inference.headers = true
-	if (!inference.body && parameters.includes('body')) inference.body = true
-	if (!inference.cookie && parameters.includes('cookie'))
-		inference.cookie = true
-	if (!inference.set && parameters.includes('set')) inference.set = true
-	if (!inference.server && parameters.includes('server'))
-		inference.server = true
-	if (!inference.route && parameters.includes('route')) inference.route = true
-	if (!inference.url && parameters.includes('url')) inference.url = true
-	if (!inference.path && parameters.includes('path')) inference.path = true
+	if (parameters.query) inference.query = true
+	if (parameters.headers) inference.headers = true
+	if (parameters.body) inference.body = true
+	if (parameters.cookie) inference.cookie = true
+	if (parameters.set) inference.set = true
+	if (parameters.server) inference.server = true
+	if (parameters.route) inference.route = true
+	if (parameters.url) inference.url = true
+	if (parameters.path) inference.path = true
 
-	if (hasParenthesis) return `{ ${parameters.join(', ')} }`
+	if (hasParenthesis) return `{ ${Object.keys(parameters).join(', ')} }`
 
-	return parameters.join(', ')
+	return Object.keys(parameters).join(', ')
 }
 
 const findEndIndex = (
@@ -293,18 +289,15 @@ const findEndIndex = (
 	content: string,
 	index?: number | undefined
 ) => {
-	const newLineIndex = content.indexOf(type + '\n', index)
-	const newTabIndex = content.indexOf(type + '\t', index)
-	const commaIndex = content.indexOf(type + ',', index)
-	const semicolonIndex = content.indexOf(type + ';', index)
-	const emptyIndex = content.indexOf(type + ' ', index)
-
-	// Pick the smallest index that is not -1 or 0
-	return (
-		[newLineIndex, newTabIndex, commaIndex, semicolonIndex, emptyIndex]
-			.filter((i) => i > 0)
-			.sort((a, b) => a - b)[0] || -1
+	const regex = new RegExp(
+		`${type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\n\\t,; ]`
 	)
+
+	if (index !== undefined) regex.lastIndex = index
+
+	const match = regex.exec(content)
+
+	return match ? match.index : -1
 }
 
 const findEndQueryBracketIndex = (
@@ -422,9 +415,9 @@ export const extractMainParameter = (parameter: string) => {
 
 	const hasComma = parameter.includes(',')
 	if (!hasComma) {
+		const index = parameter.indexOf('...')
 		// This happens when spread operator is used as the only parameter
-		if (parameter.includes('...'))
-			return parameter.slice(parameter.indexOf('...') + 3)
+		if (index !== -1) return parameter.slice(parameter.indexOf('...') + 3)
 
 		return
 	}
@@ -445,9 +438,9 @@ export const inferBodyReference = (
 	inference: Sucrose.Inference
 ) => {
 	const access = (type: string, alias: string) =>
-		code.includes(alias + '.' + type) ||
-		code.includes(alias + '["' + type + '"]') ||
-		code.includes(alias + "['" + type + "']")
+		new RegExp(
+			`${alias}\\.(${type})|${alias}\\["${type}"\\]|${alias}\\['${type}'\\]`
+		).test(code)
 
 	for (const alias of aliases) {
 		if (!alias) continue
@@ -456,32 +449,15 @@ export const inferBodyReference = (
 		if (alias.charCodeAt(0) === 123) {
 			const parameters = retrieveRootParamters(alias).parameters
 
-			if (!inference.query && parameters.includes('query'))
-				inference.query = true
-
-			if (!inference.headers && parameters.includes('headers'))
-				inference.headers = true
-
-			if (!inference.body && parameters.includes('body'))
-				inference.body = true
-
-			if (!inference.cookie && parameters.includes('cookie'))
-				inference.cookie = true
-
-			if (!inference.set && parameters.includes('set'))
-				inference.set = true
-
-			if (!inference.query && parameters.includes('server'))
-				inference.server = true
-
-			if (!inference.url && parameters.includes('url'))
-				inference.url = true
-
-			if (!inference.route && parameters.includes('route'))
-				inference.route = true
-
-			if (!inference.path && parameters.includes('path'))
-				inference.path = true
+			if (parameters.query) inference.query = true
+			if (parameters.headers) inference.headers = true
+			if (parameters.body) inference.body = true
+			if (parameters.cookie) inference.cookie = true
+			if (parameters.set) inference.set = true
+			if (parameters.server) inference.server = true
+			if (parameters.url) inference.url = true
+			if (parameters.route) inference.route = true
+			if (parameters.path) inference.path = true
 
 			continue
 		}
@@ -489,8 +465,9 @@ export const inferBodyReference = (
 		if (!inference.query && access('query', alias)) inference.query = true
 
 		if (
-			code.includes('return ' + alias) ||
-			code.includes('return ' + alias + '.query')
+			!inference.query &&
+			(code.includes('return ' + alias) ||
+				code.includes('return ' + alias + '.query'))
 		)
 			inference.query = true
 

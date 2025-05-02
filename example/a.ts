@@ -27,7 +27,7 @@ const app = new Elysia()
 	})
 	.listen(3000)
 
-// console.log(app.routes[0].compile().toString())
+app.compile()
 
 // app.handle(
 // 	upload('/', {

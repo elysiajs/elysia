@@ -379,8 +379,7 @@ export const composeHandler = ({
 	validator,
 	handler,
 	allowMeta = false,
-	inference,
-	asManifest = false
+	inference
 }: {
 	app: AnyElysia
 	path: string
@@ -390,7 +389,6 @@ export const composeHandler = ({
 	handler: unknown | Handler<any, any>
 	allowMeta?: boolean
 	inference: Sucrose.Inference
-	asManifest?: boolean
 }): ComposedHandler => {
 	const adapter = app['~adapter'].composeHandler
 	const adapterHandler = app['~adapter'].handler
@@ -411,10 +409,13 @@ export const composeHandler = ({
 			if (handler instanceof Response)
 				return Function(
 					'a',
-					`return function(){return a.clone()}`
+					'"use strict";\n' + `return function(){return a.clone()}`
 				)(handler)
 
-			return Function('a', 'return function(){return a}')(handler)
+			return Function(
+				'a',
+				'"use strict";\n' + 'return function(){return a}'
+			)(handler)
 		}
 	}
 
@@ -1057,9 +1058,9 @@ export const composeHandler = ({
 
 							default:
 								fnLiteral +=
-									`${name}=parser['${hooks.parse[i].fn}'](c,contentType)\n` +
+									`let ${name}=parser['${hooks.parse[i].fn}'](c,contentType)\n` +
 									`if(${name} instanceof Promise)${name}=await ${name}\n` +
-									`if(${name}!==undefined){c.body=${name};used=true}\n`
+									`if(${name}!==undefined){c.body=${name};used=true;}\n`
 						}
 
 						endUnit()
@@ -2026,11 +2027,9 @@ export const composeHandler = ({
 	init = ''
 
 	try {
-		if (asManifest) return Function('hooks', init) as any
-
 		return Function(
 			'hooks',
-			fnLiteral
+			'"use strict";\n' + fnLiteral
 		)({
 			handler,
 			hooks: lifeCycleToFn(hooks),
@@ -2196,11 +2195,7 @@ export const createHoc = (app: AnyElysia, fnName = 'map') => {
 	return `return function hocMap(${adapter.parameters}){return ${handler}(${adapter.parameters})}`
 }
 
-export const composeGeneralHandler = (
-	app: AnyElysia,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	{ asManifest = false }: { asManifest?: false } = {}
-) => {
+export const composeGeneralHandler = (app: AnyElysia) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
 
@@ -2329,7 +2324,7 @@ export const composeGeneralHandler = (
 
 	const fn = Function(
 		'data',
-		fnLiteral
+		'"use strict";\n' + fnLiteral
 	)({
 		app,
 		mapEarlyResponse: app['~adapter']['handler'].mapEarlyResponse,
@@ -2362,36 +2357,23 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 	fnLiteral +=
 		`const {` +
-		`app:{` +
-		`event:{` +
-		`error:onErrorContainer,` +
-		`afterResponse:resContainer,` +
-		`mapResponse:_onMapResponse,` +
-		`trace:_trace` +
-		`}` +
-		`},` +
 		`mapResponse,` +
 		`ERROR_CODE,` +
 		`ElysiaCustomStatusResponse,` +
+		allocateIf(`onError,`, app.event.error) +
+		allocateIf(`afterResponse,`, app.event.afterResponse) +
+		allocateIf(`trace,`, app.event.trace) +
+		allocateIf(`onMapResponse,`, app.event.mapResponse) +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		adapterVariables +
 		`}=inject\n`
 
-	fnLiteral +=
-		`const trace=_trace?.map(x=>typeof x==='function'?x:x.fn)??[]\n` +
-		`const onMapResponse=[]\n` +
-		`if(_onMapResponse)for(let i=0;i<_onMapResponse.length;i++)` +
-		`onMapResponse.push(_onMapResponse[i].fn??_onMapResponse[i])\n` +
-		`delete _onMapResponse\n` +
-		`const onError=onErrorContainer?.map(x=>x.fn)??[]\n` +
-		`const res=resContainer?.map(x=>x.fn)??[]\n` +
-		`return ${
-			app.event.error?.find(isAsync) ||
-			app.event.mapResponse?.find(isAsync)
-				? 'async '
-				: ''
-		}function(context,error,skipGlobal){`
+	fnLiteral += `return ${
+		app.event.error?.find(isAsync) || app.event.mapResponse?.find(isAsync)
+			? 'async '
+			: ''
+	}function(context,error,skipGlobal){`
 
 	fnLiteral += ''
 
@@ -2518,14 +2500,20 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 	fnLiteral += `\nreturn mapResponse(${saveResponse}error,set${adapter.mapResponseContext})}`
 
+	const mapFn = (x: Function | HookContainer) =>
+		typeof x === 'function' ? x : x.fn
+
 	return Function(
 		'inject',
-		fnLiteral
+		'"use strict";\n' + fnLiteral
 	)({
-		app,
 		mapResponse: app['~adapter'].handler.mapResponse,
 		ERROR_CODE,
 		ElysiaCustomStatusResponse,
+		onError: app.event.error?.map(mapFn),
+		afterResponse: app.event.afterResponse?.map(mapFn),
+		trace: app.event.trace?.map(mapFn),
+		onMapResponse: app.event.mapResponse?.map(mapFn),
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 		...adapter.inject

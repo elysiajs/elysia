@@ -18,6 +18,8 @@ for (let i = 0; i < total; i++) {
 
 const t2 = performance.now()
 
+Bun.gc(true)
+
 const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024
 console.log(+(memoryAfter - memory).toFixed(2), 'MB memory used')
 console.log(+(t2 - t1).toFixed(2), 'ms')

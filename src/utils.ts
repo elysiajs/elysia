@@ -332,16 +332,13 @@ const isBun = typeof Bun !== 'undefined'
 const hasBunHash = isBun && typeof Bun.hash === 'function'
 
 // https://stackoverflow.com/a/52171480
-export const checksum = hasBunHash
-	? (s: string) => Bun.hash(s) as number
-	: (s: string) => {
-			let h = 9
+export const checksum = (s: string) => {
+	let h = 9
 
-			for (let i = 0; i < s.length; )
-				h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
+	for (let i = 0; i < s.length; ) h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
 
-			return (h = h ^ (h >>> 9))
-		}
+	return (h = h ^ (h >>> 9))
+}
 
 export const injectChecksum = (
 	checksum: number | undefined,

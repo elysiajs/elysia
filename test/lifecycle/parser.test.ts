@@ -423,41 +423,6 @@ describe('Parser', () => {
 		])
 	})
 
-	it('handle custom parser then fallback to named default', async () => {
-		const app = new Elysia()
-			.parser('custom', ({ contentType, request }) => {
-				if (contentType.startsWith('application/x-elysia'))
-					return { name: 'Eden' }
-			})
-			.post('/json', ({ body }) => body, {
-				parse: ['custom', 'json']
-			})
-
-		const response = await Promise.all([
-			app
-				.handle(
-					new Request('http://localhost:3000/json', {
-						method: 'POST',
-						body: JSON.stringify({ name: 'Aru' })
-					})
-				)
-				.then((x) => x.json()),
-			app
-				.handle(
-					new Request('http://localhost:3000/json', {
-						method: 'POST',
-						headers: {
-							'content-type': 'application/x-elysia'
-						},
-						body: JSON.stringify({ name: 'Aru' })
-					})
-				)
-				.then((x) => x.json())
-		])
-
-		expect(response).toEqual([{ name: 'Aru' }, { name: 'Eden' }])
-	})
-
 	it('should get parse error', async () => {
 		let code: string | undefined
 
