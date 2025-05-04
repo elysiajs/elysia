@@ -427,12 +427,12 @@ export type UnwrapSchema<
 					infer NamedSchema extends TAnySchema
 				>
 				? StaticDecode<NamedSchema>[]
-				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
+				: StaticDecode<TImport<Definitions, TrimArrayName<Schema>>>[]
 			: Schema extends string
 				? Definitions extends keyof Schema
 					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
 						StaticDecode<NamedSchema>
-					: TImport<Definitions, Schema>['static']
+					: StaticDecode<TImport<Definitions, Schema>>
 				: unknown
 
 export type UnwrapBodySchema<
@@ -443,31 +443,35 @@ export type UnwrapBodySchema<
 	: Schema extends TSchema
 		? Schema extends OptionalField
 			? Partial<
+					StaticDecode<
+						TImport<
+							Definitions & {
+								readonly __elysia: Schema
+							},
+							'__elysia'
+						>
+					>
+				> | null
+			: StaticDecode<
 					TImport<
 						Definitions & {
 							readonly __elysia: Schema
 						},
 						'__elysia'
-					>['static']
-				> | null
-			: TImport<
-					Definitions & {
-						readonly __elysia: Schema
-					},
-					'__elysia'
-				>['static']
+					>
+				>
 		: Schema extends `${infer Key}[]`
 			? Definitions extends Record<
 					Key,
 					infer NamedSchema extends TAnySchema
 				>
 				? StaticDecode<NamedSchema>[]
-				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
+				: StaticDecode<TImport<Definitions, TrimArrayName<Schema>>>[]
 			: Schema extends string
 				? Definitions extends keyof Schema
 					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
 						StaticDecode<NamedSchema>
-					: TImport<Definitions, Schema>['static']
+					: StaticDecode<TImport<Definitions, Schema>>
 				: unknown
 
 export interface UnwrapRoute<
