@@ -3697,7 +3697,7 @@ export default class Elysia<
 		BasePath,
 		// @ts-expect-error - This is truly ideal
 		Prettify2<Singleton & NewElysia['~Singleton']>,
-		Prettify2<Definitions & NewElysia['~Singleton']>,
+		Prettify2<Definitions & NewElysia['~Definitions']>,
 		Prettify2<Metadata & NewElysia['~Metadata']>,
 		BasePath extends ``
 			? Routes & NewElysia['~Routes']
@@ -5415,8 +5415,7 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>,
-		const Macro extends Metadata['macro']
+		>
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -5424,11 +5423,8 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] &
-					Volatile['resolve'] &
-					MacroToContext<Metadata['macroFn'], Macro>
-			},
-			Macro
+				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			}
 		>
 	): Elysia<
 		BasePath,

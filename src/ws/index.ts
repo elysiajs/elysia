@@ -53,7 +53,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 			id?: string
 			validator?: TypeCheck<TSchema>
 		}>,
-		public data: Context,
+		public data: Prettify<
+			Omit<Context, 'body' | 'error' | 'status' | 'redirect'>
+		>,
 		public body: Route['body'] = undefined
 	) {
 		this.validator = raw.data?.validator

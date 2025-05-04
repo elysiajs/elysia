@@ -404,19 +404,23 @@ export type UnwrapSchema<
 	: Schema extends TSchema
 		? Schema extends OptionalField
 			? Partial<
+					StaticDecode<
+						TImport<
+							Definitions & {
+								readonly __elysia: Schema
+							},
+							'__elysia'
+						>
+					>
+				>
+			: StaticDecode<
 					TImport<
 						Definitions & {
 							readonly __elysia: Schema
 						},
 						'__elysia'
-					>['static']
+					>
 				>
-			: TImport<
-					Definitions & {
-						readonly __elysia: Schema
-					},
-					'__elysia'
-				>['static']
 		: Schema extends `${infer Key}[]`
 			? Definitions extends Record<
 					Key,

@@ -1,41 +1,16 @@
-import { Elysia, t } from '../src'
-import { hasType } from '../src/schema'
-import { req, upload } from '../test/utils'
+import Elysia, { t } from '../src'
+
+function addTwo(num: number) {
+	return num + 2
+}
 
 const app = new Elysia()
-	.post('/', ({ body }) => 'ok', {
-		body: t.Union([
-			t.Object({
-				hello: t.String(),
-				file: t.File({
-					type: 'image'
-				}),
-				a: t.File({
-					type: 'image'
-				})
-			}),
-			t.Object({
-				world: t.String(),
-				image: t.File({
-					type: 'image'
-				})
-			}),
-			t.Object({
-				world: t.String()
-			})
-		])
+	.get('', async ({ query: { foo } }) => addTwo(foo), {
+		query: t.Object({
+			foo: t
+				.Transform(t.String())
+				.Decode((x) => 12)
+				.Encode((x) => x.toString())
+		})
 	})
-	.listen(3000)
-
-app.compile()
-
-// app.handle(
-// 	upload('/', {
-// 		hello: 'world',
-// 		file: 'aris-yuzu.jpg'
-// 	}).request
-// )
-// 	.then((x) => x.text())
-// 	.then(console.log)
-
-// // console.log(app.router)
+	.listen(1234)

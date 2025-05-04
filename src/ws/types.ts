@@ -8,9 +8,11 @@ import {
 	DocumentDecoration,
 	ErrorHandler,
 	InputSchema,
+	MacroToContext,
 	MapResponse,
 	MaybeArray,
 	MaybePromise,
+	MetadataBase,
 	OptionalHandler,
 	Prettify,
 	RouteSchema,
@@ -116,62 +118,46 @@ export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
 	message: unknown
 ) => MaybePromise<Route['body'] | void | undefined>
 
-export type AnyWSLocalHook = WSLocalHook<any, any, any, any>
-
-type WSLocalHookKey =
-	| keyof TypedWebSocketHandler<any, any>
-	| 'detail'
-	| 'upgrade'
-	| 'parse'
-	| 'transform'
-	| 'beforeHandle'
-	| 'afterHandle'
-	| 'mapResponse'
-	| 'afterResponse'
-	| 'error'
-	| 'tags'
-	| keyof InputSchema<any>
+export type AnyWSLocalHook = WSLocalHook<any, any, any>
 
 export type WSLocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
-	Singleton extends SingletonBase,
-	Macro extends BaseMacro
-> = Macro &
-	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) & {
-		detail?: DocumentDecoration
-		/**
-		 * Headers to register to websocket before `upgrade`
-		 */
-		upgrade?: Record<string, unknown> | ((context: Context) => unknown)
-		parse?: MaybeArray<WSParseHandler<Schema>>
+	Singleton extends SingletonBase
+> = (LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) & {
+	detail?: DocumentDecoration
+	/**
+	 * Headers to register to websocket before `upgrade`
+	 */
+	upgrade?: Record<string, unknown> | ((context: Context) => unknown)
+	parse?: MaybeArray<WSParseHandler<Schema>>
 
-		/**
-		 * Transform context's value
-		 */
-		transform?: MaybeArray<TransformHandler<Schema, Singleton>>
-		/**
-		 * Execute before main handler
-		 */
-		beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
-		/**
-		 * Execute after main handler
-		 */
-		afterHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
-		/**
-		 * Execute after main handler
-		 */
-		mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
-		/**
-		 * Execute after response is sent
-		 */
-		afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
-		/**
-		 * Catch error
-		 */
-		error?: MaybeArray<ErrorHandler<{}, Schema, Singleton>>
-		tags?: DocumentDecoration['tags']
-	} & TypedWebSocketHandler<
+	/**
+	 * Transform context's value
+	 */
+	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+	/**
+	 * Execute before main handler
+	 */
+	beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+	/**
+	 * Execute after main handler
+	 */
+	afterHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+	/**
+	 * Execute after main handler
+	 */
+	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
+	/**
+	 * Execute after response is sent
+	 */
+	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
+	/**
+	 * Catch error
+	 */
+	error?: MaybeArray<ErrorHandler<{}, Schema, Singleton>>
+	tags?: DocumentDecoration['tags']
+} & TypedWebSocketHandler<
 		Omit<Context<Schema, Singleton>, 'body'> & {
 			body: never
 		},

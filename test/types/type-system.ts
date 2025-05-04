@@ -57,7 +57,6 @@ import { expectTypeOf } from 'expect-type'
 			expectTypeOf<typeof body>().toEqualTypeOf<{
 				images: File[]
 			}>()
-
 		},
 		{
 			body: t.Object({
@@ -66,6 +65,39 @@ import { expectTypeOf } from 'expect-type'
 					type: 'image'
 				})
 			})
+		}
+	)
+}
+
+// use StaticDecode to unwrap type parameter
+{
+	function addTwo(num: number) {
+		return num + 2
+	}
+
+	new Elysia().get('', async ({ query: { foo } }) => addTwo(foo), {
+		query: t.Object({
+			foo: t
+				.Transform(t.String())
+				.Decode((x) => 12)
+				.Encode((x) => x.toString())
+		})
+	})
+}
+
+// handle Elysia.Ref
+{
+	const Model = new Elysia().model({
+		hello: t.Number()
+	})
+
+	new Elysia().use(Model).get(
+		'',
+		async ({ body }) => {
+			expectTypeOf<typeof body>().toEqualTypeOf<number>()
+		},
+		{
+			body: Model.Ref('hello')
 		}
 	)
 }
