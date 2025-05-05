@@ -1,18 +1,34 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.macro({
-		a: {
-			resolve: () => ({
-				a: 'a'
+	.onError(({ code, error }) => {
+		console.error('[error]', error)
+		return { error: { code } }
+	})
+	.get(
+		'/session',
+		({ error, cookie: { sessionToken } }) => {
+			const refreshed = !!sessionToken.value
+
+			sessionToken.set({
+				value: Math.random().toString(36).substring(2, 8),
+				maxAge: 1000 * 60 * 60 * 24 * 7
 			})
+
+			if (refreshed) throw error('Unauthorized')
+
+			return sessionToken.value
+		},
+		{
+			cookie: t.Cookie(
+				{ sessionToken: t.Optional(t.String()) },
+				{
+					sign: ['sessionToken'],
+					secrets: 'my-secret'
+				}
+			)
 		}
-	})
-	.get('/a', ({ a }) => {}, {
-		a: true,
-		beforeHandle: ({ query }) => {}
-	})
-	.ws('/', {
-		a: true,
-		message({ data: { a } }) {}
-	})
+	)
+	.listen(3000)
+
+console.log(app.routes[0].compile().toString())

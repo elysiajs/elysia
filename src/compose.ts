@@ -1873,6 +1873,8 @@ export const composeHandler = ({
 		`const set=c.set\n` +
 		`if(!set.status||set.status<300)set.status=error?.status||500\n`
 
+	if (hasCookie) fnLiteral += encodeCookie()
+
 	if (hasTrace && hooks.trace)
 		for (let i = 0; i < hooks.trace.length; i++)
 			// There's a case where the error is thrown before any trace is called
