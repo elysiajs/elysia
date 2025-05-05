@@ -5387,7 +5387,17 @@ export default class Elysia<
 		const Macro extends Metadata['macro']
 	>(
 		path: Path,
-		options: WSLocalHook<LocalSchema, Schema, Decorator, Macro>
+		options: WSLocalHook<
+			LocalSchema,
+			Schema,
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
+			},
+			Macro
+		>
 	): Elysia<
 		BasePath,
 		Singleton,
