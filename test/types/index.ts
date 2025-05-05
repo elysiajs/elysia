@@ -2382,3 +2382,31 @@ type a = keyof {}
 			})
 		})
 }
+
+// Handle macro with function
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				resolve: () => ({
+					a: 'a'
+				})
+			}
+		})
+		.get(
+			'/a',
+			({ a }) => {
+				expectTypeOf<typeof a>().toEqualTypeOf<string>()
+			},
+			{
+				a: true,
+				beforeHandle: (c) => {}
+			}
+		)
+		.ws('/', {
+			a: true,
+			message({ data: { a } }) {
+				expectTypeOf<typeof a>().toEqualTypeOf<string>()
+			}
+		})
+}

@@ -38,15 +38,23 @@ import {
 	FilesOptions,
 	NonEmptyArray,
 	TForm,
-	TUnionEnum
+	TUnionEnum,
+	ElysiaTransformDecodeBuilder
 } from './types'
 
 import { ELYSIA_FORM_DATA, form } from '../utils'
 import { ValidationError } from '../error'
 import { parseDateTimeEmptySpace } from './format'
 
-const t = Object.assign({}, Type) as Omit<JavaScriptTypeBuilder, 'String'> &
-	typeof ElysiaType
+const t = Object.assign({}, Type) as unknown as Omit<
+	JavaScriptTypeBuilder,
+	'String' | 'Transform'
+> &
+	typeof ElysiaType & {
+		Transform<Type extends TSchema>(
+			type: Type
+		): ElysiaTransformDecodeBuilder<Type>
+	}
 
 createType<TUnionEnum>(
 	'UnionEnum',

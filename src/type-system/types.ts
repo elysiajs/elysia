@@ -3,8 +3,10 @@ import type {
 	NumberOptions,
 	ObjectOptions,
 	SchemaOptions,
+	StaticDecode,
 	TObject,
 	TProperties,
+	TransformKind,
 	TSchema,
 	TUnsafe
 } from '@sinclair/typebox'
@@ -147,4 +149,41 @@ declare module '@sinclair/typebox' {
 					value: unknown
 			  }) => string | boolean | number | Object | void)
 	}
+}
+
+export declare class ElysiaTransformDecodeBuilder<T extends TSchema> {
+	private readonly schema
+	constructor(schema: T)
+	Decode<U extends unknown, D extends TransformFunction<StaticDecode<T>, U>>(
+		decode: D
+	): ElysiaTransformEncodeBuilder<T, D>
+}
+export declare class ElysiaTransformEncodeBuilder<
+	T extends TSchema,
+	D extends TransformFunction
+> {
+	private readonly schema
+	private readonly decode
+	constructor(schema: T, decode: D)
+	private EncodeTransform
+	private EncodeSchema
+	Encode<E extends TransformFunction<ReturnType<D>, StaticDecode<T>>>(
+		encode: E
+	): TTransform<T, ReturnType<D>>
+}
+export type TransformFunction<T = any, U = any> = (value: T) => U
+export interface TransformOptions<
+	I extends TSchema = TSchema,
+	O extends unknown = unknown
+> {
+	Decode: TransformFunction<StaticDecode<I>, O>
+	Encode: TransformFunction<O, StaticDecode<I>>
+}
+export interface TTransform<
+	I extends TSchema = TSchema,
+	O extends unknown = unknown
+> extends TSchema {
+	static: O
+	[TransformKind]: TransformOptions<I, O>
+	[key: string]: any
 }

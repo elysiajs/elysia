@@ -5,9 +5,7 @@ import type { Serve } from './universal/server'
 
 import {
 	TSchema,
-	TObject,
 	TAnySchema,
-	StaticDecode,
 	OptionalKind,
 	TModule,
 	TImport,
@@ -404,35 +402,31 @@ export type UnwrapSchema<
 	: Schema extends TSchema
 		? Schema extends OptionalField
 			? Partial<
-					StaticDecode<
-						TImport<
-							Definitions & {
-								readonly __elysia: Schema
-							},
-							'__elysia'
-						>
-					>
-				>
-			: StaticDecode<
 					TImport<
 						Definitions & {
 							readonly __elysia: Schema
 						},
 						'__elysia'
-					>
+					>['static']
 				>
+			: TImport<
+					Definitions & {
+						readonly __elysia: Schema
+					},
+					'__elysia'
+				>['static']
 		: Schema extends `${infer Key}[]`
 			? Definitions extends Record<
 					Key,
 					infer NamedSchema extends TAnySchema
 				>
-				? StaticDecode<NamedSchema>[]
-				: StaticDecode<TImport<Definitions, TrimArrayName<Schema>>>[]
+				? NamedSchema['static'][]
+				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
 			: Schema extends string
 				? Definitions extends keyof Schema
 					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
-						StaticDecode<NamedSchema>
-					: StaticDecode<TImport<Definitions, Schema>>
+						NamedSchema['static']
+					: TImport<Definitions, Schema>['static']
 				: unknown
 
 export type UnwrapBodySchema<
@@ -443,35 +437,31 @@ export type UnwrapBodySchema<
 	: Schema extends TSchema
 		? Schema extends OptionalField
 			? Partial<
-					StaticDecode<
-						TImport<
-							Definitions & {
-								readonly __elysia: Schema
-							},
-							'__elysia'
-						>
-					>
-				> | null
-			: StaticDecode<
 					TImport<
 						Definitions & {
 							readonly __elysia: Schema
 						},
 						'__elysia'
-					>
-				>
+					>['static']
+				> | null
+			: TImport<
+					Definitions & {
+						readonly __elysia: Schema
+					},
+					'__elysia'
+				>['static']
 		: Schema extends `${infer Key}[]`
 			? Definitions extends Record<
 					Key,
 					infer NamedSchema extends TAnySchema
 				>
-				? StaticDecode<NamedSchema>[]
-				: StaticDecode<TImport<Definitions, TrimArrayName<Schema>>>[]
+				? NamedSchema['static'][]
+				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
 			: Schema extends string
 				? Definitions extends keyof Schema
 					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
-						StaticDecode<NamedSchema>
-					: StaticDecode<TImport<Definitions, Schema>>
+						NamedSchema['static']
+					: TImport<Definitions, Schema>['static']
 				: unknown
 
 export interface UnwrapRoute<
@@ -1269,7 +1259,7 @@ export type LocalHook<
 	Errors extends { [key in string]: Error },
 	Macro extends BaseMacro,
 	Parser extends keyof any = ''
-> = Macro &
+> = Prettify<Macro> &
 	// Kind of an inference hack, I have no idea why it work either
 	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) & {
 		detail?: DocumentDecoration

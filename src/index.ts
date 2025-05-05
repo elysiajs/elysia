@@ -3837,7 +3837,7 @@ export default class Elysia<
 		}
 
 		if (options?.scoped)
-			return this.guard({}, (app) => app.use(plugin as any))
+			return this.guard({} as any, (app) => app.use(plugin as any))
 
 		if (Array.isArray(plugin)) {
 			// eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -5415,7 +5415,8 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>
+		>,
+		const Macro extends Metadata['macro']
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -5423,8 +5424,11 @@ export default class Elysia<
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
-			}
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					MacroToContext<Metadata['macroFn'], Macro>
+			},
+			Macro
 		>
 	): Elysia<
 		BasePath,

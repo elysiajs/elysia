@@ -32,6 +32,8 @@ Improvement:
 - refactor `parseQuery` and `parseQueryFromURL`
 - add `config` options to `mount`
 - recompile automatically after async modules is mounted
+- support macro on when hook has function
+- support resolve macro on ws
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream
@@ -47,9 +49,8 @@ Change:
 - `Elysia.mount` now set `detail.hide = true` by default
 
 Breaking Change:
-- Minimum Node version is now `node22` LTS
 - remove `as('plugin')` in favor of `as('scoped')`
-- remove root `index`
+- remove root `index` for Eden Treaty
 - remove `websocket` from `ElysiaAdapter`
 - remove `inference.request`
 

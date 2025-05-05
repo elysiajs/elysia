@@ -1,16 +1,18 @@
-import Elysia, { t } from '../src'
-
-function addTwo(num: number) {
-	return num + 2
-}
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.get('', async ({ query: { foo } }) => addTwo(foo), {
-		query: t.Object({
-			foo: t
-				.Transform(t.String())
-				.Decode((x) => 12)
-				.Encode((x) => x.toString())
-		})
+	.macro({
+		a: {
+			resolve: () => ({
+				a: 'a'
+			})
+		}
 	})
-	.listen(1234)
+	.get('/a', ({ a }) => {}, {
+		a: true,
+		beforeHandle: ({ query }) => {}
+	})
+	.ws('/', {
+		a: true,
+		message({ data: { a } }) {}
+	})
