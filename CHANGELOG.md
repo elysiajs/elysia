@@ -1,4 +1,4 @@
-# 1.3.0
+# 1.3.0 - 5 May 2025
 Feature:
 - add `exactMirror`
 - add `systemRouter` config
