@@ -86,6 +86,16 @@ describe('Web Standard - Map Early Response', () => {
 		expect(response?.status).toBe(200)
 	})
 
+	it('map File', async () => {
+		const file = new File(['Hello'], 'hello.txt', { type: 'text/plain' })
+
+		const response = mapEarlyResponse(file, defaultContext)
+
+		expect(response).toBeInstanceOf(Response)
+		expect(await response?.text()).toEqual('Hello')
+		expect(response?.status).toBe(200)
+	})
+
 	it('map Promise', async () => {
 		const body = {
 			name: 'Shiroko'

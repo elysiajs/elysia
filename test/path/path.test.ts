@@ -310,6 +310,18 @@ describe('Path', () => {
 		expect(res.headers.get('Server')).toBe('Elysia')
 	})
 
+	it('return web api\'s File', async () => {
+		const app = new Elysia().get('/', () => new File(['Hello'], 'hello.txt', { type: 'text/plain' }))
+		const res = await app.handle(req('/'))
+
+		expect(res.headers.get('content-type')).toBe('text/plain;charset=utf-8')
+		expect(await res.text()).toBe('Hello')
+		expect(res.status).toBe(200)
+		expect(res.headers.get('accept-ranges')).toBe('bytes')
+		expect(res.headers.get('content-range')).toBe('bytes 0-4/5')
+
+	})
+
 	it('handle *', async () => {
 		const app = new Elysia().get('/*', () => 'Hi')
 		const get = await app.handle(req('/')).then((r) => r.text())

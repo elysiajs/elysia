@@ -341,6 +341,9 @@ export const mapResponse = (
 
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
+			
+			case 'File':
+				return handleFile(response as File, set as any)
 
 			case 'Blob':
 				return handleFile(response as Blob, set as any)
@@ -542,6 +545,9 @@ export const mapEarlyResponse = (
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
 
+			case 'File':
+				return handleFile(response as File, set as any)
+
 			case 'Blob':
 				return handleFile(response as File | Blob, set)
 
@@ -710,6 +716,9 @@ export const mapEarlyResponse = (
 			case 'ElysiaFile':
 				return handleFile((response as ElysiaFile).value as File)
 
+			case 'File':
+				return handleFile(response as File, set as any)
+
 			case 'Blob':
 				return handleFile(response as File | Blob, set)
 
@@ -857,6 +866,9 @@ export const mapCompactResponse = (
 
 		case 'ElysiaFile':
 			return handleFile((response as ElysiaFile).value as File)
+
+		case 'File':
+			return handleFile(response as File)
 
 		case 'Blob':
 			return handleFile(response as File | Blob)
