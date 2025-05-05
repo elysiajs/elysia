@@ -115,6 +115,9 @@ export const decode = (url: string): string | null => {
 	let percentPosition = url.indexOf('%')
 	if (percentPosition === -1) return url
 
+	// Ensure that not encoded plus signs are replaced with spaces
+	url = url.replace(/\+/g, ' ')
+
 	// Ensure percentPosition always has 2 chars after
 	let end = url.length - 3
 	if (percentPosition > end) return null
