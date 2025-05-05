@@ -34,6 +34,8 @@ Improvement:
 - recompile automatically after async modules is mounted
 - support macro on when hook has function
 - support resolve macro on ws
+- [#1146](https://github.com/elysiajs/elysia/pull/1146) add support to return web API's File from handler
+- [#1165](https://github.com/elysiajs/elysia/pull/1165) skip non-numeric status codes in response schema validation
 
 Bug fix:
 - `Response` returned from `onError` is using octet stream
