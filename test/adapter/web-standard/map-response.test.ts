@@ -107,7 +107,7 @@ describe('Web Standard - Map Response', () => {
 	it('map File', async () => {
 		const file = new File(['Hello'], 'hello.txt', { type: 'text/plain' })
 
-		const response = mapResponse(file, defaultContext)
+		const response = mapResponse(file, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('Hello')
