@@ -193,7 +193,7 @@ describe('Web Standard - Map Early Response', () => {
 		expect(await response?.json()).toEqual(body)
 		expect(response?.headers.toJSON()).toEqual({
 			...context.headers,
-			'content-type': 'application/json;charset=utf-8'
+			'content-type': 'application/json'
 		})
 		expect(response?.status).toBe(418)
 	})
@@ -211,7 +211,10 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map Response with custom context', async () => {
-		const response = mapEarlyResponse(new Response('Shiroko'), context)
+		const response = await mapEarlyResponse(
+			new Response('Shiroko'),
+			context
+		)
 		const headers = response?.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
@@ -220,7 +223,7 @@ describe('Web Standard - Map Early Response', () => {
 	})
 
 	it('map Response and merge Headers', async () => {
-		const response = mapEarlyResponse(
+		const response = await mapEarlyResponse(
 			new Response('Shiroko', {
 				headers: {
 					Name: 'Himari'

@@ -6,7 +6,7 @@ describe('retrieve root parameter', () => {
 		const parameter = ''
 		const result = retrieveRootParamters(parameter)
 		expect(result).toEqual({
-			parameters: [],
+			parameters: {},
 			hasParenthesis: false
 		})
 	})
@@ -25,7 +25,7 @@ describe('retrieve root parameter', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootParamters(parameter)
 		expect(result).toEqual({
-			parameters: ['hello', 'elysia'],
+			parameters: { hello: true, elysia: true },
 			hasParenthesis: true
 		})
 	})
@@ -34,7 +34,7 @@ describe('retrieve root parameter', () => {
 		const parameter = '()'
 		const result = retrieveRootParamters(parameter)
 		expect(result).toEqual({
-			parameters: [],
+			parameters: {},
 			hasParenthesis: false
 		})
 	})
@@ -43,7 +43,7 @@ describe('retrieve root parameter', () => {
 		const parameter = '('
 		const result = retrieveRootParamters(parameter)
 		expect(result).toEqual({
-			parameters: [],
+			parameters: {},
 			hasParenthesis: false
 		})
 	})
@@ -62,7 +62,7 @@ describe('retrieve root parameter', () => {
 		const parameter = '({ hello: { world: { a } }, elysia })'
 		const result = retrieveRootParamters(parameter)
 		expect(result).toEqual({
-			parameters: ['hello', 'elysia'],
+			parameters: { hello: true, elysia: true },
 			hasParenthesis: true
 		})
 	})
@@ -71,7 +71,7 @@ describe('retrieve root parameter', () => {
 		const parameter = '({ hello, path })'
 		const result = retrieveRootParamters(parameter)
 		expect(result).toEqual({
-			parameters: ['hello', 'path'],
+			parameters: { hello: true, path: true },
 			hasParenthesis: true
 		})
 	})
@@ -80,7 +80,7 @@ describe('retrieve root parameter', () => {
 		const parameter = '({ hello: { world: { a } }, \nelysia, \teden })'
 		const result = retrieveRootParamters(parameter)
 		expect(result).toEqual({
-			parameters: ['hello', 'elysia', 'eden'],
+			parameters: { hello: true, elysia: true, eden: true },
 			hasParenthesis: true
 		})
 	})
@@ -90,7 +90,7 @@ describe('retrieve root parameter', () => {
 		const result = retrieveRootParamters(parameter)
 		expect(result).toEqual({
 			hasParenthesis: true,
-			parameters: ['set', 'cookie']
+			parameters: { set: true, cookie: true }
 		})
 	})
 })

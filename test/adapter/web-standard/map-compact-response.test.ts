@@ -149,7 +149,7 @@ describe('Web Standard - Map Compact Response', () => {
 	})
 
 	it('map Response and merge Headers', async () => {
-		const response = mapCompactResponse(
+		const response = await mapCompactResponse(
 			new Response('Shiroko', {
 				headers: {
 					Name: 'Himari'

@@ -1,22 +1,31 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import type { Serve } from 'bun'
+import { Memoirist } from 'memoirist'
 import type { TSchema } from '@sinclair/typebox'
 
 import { WebStandardAdapter } from '../web-standard/index'
-import { parseSetCookies } from '../web-standard/handler'
+import { parseSetCookies } from '../utils'
 import type { ElysiaAdapter } from '../types'
+import type { Serve } from '../../universal/server'
 
-import { createNativeStaticHandler } from './handler'
+import { createBunRouteHandler } from './compose'
+import { createNativeStaticHandler } from './handler-native'
+
 import { serializeCookie } from '../../cookies'
 import { isProduction, ValidationError } from '../../error'
+import { getSchemaValidator } from '../../schema'
 import {
-	getSchemaValidator,
 	hasHeaderShorthand,
 	isNotEmpty,
 	isNumericString,
-	mergeHook,
 	randomId
 } from '../../utils'
+
+import {
+	mapResponse,
+	mapEarlyResponse,
+	mapCompactResponse,
+	createStaticHandler
+} from './handler'
 
 import {
 	createHandleWSResponse,
@@ -25,21 +34,156 @@ import {
 	websocket
 } from '../../ws/index'
 import type { ServerWebSocket } from '../../ws/bun'
+import { AnyElysia } from '../..'
+import { Static } from '@sinclair/typebox/parser'
+
+const optionalParam = /:.+?\?(?=\/|$)/
+
+const getPossibleParams = (path: string) => {
+	const match = optionalParam.exec(path)
+
+	if (!match) return [path]
+
+	const routes: string[] = []
+
+	const head = path.slice(0, match.index)
+	const param = match[0].slice(0, -1)
+	const tail = path.slice(match.index + match[0].length)
+
+	routes.push(head.slice(0, -1))
+	routes.push(head + param)
+
+	for (const fragment of getPossibleParams(tail)) {
+		if (!fragment) continue
+
+		if (!fragment.startsWith('/:'))
+			routes.push(head.slice(0, -1) + fragment)
+
+		routes.push(head + param + fragment)
+	}
+
+	return routes
+}
+
+const mapRoutes = (app: AnyElysia) => {
+	if (!app.config.aot || !app.config.systemRouter) return undefined
+
+	const routes = <Record<string, Function | Record<string, unknown>>>{}
+
+	const add = (
+		route: {
+			path: string
+			method: string
+		},
+		handler: Function
+	) => {
+		if (routes[route.path]) {
+			// @ts-ignore
+			if (!routes[route.path][route.method])
+				// @ts-ignore
+				routes[route.path][route.method] = handler
+		} else
+			routes[route.path] = {
+				[route.method]: handler
+			}
+	}
+
+	// @ts-expect-error
+	const tree = app.routeTree
+
+	for (const route of app.router.history) {
+		if (typeof route.handler !== 'function') continue
+
+		const method = route.method
+
+		if ((method === 'GET' && `WS_${route.path}` in tree) || method === 'WS')
+			continue
+
+		if (method === 'ALL') {
+			if (!(`WS_${route.path}` in tree))
+				routes[route.path] = route.hooks?.config?.mount
+					? route.hooks.trace ||
+						app.event.trace ||
+						// @ts-expect-error private property
+						app.extender.higherOrderFunctions
+						? createBunRouteHandler(app, route)
+						: route.hooks.mount || route.handler
+					: route.handler
+
+			continue
+		}
+
+		let compiled: Function
+
+		const handler = app.config.precompile
+			? createBunRouteHandler(app, route)
+			: (request: Request) => {
+					if (compiled) return compiled(request)
+
+					return (compiled = createBunRouteHandler(app, route))(
+						request
+					)
+				}
+
+		for (const path of getPossibleParams(route.path))
+			add(
+				{
+					method,
+					path
+				},
+				handler
+			)
+	}
+
+	return routes
+}
+
+type Routes = Record<string, Function | Response | Record<string, unknown>>
+
+const mergeRoutes = (r1: Routes, r2?: Routes) => {
+	if (!r2) return r1
+
+	for (const key of Object.keys(r2)) {
+		if (r1[key] === r2[key]) continue
+
+		if (!r1[key]) {
+			r1[key] = r2[key]
+			continue
+		}
+
+		if (r1[key] && r2[key]) {
+			if (typeof r1[key] === 'function' || r1[key] instanceof Response) {
+				r1[key] = r2[key]
+				continue
+			}
+
+			r1[key] = {
+				...r1[key],
+				...r2[key]
+			}
+		}
+	}
+
+	return r1
+}
 
 export const BunAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
 	name: 'bun',
 	handler: {
-		...WebStandardAdapter.handler,
+		mapResponse,
+		mapEarlyResponse,
+		mapCompactResponse,
+		createStaticHandler,
 		createNativeStaticHandler
 	},
 	composeHandler: {
 		...WebStandardAdapter.composeHandler,
 		headers: hasHeaderShorthand
-			? 'c.headers = c.request.headers.toJSON()\n'
-			: 'c.headers = {}\n' +
-				'for (const [key, value] of c.request.headers.entries())' +
-				'c.headers[key] = value\n'
+			? 'c.headers=c.request.headers.toJSON()\n'
+			: 'c.headers={}\n' +
+				'for(const [k,v] of c.request.headers.entries())' +
+				'c.headers[k]=v\n'
 	},
 	listen(app) {
 		return (options, callback) => {
@@ -57,7 +201,11 @@ export const BunAdapter: ElysiaAdapter = {
 				options = parseInt(options)
 			}
 
-			const fetch = app.fetch
+			const staticRoutes = <Record<string, Response>>{}
+
+			for (const [path, route] of Object.entries(app.router.response))
+				if (route && !(route instanceof Promise))
+					staticRoutes[path] = route
 
 			const serve =
 				typeof options === 'object'
@@ -67,35 +215,39 @@ export const BunAdapter: ElysiaAdapter = {
 							...(app.config.serve || {}),
 							...(options || {}),
 							// @ts-ignore
-							static: {
-								...app.router.static.http.static,
-								...app.config.serve?.static
+							routes: {
+								...staticRoutes,
+								...mapRoutes(app),
+								// @ts-expect-error
+								...app.config.serve?.routes
 							},
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {})
 							},
-							fetch,
-							// @ts-expect-error private property
-							error: app.outerErrorHandler
+							fetch: app.fetch
+							// error: outerErrorHandler
 						} as Serve)
 					: ({
 							development: !isProduction,
 							reusePort: true,
 							...(app.config.serve || {}),
 							// @ts-ignore
-							static: app.router.static.http.static,
+							routes: mergeRoutes(
+								mergeRoutes(staticRoutes, mapRoutes(app)),
+								// @ts-expect-error private property
+								app.config.serve?.routes
+							),
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {})
 							},
 							port: options,
-							fetch,
-							// @ts-expect-error private property
-							error: app.outerErrorHandler
+							fetch: app.fetch
+							// error: outerErrorHandler
 						} as Serve)
 
-			app.server = Bun?.serve(serve)
+			app.server = Bun.serve(serve as any) as any
 
 			if (app.event.start)
 				for (let i = 0; i < app.event.start.length; i++)
@@ -115,8 +267,39 @@ export const BunAdapter: ElysiaAdapter = {
 			})
 
 			// @ts-expect-error private
-			app.promisedModules.then(() => {
+			app.promisedModules.then(async () => {
 				Bun?.gc(false)
+
+				const staticRoutes = <Record<string, Response>>{}
+				const asyncStaticRoutes = <Promise<Response | undefined>[]>[]
+				const asyncStaticRoutesPath = <string[]>[]
+
+				for (const [path, route] of Object.entries(app.router.response))
+					if (route instanceof Promise) {
+						asyncStaticRoutes.push(route)
+						asyncStaticRoutesPath.push(path)
+					} else if (route) staticRoutes[path] = route
+
+				if (!app.server && !isNotEmpty(asyncStaticRoutes)) return
+
+				const promises = await Promise.all(asyncStaticRoutes)
+				for (let i = 0; i < promises.length; i++) {
+					const route = promises[i]
+					const path = asyncStaticRoutesPath[i]
+
+					if (route) staticRoutes[path] = route
+				}
+
+				app.server?.reload({
+					...serve,
+					fetch: app.fetch,
+					// @ts-ignore
+					routes: mergeRoutes(
+						mergeRoutes(staticRoutes, mapRoutes(app)),
+						// @ts-expect-error private property
+						app.config.serve?.routes
+					)
+				})
 			})
 		}
 	},
@@ -141,9 +324,9 @@ export const BunAdapter: ElysiaAdapter = {
 		})
 
 		app.route(
-			'$INTERNALWS',
+			'WS',
 			path as any,
-			async (context) => {
+			async (context: any) => {
 				// @ts-expect-error private property
 				const server = app.getServer()
 

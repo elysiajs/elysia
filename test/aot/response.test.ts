@@ -64,7 +64,10 @@ describe('Dynamic Cookie Response', () => {
 	it('set multiple cookie', async () => {
 		const response = await app.handle(req('/multiple'))
 
-		expect(getCookies(response)).toEqual(['name=Himari; Path=/', 'president=Rio; Path=/'])
+		expect(getCookies(response)).toEqual([
+			'name=Himari; Path=/',
+			'president=Rio; Path=/'
+		])
 	})
 
 	it('set JSON cookie', async () => {
@@ -88,7 +91,8 @@ describe('Dynamic Cookie Response', () => {
 									affilation: 'Financial'
 								}
 							])
-						) + '; Path=/'
+						) +
+						'; Path=/'
 				}
 			})
 		)
@@ -201,10 +205,7 @@ describe('Dynamic Cookie Response', () => {
 		const response = await app.handle(
 			req('/update', {
 				headers: {
-					cookie: `name=${await signCookie(
-						'seminar: Himari',
-						secrets
-					)}` + '; Path=/'
+					cookie: `name=${await signCookie('seminar: Himari', secrets)}`
 				}
 			})
 		)

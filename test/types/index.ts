@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { expect } from 'bun:test'
-import { t, Elysia, RouteSchema, Cookie, error } from '../../src'
+import { t, Elysia, RouteSchema, Cookie, error, file } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -309,10 +308,10 @@ app.decorate('a', 'b')
 			c: typeof c
 			d: typeof d
 		}>().toEqualTypeOf<{
-			a: 'b'
-			b: 'c'
-			c: 'd'
-			d: 'e'
+			a: string
+			b: string
+			c: string
+			d: string
 		}>()
 	})
 
@@ -331,12 +330,18 @@ app.decorate('a', 'b')
 			}
 		})
 
-	expectTypeOf<(typeof app)['decorator']['a']>().toEqualTypeOf<{
-		readonly hello: {
-			readonly cookie: 'wah!'
-			readonly world: 'Tako'
+	expectTypeOf<(typeof app)['decorator']['a']>().toEqualTypeOf<
+		{
+			hello: {
+				world: string
+			}
+		} & {
+			hello: {
+				world: string
+				cookie: string
+			}
 		}
-	}>()
+	>()
 }
 
 // ? Reconcile deep using value
@@ -357,10 +362,10 @@ app.decorate('a', 'b')
 			}
 		)
 
-	expect(app.decorator.hello).toEqual({
-		world: 'Ina',
-		cookie: 'wah!'
-	})
+	expectTypeOf<typeof app.decorator.hello>().toEqualTypeOf<{
+		world: string
+		cookie: string
+	}>()
 }
 
 // ? Reconcile deep using name
@@ -378,12 +383,18 @@ app.decorate('a', 'b')
 			}
 		})
 
-	expectTypeOf<(typeof app)['store']['a']>().toEqualTypeOf<{
-		hello: {
-			world: string
-			cookie: string
+	expectTypeOf<(typeof app)['store']['a']>().toEqualTypeOf<
+		{
+			hello: {
+				world: string
+			}
+		} & {
+			hello: {
+				world: string
+				cookie: string
+			}
 		}
-	}>()
+	>()
 }
 
 // ? Reconcile deep using value
@@ -404,10 +415,10 @@ app.decorate('a', 'b')
 			}
 		)
 
-	expect(app.store.hello).toEqual({
-		world: 'Ina',
-		cookie: 'wah!'
-	})
+	expectTypeOf<typeof app.store.hello>().toEqualTypeOf<{
+		world: string
+		cookie: string
+	}>()
 }
 
 const b = app
@@ -584,7 +595,7 @@ app.use(plugin).group(
 		})
 	},
 	(app) => {
-		app._types.Metadata.schema
+		app['~Metadata'].schema
 
 		return app.get(
 			'/',
@@ -628,7 +639,7 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['_routes']
+	type App = (typeof server)['~Routes']
 	type Route = App['v1']['a']['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
@@ -668,8 +679,8 @@ app.use(plugin).group(
 		)
 		.get('/', () => 1)
 
-	type App = (typeof server)['_routes']
-	type Route = App['index']['get']
+	type App = (typeof server)['~Routes']
+	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -709,7 +720,7 @@ app.use(plugin).group(
 					})
 			)
 	)
-	type App = (typeof server)['_routes']
+	type App = (typeof server)['~Routes']
 	type Route = App['v1']['a']['subscribe']
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: string
@@ -728,8 +739,8 @@ app.use(plugin).group(
 {
 	const server = app.get('/', () => 'Hello').get('/a', () => 'hi')
 
-	type App = (typeof server)['_routes']
-	type Route = App['index']['get']
+	type App = (typeof server)['~Routes']
+	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -934,8 +945,8 @@ app.group(
 
 	const server = app.use(plugin)
 
-	type App = (typeof server)['_routes']
-	type Route = App['index']['get']
+	type App = (typeof server)['~Routes']
+	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: unknown
@@ -955,7 +966,7 @@ app.group(
 
 	const app = new Elysia().use(test)
 
-	type App = (typeof app)['_routes']
+	type App = (typeof app)['~Routes']
 	type Routes = keyof App['app']['test']['get']
 
 	expectTypeOf<Routes>().not.toBeUnknown()
@@ -1029,11 +1040,11 @@ app.group(
 		.get('/child', () => 'Hello from child route')
 	const main = new Elysia().use(child)
 
-	type App = (typeof main)['_routes']
+	type App = (typeof main)['~Routes']
 
-	expectTypeOf<keyof (typeof main)['_routes']>().toEqualTypeOf<'child'>()
+	expectTypeOf<keyof (typeof main)['~Routes']>().toEqualTypeOf<'child'>()
 	expectTypeOf<
-		keyof (typeof main)['_types']['Singleton']['decorator']
+		keyof (typeof main)['~Singleton']['decorator']
 	>().not.toEqualTypeOf<{
 		request: {
 			b: 'b'
@@ -1161,7 +1172,7 @@ const a = app
 
 	const app = new Elysia().group('/api', (app) => app.use(testController))
 
-	expectTypeOf<(typeof app)['_routes']>().toEqualTypeOf<{
+	expectTypeOf<(typeof app)['~Routes']>().toEqualTypeOf<{
 		api: {
 			test: {
 				'could-be-error': {
@@ -1239,13 +1250,13 @@ const a = app
 			return 'Hifumi'
 		})
 
-	type app = typeof app._routes
+	type app = (typeof app)['~Routes']
 
-	expectTypeOf<app['index']['get']['response']>().toEqualTypeOf<{
+	expectTypeOf<app['get']['response']>().toEqualTypeOf<{
 		200: string
 	}>()
 
-	expectTypeOf<app['index']['post']['response']>().toEqualTypeOf<{
+	expectTypeOf<app['post']['response']>().toEqualTypeOf<{
 		200: string
 		readonly 201: string
 		422: {
@@ -1347,7 +1358,7 @@ app.get('/', ({ set }) => {
 	const child = new Elysia().get(
 		'/',
 		() => {
-			return Bun.file('test/kyuukurarin.mp4')
+			return file('test/kyuukurarin.mp4')
 		},
 		{
 			response: t.File()
@@ -1361,7 +1372,7 @@ app.get('/', ({ set }) => {
 		'/',
 		() => {
 			return {
-				a: Bun.file('test/kyuukurarin.mp4')
+				a: file('test/kyuukurarin.mp4')
 			}
 		},
 		{
@@ -1540,7 +1551,7 @@ type a = keyof {}
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('plugin')
+			.as('scoped')
 
 		const plugin = new Elysia()
 			.use(inner)
@@ -1558,13 +1569,13 @@ type a = keyof {}
 			})
 			// @ts-expect-error
 			.get('/inner', () => 'a')
-			.as('plugin')
+			.as('scoped')
 
 		const plugin = new Elysia()
 			.use(inner)
 			// @ts-expect-error
 			.get('/plugin', () => true)
-			.as('plugin')
+			.as('scoped')
 
 		// @ts-expect-error
 		const app = new Elysia().use(plugin).get('/', () => 'not a number')
@@ -1916,9 +1927,9 @@ type a = keyof {}
 			myPluginMethod: pluginMethod,
 			...rest
 		}))
-		.as('plugin')
+		.as('scoped')
 
-	expectTypeOf<typeof plugin._ephemeral.derive>().toHaveProperty(
+	expectTypeOf<(typeof plugin)['~Ephemeral']['derive']>().toHaveProperty(
 		'pluginMethod'
 	)
 }
@@ -2269,7 +2280,9 @@ type a = keyof {}
 		}
 	)
 
-	expectTypeOf<(typeof app._routes.index.get.response)[200]>().toEqualTypeOf<{
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<{
 		name: string
 	}>()
 }
@@ -2293,8 +2306,107 @@ type a = keyof {}
 		}
 	)
 
-	expectTypeOf<(typeof app._routes.index.get.response)[200]>().toEqualTypeOf<{
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<{
 		name: string
 		a: string
 	}>()
+}
+
+// ? cookie sample
+{
+	const app = new Elysia()
+		.get(
+			'/council',
+			({ cookie: { council } }) =>
+				(council.value = [
+					{
+						name: 'Rin',
+						affilation: 'Administration'
+					}
+				]),
+			{
+				cookie: t.Cookie({
+					council: t.Optional(
+						t.Array(
+							t.Object({
+								name: t.String(),
+								affilation: t.String()
+							})
+						)
+					)
+				})
+			}
+		)
+		.get('/create', ({ cookie: { name } }) => (name.value = 'Himari'))
+		.get('/multiple', ({ cookie: { name, president } }) => {
+			name.value = 'Himari'
+			president.value = 'Rio'
+
+			return 'ok'
+		})
+		.get(
+			'/update',
+			({ cookie: { name } }) => {
+				name.value = 'seminar: Himari'
+
+				return name.value
+			},
+			{
+				cookie: t.Cookie(
+					{
+						name: t.Optional(t.String())
+					},
+					{
+						secrets: 'a',
+						sign: ['name']
+					}
+				)
+			}
+		)
+		.get('/remove', ({ cookie }) => {
+			for (const self of Object.values(cookie)) self.remove()
+
+			return 'Deleted'
+		})
+		.get('/remove-with-options', ({ cookie }) => {
+			for (const self of Object.values(cookie)) self.remove()
+
+			return 'Deleted'
+		})
+		.get('/set', ({ cookie: { session } }) => {
+			session.value = 'rin'
+			session.set({
+				path: '/'
+			})
+		})
+}
+
+// Handle macro with function
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				resolve: () => ({
+					a: 'a'
+				})
+			}
+		})
+		.get(
+			'/a',
+			({ a }) => {
+				expectTypeOf<typeof a>().toEqualTypeOf<string>()
+			},
+			{
+				a: true,
+				beforeHandle: (c) => {}
+			}
+		)
+		.ws('/', {
+			a: true,
+			message({ data: { a } }) {
+				expectTypeOf<typeof a>().toEqualTypeOf<string>()
+			}
+		})
 }

@@ -8,7 +8,12 @@ export const upload = (
 	fields: Record<
 		string,
 		MaybeArray<
-			(string & {}) | 'aris-yuzu.jpg' | 'midori.png' | 'millenium.jpg'
+			| (string & {})
+			| 'aris-yuzu.jpg'
+			| 'midori.png'
+			| 'millenium.jpg'
+			| 'fake.jpg'
+			| 'kozeki-ui.webp'
 		>
 	>
 ) => {
@@ -44,7 +49,7 @@ export const post = (path: string, body?: Record<string, any>) =>
 		headers: body
 			? {
 					'Content-Type': 'application/json'
-			  }
+				}
 			: {},
 		body: body ? JSON.stringify(body) : body
 	})

@@ -1,6 +1,6 @@
 import { parse, serialize } from 'cookie'
 
-import { decode as decodeURIComponent } from './deuri'
+import decode from 'fast-decode-uri-component'
 
 import { isNotEmpty, unsignCookie } from './utils'
 import { InvalidCookieSignature } from './error'
@@ -326,7 +326,7 @@ export const parseCookie = async (
 	for (const [name, v] of Object.entries(cookies)) {
 		if (v === undefined) continue
 
-		let value = decodeURIComponent(v)
+		let value = decode(v)
 
 		if (sign === true || sign?.includes(name)) {
 			if (!secrets)

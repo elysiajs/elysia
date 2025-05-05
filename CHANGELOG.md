@@ -1,3 +1,62 @@
+# 1.3.0
+Feature:
+- add `exactMirror`
+- add `systemRouter` config
+- `standalone Validator`
+- add `Elysia.Ref` for referencing schema with autocompletion instead of `t.Ref`
+- support Ref inside inline schema
+- add sucrose cache
+- new validation `t.Form`, `t.NoValidate`
+- use `file-type` to check file type
+- add `INVALID_FILE_TYPE` error
+- add `sanitize` options
+
+Improvement:
+- `encodeSchema` now stable and enabled by default
+- optimize types
+- reduce redundant type check when using Encode
+- optimize isAsync
+- unwrap Definition['typebox'] by default to prevent unnecessary UnwrapTypeModule call
+- Elysia.form can now be type check
+- refactor type-system
+- refactor `_types` into `~Types`
+- using aot compilation to check for custom Elysia type, eg. Numeric
+- refactor `app.router.static`, and move static router code generation to compile phase
+- optimize memory usage on `add`, `_use`, and some utility functions
+- improve start up time on multiple route
+- dynamically create cookie validator as needed in compilation process
+- reduce object cloning
+- optimize start index for finding delimiter of a content type header
+- Promise can now be a static response
+- `ParseError` now keeps stack trace
+- refactor `parseQuery` and `parseQueryFromURL`
+- add `config` options to `mount`
+- recompile automatically after async modules is mounted
+- support macro on when hook has function
+- support resolve macro on ws
+- [#1146](https://github.com/elysiajs/elysia/pull/1146) add support to return web API's File from handler
+- [#1165](https://github.com/elysiajs/elysia/pull/1165) skip non-numeric status codes in response schema validation
+- [#1177](https://github.com/elysiajs/elysia/issues/1177) cookie does not sign when an error is thrown
+
+Bug fix:
+- `Response` returned from `onError` is using octet stream
+- unintentional memory allocation when using `mergeObjectArray`
+- handle empty space on Date query
+
+Change:
+- only provide `c.request` to mapResponse when `maybeStream` is true
+- use plain object for `routeTree` instead of `Map`
+- remove `compressHistoryHook` and `decompressHistoryHook`
+- webstandard handler now return `text/plain` if not on Bun
+- use non const value for `decorate` unless explicitly specified
+- `Elysia.mount` now set `detail.hide = true` by default
+
+Breaking Change:
+- remove `as('plugin')` in favor of `as('scoped')`
+- remove root `index` for Eden Treaty
+- remove `websocket` from `ElysiaAdapter`
+- remove `inference.request`
+
 # 1.2.25 - 6 Mar 2025
 Bug fix:
 - [#1108](https://github.com/elysiajs/elysia/issues/1108) use validation response instead of return type when schema is provided

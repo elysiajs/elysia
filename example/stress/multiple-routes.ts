@@ -1,20 +1,24 @@
 import { Elysia, t } from '../../src'
-import { generateHeapSnapshot } from 'bun'
 
-const total = 1000
+const total = 500
 
 {
-	console.log('Elysia')
+	const app = new Elysia()
 
-	const app = new Elysia({ precompile: true })
 	const t1 = performance.now()
 	const memory = process.memoryUsage().heapTotal / 1024 / 1024
 
 	for (let i = 0; i < total; i++)
-		app.onBeforeHandle(() => {
-			return { a: 'ok' }
-		}).get(`/id/${i}`, () => 'hello', {
-			body: t.String()
+		app.get(`/id/${i}`, () => 'hello', {
+			response: t.Object({
+				hello: t.String(),
+				world: t.String(),
+				extra: t.Object({
+					a: t.Array(t.String()),
+					b: t.Nullable(t.Array(t.String())),
+					name: t.String()
+				})
+			})
 		})
 
 	const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024
@@ -28,8 +32,6 @@ const total = 1000
 	)
 	console.log('Average', +(took / total).toFixed(4), 'ms / route')
 
-	const snapshot = generateHeapSnapshot()
-	await Bun.write('heap.json', JSON.stringify(snapshot, null, 2))
-
 	console.log(memoryAfter - memory, 'MB memory used')
+	console.log(((memoryAfter - memory) / total) * 1024, 'KB memory used')
 }

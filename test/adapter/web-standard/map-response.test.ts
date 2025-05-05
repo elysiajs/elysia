@@ -1,17 +1,16 @@
 import { describe, it, expect } from 'bun:test'
 
-import { Elysia } from '../../../src'
+import { Elysia, form, redirect } from '../../../src'
 
 import { mapResponse } from '../../../src/adapter/web-standard/handler'
-import { form, redirect } from '../../../src/utils'
 import { Passthrough } from './utils'
 import { req } from '../../utils'
 
-const defaultContext = {
+const createContext = () => ({
 	cookie: {},
 	headers: {},
 	status: 200
-}
+})
 
 const context = {
 	cookie: {},
@@ -36,7 +35,7 @@ class CustomResponse extends Response {}
 
 describe('Web Standard - Map Response', () => {
 	it('map string', async () => {
-		const response = mapResponse('Shiroko', defaultContext)
+		const response = mapResponse('Shiroko', createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toBe('Shiroko')
@@ -44,7 +43,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map number', async () => {
-		const response = mapResponse(1, defaultContext)
+		const response = mapResponse(1, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toBe('1')
@@ -52,7 +51,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map boolean', async () => {
-		const response = mapResponse(true, defaultContext)
+		const response = mapResponse(true, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toBe('true')
@@ -64,7 +63,7 @@ describe('Web Standard - Map Response', () => {
 			name: 'Shiroko'
 		}
 
-		const response = mapResponse(body, defaultContext)
+		const response = mapResponse(body, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.json()).toEqual(body)
@@ -72,7 +71,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map function', async () => {
-		const response = mapResponse(() => 1, defaultContext)
+		const response = mapResponse(() => 1, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toBe('1')
@@ -80,7 +79,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map undefined', async () => {
-		const response = mapResponse(undefined, defaultContext)
+		const response = mapResponse(undefined, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('')
@@ -88,7 +87,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map null', async () => {
-		const response = mapResponse(null, defaultContext)
+		const response = mapResponse(null, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('')
@@ -98,7 +97,7 @@ describe('Web Standard - Map Response', () => {
 	it('map Blob', async () => {
 		const file = Bun.file('./test/images/aris-yuzu.jpg')
 
-		const response = mapResponse(file, defaultContext)
+		const response = mapResponse(file, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.arrayBuffer()).toEqual(await file.arrayBuffer())
@@ -122,7 +121,7 @@ describe('Web Standard - Map Response', () => {
 
 		const response = await mapResponse(
 			new Promise((resolve) => resolve(body)),
-			defaultContext
+			createContext()
 		)
 
 		expect(response).toBeInstanceOf(Response)
@@ -131,7 +130,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map Error', async () => {
-		const response = mapResponse(new Error('Hello'), defaultContext)
+		const response = mapResponse(new Error('Hello'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.json()).toEqual({
@@ -142,7 +141,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map Response', async () => {
-		const response = mapResponse(new Response('Shiroko'), defaultContext)
+		const response = mapResponse(new Response('Shiroko'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('Shiroko')
@@ -152,7 +151,7 @@ describe('Web Standard - Map Response', () => {
 	it('map custom Response', async () => {
 		const response = mapResponse(
 			new CustomResponse('Shiroko'),
-			defaultContext
+			createContext()
 		)
 
 		expect(response).toBeInstanceOf(Response)
@@ -162,7 +161,7 @@ describe('Web Standard - Map Response', () => {
 
 	it('map custom Response with custom headers', async () => {
 		const response = mapResponse(new CustomResponse('Shiroko'), {
-			...defaultContext,
+			...createContext(),
 			headers: {
 				'content-type': 'text/html; charset=utf8'
 			}
@@ -177,7 +176,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map custom class', async () => {
-		const response = mapResponse(new Student('Himari'), defaultContext)
+		const response = mapResponse(new Student('Himari'), createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.json()).toEqual({
@@ -238,7 +237,7 @@ describe('Web Standard - Map Response', () => {
 		expect(await response.json()).toEqual(body)
 		expect(response.headers.toJSON()).toEqual({
 			...context.headers,
-			'content-type': 'application/json;charset=utf-8'
+			'content-type': 'application/json'
 		})
 		expect(response.status).toBe(418)
 	})
@@ -256,7 +255,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map Response with custom context', async () => {
-		const response = mapResponse(new Response('Shiroko'), context)
+		const response = await mapResponse(new Response('Shiroko'), context)
 		const headers = response.headers.toJSON()
 
 		expect(response).toBeInstanceOf(Response)
@@ -265,7 +264,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map Response and merge Headers', async () => {
-		const response = mapResponse(
+		const response = await mapResponse(
 			new Response('Shiroko', {
 				headers: {
 					Name: 'Himari'
@@ -357,7 +356,7 @@ describe('Web Standard - Map Response', () => {
 	})
 
 	it('map toResponse', async () => {
-		const response = mapResponse(new Passthrough(), defaultContext)
+		const response = mapResponse(new Passthrough(), createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response.text()).toEqual('hi')
@@ -367,7 +366,7 @@ describe('Web Standard - Map Response', () => {
 	it('map video content-range', async () => {
 		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
 
-		const response = mapResponse(kyuukararin, defaultContext)
+		const response = mapResponse(kyuukararin, createContext())
 
 		expect(response).toBeInstanceOf(Response)
 		expect(response.headers.get('accept-ranges')).toEqual('bytes')
@@ -381,7 +380,7 @@ describe('Web Standard - Map Response', () => {
 		const kyuukararin = Bun.file('test/kyuukurarin.mp4')
 
 		const response = mapResponse(kyuukararin, {
-			...defaultContext,
+			...createContext(),
 			status: 304
 		})
 
@@ -396,7 +395,7 @@ describe('Web Standard - Map Response', () => {
 			form({
 				a: Bun.file('test/kyuukurarin.mp4')
 			}),
-			defaultContext
+			createContext()
 		)
 
 		expect(await response.formData()).toBeInstanceOf(FormData)

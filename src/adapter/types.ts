@@ -4,7 +4,7 @@ import type { AnyElysia } from '..'
 import type { Context } from '../context'
 import type { Sucrose } from '../sucrose'
 
-import type { Prettify, AnyLocalHook } from '../types'
+import type { Prettify, AnyLocalHook, MaybePromise } from '../types'
 import type { AnyWSLocalHook } from '../ws/types'
 
 export interface ElysiaAdapter {
@@ -61,7 +61,7 @@ export interface ElysiaAdapter {
 			hooks: AnyLocalHook,
 			setHeaders?: Context['set']['headers'],
 			...params: unknown[]
-		): (() => Response) | undefined
+		): (() => MaybePromise<Response>) | undefined
 	}
 	composeHandler: {
 		mapResponseContext?: string
@@ -118,7 +118,6 @@ export interface ElysiaAdapter {
 		 * p: pathname
 		 */
 		createContext(app: AnyElysia): string
-		websocket(app: AnyElysia): string
 		/**
 		 * Inject variable to the general handler
 		 */
@@ -138,4 +137,14 @@ export interface ElysiaAdapter {
 		unknownError: string
 	}
 	ws?(app: AnyElysia, path: string, handler: AnyWSLocalHook): unknown
+	/**
+	 * Whether or not the runtime or framework the is built on top on has a router
+	 * eg. Bun.serve.routes, uWebSocket
+	 **/
+	createSystemRouterHandler?(
+		method: string,
+		path: string,
+		hook: AnyLocalHook,
+		app: AnyElysia
+	): void
 }

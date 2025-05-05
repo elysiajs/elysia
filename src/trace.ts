@@ -125,6 +125,7 @@ export type TraceHandler<
 				set: Context['set']
 				time: number
 				store: Singleton['store']
+				response: unknown
 			} & {
 				[x in `on${Capitalize<TraceEvent>}`]: TraceListener
 			}

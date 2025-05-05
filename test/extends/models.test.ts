@@ -155,7 +155,6 @@ describe('Model', () => {
 
 		expect(correctArr.status).toBe(200)
 
-
 		const wrong = await app.handle(
 			new Request('http://localhost/', {
 				method: 'POST',
@@ -249,21 +248,6 @@ describe('Model', () => {
 			})
 		)
 		expect(correct.status).toBe(200)
-	})
-
-	it('create default value with nested reference model', async () => {
-		const app = new Elysia()
-			.model({
-				number: t.Number({ default: 0 }),
-				optionalNumber: t.Optional(t.Ref('number'))
-			})
-			.post('/', ({ body }) => body, {
-				body: t.Optional(t.Ref('number'))
-			})
-
-		const result = await app.handle(post('/')).then((x) => x.text())
-
-		expect(result).toBe('0')
 	})
 
 	it('create default value with nested reference model', async () => {
