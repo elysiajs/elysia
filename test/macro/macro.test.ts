@@ -857,4 +857,39 @@ describe('Macro', () => {
 		expect(c).toEqual({ name: 'none' })
 		expect(d).toEqual({ name: 'none' })
 	})
+
+	it('handle macro resolve inside group with precompile', async () => {
+		const group = new Elysia()
+			.macro({
+				user: (enabled: true) => ({
+					resolve() {
+						if (!enabled) return
+
+						return {
+							user: 'a'
+						}
+					}
+				})
+			})
+			.get(
+				'/',
+				({ user, status }) => {
+					if (!user) return status(401)
+
+					return { hello: 'hanabi' }
+				},
+				{
+					user: true
+				}
+			)
+		const app = new Elysia({
+			precompile: true
+		}).group('/group', (app) => app.use(group))
+
+		const response = await app.handle(req('/group')).then((x) => x.json())
+
+		expect(response).toEqual({
+			hello: 'hanabi'
+		})
+	})
 })
