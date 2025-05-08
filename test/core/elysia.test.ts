@@ -276,4 +276,39 @@ describe('Edge Case', () => {
 			]
 		})
 	})
+
+	it('clone hooks before mapping it to usable function while compose', async () => {
+		const group = new Elysia()
+			.macro({
+				user: (enabled: true) => ({
+					resolve() {
+						if (!enabled) return
+
+						return {
+							user: 'a'
+						}
+					}
+				})
+			})
+			.get(
+				'/',
+				({ user, status }) => {
+					if (!user) return status(401)
+
+					return { hello: 'hanabi' }
+				},
+				{
+					user: true
+				}
+			)
+		const app = new Elysia({
+			precompile: true
+		}).group('/group', (app) => app.use(group))
+
+		const response = await app.handle(req('/group')).then((x) => x.json())
+
+		expect(response).toEqual({
+			hello: 'hanabi'
+		})
+	})
 })

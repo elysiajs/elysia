@@ -152,7 +152,8 @@ import type {
 	PrettifySchema,
 	MergeStandaloneSchema,
 	IsNever,
-	DocumentDecoration
+	DocumentDecoration,
+	AfterHandler
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -769,6 +770,7 @@ export default class Elysia<
 			)
 
 		this.applyMacro(localHook)
+
 		const hooks = isNotEmpty(this.event)
 			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
 			: lifeCycleToArray(localHookToLifeCycleStore(localHook))
@@ -1874,7 +1876,7 @@ export default class Elysia<
 	 */
 	onAfterHandle<const Schema extends RouteSchema>(
 		handler: MaybeArray<
-			OptionalHandler<
+			AfterHandler<
 				MergeSchema<
 					Schema,
 					MergeSchema<

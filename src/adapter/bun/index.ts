@@ -65,6 +65,16 @@ const getPossibleParams = (path: string) => {
 	return routes
 }
 
+const supportedMethods = {
+	GET: true,
+	HEAD: true,
+	OPTIONS: true,
+	DELETE: true,
+	PATCH: true,
+	POST: true,
+	PUT: true
+} as const
+
 const mapRoutes = (app: AnyElysia) => {
 	if (!app.config.aot || !app.config.systemRouter) return undefined
 
@@ -96,7 +106,12 @@ const mapRoutes = (app: AnyElysia) => {
 
 		const method = route.method
 
-		if ((method === 'GET' && `WS_${route.path}` in tree) || method === 'WS')
+		if (
+			(method === 'GET' && `WS_${route.path}` in tree) ||
+			method === 'WS' ||
+			route.path.charCodeAt(route.path.length - 1) === 42 ||
+			!(method in supportedMethods)
+		)
 			continue
 
 		if (method === 'ALL') {
@@ -375,7 +390,7 @@ export const BunAdapter: ElysiaAdapter = {
 					...(app.event.error ?? []).map((x) =>
 						typeof x === 'function' ? x : x.fn
 					)
-				]
+				].filter((x) => x)
 
 				const handleErrors = !errorHandlers.length
 					? () => {}

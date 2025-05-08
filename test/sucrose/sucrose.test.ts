@@ -100,25 +100,6 @@ describe('sucrose', () => {
 		})
 	})
 
-	// Remove as forceDynamicQuery is remove
-	// it("don't link object inference", () => {
-	// 	const app = new Elysia({ precompile: true })
-	// 		.get('/', 'Hi')
-	// 		.get('/id/:id', ({ set, params: { id }, query: { name } }) => {
-	// 			set.headers['x-powered-by'] = 'benchmark'
-
-	// 			return id + ' ' + name
-	// 		})
-
-	// 	expect(app.inference).toEqual({
-	// 		body: false,
-	// 		cookie: false,
-	// 		headers: false,
-	// 		query: false,
-	// 		set: false,
-	// 	})
-	// })
-
 	it('inherits inference from plugin', () => {
 		const plugin = new Elysia().derive(({ headers: { authorization } }) => {
 			return {
@@ -294,5 +275,36 @@ describe('sucrose', () => {
 		const response = await app.handle(new Request('http://localhost:3000'))
 
 		expect(response.status).toBe(200)
+	})
+
+	it('access route, url, path', () => {
+		expect(
+			sucrose({
+				handler: function (context) {
+					console.log(context.url, context.path, context.route)
+				},
+				afterHandle: [],
+				beforeHandle: [],
+				error: [],
+				mapResponse: [],
+				onResponse: [],
+				parse: [],
+				request: [],
+				start: [],
+				stop: [],
+				trace: [],
+				transform: []
+			})
+		).toEqual({
+			query: false,
+			headers: false,
+			body: false,
+			cookie: false,
+			set: false,
+			server: false,
+			path: true,
+			url: true,
+			route: true
+		})
 	})
 })

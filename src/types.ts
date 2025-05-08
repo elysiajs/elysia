@@ -880,6 +880,27 @@ export type OptionalHandler<
 		: Route['response'][keyof Route['response']] | void
 >
 
+export type AfterHandler<
+	in out Route extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	Path extends string | undefined = undefined
+> = (
+	context: Context<Route, Singleton, Path> & {
+		response: {} extends Route['response']
+			? unknown
+			: Route['response'][keyof Route['response']]
+	}
+) => MaybePromise<
+	{} extends Route['response']
+		? unknown
+		: Route['response'][keyof Route['response']] | void
+>
+
 export type MapResponse<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -995,13 +1016,11 @@ export type AfterResponseHandler<
 		resolve: {}
 	}
 > = (
-	context: Prettify<
-		Omit<Context<Route, Singleton>, 'response'> & {
-			response: {} extends Route['response']
-				? unknown
-				: Route['response'][keyof Route['response']]
-		}
-	>
+	context: Context<Route, Singleton> & {
+		response: {} extends Route['response']
+			? unknown
+			: Route['response'][keyof Route['response']]
+	}
 ) => MaybePromise<unknown>
 
 export type GracefulHandler<in Instance extends AnyElysia> = (
@@ -1288,7 +1307,7 @@ export type LocalHook<
 		/**
 		 * Execute after main handler
 		 */
-		afterHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+		afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
 		/**
 		 * Execute after main handler
 		 */
@@ -1407,11 +1426,11 @@ export type BaseMacroFn<
 		): unknown
 
 		onAfterHandle?(
-			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 		): unknown
 		onAfterHandle?(
 			options: MacroOptions,
-			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 		): unknown
 
 		onError?(
@@ -1457,7 +1476,7 @@ export type HookMacroFn<
 				beforeHandle?: MaybeArray<
 					OptionalHandler<TypedRoute, Singleton>
 				>
-				afterHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 				afterResponse?: MaybeArray<
@@ -1471,7 +1490,7 @@ export type HookMacroFn<
 				beforeHandle?: MaybeArray<
 					OptionalHandler<TypedRoute, Singleton>
 				>
-				afterHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
 				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
 				afterResponse?: MaybeArray<
@@ -1526,12 +1545,10 @@ export interface MacroManager<
 		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
 	): unknown
 
-	onAfterHandle(
-		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-	): unknown
+	onAfterHandle(fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>): unknown
 	onAfterHandle(
 		options: MacroOptions,
-		fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+		fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
 	): unknown
 
 	onError(
@@ -1573,9 +1590,11 @@ type _CreateEden<
 	? {
 			[x in Start]: _CreateEden<Rest, Property>
 		}
-	: {
-			[x in Path]: Property
-		}
+	: Path extends ''
+		? Property
+		: {
+				[x in Path]: Property
+			}
 
 type RemoveStartinSlash<T> = T extends `/${infer Rest}` ? Rest : T
 

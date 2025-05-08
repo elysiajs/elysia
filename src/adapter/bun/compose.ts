@@ -7,6 +7,7 @@ import { ELYSIA_TRACE } from '../../trace'
 
 import type { AnyElysia } from '../..'
 import type { InternalRoute } from '../../types'
+import { mapEarlyResponse } from './handler'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -108,6 +109,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		`decorator=data.decorator,` +
 		'redirect=data.redirect,' +
 		'route=data.route,' +
+		'mapEarlyResponse=data.mapEarlyResponse,' +
 		allocateIf('randomId=data.randomId,', hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID=data.ELYSIA_REQUEST_ID,`, hasTrace) +
 		allocateIf(`ELYSIA_TRACE=data.ELYSIA_TRACE,`, hasTrace) +
@@ -147,6 +149,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 		randomId: hasTrace ? randomId : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
-		trace: hasTrace ? app.event.trace?.map((x) => x?.fn ?? x) : undefined
+		trace: hasTrace ? app.event.trace?.map((x) => x?.fn ?? x) : undefined,
+		mapEarlyResponse: mapEarlyResponse
 	})
 }

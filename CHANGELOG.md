@@ -1,3 +1,21 @@
+# 1.3.1 - 8 May 2025
+Bug fix:
+- [#1200](https://github.com/elysiajs/elysia/issues/1200) limited Bun Router to supported method
+- [#1199](https://github.com/elysiajs/elysia/issues/1199) object are not normalized when t.Transform is provided
+- [#1198](https://github.com/elysiajs/elysia/issues/1198), [#1188](https://github.com/elysiajs/elysia/issues/1188), [#1186](https://github.com/elysiajs/elysia/issues/1186) exclude wildcard route from Bun router
+- [#1197](https://github.com/elysiajs/elysia/issues/1197) leave incorrect union field as-is
+- [#1195](https://github.com/elysiajs/elysia/issues/1195) invalid onAfterHandle typing
+- [#1194](https://github.com/elysiajs/elysia/issues/1194) normalize array response
+- [#1193](https://github.com/elysiajs/elysia/issues/1193) undefine value.schema.noValidate
+- [#1192](https://github.com/elysiajs/elysia/issues/1192) using a macro inside a group does not call the handler when using the `precompile` option
+- [#1190](https://github.com/elysiajs/elysia/issues/1190) derive and resolve handlers not being executed on WS context
+- [#1189](https://github.com/elysiajs/elysia/issues/1189) Type Inference Issue with Eden Treaty Group Endpoints
+- [#1185](https://github.com/elysiajs/elysia/issues/1185) path is missing from Context when Bun System Router is used
+- [#1184](https://github.com/elysiajs/elysia/issues/1184) Missing `mapEarlyResponse` on Bun System Router
+
+Change:
+- update `exact-mirror` to `0.1.2`
+
 # 1.3.0 - 5 May 2025
 Feature:
 - add `exactMirror`

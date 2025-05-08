@@ -462,11 +462,10 @@ export const inferBodyReference = (
 			continue
 		}
 
-		if (!inference.query && access('query', alias)) inference.query = true
-
 		if (
 			!inference.query &&
-			(code.includes('return ' + alias) ||
+			(access('query', alias) ||
+				code.includes('return ' + alias) ||
 				code.includes('return ' + alias + '.query'))
 		)
 			inference.query = true
@@ -483,6 +482,10 @@ export const inferBodyReference = (
 		if (!inference.server && access('server', alias))
 			inference.server = true
 
+		if (!inference.route && access('route', alias)) inference.route = true
+		if (!inference.url && access('url', alias)) inference.url = true
+		if (!inference.path && access('path', alias)) inference.path = true
+
 		if (
 			inference.query &&
 			inference.headers &&
@@ -491,7 +494,8 @@ export const inferBodyReference = (
 			inference.set &&
 			inference.server &&
 			inference.route &&
-			inference.url
+			inference.url &&
+			inference.path
 		)
 			break
 	}

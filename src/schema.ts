@@ -76,7 +76,7 @@ export const isOptional = (
 
 export const hasAdditionalProperties = (
 	_schema: TAnySchema | TypeCheck<any> | ElysiaTypeCheck<any>
-) => {
+): boolean => {
 	if (!_schema) return false
 
 	// @ts-expect-error private property
@@ -111,6 +111,9 @@ export const hasAdditionalProperties = (
 
 		return false
 	}
+
+	if (schema.type === 'array' && schema.items && !Array.isArray(schema.items))
+		return hasAdditionalProperties(schema.items)
 
 	return false
 }
@@ -834,7 +837,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			Encode: (value: unknown) => Value.Encode(schema, value),
 			get hasAdditionalProperties() {
 				if ('~hasAdditionalProperties' in this)
-					return this['~hasAdditionalProperties']
+					return this['~hasAdditionalProperties'] as boolean
 
 				return (this['~hasAdditionalProperties'] =
 					hasAdditionalProperties(schema))

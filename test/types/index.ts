@@ -2410,3 +2410,35 @@ type a = keyof {}
 			}
 		})
 }
+
+// Type AfterHandler according to known schema
+{
+	new Elysia().get('/', () => 'yay', {
+		afterResponse({ response }) {
+			expectTypeOf<typeof response>().toEqualTypeOf<string | number>()
+		},
+		response: {
+			200: t.String(),
+			400: t.Number()
+		}
+	})
+}
+
+// Handle Prefix
+{
+	const app = new Elysia().group('/users', (app) =>
+		app
+			.post('/', async ({ body }) => {
+				// Create user endpoint
+				return { success: true, userId: 1 }
+			})
+			.get('/:id', async ({ params }) => {
+				// Get user by ID endpoint
+				return { id: params.id, name: 'John Doe' }
+			})
+	)
+
+	expectTypeOf<keyof (typeof app)['~Routes']['users']>().toEqualTypeOf<
+		'post' | ':id'
+	>()
+}
