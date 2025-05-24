@@ -108,6 +108,11 @@
 			"import": "./dist/adapter/index.mjs",
 			"require": "./dist/cjs/adapter/index.js"
 		},
+		"./adapter/utils": {
+			"types": "./dist/adapter/utils.d.ts",
+			"import": "./dist/adapter/utils.mjs",
+			"require": "./dist/cjs/adapter/utils.js"
+		},
 		"./adapter/bun": {
 			"types": "./dist/adapter/bun/index.d.ts",
 			"import": "./dist/adapter/bun/index.mjs",
