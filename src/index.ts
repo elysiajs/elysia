@@ -40,7 +40,8 @@ import {
 	promoteEvent,
 	isNotEmpty,
 	encodePath,
-	lifeCycleToArray
+	lifeCycleToArray,
+	supportPerMethodInlineHandler
 } from './utils'
 
 import {
@@ -294,7 +295,11 @@ export default class Elysia<
 		// Static Router
 		static: {} as { [path in string]: { [method in string]: number } },
 		// Native Static Response
-		response: {} as Record<string, MaybePromise<Response | undefined>>,
+		response: {} as {
+			[path: string]:
+				| MaybePromise<Response | undefined>
+				| { [method: string]: MaybePromise<Response | undefined> }
+		},
 		history: [] as InternalRoute[]
 	}
 
@@ -853,12 +858,23 @@ export default class Elysia<
 		const useNativeStaticResponse =
 			this.config.nativeStaticResponse === true
 
-		if (
-			useNativeStaticResponse &&
-			nativeStaticHandler &&
-			(method === 'GET' || method === 'ALL')
-		)
-			this.router.response[path] = nativeStaticHandler()
+		const addResponsePath = (path: string) => {
+			if (!useNativeStaticResponse || !nativeStaticHandler) return
+
+			if (supportPerMethodInlineHandler) {
+				if (this.router.response[path])
+					// @ts-expect-error
+					this.router.response[path]![method] = nativeStaticHandler()
+				else
+					this.router.response[path] = {
+						[method]: nativeStaticHandler()
+					}
+			} else {
+				this.router.response[path] = nativeStaticHandler()
+			}
+		}
+
+		addResponsePath(path)
 
 		let _compiled: ComposedHandler
 		const compile = () => {
@@ -984,13 +1000,8 @@ export default class Elysia<
 					[method]: index
 				} as const
 
-			if (
-				!this.config.strictPath &&
-				useNativeStaticResponse &&
-				nativeStaticHandler &&
-				(method === 'GET' || method === 'ALL')
-			)
-				this.router.response[getLoosePath(path)] = nativeStaticHandler()
+			if(!this.config.strictPath)
+				addResponsePath(getLoosePath(path))
 
 			// Static path doesn't need encode as it's done in compilation process
 		} else {
@@ -1009,14 +1020,7 @@ export default class Elysia<
 			if (!this.config.strictPath) {
 				const loosePath = getLoosePath(path)
 
-				if (
-					useNativeStaticResponse &&
-					staticHandler &&
-					(method === 'GET' || method === 'ALL')
-				)
-					this.router.response[loosePath] =
-						staticHandler() as Response
-
+				addResponsePath(loosePath)
 				this.router.http.add(method, loosePath, handler)
 			}
 
@@ -1024,16 +1028,7 @@ export default class Elysia<
 			if (path !== encoded) {
 				this.router.http.add(method, encoded, handler)
 
-				if (
-					useNativeStaticResponse &&
-					staticHandler &&
-					(method === 'GET' || method === 'ALL')
-				) {
-					this.router.response[encoded] = staticHandler() as Response
-
-					this.router.response[getLoosePath(encoded)] =
-						staticHandler() as Response
-				}
+				addResponsePath(encoded)
 			}
 		}
 	}

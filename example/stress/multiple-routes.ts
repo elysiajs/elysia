@@ -3,7 +3,7 @@ import { Elysia, t } from '../../src'
 const total = 500
 
 {
-	const app = new Elysia()
+	const app = new Elysia({ precompile: true })
 
 	const t1 = performance.now()
 	const memory = process.memoryUsage().heapTotal / 1024 / 1024

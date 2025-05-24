@@ -1,3 +1,7 @@
+# 1.3.2 - 24 May 2025
+Feature:
+- Support Bun native static response per method for Bun >= 1.2.14
+
 # 1.3.1 - 8 May 2025
 Bug fix:
 - [#1200](https://github.com/elysiajs/elysia/issues/1200) limited Bun Router to supported method

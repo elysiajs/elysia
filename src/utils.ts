@@ -1097,3 +1097,12 @@ export const encodePath = (path: string, { dynamic = false } = {}) => {
 
 	return encoded
 }
+
+export const supportPerMethodInlineHandler = (() => {
+	if(typeof Bun === "undefined") return true
+
+	const semver = Bun.version.split('.')
+	if (+semver[0] < 1 || +semver[1] < 2 || +semver[2] < 14) return false
+
+	return true
+})()

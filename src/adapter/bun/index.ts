@@ -17,7 +17,8 @@ import {
 	hasHeaderShorthand,
 	isNotEmpty,
 	isNumericString,
-	randomId
+	randomId,
+	supportPerMethodInlineHandler
 } from '../../utils'
 
 import {
@@ -216,11 +217,94 @@ export const BunAdapter: ElysiaAdapter = {
 				options = parseInt(options)
 			}
 
-			const staticRoutes = <Record<string, Response>>{}
+			const createStaticRoute = <
+				WithAsync extends boolean | undefined = false
+			>(
+				iterator: AnyElysia['router']['response'],
+				{ withAsync = false }: { withAsync?: WithAsync } = {}
+			): true extends WithAsync
+				? Promise<{
+						[path: string]:
+							| Response
+							| { [method: string]: Response }
+					}>
+				: {
+						[path: string]:
+							| Response
+							| { [method: string]: Response }
+					} => {
+				const staticRoutes = <
+					{
+						[path: string]:
+							| Response
+							| { [method: string]: Response }
+					}
+				>{}
+				const ops = <Promise<any>[]>[]
 
-			for (const [path, route] of Object.entries(app.router.response))
-				if (route && !(route instanceof Promise))
-					staticRoutes[path] = route
+				for (const [path, route] of Object.entries(iterator)) {
+					if (supportPerMethodInlineHandler) {
+						if (!route) continue
+
+						for (const [method, value] of Object.entries(route)) {
+							if (!value || !(method in supportedMethods))
+								continue
+
+							if (value instanceof Promise) {
+								if (withAsync) {
+									if (!staticRoutes[path])
+										staticRoutes[path] = {}
+
+									ops.push(
+										value.then((awaited) => {
+											if (awaited instanceof Response)
+												// @ts-ignore
+												staticRoutes[path][method] =
+													awaited
+										})
+									)
+								}
+
+								continue
+							}
+
+							if (!(value instanceof Response)) continue
+
+							if (!staticRoutes[path]) staticRoutes[path] = {}
+
+							// @ts-ignore
+							staticRoutes[path][method] = value
+						}
+					} else {
+						if (!route) continue
+
+						if (route instanceof Promise) {
+							if (withAsync) {
+								if (!staticRoutes[path]) staticRoutes[path] = {}
+
+								ops.push(
+									route.then((awaited) => {
+										if (awaited instanceof Response)
+											// @ts-ignore
+											staticRoutes[path] = awaited
+									})
+								)
+							}
+
+							continue
+						}
+
+						if (!(route instanceof Response)) continue
+
+						staticRoutes[path] = route
+					}
+				}
+
+				if (withAsync)
+					return Promise.all(ops).then(() => staticRoutes) as any
+
+				return staticRoutes as any
+			}
 
 			const serve =
 				typeof options === 'object'
@@ -230,12 +314,14 @@ export const BunAdapter: ElysiaAdapter = {
 							...(app.config.serve || {}),
 							...(options || {}),
 							// @ts-ignore
-							routes: {
-								...staticRoutes,
-								...mapRoutes(app),
-								// @ts-expect-error
-								...app.config.serve?.routes
-							},
+							routes: mergeRoutes(
+								mergeRoutes(
+									createStaticRoute(app.router.response),
+									mapRoutes(app)
+								),
+								// @ts-expect-error private property
+								app.config.serve?.routes
+							),
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {})
@@ -249,7 +335,10 @@ export const BunAdapter: ElysiaAdapter = {
 							...(app.config.serve || {}),
 							// @ts-ignore
 							routes: mergeRoutes(
-								mergeRoutes(staticRoutes, mapRoutes(app)),
+								mergeRoutes(
+									createStaticRoute(app.router.response),
+									mapRoutes(app)
+								),
 								// @ts-expect-error private property
 								app.config.serve?.routes
 							),
@@ -283,38 +372,23 @@ export const BunAdapter: ElysiaAdapter = {
 
 			// @ts-expect-error private
 			app.promisedModules.then(async () => {
-				Bun?.gc(false)
-
-				const staticRoutes = <Record<string, Response>>{}
-				const asyncStaticRoutes = <Promise<Response | undefined>[]>[]
-				const asyncStaticRoutesPath = <string[]>[]
-
-				for (const [path, route] of Object.entries(app.router.response))
-					if (route instanceof Promise) {
-						asyncStaticRoutes.push(route)
-						asyncStaticRoutesPath.push(path)
-					} else if (route) staticRoutes[path] = route
-
-				if (!app.server && !isNotEmpty(asyncStaticRoutes)) return
-
-				const promises = await Promise.all(asyncStaticRoutes)
-				for (let i = 0; i < promises.length; i++) {
-					const route = promises[i]
-					const path = asyncStaticRoutesPath[i]
-
-					if (route) staticRoutes[path] = route
-				}
-
 				app.server?.reload({
 					...serve,
 					fetch: app.fetch,
 					// @ts-ignore
 					routes: mergeRoutes(
-						mergeRoutes(staticRoutes, mapRoutes(app)),
+						mergeRoutes(
+							await createStaticRoute(app.router.response, {
+								withAsync: true
+							}),
+							mapRoutes(app)
+						),
 						// @ts-expect-error private property
 						app.config.serve?.routes
 					)
 				})
+
+				Bun?.gc(false)
 			})
 		}
 	},

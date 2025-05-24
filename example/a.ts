@@ -1,13 +1,8 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import Elysia, { t } from '../src'
 
-const app = new Elysia()
-	.onRequest(() => 'a')
-	.get('/:hash', async ({ params: { hash }, error, set }) => {
-		const file = Bun.file('example/teapot.webp')
+const strict = new Elysia({ strictPath: true })
+	.get('', '')
 
-		return file
-	})
-	.listen(3000)
+console.log(strict.router.response)
 
-console.log(app.routes[0].compile().toString())
+// console.log(app.router.response)
