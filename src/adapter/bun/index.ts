@@ -458,9 +458,9 @@ export const BunAdapter: ElysiaAdapter = {
 				let _id: string | undefined
 
 				const errorHandlers = [
-					...(Array.isArray(options.error)
+					...(options.error ? (Array.isArray(options.error)
 						? options.error
-						: [options.error]),
+						: [options.error]) : []),
 					...(app.event.error ?? []).map((x) =>
 						typeof x === 'function' ? x : x.fn
 					)
@@ -501,9 +501,9 @@ export const BunAdapter: ElysiaAdapter = {
 							pong(data?: unknown) {
 								options.pong?.(data)
 							},
-							open(ws: ServerWebSocket<any>) {
+							open: async (ws: ServerWebSocket<any>) => {
 								try {
-									handleResponse(
+									await handleResponse(
 										ws,
 										options.open?.(
 											new ElysiaWS(ws, context as any)
@@ -529,7 +529,7 @@ export const BunAdapter: ElysiaAdapter = {
 									)
 
 								try {
-									handleResponse(
+									await handleResponse(
 										ws,
 										options.message?.(
 											new ElysiaWS(
@@ -544,9 +544,9 @@ export const BunAdapter: ElysiaAdapter = {
 									handleErrors(ws, error)
 								}
 							},
-							drain(ws: ServerWebSocket<any>) {
+							drain: async (ws: ServerWebSocket<any>) => {
 								try {
-									handleResponse(
+									await handleResponse(
 										ws,
 										options.drain?.(
 											new ElysiaWS(ws, context as any)
@@ -556,13 +556,13 @@ export const BunAdapter: ElysiaAdapter = {
 									handleErrors(ws, error)
 								}
 							},
-							close(
+							close: async (
 								ws: ServerWebSocket<any>,
 								code: number,
 								reason: string
-							) {
+							) => {
 								try {
-									handleResponse(
+									await handleResponse(
 										ws,
 										options.close?.(
 											new ElysiaWS(ws, context as any),
