@@ -180,7 +180,8 @@
 	"dependencies": {
 		"cookie": "^1.0.2",
 		"exact-mirror": "0.1.2",
-		"fast-decode-uri-component": "^1.0.1"
+		"fast-decode-uri-component": "^1.0.1",
+		"memoirist": "^0.3.0"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.2.14",
@@ -193,7 +194,6 @@
 		"eslint-plugin-sonarjs": "^3.0.2",
 		"expect-type": "^1.2.1",
 		"file-type": "^20.4.1",
-		"memoirist": "^0.3.0",
 		"mitata": "^1.0.34",
 		"prettier": "^3.5.3",
 		"tsup": "^8.4.0",
