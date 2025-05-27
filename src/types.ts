@@ -1609,8 +1609,8 @@ export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
 	Handle
 > = Handle extends (...a: any[]) => infer A
-	? _ComposeElysiaResponse<Schema, Replace<Awaited<A>, Blob, File>>
-	: _ComposeElysiaResponse<Schema, Replace<Awaited<Handle>, Blob, File>>
+	? _ComposeElysiaResponse<Schema, Awaited<A>>
+	: _ComposeElysiaResponse<Schema, Awaited<Handle>>
 
 export type EmptyRouteSchema = {
 	body: unknown
@@ -1627,7 +1627,16 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 				200: Replace<Schema['response'][200], ElysiaFile | Blob, File>
 			}
 		: {
-				200: Exclude<Handle, AnyElysiaCustomStatusResponse>
+				200: Handle extends AnyElysiaCustomStatusResponse
+					?
+							| Exclude<Handle, AnyElysiaCustomStatusResponse>
+							| Extract<
+									Handle,
+									ElysiaCustomStatusResponse<200, any, 200>
+							  >['response']
+					: Handle extends Generator<infer A, infer B, infer C>
+						? AsyncGenerator<A, B, C>
+						: Handle
 			}) &
 		ExtractErrorFromHandle<Handle> &
 		({} extends Omit<Schema['response'], 200>

@@ -1000,8 +1000,7 @@ export default class Elysia<
 					[method]: index
 				} as const
 
-			if(!this.config.strictPath)
-				addResponsePath(getLoosePath(path))
+			if (!this.config.strictPath) addResponsePath(getLoosePath(path))
 
 			// Static path doesn't need encode as it's done in compilation process
 		} else {
@@ -6179,7 +6178,7 @@ export default class Elysia<
 			decorators: Definitions['typebox'] extends infer Models extends
 				Record<string, TSchema>
 				? {
-						[type in keyof Models]: TRef<// @ts-expect-error type is always string
+						[type in keyof Models]: TRef<// @ts-ignore
 						type>
 					}
 				: {}

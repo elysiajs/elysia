@@ -294,7 +294,9 @@ export const createTracer = (traceListener: TraceHandler) => {
 			// @ts-ignore
 			onAfterResponse,
 			// @ts-ignore
-			onError
+			onError,
+			time: Date.now(),
+			store: context.store
 		})
 
 		// ? This is pass to compiler

@@ -1,6 +1,12 @@
 # 1.3.2 - 24 May 2025
 Feature:
 - Support Bun native static response per method for Bun >= 1.2.14
+- [#1213](https://github.com/elysiajs/elysia/issues/1213) trace.time is undefined in .trace() callback
+
+Improvement:
+- implement all universal type
+- offload `AsyncGenerator`, `ReplaceFile` from Eden Treaty to `CreateEden`
+- [#1223](https://github.com/elysiajs/elysia/issues/1223) infer `status(200)` response from handler if not specified
 
 # 1.3.1 - 8 May 2025
 Bug fix:

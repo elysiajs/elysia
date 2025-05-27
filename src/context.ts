@@ -1,4 +1,4 @@
-import type { Server } from 'bun'
+import type { Server } from './universal/server'
 import type { Cookie, ElysiaCookie } from './cookies'
 import type {
 	StatusMap,

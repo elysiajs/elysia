@@ -1,8 +1,9 @@
-import Elysia, { t } from '../src'
+import { Elysia } from '../src'
 
-const strict = new Elysia({ strictPath: true })
-	.get('', '')
+const app = new Elysia().get('/', function* ({ status }) {
+	const project = { url: '1234' }
+	if (!project) return status(400)
+	return status(200, project.url)
+})
 
-console.log(strict.router.response)
-
-// console.log(app.router.response)
+app['~Routes'].get.response
