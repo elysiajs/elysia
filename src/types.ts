@@ -1624,7 +1624,7 @@ export type EmptyRouteSchema = {
 type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 	(Schema['response'] extends { 200: any }
 		? {
-				200: Replace<Schema['response'][200], ElysiaFile | Blob, File>
+				200: Replace<Schema['response'][200], ElysiaFile, File>
 			}
 		: {
 				200: Handle extends AnyElysiaCustomStatusResponse
@@ -1636,7 +1636,7 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 							  >['response']
 					: Handle extends Generator<infer A, infer B, infer C>
 						? AsyncGenerator<A, B, C>
-						: Handle
+						: Replace<Handle, ElysiaFile, File>
 			}) &
 		ExtractErrorFromHandle<Handle> &
 		({} extends Omit<Schema['response'], 200>

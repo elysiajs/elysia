@@ -538,7 +538,7 @@ export const isContextPassToFunction = (
 ) => {
 	// ! Function is passed to another function, assume as all is accessed
 	try {
-		const captureFunction = new RegExp(`(?:\\w)\\((?:.*)?${context}`, 'gs')
+		const captureFunction = new RegExp(`\\w\\((.*?)?${context}`, 'gs')
 		captureFunction.test(body)
 
 		/*
