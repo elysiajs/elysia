@@ -2,6 +2,7 @@
 Bug fix:
 - mapResponseContext is not passed to compose
 - await `ElysiaFile` when not using Bun
+- export `adapter/utils`
 
 # 1.3.2 - 27 May 2025
 Feature:
