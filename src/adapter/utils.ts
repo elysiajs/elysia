@@ -2,9 +2,15 @@ import { serializeCookie } from '../cookies'
 import { hasHeaderShorthand, isNotEmpty, StatusMap } from '../utils'
 
 import type { Context } from '../context'
-import type { ElysiaAdapter } from './types'
+import { isBun } from '../universal/utils'
 
-export const handleFile = (response: File | Blob, set?: Context['set']) => {
+export const handleFile = (
+	response: File | Blob,
+	set?: Context['set']
+): Response => {
+	if (!isBun && response instanceof Promise)
+		return response.then((res) => handleFile(res, set)) as any
+
 	const size = response.size
 
 	if (
@@ -225,10 +231,7 @@ export const createStreamHandler =
 									Buffer.from(chunk.toString())
 								)
 							}
-						else
-							controller.enqueue(
-								Buffer.from(chunk.toString())
-							)
+						else controller.enqueue(Buffer.from(chunk.toString()))
 
 						// Wait for the next event loop
 						// Otherwise the data will be mixed up
@@ -313,7 +316,7 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 
 		if (
 			(response as Response).status !== status &&
-			(status !== 200) &&
+			status !== 200 &&
 			((response.status as number) <= 300 ||
 				(response.status as number) > 400)
 		)

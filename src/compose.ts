@@ -849,7 +849,7 @@ export const composeHandler = ({
 		`return ${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
 
 	const mapResponseContext =
-		maybeStream && adapter.mapResponseContext
+		maybeStream || adapter.mapResponseContext
 			? `,${adapter.mapResponseContext}`
 			: ''
 

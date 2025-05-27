@@ -1,3 +1,8 @@
+# 1.3.3 - 27 May 2025
+Bug fix:
+- mapResponseContext is not passed to compose
+- await `ElysiaFile` when not using Bun
+
 # 1.3.2 - 27 May 2025
 Feature:
 - Support Bun native static response per method for Bun >= 1.2.14
