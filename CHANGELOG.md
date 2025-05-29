@@ -1,3 +1,10 @@
+# 1.3.4
+Feature:
+- sse helper
+
+Change:
+- When yield is not sse, content-type is set to either `text/plain` or `application/json` based on the response type
+
 # 1.3.3 - 27 May 2025
 Bug fix:
 - mapResponseContext is not passed to compose

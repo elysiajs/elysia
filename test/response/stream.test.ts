@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { req } from '../utils'
 
-import { Elysia } from '../../src'
+import { Elysia, sse } from '../../src'
 
 describe('Stream', () => {
 	it('handle stream', async () => {
@@ -259,6 +259,179 @@ describe('Stream', () => {
 				})
 
 				return promise
+			})
+	})
+
+	it('handle sse with default id', () => {
+		const app = new Elysia().get('/sse', async function* () {
+			for (let i = 0; i < 3; i++) {
+				yield sse({
+					data: `message ${i}`
+				})
+				await Bun.sleep(10)
+			}
+		})
+
+		return app
+			.handle(req('/sse'))
+			.then((x) => x.body)
+			.then((x) => {
+				if (!x) return
+
+				const reader = x?.getReader()
+
+				let acc = ''
+				const { promise, resolve } = Promise.withResolvers()
+
+				reader.read().then(function pump({ done, value }): unknown {
+					if (done) return resolve(acc)
+
+					acc += value.toString()
+					return reader.read().then(pump)
+				})
+
+				return promise
+			})
+			.then((response) => {
+				if (typeof response !== 'string')
+					return void expect(response).toBeTypeOf('string')
+
+				response
+					.split('\n\n')
+					.filter(Boolean)
+					.forEach((x, i) => {
+						expect(x).toInclude(`data: message ${i}`)
+						expect(x).toInclude('id: ')
+					})
+			})
+	})
+
+	it('handle sse with event, retry and custom id', () => {
+		const app = new Elysia().get('/sse', async function* () {
+			for (let i = 0; i < 3; i++) {
+				yield sse({
+					data: `message ${i}`,
+					event: 'message',
+					retry: 1000,
+					id: i
+				})
+				await Bun.sleep(10)
+			}
+		})
+
+		return app
+			.handle(req('/sse'))
+			.then((x) => x.body)
+			.then((x) => {
+				if (!x) return
+
+				const reader = x?.getReader()
+
+				let acc = ''
+				const { promise, resolve } = Promise.withResolvers()
+
+				reader.read().then(function pump({ done, value }): unknown {
+					if (done) return resolve(acc)
+
+					acc += value.toString()
+					return reader.read().then(pump)
+				})
+
+				return promise
+			})
+			.then((response) => {
+				if (typeof response !== 'string')
+					return void expect(response).toBeTypeOf('string')
+
+				response
+					.split('\n\n')
+					.filter(Boolean)
+					.forEach((x, i) => {
+						expect(x).toInclude(`data: message ${i}`)
+						expect(x).toInclude('event: message')
+						expect(x).toInclude('retry: 1000')
+						expect(x).toInclude(`id: ${i}`)
+					})
+			})
+	})
+
+	it('handle sse without id', () => {
+		const app = new Elysia().get('/sse', async function* () {
+			for (let i = 0; i < 3; i++) {
+				yield sse({
+					id: null,
+					data: `message ${i}`
+				})
+				await Bun.sleep(10)
+			}
+		})
+
+		return app
+			.handle(req('/sse'))
+			.then((x) => x.body)
+			.then((x) => {
+				if (!x) return
+
+				const reader = x?.getReader()
+
+				let acc = ''
+				const { promise, resolve } = Promise.withResolvers()
+
+				reader.read().then(function pump({ done, value }): unknown {
+					if (done) return resolve(acc)
+
+					acc += value.toString()
+					return reader.read().then(pump)
+				})
+
+				return promise
+			})
+			.then((response) => {
+				expect(response).toBe(
+					'data: message 0\n\ndata: message 1\n\ndata: message 2\n\n'
+				)
+			})
+	})
+
+	it('handle sse short-form', () => {
+		const app = new Elysia().get('/sse', async function* () {
+			for (let i = 0; i < 3; i++) {
+				yield sse(`message ${i}`)
+				await Bun.sleep(10)
+			}
+		})
+
+		return app
+			.handle(req('/sse'))
+			.then((x) => x.body)
+			.then((x) => {
+				if (!x) return
+
+				const reader = x?.getReader()
+
+				let acc = ''
+				const { promise, resolve } = Promise.withResolvers()
+
+				reader.read().then(function pump({ done, value }): unknown {
+					if (done) return resolve(acc)
+
+					acc += value.toString()
+					return reader.read().then(pump)
+				})
+
+				return promise
+			})
+			.then((response) => {
+				if (typeof response !== 'string')
+					return void expect(response).toBeTypeOf('string')
+
+				response
+					.split('\n\n')
+					.filter(Boolean)
+					.forEach((x, i) => {
+						expect(x).toInclude(`data: message ${i}`)
+						expect(x).toInclude('id: ')
+					})
 			})
 	})
 })

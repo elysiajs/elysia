@@ -2016,3 +2016,14 @@ export type MergeTypeModule<
 	A extends TModule<any, any>,
 	B extends TModule<any, any>
 > = TModule<Prettify<UnwrapTypeModule<A> & UnwrapTypeModule<B>>>
+
+export type SSEPayload = {
+	/** id of the event */
+	id?: string | number | null
+	/** event name */
+	event?: string
+	/** retry in millisecond */
+	retry?: number
+	/** data to send */
+	data?: unknown
+}

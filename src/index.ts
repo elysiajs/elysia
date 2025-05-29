@@ -252,6 +252,16 @@ export default class Elysia<
 		scoped: null,
 		local: null,
 		getCandidate() {
+			if (!this.global && !this.scoped && !this.local)
+				return {
+					body: undefined,
+					headers: undefined,
+					params: undefined,
+					query: undefined,
+					cookie: undefined,
+					response: undefined
+				}
+
 			return mergeSchemaValidator(
 				mergeSchemaValidator(this.global, this.scoped),
 				this.local
@@ -485,7 +495,6 @@ export default class Elysia<
 
 		return models as any
 	}
-
 	private add(
 		method: HTTPMethod,
 		path: string,
@@ -1005,16 +1014,6 @@ export default class Elysia<
 			// Static path doesn't need encode as it's done in compilation process
 		} else {
 			this.router.http.add(method, path, handler)
-
-			const staticHandler =
-				typeof handle !== 'function' &&
-				typeof adapter.createStaticHandler === 'function'
-					? adapter.createStaticHandler(
-							handle,
-							hooks,
-							this.setHeaders
-						)
-					: undefined
 
 			if (!this.config.strictPath) {
 				const loosePath = getLoosePath(path)
@@ -3822,26 +3821,13 @@ export default class Elysia<
 					default:
 						| AnyElysia
 						| ((app: AnyElysia) => MaybePromise<AnyElysia>)
-			  }>,
-		options?: { scoped?: boolean }
+			  }>
 	): AnyElysia {
 		if (Array.isArray(plugin)) {
 			// eslint-disable-next-line @typescript-eslint/no-this-alias
 			let app = this
 			for (const p of plugin) app = app.use(p) as any
 			return app
-		}
-
-		if (options?.scoped)
-			return this.guard({} as any, (app) => app.use(plugin as any))
-
-		if (Array.isArray(plugin)) {
-			// eslint-disable-next-line @typescript-eslint/no-this-alias
-			let current = this
-
-			for (const p of plugin) current = this.use(p) as any
-
-			return current
 		}
 
 		if (plugin instanceof Promise) {
@@ -4001,46 +3987,6 @@ export default class Elysia<
 		plugin.getGlobalRoutes = () => this.getGlobalRoutes()
 		plugin.getGlobalDefinitions = () => this.getGlobalDefinitions()
 
-		// if (this.config.sanitize) {
-		// 	const isArray = (v: unknown): v is any[] => Array.isArray(v)
-
-		// 	if (plugin.config.sanitize) {
-		// 		if (isArray(this.config.sanitize)) {
-		// 			if (isArray(plugin.config.sanitize)) {
-		// 				plugin.config.sanitize = this.config.sanitize.concat(
-		// 					plugin.config.sanitize
-		// 				)
-		// 			} else {
-		// 				if (isArray(plugin.config.sanitize)) {
-		// 					plugin.config.sanitize =
-		// 						this.config.sanitize.concat(
-		// 							plugin.config.sanitize
-		// 						)
-		// 				} else {
-		// 					if (this.config.sanitize)
-		// 						plugin.config.sanitize = [
-		// 							...this.config.sanitize,
-		// 							plugin.config.sanitize
-		// 						]
-		// 				}
-		// 			}
-		// 		} else {
-		// 			if (isArray(plugin.config.sanitize)) {
-		// 				plugin.config.sanitize = [
-		// 					this.config.sanitize,
-		// 					...plugin.config.sanitize
-		// 				]
-		// 			} else {
-		// 				if (this.config.sanitize)
-		// 					plugin.config.sanitize = [
-		// 						this.config.sanitize,
-		// 						plugin.config.sanitize
-		// 					]
-		// 			}
-		// 		}
-		// 	} else plugin.config.sanitize = this.config.sanitize
-		// }
-
 		if (plugin.standaloneValidator?.scoped) {
 			if (this.standaloneValidator.local)
 				this.standaloneValidator.local =
@@ -4112,23 +4058,30 @@ export default class Elysia<
 
 		// ! Deduplicate current instance
 		deduplicateChecksum(this.extender.macros)
-		deduplicateChecksum(this.extender.higherOrderFunctions)
 
-		// ! Deduplicate current instance
-		const hofHashes: number[] = []
-		for (let i = 0; i < this.extender.higherOrderFunctions.length; i++) {
-			const hof = this.extender.higherOrderFunctions[i]
+		if (plugin.extender.higherOrderFunctions.length) {
+			deduplicateChecksum(this.extender.higherOrderFunctions)
 
-			if (hof.checksum) {
-				if (hofHashes.includes(hof.checksum)) {
-					this.extender.higherOrderFunctions.splice(i, 1)
-					i--
+			// ! Deduplicate current instance
+			const hofHashes: number[] = []
+			for (
+				let i = 0;
+				i < this.extender.higherOrderFunctions.length;
+				i++
+			) {
+				const hof = this.extender.higherOrderFunctions[i]
+
+				if (hof.checksum) {
+					if (hofHashes.includes(hof.checksum)) {
+						this.extender.higherOrderFunctions.splice(i, 1)
+						i--
+					}
+
+					hofHashes.push(hof.checksum)
 				}
-
-				hofHashes.push(hof.checksum)
 			}
+			hofHashes.length = 0
 		}
-		hofHashes.length = 0
 
 		this.inference = mergeInference(this.inference, plugin.inference)
 
@@ -6713,7 +6666,8 @@ export {
 	cloneInference,
 	deduplicateChecksum,
 	ELYSIA_FORM_DATA,
-	ELYSIA_REQUEST_ID
+	ELYSIA_REQUEST_ID,
+	sse
 } from './utils'
 
 export {
@@ -6777,7 +6731,16 @@ export type {
 	UnwrapGroupGuardRoute,
 	ModelValidatorError,
 	ExcludeElysiaResponse,
-	CoExist
+	SSEPayload,
+	StandaloneInputSchema,
+	MergeStandaloneSchema,
+	MergeTypeModule,
+	GracefulHandler,
+	AfterHandler,
+	InlineHandler,
+	ResolveHandler,
+	TransformHandler,
+	HTTPHeaders
 } from './types'
 
 export { env } from './universal/env'

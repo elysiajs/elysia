@@ -165,22 +165,34 @@ export const createStreamHandler =
 		let init = generator.next()
 		if (init instanceof Promise) init = await init
 
-		if (init.done) {
+		if (typeof init?.done === 'undefined' || init?.done) {
 			if (set) return mapResponse(init.value, set, request)
 			return mapCompactResponse(init.value, request)
 		}
+
+		const contentType =
+			// @ts-ignore
+			init.value && typeof init.value?.stream
+				? 'text/event-stream'
+				: init.value && typeof init.value === 'object'
+					? 'application/json'
+					: 'text/plain'
 
 		if (set?.headers) {
 			if (!set.headers['transfer-encoding'])
 				set.headers['transfer-encoding'] = 'chunked'
 			if (!set.headers['content-type'])
-				set.headers['content-type'] = 'text/event-stream; charset=utf-8'
+				set.headers['content-type'] = contentType
+			if (!set.headers['cache-control'])
+				set.headers['cache-control'] = 'no-cache'
 		} else {
 			set = {
 				status: 200,
 				headers: {
-					'content-type': 'text/event-stream; charset=utf-8',
-					'transfer-encoding': 'chunked'
+					'content-type': contentType,
+					'transfer-encoding': 'chunked',
+					'cache-control': 'no-cache',
+					connection: 'keep-alive'
 				}
 			}
 		}
@@ -201,7 +213,11 @@ export const createStreamHandler =
 					})
 
 					if (init.value !== undefined && init.value !== null) {
-						if (typeof init.value === 'object')
+						// @ts-ignore
+						if (init.value.toStream)
+							// @ts-ignore
+							controller.enqueue(init.value.toStream())
+						else if (typeof init.value === 'object')
 							try {
 								controller.enqueue(
 									Buffer.from(JSON.stringify(init.value))
@@ -221,7 +237,11 @@ export const createStreamHandler =
 						if (end) break
 						if (chunk === undefined || chunk === null) continue
 
-						if (typeof chunk === 'object')
+						// @ts-ignore
+						if (chunk.toStream)
+							// @ts-ignore
+							controller.enqueue(chunk.toStream())
+						else if (typeof chunk === 'object')
 							try {
 								controller.enqueue(
 									Buffer.from(JSON.stringify(chunk))

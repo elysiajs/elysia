@@ -3,22 +3,14 @@ import { Elysia, t } from '../../src'
 const total = 500
 
 {
-	const app = new Elysia({ precompile: true })
+	const app = new Elysia()
 
 	const t1 = performance.now()
 	const memory = process.memoryUsage().heapTotal / 1024 / 1024
 
 	for (let i = 0; i < total; i++)
 		app.get(`/id/${i}`, () => 'hello', {
-			response: t.Object({
-				hello: t.String(),
-				world: t.String(),
-				extra: t.Object({
-					a: t.Array(t.String()),
-					b: t.Nullable(t.Array(t.String())),
-					name: t.String()
-				})
-			})
+			response: t.String()
 		})
 
 	const memoryAfter = process.memoryUsage().heapTotal / 1024 / 1024

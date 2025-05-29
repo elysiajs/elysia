@@ -18,7 +18,8 @@ import type {
 	Replace,
 	AfterResponseHandler,
 	SchemaValidator,
-	AnyLocalHook
+	AnyLocalHook,
+	SSEPayload
 } from './types'
 import { ElysiaFile } from './universal/file'
 
@@ -170,6 +171,16 @@ export const mergeSchemaValidator = (
 	a?: SchemaValidator | null,
 	b?: SchemaValidator | null
 ): SchemaValidator => {
+	if (!a && !b)
+		return {
+			body: undefined,
+			headers: undefined,
+			params: undefined,
+			query: undefined,
+			cookie: undefined,
+			response: undefined
+		}
+
 	return {
 		body: b?.body ?? a?.body,
 		headers: b?.headers ?? a?.headers,
@@ -978,6 +989,8 @@ export const randomId = () => {
 export const deduplicateChecksum = <T extends Function>(
 	array: HookContainer<T>[]
 ): HookContainer<T>[] => {
+	if (!array.length) return []
+
 	const hashes: number[] = []
 
 	for (let i = 0; i < array.length; i++) {
@@ -1079,15 +1092,9 @@ export const getLoosePath = (path: string) => {
 export const isNotEmpty = (obj?: Object) => {
 	if (!obj) return false
 
-	for (const x in obj) return true
+	for (const _ in obj) return true
 
 	return false
-}
-
-const isEmptyHookProperty = (prop: unknown) => {
-	if (Array.isArray(prop)) return prop.length === 0
-
-	return !prop
 }
 
 export const encodePath = (path: string, { dynamic = false } = {}) => {
@@ -1099,10 +1106,44 @@ export const encodePath = (path: string, { dynamic = false } = {}) => {
 }
 
 export const supportPerMethodInlineHandler = (() => {
-	if(typeof Bun === "undefined") return true
+	if (typeof Bun === 'undefined') return true
 
 	const semver = Bun.version.split('.')
 	if (+semver[0] < 1 || +semver[1] < 2 || +semver[2] < 14) return false
 
 	return true
 })()
+
+export const sse = (
+	payload: string | SSEPayload
+): SSEPayload & { toStream(): string } => {
+	if (typeof payload === 'string')
+		payload = {
+			data: payload
+		}
+
+	if (payload.id === undefined) payload.id = randomId()
+
+	// @ts-ignore
+	payload.toStream = () => {
+		let payloadString = ''
+
+		if (payload.id !== undefined && payload.id !== null)
+			payloadString += `id: ${payload.id}\n`
+		if (payload.event) payloadString += `event: ${payload.event}\n`
+		if (payload.retry !== undefined)
+			payloadString += `retry: ${payload.retry}\n`
+
+		if (payload.data === null) payloadString += 'data: null\n'
+		else if (typeof payload.data === 'string')
+			payloadString += `data: ${payload.data}\n`
+		else if (typeof payload.data === 'object')
+			payloadString += `data: ${JSON.stringify(payload.data)}\n`
+
+		if (payloadString) payloadString += '\n'
+
+		return payloadString
+	}
+
+	return payload as any
+}

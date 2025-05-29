@@ -1,34 +1,13 @@
-import { Elysia, t } from '../src'
+import { Elysia, sse } from '../src'
 
-const MessageSchema = t.Object({
-	message: t.String()
-})
-
-const app = new Elysia({
-	name: 'appService'
-})
-	.model({
-		message: MessageSchema
-	})
-	.get(
-		'/health',
-		() => {
-			return {
-				timestamp: new Date().toISOString(),
-				status: 'ok'
-			}
-		},
-		{
-			response: {
-				200: t.Object({
-					status: t.String(),
-					timestamp: t.String()
-				}),
-				default: t.Ref('message')
-			}
+new Elysia()
+	.get('/a', async function* () {
+		for (let i = 0; i < 100; i++) {
+			yield sse({
+				event: 'message',
+				data: 'A'
+			})
+			await Bun.sleep(100)
 		}
-	)
-
-app.handle(new Request('http://localhost/health'))
-	.then((x) => x.json())
-	.then(console.log)
+	})
+	.listen(3000)
