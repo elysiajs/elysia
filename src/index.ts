@@ -5333,7 +5333,8 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
-		const Macro extends Metadata['macro']
+		const Macro extends Metadata['macro'],
+		const UpgradeDataSchema extends TSchema,
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -5345,7 +5346,8 @@ export default class Elysia<
 					Volatile['resolve'] &
 					MacroToContext<Metadata['macroFn'], Macro>
 			},
-			Macro
+			Macro,
+			UpgradeDataSchema
 		>
 	): Elysia<
 		BasePath,
