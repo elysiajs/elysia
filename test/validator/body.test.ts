@@ -664,6 +664,27 @@ describe('Body Validator', () => {
 		expect(+response).toBe(size)
 	})
 
+	it('handle file upload using model reference', async () => {
+		const app = new Elysia()
+			.model({
+				a: t.Object({
+					message: t.String(),
+					image: t.Optional(t.Files())
+				})
+			})
+			.post('/', ({ body }) => 'ok', {
+				body: 'a'
+			})
+
+		const { request } = upload('/', {
+			message: 'Hello, world!'
+		})
+
+		const status = await app.handle(request).then((r) => r.status)
+
+		expect(status).toBe(200)
+	})
+
 	it('handle file prefix', async () => {
 		const app = new Elysia()
 			.post('/pass1', ({ body: { file } }) => file.size, {

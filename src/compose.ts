@@ -40,7 +40,8 @@ import {
 	getCookieValidator,
 	getSchemaValidator,
 	hasType,
-	isUnion
+	isUnion,
+	unwrapImportSchema
 } from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
@@ -1312,12 +1313,13 @@ export const composeHandler = ({
 						: undefined
 				)
 
+				const schema = unwrapImportSchema(validator.body.schema)
+
 				if (
 					!hasUnion &&
 					value &&
 					typeof value === 'object' &&
-					(hasType('File', validator.body.schema) ||
-						hasType('Files', validator.body.schema))
+					(hasType('File', schema) || hasType('Files', schema))
 				) {
 					hasNonUnionFileWithDefault = true
 
@@ -1452,14 +1454,20 @@ export const composeHandler = ({
 			} else if (
 				hasNonUnionFileWithDefault ||
 				(!hasUnion &&
-					(hasType('File', validator.body.schema) ||
-						hasType('Files', validator.body.schema)))
+					(hasType(
+						'File',
+						unwrapImportSchema(validator.body.schema)
+					) ||
+						hasType(
+							'Files',
+							unwrapImportSchema(validator.body.schema)
+						)))
 			) {
 				let validateFile = ''
 
 				let i = 0
 				for (const [k, v] of Object.entries(
-					validator.body.schema.properties
+					unwrapImportSchema(validator.body.schema).properties
 				) as [string, TSchema][]) {
 					if (
 						!v.extension ||

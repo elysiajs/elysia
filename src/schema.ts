@@ -1318,3 +1318,8 @@ export const getCookieValidator = ({
 // 	// @ts-ignore
 // 	return validator.schema?.type
 // }
+
+export const unwrapImportSchema = (schema: TSchema): TSchema =>
+	schema[Kind] === 'Import' && schema.$defs[schema.$ref][Kind] === 'Object'
+		? schema.$defs[schema.$ref]
+		: schema

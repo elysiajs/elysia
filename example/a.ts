@@ -1,13 +1,15 @@
-import { Elysia, sse } from '../src'
+import { Elysia, sse, t } from '../src'
+
+const a = t.Object({
+	message: t.String(),
+	image: t.Optional(t.Files())
+})
 
 new Elysia()
-	.get('/a', async function* () {
-		for (let i = 0; i < 100; i++) {
-			yield sse({
-				event: 'message',
-				data: 'A'
-			})
-			await Bun.sleep(100)
-		}
+	.model({
+		a
+	})
+	.post('/', ({ body }) => 'ok', {
+		body: 'a'
 	})
 	.listen(3000)
