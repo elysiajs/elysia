@@ -1025,6 +1025,48 @@ describe('Body Validator', () => {
 		}
 	})
 
+	it('validate actual files', async () => {
+		const app = new Elysia().post('/', () => 'ok', {
+			body: t.Object({
+				file: t.Files({
+					type: 'image'
+				})
+			})
+		})
+
+		// case 1 fail: contains fake image
+		// {
+		// 	const body = new FormData()
+		// 	body.append('file', Bun.file('test/images/fake.jpg'))
+		// 	body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+
+		// 	const response = await app.handle(
+		// 		new Request('http://localhost/', {
+		// 			method: 'POST',
+		// 			body
+		// 		})
+		// 	)
+
+		// 	expect(response.status).toBe(422)
+		// }
+
+		// case 2 pass: all valid images
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/millenium.jpg'))
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
+
+			expect(response.status).toBe(200)
+		}
+	})
+
 	it('handle body using Transform with Intersect ', async () => {
 		const app = new Elysia().post('/test', ({ body }) => body, {
 			body: t.Intersect([

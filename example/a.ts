@@ -1,16 +1,22 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
-const app = new Elysia().get(
-	'/api/:required/:optional?',
-	({ params }) => params.required
+const app = new Elysia().post('/', () => 'ok', {
+	body: t.Object({
+		file: t.Files({
+			type: 'image'
+		})
+	})
+})
+
+const body = new FormData()
+body.append('file', Bun.file('test/images/fake.jpg'))
+body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+
+const response = await app.handle(
+	new Request('http://localhost/', {
+		method: 'POST',
+		body
+	})
 )
 
-const response = await app
-	.handle(new Request('http://localhost/api/yay/ok'))
-	.then((x) => x.text())
-
-console.log(response)
-
-// expect(await res.text()).toBe('Chocominto yorimo anata!')
-// expect(res.status).toBe(418)
+console.log(response.status)

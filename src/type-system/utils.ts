@@ -11,6 +11,7 @@ import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
 import { ElysiaFile } from '../universal/file'
 import { InvalidFileType, ValidationError } from '../error'
 import type { FileOptions, FileUnit } from './types'
+import type { MaybeArray } from '../types'
 
 export const tryParse = (v: unknown, schema: TAnySchema) => {
 	try {
@@ -120,12 +121,20 @@ export const fileTypeFromBlob = (file: Blob | File) => {
 }
 
 export const validateFileExtension = async (
-	file: Blob | File | undefined,
+	file: MaybeArray<Blob | File | undefined>,
 	extension: string | string[],
 	// @ts-ignore
 	name = file?.name ?? ''
-) => {
-	if (!file) return
+): Promise<boolean> => {
+	if (Array.isArray(file)) {
+		await Promise.all(
+			file.map((f) => validateFileExtension(f, extension, name))
+		)
+
+		return true
+	}
+
+	if (!file) return false
 
 	const result = await fileTypeFromBlob(file)
 	if (!result) throw new InvalidFileType(name, extension)
