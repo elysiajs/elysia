@@ -3041,12 +3041,12 @@ export default class Elysia<
 								? sandbox.event.error
 								: Array.isArray(localHook.error)
 									? [
-											...(localHook.error || {}),
-											...(sandbox.event.error || {})
+											...(localHook.error ?? []),
+											...(sandbox.event.error ?? [])
 										]
 									: [
 											localHook.error,
-											...(sandbox.event.error || {})
+											...(sandbox.event.error ?? [])
 										]
 						}),
 						undefined,
@@ -3573,12 +3573,12 @@ export default class Elysia<
 							? sandbox.event.error
 							: Array.isArray(localHook.error)
 								? [
-										...(localHook.error || {}),
-										...(sandbox.event.error || [])
+										...(localHook.error ?? []),
+										...(sandbox.event.error ?? [])
 									]
 								: [
 										localHook.error,
-										...(sandbox.event.error || [])
+										...(sandbox.event.error ?? [])
 									]
 					})
 				)

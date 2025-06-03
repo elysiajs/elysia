@@ -3,6 +3,7 @@ Feature:
 - sse helper
 
 Bug fix:
+- [#1237](https://github.com/elysiajs/elysia/issues/1237) ws in a group merge error
 - [#1235](https://github.com/elysiajs/elysia/issues/1235) errors not handled correctly in resolve hook on dynamic mode
 - [#1234](https://github.com/elysiajs/elysia/issues/1234) optional path parameters can't follow required ones
 - [#1232](https://github.com/elysiajs/elysia/issues/1232) t.Files fails with array of files
