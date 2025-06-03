@@ -254,9 +254,9 @@ describe('Dynamic Mode', () => {
 	describe('it handle async resolve', async () => {
 		const app = new Elysia({ aot: false })
 			.resolve(() => status(418, 'Chocominto yorimo anata!'))
-			.get('/ruby-chan', () => 'Ruby chan! nani ga suki!?')
+			.post('/ruby-chan', () => 'Hai!')
 
-		const res = await app.handle(req('/ruby-chan'))
+		const res = await app.handle(post('/ruby-chan', 'nani ga suki!'))
 
 		expect(await res.text()).toBe('Chocominto yorimo anata!')
 		expect(res.status).toBe(418)
