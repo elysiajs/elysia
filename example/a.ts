@@ -1,15 +1,16 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia({ aot: false })
-	.resolve(({ error }) => {
-		return error(418, 'Chocominto yorimo anata!')
-	})
-	.get('/ruby-chan', () => 'Ruby chan! nani ga suki!?')
+const app = new Elysia().get(
+	'/api/:required/:optional?',
+	({ params }) => params.required
+)
 
-const res = await app.handle(req('/ruby-chan'))
+const response = await app
+	.handle(new Request('http://localhost/api/yay/ok'))
+	.then((x) => x.text())
 
-console.log(res)
+console.log(response)
 
 // expect(await res.text()).toBe('Chocominto yorimo anata!')
 // expect(res.status).toBe(418)

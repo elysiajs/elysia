@@ -3,7 +3,8 @@ Feature:
 - sse helper
 
 Bug fix:
-- [#1235](https://github.com/elysiajs/elysia/issues/1235) Errors not handled correctly in resolve hook on dynamic mode
+- [#1235](https://github.com/elysiajs/elysia/issues/1235) errors not handled correctly in resolve hook on dynamic mode
+- [#1234](https://github.com/elysiajs/elysia/issues/1234) optional path parameters can't follow required ones
 
 Change:
 - When yield is not sse, content-type is set to either `text/plain` or `application/json` based on the response type
