@@ -1,15 +1,15 @@
-import { Elysia, sse, t } from '../src'
+import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const a = t.Object({
-	message: t.String(),
-	image: t.Optional(t.Files())
-})
+const app = new Elysia({ aot: false })
+	.resolve(({ error }) => {
+		return error(418, 'Chocominto yorimo anata!')
+	})
+	.get('/ruby-chan', () => 'Ruby chan! nani ga suki!?')
 
-new Elysia()
-	.model({
-		a
-	})
-	.post('/', ({ body }) => 'ok', {
-		body: 'a'
-	})
-	.listen(3000)
+const res = await app.handle(req('/ruby-chan'))
+
+console.log(res)
+
+// expect(await res.text()).toBe('Chocominto yorimo anata!')
+// expect(res.status).toBe(418)
