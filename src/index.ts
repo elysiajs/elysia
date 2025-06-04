@@ -2902,7 +2902,6 @@ export default class Elysia<
 			)
 			this.validator.local = null
 
-			console.log("BEFORE", this.standaloneValidator.local)
 			if (this.standaloneValidator.local !== null) {
 				this.standaloneValidator.scoped ||= []
 				this.standaloneValidator.scoped.push(
@@ -2910,7 +2909,6 @@ export default class Elysia<
 				)
 				this.standaloneValidator.local = null
 			}
-			console.log("AFTER", this.standaloneValidator.scoped)
 		} else if (type === 'global') {
 			this.validator.global = mergeSchemaValidator(
 				this.validator.global,
