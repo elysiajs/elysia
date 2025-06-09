@@ -922,7 +922,7 @@ export type MapResponse<
 		},
 		Path
 	>
-) => MaybePromise<Response | void>
+) => MaybePromise<{} extends Route['response'] ? unknown : Route['response'][keyof Route['response']] | void>
 
 // Handler<
 // 	Omit<Route, 'response'> & {},

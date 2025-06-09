@@ -1951,7 +1951,7 @@ export default class Elysia<
 	>(
 		options: { as?: LifeCycleType },
 		handler: MaybeArray<
-			OptionalHandler<
+			AfterHandler<
 				MergeSchema<
 					Schema,
 					MergeSchema<
