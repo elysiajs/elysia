@@ -20,7 +20,7 @@ const env =
 export const ERROR_CODE = Symbol('ElysiaErrorCode')
 export type ERROR_CODE = typeof ERROR_CODE
 
-export const isProduction = (env?.NODE_ENV ?? env?.ENV) === 'production'
+export const isProduction = (env?.NODE_ENV ?? env?.ENV) !== 'development'
 
 export type ElysiaErrors =
 	| InternalServerError
