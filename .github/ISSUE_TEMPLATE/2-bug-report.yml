@@ -18,7 +18,7 @@ body:
     - type: input
       attributes:
           label: What version of Elysia is running?
-          description: Copy the output of `Elysia --revision`
+          description: Copy the row with `elysia` dependency from output `bun pm ls` command
     - type: input
       attributes:
           label: What platform is your computer?
