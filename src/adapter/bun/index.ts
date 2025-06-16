@@ -430,6 +430,14 @@ export const BunAdapter: ElysiaAdapter = {
 			normalize: app.config.normalize
 		})
 
+		const validateUpgradeData = getSchemaValidator(options.upgradeData, {
+			// @ts-expect-error private property
+			modules: app.definitions.typebox,
+			// @ts-expect-error private property
+			models: app.definitions.type as Record<string, TSchema>,
+			normalize: app.config.normalize
+		})
+
 		app.route(
 			'WS',
 			path as any,
@@ -474,6 +482,12 @@ export const BunAdapter: ElysiaAdapter = {
 				const parseMessage = createWSMessageParser(parse)
 
 				let _id: string | undefined
+
+				let _beforeHandleData: any
+				if (typeof options.beforeHandle === 'function') {
+					const result = options.beforeHandle(context)
+					_beforeHandleData = result instanceof Promise ? await result : result
+				}
 
 				const errorHandlers = [
 					...(Array.isArray(options.error)
@@ -520,11 +534,22 @@ export const BunAdapter: ElysiaAdapter = {
 								options.pong?.(data)
 							},
 							open(ws: ServerWebSocket<any>) {
+								if (validateUpgradeData?.Check(_beforeHandleData) === false) {
+									return void ws.send(
+										new ValidationError(
+											'upgradeData',
+											validateUpgradeData,
+											_beforeHandleData
+										).message as string
+									)
+								}
+
 								try {
 									handleResponse(
 										ws,
 										options.open?.(
-											new ElysiaWS(ws, context as any)
+											new ElysiaWS(ws, context as any),
+											_beforeHandleData as any
 										)
 									)
 								} catch (error) {
