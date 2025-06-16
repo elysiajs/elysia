@@ -1,6 +1,8 @@
 # 1.3.5 - 16 Jun 2025
 Bug fix:
-- [#1255](https://github.com/elysiajs/elysia/issues/1255) Regression in serving an imported HTML file
+- [#1255](https://github.com/elysiajs/elysia/issues/1255) regression in serving an imported HTML file
+- [#1247](https://github.com/elysiajs/elysia/pull/1247) ensure WebSockets get routed properly without AoT compilation
+- [#1187](https://github.com/elysiajs/elysia/pull/1187), [#1169](https://github.com/elysiajs/elysia/issues/1169) websocket beforeLoad not being executed
 
 # 1.3.4 - 3 Jun 2025
 Feature:
