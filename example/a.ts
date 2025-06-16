@@ -1,5 +1,12 @@
 import { Elysia, t } from '../src'
-import homepage from './index.html'
 
-new Elysia({ aot: false })
-	.post('/test', () => 'Hello World', { body: t.Object({}) })
+export const webSocketHandler = () => {
+	return new Elysia().ws('/ws', {
+		open(ws) {
+			console.log('WebSocket connected')
+		},
+		message(ws, message) {}
+	})
+}
+
+new Elysia().use(webSocketHandler).listen(3000)
