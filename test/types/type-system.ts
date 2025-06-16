@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { expect } from 'bun:test'
-import { t, Elysia, RouteSchema, Cookie, form, file } from '../../src'
+import { t, Elysia, form, file } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 // ? ArrayString
@@ -98,6 +97,25 @@ import { expectTypeOf } from 'expect-type'
 		},
 		{
 			body: Model.Ref('hello')
+		}
+	)
+}
+
+// Transform Tuple<ElysiaFile> to Files[]
+{
+	new Elysia().get(
+		'/test',
+		() => {
+			return form({
+				files: [file('test.png'), file('test.png')],
+				text: 'hello'
+			})
+		},
+		{
+			response: t.Form({
+				files: t.Files(),
+				text: t.String()
+			})
 		}
 	)
 }

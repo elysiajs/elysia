@@ -933,8 +933,23 @@ export type redirect = typeof redirect
 export const ELYSIA_FORM_DATA = Symbol('ElysiaFormData')
 export type ELYSIA_FORM_DATA = typeof ELYSIA_FORM_DATA
 
+type IsTuple<T> = T extends readonly any[]
+	? number extends T['length']
+		? false
+		: true
+	: false
+
 export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {
-	[ELYSIA_FORM_DATA]: Replace<T, Blob | ElysiaFile, File>
+	[ELYSIA_FORM_DATA]: Replace<T, Blob | ElysiaFile, File> extends infer A
+		? {
+				[key in keyof A]: IsTuple<A[key]> extends true
+					? // @ts-ignore Trust me bro
+						A[key][number] extends Blob | ElysiaFile
+						? File[]
+						: A[key]
+					: A[key]
+			}
+		: T
 }
 
 export const ELYSIA_REQUEST_ID = Symbol('ElysiaRequestId')
