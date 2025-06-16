@@ -1084,7 +1084,10 @@ export default class Elysia<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -1128,7 +1131,10 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>,
 					BasePath
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -1172,6 +1178,10 @@ export default class Elysia<
 					>,
 					BasePath
 				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema']
+				&
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -1260,7 +1270,10 @@ export default class Elysia<
 					MergeSchema<Ephemeral['schema'], Metadata['schema']>
 				>,
 				BasePath
-			>,
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
 			{
 				decorator: Singleton['decorator']
 				store: Singleton['store']
@@ -1317,7 +1330,10 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>,
 					BasePath
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -1359,6 +1375,10 @@ export default class Elysia<
 					>,
 					BasePath
 				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema']
+				&
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -1438,6 +1458,10 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 						BasePath
 					> &
+						Metadata['standaloneSchema'] &
+						Ephemeral['standaloneSchema'] &
+						Volatile['standaloneSchema']
+					&
 						'global' extends Type
 						? { params: Record<string, string> }
 						: 'scoped' extends Type
@@ -1551,7 +1575,10 @@ export default class Elysia<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 						BasePath
-					>,
+					> &
+						Metadata['standaloneSchema'] &
+						Ephemeral['standaloneSchema'] &
+						Volatile['standaloneSchema'],
 					Singleton & {
 						derive: Ephemeral['derive'] & Volatile['derive']
 						resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -1604,7 +1631,10 @@ export default class Elysia<
 				MergeSchema<
 					Metadata['schema'],
 					MergeSchema<Ephemeral['schema'], Volatile['schema']>
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -1639,7 +1669,10 @@ export default class Elysia<
 				MergeSchema<
 					Metadata['schema'],
 					MergeSchema<Ephemeral['schema'], Volatile['schema']>
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton &
 					('global' extends Type
 						? {
@@ -1762,7 +1795,10 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>,
 					BasePath
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -1805,6 +1841,10 @@ export default class Elysia<
 					>,
 					BasePath
 				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema']
+				&
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -1877,7 +1917,10 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>,
 					BasePath
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -1917,6 +1960,10 @@ export default class Elysia<
 					>,
 					BasePath
 				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema']
+				&
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -1988,7 +2035,10 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>,
 					BasePath
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -2025,6 +2075,10 @@ export default class Elysia<
 					>,
 					BasePath
 				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema']
+				&
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -2093,7 +2147,10 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>,
 					BasePath
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -2132,6 +2189,10 @@ export default class Elysia<
 					>,
 					BasePath
 				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'] 
+				&
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -2447,7 +2508,10 @@ export default class Elysia<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton,
 				Ephemeral,
 				Volatile
@@ -2483,7 +2547,10 @@ export default class Elysia<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
 					>
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Scope extends 'global'
 					? {
 							store: Singleton['store']
@@ -2775,7 +2842,7 @@ export default class Elysia<
 			schema: MergeSchema<
 				MergeSchema<Volatile['schema'], Ephemeral['schema']>,
 				Metadata['schema']
-			>
+			> 
 			standaloneSchema: Metadata['standaloneSchema']
 			macro: Metadata['macro']
 			macroFn: Metadata['macroFn']
@@ -2834,6 +2901,14 @@ export default class Elysia<
 				this.validator.local
 			)
 			this.validator.local = null
+
+			if (this.standaloneValidator.local !== null) {
+				this.standaloneValidator.scoped ||= []
+				this.standaloneValidator.scoped.push(
+					...this.standaloneValidator.local
+				)
+				this.standaloneValidator.local = null
+			}
 		} else if (type === 'global') {
 			this.validator.global = mergeSchemaValidator(
 				this.validator.global,
@@ -2845,6 +2920,21 @@ export default class Elysia<
 
 			this.validator.scoped = null
 			this.validator.local = null
+
+			if (this.standaloneValidator.local !== null) {
+				this.standaloneValidator.scoped ||= []
+				this.standaloneValidator.scoped.push(
+					...this.standaloneValidator.local
+				)
+				this.standaloneValidator.local = null
+			}
+			if (this.standaloneValidator.scoped !== null) {
+				this.standaloneValidator.global ||= []
+				this.standaloneValidator.global.push(
+					...this.standaloneValidator.scoped
+				)
+				this.standaloneValidator.scoped = null
+			}
 		}
 
 		return this as any
@@ -2904,7 +2994,7 @@ export default class Elysia<
 				JoinPath<BasePath, Prefix>
 			>,
 			Metadata['schema']
-		>,
+		> & Metadata['standaloneSchema'],
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
@@ -3495,17 +3585,15 @@ export default class Elysia<
 						response,
 						cookie: hook.cookie
 					})
-
-					return this
-				}
-
-				this.validator[type] = {
-					body: hook.body ?? this.validator[type]?.body,
-					headers: hook.headers ?? this.validator[type]?.headers,
-					params: hook.params ?? this.validator[type]?.params,
-					query: hook.query ?? this.validator[type]?.query,
-					response: hook.response ?? this.validator[type]?.response,
-					cookie: hook.cookie ?? this.validator[type]?.cookie
+				} else {
+					this.validator[type] = {
+						body: hook.body ?? this.validator[type]?.body,
+						headers: hook.headers ?? this.validator[type]?.headers,
+						params: hook.params ?? this.validator[type]?.params,
+						query: hook.query ?? this.validator[type]?.query,
+						response: hook.response ?? this.validator[type]?.response,
+						cookie: hook.cookie ?? this.validator[type]?.cookie
+					}
 				}
 
 				if (hook.parse) this.on({ as: type }, 'parse', hook.parse)
@@ -4204,7 +4292,10 @@ export default class Elysia<
 				MergeSchema<
 					Metadata['schema'],
 					MergeSchema<Ephemeral['schema'], Volatile['schema']>
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton & {
 					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
 					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
@@ -5934,7 +6025,10 @@ export default class Elysia<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 						BasePath
-					>,
+					> &
+						Metadata['standaloneSchema'] &
+						Ephemeral['standaloneSchema'] &
+						Volatile['standaloneSchema'],
 					Singleton & {
 						derive: Ephemeral['derive'] & Volatile['derive']
 						resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5990,6 +6084,10 @@ export default class Elysia<
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>,
 						BasePath
 					> &
+						Metadata['standaloneSchema'] &
+						Ephemeral['standaloneSchema'] &
+						Volatile['standaloneSchema']
+					&
 						'global' extends Type
 						? { params: Record<string, string> }
 						: 'scoped' extends Type
@@ -6537,7 +6635,10 @@ export default class Elysia<
 				MergeSchema<
 					Metadata['schema'],
 					MergeSchema<Ephemeral['schema'], Volatile['schema']>
-				>,
+				> &
+					Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema'],
 				Singleton & {
 					derive: Ephemeral['derive'] & Volatile['derive']
 					resolve: Ephemeral['resolve'] & Volatile['resolve']
