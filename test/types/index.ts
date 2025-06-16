@@ -2449,3 +2449,8 @@ type a = keyof {}
 		status(200)
 	})
 }
+
+// onAfterHandle should have response
+{
+	new Elysia().onAfterHandle({ as: 'scoped' }, ({ response }) => response)
+}

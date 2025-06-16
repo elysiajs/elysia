@@ -1951,7 +1951,7 @@ export default class Elysia<
 	>(
 		options: { as?: LifeCycleType },
 		handler: MaybeArray<
-			OptionalHandler<
+			AfterHandler<
 				MergeSchema<
 					Schema,
 					MergeSchema<
@@ -2191,7 +2191,7 @@ export default class Elysia<
 				> &
 					Metadata['standaloneSchema'] &
 					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'] 
+					Volatile['standaloneSchema']
 				&
 					'global' extends Type
 					? { params: Record<string, string> }
@@ -2842,7 +2842,7 @@ export default class Elysia<
 			schema: MergeSchema<
 				MergeSchema<Volatile['schema'], Ephemeral['schema']>,
 				Metadata['schema']
-			> 
+			>
 			standaloneSchema: Metadata['standaloneSchema']
 			macro: Metadata['macro']
 			macroFn: Metadata['macroFn']

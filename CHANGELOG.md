@@ -4,6 +4,7 @@ Bug fix:
 - [#1251](https://github.com/elysiajs/elysia/issues/1251) property 'status' does not exist onError function
 - [#1247](https://github.com/elysiajs/elysia/pull/1247) ensure WebSockets get routed properly without AoT compilation
 - [#1246](https://github.com/elysiajs/elysia/issues/1246) property 'timeout' does not exist on type 'Server'
+- [#1245](https://github.com/elysiajs/elysia/issues/1245) error on onAfterHandle (no property 'response')
 - [#1187](https://github.com/elysiajs/elysia/pull/1187), [#1169](https://github.com/elysiajs/elysia/issues/1169) websocket beforeLoad not being executed
 
 # 1.3.4 - 3 Jun 2025
