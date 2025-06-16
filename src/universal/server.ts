@@ -115,6 +115,11 @@ export interface ServeOptions extends GenericServeOptions {
 		request: Request,
 		server: Server
 	): Response | Promise<Response>
+
+	routes: Record<
+		string,
+		Function | Response | Record<string, Function | Response>
+	>
 }
 
 export type Serve = IsAny<BunServe> extends false ? BunServe : ServeOptions

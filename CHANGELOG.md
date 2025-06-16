@@ -1,3 +1,7 @@
+# 1.3.5 - 16 Jun 2025
+Bug fix:
+- [#1255](https://github.com/elysiajs/elysia/issues/1255) Regression in serving an imported HTML file
+
 # 1.3.4 - 3 Jun 2025
 Feature:
 - sse helper

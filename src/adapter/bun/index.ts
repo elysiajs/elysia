@@ -261,6 +261,15 @@ export const BunAdapter: ElysiaAdapter = {
 												// @ts-ignore
 												staticRoutes[path][method] =
 													awaited
+
+											if (
+												typeof awaited === 'object' &&
+												awaited?.toString() ===
+													'[object HTMLBundle]'
+											)
+												// @ts-ignore
+												staticRoutes[path][method] =
+													awaited
 										})
 									)
 								}
@@ -268,7 +277,14 @@ export const BunAdapter: ElysiaAdapter = {
 								continue
 							}
 
-							if (!(value instanceof Response)) continue
+							if (
+								!(value instanceof Response) &&
+								!(
+									typeof value === 'object' &&
+									value?.toString() === '[object HTMLBundle]'
+								)
+							)
+								continue
 
 							if (!staticRoutes[path]) staticRoutes[path] = {}
 
@@ -350,6 +366,8 @@ export const BunAdapter: ElysiaAdapter = {
 							fetch: app.fetch
 							// error: outerErrorHandler
 						} as Serve)
+
+			console.log(createStaticRoute(app.router.response))
 
 			app.server = Bun.serve(serve as any) as any
 

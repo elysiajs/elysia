@@ -14,7 +14,6 @@ export const createNativeStaticHandler = (
 		typeof handle === 'object' &&
 		handle?.toString() === '[object HTMLBundle]'
 	)
-		// Bun HTMLBundle
 		return () => handle as any
 
 	const response = mapResponse(handle, {

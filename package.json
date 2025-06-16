@@ -188,7 +188,7 @@
 		"fast-decode-uri-component": "^1.0.1"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.2.14",
+		"@types/bun": "^1.2.16",
 		"@types/cookie": "^1.0.0",
 		"@types/fast-decode-uri-component": "^1.0.0",
 		"@typescript-eslint/eslint-plugin": "^8.30.1",
