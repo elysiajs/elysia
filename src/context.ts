@@ -63,6 +63,27 @@ export type ErrorContext<
 			cookie?: Record<string, ElysiaCookie>
 		}
 
+		status: {} extends Route['response']
+			? typeof status
+			: <
+					const Code extends
+						| keyof Route['response']
+						| InvertedStatusMap[Extract<
+								InvertedStatusMapKey,
+								keyof Route['response']
+						  >],
+					const T extends Code extends keyof Route['response']
+						? Route['response'][Code]
+						: Code extends keyof StatusMap
+							? // @ts-ignore StatusMap[Code] always valid because Code generic check
+								Route['response'][StatusMap[Code]]
+							: never
+				>(
+					code: Code,
+					response: T
+					// @ts-ignore trust me bro
+				) => ElysiaCustomStatusResponse<Code, T>
+
 		/**
 		 * Path extracted from incoming URL
 		 *

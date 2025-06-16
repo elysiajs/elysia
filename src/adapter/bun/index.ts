@@ -367,8 +367,6 @@ export const BunAdapter: ElysiaAdapter = {
 							// error: outerErrorHandler
 						} as Serve)
 
-			console.log(createStaticRoute(app.router.response))
-
 			app.server = Bun.serve(serve as any) as any
 
 			if (app.event.start)

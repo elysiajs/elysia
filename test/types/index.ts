@@ -2442,3 +2442,10 @@ type a = keyof {}
 		'post' | ':id'
 	>()
 }
+
+// onError should have status
+{
+	new Elysia().onError(({ status }) => {
+		status(200)
+	})
+}
