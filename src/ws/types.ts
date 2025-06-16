@@ -36,12 +36,10 @@ export type FlattenResponse<Response extends RouteSchema['response']> =
 
 interface TypedWebSocketHandler<
 	in out Context,
-	in out Route extends RouteSchema = {},
-	in out UpgradeDataSchema extends unknown = unknown
+	in out Route extends RouteSchema = {}
 > extends Omit<WebSocketHandler<Context>, TypedWebSocketMethod> {
 	open?(
-		ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>,
-		data: UpgradeDataSchema
+		ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
 	): MaybePromise<FlattenResponse<Route['response']> | void>
 	message?(
 		ws: ElysiaWS<Context, Route>,
@@ -123,14 +121,13 @@ export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
 	message: unknown
 ) => MaybePromise<Route['body'] | void | undefined>
 
-export type AnyWSLocalHook = WSLocalHook<any, any, any, any, any>
+export type AnyWSLocalHook = WSLocalHook<any, any, any, any>
 
 export type WSLocalHook<
 	LocalSchema extends InputSchema,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
-	Macro extends MetadataBase['macro'],
-	UpgradeDataSchema extends TSchema,
+	Macro extends MetadataBase['macro']
 > = Prettify<Macro> &
 	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) & {
 		detail?: DocumentDecoration
@@ -139,11 +136,6 @@ export type WSLocalHook<
 		 */
 		upgrade?: Record<string, unknown> | ((context: Context) => unknown)
 		parse?: MaybeArray<WSParseHandler<Schema>>
-
-		/**
-		 * Upgrade data's value
-		 */
-		upgradeData?: UpgradeDataSchema;
 
 		/**
 		 * Transform context's value
@@ -174,6 +166,5 @@ export type WSLocalHook<
 		Omit<Context<Schema, Singleton>, 'body'> & {
 			body: never
 		},
-		Schema,
-		UnwrapSchema<UpgradeDataSchema>
+		Schema
 	>
