@@ -88,8 +88,15 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					if (response) return (context.response = response)
 				}
 
+			const isWS =
+				request.method === 'GET' &&
+				request.headers.get('upgrade')?.toLowerCase() === 'websocket'
+
+			const methodKey = isWS ? 'WS' : request.method
+
 			const handler =
 				app.router.dynamic.find(request.method, path) ??
+				app.router.dynamic.find(methodKey, path) ??
 				app.router.dynamic.find('ALL', path)
 
 			if (!handler) throw new NotFoundError()
