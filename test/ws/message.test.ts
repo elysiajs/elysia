@@ -487,4 +487,38 @@ describe('WebSocket message', () => {
 		await wsClosed(ws)
 		app.stop()
 	})
+
+	it('should call beforeHandle hook', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				upgradeData: t.Object({
+					hello: t.String()
+				}),
+				beforeHandle() {
+					return {
+						hello: 'world'
+					}
+				},
+				open(ws, data) {
+					ws.send(data.hello)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send('Hello!')
+
+		const { data } = await message
+		
+		expect(data).toBe('world')
+
+		await wsClosed(ws)
+
+		app.stop()
+	})
 })
