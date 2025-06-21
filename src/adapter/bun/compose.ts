@@ -35,14 +35,16 @@ const createContext = (
 		`s=u.indexOf('/',${standardHostname ? 11 : 7}),` +
 		`qi=u.indexOf('?', s + 1)\n`
 
-	if (inference.query) fnLiteral += getQi
+	const needsQuery = inference.query || !!route.hooks.query || !!route.standaloneValidators?.find((x) => x.query)
+
+	if (needsQuery) fnLiteral += getQi
 
 	const getPath = !inference.path
 		? ''
 		: !isDynamic
 			? `path:'${route.path}',`
 			: `get path(){` +
-				(inference.query ? '' : getQi) +
+				(needsQuery ? '' : getQi) +
 				`if(qi===-1)return u.substring(s)\n` +
 				`return u.substring(s,qi)\n` +
 				`},`
@@ -51,12 +53,12 @@ const createContext = (
 		allocateIf(`const c=`, !isInline) +
 		`{request,` +
 		`store,` +
-		allocateIf(`qi,`, inference.query) +
+		allocateIf(`qi,`, needsQuery) +
 		allocateIf(`params:request.params,`, isDynamic) +
 		getPath +
 		allocateIf(
 			`url:request.url,`,
-			hasTrace || inference.url || inference.query
+			hasTrace || inference.url || needsQuery
 		) +
 		`redirect,` +
 		`error:status,` +
@@ -122,8 +124,10 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 
 	fnLiteral += `${app.event.request?.find(isAsync) ? 'async' : ''} function map(request){`
 
+	const needsQuery = inference.query || !!route.hooks.query || !!route.standaloneValidators?.find((x) => x.query)
+
 	// inference.query require declaring const 'qi'
-	if (hasTrace || inference.query || app.event.request?.length) {
+	if (hasTrace || needsQuery) {
 		fnLiteral += createContext(app, route, inference)
 		fnLiteral += createOnRequestHandler(app)
 
