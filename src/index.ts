@@ -6727,6 +6727,10 @@ export default class Elysia<
 		}
 	}
 
+	[Symbol.dispose] = () => {
+		this.stop()
+	}
+
 	/**
 	 * Wait until all lazy loaded modules all load is fully
 	 */
