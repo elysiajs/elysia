@@ -344,7 +344,7 @@ const hasBunHash = isBun && typeof Bun.hash === 'function'
 
 // https://stackoverflow.com/a/52171480
 export const checksum = (s: string) => {
-	if (hasBunHash) return Bun.hash(s)
+	if (hasBunHash) return Bun.hash(s) as unknown as number
 
 	let h = 9
 
