@@ -11,7 +11,7 @@ const plugin = new Elysia()
 const t1 = performance.now()
 
 for (let i = 0; i < total * sub; i++)
-	plugin.get(`/${i}`, () => new Response('hi'), { response: t.String() })
+	plugin.get(`/${i}`, () => 'hi', { response: t.String() })
 
 app.use(plugin)
 

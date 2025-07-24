@@ -7,6 +7,7 @@ Improvement:
 Bug fix:
 - [#1126](https://github.com/elysiajs/elysia/pull/1126) websocket errors not catching
 - [#1281](https://github.com/elysiajs/elysia/issues/1281) automatically enforce additional properties in nested schema (eg. array)
+- Dynamic handle decode signed cookie secret instead of accidental hardcoded value
 
 # 1.3.5 - 16 Jun 2025
 Bug fix:

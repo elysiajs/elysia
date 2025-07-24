@@ -453,27 +453,30 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						? cookieMeta.secrets
 						: cookieMeta.secrets[0]
 
-				if (cookieMeta.sign === true)
-					for (const [key, cookie] of Object.entries(
-						context.set.cookie
-					))
-						context.set.cookie[key].value = await signCookie(
-							cookie.value as any,
-							'${secret}'
-						)
-				else {
+				if (cookieMeta.sign === true) {
+					if (secret)
+						for (const [key, cookie] of Object.entries(
+							context.set.cookie
+						))
+							context.set.cookie[key].value = await signCookie(
+								cookie.value as any,
+								secret
+							)
+				} else {
 					const properties = validator?.cookie?.schema?.properties
 
-					for (const name of cookieMeta.sign) {
-						if (!(name in properties)) continue
+					if (secret)
+						for (const name of cookieMeta.sign) {
+							if (!(name in properties)) continue
 
-						if (context.set.cookie[name]?.value) {
-							context.set.cookie[name].value = await signCookie(
-								context.set.cookie[name].value as any,
-								secret as any
-							)
+							if (context.set.cookie[name]?.value) {
+								context.set.cookie[name].value =
+									await signCookie(
+										context.set.cookie[name].value as any,
+										secret
+									)
+							}
 						}
-					}
 				}
 			}
 

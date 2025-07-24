@@ -1180,8 +1180,7 @@ export default class Elysia<
 				> &
 					Metadata['standaloneSchema'] &
 					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema']
-				&
+					Volatile['standaloneSchema'] &
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -1377,8 +1376,7 @@ export default class Elysia<
 				> &
 					Metadata['standaloneSchema'] &
 					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema']
-				&
+					Volatile['standaloneSchema'] &
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -1460,8 +1458,7 @@ export default class Elysia<
 					> &
 						Metadata['standaloneSchema'] &
 						Ephemeral['standaloneSchema'] &
-						Volatile['standaloneSchema']
-					&
+						Volatile['standaloneSchema'] &
 						'global' extends Type
 						? { params: Record<string, string> }
 						: 'scoped' extends Type
@@ -1843,8 +1840,7 @@ export default class Elysia<
 				> &
 					Metadata['standaloneSchema'] &
 					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema']
-				&
+					Volatile['standaloneSchema'] &
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -1962,8 +1958,7 @@ export default class Elysia<
 				> &
 					Metadata['standaloneSchema'] &
 					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema']
-				&
+					Volatile['standaloneSchema'] &
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -2077,8 +2072,7 @@ export default class Elysia<
 				> &
 					Metadata['standaloneSchema'] &
 					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema']
-				&
+					Volatile['standaloneSchema'] &
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -2191,8 +2185,7 @@ export default class Elysia<
 				> &
 					Metadata['standaloneSchema'] &
 					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema']
-				&
+					Volatile['standaloneSchema'] &
 					'global' extends Type
 					? { params: Record<string, string> }
 					: 'scoped' extends Type
@@ -2994,7 +2987,8 @@ export default class Elysia<
 				JoinPath<BasePath, Prefix>
 			>,
 			Metadata['schema']
-		> & Metadata['standaloneSchema'],
+		> &
+			Metadata['standaloneSchema'],
 		const Resolutions extends MaybeArray<
 			ResolveHandler<
 				Schema,
@@ -3591,7 +3585,8 @@ export default class Elysia<
 						headers: hook.headers ?? this.validator[type]?.headers,
 						params: hook.params ?? this.validator[type]?.params,
 						query: hook.query ?? this.validator[type]?.query,
-						response: hook.response ?? this.validator[type]?.response,
+						response:
+							hook.response ?? this.validator[type]?.response,
 						cookie: hook.cookie ?? this.validator[type]?.cookie
 					}
 				}
@@ -5424,7 +5419,7 @@ export default class Elysia<
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
 		>,
-		const Macro extends Metadata['macro'],
+		const Macro extends Metadata['macro']
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -6086,8 +6081,7 @@ export default class Elysia<
 					> &
 						Metadata['standaloneSchema'] &
 						Ephemeral['standaloneSchema'] &
-						Volatile['standaloneSchema']
-					&
+						Volatile['standaloneSchema'] &
 						'global' extends Type
 						? { params: Record<string, string> }
 						: 'scoped' extends Type
@@ -6715,10 +6709,10 @@ export default class Elysia<
 		await this['~adapter'].stop(this, closeActiveConnections)
 
 		return this
-	}
+	};
 
 	[Symbol.dispose] = () => {
-		this.stop()
+		if (this.server) this.stop()
 	}
 
 	/**

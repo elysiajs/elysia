@@ -11,8 +11,8 @@ const stack: Memoirist<any>[] = []
 	for (let i = 0; i < total; i++) {
 		for (let i = 0; i < 2; i++) {
 			const router = new Memoirist()
-			router.add('GET', '/a', () => 'Hello, World!')
-			router.add('GET', '/b', () => 'Hello, World!')
+			// router.add('GET', '/a', () => 'Hello, World!')
+			// router.add('GET', '/b', () => 'Hello, World!')
 
 			stack.push(router)
 		}
