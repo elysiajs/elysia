@@ -1,17 +1,30 @@
-import { Elysia, file, form, t } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.ws('/ws', {
-		upgradeData: t.Object({
-			hello: t.String()
-		}),
-		beforeHandle() {
-			return {
-				hello: 'world'
+const app = new Elysia().get(
+	'/',
+	() => {
+		return [
+			{
+				id: 'testId',
+				date: new Date('2025-07-11T00:00:00.000Z'),
+				name: 'testName',
+				needNormalize: 'yes'
 			}
-		},
-		open(ws, data) {
-			ws.send(data.hello)
+		]
+	},
+	{
+		response: {
+			200: t.Array(
+				t.Object({
+					id: t.String(),
+					date: t.Date(),
+					name: t.String()
+				})
+			)
 		}
-	})
-	.listen(3000)
+	}
+)
+
+app.handle(new Request('http://localhost:3000/'))
+	.then((x) => x.json())
+	.then(console.log)

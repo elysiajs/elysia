@@ -290,6 +290,10 @@ interface ReplaceSchemaTypeOptions {
 	 * Traverse until object is found except root object
 	 **/
 	untilObjectFound?: boolean
+	/**
+	 * Only replace first object type
+	 **/
+	onlyFirstObject?: boolean
 }
 
 interface ReplaceSchemaTypeConfig {
@@ -350,6 +354,9 @@ const _replaceSchemaType = (
 	if (!schema) return schema
 
 	const root = config.root
+
+	if (options.onlyFirstObject && schema.type === 'object')
+		return options.to(schema) ?? schema
 
 	if (options.untilObjectFound && !root && schema.type === 'object')
 		return schema
@@ -651,6 +658,20 @@ const _replaceSchemaType = (
 			}
 		}
 
+	if (schema.type === 'array' && schema.items)
+		if (Array.isArray(schema.items))
+			schema.items = schema.items.map((item) =>
+				_replaceSchemaType(item, options, {
+					...config,
+					root: false
+				})
+			)
+		else
+			schema.items = _replaceSchemaType(schema.items, options, {
+				...config,
+				root: false
+			})
+
 	return schema
 }
 
@@ -820,6 +841,22 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			'additionalProperties' in schema === false
 		)
 			schema.additionalProperties = additionalProperties
+		else
+			schema = replaceSchemaType(schema, {
+				onlyFirstObject: true,
+				from: t.Object({}),
+				// @ts-ignore
+				to({ properties, ...options }) {
+					// If nothing is return, use the original schema
+					if (!properties) return
+					if ('additionalProperties' in schema) return
+
+					return t.Object(properties, {
+						...options,
+						additionalProperties: false
+					})
+				}
+			})
 	}
 
 	if (dynamic) {
