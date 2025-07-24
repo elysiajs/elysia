@@ -694,7 +694,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		validators?: InputSchema['body'][]
 		sanitize?: () => ExactMirrorInstruction['sanitize']
 	} = {}
-): T extends TSchema ? ElysiaTypeCheck<TSchema> : undefined => {
+): T extends TSchema ? ElysiaTypeCheck<T> : undefined => {
 	validators = validators?.filter((x) => x)
 
 	if (!s) {
