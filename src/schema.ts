@@ -679,13 +679,7 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	if (typeof value === 'object')
 		try {
 			return Value.Clean(schema, value)
-		} catch {
-			try {
-				return Value.Clean(schema, value)
-			} catch {
-				return value
-			}
-		}
+		} catch {}
 
 	return value
 }

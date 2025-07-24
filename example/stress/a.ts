@@ -1,4 +1,6 @@
+import { getHeapSpaceStatistics } from 'v8'
 import { Elysia, t } from '../../src'
+import { generateHeapSnapshot } from 'bun'
 
 const memory = process.memoryUsage().heapTotal / 1024 / 1024
 

@@ -2038,7 +2038,7 @@ export const composeHandler = ({
 			'"use strict";\n' + fnLiteral
 		)({
 			handler,
-			hooks: lifeCycleToFn({ ...hooks }),
+			hooks: lifeCycleToFn(hooks),
 			validator: hasValidation ? validator : undefined,
 			// @ts-expect-error
 			handleError: app.handleError,
@@ -2066,7 +2066,7 @@ export const composeHandler = ({
 			ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 			ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 			// @ts-expect-error private property
-			getServer: () => app.getServer(),
+			getServer: inference.server ? () => app.getServer() : undefined,
 			fileUnions: fileUnions.length ? fileUnions : undefined,
 			TypeBoxError: hasValidation ? TypeBoxError : undefined,
 			parser: app['~parser'],
@@ -2326,8 +2326,10 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 
 	fnLiteral += findDynamicRoute + `}\n` + createHoc(app)
 
+	const handleError = composeErrorHandler(app)
+
 	// @ts-expect-error private property
-	app.handleError = composeErrorHandler(app) as any
+	app.handleError = handleError
 
 	const fn = Function(
 		'data',
@@ -2337,8 +2339,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		mapEarlyResponse: app['~adapter']['handler'].mapEarlyResponse,
 		NotFoundError,
 		randomId,
-		// @ts-expect-error private property
-		handleError: app.handleError,
+		handleError,
 		status,
 		redirect,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,

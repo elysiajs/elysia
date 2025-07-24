@@ -344,6 +344,8 @@ const hasBunHash = isBun && typeof Bun.hash === 'function'
 
 // https://stackoverflow.com/a/52171480
 export const checksum = (s: string) => {
+	if (hasBunHash) return Bun.hash(s)
+
 	let h = 9
 
 	for (let i = 0; i < s.length; ) h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
@@ -876,33 +878,27 @@ export const localHookToLifeCycleStore = (a: AnyLocalHook): LifeCycleStore => {
 }
 
 export const lifeCycleToFn = (a: Partial<LifeCycleStore>): AnyLocalHook => {
-	// @ts-expect-error
-	if (a.start?.map) a.start = a.start.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.request?.map) a.request = a.request.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.parse?.map) a.parse = a.parse.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.transform?.map) a.transform = a.transform.map((x) => x.fn)
-	if (a.beforeHandle?.map)
-		// @ts-expect-error
-		a.beforeHandle = a.beforeHandle.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.afterHandle?.map) a.afterHandle = a.afterHandle.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.mapResponse?.map) a.mapResponse = a.mapResponse.map((x) => x.fn)
-	if (a.afterResponse?.map)
-		// @ts-expect-error
-		a.afterResponse = a.afterResponse.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.trace?.map) a.trace = a.trace.map((x) => x.fn)
-	else a.trace = []
-	// @ts-expect-error
-	if (a.error?.map) a.error = a.error.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.stop?.map) a.stop = a.stop.map((x) => x.fn)
+	const lifecycle = Object.create(null)
 
-	return a
+	if (a.start?.map) lifecycle.start = a.start.map((x) => x.fn)
+	if (a.request?.map) lifecycle.request = a.request.map((x) => x.fn)
+	if (a.parse?.map) lifecycle.parse = a.parse.map((x) => x.fn)
+	if (a.transform?.map) lifecycle.transform = a.transform.map((x) => x.fn)
+	if (a.beforeHandle?.map)
+		lifecycle.beforeHandle = a.beforeHandle.map((x) => x.fn)
+	if (a.afterHandle?.map)
+		lifecycle.afterHandle = a.afterHandle.map((x) => x.fn)
+	if (a.mapResponse?.map)
+		lifecycle.mapResponse = a.mapResponse.map((x) => x.fn)
+	if (a.afterResponse?.map)
+		lifecycle.afterResponse = a.afterResponse.map((x) => x.fn)
+	if (a.error?.map) lifecycle.error = a.error.map((x) => x.fn)
+	if (a.stop?.map) lifecycle.stop = a.stop.map((x) => x.fn)
+
+	if (a.trace?.map) lifecycle.trace = a.trace.map((x) => x.fn)
+	else lifecycle.trace = []
+
+	return lifecycle
 }
 
 export const cloneInference = (inference: Sucrose.Inference) =>

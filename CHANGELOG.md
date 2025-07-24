@@ -1,4 +1,4 @@
-# 1.3.6 -
+# 1.3.6 - 24 Jul 2025
 Improvement:
 - [#1263](https://github.com/elysiajs/elysia/pull/1263) bun adapter add qi to routes that need query from guard
 - [#1270](https://github.com/elysiajs/elysia/pull/1270) add Symbol.dispose

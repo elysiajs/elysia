@@ -39,6 +39,6 @@ export const createNativeStaticHandler = (
 		if (!response.headers.has('content-type'))
 			response.headers.append('content-type', 'text/plain')
 
-		return response.clone.bind(response) as any
+		return () => response.clone() as any
 	}
 }
