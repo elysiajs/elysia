@@ -1,3 +1,11 @@
+# 1.3.6 -
+Improvement:
+- [#1263](https://github.com/elysiajs/elysia/pull/1263) bun adapter add qi to routes that need query from guard
+- [#1270](https://github.com/elysiajs/elysia/pull/1270) add Symbol.dispose
+
+Bug fix:
+- [#1126](https://github.com/elysiajs/elysia/pull/1126) Websocket errors not catching
+
 # 1.3.5 - 16 Jun 2025
 Bug fix:
 - [#1255](https://github.com/elysiajs/elysia/issues/1255) regression in serving an imported HTML file

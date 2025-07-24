@@ -301,6 +301,7 @@ describe('Edge Case', () => {
 					user: true
 				}
 			)
+
 		const app = new Elysia({
 			precompile: true
 		}).group('/group', (app) => app.use(group))

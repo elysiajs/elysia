@@ -1,5 +1,4 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import { Memoirist } from 'memoirist'
 import type { TSchema } from '@sinclair/typebox'
 
 import { WebStandardAdapter } from '../web-standard/index'
@@ -35,8 +34,7 @@ import {
 	websocket
 } from '../../ws/index'
 import type { ServerWebSocket } from '../../ws/bun'
-import { AnyElysia } from '../..'
-import { Static } from '@sinclair/typebox/parser'
+import type { AnyElysia } from '../..'
 
 const optionalParam = /:.+?\?(?=\/|$)/
 
@@ -343,7 +341,6 @@ export const BunAdapter: ElysiaAdapter = {
 								...(websocket || {})
 							},
 							fetch: app.fetch
-							// error: outerErrorHandler
 						} as Serve)
 					: ({
 							development: !isProduction,
@@ -364,7 +361,6 @@ export const BunAdapter: ElysiaAdapter = {
 							},
 							port: options,
 							fetch: app.fetch
-							// error: outerErrorHandler
 						} as Serve)
 
 			app.server = Bun.serve(serve as any) as any
