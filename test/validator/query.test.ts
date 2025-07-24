@@ -948,4 +948,22 @@ describe('Query Validator', () => {
 			type: 'object'
 		})
 	})
+
+	it('handle Date query', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query: { date } }) => date.toISOString(),
+			{
+				query: t.Object({
+					date: t.Date()
+				})
+			}
+		)
+
+		const response = await app
+			.handle(req(`/?date=2023-04-05T12:30:00+01:00`))
+			.then((x) => x.text())
+
+		expect(response).toEqual('2023-04-05T11:30:00.000Z')
+	})
 })

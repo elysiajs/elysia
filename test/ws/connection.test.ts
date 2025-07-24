@@ -137,4 +137,40 @@ describe('WebSocket connection', () => {
 
 		app.stop()
 	})
+
+	it('handle derive, resolve', async () => {
+		let sessionId: string | undefined
+		let user: { id: '123'; name: 'Jane Doe' } | undefined
+
+		const app = new Elysia()
+			.derive(() => ({
+				sessionId: '123'
+			}))
+			.resolve(() => ({
+				getUser() {
+					return {
+						id: '123',
+						name: 'Jane Doe'
+					} as const
+				}
+			}))
+			.ws('/ws', {
+				open(ws) {
+					sessionId = ws.data.sessionId
+					user = ws.data.getUser()
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!, '/ws')
+
+		await wsOpen(ws)
+		await wsClosed(ws)
+
+		expect(sessionId).toEqual('123')
+		expect(user).toEqual({
+			id: '123',
+			name: 'Jane Doe'
+		})
+	})
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { parseSetCookies } from '../../../src/adapter/web-standard/handler'
+import { parseSetCookies } from '../../../src/adapter/utils'
 
 describe('Web Standard - Parse Set Cookie', () => {
 	it('should handle empty arrays', () => {

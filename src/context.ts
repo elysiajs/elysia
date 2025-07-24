@@ -1,4 +1,4 @@
-import type { Server } from 'bun'
+import type { Server } from './universal/server'
 import type { Cookie, ElysiaCookie } from './cookies'
 import type {
 	StatusMap,
@@ -6,7 +6,7 @@ import type {
 	redirect as Redirect
 } from './utils'
 
-import { ElysiaCustomStatusResponse, error } from './error'
+import { ElysiaCustomStatusResponse, status } from './error'
 import type {
 	RouteSchema,
 	Prettify,
@@ -16,10 +16,6 @@ import type {
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
-
-type WithoutNullableKeys<Type> = {
-	[Key in keyof Type]-?: NonNullable<Type[Key]>
-}
 
 export type ErrorContext<
 	in out Route extends RouteSchema = {},
@@ -46,14 +42,11 @@ export type ErrorContext<
 			: Route['headers']
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<string | undefined>>
-			: Record<string, Cookie<string | undefined>> &
-					Prettify<
-						WithoutNullableKeys<{
-							[key in keyof Route['cookie']]: Cookie<
-								Route['cookie'][key]
-							>
-						}>
+			: Record<string, Cookie<string | undefined>> & {
+					[key in keyof Route['cookie']]-?: NonNullable<
+						Cookie<Route['cookie'][key]>
 					>
+				}
 
 		server: Server | null
 		redirect: Redirect
@@ -69,6 +62,27 @@ export type ErrorContext<
 			 */
 			cookie?: Record<string, ElysiaCookie>
 		}
+
+		status: {} extends Route['response']
+			? typeof status
+			: <
+					const Code extends
+						| keyof Route['response']
+						| InvertedStatusMap[Extract<
+								InvertedStatusMapKey,
+								keyof Route['response']
+						  >],
+					const T extends Code extends keyof Route['response']
+						? Route['response'][Code]
+						: Code extends keyof StatusMap
+							? // @ts-ignore StatusMap[Code] always valid because Code generic check
+								Route['response'][StatusMap[Code]]
+							: never
+				>(
+					code: Code,
+					response: T
+					// @ts-ignore trust me bro
+				) => ElysiaCustomStatusResponse<Code, T>
 
 		/**
 		 * Path extracted from incoming URL
@@ -94,6 +108,8 @@ export type ErrorContext<
 		Singleton['resolve']
 >
 
+type PrettifyIfObject<T> = T extends object ? Prettify<T> : T
+
 export type Context<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -105,30 +121,27 @@ export type Context<
 	Path extends string | undefined = undefined
 > = Prettify<
 	{
-		body: Route['body']
+		body: PrettifyIfObject<Route['body']>
 		query: undefined extends Route['query']
 			? Record<string, string>
-			: Route['query']
+			: PrettifyIfObject<Route['query']>
 		params: undefined extends Route['params']
 			? undefined extends Path
 				? Record<string, string>
 				: Path extends `${string}/${':' | '*'}${string}`
 					? ResolvePath<Path>
 					: never
-			: Route['params']
+			: PrettifyIfObject<Route['params']>
 		headers: undefined extends Route['headers']
 			? Record<string, string | undefined>
-			: Route['headers']
+			: PrettifyIfObject<Route['headers']>
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<string | undefined>>
-			: Record<string, Cookie<string | undefined>> &
-					Prettify<
-						WithoutNullableKeys<{
-							[key in keyof Route['cookie']]: Cookie<
-								Route['cookie'][key]
-							>
-						}>
+			: Record<string, Cookie<string | undefined>> & {
+					[key in keyof Route['cookie']]-?: Cookie<
+						Route['cookie'][key]
 					>
+				}
 
 		server: Server | null
 		redirect: Redirect
@@ -172,15 +185,10 @@ export type Context<
 		route: string
 		request: Request
 		store: Singleton['store']
-		response?: never extends keyof Route['response']
-			? unknown
-			: Route['response'][keyof Route['response']]
-	} & ({} extends Route['response']
-		? {
-				error: typeof error
-			}
-		: {
-				error: <
+
+		status: {} extends Route['response']
+			? typeof status
+			: <
 					const Code extends
 						| keyof Route['response']
 						| InvertedStatusMap[Extract<
@@ -198,8 +206,35 @@ export type Context<
 					response: T
 					// @ts-ignore trust me bro
 				) => ElysiaCustomStatusResponse<Code, T>
-			}) &
-		Singleton['decorator'] &
+
+		/**
+		* @deprecated use `status` instead
+		*/
+		error: {} extends Route['response']
+			? typeof status
+			: <
+					const Code extends
+						| keyof Route['response']
+						| InvertedStatusMap[Extract<
+								InvertedStatusMapKey,
+								keyof Route['response']
+						  >],
+					const T extends Code extends keyof Route['response']
+						? Route['response'][Code]
+						: Code extends keyof StatusMap
+							? // @ts-ignore StatusMap[Code] always valid because Code generic check
+								Route['response'][StatusMap[Code]]
+							: never
+				>(
+					code: Code,
+					response: T
+					// @ts-ignore trust me bro
+				) => ElysiaCustomStatusResponse<Code, T>
+
+		// response?: IsNever<keyof Route['response']> extends true
+		// 	? unknown
+		// 	: Route['response'][keyof Route['response']]
+	} & Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']
 >
@@ -226,6 +261,10 @@ export type PreContext<
 			redirect?: string
 		}
 
-		error: typeof error
+		/**
+		 * @deprecated use `status` instead
+		 */
+		error: typeof status
+		status: typeof status
 	} & Singleton['decorator']
 >

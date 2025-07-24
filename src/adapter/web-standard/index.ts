@@ -5,8 +5,6 @@ import {
 	createStaticHandler
 } from './handler'
 
-import { getLoosePath } from '../../utils'
-
 import type { ElysiaAdapter } from '../types'
 
 export const WebStandardAdapter: ElysiaAdapter = {
@@ -23,9 +21,9 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		preferWebstandardHeaders: true,
 		// @ts-ignore Bun specific
 		headers:
-			'c.headers = {}\n' +
-			'for (const [key, value] of c.request.headers.entries())' +
-			'c.headers[key] = value\n',
+			'c.headers={}\n' +
+			'for(const [k,v] of c.request.headers.entries())' +
+			'c.headers[k]=v\n',
 		parser: {
 			json(isOptional) {
 				if (isOptional)
@@ -85,9 +83,8 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			// @ts-expect-error private
 			const defaultHeaders = app.setHeaders
 
-			// @ts-ignore
-			for (const key of Object.keys(app.singleton.decorator))
-				decoratorsLiteral += `,${key}: decorator['${key}']`
+			for (const key of Object.keys(app.decorator))
+				decoratorsLiteral += `,'${key}':decorator['${key}']`
 
 			const standardHostname =
 				app.config.handler?.standardHostname ?? true
@@ -96,7 +93,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			fnLiteral +=
 				`const u=r.url,` +
 				`s=u.indexOf('/',${standardHostname ? 11 : 7}),` +
-				`qi=u.indexOf('?', s + 1)\n` +
+				`qi=u.indexOf('?',s+1)\n` +
 				`let p\n` +
 				`if(qi===-1)p=u.substring(s)\n` +
 				`else p=u.substring(s, qi)\n`
@@ -110,12 +107,13 @@ export const WebStandardAdapter: ElysiaAdapter = {
 				`path:p,` +
 				`url:u,` +
 				`redirect,` +
-				`error,` +
+				`error:status,` +
+				`status,` +
 				`set:{headers:`
 
 			fnLiteral += Object.keys(defaultHeaders ?? {}).length
-				? 'Object.assign({}, app.setHeaders)'
-				: '{}'
+				? 'Object.assign({},app.setHeaders)'
+				: 'Object.create(null)'
 
 			fnLiteral += `,status:200}`
 
@@ -125,48 +123,6 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			if (hasTrace) fnLiteral += ',[ELYSIA_REQUEST_ID]:id'
 			fnLiteral += decoratorsLiteral
 			fnLiteral += `}\n`
-
-			return fnLiteral
-		},
-		websocket(app) {
-			let fnLiteral = ''
-
-			const wsPaths = app.router.static.ws
-			const router = app.router.http
-
-			router.build()
-
-			if (
-				Object.keys(wsPaths).length ||
-				router.root.ws ||
-				router.history.find((x) => x['0'] === 'ws')
-			) {
-				fnLiteral += `if(r.method==='GET'){switch(p){`
-
-				for (const [path, index] of Object.entries(wsPaths)) {
-					fnLiteral +=
-						`case'${path}':` +
-						(app.config.strictPath !== true
-							? `case'${getLoosePath(path)}':`
-							: '') +
-						`if(r.headers.get('upgrade')==='websocket')` +
-						`return ht[${index}].composed(c)\n`
-				}
-
-				fnLiteral +=
-					`default:` +
-					`if(r.headers.get('upgrade')==='websocket'){` +
-					`const route=router.find('ws',p)\n` +
-					`if(route){` +
-					`c.params=route.params\n` +
-					`if(route.store.handler)return route.store.handler(c)\n` +
-					`return (route.store.handler=route.store.compile())(c)` +
-					`}` +
-					`}` +
-					`break` +
-					`}` +
-					`}`
-			}
 
 			return fnLiteral
 		},

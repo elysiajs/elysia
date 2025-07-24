@@ -101,4 +101,25 @@ describe('handle path with spaces', () => {
 		expect(value[0]).toBe('0')
 		expect(value[1]).toBe('1')
 	})
+
+	it('handle optional path parameters after required', async () => {
+		const app = new Elysia().get(
+			'/api/:required/:optional?',
+			({ params }) => params.required
+		)
+
+		const required = await app.handle(
+			new Request('http://localhost/api/yay')
+		)
+
+		expect(required.status).toBe(200)
+		expect(await required.text()).toEqual('yay')
+
+		const optional = await app.handle(
+			new Request('http://localhost/api/yay/ok')
+		)
+
+		expect(optional.status).toBe(200)
+		expect(await optional.text()).toEqual('yay')
+	})
 })

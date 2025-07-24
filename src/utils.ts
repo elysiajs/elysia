@@ -1,21 +1,5 @@
-import type { BunFile } from 'bun'
-import {
-	Kind,
-	TAnySchema,
-	TModule,
-	TransformKind,
-	type TSchema
-} from '@sinclair/typebox'
-import { Value } from '@sinclair/typebox/value'
-import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler'
-
-import { t } from './type-system'
 import type { Sucrose } from './sucrose'
-
-import { mapValueError } from './error'
-
 import type { TraceHandler } from './trace'
-import type { CookieOptions } from './cookies'
 
 import type {
 	LifeCycleStore,
@@ -29,14 +13,15 @@ import type {
 	BodyHandler,
 	TransformHandler,
 	OptionalHandler,
-	AfterHandler,
 	MapResponse,
 	ErrorHandler,
 	Replace,
 	AfterResponseHandler,
 	SchemaValidator,
-	AnyLocalHook
+	AnyLocalHook,
+	SSEPayload
 } from './types'
+import { ElysiaFile } from './universal/file'
 
 export const hasHeaderShorthand = 'toJSON' in new Headers()
 
@@ -67,14 +52,14 @@ export const mergeDeep = <
 >(
 	target: A,
 	source: B,
-	{
-		skipKeys,
-		override = true
-	}: {
+	options?: {
 		skipKeys?: string[]
 		override?: boolean
-	} = {}
+	}
 ): A & B => {
+	const skipKeys = options?.skipKeys
+	const override = options?.override ?? true
+
 	if (!isObject(target) || !isObject(source)) return target as A & B
 
 	for (const [key, value] of Object.entries(source)) {
@@ -104,33 +89,36 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 		skipKeys: ['properties']
 	}) as A & B
 
-	if ('properties' in v) delete v.properties
+	// @ts-expect-error
+	if (v.properties) delete v.properties
 
 	return v
 }
 
 export const mergeObjectArray = <T extends HookContainer>(
-	a: T | T[] = [],
-	b: T | T[] = []
+	a: T | T[] | undefined,
+	b: T | T[] | undefined
 ): T[] | undefined => {
-	if (!a) return undefined
 	if (!b) return a as any
 
 	// ! Must copy to remove side-effect
 	const array = <T[]>[]
 	const checksums = <(number | undefined)[]>[]
 
-	if (!Array.isArray(a)) a = [a]
-	if (!Array.isArray(b)) b = [b]
+	if (a) {
+		if (!Array.isArray(a)) a = [a]
+		for (const item of a) {
+			array.push(item)
 
-	for (const item of a) {
-		array.push(item)
-
-		if (item.checksum) checksums.push(item.checksum)
+			if (item.checksum) checksums.push(item.checksum)
+		}
 	}
 
-	for (const item of b)
-		if (!checksums.includes(item.checksum)) array.push(item)
+	if (b) {
+		if (!Array.isArray(b)) b = [b]
+		for (const item of b)
+			if (!checksums.includes(item.checksum)) array.push(item)
+	}
 
 	return array
 }
@@ -183,6 +171,16 @@ export const mergeSchemaValidator = (
 	a?: SchemaValidator | null,
 	b?: SchemaValidator | null
 ): SchemaValidator => {
+	if (!a && !b)
+		return {
+			body: undefined,
+			headers: undefined,
+			params: undefined,
+			query: undefined,
+			cookie: undefined,
+			response: undefined
+		}
+
 	return {
 		body: b?.body ?? a?.body,
 		headers: b?.headers ?? a?.headers,
@@ -233,13 +231,12 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
-	// @ts-expect-error
-	const { resolve: resolveA, ...restA } = a ?? {}
-	const { resolve: resolveB, ...restB } = b ?? {}
+	if (!Object.values(b).find((x) => x !== undefined && x !== null))
+		return { ...a } as any
 
-	return {
-		...restA,
-		...restB,
+	const hook = {
+		...a,
+		...b,
 		// Merge local hook first
 		// @ts-ignore
 		body: b?.body ?? a?.body,
@@ -269,11 +266,12 @@ export const mergeHook = (
 		transform: mergeObjectArray(a?.transform, b?.transform),
 		beforeHandle: mergeObjectArray(
 			mergeObjectArray(
-				fnToContainer(resolveA, 'resolve'),
+				// @ts-ignore
+				fnToContainer(a?.resolve, 'resolve'),
 				a?.beforeHandle
 			),
 			mergeObjectArray(
-				fnToContainer(resolveB, 'resolve'),
+				fnToContainer(b.resolve, 'resolve'),
 				b?.beforeHandle
 			)
 		),
@@ -286,696 +284,71 @@ export const mergeHook = (
 		trace: mergeObjectArray(a?.trace, b?.trace) as any,
 		error: mergeObjectArray(a?.error, b?.error)
 	}
+
+	if (hook.resolve) delete hook.resolve
+
+	return hook
 }
 
-interface ReplaceSchemaTypeOptions {
-	from: TSchema
-	to(options: Object): TSchema | null
-	excludeRoot?: boolean
-	rootOnly?: boolean
-	original?: TAnySchema
-	/**
-	 * Traverse until object is found except root object
-	 **/
-	untilObjectFound?: boolean
-}
+export const lifeCycleToArray = (a: LifeCycleStore) => {
+	if (a.parse && !Array.isArray(a.parse)) a.parse = [a.parse]
 
-export const replaceSchemaType = (
-	schema: TSchema,
-	options: MaybeArray<ReplaceSchemaTypeOptions>,
-	root = true
-) => {
-	if (!Array.isArray(options)) {
-		options.original = schema
+	if (a.transform && !Array.isArray(a.transform)) a.transform = [a.transform]
 
-		return _replaceSchemaType(schema, options, root)
-	}
+	if (a.afterHandle && !Array.isArray(a.afterHandle))
+		a.afterHandle = [a.afterHandle]
 
-	for (const option of options) {
-		option.original = schema
+	if (a.mapResponse && !Array.isArray(a.mapResponse))
+		a.mapResponse = [a.mapResponse]
 
-		schema = _replaceSchemaType(schema, option, root)
-	}
+	if (a.afterResponse && !Array.isArray(a.afterResponse))
+		a.afterResponse = [a.afterResponse]
 
-	return schema
-}
+	if (a.trace && !Array.isArray(a.trace)) a.trace = [a.trace]
+	if (a.error && !Array.isArray(a.error)) a.error = [a.error]
 
-const _replaceSchemaType = (
-	schema: TSchema,
-	options: ReplaceSchemaTypeOptions,
-	root = true
-) => {
-	if (!schema) return schema
-	if (options.untilObjectFound && !root && schema.type === 'object')
-		return schema
-
-	const fromSymbol = options.from[Kind]
-
-	if (schema.oneOf) {
-		for (let i = 0; i < schema.oneOf.length; i++)
-			schema.oneOf[i] = _replaceSchemaType(schema.oneOf[i], options, root)
-
-		return schema
-	}
-
-	if (schema.anyOf) {
-		for (let i = 0; i < schema.anyOf.length; i++)
-			schema.anyOf[i] = _replaceSchemaType(schema.anyOf[i], options, root)
-
-		return schema
-	}
-
-	if (schema.allOf) {
-		for (let i = 0; i < schema.allOf.length; i++)
-			schema.allOf[i] = _replaceSchemaType(schema.allOf[i], options, root)
-
-		return schema
-	}
-
-	if (schema.not) return _replaceSchemaType(schema.not, options, root)
-
-	const isRoot = root && !!options.excludeRoot
-
-	if (schema[Kind] === fromSymbol) {
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const { anyOf, oneOf, allOf, not, properties, items, ...rest } = schema
-		const to = options.to(rest)
-
-		if (!to) return schema
-
-		// If t.Transform is used, we need to re-calculate Encode, Decode
-		let transform
-
-		const composeProperties = (v: TSchema) => {
-			if (properties && v.type === 'object') {
-				const newProperties = <Record<string, unknown>>{}
-				for (const [key, value] of Object.entries(properties))
-					newProperties[key] = _replaceSchemaType(
-						value as TSchema,
-						options,
-						false
-					)
-
-				return {
-					...rest,
-					...v,
-					properties: newProperties
-				}
-			}
-
-			if (items && v.type === 'array')
-				return {
-					...rest,
-					...v,
-					items: _replaceSchemaType(items, options, false)
-				}
-
-			const value = {
-				...rest,
-				...v
-			}
-
-			// Remove required as it's not object
-			delete value['required']
-
-			// Create default value for ObjectString
-			if (
-				properties &&
-				v.type === 'string' &&
-				v.format === 'ObjectString' &&
-				v.default === '{}'
-			) {
-				transform = t.ObjectString(properties, rest)
-				value.default = JSON.stringify(
-					Value.Create(t.Object(properties))
-				)
-				value.properties = properties
-			}
-
-			// Create default value for ArrayString
-			if (
-				items &&
-				v.type === 'string' &&
-				v.format === 'ArrayString' &&
-				v.default === '[]'
-			) {
-				transform = t.ArrayString(items, rest)
-				value.default = JSON.stringify(Value.Create(t.Array(items)))
-				value.items = items
-			}
-
-			return value
-		}
-
-		if (isRoot) {
-			if (properties) {
-				const newProperties = <Record<string, unknown>>{}
-				for (const [key, value] of Object.entries(properties))
-					newProperties[key] = _replaceSchemaType(
-						value as TSchema,
-						options,
-						false
-					)
-
-				return {
-					...rest,
-					properties: newProperties
-				}
-			} else if (items?.map)
-				return {
-					...rest,
-					items: items.map((v: TSchema) =>
-						_replaceSchemaType(v, options, false)
-					)
-				}
-
-			return rest
-		}
-
-		if (to.anyOf)
-			for (let i = 0; i < to.anyOf.length; i++)
-				to.anyOf[i] = composeProperties(to.anyOf[i])
-		else if (to.oneOf)
-			for (let i = 0; i < to.oneOf.length; i++)
-				to.oneOf[i] = composeProperties(to.oneOf[i])
-		else if (to.allOf)
-			for (let i = 0; i < to.allOf.length; i++)
-				to.allOf[i] = composeProperties(to.allOf[i])
-		else if (to.not) to.not = composeProperties(to.not)
-
-		if (transform) to[TransformKind as any] = transform[TransformKind]
-
-		if (to.anyOf || to.oneOf || to.allOf || to.not) return to
-
-		if (properties) {
-			const newProperties = <Record<string, unknown>>{}
-			for (const [key, value] of Object.entries(properties))
-				newProperties[key] = _replaceSchemaType(
-					value as TSchema,
-					options,
-					false
-				)
-
-			return {
-				...rest,
-				...to,
-				properties: newProperties
-			}
-		} else if (items?.map)
-			return {
-				...rest,
-				...to,
-				items: items.map((v: TSchema) =>
-					_replaceSchemaType(v, options, false)
-				)
-			}
-
-		return {
-			...rest,
-			...to
-		}
-	}
-
-	const properties = schema?.properties as Record<string, TSchema>
-
-	if (properties && root && options.rootOnly !== true)
-		for (const [key, value] of Object.entries(properties)) {
-			switch (value[Kind]) {
-				case fromSymbol:
-					// eslint-disable-next-line @typescript-eslint/no-unused-vars
-					const { anyOf, oneOf, allOf, not, type, ...rest } = value
-					const to = options.to(rest)
-
-					if (!to) return schema
-
-					if (to.anyOf)
-						for (let i = 0; i < to.anyOf.length; i++)
-							to.anyOf[i] = { ...rest, ...to.anyOf[i] }
-					else if (to.oneOf)
-						for (let i = 0; i < to.oneOf.length; i++)
-							to.oneOf[i] = { ...rest, ...to.oneOf[i] }
-					else if (to.allOf)
-						for (let i = 0; i < to.allOf.length; i++)
-							to.allOf[i] = { ...rest, ...to.allOf[i] }
-					else if (to.not) to.not = { ...rest, ...to.not }
-
-					properties[key] = {
-						...rest,
-						..._replaceSchemaType(rest, options, false)
-					}
-					break
-
-				case 'Object':
-				case 'Union':
-					properties[key] = _replaceSchemaType(value, options, false)
-					break
-
-				default:
-					if (Array.isArray(value.items)) {
-						for (let i = 0; i < value.items.length; i++) {
-							value.items[i] = _replaceSchemaType(
-								value.items[i],
-								options,
-								false
-							)
-						}
-					} else if (
-						value.anyOf ||
-						value.oneOf ||
-						value.allOf ||
-						value.not
-					)
-						properties[key] = _replaceSchemaType(
-							value,
-							options,
-							false
-						)
-					else if (value.type === 'array') {
-						value.items = _replaceSchemaType(
-							value.items,
-							options,
-							false
-						)
-					}
-
-					break
-			}
-		}
-
-	return schema
-}
-
-const createCleaner = (schema: TAnySchema) => (value: unknown) => {
-	if (typeof value === 'object')
-		try {
-			return Value.Clean(schema, structuredClone(value))
-		} catch {
-			try {
-				return Value.Clean(schema, value)
-			} catch {
-				return value
-			}
-		}
-
-	return value
-}
-
-// const unwrapImport = (schema: TImport<any, any>) => {
-// 	if (
-// 		!schema ||
-// 		!schema.$defs ||
-// 		!schema.$ref ||
-// 		!(schema.$ref in schema.$defs)
-// 	)
-// 		return schema
-
-// 	return schema.$defs[schema.$ref]
-// }
-
-export const getSchemaValidator = <T extends TSchema | string | undefined>(
-	s: T,
-	{
-		models = {},
-		dynamic = false,
-		modules,
-		normalize = false,
-		additionalProperties = false,
-		coerce = false,
-		additionalCoerce = []
-	}: {
-		models?: Record<string, TSchema>
-		modules: TModule<any, any>
-		additionalProperties?: boolean
-		dynamic?: boolean
-		normalize?: boolean
-		coerce?: boolean
-		additionalCoerce?: MaybeArray<ReplaceSchemaTypeOptions>
-	} = {
-		modules: t.Module({})
-	}
-): T extends TSchema ? TypeCheck<TSchema> : undefined => {
-	if (!s) return undefined as any
-
-	let schema: TSchema
-
-	if (typeof s !== 'string') schema = s
-	else {
-		const isArray = s.endsWith('[]')
-		const key = isArray ? s.substring(0, s.length - 2) : s
-
-		schema =
-			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
-
-		if (isArray) schema = t.Array(schema)
-	}
-
-	if (!schema) return undefined as any
-
-	if (coerce || additionalCoerce) {
-		if (coerce)
-			schema = replaceSchemaType(schema, [
-				{
-					from: t.Ref(''),
-					// @ts-expect-error
-					to: (options) => modules.Import(options['$ref'])
-				},
-				{
-					from: t.Number(),
-					to: (options) => t.Numeric(options),
-					untilObjectFound: true
-				},
-				{
-					from: t.Boolean(),
-					to: (options) => t.BooleanString(options),
-					untilObjectFound: true
-				},
-				...(Array.isArray(additionalCoerce)
-					? additionalCoerce
-					: [additionalCoerce])
-			])
-		else {
-			schema = replaceSchemaType(schema, [
-				{
-					from: t.Ref(''),
-					// @ts-expect-error
-					to: (options) => modules.Import(options['$ref'])
-				},
-				...(Array.isArray(additionalCoerce)
-					? additionalCoerce
-					: [additionalCoerce])
-			])
-		}
-	}
-
-	// @ts-ignore
-	if (schema.type === 'object' && 'additionalProperties' in schema === false)
-		schema.additionalProperties = additionalProperties
-
-	if (dynamic) {
-		const validator = {
-			schema,
-			references: '',
-			checkFunc: () => {},
-			code: '',
-			Check: (value: unknown) => Value.Check(schema, value),
-			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => '',
-			Clean: createCleaner(schema),
-			Decode: (value: unknown) => Value.Decode(schema, value),
-			Encode: (value: unknown) => Value.Encode(schema, value)
-		} as unknown as TypeCheck<TSchema>
-
-		if (normalize && schema.additionalProperties === false)
-			// @ts-ignore
-			validator.Clean = createCleaner(schema)
-
-		// @ts-ignore
-		if (schema.config) {
-			// @ts-ignore
-			validator.config = schema.config
-
-			// @ts-ignore
-			if (validator?.schema?.config)
-				// @ts-ignore
-				delete validator.schema.config
-		}
-
-		// @ts-ignore
-		validator.parse = (v) => {
-			try {
-				return validator.Decode(v)
-			} catch (error) {
-				throw [...validator.Errors(v)].map(mapValueError)
-			}
-		}
-
-		// @ts-ignore
-		validator.safeParse = (v) => {
-			try {
-				return { success: true, data: validator.Decode(v), error: null }
-			} catch (error) {
-				const errors = [...compiled.Errors(v)].map(mapValueError)
-
-				return {
-					success: false,
-					data: null,
-					error: errors[0]?.summary,
-					errors
-				}
-			}
-		}
-
-		return validator as any
-	}
-
-	const compiled = TypeCompiler.Compile(schema, Object.values(models))
+	let beforeHandle = []
 
 	// @ts-expect-error
-	compiled.Clean = createCleaner(schema)
+	if (a.resolve) {
+		beforeHandle = fnToContainer(
+			// @ts-expect-error
+			Array.isArray(a.resolve) ? a.resolve : [a.resolve],
+			'resolve'
+		) as any[]
 
-	// @ts-ignore
-	if (schema.config) {
-		// @ts-ignore
-		compiled.config = schema.config
-
-		// @ts-ignore
-		if (compiled?.schema?.config)
-			// @ts-ignore
-			delete compiled.schema.config
+		// @ts-expect-error
+		delete a.resolve
 	}
 
-	// @ts-ignore
-	compiled.parse = (v) => {
-		try {
-			return compiled.Decode(v)
-		} catch (error) {
-			throw [...compiled.Errors(v)].map(mapValueError)
-		}
+	if (a.beforeHandle) {
+		if (beforeHandle.length)
+			beforeHandle = beforeHandle.concat(
+				Array.isArray(a.beforeHandle)
+					? a.beforeHandle
+					: [a.beforeHandle]
+			)
+		else
+			beforeHandle = Array.isArray(a.beforeHandle)
+				? a.beforeHandle
+				: [a.beforeHandle]
 	}
 
-	// @ts-ignore
-	compiled.safeParse = (v) => {
-		try {
-			return { success: true, data: compiled.Decode(v), error: null }
-		} catch (error) {
-			const errors = [...compiled.Errors(v)].map(mapValueError)
+	if (beforeHandle.length) a.beforeHandle = beforeHandle
 
-			return {
-				success: false,
-				data: null,
-				error: errors[0]?.summary,
-				errors
-			}
-		}
-	}
-
-	return compiled as any
-}
-
-export const getResponseSchemaValidator = (
-	s: InputSchema['response'] | undefined,
-	{
-		models = {},
-		modules,
-		dynamic = false,
-		normalize = false,
-		additionalProperties = false
-	}: {
-		modules: TModule<any, any>
-		models?: Record<string, TSchema>
-		additionalProperties?: boolean
-		dynamic?: boolean
-		normalize?: boolean
-	}
-): Record<number, TypeCheck<any>> | undefined => {
-	if (!s) return
-
-	let maybeSchemaOrRecord: TSchema | Record<number, string | TSchema>
-
-	if (typeof s !== 'string') maybeSchemaOrRecord = s
-	else {
-		const isArray = s.endsWith('[]')
-		const key = isArray ? s.substring(0, s.length - 2) : s
-
-		maybeSchemaOrRecord =
-			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
-
-		if (isArray)
-			maybeSchemaOrRecord = t.Array(maybeSchemaOrRecord as TSchema)
-	}
-
-	if (!maybeSchemaOrRecord) return
-
-	const compile = (schema: TSchema, references?: TSchema[]) => {
-		if (dynamic)
-			return {
-				schema,
-				references: '',
-				checkFunc: () => {},
-				code: '',
-				Check: (value: unknown) => Value.Check(schema, value),
-				Errors: (value: unknown) => Value.Errors(schema, value),
-				Code: () => '',
-				Clean: createCleaner(schema),
-				Decode: (value: unknown) => Value.Decode(schema, value),
-				Encode: (value: unknown) => Value.Encode(schema, value)
-			} as unknown as TypeCheck<TSchema>
-
-		const compiledValidator = TypeCompiler.Compile(schema, references)
-
-		if (normalize && schema.additionalProperties === false)
-			// @ts-ignore
-			compiledValidator.Clean = createCleaner(schema)
-
-		return compiledValidator
-	}
-
-	const modelValues = Object.values(models)
-
-	if (Kind in maybeSchemaOrRecord) {
-		if ('additionalProperties' in maybeSchemaOrRecord === false)
-			maybeSchemaOrRecord.additionalProperties = additionalProperties
-
-		return {
-			200: compile(maybeSchemaOrRecord, modelValues)
-		}
-	}
-
-	const record: Record<number, TypeCheck<any>> = {}
-
-	Object.keys(maybeSchemaOrRecord).forEach((status): TSchema | undefined => {
-		const maybeNameOrSchema = maybeSchemaOrRecord[+status]
-
-		if (typeof maybeNameOrSchema === 'string') {
-			if (maybeNameOrSchema in models) {
-				const schema = models[maybeNameOrSchema]
-				schema.type === 'object' &&
-					'additionalProperties' in schema === false
-
-				// Inherits model maybe already compiled
-				record[+status] =
-					Kind in schema ? compile(schema, modelValues) : schema
-			}
-
-			return undefined
-		}
-
-		if (
-			maybeNameOrSchema.type === 'object' &&
-			'additionalProperties' in maybeNameOrSchema === false
-		)
-			maybeNameOrSchema.additionalProperties = additionalProperties
-
-		// Inherits model maybe already compiled
-		record[+status] =
-			Kind in maybeNameOrSchema
-				? compile(maybeNameOrSchema, modelValues)
-				: maybeNameOrSchema
-	})
-
-	return record
+	return a
 }
 
 const isBun = typeof Bun !== 'undefined'
-const hasHash = isBun && typeof Bun.hash === 'function'
+const hasBunHash = isBun && typeof Bun.hash === 'function'
 
 // https://stackoverflow.com/a/52171480
 export const checksum = (s: string) => {
-	if (hasHash) return Bun.hash(s) as number
-
 	let h = 9
 
 	for (let i = 0; i < s.length; ) h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)
 
 	return (h = h ^ (h >>> 9))
-}
-
-let _stringToStructureCoercions: ReplaceSchemaTypeOptions[]
-
-export const stringToStructureCoercions = () => {
-	if (!_stringToStructureCoercions) {
-		_stringToStructureCoercions = [
-			{
-				from: t.Object({}),
-				to: () => t.ObjectString({}),
-				excludeRoot: true
-			},
-			{
-				from: t.Array(t.Any()),
-				to: () => t.ArrayString(t.Any())
-			}
-		] satisfies ReplaceSchemaTypeOptions[]
-	}
-
-	return _stringToStructureCoercions
-}
-
-let _coercePrimitiveRoot: ReplaceSchemaTypeOptions[]
-
-export const coercePrimitiveRoot = () => {
-	if (!_coercePrimitiveRoot)
-		_coercePrimitiveRoot = [
-			{
-				from: t.Number(),
-				to: (options) => t.Numeric(options),
-				rootOnly: true
-			},
-			{
-				from: t.Boolean(),
-				to: (options) => t.BooleanString(options),
-				rootOnly: true
-			}
-		] satisfies ReplaceSchemaTypeOptions[]
-
-	return _coercePrimitiveRoot
-}
-
-export const getCookieValidator = ({
-	validator,
-	modules,
-	defaultConfig = {},
-	config,
-	dynamic,
-	models
-}: {
-	validator: TSchema | string | undefined
-	modules: TModule<any, any>
-	defaultConfig: CookieOptions | undefined
-	config: CookieOptions
-	dynamic: boolean
-	models: Record<string, TSchema> | undefined
-}) => {
-	let cookieValidator = getSchemaValidator(validator, {
-		modules,
-		dynamic,
-		models,
-		additionalProperties: true,
-		coerce: true,
-		additionalCoerce: stringToStructureCoercions()
-	})
-
-	if (isNotEmpty(defaultConfig)) {
-		if (cookieValidator) {
-			// @ts-expect-error private
-			cookieValidator.config = mergeCookie(
-				// @ts-expect-error private
-				cookieValidator.config,
-				config
-			)
-		} else {
-			cookieValidator = getSchemaValidator(t.Cookie({}), {
-				modules,
-				dynamic,
-				models,
-				additionalProperties: true
-			})
-
-			// @ts-expect-error private
-			cookieValidator.config = defaultConfig
-		}
-	}
-
-	return cookieValidator
 }
 
 export const injectChecksum = (
@@ -1045,7 +418,7 @@ export const mergeLifeCycle = (
 		afterHandle: mergeObjectArray(
 			a.afterHandle,
 			injectChecksum(checksum, b?.afterHandle)
-		) as HookContainer<AfterHandler<any, any>>[],
+		) as HookContainer<OptionalHandler<any, any>>[],
 		mapResponse: mergeObjectArray(
 			a.mapResponse,
 			injectChecksum(checksum, b?.mapResponse)
@@ -1073,7 +446,7 @@ export const mergeLifeCycle = (
 export const asHookType = (
 	fn: HookContainer,
 	inject: LifeCycleType,
-	{ skipIfHasType = false }: { skipIfHasType?: boolean } = {}
+	{ skipIfHasType = false }: { skipIfHasType?: boolean }
 ) => {
 	if (!fn) return fn
 
@@ -1210,9 +583,10 @@ export type InvertedStatusMap = typeof InvertedStatusMap
 
 function removeTrailingEquals(digest: string): string {
 	let trimmedDigest = digest
-	while (trimmedDigest.endsWith('=')) {
+
+	while (trimmedDigest.endsWith('='))
 		trimmedDigest = trimmedDigest.slice(0, -1)
-	}
+
 	return trimmedDigest
 }
 
@@ -1231,11 +605,18 @@ export const signCookie = async (val: string, secret: string | null) => {
 		false,
 		['sign']
 	)
+
 	const hmacBuffer = await crypto.subtle.sign(
 		'HMAC',
 		secretKey,
 		encoder.encode(val)
 	)
+
+	// console.log({
+	// 	val,
+	// 	secret,
+	// 	hash: removeTrailingEquals(Buffer.from(hmacBuffer).toString('base64'))
+	// })
 
 	return (
 		val +
@@ -1264,7 +645,7 @@ export const traceBackMacro = (
 	if (!extension || typeof extension !== 'object' || !property) return
 
 	for (const [key, value] of Object.entries(property)) {
-		if (key in primitiveHookMap || !(key in extension)) continue
+		if (primitiveHookMap[key] || !(key in extension)) continue
 
 		const v = extension[
 			key as unknown as keyof typeof extension
@@ -1273,13 +654,11 @@ export const traceBackMacro = (
 		if (typeof v === 'function') {
 			const hook = v(value)
 
-			if (typeof hook === 'object') {
-				for (const [k, v] of Object.entries(hook)) {
+			if (typeof hook === 'object')
+				for (const [k, v] of Object.entries(hook))
 					manage(k as keyof LifeCycleStore)({
 						fn: v as any
 					})
-				}
-			}
 		}
 
 		delete property[key as unknown as keyof typeof extension]
@@ -1317,11 +696,13 @@ export const createMacroManager =
 			}
 		}
 
-		if ('fn' in type || Array.isArray(type)) {
-			if (!localHook[stackName]) localHook[stackName] = []
-			if (typeof localHook[stackName] === 'function')
-				localHook[stackName] = [localHook[stackName]]
+		if (!localHook[stackName]) localHook[stackName] = []
+		if (typeof localHook[stackName] === 'function')
+			localHook[stackName] = [localHook[stackName]]
+		if (!Array.isArray(localHook[stackName]))
+			localHook[stackName] = [localHook[stackName]]
 
+		if ('fn' in type || Array.isArray(type)) {
 			if (Array.isArray(type))
 				localHook[stackName] = (
 					localHook[stackName] as unknown[]
@@ -1354,10 +735,6 @@ export const createMacroManager =
 				}
 			}
 		} else {
-			if (!localHook[stackName]) localHook[stackName] = []
-			if (typeof localHook[stackName] === 'function')
-				localHook[stackName] = [localHook[stackName]]
-
 			if (!Array.isArray(fn)) {
 				if (insert === 'before') {
 					;(localHook[stackName] as any[]).unshift(fn)
@@ -1406,7 +783,10 @@ export class PromiseGroup implements PromiseLike<void> {
 	root: Promise<any> | null = null
 	promises: Promise<any>[] = []
 
-	constructor(public onError: (error: any) => void = console.error) {}
+	constructor(
+		public onError: (error: any) => void = console.error,
+		public onFinally: () => void = () => {}
+	) {}
 
 	/**
 	 * The number of promises still being awaited.
@@ -1422,6 +802,8 @@ export class PromiseGroup implements PromiseLike<void> {
 	add<T>(promise: Promise<T>) {
 		this.promises.push(promise)
 		this.root ||= this.drain()
+
+		if (this.promises.length === 1) this.then(this.onFinally)
 		return promise
 	}
 
@@ -1478,50 +860,49 @@ export const fnToContainer = (
 }
 
 export const localHookToLifeCycleStore = (a: AnyLocalHook): LifeCycleStore => {
-	return {
-		...a,
-		start: fnToContainer(a?.start),
-		request: fnToContainer(a?.request),
-		parse: fnToContainer(a?.parse),
-		transform: fnToContainer(a?.transform),
-		beforeHandle: fnToContainer(a?.beforeHandle),
-		afterHandle: fnToContainer(a?.afterHandle),
-		mapResponse: fnToContainer(a?.mapResponse),
-		afterResponse: fnToContainer(a?.afterResponse),
-		trace: fnToContainer(a?.trace),
-		error: fnToContainer(a?.error),
-		stop: fnToContainer(a?.stop)
-	}
+	if (a.start) a.start = fnToContainer(a.start)
+	if (a.request) a.request = fnToContainer(a.request)
+	if (a.parse) a.parse = fnToContainer(a.parse)
+	if (a.transform) a.transform = fnToContainer(a.transform)
+	if (a.beforeHandle) a.beforeHandle = fnToContainer(a.beforeHandle)
+	if (a.afterHandle) a.afterHandle = fnToContainer(a.afterHandle)
+	if (a.mapResponse) a.mapResponse = fnToContainer(a.mapResponse)
+	if (a.afterResponse) a.afterResponse = fnToContainer(a.afterResponse)
+	if (a.trace) a.trace = fnToContainer(a.trace)
+	if (a.error) a.error = fnToContainer(a.error)
+	if (a.stop) a.stop = fnToContainer(a.stop)
+
+	return a
 }
 
 export const lifeCycleToFn = (a: Partial<LifeCycleStore>): AnyLocalHook => {
-	const hook: Partial<HookContainer> = {}
-
 	// @ts-expect-error
-	if (a.start?.map) hook.start = a.start.map((x) => x.fn)
+	if (a.start?.map) a.start = a.start.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.request?.map) hook.request = a.request.map((x) => x.fn)
+	if (a.request?.map) a.request = a.request.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.parse?.map) hook.parse = a.parse.map((x) => x.fn)
+	if (a.parse?.map) a.parse = a.parse.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.transform?.map) hook.transform = a.transform.map((x) => x.fn)
+	if (a.transform?.map) a.transform = a.transform.map((x) => x.fn)
+	if (a.beforeHandle?.map)
+		// @ts-expect-error
+		a.beforeHandle = a.beforeHandle.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.beforeHandle?.map) hook.beforeHandle = a.beforeHandle.map((x) => x.fn)
+	if (a.afterHandle?.map) a.afterHandle = a.afterHandle.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.afterHandle?.map) hook.afterHandle = a.afterHandle.map((x) => x.fn)
-	// @ts-expect-error
-	if (a.mapResponse?.map) hook.mapResponse = a.mapResponse.map((x) => x.fn)
+	if (a.mapResponse?.map) a.mapResponse = a.mapResponse.map((x) => x.fn)
 	if (a.afterResponse?.map)
 		// @ts-expect-error
-		hook.afterResponse = a.afterResponse.map((x) => x.fn)
+		a.afterResponse = a.afterResponse.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.trace?.map) hook.trace = a.trace.map((x) => x.fn)
+	if (a.trace?.map) a.trace = a.trace.map((x) => x.fn)
+	else a.trace = []
 	// @ts-expect-error
-	if (a.error?.map) hook.error = a.error.map((x) => x.fn)
+	if (a.error?.map) a.error = a.error.map((x) => x.fn)
 	// @ts-expect-error
-	if (a.stop?.map) hook.stop = a.stop.map((x) => x.fn)
+	if (a.stop?.map) a.stop = a.stop.map((x) => x.fn)
 
-	return hook
+	return a
 }
 
 export const cloneInference = (inference: Sucrose.Inference) =>
@@ -1532,8 +913,9 @@ export const cloneInference = (inference: Sucrose.Inference) =>
 		query: inference.query,
 		set: inference.set,
 		server: inference.server,
-		request: inference.request,
-		route: inference.route
+		path: inference.path,
+		route: inference.route,
+		url: inference.url
 	}) satisfies Sucrose.Inference
 
 /**
@@ -1551,33 +933,64 @@ export type redirect = typeof redirect
 export const ELYSIA_FORM_DATA = Symbol('ElysiaFormData')
 export type ELYSIA_FORM_DATA = typeof ELYSIA_FORM_DATA
 
-type ElysiaFormData<T extends Record<string | number, unknown>> = FormData & {
-	[ELYSIA_FORM_DATA]: Replace<T, BunFile, File>
+type IsTuple<T> = T extends readonly any[]
+	? number extends T['length']
+		? false
+		: true
+	: false
+
+export type ElysiaFormData<T extends Record<keyof any, unknown>> = FormData & {
+	[ELYSIA_FORM_DATA]: Replace<T, Blob | ElysiaFile, File> extends infer A
+		? {
+				[key in keyof A]: IsTuple<A[key]> extends true
+					? // @ts-ignore Trust me bro
+						A[key][number] extends Blob | ElysiaFile
+						? File[]
+						: A[key]
+					: A[key]
+			}
+		: T
 }
 
 export const ELYSIA_REQUEST_ID = Symbol('ElysiaRequestId')
 export type ELYSIA_REQUEST_ID = typeof ELYSIA_REQUEST_ID
 
-export const form = <const T extends Record<string | number, unknown>>(
+export const form = <const T extends Record<keyof any, unknown>>(
 	items: T
 ): ElysiaFormData<T> => {
 	const formData = new FormData()
+	// @ts-ignore
+	formData[ELYSIA_FORM_DATA] = {}
 
-	for (const [key, value] of Object.entries(items)) {
-		if (Array.isArray(value)) {
-			for (const v of value) {
-				if (value instanceof File)
-					formData.append(key, value, value.name)
+	if (items)
+		for (const [key, value] of Object.entries(items)) {
+			if (Array.isArray(value)) {
+				// @ts-expect-error
+				formData[ELYSIA_FORM_DATA][key] = []
 
-				formData.append(key, v)
+				for (const v of value) {
+					if (value instanceof File)
+						formData.append(key, value, value.name)
+					else if (value instanceof ElysiaFile)
+						// @ts-expect-error
+						formData.append(key, value.value, value.value?.name)
+					else formData.append(key, value as any)
+
+					// @ts-expect-error
+					formData[ELYSIA_FORM_DATA][key].push(value)
+				}
+
+				continue
 			}
 
-			continue
+			if (value instanceof File) formData.append(key, value, value.name)
+			else if (value instanceof ElysiaFile)
+				// @ts-expect-error
+				formData.append(key, value.value, value.value?.name)
+			else formData.append(key, value as any)
+			// @ts-expect-error
+			formData[ELYSIA_FORM_DATA][key] = value
 		}
-
-		if (value instanceof File) formData.append(key, value, value.name)
-		formData.append(key, value)
-	}
 
 	return formData as any
 }
@@ -1591,6 +1004,8 @@ export const randomId = () => {
 export const deduplicateChecksum = <T extends Function>(
 	array: HookContainer<T>[]
 ): HookContainer<T>[] => {
+	if (!array.length) return []
+
 	const hashes: number[] = []
 
 	for (let i = 0; i < array.length; i++) {
@@ -1692,83 +1107,9 @@ export const getLoosePath = (path: string) => {
 export const isNotEmpty = (obj?: Object) => {
 	if (!obj) return false
 
-	for (const x in obj) return true
+	for (const _ in obj) return true
 
 	return false
-}
-
-const isEmptyHookProperty = (prop: unknown) => {
-	if (Array.isArray(prop)) return prop.length === 0
-
-	return !prop
-}
-
-export const compressHistoryHook = (hook: LifeCycleStore) => {
-	const history: Partial<LifeCycleStore> = { ...hook }
-
-	if (isEmptyHookProperty(hook.afterHandle)) delete history.afterHandle
-	if (isEmptyHookProperty(hook.afterResponse)) delete history.afterResponse
-	if (isEmptyHookProperty(hook.beforeHandle)) delete history.beforeHandle
-	if (isEmptyHookProperty(hook.error)) delete history.error
-	if (isEmptyHookProperty(hook.mapResponse)) delete history.mapResponse
-	if (isEmptyHookProperty(hook.parse)) delete history.parse
-	if (isEmptyHookProperty(hook.request)) delete history.request
-	if (isEmptyHookProperty(hook.start)) delete history.start
-	if (isEmptyHookProperty(hook.stop)) delete history.stop
-	if (isEmptyHookProperty(hook.trace)) delete history.trace
-	if (isEmptyHookProperty(hook.transform)) delete history.transform
-
-	if (!history.type) delete history.type
-	// @ts-expect-error
-	if (history.detail && !Object.keys(history.detail).length)
-		// @ts-expect-error
-		delete history.detail
-
-	// @ts-expect-error
-	if (!history.body) delete history.body
-	// @ts-expect-error
-	if (!history.cookie) delete history.cookie
-	// @ts-expect-error
-	if (!history.headers) delete history.headers
-	// @ts-expect-error
-	if (!history.query) delete history.query
-	// @ts-expect-error
-	if (!history.params) delete history.params
-	// @ts-expect-error
-	if (!history.response) delete history.response
-
-	return history
-}
-
-export const decompressHistoryHook = (hook: Partial<LifeCycleStore>) => {
-	const history = { ...hook } as LifeCycleStore
-
-	if (!history.afterHandle) history.afterHandle = []
-	if (!history.afterResponse) history.afterResponse = []
-	if (!history.beforeHandle) history.beforeHandle = []
-	if (!history.error) history.error = []
-	if (!history.mapResponse) history.mapResponse = []
-	if (!history.parse) history.parse = []
-	if (!history.request) history.request = []
-	if (!history.start) history.start = []
-	if (!history.stop) history.stop = []
-	if (!history.trace) history.trace = []
-	if (!history.transform) history.transform = []
-
-	// @ts-expect-error
-	if (!history.body) history.body = undefined
-	// @ts-expect-error
-	if (!history.cookie) history.cookie = undefined
-	// @ts-expect-error
-	if (!history.headers) history.headers = undefined
-	// @ts-expect-error
-	if (!history.query) history.query = undefined
-	// @ts-expect-error
-	if (!history.params) history.params = undefined
-	// @ts-expect-error
-	if (!history.response) history.response = undefined
-
-	return history
 }
 
 export const encodePath = (path: string, { dynamic = false } = {}) => {
@@ -1777,4 +1118,47 @@ export const encodePath = (path: string, { dynamic = false } = {}) => {
 	if (dynamic) encoded = encoded.replace(/%3A/g, ':').replace(/%3F/g, '?')
 
 	return encoded
+}
+
+export const supportPerMethodInlineHandler = (() => {
+	if (typeof Bun === 'undefined') return true
+
+	const semver = Bun.version.split('.')
+	if (+semver[0] < 1 || +semver[1] < 2 || +semver[2] < 14) return false
+
+	return true
+})()
+
+export const sse = (
+	payload: string | SSEPayload
+): SSEPayload & { toStream(): string } => {
+	if (typeof payload === 'string')
+		payload = {
+			data: payload
+		}
+
+	if (payload.id === undefined) payload.id = randomId()
+
+	// @ts-ignore
+	payload.toStream = () => {
+		let payloadString = ''
+
+		if (payload.id !== undefined && payload.id !== null)
+			payloadString += `id: ${payload.id}\n`
+		if (payload.event) payloadString += `event: ${payload.event}\n`
+		if (payload.retry !== undefined)
+			payloadString += `retry: ${payload.retry}\n`
+
+		if (payload.data === null) payloadString += 'data: null\n'
+		else if (typeof payload.data === 'string')
+			payloadString += `data: ${payload.data}\n`
+		else if (typeof payload.data === 'object')
+			payloadString += `data: ${JSON.stringify(payload.data)}\n`
+
+		if (payloadString) payloadString += '\n'
+
+		return payloadString
+	}
+
+	return payload as any
 }

@@ -3,66 +3,59 @@ import type { AnyElysia } from '.'
 import { Value } from '@sinclair/typebox/value'
 import {
 	Kind,
+	OptionalKind,
 	TypeBoxError,
 	type TAnySchema,
 	type TSchema
 } from '@sinclair/typebox'
 
-import { parseQuery, parseQueryFromURL } from './fast-querystring'
-
-import { decode as decodeURIComponent } from './deuri'
+import decode from 'fast-decode-uri-component'
+import { parseQuery, parseQueryFromURL } from './parse-query'
 
 import {
 	ELYSIA_REQUEST_ID,
-	getCookieValidator,
 	getLoosePath,
 	lifeCycleToFn,
 	randomId,
 	redirect,
 	signCookie,
 	isNotEmpty,
-	encodePath
+	encodePath,
+	mergeCookie
 } from './utils'
-import { ParseError, error } from './error'
+import { isBun } from './universal/utils'
+import { ParseError, status } from './error'
 
 import {
 	NotFoundError,
 	ValidationError,
-	InternalServerError,
 	ERROR_CODE,
 	ElysiaCustomStatusResponse
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
-import { Sucrose, hasReturn, sucrose } from './sucrose'
+import {
+	coercePrimitiveRoot,
+	ElysiaTypeCheck,
+	getCookieValidator,
+	getSchemaValidator,
+	hasType,
+	isUnion,
+	unwrapImportSchema
+} from './schema'
+import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
+import { validateFileExtension } from './type-system/utils'
 
 import type { TraceEvent } from './trace'
 import type {
 	ComposedHandler,
+	ElysiaConfig,
 	Handler,
 	HookContainer,
 	LifeCycleStore,
 	SchemaValidator
 } from './types'
-import { type TypeCheck } from './type-system'
-
-const TypeBoxSymbol = {
-	optional: Symbol.for('TypeBox.Optional'),
-	kind: Symbol.for('TypeBox.Kind')
-} as const
-
-const isOptional = (validator?: TypeCheck<any>) => {
-	if (!validator) return false
-
-	// @ts-expect-error
-	const schema = validator?.schema
-
-	if (schema?.[TypeBoxSymbol.kind] === 'Import')
-		return validator.References().some(isOptional as any)
-
-	return !!schema && TypeBoxSymbol.optional in schema
-}
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -83,49 +76,6 @@ const defaultParsers = [
 	// eslint-disable-next-line sonarjs/no-duplicate-string
 	'multipart/form-data'
 ]
-
-export const hasAdditionalProperties = (
-	_schema: TAnySchema | TypeCheck<any>
-) => {
-	if (!_schema) return false
-
-	// @ts-expect-error private property
-	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? _schema
-
-	// @ts-expect-error private property
-	if (schema[TypeBoxSymbol.kind] === 'Import' && _schema.References()) {
-		return _schema.References().some(hasAdditionalProperties)
-	}
-
-	if (schema.anyOf) return schema.anyOf.some(hasAdditionalProperties)
-	if (schema.someOf) return schema.someOf.some(hasAdditionalProperties)
-	if (schema.allOf) return schema.allOf.some(hasAdditionalProperties)
-	if (schema.not) return schema.not.some(hasAdditionalProperties)
-
-	if (schema.type === 'object') {
-		const properties = schema.properties as Record<string, TAnySchema>
-
-		if ('additionalProperties' in schema) return schema.additionalProperties
-		if ('patternProperties' in schema) return false
-
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (property.type === 'object') {
-				if (hasAdditionalProperties(property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++)
-					if (hasAdditionalProperties(property.anyOf[i])) return true
-			}
-
-			return property.additionalProperties
-		}
-
-		return false
-	}
-
-	return false
-}
 
 const createReport = ({
 	context = 'c',
@@ -148,8 +98,8 @@ const createReport = ({
 
 	for (let i = 0; i < trace.length; i++)
 		addFn(
-			`let report${i}, reportChild${i}, reportErr${i}, reportErrChild${i};` +
-				`let trace${i} = ${context}[ELYSIA_TRACE]?.[${i}] ?? trace[${i}](${context});\n`
+			`let report${i},reportChild${i},reportErr${i},reportErrChild${i};` +
+				`let trace${i}=${context}[ELYSIA_TRACE]?.[${i}]??trace[${i}](${context});\n`
 		)
 
 	return (
@@ -226,20 +176,60 @@ const createReport = ({
 	}
 }
 
+const composeCleaner = ({
+	schema,
+	name,
+	type,
+	typeAlias = type,
+	normalize,
+	ignoreTryCatch = false
+}: {
+	schema: ElysiaTypeCheck<any>
+	name: string
+	type: keyof SchemaValidator
+	typeAlias?: string
+	normalize: ElysiaConfig<''>['normalize']
+	ignoreTryCatch?: boolean
+}) => {
+	if (!normalize || !schema.Clean || schema.hasAdditionalProperties) return ''
+
+	if (normalize === true || normalize === 'exactMirror') {
+		if (ignoreTryCatch)
+			return `${name}=validator.${typeAlias}.Clean(${name})\n`
+
+		return (
+			`try{` +
+			`${name}=validator.${typeAlias}.Clean(${name})\n` +
+			`}catch{}`
+		)
+	}
+
+	if (normalize === 'typebox')
+		return `${name}=validator.${typeAlias}.Clean(${name})\n`
+
+	return ''
+}
+
 const composeValidationFactory = ({
 	injectResponse = '',
 	normalize = false,
 	validator,
-	encodeSchema = false
+	encodeSchema = false,
+	isStaticResponse = false,
+	hasSanitize = false
 }: {
 	injectResponse?: string
-	normalize?: boolean
+	normalize?: ElysiaConfig<''>['normalize']
 	validator: SchemaValidator
 	encodeSchema?: boolean
+	isStaticResponse?: boolean
+	hasSanitize?: boolean
 }) => ({
-	composeValidation: (type: string, value = `c.${type}`) =>
+	validate: (type: string, value = `c.${type}`) =>
 		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
-	composeResponseValidation: (name = 'r') => {
+	response: (name = 'r') => {
+		if (isStaticResponse) return ''
+
 		let code = injectResponse + '\n'
 
 		code +=
@@ -247,35 +237,55 @@ const composeValidationFactory = ({
 			`c.set.status=${name}.code\n` +
 			`${name}=${name}.response` +
 			`}` +
-			`const isResponse=${name} instanceof Response\n` +
 			`switch(c.set.status){`
 
-		for (const [status, value] of Object.entries(
-			validator.response as Record<string, TypeCheck<any>>
-		)) {
-			code += `\ncase ${status}:if(!isResponse){`
+		for (const [status, value] of Object.entries(validator.response!)) {
+			code += `\ncase ${status}:if(${name} instanceof Response)break\n`
 
-			if (
-				normalize &&
-				'Clean' in value &&
-				!hasAdditionalProperties(value as any)
-			)
-				code += `${name}=validator.response['${status}'].Clean(${name})\n`
+			const noValidate = value.schema?.noValidate === true
 
-			if (
-				encodeSchema &&
-				// @ts-expect-error hasTransform is appended by getResponseSchemaValidator
-				(value.hasTransform || typeof value.Decode === 'function')
-			)
-				code += `${name}=validator.response['${status}'].Encode(${name})\n`
+			const appliedCleaner = noValidate || hasSanitize
 
-			code +=
-				`if(validator.response['${status}'].Check(${name})===false){` +
-				'c.set.status=422\n' +
-				`throw new ValidationError('response',validator.response['${status}'],${name})` +
-				'}' +
-				`c.set.status = ${status}` +
-				'}\n'
+			const clean = ({ ignoreTryCatch = false } = {}) =>
+				composeCleaner({
+					name,
+					schema: value,
+					type: 'response',
+					typeAlias: `response[${status}]`,
+					normalize,
+					ignoreTryCatch
+				})
+
+			if (appliedCleaner) code += clean()
+
+			const applyErrorCleaner =
+				!appliedCleaner && normalize && !noValidate
+
+			// Encode call TypeCheck.Check internally
+			if (encodeSchema && value.hasTransform)
+				code +=
+					`try{` +
+					`${name}=validator.response[${status}].Encode(${name})\n` +
+					`c.set.status=${status}` +
+					`}catch{` +
+					(applyErrorCleaner
+						? `try{\n` +
+							clean({ ignoreTryCatch: true }) +
+							`${name}=validator.response[${status}].Encode(${name})\n` +
+							`}catch{` +
+							`throw new ValidationError('response',validator.response[${status}],${name})` +
+							`}`
+						: `throw new ValidationError('response',validator.response[${status}],${name})`) +
+					`}`
+			else {
+				if (!appliedCleaner) code += clean()
+
+				if (!noValidate)
+					code +=
+						`if(validator.response[${status}].Check(${name})===false)` +
+						`throw new ValidationError('response',validator.response[${status}],${name})\n` +
+						`c.set.status=${status}\n`
+			}
 
 			code += 'break\n'
 		}
@@ -284,239 +294,71 @@ const composeValidationFactory = ({
 	}
 })
 
-const KindSymbol = Symbol.for('TypeBox.Kind')
-
-export const hasType = (type: string, schema: TAnySchema) => {
-	if (!schema) return
-
-	if (KindSymbol in schema && schema[KindSymbol] === type) return true
-
-	if (schema.type === 'object') {
-		const properties = schema.properties as Record<string, TAnySchema>
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (property.type === 'object') {
-				if (hasType(type, property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++)
-					if (hasType(type, property.anyOf[i])) return true
-			}
-
-			if (KindSymbol in property && property[KindSymbol] === type)
-				return true
-		}
-
-		return false
-	}
-
-	return (
-		schema.properties &&
-		KindSymbol in schema.properties &&
-		schema.properties[KindSymbol] === type
-	)
-}
-
-export const hasProperty = (
-	expectedProperty: string,
-	_schema: TAnySchema | TypeCheck<any>
-) => {
-	if (!_schema) return
-
-	// @ts-expect-error private property
-	const schema = _schema.schema ?? _schema
-
-	if (schema[TypeBoxSymbol.kind] === 'Import')
-		return _schema
-			.References()
-			.some((schema: TAnySchema) => hasProperty(expectedProperty, schema))
-
-	if (schema.type === 'object') {
-		const properties = schema.properties as Record<string, TAnySchema>
-
-		if (!properties) return false
-
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (expectedProperty in property) return true
-
-			if (property.type === 'object') {
-				if (hasProperty(expectedProperty, property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++) {
-					if (hasProperty(expectedProperty, property.anyOf[i]))
-						return true
-				}
-			}
-		}
-
-		return false
-	}
-
-	return expectedProperty in schema
-}
-
-const TransformSymbol = Symbol.for('TypeBox.Transform')
-
-export const hasRef = (schema: TAnySchema): boolean => {
-	if (!schema) return false
-
-	if (schema.oneOf)
-		for (let i = 0; i < schema.oneOf.length; i++)
-			if (hasRef(schema.oneOf[i])) return true
-
-	if (schema.anyOf)
-		for (let i = 0; i < schema.anyOf.length; i++)
-			if (hasRef(schema.anyOf[i])) return true
-
-	if (schema.oneOf)
-		for (let i = 0; i < schema.oneOf.length; i++)
-			if (hasRef(schema.oneOf[i])) return true
-
-	if (schema.allOf)
-		for (let i = 0; i < schema.allOf.length; i++)
-			if (hasRef(schema.allOf[i])) return true
-
-	if (schema.not && hasRef(schema.not)) return true
-
-	if (schema.type === 'object' && schema.properties) {
-		const properties = schema.properties as Record<string, TAnySchema>
-
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (hasRef(property)) return true
-
-			if (
-				property.type === 'array' &&
-				property.items &&
-				hasRef(property.items)
-			)
-				return true
-		}
-	}
-
-	if (schema.type === 'array' && schema.items && hasRef(schema.items))
-		return true
-
-	return schema[Kind] === 'Ref' && '$ref' in schema
-}
-
-export const hasTransform = (schema: TAnySchema): boolean => {
-	if (!schema) return false
-
-	if (
-		schema.$ref &&
-		schema.$defs &&
-		schema.$ref in schema.$defs &&
-		hasTransform(schema.$defs[schema.$ref])
-	)
-		return true
-
-	if (schema.oneOf)
-		for (let i = 0; i < schema.oneOf.length; i++)
-			if (hasTransform(schema.oneOf[i])) return true
-
-	if (schema.anyOf) {
-		for (let i = 0; i < schema.anyOf.length; i++)
-			if (hasTransform(schema.anyOf[i])) return true
-	}
-
-	if (schema.allOf)
-		for (let i = 0; i < schema.allOf.length; i++)
-			if (hasTransform(schema.allOf[i])) return true
-
-	if (schema.not && hasTransform(schema.not)) return true
-
-	if (schema.type === 'object' && schema.properties) {
-		const properties = schema.properties as Record<string, TAnySchema>
-
-		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (hasTransform(property)) return true
-
-			if (
-				property.type === 'array' &&
-				property.items &&
-				hasTransform(property.items)
-			)
-				return true
-		}
-	}
-
-	if (schema.type === 'array' && schema.items && hasTransform(schema.items))
-		return true
-
-	return TransformSymbol in schema
-}
-
-/**
- * This function will return the type of unioned if all unioned type is the same.
- * It's intent to use for content-type mapping only
- *
- * ```ts
- * t.Union([
- *   t.Object({
- *     password: t.String()
- *   }),
- *   t.Object({
- *     token: t.String()
- *   })
- * ])
- * ```
- */
-// const getUnionedType = (validator: TypeCheck<any> | undefined) => {
-// 	if (!validator) return
-
-// 	// @ts-ignore
-// 	const schema = validator?.schema
-
-// 	if (schema && 'anyOf' in schema) {
-// 		let foundDifference = false
-// 		const type: string = schema.anyOf[0].type
-
-// 		for (const validator of schema.anyOf as { type: string }[]) {
-// 			if (validator.type !== type) {
-// 				foundDifference = true
-// 				break
-// 			}
-// 		}
-
-// 		if (!foundDifference) return type
-// 	}
-
-// 	// @ts-ignore
-// 	return validator.schema?.type
-// }
-
-const matchFnReturn = /(?:return|=>) \S+\(/g
-
-export const isAsyncName = (v: Function | HookContainer) => {
+const isAsyncName = (v: Function | HookContainer) => {
 	// @ts-ignore
 	const fn = v?.fn ?? v
 
 	return fn.constructor.name === 'AsyncFunction'
 }
 
+const matchResponseClone = /=>\s?response\.clone\(/
+const matchFnReturn = /(?:return|=>)\s?\S+\(|a(?:sync|wait)/
+
 export const isAsync = (v: Function | HookContainer) => {
-	// @ts-ignore
-	const fn = v?.fn ?? v
+	const isObject = typeof v === 'object'
+
+	if (isObject && v.isAsync !== undefined) return v.isAsync
+
+	const fn = isObject ? v.fn : v
 
 	if (fn.constructor.name === 'AsyncFunction') return true
 
-	const literal = fn.toString()
-	if (literal.includes('=> response.clone(')) return false
-	if (literal.includes('await')) return true
-	if (literal.includes('async')) return true
-	// v8 minified
-	if (literal.includes('=>response.clone(')) return false
+	const literal: string = fn.toString()
 
-	return !!literal.match(matchFnReturn)
+	if (matchResponseClone.test(literal)) {
+		if (isObject) v.isAsync = false
+
+		return false
+	}
+
+	const result = matchFnReturn.test(literal)
+
+	if (isObject) v.isAsync = result
+
+	return result
 }
 
-export const isGenerator = (v: Function | HookContainer) => {
+const hasReturn = (v: string | HookContainer<any> | Function) => {
+	const isObject = typeof v === 'object'
+
+	if (isObject && v.hasReturn !== undefined) return v.hasReturn
+
+	const fnLiteral = isObject
+		? v.fn.toString()
+		: typeof v === 'string'
+			? v.toString()
+			: v
+
+	const parenthesisEnd = fnLiteral.indexOf(')')
+
+	// Is direct arrow function return eg. () => 1
+	if (
+		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
+		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
+	) {
+		if (isObject) v.hasReturn = true
+
+		return true
+	}
+
+	const result = fnLiteral.includes('return')
+
+	if (isObject) v.hasReturn = result
+
+	return result
+}
+
+const isGenerator = (v: Function | HookContainer) => {
 	// @ts-ignore
 	const fn = v?.fn ?? v
 
@@ -534,8 +376,7 @@ export const composeHandler = ({
 	validator,
 	handler,
 	allowMeta = false,
-	inference,
-	asManifest = false
+	inference
 }: {
 	app: AnyElysia
 	path: string
@@ -545,7 +386,6 @@ export const composeHandler = ({
 	handler: unknown | Handler<any, any>
 	allowMeta?: boolean
 	inference: Sucrose.Inference
-	asManifest?: boolean
 }): ComposedHandler => {
 	const adapter = app['~adapter'].composeHandler
 	const adapterHandler = app['~adapter'].handler
@@ -566,10 +406,13 @@ export const composeHandler = ({
 			if (handler instanceof Response)
 				return Function(
 					'a',
-					`return function(){return a.clone()}`
+					'"use strict";\n' + `return function(){return a.clone()}`
 				)(handler)
 
-			return Function('a', 'return function(){return a}')(handler)
+			return Function(
+				'a',
+				'"use strict";\n' + 'return function(){return a}'
+			)(handler)
 		}
 	}
 
@@ -579,10 +422,11 @@ export const composeHandler = ({
 	const hasTrace = !!hooks.trace?.length
 	let fnLiteral = ''
 
+	inference = sucrose(hooks, inference)
 	inference = sucrose(
-		Object.assign({}, hooks, {
+		{
 			handler: handler as any
-		}),
+		},
 		inference
 	)
 
@@ -606,12 +450,12 @@ export const composeHandler = ({
 	validator.createResponse?.()
 
 	const hasValidation =
-		validator.body ||
-		validator.headers ||
-		validator.params ||
-		validator.query ||
-		validator.cookie ||
-		validator.response
+		!!validator.body ||
+		!!validator.headers ||
+		!!validator.params ||
+		!!validator.query ||
+		!!validator.cookie ||
+		!!validator.response
 
 	const hasQuery = inference.query || !!validator.query
 
@@ -621,13 +465,11 @@ export const composeHandler = ({
 		hooks.parse[0].fn === 'none'
 
 	const hasBody =
-		method !== '$INTERNALWS' &&
+		method !== '' &&
 		method !== 'GET' &&
 		method !== 'HEAD' &&
 		(inference.body || !!validator.body || !!hooks.parse?.length) &&
 		!requestNoBody
-
-	if (hasBody) fnLiteral += `let isParsing=false\n`
 
 	// @ts-expect-error private
 	const defaultHeaders = app.setHeaders
@@ -637,72 +479,65 @@ export const composeHandler = ({
 	// ? defaultHeaders doesn't imply that user will use headers in handler
 	const hasHeaders =
 		inference.headers ||
-		validator.headers ||
+		!!validator.headers ||
 		(adapter.preferWebstandardHeaders !== true && inference.body)
 
 	const hasCookie = inference.cookie || !!validator.cookie
 
-	const cookieValidator = hasCookie
-		? getCookieValidator({
-				// @ts-expect-error private property
-				modules: app.definitions.typebox,
-				validator: validator.cookie as any,
-				defaultConfig: app.config.cookie,
-				dynamic: !!app.config.aot,
-				// @ts-expect-error
-				config: validator.cookie?.config ?? {},
-				// @ts-expect-error
-				models: app.definitions.type
-			})
-		: undefined
-
-	// @ts-ignore private property
-	const cookieMeta = cookieValidator?.config as {
+	const cookieMeta: {
 		secrets?: string | string[]
 		sign: string[] | true
 		properties: { [x: string]: Object }
-	}
+	} = validator.cookie?.config
+		? mergeCookie(validator?.cookie?.config, app.config.cookie as any)
+		: app.config.cookie
 
-	let encodeCookie = ''
+	let _encodeCookie = ''
+	const encodeCookie = () => {
+		if (_encodeCookie) return _encodeCookie
 
-	if (cookieMeta?.sign) {
-		if (!cookieMeta.secrets)
-			throw new Error(
-				`t.Cookie required secret which is not set in (${method}) ${path}.`
-			)
+		if (cookieMeta?.sign) {
+			if (!cookieMeta.secrets)
+				throw new Error(
+					`t.Cookie required secret which is not set in (${method}) ${path}.`
+				)
 
-		const secret = !cookieMeta.secrets
-			? undefined
-			: typeof cookieMeta.secrets === 'string'
-				? cookieMeta.secrets
-				: cookieMeta.secrets[0]
+			const secret = !cookieMeta.secrets
+				? undefined
+				: typeof cookieMeta.secrets === 'string'
+					? cookieMeta.secrets
+					: cookieMeta.secrets[0]
 
-		encodeCookie += 'const _setCookie = c.set.cookie\n' + 'if(_setCookie){'
+			_encodeCookie +=
+				'const _setCookie = c.set.cookie\n' + 'if(_setCookie){'
 
-		if (cookieMeta.sign === true) {
-			encodeCookie +=
-				'for(const [key, cookie] of Object.entries(_setCookie)){' +
-				`c.set.cookie[key].value=await signCookie(cookie.value,'${secret}')` +
-				'}'
-		} else
-			for (const name of cookieMeta.sign)
-				encodeCookie +=
-					`if(_setCookie['${name}']?.value){` +
-					`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')` +
+			if (cookieMeta.sign === true)
+				_encodeCookie +=
+					'for(const [key, cookie] of Object.entries(_setCookie)){' +
+					`c.set.cookie[key].value=await signCookie(cookie.value,'${secret}')` +
 					'}'
+			else
+				for (const name of cookieMeta.sign)
+					_encodeCookie +=
+						`if(_setCookie['${name}']?.value)` +
+						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')\n`
 
-		encodeCookie += '}\n'
+			_encodeCookie += '}\n'
+		}
+
+		return _encodeCookie
 	}
 
 	const normalize = app.config.normalize
-	const encodeSchema = app.config.experimental?.encodeSchema
+	const encodeSchema = app.config.encodeSchema
 
-	const { composeValidation, composeResponseValidation } =
-		composeValidationFactory({
-			normalize,
-			validator,
-			encodeSchema
-		})
+	const validation = composeValidationFactory({
+		normalize,
+		validator,
+		encodeSchema,
+		isStaticResponse: handler instanceof Response,
+		hasSanitize: !!app.config.sanitize
+	})
 
 	if (hasHeaders) fnLiteral += adapter.headers
 
@@ -786,14 +621,11 @@ export const composeHandler = ({
 			}[]
 		>[]
 
-		// @ts-ignore
 		if (validator.query && validator.query.schema.type === 'object') {
-			// @ts-expect-error private property
 			const properties = validator.query.schema.properties
 
-			if (!hasAdditionalProperties(validator.query as any))
-				// eslint-disable-next-line prefer-const
-				for (let [key, _value] of Object.entries(properties)) {
+			if (!validator.query.hasAdditionalProperties)
+				for (const [key, _value] of Object.entries(properties)) {
 					let value = _value as TAnySchema
 
 					const isArray =
@@ -807,13 +639,12 @@ export const composeHandler = ({
 					// @ts-ignore
 					if (
 						value &&
-						TypeBoxSymbol.optional in value &&
+						OptionalKind in value &&
 						value.type === 'array' &&
 						value.items
 					)
 						value = value.items
 
-					// @ts-ignore unknown
 					const { type, anyOf } = value
 
 					destructured.push({
@@ -822,8 +653,8 @@ export const composeHandler = ({
 						isNestedObjectArray:
 							(isArray && value.items?.type === 'object') ||
 							!!value.items?.anyOf?.some(
-								// @ts-expect-error
-								(x) => x.type === 'object' || x.type === 'array'
+								(x: TSchema) =>
+									x.type === 'object' || x.type === 'array'
 							),
 						isObject:
 							type === 'object' ||
@@ -842,11 +673,10 @@ export const composeHandler = ({
 				'if(c.qi===-1){' +
 				'c.query={}' +
 				'}else{' +
-				'c.query=parseQueryFromURL(c.url.slice(c.qi + 1))' +
+				'c.query=parseQueryFromURL(c.url,c.qi+1)' +
 				'}'
 		} else {
-			fnLiteral +=
-				'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi + 1)\n`
+			fnLiteral += 'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi+1)\n`
 
 			let index = 0
 			for (const {
@@ -1000,36 +830,45 @@ export const composeHandler = ({
 		!!hooks.afterHandle?.some(isGenerator) ||
 		!!hooks.transform?.some(isGenerator)
 
+	const responseKeys = Object.keys(validator.response ?? {})
+	const hasMultipleResponses = responseKeys.length > 1
+	const hasSingle200 =
+		responseKeys.length === 0 ||
+		(responseKeys.length === 1 && responseKeys[0] === '200')
+
 	const hasSet =
 		inference.cookie ||
 		inference.set ||
 		hasHeaders ||
 		hasTrace ||
-		validator.response ||
+		hasMultipleResponses ||
+		!hasSingle200 ||
 		(isHandleFn && hasDefaultHeaders) ||
 		maybeStream
 
-	const mapResponseContext = adapter.mapResponseContext
-		? `,${adapter.mapResponseContext}`
-		: ''
+	const mapResponse = (r = 'r') =>
+		`return ${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
 
-	if (inference.route) fnLiteral += `c.route=\`${path}\`\n`
+	const mapResponseContext =
+		maybeStream || adapter.mapResponseContext
+			? `,${adapter.mapResponseContext}`
+			: ''
+
+	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
 
 	const parseReporter = report('parse', {
 		total: hooks.parse?.length
 	})
 
 	if (hasBody) {
-		const isOptionalBody = isOptional(validator.body)
-
 		const hasBodyInference =
 			!!hooks.parse?.length || inference.body || validator.body
 
 		if (adapter.parser.declare) fnLiteral += adapter.parser.declare
 
-		fnLiteral += '\nisParsing=true\n'
+		fnLiteral += '\ntry{'
 
-		const parser =
+		let parser: string | undefined =
 			typeof hooks.parse === 'string'
 				? hooks.parse
 				: Array.isArray(hooks.parse) && hooks.parse.length === 1
@@ -1040,10 +879,24 @@ export const composeHandler = ({
 							: undefined
 					: undefined
 
+		if (!parser && validator.body && !hooks.parse?.length) {
+			const schema = validator.body.schema
+			if (
+				schema &&
+				schema.anyOf &&
+				schema[Kind] === 'Union' &&
+				schema.anyOf?.length === 2 &&
+				schema.anyOf?.find((x: TAnySchema) => x[Kind] === 'ElysiaForm')
+			)
+				parser = 'formdata'
+		}
+
 		if (parser && defaultParsers.includes(parser)) {
 			const reporter = report('parse', {
 				total: hooks.parse?.length
 			})
+
+			const isOptionalBody = !!validator.body?.isOptional
 
 			switch (parser) {
 				case 'json':
@@ -1083,11 +936,9 @@ export const composeHandler = ({
 						fnLiteral +=
 							`\nif(contentType){` +
 							`const index=contentType.indexOf(';')\n` +
-							`if(index!==-1)contentType=contentType.substring(0, index)}\n` +
+							`if(index!==-1)contentType=contentType.substring(0,index)}\n` +
 							`else{contentType=''}` +
-							`c.contentType=contentType\n`
-
-						fnLiteral +=
+							`c.contentType=contentType\n` +
 							`let result=parser['${parser}'](c, contentType)\n` +
 							`if(result instanceof Promise)result=await result\n` +
 							`if(result instanceof ElysiaCustomStatusResponse)throw result\n` +
@@ -1101,24 +952,56 @@ export const composeHandler = ({
 			reporter.resolve()
 		} else if (hasBodyInference) {
 			fnLiteral += '\n'
+
+			const declaration = hooks.parse?.length ? 'let' : 'const'
 			fnLiteral += hasHeaders
-				? `let contentType = c.headers['content-type']`
-				: `let contentType = c.request.headers.get('content-type')`
+				? `${declaration} contentType=c.headers['content-type']\n`
+				: `${declaration} contentType=c.request.headers.get('content-type')\n`
 
-			fnLiteral +=
-				`\nif(contentType){` +
-				`const index=contentType.indexOf(';')\n` +
-				`if(index!==-1)contentType=contentType.substring(0, index)}\n` +
-				`else{contentType=''}` +
-				`c.contentType=contentType\n`
+			let hasDefaultParser = false
+			if (hooks.parse?.length)
+				fnLiteral +=
+					`if(contentType){\n` +
+					`const index=contentType.indexOf(';')\n` +
+					`\nif(index!==-1)contentType=contentType.substring(0,index)` +
+					`}else{contentType=''}` +
+					`let used=false\n` +
+					`c.contentType=contentType\n`
+			else {
+				hasDefaultParser = true
+				const isOptionalBody = !!validator.body?.isOptional
 
-			if (hooks.parse?.length) fnLiteral += `let used=false\n`
+				fnLiteral +=
+					`if(contentType)` +
+					`switch(contentType.charCodeAt(12)){` +
+					`\ncase 106:` +
+					adapter.parser.json(isOptionalBody) +
+					'break' +
+					`\n` +
+					`case 120:` +
+					adapter.parser.urlencoded(isOptionalBody) +
+					`break` +
+					`\n` +
+					`case 111:` +
+					adapter.parser.arrayBuffer(isOptionalBody) +
+					`break` +
+					`\n` +
+					`case 114:` +
+					adapter.parser.formData(isOptionalBody) +
+					`break` +
+					`\n` +
+					`default:` +
+					`if(contentType.charCodeAt(0)===116){` +
+					adapter.parser.text(isOptionalBody) +
+					`}` +
+					`break\n` +
+					`}`
+			}
 
 			const reporter = report('parse', {
 				total: hooks.parse?.length
 			})
 
-			let hasDefaultParser = false
 			if (hooks.parse)
 				for (let i = 0; i < hooks.parse.length; i++) {
 					const name = `bo${i}`
@@ -1128,6 +1011,8 @@ export const composeHandler = ({
 						const endUnit = reporter.resolveChild(
 							hooks.parse[i].fn as unknown as string
 						)
+
+						const isOptionalBody = !!validator.body?.isOptional
 
 						switch (hooks.parse[i].fn as unknown as string) {
 							case 'json':
@@ -1170,9 +1055,9 @@ export const composeHandler = ({
 
 							default:
 								fnLiteral +=
-									`${name}=parser['${hooks.parse[i].fn}'](c,contentType)\n` +
+									`let ${name}=parser['${hooks.parse[i].fn}'](c,contentType)\n` +
 									`if(${name} instanceof Promise)${name}=await ${name}\n` +
-									`if(${name}!==undefined){c.body=${name};used=true}\n`
+									`if(${name}!==undefined){c.body=${name};used=true;}\n`
 						}
 
 						endUnit()
@@ -1198,6 +1083,8 @@ export const composeHandler = ({
 			reporter.resolve()
 
 			if (!hasDefaultParser) {
+				const isOptionalBody = !!validator.body?.isOptional
+
 				if (hooks.parse?.length)
 					fnLiteral +=
 						`\nif(!used){\n` +
@@ -1241,11 +1128,10 @@ export const composeHandler = ({
 				fnLiteral += '}'
 			}
 
-			// fnLiteral += '}'
+			if (hooks.parse?.length) fnLiteral += '\ndelete c.contentType'
 		}
 
-		fnLiteral += '\ndelete c.contentType'
-		fnLiteral += '\nisParsing=false\n'
+		fnLiteral += '}catch(error){throw new ParseError(error)}'
 	}
 
 	parseReporter.resolve()
@@ -1291,16 +1177,11 @@ export const composeHandler = ({
 		reporter.resolve()
 	}
 
+	const fileUnions = <ElysiaTypeCheck<any>[]>[]
+
 	if (validator) {
 		if (validator.headers) {
-			if (
-				normalize &&
-				'Clean' in validator.headers &&
-				!hasAdditionalProperties(validator.headers as any)
-			)
-				fnLiteral += 'c.headers=validator.headers.Clean(c.headers);\n'
-
-			if (hasProperty('default', validator.headers))
+			if (validator.headers.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1319,23 +1200,30 @@ export const composeHandler = ({
 						fnLiteral += `c.headers['${key}']??=${parsed}\n`
 				}
 
-			if (isOptional(validator.headers))
+			fnLiteral += composeCleaner({
+				name: 'c.headers',
+				schema: validator.headers,
+				type: 'headers',
+				normalize
+			})
+
+			if (validator.headers.isOptional)
 				fnLiteral += `if(isNotEmpty(c.headers)){`
 
-			fnLiteral +=
-				`if(validator.headers.Check(c.headers) === false){` +
-				composeValidation('headers') +
-				'}'
+			if (validator.body?.schema?.noValidate !== true)
+				fnLiteral +=
+					`if(validator.headers.Check(c.headers) === false){` +
+					validation.validate('headers') +
+					'}'
 
-			// @ts-expect-error private property
-			if (hasTransform(validator.headers.schema))
+			if (validator.headers.hasTransform)
 				fnLiteral += `c.headers=validator.headers.Decode(c.headers)\n`
 
-			if (isOptional(validator.headers)) fnLiteral += '}'
+			if (validator.headers.isOptional) fnLiteral += '}'
 		}
 
 		if (validator.params) {
-			if (hasProperty('default', validator.params))
+			if (validator.params.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1354,25 +1242,18 @@ export const composeHandler = ({
 						fnLiteral += `c.params['${key}']??=${parsed}\n`
 				}
 
-			fnLiteral +=
-				`if(validator.params.Check(c.params)===false){` +
-				composeValidation('params') +
-				'}'
+			if (validator.params?.schema?.noValidate !== true)
+				fnLiteral +=
+					`if(validator.params.Check(c.params)===false){` +
+					validation.validate('params') +
+					'}'
 
-			// @ts-expect-error private property
-			if (hasTransform(validator.params.schema))
+			if (validator.params.hasTransform)
 				fnLiteral += `c.params=validator.params.Decode(c.params)\n`
 		}
 
 		if (validator.query) {
-			if (
-				normalize &&
-				'Clean' in validator.query &&
-				!hasAdditionalProperties(validator.query as any)
-			)
-				fnLiteral += 'c.query=validator.query.Clean(c.query)\n'
-
-			if (hasProperty('default', validator.query))
+			if (validator.query.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1389,44 +1270,66 @@ export const composeHandler = ({
 
 					if (parsed !== undefined)
 						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
+
+					fnLiteral += composeCleaner({
+						name: 'c.query',
+						schema: validator.query,
+						type: 'query',
+						normalize
+					})
 				}
 
-			if (isOptional(validator.query))
+			if (validator.query.isOptional)
 				fnLiteral += `if(isNotEmpty(c.query)){`
 
-			fnLiteral +=
-				`if(validator.query.Check(c.query)===false){` +
-				composeValidation('query') +
-				`}`
+			if (validator.query?.schema?.noValidate !== true)
+				fnLiteral +=
+					`if(validator.query.Check(c.query)===false){` +
+					validation.validate('query') +
+					`}`
 
-			// @ts-expect-error private property
-			if (hasTransform(validator.query.schema))
+			if (validator.query.hasTransform)
 				fnLiteral += `c.query=validator.query.Decode(Object.assign({},c.query))\n`
 
-			if (isOptional(validator.query)) fnLiteral += `}`
+			if (validator.query.isOptional) fnLiteral += `}`
 		}
 
-		if (validator.body) {
-			if (
-				normalize &&
-				'Clean' in validator.body &&
-				!hasAdditionalProperties(validator.body as any)
-			)
-				fnLiteral += 'c.body=validator.body.Clean(c.body)\n'
-
-			// @ts-expect-error private property
-			const doesHaveTransform = hasTransform(validator.body.schema)
-
-			if (doesHaveTransform || isOptional(validator.body))
+		if (hasBody && validator.body) {
+			if (validator.body.hasTransform || validator.body.isOptional)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
-			if (hasProperty('default', validator.body)) {
-				const value = Value.Default(
-					// @ts-expect-error private property
+			const hasUnion = isUnion(validator.body.schema)
+			let hasNonUnionFileWithDefault = false
+
+			if (validator.body.hasDefault) {
+				let value = Value.Default(
 					validator.body.schema,
-					// @ts-expect-error private property
-					validator.body.schema.type === 'object' ? {} : undefined
+					validator.body.schema.type === 'object' ||
+						(validator.body.schema[Kind] === 'Import' &&
+							validator.body.schema.$defs[
+								validator.body.schema.$ref
+							][Kind] === 'Object')
+						? {}
+						: undefined
 				)
+
+				const schema = unwrapImportSchema(validator.body.schema)
+
+				if (
+					!hasUnion &&
+					value &&
+					typeof value === 'object' &&
+					(hasType('File', schema) || hasType('Files', schema))
+				) {
+					hasNonUnionFileWithDefault = true
+
+					for (const [k, v] of Object.entries(value))
+						if (v === 'File' || v === 'Files')
+							// @ts-ignore
+							delete value[k]
+
+					if (!isNotEmpty(value)) value = undefined
+				}
 
 				const parsed =
 					typeof value === 'object'
@@ -1435,63 +1338,178 @@ export const composeHandler = ({
 							? `'${value}'`
 							: value
 
-				fnLiteral +=
-					`if(validator.body.Check(c.body)===false){` +
-					`if(typeof c.body==='object')` +
-					`c.body=Object.assign(${parsed},c.body)\n` +
-					`else c.body=${parsed}\n`
+				if (value !== undefined && value !== null) {
+					if (Array.isArray(value))
+						fnLiteral += `if(!c.body)c.body=${parsed}\n`
+					else if (typeof value === 'object')
+						fnLiteral += `c.body=Object.assign(${parsed},c.body)\n`
+					else fnLiteral += `c.body=${parsed}\n`
+				}
 
-				if (isOptional(validator.body))
-					fnLiteral +=
-						`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
-						composeValidation('body') +
-						'}'
-				else
-					fnLiteral +=
-						`if(validator.body.Check(c.body)===false){` +
-						composeValidation('body') +
-						`}`
+				fnLiteral += composeCleaner({
+					name: 'c.body',
+					schema: validator.body,
+					type: 'body',
+					normalize
+				})
 
-				fnLiteral += '}'
+				if (validator.body?.schema?.noValidate !== true) {
+					if (validator.body.isOptional)
+						fnLiteral +=
+							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
+							validation.validate('body') +
+							'}'
+					else
+						fnLiteral +=
+							`if(validator.body.Check(c.body)===false){` +
+							validation.validate('body') +
+							`}`
+				}
 			} else {
-				if (isOptional(validator.body))
-					fnLiteral +=
-						`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
-						composeValidation('body') +
-						'}'
-				else
-					fnLiteral +=
-						`if(validator.body.Check(c.body)===false){` +
-						composeValidation('body') +
-						'}'
+				fnLiteral += composeCleaner({
+					name: 'c.body',
+					schema: validator.body,
+					type: 'body',
+					normalize
+				})
+
+				if (validator.body?.schema?.noValidate !== true) {
+					if (validator.body.isOptional)
+						fnLiteral +=
+							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
+							validation.validate('body') +
+							'}'
+					else
+						fnLiteral +=
+							`if(validator.body.Check(c.body)===false){` +
+							validation.validate('body') +
+							'}'
+				}
 			}
 
-			if (doesHaveTransform)
+			if (validator.body.hasTransform)
 				fnLiteral += `if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`
+
+			if (hasUnion && validator.body.schema.anyOf?.length) {
+				const iterator = Object.values(
+					validator.body.schema.anyOf
+				) as TAnySchema[]
+
+				for (let i = 0; i < iterator.length; i++) {
+					const type = iterator[i]
+
+					if (hasType('File', type) || hasType('Files', type)) {
+						const candidate = getSchemaValidator(type, {
+							// @ts-expect-error private property
+							modules: app.definitions.typebox,
+							dynamic: !app.config.aot,
+							// @ts-expect-error private property
+							models: app.definitions.type,
+							normalize: app.config.normalize,
+							additionalCoerce: coercePrimitiveRoot(),
+							sanitize: () => app.config.sanitize
+						})
+
+						if (candidate) {
+							const isFirst = fileUnions.length === 0
+
+							const iterator = Object.entries(
+								type.properties
+							) as [string, TSchema][]
+
+							let validator = isFirst ? '\n' : ' else '
+							validator += `if(fileUnions[${fileUnions.length}].Check(c.body)){`
+
+							let validateFile = ''
+							let validatorLength = 0
+							for (let i = 0; i < iterator.length; i++) {
+								const [k, v] = iterator[i]
+
+								if (
+									!v.extension ||
+									(v[Kind] !== 'File' && v[Kind] !== 'Files')
+								)
+									continue
+
+								if (validatorLength) validateFile += ','
+								validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+
+								validatorLength++
+							}
+
+							if (validateFile) {
+								if (validatorLength === 1)
+									validator += `await ${validateFile}\n`
+								else if (validatorLength > 1)
+									validator += `await Promise.all([${validateFile}])\n`
+
+								validator += '}'
+
+								fnLiteral += validator
+								fileUnions.push(candidate)
+							}
+						}
+					}
+				}
+			} else if (
+				hasNonUnionFileWithDefault ||
+				(!hasUnion &&
+					(hasType(
+						'File',
+						unwrapImportSchema(validator.body.schema)
+					) ||
+						hasType(
+							'Files',
+							unwrapImportSchema(validator.body.schema)
+						)))
+			) {
+				let validateFile = ''
+
+				let i = 0
+				for (const [k, v] of Object.entries(
+					unwrapImportSchema(validator.body.schema).properties
+				) as [string, TSchema][]) {
+					if (
+						!v.extension ||
+						(v[Kind] !== 'File' && v[Kind] !== 'Files')
+					)
+						continue
+
+					if (i) validateFile += ','
+					validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+
+					i++
+				}
+
+				if (i) fnLiteral += '\n'
+
+				if (i === 1) fnLiteral += `await ${validateFile}\n`
+				else if (i > 1)
+					fnLiteral += `await Promise.all([${validateFile}])\n`
+			}
 		}
 
-		if (
-			cookieValidator &&
-			isNotEmpty(
-				// @ts-ignore
-				cookieValidator?.schema?.properties ??
-					// @ts-ignore
-					cookieValidator?.schema?.schema ??
-					{}
-			)
-		) {
+		if (validator.cookie) {
+			// ! Get latest app.config.cookie
+			const cookieValidator = getCookieValidator({
+				// @ts-expect-error private property
+				modules: app.definitions.typebox,
+				validator: validator.cookie as any,
+				defaultConfig: app.config.cookie,
+				dynamic: !!app.config.aot,
+				config: validator.cookie?.config ?? {},
+				// @ts-expect-error
+				models: app.definitions.type
+			})!
+
 			fnLiteral +=
 				`const cookieValue={}\n` +
 				`for(const [key,value] of Object.entries(c.cookie))` +
 				`cookieValue[key]=value.value\n`
 
-			if (hasProperty('default', cookieValidator))
+			if (cookieValidator.hasDefault)
 				for (const [key, value] of Object.entries(
-					Value.Default(
-						// @ts-ignore
-						cookieValidator.schema,
-						{}
-					) as Object
+					Value.Default(cookieValidator.schema, {}) as Object
 				)) {
 					fnLiteral += `cookieValue['${key}'] = ${
 						typeof value === 'object'
@@ -1500,21 +1518,22 @@ export const composeHandler = ({
 					}\n`
 				}
 
-			if (isOptional(validator.cookie))
+			if (cookieValidator.isOptional)
 				fnLiteral += `if(isNotEmpty(c.cookie)){`
 
-			fnLiteral +=
-				`if(validator.cookie.Check(cookieValue)===false){` +
-				composeValidation('cookie', 'cookieValue') +
-				'}'
+			if (validator.body?.schema?.noValidate !== true) {
+				fnLiteral +=
+					`if(validator.cookie.Check(cookieValue)===false){` +
+					validation.validate('cookie', 'cookieValue') +
+					'}'
+			}
 
-			// @ts-expect-error private property
-			if (hasTransform(validator.cookie.schema))
+			if (cookieValidator.hasTransform)
 				fnLiteral +=
 					`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue)))` +
 					`c.cookie[key].value=value\n`
 
-			if (isOptional(validator.cookie)) fnLiteral += `}`
+			if (cookieValidator.isOptional) fnLiteral += `}`
 		}
 	}
 
@@ -1550,15 +1569,15 @@ export const composeHandler = ({
 						`if(resolved instanceof ElysiaCustomStatusResponse)` +
 						`throw resolved\n` +
 						`else{` +
-						`resolved.request = c.request\n` +
-						`resolved.store = c.store\n` +
-						`resolved.qi = c.qi\n` +
-						`resolved.path = c.path\n` +
-						`resolved.url = c.url\n` +
-						`resolved.redirect = c.redirect\n` +
-						`resolved.set = c.set\n` +
-						`resolved.error = c.error\n` +
-						`c = resolved` +
+						`resolved.request=c.request\n` +
+						`resolved.store=c.store\n` +
+						`resolved.qi=c.qi\n` +
+						`resolved.path=c.path\n` +
+						`resolved.url=c.url\n` +
+						`resolved.redirect=c.redirect\n` +
+						`resolved.set=c.set\n` +
+						`resolved.error=c.error\n` +
+						`c=resolved` +
 						`}`
 				else
 					fnLiteral +=
@@ -1604,8 +1623,8 @@ export const composeHandler = ({
 								: `e.afterHandle[${i}](c, be)\n`
 						} else {
 							fnLiteral += isAsync(hook.fn)
-								? `af = await e.afterHandle[${i}](c)\n`
-								: `af = e.afterHandle[${i}](c)\n`
+								? `af=await e.afterHandle[${i}](c)\n`
+								: `af=e.afterHandle[${i}](c)\n`
 
 							fnLiteral += `if(af!==undefined) c.response=be=af\n`
 						}
@@ -1615,8 +1634,7 @@ export const composeHandler = ({
 					reporter.resolve()
 				}
 
-				if (validator.response)
-					fnLiteral += composeResponseValidation('be')
+				if (validator.response) fnLiteral += validation.response('be')
 
 				const mapResponseReporter = report('mapResponse', {
 					total: hooks.mapResponse?.length
@@ -1644,7 +1662,7 @@ export const composeHandler = ({
 
 				mapResponseReporter.resolve()
 
-				fnLiteral += encodeCookie
+				fnLiteral += encodeCookie()
 				fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${
 					mapResponseContext
 				})}\n`
@@ -1696,7 +1714,7 @@ export const composeHandler = ({
 					fnLiteral += `if(af!==undefined){`
 					reporter.resolve()
 
-					fnLiteral += composeResponseValidation('af')
+					fnLiteral += validation.response('af')
 
 					fnLiteral += `c.response=af}`
 				} else {
@@ -1712,9 +1730,9 @@ export const composeHandler = ({
 
 		fnLiteral += `r=c.response\n`
 
-		if (validator.response) fnLiteral += composeResponseValidation()
+		if (validator.response) fnLiteral += validation.response()
 
-		fnLiteral += encodeCookie
+		fnLiteral += encodeCookie()
 
 		const mapResponseReporter = report('mapResponse', {
 			total: hooks.mapResponse?.length
@@ -1738,14 +1756,7 @@ export const composeHandler = ({
 		}
 		mapResponseReporter.resolve()
 
-		if (hasSet)
-			fnLiteral += `return mapResponse(${saveResponse}r,c.set${
-				mapResponseContext
-			})\n`
-		else
-			fnLiteral += `return mapCompactResponse(${saveResponse}r${
-				mapResponseContext
-			})\n`
+		fnLiteral += mapResponse()
 	} else {
 		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
@@ -1758,7 +1769,7 @@ export const composeHandler = ({
 
 			handleReporter.resolve()
 
-			if (validator.response) fnLiteral += composeResponseValidation()
+			if (validator.response) fnLiteral += validation.response()
 
 			report('afterHandle').resolve()
 
@@ -1787,7 +1798,7 @@ export const composeHandler = ({
 			}
 			mapResponseReporter.resolve()
 
-			fnLiteral += encodeCookie
+			fnLiteral += encodeCookie()
 
 			if (handler instanceof Response) {
 				fnLiteral += inference.set
@@ -1802,14 +1813,7 @@ export const composeHandler = ({
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
-			} else if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
-					mapResponseContext
-				})\n`
-			else
-				fnLiteral += `return mapCompactResponse(${saveResponse}r${
-					mapResponseContext
-				})\n`
+			} else fnLiteral += mapResponse()
 		} else if (hasCookie || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r=await ${handle}\n`
@@ -1843,16 +1847,7 @@ export const composeHandler = ({
 			}
 			mapResponseReporter.resolve()
 
-			fnLiteral += encodeCookie
-
-			if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse}r,c.set${
-					mapResponseContext
-				})\n`
-			else
-				fnLiteral += `return mapCompactResponse(${saveResponse}r${
-					mapResponseContext
-				})\n`
+			fnLiteral += encodeCookie() + mapResponse()
 		} else {
 			handleReporter.resolve()
 
@@ -1871,25 +1866,18 @@ export const composeHandler = ({
 						})\n` +
 						`else return ${handle}.clone()\n`
 					: `return ${handle}.clone()\n`
-			} else if (hasSet)
-				fnLiteral += `return mapResponse(${saveResponse}${handled},c.set${
-					mapResponseContext
-				})\n`
-			else
-				fnLiteral += `return mapCompactResponse(${saveResponse}${handled}${
-					mapResponseContext
-				})\n`
+			} else fnLiteral += mapResponse(handled)
 		}
 	}
 
 	fnLiteral += `\n}catch(error){`
 
-	if (hasBody) fnLiteral += `if(isParsing)error=new ParseError()\n`
-
-	if (!maybeAsync) fnLiteral += `return(async()=>{`
+	if (!maybeAsync && hooks.error?.length) fnLiteral += `return(async()=>{`
 	fnLiteral +=
 		`const set=c.set\n` +
 		`if(!set.status||set.status<300)set.status=error?.status||500\n`
+
+	if (hasCookie) fnLiteral += encodeCookie()
 
 	if (hasTrace && hooks.trace)
 		for (let i = 0; i < hooks.trace.length; i++)
@@ -1966,7 +1954,7 @@ export const composeHandler = ({
 	errorReporter.resolve()
 
 	fnLiteral += `return handleError(c,error,true)`
-	if (!maybeAsync) fnLiteral += '})()'
+	if (!maybeAsync && hooks.error?.length) fnLiteral += '})()'
 	fnLiteral += '}'
 
 	if (hasAfterResponse || hasTrace) {
@@ -2015,9 +2003,9 @@ export const composeHandler = ({
 		`},` +
 		`error:{` +
 		allocateIf(`ValidationError,`, hasValidation) +
-		`InternalServerError,` +
 		allocateIf(`ParseError`, hasBody) +
 		`},` +
+		`validateFileExtension,` +
 		`schema,` +
 		`definitions,` +
 		`ERROR_CODE,` +
@@ -2029,28 +2017,28 @@ export const composeHandler = ({
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		allocateIf('parser,', hooks.parse?.length) +
 		allocateIf(`getServer,`, inference.server) +
+		allocateIf(`fileUnions,`, fileUnions.length) +
 		adapterVariables +
 		allocateIf('TypeBoxError', hasValidation) +
 		`}=hooks\n` +
-		`const trace=e.trace?.map(x=>typeof x==='function'?x:x.fn)??[]\n` +
+		`const trace=e.trace\n` +
 		`return ${maybeAsync ? 'async ' : ''}function handle(c){`
 
 	if (hooks.beforeHandle?.length) init += 'let be\n'
 	if (hooks.afterHandle?.length) init += 'let af\n'
 	if (hooks.mapResponse?.length) init += 'let mr\n'
-	if (allowMeta) init += 'c.schema = schema\nc.defs = definitions\n'
+	if (allowMeta) init += 'c.schema=schema\nc.defs=definitions\n'
 
-	init += fnLiteral + '}'
+	fnLiteral = init + fnLiteral + '}'
+	init = ''
 
 	try {
-		if (asManifest) return Function('hooks', init) as any
-
 		return Function(
 			'hooks',
-			init
+			'"use strict";\n' + fnLiteral
 		)({
 			handler,
-			hooks: lifeCycleToFn(hooks),
+			hooks: lifeCycleToFn({ ...hooks }),
 			validator: hasValidation ? validator : undefined,
 			// @ts-expect-error
 			handleError: app.handleError,
@@ -2064,21 +2052,22 @@ export const composeHandler = ({
 			},
 			error: {
 				ValidationError: hasValidation ? ValidationError : undefined,
-				InternalServerError,
 				ParseError: hasBody ? ParseError : undefined
 			},
+			validateFileExtension,
 			schema: app.router.history,
 			// @ts-expect-error
 			definitions: app.definitions.type,
 			ERROR_CODE,
 			parseCookie: hasCookie ? parseCookie : undefined,
 			signCookie: hasCookie ? signCookie : undefined,
-			decodeURIComponent: hasQuery ? decodeURIComponent : undefined,
+			decodeURIComponent: hasQuery ? decode : undefined,
 			ElysiaCustomStatusResponse,
 			ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 			ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 			// @ts-expect-error private property
 			getServer: () => app.getServer(),
+			fileUnions: fileUnions.length ? fileUnions : undefined,
 			TypeBoxError: hasValidation ? TypeBoxError : undefined,
 			parser: app['~parser'],
 			...adapter.inject
@@ -2091,41 +2080,40 @@ export const composeHandler = ({
 		console.log({
 			handler:
 				typeof handler === 'function' ? handler.toString() : handler,
-			instruction: init,
+			instruction: fnLiteral,
 			hooks: {
 				...debugHooks,
-				// @ts-expect-error
+				// @ts-ignore
 				transform: debugHooks?.transform?.map?.((x) => x.toString()),
-				// @ts-expect-error
+				// @ts-ignore
 				resolve: debugHooks?.resolve?.map?.((x) => x.toString()),
-				// @ts-expect-error
+				// @ts-ignore
 				beforeHandle: debugHooks?.beforeHandle?.map?.((x) =>
 					x.toString()
 				),
-				// @ts-expect-error
+				// @ts-ignore
 				afterHandle: debugHooks?.afterHandle?.map?.((x) =>
 					x.toString()
 				),
-				// @ts-expect-error
+				// @ts-ignore
 				mapResponse: debugHooks?.mapResponse?.map?.((x) =>
 					x.toString()
 				),
-				// @ts-expect-error
+				// @ts-ignore
 				parse: debugHooks?.parse?.map?.((x) => x.toString()),
-				// @ts-expect-error
+				// @ts-ignore
 				error: debugHooks?.error?.map?.((x) => x.toString()),
-				// @ts-expect-error
+				// @ts-ignore
 				afterResponse: debugHooks?.afterResponse?.map?.((x) =>
 					x.toString()
 				),
-				// @ts-expect-error
+				// @ts-ignore
 				stop: debugHooks?.stop?.map?.((x) => x.toString())
 			},
 			validator,
 			// @ts-expect-error
 			definitions: app.definitions.type,
-			error,
-			fnLiteral
+			error
 		})
 		console.log('---')
 
@@ -2146,13 +2134,77 @@ export interface ComposerGeneralHandlerOptions {
 	standardHostname?: boolean
 }
 
-export const composeGeneralHandler = (
+export const createOnRequestHandler = (
 	app: AnyElysia,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	{ asManifest = false }: { asManifest?: false } = {}
+	addFn?: (word: string) => void
 ) => {
+	let fnLiteral = ''
+
+	const report = createReport({
+		trace: app.event.trace,
+		addFn:
+			addFn ??
+			((word) => {
+				fnLiteral += word
+			})
+	})
+
+	const reporter = report('request', {
+		total: app.event.request?.length
+	})
+
+	if (app.event.request?.length) {
+		fnLiteral += `try{`
+
+		for (let i = 0; i < app.event.request.length; i++) {
+			const hook = app.event.request[i]
+			const withReturn = hasReturn(hook)
+			const maybeAsync = isAsync(hook)
+
+			const endUnit = reporter.resolveChild(app.event.request[i].fn.name)
+
+			if (withReturn) {
+				fnLiteral +=
+					`re=mapEarlyResponse(` +
+					`${maybeAsync ? 'await ' : ''}onRequest[${i}](c),` +
+					`c.set)\n`
+
+				endUnit('re')
+				fnLiteral += `if(re!==undefined)return re\n`
+			} else {
+				fnLiteral += `${maybeAsync ? 'await ' : ''}onRequest[${i}](c)\n`
+				endUnit()
+			}
+		}
+
+		fnLiteral += `}catch(error){return app.handleError(c,error,false)}`
+	}
+
+	reporter.resolve()
+
+	return fnLiteral
+}
+
+export const createHoc = (app: AnyElysia, fnName = 'map') => {
+	// @ts-expect-error private property
+	const hoc = app.extender.higherOrderFunctions
+
+	if (!hoc.length) return 'return ' + fnName
+
+	const adapter = app['~adapter'].composeGeneralHandler
+
+	let handler = fnName
+
+	for (let i = 0; i < hoc.length; i++)
+		handler = `hoc[${i}](${handler},${adapter.parameters})`
+
+	return `return function hocMap(${adapter.parameters}){return ${handler}(${adapter.parameters})}`
+}
+
+export const composeGeneralHandler = (app: AnyElysia) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
+
 	const error404 = adapter.error404(
 		!!app.event.request?.length,
 		!!app.event.error?.length
@@ -2164,7 +2216,10 @@ export const composeGeneralHandler = (
 
 	const router = app.router
 
-	let findDynamicRoute = `const route=router.find(r.method,p)`
+	let findDynamicRoute = router.http.root.WS
+		? `const route=router.find(r.method === "GET" && r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
+		: `const route=router.find(r.method,p)`
+
 	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
 
 	findDynamicRoute += error404.code
@@ -2172,10 +2227,10 @@ export const composeGeneralHandler = (
 	findDynamicRoute +=
 		`\nc.params=route.params\n` +
 		`if(route.store.handler)return route.store.handler(c)\n` +
-		`return (route.store.handler=route.store.compile())(c)\n`
+		`return route.store.compile()(c)\n`
 
-	let switchMap = ``
-	for (const [path, v] of Object.entries(router.static.http.map)) {
+	let switchMap = ''
+	for (const [path, methods] of Object.entries(router.static)) {
 		switchMap += `case'${path}':`
 
 		if (app.config.strictPath !== true)
@@ -2184,10 +2239,32 @@ export const composeGeneralHandler = (
 		const encoded = encodePath(path)
 		if (path !== encoded) switchMap += `case'${encoded}':`
 
-		switchMap +=
-			`switch(r.method){${v.code}\n` +
-			(v.all ?? `default: break map`) +
-			'}'
+		switchMap += 'switch(r.method){'
+
+		if ('GET' in methods || 'WS' in methods) {
+			switchMap += `case 'GET':`
+
+			if ('WS' in methods)
+				switchMap +=
+					`if(r.headers.get('upgrade')==='websocket')` +
+					`return ht[${methods.WS}].composed(c)\n`
+
+			if ('GET' in methods)
+				switchMap += `return ht[${methods.GET}].composed(c)\n`
+		}
+
+		for (const [method, index] of Object.entries(methods)) {
+			if (method === 'ALL' || method === 'GET' || method === 'WS')
+				continue
+
+			switchMap += `case '${method}':return ht[${index}].composed(c)\n`
+		}
+
+		if ('ALL' in methods)
+			switchMap += `default:return ht[${methods.ALL}].composed(c)\n`
+		else switchMap += `default:break map\n`
+
+		switchMap += '}'
 	}
 
 	const maybeAsync = !!app.event.request?.some(isAsync)
@@ -2203,7 +2280,7 @@ export const composeGeneralHandler = (
 		`NotFoundError,` +
 		`randomId,` +
 		`handleError,` +
-		`error,` +
+		`status,` +
 		`redirect,` +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
@@ -2243,85 +2320,35 @@ export const composeGeneralHandler = (
 			app.event.trace.map((_, i) => `tr${i}(c)`).join(',') +
 			`]\n`
 
-	const report = createReport({
-		trace: app.event.trace,
-		addFn(word) {
-			fnLiteral += word
-		}
-	})
+	fnLiteral += createOnRequestHandler(app)
 
-	const reporter = report('request', {
-		total: app.event.request?.length
-	})
+	if (switchMap) fnLiteral += `\nmap: switch(p){\n` + switchMap + `}`
 
-	if (app.event.request?.length) {
-		fnLiteral += `try{`
-
-		for (let i = 0; i < app.event.request.length; i++) {
-			const hook = app.event.request[i]
-			const withReturn = hasReturn(hook)
-			const maybeAsync = isAsync(hook)
-
-			const endUnit = reporter.resolveChild(app.event.request[i].fn.name)
-
-			if (withReturn) {
-				fnLiteral +=
-					`re=mapEarlyResponse(` +
-					`${maybeAsync ? 'await ' : ''}onRequest[${i}](c),` +
-					`c.set)\n`
-
-				endUnit('re')
-				fnLiteral += `if(re!==undefined)return re\n`
-			} else {
-				fnLiteral += `${maybeAsync ? 'await ' : ''}onRequest[${i}](c)\n`
-				endUnit()
-			}
-		}
-
-		fnLiteral += `}catch(error){return app.handleError(c,error,false)}`
-	}
-
-	reporter.resolve()
-
-	fnLiteral += adapter.websocket(app)
-
-	fnLiteral +=
-		`\nmap:switch(p){\n` +
-		switchMap +
-		`default:break}` +
-		findDynamicRoute +
-		`}\n`
+	fnLiteral += findDynamicRoute + `}\n` + createHoc(app)
 
 	// @ts-expect-error private property
-	if (app.extender.higherOrderFunctions.length) {
-		let handler = 'map'
-		// @ts-expect-error private property
-		for (let i = 0; i < app.extender.higherOrderFunctions.length; i++)
-			handler = `hoc[${i}](${handler},${adapter.parameters})`
+	app.handleError = composeErrorHandler(app) as any
 
-		fnLiteral += `return function hocMap(${adapter.parameters}){return ${handler}(${adapter.parameters})}`
-	} else fnLiteral += `return map`
-
-	const handleError = composeErrorHandler(app) as any
-
-	// @ts-expect-error
-	app.handleError = handleError
-
-	return Function(
+	const fn = Function(
 		'data',
-		fnLiteral
+		'"use strict";\n' + fnLiteral
 	)({
 		app,
 		mapEarlyResponse: app['~adapter']['handler'].mapEarlyResponse,
 		NotFoundError,
 		randomId,
-		handleError,
-		error,
+		// @ts-expect-error private property
+		handleError: app.handleError,
+		status,
 		redirect,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 		...adapter.inject
 	})
+
+	if (isBun) Bun.gc(false)
+
+	return fn
 }
 
 export const composeErrorHandler = (app: AnyElysia) => {
@@ -2337,36 +2364,23 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 	fnLiteral +=
 		`const {` +
-		`app:{` +
-		`event:{` +
-		`error:onErrorContainer,` +
-		`afterResponse:resContainer,` +
-		`mapResponse:_onMapResponse,` +
-		`trace:_trace` +
-		`}` +
-		`},` +
 		`mapResponse,` +
 		`ERROR_CODE,` +
 		`ElysiaCustomStatusResponse,` +
+		allocateIf(`onError,`, app.event.error) +
+		allocateIf(`afterResponse,`, app.event.afterResponse) +
+		allocateIf(`trace,`, app.event.trace) +
+		allocateIf(`onMapResponse,`, app.event.mapResponse) +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		adapterVariables +
 		`}=inject\n`
 
-	fnLiteral +=
-		`const trace=_trace?.map(x=>typeof x==='function'?x:x.fn)??[]\n` +
-		`const onMapResponse=[]\n` +
-		`if(_onMapResponse)for(let i=0;i<_onMapResponse.length;i++)` +
-		`onMapResponse.push(_onMapResponse[i].fn??_onMapResponse[i])\n` +
-		`delete _onMapResponse\n` +
-		`const onError=onErrorContainer?.map(x=>x.fn)??[]\n` +
-		`const res=resContainer?.map(x=>x.fn)??[]\n` +
-		`return ${
-			app.event.error?.find(isAsync) ||
-			app.event.mapResponse?.find(isAsync)
-				? 'async '
-				: ''
-		}function(context,error,skipGlobal){`
+	fnLiteral += `return ${
+		app.event.error?.find(isAsync) || app.event.mapResponse?.find(isAsync)
+			? 'async '
+			: ''
+	}function(context,error,skipGlobal){`
 
 	fnLiteral += ''
 
@@ -2449,13 +2463,17 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		}
 
 	fnLiteral +=
-		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){` +
+		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){\n` +
 		`if(error.error)error=error.error\n` +
 		`set.status=error.status??422\n` +
 		adapter.validationError +
-		`}`
+		`\n}\n`
 
-	fnLiteral += `if(error instanceof Error){` + adapter.unknownError + `}`
+	fnLiteral +=
+		`if(error instanceof Error){` +
+		`\nif(typeof error.toResponse==='function')return context.response=error.toResponse()\n` +
+		adapter.unknownError +
+		`\n}`
 
 	const mapResponseReporter = report('mapResponse', {
 		total: hooks.mapResponse?.length,
@@ -2489,14 +2507,20 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 	fnLiteral += `\nreturn mapResponse(${saveResponse}error,set${adapter.mapResponseContext})}`
 
+	const mapFn = (x: Function | HookContainer) =>
+		typeof x === 'function' ? x : x.fn
+
 	return Function(
 		'inject',
-		fnLiteral
+		'"use strict";\n' + fnLiteral
 	)({
-		app,
 		mapResponse: app['~adapter'].handler.mapResponse,
 		ERROR_CODE,
 		ElysiaCustomStatusResponse,
+		onError: app.event.error?.map(mapFn),
+		afterResponse: app.event.afterResponse?.map(mapFn),
+		trace: app.event.trace?.map(mapFn),
+		onMapResponse: app.event.mapResponse?.map(mapFn),
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 		...adapter.inject

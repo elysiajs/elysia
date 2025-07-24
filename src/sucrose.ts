@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
+import { checksum } from './utils'
+import { isBun } from './universal/utils'
+
 import type { Handler, HookContainer, LifeCycleStore } from './types'
 
 export namespace Sucrose {
@@ -11,33 +14,13 @@ export namespace Sucrose {
 		set: boolean
 		server: boolean
 		route: boolean
-		request: boolean
+		url: boolean
+		path: boolean
 	}
 
 	export interface LifeCycle extends Partial<LifeCycleStore> {
 		handler?: Handler
 	}
-}
-
-export const hasReturn = (fn: string | HookContainer<any> | Function) => {
-	const fnLiteral =
-		typeof fn === 'object'
-			? fn.fn.toString()
-			: typeof fn === 'string'
-				? fn.toString()
-				: fn
-
-	const parenthesisEnd = fnLiteral.indexOf(')')
-
-	// Is direct arrow function return eg. () => 1
-	if (
-		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
-		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
-	) {
-		return true
-	}
-
-	return fnLiteral.includes('return')
 }
 
 /**
@@ -258,20 +241,19 @@ export const retrieveRootParamters = (parameter: string) => {
 	parameter = removeColonAlias(parameter)
 	if (parameter) parameters = parameters.concat(parameter.split(','))
 
-	const newParameters = []
+	const parameterMap: Record<string, true> = Object.create(null)
 	for (const p of parameters) {
 		if (p.indexOf(',') === -1) {
-			newParameters.push(p)
+			parameterMap[p] = true
 			continue
 		}
 
-		for (const q of p.split(',')) newParameters.push(q.trim())
+		for (const q of p.split(',')) parameterMap[q.trim()] = true
 	}
-	parameters = newParameters
 
 	return {
 		hasParenthesis,
-		parameters
+		parameters: parameterMap
 	}
 }
 
@@ -287,22 +269,19 @@ export const findParameterReference = (
 	const { parameters, hasParenthesis } = retrieveRootParamters(parameter)
 
 	// Check if root is an object destructuring
-	if (!inference.query && parameters.includes('query')) inference.query = true
-	if (!inference.headers && parameters.includes('headers'))
-		inference.headers = true
-	if (!inference.body && parameters.includes('body')) inference.body = true
-	if (!inference.cookie && parameters.includes('cookie'))
-		inference.cookie = true
-	if (!inference.set && parameters.includes('set')) inference.set = true
-	if (!inference.server && parameters.includes('server'))
-		inference.server = true
-	if (!inference.request && parameters.includes('request'))
-		inference.request = true
-	if (!inference.route && parameters.includes('route')) inference.route = true
+	if (parameters.query) inference.query = true
+	if (parameters.headers) inference.headers = true
+	if (parameters.body) inference.body = true
+	if (parameters.cookie) inference.cookie = true
+	if (parameters.set) inference.set = true
+	if (parameters.server) inference.server = true
+	if (parameters.route) inference.route = true
+	if (parameters.url) inference.url = true
+	if (parameters.path) inference.path = true
 
-	if (hasParenthesis) return `{ ${parameters.join(', ')} }`
+	if (hasParenthesis) return `{ ${Object.keys(parameters).join(', ')} }`
 
-	return parameters.join(', ')
+	return Object.keys(parameters).join(', ')
 }
 
 const findEndIndex = (
@@ -310,18 +289,15 @@ const findEndIndex = (
 	content: string,
 	index?: number | undefined
 ) => {
-	const newLineIndex = content.indexOf(type + '\n', index)
-	const newTabIndex = content.indexOf(type + '\t', index)
-	const commaIndex = content.indexOf(type + ',', index)
-	const semicolonIndex = content.indexOf(type + ';', index)
-	const emptyIndex = content.indexOf(type + ' ', index)
-
-	// Pick the smallest index that is not -1 or 0
-	return (
-		[newLineIndex, newTabIndex, commaIndex, semicolonIndex, emptyIndex]
-			.filter((i) => i > 0)
-			.sort((a, b) => a - b)[0] || -1
+	const regex = new RegExp(
+		`${type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\n\\t,; ]`
 	)
+
+	if (index !== undefined) regex.lastIndex = index
+
+	const match = regex.exec(content)
+
+	return match ? match.index : -1
 }
 
 const findEndQueryBracketIndex = (
@@ -439,9 +415,9 @@ export const extractMainParameter = (parameter: string) => {
 
 	const hasComma = parameter.includes(',')
 	if (!hasComma) {
+		const index = parameter.indexOf('...')
 		// This happens when spread operator is used as the only parameter
-		if (parameter.includes('...'))
-			return parameter.slice(parameter.indexOf('...') + 3)
+		if (index !== -1) return parameter.slice(parameter.indexOf('...') + 3)
 
 		return
 	}
@@ -462,9 +438,9 @@ export const inferBodyReference = (
 	inference: Sucrose.Inference
 ) => {
 	const access = (type: string, alias: string) =>
-		code.includes(alias + '.' + type) ||
-		code.includes(alias + '["' + type + '"]') ||
-		code.includes(alias + "['" + type + "']")
+		new RegExp(
+			`${alias}\\.(${type})|${alias}\\["${type}"\\]|${alias}\\['${type}'\\]`
+		).test(code)
 
 	for (const alias of aliases) {
 		if (!alias) continue
@@ -473,38 +449,24 @@ export const inferBodyReference = (
 		if (alias.charCodeAt(0) === 123) {
 			const parameters = retrieveRootParamters(alias).parameters
 
-			if (!inference.query && parameters.includes('query'))
-				inference.query = true
-
-			if (!inference.headers && parameters.includes('headers'))
-				inference.headers = true
-
-			if (!inference.body && parameters.includes('body'))
-				inference.body = true
-
-			if (!inference.cookie && parameters.includes('cookie'))
-				inference.cookie = true
-
-			if (!inference.set && parameters.includes('set'))
-				inference.set = true
-
-			if (!inference.query && parameters.includes('server'))
-				inference.server = true
-
-			if (!inference.request && parameters.includes('request'))
-				inference.request = true
-
-			if (!inference.route && parameters.includes('route'))
-				inference.route = true
+			if (parameters.query) inference.query = true
+			if (parameters.headers) inference.headers = true
+			if (parameters.body) inference.body = true
+			if (parameters.cookie) inference.cookie = true
+			if (parameters.set) inference.set = true
+			if (parameters.server) inference.server = true
+			if (parameters.url) inference.url = true
+			if (parameters.route) inference.route = true
+			if (parameters.path) inference.path = true
 
 			continue
 		}
 
-		if (!inference.query && access('query', alias)) inference.query = true
-
 		if (
-			code.includes('return ' + alias) ||
-			code.includes('return ' + alias + '.query')
+			!inference.query &&
+			(access('query', alias) ||
+				code.includes('return ' + alias) ||
+				code.includes('return ' + alias + '.query'))
 		)
 			inference.query = true
 
@@ -520,6 +482,10 @@ export const inferBodyReference = (
 		if (!inference.server && access('server', alias))
 			inference.server = true
 
+		if (!inference.route && access('route', alias)) inference.route = true
+		if (!inference.url && access('url', alias)) inference.url = true
+		if (!inference.path && access('path', alias)) inference.path = true
+
 		if (
 			inference.query &&
 			inference.headers &&
@@ -527,8 +493,9 @@ export const inferBodyReference = (
 			inference.cookie &&
 			inference.set &&
 			inference.server &&
-			inference.server &&
-			inference.route
+			inference.route &&
+			inference.url &&
+			inference.path
 		)
 			break
 	}
@@ -571,7 +538,7 @@ export const isContextPassToFunction = (
 ) => {
 	// ! Function is passed to another function, assume as all is accessed
 	try {
-		const captureFunction = new RegExp(`(?:\\w)\\((?:.*)?${context}`, 'gs')
+		const captureFunction = new RegExp(`\\w\\((.*?)?${context}`, 'gs')
 		captureFunction.test(body)
 
 		/*
@@ -588,8 +555,9 @@ export const isContextPassToFunction = (
 			inference.cookie = true
 			inference.set = true
 			inference.server = true
+			inference.url = true
 			inference.route = true
-			inference.request = true
+			inference.path = true
 
 			return true
 		}
@@ -608,6 +576,34 @@ export const isContextPassToFunction = (
 	}
 }
 
+let pendingGC: number | undefined
+let caches = <Record<number, Sucrose.Inference>>{}
+
+export const clearSucroseCache = (delay = 0) => {
+	if (pendingGC) clearTimeout(pendingGC)
+
+	pendingGC = setTimeout(() => {
+		caches = {}
+
+		pendingGC = undefined
+		if (isBun) Bun.gc(false)
+	}, delay) as unknown as number
+}
+
+export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
+	return {
+		body: a.body || b.body,
+		cookie: a.cookie || b.cookie,
+		headers: a.headers || b.headers,
+		query: a.query || b.query,
+		set: a.set || b.set,
+		server: a.server || b.server,
+		url: a.url || b.url,
+		route: a.route || b.route,
+		path: a.path || b.path
+	}
+}
+
 export const sucrose = (
 	lifeCycle: Sucrose.LifeCycle,
 	inference: Sucrose.Inference = {
@@ -617,14 +613,12 @@ export const sucrose = (
 		cookie: false,
 		set: false,
 		server: false,
-		request: false,
-		route: false
+		url: false,
+		route: false,
+		path: false
 	}
 ): Sucrose.Inference => {
-	const events = []
-
-	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
-		events.push(lifeCycle.handler)
+	const events = <(Handler | HookContainer)[]>[]
 
 	if (lifeCycle.request?.length) events.push(...lifeCycle.request)
 	if (lifeCycle.beforeHandle?.length) events.push(...lifeCycle.beforeHandle)
@@ -635,34 +629,68 @@ export const sucrose = (
 	if (lifeCycle.mapResponse?.length) events.push(...lifeCycle.mapResponse)
 	if (lifeCycle.afterResponse?.length) events.push(...lifeCycle.afterResponse)
 
-	for (const e of events) {
+	if (lifeCycle.handler && typeof lifeCycle.handler === 'function')
+		events.push(lifeCycle.handler as Handler)
+
+	for (let i = 0; i < events.length; i++) {
+		const e = events[i]
 		if (!e) continue
 
-		const event = 'fn' in e ? e.fn : e
+		const event = typeof e === 'object' ? e.fn : e
 
 		// parse can be either a function or string
-		if(typeof event !== "function") continue
+		if (typeof event !== 'function') continue
 
-		const [parameter, body, { isArrowReturn }] = separateFunction(
-			event.toString()
-		)
+		const content = event.toString()
+		const key = checksum(content)
+		const cachedInference = caches[key]
+		if (cachedInference) {
+			inference = mergeInference(inference, cachedInference)
+			continue
+		}
 
-		const rootParameters = findParameterReference(parameter, inference)
+		const fnInference: Sucrose.Inference = {
+			query: false,
+			headers: false,
+			body: false,
+			cookie: false,
+			set: false,
+			server: false,
+			url: false,
+			route: false,
+			path: false
+		}
+
+		const [parameter, body] = separateFunction(content)
+
+		const rootParameters = findParameterReference(parameter, fnInference)
 		const mainParameter = extractMainParameter(rootParameters)
 
 		if (mainParameter) {
-			const aliases = findAlias(mainParameter, body)
+			const aliases = findAlias(mainParameter, body.slice(1, -1))
 			aliases.splice(0, -1, mainParameter)
 
-			if (!isContextPassToFunction(mainParameter, body, inference))
-				inferBodyReference(body, aliases, inference)
+			let code = body
 
 			if (
-				!inference.query &&
-				body.includes('return ' + mainParameter + '.query')
+				code.charCodeAt(0) === 123 &&
+				code.charCodeAt(body.length - 1) === 125
 			)
-				inference.query = true
+				code = code.slice(1, -1)
+
+			if (!isContextPassToFunction(mainParameter, code, fnInference))
+				inferBodyReference(code, aliases, fnInference)
+
+			if (
+				!fnInference.query &&
+				code.includes('return ' + mainParameter + '.query')
+			)
+				fnInference.query = true
 		}
+
+		if (!caches[key]) caches[key] = fnInference
+
+		inference = mergeInference(inference, fnInference)
 
 		if (
 			inference.query &&
@@ -671,8 +699,9 @@ export const sucrose = (
 			inference.cookie &&
 			inference.set &&
 			inference.server &&
-			inference.request &&
-			inference.route
+			inference.url &&
+			inference.route &&
+			inference.path
 		)
 			break
 	}

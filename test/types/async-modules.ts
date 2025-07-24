@@ -20,7 +20,7 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<'decoratorA' | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
 
 			return v
 		})
@@ -55,13 +55,13 @@ import { Elysia } from '../../src'
 			.resolve(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('plugin')
+			.as('scoped')
 	})
 
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<'decoratorA' | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
 
 			return v
 		})
@@ -96,13 +96,13 @@ import { Elysia } from '../../src'
 			.resolve(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('plugin')
+			.as('scoped')
 	}
 
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<'decoratorA' | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
 
 			return v
 		})
@@ -137,13 +137,13 @@ import { Elysia } from '../../src'
 			.resolve(() => ({
 				resolveA: 'resolveA'
 			}))
-			.as('plugin')
+			.as('scoped')
 	})
 
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<'decoratorA' | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
 
 			return v
 		})
@@ -184,7 +184,7 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<'decoratorA' | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
 
 			return v
 		})
@@ -225,7 +225,7 @@ import { Elysia } from '../../src'
 	new Elysia()
 		.use(serviceA)
 		.decorate((v) => {
-			expectTypeOf(v.decoratorA).toEqualTypeOf<'decoratorA' | undefined>()
+			expectTypeOf(v.decoratorA).toEqualTypeOf<string | undefined>()
 
 			return v
 		})

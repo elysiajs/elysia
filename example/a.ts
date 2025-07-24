@@ -1,33 +1,17 @@
-import { Elysia, t } from '../src'
-import { hasTransform } from '../src/compose'
-import { post } from '../test/utils'
+import { Elysia, file, form, t } from '../src'
 
-console.log(
-	hasTransform(
-		t
-			.Transform(
-				t.Object({
-					name: t.String()
-				})
-			)
-			.Decode((x) => x.name)
-			.Encode((x) => ({ name: x }))
-	)
-)
-
-const app = new Elysia().post('/', ({ body }) => body, {
-	body: t
-		.Transform(
-			t.Object({
-				name: t.String()
-			})
-		)
-		.Decode((x) => x.name)
-		.Encode((x) => ({ name: x })),
-	response: t.String()
-})
-
-const res = await app.handle(post('/', { name: 'difhel' }))
-
-console.log(await res.text()) //.toBe('difhel')
-console.log(res.status) //.toBe(200)
+const app = new Elysia()
+	.ws('/ws', {
+		upgradeData: t.Object({
+			hello: t.String()
+		}),
+		beforeHandle() {
+			return {
+				hello: 'world'
+			}
+		},
+		open(ws, data) {
+			ws.send(data.hello)
+		}
+	})
+	.listen(3000)

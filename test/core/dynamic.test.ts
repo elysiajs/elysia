@@ -1,4 +1,4 @@
-import { Elysia, ElysiaConfig, NotFoundError, t } from '../../src'
+import { Elysia, NotFoundError, status, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
@@ -14,11 +14,11 @@ describe('Dynamic Mode', () => {
 	})
 
 	it('handle literal', async () => {
-		const app = new Elysia({ aot: false }).get('/', 'Hi');
+		const app = new Elysia({ aot: false }).get('/', 'Hi')
 
-		const response = await app.handle(req('/')).then((x) => x.text());
+		const response = await app.handle(req('/')).then((x) => x.text())
 
-		expect(response).toBe('Hi');
+		expect(response).toBe('Hi')
 	})
 
 	it('handle body', async () => {
@@ -152,19 +152,23 @@ describe('Dynamic Mode', () => {
 	})
 
 	it('validate', async () => {
-		const app = new Elysia({ aot: false }).post('/', ({ query: { id, arr } }) => `${id} - ${arr}`, {
-			body: t.Object({
-				username: t.String(),
-				password: t.String()
-			}),
-			query: t.Object({
-				id: t.String(),
-				arr: t.Array(t.String()),
-			}),
-			response: {
-				200: t.String()
+		const app = new Elysia({ aot: false }).post(
+			'/',
+			({ query: { id, arr } }) => `${id} - ${arr}`,
+			{
+				body: t.Object({
+					username: t.String(),
+					password: t.String()
+				}),
+				query: t.Object({
+					id: t.String(),
+					arr: t.Array(t.String())
+				}),
+				response: {
+					200: t.String()
+				}
 			}
-		})
+		)
 
 		const res = await app
 			.handle(
@@ -180,31 +184,37 @@ describe('Dynamic Mode', () => {
 
 	it('default value', async () => {
 		const app = new Elysia({ aot: false }).get(
-			"/:propParams?",
-			({ params: { propParams }, headers: { propHeader }, query: { propQuery } }) => `${propParams} ${propHeader} ${propQuery}`,
+			'/:propParams?',
+			({
+				params: { propParams },
+				headers: { propHeader },
+				query: { propQuery }
+			}) => `${propParams} ${propHeader} ${propQuery}`,
 			{
 				params: t.Object({
 					propParams: t.String({
-						default: "params-default",
-					}),
+						default: 'params-default'
+					})
 				}),
 				headers: t.Object({
 					propHeader: t.String({
-						default: "header-default",
-					}),
+						default: 'header-default'
+					})
 				}),
 				query: t.Object({
 					propQuery: t.String({
-						default: "query-default",
-					}),
-				}),
+						default: 'query-default'
+					})
+				})
 			}
-		);
+		)
 
-		const response = await app.handle(new Request('http://localhost')).then((x) => x.text());
+		const response = await app
+			.handle(new Request('http://localhost'))
+			.then((x) => x.text())
 
-		expect(response).toBe('params-default header-default query-default');
-	});
+		expect(response).toBe('params-default header-default query-default')
+	})
 
 	it('handle non query fallback', async () => {
 		const app = new Elysia({ aot: false }).get('/', () => 'hi', {
@@ -239,5 +249,16 @@ describe('Dynamic Mode', () => {
 		)
 
 		expect(await res.text()).toBe('text/plain')
+	})
+
+	describe('it handle async resolve', async () => {
+		const app = new Elysia({ aot: false })
+			.resolve(() => status(418, 'Chocominto yorimo anata!'))
+			.post('/ruby-chan', () => 'Hai!')
+
+		const res = await app.handle(post('/ruby-chan', 'nani ga suki!'))
+
+		expect(await res.text()).toBe('Chocominto yorimo anata!')
+		expect(res.status).toBe(418)
 	})
 })

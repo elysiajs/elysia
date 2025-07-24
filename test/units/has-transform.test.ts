@@ -2,7 +2,7 @@ import { t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 
-import { hasTransform } from '../../src/compose'
+import { hasTransform } from '../../src/schema'
 
 describe('has transform', () => {
 	it('return true if object property has Transform', () => {

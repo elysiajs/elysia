@@ -3,7 +3,7 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
-import { hasType } from '../../src/compose'
+import { hasType } from '../../src/schema'
 
 const payload = { hello: 'world' }
 

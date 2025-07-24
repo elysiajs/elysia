@@ -200,9 +200,9 @@ export abstract class WebStandardResponse implements BodyMixin {
 		return Response.error()
 	}
 	static json(data: any, init?: ResponseInit) {
-		return Response.json(data, init)
+		return Response.json(data, init as any)
 	}
-	static redirect(url: string | URL, status: ResponseRedirectStatus) {
+	static redirect(url: string, status: ResponseRedirectStatus) {
 		return Response.redirect(url, status)
 	}
 }

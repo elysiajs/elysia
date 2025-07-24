@@ -6,9 +6,7 @@ import { req } from '../utils'
 describe('Encode response', () => {
 	it('handle default status', async () => {
 		const app = new Elysia({
-			experimental: {
-				encodeSchema: true
-			}
+			encodeSchema: true
 		}).get(
 			'/',
 			() => ({
@@ -33,9 +31,7 @@ describe('Encode response', () => {
 
 	it('handle default named status', async () => {
 		const app = new Elysia({
-			experimental: {
-				encodeSchema: true
-			}
+			encodeSchema: true
 		}).get(
 			'/:id',
 			({ error, params: { id } }) =>

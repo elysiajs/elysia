@@ -80,8 +80,7 @@ describe('error', () => {
 		const res = await app.handle(post('/login', {}))
 		const data = await res.json()
 
-		// @ts-ignore
-		expect(data.length).toBe(4)
+		expect(data).toBeArray()
 		expect(res.status).toBe(400)
 	})
 

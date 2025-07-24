@@ -208,14 +208,14 @@ describe('trace', () => {
 		expect(called).toBe(true)
 	})
 
-	it('handle propagate', async () => {
+	it('handle as cast', async () => {
 		let called = false
 
 		const plugin = new Elysia().trace({ as: 'scoped' }, () => {
 			called = true
 		})
 
-		const parent = new Elysia().use(plugin).propagate()
+		const parent = new Elysia().use(plugin).as('scoped')
 		const main = new Elysia().use(parent).get('/', () => 'h')
 
 		await main.handle(req('/'))
@@ -421,5 +421,26 @@ describe('trace', () => {
 		await app.handle(req('/'))
 
 		expect(isCalled).toBeTrue()
+	})
+
+	it('report route when using trace', async () => {
+		let route: string | undefined
+
+		const app = new Elysia()
+			.trace(({ onHandle, context }) => {
+				onHandle(({ onStop }) => {
+					onStop(({ error }) => {
+						route = context.route
+						expect(error).toBeInstanceOf(Error)
+					})
+				})
+			})
+			.get('/id/:id', () => {
+				throw new Error('A')
+			})
+
+		await app.handle(req('/id/1'))
+
+		expect(route).toBe('/id/:id')
 	})
 })

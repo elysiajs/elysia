@@ -371,7 +371,7 @@ export type WebSocketCompressor =
  * });
  * ```
  */
-export interface WebSocketHandler<T = undefined> {
+export interface WebSocketHandler<in out T = undefined> {
 	/**
 	 * Called when the server receives an incoming message.
 	 *

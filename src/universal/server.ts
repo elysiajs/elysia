@@ -1,4 +1,4 @@
-import type { Serve as BunServe } from 'bun'
+import type { Serve as BunServe, Server as BunServer } from 'bun'
 import type { IsAny, MaybePromise } from '../types'
 
 export interface ErrorLike extends Error {
@@ -115,9 +115,15 @@ export interface ServeOptions extends GenericServeOptions {
 		request: Request,
 		server: Server
 	): Response | Promise<Response>
+
+	routes: Record<
+		string,
+		Function | Response | Record<string, Function | Response>
+	>
 }
 
 export type Serve = IsAny<BunServe> extends false ? BunServe : ServeOptions
+export type Server = IsAny<BunServer> extends false ? BunServer : ServerOptions
 
 export type ServerWebSocketSendStatus = number
 
@@ -136,7 +142,7 @@ export interface SocketAddress {
 	family: 'IPv4' | 'IPv6'
 }
 
-export interface Server extends Disposable {
+export interface ServerOptions extends Disposable {
 	/**
 	 * Stop listening to prevent new connections from being accepted.
 	 *
@@ -284,6 +290,22 @@ export interface Server extends Disposable {
 	 * ```
 	 */
 	requestIP(request: Request): SocketAddress | null
+
+ 	/**
+     * Reset the idleTimeout of the given Request to the number in seconds. 0 means no timeout.
+     *
+     * @example
+     * ```js
+     * export default {
+     *  async fetch(request, server) {
+     *    server.timeout(request, 60);
+     *    await Bun.sleep(30000);
+     *    return new Response("30 seconds have passed");
+     *  }
+     * }
+     * ```
+     */
+    timeout(request: Request, seconds: number): void;
 
 	/**
 	 * Undo a call to {@link Server.unref}

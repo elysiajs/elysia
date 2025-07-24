@@ -186,7 +186,7 @@ describe('WebSocket message', () => {
 		await wsClosed(ws)
 		app.stop()
 	})
-	
+
 	it('should parse objects', async () => {
 		const app = new Elysia()
 			.ws('/ws', {
@@ -465,6 +465,35 @@ describe('WebSocket message', () => {
 				error() {
 					return 'caught'
 				},
+				message(ws, message) {
+					throw new Error('A')
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send('Hello!')
+
+		const { type, data } = await message
+
+		expect(type).toBe('message')
+		expect(data).toBe('caught')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('handle error with onError', async () => {
+		const app = new Elysia()
+			.onError(() => {
+				return 'caught'
+			})
+			.ws('/ws', {
 				message(ws, message) {
 					throw new Error('A')
 				}

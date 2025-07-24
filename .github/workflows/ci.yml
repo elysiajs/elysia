@@ -26,3 +26,7 @@ jobs:
 
             - name: Test
               run: bun run test
+
+            - name: Publish Preview
+              if: github.event_name == 'pull_request'
+              run: bunx pkg-pr-new publish

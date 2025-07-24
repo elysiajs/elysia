@@ -1,6 +1,134 @@
+# 1.3.5 - 16 Jun 2025
+Bug fix:
+- [#1255](https://github.com/elysiajs/elysia/issues/1255) regression in serving an imported HTML file
+- [#1251](https://github.com/elysiajs/elysia/issues/1251) property 'status' does not exist onError function
+- [#1247](https://github.com/elysiajs/elysia/pull/1247) ensure WebSockets get routed properly without AoT compilation
+- [#1246](https://github.com/elysiajs/elysia/issues/1246) property 'timeout' does not exist on type 'Server'
+- [#1245](https://github.com/elysiajs/elysia/issues/1245) error on onAfterHandle (no property 'response')
+- [#1239](https://github.com/elysiajs/elysia/issues/1239) t.Files validator breaks for response schema
+- [#1187](https://github.com/elysiajs/elysia/pull/1187), [#1169](https://github.com/elysiajs/elysia/issues/1169) websocket beforeLoad not being executed
+
+# 1.3.4 - 3 Jun 2025
+Feature:
+- sse helper
+
+Bug fix:
+- [#1237](https://github.com/elysiajs/elysia/issues/1237) ws in a group merge error
+- [#1235](https://github.com/elysiajs/elysia/issues/1235) errors not handled correctly in resolve hook on dynamic mode
+- [#1234](https://github.com/elysiajs/elysia/issues/1234) optional path parameters can't follow required ones
+- [#1232](https://github.com/elysiajs/elysia/issues/1232) t.Files fails with array of files
+
+Change:
+- When yield is not sse, content-type is set to either `text/plain` or `application/json` based on the response type
+
+# 1.3.3 - 27 May 2025
+Bug fix:
+- mapResponseContext is not passed to compose
+- await `ElysiaFile` when not using Bun
+- export `adapter/utils`
+
+# 1.3.2 - 27 May 2025
+Feature:
+- Support Bun native static response per method for Bun >= 1.2.14
+- [#1213](https://github.com/elysiajs/elysia/issues/1213) trace.time is undefined in .trace() callback
+
+Improvement:
+- implement all universal type
+- offload `AsyncGenerator`, `ReplaceFile` from Eden Treaty to `CreateEden`
+- [#1223](https://github.com/elysiajs/elysia/issues/1223) infer `status(200)` response from handler if not specified
+- [#1185](https://github.com/elysiajs/elysia/issues/1185) use non-greedy match for `isContextPassToFunction` to prevent false positive
+
+# 1.3.1 - 8 May 2025
+Bug fix:
+- [#1200](https://github.com/elysiajs/elysia/issues/1200) limited Bun Router to supported method
+- [#1199](https://github.com/elysiajs/elysia/issues/1199) object are not normalized when t.Transform is provided
+- [#1198](https://github.com/elysiajs/elysia/issues/1198), [#1188](https://github.com/elysiajs/elysia/issues/1188), [#1186](https://github.com/elysiajs/elysia/issues/1186) exclude wildcard route from Bun router
+- [#1197](https://github.com/elysiajs/elysia/issues/1197) leave incorrect union field as-is
+- [#1195](https://github.com/elysiajs/elysia/issues/1195) invalid onAfterHandle typing
+- [#1194](https://github.com/elysiajs/elysia/issues/1194) normalize array response
+- [#1193](https://github.com/elysiajs/elysia/issues/1193) undefine value.schema.noValidate
+- [#1192](https://github.com/elysiajs/elysia/issues/1192) using a macro inside a group does not call the handler when using the `precompile` option
+- [#1190](https://github.com/elysiajs/elysia/issues/1190) derive and resolve handlers not being executed on WS context
+- [#1189](https://github.com/elysiajs/elysia/issues/1189) Type Inference Issue with Eden Treaty Group Endpoints
+- [#1185](https://github.com/elysiajs/elysia/issues/1185) path is missing from Context when Bun System Router is used
+- [#1184](https://github.com/elysiajs/elysia/issues/1184) Missing `mapEarlyResponse` on Bun System Router
+
+Change:
+- update `exact-mirror` to `0.1.2`
+
+# 1.3.0 - 5 May 2025
+Feature:
+- add `exactMirror`
+- add `systemRouter` config
+- `standalone Validator`
+- add `Elysia.Ref` for referencing schema with autocompletion instead of `t.Ref`
+- support Ref inside inline schema
+- add sucrose cache
+- new validation `t.Form`, `t.NoValidate`
+- use `file-type` to check file type
+- add `INVALID_FILE_TYPE` error
+- add `sanitize` options
+
+Improvement:
+- `encodeSchema` now stable and enabled by default
+- optimize types
+- reduce redundant type check when using Encode
+- optimize isAsync
+- unwrap Definition['typebox'] by default to prevent unnecessary UnwrapTypeModule call
+- Elysia.form can now be type check
+- refactor type-system
+- refactor `_types` into `~Types`
+- using aot compilation to check for custom Elysia type, eg. Numeric
+- refactor `app.router.static`, and move static router code generation to compile phase
+- optimize memory usage on `add`, `_use`, and some utility functions
+- improve start up time on multiple route
+- dynamically create cookie validator as needed in compilation process
+- reduce object cloning
+- optimize start index for finding delimiter of a content type header
+- Promise can now be a static response
+- `ParseError` now keeps stack trace
+- refactor `parseQuery` and `parseQueryFromURL`
+- add `config` options to `mount`
+- recompile automatically after async modules is mounted
+- support macro on when hook has function
+- support resolve macro on ws
+- [#1146](https://github.com/elysiajs/elysia/pull/1146) add support to return web API's File from handler
+- [#1165](https://github.com/elysiajs/elysia/pull/1165) skip non-numeric status codes in response schema validation
+- [#1177](https://github.com/elysiajs/elysia/issues/1177) cookie does not sign when an error is thrown
+
+Bug fix:
+- `Response` returned from `onError` is using octet stream
+- unintentional memory allocation when using `mergeObjectArray`
+- handle empty space on Date query
+
+Change:
+- only provide `c.request` to mapResponse when `maybeStream` is true
+- use plain object for `routeTree` instead of `Map`
+- remove `compressHistoryHook` and `decompressHistoryHook`
+- webstandard handler now return `text/plain` if not on Bun
+- use non const value for `decorate` unless explicitly specified
+- `Elysia.mount` now set `detail.hide = true` by default
+
+Breaking Change:
+- remove `as('plugin')` in favor of `as('scoped')`
+- remove root `index` for Eden Treaty
+- remove `websocket` from `ElysiaAdapter`
+- remove `inference.request`
+
+# 1.2.25 - 6 Mar 2025
+Bug fix:
+- [#1108](https://github.com/elysiajs/elysia/issues/1108) use validation response instead of return type when schema is provided
+- [#1105](https://github.com/elysiajs/elysia/pull/1105), [#1003](https://github.com/elysiajs/elysia/issues/1003) invalid parsing body with missed fields if used object model
+
+# 1.2.24 - 2 Mar 2025
+Bug fix:
+- 200 object response is not inferring type in type-level
+- [#1091](https://github.com/elysiajs/elysia/issues/1091) route is not defined when using trace
+
 # 1.2.23 - 25 Feb 2025
 Bug fix:
 - [#1087](https://github.com/elysiajs/elysia/pull/1087) websocket to parse string array
+- [#1088](https://github.com/elysiajs/elysia/pull/1088) infinite loop when inference body is empty
 
 # 1.2.22 - 24 Feb 2025
 Bug fix:

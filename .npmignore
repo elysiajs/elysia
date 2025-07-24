@@ -10,10 +10,12 @@
 .husky
 .eslintrc.json
 
+bun.lock
 bun.lockb
 node_modules
 tsconfig.json
 CHANGELOG.md
+heap.json
 
 example
 tests
@@ -35,3 +37,4 @@ trace
 build.ts
 .scannerwork
 src
+server

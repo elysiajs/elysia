@@ -9,6 +9,7 @@ import type {
 
 import type { TSchema } from '@sinclair/typebox'
 import type { TypeCheck } from '../type-system'
+import type { ElysiaTypeCheck } from '../schema'
 
 import type { FlattenResponse, WSParseHandler } from './types'
 import type { MaybeArray, Prettify, RouteSchema } from '../types'
@@ -52,7 +53,9 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 			id?: string
 			validator?: TypeCheck<TSchema>
 		}>,
-		public data: Context,
+		public data: Prettify<
+			Omit<Context, 'body' | 'error' | 'status' | 'redirect'>
+		>,
 		public body: Route['body'] = undefined
 	) {
 		this.validator = raw.data?.validator
@@ -231,7 +234,7 @@ export const createWSMessageParser = (
 }
 
 export const createHandleWSResponse = (
-	validateResponse: TypeCheck<any> | undefined
+	validateResponse: TypeCheck<any> | ElysiaTypeCheck<any> | undefined
 ) => {
 	const handleWSResponse = (
 		ws: ServerWebSocket<any>,

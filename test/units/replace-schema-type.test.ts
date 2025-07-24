@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
-import { replaceSchemaType } from '../../src/utils'
+import { replaceSchemaType } from '../../src/schema'
 import { req } from '../utils'
 
 describe('Replace Schema Type', () => {

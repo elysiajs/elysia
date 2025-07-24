@@ -125,6 +125,7 @@ export type TraceHandler<
 				set: Context['set']
 				time: number
 				store: Singleton['store']
+				response: unknown
 			} & {
 				[x in `on${Capitalize<TraceEvent>}`]: TraceListener
 			}
@@ -293,7 +294,9 @@ export const createTracer = (traceListener: TraceHandler) => {
 			// @ts-ignore
 			onAfterResponse,
 			// @ts-ignore
-			onError
+			onError,
+			time: Date.now(),
+			store: context.store
 		})
 
 		// ? This is pass to compiler
