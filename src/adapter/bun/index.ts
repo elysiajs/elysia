@@ -404,6 +404,21 @@ export const BunAdapter: ElysiaAdapter = {
 			})
 		}
 	},
+	async stop(app, closeActiveConnections) {
+		if (!app.server)
+			throw new Error(
+				"Elysia isn't running. Call `app.listen` to start the server."
+			)
+
+		if (app.server) {
+			app.server.stop(closeActiveConnections)
+			app.server = null
+
+			if (app.event.stop?.length)
+				for (let i = 0; i < app.event.stop.length; i++)
+					app.event.stop[i].fn(app)
+		}
+	},
 	ws(app, path, options) {
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		const { parse, body, response, ...rest } = options
@@ -484,20 +499,20 @@ export const BunAdapter: ElysiaAdapter = {
 				].filter((x) => x)
 
 				const handleErrors = !errorHandlers.length
-					? () => {}
+					? () => { }
 					: async (ws: ServerWebSocket<any>, error: unknown) => {
-							for (const handleError of errorHandlers) {
-								let response = handleError(
-									Object.assign(context, { error })
-								)
-								if (response instanceof Promise)
-									response = await response
+						for (const handleError of errorHandlers) {
+							let response = handleError(
+								Object.assign(context, { error })
+							)
+							if (response instanceof Promise)
+								response = await response
 
-								await handleResponse(ws, response)
+							await handleResponse(ws, response)
 
-								if (response) break
-							}
+							if (response) break
 						}
+					}
 
 				if (
 					server?.upgrade<any>(context.request, {
