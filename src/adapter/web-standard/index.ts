@@ -59,6 +59,21 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			}
 		}
 	},
+	async stop(app, closeActiveConnections) {
+		if (!app.server)
+			throw new Error(
+				"Elysia isn't running. Call `app.listen` to start the server."
+			)
+
+		if (app.server) {
+			app.server.stop(closeActiveConnections)
+			app.server = null
+
+			if (app.event.stop?.length)
+				for (let i = 0; i < app.event.stop.length; i++)
+					app.event.stop[i].fn(app)
+		}
+	},
 	composeGeneralHandler: {
 		parameters: 'r',
 		createContext(app) {
