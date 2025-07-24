@@ -437,19 +437,19 @@ describe('Normalize', () => {
 		const service = {
 			name: 'nagisa',
 			status: 'online',
-			token: 'secret',
+			token: 'secret'
 		}
 
 		// ...but this property is hidden by the response schema
 		const responseSchema = t.Object({
 			name: t.String(),
-			status: t.String(),
+			status: t.String()
 		})
 
 		const app = new Elysia({
-			normalize: true,
+			normalize: true
 		}).get('/test', () => service, {
-			response: responseSchema,
+			response: responseSchema
 		})
 
 		expect(service).toHaveProperty('token')
@@ -463,6 +463,49 @@ describe('Normalize', () => {
 
 		// In fact, expect the `service` to not be mutated at all
 		expect(service).toEqual(origService)
+	})
+
+	it('normalize nested schema', async () => {
+		const type = t.Array(
+			t.Object({
+				id: t.String(),
+				date: t.Date(),
+				name: t.String()
+			})
+		)
+		const date = new Date('2025-07-11T00:00:00.000Z')
+
+		const app = new Elysia().get(
+			'/',
+			() => {
+				return [
+					{
+						id: 'testId',
+						date,
+						name: 'testName',
+						needNormalize: 'yes'
+					}
+				]
+			},
+			{
+				response: {
+					200: type
+				}
+			}
+		)
+
+		const response = (await app
+			.handle(new Request('http://localhost:3000/'))
+			.then((x) => x.json())) as typeof type.static
+
+		expect(response).toEqual([
+			{
+				id: 'testId',
+				// @ts-ignore date is normalized to ISO string by default
+				date: date.toISOString(),
+				name: 'testName'
+			}
+		])
 	})
 
 	// it('normalize response with getter fields on class', async () => {
