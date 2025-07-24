@@ -2,6 +2,7 @@
 Improvement:
 - [#1263](https://github.com/elysiajs/elysia/pull/1263) bun adapter add qi to routes that need query from guard
 - [#1270](https://github.com/elysiajs/elysia/pull/1270) add Symbol.dispose
+- [#1089](https://github.com/elysiajs/elysia/pull/1089) add stop function to ElysiaAdapter type
 
 Bug fix:
 - [#1126](https://github.com/elysiajs/elysia/pull/1126) Websocket errors not catching
