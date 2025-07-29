@@ -127,7 +127,7 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 	const needsQuery = inference.query || !!route.hooks.query || !!route.standaloneValidators?.find((x) => x.query)
 
 	// inference.query require declaring const 'qi'
-	if (hasTrace || needsQuery) {
+	if (hasTrace || needsQuery || app.event.request?.length) {
 		fnLiteral += createContext(app, route, inference)
 		fnLiteral += createOnRequestHandler(app)
 
