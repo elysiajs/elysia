@@ -404,8 +404,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							responseValidator,
 							response
 						)
-					else if (responseValidator?.Decode)
-						response = responseValidator.Decode(response)
+					else if (responseValidator?.Encode)
+						response = responseValidator.Encode(response)
 				} else {
 					;(
 						context as Context & {
@@ -437,8 +437,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 									responseValidator,
 									result
 								)
-							else if (responseValidator?.Decode)
-								response = responseValidator.Decode(response)
+							else if (responseValidator?.Encode)
+								response = responseValidator.Encode(response)
 
 							// @ts-expect-error
 							return (context.response = result)

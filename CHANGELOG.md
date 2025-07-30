@@ -4,6 +4,7 @@ Bug fix:
 - [#1313](https://github.com/elysiajs/elysia/pull/1313) onRequest not firing
 - [#1311](https://github.com/elysiajs/elysia/issues/1311) handle property start with number
 - [#1310](https://github.com/elysiajs/elysia/issues/1310) webSocket fails to connect when inside group and guard
+- [#1309](https://github.com/elysiajs/elysia/issues/1309) Encode is not called when using dynamic handler
 
 Change:
 - update exact mirror to 0.1.3
