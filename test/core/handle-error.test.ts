@@ -237,6 +237,7 @@ describe('Handle Error', () => {
 		let response = await new Elysia({ aot: false })
 			.use(route)
 			.handle(req('/?aid=a'))
+
 		expect(response.status).toEqual(404)
 		expect(await response.text()).toEqual('foo')
 

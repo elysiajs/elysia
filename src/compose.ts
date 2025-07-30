@@ -372,11 +372,10 @@ const coerceTransformDecodeError = (
 	fnLiteral: string,
 	type: string,
 	value = `c.${type}`
-) =>
-	`try{${fnLiteral}}catch(error){` +
+) => `try{${fnLiteral}}catch(error){` +
 	`if(error.constructor.name === 'TransformDecodeError'){` +
 	`c.set.status=422\n` +
-	`throw new ValidationError('${type}',validator.${type},${value})}` +
+	`throw error.error ?? new ValidationError('${type}',validator.${type},${value})}` +
 	`}`
 
 export const composeHandler = ({

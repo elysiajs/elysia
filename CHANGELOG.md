@@ -1,7 +1,13 @@
 # 1.3.7 - 31 Jul 2025
 Bug fix:
-- [#1314](https://github.com/elysiajs/elysia/issues/1314) coerce TransformDecodeError to ValidationError
+- [#1314](https://github.com/elysiajs/elysia/issues/1314) [Exact Mirror] coerce TransformDecodeError to ValidationError
 - [#1313](https://github.com/elysiajs/elysia/pull/1313) onRequest not firing
+- [#1311](https://github.com/elysiajs/elysia/issues/1311) handle property start with number
+- [#1310](https://github.com/elysiajs/elysia/issues/1310) webSocket fails to connect when inside group and guard
+
+Change:
+- update exact mirror to 0.1.3
+- warn when stop is called instead of throwing an error
 
 # 1.3.6 - 24 Jul 2025
 Improvement:

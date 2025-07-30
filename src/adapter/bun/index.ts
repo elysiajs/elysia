@@ -405,11 +405,6 @@ export const BunAdapter: ElysiaAdapter = {
 		}
 	},
 	async stop(app, closeActiveConnections) {
-		if (!app.server)
-			throw new Error(
-				"Elysia isn't running. Call `app.listen` to start the server."
-			)
-
 		if (app.server) {
 			app.server.stop(closeActiveConnections)
 			app.server = null
@@ -417,7 +412,11 @@ export const BunAdapter: ElysiaAdapter = {
 			if (app.event.stop?.length)
 				for (let i = 0; i < app.event.stop.length; i++)
 					app.event.stop[i].fn(app)
-		}
+		} else
+			console.log(
+				"Elysia isn't running. Call `app.listen` to start the server.",
+				new Error().stack
+			)
 	},
 	ws(app, path, options) {
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -443,8 +442,8 @@ export const BunAdapter: ElysiaAdapter = {
 			'WS',
 			path as any,
 			async (context: any) => {
-				// @ts-expect-error private property
-				const server = app.getServer()
+				const server =
+					(context.server as (typeof app)['server']) ?? app.server
 
 				// ! Enable static code analysis just in case resolveUnknownFunction doesn't work, do not remove
 				// eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -490,29 +489,31 @@ export const BunAdapter: ElysiaAdapter = {
 				}
 
 				const errorHandlers = [
-					...(options.error ? (Array.isArray(options.error)
-						? options.error
-						: [options.error]) : []),
+					...(options.error
+						? Array.isArray(options.error)
+							? options.error
+							: [options.error]
+						: []),
 					...(app.event.error ?? []).map((x) =>
 						typeof x === 'function' ? x : x.fn
 					)
 				].filter((x) => x)
 
 				const handleErrors = !errorHandlers.length
-					? () => { }
+					? () => {}
 					: async (ws: ServerWebSocket<any>, error: unknown) => {
-						for (const handleError of errorHandlers) {
-							let response = handleError(
-								Object.assign(context, { error })
-							)
-							if (response instanceof Promise)
-								response = await response
+							for (const handleError of errorHandlers) {
+								let response = handleError(
+									Object.assign(context, { error })
+								)
+								if (response instanceof Promise)
+									response = await response
 
-							await handleResponse(ws, response)
+								await handleResponse(ws, response)
 
-							if (response) break
+								if (response) break
+							}
 						}
-					}
 
 				if (
 					server?.upgrade<any>(context.request, {

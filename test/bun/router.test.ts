@@ -246,7 +246,7 @@ describe('Bun router', () => {
 				.get('/router', () => 'OK')
 				.get('/static', 'OK')
 
-		const app = new Elysia({ name: 'main' }).use(asyncPlugin).listen(3000)
+		const app = new Elysia({ name: 'main' }).use(asyncPlugin).listen(0)
 
 		const [router, _static] = await Promise.all([
 			fetch(`http://localhost:${app.server?.port}/router`).then((x) =>

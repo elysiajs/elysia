@@ -1,30 +1,19 @@
-import { Elysia, t, ValidationError } from '../src'
-import { post, req } from '../test/utils'
+import Elysia, { NotFoundError, t } from '../src'
+import { req } from '../test/utils'
 
-let err: Error | undefined
-
-const app = new Elysia()
-	.post('/', ({ body }) => body, {
-		headers: t.Object({
-			year: t.Numeric({ minimum: 1900, maximum: 2160 })
-		}),
-		transform({ headers }) {
-			console.log(headers)
-		},
-		error({ code, error }) {
-			console.log(code)
-			switch (code) {
-				case 'VALIDATION':
-					err = error
-			}
-		}
+const route = new Elysia().get('/', ({ query: { aid } }) => aid, {
+	query: t.Object({
+		aid: t
+			.Transform(t.String())
+			.Decode((value) => {
+				throw new NotFoundError('foo')
+			})
+			.Encode((value) => `1`)
 	})
-	.listen(3000)
+})
 
-await app.handle(
-	req('/', {
-		headers: {
-			year: '3000'
-		}
-	})
-)
+let response = await new Elysia({ aot: true })
+	.use(route)
+	.handle(req('/?aid=a'))
+
+console.log(response.status)

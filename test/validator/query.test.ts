@@ -982,7 +982,7 @@ describe('Query Validator', () => {
 					}
 				}
 			})
-			.listen(3000)
+			.listen(0)
 
 		await app.handle(req('?year=3000'))
 

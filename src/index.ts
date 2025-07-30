@@ -3622,6 +3622,7 @@ export default class Elysia<
 		instance.definitions = { ...this.definitions }
 		instance.inference = cloneInference(this.inference)
 		instance.extender = { ...this.extender }
+		instance.getServer = () => this.server
 
 		const sandbox = run(instance)
 		this.singleton = mergeDeep(this.singleton, instance.singleton) as any

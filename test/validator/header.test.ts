@@ -395,7 +395,7 @@ describe('Header Validator', () => {
 					}
 				}
 			})
-			.listen(3000)
+			.listen(0)
 
 		await app.handle(
 			req('/', {
