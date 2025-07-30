@@ -801,10 +801,21 @@ type ResolveMacroPropertyLike = {
 
 type ResolveMacroFnLike = (...v: any[]) => ResolveMacroPropertyLike
 
-type InnerMacroToContext<A> =
-	IsNever<A[keyof A]> extends false
-		? Exclude<Awaited<A[keyof A]>, AnyElysiaCustomStatusResponse | void>
-		: {}
+type MergeAllMacroContext<T> =
+	UnionToIntersection<T[keyof T]> extends infer O
+		? { [K in keyof O]: O[K] }
+		: never
+
+type UnionToIntersection<U> = (U extends any ? (x: U) => any : never) extends (
+	x: infer I
+) => any
+	? I
+	: never
+
+type ExtractMacroContext<A> =
+	IsNever<A> extends true
+		? {}
+		: Exclude<Awaited<A>, AnyElysiaCustomStatusResponse | void>
 
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
@@ -812,16 +823,18 @@ export type MacroToContext<
 	SelectedMacro extends MetadataBase['macro'] = {}
 > = {} extends SelectedMacro
 	? {}
-	: InnerMacroToContext<{
+	: MergeAllMacroContext<{
 			[key in keyof SelectedMacro as MacroFn[key] extends ResolveMacroFnLike
 				? key
 				: MacroFn[key] extends ResolveMacroPropertyLike
 					? true extends SelectedMacro[key]
 						? key
 						: never
-					: never]: ResolveResolutions<
-				// @ts-expect-error type is checked in key mapping
-				ReturnTypeIfPossible<MacroFn[key]>['resolve']
+					: never]: ExtractMacroContext<
+				ResolveResolutions<
+					// @ts-expect-error type is checked in key mapping
+					ReturnTypeIfPossible<MacroFn[key]>['resolve']
+				>
 			>
 		}>
 

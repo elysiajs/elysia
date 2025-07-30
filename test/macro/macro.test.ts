@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import Elysia, { error } from '../../src'
+import Elysia, { error, t } from '../../src'
 import { req } from '../utils'
 
 describe('Macro', () => {
@@ -856,5 +856,78 @@ describe('Macro', () => {
 		expect(b).toEqual({ name: 'hoshino' })
 		expect(c).toEqual({ name: 'none' })
 		expect(d).toEqual({ name: 'none' })
+	})
+
+	it('handle multiple macros in a route handler', async () => {
+		const app = new Elysia()
+			.macro({
+				a: {
+					resolve: () => ({ a: 'a' as const })
+				},
+				b: {
+					resolve: () => ({ b: 'b' as const })
+				},
+				c: (n: number) => ({
+					resolve: () => ({ c: n })
+				})
+			})
+			.get('/a', ({ a }) => ({ a }), {
+				a: true,
+				response: t.Object({ a: t.Literal('a') })
+			})
+			.get('/b', ({ b }) => ({ b }), {
+				b: true,
+				response: t.Object({ b: t.Literal('b') })
+			})
+			.get('/c', ({ a, b }) => ({ a, b }), {
+				a: true,
+				b: true,
+				response: t.Object({ a: t.Literal('a'), b: t.Literal('b') })
+			})
+			.get(
+				'/d',
+				({
+					a,
+					// @ts-expect-error Property `b` does not exist
+					b
+				}) => ({ a, b }),
+				{
+					a: true,
+					b: false,
+					response: t.Object({ a: t.Literal('a'), b: t.Undefined() })
+				}
+			)
+			.get(
+				'/e',
+				({
+					// @ts-expect-error Property `a` does not exist
+					a,
+					b,
+					c
+				}) => ({ a, b, c }),
+				{
+					b: true,
+					c: 10,
+					response: t.Object({
+						a: t.Undefined(),
+						b: t.Literal('b'),
+						c: t.Number()
+					})
+				}
+			)
+
+		const [a, b, c, d, e] = await Promise.all([
+			app.handle(req('/a')).then((x) => x.json()),
+			app.handle(req('/b')).then((x) => x.json()),
+			app.handle(req('/c')).then((x) => x.json()),
+			app.handle(req('/d')).then((x) => x.json()),
+			app.handle(req('/e')).then((x) => x.json())
+		])
+
+		expect(a).toEqual({ a: 'a' })
+		expect(b).toEqual({ b: 'b' })
+		expect(c).toEqual({ a: 'a', b: 'b' })
+		expect(d).toEqual({ a: 'a', b: undefined })
+		expect(e).toEqual({ a: undefined, b: 'b', c: 10 })
 	})
 })
