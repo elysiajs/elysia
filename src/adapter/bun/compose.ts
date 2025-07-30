@@ -35,7 +35,11 @@ const createContext = (
 		`s=u.indexOf('/',${standardHostname ? 11 : 7}),` +
 		`qi=u.indexOf('?', s + 1)\n`
 
-	const needsQuery = inference.query || !!route.hooks.query || !!route.standaloneValidators?.find((x) => x.query)
+	const needsQuery =
+		inference.query ||
+		!!route.hooks.query ||
+		!!route.standaloneValidators?.find((x) => x.query) ||
+		app.event.request?.length
 
 	if (needsQuery) fnLiteral += getQi
 
@@ -124,7 +128,10 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 
 	fnLiteral += `${app.event.request?.find(isAsync) ? 'async' : ''} function map(request){`
 
-	const needsQuery = inference.query || !!route.hooks.query || !!route.standaloneValidators?.find((x) => x.query)
+	const needsQuery =
+		inference.query ||
+		!!route.hooks.query ||
+		!!route.standaloneValidators?.find((x) => x.query)
 
 	// inference.query require declaring const 'qi'
 	if (hasTrace || needsQuery || app.event.request?.length) {

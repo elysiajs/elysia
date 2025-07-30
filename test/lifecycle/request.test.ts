@@ -84,12 +84,15 @@ describe('On Request', () => {
 	it('has qi', async () => {
 		let queryIndex
 
-		// @ts-ignore
-		const app = new Elysia().onRequest(({ qi }) => {
-			queryIndex = qi
-		})
+		const app = new Elysia()
+			// @ts-ignore
+			.onRequest(({ qi }) => {
+				queryIndex = qi
+			})
+			.get('/', () => 'ok')
+			.listen(0)
 
-		await app.handle(req('/'))
+		await fetch(`http://localhost:${app.server?.port}`)
 
 		expect(queryIndex).toBeTypeOf('number')
 	})
