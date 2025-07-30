@@ -29,6 +29,15 @@ export type ElysiaErrors =
 	| ValidationError
 	| InvalidCookieSignature
 
+const emptyHttpStatus = {
+	101: undefined,
+	204: undefined,
+	205: undefined,
+	304: undefined,
+	307: undefined,
+	308: undefined
+} as const
+
 export class ElysiaCustomStatusResponse<
 	const in out Code extends number | keyof StatusMap,
 	const in out T = Code extends keyof InvertedStatusMap
@@ -51,7 +60,11 @@ export class ElysiaCustomStatusResponse<
 
 		// @ts-ignore Trust me bro
 		this.code = StatusMap[code] ?? code
-		this.response = res
+
+		if (code in emptyHttpStatus) this.response = undefined as any
+		else
+			// @ts-ignore Trust me bro
+			this.response = res
 	}
 }
 
