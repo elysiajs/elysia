@@ -80,4 +80,17 @@ describe('On Request', () => {
 
 		expect(order).toEqual(['A', 'B'])
 	})
+
+	it('has qi', async () => {
+		let queryIndex
+
+		// @ts-ignore
+		const app = new Elysia().onRequest(({ qi }) => {
+			queryIndex = qi
+		})
+
+		await app.handle(req('/'))
+
+		expect(queryIndex).toBeTypeOf('number')
+	})
 })
