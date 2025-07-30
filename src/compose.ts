@@ -368,6 +368,17 @@ const isGenerator = (v: Function | HookContainer) => {
 	)
 }
 
+const coerceTransformDecodeError = (
+	fnLiteral: string,
+	type: string,
+	value = `c.${type}`
+) =>
+	`try{${fnLiteral}}catch(error){` +
+	`if(error.constructor.name === 'TransformDecodeError'){` +
+	`c.set.status=422\n` +
+	`throw new ValidationError('${type}',validator.${type},${value})}` +
+	`}`
+
 export const composeHandler = ({
 	app,
 	path,
@@ -1217,7 +1228,10 @@ export const composeHandler = ({
 					'}'
 
 			if (validator.headers.hasTransform)
-				fnLiteral += `c.headers=validator.headers.Decode(c.headers)\n`
+				fnLiteral += coerceTransformDecodeError(
+					`c.headers=validator.headers.Decode(c.headers)\n`,
+					'headers'
+				)
 
 			if (validator.headers.isOptional) fnLiteral += '}'
 		}
@@ -1249,7 +1263,10 @@ export const composeHandler = ({
 					'}'
 
 			if (validator.params.hasTransform)
-				fnLiteral += `c.params=validator.params.Decode(c.params)\n`
+				fnLiteral += coerceTransformDecodeError(
+					`c.params=validator.params.Decode(c.params)\n`,
+					'params'
+				)
 		}
 
 		if (validator.query) {
@@ -1289,7 +1306,10 @@ export const composeHandler = ({
 					`}`
 
 			if (validator.query.hasTransform)
-				fnLiteral += `c.query=validator.query.Decode(Object.assign({},c.query))\n`
+				fnLiteral += coerceTransformDecodeError(
+					`c.query=validator.query.Decode(Object.assign({},c.query))\n`,
+					'query'
+				)
 
 			if (validator.query.isOptional) fnLiteral += `}`
 		}
@@ -1388,7 +1408,10 @@ export const composeHandler = ({
 			}
 
 			if (validator.body.hasTransform)
-				fnLiteral += `if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`
+				fnLiteral += coerceTransformDecodeError(
+					`if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`,
+					'body'
+				)
 
 			if (hasUnion && validator.body.schema.anyOf?.length) {
 				const iterator = Object.values(
@@ -1529,9 +1552,11 @@ export const composeHandler = ({
 			}
 
 			if (cookieValidator.hasTransform)
-				fnLiteral +=
+				fnLiteral += coerceTransformDecodeError(
 					`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue)))` +
-					`c.cookie[key].value=value\n`
+						`c.cookie[key].value=value\n`,
+					'cookie'
+				)
 
 			if (cookieValidator.isOptional) fnLiteral += `}`
 		}

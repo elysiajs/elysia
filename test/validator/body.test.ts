@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, t, ValidationError } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, upload } from '../utils'
@@ -1114,5 +1114,32 @@ describe('Body Validator', () => {
 		)
 
 		expect(res.status).toBe(422)
+	})
+
+	it('handle coerce TransformDecodeError', async () => {
+		let err: Error | undefined
+
+		const app = new Elysia()
+			.post('/', ({ body }) => body, {
+				body: t.Object({
+					year: t.Numeric({ minimum: 1900, maximum: 2160 })
+				}),
+				error({ code, error }) {
+					switch (code) {
+						case 'VALIDATION':
+							err = error
+					}
+				}
+			})
+			.listen(3000)
+
+		await app
+			.handle(
+				post('/', {
+					year: '3000'
+				})
+			)
+
+		expect(err instanceof ValidationError).toBe(true)
 	})
 })

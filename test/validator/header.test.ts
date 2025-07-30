@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, t, ValidationError } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -378,5 +378,33 @@ describe('Header Validator', () => {
 		])
 
 		expect(res).toEqual([{}, { id: 1 }])
+	})
+
+	it('handle coerce TransformDecodeError', async () => {
+		let err: Error | undefined
+
+		const app = new Elysia()
+			.get('/', ({ body }) => body, {
+				headers: t.Object({
+					year: t.Numeric({ minimum: 1900, maximum: 2160 })
+				}),
+				error({ code, error }) {
+					switch (code) {
+						case 'VALIDATION':
+							err = error
+					}
+				}
+			})
+			.listen(3000)
+
+		await app.handle(
+			req('/', {
+				headers: {
+					year: '3000'
+				}
+			})
+		)
+
+		expect(err instanceof ValidationError).toBe(true)
 	})
 })

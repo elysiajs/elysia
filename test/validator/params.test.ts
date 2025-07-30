@@ -1,4 +1,4 @@
-import { Elysia, t } from '../../src'
+import { Elysia, t, ValidationError } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -262,5 +262,27 @@ describe('Params Validator', () => {
 				'kurokami/sucorn'
 			])
 		})
+	})
+
+	it('handle coerce TransformDecodeError', async () => {
+		let err: Error | undefined
+
+		const app = new Elysia()
+			.get('/id/:id', ({ body }) => body, {
+				params: t.Object({
+					year: t.Numeric({ minimum: 1900, maximum: 2160 })
+				}),
+				error({ code, error }) {
+					switch (code) {
+						case 'VALIDATION':
+							err = error
+					}
+				}
+			})
+			.listen(3000)
+
+		await app.handle(req('/id/3000'))
+
+		expect(err instanceof ValidationError).toBe(true)
 	})
 })

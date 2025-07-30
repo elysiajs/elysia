@@ -48,7 +48,8 @@ export const post = (path: string, body?: string | Record<string, any>) =>
 		? new Request(`http://localhost${path}`, {
 				method: 'POST',
 				headers: {
-					'Content-Type': 'text/plain'
+					'Content-Type': 'text/plain',
+					'Content-Length': String(Buffer.byteLength(body))
 				},
 				body
 			})
@@ -56,7 +57,10 @@ export const post = (path: string, body?: string | Record<string, any>) =>
 				method: 'POST',
 				headers: body
 					? {
-							'Content-Type': 'application/json'
+							'Content-Type': 'application/json',
+							'Content-Length': String(
+								Buffer.byteLength(JSON.stringify(body))
+							)
 						}
 					: {},
 				body: body ? JSON.stringify(body) : body

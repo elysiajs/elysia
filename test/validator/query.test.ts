@@ -1,4 +1,4 @@
-import { Context, Elysia, t } from '../../src'
+import { Context, Elysia, t, ValidationError } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -965,5 +965,27 @@ describe('Query Validator', () => {
 			.then((x) => x.text())
 
 		expect(response).toEqual('2023-04-05T11:30:00.000Z')
+	})
+
+	it('handle coerce TransformDecodeError', async () => {
+		let err: Error | undefined
+
+		const app = new Elysia()
+			.get('/', ({ query }) => query, {
+				query: t.Object({
+					year: t.Numeric({ minimum: 1900, maximum: 2160 })
+				}),
+				error({ code, error }) {
+					switch (code) {
+						case 'VALIDATION':
+							err = error
+					}
+				}
+			})
+			.listen(3000)
+
+		await app.handle(req('?year=3000'))
+
+		expect(err instanceof ValidationError).toBe(true)
 	})
 })
