@@ -3622,7 +3622,7 @@ export default class Elysia<
 		instance.definitions = { ...this.definitions }
 		instance.inference = cloneInference(this.inference)
 		instance.extender = { ...this.extender }
-		instance.getServer = () => this.server
+		instance.getServer = () => this.getServer()
 
 		const sandbox = run(instance)
 		this.singleton = mergeDeep(this.singleton, instance.singleton) as any
@@ -6707,7 +6707,7 @@ export default class Elysia<
 	 * ```
 	 */
 	stop = async (closeActiveConnections?: boolean) => {
-		await this['~adapter'].stop(this, closeActiveConnections)
+		await this['~adapter'].stop?.(this, closeActiveConnections)
 
 		return this
 	};
