@@ -14,9 +14,8 @@ export const handleFile = (
 	const size = response.size
 
 	if (
-		(!set && size) ||
-		(size &&
-			set &&
+		size ||
+		(set &&
 			set.status !== 206 &&
 			set.status !== 304 &&
 			set.status !== 412 &&

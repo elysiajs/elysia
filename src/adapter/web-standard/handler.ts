@@ -17,6 +17,30 @@ import { ElysiaCustomStatusResponse } from '../../error'
 import type { Context } from '../../context'
 import type { AnyLocalHook } from '../../types'
 
+import { lookup } from 'mime-types'
+
+const handleElysiaFile = (
+	file: ElysiaFile,
+	set: Context['set'] = {
+		headers: {}
+	}
+) => {
+	const path = file.path
+	const contentType = lookup(path.slice(path.lastIndexOf('.')) + '')
+	if (contentType) set.headers['content-type'] = contentType
+
+	if (file.stats)
+		return file.stats!.then((stat) => {
+			const size = stat.size as number
+
+			set.headers['content-range'] = `bytes 0-${size - 1}/${size}`
+
+			return handleFile(file.value as any, set)
+		}) as any
+
+	return handleFile(file.value as any, set)
+}
+
 export const mapResponse = (
 	response: unknown,
 	set: Context['set'],
@@ -36,8 +60,8 @@ export const mapResponse = (
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File)
-			
+				return handleElysiaFile(response as ElysiaFile, set)
+
 			case 'File':
 				return handleFile(response as File, set as any)
 
@@ -209,7 +233,7 @@ export const mapEarlyResponse = (
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File)
+				return handleElysiaFile(response as ElysiaFile, set)
 
 			case 'File':
 				return handleFile(response as File, set as any)
@@ -349,7 +373,7 @@ export const mapEarlyResponse = (
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File)
+				return handleElysiaFile(response as ElysiaFile, set)
 
 			case 'File':
 				return handleFile(response as File, set as any)
@@ -508,7 +532,7 @@ export const mapCompactResponse = (
 			})
 
 		case 'ElysiaFile':
-			return handleFile((response as ElysiaFile).value as File)
+			return handleElysiaFile(response as ElysiaFile)
 
 		case 'File':
 			return handleFile(response as File)

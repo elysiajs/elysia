@@ -185,12 +185,14 @@
 	"dependencies": {
 		"cookie": "^1.0.2",
 		"exact-mirror": "0.1.3",
-		"fast-decode-uri-component": "^1.0.1"
+		"fast-decode-uri-component": "^1.0.1",
+		"mime-types": "^3.0.1"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.2.16",
 		"@types/cookie": "^1.0.0",
 		"@types/fast-decode-uri-component": "^1.0.0",
+		"@types/mime-types": "^3.0.1",
 		"@typescript-eslint/eslint-plugin": "^8.30.1",
 		"@typescript-eslint/parser": "^8.30.1",
 		"eslint": "^9.24.0",
