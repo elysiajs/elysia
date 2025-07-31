@@ -29,7 +29,7 @@ export interface ElysiaAdapter {
 	 * app.stop(true) // Abruptly any requests inflight
 	 * ```
 	 */
-	stop(app: AnyElysia, closeActiveConnections?: boolean): Promise<void>
+	stop?(app: AnyElysia, closeActiveConnections?: boolean): Promise<void>
 	isWebStandard?: boolean
 	handler: {
 		/**

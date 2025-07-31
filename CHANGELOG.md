@@ -1,5 +1,6 @@
 # 1.3.8 - 31 Jul 2025
 Improvement:
+- ElysiaFile doesn't inherits `set.headers` eg. cors
 - [Web Standard] automatically set `Content-Type`, `Content-Range` of ElysiaFile
 
 Bug fix:
@@ -7,6 +8,7 @@ Bug fix:
 - [#1306](https://github.com/elysiajs/elysia/pull/1306) preserve type narrowing in getSchemaValidator
 - add `set` to `handleFile` when file is `ElysiaFile`
 - [Web Standard] inherit set.status for `ElysiaFile`
+- make `ElysiaAdapter.stop` optional
 
 # 1.3.7 - 31 Jul 2025
 Bug fix:

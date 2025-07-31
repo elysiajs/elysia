@@ -17,8 +17,6 @@ import { ElysiaCustomStatusResponse } from '../../error'
 import type { Context } from '../../context'
 import type { AnyLocalHook } from '../../types'
 
-import { lookup } from 'mime-types'
-
 const handleElysiaFile = (
 	file: ElysiaFile,
 	set: Context['set'] = {
@@ -26,7 +24,8 @@ const handleElysiaFile = (
 	}
 ) => {
 	const path = file.path
-	const contentType = lookup(path.slice(path.lastIndexOf('.')) + '')
+	// @ts-ignore
+	const contentType = mime[path.slice(path.lastIndexOf('.') + 1)]
 	if (contentType) set.headers['content-type'] = contentType
 
 	if (
@@ -39,8 +38,10 @@ const handleElysiaFile = (
 		return file.stats!.then((stat) => {
 			const size = stat.size as number
 
-			if (size !== undefined)
+			if (size !== undefined) {
 				set.headers['content-range'] = `bytes 0-${size - 1}/${size}`
+				set.headers['content-length'] = size
+			}
 
 			return handleFile(file.value as any, set)
 		}) as any
