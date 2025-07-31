@@ -70,6 +70,7 @@ export const handleFile = (
 		}
 
 		return new Response(response as Blob, {
+			status: set?.status as number ?? 200,
 			headers: {
 				'accept-ranges': 'bytes',
 				'content-range': `bytes 0-${size - 1}/${size}`,
@@ -78,7 +79,7 @@ export const handleFile = (
 		})
 	}
 
-	return new Response(response as Blob)
+	return new Response(response as Blob, set)
 }
 
 export const parseSetCookies = (headers: Headers, setCookie: string[]) => {
