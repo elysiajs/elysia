@@ -2454,3 +2454,28 @@ type a = keyof {}
 {
 	new Elysia().onAfterHandle({ as: 'scoped' }, ({ response }) => response)
 }
+
+{
+	new Elysia()
+		.macro({
+			a: {
+				resolve: () => ({ a: 'a' as const })
+			},
+			b: {
+				resolve: () => ({ b: 'b' as const })
+			}
+		})
+		.get(
+			'/test',
+			(
+				{
+					a,
+					b
+				} /* Neither `a` or `b` exist at the type level, even though they do exist at runtime */
+			) => ({ a, b }),
+			{
+				a: true,
+				b: true
+			}
+		)
+}

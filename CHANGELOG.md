@@ -1,3 +1,8 @@
+# 1.3.8 - 31 Jul 2025
+Bug fix:
+- [#1316](https://github.com/elysiajs/elysia/pull/1316) fix context type when multiple macros are selected
+- [#1306](https://github.com/elysiajs/elysia/pull/1306) preserve type narrowing in getSchemaValidator
+
 # 1.3.7 - 31 Jul 2025
 Bug fix:
 - [#1314](https://github.com/elysiajs/elysia/issues/1314) coerce TransformDecodeError to ValidationError
