@@ -12,74 +12,64 @@ export const handleFile = (
 		return response.then((res) => handleFile(res, set)) as any
 
 	const size = response.size
-
-	if (
+	const immutable =
 		set &&
 		(set.status === 206 ||
 			set.status === 304 ||
 			set.status === 412 ||
 			set.status === 416)
-	) {
-		delete set.headers['content-length']
-		delete set.headers['accept-ranges']
-	}
 
-	if (
-		(!set && size) ||
-		(size &&
-			set &&
-			set.status !== 206 &&
-			set.status !== 304 &&
-			set.status !== 412 &&
-			set.status !== 416)
-	) {
-		if (set) {
-			if (set.headers instanceof Headers) {
-				let setHeaders: Record<string, any> = {
-					'accept-ranges': 'bytes',
-					'content-range': `bytes 0-${size - 1}/${size}`,
-					'transfer-encoding': 'chunked'
-				}
-
-				if (hasHeaderShorthand)
-					setHeaders = (set.headers as unknown as Headers).toJSON()
-				else {
-					setHeaders = {}
-					for (const [key, value] of set.headers.entries())
-						if (key in set.headers) setHeaders[key] = value
-				}
-
-				return new Response(response as Blob, {
-					status: set.status as number,
-					headers: setHeaders
-				})
+	const defaultHeader = immutable
+		? {
+				'transfer-encoding': 'chunked'
 			}
+		: ({
+				'accept-ranges': 'bytes',
+				'content-range': size
+					? `bytes 0-${size - 1}/${size}`
+					: undefined,
+				'transfer-encoding': 'chunked'
+			} as any)
 
-			if (isNotEmpty(set.headers))
-				return new Response(response as Blob, {
-					status: set.status as number,
-					headers: Object.assign(
-						{
-							'accept-ranges': 'bytes',
-							'content-range': `bytes 0-${size - 1}/${size}`,
-							'transfer-encoding': 'chunked'
-						} as any,
-						set.headers
-					)
-				})
+	if (!set && !size) return new Response(response as Blob)
+
+	if (!set)
+		return new Response(response as Blob, {
+			headers: defaultHeader
+		})
+
+	if (set.headers instanceof Headers) {
+		let setHeaders: Record<string, any> = defaultHeader
+
+		if (hasHeaderShorthand)
+			setHeaders = (set.headers as unknown as Headers).toJSON()
+		else {
+			setHeaders = {}
+			for (const [key, value] of set.headers.entries())
+				if (key in set.headers) setHeaders[key] = value
+		}
+
+		if (immutable) {
+			delete set.headers['content-length']
+			delete set.headers['accept-ranges']
 		}
 
 		return new Response(response as Blob, {
-			status: set?.status as number ?? 200,
-			headers: {
-				'accept-ranges': 'bytes',
-				'content-range': `bytes 0-${size - 1}/${size}`,
-				'transfer-encoding': 'chunked'
-			}
+			status: set.status as number,
+			headers: setHeaders
 		})
 	}
 
-	return new Response(response as Blob, set)
+	if (isNotEmpty(set.headers))
+		return new Response(response as Blob, {
+			status: set.status as number,
+			headers: Object.assign(defaultHeader, set.headers)
+		})
+
+	return new Response(response as Blob, {
+		status: set.status as number,
+		headers: defaultHeader
+	})
 }
 
 export const parseSetCookies = (headers: Headers, setCookie: string[]) => {

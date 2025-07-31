@@ -31,7 +31,6 @@ const handleElysiaFile = (
 
 	if (
 		file.stats &&
-		set &&
 		set.status !== 206 &&
 		set.status !== 304 &&
 		set.status !== 412 &&

@@ -387,7 +387,7 @@ describe('Web Standard - Map Response', () => {
 		expect(response).toBeInstanceOf(Response)
 		expect(response.headers.get('accept-ranges')).toBeNull()
 		expect(response.headers.get('content-range')).toBeNull()
-		expect(response.status).toBe(200)
+		expect(response.status).toBe(304)
 	})
 
 	it('map formdata', async () => {
