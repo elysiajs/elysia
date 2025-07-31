@@ -29,11 +29,19 @@ const handleElysiaFile = (
 	const contentType = lookup(path.slice(path.lastIndexOf('.')) + '')
 	if (contentType) set.headers['content-type'] = contentType
 
-	if (file.stats)
+	if (
+		file.stats &&
+		set &&
+		set.status !== 206 &&
+		set.status !== 304 &&
+		set.status !== 412 &&
+		set.status !== 416
+	)
 		return file.stats!.then((stat) => {
 			const size = stat.size as number
 
-			set.headers['content-range'] = `bytes 0-${size - 1}/${size}`
+			if (size !== undefined)
+				set.headers['content-range'] = `bytes 0-${size - 1}/${size}`
 
 			return handleFile(file.value as any, set)
 		}) as any

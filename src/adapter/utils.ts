@@ -14,8 +14,20 @@ export const handleFile = (
 	const size = response.size
 
 	if (
-		size ||
-		(set &&
+		set &&
+		(set.status === 206 ||
+			set.status === 304 ||
+			set.status === 412 ||
+			set.status === 416)
+	) {
+		delete set.headers['content-length']
+		delete set.headers['accept-ranges']
+	}
+
+	if (
+		(!set && size) ||
+		(size &&
+			set &&
 			set.status !== 206 &&
 			set.status !== 304 &&
 			set.status !== 412 &&
