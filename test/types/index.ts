@@ -962,9 +962,11 @@ app.group(
 // ? Inherits plugin instance prefix path
 {
 	const pluginPrefixApp = new Elysia({ prefix: '/app' }).get('/test', () => 'hello')
-	const appWithPrefix = new Elysia({ prefix: '/api' }).use([pluginPrefixApp])
 
-	expectTypeOf<typeof appWithPrefix['~Routes']>().toEqualTypeOf<{
+	const appWithArrayOfPlugin = new Elysia({ prefix: '/api' }).use([pluginPrefixApp])
+	const appWithPlugin = new Elysia({ prefix: '/api' }).use(pluginPrefixApp)
+	
+	expectTypeOf<typeof appWithArrayOfPlugin['~Routes']>().toEqualTypeOf<{
 		api: {
 			app: {
 				test: {
@@ -981,6 +983,7 @@ app.group(
 			},
 		}
 	}>()
+	expectTypeOf<typeof appWithArrayOfPlugin['~Routes']>().toEqualTypeOf<typeof appWithPlugin['~Routes']>()
 }
 
 // ? Inlining function callback don't repeat prefix
