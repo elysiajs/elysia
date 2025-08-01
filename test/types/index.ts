@@ -959,6 +959,30 @@ app.group(
 	}>()
 }
 
+// ? Inherits plugin instance prefix path
+{
+	const pluginPrefixApp = new Elysia({ prefix: '/app' }).get('/test', () => 'hello')
+	const appWithPrefix = new Elysia({ prefix: '/api' }).use([pluginPrefixApp])
+
+	expectTypeOf<typeof appWithPrefix['~Routes']>().toEqualTypeOf<{
+		api: {
+			app: {
+				test: {
+					get: {
+						body: unknown
+						headers: unknown
+						query: unknown
+						params: Record<never, string>
+						response: {
+							200: string
+						}
+					}
+				}
+			},
+		}
+	}>()
+}
+
 // ? Inlining function callback don't repeat prefix
 {
 	const test = (app: Elysia) =>
