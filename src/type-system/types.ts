@@ -1,6 +1,5 @@
 import type {
 	Kind,
-	NumberOptions,
 	ObjectOptions,
 	SchemaOptions,
 	StaticDecode,
@@ -12,8 +11,6 @@ import type {
 } from '@sinclair/typebox'
 import { ValueError } from '@sinclair/typebox/errors'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
-
-import { ElysiaType } from './index'
 
 import { ElysiaFormData } from '../utils'
 import type { CookieOptions } from '../cookies'

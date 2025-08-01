@@ -381,7 +381,10 @@ export const ElysiaType = {
 			.Encode((value) => value) as unknown as TUnsafe<File[]>,
 
 	Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
-		t.Union([schema, t.Null()], options),
+		t.Union([schema, t.Null()], {
+			...options,
+			nullable: true
+		}),
 
 	/**
 	 * Allow Optional, Nullable and Undefined
