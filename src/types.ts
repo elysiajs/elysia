@@ -2020,7 +2020,10 @@ export type HTTPHeaders = Record<string, string | number> & {
 	'x-ua-compatible'?: string
 }
 
-export type JoinPath<A extends string, B extends string> = `${A}${B}`
+export type JoinPath<
+	A extends string,
+	B extends string
+> = B extends `/${string}` ? `${A}${B}` : `${A}/${B}`
 
 export type UnwrapTypeModule<Module extends TModule<any, any>> =
 	Module extends TModule<infer Type extends TProperties, any> ? Type : {}

@@ -369,13 +369,17 @@ export default class Elysia<
 		}
 
 		this.config = {
-			prefix: '' as any,
 			aot: env.ELYSIA_AOT !== 'false',
 			nativeStaticResponse: true,
 			systemRouter: true,
 			encodeSchema: true,
 			normalize: true,
 			...config,
+			prefix: config.prefix
+				? config.prefix.charCodeAt(0) === 47
+					? config.prefix
+					: `/${config.prefix}`
+				: (undefined as any),
 			cookie: {
 				path: '/',
 				...config?.cookie
@@ -3109,7 +3113,8 @@ export default class Elysia<
 
 		Object.values(instance.router.history).forEach(
 			({ method, path, handler, hooks, standaloneValidators }) => {
-				path = (isSchema ? '' : this.config.prefix) + prefix + path
+				path =
+					(isSchema ? '' : (this.config.prefix ?? '')) + prefix + path
 
 				if (isSchema) {
 					const hook = schemaOrRun
