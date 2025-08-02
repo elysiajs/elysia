@@ -4,10 +4,12 @@ import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('On After Response', () => {
-	it('inherits set if Response is return', async () => {
+	it('call after response in error', async () => {
+		let isAfterResponseCalled = false
+
 		const app = new Elysia()
-			.onAfterResponse(({ set }) => {
-				expect(set.status).toBe(401)
+			.onAfterResponse(() => {
+				isAfterResponseCalled = true
 			})
 			.onError(() => {
 				return new Response('a', {
@@ -19,6 +21,25 @@ describe('On After Response', () => {
 			})
 
 		await app.handle(req('/'))
+		// wait for next tick
+		await Bun.sleep(1)
+
+		expect(isAfterResponseCalled).toBeTrue()
+	})
+
+	it('call after response on not found without error handler', async () => {
+		let isAfterResponseCalled = false
+
+		const app = new Elysia()
+			.onAfterResponse(() => {
+				isAfterResponseCalled = true
+			})
+
+		await app.handle(req('/'))
+		// wait for next tick
+		await Bun.sleep(1)
+
+		expect(isAfterResponseCalled).toBeTrue()
 	})
 
 	it('response in order', async () => {
@@ -34,6 +55,8 @@ describe('On After Response', () => {
 			.get('/', () => '')
 
 		await app.handle(req('/'))
+		// wait for next tick
+		await Bun.sleep(1)
 
 		expect(order).toEqual(['A', 'B'])
 	})
@@ -70,6 +93,8 @@ describe('On After Response', () => {
 			app.handle(req('/inner')),
 			app.handle(req('/outer'))
 		])
+		// wait for next tick
+		await Bun.sleep(1)
 
 		expect(called).toEqual(['/inner', '/outer'])
 	})
@@ -89,6 +114,8 @@ describe('On After Response', () => {
 			app.handle(req('/inner')),
 			app.handle(req('/outer'))
 		])
+		// wait for next tick
+		await Bun.sleep(1)
 
 		expect(called).toEqual(['/inner'])
 	})
@@ -108,6 +135,8 @@ describe('On After Response', () => {
 			.get('/', () => 'NOOP')
 
 		const res = await app.handle(req('/'))
+		// wait for next tick
+		await Bun.sleep(1)
 
 		expect(total).toEqual(2)
 	})

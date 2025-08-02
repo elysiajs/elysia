@@ -372,7 +372,8 @@ const coerceTransformDecodeError = (
 	fnLiteral: string,
 	type: string,
 	value = `c.${type}`
-) => `try{${fnLiteral}}catch(error){` +
+) =>
+	`try{${fnLiteral}}catch(error){` +
 	`if(error.constructor.name === 'TransformDecodeError'){` +
 	`c.set.status=422\n` +
 	`throw error.error ?? new ValidationError('${type}',validator.${type},${value})}` +
@@ -427,7 +428,6 @@ export const composeHandler = ({
 	}
 
 	const handle = isHandleFn ? `handler(c)` : `handler`
-	const hasAfterResponse = !!hooks.afterResponse?.length
 
 	const hasTrace = !!hooks.trace?.length
 	let fnLiteral = ''
@@ -1981,30 +1981,29 @@ export const composeHandler = ({
 	if (!maybeAsync && hooks.error?.length) fnLiteral += '})()'
 	fnLiteral += '}'
 
-	if (hasAfterResponse || hasTrace) {
-		fnLiteral += `finally{ `
+	if (hooks.afterResponse?.length || hasTrace) {
+		const prefix = hooks.afterResponse?.some(isAsync) ? 'async ' : ''
 
-		if (!maybeAsync) fnLiteral += ';(async()=>{'
+		fnLiteral += `finally{ ` + `setImmediate(${prefix}()=>{`
 
 		const reporter = report('afterResponse', {
 			total: hooks.afterResponse?.length
 		})
 
-		if (hasAfterResponse && hooks.afterResponse) {
+		if (hooks.afterResponse?.length && hooks.afterResponse) {
 			for (let i = 0; i < hooks.afterResponse.length; i++) {
 				const endUnit = reporter.resolveChild(
 					hooks.afterResponse[i].fn.name
 				)
-				fnLiteral += `\nawait e.afterResponse[${i}](c)\n`
+				const prefix = isAsync(hooks.afterResponse[i]) ? 'await ' : ''
+				fnLiteral += `\n${prefix}e.afterResponse[${i}](c)\n`
 				endUnit()
 			}
 		}
 
 		reporter.resolve()
 
-		if (!maybeAsync) fnLiteral += '})()'
-
-		fnLiteral += `}`
+		fnLiteral += '})' + `}`
 	}
 
 	const adapterVariables = adapter.inject
@@ -2229,11 +2228,6 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
 
-	const error404 = adapter.error404(
-		!!app.event.request?.length,
-		!!app.event.error?.length
-	)
-
 	const hasTrace = app.event.trace?.length
 
 	let fnLiteral = ''
@@ -2245,6 +2239,26 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		: `const route=router.find(r.method,p)`
 
 	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
+
+	let afterResponse = ''
+	if (app.event.afterResponse?.length) {
+		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
+		afterResponse += `\nsetImmediate(${prefix}()=>{`
+
+		for (let i = 0; i < app.event.afterResponse.length; i++) {
+			const fn = app.event.afterResponse[i].fn
+
+			afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}afterResponse[${i}](c)\n`
+		}
+
+		afterResponse += `})\n`
+	}
+
+	const error404 = adapter.error404(
+		!!app.event.request?.length,
+		!!app.event.error?.length,
+		afterResponse
+	)
 
 	findDynamicRoute += error404.code
 
@@ -2321,6 +2335,9 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 
 	if (app.event.request?.length)
 		fnLiteral += `const onRequest=app.event.request.map(x=>x.fn)\n`
+
+	if (app.event.afterResponse?.length)
+		fnLiteral += `const afterResponse=app.event.afterResponse.map(x=>x.fn)\n`
 
 	fnLiteral += error404.declare
 
@@ -2419,6 +2436,30 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		}
 	})
 
+	let afterResponse = ''
+	if (hooks.afterResponse?.length) {
+		const prefix = hooks.afterResponse.some(isAsync) ? 'async' : ''
+		afterResponse += `\nsetImmediate(${prefix}()=>{`
+
+		const reporter = report('afterResponse', {
+			total: hooks.afterResponse?.length,
+			name: 'context'
+		})
+
+		for (let i = 0; i < hooks.afterResponse.length; i++) {
+			const fn = hooks.afterResponse[i].fn
+			const endUnit = reporter.resolveChild(fn.name)
+
+			afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}e.afterResponse[${i}](c)\n`
+
+			endUnit()
+		}
+
+		afterResponse += `})\n`
+
+		reporter.resolve()
+	}
+
 	fnLiteral +=
 		`const set=context.set\n` +
 		`let _r\n` +
@@ -2491,6 +2532,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){\n` +
 		`if(error.error)error=error.error\n` +
 		`set.status=error.status??422\n` +
+		afterResponse +
 		adapter.validationError +
 		`\n}\n`
 
@@ -2530,7 +2572,9 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 	mapResponseReporter.resolve()
 
-	fnLiteral += `\nreturn mapResponse(${saveResponse}error,set${adapter.mapResponseContext})}`
+	fnLiteral +=
+		afterResponse +
+		`\nreturn mapResponse(${saveResponse}error,set${adapter.mapResponseContext})}`
 
 	const mapFn = (x: Function | HookContainer) =>
 		typeof x === 'function' ? x : x.fn

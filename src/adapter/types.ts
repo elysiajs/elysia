@@ -120,7 +120,8 @@ export interface ElysiaAdapter {
 		parameters?: string
 		error404(
 			hasEventHook: boolean,
-			hasErrorHook: boolean
+			hasErrorHook: boolean,
+			afterResponseHandler?: string
 		): {
 			declare: string
 			code: string

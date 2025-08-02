@@ -1,3 +1,4 @@
+import { mapEarlyResponse } from './handler'
 import { sucrose, type Sucrose } from '../../sucrose'
 import { createHoc, createOnRequestHandler, isAsync } from '../../compose'
 
@@ -7,7 +8,6 @@ import { ELYSIA_TRACE } from '../../trace'
 
 import type { AnyElysia } from '../..'
 import type { InternalRoute } from '../../types'
-import { mapEarlyResponse } from './handler'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''

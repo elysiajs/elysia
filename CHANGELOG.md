@@ -2,6 +2,10 @@
 Bug fix:
 - [#459](https://github.com/elysiajs/elysia/issues/459) route prefix should give type error when prefix is not start with '/'
 - [#669](https://github.com/elysiajs/elysia/issues/669) add nullable field to t.Nullable for OpenAPI 3.0 spec
+- [#713](https://github.com/elysiajs/elysia/issues/713) NotFoundError doesn't call onAfterResponse hook
+
+Change:
+- afterResponse now call after response by scheduling setImmediate
 
 # 1.3.8 - 31 Jul 2025
 Improvement:
