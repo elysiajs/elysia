@@ -1727,7 +1727,7 @@ export type MergeElysiaInstances<
 			Routes &
 				(Prefix extends ``
 					? Current['~Routes']
-					: AddPrefix<Prefix, Current['~Routes']>)
+					: CreateEden<Prefix, Current['~Routes']>)
 		>
 	: Elysia<
 			Prefix,
