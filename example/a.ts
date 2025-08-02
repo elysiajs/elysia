@@ -1,24 +1,12 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
-let isAfterResponseCalled = false
-
-const app = new Elysia()
-	.onAfterResponse(() => {
-		isAfterResponseCalled = true
-		console.log('B')
+const app = new Elysia({ aot: false })
+	.headers({
+		'X-Powered-By': 'Elysia'
 	})
-	.onError(() => {
-		return new Response('a', {
-			status: 401,
-			headers: {
-				awd: 'b'
-			}
-		})
-	})
+	.get('/', () => 'Hello')
 	.listen(3000)
 
-await app.handle(req('/'))
-await Bun.sleep(1)
-
-console.log(isAfterResponseCalled)
+console.log(
+	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+)

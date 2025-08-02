@@ -232,7 +232,7 @@ describe('Dynamic Mode', () => {
 		expect(res3.status).toBe(200)
 	})
 
-	describe('handle local parse event', async () => {
+	it('handle local parse event', async () => {
 		const app = new Elysia({ aot: false }).post('/', (ctx) => ctx.body, {
 			parse: (ctx, contentType) => {
 				return contentType
@@ -251,7 +251,7 @@ describe('Dynamic Mode', () => {
 		expect(await res.text()).toBe('text/plain')
 	})
 
-	describe('it handle async resolve', async () => {
+	it('handle async resolve', async () => {
 		const app = new Elysia({ aot: false })
 			.resolve(() => status(418, 'Chocominto yorimo anata!'))
 			.post('/ruby-chan', () => 'Hai!')
@@ -260,5 +260,17 @@ describe('Dynamic Mode', () => {
 
 		expect(await res.text()).toBe('Chocominto yorimo anata!')
 		expect(res.status).toBe(418)
+	})
+
+	it('set default header', async () => {
+		const app = new Elysia({ aot: false })
+			.headers({
+				'X-Powered-By': 'Elysia'
+			})
+			.get('/', () => 'Hello')
+
+		const res = await app.handle(req('/'))
+
+		expect(res.headers.get('X-Powered-By')).toBe('Elysia')
 	})
 })

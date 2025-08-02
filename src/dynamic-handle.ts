@@ -46,6 +46,9 @@ const injectDefaultValues = (
 export const createDynamicHandler = (app: AnyElysia) => {
 	const { mapResponse, mapEarlyResponse } = app['~adapter'].handler
 
+	// @ts-ignore
+	const defaultHeader = app.setHeaders
+
 	return async (request: Request): Promise<Response> => {
 		const url = request.url,
 			s = url.indexOf('/', 11),
@@ -55,7 +58,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 		const set: Context['set'] = {
 			cookie: {},
 			status: 200,
-			headers: {}
+			headers: defaultHeader ? { ...defaultHeader } : {}
 		}
 
 		const context = Object.assign(
