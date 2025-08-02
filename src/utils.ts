@@ -1125,6 +1125,22 @@ export const supportPerMethodInlineHandler = (() => {
 	return true
 })()
 
+/**
+ * Return a Server Sent Events (SSE) payload
+ *
+ * @example
+ * ```ts
+ * import { sse } from 'elysia'
+ *
+ * new Elysia()
+ *   .get('/sse', function*() {
+ *     yield sse('Hello, world!')
+ *     yield sse({
+ *       event: 'message',
+ *       data: { message: 'This is a JSON object' }
+ *     })
+ *   }
+ */
 export const sse = (
 	payload: string | SSEPayload
 ): SSEPayload & { toStream(): string } => {
