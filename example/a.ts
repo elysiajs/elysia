@@ -1,16 +1,8 @@
-import { Elysia, t, sse } from '../src'
+import { Elysia, t } from '../src'
 
-class Logger {
-    log(value: string) {
-        console.log(value)
-    }
-}
-
-new Elysia()
-    .decorate('logger', new Logger())
-    // ✅ defined from the previous line
-    .get('/', ({ logger }) => {
-        logger.log('hi')
-
-        return 'hi'
-    })
+const app = new Elysia({ precompile: true })
+	.mapResponse(({ set }) => {
+		set.headers['content-type'] = 'text/plain'
+	})
+	.get('/', new Response('ok'))
+	.listen(3000)

@@ -1832,7 +1832,7 @@ export const composeHandler = ({
 						`c.set.redirect||` +
 						`c.set.cookie)return mapResponse(${saveResponse}${handle}.clone(),c.set${
 							mapResponseContext
-						})` +
+						})\n` +
 						`else return ${handle}.clone()`
 					: `return ${handle}.clone()`
 

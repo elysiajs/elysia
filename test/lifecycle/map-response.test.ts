@@ -283,4 +283,18 @@ describe('Map Response', () => {
 
 		expect(response).toBe('ok')
 	})
+
+	it('handle set in mapResonse', async () => {
+		const app = new Elysia()
+			.mapResponse(({ set }) => {
+				set.headers['x-powered-by'] = 'Elysia'
+			})
+			.get('/', new Response('ok'))
+
+		const response = await app.handle(req('/'))
+		const value = await response.text()
+
+		expect(value).toBe('ok')
+		expect(response.headers.get('x-powered-by')).toBe('Elysia')
+	})
 })
