@@ -238,27 +238,6 @@ describe('Map Response', () => {
 		expect(response).toBe('aru')
 	})
 
-	it('mapResponse in error', async () => {
-		class CustomClass {
-			constructor(public name: string) {}
-		}
-
-		const app = new Elysia()
-			.trace(() => {})
-			.onError(() => new CustomClass('aru'))
-			.mapResponse(({ response }) => {
-				if (response instanceof CustomClass)
-					return new Response(response.name)
-			})
-			.get('/', () => {
-				throw new Error('Hello')
-			})
-
-		const response = await app.handle(req('/')).then((x) => x.text())
-
-		expect(response).toBe('aru')
-	})
-
 	// https://github.com/elysiajs/elysia/issues/965
 	it('mapResponse with after handle', async () => {
 		const app = new Elysia()

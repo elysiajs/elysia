@@ -1938,11 +1938,15 @@ export const composeHandler = ({
 
 			endUnit()
 
-			const mapResponseReporter = report('mapResponse', {
-				total: hooks.mapResponse?.length
-			})
 
 			if (hooks.mapResponse?.length) {
+				const mapResponseReporter = report('mapResponse', {
+					total: hooks.mapResponse?.length
+				})
+
+				// Mapped error Response
+				fnLiteral += 'let mep\n'
+
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					const mapResponse = hooks.mapResponse[i]
 
@@ -1952,14 +1956,14 @@ export const composeHandler = ({
 
 					fnLiteral +=
 						`c.response=er\n` +
-						`er=e.mapResponse[${i}](c)\n` +
-						`if(er instanceof Promise)er=await er\n`
+						`mep=e.mapResponse[${i}](c)\n` +
+						`if(mep instanceof Promise)er=await er\n` +
+						`if(mep!==undefined)er=mep\n`
 
 					endUnit()
 				}
+				mapResponseReporter.resolve()
 			}
-
-			mapResponseReporter.resolve()
 
 			fnLiteral += `er=mapEarlyResponse(er,set${mapResponseContext})\n`
 			fnLiteral += `if(er){`
@@ -2054,6 +2058,8 @@ export const composeHandler = ({
 
 	fnLiteral = init + fnLiteral + '}'
 	init = ''
+
+	// console.log(fnLiteral)
 
 	try {
 		return Function(

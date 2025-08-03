@@ -1,8 +1,20 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const app = new Elysia({ precompile: true })
-	.mapResponse(({ set }) => {
-		set.headers['content-type'] = 'text/plain'
+const app = new Elysia()
+	.mapResponse(({ response }) => {
+		console.log({ response })
 	})
-	.get('/', new Response('ok'))
+	.onError(({ code }) => {
+		if (code === 'VALIDATION') return 'b'
+	})
+	.get('/query', () => 'a', {
+		query: t.Object({
+			a: t.String()
+		})
+	})
 	.listen(3000)
+
+app.handle(req('/query'))
+	.then((x) => x.text())
+	.then(console.log)
