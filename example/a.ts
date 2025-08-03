@@ -1,12 +1,16 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, sse } from '../src'
 
-const app = new Elysia({ aot: false })
-	.headers({
-		'X-Powered-By': 'Elysia'
-	})
-	.get('/', () => 'Hello')
-	.listen(3000)
+class Logger {
+    log(value: string) {
+        console.log(value)
+    }
+}
 
-console.log(
-	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-)
+new Elysia()
+    .decorate('logger', new Logger())
+    // ✅ defined from the previous line
+    .get('/', ({ logger }) => {
+        logger.log('hi')
+
+        return 'hi'
+    })
