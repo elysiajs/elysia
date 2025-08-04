@@ -4,6 +4,7 @@ Bug fix:
 - [#669](https://github.com/elysiajs/elysia/issues/669) add nullable field to t.Nullable for OpenAPI 3.0 spec
 - [#711](https://github.com/elysiajs/elysia/issues/711) set default headers for non-aot
 - [#713](https://github.com/elysiajs/elysia/issues/713) NotFoundError doesn't call onAfterResponse hook
+- [#771](https://github.com/elysiajs/elysia/issues/771) skip body parsing if Content-Type is present but body is not
 - [#747](https://github.com/elysiajs/elysia/issues/747) mapResponse inside mapError override error value
 - [#812](https://github.com/elysiajs/elysia/issues/812) check for minItems length before array validation
 - [#1276](https://github.com/elysiajs/elysia/issues/1276) mapResponse with set inference produce invalid instruction
