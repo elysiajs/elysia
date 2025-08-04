@@ -1,3 +1,4 @@
+import { isHTMLBundle } from '.'
 import type { Context } from '../../context'
 import type { AnyLocalHook, MaybePromise } from '../../types'
 
@@ -10,11 +11,9 @@ export const createNativeStaticHandler = (
 ): (() => MaybePromise<Response>) | undefined => {
 	if (typeof handle === 'function' || handle instanceof Blob) return
 
-	if (
-		typeof handle === 'object' &&
-		handle?.toString() === '[object HTMLBundle]'
-	)
+	if (isHTMLBundle(handle)) {
 		return () => handle as any
+	}
 
 	const response = mapResponse(handle, {
 		headers: setHeaders
