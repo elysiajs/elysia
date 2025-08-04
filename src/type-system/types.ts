@@ -78,7 +78,17 @@ export type FileType = (string & {}) | StrictFileType
 
 export interface FileOptions extends SchemaOptions {
 	type?: MaybeArray<FileType>
+	/**
+	 * Each file must be at least the specified size.
+	 *
+	 * @example '600k' (600 kilobytes), '3m' (3 megabytes)
+	 */
 	minSize?: FileUnit
+	/**
+	 * Each file must be less than or equal to the specified size.
+	 *
+	 * @example '3m' (3 megabytes), '600k' (600 kilobytes)
+	 */
 	maxSize?: FileUnit
 }
 

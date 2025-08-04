@@ -1,16 +1,27 @@
-import { Elysia, t } from '../src'
+import { Elysia, error, t } from '../src'
 
-new Elysia()
-	.get(
-		'/test',
-		({ query }) => {
-			return query
+export const App = new Elysia()
+	.get('/', () => {
+		return 'Hi everyone'
+	})
+	.post(
+		'/a',
+		async ({ body: { images } }) => {
+			console.log('images', images)
+			if (images.length < 10) {
+				throw new Error("it shouldn't come here.")
+			}
+			return images
 		},
 		{
-			query: t.Object({
-				limit: t.Optional(
-					t.Number({ minimum: 10, maximum: 100, default: 25 })
-				)
+			body: t.Object({
+				images: t.Files({
+					type: ['image/png'],
+					minItems: 3,
+					maxItems: 15,
+					maxSize: '3m',
+					minSize: '600k'
+				})
 			})
 		}
 	)

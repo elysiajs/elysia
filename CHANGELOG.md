@@ -5,6 +5,7 @@ Bug fix:
 - [#711](https://github.com/elysiajs/elysia/issues/711) set default headers for non-aot
 - [#713](https://github.com/elysiajs/elysia/issues/713) NotFoundError doesn't call onAfterResponse hook
 - [#747](https://github.com/elysiajs/elysia/issues/747) mapResponse inside mapError override error value
+- [#812](https://github.com/elysiajs/elysia/issues/812) check for minItems length before array validation
 - [#1276](https://github.com/elysiajs/elysia/issues/1276) mapResponse with set inference produce invalid instruction
 - [#1268](https://github.com/elysiajs/elysia/issues/1268) using number instead of stringifed value for reporting validation error
 

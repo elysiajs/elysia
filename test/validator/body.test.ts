@@ -1035,20 +1035,20 @@ describe('Body Validator', () => {
 		})
 
 		// case 1 fail: contains fake image
-		// {
-		// 	const body = new FormData()
-		// 	body.append('file', Bun.file('test/images/fake.jpg'))
-		// 	body.append('file', Bun.file('test/images/kozeki-ui.webp'))
+		{
+			const body = new FormData()
+			body.append('file', Bun.file('test/images/fake.jpg'))
+			body.append('file', Bun.file('test/images/kozeki-ui.webp'))
 
-		// 	const response = await app.handle(
-		// 		new Request('http://localhost/', {
-		// 			method: 'POST',
-		// 			body
-		// 		})
-		// 	)
+			const response = await app.handle(
+				new Request('http://localhost/', {
+					method: 'POST',
+					body
+				})
+			)
 
-		// 	expect(response.status).toBe(422)
-		// }
+			expect(response.status).toBe(422)
+		}
 
 		// case 2 pass: all valid images
 		{

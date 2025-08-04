@@ -68,10 +68,12 @@ createType<TUnionEnum>(
 const internalFiles = createType<FilesOptions, File[]>(
 	'Files',
 	(options, value) => {
+		if (options.minItems && options.minItems > 1 && !Array.isArray(value))
+			return false
+
 		if (!Array.isArray(value)) return validateFile(options, value)
 
 		if (options.minItems && value.length < options.minItems) return false
-
 		if (options.maxItems && value.length > options.maxItems) return false
 
 		for (let i = 0; i < value.length; i++)
