@@ -4025,11 +4025,7 @@ export default class Elysia<
 										method,
 										path,
 										handler,
-										isNotEmpty(plugin.event.error)
-											? mergeHook(hooks as AnyLocalHook, {
-													error: plugin.event.error
-												})
-											: hooks,
+										hooks,
 										undefined,
 										standaloneValidators
 									)
@@ -4202,11 +4198,7 @@ export default class Elysia<
 				method,
 				path,
 				handler,
-				isNotEmpty(plugin.event.error)
-					? mergeHook(hooks as AnyLocalHook, {
-							error: plugin.event.error
-						})
-					: hooks,
+				hooks,
 				undefined,
 				standaloneValidators
 			)

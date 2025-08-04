@@ -8,6 +8,7 @@ Bug fix:
 - [#812](https://github.com/elysiajs/elysia/issues/812) check for minItems length before array validation
 - [#1276](https://github.com/elysiajs/elysia/issues/1276) mapResponse with set inference produce invalid instruction
 - [#1268](https://github.com/elysiajs/elysia/issues/1268) using number instead of stringifed value for reporting validation error
+- [#1323](https://github.com/elysiajs/elysia/issues/1323) don't duplicate error from plugin
 
 Change:
 - afterResponse now call after response by scheduling setImmediate

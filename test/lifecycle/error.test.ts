@@ -311,4 +311,23 @@ describe('error', () => {
 		expect(await root.text()).toBe('Where is the signature?')
 		expect(root.status).toBe(400)
 	})
+
+	it("don't duplicate error from plugin", async () => {
+		let i = 0
+
+		const plugin = new Elysia()
+			.onError(() => {
+				i++
+			})
+			.get('/', ({ status }) => {
+				throw status(401)
+			})
+
+		const app = new Elysia().use(plugin).listen(3000)
+
+		const response = await app.handle(req('/'))
+		expect(response.status).toBe(401)
+		expect(await response.text()).toBe('Unauthorized')
+		expect(i).toBe(1)
+	})
 })
