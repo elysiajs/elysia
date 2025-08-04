@@ -136,7 +136,7 @@ export const ElysiaType = {
 				if (isNaN(number)) return value
 
 				if (property && !compiler.Check(number))
-					throw compiler.Error(value)
+					throw compiler.Error(number)
 
 				return number
 			})

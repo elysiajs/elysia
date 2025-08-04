@@ -1,20 +1,17 @@
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
 
-const app = new Elysia()
-	.mapResponse(({ response }) => {
-		console.log({ response })
-	})
-	.onError(({ code }) => {
-		if (code === 'VALIDATION') return 'b'
-	})
-	.get('/query', () => 'a', {
-		query: t.Object({
-			a: t.String()
-		})
-	})
+new Elysia()
+	.get(
+		'/test',
+		({ query }) => {
+			return query
+		},
+		{
+			query: t.Object({
+				limit: t.Optional(
+					t.Number({ minimum: 10, maximum: 100, default: 25 })
+				)
+			})
+		}
+	)
 	.listen(3000)
-
-app.handle(req('/query'))
-	.then((x) => x.text())
-	.then(console.log)
