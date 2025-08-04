@@ -273,4 +273,80 @@ describe('Dynamic Mode', () => {
 
 		expect(res.headers.get('X-Powered-By')).toBe('Elysia')
 	})
+
+	it('handle local cookie signing', async () => {
+		const app = new Elysia({
+			aot: false
+		}).get(
+			'/',
+			({ cookie: { profile } }) => {
+				profile.value = {
+					id: 617,
+					name: 'Summoning 101'
+				}
+
+				return profile.value
+			},
+			{
+				cookie: t.Cookie(
+					{
+						profile: t.Optional(
+							t.Object({
+								id: t.Numeric(),
+								name: t.String()
+							})
+						)
+					},
+					{
+						secrets: 'Fischl von Luftschloss Narfidort',
+						sign: ['profile']
+					}
+				)
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			id: 617,
+			name: 'Summoning 101'
+		})
+	})
+
+	it('handle global cookie signing', async () => {
+		const app = new Elysia({
+			aot: false,
+			cookie: {
+				secrets: 'Fischl von Luftschloss Narfidort',
+				sign: ['profile']
+			}
+		}).get(
+			'/',
+			({ cookie: { profile } }) => {
+				profile.value = {
+					id: 617,
+					name: 'Summoning 101'
+				}
+
+				return profile.value
+			},
+			{
+				cookie: t.Cookie({
+					profile: t.Optional(
+						t.Object({
+							id: t.Numeric(),
+							name: t.String()
+						})
+					)
+				})
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			id: 617,
+			name: 'Summoning 101'
+		})
+	})
 })

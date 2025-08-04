@@ -595,8 +595,8 @@ function removeTrailingEquals(digest: string): string {
 const encoder = new TextEncoder()
 
 export const signCookie = async (val: string, secret: string | null) => {
-	if (typeof val !== 'string')
-		throw new TypeError('Cookie value must be provided as a string.')
+	if (typeof val === 'object') val = JSON.stringify(val)
+	else if (typeof val !== 'string') val = val + ''
 
 	if (secret === null) throw new TypeError('Secret key must be provided.')
 
@@ -628,6 +628,8 @@ export const signCookie = async (val: string, secret: string | null) => {
 }
 
 export const unsignCookie = async (input: string, secret: string | null) => {
+	console.log(secret)
+
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
 

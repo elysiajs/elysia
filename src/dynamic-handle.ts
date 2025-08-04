@@ -1,4 +1,4 @@
-import type { AnyElysia } from '.'
+import type { AnyElysia, CookieOptions } from '.'
 
 import { TransformDecodeError } from '@sinclair/typebox/value'
 import { TypeCheck } from './type-system'
@@ -218,14 +218,49 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			for (const [key, value] of request.headers.entries())
 				context.headers[key] = value
 
-			const cookieMeta = Object.assign(
-				{},
-				app.config?.cookie,
-				validator?.cookie?.config
-			) as {
-				secrets?: string | string[]
-				sign: string[] | true
-				properties: { [x: string]: Object }
+			const cookieMeta = {
+				domain:
+					app.config.cookie?.domain ??
+					// @ts-ignore
+					validator?.cookie?.config.domain,
+				expires:
+					app.config.cookie?.expires ??
+					// @ts-ignore
+					validator?.cookie?.config.expires,
+				httpOnly:
+					app.config.cookie?.httpOnly ??
+					// @ts-ignore
+					validator?.cookie?.config.httpOnly,
+				maxAge:
+					app.config.cookie?.maxAge ??
+					// @ts-ignore
+					validator?.cookie?.config.maxAge,
+				// @ts-ignore
+				path: app.config.cookie?.path ?? validator?.cookie?.config.path,
+				priority:
+					app.config.cookie?.priority ??
+					// @ts-ignore
+					validator?.cookie?.config.priority,
+				partitioned:
+					app.config.cookie?.partitioned ??
+					// @ts-ignore
+					validator?.cookie?.config.partitioned,
+				sameSite:
+					app.config.cookie?.sameSite ??
+					// @ts-ignore
+					validator?.cookie?.config.sameSite,
+				secure:
+					app.config.cookie?.secure ??
+					// @ts-ignore
+					validator?.cookie?.config.secure,
+				secrets:
+					app.config.cookie?.secrets ??
+					// @ts-ignore
+					validator?.cookie?.config.secrets,
+				// @ts-ignore
+				sign: app.config.cookie?.sign ?? validator?.cookie?.config.sign
+			} as CookieOptions & {
+				sign?: true | string | string[]
 			}
 
 			const cookieHeaderValue = request.headers.get('cookie')
@@ -234,23 +269,6 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				context.set,
 				cookieHeaderValue,
 				cookieMeta
-					? {
-							secrets:
-								cookieMeta.secrets !== undefined
-									? typeof cookieMeta.secrets === 'string'
-										? cookieMeta.secrets
-										: cookieMeta.secrets.join(',')
-									: undefined,
-							sign:
-								cookieMeta.sign === true
-									? true
-									: cookieMeta.sign !== undefined
-										? typeof cookieMeta.sign === 'string'
-											? cookieMeta.sign
-											: cookieMeta.sign.join(',')
-										: undefined
-						}
-					: undefined
 			)) as any
 
 			const headerValidator = validator?.createHeaders?.()

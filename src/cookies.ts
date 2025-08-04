@@ -322,6 +322,7 @@ export const parseCookie = async (
 
 	const jar: Record<string, ElysiaCookie> = {}
 
+
 	const cookies = parse(cookieString)
 	for (const [name, v] of Object.entries(cookies)) {
 		if (v === undefined) continue
@@ -345,6 +346,7 @@ export const parseCookie = async (
 					if (temp !== false) {
 						decoded = true
 						value = temp
+
 						break
 					}
 				}

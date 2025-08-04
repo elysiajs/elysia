@@ -1,37 +1,40 @@
 import { Elysia, t } from '../src'
 
-const thing = new Elysia()
-
-const server = new Elysia()
-	.use(process.env.NODE_ENV === 'development' && thing)
+const app = new Elysia({
+	aot: false,
+	cookie: {
+		// both constructor secret and cookie schema (see below) doesn't work
+		secrets: 'Fischl von Luftschloss Narfidort',
+		sign: ['profile']
+	}
+})
 	.get(
 		'/',
-		({ query }) => {
-			return query
-		},
+		({ cookie: { profile } }) => {
+			profile.value = {
+				id: 617,
+				name: 'Summoning 101'
+			}
 
+			return profile.value
+		},
 		{
-			query: t.Union([
-				t.Object({
-					q1: t.String(),
-					q2: t.Optional(t.String())
-				}),
-				t.Object({
-					q1: t.Optional(t.String()),
-					q2: t.String()
-				})
-			])
+			cookie: t.Cookie(
+				{
+					profile: t.Optional(
+						t.Object({
+							id: t.Numeric(),
+							name: t.String()
+						})
+					)
+				},
+				{
+				  secrets: "Fischl von Luftschloss Narfidort",
+				  sign: ["profile"],
+				}
+			)
 		}
 	)
 	.listen(3000)
 
-console.log(
-	await Promise.all([
-		fetch('http://localhost:3000?q1=v').then((r) => r.json()),
-		fetch('http://localhost:3000?q2=v').then((r) => r.json()),
-		fetch('http://localhost:3000?q1=v&q2=v').then((r) => r.json()),
-		fetch('http://localhost:3000?q1=v&q2=v&q3=v').then((r) => r.json()),
-		fetch('http://localhost:3000').then((r) => r.json()),
-		fetch('http://localhost:3000?q3').then((r) => r.json())
-	])
-)
+// console.log(app.routes[0]?.compile().toString())
