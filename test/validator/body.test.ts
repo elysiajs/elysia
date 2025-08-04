@@ -4,6 +4,21 @@ import { describe, expect, it } from 'bun:test'
 import { post, upload } from '../utils'
 
 describe('Body Validator', () => {
+	it('skip body parsing if body is empty but headers is present', async () => {
+		const app = new Elysia().post('/', ({ body }) => 'ok')
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				}
+			})
+		)
+
+		expect(response.status).toBe(200)
+	})
+
 	it('validate single', async () => {
 		const app = new Elysia().post('/', ({ body: { name } }) => name, {
 			body: t.Object({
@@ -1133,12 +1148,11 @@ describe('Body Validator', () => {
 			})
 			.listen(0)
 
-		await app
-			.handle(
-				post('/', {
-					year: '3000'
-				})
-			)
+		await app.handle(
+			post('/', {
+				year: '3000'
+			})
+		)
 
 		expect(err instanceof ValidationError).toBe(true)
 	})

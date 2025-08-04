@@ -141,7 +141,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							break
 					}
 				} else {
-					let contentType = request.headers.get('content-type')
+					let contentType
+					if (request.body)
+						contentType = request.headers.get('content-type')
 
 					if (contentType) {
 						const index = contentType.indexOf(';')

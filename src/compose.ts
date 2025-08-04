@@ -963,10 +963,10 @@ export const composeHandler = ({
 		} else if (hasBodyInference) {
 			fnLiteral += '\n'
 
-			const declaration = hooks.parse?.length ? 'let' : 'const'
+			fnLiteral += 'let contentType\n' + 'if(c.request.body)'
 			fnLiteral += hasHeaders
-				? `${declaration} contentType=c.headers['content-type']\n`
-				: `${declaration} contentType=c.request.headers.get('content-type')\n`
+				? `contentType=c.headers['content-type']\n`
+				: `contentType=c.request.headers.get('content-type')\n`
 
 			let hasDefaultParser = false
 			if (hooks.parse?.length)
