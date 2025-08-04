@@ -7,6 +7,7 @@ Bug fix:
 - [#771](https://github.com/elysiajs/elysia/issues/771) skip body parsing if Content-Type is present but body is not
 - [#747](https://github.com/elysiajs/elysia/issues/747) mapResponse inside mapError override error value
 - [#812](https://github.com/elysiajs/elysia/issues/812) check for minItems length before array validation
+- [#1274](https://github.com/elysiajs/elysia/issues/1274) Support .use(undefined | false) for conditional plugin
 - [#1276](https://github.com/elysiajs/elysia/issues/1276) mapResponse with set inference produce invalid instruction
 - [#1268](https://github.com/elysiajs/elysia/issues/1268) using number instead of stringifed value for reporting validation error
 - [#1323](https://github.com/elysiajs/elysia/issues/1323) don't duplicate error from plugin

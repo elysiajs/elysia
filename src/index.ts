@@ -3887,6 +3887,24 @@ export default class Elysia<
 	>
 
 	/**
+	 * conditional undefined ignore type
+	 */
+	use(
+		instance:
+			| MaybeArray<MaybePromise<AnyElysia>>
+			| MaybePromise<
+					AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
+			  >
+			| Promise<{
+					default:
+						| AnyElysia
+						| ((app: AnyElysia) => MaybePromise<AnyElysia>)
+			  }>
+			| undefined
+			| false
+	): this
+
+	/**
 	 * ### use
 	 * Merge separate logic of Elysia with current
 	 *
@@ -3911,7 +3929,11 @@ export default class Elysia<
 						| AnyElysia
 						| ((app: AnyElysia) => MaybePromise<AnyElysia>)
 			  }>
+			| undefined
+			| false
 	): AnyElysia {
+		if (!plugin) return this
+
 		if (Array.isArray(plugin)) {
 			// eslint-disable-next-line @typescript-eslint/no-this-alias
 			let app = this
