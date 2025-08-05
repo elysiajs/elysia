@@ -1,21 +1,22 @@
+import { LifeCycleEvent } from '../dist/bun'
 import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { post, req } from '../test/utils'
 
-class CustomError {
-	constructor(public value: string) { }
-}
+const app = new Elysia({ aot: false }).post('/', ({ body }) => {
+	return typeof body
+}, {
+	parse: 'text'
+})
 
-const app = new Elysia()
-	.onAfterResponse(() => {
-		console.log("THING")
-	})
-	.post('/', () => 'yay', {
-		body: t.Object({
-			test: t.String()
+const response = await app
+	.handle(
+		new Request('http://localhost', {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json'
+			},
+			body: JSON.stringify({ hello: 'world' })
 		})
-	})
-	.get('/customError', () => {
-		throw new CustomError('whelp')
-	})
-
-app.handle(req('/customError'))
+	)
+	.then((x) => x.text())
+	.then(console.log)

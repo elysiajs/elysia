@@ -156,12 +156,74 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						if (hooks.parse)
 							for (let i = 0; i < hooks.parse.length; i++) {
 								const hook = hooks.parse[i].fn
-								let temp = hook(context as any, contentType)
-								if (temp instanceof Promise) temp = await temp
 
-								if (temp) {
-									body = temp
-									break
+								if (typeof hook === 'string')
+									switch (hook) {
+										case 'json':
+										case 'application/json':
+											body = (await request.json()) as any
+											break
+
+										case 'text':
+										case 'text/plain':
+											body = await request.text()
+											break
+
+										case 'urlencoded':
+										case 'application/x-www-form-urlencoded':
+											body = parseQuery(
+												await request.text()
+											)
+											break
+
+										case 'arrayBuffer':
+										case 'application/octet-stream':
+											body = await request.arrayBuffer()
+											break
+
+										case 'formdata':
+										case 'multipart/form-data':
+											body = {}
+
+											const form =
+												await request.formData()
+											for (const key of form.keys()) {
+												if (body[key]) continue
+
+												const value = form.getAll(key)
+												if (value.length === 1)
+													body[key] = value[0]
+												else body[key] = value
+											}
+
+											break
+
+										default:
+											const parser = app['~parser'][hook]
+											if (parser) {
+												let temp = parser(
+													context as any,
+													contentType
+												)
+												if (temp instanceof Promise)
+													temp = await temp
+
+												if (temp) {
+													body = temp
+													break
+												}
+											}
+											break
+									}
+								else {
+									let temp = hook(context as any, contentType)
+									if (temp instanceof Promise)
+										temp = await temp
+
+									if (temp) {
+										body = temp
+										break
+									}
 								}
 							}
 

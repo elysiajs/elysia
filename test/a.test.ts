@@ -1,73 +1,72 @@
 // test.test.ts
-import {
-	t,
-	Elysia,
-	ParseError,
-	NotFoundError,
-	ValidationError,
-	InternalServerError
-} from '../src'
-import { describe, it, expect, beforeEach } from 'bun:test'
+import { describe, it, expect } from 'bun:test'
+import { Elysia } from 'elysia'
 
-export const newReq = (params?: {
-	path?: string
-	headers?: Record<string, string>
-	method?: string
-	body?: string
-}) => new Request(`http://localhost${params?.path ?? '/'}`, params)
+const setApp = new Elysia()
+	.onRequest(({ set }) => {
+		set.headers['x-header'] = 'test'
+		set.status = 400
+	})
+	.get('/', 'yay')
+	.get('/func', () => 'yay')
 
-class CustomError extends Error {}
+const responseApp = new Elysia()
+	.onRequest(() => {
+		return new Response('nope', {
+			status: 400,
+			headers: {
+				'x-header': 'test'
+			}
+		})
+	})
+	.get('/', 'yay')
+	.get('/func', () => 'yay')
 
-describe('onResponse', () => {
-	let isOnResponseCalled: boolean
+async function expectResponse(
+	response: Response,
+	exp: { status: number; header: string; body: string }
+) {
+	expect(response.status).toBe(exp.status)
+	expect(response.headers.get('x-header')).toBe(exp.header)
+	expect(await response.text()).toBe(exp.body)
+}
 
-	beforeEach(() => {
-		isOnResponseCalled = false
+const setExp = {
+	status: 200,
+	header: 'test',
+	body: 'yay'
+}
+
+const responseExp = {
+	status: 400,
+	header: 'test',
+	body: 'nope'
+}
+
+describe('Elysia', () => {
+	it('setApp - /', async () => {
+		const response = await setApp.handle(new Request('http://localhost/'))
+		await expectResponse(response, setExp)
 	})
 
-	const app = new Elysia()
-		.onAfterResponse(() => {
-			isOnResponseCalled = true
-		})
-		.post('/', () => 'yay', {
-			body: t.Object({
-				test: t.String()
-			})
-		})
-		.get('/customError', () => {
-			throw new CustomError('whelp')
-		})
-		.get('/internalError', () => {
-			throw new InternalServerError('whelp')
-		})
-
-	it.each([
-		['NotFoundError', newReq({ path: '/notFound' })],
-		[
-			'ParseError',
-			newReq({
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: ''
-			})
-		],
-		[
-			'ValidationError',
-			newReq({
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({})
-			})
-		],
-		['CustomError', newReq({ path: '/customError' })],
-		['InternalServerError', newReq({ path: '/internalError' })]
-	])('%s should call onResponse', async (_name, request) => {
-		expect(isOnResponseCalled).toBeFalse()
-
-		await app.handle(request)
-		// Wait for schedule microtask
-		await Bun.sleep(1)
-
-		expect(isOnResponseCalled).toBeTrue()
+	it('setApp - /func', async () => {
+		const response = await setApp.handle(
+			new Request('http://localhost/func')
+		)
+		await expectResponse(response, setExp)
 	})
+
+	// it('responseApp - /', async () => {
+	// 	const response = await responseApp.handle(
+	// 		new Request('http://localhost/')
+	// 	)
+	// 	await expectResponse(response, responseExp)
+	// })
+
+	// it('responseApp - /func', async () => {
+	// 	const response = await responseApp.handle(
+	// 		new Request('http://localhost/func')
+	// 	)
+	// 	await expectResponse(response, responseExp)
+	// })
 })

@@ -390,4 +390,100 @@ describe('Dynamic Mode', () => {
 			name: 'Summoning 101'
 		})
 	})
+
+	it('use built-in name parser (text)', async () => {
+		const app = new Elysia({ aot: false }).post(
+			'/',
+			({ body }) => typeof body,
+			{
+				parse: 'text'
+			}
+		)
+
+		const response = await app
+			.handle(
+				new Request('http://localhost', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json'
+					},
+					body: JSON.stringify({ hello: 'world' })
+				})
+			)
+			.then((x) => x.text())
+
+		expect(response).toBe('string')
+	})
+
+	it('use built-in name parser (text/plain)', async () => {
+		const app = new Elysia({ aot: false }).post(
+			'/',
+			({ body }) => typeof body,
+			{
+				parse: 'text/plain'
+			}
+		)
+
+		const response = await app
+			.handle(
+				new Request('http://localhost', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json'
+					},
+					body: JSON.stringify({ hello: 'world' })
+				})
+			)
+			.then((x) => x.text())
+
+		expect(response).toBe('string')
+	})
+
+	it('use built-in name parser (json)', async () => {
+		const app = new Elysia({ aot: false }).post(
+			'/',
+			({ body }) => typeof body,
+			{
+				parse: 'json'
+			}
+		)
+
+		const response = await app
+			.handle(
+				new Request('http://localhost', {
+					method: 'POST',
+					headers: {
+						'content-type': 'text/plain'
+					},
+					body: JSON.stringify({ hello: 'world' })
+				})
+			)
+			.then((x) => x.text())
+
+		expect(response).toBe('object')
+	})
+
+	it('use custom name parser', async () => {
+		const app = new Elysia({ aot: false })
+			.parser('thing', () => {
+				return true
+			})
+			.post('/', ({ body }) => typeof body, {
+				parse: 'thing'
+			})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost', {
+					method: 'POST',
+					headers: {
+						'content-type': 'text/plain'
+					},
+					body: JSON.stringify({ hello: 'world' })
+				})
+			)
+			.then((x) => x.text())
+
+		expect(response).toBe('boolean')
+	})
 })
