@@ -39,6 +39,7 @@ import {
 	ElysiaTypeCheck,
 	getCookieValidator,
 	getSchemaValidator,
+	hasPropertyCountConstraints,
 	hasType,
 	isUnion,
 	unwrapImportSchema
@@ -1314,7 +1315,7 @@ export const composeHandler = ({
 		}
 
 		if (hasBody && validator.body) {
-			if (validator.body.hasTransform || validator.body.isOptional)
+			if (validator.body.hasTransform || validator.body.isOptional || validator.body.hasPropertyCountConstraints)
 				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
 
 			const hasUnion = isUnion(validator.body.schema)
@@ -1365,6 +1366,16 @@ export const composeHandler = ({
 					else fnLiteral += `c.body=${parsed}\n`
 				}
 
+				if (validator.body?.schema?.noValidate !== true) {
+					// Check property count constraints on original body before cleaning
+					if (validator.body.hasPropertyCountConstraints) {
+						fnLiteral +=
+							`if(validator.body.Check(isNotEmptyObject?c.body:{})===false){` +
+							validation.validate('body') +
+							'}'
+					}
+				}
+
 				fnLiteral += composeCleaner({
 					name: 'c.body',
 					schema: validator.body,
@@ -1373,18 +1384,31 @@ export const composeHandler = ({
 				})
 
 				if (validator.body?.schema?.noValidate !== true) {
-					if (validator.body.isOptional)
-						fnLiteral +=
-							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
-							validation.validate('body') +
-							'}'
-					else
-						fnLiteral +=
-							`if(validator.body.Check(c.body)===false){` +
-							validation.validate('body') +
-							`}`
+					// Only check non-property-count constraints on cleaned body
+					if (!validator.body.hasPropertyCountConstraints) {
+						if (validator.body.isOptional)
+							fnLiteral +=
+								`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
+								validation.validate('body') +
+								'}'
+						else
+							fnLiteral +=
+								`if(validator.body.Check(c.body)===false){` +
+								validation.validate('body') +
+								`}`
+					}
 				}
 			} else {
+				if (validator.body?.schema?.noValidate !== true) {
+					// Check property count constraints on original body before cleaning
+					if (validator.body.hasPropertyCountConstraints) {
+						fnLiteral +=
+							`if(validator.body.Check(isNotEmptyObject?c.body:{})===false){` +
+							validation.validate('body') +
+							'}'
+					}
+				}
+
 				fnLiteral += composeCleaner({
 					name: 'c.body',
 					schema: validator.body,
@@ -1393,16 +1417,19 @@ export const composeHandler = ({
 				})
 
 				if (validator.body?.schema?.noValidate !== true) {
-					if (validator.body.isOptional)
-						fnLiteral +=
-							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
-							validation.validate('body') +
-							'}'
-					else
-						fnLiteral +=
-							`if(validator.body.Check(c.body)===false){` +
-							validation.validate('body') +
-							'}'
+					// Only check non-property-count constraints on cleaned body
+					if (!validator.body.hasPropertyCountConstraints) {
+						if (validator.body.isOptional)
+							fnLiteral +=
+								`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
+								validation.validate('body') +
+								'}'
+						else
+							fnLiteral +=
+								`if(validator.body.Check(c.body)===false){` +
+								validation.validate('body') +
+								'}'
+					}
 				}
 			}
 

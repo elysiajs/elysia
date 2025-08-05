@@ -1182,4 +1182,79 @@ describe('Body Validator', () => {
 		)
 		expect(validRes.status).toBe(200)
 	})
+
+	it('validate maxProperties constraint', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object(
+				{
+					name: t.Optional(t.String()),
+					description: t.Optional(t.String()),
+				},
+				{ maxProperties: 1 }
+			)
+		})
+
+		// Object with one property should pass
+		const validRes = await app.handle(
+			post('/', {
+				name: 'test'
+			})
+		)
+		expect(validRes.status).toBe(200)
+
+		// Object with two properties should fail
+		const invalidRes = await app.handle(
+			post('/', {
+				name: 'test',
+				description: 'desc'
+			})
+		)
+		expect(invalidRes.status).toBe(422)
+	})
+
+	it('validate combined minProperties and maxProperties', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object(
+				{
+					name: t.Optional(t.String()),
+					description: t.Optional(t.String()),
+					category: t.Optional(t.String()),
+				},
+				{ minProperties: 1, maxProperties: 2 }
+			)
+		})
+
+		// Empty object should fail (minProperties)
+		const emptyRes = await app.handle(
+			post('/', {})
+		)
+		expect(emptyRes.status).toBe(422)
+
+		// Object with one property should pass
+		const onePropertyRes = await app.handle(
+			post('/', {
+				name: 'test'
+			})
+		)
+		expect(onePropertyRes.status).toBe(200)
+
+		// Object with two properties should pass
+		const twoPropertiesRes = await app.handle(
+			post('/', {
+				name: 'test',
+				description: 'desc'
+			})
+		)
+		expect(twoPropertiesRes.status).toBe(200)
+
+		// Object with three properties should fail (maxProperties)
+		const threePropertiesRes = await app.handle(
+			post('/', {
+				name: 'test',
+				description: 'desc',
+				category: 'cat'
+			})
+		)
+		expect(threePropertiesRes.status).toBe(422)
+	})
 })

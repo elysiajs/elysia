@@ -55,6 +55,8 @@ export interface ElysiaTypeCheck<T extends TSchema>
 	'~hasTransform'?: boolean
 	hasRef: boolean
 	'~hasRef'?: boolean
+	hasPropertyCountConstraints: boolean
+	'~hasPropertyCountConstraints'?: boolean
 }
 
 export const isOptional = (
@@ -186,6 +188,28 @@ export const hasProperty = (
 	}
 
 	return expectedProperty in schema
+}
+
+export const hasPropertyCountConstraints = (
+	_schema: TAnySchema | TypeCheck<any> | ElysiaTypeCheck<any>
+): boolean => {
+	if (!_schema) return false
+
+	// @ts-expect-error private property
+	const schema = _schema.schema ?? _schema
+
+	if (schema[Kind] === 'Import' && _schema.References)
+		return _schema
+			.References()
+			.some((schema: TAnySchema) => hasPropertyCountConstraints(schema))
+
+	// Check for minProperties or maxProperties constraints
+	return !!(
+		(schema.type === 'object' && 
+			('minProperties' in schema || 'maxProperties' in schema)) ||
+		(schema.type === 'array' && 
+			('minItems' in schema || 'maxItems' in schema))
+	)
 }
 
 export const hasRef = (schema: TAnySchema): boolean => {
@@ -892,7 +916,12 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			get hasRef() {
 				if ('~hasRef' in this) return this['~hasRef']!
 
-				return (this['~hasRef'] = hasTransform(schema))
+				return (this['~hasRef'] = hasRef(schema))
+			},
+			get hasPropertyCountConstraints() {
+				if ('~hasPropertyCountConstraints' in this) return this['~hasPropertyCountConstraints']!
+
+				return (this['~hasPropertyCountConstraints'] = hasPropertyCountConstraints(schema))
 			}
 		}
 
@@ -1026,6 +1055,11 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			if ('~hasRef' in this) return this['~hasRef']!
 
 			return (this['~hasRef'] = hasRef(schema))
+		},
+		get hasPropertyCountConstraints() {
+			if ('~hasPropertyCountConstraints' in this) return this['~hasPropertyCountConstraints']!
+
+			return (this['~hasPropertyCountConstraints'] = hasPropertyCountConstraints(schema))
 		},
 		'~hasRef': doesHaveRef
 	} as ElysiaTypeCheck<any>)
