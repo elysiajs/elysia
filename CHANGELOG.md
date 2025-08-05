@@ -18,6 +18,7 @@ Bug fix:
 Change:
 - afterResponse now call after response by scheduling setImmediate
 - update memoirist to 0.4.0
+- update exact-mirror to 0.1.5
 
 # 1.3.8 - 31 Jul 2025
 Improvement:

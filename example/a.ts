@@ -1,14 +1,13 @@
 import { Elysia, t } from '../src'
 
-const api = new Elysia()
-	.get('/:id', ({ params }) => params, {
-		params: t.Object({
-			id: t.String()
-		})
+const app = new Elysia()
+	.post('/', ({ body }) => body, {
+		body: t.Object(
+			{
+				name: t.Optional(t.String()),
+				description: t.Optional(t.String())
+			},
+			{ minProperties: 1 }
+		)
 	})
 	.listen(3000)
-
-const result = await api
-	.handle(new Request('http://localhost:3000/hello world'))
-	.then((response) => response.json())
-console.log('🚀 ~ result:', result)
