@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 
 const app = new Elysia({
-	aot: false,
+	aot: true,
 	cookie: {
 		// both constructor secret and cookie schema (see below) doesn't work
 		secrets: 'Fischl von Luftschloss Narfidort',
@@ -29,8 +29,8 @@ const app = new Elysia({
 					)
 				},
 				{
-				  secrets: "Fischl von Luftschloss Narfidort",
-				  sign: ["profile"],
+					secrets: 'Fischl von Luftschloss Narfidort',
+					sign: ['profile']
 				}
 			)
 		}

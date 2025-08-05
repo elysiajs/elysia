@@ -349,4 +349,45 @@ describe('Dynamic Mode', () => {
 			name: 'Summoning 101'
 		})
 	})
+
+	it('handle optional cookie', async () => {
+		const app = new Elysia({
+			aot: false
+		}).get(
+			'/',
+			({ cookie: { profile } }) => {
+				profile.value = {
+					id: 617,
+					name: 'Summoning 101'
+				}
+
+				return profile.value
+			},
+			{
+				cookie: t.Optional(
+					t.Cookie(
+						{
+							profile: t.Optional(
+								t.Object({
+									id: t.Numeric(),
+									name: t.String()
+								})
+							)
+						},
+						{
+							secrets: 'Fischl von Luftschloss Narfidort',
+							sign: ['profile']
+						}
+					)
+				)
+			}
+		)
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			id: 617,
+			name: 'Summoning 101'
+		})
+	})
 })

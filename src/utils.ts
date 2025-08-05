@@ -628,8 +628,6 @@ export const signCookie = async (val: string, secret: string | null) => {
 }
 
 export const unsignCookie = async (input: string, secret: string | null) => {
-	console.log(secret)
-
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
 
