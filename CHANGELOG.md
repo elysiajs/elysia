@@ -13,6 +13,8 @@ Bug fix:
 - [#1274](https://github.com/elysiajs/elysia/issues/1274) support .use(undefined | false) for conditional plugin
 - [#1276](https://github.com/elysiajs/elysia/issues/1276) mapResponse with set inference produce invalid instruction
 - [#1268](https://github.com/elysiajs/elysia/issues/1268) using number instead of stringifed value for reporting validation error
+- [#1297](https://github.com/elysiajs/elysia/issues/1297), [#1325](https://github.com/elysiajs/elysia/pull/1325) fix HTML imported pages in compiled apps
+- [#1319](https://github.com/elysiajs/elysia/pull/1319) fix array of plugin usage causes incorrect path aggregation
 - [#1323](https://github.com/elysiajs/elysia/issues/1323) don't duplicate error from plugin
 - dynamic handle should handle named parser
 - hand

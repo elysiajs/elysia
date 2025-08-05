@@ -1,12 +1,10 @@
 import { Elysia, t } from '../src'
+import Index from './index.html'
 
-const app = new Elysia({ precompile: true })
+const app = new Elysia()
 	.get(
 		'/',
-		async () => {
-			// `b: 2` should not be included, yet it is.
-			return { keys: [{ a: 1, b: 2 }], extra: true }
-		},
+		Index,
 		{
 			response: t.Object(
 				{ keys: t.Array(t.Object({ a: t.Number() })) },
