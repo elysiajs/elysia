@@ -64,6 +64,15 @@ const getPossibleParams = (path: string) => {
 	return routes
 }
 
+export const isHTMLBundle = (handle: any) => {
+	return (
+		typeof handle === 'object' &&
+		handle !== null &&
+		(handle.toString() === '[object HTMLBundle]' ||
+			typeof handle.index === 'string')
+	)
+}
+
 const supportedMethods = {
 	GET: true,
 	HEAD: true,
@@ -260,11 +269,7 @@ export const BunAdapter: ElysiaAdapter = {
 												staticRoutes[path][method] =
 													awaited
 
-											if (
-												typeof awaited === 'object' &&
-												awaited?.toString() ===
-													'[object HTMLBundle]'
-											)
+											if (isHTMLBundle(awaited))
 												// @ts-ignore
 												staticRoutes[path][method] =
 													awaited
@@ -277,10 +282,7 @@ export const BunAdapter: ElysiaAdapter = {
 
 							if (
 								!(value instanceof Response) &&
-								!(
-									typeof value === 'object' &&
-									value?.toString() === '[object HTMLBundle]'
-								)
+								!isHTMLBundle(value)
 							)
 								continue
 
