@@ -9,6 +9,7 @@ import {
 	type TProperties
 } from '@sinclair/typebox'
 
+import fastDecodeURIComponent from 'fast-decode-uri-component'
 import type { Context } from './context'
 
 import { t } from './type-system'
@@ -291,14 +292,21 @@ export default class Elysia<
 			  }>
 			| undefined,
 		get http() {
-			if (!this['~http']) this['~http'] = new Memoirist({ lazy: true })
+			if (!this['~http'])
+				this['~http'] = new Memoirist({
+					lazy: true,
+					onParam: fastDecodeURIComponent
+				})
 
 			return this['~http']
 		},
 		'~dynamic': undefined as Memoirist<DynamicHandler> | undefined,
 		// Use in non-AOT mode
 		get dynamic() {
-			if (!this['~dynamic']) this['~dynamic'] = new Memoirist()
+			if (!this['~dynamic'])
+				this['~dynamic'] = new Memoirist({
+					onParam: fastDecodeURIComponent
+				})
 
 			return this['~dynamic']
 		},

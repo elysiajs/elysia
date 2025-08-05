@@ -312,4 +312,20 @@ describe('Edge Case', () => {
 			hello: 'hanabi'
 		})
 	})
+
+	it('decode URI of path parameter', async () => {
+		const api = new Elysia().get('/:id', ({ params }) => params, {
+			params: t.Object({
+				id: t.String()
+			})
+		})
+
+		const value = await api
+			.handle(new Request('http://localhost:3000/hello world'))
+			.then((response) => response.json())
+
+		expect(value).toEqual({
+			id: 'hello world'
+		})
+	})
 })
