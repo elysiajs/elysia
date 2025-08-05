@@ -1156,4 +1156,30 @@ describe('Body Validator', () => {
 
 		expect(err instanceof ValidationError).toBe(true)
 	})
+
+	it('validate minProperties constraint', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object(
+				{
+					name: t.Optional(t.String()),
+					description: t.Optional(t.String()),
+				},
+				{ minProperties: 1 }
+			)
+		})
+
+		// Empty object should fail validation
+		const emptyRes = await app.handle(
+			post('/', {})
+		)
+		expect(emptyRes.status).toBe(422)
+
+		// Object with one property should pass
+		const validRes = await app.handle(
+			post('/', {
+				name: 'test'
+			})
+		)
+		expect(validRes.status).toBe(200)
+	})
 })
