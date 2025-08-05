@@ -1,40 +1,21 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const app = new Elysia({
-	aot: true,
-	cookie: {
-		// both constructor secret and cookie schema (see below) doesn't work
-		secrets: 'Fischl von Luftschloss Narfidort',
-		sign: ['profile']
-	}
-})
-	.get(
-		'/',
-		({ cookie: { profile } }) => {
-			profile.value = {
-				id: 617,
-				name: 'Summoning 101'
-			}
+class CustomError {
+	constructor(public value: string) { }
+}
 
-			return profile.value
-		},
-		{
-			cookie: t.Cookie(
-				{
-					profile: t.Optional(
-						t.Object({
-							id: t.Numeric(),
-							name: t.String()
-						})
-					)
-				},
-				{
-					secrets: 'Fischl von Luftschloss Narfidort',
-					sign: ['profile']
-				}
-			)
-		}
-	)
-	.listen(3000)
+const app = new Elysia()
+	.onAfterResponse(() => {
+		console.log("THING")
+	})
+	.post('/', () => 'yay', {
+		body: t.Object({
+			test: t.String()
+		})
+	})
+	.get('/customError', () => {
+		throw new CustomError('whelp')
+	})
 
-// console.log(app.routes[0]?.compile().toString())
+app.handle(req('/customError'))

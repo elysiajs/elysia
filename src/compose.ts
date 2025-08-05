@@ -2456,7 +2456,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 			const fn = hooks.afterResponse[i].fn
 			const endUnit = reporter.resolveChild(fn.name)
 
-			afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}e.afterResponse[${i}](c)\n`
+			afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}afterResponse[${i}](context)\n`
 
 			endUnit()
 		}

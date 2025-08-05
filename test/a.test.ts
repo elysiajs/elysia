@@ -1,18 +1,73 @@
-import { Elysia } from '../src'
-import { it, expect } from 'bun:test'
+// test.test.ts
+import {
+	t,
+	Elysia,
+	ParseError,
+	NotFoundError,
+	ValidationError,
+	InternalServerError
+} from '../src'
+import { describe, it, expect, beforeEach } from 'bun:test'
 
-const asyncPlugin = Promise.resolve(new Elysia({ name: 'AsyncPlugin' }))
+export const newReq = (params?: {
+	path?: string
+	headers?: Record<string, string>
+	method?: string
+	body?: string
+}) => new Request(`http://localhost${params?.path ?? '/'}`, params)
 
-const plugin = new Elysia({ name: 'Plugin' })
-	.use(asyncPlugin)
-	.get('/plugin', () => 'GET /plugin')
+class CustomError extends Error {}
 
-const app = new Elysia({ name: 'App' })
-	.use(plugin)
-	.get('/foo', () => 'GET /foo')
+describe('onResponse', () => {
+	let isOnResponseCalled: boolean
 
-it('matches the right route', async () => {
-	const response = await app.handle(new Request('http://localhost/plugin'))
-	const text = await response.text()
-	expect(text).toEqual('GET /plugin')
+	beforeEach(() => {
+		isOnResponseCalled = false
+	})
+
+	const app = new Elysia()
+		.onAfterResponse(() => {
+			isOnResponseCalled = true
+		})
+		.post('/', () => 'yay', {
+			body: t.Object({
+				test: t.String()
+			})
+		})
+		.get('/customError', () => {
+			throw new CustomError('whelp')
+		})
+		.get('/internalError', () => {
+			throw new InternalServerError('whelp')
+		})
+
+	it.each([
+		['NotFoundError', newReq({ path: '/notFound' })],
+		[
+			'ParseError',
+			newReq({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: ''
+			})
+		],
+		[
+			'ValidationError',
+			newReq({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({})
+			})
+		],
+		['CustomError', newReq({ path: '/customError' })],
+		['InternalServerError', newReq({ path: '/internalError' })]
+	])('%s should call onResponse', async (_name, request) => {
+		expect(isOnResponseCalled).toBeFalse()
+
+		await app.handle(request)
+		// Wait for schedule microtask
+		await Bun.sleep(1)
+
+		expect(isOnResponseCalled).toBeTrue()
+	})
 })

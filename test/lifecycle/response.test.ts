@@ -1,6 +1,6 @@
-import { Elysia } from '../../src'
+import { Elysia, InternalServerError, t } from '../../src'
 
-import { describe, expect, it } from 'bun:test'
+import { beforeEach, describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 describe('On After Response', () => {
@@ -30,10 +30,9 @@ describe('On After Response', () => {
 	it('call after response on not found without error handler', async () => {
 		let isAfterResponseCalled = false
 
-		const app = new Elysia()
-			.onAfterResponse(() => {
-				isAfterResponseCalled = true
-			})
+		const app = new Elysia().onAfterResponse(() => {
+			isAfterResponseCalled = true
+		})
 
 		await app.handle(req('/'))
 		// wait for next tick
@@ -89,7 +88,7 @@ describe('On After Response', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		const res = await Promise.all([
+		await Promise.all([
 			app.handle(req('/inner')),
 			app.handle(req('/outer'))
 		])
@@ -110,7 +109,7 @@ describe('On After Response', () => {
 
 		const app = new Elysia().use(plugin).get('/outer', () => 'NOOP')
 
-		const res = await Promise.all([
+		await Promise.all([
 			app.handle(req('/inner')),
 			app.handle(req('/outer'))
 		])
@@ -139,5 +138,69 @@ describe('On After Response', () => {
 		await Bun.sleep(1)
 
 		expect(total).toEqual(2)
+	})
+})
+
+describe('onResponse', () => {
+	const newReq = (params?: {
+		path?: string
+		headers?: Record<string, string>
+		method?: string
+		body?: string
+	}) => new Request(`http://localhost${params?.path ?? '/'}`, params)
+
+	class CustomError extends Error {}
+
+	let isOnResponseCalled: boolean
+
+	beforeEach(() => {
+		isOnResponseCalled = false
+	})
+
+	const app = new Elysia()
+		.onAfterResponse(() => {
+			isOnResponseCalled = true
+		})
+		.post('/', () => 'yay', {
+			body: t.Object({
+				test: t.String()
+			})
+		})
+		.get('/customError', () => {
+			throw new CustomError('whelp')
+		})
+		.get('/internalError', () => {
+			throw new InternalServerError('whelp')
+		})
+
+	it.each([
+		['NotFoundError', newReq({ path: '/notFound' })],
+		[
+			'ParseError',
+			newReq({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: ''
+			})
+		],
+		[
+			'ValidationError',
+			newReq({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({})
+			})
+		],
+		['CustomError', newReq({ path: '/customError' })],
+		['InternalServerError', newReq({ path: '/internalError' })]
+	])('%s should call onResponse', async (_name, request) => {
+		expect(isOnResponseCalled).toBeFalse()
+
+		await app.handle(request)
+
+		// wait for next tick
+		await Bun.sleep(1)
+
+		expect(isOnResponseCalled).toBeTrue()
 	})
 })
