@@ -328,4 +328,27 @@ describe('Edge Case', () => {
 			id: 'hello world'
 		})
 	})
+
+	it('clean non-root additionalProperties', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => ({
+				keys: [{ a: 1, b: 2 }],
+				extra: true
+			}),
+			{
+				response: t.Object(
+					{ keys: t.Array(t.Object({ a: t.Number() })) },
+					{ additionalProperties: true }
+				)
+			}
+		)
+
+		const value = await app.handle(req('/')).then((x) => x.json())
+
+		expect(value).toEqual({
+			keys: [{ a: 1 }],
+			extra: true
+		})
+	})
 })

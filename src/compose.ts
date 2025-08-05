@@ -191,7 +191,7 @@ const composeCleaner = ({
 	normalize: ElysiaConfig<''>['normalize']
 	ignoreTryCatch?: boolean
 }) => {
-	if (!normalize || !schema.Clean || schema.hasAdditionalProperties) return ''
+	if (!normalize || !schema.Clean) return ''
 
 	if (normalize === true || normalize === 'exactMirror') {
 		if (ignoreTryCatch)
