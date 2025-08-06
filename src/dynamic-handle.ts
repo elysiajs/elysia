@@ -581,8 +581,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			return app.handleError(context, reportedError)
 		} finally {
 			if (app.event.afterResponse)
-				for (const afterResponse of app.event.afterResponse)
-					await afterResponse.fn(context as any)
+				setImmediate(async () => {
+					for (const afterResponse of app.event.afterResponse!)
+						await afterResponse.fn(context as any)
+				})
 		}
 	}
 }
