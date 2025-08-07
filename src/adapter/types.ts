@@ -74,8 +74,7 @@ export interface ElysiaAdapter {
 		createNativeStaticHandler?(
 			handle: unknown,
 			hooks: AnyLocalHook,
-			setHeaders?: Context['set']['headers'],
-			...params: unknown[]
+			set?: Context['set']
 		): (() => MaybePromise<Response>) | undefined
 	}
 	composeHandler: {

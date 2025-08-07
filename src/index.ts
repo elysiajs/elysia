@@ -10,7 +10,7 @@ import {
 } from '@sinclair/typebox'
 
 import fastDecodeURIComponent from 'fast-decode-uri-component'
-import type { Context } from './context'
+import type { Context, PreContext } from './context'
 
 import { t } from './type-system'
 import {
@@ -42,7 +42,8 @@ import {
 	isNotEmpty,
 	encodePath,
 	lifeCycleToArray,
-	supportPerMethodInlineHandler
+	supportPerMethodInlineHandler,
+	redirect
 } from './utils'
 
 import {
@@ -84,7 +85,8 @@ import {
 	type ParseError,
 	type NotFoundError,
 	type InternalServerError,
-	ElysiaCustomStatusResponse
+	ElysiaCustomStatusResponse,
+	status
 } from './error'
 
 import type { TraceHandler } from './trace'
@@ -862,10 +864,51 @@ export default class Elysia<
 		const nativeStaticHandler =
 			typeof handle !== 'function'
 				? () => {
+						const context: PreContext = {
+							redirect,
+							request: this['~adapter'].isWebStandard
+								? new Request(`http://e.ly${path}`, {
+										method
+									})
+								: (undefined as any as Request),
+							server: null,
+							set: {
+								headers: Object.assign({}, this.setHeaders)
+							},
+							status,
+							error: status,
+							store: this.store
+						}
+
+						try {
+							this.event.request?.map((x) => {
+								if (typeof x.fn === 'function')
+									return x.fn(context)
+
+								// @ts-ignore just in case
+								if (typeof x === 'function') return x(context)
+							})
+						} catch (error) {
+							let res
+							// @ts-ignore
+							context.error = error
+
+							this.event.error?.some((x) => {
+								if (typeof x.fn === 'function')
+									return (res = x.fn(context))
+
+								if (typeof x === 'function')
+									// @ts-ignore just in case
+									return (res = x(context))
+							})
+
+							if (res !== undefined) handle = res
+						}
+
 						const fn = adapter.createNativeStaticHandler?.(
 							handle,
 							hooks,
-							this.setHeaders
+							context.set as Context['set']
 						)
 
 						return fn instanceof Promise
@@ -890,9 +933,7 @@ export default class Elysia<
 					this.router.response[path] = {
 						[method]: nativeStaticHandler()
 					}
-			} else {
-				this.router.response[path] = nativeStaticHandler()
-			}
+			} else this.router.response[path] = nativeStaticHandler()
 		}
 
 		addResponsePath(path)

@@ -7,17 +7,18 @@ import { mapResponse } from './handler'
 export const createNativeStaticHandler = (
 	handle: unknown,
 	hooks: AnyLocalHook,
-	setHeaders: Context['set']['headers'] = {}
+	set?: Context['set']
 ): (() => MaybePromise<Response>) | undefined => {
 	if (typeof handle === 'function' || handle instanceof Blob) return
 
-	if (isHTMLBundle(handle)) {
-		return () => handle as any
-	}
+	if (isHTMLBundle(handle)) return () => handle as any
 
-	const response = mapResponse(handle, {
-		headers: setHeaders
-	})
+	const response = mapResponse(
+		handle,
+		set ?? {
+			headers: {}
+		}
+	)
 
 	if (
 		!hooks.parse?.length &&

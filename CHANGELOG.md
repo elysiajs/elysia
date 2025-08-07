@@ -22,6 +22,7 @@ Bug fix:
 Improvement:
 - remove `finally` from compose
 - `NotFoundError` should parse query if inferred
+- [#853](https://github.com/elysiajs/elysia/issues/853) Bun Static response now handle pre-compute `onRequest`, and `onError`
 
 Change:
 - afterResponse now call after response by scheduling setImmediate
