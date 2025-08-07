@@ -1,4 +1,7 @@
 # 1.3.9
+Feature:
+- [#932](https://github.com/elysiajs/elysia/issues/932) add `t.ArrayBuffer`, `t.Uint8Array`
+
 Bug fix:
 - [#459](https://github.com/elysiajs/elysia/issues/459) route prefix should give type error when prefix is not start with '/'
 - [#669](https://github.com/elysiajs/elysia/issues/669) add nullable field to t.Nullable for OpenAPI 3.0 spec
@@ -17,7 +20,6 @@ Bug fix:
 - [#1319](https://github.com/elysiajs/elysia/pull/1319) fix array of plugin usage causes incorrect path aggregation
 - [#1323](https://github.com/elysiajs/elysia/issues/1323) don't duplicate error from plugin
 - dynamic handle should handle named parser
-- handle non-root additionalProperties
 
 Improvement:
 - remove `finally` from compose

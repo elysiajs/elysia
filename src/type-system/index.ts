@@ -19,7 +19,8 @@ import type {
 	NumberOptions,
 	JavaScriptTypeBuilder,
 	StringOptions,
-	TUnsafe
+	TUnsafe,
+	Uint8ArrayOptions
 } from '@sinclair/typebox'
 
 import './format'
@@ -39,7 +40,8 @@ import {
 	NonEmptyArray,
 	TForm,
 	TUnionEnum,
-	ElysiaTransformDecodeBuilder
+	ElysiaTransformDecodeBuilder,
+	TArrayBuffer
 } from './types'
 
 import { ELYSIA_FORM_DATA, form } from '../utils'
@@ -63,6 +65,11 @@ createType<TUnionEnum>(
 			typeof value === 'string' ||
 			value === null) &&
 		schema.enum.includes(value as never)
+)
+
+createType<TArrayBuffer>(
+	'ArrayBuffer',
+	(schema, value) => value instanceof ArrayBuffer
 )
 
 const internalFiles = createType<FilesOptions, File[]>(
@@ -480,6 +487,36 @@ export const ElysiaType = {
 				compiler
 			})
 		])
+	},
+
+	ArrayBuffer(options: TArrayBuffer = {}) {
+		return {
+			// default is need for generating error message
+			default: [1, 2, 3],
+			...options,
+			[Kind]: 'ArrayBuffer'
+		} as any as TUnsafe<ArrayBuffer>
+	},
+
+	Uint8Array: (options: Uint8ArrayOptions) => {
+		const schema = Type.Uint8Array(options)
+		const compiler = compile(schema)
+
+		const decoder = new TextDecoder()
+
+		return t
+			.Transform(t.Union([t.ArrayBuffer(), Type.Uint8Array(options)]))
+			.Decode((value) => {
+				if (value instanceof ArrayBuffer) {
+					if (!compiler.Check((value = new Uint8Array(value))))
+						throw compiler.Error(value)
+
+					return value
+				}
+
+				return value
+			})
+			.Encode((value) => value) as any as TUnsafe<Uint8Array>
 	}
 }
 
@@ -526,6 +563,9 @@ t.Date = ElysiaType.Date
 t.UnionEnum = ElysiaType.UnionEnum
 t.NoValidate = ElysiaType.NoValidate
 t.Form = ElysiaType.Form
+
+t.ArrayBuffer = ElysiaType.ArrayBuffer
+t.Uint8Array = ElysiaType.Uint8Array as any
 
 export { t }
 

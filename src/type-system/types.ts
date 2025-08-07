@@ -7,7 +7,8 @@ import type {
 	TProperties,
 	TransformKind,
 	TSchema,
-	TUnsafe
+	TUnsafe,
+	Uint8ArrayOptions
 } from '@sinclair/typebox'
 import { ValueError } from '@sinclair/typebox/errors'
 import type { TypeCheck } from '@sinclair/typebox/compiler'
@@ -137,6 +138,8 @@ export interface TUnionEnum<
 	static: T[number]
 	enum: T
 }
+
+export interface TArrayBuffer extends Uint8ArrayOptions {}
 
 export type TForm<T extends TProperties = TProperties> = TUnsafe<
 	ElysiaFormData<TObject<T>['static']>

@@ -1351,7 +1351,7 @@ export const composeHandler = ({
 
 		if (hasBody && validator.body) {
 			if (validator.body.hasTransform || validator.body.isOptional)
-				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&isNotEmpty(c.body))\n`
+				fnLiteral += `const isNotEmptyObject=c.body&&(typeof c.body==="object"&&(isNotEmpty(c.body)||c.body instanceof ArrayBuffer))\n`
 
 			const hasUnion = isUnion(validator.body.schema)
 			let hasNonUnionFileWithDefault = false
