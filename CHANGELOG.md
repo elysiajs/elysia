@@ -19,6 +19,9 @@ Bug fix:
 - dynamic handle should handle named parser
 - hand
 
+Improvement:
+- remove `finally` from compose
+
 Change:
 - afterResponse now call after response by scheduling setImmediate
 - update memoirist to 0.4.0

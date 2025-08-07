@@ -856,8 +856,44 @@ export const composeHandler = ({
 		(isHandleFn && hasDefaultHeaders) ||
 		maybeStream
 
-	const mapResponse = (r = 'r') =>
-		`return ${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
+	const afterResponse = () => {
+		if (!hooks.afterResponse?.length) return ''
+
+		let afterResponse = ''
+		const prefix = hooks.afterResponse?.some(isAsync) ? 'async ' : ''
+
+		afterResponse += `\nsetImmediate(${prefix}()=>{`
+
+		const reporter = report('afterResponse', {
+			total: hooks.afterResponse?.length
+		})
+
+		if (hooks.afterResponse?.length && hooks.afterResponse) {
+			for (let i = 0; i < hooks.afterResponse.length; i++) {
+				const endUnit = reporter.resolveChild(
+					hooks.afterResponse[i].fn.name
+				)
+				const prefix = isAsync(hooks.afterResponse[i]) ? 'await ' : ''
+				afterResponse += `\n${prefix}e.afterResponse[${i}](c)\n`
+				endUnit()
+			}
+		}
+
+		reporter.resolve()
+
+		afterResponse += '})\n'
+
+		return afterResponse
+	}
+
+	const mapResponse = (r = 'r') => {
+		const after = afterResponse()
+		const response = `${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
+
+		if (!after) `return ${response}`
+
+		return `const _res=${response}` + after + `return _res`
+	}
 
 	const mapResponseContext =
 		maybeStream || adapter.mapResponseContext
@@ -1795,8 +1831,6 @@ export const composeHandler = ({
 
 			if (validator.response) fnLiteral += validation.response()
 
-			report('afterHandle').resolve()
-
 			const mapResponseReporter = report('mapResponse', {
 				total: hooks.mapResponse?.length
 			})
@@ -1825,6 +1859,8 @@ export const composeHandler = ({
 			fnLiteral += encodeCookie()
 
 			if (handler instanceof Response) {
+				fnLiteral += afterResponse()
+
 				fnLiteral += inference.set
 					? `if(` +
 						`isNotEmpty(c.set.headers)||` +
@@ -1844,8 +1880,6 @@ export const composeHandler = ({
 				: `let r=${handle}\n`
 
 			handleReporter.resolve()
-
-			report('afterHandle').resolve()
 
 			const mapResponseReporter = report('mapResponse', {
 				total: hooks.mapResponse?.length
@@ -1877,9 +1911,9 @@ export const composeHandler = ({
 
 			const handled = isAsyncHandler ? `await ${handle}` : handle
 
-			report('afterHandle').resolve()
-
 			if (handler instanceof Response) {
+				fnLiteral += afterResponse()
+
 				fnLiteral += inference.set
 					? `if(isNotEmpty(c.set.headers)||` +
 						`c.set.status!==200||` +
@@ -1938,7 +1972,6 @@ export const composeHandler = ({
 
 			endUnit()
 
-
 			if (hooks.mapResponse?.length) {
 				const mapResponseReporter = report('mapResponse', {
 					total: hooks.mapResponse?.length
@@ -1984,31 +2017,6 @@ export const composeHandler = ({
 	fnLiteral += `return handleError(c,error,true)`
 	if (!maybeAsync && hooks.error?.length) fnLiteral += '})()'
 	fnLiteral += '}'
-
-	if (hooks.afterResponse?.length || hasTrace) {
-		const prefix = hooks.afterResponse?.some(isAsync) ? 'async ' : ''
-
-		fnLiteral += `finally{ ` + `setImmediate(${prefix}()=>{`
-
-		const reporter = report('afterResponse', {
-			total: hooks.afterResponse?.length
-		})
-
-		if (hooks.afterResponse?.length && hooks.afterResponse) {
-			for (let i = 0; i < hooks.afterResponse.length; i++) {
-				const endUnit = reporter.resolveChild(
-					hooks.afterResponse[i].fn.name
-				)
-				const prefix = isAsync(hooks.afterResponse[i]) ? 'await ' : ''
-				fnLiteral += `\n${prefix}e.afterResponse[${i}](c)\n`
-				endUnit()
-			}
-		}
-
-		reporter.resolve()
-
-		fnLiteral += '})' + `}`
-	}
 
 	const adapterVariables = adapter.inject
 		? Object.keys(adapter.inject).join(',') + ','
@@ -2442,8 +2450,10 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		}
 	})
 
-	let afterResponse = ''
-	if (hooks.afterResponse?.length) {
+	const afterResponse = () => {
+		if (!hooks.afterResponse?.length) return ''
+
+		let afterResponse = ''
 		const prefix = hooks.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse += `\nsetImmediate(${prefix}()=>{`
 
@@ -2464,6 +2474,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		afterResponse += `})\n`
 
 		reporter.resolve()
+
+		return afterResponse
 	}
 
 	fnLiteral +=
@@ -2538,12 +2550,13 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){\n` +
 		`if(error.error)error=error.error\n` +
 		`set.status=error.status??422\n` +
-		afterResponse +
+		afterResponse() +
 		adapter.validationError +
 		`\n}\n`
 
 	fnLiteral +=
 		`if(error instanceof Error){` +
+		afterResponse() +
 		`\nif(typeof error.toResponse==='function')return context.response=error.toResponse()\n` +
 		adapter.unknownError +
 		`\n}`
@@ -2579,7 +2592,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	mapResponseReporter.resolve()
 
 	fnLiteral +=
-		afterResponse +
+		afterResponse() +
 		`\nreturn mapResponse(${saveResponse}error,set${adapter.mapResponseContext})}`
 
 	const mapFn = (x: Function | HookContainer) =>

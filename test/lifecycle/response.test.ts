@@ -141,7 +141,7 @@ describe('On After Response', () => {
 	})
 })
 
-describe('onResponse', () => {
+describe('On After Response Error', () => {
 	const newReq = (params?: {
 		path?: string
 		headers?: Record<string, string>
@@ -152,14 +152,17 @@ describe('onResponse', () => {
 	class CustomError extends Error {}
 
 	let isOnResponseCalled: boolean
+	let onResponseCalledCounter = 0
 
 	beforeEach(() => {
 		isOnResponseCalled = false
+		onResponseCalledCounter = 0
 	})
 
 	const app = new Elysia()
 		.onAfterResponse(() => {
 			isOnResponseCalled = true
+			onResponseCalledCounter++
 		})
 		.post('/', () => 'yay', {
 			body: t.Object({
@@ -202,5 +205,6 @@ describe('onResponse', () => {
 		await Bun.sleep(1)
 
 		expect(isOnResponseCalled).toBeTrue()
+		expect(onResponseCalledCounter).toBe(1)
 	})
 })
