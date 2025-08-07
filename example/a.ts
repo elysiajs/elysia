@@ -1,25 +1,19 @@
-import { Elysia, t } from '../src'
+// index.ts
+import Elysia from '../src'
 
 const app = new Elysia()
-	.post(
-		'/',
-		({ body }) => {
-			return body
-		},
-		{
-			body: t.Uint8Array({
-				maxByteLength: 1
-			})
-		}
-	)
+	.onError((err) => {
+		if (err.code === 'NOT_FOUND') return
+
+		process.stdout.write(`Error: ${JSON.stringify(err, null, 2)}\n`)
+	})
+	.get('/testing-status', ({ status }) => {
+		return status(403, 'This is a test error from status')
+	})
+	.resolve(({ status }) => {
+		return status(403, 'This is a test error from resolve')
+	})
+	.get('/testing-resolve', () => 'Hello World!')
 	.listen(3000)
 
-const response = await fetch(
-	new Request('http://localhost:3000', {
-		method: 'POST',
-		body: new TextEncoder().encode('可愛くてごめん'),
-		headers: { 'content-type': 'application/octet-stream' }
-	})
-)
-
-console.log(response.headers.toJSON())
+console.log(app.routes[1].compile().toString())

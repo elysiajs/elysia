@@ -216,16 +216,18 @@ describe('resolve', () => {
 			})
 			.get('/', () => '')
 
-		const res = await (new Elysia({aot: true})).use(route).handle(req('/'))
+		const res = await new Elysia({ aot: true }).use(route).handle(req('/'))
 		expect(await res.status).toEqual(418)
 		expect(await res.text()).toEqual("I'm a teapot")
 
-		const res2 = await (new Elysia({aot: false})).use(route).handle(req('/'))
+		const res2 = await new Elysia({ aot: false })
+			.use(route)
+			.handle(req('/'))
 		expect(await res2.status).toEqual(418)
 		expect(await res2.text()).toEqual("I'm a teapot")
-
 	})
 
+	/** These work but there's no support for type
 	it('work inline', async () => {
 		const app = new Elysia().get('/', ({ hi }) => hi(), {
 			resolve: () => ({
@@ -359,5 +361,21 @@ describe('resolve', () => {
 
 		const res2 = await root.handle(req('/root')).then((t) => t.text())
 		expect(res2).toBe('hi')
+	})
+	 */
+
+	it('handle return resolve without throw', async () => {
+		let isOnErrorCalled = false
+
+		const app = new Elysia()
+			.onError(() => {
+				isOnErrorCalled = true
+			})
+			.resolve(({ status }) => status(418))
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(isOnErrorCalled).toBe(false)
 	})
 })

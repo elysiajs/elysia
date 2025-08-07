@@ -1164,7 +1164,9 @@ export const composeHandler = ({
 						`case '${key}':` +
 						`let bo${key}=parser['${key}'](c,contentType)\n` +
 						`if(bo${key} instanceof Promise)bo${key}=await bo${key}\n` +
-						`if(bo${key} instanceof ElysiaCustomStatusResponse)throw result\n` +
+						`if(bo${key} instanceof ElysiaCustomStatusResponse){` +
+						mapResponse(`bo${key}`) +
+						`}` +
 						`if(bo${key}!==undefined)c.body=bo${key}\n` +
 						`break` +
 						'\n'
@@ -1200,8 +1202,9 @@ export const composeHandler = ({
 
 			if (transform.subType === 'mapDerive')
 				fnLiteral +=
-					`if(transformed instanceof ElysiaCustomStatusResponse)throw transformed\n` +
-					`else{` +
+					`if(transformed instanceof ElysiaCustomStatusResponse){` +
+					mapResponse('transformed') +
+					`}else{` +
 					`transformed.request=c.request\n` +
 					`transformed.store=c.store\n` +
 					`transformed.qi=c.qi\n` +
@@ -1214,8 +1217,9 @@ export const composeHandler = ({
 					'}'
 			else
 				fnLiteral +=
-					`if(transformed instanceof ElysiaCustomStatusResponse)throw transformed\n` +
-					`else Object.assign(c,transformed)\n`
+					`if(transformed instanceof ElysiaCustomStatusResponse){` +
+					mapResponse('transformed') +
+					`}else Object.assign(c,transformed)\n`
 
 			endUnit()
 		}
@@ -1626,9 +1630,9 @@ export const composeHandler = ({
 
 				if (beforeHandle.subType === 'mapResolve')
 					fnLiteral +=
-						`if(resolved instanceof ElysiaCustomStatusResponse)` +
-						`throw resolved\n` +
-						`else{` +
+						`if(resolved instanceof ElysiaCustomStatusResponse){` +
+						mapResponse('resolved') +
+						`}else{` +
 						`resolved.request=c.request\n` +
 						`resolved.store=c.store\n` +
 						`resolved.qi=c.qi\n` +
@@ -1641,7 +1645,9 @@ export const composeHandler = ({
 						`}`
 				else
 					fnLiteral +=
-						`if(resolved instanceof ElysiaCustomStatusResponse)throw resolved\n` +
+						`if(resolved instanceof ElysiaCustomStatusResponse){` +
+						mapResponse('resolved') +
+						`}` +
 						`else Object.assign(c, resolved)\n`
 			} else if (!returning) {
 				fnLiteral += isAsync(beforeHandle)

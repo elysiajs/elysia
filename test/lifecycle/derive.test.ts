@@ -326,4 +326,19 @@ describe('derive', () => {
 	// 	const res2 = await root.handle(req('/root')).then((t) => t.text())
 	// 	expect(res2).toBe('hi')
 	// })
+
+	it('handle return derive without throw', async () => {
+		let isOnErrorCalled = false
+
+		const app = new Elysia()
+			.onError(() => {
+				isOnErrorCalled = true
+			})
+			.derive(({ status }) => status(418))
+			.get('/', () => '')
+
+		await app.handle(req('/'))
+
+		expect(isOnErrorCalled).toBe(false)
+	})
 })
