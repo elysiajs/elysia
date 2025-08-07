@@ -3,7 +3,7 @@ import { Elysia, InternalServerError, t } from '../src'
 
 class CustomError extends Error {}
 
-const app = new Elysia()
+const app = new Elysia({ aot: false })
 	.onAfterResponse((context) => {
 		console.log(context.query)
 	})

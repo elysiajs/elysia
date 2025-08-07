@@ -102,7 +102,13 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				app.router.dynamic.find(methodKey, path) ??
 				app.router.dynamic.find('ALL', path)
 
-			if (!handler) throw new NotFoundError()
+			if (!handler) {
+				// @ts-ignore
+				context.query =
+					qi === -1 ? {} : parseQuery(url.substring(qi + 1))
+
+				throw new NotFoundError()
+			}
 
 			const { handle, hooks, validator, content, route } = handler.store
 
