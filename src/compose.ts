@@ -2254,7 +2254,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 
 	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
 
-	let afterResponse = ''
+	let afterResponse = `c.error=notFound\n`
 	if (app.event.afterResponse?.length) {
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse += `\nsetImmediate(${prefix}()=>{`
@@ -2267,6 +2267,15 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 
 		afterResponse += `})\n`
 	}
+
+	// @ts-ignore
+	if (app.inference.query)
+		afterResponse +=
+			'if(c.qi===-1){' +
+			'c.query={}' +
+			'}else{' +
+			'c.query=parseQueryFromURL(c.url,c.qi+1)' +
+			'}'
 
 	const error404 = adapter.error404(
 		!!app.event.request?.length,
@@ -2334,6 +2343,8 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		`handleError,` +
 		`status,` +
 		`redirect,` +
+		// @ts-ignore
+		allocateIf(`parseQueryFromURL,`, app.inference.query) +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
 		allocateIf(`ELYSIA_REQUEST_ID,`, hasTrace) +
 		adapterVariables +
@@ -2397,6 +2408,8 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		handleError,
 		status,
 		redirect,
+		// @ts-ignore
+		parseQueryFromURL: app.inference.query ? parseQueryFromURL : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
 		ELYSIA_REQUEST_ID: hasTrace ? ELYSIA_REQUEST_ID : undefined,
 		...adapter.inject

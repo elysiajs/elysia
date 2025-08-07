@@ -17,10 +17,11 @@ Bug fix:
 - [#1319](https://github.com/elysiajs/elysia/pull/1319) fix array of plugin usage causes incorrect path aggregation
 - [#1323](https://github.com/elysiajs/elysia/issues/1323) don't duplicate error from plugin
 - dynamic handle should handle named parser
-- hand
+- handle non-root additionalProperties
 
 Improvement:
 - remove `finally` from compose
+- `NotFoundError` should parse query if inferred
 
 Change:
 - afterResponse now call after response by scheduling setImmediate

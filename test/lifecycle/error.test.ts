@@ -330,4 +330,15 @@ describe('error', () => {
 		expect(await response.text()).toBe('Unauthorized')
 		expect(i).toBe(1)
 	})
+
+	it('404 should parse query if infer', async () => {
+		const app = new Elysia().onError(({ query }) => query)
+
+		const response = await app.handle(
+			new Request('http://localhost?hello=world')
+		)
+
+		expect(response.status).toBe(404)
+		expect(await response.json()).toEqual({ hello: 'world' })
+	})
 })
