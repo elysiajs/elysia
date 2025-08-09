@@ -1,18 +1,13 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.get(
-		'/',
-		async function* () {
-			yield 'a'
-			await Bun.sleep(10)
-			throw new Error('My Dummy Error')
-			yield 'b'
-		},
-		{
-			error({ error }) {
-				return 'handled'
-			}
+export const app = new Elysia().get(
+	'/test1',
+	() => {
+		return { message: 'Hello, World!' }
+	},
+	{
+		afterHandle: ({ response }) => {
+			console.log(response)
 		}
-	)
-	.listen(3000)
+	}
+)

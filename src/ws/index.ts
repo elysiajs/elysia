@@ -38,16 +38,6 @@ type ElysiaServerWebSocket = Omit<
 export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 	implements ElysiaServerWebSocket
 {
-	validator?: TypeCheck<TSchema>;
-	['~types']?: {
-		validator: Prettify<Route>
-	}
-
-	get id() {
-		// @ts-ignore
-		return this.data.id
-	}
-
 	constructor(
 		public raw: ServerWebSocket<{
 			id?: string
@@ -197,6 +187,16 @@ export class ElysiaWS<Context = unknown, Route extends RouteSchema = {}>
 
 	get readyState() {
 		return this.raw.readyState
+	}
+
+	validator?: TypeCheck<TSchema>;
+	['~types']?: {
+		validator: Prettify<Route>
+	}
+
+	get id(): string {
+		// @ts-ignore
+		return this.data.id
 	}
 }
 

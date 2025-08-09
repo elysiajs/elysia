@@ -39,10 +39,10 @@ interface TypedWebSocketHandler<
 	in out Route extends RouteSchema = {}
 > extends Omit<WebSocketHandler<Context>, TypedWebSocketMethod> {
 	open?(
-		ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
+		ws: Prettify<ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>>
 	): MaybePromise<FlattenResponse<Route['response']> | void>
 	message?(
-		ws: ElysiaWS<Context, Route>,
+		ws: Prettify<ElysiaWS<Context, Route>>,
 		message: Route['body']
 	): MaybePromise<
 		| FlattenResponse<Route['response']>
@@ -57,7 +57,7 @@ interface TypedWebSocketHandler<
 		  >
 	>
 	drain?(
-		ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>
+		ws: Prettify<ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>>
 	): MaybePromise<
 		| FlattenResponse<Route['response']>
 		| void
@@ -71,7 +71,7 @@ interface TypedWebSocketHandler<
 		  >
 	>
 	close?(
-		ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>,
+		ws: Prettify<ElysiaWS<Context, Omit<Route, 'body'> & { body: never }>>,
 		code: number,
 		reason: string
 	): MaybePromise<
@@ -117,7 +117,7 @@ interface TypedWebSocketHandler<
 }
 
 export type WSParseHandler<Route extends RouteSchema, Context = {}> = (
-	ws: ElysiaWS<Context, Omit<Route, 'body'> & { body: unknown }>,
+	ws: Prettify<ElysiaWS<Context, Omit<Route, 'body'> & { body: unknown }>>,
 	message: unknown
 ) => MaybePromise<Route['body'] | void | undefined>
 

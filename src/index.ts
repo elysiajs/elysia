@@ -6837,7 +6837,8 @@ export {
 	ValidationError,
 	InternalServerError,
 	InvalidCookieSignature,
-	ERROR_CODE
+	ERROR_CODE,
+	ElysiaCustomStatusResponse
 } from './error'
 
 export type {
