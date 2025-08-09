@@ -556,8 +556,8 @@ t.Files = (arg) => {
 	})
 }
 
-t.Nullable = (schema) => ElysiaType.Nullable(schema)
-t.MaybeEmpty = ElysiaType.MaybeEmpty as any
+t.Nullable = ElysiaType.Nullable
+t.MaybeEmpty = ElysiaType.MaybeEmpty
 t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date
 t.UnionEnum = ElysiaType.UnionEnum

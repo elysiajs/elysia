@@ -1,19 +1,18 @@
-// index.ts
-import Elysia from '../src'
+import { Elysia, t } from '../src'
 
 const app = new Elysia()
-	.onError((err) => {
-		if (err.code === 'NOT_FOUND') return
-
-		process.stdout.write(`Error: ${JSON.stringify(err, null, 2)}\n`)
-	})
-	.get('/testing-status', ({ status }) => {
-		return status(403, 'This is a test error from status')
-	})
-	.resolve(({ status }) => {
-		return status(403, 'This is a test error from resolve')
-	})
-	.get('/testing-resolve', () => 'Hello World!')
+	.get(
+		'/',
+		async function* () {
+			yield 'a'
+			await Bun.sleep(10)
+			throw new Error('My Dummy Error')
+			yield 'b'
+		},
+		{
+			error({ error }) {
+				return 'handled'
+			}
+		}
+	)
 	.listen(3000)
-
-console.log(app.routes[1].compile().toString())
