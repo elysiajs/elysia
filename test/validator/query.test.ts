@@ -988,4 +988,24 @@ describe('Query Validator', () => {
 
 		expect(err instanceof ValidationError).toBe(true)
 	})
+
+	it('handle reference query array', async () => {
+		const app = new Elysia()
+			.model({
+				ids: t.Object({
+					ids: t.Array(t.Union([t.String(), t.ArrayString()]))
+				})
+			})
+			.get('/', ({ query }) => query, {
+				query: 'ids'
+			})
+
+		const response = await app
+			.handle(req('?ids=1,2,3'))
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			ids: ['1', '2', '3']
+		})
+	})
 })
