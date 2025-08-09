@@ -225,7 +225,23 @@ export const ElysiaType = {
 
 				return date
 			})
-			.Encode((value) => (value instanceof Date ? value : new Date(value)).toISOString()) as any as TDate
+			.Encode((value) => {
+				if (value instanceof Date) return value.toISOString()
+				if (typeof value === 'string') {
+					if (
+						isNaN(
+							new Date(parseDateTimeEmptySpace(value)).getTime()
+						)
+					)
+						throw new ValidationError('property', schema, value)
+
+					return value
+				}
+
+				if (!compiler.Check(value)) throw compiler.Error(value)
+
+				return value
+			}) as any as TDate
 	},
 
 	BooleanString: (property?: SchemaOptions) => {
@@ -501,8 +517,6 @@ export const ElysiaType = {
 	Uint8Array: (options: Uint8ArrayOptions) => {
 		const schema = Type.Uint8Array(options)
 		const compiler = compile(schema)
-
-		const decoder = new TextDecoder()
 
 		return t
 			.Transform(t.Union([t.ArrayBuffer(), Type.Uint8Array(options)]))

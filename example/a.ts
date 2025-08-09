@@ -1,11 +1,23 @@
-import { Elysia, t } from '../src'
+import { Elysia, t, form, ElysiaCustomStatusResponse } from '../src'
 
-new Elysia()
-	.model({
-		ids: t.Object({
-			ids: t.Array(t.Union([t.String(), t.ArrayString()]))
+new Elysia().get('/course', async ({ error, dta }) => {
+	const response = database
+		.transaction(async (tx) => {
+			const statuses = await tx.courseStatus.all()
+
+			await tx.course.create([
+				{
+					title: 'Course x' + Math.random(),
+					statusId: statuses[0].data.id
+				}
+			])
+
+			return 'something'
 		})
-	})
-	.get('/', ({ query }) => query, {
-		query: 'ids'
-	})
+		.catch(() => {
+			return error(400, 'Some weird issue')
+		})
+
+	if (response instanceof ElysiaCustomStatusResponse)
+		return response
+})

@@ -22,6 +22,7 @@ Bug fix:
 - [#1297](https://github.com/elysiajs/elysia/issues/1297), [#1325](https://github.com/elysiajs/elysia/pull/1325) fix HTML imported pages in compiled apps
 - [#1319](https://github.com/elysiajs/elysia/pull/1319) fix array of plugin usage causes incorrect path aggregation
 - [#1323](https://github.com/elysiajs/elysia/issues/1323) don't duplicate error from plugin
+- [#1327](https://github.com/elysiajs/elysia/pull/1327) ensure that t.Date value is Date in Encode
 - dynamic handle should handle named parser
 - instanceof ElysiaCustomStatusResponse should return true when import from root Elysia module
 
