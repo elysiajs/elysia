@@ -72,7 +72,7 @@ export type ErrorContext<
 								InvertedStatusMapKey,
 								keyof Route['response']
 						  >],
-					const T extends Code extends keyof Route['response']
+					T extends Code extends keyof Route['response']
 						? Route['response'][Code]
 						: Code extends keyof StatusMap
 							? // @ts-ignore StatusMap[Code] always valid because Code generic check
@@ -195,7 +195,7 @@ export type Context<
 								InvertedStatusMapKey,
 								keyof Route['response']
 						  >],
-					const T extends Code extends keyof Route['response']
+					T extends Code extends keyof Route['response']
 						? Route['response'][Code]
 						: Code extends keyof StatusMap
 							? // @ts-ignore StatusMap[Code] always valid because Code generic check

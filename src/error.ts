@@ -40,7 +40,7 @@ const emptyHttpStatus = {
 
 export class ElysiaCustomStatusResponse<
 	const in out Code extends number | keyof StatusMap,
-	const in out T = Code extends keyof InvertedStatusMap
+	in out T = Code extends keyof InvertedStatusMap
 		? InvertedStatusMap[Code]
 		: Code,
 	const in out Status extends Code extends keyof StatusMap

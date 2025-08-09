@@ -486,4 +486,157 @@ describe('Dynamic Mode', () => {
 
 		expect(response).toBe('boolean')
 	})
+
+	it('validate response', async () => {
+		const app = new Elysia({ aot: false })
+			// @ts-ignore
+			.get('/invalid', () => ({ name: 'Jane Doe' }), {
+				response: t.Object({
+					foo: t.String()
+				})
+			})
+			.get(
+				'/invalid-201',
+				// @ts-ignore
+				({ status }) => status(201, { name: 'Jane Doe' }),
+				{
+					response: {
+						201: t.Object({
+							foo: t.String()
+						})
+					}
+				}
+			)
+			.get('/valid', () => ({ foo: 'bar' }), {
+				response: t.Object({
+					foo: t.String()
+				})
+			})
+			.get('/valid-201', ({ status }) => status(201, { foo: 'bar' }), {
+				response: {
+					201: t.Object({
+						foo: t.String()
+					})
+				}
+			})
+
+		const invalid = await app.handle(req('/invalid')).then((x) => x.status)
+		const invalid201 = await app
+			.handle(req('/invalid-201'))
+			.then((x) => x.status)
+		const valid = await app.handle(req('/valid')).then((x) => x.status)
+		const valid201 = await app
+			.handle(req('/valid-201'))
+			.then((x) => x.status)
+
+		expect(invalid).toBe(422)
+		expect(invalid201).toBe(422)
+		expect(valid).toBe(200)
+		expect(valid201).toBe(201)
+	})
+
+	it('clean response', async () => {
+		const app = new Elysia({ aot: false })
+			// @ts-ignore
+			.get('/invalid', () => ({ name: 'Jane Doe' }), {
+				response: t.Object({
+					foo: t.String()
+				})
+			})
+			.get('/valid', () => ({ foo: 'bar', a: 'b' }), {
+				response: t.Object({
+					foo: t.String()
+				})
+			})
+
+		const invalid = await app.handle(req('/invalid')).then((x) => x.status)
+		const valid = await app.handle(req('/valid')).then((x) => x.json())
+
+		expect(invalid).toBe(422)
+		expect(valid).toEqual({
+			foo: 'bar'
+		})
+	})
+
+	it('validate after handle', async () => {
+		const app = new Elysia({ aot: false })
+			// @ts-ignore
+			.get('/invalid', () => '', {
+				afterHandle: () => ({ name: 'Jane Doe' }),
+				response: t.Object({
+					foo: t.String()
+				})
+			})
+			.get(
+				'/invalid-201',
+				// @ts-ignore
+				() => '',
+				{
+					// @ts-ignore
+					afterHandle: ({ status }) =>
+						// @ts-ignore
+						status(201, { name: 'Jane Doe' }),
+					response: {
+						201: t.Object({
+							foo: t.String()
+						})
+					}
+				}
+			)
+			// @ts-ignore
+			.get('/valid', () => '', {
+				afterHandle: () => ({ foo: 'bar' }),
+				response: t.Object({
+					foo: t.String()
+				})
+			})
+			.get('/valid-201', () => '', {
+				afterHandle: ({ status }) => status(201, { foo: 'bar' }),
+				response: {
+					201: t.Object({
+						foo: t.String()
+					})
+				}
+			})
+
+		const invalid = await app.handle(req('/invalid')).then((x) => x.status)
+		const invalid201 = await app
+			.handle(req('/invalid-201'))
+			.then((x) => x.status)
+		const valid = await app.handle(req('/valid')).then((x) => x.status)
+		const valid201 = await app
+			.handle(req('/valid-201'))
+			.then((x) => x.status)
+
+		expect(invalid).toBe(422)
+		expect(invalid201).toBe(422)
+		expect(valid).toBe(200)
+		expect(valid201).toBe(201)
+	})
+
+	it('clean afterHandle', async () => {
+		const app = new Elysia({ aot: false })
+			// @ts-ignore
+			.get('/invalid', () => '', {
+				afterHandle: () => ({ name: 'Jane Doe' }),
+				response: t.Object({
+					foo: t.String()
+				})
+			})
+			// @ts-ignore
+			.get('/valid', () => '', {
+				afterHandle: () => ({ foo: 'bar', a: 'b' }),
+				response: t.Object({
+					foo: t.String()
+				})
+			})
+
+		const invalid = await app.handle(req('/invalid')).then((x) => x.status)
+		const valid = await app.handle(req('/valid')).then((x) => x.json())
+
+		expect(invalid).toBe(422)
+		expect(valid).toEqual({
+			foo: 'bar'
+		})
+	})
 })

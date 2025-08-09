@@ -911,7 +911,10 @@ export type AfterHandler<
 ) => MaybePromise<
 	{} extends Route['response']
 		? unknown
-		: Route['response'][keyof Route['response']] | void
+		:
+				| Route['response'][keyof Route['response']]
+				| InlineHandlerResponse<Route['response']>
+				| void
 >
 
 export type MapResponse<

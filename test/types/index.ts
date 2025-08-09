@@ -961,12 +961,17 @@ app.group(
 
 // ? Inherits plugin instance prefix path
 {
-	const pluginPrefixApp = new Elysia({ prefix: '/app' }).get('/test', () => 'hello')
+	const pluginPrefixApp = new Elysia({ prefix: '/app' }).get(
+		'/test',
+		() => 'hello'
+	)
 
-	const appWithArrayOfPlugin = new Elysia({ prefix: '/api' }).use([pluginPrefixApp])
+	const appWithArrayOfPlugin = new Elysia({ prefix: '/api' }).use([
+		pluginPrefixApp
+	])
 	const appWithPlugin = new Elysia({ prefix: '/api' }).use(pluginPrefixApp)
-	
-	expectTypeOf<typeof appWithArrayOfPlugin['~Routes']>().toEqualTypeOf<{
+
+	expectTypeOf<(typeof appWithArrayOfPlugin)['~Routes']>().toEqualTypeOf<{
 		api: {
 			app: {
 				test: {
@@ -980,10 +985,12 @@ app.group(
 						}
 					}
 				}
-			},
+			}
 		}
 	}>()
-	expectTypeOf<typeof appWithArrayOfPlugin['~Routes']>().toEqualTypeOf<typeof appWithPlugin['~Routes']>()
+	expectTypeOf<(typeof appWithArrayOfPlugin)['~Routes']>().toEqualTypeOf<
+		(typeof appWithPlugin)['~Routes']
+	>()
 }
 
 // ? Inlining function callback don't repeat prefix
@@ -2515,4 +2522,24 @@ type a = keyof {}
 
 	// This should not error
 	app['~Routes']?.api.v1.thing
+}
+
+// handle status in afterResponse
+{
+	new Elysia().get('/', () => '', {
+		afterHandle: ({ status }) => status(201, { foo: 'bar' }),
+		response: {
+			201: t.Object({
+				foo: t.String()
+			})
+		}
+	})
+
+	const route = new Elysia().get('/', () => ({ foo: 'a' }), {
+		// @ts-expect-error
+		afterHandle: () => ({ q: 'a' }),
+		response: t.Object({
+			foo: t.String()
+		})
+	})
 }

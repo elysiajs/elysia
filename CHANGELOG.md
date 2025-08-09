@@ -22,6 +22,7 @@ Bug fix:
 - [#1319](https://github.com/elysiajs/elysia/pull/1319) fix array of plugin usage causes incorrect path aggregation
 - [#1323](https://github.com/elysiajs/elysia/issues/1323) don't duplicate error from plugin
 - dynamic handle should handle named parser
+- instanceof ElysiaCustomStatusResponse should return true when import from root Elysia module
 
 Improvement:
 - remove `finally` from compose
@@ -29,8 +30,10 @@ Improvement:
 - [#853](https://github.com/elysiajs/elysia/issues/853) Bun Static response now handle pre-compute `onRequest`, and `onError`
 - prettify ElysiaWS type
 - export `ElysiaCustomStatusResponse`
+- handle type-level status check in after response
 
 Change:
+- status no longer make value as readonly
 - afterResponse now call after response by scheduling setImmediate
 - update memoirist to 0.4.0
 - update exact-mirror to 0.1.5

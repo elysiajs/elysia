@@ -475,67 +475,117 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				typeof handle === 'function' ? handle(context) : handle
 			if (response instanceof Promise) response = await response
 
-			if (hooks.afterHandle)
-				if (!hooks.afterHandle.length) {
-					const status =
-						response instanceof ElysiaCustomStatusResponse
-							? response.code
+			if (!hooks.afterHandle?.length) {
+				const isCustomStatuResponse =
+					response instanceof ElysiaCustomStatusResponse
+
+				const status = isCustomStatuResponse
+					? response.code
+					: set.status
+						? typeof set.status === 'string'
+							? StatusMap[set.status]
 							: set.status
-								? typeof set.status === 'string'
-									? StatusMap[set.status]
-									: set.status
-								: 200
+						: 200
 
-					const responseValidator =
-						validator?.createResponse?.()?.[status]
+				if (isCustomStatuResponse) {
+					set.status = status
+					response = response.response
+				}
 
-					if (responseValidator?.Check(response) === false)
+				const responseValidator =
+					validator?.createResponse?.()?.[status]
+
+				if (responseValidator?.Check(response) === false) {
+					if (responseValidator?.Clean) {
+						const temp = responseValidator.Clean(response)
+						if (responseValidator?.Check(temp) === false)
+							throw new ValidationError(
+								'response',
+								responseValidator,
+								response
+							)
+
+						response = temp
+					} else
 						throw new ValidationError(
 							'response',
 							responseValidator,
 							response
 						)
-					else if (responseValidator?.Encode)
-						response = responseValidator.Encode(response)
-				} else {
-					;(
+				}
+
+				if (responseValidator?.Encode)
+					response = responseValidator.Encode(response)
+
+				if (responseValidator?.Clean)
+					response = responseValidator.Clean(response)
+			} else {
+				;(
+					context as Context & {
+						response: unknown
+					}
+				).response = response
+
+				for (let i = 0; i < hooks.afterHandle.length; i++) {
+					let response: unknown = hooks.afterHandle[i].fn(
 						context as Context & {
 							response: unknown
 						}
-					).response = response
+					)
+					if (response instanceof Promise) response = await response
 
-					for (let i = 0; i < hooks.afterHandle.length; i++) {
-						let newResponse = hooks.afterHandle[i].fn(
-							context as Context & {
-								response: unknown
-							}
-						)
-						if (newResponse instanceof Promise)
-							newResponse = await newResponse
+					const isCustomStatuResponse =
+						response instanceof ElysiaCustomStatusResponse
 
-						const result = mapEarlyResponse(
-							newResponse,
-							context.set
-						)
-						if (result !== undefined) {
-							const responseValidator =
-								// @ts-expect-error
-								validator?.response?.[result.status]
+					const status = isCustomStatuResponse
+						? (response as ElysiaCustomStatusResponse<any>).code
+						: set.status
+							? typeof set.status === 'string'
+								? StatusMap[set.status]
+								: set.status
+							: 200
 
-							if (responseValidator?.Check(result) === false)
+					if (isCustomStatuResponse) {
+						set.status = status
+						response = (response as ElysiaCustomStatusResponse<any>)
+							.response
+					}
+
+					const responseValidator =
+						validator?.createResponse?.()?.[status]
+
+					if (responseValidator?.Check(response) === false) {
+						if (responseValidator?.Clean) {
+							const temp = responseValidator.Clean(response)
+							if (responseValidator?.Check(temp) === false)
 								throw new ValidationError(
 									'response',
 									responseValidator,
-									result
+									response
 								)
-							else if (responseValidator?.Encode)
-								response = responseValidator.Encode(response)
 
-							// @ts-expect-error
-							return (context.response = result)
-						}
+							response = temp
+						} else
+							throw new ValidationError(
+								'response',
+								responseValidator,
+								response
+							)
 					}
+
+					if (responseValidator?.Encode)
+						context.response = response =
+							responseValidator.Encode(response)
+
+					if (responseValidator?.Clean)
+						context.response = response =
+							responseValidator.Clean(response)
+
+					const result = mapEarlyResponse(response, context.set)
+					// @ts-ignore
+					if (result !== undefined) return (context.response = result)
 				}
+			}
 
 			if (context.set.cookie && cookieMeta?.sign) {
 				const secret = !cookieMeta.secrets

@@ -1,13 +1,12 @@
 import { Elysia, t } from '../src'
 
-export const app = new Elysia().get(
-	'/test1',
-	() => {
-		return { message: 'Hello, World!' }
-	},
-	{
-		afterHandle: ({ response }) => {
-			console.log(response)
-		}
-	}
-)
+const route = new Elysia({ aot: false })
+	.get('/valid', () => ({ foo: 'a' }), {
+		afterHandle: () => ({ q: 'a' }),
+		response: t.Object({
+			foo: t.String()
+		})
+	})
+	.listen(3000)
+
+// console.log(route.routes[0].compile().toString())
