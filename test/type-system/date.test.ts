@@ -56,9 +56,7 @@ describe('TypeSystem - Date', () => {
 		expect(() =>
 			Value.Encode(schema, Value.Decode(schema, 42))
 		).not.toThrowError()
-		expect(() =>
-			new Date().toISOString()
-		).not.toThrowError()
+		expect(() => new Date().toISOString()).not.toThrowError()
 		expect(() => Value.Encode(schema, {})).toThrowError()
 		expect(() => Value.Encode(schema, undefined)).toThrowError()
 		expect(() => Value.Encode(schema, null)).toThrowError()

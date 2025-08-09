@@ -20,16 +20,16 @@ export const handleFile = (
 			set.status === 416)
 
 	const defaultHeader = immutable
-		? {
+		? ({
 				'transfer-encoding': 'chunked'
-			}
+			} as Record<string, string>)
 		: ({
 				'accept-ranges': 'bytes',
 				'content-range': size
 					? `bytes 0-${size - 1}/${size}`
 					: undefined,
 				'transfer-encoding': 'chunked'
-			} as any)
+			} as Record<string, string>)
 
 	if (!set && !size) return new Response(response as Blob)
 
@@ -39,25 +39,15 @@ export const handleFile = (
 		})
 
 	if (set.headers instanceof Headers) {
-		let setHeaders: Record<string, any> = defaultHeader
-
-		if (hasHeaderShorthand)
-			setHeaders = (set.headers as unknown as Headers).toJSON()
-		else {
-			setHeaders = {}
-			for (const [key, value] of set.headers.entries())
-				if (key in set.headers) setHeaders[key] = value
-		}
+		for (const key of Object.keys(defaultHeader))
+			if (key in set.headers) set.headers.append(key, defaultHeader[key])
 
 		if (immutable) {
-			delete set.headers['content-length']
-			delete set.headers['accept-ranges']
+			set.headers.delete('content-length')
+			set.headers.delete('accept-ranges')
 		}
 
-		return new Response(response as Blob, {
-			status: set.status as number,
-			headers: setHeaders
-		})
+		return new Response(response as Blob, set as any)
 	}
 
 	if (isNotEmpty(set.headers))
