@@ -922,7 +922,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 		validator.parse = (v) => {
 			try {
-				return validator.Decode(v)
+				return validator.Decode(validator.Clean?.(v) ?? v)
 			} catch (error) {
 				throw [...validator.Errors(v)].map(mapValueError)
 			}
@@ -930,7 +930,11 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 		validator.safeParse = (v) => {
 			try {
-				return { success: true, data: validator.Decode(v), error: null }
+				return {
+					success: true,
+					data: validator.Decode(validator.Clean?.(v) ?? v),
+					error: null
+				}
 			} catch (error) {
 				const errors = [...compiled.Errors(v)].map(mapValueError)
 
@@ -978,7 +982,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 	compiled.parse = (v) => {
 		try {
-			return compiled.Decode(v)
+			return compiled.Decode(compiled.Clean?.(v) ?? v)
 		} catch (error) {
 			throw [...compiled.Errors(v)].map(mapValueError)
 		}
@@ -986,7 +990,11 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 
 	compiled.safeParse = (v) => {
 		try {
-			return { success: true, data: compiled.Decode(v), error: null }
+			return {
+				success: true,
+				data: compiled.Decode(compiled.Clean?.(v) ?? v),
+				error: null
+			}
 		} catch (error) {
 			const errors = [...compiled.Errors(v)].map(mapValueError)
 

@@ -1008,4 +1008,22 @@ describe('Query Validator', () => {
 			ids: ['1', '2', '3']
 		})
 	})
+
+	it('validate url encoded query', () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				test: t.Optional(t.Number()),
+				$test: t.Optional(t.Number())
+			})
+		})
+
+		const value = app
+			.handle(new Request('http://localhost?test=1&%24test=2'))
+			.then((x) => x.json())
+
+		expect(value).resolves.toEqual({
+			test: 1,
+			$test: 2
+		})
+	})
 })

@@ -702,9 +702,11 @@ export const composeHandler = ({
 				isNestedObjectArray,
 				anyOf
 			} of destructured) {
+				const encoded = encodeURIComponent(key)
+
 				const init =
 					(index === 0 ? 'let ' : '') +
-					`memory=url.indexOf('&${key}=')` +
+					`memory=url.indexOf('&${encoded}=')` +
 					`\nlet a${index}\n`
 
 				if (isArray) {
@@ -713,7 +715,7 @@ export const composeHandler = ({
 					if (isNestedObjectArray)
 						fnLiteral +=
 							`while(memory!==-1){` +
-							`const start=memory+${key.length + 2}\n` +
+							`const start=memory+${encoded.length + 2}\n` +
 							`memory=url.indexOf('&',start)\n` +
 							`if(a${index}===undefined)\n` +
 							`a${index}=''\n` +
@@ -727,7 +729,7 @@ export const composeHandler = ({
 							`temp='"'+temp+'"'\n` +
 							`a${index}+=temp\n` +
 							`if(memory===-1)break\n` +
-							`memory=url.indexOf('&${key}=',memory)\n` +
+							`memory=url.indexOf('&${encoded}=',memory)\n` +
 							`if(memory===-1)break` +
 							`}` +
 							`try{` +
@@ -739,7 +741,7 @@ export const composeHandler = ({
 					else
 						fnLiteral +=
 							`while(memory!==-1){` +
-							`const start=memory+${key.length + 2}\n` +
+							`const start=memory+${encoded.length + 2}\n` +
 							`memory=url.indexOf('&',start)\n` +
 							`if(a${index}===undefined)` +
 							`a${index}=[]\n` +
@@ -753,14 +755,14 @@ export const composeHandler = ({
 							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
 							`else{a${index}.push(temp)}\n` +
 							`}` +
-							`memory=url.indexOf('&${key}=',memory)\n` +
+							`memory=url.indexOf('&${encoded}=',memory)\n` +
 							`if(memory===-1) break\n` +
 							`}`
 				} else if (isObject)
 					fnLiteral +=
 						init +
 						`if(memory!==-1){` +
-						`const start=memory+${key.length + 2}\n` +
+						`const start=memory+${encoded.length + 2}\n` +
 						`memory=url.indexOf('&',start)\n` +
 						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))` +
 						`else a${index}=decodeURIComponent(url.slice(start,memory).replace(/\\+/g,' '))` +
@@ -774,7 +776,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						init +
 						`if(memory!==-1){` +
-						`const start=memory+${key.length + 2}\n` +
+						`const start=memory+${encoded.length + 2}\n` +
 						`memory=url.indexOf('&',start)\n` +
 						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
 						`else{` +
@@ -782,12 +784,12 @@ export const composeHandler = ({
 
 					if (anyOf)
 						fnLiteral +=
-							`\nlet deepMemory=url.indexOf('&${key}=',memory)\n` +
+							`\nlet deepMemory=url.indexOf('&${encoded}=',memory)\n` +
 							`if(deepMemory!==-1){` +
 							`a${index}=[a${index}]\n` +
 							`let first=true\n` +
 							`while(true){` +
-							`const start=deepMemory+${key.length + 2}\n` +
+							`const start=deepMemory+${encoded.length + 2}\n` +
 							`if(first)first=false\n` +
 							`else deepMemory = url.indexOf('&', start)\n` +
 							`let value\n` +

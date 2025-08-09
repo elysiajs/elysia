@@ -1,10 +1,11 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-new Elysia()
-	.get('/', ({ cookie: { foo, baz }, set }) => {
-		foo.value = 'foo'
-		baz.value = 'baz'
-
-		return Bun.file('./package.json')
+const app = new Elysia().get('/', ({ query }) => query, {
+	query: t.Object({
+		test: t.Optional(t.Number()),
+		$test: t.Optional(t.Number())
 	})
-	.listen(3000)
+})
+
+const value = app.handle(new Request('http://localhost?test=1&%24test=2'))
+	.then((x) => x.json())
