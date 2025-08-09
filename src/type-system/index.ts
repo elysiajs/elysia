@@ -225,7 +225,7 @@ export const ElysiaType = {
 
 				return date
 			})
-			.Encode((value) => value.toISOString()) as any as TDate
+			.Encode((value) => (value instanceof Date ? value : new Date(value)).toISOString()) as any as TDate
 	},
 
 	BooleanString: (property?: SchemaOptions) => {
