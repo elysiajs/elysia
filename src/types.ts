@@ -31,7 +31,7 @@ import type {
 	ValidationError
 } from './error'
 
-import type { AnyWSLocalHook, WSLocalHook } from './ws/types'
+import type { AnyWSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 
