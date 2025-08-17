@@ -1139,13 +1139,10 @@ export const composeHandler = ({
 			if (!hasDefaultParser) {
 				const isOptionalBody = !!validator.body?.isOptional
 
-				if (hooks.parse?.length)
-					fnLiteral +=
-						`\nif(!used){\n`
-
-				fnLiteral += `switch(contentType){`
+				if (hooks.parse?.length) fnLiteral += `\nif(!used){\n`
 
 				fnLiteral +=
+					`switch(contentType){` +
 					`case 'application/json':\n` +
 					adapter.parser.json(isOptionalBody) +
 					`break\n` +

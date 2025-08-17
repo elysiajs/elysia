@@ -395,6 +395,25 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					// @ts-ignore
 					context.params = validator.params.Decode(context.params)
 
+				if (validator.query?.schema) {
+					const properties = validator.query?.schema.properties
+
+					for (const property of Object.keys(properties)) {
+						const value = properties[property]
+						if (
+							(value.type === 'array' ||
+								value.items?.type === 'string') &&
+							typeof context.query[property] === 'string' &&
+							context.query[property]?.includes(',')
+						) {
+							// If the query is an array of strings, we need to split it
+							// @ts-ignore
+							context.query[property] =
+								context.query[property].split(',')
+						}
+					}
+				}
+
 				if (queryValidator?.Check(context.query) === false)
 					throw new ValidationError(
 						'query',

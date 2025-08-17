@@ -639,4 +639,22 @@ describe('Dynamic Mode', () => {
 			foo: 'bar'
 		})
 	})
+
+	it('handle query array', async () => {
+		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				names: t.Array(t.String())
+			})
+		})
+
+		const data = await app
+			.handle(req('/?name=neon&names=rapi,anis'))
+			.then((x) => x.json())
+
+		expect(data).toEqual({
+			name: 'neon',
+			names: ['rapi', 'anis']
+		})
+	})
 })
