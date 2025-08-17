@@ -1141,8 +1141,7 @@ export const composeHandler = ({
 
 				if (hooks.parse?.length)
 					fnLiteral +=
-						`\nif(!used){\n` +
-						`if(!contentType) throw new ParseError()\n`
+						`\nif(!used){\n`
 
 				fnLiteral += `switch(contentType){`
 

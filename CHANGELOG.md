@@ -19,6 +19,7 @@ Bug fix:
 - [#1124](https://github.com/elysiajs/elysia/issues/1124) validate url encoded query
 - [#1158](https://github.com/elysiajs/elysia/issues/1158) prevent side-effect from guard merge
 - [#1162](https://github.com/elysiajs/elysia/issues/1162) handle encoded space in array query string
+- [#1267](https://github.com/elysiajs/elysia/issues/1267) parse without contentType headers throw Bad Request
 - [#1274](https://github.com/elysiajs/elysia/issues/1274) support .use(undefined | false) for conditional plugin
 - [#1276](https://github.com/elysiajs/elysia/issues/1276) mapResponse with set inference produce invalid instruction
 - [#1268](https://github.com/elysiajs/elysia/issues/1268) using number instead of stringifed value for reporting validation error
