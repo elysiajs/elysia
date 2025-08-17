@@ -1,4 +1,4 @@
-# 1.3.9
+# 1.3.9 - 18 Aug 2025
 Feature:
 - [#932](https://github.com/elysiajs/elysia/issues/932) add `t.ArrayBuffer`, `t.Uint8Array`
 
