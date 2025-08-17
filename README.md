@@ -17,6 +17,8 @@ bun create elysia app
 
 ![Elysia feature sheet including 18x faster than Express based on Techempower benchmark, Frontend RPC Connector, Advance TypeScript type, unified type single source of truth of type TypeScript runtime and documentation all at once, Made of Productivity focus on developer experience, powered by Bun, WinterCG Compliance, Fully type safe GraphQL (same author with GraphQL Mobius), documentation in one line, End-to-end type safety move fast and break nothing like tRPC, strong ecosystem most popular Bun native Web Framework](https://github.com/elysiajs/elysia/assets/35027979/d4b184ca-a622-434d-bb06-06c3110726af)
 
+![Elysia chan cover | bun creeate elysia app](https://github.com/user-attachments/assets/ed0a056d-d450-4e41-a08a-96a243809ceb)
+
 ## Documentation
 The documentation is available on [elysiajs.com](https://elysiajs.com).
 
