@@ -293,7 +293,7 @@ interface ReplaceSchemaTypeOptions {
 	/**
 	 * Only replace first object type
 	 **/
-	onlyFirstObject?: boolean
+	onlyFirst?: 'object' | 'array' | (string & {})
 }
 
 interface ReplaceSchemaTypeConfig {
@@ -355,7 +355,7 @@ const _replaceSchemaType = (
 
 	const root = config.root
 
-	if (options.onlyFirstObject && schema.type === 'object')
+	if (options.onlyFirst && schema.type === options.onlyFirst)
 		return options.to(schema) ?? schema
 
 	if (options.untilObjectFound && !root && schema.type === 'object')
@@ -837,7 +837,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			schema.additionalProperties = additionalProperties
 		else
 			schema = replaceSchemaType(schema, {
-				onlyFirstObject: true,
+				onlyFirst: 'object',
 				from: t.Object({}),
 				// @ts-ignore
 				to({ properties, ...options }) {

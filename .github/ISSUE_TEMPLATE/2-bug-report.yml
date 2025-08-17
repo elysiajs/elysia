@@ -25,6 +25,18 @@ body:
           description: |
               For MacOS and Linux: copy the output of `uname -mprs`
               For Windows: copy the output of `"$([Environment]::OSVersion | ForEach-Object VersionString) $(if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" })"` in the PowerShell console
+    - type: input
+      attributes:
+        label: What environment are you using
+        description: |
+              - Bun version: `bun --version`
+              - Node version: `node --version`
+              - Deno version: `deno --version`
+              - Cloudflare Workers (compatability date if applicable)
+    - type: input
+      attributes:
+        label: Are you using dynamic mode?
+        description: Is your code using `new Elysia({ aot:false })`
     - type: textarea
       attributes:
           label: What steps can reproduce the bug?

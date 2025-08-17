@@ -1,17 +1,14 @@
 import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.guard(
-		{
-			response: {
-				403: t.String()
-			}
+new Elysia()
+	.ws('/ws', {
+		open(ws) {
+			const { query } = ws.data
+			console.log(query)
 		},
-		(app) =>
-			app
-				.get('/foo', () => 'bar', { response: { 200: t.String() } })
-				.get('/bar', () => 12, { response: { 200: t.Integer() } })
-	)
-	.listen(3500)
-
-console.log(app.routes[0].hooks.response['200'])
+		body: t.String({ minLength: 1 }),
+		error({ error }) {
+			console.log(error)
+		}
+	})
+	.listen(3000)

@@ -47,6 +47,8 @@ import {
 import { ELYSIA_FORM_DATA, form } from '../utils'
 import { ValidationError } from '../error'
 import { parseDateTimeEmptySpace } from './format'
+import { replaceSchemaType } from '../schema'
+import { isJSDocDeprecatedTag } from 'typescript'
 
 const t = Object.assign({}, Type) as unknown as Omit<
 	JavaScriptTypeBuilder,
