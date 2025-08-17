@@ -327,6 +327,7 @@ export const BunAdapter: ElysiaAdapter = {
 					? ({
 							development: !isProduction,
 							reusePort: true,
+							idleTimeout: 30,
 							...(app.config.serve || {}),
 							...(options || {}),
 							// @ts-ignore
@@ -347,6 +348,7 @@ export const BunAdapter: ElysiaAdapter = {
 					: ({
 							development: !isProduction,
 							reusePort: true,
+							idleTimeout: 30,
 							...(app.config.serve || {}),
 							// @ts-ignore
 							routes: mergeRoutes(

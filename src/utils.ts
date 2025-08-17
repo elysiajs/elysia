@@ -150,17 +150,21 @@ const primitiveHookMap = primitiveHooks.reduce(
 	{} as Record<string, boolean>
 )
 
+// If both are Record<number, ...> then merge them,
+// giving preference to b.
+type RecordNumber = Record<number, any>
+const isRecordNumber = (
+	x: Record<keyof object, unknown> | undefined
+): x is RecordNumber =>
+	typeof x === 'object' && Object.keys(x).every((x) => !isNaN(+x))
+
 export const mergeResponse = (
 	a: InputSchema['response'],
 	b: InputSchema['response']
 ) => {
-	// If both are Record<number, ...> then merge them,
-	// giving preference to b.
-	type RecordNumber = Record<number, any>
-	const isRecordNumber = (x: typeof a | typeof b): x is RecordNumber =>
-		typeof x === 'object' && Object.keys(x).every(isNumericString)
-
-	if (isRecordNumber(a) && isRecordNumber(b)) return Object.assign(a, b)
+	if (isRecordNumber(a) && isRecordNumber(b))
+		// Prevent side effect
+		return Object.assign({}, a, b)
 	else if (a && !isRecordNumber(a) && isRecordNumber(b))
 		return Object.assign({ 200: a }, b)
 

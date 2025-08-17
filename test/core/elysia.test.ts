@@ -370,4 +370,22 @@ describe('Edge Case', () => {
 			extra: true
 		})
 	})
+
+	it('prevent side-effect from guard merge', async () => {
+		const app = new Elysia().guard(
+			{
+				response: {
+					403: t.String()
+				}
+			},
+			(app) =>
+				app
+					.get('/foo', () => 'bar', { response: { 200: t.String() } })
+					.get('/bar', () => 12, { response: { 200: t.Integer() } })
+		)
+
+		const response = await app.handle(req('/foo'))
+
+		expect(response.status).toBe(200)
+	})
 })
