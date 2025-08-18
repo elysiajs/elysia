@@ -29,6 +29,7 @@ body:
       attributes:
         label: What environment are you using
         description: |
+              Answer with runtime and version you are using.
               - Bun version: `bun --version`
               - Node version: `node --version`
               - Deno version: `deno --version`

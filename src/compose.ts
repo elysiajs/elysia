@@ -1969,6 +1969,8 @@ export const composeHandler = ({
 		else fnLiteral += `c.code=error.code??error[ERROR_CODE]??"UNKNOWN"\n`
 
 		fnLiteral += `let er\n`
+		// Mapped error Response
+		if (hooks.mapResponse?.length) fnLiteral += 'let mep\n'
 
 		for (let i = 0; i < hooks.error.length; i++) {
 			const endUnit = errorReporter.resolveChild(hooks.error[i].fn.name)
@@ -1986,9 +1988,6 @@ export const composeHandler = ({
 				const mapResponseReporter = report('mapResponse', {
 					total: hooks.mapResponse?.length
 				})
-
-				// Mapped error Response
-				fnLiteral += 'let mep\n'
 
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					const mapResponse = hooks.mapResponse[i]
