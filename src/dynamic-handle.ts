@@ -34,10 +34,15 @@ const injectDefaultValues = (
 	typeChecker: TypeCheck<any> | ElysiaTypeCheck<any>,
 	obj: Record<string, any>
 ) => {
-	for (const [key, keySchema] of Object.entries(
-		// @ts-expect-error private
-		typeChecker.schema.properties
-	)) {
+	// @ts-expect-error private property
+	let schema = typeChecker.schema
+	if (!schema) return
+
+	if (schema.$defs?.[schema.$ref]) schema = schema.$defs[schema.$ref]
+
+	if (!schema?.properties) return
+
+	for (const [key, keySchema] of Object.entries(schema.properties)) {
 		// @ts-expect-error private
 		obj[key] ??= keySchema.default
 	}
@@ -396,7 +401,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					context.params = validator.params.Decode(context.params)
 
 				if (validator.query?.schema) {
-					const properties = validator.query?.schema.properties
+					let schema = validator.query.schema
+					if (schema.$defs?.[schema.$ref])
+						schema = schema.$defs[schema.$ref]
+
+					const properties = schema.properties
 
 					for (const property of Object.keys(properties)) {
 						const value = properties[property]
@@ -404,9 +413,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							(value.type === 'array' ||
 								value.items?.type === 'string') &&
 							typeof context.query[property] === 'string' &&
-							context.query[property]?.includes(',')
+							context.query[property]
 						) {
-							// If the query is an array of strings, we need to split it
 							// @ts-ignore
 							context.query[property] =
 								context.query[property].split(',')

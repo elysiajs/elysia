@@ -1,9 +1,14 @@
 import { Elysia, t } from '../src'
 
-new Elysia({ aot: false })
+const IdsModel = new Elysia().model({
+	ids: t.Object({
+		ids: t.Array(t.String())
+	})
+})
+
+const app = new Elysia({ aot: false })
+	.use(IdsModel)
 	.get('/', ({ query }) => query, {
-		query: t.Object({
-			name: t.Array(t.String())
-		})
+		query: 'ids'
 	})
 	.listen(3000)

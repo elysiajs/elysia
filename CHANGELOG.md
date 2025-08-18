@@ -1,3 +1,8 @@
+# 1.3.10 - 18 Aug 2025
+Bug fix:
+- [#1028](https://github.com/elysiajs/elysia/issues/1028) query array nuqs format in dynamic mode
+- unwrap t.Import in dynamic mode
+
 # 1.3.9 - 18 Aug 2025
 Feature:
 - [#932](https://github.com/elysiajs/elysia/issues/932) add `t.ArrayBuffer`, `t.Uint8Array`

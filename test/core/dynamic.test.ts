@@ -640,7 +640,25 @@ describe('Dynamic Mode', () => {
 		})
 	})
 
-	it('handle query array', async () => {
+	it('handle single query array', async () => {
+		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				names: t.Array(t.String())
+			})
+		})
+
+		const data = await app
+			.handle(req('/?name=neon&names=rapi'))
+			.then((x) => x.json())
+
+		expect(data).toEqual({
+			name: 'neon',
+			names: ['rapi']
+		})
+	})
+
+	it('handle multiple query array in nuqs format', async () => {
 		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
 			query: t.Object({
 				name: t.String(),
@@ -654,6 +672,68 @@ describe('Dynamic Mode', () => {
 
 		expect(data).toEqual({
 			name: 'neon',
+			names: ['rapi', 'anis']
+		})
+	})
+
+	it('handle multiple query array in nuqs format', async () => {
+		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				names: t.Array(t.String())
+			})
+		})
+
+		const data = await app
+			.handle(req('/?name=neon&names=rapi,anis'))
+			.then((x) => x.json())
+
+		expect(data).toEqual({
+			name: 'neon',
+			names: ['rapi', 'anis']
+		})
+	})
+
+	it('handle query array reference in multiple reference format', async () => {
+		const IdsModel = new Elysia().model({
+			name: t.Object({
+				name: t.Array(t.String())
+			})
+		})
+
+		const app = new Elysia({ aot: false })
+			.use(IdsModel)
+			.get('/', ({ query }) => query, {
+				name: 'ids'
+			})
+
+		const data = await app
+			.handle(req('/?names=rapi&names=anis'))
+			.then((x) => x.json())
+
+		expect(data).toEqual({
+			names: ['rapi', 'anis']
+		})
+	})
+
+	it('handle query array reference in multiple reference format', async () => {
+		const IdsModel = new Elysia().model({
+			name: t.Object({
+				name: t.Array(t.String())
+			})
+		})
+
+		const app = new Elysia({ aot: false })
+			.use(IdsModel)
+			.get('/', ({ query }) => query, {
+				name: 'ids'
+			})
+
+		const data = await app
+			.handle(req('/?names=rapi&names=anis'))
+			.then((x) => x.json())
+
+		expect(data).toEqual({
 			names: ['rapi', 'anis']
 		})
 	})
