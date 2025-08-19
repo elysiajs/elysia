@@ -1564,6 +1564,7 @@ export const composeHandler = ({
 				defaultConfig: app.config.cookie,
 				dynamic: !!app.config.aot,
 				config: validator.cookie?.config ?? {},
+				normalize: app.config.normalize,
 				// @ts-expect-error
 				models: app.definitions.type
 			})!

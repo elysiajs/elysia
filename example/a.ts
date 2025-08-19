@@ -1,26 +1,23 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-let isAfterResponseCalled = false
-
-const app = new Elysia({ precompile: true })
-	.onAfterResponse(() => {
-		isAfterResponseCalled = true
+const app = new Elysia().get('/', ({ headers }) => typeof headers['is-admin'], {
+	headers: t.Object({
+		'is-admin': t.Union([
+			t.Boolean(),
+			t.String({
+				format: 'boolean'
+			})
+		])
 	})
-	.onError(() => {
-		return new Response('a', {
-			status: 401,
+})
+
+const value = await app
+	.handle(
+		req('/', {
 			headers: {
-				awd: 'b'
+				'is-admin': 'true'
 			}
 		})
-	})
-	.compile()
-
-// console.log(app.handleError.toString())
-
-await app.handle(req('/'))
-// wait for next tick
-await Bun.sleep(1)
-
-console.log(isAfterResponseCalled)
+	)
+	.then((x) => x.text())
