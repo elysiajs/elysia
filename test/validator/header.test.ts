@@ -232,15 +232,13 @@ describe('Header Validator', () => {
 			'/',
 			({ headers }) => headers?.name ?? 'sucrose',
 			{
-				headers: t.Optional(
-					t.Object(
-						{
-							name: t.String()
-						},
-						{
-							additionalProperties: true
-						}
-					)
+				headers: t.Object(
+					{
+						name: t.Optional(t.String())
+					},
+					{
+						additionalProperties: true
+					}
 				)
 			}
 		)

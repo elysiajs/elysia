@@ -606,6 +606,7 @@ export default class Elysia<
 						modules,
 						validator: cloned.cookie,
 						defaultConfig: this.config.cookie,
+						normalize,
 						config: cloned.cookie?.config ?? {},
 						dynamic,
 						models,
@@ -700,6 +701,7 @@ export default class Elysia<
 									modules,
 									dynamic,
 									models,
+									normalize,
 									additionalProperties: !normalize,
 									coerce: true,
 									additionalCoerce:
@@ -720,6 +722,7 @@ export default class Elysia<
 									modules,
 									dynamic,
 									models,
+									normalize,
 									coerce: true,
 									additionalCoerce:
 										stringToStructureCoercions(),
@@ -739,6 +742,7 @@ export default class Elysia<
 									modules,
 									dynamic,
 									models,
+									normalize,
 									coerce: true,
 									additionalCoerce: queryCoercions(),
 									validators: standaloneValidators.map(

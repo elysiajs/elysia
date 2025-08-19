@@ -256,15 +256,13 @@ describe('Query Validator', () => {
 			'/',
 			({ query }) => query?.name ?? 'sucrose',
 			{
-				query: t.Optional(
-					t.Object(
-						{
-							name: t.String()
-						},
-						{
-							additionalProperties: true
-						}
-					)
+				query: t.Object(
+					{
+						name: t.Optional(t.String())
+					},
+					{
+						additionalProperties: true
+					}
 				)
 			}
 		)

@@ -1027,11 +1027,13 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			console.warn(
 				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
 			)
-			console.warn(schema)
+			console.dir(schema, {
+				depth: null
+			})
 
 			compiled.Clean = createCleaner(schema)
 		}
-	} else compiled.Clean = createCleaner(schema)
+	} else if (normalize === 'typebox') compiled.Clean = createCleaner(schema)
 
 	compiled.parse = (v) => {
 		try {
@@ -1350,6 +1352,7 @@ export const getCookieValidator = ({
 	defaultConfig = {},
 	config,
 	dynamic,
+	normalize = false,
 	models,
 	validators,
 	sanitize
@@ -1359,6 +1362,7 @@ export const getCookieValidator = ({
 	defaultConfig: CookieOptions | undefined
 	config: CookieOptions
 	dynamic: boolean
+	normalize: ElysiaConfig<''>['normalize'] | undefined
 	models: Record<string, TSchema> | undefined
 	validators?: InputSchema['cookie'][]
 	sanitize?: () => ExactMirrorInstruction['sanitize']
@@ -1367,6 +1371,7 @@ export const getCookieValidator = ({
 		modules,
 		dynamic,
 		models,
+		normalize,
 		additionalProperties: true,
 		coerce: true,
 		additionalCoerce: stringToStructureCoercions(),

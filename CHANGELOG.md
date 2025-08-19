@@ -1,3 +1,11 @@
+# 1.3.13 - 18 Aug 2025
+Bug fix:
+- important performance degration, exact mirror normalize doesn't apply correctly
+- normalize optional property with special character
+
+Change:
+- update `exact-mirror` to `0.1.6`
+
 # 1.3.12 - 19 Aug 2025
 Bug fix:
 - [#1348](https://github.com/elysiajs/elysia/issues/1348) onAfterResponse runs twice if NotFoundError thrown and onError provided
