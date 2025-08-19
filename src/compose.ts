@@ -39,6 +39,8 @@ import {
 	ElysiaTypeCheck,
 	getCookieValidator,
 	getSchemaValidator,
+	hasElysiaMeta,
+	hasProperty,
 	hasType,
 	isUnion,
 	unwrapImportSchema
@@ -631,200 +633,31 @@ export const composeHandler = ({
 			}[]
 		>[]
 
-		const schema = validator.query?.schema
-		if (
-			schema &&
-			(schema.type === 'object' ||
-				(schema[Kind] === 'Import' && schema.$defs[schema.$ref]))
-		) {
-			const properties =
-				schema.properties ?? schema.$defs[schema.$ref].properties
+		const schema = unwrapImportSchema(validator.query?.schema)
+		let arrayProperties: Record<string, 1> = {}
+		let objectProperties: Record<string, 1> = {}
+		let hasArrayProperty = false
+		let hasObjectProperty = false
 
-			if (!validator.query!.hasAdditionalProperties)
-				for (const [key, _value] of Object.entries(properties)) {
-					let value = _value as TAnySchema
-
-					const isArray =
-						value.type === 'array' ||
-						!!value.anyOf?.some(
-							(v: TSchema) =>
-								v.type === 'string' &&
-								v.format === 'ArrayString'
-						)
-
-					// @ts-ignore
-					if (
-						value &&
-						OptionalKind in value &&
-						value.type === 'array' &&
-						value.items
-					)
-						value = value.items
-
-					const { type, anyOf } = value
-
-					destructured.push({
-						key,
-						isArray,
-						isNestedObjectArray:
-							(isArray && value.items?.type === 'object') ||
-							!!value.items?.anyOf?.some(
-								(x: TSchema) =>
-									x.type === 'object' || x.type === 'array'
-							),
-						isObject:
-							type === 'object' ||
-							anyOf?.some(
-								(v: TSchema) =>
-									v.type === 'string' &&
-									v.format === 'ArrayString'
-							),
-						anyOf: !!anyOf
-					})
-				}
-		}
-
-		if (!destructured.length) {
-			fnLiteral +=
-				'if(c.qi===-1){' +
-				'c.query={}' +
-				'}else{' +
-				'c.query=parseQueryFromURL(c.url,c.qi+1)' +
-				'}'
-		} else {
-			fnLiteral += 'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi+1)\n`
-
-			let index = 0
-			for (const {
-				key,
-				isArray,
-				isObject,
-				isNestedObjectArray,
-				anyOf
-			} of destructured) {
-				const encoded = encodeURIComponent(key)
-
-				const init =
-					(index === 0 ? 'let ' : '') +
-					`memory=url.indexOf('&${encoded}=')` +
-					`\nlet a${index}\n`
-
-				if (isArray) {
-					fnLiteral += init
-
-					if (isNestedObjectArray)
-						fnLiteral +=
-							`while(memory!==-1){` +
-							`const start=memory+${encoded.length + 2}\n` +
-							`memory=url.indexOf('&',start)\n` +
-							`if(a${index}===undefined)\n` +
-							`a${index}=''\n` +
-							`else\n` +
-							`a${index}+=','\n` +
-							`let temp\n` +
-							`if(memory===-1)temp=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-							`else temp=decodeURIComponent(url.slice(start, memory).replace(/\\+/g,' '))\n` +
-							`const charCode=temp.charCodeAt(0)\n` +
-							`if(charCode!==91&&charCode !== 123)\n` +
-							`temp='"'+temp+'"'\n` +
-							`a${index}+=temp\n` +
-							`if(memory===-1)break\n` +
-							`memory=url.indexOf('&${encoded}=',memory)\n` +
-							`if(memory===-1)break` +
-							`}` +
-							`try{` +
-							`if(a${index}.charCodeAt(0)===91)` +
-							`a${index} = JSON.parse(a${index})\n` +
-							`else\n` +
-							`a${index}=JSON.parse('['+a${index}+']')` +
-							`}catch{}\n`
-					else
-						fnLiteral +=
-							`while(memory!==-1){` +
-							`const start=memory+${encoded.length + 2}\n` +
-							`memory=url.indexOf('&',start)\n` +
-							`if(a${index}===undefined)` +
-							`a${index}=[]\n` +
-							`if(memory===-1){` +
-							`const temp=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
-							`else{a${index}.push(decodeURIComponent(url.slice(start).replace(/\\+/g,' ')))}\n` +
-							`break` +
-							`}else{` +
-							`const temp=decodeURIComponent(url.slice(start, memory).replace(/\\+/g,' '))\n` +
-							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
-							`else{a${index}.push(temp)}\n` +
-							`}` +
-							`memory=url.indexOf('&${encoded}=',memory)\n` +
-							`if(memory===-1) break\n` +
-							`}`
-				} else if (isObject)
-					fnLiteral +=
-						init +
-						`if(memory!==-1){` +
-						`const start=memory+${encoded.length + 2}\n` +
-						`memory=url.indexOf('&',start)\n` +
-						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))` +
-						`else a${index}=decodeURIComponent(url.slice(start,memory).replace(/\\+/g,' '))` +
-						`if(a${index}!==undefined)` +
-						`try{` +
-						`a${index}=JSON.parse(a${index})` +
-						`}catch{}` +
-						'}'
-				// Might be union primitive and array
-				else {
-					fnLiteral +=
-						init +
-						`if(memory!==-1){` +
-						`const start=memory+${encoded.length + 2}\n` +
-						`memory=url.indexOf('&',start)\n` +
-						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-						`else{` +
-						`a${index}=decodeURIComponent(url.slice(start,memory).replace(/\\+/g,' '))`
-
-					if (anyOf)
-						fnLiteral +=
-							`\nlet deepMemory=url.indexOf('&${encoded}=',memory)\n` +
-							`if(deepMemory!==-1){` +
-							`a${index}=[a${index}]\n` +
-							`let first=true\n` +
-							`while(true){` +
-							`const start=deepMemory+${encoded.length + 2}\n` +
-							`if(first)first=false\n` +
-							`else deepMemory = url.indexOf('&', start)\n` +
-							`let value\n` +
-							`if(deepMemory===-1)value=url.slice(start).replace(/\\+/g,' ')\n` +
-							`else value=url.slice(start, deepMemory).replace(/\\+/g,' ')\n` +
-							`value=decodeURIComponent(value)\n` +
-							`if(value===null){if(deepMemory===-1){break}else{continue}}\n` +
-							`const vStart=value.charCodeAt(0)\n` +
-							`const vEnd=value.charCodeAt(value.length - 1)\n` +
-							`if((vStart===91&&vEnd===93)||(vStart===123&&vEnd===125))\n` +
-							`try{` +
-							`a${index}.push(JSON.parse(value))` +
-							`}catch{` +
-							`a${index}.push(value)` +
-							`}` +
-							`if(deepMemory===-1)break` +
-							`}}`
-
-					fnLiteral += '}}'
+		if (schema)
+			for (const [key, value] of Object.entries(schema.properties)) {
+				if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
+					arrayProperties[key] = 1
+					hasArrayProperty = true
 				}
 
-				index++
-				fnLiteral += '\n'
+				if (hasElysiaMeta('ObjectString', value as TSchema)) {
+					objectProperties[key] = 1
+					hasObjectProperty = true
+				}
 			}
 
-			fnLiteral +=
-				`c.query={` +
-				destructured
-					.map(({ key }, index) => `'${key}':a${index}`)
-					.join(',') +
-				`}`
-
-			// If there are no query parameters, set it to an empty object
-			fnLiteral += `} else c.query = {}\n`
-		}
+		fnLiteral +=
+			'if(c.qi===-1){' +
+			'c.query=Object.create(null)' +
+			'}else{' +
+			`c.query=parseQueryFromURL(c.url,c.qi+1,${hasArrayProperty ? JSON.stringify(arrayProperties) : undefined},${hasObjectProperty ? JSON.stringify(objectProperties) : undefined})` +
+			'}'
 	}
 
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
@@ -1330,14 +1163,14 @@ export const composeHandler = ({
 
 					if (parsed !== undefined)
 						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
-
-					fnLiteral += composeCleaner({
-						name: 'c.query',
-						schema: validator.query,
-						type: 'query',
-						normalize
-					})
 				}
+
+			fnLiteral += composeCleaner({
+				name: 'c.query',
+				schema: validator.query,
+				type: 'query',
+				normalize
+			})
 
 			if (validator.query.isOptional)
 				fnLiteral += `if(isNotEmpty(c.query)){`
@@ -1348,11 +1181,19 @@ export const composeHandler = ({
 					validation.validate('query') +
 					`}`
 
-			if (validator.query.hasTransform)
+			if (validator.query.hasTransform) {
+				// TypeBox Decode only work with single Decode at the time
+				// If we have multiple Decode, it will handle only the first one
+				// For query, we decode it twice to ensure that it works
 				fnLiteral += coerceTransformDecodeError(
-					`c.query=validator.query.Decode(Object.assign({},c.query))\n`,
+					`c.query=validator.query.Decode(c.query)\n`,
 					'query'
 				)
+				fnLiteral += coerceTransformDecodeError(
+					`c.query=validator.query.Decode(c.query)\n`,
+					'query'
+				)
+			}
 
 			if (validator.query.isOptional) fnLiteral += `}`
 		}
@@ -1368,10 +1209,8 @@ export const composeHandler = ({
 				let value = Value.Default(
 					validator.body.schema,
 					validator.body.schema.type === 'object' ||
-						(validator.body.schema[Kind] === 'Import' &&
-							validator.body.schema.$defs[
-								validator.body.schema.$ref
-							][Kind] === 'Object')
+						unwrapImportSchema(validator.body.schema)[Kind] ===
+							'Object'
 						? {}
 						: undefined
 				)

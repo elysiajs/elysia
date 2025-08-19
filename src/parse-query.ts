@@ -1,31 +1,33 @@
 import decode from 'fast-decode-uri-component'
 
+// bit flags
+const KEY_HAS_PLUS = 1
+const KEY_NEEDS_DECODE = 2
+const VALUE_HAS_PLUS = 4
+const VALUE_NEEDS_DECODE = 8
+
 // Parse query without array
 export function parseQueryFromURL(
 	input: string,
-	startIndex: number = 0
+	startIndex: number = 0,
+	array?: { [key: string]: 1 },
+	object?: { [key: string]: 1 }
 ): Record<string, string> {
 	const result = Object.create(null)
 
-	// bit flags
-	const KEY_PLUS_FLAG = 1
-	const KEY_DECODE_FLAG = 2
-	const VALUE_PLUS_FLAG = 4
-	const VALUE_DECODE_FLAG = 8
-
 	let flags = 0
+
+	const inputLength = input.length
 	let startingIndex = startIndex - 1
 	let equalityIndex = startingIndex
-	const inputLength = input.length
 
-	// Main parsing loop
-	for (let i = startIndex; i < inputLength; i++)
+	for (let i = 0; i < inputLength; i++)
 		switch (input.charCodeAt(i)) {
 			// '&'
 			case 38:
-				processKeyValuePair(i)
+				processKeyValuePair(input, i)
 
-				// Reset for next pair
+				// Reset state variables
 				startingIndex = i
 				equalityIndex = i
 				flags = 0
@@ -35,56 +37,80 @@ export function parseQueryFromURL(
 			// '='
 			case 61:
 				if (equalityIndex <= startingIndex) equalityIndex = i
-				else flags |= VALUE_DECODE_FLAG
+				// If '=' character occurs again, we should decode the input
+				else flags |= VALUE_NEEDS_DECODE
 
 				break
 
 			// '+'
 			case 43:
-				if (equalityIndex > startingIndex) flags |= VALUE_PLUS_FLAG
-				else flags |= KEY_PLUS_FLAG
+				if (equalityIndex > startingIndex) flags |= VALUE_HAS_PLUS
+				else flags |= KEY_HAS_PLUS
 
 				break
 
 			// '%'
 			case 37:
-				if (equalityIndex > startingIndex) flags |= VALUE_DECODE_FLAG
-				else flags |= KEY_DECODE_FLAG
+				if (equalityIndex > startingIndex) flags |= VALUE_NEEDS_DECODE
+				else flags |= KEY_NEEDS_DECODE
 
 				break
 		}
 
-	// Process the last pair if there is one
-	processKeyValuePair(inputLength)
+	// Process the last pair if needed
+	if (startingIndex < inputLength) processKeyValuePair(input, inputLength)
 
 	return result
 
-	function processKeyValuePair(endIndex: number) {
+	function processKeyValuePair(input: string, endIndex: number) {
 		const hasBothKeyValuePair = equalityIndex > startingIndex
-		const keyEndIndex = hasBothKeyValuePair ? equalityIndex : endIndex
+		const effectiveEqualityIndex = hasBothKeyValuePair
+			? equalityIndex
+			: endIndex
 
-		// Extract and process key only if the slice is not empty
-		if (keyEndIndex <= startingIndex + 1) return
+		const keySlice = input.slice(startingIndex + 1, effectiveEqualityIndex)
 
-		let keySlice = input.slice(startingIndex + 1, keyEndIndex)
-		if (flags & KEY_PLUS_FLAG) keySlice = keySlice.replace(/\+/g, ' ')
-		if (flags & KEY_DECODE_FLAG) keySlice = decode(keySlice) || keySlice
+		// Skip processing if key is empty
+		if (!hasBothKeyValuePair && keySlice.length === 0) return
 
-		// Only add to result if this key doesn't already exist
-		if (result[keySlice] !== undefined) return
+		let finalKey = keySlice
+		if (flags & KEY_HAS_PLUS) finalKey = finalKey.replace(/\+/g, ' ')
+		if (flags & KEY_NEEDS_DECODE) finalKey = decode(finalKey) || finalKey
 
-		// Process value if it exists
 		let finalValue = ''
 		if (hasBothKeyValuePair) {
-			finalValue = input.slice(equalityIndex + 1, endIndex)
-
-			if (flags & VALUE_PLUS_FLAG)
-				finalValue = finalValue.replace(/\+/g, ' ')
-			if (flags & VALUE_DECODE_FLAG)
-				finalValue = decode(finalValue) || finalValue
+			let valueSlice = input.slice(equalityIndex + 1, endIndex)
+			if (flags & VALUE_HAS_PLUS)
+				valueSlice = valueSlice.replace(/\+/g, ' ')
+			if (flags & VALUE_NEEDS_DECODE)
+				valueSlice = decode(valueSlice) || valueSlice
+			finalValue = valueSlice
 		}
 
-		result[keySlice] = finalValue
+		const currentValue = result[finalKey]
+
+		if (array?.[finalKey]) {
+			if (finalValue.charCodeAt(0) === 91) {
+				if (object?.[finalKey])
+					finalValue = JSON.parse(finalValue) as any
+				else finalValue = finalValue.slice(1, -1).split(',') as any
+
+				if (currentValue === undefined) result[finalKey] = finalValue
+				else if (Array.isArray(currentValue))
+					currentValue.push(...finalValue)
+				else {
+					result[finalKey] = finalValue
+					result[finalKey].unshift(currentValue)
+				}
+			} else {
+				if (currentValue === undefined) result[finalKey] = finalValue
+				else if (Array.isArray(currentValue))
+					currentValue.push(finalValue)
+				else result[finalKey] = [currentValue, finalValue]
+			}
+		} else {
+			result[finalKey] = finalValue
+		}
 	}
 }
 
@@ -95,12 +121,7 @@ export function parseQueryFromURL(
 export function parseQuery(input: string) {
 	const result = Object.create(null) as Record<string, string | string[]>
 
-	// bit flags
 	let flags = 0
-	const KEY_HAS_PLUS = 1
-	const KEY_NEEDS_DECODE = 2
-	const VALUE_HAS_PLUS = 4
-	const VALUE_NEEDS_DECODE = 8
 
 	const inputLength = input.length
 	let startingIndex = -1

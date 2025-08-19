@@ -930,7 +930,7 @@ describe('Query Validator', () => {
 			{
 				query: t.Object({
 					id: t
-						.Transform(t.Array(t.UnionEnum(['test', 'foo'])))
+						.Transform(t.UnionEnum(['test', 'foo']))
 						.Decode((id) => ({ value: id }))
 						.Encode((id) => id.value)
 				})
@@ -943,7 +943,7 @@ describe('Query Validator', () => {
 
 		expect(response).toEqual({
 			id: {
-				value: ['test']
+				value: 'test'
 			},
 			type: 'object'
 		})

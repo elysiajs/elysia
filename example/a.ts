@@ -1,26 +1,19 @@
 import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-let isAfterResponseCalled = false
+const app = new Elysia().get('/', ({ query }) => query, {
+	query: t.Object(
+		{
+			name: t.String()
+		},
+		{ additionalProperties: true }
+	)
+})
 
-const app = new Elysia({ precompile: true })
-	.onAfterResponse(() => {
-		isAfterResponseCalled = true
-	})
-	.onError(() => {
-		return new Response('a', {
-			status: 401,
-			headers: {
-				awd: 'b'
-			}
-		})
-	})
-	.compile()
+const response = await app
+	.handle(req('/?name=nagisa&hifumi=daisuki'))
+	.then((x) => x.json())
 
-// console.log(app.handleError.toString())
+console.log(response)
 
-await app.handle(req('/'))
-// wait for next tick
-await Bun.sleep(1)
-
-console.log(isAfterResponseCalled)
+console.log(app.routes[0].hooks)

@@ -52,7 +52,8 @@ import {
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	getCookieValidator,
-	ElysiaTypeCheck
+	ElysiaTypeCheck,
+	queryCoercions
 } from './schema'
 import {
 	composeHandler,
@@ -653,7 +654,7 @@ export default class Elysia<
 							models,
 							normalize,
 							coerce: true,
-							additionalCoerce: stringToStructureCoercions(),
+							additionalCoerce: queryCoercions(),
 							validators: standaloneValidators.map(
 								(x) => x.query
 							),
@@ -739,8 +740,7 @@ export default class Elysia<
 									dynamic,
 									models,
 									coerce: true,
-									additionalCoerce:
-										stringToStructureCoercions(),
+									additionalCoerce: queryCoercions(),
 									validators: standaloneValidators.map(
 										(x) => x.query
 									),

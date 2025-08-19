@@ -150,6 +150,59 @@ export const hasType = (type: string, schema: TAnySchema) => {
 	)
 }
 
+export const hasElysiaMeta = (meta: string, _schema: TAnySchema): boolean => {
+	if (!_schema) return false
+
+	// @ts-expect-error private property
+	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? _schema
+
+	if (schema.elysiaMeta === meta) return true
+
+	if (schema[Kind] === 'Import' && _schema.References)
+		return _schema
+			.References()
+			.some((schema: TSchema) => hasElysiaMeta(meta, schema))
+
+	if (schema.anyOf)
+		return schema.anyOf.some((schema: TSchema) =>
+			hasElysiaMeta(meta, schema)
+		)
+	if (schema.someOf)
+		return schema.someOf.some((schema: TSchema) =>
+			hasElysiaMeta(meta, schema)
+		)
+	if (schema.allOf)
+		return schema.allOf.some((schema: TSchema) =>
+			hasElysiaMeta(meta, schema)
+		)
+	if (schema.not)
+		return schema.not.some((schema: TSchema) => hasElysiaMeta(meta, schema))
+
+	if (schema.type === 'object') {
+		const properties = schema.properties as Record<string, TAnySchema>
+
+		for (const key of Object.keys(properties)) {
+			const property = properties[key]
+
+			if (property.type === 'object') {
+				if (hasElysiaMeta(meta, property)) return true
+			} else if (property.anyOf) {
+				for (let i = 0; i < property.anyOf.length; i++)
+					if (hasElysiaMeta(meta, property.anyOf[i])) return true
+			}
+
+			return schema.elysiaMeta === meta
+		}
+
+		return false
+	}
+
+	if (schema.type === 'array' && schema.items && !Array.isArray(schema.items))
+		return hasElysiaMeta(meta, schema.items)
+
+	return false
+}
+
 export const hasProperty = (
 	expectedProperty: string,
 	_schema: TAnySchema | TypeCheck<any> | ElysiaTypeCheck<any>
@@ -1251,6 +1304,26 @@ export const stringToStructureCoercions = () => {
 	return _stringToStructureCoercions
 }
 
+let _queryCoercions: ReplaceSchemaTypeOptions[]
+
+export const queryCoercions = () => {
+	if (!_queryCoercions) {
+		_queryCoercions = [
+			{
+				from: t.Object({}),
+				to: () => t.ObjectString({}),
+				excludeRoot: true
+			},
+			{
+				from: t.Array(t.Any()),
+				to: () => t.ArrayQuery(t.Any())
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
+	}
+
+	return _queryCoercions
+}
+
 let _coercePrimitiveRoot: ReplaceSchemaTypeOptions[]
 
 export const coercePrimitiveRoot = () => {
@@ -1359,6 +1432,8 @@ export const getCookieValidator = ({
 // }
 
 export const unwrapImportSchema = (schema: TSchema): TSchema =>
-	schema[Kind] === 'Import' && schema.$defs[schema.$ref][Kind] === 'Object'
+	schema &&
+	schema[Kind] === 'Import' &&
+	schema.$defs[schema.$ref][Kind] === 'Object'
 		? schema.$defs[schema.$ref]
 		: schema

@@ -1,10 +1,10 @@
 # 1.3.12 - 19 Aug 2025
 Bug fix:
-- [#1348](https://github.com/elysiajs/elysia/issues/1348) onAfterResponse runs twice if NotFoundError thrown and onError provided 
+- [#1348](https://github.com/elysiajs/elysia/issues/1348) onAfterResponse runs twice if NotFoundError thrown and onError provided
 
 # 1.3.11 - 18 Aug 2025
 Bug fix:
-- [#1346](https://github.com/elysiajs/elysia/issues/1346) cannot declare 'mep' twice 
+- [#1346](https://github.com/elysiajs/elysia/issues/1346) cannot declare 'mep' twice
 
 # 1.3.10 - 18 Aug 2025
 Bug fix:
