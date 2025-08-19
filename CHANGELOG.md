@@ -1,3 +1,7 @@
+# 1.4.0
+Improvement:
+- refactor, and simplify query parser
+
 # 1.3.13 - 18 Aug 2025
 Bug fix:
 - important performance degration, exact mirror normalize doesn't apply correctly
