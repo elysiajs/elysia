@@ -207,4 +207,29 @@ describe('On After Response Error', () => {
 		expect(isOnResponseCalled).toBeTrue()
 		expect(onResponseCalledCounter).toBe(1)
 	})
+
+	it.each([
+		{ aot: true, withOnError: true },
+		{ aot: true, withOnError: false },
+
+		{ aot: false, withOnError: true },
+		{ aot: false, withOnError: false }
+	])(
+		'should execute onAfterResponse once during NotFoundError aot=$aot,\twithOnError=$withOnError',
+		async ({ aot, withOnError }) => {
+			let counter = 0
+
+			const app = new Elysia({ aot }).onAfterResponse(() => {
+				counter++
+			})
+
+			if (withOnError) app.onError(() => {})
+
+			const req = new Request('http://localhost/notFound')
+			await app.handle(req)
+			await Bun.sleep(1)
+
+			expect(counter).toBe(1)
+		}
+	)
 })

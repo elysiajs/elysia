@@ -2264,7 +2264,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
 
 	let afterResponse = `c.error=notFound\n`
-	if (app.event.afterResponse?.length) {
+	if (app.event.afterResponse?.length && !app.event.error) {
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse += `\nsetImmediate(${prefix}()=>{`
 
@@ -2532,7 +2532,9 @@ export const composeErrorHandler = (app: AnyElysia) => {
 			if (hasReturn(handler)) {
 				fnLiteral +=
 					`_r=${response}\nif(_r!==undefined){` +
-					`if(_r instanceof Response)return mapResponse(_r,set${adapter.mapResponseContext})\n` +
+					`if(_r instanceof Response){` +
+					afterResponse() +
+					`return mapResponse(_r,set${adapter.mapResponseContext})}` +
 					`if(_r instanceof ElysiaCustomStatusResponse){` +
 					`error.status=error.code\n` +
 					`error.message = error.response` +
@@ -2562,7 +2564,9 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 				mapResponseReporter.resolve()
 
-				fnLiteral += `return mapResponse(${saveResponse}_r,set${adapter.mapResponseContext})}`
+				fnLiteral +=
+					afterResponse() +
+					`return mapResponse(${saveResponse}_r,set${adapter.mapResponseContext})}`
 			} else fnLiteral += response
 
 			fnLiteral += '}'

@@ -1,14 +1,26 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const IdsModel = new Elysia().model({
-	ids: t.Object({
-		ids: t.Array(t.String())
-	})
-})
+let isAfterResponseCalled = false
 
-const app = new Elysia({ aot: false })
-	.use(IdsModel)
-	.get('/', ({ query }) => query, {
-		query: 'ids'
+const app = new Elysia({ precompile: true })
+	.onAfterResponse(() => {
+		isAfterResponseCalled = true
 	})
-	.listen(3000)
+	.onError(() => {
+		return new Response('a', {
+			status: 401,
+			headers: {
+				awd: 'b'
+			}
+		})
+	})
+	.compile()
+
+// console.log(app.handleError.toString())
+
+await app.handle(req('/'))
+// wait for next tick
+await Bun.sleep(1)
+
+console.log(isAfterResponseCalled)
