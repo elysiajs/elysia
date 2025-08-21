@@ -182,6 +182,11 @@ export type ElysiaTypeCustomErrorCallback = (
 		 */
 		message?: string
 		/**
+		 * Expected value
+		 * (omitted on production)
+		 */
+		expected?: unknown
+		/**
 		 * Array of validation errors
 		 * (omitted on production)
 		 */

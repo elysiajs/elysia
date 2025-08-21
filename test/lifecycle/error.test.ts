@@ -423,4 +423,32 @@ describe('error', () => {
 		expect(value.type).toBe('validation')
 		expect(value.message).toBe('x must be a number')
 	})
+
+	it('ValidationError.detail only handle custom error', async () => {
+		const app = new Elysia()
+			.onError(({ error, code }) => {
+				if (code === 'VALIDATION') return error.detail(error.message)
+			})
+			.post('/', () => 'Hello World!', {
+				body: t.Object({
+					x: t.Number()
+				})
+			})
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'POST',
+				body: JSON.stringify({ x: 'hi!' }),
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			})
+		)
+
+		expect(response.status).toBe(422)
+
+		const value = (await response.json()) as Record<string, unknown>
+		expect(value.type).toBe('validation')
+		expect(value.message).not.toStartWith('{')
+	})
 })

@@ -7,8 +7,8 @@ new Elysia()
 	.post('/', () => 'Hello World!', {
 		body: t.Object({
 			x: t.Number({
-				error: 'x must be a number',
-			})
+				error: 'x must be a number'
+			}),
 		})
 	})
 	.listen(3000)

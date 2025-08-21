@@ -1,3 +1,7 @@
+# 1.3.15 - 21 Aug 2025
+Bug fix:
+- ValidationError.detail only handle custom error
+
 # 1.3.14 - 21 Aug 2025
 Improvement:
 - custom error on production mode

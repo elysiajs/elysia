@@ -249,6 +249,8 @@ export class ValidationError extends Error {
 	status = 422
 
 	valueError?: ValueError
+	expected?: unknown
+	customError?: string
 
 	constructor(
 		public type: string,
@@ -271,6 +273,24 @@ export class ValidationError extends Error {
 
 		const accessor = error?.path || 'root'
 
+		// @ts-ignore private field
+		const schema = validator?.schema ?? validator
+
+		let expected
+
+		if (!isProduction) {
+			try {
+				expected = Value.Create(schema)
+			} catch (error) {
+				expected = {
+					type: 'Could not create expected value',
+					// @ts-expect-error
+					message: error?.message,
+					error
+				}
+			}
+		}
+
 		const customError =
 			error?.schema?.message || error?.schema?.error !== undefined
 				? typeof error.schema.error === 'function'
@@ -285,15 +305,24 @@ export class ValidationError extends Error {
 										type: 'validation',
 										on: type,
 										value,
-										summary: mapValueError(error).summary,
 										property: accessor,
 										message: error?.message,
+										summary: mapValueError(error).summary,
 										found: value,
-										get errors() {
-											return [
-												...validator?.Errors(value)
-											].map(mapValueError)
-										}
+										expected,
+										errors:
+											'Errors' in validator
+												? [
+														...validator.Errors(
+															value
+														)
+													].map(mapValueError)
+												: [
+														...Value.Errors(
+															validator,
+															value
+														)
+													].map(mapValueError)
 									},
 							validator
 						)
@@ -314,36 +343,21 @@ export class ValidationError extends Error {
 				found: value
 			})
 		} else {
-			// @ts-ignore private field
-			const schema = validator?.schema ?? validator
-			const errors =
-				'Errors' in validator
-					? [...validator.Errors(value)].map(mapValueError)
-					: [...Value.Errors(validator, value)].map(mapValueError)
-
-			let expected
-
-			try {
-				expected = Value.Create(schema)
-			} catch (error) {
-				expected = {
-					type: 'Could not create expected value',
-					// @ts-expect-error
-					message: error?.message,
-					error
-				}
-			}
-
 			message = JSON.stringify(
 				{
 					type: 'validation',
 					on: type,
-					summary: mapValueError(error).summary,
 					property: accessor,
 					message: error?.message,
+					summary: mapValueError(error).summary,
 					expected,
 					found: value,
-					errors
+					errors:
+						'Errors' in validator
+							? [...validator.Errors(value)].map(mapValueError)
+							: [...Value.Errors(validator, value)].map(
+									mapValueError
+								)
 				},
 				null,
 				2
@@ -353,6 +367,8 @@ export class ValidationError extends Error {
 		super(message)
 
 		this.valueError = error
+		this.expected = expected
+		this.customError = customError
 
 		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
@@ -411,9 +427,13 @@ export class ValidationError extends Error {
 	 *		})
 	 * ```
 	 */
-	detail(message: string) {
+	detail(message: unknown) {
+		if (!this.customError) return this.message
+
 		const validator = this.validator
 		const value = this.value
+		const expected = this.expected
+		const errors = this.all
 
 		return isProduction
 			? {
@@ -425,13 +445,12 @@ export class ValidationError extends Error {
 			: {
 					type: 'validation',
 					on: this.type,
+					property: this.valueError?.path || 'root',
 					message,
 					summary: mapValueError(this.valueError).summary,
-					property: this.valueError?.path || 'root',
 					found: value,
-					get errors() {
-						return [...validator.Errors(value)].map(mapValueError)
-					}
+					expected,
+					errors
 				}
 	}
 }
