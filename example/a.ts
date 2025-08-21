@@ -1,23 +1,14 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t, validationDetail } from '../src'
 
-const app = new Elysia().get('/', ({ headers }) => typeof headers['is-admin'], {
-	headers: t.Object({
-		'is-admin': t.Union([
-			t.Boolean(),
-			t.String({
-				format: 'boolean'
-			})
-		])
+new Elysia()
+	.onError(({ error, code }) => {
+		if (code === 'VALIDATION') return error.detail(error.message)
 	})
-})
-
-const value = await app
-	.handle(
-		req('/', {
-			headers: {
-				'is-admin': 'true'
-			}
+	.post('/', () => 'Hello World!', {
+		body: t.Object({
+			x: t.Number({
+				error: 'x must be a number',
+			})
 		})
-	)
-	.then((x) => x.text())
+	})
+	.listen(3000)

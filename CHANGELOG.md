@@ -1,6 +1,8 @@
-# 1.4.0
+# 1.3.14 - 21 Aug 2025
 Improvement:
-- refactor, and simplify query parser
+- custom error on production mode
+- add `ValidationError.withDetail`
+- add `withDetail` for additional error information
 
 # 1.3.13 - 18 Aug 2025
 Bug fix:

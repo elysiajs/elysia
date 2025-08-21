@@ -248,6 +248,8 @@ export class ValidationError extends Error {
 	code = 'VALIDATION'
 	status = 422
 
+	valueError?: ValueError
+
 	constructor(
 		public type: string,
 		public validator: TSchema | TypeCheck<any> | ElysiaTypeCheck<any>,
@@ -262,30 +264,42 @@ export class ValidationError extends Error {
 			value = value.response
 
 		const error =
-			errors?.First() ||
-			(isProduction
-				? undefined
-				: 'Errors' in validator
-					? validator.Errors(value).First()
-					: Value.Errors(validator, value).First())
+			errors?.First() ??
+			('Errors' in validator
+				? validator.Errors(value).First()
+				: Value.Errors(validator, value).First())
+
+		const accessor = error?.path || 'root'
 
 		const customError =
 			error?.schema?.message || error?.schema?.error !== undefined
 				? typeof error.schema.error === 'function'
-					? error.schema.error({
-							type,
-							validator,
-							value,
-							get errors() {
-								return [...validator.Errors(value)].map(
-									mapValueError
-								)
-							}
-						})
+					? error.schema.error(
+							isProduction
+								? {
+										type: 'validation',
+										on: type,
+										found: value
+									}
+								: {
+										type: 'validation',
+										on: type,
+										value,
+										summary: mapValueError(error).summary,
+										property: accessor,
+										message: error?.message,
+										found: value,
+										get errors() {
+											return [
+												...validator?.Errors(value)
+											].map(mapValueError)
+										}
+									},
+							validator
+						)
 					: error.schema.error
 				: undefined
 
-		const accessor = error?.path || 'root'
 		let message = ''
 
 		if (customError !== undefined) {
@@ -297,8 +311,6 @@ export class ValidationError extends Error {
 			message = JSON.stringify({
 				type: 'validation',
 				on: type,
-				summary: mapValueError(error).summary,
-				message: error?.message,
 				found: value
 			})
 		} else {
@@ -340,6 +352,8 @@ export class ValidationError extends Error {
 
 		super(message)
 
+		this.valueError = error
+
 		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
 
@@ -375,5 +389,49 @@ export class ValidationError extends Error {
 				'content-type': 'application/json'
 			}
 		})
+	}
+
+	/**
+	 * Utility function to inherit add custom error and keep the original Validation error
+	 *
+	 * @since 1.3.14
+	 *
+	 * @example
+	 * ```ts
+	 * new Elysia()
+	 *		.onError(({ error, code }) => {
+	 *			if (code === 'VALIDATION') return error.detail(error.message)
+	 *		})
+	 *		.post('/', () => 'Hello World!', {
+	 *			body: t.Object({
+	 *				x: t.Number({
+	 *					error: 'x must be a number'
+	 *				})
+	 *			})
+	 *		})
+	 * ```
+	 */
+	detail(message: string) {
+		const validator = this.validator
+		const value = this.value
+
+		return isProduction
+			? {
+					type: 'validation',
+					on: this.type,
+					found: value,
+					message
+				}
+			: {
+					type: 'validation',
+					on: this.type,
+					message,
+					summary: mapValueError(this.valueError).summary,
+					property: this.valueError?.path || 'root',
+					found: value,
+					get errors() {
+						return [...validator.Errors(value)].map(mapValueError)
+					}
+				}
 	}
 }

@@ -5,7 +5,8 @@ import {
 	ParseError,
 	ValidationError,
 	error,
-	t
+	t,
+	validationDetail
 } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
@@ -340,5 +341,86 @@ describe('error', () => {
 
 		expect(response.status).toBe(404)
 		expect(await response.json()).toEqual({ hello: 'world' })
+	})
+
+	it('handle inline custom error message', async () => {
+		const app = new Elysia().post('/', () => 'Hello World!', {
+			body: t.Object({
+				x: t.Number({
+					error: 'x must be a number'
+				})
+			})
+		})
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'POST',
+				body: JSON.stringify({ x: 'hi!' }),
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			})
+		)
+
+		expect(response.status).toBe(422)
+
+		const value = await response.text()
+		expect(value).toBe('x must be a number')
+	})
+
+	it('handle inline custom error message with validationDetail', async () => {
+		const app = new Elysia().post('/', () => 'Hello World!', {
+			body: t.Object({
+				x: t.Number({
+					error: validationDetail('x must be a number')
+				})
+			})
+		})
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'POST',
+				body: JSON.stringify({ x: 'hi!' }),
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			})
+		)
+
+		expect(response.status).toBe(422)
+
+		const value = (await response.json()) as Record<string, unknown>
+		expect(value.type).toBe('validation')
+		expect(value.message).toBe('x must be a number')
+	})
+
+	it('handle custom error message globally', async () => {
+		const app = new Elysia()
+			.onError(({ error, code }) => {
+				if (code === 'VALIDATION') return error.detail(error.message)
+			})
+			.post('/', () => 'Hello World!', {
+				body: t.Object({
+					x: t.Number({
+						error: 'x must be a number'
+					})
+				})
+			})
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'POST',
+				body: JSON.stringify({ x: 'hi!' }),
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			})
+		)
+
+		expect(response.status).toBe(422)
+
+		const value = (await response.json()) as Record<string, unknown>
+		expect(value.type).toBe('validation')
+		expect(value.message).toBe('x must be a number')
 	})
 })
