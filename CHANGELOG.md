@@ -1,3 +1,7 @@
+# 1.3.18 - 23 Aug 2025
+Bug fix:
+- `ReadableStream` is not pass to `handleStream` in `mapCompactResponse`, and `mapEarlyResponse`
+
 # 1.3.17 - 23 Aug 2025
 Bug fix:
 - [#1353](https://github.com/elysiajs/elysia/issues/1353) normalize encodeSchema with Transform

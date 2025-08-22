@@ -5,7 +5,7 @@
       "name": "elysia",
       "dependencies": {
         "cookie": "^1.0.2",
-        "exact-mirror": "^0.1.6",
+        "exact-mirror": "0.1.6",
         "fast-decode-uri-component": "^1.0.1",
       },
       "devDependencies": {

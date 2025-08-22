@@ -147,8 +147,6 @@ type CreateHandlerParameter = {
 	mapCompactResponse(response: unknown, request?: Request): Response
 }
 
-const asyncIterator = Symbol.asyncIterator
-
 export const createStreamHandler =
 	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
 	async (

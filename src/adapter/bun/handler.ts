@@ -56,30 +56,6 @@ export const mapResponse = (
 					request
 				)
 
-			case 'ReadableStream':
-				if (
-					!set.headers['content-type']?.startsWith(
-						'text/event-stream'
-					)
-				)
-					set.headers['content-type'] =
-						'text/event-stream; charset=utf-8'
-
-				request?.signal?.addEventListener(
-					'abort',
-					{
-						handleEvent() {
-							if (request?.signal && !request?.signal?.aborted)
-								(response as ReadableStream).cancel()
-						}
-					},
-					{
-						once: true
-					}
-				)
-
-				return new Response(response as ReadableStream, set as any)
-
 			case undefined:
 				if (!response) return new Response('', set as any)
 
@@ -138,8 +114,11 @@ export const mapResponse = (
 					)
 				}
 
-				// @ts-expect-error
-				if (typeof response?.next === 'function')
+				if (
+					// @ts-expect-error
+					typeof response?.next === 'function' ||
+					response instanceof ReadableStream
+				)
 					return handleStream(response as any, set, request) as any
 
 				// @ts-expect-error
@@ -228,30 +207,6 @@ export const mapEarlyResponse = (
 					request
 				)
 
-			case 'ReadableStream':
-				if (
-					!set.headers['content-type']?.startsWith(
-						'text/event-stream'
-					)
-				)
-					set.headers['content-type'] =
-						'text/event-stream; charset=utf-8'
-
-				request?.signal?.addEventListener(
-					'abort',
-					{
-						handleEvent() {
-							if (request?.signal && !request?.signal?.aborted)
-								(response as ReadableStream).cancel()
-						}
-					},
-					{
-						once: true
-					}
-				)
-
-				return new Response(response as ReadableStream, set as any)
-
 			case undefined:
 				if (!response) return
 
@@ -310,8 +265,11 @@ export const mapEarlyResponse = (
 					)
 				}
 
-				// @ts-expect-error
-				if (typeof response?.next === 'function')
+				if (
+					// @ts-expect-error
+					typeof response?.next === 'function' ||
+					response instanceof ReadableStream
+				)
 					return handleStream(response as any, set, request) as any
 
 				// @ts-expect-error
@@ -366,26 +324,6 @@ export const mapEarlyResponse = (
 					set,
 					request
 				)
-
-			case 'ReadableStream':
-				request?.signal?.addEventListener(
-					'abort',
-					{
-						handleEvent() {
-							if (request?.signal && !request?.signal?.aborted)
-								(response as ReadableStream).cancel()
-						}
-					},
-					{
-						once: true
-					}
-				)
-
-				return new Response(response as ReadableStream, {
-					headers: {
-						'Content-Type': 'text/event-stream; charset=utf-8'
-					}
-				})
 
 			case undefined:
 				if (!response) return new Response('')
@@ -457,8 +395,11 @@ export const mapEarlyResponse = (
 					)
 				}
 
-				// @ts-expect-error
-				if (typeof response?.next === 'function')
+				if (
+					// @ts-expect-error
+					typeof response?.next === 'function' ||
+					response instanceof ReadableStream
+				)
 					return handleStream(response as any, set, request) as any
 
 				// @ts-expect-error
@@ -522,26 +463,6 @@ export const mapCompactResponse = (
 				}
 			)
 
-		case 'ReadableStream':
-			request?.signal?.addEventListener(
-				'abort',
-				{
-					handleEvent() {
-						if (request?.signal && !request?.signal?.aborted)
-							(response as ReadableStream).cancel()
-					}
-				},
-				{
-					once: true
-				}
-			)
-
-			return new Response(response as ReadableStream, {
-				headers: {
-					'Content-Type': 'text/event-stream; charset=utf-8'
-				}
-			})
-
 		case undefined:
 			if (!response) return new Response('')
 
@@ -604,8 +525,11 @@ export const mapCompactResponse = (
 					}
 				)
 
-			// @ts-expect-error
-			if (typeof response?.next === 'function')
+			if (
+				// @ts-expect-error
+				typeof response?.next === 'function' ||
+				response instanceof ReadableStream
+			)
 				return handleStream(response as any, undefined, request) as any
 
 			// @ts-expect-error
