@@ -3,7 +3,7 @@ Improvement:
 - `sse` now infer type
 - `sse` now accepts `ReadableStream` to return stream as `text/event-stream`
 - refactor SSE handler
-- support returning `ReadbleStream` from generator or async generator
+- support returning `ReadableStream` from generator or async generator
 
 Change:
 - sse no longer include generated id by default
