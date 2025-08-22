@@ -106,7 +106,6 @@ export const hasAdditionalProperties = (
 					if (hasAdditionalProperties(property.anyOf[i])) return true
 			}
 
-			return property.additionalProperties
 		}
 
 		return false
@@ -843,7 +842,7 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 				to({ properties, ...options }) {
 					// If nothing is return, use the original schema
 					if (!properties) return
-					if ('additionalProperties' in schema) return
+					if ('additionalProperties' in schema && schema.additionalProperties !== undefined) return
 
 					return t.Object(properties, {
 						...options,

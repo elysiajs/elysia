@@ -256,7 +256,12 @@ const composeValidationFactory = ({
 					ignoreTryCatch
 				})
 
-			if (appliedCleaner) code += clean()
+			// Always apply Clean first if we have normalize and Clean function
+			if (!appliedCleaner && normalize && value.Clean) {
+				code += clean()
+			} else if (appliedCleaner) {
+				code += clean()
+			}
 
 			const applyErrorCleaner =
 				!appliedCleaner && normalize && !noValidate
@@ -278,7 +283,7 @@ const composeValidationFactory = ({
 						: `throw new ValidationError('response',validator.response[${status}],${name})`) +
 					`}`
 			else {
-				if (!appliedCleaner) code += clean()
+				// Clean was already applied above, no need to call it again
 
 				if (!noValidate)
 					code +=
