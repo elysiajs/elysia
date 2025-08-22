@@ -5,6 +5,9 @@ Improvement:
 - refactor SSE handler
 - support returning `ReadbleStream` from generator or async generator
 
+Change:
+- sse no longer include generated id by default
+
 Bug fix:
 - static response now use callback clone instead of bind
 
