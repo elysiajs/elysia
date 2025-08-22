@@ -1,23 +1,34 @@
 import { Elysia, sse, t } from '../src'
-import { streamResponse } from '../src/adapter/utils'
 import { req } from '../test/utils'
 
-const app = new Elysia()
-	.get('/', function () {
-		return new ReadableStream({
-			async start(controller) {
-				controller.enqueue('a')
-				await Bun.sleep(100)
-				controller.enqueue('b')
-				await Bun.sleep(100)
-				controller.close()
-			}
+const app = new Elysia().get(
+	'/',
+	() => ({
+		hasMore: true,
+		total: 1,
+		offset: 0,
+		totalPages: 1,
+		currentPage: 1,
+		items: [{ username: 'Bob', secret: 'shhh' }]
+	}),
+	{
+		response: t.Object({
+			hasMore: t.Boolean(),
+			items: t.Array(
+				t.Object({
+					username: t.String()
+				})
+			),
+			total: t
+				.Transform(t.Number())
+				.Decode((x) => x)
+				.Encode((x) => x),
+			offset: t.Number({ minimum: 0 }),
+			totalPages: t.Number(),
+			currentPage: t.Number({ minimum: 1 })
 		})
-	})
-	.listen(3000)
+	}
+)
+.listen(3000)
 
-const response = await app.handle(req('/'))
-
-for await (const a of streamResponse(response)) {
-	console.log(a)
-}
+const data = await app.handle(req('/')).then((x) => x.text())

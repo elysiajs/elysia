@@ -508,6 +508,53 @@ describe('Normalize', () => {
 		])
 	})
 
+	it('normalize encodeSchema with Transform', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => ({
+				hasMore: true,
+				total: 1,
+				offset: 0,
+				totalPages: 1,
+				currentPage: 1,
+				items: [{ username: 'Bob', secret: 'shhh' }]
+			}),
+			{
+				// I don't know why but it must be this exact shape
+				response: t.Object({
+					hasMore: t.Boolean(),
+					items: t.Array(
+						t.Object({
+							username: t.String()
+						})
+					),
+					total: t
+						.Transform(t.Number())
+						.Decode((x) => x)
+						.Encode((x) => x),
+					offset: t.Number({ minimum: 0 }),
+					totalPages: t.Number(),
+					currentPage: t.Number({ minimum: 1 })
+				})
+			}
+		)
+
+		const data = await app.handle(req('/')).then((x) => x.json())
+
+		expect(data).toEqual({
+			hasMore: true,
+			items: [
+				{
+					username: 'Bob'
+				}
+			],
+			total: 1,
+			offset: 0,
+			totalPages: 1,
+			currentPage: 1
+		})
+	})
+
 	// it('normalize response with getter fields on class', async () => {
 	// 	const app = new Elysia({
 	// 		normalize: true

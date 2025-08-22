@@ -262,10 +262,14 @@ const composeValidationFactory = ({
 				!appliedCleaner && normalize && !noValidate
 
 			// Encode call TypeCheck.Check internally
-			if (encodeSchema && value.hasTransform)
+			if (encodeSchema && value.hasTransform) {
 				code +=
 					`try{` +
-					`${name}=validator.response[${status}].Encode(${name})\n` +
+					`${name}=validator.response[${status}].Encode(${name})\n`
+
+				if (!appliedCleaner) code += clean({ ignoreTryCatch: true })
+
+				code +=
 					`c.set.status=${status}` +
 					`}catch{` +
 					(applyErrorCleaner
@@ -277,7 +281,7 @@ const composeValidationFactory = ({
 							`}`
 						: `throw new ValidationError('response',validator.response[${status}],${name})`) +
 					`}`
-			else {
+			} else {
 				if (!appliedCleaner) code += clean()
 
 				if (!noValidate)

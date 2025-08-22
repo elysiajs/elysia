@@ -1,4 +1,8 @@
-# 1.3.16 - 22 Aug 2025
+# 1.3.17 - 23 Aug 2025
+Bug fix:
+- [#1353](https://github.com/elysiajs/elysia/issues/1353) normalize encodeSchema with Transform
+
+# 1.3.16 - 23 Aug 2025
 Improvement:
 - `sse` now infer type
 - `sse` now accepts `ReadableStream` to return stream as `text/event-stream`
