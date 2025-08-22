@@ -517,37 +517,37 @@ describe('WebSocket message', () => {
 		app.stop()
 	})
 
-  it('handle validation error with onError', async () => {
-    const app = new Elysia()
-      .onError(() => {
-        return 'caught'
-      })
-      .ws('/ws', {
-        body: t.Object({
-          name: t.String()
-        }),
-        message(ws, message) {
-          return ws.send(message)
-        }
-      })
-      .listen(0)
+    it('handle validation error with onError', async () => {
+        const app = new Elysia()
+            .onError(() => {
+                return 'caught'
+            })
+            .ws('/ws', {
+                body: t.Object({
+                    name: t.String()
+                }),
+                message(ws, message) {
+                    return ws.send(message)
+                }
+            })
+            .listen(0)
 
-    const ws = newWebsocket(app.server!)
+        const ws = newWebsocket(app.server!)
 
-		await wsOpen(ws)
+        await wsOpen(ws)
 
-		const message = wsMessage(ws)
+        const message = wsMessage(ws)
 
-		ws.send(JSON.stringify({
-      name: 123, // expecting a string
-    }))
+        ws.send(JSON.stringify({
+            name: 123, // expecting a string
+        }))
 
-		const { type, data } = await message
+        const { type, data } = await message
 
-		expect(type).toBe('message')
-		expect(data).toBe('caught')
+        expect(type).toBe('message')
+        expect(data).toBe('caught')
 
-		await wsClosed(ws)
-		app.stop()
-  })
+        await wsClosed(ws)
+        app.stop()
+    })
 })
