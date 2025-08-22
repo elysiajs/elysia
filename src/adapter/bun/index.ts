@@ -13,25 +13,25 @@ import { serializeCookie } from '../../cookies'
 import { isProduction, ValidationError } from '../../error'
 import { getSchemaValidator } from '../../schema'
 import {
-	hasHeaderShorthand,
-	isNotEmpty,
-	isNumericString,
-	randomId,
-	supportPerMethodInlineHandler
+  hasHeaderShorthand,
+  isNotEmpty,
+  isNumericString,
+  randomId,
+  supportPerMethodInlineHandler
 } from '../../utils'
 
 import {
-	mapResponse,
-	mapEarlyResponse,
-	mapCompactResponse,
-	createStaticHandler
+  mapResponse,
+  mapEarlyResponse,
+  mapCompactResponse,
+  createStaticHandler
 } from './handler'
 
 import {
-	createHandleWSResponse,
-	createWSMessageParser,
-	ElysiaWS,
-	websocket
+  createHandleWSResponse,
+  createWSMessageParser,
+  ElysiaWS,
+  websocket
 } from '../../ws/index'
 import type { ServerWebSocket } from '../../ws/bun'
 import type { AnyElysia } from '../..'
@@ -503,7 +503,9 @@ export const BunAdapter: ElysiaAdapter = {
 					)
 				].filter((x) => x)
 
-				const handleErrors = !errorHandlers.length
+        const hasCustomErrorHandlers = errorHandlers.length > 0
+
+				const handleErrors = !hasCustomErrorHandlers
 					? () => {}
 					: async (ws: ServerWebSocket<any>, error: unknown) => {
 							for (const handleError of errorHandlers) {
@@ -556,14 +558,19 @@ export const BunAdapter: ElysiaAdapter = {
 							) => {
 								const message = await parseMessage(ws, _message)
 
-								if (validateMessage?.Check(message) === false)
-									return void ws.send(
-										new ValidationError(
-											'message',
-											validateMessage,
-											message
-										).message as string
-									)
+								if (validateMessage?.Check(message) === false) {
+                  const validationError = new ValidationError(
+                    'message',
+                    validateMessage,
+                    message
+                  )
+
+                  if (!hasCustomErrorHandlers) {
+                    return void ws.send(validationError.message as string)
+                  }
+
+                  return handleErrors(ws, validationError)
+                }
 
 								try {
 									await handleResponse(
