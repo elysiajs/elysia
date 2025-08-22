@@ -19,7 +19,8 @@ import type {
 	AfterResponseHandler,
 	SchemaValidator,
 	AnyLocalHook,
-	SSEPayload
+	SSEPayload,
+	Prettify
 } from './types'
 import { ElysiaFile } from './universal/file'
 
@@ -1129,6 +1130,10 @@ export const supportPerMethodInlineHandler = (() => {
 	return true
 })()
 
+type FormatSSEPayload<T = unknown> = T extends string
+	? { readonly data: T }
+	: Prettify<SSEPayload<T>>
+
 /**
  * Return a Server Sent Events (SSE) payload
  *
@@ -1145,18 +1150,44 @@ export const supportPerMethodInlineHandler = (() => {
  *     })
  *   }
  */
-export const sse = (
-	payload: string | SSEPayload
-): SSEPayload & { toStream(): string } => {
-	if (typeof payload === 'string')
-		payload = {
-			data: payload
-		}
+export const sse = <
+	const T extends
+		| string
+		| SSEPayload
+		| Generator
+		| AsyncGenerator
+		| ReadableStream
+>(
+	_payload: T
+): T extends string
+	? { readonly data: T }
+	: T extends SSEPayload
+		? T
+		: T extends ReadableStream<infer A>
+			? ReadableStream<FormatSSEPayload<A>>
+			: T extends Generator<infer A, infer B, infer C>
+				? Generator<FormatSSEPayload<A>, B, C>
+				: T extends AsyncGenerator<infer A, infer B, infer C>
+					? AsyncGenerator<FormatSSEPayload<A>, B, C>
+					: T => {
+	if (_payload instanceof ReadableStream) {
+		// @ts-expect-error
+		_payload.sse = true
+		return _payload as any
+	}
 
-	if (payload.id === undefined) payload.id = randomId()
+	const payload: SSEPayload =
+		typeof _payload === 'string'
+			? { data: _payload }
+			: (_payload as SSEPayload)
+
+	// if (payload.id === undefined) payload.id = randomId()
 
 	// @ts-ignore
-	payload.toStream = () => {
+	payload.sse = true
+
+	// @ts-ignore
+	payload.toSSE = () => {
 		let payloadString = ''
 
 		if (payload.id !== undefined && payload.id !== null)

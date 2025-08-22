@@ -2,6 +2,8 @@ import { describe, it, expect } from 'bun:test'
 import { req } from '../utils'
 
 import { Elysia, sse } from '../../src'
+import { streamResponse } from '../../src/adapter/utils'
+import { randomId } from '../../src/utils'
 
 describe('Stream', () => {
 	it('handle stream', async () => {
@@ -262,10 +264,11 @@ describe('Stream', () => {
 			})
 	})
 
-	it('handle sse with default id', () => {
+	it('handle sse with id', () => {
 		const app = new Elysia().get('/sse', async function* () {
 			for (let i = 0; i < 3; i++) {
 				yield sse({
+					id: randomId(),
 					data: `message ${i}`
 				})
 				await Bun.sleep(10)
@@ -430,8 +433,106 @@ describe('Stream', () => {
 					.filter(Boolean)
 					.forEach((x, i) => {
 						expect(x).toInclude(`data: message ${i}`)
-						expect(x).toInclude('id: ')
 					})
 			})
+	})
+
+	it('stream ReadableStream', async () => {
+		const app = new Elysia().get('/', function () {
+			return new ReadableStream({
+				async start(controller) {
+					controller.enqueue('Elysia')
+					await Bun.sleep(1)
+
+					controller.enqueue('Eden')
+					await Bun.sleep(1)
+
+					controller.close()
+				}
+			})
+		})
+
+		const response = await app.handle(req('/'))
+
+		const result = []
+
+		for await (const a of streamResponse(response)) result.push(a)
+
+		expect(result).toEqual(['Elysia', 'Eden'])
+	})
+
+	it('stream ReadableStream return from generator function', async () => {
+		const app = new Elysia().get('/', function* () {
+			return new ReadableStream({
+				async start(controller) {
+					controller.enqueue('Elysia')
+					await Bun.sleep(1)
+
+					controller.enqueue('Eden')
+					await Bun.sleep(1)
+
+					controller.close()
+				}
+			})
+		})
+
+		const response = await app.handle(req('/'))
+
+		const result = []
+
+		for await (const a of streamResponse(response)) result.push(a)
+
+		expect(result).toEqual(['Elysia', 'Eden'])
+	})
+
+	it('stream ReadableStream return from async generator function', async () => {
+		const app = new Elysia().get('/', async function* () {
+			return new ReadableStream({
+				async start(controller) {
+					controller.enqueue('Elysia')
+					await Bun.sleep(1)
+
+					controller.enqueue('Eden')
+					await Bun.sleep(1)
+
+					controller.close()
+				}
+			})
+		})
+
+		const response = await app.handle(req('/'))
+
+		const result = []
+
+		for await (const a of streamResponse(response)) result.push(a)
+
+		expect(result).toEqual(['Elysia', 'Eden'])
+	})
+
+	it('stream ReadableStream with sse', async () => {
+		const app = new Elysia().get('/', async function* () {
+			return sse(
+				new ReadableStream({
+					async start(controller) {
+						controller.enqueue('Elysia')
+						await Bun.sleep(1)
+
+						controller.enqueue('Eden')
+						await Bun.sleep(1)
+
+						controller.close()
+					}
+				})
+			)
+		})
+
+		const response = await app.handle(req('/'))
+
+		const result = []
+
+		for await (const a of streamResponse(response)) result.push(a)
+
+		expect(result).toEqual(['Elysia', 'Eden'].map((x) => `data: ${x}\n\n`))
+		expect(response.headers.get('content-type')).toBe('text/event-stream')
 	})
 })

@@ -1,3 +1,13 @@
+# 1.3.16 - 22 Aug 2025
+Improvement:
+- `sse` now infer type
+- `sse` now accepts `ReadableStream` to return stream as `text/event-stream`
+- refactor SSE handler
+- support returning `ReadbleStream` from generator or async generator
+
+Bug fix:
+- static response now use callback clone instead of bind
+
 # 1.3.15 - 21 Aug 2025
 Bug fix:
 - ValidationError.detail only handle custom error

@@ -1,5 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { t, Elysia, RouteSchema, Cookie, error, file } from '../../src'
+import {
+	t,
+	Elysia,
+	RouteSchema,
+	Cookie,
+	error,
+	file,
+	sse,
+	SSEPayload
+} from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -2542,4 +2551,123 @@ type a = keyof {}
 			foo: t.String()
 		})
 	})
+}
+
+// infer SSE type correctly
+{
+	const app = new Elysia().get('/', function* () {
+		yield sse('a')
+
+		yield sse({
+			event: 'a',
+			data: 'b'
+		})
+	})
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<
+		AsyncGenerator<
+			| {
+					readonly data: 'a'
+			  }
+			| {
+					readonly event: 'a'
+					readonly data: 'b'
+			  },
+			void,
+			unknown
+		>
+	>()
+}
+
+// return generator SSE type correctly
+{
+	function* a() {
+		yield 'a'
+		yield 'b'
+	}
+
+	const app = new Elysia().get('/', function () {
+		return sse(a())
+	})
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<
+		AsyncGenerator<
+			| {
+					readonly data: 'a'
+			  }
+			| {
+					readonly data: 'b'
+			  },
+			void,
+			unknown
+		>
+	>()
+}
+
+// return async generator SSE type correctly
+{
+	async function* a() {
+		yield 'a'
+		yield 'b'
+	}
+
+	const app = new Elysia().get('/', function () {
+		return sse(a())
+	})
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<
+		AsyncGenerator<
+			| {
+					readonly data: 'a'
+			  }
+			| {
+					readonly data: 'b'
+			  },
+			void,
+			unknown
+		>
+	>()
+}
+
+// return ReadableStream SSE type correctly
+{
+	async function* a() {
+		yield 'a'
+		yield 'b'
+	}
+
+	const app = new Elysia().get('/', function () {
+		return sse(undefined as any as ReadableStream<'a'>)
+	})
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<
+		AsyncGenerator<
+			{
+				readonly data: 'a'
+			},
+			void,
+			unknown
+		>
+	>()
+}
+
+// infer ReadableStream to Iterable
+{
+	const app = new Elysia()
+		.get('/', function () {
+			return undefined as any as ReadableStream<'a'>
+		})
+		.listen(3000)
+
+	expectTypeOf<
+		(typeof app)['~Routes']['get']['response'][200]
+	>().toEqualTypeOf<AsyncGenerator<'a', void, unknown>>()
 }
