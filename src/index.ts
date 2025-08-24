@@ -509,6 +509,7 @@ export default class Elysia<
 
 		return models as any
 	}
+
 	private add(
 		method: HTTPMethod,
 		path: string,

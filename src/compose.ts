@@ -412,13 +412,19 @@ export const composeHandler = ({
 			headers: app.setHeaders ?? {}
 		})
 
+		const isResponse =
+			handler instanceof Response ||
+			// @ts-ignore If it's not instanceof Response, it might be a polyfill (only on Node)
+			(handler?.constructor?.name === 'Response' &&
+				typeof (handler as Response)?.clone === 'function')
+
 		if (
 			hooks.parse?.length &&
 			hooks.transform?.length &&
 			hooks.beforeHandle?.length &&
 			hooks.afterHandle?.length
 		) {
-			if (handler instanceof Response)
+			if (isResponse)
 				return Function(
 					'a',
 					'"use strict";\n' + `return function(){return a.clone()}`
@@ -428,6 +434,12 @@ export const composeHandler = ({
 				'a',
 				'"use strict";\n' + 'return function(){return a}'
 			)(handler)
+		}
+
+		if (isResponse) {
+			const response = handler as Response
+
+			handler = () => response.clone()
 		}
 	}
 
@@ -2080,8 +2092,6 @@ export const composeHandler = ({
 
 	fnLiteral = init + fnLiteral + '}'
 	init = ''
-
-	// console.log(fnLiteral)
 
 	try {
 		return Function(

@@ -148,17 +148,6 @@ export const mapResponse = (
 		}
 	}
 
-	if (
-		response instanceof Response &&
-		!(response as Response).headers.has('content-length') &&
-		(response as Response).headers.get('transfer-encoding') === 'chunked'
-	)
-		return handleStream(
-			streamResponse(response),
-			responseToSetHeaders(response as Response, set),
-			request
-		) as any
-
 	// Stream response defers a 'set' API, assume that it may include 'set'
 	if (
 		// @ts-expect-error
@@ -335,17 +324,6 @@ export const mapEarlyResponse = (
 				})
 
 			case 'Response':
-				if (
-					!(response as Response).headers.has('content-length') &&
-					(response as Response).headers.get('transfer-encoding') ===
-						'chunked'
-				)
-					return handleStream(
-						streamResponse(response as Response),
-						responseToSetHeaders(response as Response),
-						request
-					) as any
-
 				return response as Response
 
 			case 'Promise':
@@ -473,16 +451,6 @@ export const mapCompactResponse = (
 			})
 
 		case 'Response':
-			if (
-				(response as Response).headers.get('transfer-encoding') ===
-				'chunked'
-			)
-				return handleStream(
-					streamResponse(response as Response),
-					responseToSetHeaders(response as Response),
-					request
-				) as any
-
 			return response as Response
 
 		case 'Error':

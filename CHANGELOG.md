@@ -1,3 +1,10 @@
+# 1.3.19 - 24 Aug 2025
+Change:
+- [#1357](https://github.com/elysiajs/elysia/issues/1357) return `Response` proxy as-is
+
+Bug fix:
+- [elysiajs/node#45](https://github.com/elysiajs/node/issues/45) detect Response polyfill on Node
+
 # 1.3.18 - 23 Aug 2025
 Bug fix:
 - `ReadableStream` is not pass to `handleStream` in `mapCompactResponse`, and `mapEarlyResponse`

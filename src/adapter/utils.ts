@@ -357,6 +357,7 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 					status: set.status as number
 				})
 
+
 				if (
 					!(newResponse as Response).headers.has('content-length') &&
 					(newResponse as Response).headers.get(
