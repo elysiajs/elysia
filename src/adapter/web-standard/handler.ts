@@ -4,12 +4,10 @@ import {
 	createResponseHandler,
 	createStreamHandler,
 	handleFile,
-	handleSet,
-	responseToSetHeaders,
-	streamResponse
+	handleSet
 } from '../utils'
 
-import { ElysiaFile } from '../../universal/file'
+import { ElysiaFile, mime } from '../../universal/file'
 import { isNotEmpty } from '../../utils'
 import { Cookie } from '../../cookies'
 import { ElysiaCustomStatusResponse } from '../../error'
@@ -24,8 +22,9 @@ const handleElysiaFile = (
 	}
 ) => {
 	const path = file.path
-	// @ts-ignore
-	const contentType = mime[path.slice(path.lastIndexOf('.') + 1)]
+	const contentType =
+		mime[path.slice(path.lastIndexOf('.') + 1) as any as keyof typeof mime]
+
 	if (contentType) set.headers['content-type'] = contentType
 
 	if (

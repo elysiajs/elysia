@@ -1,3 +1,7 @@
+# 1.3.20 - 24 Aug 2025
+Change:
+- mime is undefined when using `Elysia.file` in Web Standard Adapter
+
 # 1.3.19 - 24 Aug 2025
 Change:
 - [#1357](https://github.com/elysiajs/elysia/issues/1357) return `Response` proxy as-is
