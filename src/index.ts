@@ -510,6 +510,7 @@ export default class Elysia<
 
 		return models as any
 	}
+
 	private add(
 		method: HTTPMethod,
 		path: string,
@@ -6799,6 +6800,12 @@ export default class Elysia<
 export { Elysia }
 
 export { t } from './type-system'
+export { validationDetail } from './type-system/utils'
+export type {
+	ElysiaTypeCustomError,
+	ElysiaTypeCustomErrorCallback
+} from './type-system/types'
+
 export { serializeCookie, Cookie, type CookieOptions } from './cookies'
 export type { Context, PreContext, ErrorContext } from './context'
 export {

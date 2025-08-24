@@ -145,19 +145,59 @@ export type TForm<T extends TProperties = TProperties> = TUnsafe<
 	ElysiaFormData<TObject<T>['static']>
 >
 
+export type ElysiaTypeCustomError =
+	| string
+	| boolean
+	| number
+	| ElysiaTypeCustomErrorCallback
+
+export type ElysiaTypeCustomErrorCallback = (
+	error: {
+		/**
+		 * Error type
+		 */
+		type: 'valdation'
+		/**
+		 * Where the error was found
+		 */
+		on: 'body' | 'query' | 'params' | 'headers' | 'cookie' | 'response'
+		found: unknown
+		/**
+		 * Value that caused the error
+		 */
+		value: unknown
+		/**
+		 * Human readable summary of the error
+		 * (omitted on production)
+		 */
+		summary?: string
+		/**
+		 * Property that caused the error
+		 * (omitted on production)
+		 */
+		property?: string
+		/**
+		 * Error message
+		 * (omitted on production)
+		 */
+		message?: string
+		/**
+		 * Expected value
+		 * (omitted on production)
+		 */
+		expected?: unknown
+		/**
+		 * Array of validation errors
+		 * (omitted on production)
+		 */
+		errors: ValueError[]
+	},
+	validator: TypeCheck<any>
+) => unknown
+
 declare module '@sinclair/typebox' {
 	interface SchemaOptions {
-		error?:
-			| string
-			| boolean
-			| number
-			| Object
-			| ((validation: {
-					errors: ValueError[]
-					type: string
-					validator: TypeCheck<any>
-					value: unknown
-			  }) => string | boolean | number | Object | void)
+		error?: ElysiaTypeCustomError
 	}
 }
 

@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src'
+import { Elysia, sse, t } from '../src'
 import { req } from '../test/utils'
 
 const app = new Elysia().get('/', ({ query }) => query, {

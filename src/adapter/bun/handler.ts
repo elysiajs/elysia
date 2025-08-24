@@ -56,30 +56,6 @@ export const mapResponse = (
 					request
 				)
 
-			case 'ReadableStream':
-				if (
-					!set.headers['content-type']?.startsWith(
-						'text/event-stream'
-					)
-				)
-					set.headers['content-type'] =
-						'text/event-stream; charset=utf-8'
-
-				request?.signal?.addEventListener(
-					'abort',
-					{
-						handleEvent() {
-							if (request?.signal && !request?.signal?.aborted)
-								(response as ReadableStream).cancel()
-						}
-					},
-					{
-						once: true
-					}
-				)
-
-				return new Response(response as ReadableStream, set as any)
-
 			case undefined:
 				if (!response) return new Response('', set as any)
 
@@ -138,8 +114,11 @@ export const mapResponse = (
 					)
 				}
 
-				// @ts-expect-error
-				if (typeof response?.next === 'function')
+				if (
+					// @ts-expect-error
+					typeof response?.next === 'function' ||
+					response instanceof ReadableStream
+				)
 					return handleStream(response as any, set, request) as any
 
 				// @ts-expect-error
@@ -168,17 +147,6 @@ export const mapResponse = (
 				return new Response(response as any, set as any)
 		}
 	}
-
-	if (
-		response instanceof Response &&
-		!(response as Response).headers.has('content-length') &&
-		(response as Response).headers.get('transfer-encoding') === 'chunked'
-	)
-		return handleStream(
-			streamResponse(response),
-			responseToSetHeaders(response as Response, set),
-			request
-		) as any
 
 	// Stream response defers a 'set' API, assume that it may include 'set'
 	if (
@@ -227,30 +195,6 @@ export const mapEarlyResponse = (
 					set,
 					request
 				)
-
-			case 'ReadableStream':
-				if (
-					!set.headers['content-type']?.startsWith(
-						'text/event-stream'
-					)
-				)
-					set.headers['content-type'] =
-						'text/event-stream; charset=utf-8'
-
-				request?.signal?.addEventListener(
-					'abort',
-					{
-						handleEvent() {
-							if (request?.signal && !request?.signal?.aborted)
-								(response as ReadableStream).cancel()
-						}
-					},
-					{
-						once: true
-					}
-				)
-
-				return new Response(response as ReadableStream, set as any)
 
 			case undefined:
 				if (!response) return
@@ -310,8 +254,11 @@ export const mapEarlyResponse = (
 					)
 				}
 
-				// @ts-expect-error
-				if (typeof response?.next === 'function')
+				if (
+					// @ts-expect-error
+					typeof response?.next === 'function' ||
+					response instanceof ReadableStream
+				)
 					return handleStream(response as any, set, request) as any
 
 				// @ts-expect-error
@@ -367,26 +314,6 @@ export const mapEarlyResponse = (
 					request
 				)
 
-			case 'ReadableStream':
-				request?.signal?.addEventListener(
-					'abort',
-					{
-						handleEvent() {
-							if (request?.signal && !request?.signal?.aborted)
-								(response as ReadableStream).cancel()
-						}
-					},
-					{
-						once: true
-					}
-				)
-
-				return new Response(response as ReadableStream, {
-					headers: {
-						'Content-Type': 'text/event-stream; charset=utf-8'
-					}
-				})
-
 			case undefined:
 				if (!response) return new Response('')
 
@@ -397,17 +324,6 @@ export const mapEarlyResponse = (
 				})
 
 			case 'Response':
-				if (
-					!(response as Response).headers.has('content-length') &&
-					(response as Response).headers.get('transfer-encoding') ===
-						'chunked'
-				)
-					return handleStream(
-						streamResponse(response as Response),
-						responseToSetHeaders(response as Response),
-						request
-					) as any
-
 				return response as Response
 
 			case 'Promise':
@@ -457,8 +373,11 @@ export const mapEarlyResponse = (
 					)
 				}
 
-				// @ts-expect-error
-				if (typeof response?.next === 'function')
+				if (
+					// @ts-expect-error
+					typeof response?.next === 'function' ||
+					response instanceof ReadableStream
+				)
 					return handleStream(response as any, set, request) as any
 
 				// @ts-expect-error
@@ -522,26 +441,6 @@ export const mapCompactResponse = (
 				}
 			)
 
-		case 'ReadableStream':
-			request?.signal?.addEventListener(
-				'abort',
-				{
-					handleEvent() {
-						if (request?.signal && !request?.signal?.aborted)
-							(response as ReadableStream).cancel()
-					}
-				},
-				{
-					once: true
-				}
-			)
-
-			return new Response(response as ReadableStream, {
-				headers: {
-					'Content-Type': 'text/event-stream; charset=utf-8'
-				}
-			})
-
 		case undefined:
 			if (!response) return new Response('')
 
@@ -552,16 +451,6 @@ export const mapCompactResponse = (
 			})
 
 		case 'Response':
-			if (
-				(response as Response).headers.get('transfer-encoding') ===
-				'chunked'
-			)
-				return handleStream(
-					streamResponse(response as Response),
-					responseToSetHeaders(response as Response),
-					request
-				) as any
-
 			return response as Response
 
 		case 'Error':
@@ -604,8 +493,11 @@ export const mapCompactResponse = (
 					}
 				)
 
-			// @ts-expect-error
-			if (typeof response?.next === 'function')
+			if (
+				// @ts-expect-error
+				typeof response?.next === 'function' ||
+				response instanceof ReadableStream
+			)
 				return handleStream(response as any, undefined, request) as any
 
 			// @ts-expect-error
@@ -664,7 +556,7 @@ export const createStaticHandler = (
 		!hooks.beforeHandle?.length &&
 		!hooks.afterHandle?.length
 	)
-		return response.clone.bind(response) as any
+		return () => response.clone() as Response
 }
 
 const handleResponse = createResponseHandler({

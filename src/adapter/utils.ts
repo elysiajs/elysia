@@ -150,25 +150,43 @@ type CreateHandlerParameter = {
 export const createStreamHandler =
 	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
 	async (
-		generator: Generator | AsyncGenerator,
+		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
 		request?: Request
 	) => {
-		let init = generator.next()
+		// Since ReadableStream doesn't have next, init might be undefined
+		let init = (generator as Generator).next?.() as
+			| IteratorResult<unknown>
+			| undefined
+
 		if (init instanceof Promise) init = await init
 
-		if (typeof init?.done === 'undefined' || init?.done) {
+		// Generator or ReadableStream is returned from a generator function
+		if (init?.value instanceof ReadableStream) {
+			// @ts-ignore
+			generator = init.value
+		} else if (init && (typeof init?.done === 'undefined' || init?.done)) {
 			if (set) return mapResponse(init.value, set, request)
 			return mapCompactResponse(init.value, request)
 		}
 
-		const contentType =
-			// @ts-ignore
-			init.value && typeof init.value?.stream
-				? 'text/event-stream'
-				: init.value && typeof init.value === 'object'
-					? 'application/json'
-					: 'text/plain'
+		const isSSE =
+			// @ts-ignore First SSE result is wrapped with sse()
+			init?.value?.sse ??
+			// @ts-ignore ReadableStream is wrapped with sse()
+			generator?.sse ??
+			// User explicitly set content-type to SSE
+			set?.headers['content-type']?.startsWith('text/event-stream')
+
+		const format = isSSE
+			? (data: string) => `data: ${data}\n\n`
+			: (data: string) => data
+
+		const contentType = isSSE
+			? 'text/event-stream'
+			: init?.value && typeof init?.value === 'object'
+				? 'application/json'
+				: 'text/plain'
 
 		if (set?.headers) {
 			if (!set.headers['transfer-encoding'])
@@ -177,7 +195,7 @@ export const createStreamHandler =
 				set.headers['content-type'] = contentType
 			if (!set.headers['cache-control'])
 				set.headers['cache-control'] = 'no-cache'
-		} else {
+		} else
 			set = {
 				status: 200,
 				headers: {
@@ -187,7 +205,6 @@ export const createStreamHandler =
 					connection: 'keep-alive'
 				}
 			}
-		}
 
 		return new Response(
 			new ReadableStream({
@@ -199,57 +216,58 @@ export const createStreamHandler =
 
 						try {
 							controller.close()
-						} catch {
-							// nothing
-						}
+						} catch {}
 					})
 
-					if (init.value !== undefined && init.value !== null) {
+					if (!init || init.value instanceof ReadableStream) {
+					} else if (
+						init.value !== undefined &&
+						init.value !== null
+					) {
 						// @ts-ignore
-						if (init.value.toStream)
+						if (init.value.toSSE)
 							// @ts-ignore
-							controller.enqueue(init.value.toStream())
+							controller.enqueue(init.value.toSSE())
 						else if (typeof init.value === 'object')
 							try {
 								controller.enqueue(
-									Buffer.from(JSON.stringify(init.value))
+									format(JSON.stringify(init.value))
 								)
 							} catch {
 								controller.enqueue(
-									Buffer.from(init.value.toString())
+									format(init.value.toString())
 								)
 							}
-						else
-							controller.enqueue(
-								Buffer.from(init.value.toString())
-							)
+						else controller.enqueue(format(init.value.toString()))
 					}
 
-					for await (const chunk of generator) {
-						if (end) break
-						if (chunk === undefined || chunk === null) continue
+					try {
+						for await (const chunk of generator) {
+							if (end) break
+							if (chunk === undefined || chunk === null) continue
 
-						// @ts-ignore
-						if (chunk.toStream)
 							// @ts-ignore
-							controller.enqueue(chunk.toStream())
-						else if (typeof chunk === 'object')
-							try {
-								controller.enqueue(
-									Buffer.from(JSON.stringify(chunk))
-								)
-							} catch {
-								controller.enqueue(
-									Buffer.from(chunk.toString())
-								)
-							}
-						else controller.enqueue(Buffer.from(chunk.toString()))
+							if (chunk.toSSE)
+								// @ts-ignore
+								controller.enqueue(chunk.toSSE())
+							else if (typeof chunk === 'object')
+								try {
+									controller.enqueue(
+										format(JSON.stringify(chunk))
+									)
+								} catch {
+									controller.enqueue(format(chunk.toString()))
+								}
+							else controller.enqueue(format(chunk.toString()))
 
-						// Wait for the next event loop
-						// Otherwise the data will be mixed up
-						await new Promise<void>((resolve) =>
-							setTimeout(() => resolve(), 0)
-						)
+							// Wait for the next event loop
+							// Otherwise the data will be mixed up
+							await new Promise<void>((resolve) =>
+								setTimeout(() => resolve(), 0)
+							)
+						}
+					} catch (error) {
+						console.warn(error)
 					}
 
 					try {
@@ -276,7 +294,8 @@ export async function* streamResponse(response: Response) {
 			const { done, value } = await reader.read()
 			if (done) break
 
-			yield decoder.decode(value)
+			if (typeof value === 'string') yield value
+			else yield decoder.decode(value)
 		}
 	} finally {
 		reader.releaseLock()
@@ -337,6 +356,7 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 					headers: response.headers,
 					status: set.status as number
 				})
+
 
 				if (
 					!(newResponse as Response).headers.has('content-length') &&

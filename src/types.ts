@@ -1612,14 +1612,14 @@ type _CreateEden<
 				[x in Path]: Property
 			}
 
-type RemoveStartinSlash<T> = T extends `/${infer Rest}` ? Rest : T
+type RemoveStartingSlash<T> = T extends `/${infer Rest}` ? Rest : T
 
 export type CreateEden<
 	Path extends string,
 	Property extends Record<string, unknown> = {}
 > = Path extends '' | '/'
 	? Property
-	: _CreateEden<RemoveStartinSlash<Path>, Property>
+	: _CreateEden<RemoveStartingSlash<Path>, Property>
 
 export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
@@ -1652,7 +1652,9 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 							  >['response']
 					: Handle extends Generator<infer A, infer B, infer C>
 						? AsyncGenerator<A, B, C>
-						: Replace<Handle, ElysiaFile, File>
+						: Handle extends ReadableStream<infer A>
+							? AsyncGenerator<A, void, unknown>
+							: Replace<Handle, ElysiaFile, File>
 			}) &
 		ExtractErrorFromHandle<Handle> &
 		({} extends Omit<Schema['response'], 200>
@@ -1843,8 +1845,9 @@ type SetContentType =
 	| 'application/zip'
 	| 'text/css'
 	| 'text/csv'
-	| 'text/html'
 	| 'text/calendar'
+	| 'text/event-stream'
+	| 'text/html'
 	| 'text/javascript'
 	| 'text/plain'
 	| 'text/xml'
@@ -2036,13 +2039,16 @@ export type MergeTypeModule<
 	B extends TModule<any, any>
 > = TModule<Prettify<UnwrapTypeModule<A> & UnwrapTypeModule<B>>>
 
-export type SSEPayload = {
+export type SSEPayload<
+	Data extends unknown = unknown,
+	Event extends string | undefined = string | undefined
+> = {
 	/** id of the event */
 	id?: string | number | null
 	/** event name */
-	event?: string
+	event?: Event
 	/** retry in millisecond */
 	retry?: number
 	/** data to send */
-	data?: unknown
+	data?: Data
 }

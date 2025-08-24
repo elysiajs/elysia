@@ -1,3 +1,45 @@
+# 1.3.20 - 24 Aug 2025
+Change:
+- mime is undefined when using `Elysia.file` in Web Standard Adapter
+
+# 1.3.19 - 24 Aug 2025
+Change:
+- [#1357](https://github.com/elysiajs/elysia/issues/1357) return `Response` proxy as-is
+
+Bug fix:
+- [elysiajs/node#45](https://github.com/elysiajs/node/issues/45) detect Response polyfill on Node
+
+# 1.3.18 - 23 Aug 2025
+Bug fix:
+- `ReadableStream` is not pass to `handleStream` in `mapCompactResponse`, and `mapEarlyResponse`
+
+# 1.3.17 - 23 Aug 2025
+Bug fix:
+- [#1353](https://github.com/elysiajs/elysia/issues/1353) normalize encodeSchema with Transform
+
+# 1.3.16 - 23 Aug 2025
+Improvement:
+- `sse` now infer type
+- `sse` now accepts `ReadableStream` to return stream as `text/event-stream`
+- refactor SSE handler
+- support returning `ReadableStream` from generator or async generator
+
+Change:
+- sse no longer include generated id by default
+
+Bug fix:
+- static response now use callback clone instead of bind
+
+# 1.3.15 - 21 Aug 2025
+Bug fix:
+- ValidationError.detail only handle custom error
+
+# 1.3.14 - 21 Aug 2025
+Improvement:
+- custom error on production mode
+- add `ValidationError.withDetail`
+- add `withDetail` for additional error information
+
 # 1.3.13 - 18 Aug 2025
 Bug fix:
 - important performance degration, exact mirror normalize doesn't apply correctly
