@@ -40,7 +40,6 @@ import {
 	getCookieValidator,
 	getSchemaValidator,
 	hasElysiaMeta,
-	hasProperty,
 	hasType,
 	isUnion,
 	unwrapImportSchema
@@ -243,6 +242,17 @@ const composeValidationFactory = ({
 
 		for (const [status, value] of Object.entries(validator.response!)) {
 			code += `\ncase ${status}:if(${name} instanceof Response)break\n`
+
+			if (value.provider === 'standard') {
+				code +=
+					`const vare${status}=validator.response[${status}].Check(${name})\n` +
+					`if(vare${status}.issues)` +
+					`throw new ValidationError('response',validator.response[${status}],${name})\n` +
+					`${name}=vare${status}.value\n` +
+					`c.set.status=${status}\n`
+
+				continue
+			}
 
 			const noValidate = value.schema?.noValidate === true
 
@@ -655,7 +665,7 @@ export const composeHandler = ({
 		let hasArrayProperty = false
 		let hasObjectProperty = false
 
-		if (schema)
+		if (Kind in schema)
 			for (const [key, value] of Object.entries(schema.properties)) {
 				if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
 					arrayProperties[key] = 1
@@ -1148,7 +1158,13 @@ export const composeHandler = ({
 						fnLiteral += `c.params['${key}']??=${parsed}\n`
 				}
 
-			if (validator.params?.schema?.noValidate !== true)
+			if (validator.params.provider === 'standard') {
+				fnLiteral +=
+					`const vap=validator.params.Check(c.params)\n` +
+					`if(vap.issues){` +
+					validation.validate('params') +
+					'}else{c.params=vap.value}\n'
+			} else if (validator.params?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.params.Check(c.params)===false){` +
 					validation.validate('params') +
@@ -1162,7 +1178,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
-			if (validator.query.hasDefault)
+			if (Kind in validator.query && validator.query.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1191,7 +1207,13 @@ export const composeHandler = ({
 			if (validator.query.isOptional)
 				fnLiteral += `if(isNotEmpty(c.query)){`
 
-			if (validator.query?.schema?.noValidate !== true)
+			if (validator.query.provider === 'standard') {
+				fnLiteral +=
+					`const vaq=validator.query.Check(c.query)\n` +
+					`if(vaq.issues){` +
+					validation.validate('query') +
+					'}else{c.query=vaq.value}\n'
+			} else if (validator.query?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.query.Check(c.query)===false){` +
 					validation.validate('query') +
@@ -1271,7 +1293,13 @@ export const composeHandler = ({
 					normalize
 				})
 
-				if (validator.body?.schema?.noValidate !== true) {
+				if (validator.body.provider === 'standard') {
+					fnLiteral +=
+						`const vab=validator.body.Check(c.body)\n` +
+						`if(vab.issues){` +
+						validation.validate('body') +
+						'}else{c.body=vab.value}\n'
+				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
 						fnLiteral +=
 							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
@@ -1291,7 +1319,13 @@ export const composeHandler = ({
 					normalize
 				})
 
-				if (validator.body?.schema?.noValidate !== true) {
+				if (validator.body.provider === 'standard') {
+					fnLiteral +=
+						`const vab=validator.body.Check(c.body)\n` +
+						`if(vab.issues){` +
+						validation.validate('body') +
+						'}else{c.body=vab.value}\n'
+				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
 						fnLiteral +=
 							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
@@ -1443,7 +1477,13 @@ export const composeHandler = ({
 			if (cookieValidator.isOptional)
 				fnLiteral += `if(isNotEmpty(c.cookie)){`
 
-			if (validator.body?.schema?.noValidate !== true) {
+			if (cookieValidator.provider === 'standard') {
+				fnLiteral +=
+					`const vac=validator.cookie.Check(c.body)\n` +
+					`if(vac.issues){` +
+					validation.validate('cookie') +
+					'}else{c.body=vac.value}\n'
+			} else if (validator.body?.schema?.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
 					validation.validate('cookie', 'cookieValue') +

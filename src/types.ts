@@ -3,6 +3,7 @@ import type { Elysia, AnyElysia } from '.'
 import type { ElysiaFile } from './universal/file'
 import type { Serve } from './universal/server'
 
+import { StandardSchemaV1 } from '@standard-schema/spec'
 import {
 	TSchema,
 	TAnySchema,
@@ -395,7 +396,7 @@ interface OptionalField {
 type TrimArrayName<T extends string> = T extends `${infer Name}[]` ? Name : T
 
 export type UnwrapSchema<
-	Schema extends TSchema | string | undefined,
+	Schema extends TSchema | StandardSchemaV1 | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
@@ -415,22 +416,24 @@ export type UnwrapSchema<
 					},
 					'__elysia'
 				>['static']
-		: Schema extends `${infer Key}[]`
-			? Definitions extends Record<
-					Key,
-					infer NamedSchema extends TAnySchema
-				>
-				? NamedSchema['static'][]
-				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
-			: Schema extends string
-				? Definitions extends keyof Schema
-					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
-						NamedSchema['static']
-					: TImport<Definitions, Schema>['static']
-				: unknown
+		: Schema extends StandardSchemaV1
+			? NonNullable<Schema['~standard']['types']>['output']
+			: Schema extends `${infer Key}[]`
+				? Definitions extends Record<
+						Key,
+						infer NamedSchema extends TAnySchema
+					>
+					? NamedSchema['static'][]
+					: TImport<Definitions, TrimArrayName<Schema>>['static'][]
+				: Schema extends string
+					? Definitions extends keyof Schema
+						? // @ts-ignore Definitions is always a Record<string, TAnySchema>
+							NamedSchema['static']
+						: TImport<Definitions, Schema>['static']
+					: unknown
 
 export type UnwrapBodySchema<
-	Schema extends TSchema | string | undefined,
+	Schema extends TSchema | StandardSchemaV1 | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
@@ -450,19 +453,21 @@ export type UnwrapBodySchema<
 					},
 					'__elysia'
 				>['static']
-		: Schema extends `${infer Key}[]`
-			? Definitions extends Record<
-					Key,
-					infer NamedSchema extends TAnySchema
-				>
-				? NamedSchema['static'][]
-				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
-			: Schema extends string
-				? Definitions extends keyof Schema
-					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
-						NamedSchema['static']
-					: TImport<Definitions, Schema>['static']
-				: unknown
+		: Schema extends StandardSchemaV1
+			? NonNullable<Schema['~standard']['types']>['output']
+			: Schema extends `${infer Key}[]`
+				? Definitions extends Record<
+						Key,
+						infer NamedSchema extends TAnySchema
+					>
+					? NamedSchema['static'][]
+					: TImport<Definitions, TrimArrayName<Schema>>['static'][]
+				: Schema extends string
+					? Definitions extends keyof Schema
+						? // @ts-ignore Definitions is always a Record<string, TAnySchema>
+							NamedSchema['static']
+						: TImport<Definitions, Schema>['static']
+					: unknown
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
@@ -486,7 +491,9 @@ export interface UnwrapRoute<
 					ElysiaFile | Blob
 				>
 			}
-		: Schema['response'] extends { [status in number]: TAnySchema | string }
+		: Schema['response'] extends {
+					[status in number]: StandardSchemaV1 | TAnySchema | string
+			  }
 			? {
 					[k in keyof Schema['response']]: CoExist<
 						UnwrapSchema<Schema['response'][k], Definitions>,
@@ -623,17 +630,24 @@ export type HTTPMethod =
 	| 'ALL'
 
 export interface InputSchema<Name extends string = string> {
-	body?: TSchema | Name | `${Name}[]`
-	headers?: TSchema | Name | `${Name}[]`
-	query?: TSchema | Name | `${Name}[]`
-	params?: TSchema | Name | `${Name}[]`
-	cookie?: TSchema | Name | `${Name}[]`
+	body?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	headers?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	query?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	params?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	cookie?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
 	response?:
 		| TSchema
-		| { [status in number]: TSchema }
+		| StandardSchemaV1
+		| { [status in number]: TSchema | StandardSchemaV1 }
 		| Name
 		| `${Name}[]`
-		| { [status in number]: `${Name}[]` | Name | TSchema }
+		| {
+				[status in number]:
+					| `${Name}[]`
+					| Name
+					| TSchema
+					| StandardSchemaV1
+		  }
 }
 
 export interface PrettifySchema<in out A extends RouteSchema> {

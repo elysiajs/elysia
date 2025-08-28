@@ -28,11 +28,14 @@ import type {
 	MaybeArray,
 	StandaloneInputSchema
 } from './types'
+import { StandardSchemaV1 } from '@standard-schema/spec'
+import { fa } from 'zod/locales'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
 export interface ElysiaTypeCheck<T extends TSchema>
 	extends Omit<TypeCheck<T>, 'schema'> {
+	provider: 'typebox' | 'standard'
 	schema: T
 	config: Object
 	Clean?(v: unknown): T
@@ -739,7 +742,9 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
-export const getSchemaValidator = <T extends TSchema | string | undefined>(
+export const getSchemaValidator = <
+	T extends TSchema | StandardSchemaV1 | string | undefined
+>(
 	s: T,
 	{
 		models = {},
@@ -795,7 +800,12 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		return replaceSchemaType(schema, additionalCoerce)
 	}
 
-	const mapSchema = (s: string | TSchema | undefined): TSchema => {
+	const mapSchema = (
+		s: string | TSchema | StandardSchemaV1 | undefined
+	): TSchema | StandardSchemaV1 => {
+		// @ts-ignore
+		if (s && '~standard' in s) return s as StandardSchemaV1
+
 		let schema: TSchema
 
 		if (!s) return undefined as any
@@ -846,64 +856,75 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 	}
 
 	let schema = mapSchema(s)
+	let _validators = validators
 
-	if (validators?.length) {
-		let hasAdditional = false
+	if (
+		!('~standard' in schema) &&
+		validators?.every(
+			(x) => x && typeof x !== 'string' && !('~standard' in x)
+		)
+	) {
+		if (validators?.length) {
+			let hasAdditional = false
 
-		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas([
-			schema,
-			...validators.map(mapSchema)
-		])
+			const validators = _validators as TSchema[]
 
-		if (notObjects) {
-			schema = t.Intersect([
-				...(mergedObjectSchema ? [mergedObjectSchema] : []),
-				...notObjects.map((x) => {
-					const schema = mapSchema(x)
+			const { schema: mergedObjectSchema, notObjects } =
+				mergeObjectSchemas([
+					schema,
+					...(validators.map(mapSchema) as TSchema[])
+				])
 
-					if (
-						schema.type === 'object' &&
-						'additionalProperties' in schema
-					) {
+			if (notObjects) {
+				schema = t.Intersect([
+					...(mergedObjectSchema ? [mergedObjectSchema] : []),
+					...notObjects.map((x) => {
+						const schema = mapSchema(x) as TSchema
+
 						if (
-							!hasAdditional &&
-							schema.additionalProperties === false
+							schema.type === 'object' &&
+							'additionalProperties' in schema
 						) {
-							hasAdditional = true
+							if (
+								!hasAdditional &&
+								schema.additionalProperties === false
+							) {
+								hasAdditional = true
+							}
+
+							delete schema.additionalProperties
 						}
 
-						delete schema.additionalProperties
-					}
-
-					return schema
-				})
-			])
-
-			if (schema.type === 'object' && hasAdditional)
-				schema.additionalProperties = false
-		}
-	} else {
-		if (
-			schema.type === 'object' &&
-			'additionalProperties' in schema === false
-		)
-			schema.additionalProperties = additionalProperties
-		else
-			schema = replaceSchemaType(schema, {
-				onlyFirst: 'object',
-				from: t.Object({}),
-				// @ts-ignore
-				to({ properties, ...options }) {
-					// If nothing is return, use the original schema
-					if (!properties) return
-					if ('additionalProperties' in schema) return
-
-					return t.Object(properties, {
-						...options,
-						additionalProperties: false
+						return schema
 					})
-				}
-			})
+				])
+
+				if (schema.type === 'object' && hasAdditional)
+					schema.additionalProperties = false
+			}
+		} else {
+			if (
+				schema.type === 'object' &&
+				'additionalProperties' in schema === false
+			)
+				schema.additionalProperties = additionalProperties
+			else
+				schema = replaceSchemaType(schema, {
+					onlyFirst: 'object',
+					from: t.Object({}),
+					// @ts-ignore
+					to({ properties, ...options }) {
+						// If nothing is return, use the original schema
+						if (!properties) return
+						if ('additionalProperties' in schema) return
+
+						return t.Object(properties, {
+							...options,
+							additionalProperties: false
+						})
+					}
+				})
+		}
 	}
 
 	if (dynamic) {
@@ -1005,35 +1026,90 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		return validator as any
 	}
 
-	const compiled = TypeCompiler.Compile(
-		schema,
-		Object.values(models)
-	) as any as ElysiaTypeCheck<any>
+	let compiled: ElysiaTypeCheck<any>
 
-	if (schema.config) {
-		compiled.config = schema.config
+	if (Kind in schema) {
+		compiled = TypeCompiler.Compile(schema, Object.values(models)) as any
+		compiled.provider = 'typebox'
+	} else {
+		compiled = {
+			provider: 'standard',
+			schema,
+			references: '',
+			checkFunc: () => {},
+			code: '',
+			Check(value) {
+				// @ts-ignore
+				const response = schema['~standard']['validate'](value)
 
-		if (compiled?.schema?.config) delete compiled.schema.config
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response
+			},
+			// @ts-ignore
+			Errors(value: unknown) {
+				// @ts-ignore
+				const response = schema['~standard']['validate'](value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response.issues
+			},
+			Code: () => '',
+			// @ts-ignore
+			Decode(value) {
+				const response = schema['~standard']['validate'](value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response
+			},
+			// @ts-ignore
+			Encode: (value: unknown) => value,
+			hasAdditionalProperties: false,
+			hasDefault: false,
+			isOptional: false,
+			hasTransform: false,
+			hasRef: false
+		}
 	}
 
-	if (normalize === true || normalize === 'exactMirror') {
-		try {
-			compiled.Clean = createMirror(schema, {
-				TypeCompiler,
-				sanitize: sanitize?.(),
-				modules
-			})
-		} catch (error) {
-			console.warn(
-				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-			)
-			console.dir(schema, {
-				depth: null
-			})
+	if (Kind in schema) {
+		if (schema.config) {
+			compiled.config = schema.config
 
-			compiled.Clean = createCleaner(schema)
+			if (compiled?.schema?.config) delete compiled.schema.config
 		}
-	} else if (normalize === 'typebox') compiled.Clean = createCleaner(schema)
+
+		if (normalize === true || normalize === 'exactMirror') {
+			try {
+				compiled.Clean = createMirror(schema, {
+					TypeCompiler,
+					sanitize: sanitize?.(),
+					modules
+				})
+			} catch (error) {
+				console.warn(
+					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+				)
+				console.dir(schema, {
+					depth: null
+				})
+
+				compiled.Clean = createCleaner(schema)
+			}
+		} else if (normalize === 'typebox')
+			compiled.Clean = createCleaner(schema)
+	}
 
 	compiled.parse = (v) => {
 		try {
@@ -1062,36 +1138,37 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		}
 	}
 
-	Object.assign(compiled, {
-		get hasAdditionalProperties() {
-			if ('~hasAdditionalProperties' in this)
-				return this['~hasAdditionalProperties']
+	if (Kind in schema)
+		Object.assign(compiled, {
+			get hasAdditionalProperties() {
+				if ('~hasAdditionalProperties' in this)
+					return this['~hasAdditionalProperties']
 
-			return (this['~hasAdditionalProperties'] =
-				hasAdditionalProperties(compiled))
-		},
-		get hasDefault() {
-			if ('~hasDefault' in this) return this['~hasDefault']
+				return (this['~hasAdditionalProperties'] =
+					hasAdditionalProperties(compiled))
+			},
+			get hasDefault() {
+				if ('~hasDefault' in this) return this['~hasDefault']
 
-			return (this['~hasDefault'] = hasProperty('default', compiled))
-		},
-		get isOptional() {
-			if ('~isOptional' in this) return this['~isOptional']!
+				return (this['~hasDefault'] = hasProperty('default', compiled))
+			},
+			get isOptional() {
+				if ('~isOptional' in this) return this['~isOptional']!
 
-			return (this['~isOptional'] = isOptional(compiled))
-		},
-		get hasTransform() {
-			if ('~hasTransform' in this) return this['~hasTransform']!
+				return (this['~isOptional'] = isOptional(compiled))
+			},
+			get hasTransform() {
+				if ('~hasTransform' in this) return this['~hasTransform']!
 
-			return (this['~hasTransform'] = hasTransform(schema))
-		},
-		get hasRef() {
-			if ('~hasRef' in this) return this['~hasRef']!
+				return (this['~hasTransform'] = hasTransform(schema))
+			},
+			get hasRef() {
+				if ('~hasRef' in this) return this['~hasRef']!
 
-			return (this['~hasRef'] = hasRef(schema))
-		},
-		'~hasRef': doesHaveRef
-	} as ElysiaTypeCheck<any>)
+				return (this['~hasRef'] = hasRef(schema))
+			},
+			'~hasRef': doesHaveRef
+		} as ElysiaTypeCheck<any>)
 
 	// if (cacheKey) caches[cacheKey] = compiled
 
@@ -1203,7 +1280,9 @@ export const getResponseSchemaValidator = (
 		validators = validators.slice(1)
 	}
 
-	let maybeSchemaOrRecord: TSchema | Record<number, string | TSchema>
+	let maybeSchemaOrRecord:
+		| TSchema
+		| Record<number, string | TSchema | StandardSchemaV1>
 
 	if (typeof s !== 'string') maybeSchemaOrRecord = s!
 	else {
@@ -1219,19 +1298,22 @@ export const getResponseSchemaValidator = (
 
 	if (!maybeSchemaOrRecord) return
 
-	if (Kind in maybeSchemaOrRecord) {
+	if (Kind in maybeSchemaOrRecord || '~standard' in maybeSchemaOrRecord) {
 		return {
-			200: getSchemaValidator(maybeSchemaOrRecord, {
-				modules,
-				models,
-				additionalProperties,
-				dynamic,
-				normalize,
-				coerce: false,
-				additionalCoerce: [],
-				validators: validators.map((x) => x![200]),
-				sanitize
-			})
+			200: getSchemaValidator(
+				maybeSchemaOrRecord as TSchema | StandardSchemaV1,
+				{
+					modules,
+					models,
+					additionalProperties,
+					dynamic,
+					normalize,
+					coerce: false,
+					additionalCoerce: [],
+					validators: validators.map((x) => x![200]),
+					sanitize
+				}
+			)
 		}
 	}
 
@@ -1248,7 +1330,7 @@ export const getResponseSchemaValidator = (
 
 				// Inherits model maybe already compiled
 				record[+status] =
-					Kind in schema
+					Kind in schema || '~standard' in schema
 						? getSchemaValidator(schema, {
 								modules,
 								models,
@@ -1268,7 +1350,7 @@ export const getResponseSchemaValidator = (
 
 		// Inherits model maybe already compiled
 		record[+status] =
-			Kind in maybeNameOrSchema
+			Kind in maybeNameOrSchema || '~standard' in maybeNameOrSchema
 				? getSchemaValidator(maybeNameOrSchema as TSchema, {
 						modules,
 						models,

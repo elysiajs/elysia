@@ -1,19 +1,23 @@
-import { Elysia, sse, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
+import { z } from 'zod'
+import { type } from 'arktype'
+import * as v from 'valibot'
 
-const app = new Elysia().get('/', ({ query }) => query, {
-	query: t.Object(
-		{
-			name: t.String()
-		},
-		{ additionalProperties: true }
-	)
-})
-
-const response = await app
-	.handle(req('/?name=nagisa&hifumi=daisuki'))
-	.then((x) => x.json())
-
-console.log(response)
-
-console.log(app.routes[0].hooks)
+new Elysia().get(
+	'/name/:name',
+	({ status }) => Math.random() > 0.5
+		? status(200, 'ok')
+		: status(201, 'aight'),
+	{
+		params: type({
+			name: '"hi saltyaom"'
+		}),
+		query: z.object({
+			id: z.coerce.number()
+		}),
+		response: {
+			200: t.Literal('ok'),
+			201: v.literal('aight')
+		}
+	})
+	.listen(3000)
