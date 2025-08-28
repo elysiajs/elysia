@@ -10,7 +10,11 @@ import {
 } from '@sinclair/typebox'
 
 import decode from 'fast-decode-uri-component'
-import { parseQuery, parseQueryFromURL } from './parse-query'
+import {
+	parseQuery,
+	parseQueryFromURL,
+	parseQueryStandardSchema
+} from './parse-query'
 
 import {
 	ELYSIA_REQUEST_ID,
@@ -245,7 +249,7 @@ const composeValidationFactory = ({
 
 			if (value.provider === 'standard') {
 				code +=
-					`const vare${status}=validator.response[${status}].Check(${name})\n` +
+					`let vare${status}=validator.response[${status}].Check(${name})\n` +
 					`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
 					`if(vare${status}.issues)` +
 					`throw new ValidationError('response',validator.response[${status}],${name})\n` +
@@ -691,6 +695,12 @@ export const composeHandler = ({
 	const saveResponse =
 		hasTrace || hooks.afterResponse?.length ? 'c.response= ' : ''
 
+	const responseKeys = Object.keys(validator.response ?? {})
+	const hasMultipleResponses = responseKeys.length > 1
+	const hasSingle200 =
+		responseKeys.length === 0 ||
+		(responseKeys.length === 1 && responseKeys[0] === '200')
+
 	const maybeAsync =
 		hasCookie ||
 		hasBody ||
@@ -699,19 +709,23 @@ export const composeHandler = ({
 		!!hooks.afterHandle?.some(isAsync) ||
 		!!hooks.beforeHandle?.some(isAsync) ||
 		!!hooks.transform?.some(isAsync) ||
-		!!hooks.mapResponse?.some(isAsync)
+		!!hooks.mapResponse?.some(isAsync) ||
+		validator.body?.provider === 'standard' ||
+		validator.headers?.provider === 'standard' ||
+		validator.query?.provider === 'standard' ||
+		validator.params?.provider === 'standard' ||
+		validator.cookie?.provider === 'standard' ||
+		(hasMultipleResponses
+			? Object.values(validator.response ?? {}).find(
+					(x) => x.provider === 'standard'
+				)
+			: validator.response?.[200].provider === 'standard')
 
 	const maybeStream =
 		(typeof handler === 'function' ? isGenerator(handler as any) : false) ||
 		!!hooks.beforeHandle?.some(isGenerator) ||
 		!!hooks.afterHandle?.some(isGenerator) ||
 		!!hooks.transform?.some(isGenerator)
-
-	const responseKeys = Object.keys(validator.response ?? {})
-	const hasMultipleResponses = responseKeys.length > 1
-	const hasSingle200 =
-		responseKeys.length === 0 ||
-		(responseKeys.length === 1 && responseKeys[0] === '200')
 
 	const hasSet =
 		inference.cookie ||
@@ -1210,7 +1224,7 @@ export const composeHandler = ({
 
 			if (validator.query.provider === 'standard') {
 				fnLiteral +=
-					`const vaq=validator.query.Check(c.query)\n` +
+					`let vaq=validator.query.Check(c.query)\n` +
 					`if(vaq instanceof Promise)vaq=await vaq\n` +
 					`if(vaq.issues){` +
 					validation.validate('query') +
@@ -1297,7 +1311,7 @@ export const composeHandler = ({
 
 				if (validator.body.provider === 'standard') {
 					fnLiteral +=
-						`const vab=validator.body.Check(c.body)\n` +
+						`let vab=validator.body.Check(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
 						`if(vab.issues){` +
 						validation.validate('body') +
@@ -1324,7 +1338,7 @@ export const composeHandler = ({
 
 				if (validator.body.provider === 'standard') {
 					fnLiteral +=
-						`const vab=validator.body.Check(c.body)\n` +
+						`let vab=validator.body.Check(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
 						`if(vab.issues){` +
 						validation.validate('body') +
@@ -1476,7 +1490,7 @@ export const composeHandler = ({
 
 			if (validator.cookie.provider === 'standard') {
 				fnLiteral +=
-					`const vac=validator.cookie.Check(c.body)\n` +
+					`let vac=validator.cookie.Check(c.body)\n` +
 					`if(vac instanceof Promise)vac=await vac\n` +
 					`if(vac.issues){` +
 					validation.validate('cookie') +
@@ -1987,7 +2001,11 @@ export const composeHandler = ({
 			isNotEmpty,
 			utils: {
 				parseQuery: hasBody ? parseQuery : undefined,
-				parseQueryFromURL: hasQuery ? parseQueryFromURL : undefined
+				parseQueryFromURL: hasQuery
+					? validator.query?.provider === 'standard'
+						? parseQueryStandardSchema
+						: parseQueryFromURL
+					: undefined
 			},
 			error: {
 				ValidationError: hasValidation ? ValidationError : undefined,
