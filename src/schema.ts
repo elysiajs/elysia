@@ -803,8 +803,8 @@ export const getSchemaValidator = <
 	const mapSchema = (
 		s: string | TSchema | StandardSchemaV1 | undefined
 	): TSchema | StandardSchemaV1 => {
-		// @ts-ignore
-		if (s && '~standard' in s) return s as StandardSchemaV1
+		if (s && typeof s !== 'string' && '~standard' in s)
+			return s as StandardSchemaV1
 
 		let schema: TSchema
 
@@ -930,47 +930,18 @@ export const getSchemaValidator = <
 	if (dynamic) {
 		if (Kind in schema) {
 			const validator: ElysiaTypeCheck<any> = {
-				provider: 'standard',
+				provider: 'typebox',
 				schema,
 				references: '',
-				checkFunc(value: unknown) {
-					const response = schema['~standard']['validate'](value)
-
-					if (response instanceof Promise)
-						throw Error(
-							'Async validation is not supported in non-dynamic schema'
-						)
-
-					return response
-				},
+				checkFunc: () => {},
 				code: '',
-				Check: schema['~standard']['validate'],
-				// @ts-ignore
-				Errors(value: unknown) {
-					// @ts-ignore
-					const response = schema['~standard']['validate'](value)
-
-					if (response instanceof Promise)
-						throw Error(
-							'Async validation is not supported in non-dynamic schema'
-						)
-
-					return response.issues
-				},
+				// @ts-expect-error
+				Check: (value: unknown) => Value.Check(schema, value),
+				Errors: (value: unknown) => Value.Errors(schema, value),
 				Code: () => '',
-				// @ts-ignore
-				Decode(value) {
-					const response = schema['~standard']['validate'](value)
-
-					if (response instanceof Promise)
-						throw Error(
-							'Async validation is not supported in non-dynamic schema'
-						)
-
-					return response
-				},
-				// @ts-ignore
-				Encode: (value: unknown) => value,
+				Clean: createCleaner(schema),
+				Decode: (value: unknown) => Value.Decode(schema, value),
+				Encode: (value: unknown) => Value.Encode(schema, value),
 				get hasAdditionalProperties() {
 					if ('~hasAdditionalProperties' in this)
 						return this['~hasAdditionalProperties'] as boolean
@@ -1066,11 +1037,11 @@ export const getSchemaValidator = <
 				checkFunc: () => {},
 				code: '',
 				// @ts-ignore
-				Check: schema['~standard']['validate'],
+				Check: (v) => schema['~standard'].validate(v),
 				// @ts-ignore
 				Errors(value: unknown) {
 					// @ts-ignore
-					const response = schema['~standard']['validate'](value)
+					const response = schema['~standard'].validate(value)
 
 					if (response instanceof Promise)
 						throw Error(
@@ -1082,7 +1053,7 @@ export const getSchemaValidator = <
 				Code: () => '',
 				// @ts-ignore
 				Decode(value) {
-					const response = schema['~standard']['validate'](value)
+					const response = schema['~standard'].validate(value)
 
 					if (response instanceof Promise)
 						throw Error(
@@ -1138,59 +1109,7 @@ export const getSchemaValidator = <
 	if (Kind in schema) {
 		compiled = TypeCompiler.Compile(schema, Object.values(models)) as any
 		compiled.provider = 'typebox'
-	} else {
-		compiled = {
-			provider: 'standard',
-			schema,
-			references: '',
-			checkFunc(value: unknown) {
-				const response = schema['~standard']['validate'](value)
 
-				if (response instanceof Promise)
-					throw Error(
-						'Async validation is not supported in non-dynamic schema'
-					)
-
-				return response
-			},
-			code: '',
-			// @ts-ignore
-			Check: schema['~standard']['validate'],
-			// @ts-ignore
-			Errors(value: unknown) {
-				// @ts-ignore
-				const response = schema['~standard']['validate'](value)
-
-				if (response instanceof Promise)
-					throw Error(
-						'Async validation is not supported in non-dynamic schema'
-					)
-
-				return response.issues
-			},
-			Code: () => '',
-			// @ts-ignore
-			Decode(value) {
-				const response = schema['~standard']['validate'](value)
-
-				if (response instanceof Promise)
-					throw Error(
-						'Async validation is not supported in non-dynamic schema'
-					)
-
-				return response
-			},
-			// @ts-ignore
-			Encode: (value: unknown) => value,
-			hasAdditionalProperties: false,
-			hasDefault: false,
-			isOptional: false,
-			hasTransform: false,
-			hasRef: false
-		}
-	}
-
-	if (Kind in schema) {
 		if (schema.config) {
 			compiled.config = schema.config
 
@@ -1216,6 +1135,56 @@ export const getSchemaValidator = <
 			}
 		} else if (normalize === 'typebox')
 			compiled.Clean = createCleaner(schema)
+	} else {
+		compiled = {
+			provider: 'standard',
+			schema,
+			references: '',
+			checkFunc(value: unknown) {
+				const response = schema['~standard'].validate(value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response
+			},
+			code: '',
+			// @ts-ignore
+			Check: (v) => schema['~standard'].validate(v),
+			// @ts-ignore
+			Errors(value: unknown) {
+				// @ts-ignore
+				const response = schema['~standard'].validate(value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response.issues
+			},
+			Code: () => '',
+			// @ts-ignore
+			Decode(value) {
+				const response = schema['~standard'].validate(value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response
+			},
+			// @ts-ignore
+			Encode: (value: unknown) => value,
+			hasAdditionalProperties: false,
+			hasDefault: false,
+			isOptional: false,
+			hasTransform: false,
+			hasRef: false
+		}
 	}
 
 	compiled.parse = (v) => {
@@ -1546,7 +1515,7 @@ export const getCookieValidator = ({
 	validators,
 	sanitize
 }: {
-	validator: TSchema | string | undefined
+	validator: TSchema | ElysiaTypeCheck<any> | string | undefined
 	modules: TModule<any, any>
 	defaultConfig: CookieOptions | undefined
 	config: CookieOptions
@@ -1556,17 +1525,22 @@ export const getCookieValidator = ({
 	validators?: InputSchema['cookie'][]
 	sanitize?: () => ExactMirrorInstruction['sanitize']
 }) => {
-	let cookieValidator = getSchemaValidator(validator, {
-		modules,
-		dynamic,
-		models,
-		normalize,
-		additionalProperties: true,
-		coerce: true,
-		additionalCoerce: stringToStructureCoercions(),
-		validators,
-		sanitize
-	})
+	let cookieValidator =
+		// @ts-ignore
+		validator?.provider
+			? (validator as ElysiaTypeCheck<any>)
+			: // @ts-ignore
+				getSchemaValidator(validator, {
+					modules,
+					dynamic,
+					models,
+					normalize,
+					additionalProperties: true,
+					coerce: true,
+					additionalCoerce: stringToStructureCoercions(),
+					validators,
+					sanitize
+				})
 
 	if (cookieValidator)
 		cookieValidator.config = mergeCookie(cookieValidator.config, config)

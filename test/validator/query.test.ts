@@ -968,19 +968,17 @@ describe('Query Validator', () => {
 	it('handle coerce TransformDecodeError', async () => {
 		let err: Error | undefined
 
-		const app = new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Object({
-					year: t.Numeric({ minimum: 1900, maximum: 2160 })
-				}),
-				error({ code, error }) {
-					switch (code) {
-						case 'VALIDATION':
-							err = error
-					}
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				year: t.Numeric({ minimum: 1900, maximum: 2160 })
+			}),
+			error({ code, error }) {
+				switch (code) {
+					case 'VALIDATION':
+						err = error
 				}
-			})
-			.listen(0)
+			}
+		})
 
 		await app.handle(req('?year=3000'))
 

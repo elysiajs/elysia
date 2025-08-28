@@ -1,14 +1,28 @@
-import { Elysia, t, validateFileExtension } from '../src'
-import { z } from 'zod'
+import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
 const app = new Elysia()
-	.post('', ({ body: { file } }) => file, {
-		body: z.object({
-			file: z
-				.file()
-				.refine((file) => validateFileExtension(file, 'image/jpeg'))
+	.onError(({ error, code }) => {
+		if (code === 'VALIDATION') return error.detail(error.message)
+	})
+	.post('/', () => 'Hello World!', {
+		body: t.Object({
+			x: t.Number({
+				error: 'x must be a number'
+			})
 		})
 	})
-	.listen(3000)
 
-console.log(app.routes[0].compile().toString())
+const response = await app
+	.handle(
+		new Request('http://localhost', {
+			method: 'POST',
+			body: JSON.stringify({ x: 'hi!' }),
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		})
+	)
+	.then((x) => x.text())
+
+console.log(response)

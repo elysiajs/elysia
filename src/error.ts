@@ -268,8 +268,11 @@ export class ValidationError extends Error {
 		let expected
 		let customError
 
-		// @ts-ignore
-		if ('~standard' in validator || '~standard' in validator.schema) {
+		if (
+			'~standard' in validator ||
+			// @ts-ignore
+			(validator.schema && '~standard' in validator.schema)
+		) {
 			const standard = // @ts-ignore
 				('~standard' in validator ? validator : validator.schema)[
 					'~standard'
@@ -300,6 +303,8 @@ export class ValidationError extends Error {
 					null,
 					2
 				)
+
+			customError = error?.message
 		} else {
 			if (
 				value &&
@@ -332,7 +337,7 @@ export class ValidationError extends Error {
 				}
 			}
 
-			const customError =
+			customError =
 				error?.schema?.message || error?.schema?.error !== undefined
 					? typeof error.schema.error === 'function'
 						? error.schema.error(
