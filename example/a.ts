@@ -1,23 +1,14 @@
-import { Elysia, t } from 'elysia'
+import { Elysia, t, validateFileExtension } from '../src'
 import { z } from 'zod'
-import { type } from 'arktype'
-import * as v from 'valibot'
 
-new Elysia().get(
-	'/name/:name',
-	({ status }) => Math.random() > 0.5
-		? status(200, 'ok')
-		: status(201, 'aight'),
-	{
-		params: type({
-			name: '"Standard Schema"'
-		}),
-		query: z.object({
-			id: z.coerce.number()
-		}),
-		response: {
-			200: t.Literal('ok'),
-			201: v.literal('aight')
-		}
+const app = new Elysia()
+	.post('', ({ body: { file } }) => file, {
+		body: z.object({
+			file: z
+				.file()
+				.refine((file) => validateFileExtension(file, 'image/jpeg'))
+		})
 	})
 	.listen(3000)
+
+console.log(app.routes[0].compile().toString())

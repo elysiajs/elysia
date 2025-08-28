@@ -246,6 +246,7 @@ const composeValidationFactory = ({
 			if (value.provider === 'standard') {
 				code +=
 					`const vare${status}=validator.response[${status}].Check(${name})\n` +
+					`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
 					`if(vare${status}.issues)` +
 					`throw new ValidationError('response',validator.response[${status}],${name})\n` +
 					`${name}=vare${status}.value\n` +
@@ -649,40 +650,39 @@ export const composeHandler = ({
 	}
 
 	if (hasQuery) {
-		const destructured = <
-			{
-				key: string
-				isArray: boolean
-				isNestedObjectArray: boolean
-				isObject: boolean
-				anyOf: boolean
-			}[]
-		>[]
-
-		const schema = unwrapImportSchema(validator.query?.schema)
 		let arrayProperties: Record<string, 1> = {}
 		let objectProperties: Record<string, 1> = {}
 		let hasArrayProperty = false
 		let hasObjectProperty = false
 
-		if (Kind in schema)
-			for (const [key, value] of Object.entries(schema.properties)) {
-				if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
-					arrayProperties[key] = 1
-					hasArrayProperty = true
-				}
+		if (validator.query?.schema) {
+			const schema = unwrapImportSchema(validator.query?.schema)
+			if (Kind in schema) {
+				for (const [key, value] of Object.entries(schema.properties)) {
+					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
+						arrayProperties[key] = 1
+						hasArrayProperty = true
+					}
 
-				if (hasElysiaMeta('ObjectString', value as TSchema)) {
-					objectProperties[key] = 1
-					hasObjectProperty = true
+					if (hasElysiaMeta('ObjectString', value as TSchema)) {
+						objectProperties[key] = 1
+						hasObjectProperty = true
+					}
 				}
 			}
+		}
 
 		fnLiteral +=
 			'if(c.qi===-1){' +
 			'c.query=Object.create(null)' +
 			'}else{' +
-			`c.query=parseQueryFromURL(c.url,c.qi+1,${hasArrayProperty ? JSON.stringify(arrayProperties) : undefined},${hasObjectProperty ? JSON.stringify(objectProperties) : undefined})` +
+			`c.query=parseQueryFromURL(c.url,c.qi+1,${
+				//
+				hasArrayProperty ? JSON.stringify(arrayProperties) : undefined
+			},${
+				//
+				hasObjectProperty ? JSON.stringify(objectProperties) : undefined
+			})` +
 			'}'
 	}
 
@@ -1160,7 +1160,8 @@ export const composeHandler = ({
 
 			if (validator.params.provider === 'standard') {
 				fnLiteral +=
-					`const vap=validator.params.Check(c.params)\n` +
+					`let vap=validator.params.Check(c.params)\n` +
+					`if(vap instanceof Promise)vap=await vap\n` +
 					`if(vap.issues){` +
 					validation.validate('params') +
 					'}else{c.params=vap.value}\n'
@@ -1210,6 +1211,7 @@ export const composeHandler = ({
 			if (validator.query.provider === 'standard') {
 				fnLiteral +=
 					`const vaq=validator.query.Check(c.query)\n` +
+					`if(vaq instanceof Promise)vaq=await vaq\n` +
 					`if(vaq.issues){` +
 					validation.validate('query') +
 					'}else{c.query=vaq.value}\n'
@@ -1296,6 +1298,7 @@ export const composeHandler = ({
 				if (validator.body.provider === 'standard') {
 					fnLiteral +=
 						`const vab=validator.body.Check(c.body)\n` +
+						`if(vab instanceof Promise)vab=await vab\n` +
 						`if(vab.issues){` +
 						validation.validate('body') +
 						'}else{c.body=vab.value}\n'
@@ -1322,6 +1325,7 @@ export const composeHandler = ({
 				if (validator.body.provider === 'standard') {
 					fnLiteral +=
 						`const vab=validator.body.Check(c.body)\n` +
+						`if(vab instanceof Promise)vab=await vab\n` +
 						`if(vab.issues){` +
 						validation.validate('body') +
 						'}else{c.body=vab.value}\n'
@@ -1480,6 +1484,7 @@ export const composeHandler = ({
 			if (cookieValidator.provider === 'standard') {
 				fnLiteral +=
 					`const vac=validator.cookie.Check(c.body)\n` +
+					`if(vac instanceof Promise)vac=await vac\n` +
 					`if(vac.issues){` +
 					validation.validate('cookie') +
 					'}else{c.body=vac.value}\n'

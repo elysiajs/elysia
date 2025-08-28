@@ -13,7 +13,8 @@ import { InvalidFileType, ValidationError } from '../error'
 import type {
 	ElysiaTypeCustomErrorCallback,
 	FileOptions,
-	FileUnit
+	FileUnit,
+	FileType
 } from './types'
 import type { MaybeArray } from '../types'
 
@@ -126,7 +127,7 @@ export const fileTypeFromBlob = (file: Blob | File) => {
 
 export const validateFileExtension = async (
 	file: MaybeArray<Blob | File | undefined>,
-	extension: string | string[],
+	extension: FileType | FileType[],
 	// @ts-ignore
 	name = file?.name ?? ''
 ): Promise<boolean> => {

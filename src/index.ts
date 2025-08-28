@@ -6800,7 +6800,11 @@ export default class Elysia<
 export { Elysia }
 
 export { t } from './type-system'
-export { validationDetail } from './type-system/utils'
+export {
+	validationDetail,
+	validateFile,
+	validateFileExtension
+} from './type-system/utils'
 export type {
 	ElysiaTypeCustomError,
 	ElysiaTypeCustomErrorCallback

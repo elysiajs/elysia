@@ -930,17 +930,47 @@ export const getSchemaValidator = <
 	if (dynamic) {
 		if (Kind in schema) {
 			const validator: ElysiaTypeCheck<any> = {
+				provider: 'standard',
 				schema,
 				references: '',
-				checkFunc: () => {},
+				checkFunc(value: unknown) {
+					const response = schema['~standard']['validate'](value)
+
+					if (response instanceof Promise)
+						throw Error(
+							'Async validation is not supported in non-dynamic schema'
+						)
+
+					return response
+				},
 				code: '',
-				// @ts-expect-error
-				Check: (value: unknown) => Value.Check(schema, value),
-				Errors: (value: unknown) => Value.Errors(schema, value),
+				Check: schema['~standard']['validate'],
+				// @ts-ignore
+				Errors(value: unknown) {
+					// @ts-ignore
+					const response = schema['~standard']['validate'](value)
+
+					if (response instanceof Promise)
+						throw Error(
+							'Async validation is not supported in non-dynamic schema'
+						)
+
+					return response.issues
+				},
 				Code: () => '',
-				Clean: createCleaner(schema),
-				Decode: (value: unknown) => Value.Decode(schema, value),
-				Encode: (value: unknown) => Value.Encode(schema, value),
+				// @ts-ignore
+				Decode(value) {
+					const response = schema['~standard']['validate'](value)
+
+					if (response instanceof Promise)
+						throw Error(
+							'Async validation is not supported in non-dynamic schema'
+						)
+
+					return response
+				},
+				// @ts-ignore
+				Encode: (value: unknown) => value,
 				get hasAdditionalProperties() {
 					if ('~hasAdditionalProperties' in this)
 						return this['~hasAdditionalProperties'] as boolean
@@ -1036,16 +1066,7 @@ export const getSchemaValidator = <
 				checkFunc: () => {},
 				code: '',
 				// @ts-ignore
-				Check(value) {
-					const response = schema['~standard']['validate'](value)
-
-					if (response instanceof Promise)
-						throw Error(
-							'Async validation is not supported in non-dynamic schema'
-						)
-
-					return response
-				},
+				Check: schema['~standard']['validate'],
 				// @ts-ignore
 				Errors(value: unknown) {
 					// @ts-ignore
@@ -1122,10 +1143,7 @@ export const getSchemaValidator = <
 			provider: 'standard',
 			schema,
 			references: '',
-			checkFunc: () => {},
-			code: '',
-			// @ts-ignore
-			Check(value) {
+			checkFunc(value: unknown) {
 				const response = schema['~standard']['validate'](value)
 
 				if (response instanceof Promise)
@@ -1135,6 +1153,9 @@ export const getSchemaValidator = <
 
 				return response
 			},
+			code: '',
+			// @ts-ignore
+			Check: schema['~standard']['validate'],
 			// @ts-ignore
 			Errors(value: unknown) {
 				// @ts-ignore
