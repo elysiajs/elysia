@@ -436,6 +436,8 @@ export class ValidationError extends Error {
 	}
 
 	get model() {
+		if ('~standard' in this.validator) return this.validator
+
 		return ValidationError.simplifyModel(this.validator)
 	}
 

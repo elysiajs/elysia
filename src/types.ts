@@ -206,12 +206,12 @@ export interface ValidatorLayer {
 }
 
 export interface StandaloneInputSchema<Name extends string = string> {
-	body?: TSchema | Name | `${Name}[]`
-	headers?: TSchema | Name | `${Name}[]`
-	query?: TSchema | Name | `${Name}[]`
-	params?: TSchema | Name | `${Name}[]`
-	cookie?: TSchema | Name | `${Name}[]`
-	response?: { [status in number]: `${Name}[]` | Name | TSchema }
+	body?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	headers?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	query?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	params?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	cookie?: TSchema | StandardSchemaV1 | Name | `${Name}[]`
+	response?: { [status in number]: `${Name}[]` | Name | TSchema | StandardSchemaV1 }
 }
 
 export interface StandaloneValidator {

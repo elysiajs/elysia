@@ -928,102 +928,188 @@ export const getSchemaValidator = <
 	}
 
 	if (dynamic) {
-		const validator: ElysiaTypeCheck<any> = {
-			schema,
-			references: '',
-			checkFunc: () => {},
-			code: '',
-			// @ts-expect-error
-			Check: (value: unknown) => Value.Check(schema, value),
-			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => '',
-			Clean: createCleaner(schema),
-			Decode: (value: unknown) => Value.Decode(schema, value),
-			Encode: (value: unknown) => Value.Encode(schema, value),
-			get hasAdditionalProperties() {
-				if ('~hasAdditionalProperties' in this)
-					return this['~hasAdditionalProperties'] as boolean
+		if (Kind in schema) {
+			const validator: ElysiaTypeCheck<any> = {
+				schema,
+				references: '',
+				checkFunc: () => {},
+				code: '',
+				// @ts-expect-error
+				Check: (value: unknown) => Value.Check(schema, value),
+				Errors: (value: unknown) => Value.Errors(schema, value),
+				Code: () => '',
+				Clean: createCleaner(schema),
+				Decode: (value: unknown) => Value.Decode(schema, value),
+				Encode: (value: unknown) => Value.Encode(schema, value),
+				get hasAdditionalProperties() {
+					if ('~hasAdditionalProperties' in this)
+						return this['~hasAdditionalProperties'] as boolean
 
-				return (this['~hasAdditionalProperties'] =
-					hasAdditionalProperties(schema))
-			},
-			get hasDefault() {
-				if ('~hasDefault' in this) return this['~hasDefault']
+					return (this['~hasAdditionalProperties'] =
+						hasAdditionalProperties(schema))
+				},
+				get hasDefault() {
+					if ('~hasDefault' in this) return this['~hasDefault']
 
-				return (this['~hasDefault'] = hasProperty('default', schema))
-			},
-			get isOptional() {
-				if ('~isOptional' in this) return this['~isOptional']!
+					return (this['~hasDefault'] = hasProperty(
+						'default',
+						schema
+					))
+				},
+				get isOptional() {
+					if ('~isOptional' in this) return this['~isOptional']!
 
-				return (this['~isOptional'] = isOptional(schema))
-			},
-			get hasTransform() {
-				if ('~hasTransform' in this) return this['~hasTransform']!
+					return (this['~isOptional'] = isOptional(schema))
+				},
+				get hasTransform() {
+					if ('~hasTransform' in this) return this['~hasTransform']!
 
-				return (this['~hasTransform'] = hasTransform(schema))
-			},
-			'~hasRef': doesHaveRef,
-			get hasRef() {
-				if ('~hasRef' in this) return this['~hasRef']!
+					return (this['~hasTransform'] = hasTransform(schema))
+				},
+				'~hasRef': doesHaveRef,
+				get hasRef() {
+					if ('~hasRef' in this) return this['~hasRef']!
 
-				return (this['~hasRef'] = hasTransform(schema))
+					return (this['~hasRef'] = hasTransform(schema))
+				}
 			}
-		}
 
-		if (schema.config) {
-			validator.config = schema.config
+			if (schema.config) {
+				validator.config = schema.config
 
-			if (validator?.schema?.config) delete validator.schema.config
-		}
+				if (validator?.schema?.config) delete validator.schema.config
+			}
 
-		if (normalize && schema.additionalProperties === false) {
-			if (normalize === true || normalize === 'exactMirror') {
+			if (normalize && schema.additionalProperties === false) {
+				if (normalize === true || normalize === 'exactMirror') {
+					try {
+						validator.Clean = createMirror(schema, {
+							TypeCompiler,
+							sanitize: sanitize?.(),
+							modules
+						})
+					} catch {
+						console.warn(
+							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+						)
+						console.warn(schema)
+						validator.Clean = createCleaner(schema)
+					}
+				} else validator.Clean = createCleaner(schema)
+			}
+
+			validator.parse = (v) => {
 				try {
-					validator.Clean = createMirror(schema, {
-						TypeCompiler,
-						sanitize: sanitize?.(),
-						modules
-					})
-				} catch {
-					console.warn(
-						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-					)
-					console.warn(schema)
-					validator.Clean = createCleaner(schema)
-				}
-			} else validator.Clean = createCleaner(schema)
-		}
-
-		validator.parse = (v) => {
-			try {
-				return validator.Decode(validator.Clean?.(v) ?? v)
-			} catch (error) {
-				throw [...validator.Errors(v)].map(mapValueError)
-			}
-		}
-
-		validator.safeParse = (v) => {
-			try {
-				return {
-					success: true,
-					data: validator.Decode(validator.Clean?.(v) ?? v),
-					error: null
-				}
-			} catch (error) {
-				const errors = [...compiled.Errors(v)].map(mapValueError)
-
-				return {
-					success: false,
-					data: null,
-					error: errors[0]?.summary,
-					errors
+					return validator.Decode(validator.Clean?.(v) ?? v)
+				} catch (error) {
+					throw [...validator.Errors(v)].map(mapValueError)
 				}
 			}
+
+			validator.safeParse = (v) => {
+				try {
+					return {
+						success: true,
+						data: validator.Decode(validator.Clean?.(v) ?? v),
+						error: null
+					}
+				} catch (error) {
+					const errors = [...compiled.Errors(v)].map(mapValueError)
+
+					return {
+						success: false,
+						data: null,
+						error: errors[0]?.summary,
+						errors
+					}
+				}
+			}
+
+			// if (cacheKey) caches[cacheKey] = validator
+
+			return validator as any
+		} else {
+			const validator: ElysiaTypeCheck<any> = {
+				provider: 'standard',
+				schema,
+				references: '',
+				checkFunc: () => {},
+				code: '',
+				// @ts-ignore
+				Check(value) {
+					const response = schema['~standard']['validate'](value)
+
+					if (response instanceof Promise)
+						throw Error(
+							'Async validation is not supported in non-dynamic schema'
+						)
+
+					return response
+				},
+				// @ts-ignore
+				Errors(value: unknown) {
+					// @ts-ignore
+					const response = schema['~standard']['validate'](value)
+
+					if (response instanceof Promise)
+						throw Error(
+							'Async validation is not supported in non-dynamic schema'
+						)
+
+					return response.issues
+				},
+				Code: () => '',
+				// @ts-ignore
+				Decode(value) {
+					const response = schema['~standard']['validate'](value)
+
+					if (response instanceof Promise)
+						throw Error(
+							'Async validation is not supported in non-dynamic schema'
+						)
+
+					return response
+				},
+				// @ts-ignore
+				Encode: (value: unknown) => value,
+				hasAdditionalProperties: false,
+				hasDefault: false,
+				isOptional: false,
+				hasTransform: false,
+				hasRef: false
+			}
+
+			validator.parse = (v) => {
+				try {
+					return validator.Decode(validator.Clean?.(v) ?? v)
+				} catch (error) {
+					throw [...validator.Errors(v)].map(mapValueError)
+				}
+			}
+
+			validator.safeParse = (v) => {
+				try {
+					return {
+						success: true,
+						data: validator.Decode(validator.Clean?.(v) ?? v),
+						error: null
+					}
+				} catch (error) {
+					const errors = [...compiled.Errors(v)].map(mapValueError)
+
+					return {
+						success: false,
+						data: null,
+						error: errors[0]?.summary,
+						errors
+					}
+				}
+			}
+
+			// if (cacheKey) caches[cacheKey] = validator
+
+			return validator as any
 		}
-
-		// if (cacheKey) caches[cacheKey] = validator
-
-		return validator as any
 	}
 
 	let compiled: ElysiaTypeCheck<any>
@@ -1038,8 +1124,8 @@ export const getSchemaValidator = <
 			references: '',
 			checkFunc: () => {},
 			code: '',
+			// @ts-ignore
 			Check(value) {
-				// @ts-ignore
 				const response = schema['~standard']['validate'](value)
 
 				if (response instanceof Promise)
@@ -1282,6 +1368,7 @@ export const getResponseSchemaValidator = (
 
 	let maybeSchemaOrRecord:
 		| TSchema
+		| StandardSchemaV1
 		| Record<number, string | TSchema | StandardSchemaV1>
 
 	if (typeof s !== 'string') maybeSchemaOrRecord = s!
@@ -1298,7 +1385,7 @@ export const getResponseSchemaValidator = (
 
 	if (!maybeSchemaOrRecord) return
 
-	if (Kind in maybeSchemaOrRecord || '~standard' in maybeSchemaOrRecord) {
+	if (Kind in maybeSchemaOrRecord || '~standard' in maybeSchemaOrRecord)
 		return {
 			200: getSchemaValidator(
 				maybeSchemaOrRecord as TSchema | StandardSchemaV1,
@@ -1313,9 +1400,8 @@ export const getResponseSchemaValidator = (
 					validators: validators.map((x) => x![200]),
 					sanitize
 				}
-			)
+			)!
 		}
-	}
 
 	const record: Record<number, ElysiaTypeCheck<any>> = {}
 

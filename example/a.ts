@@ -1,4 +1,4 @@
-import { Elysia, t } from '../src'
+import { Elysia, t } from 'elysia'
 import { z } from 'zod'
 import { type } from 'arktype'
 import * as v from 'valibot'
@@ -10,7 +10,7 @@ new Elysia().get(
 		: status(201, 'aight'),
 	{
 		params: type({
-			name: '"hi saltyaom"'
+			name: '"Standard Schema"'
 		}),
 		query: z.object({
 			id: z.coerce.number()

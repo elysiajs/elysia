@@ -669,7 +669,7 @@ export default class Elysia<
 							models,
 							normalize,
 							validators: standaloneValidators.map(
-								(x) => x.response
+								(x) => x.response as any
 							),
 							sanitize
 						})
@@ -769,7 +769,7 @@ export default class Elysia<
 									models,
 									normalize,
 									validators: standaloneValidators.map(
-										(x) => x.response
+										(x) => x.response as any
 									),
 									sanitize
 								}
