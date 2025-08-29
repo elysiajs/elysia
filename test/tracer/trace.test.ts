@@ -95,6 +95,9 @@ describe('trace', () => {
 
 		await app.handle(req('/'))
 
+		// wait for next tick
+		await Bun.sleep(1)
+
 		expect(called).toEqual([
 			'request',
 			'parse',
@@ -107,7 +110,7 @@ describe('trace', () => {
 		])
 	})
 
-	it("don't crash on composer", () => {
+	it("don't crash on composer", async () => {
 		const called = <string[]>[]
 
 		const detectEvent =
@@ -152,13 +155,29 @@ describe('trace', () => {
 							'handle',
 							'afterHandle',
 							'mapResponse',
-							'afterResponse'
+							// afterResponse is being called so we can't check it yet
 						])
 					})
 				}
 			)
 
-		const app = new Elysia().get('/', 'hi')
+		const app = new Elysia().use(plugin).get('/', 'hi')
+
+		await app.handle(req('/'))
+
+		// wait for next tick
+		await Bun.sleep(1)
+
+		expect(called).toEqual([
+			'request',
+			'parse',
+			'transform',
+			'beforeHandle',
+			'handle',
+			'afterHandle',
+			'mapResponse',
+			'afterResponse'
+		])
 	})
 
 	it('handle local scope', async () => {
