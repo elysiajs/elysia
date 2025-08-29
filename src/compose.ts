@@ -1828,7 +1828,7 @@ export const composeHandler = ({
 
 		reporter.resolve()
 
-		fnLiteral += `r=c.response\n`
+		if (hooks.afterHandle?.length) fnLiteral += `r=c.response\n`
 
 		if (validator.response) fnLiteral += validation.response()
 
