@@ -881,14 +881,19 @@ export const composeHandler = ({
 		maybeStream
 
 	const afterResponse = () => {
-		if (!hooks.afterResponse?.length) return ''
+		if (!hooks.afterResponse?.length && !hasTrace) return ''
 
 		let afterResponse = ''
 		const prefix = hooks.afterResponse?.some(isAsync) ? 'async ' : ''
 
 		afterResponse += `\nsetImmediate(${prefix}()=>{`
 
-		const reporter = report('afterResponse', {
+		const reporter = createReport({
+			trace: hooks.trace,
+			addFn: (word) => {
+				afterResponse += word
+			}
+		})('afterResponse', {
 			total: hooks.afterResponse?.length
 		})
 
@@ -902,7 +907,7 @@ export const composeHandler = ({
 				endUnit()
 			}
 		}
-
+		
 		reporter.resolve()
 
 		afterResponse += '})\n'
@@ -914,7 +919,7 @@ export const composeHandler = ({
 		const after = afterResponse()
 		const response = `${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
 
-		if (!after) `return ${response}`
+		if (!after) return `return ${response}`
 
 		return `const _res=${response}` + after + `return _res`
 	}
@@ -1204,44 +1209,46 @@ export const composeHandler = ({
 
 	parseReporter.resolve()
 
-	if (hooks?.transform) {
+	if (hooks?.transform || hasTrace) {
 		const reporter = report('transform', {
-			total: hooks.transform.length
+			total: hooks.transform?.length
 		})
 
-		if (hooks.transform.length) fnLiteral += 'let transformed\n'
+		if (hooks.transform?.length) {
+			fnLiteral += 'let transformed\n'
 
-		for (let i = 0; i < hooks.transform.length; i++) {
-			const transform = hooks.transform[i]
+			for (let i = 0; i < hooks.transform.length; i++) {
+				const transform = hooks.transform[i]
 
-			const endUnit = reporter.resolveChild(transform.fn.name)
+				const endUnit = reporter.resolveChild(transform.fn.name)
 
-			fnLiteral += isAsync(transform)
-				? `transformed=await e.transform[${i}](c)\n`
-				: `transformed=e.transform[${i}](c)\n`
+				fnLiteral += isAsync(transform)
+					? `transformed=await e.transform[${i}](c)\n`
+					: `transformed=e.transform[${i}](c)\n`
 
-			if (transform.subType === 'mapDerive')
-				fnLiteral +=
-					`if(transformed instanceof ElysiaCustomStatusResponse){` +
-					mapResponse('transformed') +
-					`}else{` +
-					`transformed.request=c.request\n` +
-					`transformed.store=c.store\n` +
-					`transformed.qi=c.qi\n` +
-					`transformed.path=c.path\n` +
-					`transformed.url=c.url\n` +
-					`transformed.redirect=c.redirect\n` +
-					`transformed.set=c.set\n` +
-					`transformed.error=c.error\n` +
-					`c=transformed` +
-					'}'
-			else
-				fnLiteral +=
-					`if(transformed instanceof ElysiaCustomStatusResponse){` +
-					mapResponse('transformed') +
-					`}else Object.assign(c,transformed)\n`
+				if (transform.subType === 'mapDerive')
+					fnLiteral +=
+						`if(transformed instanceof ElysiaCustomStatusResponse){` +
+						mapResponse('transformed') +
+						`}else{` +
+						`transformed.request=c.request\n` +
+						`transformed.store=c.store\n` +
+						`transformed.qi=c.qi\n` +
+						`transformed.path=c.path\n` +
+						`transformed.url=c.url\n` +
+						`transformed.redirect=c.redirect\n` +
+						`transformed.set=c.set\n` +
+						`transformed.error=c.error\n` +
+						`c=transformed` +
+						'}'
+				else
+					fnLiteral +=
+						`if(transformed instanceof ElysiaCustomStatusResponse){` +
+						mapResponse('transformed') +
+						`}else Object.assign(c,transformed)\n`
 
-			endUnit()
+				endUnit()
+			}
 		}
 
 		reporter.resolve()
@@ -1622,149 +1629,153 @@ export const composeHandler = ({
 		}
 	}
 
-	if (hooks?.beforeHandle) {
+	if (hooks?.beforeHandle || hasTrace) {
 		const reporter = report('beforeHandle', {
-			total: hooks.beforeHandle.length
+			total: hooks.beforeHandle?.length
 		})
 
 		let hasResolve = false
 
-		for (let i = 0; i < hooks.beforeHandle.length; i++) {
-			const beforeHandle = hooks.beforeHandle[i]
+		if (hooks.beforeHandle?.length) {
+			for (let i = 0; i < hooks.beforeHandle.length; i++) {
+				const beforeHandle = hooks.beforeHandle[i]
 
-			const endUnit = reporter.resolveChild(beforeHandle.fn.name)
+				const endUnit = reporter.resolveChild(beforeHandle.fn.name)
 
-			const returning = hasReturn(beforeHandle)
-			const isResolver =
-				beforeHandle.subType === 'resolve' ||
-				beforeHandle.subType === 'mapResolve'
+				const returning = hasReturn(beforeHandle)
+				const isResolver =
+					beforeHandle.subType === 'resolve' ||
+					beforeHandle.subType === 'mapResolve'
 
-			if (isResolver) {
-				if (!hasResolve) {
-					hasResolve = true
-					fnLiteral += '\nlet resolved\n'
-				}
+				if (isResolver) {
+					if (!hasResolve) {
+						hasResolve = true
+						fnLiteral += '\nlet resolved\n'
+					}
 
-				fnLiteral += isAsync(beforeHandle)
-					? `resolved=await e.beforeHandle[${i}](c);\n`
-					: `resolved=e.beforeHandle[${i}](c);\n`
+					fnLiteral += isAsync(beforeHandle)
+						? `resolved=await e.beforeHandle[${i}](c);\n`
+						: `resolved=e.beforeHandle[${i}](c);\n`
 
-				if (beforeHandle.subType === 'mapResolve')
-					fnLiteral +=
-						`if(resolved instanceof ElysiaCustomStatusResponse){` +
-						mapResponse('resolved') +
-						`}else{` +
-						`resolved.request=c.request\n` +
-						`resolved.store=c.store\n` +
-						`resolved.qi=c.qi\n` +
-						`resolved.path=c.path\n` +
-						`resolved.url=c.url\n` +
-						`resolved.redirect=c.redirect\n` +
-						`resolved.set=c.set\n` +
-						`resolved.error=c.error\n` +
-						`c=resolved` +
-						`}`
-				else
-					fnLiteral +=
-						`if(resolved instanceof ElysiaCustomStatusResponse){` +
-						mapResponse('resolved') +
-						`}` +
-						`else Object.assign(c, resolved)\n`
-			} else if (!returning) {
-				fnLiteral += isAsync(beforeHandle)
-					? `await e.beforeHandle[${i}](c)\n`
-					: `e.beforeHandle[${i}](c)\n`
+					if (beforeHandle.subType === 'mapResolve')
+						fnLiteral +=
+							`if(resolved instanceof ElysiaCustomStatusResponse){` +
+							mapResponse('resolved') +
+							`}else{` +
+							`resolved.request=c.request\n` +
+							`resolved.store=c.store\n` +
+							`resolved.qi=c.qi\n` +
+							`resolved.path=c.path\n` +
+							`resolved.url=c.url\n` +
+							`resolved.redirect=c.redirect\n` +
+							`resolved.set=c.set\n` +
+							`resolved.error=c.error\n` +
+							`c=resolved` +
+							`}`
+					else
+						fnLiteral +=
+							`if(resolved instanceof ElysiaCustomStatusResponse){` +
+							mapResponse('resolved') +
+							`}` +
+							`else Object.assign(c, resolved)\n`
+				} else if (!returning) {
+					fnLiteral += isAsync(beforeHandle)
+						? `await e.beforeHandle[${i}](c)\n`
+						: `e.beforeHandle[${i}](c)\n`
 
-				endUnit()
-			} else {
-				fnLiteral += isAsync(beforeHandle)
-					? `be=await e.beforeHandle[${i}](c)\n`
-					: `be=e.beforeHandle[${i}](c)\n`
+					endUnit()
+				} else {
+					fnLiteral += isAsync(beforeHandle)
+						? `be=await e.beforeHandle[${i}](c)\n`
+						: `be=e.beforeHandle[${i}](c)\n`
 
-				endUnit('be')
+					endUnit('be')
 
-				fnLiteral += `if(be!==undefined){`
-				reporter.resolve()
+					fnLiteral += `if(be!==undefined){`
+					reporter.resolve()
 
-				if (hooks.afterHandle?.length) {
-					report('handle', {
-						name: isHandleFn
-							? (handler as Function).name
-							: undefined
-					}).resolve()
+					if (hooks.afterHandle?.length || hasTrace) {
+						report('handle', {
+							name: isHandleFn
+								? (handler as Function).name
+								: undefined
+						}).resolve()
 
-					const reporter = report('afterHandle', {
-						total: hooks.afterHandle.length
+						const reporter = report('afterHandle', {
+							total: hooks.afterHandle?.length
+						})
+
+						if(hooks.afterHandle?.length) {
+							for (let i = 0; i < hooks.afterHandle.length; i++) {
+								const hook = hooks.afterHandle[i]
+								const returning = hasReturn(hook)
+								const endUnit = reporter.resolveChild(hook.fn.name)
+
+								fnLiteral += `c.response = be\n`
+
+								if (!returning) {
+									fnLiteral += isAsync(hook.fn)
+										? `await e.afterHandle[${i}](c, be)\n`
+										: `e.afterHandle[${i}](c, be)\n`
+								} else {
+									fnLiteral += isAsync(hook.fn)
+										? `af=await e.afterHandle[${i}](c)\n`
+										: `af=e.afterHandle[${i}](c)\n`
+
+									fnLiteral += `if(af!==undefined) c.response=be=af\n`
+								}
+
+								endUnit('af')
+							}
+						}
+						reporter.resolve()
+					}
+
+					if (validator.response) fnLiteral += validation.response('be')
+
+					const mapResponseReporter = report('mapResponse', {
+						total: hooks.mapResponse?.length
 					})
 
-					for (let i = 0; i < hooks.afterHandle.length; i++) {
-						const hook = hooks.afterHandle[i]
-						const returning = hasReturn(hook)
-						const endUnit = reporter.resolveChild(hook.fn.name)
+					if (hooks.mapResponse?.length) {
+						fnLiteral += `c.response=be\n`
 
-						fnLiteral += `c.response = be\n`
+						for (let i = 0; i < hooks.mapResponse.length; i++) {
+							const mapResponse = hooks.mapResponse[i]
 
-						if (!returning) {
-							fnLiteral += isAsync(hook.fn)
-								? `await e.afterHandle[${i}](c, be)\n`
-								: `e.afterHandle[${i}](c, be)\n`
-						} else {
-							fnLiteral += isAsync(hook.fn)
-								? `af=await e.afterHandle[${i}](c)\n`
-								: `af=e.afterHandle[${i}](c)\n`
+							const endUnit = mapResponseReporter.resolveChild(
+								mapResponse.fn.name
+							)
 
-							fnLiteral += `if(af!==undefined) c.response=be=af\n`
+							fnLiteral +=
+								`if(mr===undefined){` +
+								`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
+								`if(mr!==undefined)be=c.response=mr` +
+								'}'
+
+							endUnit()
 						}
-
-						endUnit('af')
 					}
-					reporter.resolve()
+
+					mapResponseReporter.resolve()
+
+					fnLiteral += encodeCookie()
+					fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${
+						mapResponseContext
+					})}\n`
 				}
-
-				if (validator.response) fnLiteral += validation.response('be')
-
-				const mapResponseReporter = report('mapResponse', {
-					total: hooks.mapResponse?.length
-				})
-
-				if (hooks.mapResponse?.length) {
-					fnLiteral += `c.response=be\n`
-
-					for (let i = 0; i < hooks.mapResponse.length; i++) {
-						const mapResponse = hooks.mapResponse[i]
-
-						const endUnit = mapResponseReporter.resolveChild(
-							mapResponse.fn.name
-						)
-
-						fnLiteral +=
-							`if(mr===undefined){` +
-							`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
-							`if(mr!==undefined)be=c.response=mr` +
-							'}'
-
-						endUnit()
-					}
-				}
-
-				mapResponseReporter.resolve()
-
-				fnLiteral += encodeCookie()
-				fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${
-					mapResponseContext
-				})}\n`
 			}
 		}
 
 		reporter.resolve()
 	}
 
-	if (hooks.afterHandle?.length) {
+	if (hooks.afterHandle?.length || hasTrace) {
 		const handleReporter = report('handle', {
 			name: isHandleFn ? (handler as Function).name : undefined
 		})
 
-		if (hooks.afterHandle.length)
+		if (hooks.afterHandle?.length)
 			fnLiteral += isAsyncHandler
 				? `let r=c.response=await ${handle}\n`
 				: `let r=c.response=${handle}\n`
@@ -1776,46 +1787,48 @@ export const composeHandler = ({
 		handleReporter.resolve()
 
 		const reporter = report('afterHandle', {
-			total: hooks.afterHandle.length
+			total: hooks.afterHandle?.length
 		})
 
-		for (let i = 0; i < hooks.afterHandle.length; i++) {
-			const hook = hooks.afterHandle[i]
-			const returning = hasReturn(hook)
-			const endUnit = reporter.resolveChild(hook.fn.name)
+		if(hooks.afterHandle?.length) {
+			for (let i = 0; i < hooks.afterHandle.length; i++) {
+				const hook = hooks.afterHandle[i]
+				const returning = hasReturn(hook)
+				const endUnit = reporter.resolveChild(hook.fn.name)
 
-			if (!returning) {
-				fnLiteral += isAsync(hook.fn)
-					? `await e.afterHandle[${i}](c)\n`
-					: `e.afterHandle[${i}](c)\n`
+				if (!returning) {
+					fnLiteral += isAsync(hook.fn)
+						? `await e.afterHandle[${i}](c)\n`
+						: `e.afterHandle[${i}](c)\n`
 
-				endUnit()
-			} else {
-				fnLiteral += isAsync(hook.fn)
-					? `af=await e.afterHandle[${i}](c)\n`
-					: `af=e.afterHandle[${i}](c)\n`
-
-				endUnit('af')
-
-				if (validator.response) {
-					fnLiteral += `if(af!==undefined){`
-					reporter.resolve()
-
-					fnLiteral += validation.response('af')
-
-					fnLiteral += `c.response=af}`
+					endUnit()
 				} else {
-					fnLiteral += `if(af!==undefined){`
-					reporter.resolve()
+					fnLiteral += isAsync(hook.fn)
+						? `af=await e.afterHandle[${i}](c)\n`
+						: `af=e.afterHandle[${i}](c)\n`
 
-					fnLiteral += `c.response=af}`
+					endUnit('af')
+
+					if (validator.response) {
+						fnLiteral += `if(af!==undefined){`
+						reporter.resolve()
+
+						fnLiteral += validation.response('af')
+
+						fnLiteral += `c.response=af}`
+					} else {
+						fnLiteral += `if(af!==undefined){`
+						reporter.resolve()
+
+						fnLiteral += `c.response=af}`
+					}
 				}
 			}
 		}
 
 		reporter.resolve()
 
-		fnLiteral += `r=c.response\n`
+		if (hooks.afterHandle?.length) fnLiteral += `r=c.response\n`
 
 		if (validator.response) fnLiteral += validation.response()
 
@@ -1849,7 +1862,7 @@ export const composeHandler = ({
 			name: isHandleFn ? (handler as Function).name : undefined
 		})
 
-		if (validator.response || hooks.mapResponse?.length) {
+		if (validator.response || hooks.mapResponse?.length || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r=await ${handle}\n`
 				: `let r=${handle}\n`
@@ -2488,29 +2501,37 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	})
 
 	const afterResponse = () => {
-		if (!hooks.afterResponse?.length) return ''
+		if (!hooks.afterResponse?.length && !hasTrace) return ''
 
 		let afterResponse = ''
-		const prefix = hooks.afterResponse.some(isAsync) ? 'async' : ''
+		const prefix = hooks.afterResponse?.some(isAsync) ? 'async' : ''
 		afterResponse += `\nsetImmediate(${prefix}()=>{`
 
-		const reporter = report('afterResponse', {
+		const reporter = createReport({
+			context: 'context',
+			trace: hooks.trace,
+			addFn: (word) => {
+				afterResponse += word
+			}
+		})('afterResponse', {
 			total: hooks.afterResponse?.length,
 			name: 'context'
 		})
+		
+		if (hooks.afterResponse?.length && hooks.afterResponse) {
+			for (let i = 0; i < hooks.afterResponse.length; i++) {
+				const fn = hooks.afterResponse[i].fn
+				const endUnit = reporter.resolveChild(fn.name)
 
-		for (let i = 0; i < hooks.afterResponse.length; i++) {
-			const fn = hooks.afterResponse[i].fn
-			const endUnit = reporter.resolveChild(fn.name)
+				afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}afterResponse[${i}](context)\n`
 
-			afterResponse += `\n${isAsyncName(fn) ? 'await ' : ''}afterResponse[${i}](context)\n`
-
-			endUnit()
+				endUnit()
+			}
 		}
 
-		afterResponse += `})\n`
-
 		reporter.resolve()
+
+		afterResponse += `})\n`
 
 		return afterResponse
 	}
@@ -2529,7 +2550,6 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 	const saveResponse =
 		hasTrace ||
-		!!hooks.afterResponse?.length ||
 		!!hooks.afterResponse?.length
 			? 'context.response = '
 			: ''
