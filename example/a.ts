@@ -1,10 +1,23 @@
 import { Elysia, t } from '../src'
-import { z } from 'zod'
 
-const app = new Elysia()
-	.get('/', ({ query }) => query, {
-		query: z.object({
-			x: z.array(z.string())
-		})
+new Elysia()
+	.macro({
+		a: {
+			resolve: () => ({
+				query: {
+					age: 17
+				}
+			})
+		}
 	})
-	.listen(3000)
+	.get(
+		'/',
+		({ query }) => {
+			query
+		},
+		{
+			query: t.Object({
+				name: t.String()
+			})
+		}
+	)

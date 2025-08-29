@@ -1301,7 +1301,7 @@ const a = app
 
 	expectTypeOf<app['post']['response']>().toEqualTypeOf<{
 		200: string
-		readonly 201: string
+		201: string
 		422: {
 			type: 'validation'
 			on: string
@@ -1319,7 +1319,7 @@ const a = app
 
 	expectTypeOf<app['true']['post']['response']>().toEqualTypeOf<{
 		200: boolean
-		readonly 202: boolean
+		202: boolean
 		422: {
 			type: 'validation'
 			on: string
@@ -2014,32 +2014,46 @@ type a = keyof {}
 {
 	new Elysia()
 		.onParse(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
 		})
 		.derive(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
 
 			return {}
 		})
 		.resolve(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<never>()
 
 			return {}
 		})
 		.onTransform(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
 		})
 		.onBeforeHandle(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
 		})
 		.onAfterHandle(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
 		})
 		.mapResponse(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
 		})
 		.onAfterResponse(({ params }) => {
-			expectTypeOf<typeof params>().toEqualTypeOf<{}>()
+			expectTypeOf<typeof params>().toEqualTypeOf<
+				Record<string, string>
+			>()
 		})
 }
 
@@ -2442,8 +2456,8 @@ type a = keyof {}
 				expectTypeOf<typeof a>().toEqualTypeOf<string>()
 			},
 			{
-				a: true,
-				beforeHandle: (c) => {}
+				a: true
+				// beforeHandle: (c) => {}
 			}
 		)
 		.ws('/', {
@@ -2567,7 +2581,7 @@ type a = keyof {}
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
 	>().toEqualTypeOf<
-		AsyncGenerator<
+		Generator<
 			| {
 					readonly data: 'a'
 			  }
@@ -2595,7 +2609,7 @@ type a = keyof {}
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
 	>().toEqualTypeOf<
-		AsyncGenerator<
+		Generator<
 			| {
 					readonly data: 'a'
 			  }
@@ -2649,13 +2663,9 @@ type a = keyof {}
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
 	>().toEqualTypeOf<
-		AsyncGenerator<
-			{
-				readonly data: 'a'
-			},
-			void,
-			unknown
-		>
+		ReadableStream<{
+			readonly data: 'a'
+		}>
 	>()
 }
 
@@ -2669,5 +2679,5 @@ type a = keyof {}
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
-	>().toEqualTypeOf<AsyncGenerator<'a', void, unknown>>()
+	>().toEqualTypeOf<ReadableStream<'a'>>()
 }

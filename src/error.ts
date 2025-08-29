@@ -8,7 +8,7 @@ import type {
 
 import { StatusMap, InvertedStatusMap } from './utils'
 import type { ElysiaTypeCheck } from './schema'
-import { StandardSchemaV1 } from '@standard-schema/spec'
+import { StandardSchemaV1Like } from './types'
 
 // ? Cloudflare worker support
 const env =
@@ -259,7 +259,7 @@ export class ValidationError extends Error {
 			| TSchema
 			| TypeCheck<any>
 			| ElysiaTypeCheck<any>
-			| StandardSchemaV1,
+			| StandardSchemaV1Like,
 		public value: unknown,
 		errors?: ValueErrorIterator
 	) {

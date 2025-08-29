@@ -28,8 +28,8 @@ import type {
 	MaybeArray,
 	StandaloneInputSchema
 } from './types'
-import { StandardSchemaV1 } from '@standard-schema/spec'
-import { fa } from 'zod/locales'
+
+import type { StandardSchemaV1Like } from './types'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
@@ -743,7 +743,7 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
 export const getSchemaValidator = <
-	T extends TSchema | StandardSchemaV1 | string | undefined
+	T extends TSchema | StandardSchemaV1Like | string | undefined
 >(
 	s: T,
 	{
@@ -801,10 +801,10 @@ export const getSchemaValidator = <
 	}
 
 	const mapSchema = (
-		s: string | TSchema | StandardSchemaV1 | undefined
-	): TSchema | StandardSchemaV1 => {
+		s: string | TSchema | StandardSchemaV1Like | undefined
+	): TSchema | StandardSchemaV1Like => {
 		if (s && typeof s !== 'string' && '~standard' in s)
-			return s as StandardSchemaV1
+			return s as StandardSchemaV1Like
 
 		let schema: TSchema
 
@@ -1053,6 +1053,7 @@ export const getSchemaValidator = <
 				Code: () => '',
 				// @ts-ignore
 				Decode(value) {
+					// @ts-ignore
 					const response = schema['~standard'].validate(value)
 
 					if (response instanceof Promise)
@@ -1141,6 +1142,7 @@ export const getSchemaValidator = <
 			schema,
 			references: '',
 			checkFunc(value: unknown) {
+				// @ts-ignore
 				const response = schema['~standard'].validate(value)
 
 				if (response instanceof Promise)
@@ -1168,6 +1170,7 @@ export const getSchemaValidator = <
 			Code: () => '',
 			// @ts-ignore
 			Decode(value) {
+				// @ts-ignore
 				const response = schema['~standard'].validate(value)
 
 				if (response instanceof Promise)
@@ -1358,9 +1361,10 @@ export const getResponseSchemaValidator = (
 
 	let maybeSchemaOrRecord:
 		| TSchema
-		| StandardSchemaV1
-		| Record<number, string | TSchema | StandardSchemaV1>
+		| StandardSchemaV1Like
+		| Record<number, string | TSchema | StandardSchemaV1Like>
 
+	// @ts-ignore
 	if (typeof s !== 'string') maybeSchemaOrRecord = s!
 	else {
 		const isArray = s.endsWith('[]')
@@ -1378,7 +1382,7 @@ export const getResponseSchemaValidator = (
 	if (Kind in maybeSchemaOrRecord || '~standard' in maybeSchemaOrRecord)
 		return {
 			200: getSchemaValidator(
-				maybeSchemaOrRecord as TSchema | StandardSchemaV1,
+				maybeSchemaOrRecord as TSchema | StandardSchemaV1Like,
 				{
 					modules,
 					models,
