@@ -4623,9 +4623,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		path: Path,
 		handler: Handle,
@@ -4707,11 +4705,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			NoInfer<Decorator>,
-			JoinPath<BasePath, Path>
-		>
+		const Handle extends InlineHandler<NoInfer<Schema>, NoInfer<Decorator>>
 	>(
 		path: Path,
 		handler: Handle,
@@ -4793,9 +4787,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		path: Path,
 		handler: Handle,
@@ -4877,9 +4869,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		path: Path,
 		handler: Handle,
@@ -4961,9 +4951,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5045,9 +5033,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5129,9 +5115,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5213,9 +5197,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5297,9 +5279,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5382,9 +5362,7 @@ export default class Elysia<
 					Omit<Input, NonResolvableMacroKey>
 				>
 		},
-		const Handle extends InlineHandler<
-			NoInfer<Schema>,
-			Decorator>
+		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
 	>(
 		method: Method,
 		path: Path,
