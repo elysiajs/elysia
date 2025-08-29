@@ -44,7 +44,7 @@ describe('trace', () => {
 		expect(response.status).toBe(200)
 	})
 
-	it('call all trace', () => {
+	it('call all trace', async () => {
 		const called = <string[]>[]
 
 		const detectEvent =
@@ -85,13 +85,26 @@ describe('trace', () => {
 						'handle',
 						'afterHandle',
 						'mapResponse',
-						'afterResponse'
+						// afterResponse is being called so we can't check it yet
 					])
 				})
 			}
 		)
 
-		const app = new Elysia().get('/', 'hi')
+		const app = new Elysia().use(plugin).get('/', 'hi')
+
+		await app.handle(req('/'))
+
+		expect(called).toEqual([
+			'request',
+			'parse',
+			'transform',
+			'beforeHandle',
+			'handle',
+			'afterHandle',
+			'mapResponse',
+			'afterResponse'
+		])
 	})
 
 	it("don't crash on composer", () => {
