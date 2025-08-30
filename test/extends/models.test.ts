@@ -332,14 +332,14 @@ describe('Model', () => {
 					400: 'res'
 				}
 			})
-			.get('/400', ({ error }) => error(400, 'ok'), {
+			.get('/400', ({ status }) => status(400, 'ok'), {
 				response: {
 					200: 'res',
 					400: 'res'
 				}
 			})
 			// @ts-expect-error
-			.get('/error', ({ error }) => error(400, 1), {
+			.get('/error', ({ status }) => status(400, 1), {
 				response: {
 					200: 'res',
 					400: 'res'

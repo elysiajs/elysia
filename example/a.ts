@@ -1,23 +1,13 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-new Elysia()
-	.macro({
-		a: {
-			resolve: () => ({
-				query: {
-					age: 17
-				}
-			})
-		}
+const app = new Elysia()
+	.get('/', function* () {
+		for (let i = 0; i <= 100_000; i++) yield { hello: 'world' }
 	})
-	.get(
-		'/',
-		({ query }) => {
-			query
-		},
-		{
-			query: t.Object({
-				name: t.String()
-			})
-		}
-	)
+	.listen(3000)
+
+const q = app
+	.handle(req('/'))
+	.then((x) => x.text())
+	.then(console.log)

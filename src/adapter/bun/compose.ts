@@ -65,7 +65,6 @@ const createContext = (
 			hasTrace || inference.url || needsQuery
 		) +
 		`redirect,` +
-		`error:status,` +
 		`status,` +
 		`set:{headers:` +
 		(isNotEmpty(defaultHeaders)

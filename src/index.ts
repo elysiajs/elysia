@@ -883,7 +883,6 @@ export default class Elysia<
 								headers: Object.assign({}, this.setHeaders)
 							},
 							status,
-							error: status,
 							store: this.store
 						}
 
@@ -4382,7 +4381,8 @@ export default class Elysia<
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
 				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
 			},
-			Definitions['error']
+			Definitions['error'],
+			keyof Definitions['typebox'] & string
 		>
 	>(
 		macro: NewMacro
@@ -4620,7 +4620,8 @@ export default class Elysia<
 				Volatile['resolve'] &
 				MacroToContext<
 					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
+					Omit<Input, NonResolvableMacroKey>,
+					Definitions['typebox']
 				>
 		},
 		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>

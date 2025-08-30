@@ -107,7 +107,6 @@ export const WebStandardAdapter: ElysiaAdapter = {
 				`path:p,` +
 				`url:u,` +
 				`redirect,` +
-				`error:status,` +
 				`status,` +
 				`set:{headers:`
 

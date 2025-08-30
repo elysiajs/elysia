@@ -863,23 +863,52 @@ type ExtractMacroContext<A> =
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
-	SelectedMacro extends BaseMacro = {}
+	SelectedMacro extends BaseMacro = {},
+	Definitions extends DefinitionBase['typebox'] = {}
 > = {} extends SelectedMacro
 	? {}
 	: MergeAllMacroContext<{
-			[key in keyof SelectedMacro as MacroFn[key] extends ResolveMacroFnLike
-				? key
-				: MacroFn[key] extends ResolveMacroPropertyLike
-					? true extends SelectedMacro[key]
-						? key
-						: never
-					: never]: ExtractMacroContext<
-				ResolveResolutions<
-					// @ts-expect-error type is checked in key mapping
-					ReturnTypeIfPossible<MacroFn[key]>['resolve']
+			[key in keyof SelectedMacro]: (MacroFn[key] extends
+				| ResolveMacroFnLike
+				| ResolveMacroPropertyLike
+				? true extends SelectedMacro[key]
+					? ExtractMacroContext<
+							ResolveResolutions<
+								// @ts-expect-error type is checked in key mapping
+								ReturnTypeIfPossible<MacroFn[key]>['resolve']
+							>
+						>
+					: {}
+				: {}) &
+				UnwrapMacroSchema<
+					// @ts-ignore Trust me bro
+					ReturnTypeIfPossible<MacroFn[key]>,
+					Definitions
 				>
-			>
 		}>
+
+type UnwrapMacroSchema<
+	T extends Partial<InputSchema<any>>,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = Omit<
+	UnwrapRoute<
+		{
+			body: 'body' extends keyof T ? T['body'] : undefined
+			headers: 'headers' extends keyof T ? T['headers'] : undefined
+			query: 'query' extends keyof T ? T['query'] : undefined
+			params: 'params' extends keyof T ? T['params'] : undefined
+			cookie: 'cookie' extends keyof T ? T['cookie'] : undefined
+			response: 'response' extends keyof T ? T['response'] : undefined
+		},
+		Definitions
+	>,
+	| ('body' extends keyof T ? never : 'body')
+	| ('headers' extends keyof T ? never : 'headers')
+	| ('query' extends keyof T ? never : 'query')
+	| ('params' extends keyof T ? never : 'params')
+	| ('cookie' extends keyof T ? never : 'cookie')
+	| ('response' extends keyof T ? never : 'response')
+>
 
 type InlineHandlerResponse<Route extends RouteSchema['response']> = {
 	[Status in keyof Route]: ElysiaCustomStatusResponse<
@@ -1589,10 +1618,11 @@ export type HookMacroFn<
 		derive: {}
 		resolve: {}
 	},
-	in out Errors extends Record<string, Error> = {}
+	in out Errors extends Record<string, Error> = {},
+	in out Name extends string = ''
 > = {
 	[K in keyof any]:
-		| {
+		| ({
 				parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 				transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 				beforeHandle?: MaybeArray<
@@ -1605,25 +1635,39 @@ export type HookMacroFn<
 					AfterResponseHandler<TypedRoute, Singleton>
 				>
 				resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-		  }
-		| ((...a: any) => {
-				parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-				transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-				beforeHandle?: MaybeArray<
-					OptionalHandler<TypedRoute, Singleton>
-				>
-				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
-				afterResponse?: MaybeArray<
-					AfterResponseHandler<TypedRoute, Singleton>
-				>
-				resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-		  } | void)
+				detail?: AnyBaseHookLifeCycle['detail']
+		  } & InputSchema<Name>)
+		| ((...a: any) =>
+				| void
+				| ({
+						parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+						transform?: MaybeArray<
+							VoidHandler<TypedRoute, Singleton>
+						>
+						beforeHandle?: MaybeArray<
+							OptionalHandler<TypedRoute, Singleton>
+						>
+						afterHandle?: MaybeArray<
+							AfterHandler<TypedRoute, Singleton>
+						>
+						error?: MaybeArray<
+							ErrorHandler<Errors, TypedRoute, Singleton>
+						>
+						mapResponse?: MaybeArray<
+							MapResponse<TypedRoute, Singleton>
+						>
+						afterResponse?: MaybeArray<
+							AfterResponseHandler<TypedRoute, Singleton>
+						>
+						resolve?: MaybeArray<
+							ResolveHandler<TypedRoute, Singleton>
+						>
+						detail?: AnyBaseHookLifeCycle['detail']
+				  } & InputSchema<Name>))
 }
 
 export type MacroToProperty<
-	in out T extends BaseMacroFn | HookMacroFn<any, any, any>
+	in out T extends BaseMacroFn | HookMacroFn<any, any, any, any>
 > = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any

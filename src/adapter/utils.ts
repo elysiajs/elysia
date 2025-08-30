@@ -262,9 +262,9 @@ export const createStreamHandler =
 
 							// Wait for the next event loop
 							// Otherwise the data will be mixed up
-							await new Promise<void>((resolve) =>
-								setTimeout(() => resolve(), 0)
-							)
+							// await new Promise<void>((resolve) =>
+							// 	setTimeout(() => resolve(), 0)
+							// )
 						}
 					} catch (error) {
 						console.warn(error)
