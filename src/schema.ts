@@ -859,72 +859,196 @@ export const getSchemaValidator = <
 	let _validators = validators
 
 	if (
-		!('~standard' in schema) &&
-		validators?.every(
-			(x) => x && typeof x !== 'string' && !('~standard' in x)
-		)
+		'~standard' in schema ||
+		(validators?.length &&
+			validators.some(
+				(x) => x && typeof x !== 'string' && '~standard' in x
+			))
 	) {
-		if (validators?.length) {
-			let hasAdditional = false
+		let mainCheck
 
-			const validators = _validators as TSchema[]
+		if (schema['~standard']) mainCheck = schema['~standard'].validate
+		else {
+			const validator = getSchemaValidator(schema, {
+				models,
+				modules,
+				dynamic,
+				normalize,
+				additionalProperties: true,
+				coerce,
+				additionalCoerce
+			})!
 
-			const { schema: mergedObjectSchema, notObjects } =
-				mergeObjectSchemas([
-					schema,
-					...(validators.map(mapSchema) as TSchema[])
-				])
+			mainCheck = (v: unknown) => {
+				if (validator.Check(v)) return { value: validator.Decode(v) }
+				else
+					return {
+						issues: validator.Errors(v)
+					}
+			}
+		}
 
-			if (notObjects) {
-				schema = t.Intersect([
-					...(mergedObjectSchema ? [mergedObjectSchema] : []),
-					...notObjects.map((x) => {
-						const schema = mapSchema(x) as TSchema
+		let checkers = []
+		if (validators?.length)
+			for (let i = 0; i < validators.length; i++) {
+				const validator = validators[i]
 
+				if (!validator) continue
+				if (typeof validator === 'string') continue
+
+				if (validator?.['~standard']) {
+					checkers.push(validator['~standard'])
+					continue
+				}
+
+				if (Kind in validator) {
+					checkers[i] = getSchemaValidator(validator, {
+						models,
+						modules,
+						dynamic,
+						normalize
+					})
+					continue
+				}
+			}
+
+		async function Check(v) {
+			v = mainCheck(v)
+			if (v instanceof Promise) v = await v
+
+			if (v.issues) return v
+			else v = v.value
+
+			for (let i = 0; i < checkers.length; i++) {
+				v = checkers[i].validate(v)
+				if (v instanceof Promise) v = await v
+
+				if (v.issues) return v
+				else v = v.value
+			}
+
+			return { value: v }
+		}
+
+		const validator: ElysiaTypeCheck<any> = {
+			provider: 'standard',
+			schema,
+			references: '',
+			checkFunc: () => {},
+			code: '',
+			// @ts-ignore
+			Check,
+			// @ts-ignore
+			Errors: (value: unknown) => Check(value).then((x) => x?.issues),
+			Code: () => '',
+			// @ts-ignore
+			Decode(value) {
+				// @ts-ignore
+				const response = schema['~standard'].validate(value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response
+			},
+			// @ts-ignore
+			Encode: (value: unknown) => value,
+			hasAdditionalProperties: false,
+			hasDefault: false,
+			isOptional: false,
+			hasTransform: false,
+			hasRef: false
+		}
+
+		validator.parse = (v) => {
+			try {
+				return validator.Decode(validator.Clean?.(v) ?? v)
+			} catch (error) {
+				throw [...validator.Errors(v)].map(mapValueError)
+			}
+		}
+
+		validator.safeParse = (v) => {
+			try {
+				return {
+					success: true,
+					data: validator.Decode(validator.Clean?.(v) ?? v),
+					error: null
+				}
+			} catch (error) {
+				const errors = [...compiled.Errors(v)].map(mapValueError)
+
+				return {
+					success: false,
+					data: null,
+					error: errors[0]?.summary,
+					errors
+				}
+			}
+		}
+
+		return validator
+	} else if (validators?.length) {
+		let hasAdditional = false
+
+		const validators = _validators as TSchema[]
+
+		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas([
+			schema,
+			...(validators.map(mapSchema) as TSchema[])
+		])
+
+		if (notObjects) {
+			schema = t.Intersect([
+				...(mergedObjectSchema ? [mergedObjectSchema] : []),
+				...notObjects.map((x) => {
+					const schema = mapSchema(x) as TSchema
+
+					if (
+						schema.type === 'object' &&
+						'additionalProperties' in schema
+					) {
 						if (
-							schema.type === 'object' &&
-							'additionalProperties' in schema
+							!hasAdditional &&
+							schema.additionalProperties === false
 						) {
-							if (
-								!hasAdditional &&
-								schema.additionalProperties === false
-							) {
-								hasAdditional = true
-							}
-
-							delete schema.additionalProperties
+							hasAdditional = true
 						}
 
-						return schema
-					})
-				])
-
-				if (schema.type === 'object' && hasAdditional)
-					schema.additionalProperties = false
-			}
-		} else {
-			if (
-				schema.type === 'object' &&
-				'additionalProperties' in schema === false
-			)
-				schema.additionalProperties = additionalProperties
-			else
-				schema = replaceSchemaType(schema, {
-					onlyFirst: 'object',
-					from: t.Object({}),
-					// @ts-ignore
-					to({ properties, ...options }) {
-						// If nothing is return, use the original schema
-						if (!properties) return
-						if ('additionalProperties' in schema) return
-
-						return t.Object(properties, {
-							...options,
-							additionalProperties: false
-						})
+						delete schema.additionalProperties
 					}
+
+					return schema
 				})
+			])
+
+			if (schema.type === 'object' && hasAdditional)
+				schema.additionalProperties = false
 		}
+	} else {
+		if (
+			schema.type === 'object' &&
+			'additionalProperties' in schema === false
+		)
+			schema.additionalProperties = additionalProperties
+		else
+			schema = replaceSchemaType(schema, {
+				onlyFirst: 'object',
+				from: t.Object({}),
+				// @ts-ignore
+				to({ properties, ...options }) {
+					// If nothing is return, use the original schema
+					if (!properties) return
+					if ('additionalProperties' in schema) return
+
+					return t.Object(properties, {
+						...options,
+						additionalProperties: false
+					})
+				}
+			})
 	}
 
 	if (dynamic) {

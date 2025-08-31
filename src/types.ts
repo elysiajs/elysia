@@ -45,12 +45,9 @@ export interface StandardSchemaV1Like<
 	in out Input = unknown,
 	in out Output = unknown
 > {
-	'~standard': {
-		types:
-			| {
-					input: Input
-					output: Output
-			  }
+	readonly '~standard': {
+		readonly types:
+			| any
 			| undefined
 	}
 }

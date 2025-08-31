@@ -1,13 +1,24 @@
 import { Elysia, t } from '../src'
+import { z } from 'zod'
 import { req } from '../test/utils'
 
 const app = new Elysia()
-	.get('/', function* () {
-		for (let i = 0; i <= 100_000; i++) yield { hello: 'world' }
+	.guard({
+		schema: 'standalone',
+		body: z
+			.object({
+				age: z.number()
+			})
+			.loose()
+	})
+	.post('/', ({ body }) => ({ body }), {
+		body: z.object({
+			age: z.number()
+		})
 	})
 	.listen(3000)
 
-const q = app
-	.handle(req('/'))
-	.then((x) => x.text())
-	.then(console.log)
+// const q = app
+// 	.handle(req('/'))
+// 	.then((x) => x.text())
+// 	.then(console.log)
