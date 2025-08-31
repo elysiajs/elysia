@@ -230,8 +230,8 @@ const composeValidationFactory = ({
 	isStaticResponse?: boolean
 	hasSanitize?: boolean
 }) => ({
-	validate: (type: string, value = `c.${type}`) =>
-		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
+	validate: (type: string, value = `c.${type}`, error?: string) =>
+		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value}${error ? ',' + error : ''})`,
 	response: (name = 'r') => {
 		if (isStaticResponse) return ''
 
@@ -252,7 +252,7 @@ const composeValidationFactory = ({
 					`let vare${status}=validator.response[${status}].Check(${name})\n` +
 					`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
 					`if(vare${status}.issues)` +
-					`throw new ValidationError('response',validator.response[${status}],${name})\n` +
+					`throw new ValidationError('response',validator.response[${status}],${name},vare${status}.issues)\n` +
 					`${name}=vare${status}.value\n` +
 					`c.set.status=${status}\n`
 
@@ -1144,7 +1144,14 @@ export const composeHandler = ({
 			if (validator.headers.isOptional)
 				fnLiteral += `if(isNotEmpty(c.headers)){`
 
-			if (validator.body?.schema?.noValidate !== true)
+			if (validator.body?.provider === 'standard') {
+				fnLiteral +=
+					`let vah=validator.headers.Check(c.headers)\n` +
+					`if(vah instanceof Promise)vah=await vah\n` +
+					`if(vah.issues){` +
+					validation.validate('headers', undefined, 'vah.issues') +
+					'}else{c.headers=vah.value}\n'
+			} else if (validator.body?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.headers.Check(c.headers) === false){` +
 					validation.validate('headers') +
@@ -1184,7 +1191,7 @@ export const composeHandler = ({
 					`let vap=validator.params.Check(c.params)\n` +
 					`if(vap instanceof Promise)vap=await vap\n` +
 					`if(vap.issues){` +
-					validation.validate('params') +
+					validation.validate('params', undefined, 'vap.issues') +
 					'}else{c.params=vap.value}\n'
 			} else if (validator.params?.schema?.noValidate !== true)
 				fnLiteral +=
@@ -1234,7 +1241,7 @@ export const composeHandler = ({
 					`let vaq=validator.query.Check(c.query)\n` +
 					`if(vaq instanceof Promise)vaq=await vaq\n` +
 					`if(vaq.issues){` +
-					validation.validate('query') +
+					validation.validate('query', undefined, 'vaq.issues') +
 					'}else{c.query=vaq.value}\n'
 			} else if (validator.query?.schema?.noValidate !== true)
 				fnLiteral +=
@@ -1321,7 +1328,7 @@ export const composeHandler = ({
 						`let vab=validator.body.Check(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
 						`if(vab.issues){` +
-						validation.validate('body') +
+						validation.validate('body', undefined, 'vab.issues') +
 						'}else{c.body=vab.value}\n'
 				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
@@ -1348,7 +1355,7 @@ export const composeHandler = ({
 						`let vab=validator.body.Check(c.body)\n` +
 						`if(vab instanceof Promise)vab=await vab\n` +
 						`if(vab.issues){` +
-						validation.validate('body') +
+						validation.validate('body', undefined, 'vab.issues') +
 						'}else{c.body=vab.value}\n'
 				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
@@ -1500,7 +1507,7 @@ export const composeHandler = ({
 					`let vac=validator.cookie.Check(c.body)\n` +
 					`if(vac instanceof Promise)vac=await vac\n` +
 					`if(vac.issues){` +
-					validation.validate('cookie') +
+					validation.validate('cookie', undefined, 'vac.issues') +
 					'}else{c.body=vac.value}\n'
 			} else if (validator.body?.schema?.noValidate !== true) {
 				fnLiteral +=
@@ -1599,11 +1606,13 @@ export const composeHandler = ({
 							total: hooks.afterHandle?.length
 						})
 
-						if(hooks.afterHandle?.length) {
+						if (hooks.afterHandle?.length) {
 							for (let i = 0; i < hooks.afterHandle.length; i++) {
 								const hook = hooks.afterHandle[i]
 								const returning = hasReturn(hook)
-								const endUnit = reporter.resolveChild(hook.fn.name)
+								const endUnit = reporter.resolveChild(
+									hook.fn.name
+								)
 
 								fnLiteral += `c.response = be\n`
 
@@ -1625,7 +1634,8 @@ export const composeHandler = ({
 						reporter.resolve()
 					}
 
-					if (validator.response) fnLiteral += validation.response('be')
+					if (validator.response)
+						fnLiteral += validation.response('be')
 
 					const mapResponseReporter = report('mapResponse', {
 						total: hooks.mapResponse?.length
@@ -1684,7 +1694,7 @@ export const composeHandler = ({
 			total: hooks.afterHandle?.length
 		})
 
-		if(hooks.afterHandle?.length) {
+		if (hooks.afterHandle?.length) {
 			for (let i = 0; i < hooks.afterHandle.length; i++) {
 				const hook = hooks.afterHandle[i]
 				const returning = hasReturn(hook)
@@ -2447,10 +2457,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	if (adapter.declare) fnLiteral += adapter.declare
 
 	const saveResponse =
-		hasTrace ||
-		!!hooks.afterResponse?.length
-			? 'context.response = '
-			: ''
+		hasTrace || !!hooks.afterResponse?.length ? 'context.response = ' : ''
 
 	if (app.event.error)
 		for (let i = 0; i < app.event.error.length; i++) {

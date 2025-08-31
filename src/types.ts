@@ -56,6 +56,12 @@ export interface StandardSchemaV1Like<
 	}
 }
 
+export type StandardSchemaV1LikeValidate = <T>(
+	v: T
+) => MaybePromise<
+	{ value: T; issues?: never } | { value?: never; issues: unknown[] }
+>
+
 export interface ElysiaConfig<Prefix extends string | undefined> {
 	/**
 	 * @default BunAdapter

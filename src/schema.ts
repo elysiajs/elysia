@@ -18,7 +18,7 @@ import {
 
 import { t, type TypeCheck } from './type-system'
 
-import { mergeCookie, randomId } from './utils'
+import { mergeCookie, mergeDeep, randomId } from './utils'
 import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
@@ -26,7 +26,8 @@ import type {
 	ElysiaConfig,
 	InputSchema,
 	MaybeArray,
-	StandaloneInputSchema
+	StandaloneInputSchema,
+	StandardSchemaV1LikeValidate
 } from './types'
 
 import type { StandardSchemaV1Like } from './types'
@@ -865,11 +866,26 @@ export const getSchemaValidator = <
 				(x) => x && typeof x !== 'string' && '~standard' in x
 			))
 	) {
-		let mainCheck
+		const typeboxSubValidator = (
+			schema: TSchema
+		): StandardSchemaV1LikeValidate => {
+			let mirror: Function
+			if (normalize === true || normalize === 'exactMirror')
+				try {
+					mirror = createMirror(schema as TSchema, {
+						TypeCompiler,
+						sanitize: sanitize?.(),
+						modules
+					})
+				} catch {
+					console.warn(
+						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+					)
+					console.warn(schema)
+					mirror = createCleaner(schema as TSchema)
+				}
 
-		if (schema['~standard']) mainCheck = schema['~standard'].validate
-		else {
-			const validator = getSchemaValidator(schema, {
+			const vali = getSchemaValidator(schema, {
 				models,
 				modules,
 				dynamic,
@@ -879,20 +895,29 @@ export const getSchemaValidator = <
 				additionalCoerce
 			})!
 
-			mainCheck = (v: unknown) => {
-				if (validator.Check(v)) return { value: validator.Decode(v) }
+			// @ts-ignore
+			vali.Decode = mirror
+
+			// @ts-ignore
+			return (v) => {
+				if (vali.Check(v))
+					return {
+						value: vali.Decode(v)
+					}
 				else
 					return {
-						issues: validator.Errors(v)
+						issues: [...vali.Errors(v)]
 					}
 			}
 		}
 
-		let checkers = []
-		if (validators?.length)
-			for (let i = 0; i < validators.length; i++) {
-				const validator = validators[i]
+		const mainCheck = schema['~standard']
+			? schema['~standard'].validate
+			: typeboxSubValidator(schema as TSchema)
 
+		let checkers = <StandardSchemaV1LikeValidate[]>[]
+		if (validators?.length)
+			for (const validator of validators) {
 				if (!validator) continue
 				if (typeof validator === 'string') continue
 
@@ -902,32 +927,41 @@ export const getSchemaValidator = <
 				}
 
 				if (Kind in validator) {
-					checkers[i] = getSchemaValidator(validator, {
-						models,
-						modules,
-						dynamic,
-						normalize
-					})
+					checkers.push(typeboxSubValidator(validator))
 					continue
 				}
 			}
 
-		async function Check(v) {
-			v = mainCheck(v)
+		async function Check(value: unknown) {
+			let v = mainCheck(value)
 			if (v instanceof Promise) v = await v
-
 			if (v.issues) return v
-			else v = v.value
+
+			const values = <(Record<string, unknown> | unknown[])[]>[]
+
+			if (v && typeof v === 'object') values.push(v.value as any)
 
 			for (let i = 0; i < checkers.length; i++) {
-				v = checkers[i].validate(v)
+				// @ts-ignore
+				v = checkers[i].validate(value)
 				if (v instanceof Promise) v = await v
-
 				if (v.issues) return v
-				else v = v.value
+
+				// @ts-ignore
+				if (v && typeof v === 'object') values.push(v.value)
 			}
 
-			return { value: v }
+			if (!values.length) return { value: v }
+			if (values.length === 1) return { value: values[0] }
+			if (values.length === 2)
+				return { value: mergeDeep(values[0], values[1]) }
+
+			let newValue = mergeDeep(values[0], values[1])
+
+			for (let i = 2; i < values.length; i++)
+				newValue = mergeDeep(newValue, values[i])
+
+			return { value: newValue }
 		}
 
 		const validator: ElysiaTypeCheck<any> = {
@@ -939,20 +973,10 @@ export const getSchemaValidator = <
 			// @ts-ignore
 			Check,
 			// @ts-ignore
-			Errors: (value: unknown) => Check(value).then((x) => x?.issues),
+			Errors: (value: unknown) => Check(value)?.then?.((x) => x?.issues),
 			Code: () => '',
 			// @ts-ignore
-			Decode(value) {
-				// @ts-ignore
-				const response = schema['~standard'].validate(value)
-
-				if (response instanceof Promise)
-					throw Error(
-						'Async validation is not supported in non-dynamic schema'
-					)
-
-				return response
-			},
+			Decode: Check,
 			// @ts-ignore
 			Encode: (value: unknown) => value,
 			hasAdditionalProperties: false,
@@ -989,7 +1013,7 @@ export const getSchemaValidator = <
 			}
 		}
 
-		return validator
+		return validator as any
 	} else if (validators?.length) {
 		let hasAdditional = false
 

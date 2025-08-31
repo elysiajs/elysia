@@ -264,6 +264,8 @@ export class ValidationError extends Error {
 		let customError
 
 		if (
+			// @ts-ignore
+			validator?.provider === 'standard' ||
 			'~standard' in validator ||
 			// @ts-ignore
 			(validator.schema && '~standard' in validator.schema)
@@ -273,9 +275,9 @@ export class ValidationError extends Error {
 					'~standard'
 				]
 
-			const errors = standard.validate(value).issues
+			const _errors = errors ?? standard.validate(value).issues
 
-			error = errors?.[0]
+			error = _errors?.[0]
 
 			if (isProduction)
 				message = JSON.stringify({
