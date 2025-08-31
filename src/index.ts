@@ -3990,7 +3990,7 @@ export default class Elysia<
 						if (plugin instanceof Elysia)
 							return this._use(plugin).compile()
 
-						if (plugin.constructor.name === 'Elysia')
+						if (plugin.constructor?.name === 'Elysia')
 							return this._use(
 								plugin as unknown as Elysia
 							).compile()
@@ -4001,10 +4001,10 @@ export default class Elysia<
 						if (plugin.default instanceof Elysia)
 							return this._use(plugin.default)
 
-						if (plugin.constructor.name === 'Elysia')
+						if (plugin.constructor?.name === 'Elysia')
 							return this._use(plugin.default)
 
-						if (plugin.constructor.name === '_Elysia')
+						if (plugin.constructor?.name === '_Elysia')
 							return this._use(plugin.default)
 
 						try {

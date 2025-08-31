@@ -247,24 +247,34 @@ export const createStreamHandler =
 							if (chunk === undefined || chunk === null) continue
 
 							// @ts-ignore
-							if (chunk.toSSE)
+							if (chunk.toSSE) {
 								// @ts-ignore
 								controller.enqueue(chunk.toSSE())
-							else if (typeof chunk === 'object')
-								try {
-									controller.enqueue(
-										format(JSON.stringify(chunk))
-									)
-								} catch {
+							} else {
+								if (typeof chunk === 'object')
+									try {
+										controller.enqueue(
+											format(JSON.stringify(chunk))
+										)
+									} catch {
+										controller.enqueue(
+											format(chunk.toString())
+										)
+									}
+								else
 									controller.enqueue(format(chunk.toString()))
-								}
-							else controller.enqueue(format(chunk.toString()))
 
-							// Wait for the next event loop
-							// Otherwise the data will be mixed up
-							// await new Promise<void>((resolve) =>
-							// 	setTimeout(() => resolve(), 0)
-							// )
+								if (!isSSE)
+									/**
+									 * Wait for the next event loop
+									 * otherwise the data will be mixed up
+									 *
+									 * @see https://github.com/elysiajs/elysia/issues/741
+									 */
+									await new Promise<void>((resolve) =>
+										setTimeout(() => resolve(), 0)
+									)
+							}
 						}
 					} catch (error) {
 						console.warn(error)
@@ -356,7 +366,6 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 					headers: response.headers,
 					status: set.status as number
 				})
-
 
 				if (
 					!(newResponse as Response).headers.has('content-length') &&

@@ -1,7 +1,11 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
+<<<<<<< HEAD
 	"version": "1.4.0-exp.2",
+=======
+	"version": "1.3.21",
+>>>>>>> weirs
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",

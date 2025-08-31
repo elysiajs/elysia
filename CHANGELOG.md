@@ -1,3 +1,11 @@
+# 1.3.21 - 31 Aug 2025
+Bug fix:
+- [#1356](https://github.com/elysiajs/elysia/pull/1356) webSocket validation error handling in BunAdapter
+- [#1358](https://github.com/elysiajs/elysia/pull/1358) allow overriding websocket handler with listen options
+- [#1365](https://github.com/elysiajs/elysia/pull/1365) check if the plugin.constructor (fix import module in Bun 1.2.21)
+- [#1367](https://github.com/elysiajs/elysia/pull/1367) .trace hooks (onAfterResponse, etc...) not being called
+- [#1369](https://github.com/elysiajs/elysia/issues/1369) don't block microtask queue in SSE
+
 # 1.3.20 - 24 Aug 2025
 Change:
 - mime is undefined when using `Elysia.file` in Web Standard Adapter
