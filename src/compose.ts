@@ -907,7 +907,7 @@ export const composeHandler = ({
 				endUnit()
 			}
 		}
-		
+
 		reporter.resolve()
 
 		afterResponse += '})\n'
@@ -1678,6 +1678,8 @@ export const composeHandler = ({
 							mapResponse('resolved') +
 							`}` +
 							`else Object.assign(c, resolved)\n`
+
+					endUnit()
 				} else if (!returning) {
 					fnLiteral += isAsync(beforeHandle)
 						? `await e.beforeHandle[${i}](c)\n`
@@ -2517,7 +2519,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 			total: hooks.afterResponse?.length,
 			name: 'context'
 		})
-		
+
 		if (hooks.afterResponse?.length && hooks.afterResponse) {
 			for (let i = 0; i < hooks.afterResponse.length; i++) {
 				const fn = hooks.afterResponse[i].fn
