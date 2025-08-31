@@ -341,7 +341,9 @@ export const BunAdapter: ElysiaAdapter = {
 							),
 							websocket: {
 								...(app.config.websocket || {}),
-								...(websocket || {})
+								...(websocket || {}),
+								// @ts-expect-error not available in this variant of options type
+								...(options.websocket || {})
 							},
 							fetch: app.fetch
 						} as Serve)
