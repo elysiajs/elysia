@@ -753,6 +753,7 @@ export const getSchemaValidator = <
 		modules,
 		normalize = false,
 		additionalProperties = false,
+		forceAdditionalProperties = false,
 		coerce = false,
 		additionalCoerce = [],
 		validators,
@@ -761,6 +762,7 @@ export const getSchemaValidator = <
 		models?: Record<string, TSchema>
 		modules?: TModule<any, any>
 		additionalProperties?: boolean
+		forceAdditionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
 		coerce?: boolean
@@ -891,6 +893,7 @@ export const getSchemaValidator = <
 				dynamic,
 				normalize,
 				additionalProperties: true,
+				forceAdditionalProperties: true,
 				coerce,
 				additionalCoerce
 			})!
@@ -900,10 +903,11 @@ export const getSchemaValidator = <
 
 			// @ts-ignore
 			return (v) => {
-				if (vali.Check(v))
+				if (vali.Check(v)) {
 					return {
 						value: vali.Decode(v)
 					}
+				}
 				else
 					return {
 						issues: [...vali.Errors(v)]
@@ -1054,7 +1058,8 @@ export const getSchemaValidator = <
 	} else {
 		if (
 			schema.type === 'object' &&
-			'additionalProperties' in schema === false
+			('additionalProperties' in schema === false ||
+				forceAdditionalProperties)
 		)
 			schema.additionalProperties = additionalProperties
 		else
