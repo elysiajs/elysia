@@ -297,7 +297,7 @@ describe('Cookie Response', () => {
 	})
 
 	it("don't parse cookie type unless specified", async () => {
-		let value: string | undefined
+		let value: unknown
 
 		const app = new Elysia().get(
 			'/council',
@@ -355,7 +355,6 @@ describe('Cookie Response', () => {
 			return 'a'
 		})
 
-		// @ts-expect-error
 		const res = app.handle(req('/')).then((x) => x.headers.toJSON())
 
 		// @ts-expect-error

@@ -6,7 +6,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => ({
+				resolve: () => ({
 					account: 'A'
 				})
 			})
@@ -32,7 +32,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => ({
+				resolve: () => ({
 					account: 'A'
 				})
 			})
@@ -60,7 +60,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => ({
+				resolve: () => ({
 					account: 'A'
 				})
 			})
@@ -89,7 +89,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => ({
+				resolve: () => ({
 					account: 'A'
 				})
 			})
@@ -116,8 +116,8 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => {
-					if (Math.random() > 0.5) return error(401)
+				resolve: ({ status }) => {
+					if (Math.random() > 0.5) return status(401)
 
 					return {
 						account: 'A'
@@ -146,8 +146,8 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: async ({ error }) => {
-					if (Math.random() > 0.5) return error(401)
+				resolve: async ({ status }) => {
+					if (Math.random() > 0.5) return status(401)
 
 					return {
 						account: 'A'

@@ -6793,7 +6793,6 @@ export {
 
 export {
 	status,
-	error,
 	mapValueError,
 	ParseError,
 	NotFoundError,

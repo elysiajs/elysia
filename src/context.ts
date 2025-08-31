@@ -136,8 +136,8 @@ export type Context<
 			? Record<string, string | undefined>
 			: PrettifyIfObject<Route['headers']>
 		cookie: undefined extends Route['cookie']
-			? Record<string, Cookie<string | undefined>>
-			: Record<string, Cookie<string | undefined>> & {
+			? Record<string, Cookie<unknown>>
+			: Record<string, Cookie<unknown>> & {
 					[key in keyof Route['cookie']]-?: Cookie<
 						Route['cookie'][key]
 					>

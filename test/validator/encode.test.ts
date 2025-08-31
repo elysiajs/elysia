@@ -34,8 +34,8 @@ describe('Encode response', () => {
 			encodeSchema: true
 		}).get(
 			'/:id',
-			({ error, params: { id } }) =>
-				error(id as any, {
+			({ status, params: { id } }) =>
+				status(id as any, {
 					id: 'hello world'
 				}),
 			{

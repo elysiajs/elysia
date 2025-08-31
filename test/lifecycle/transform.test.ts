@@ -41,17 +41,13 @@ describe('Transform', () => {
 
 	it('group transform', async () => {
 		const app = new Elysia()
-			.group('/scoped', (app) =>
+			.group('/scoped/id/:id', (app) =>
 				app
-					.onTransform<{
-						params: {
-							id: number
-						} | null
-					}>((request) => {
-						if (request.params?.id)
-							request.params.id = +request.params.id
+					.onTransform(({ params }) => {
+						// @ts-ignore
+						if (params.id) params.id = +params.id
 					})
-					.get('/id/:id', ({ params: { id } }) => typeof id)
+					.get('', ({ params: { id } }) => typeof id)
 			)
 			.get('/id/:id', ({ params: { id } }) => typeof id)
 
@@ -71,6 +67,7 @@ describe('Transform', () => {
 			},
 			'global'
 		>({ as: 'global' }, (request) => {
+			// @ts-ignore
 			if (request.params?.id) request.params.id = +request.params.id
 		})
 

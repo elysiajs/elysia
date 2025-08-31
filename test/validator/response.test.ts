@@ -1,4 +1,4 @@
-import { Elysia, error, t } from '../../src'
+import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { post, req, upload } from '../utils'
@@ -295,18 +295,22 @@ describe('Response Validator', () => {
 	})
 
 	it('validate response per status with error()', async () => {
-		const app = new Elysia().get('/', () => error(418, 'I am a teapot'), {
-			response: {
-				200: t.String(),
-				418: t.String()
+		const app = new Elysia().get(
+			'/',
+			({ status }) => status(418, 'I am a teapot'),
+			{
+				response: {
+					200: t.String(),
+					418: t.String()
+				}
 			}
-		})
+		)
 	})
 
 	it('use inline error from handler', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ error }) => error(418, 'I am a teapot'),
+			({ status }) => status(418, 'I am a teapot'),
 			{
 				response: {
 					200: t.String(),
@@ -379,7 +383,7 @@ describe('Response Validator', () => {
 
 	it('return error response with validator', async () => {
 		const app = new Elysia()
-			.get('/ok', ({ error }) => 'ok', {
+			.get('/ok', () => 'ok', {
 				response: {
 					200: t.String(),
 					418: t.Literal('Kirifuji Nagisa'),
@@ -388,7 +392,7 @@ describe('Response Validator', () => {
 			})
 			.get(
 				'/error',
-				({ error }) => error("I'm a teapot", 'Kirifuji Nagisa'),
+				({ status }) => status("I'm a teapot", 'Kirifuji Nagisa'),
 				{
 					response: {
 						200: t.String(),
@@ -399,8 +403,8 @@ describe('Response Validator', () => {
 			)
 			.get(
 				'/validate-error',
-				// @ts-expect-error
-				({ error }) => error("I'm a teapot", 'Nagisa'),
+				// @ts-ignore
+				({ status }) => status("I'm a teapot", 'Nagisa'),
 				{
 					response: {
 						200: t.String(),

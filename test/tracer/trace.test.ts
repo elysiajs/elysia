@@ -31,7 +31,7 @@ describe('trace', () => {
 			clearTimeout(timeout)
 		})
 
-		const b = new Elysia({ scoped: true }).get('/scoped', () => 'hi')
+		const b = new Elysia().get('/scoped', () => 'hi')
 
 		const app = new Elysia()
 			.use(a)

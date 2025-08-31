@@ -243,7 +243,7 @@ describe('Map Response', () => {
 		const app = new Elysia()
 			.onAfterHandle(() => {})
 			.mapResponse((context) => {
-				return context.response
+				return new Response(context.response + '')
 			})
 			.get('/', async () => 'aru')
 

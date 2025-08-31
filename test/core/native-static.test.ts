@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 

@@ -13,19 +13,19 @@ describe('Hook Types', () => {
 			}
 		)
 
-		expect(plugin.event.transform[0].scope).toBe('scoped')
+		expect(plugin.event.transform?.[0].scope).toBe('scoped')
 
 		const a = new Elysia().use(plugin).get('/foo', ({ id }) => {
 			return { id, name: 'foo' }
 		})
 
-		expect(plugin.event.transform[0].scope).toBe('scoped')
+		expect(plugin.event.transform?.[0].scope).toBe('scoped')
 
 		const b = new Elysia().use(plugin).get('/bar', ({ id }) => {
 			return { id, name: 'bar' }
 		})
 
-		expect(plugin.event.transform[0].scope).toBe('scoped')
+		expect(plugin.event.transform?.[0].scope).toBe('scoped')
 
 		const [res1, res2] = await Promise.all([
 			a.handle(req('/foo')).then((x) => x.json()),

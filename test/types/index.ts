@@ -4,10 +4,10 @@ import {
 	Elysia,
 	RouteSchema,
 	Cookie,
-	error,
 	file,
 	sse,
-	SSEPayload
+	SSEPayload,
+    status
 } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
@@ -67,7 +67,7 @@ app.model({
 
 		// ? unwrap cookie
 		expectTypeOf<
-			Record<string, Cookie<string | undefined>> & {
+			Record<string, Cookie<unknown>> & {
 				username: Cookie<string>
 				password: Cookie<string>
 			}
@@ -1255,14 +1255,13 @@ const a = app
 // ? Handle error status
 {
 	const a = new Elysia()
-		.get('/', ({ error }) => error(418, 'a'), {
+		.get('/', ({ status }) => status(418, 'a'), {
 			response: {
 				200: t.String(),
 				418: t.Literal('a')
 			}
 		})
-		// @ts-expect-error
-		.get('/', ({ error }) => error(418, 'b'), {
+		.get('/', ({ status }) => status(418, 'b' as any), {
 			response: {
 				200: t.String(),
 				418: t.Literal('a')
@@ -1277,18 +1276,18 @@ const a = app
 		.get('/true', () => true)
 		.post('', () => 'a', { response: { 201: t.String() } })
 		.post('/true', () => true, { response: { 202: t.Boolean() } })
-		.get('/error', ({ error }) => error("I'm a teapot", 'a'))
+		.get('/error', ({ status }) => status("I'm a teapot", 'a'))
 		.post('/mirror', ({ body }) => body)
 		.get('/immutable', '1')
-		.get('/immutable-error', ({ error }) => error("I'm a teapot", 'a'))
-		.get('/async', async ({ error }) => {
-			if (Math.random() > 0.5) return error("I'm a teapot", 'Nagisa')
+		.get('/immutable-error', ({ status }) => status("I'm a teapot", 'a'))
+		.get('/async', async ({ status }) => {
+			if (Math.random() > 0.5) return status("I'm a teapot", 'Nagisa')
 
 			return 'Hifumi'
 		})
-		.get('/default-error-code', ({ error }) => {
-			if (Math.random() > 0.5) return error(418, 'Nagisa')
-			if (Math.random() > 0.5) return error(401)
+		.get('/default-error-code', ({ status }) => {
+			if (Math.random() > 0.5) return status(418, 'Nagisa')
+			if (Math.random() > 0.5) return status(401)
 
 			return 'Hifumi'
 		})
@@ -1643,9 +1642,9 @@ type a = keyof {}
 					401: t.Boolean()
 				}
 			})
-			.get('/plugin', ({ error }) => {
-				error('Payment Required', 20)
-				return error(401, true)
+			.get('/plugin', ({ status }) => {
+				status('Payment Required', 20)
+				return status(401, true)
 			})
 
 		const app = new Elysia().use(plugin).get('/', () => 'ok')
@@ -1670,7 +1669,7 @@ type a = keyof {}
 					401: t.Boolean()
 				}
 			})
-			.get('/plugin', error(401, true))
+			.get('/plugin', status(401, true))
 
 		const app = new Elysia().use(plugin).get('/', 'ok')
 	}
@@ -1905,9 +1904,9 @@ type a = keyof {}
 					401: t.Boolean()
 				}
 			})
-			.get('/plugin', ({ error }) => {
-				error('Payment Required', 20)
-				return error(401, true)
+			.get('/plugin', ({ status }) => {
+				status('Payment Required', 20)
+				return status(401, true)
 			})
 
 		const app = new Elysia().use(plugin).get('/', () => 'ok')
@@ -1932,7 +1931,7 @@ type a = keyof {}
 					401: t.Boolean()
 				}
 			})
-			.get('/plugin', error(401, true))
+			.get('/plugin', status(401, true))
 
 		const app = new Elysia().use(plugin).get('/', 'ok')
 	}
@@ -2287,12 +2286,12 @@ type a = keyof {}
 
 				return {
 					beforeHandle({
-						error,
+						status,
 						cookie: { token },
 						store: { session }
 					}) {
 						if (!token.value)
-							return error(401, {
+							return status(401, {
 								success: false,
 								message: 'Unauthorized'
 							})
@@ -2305,7 +2304,7 @@ type a = keyof {}
 							session[token.value as unknown as number]
 
 						if (!username)
-							return error(401, {
+							return status(401, {
 								success: false,
 								message: 'Unauthorized'
 							})

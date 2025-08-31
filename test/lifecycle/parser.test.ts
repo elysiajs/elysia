@@ -428,6 +428,7 @@ describe('Parser', () => {
 
 		const app = new Elysia()
 			.onError((ctx) => {
+				// @ts-ignore
 				code = ctx.code
 			})
 			.post('/', () => '', {
