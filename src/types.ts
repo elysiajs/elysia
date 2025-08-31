@@ -33,8 +33,9 @@ import type {
 
 import type { AnyWSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
+
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
-import { Static } from '@sinclair/typebox/parser'
+import type { StandardSchemaV1 } from '@standard-schema/spec'
 
 type PartialServe = Partial<Serve>
 
@@ -43,11 +44,14 @@ export type IsNever<T> = [T] extends [never] ? true : false
 // Standard Schema reduce to bare minimum to save inference time
 export interface StandardSchemaV1Like<
 	in out Input = unknown,
-	in out Output = unknown
+	in out Output = Input
 > {
 	readonly '~standard': {
-		readonly types:
-			| any
+		readonly types?:
+			| {
+					readonly input: Input
+					readonly output: Output
+			  }
 			| undefined
 	}
 }

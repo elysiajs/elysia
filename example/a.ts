@@ -2,6 +2,8 @@ import { Elysia, t } from '../src'
 import { z } from 'zod'
 import { req } from '../test/utils'
 
+import type { StandardSchemaV1Like } from '../src/types'
+
 const app = new Elysia()
 	.guard({
 		schema: 'standalone',
