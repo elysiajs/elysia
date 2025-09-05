@@ -7,7 +7,7 @@ import {
 	file,
 	sse,
 	SSEPayload,
-    status
+	status
 } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
@@ -98,14 +98,14 @@ app.model({
 			{
 				username: string
 				password: string
-			}[]
+			}
 		>().toEqualTypeOf<typeof body>()
 
 		return body
 	},
 	{
-		body: 't[]',
-		response: 't[]'
+		body: 't',
+		response: 't'
 	}
 )
 
@@ -219,10 +219,10 @@ app.model({
 				'/',
 				({ body }) => {
 					expectTypeOf<typeof body>().not.toBeUnknown()
-					expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
+					expectTypeOf<typeof body>().toEqualTypeOf<string>()
 				},
 				{
-					body: 'string[]'
+					body: 'string'
 				}
 			)
 			.model({
@@ -460,10 +460,10 @@ const b = app
 	.post(
 		'/',
 		({ body }) => {
-			expectTypeOf<typeof body>().toEqualTypeOf<'c'[]>()
+			expectTypeOf<typeof body>().toEqualTypeOf<'c'>()
 		},
 		{
-			body: 'c[]'
+			body: 'c'
 		}
 	)
 
@@ -553,10 +553,10 @@ app.use(plugin)
 		({ body, decorate, store: { state } }) => {
 			expectTypeOf<typeof decorate>().toBeString()
 			expectTypeOf<typeof state>().toBeString()
-			expectTypeOf<typeof body>().toEqualTypeOf<string[]>()
+			expectTypeOf<typeof body>().toEqualTypeOf<string>()
 		},
 		{
-			body: 'string[]'
+			body: 'string'
 		}
 	)
 

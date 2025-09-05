@@ -6233,7 +6233,7 @@ export default class Elysia<
 	>
 
 	model<
-		const Recorder extends Record<string, TAnySchema | StandardSchemaV1Like>
+		const Recorder extends Record<string, TSchema | StandardSchemaV1Like>
 	>(
 		record: Recorder
 	): Elysia<
@@ -6249,13 +6249,11 @@ export default class Elysia<
 		Volatile
 	>
 
-	model<
-		const NewType extends Record<string, TAnySchema | StandardSchemaV1Like>
-	>(
+	model<const NewType extends Record<string, TSchema | StandardSchemaV1Like>>(
 		mapper: (
 			decorators: Definitions['typebox'] extends infer Models
 				? {
-						[Name in keyof Models]: Models[Name] extends TAnySchema
+						[Name in keyof Models]: Models[Name] extends TSchema
 							? TRef<Name & string>
 							: Models[Name]
 					}
@@ -6287,7 +6285,7 @@ export default class Elysia<
 			| Record<string, TAnySchema | StandardSchemaV1Like>
 			| Function,
 		model?: TAnySchema | StandardSchemaV1Like
-	) {
+	): AnyElysia {
 		const onlyTypebox = <
 			A extends Record<string, TAnySchema | StandardSchemaV1Like>
 		>(
@@ -6355,7 +6353,7 @@ export default class Elysia<
 				return this
 		}
 
-		if(!model) return this
+		if (!model) return this
 
 		this.definitions.type[name] = model!
 		if ('~standard' in model) return this

@@ -843,15 +843,18 @@ export const getSchemaValidator = <
 			schema = model.Import(id)
 		}
 
-		if (Kind in schema && schema[Kind] === 'Import') {
-			const newDefs: Record<string, TSchema> = {}
+		if (Kind in schema) {
+			if (schema[Kind] === 'Import') {
+				const newDefs: Record<string, TSchema> = {}
 
-			for (const [key, value] of Object.entries(schema.$defs))
-				newDefs[key] = replaceSchema(value as TSchema)
+				for (const [key, value] of Object.entries(schema.$defs))
+					newDefs[key] = replaceSchema(value as TSchema)
 
-			const key = schema.$ref
-			schema = t.Module(newDefs).Import(key)
-		} else if (coerce || additionalCoerce) schema = replaceSchema(schema)
+				const key = schema.$ref
+				schema = t.Module(newDefs).Import(key)
+			} else if (coerce || additionalCoerce)
+				schema = replaceSchema(schema)
+		}
 
 		return schema
 	}
@@ -1258,7 +1261,10 @@ export const getSchemaValidator = <
 	let compiled: ElysiaTypeCheck<any>
 
 	if (Kind in schema) {
-		compiled = TypeCompiler.Compile(schema, Object.values(models)) as any
+		compiled = TypeCompiler.Compile(
+			schema,
+			Object.values(models).filter((x) => Kind in x)
+		) as any
 		compiled.provider = 'typebox'
 
 		if (schema.config) {
@@ -1558,10 +1564,12 @@ export const getResponseSchemaValidator = (
 			if (maybeNameOrSchema in models) {
 				const schema = models[maybeNameOrSchema]
 
+				if (!schema) return
+
 				// Inherits model maybe already compiled
 				record[+status] =
 					Kind in schema || '~standard' in schema
-						? getSchemaValidator(schema, {
+						? getSchemaValidator(schema as TSchema, {
 								modules,
 								models,
 								additionalProperties,
@@ -1571,8 +1579,8 @@ export const getResponseSchemaValidator = (
 								additionalCoerce: [],
 								validators: validators.map((x) => x![+status]),
 								sanitize
-							})
-						: schema
+							})!
+						: (schema as ElysiaTypeCheck<any>)
 			}
 
 			return undefined
@@ -1592,7 +1600,7 @@ export const getResponseSchemaValidator = (
 						validators: validators.map((x) => x![+status]),
 						sanitize
 					})
-				: maybeNameOrSchema
+				: (maybeNameOrSchema as ElysiaTypeCheck<any>)
 	})
 
 	return record

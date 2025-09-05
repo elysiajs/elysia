@@ -432,7 +432,7 @@ export type UnwrapSchema<
 		? Schema extends OptionalField
 			? Partial<
 					TImport<
-						// @ts-ignore Schema is always a TSchema
+						// @ts-expect-error Internal typebox already filter for TSchema
 						Definitions & {
 							readonly __elysia: Schema
 						},
@@ -440,7 +440,7 @@ export type UnwrapSchema<
 					>['static']
 				>
 			: TImport<
-					// @ts-ignore Schema is always a TSchema
+					// @ts-expect-error Internal typebox already filter for TSchema
 					Definitions & {
 						readonly __elysia: Schema
 					},
@@ -453,7 +453,8 @@ export type UnwrapSchema<
 				? Schema extends keyof Definitions
 					? Definitions[Schema] extends TAnySchema
 						? TImport<
-								Extract<Definitions, TAnySchema>,
+								// @ts-expect-error Internal typebox already filter for TSchema
+								Definitions,
 								Schema
 							>['static']
 						: NonNullable<
@@ -471,7 +472,7 @@ export type UnwrapBodySchema<
 		? Schema extends OptionalField
 			? Partial<
 					TImport<
-						// @ts-ignore Schema is always a TSchema
+						// @ts-expect-error Internal typebox already filter for TSchema
 						Definitions & {
 							readonly __elysia: Schema
 						},
@@ -479,7 +480,7 @@ export type UnwrapBodySchema<
 					>['static']
 				> | null
 			: TImport<
-					// @ts-ignore Schema is always a TSchema
+					// @ts-expect-error Internal typebox already filter for TSchema
 					Definitions & {
 						readonly __elysia: Schema
 					},
@@ -492,7 +493,8 @@ export type UnwrapBodySchema<
 				? Schema extends keyof Definitions
 					? Definitions[Schema] extends TAnySchema
 						? TImport<
-								Extract<Definitions, TAnySchema>,
+								// @ts-expect-error Internal typebox already filter for TSchema
+								Definitions,
 								Schema
 							>['static']
 						: // @ts-ignore Schema is StandardSchemaV1Like

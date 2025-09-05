@@ -125,8 +125,8 @@ describe('Model', () => {
 				})
 			})
 			.post('/arr', ({ body }) => body, {
-				response: 'number[]',
-				body: 'number[]',
+				response: 'number',
+				body: 'number',
 			})
 
 		const correct = await app.handle(
@@ -149,7 +149,7 @@ describe('Model', () => {
 				headers: {
 					'content-type': 'application/json'
 				},
-				body: JSON.stringify([1, 2])
+				body: 1
 			})
 		)
 
