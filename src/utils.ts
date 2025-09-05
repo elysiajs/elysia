@@ -1208,3 +1208,18 @@ export const sse = <
 
 	return payload as any
 }
+
+export async function getResponseLength(response: Response) {
+	if (response.bodyUsed || !response.body) return 0
+
+	let length = 0
+	const reader = response.body.getReader()
+
+	while (true) {
+		const { done, value } = await reader.read()
+		if (done) break
+		length += value.byteLength
+	}
+
+	return length
+}

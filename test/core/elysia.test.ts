@@ -387,4 +387,34 @@ describe('Edge Case', () => {
 
 		expect(response.status).toBe(200)
 	})
+
+	it('automatically handle HEAD request for GET static path', async () => {
+		const app = new Elysia().get('/', () => 'hello world')
+
+		const response = await app.handle(
+			new Request('http://localhost', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(response.headers.toJSON()).toEqual({
+			'content-length': '11',
+		})
+	})
+
+	it('automatically handle HEAD request for GET dynamic path', async () => {
+		const app = new Elysia().get('/:id', () => 'hello world')
+
+		const response = await app.handle(
+			new Request('http://localhost/1', {
+				method: 'HEAD'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(response.headers.toJSON()).toEqual({
+			'content-length': '11',
+		})
+	})
 })

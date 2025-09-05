@@ -213,6 +213,9 @@ describe('Standard Schema Standalone', () => {
 
 	it('validate multiple schema together', async () => {
 		const app = new Elysia()
+			.onError(({ error, code }) => {
+				if (code !== 'VALIDATION') console.log(error)
+			})
 			.guard({
 				schema: 'standalone',
 				body: z.object({

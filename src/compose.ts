@@ -25,7 +25,8 @@ import {
 	signCookie,
 	isNotEmpty,
 	encodePath,
-	mergeCookie
+	mergeCookie,
+	getResponseLength
 } from './utils'
 import { isBun } from './universal/utils'
 import { ParseError, status } from './error'
@@ -2187,6 +2188,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
 
+	const isWebstandard = app['~adapter'].isWebStandard
 	const hasTrace = app.event.trace?.length
 
 	let fnLiteral = ''
@@ -2194,13 +2196,30 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 	const router = app.router
 
 	let findDynamicRoute = router.http.root.WS
-		? `const route=router.find(r.method === "GET" && r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
+		? `const route=router.find(r.method==='GET'&&r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
 		: `const route=router.find(r.method,p)`
 
-	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
+	findDynamicRoute += router.http.root.ALL ? `??router.find('ALL',p)\n` : '\n'
+
+	if (isWebstandard)
+		findDynamicRoute +=
+			`if(r.method==='HEAD'){` +
+			`const route=router.find('GET',p)\n` +
+			'if(route){' +
+			`c.params=route.params\n` +
+			`const _res=route.store.handler?route.store.handler(c):route.store.compile()(c)\n` +
+			`if(_res)` +
+			'return getResponseLength(_res).then((length)=>{' +
+			`_res.headers.set('content-length', length)\n` +
+			`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
+			'})' +
+			'}' +
+			'}'
 
 	let afterResponse = `c.error=notFound\n`
 	if (app.event.afterResponse?.length && !app.event.error) {
+		afterResponse = '\nc.error=notFound\n'
+
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse += `\nsetImmediate(${prefix}()=>{`
 
@@ -2216,7 +2235,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 	// @ts-ignore
 	if (app.inference.query)
 		afterResponse +=
-			'if(c.qi===-1){' +
+			'\nif(c.qi===-1){' +
 			'c.query={}' +
 			'}else{' +
 			'c.query=parseQueryFromURL(c.url,c.qi+1)' +
@@ -2259,6 +2278,18 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 				switchMap += `return ht[${methods.GET}].composed(c)\n`
 		}
 
+		if (
+			isWebstandard &&
+			('GET' in methods || 'ALL' in methods) &&
+			'HEAD' in methods === false
+		)
+			switchMap +=
+				`case 'HEAD':const _res=ht[${methods.GET}].composed(c)\n` +
+				'return getResponseLength(_res).then((length)=>{' +
+				`_res.headers.set('content-length', length)\n` +
+				`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
+				'})\n'
+
 		for (const [method, index] of Object.entries(methods)) {
 			if (method === 'ALL' || method === 'GET' || method === 'WS')
 				continue
@@ -2288,6 +2319,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		`handleError,` +
 		`status,` +
 		`redirect,` +
+		`getResponseLength,` +
 		// @ts-ignore
 		allocateIf(`parseQueryFromURL,`, app.inference.query) +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
@@ -2353,6 +2385,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		handleError,
 		status,
 		redirect,
+		getResponseLength,
 		// @ts-ignore
 		parseQueryFromURL: app.inference.query ? parseQueryFromURL : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
