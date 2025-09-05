@@ -10,7 +10,6 @@ describe('WebSocket with AoT disabled', () => {
 			})
 			.listen(0)
 
-		// @ts-expect-error some properties are missing
 		const ws = newWebsocket(app.server!)
 
 		await wsOpen(ws)

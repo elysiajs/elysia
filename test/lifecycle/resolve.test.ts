@@ -1,4 +1,4 @@
-import { Elysia, error } from '../../src'
+import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -211,8 +211,8 @@ describe('resolve', () => {
 
 	it('handle error', async () => {
 		const route = new Elysia()
-			.resolve(() => {
-				return error(418)
+			.resolve(({ status }) => {
+				return status(418)
 			})
 			.get('/', () => '')
 

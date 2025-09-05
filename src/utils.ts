@@ -696,12 +696,11 @@ export const createMacroManager =
 			}
 
 		// @ts-expect-error this is available in macro v2
-		if (stackName === 'resolve') {
+		if (stackName === 'resolve')
 			type = {
 				...type,
 				subType: 'resolve'
 			}
-		}
 
 		if (!localHook[stackName]) localHook[stackName] = []
 		if (typeof localHook[stackName] === 'function')

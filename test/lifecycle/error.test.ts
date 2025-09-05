@@ -4,7 +4,6 @@ import {
 	InternalServerError,
 	ParseError,
 	ValidationError,
-	error,
 	t,
 	validationDetail
 } from '../../src'
@@ -127,8 +126,8 @@ describe('error', () => {
 	it.each([true, false])(
 		'return correct number status on error function with aot: %p',
 		async (aot) => {
-			const app = new Elysia({ aot }).get('/', ({ error }) =>
-				error(418, 'I am a teapot')
+			const app = new Elysia({ aot }).get('/', ({ status }) =>
+				status(418, 'I am a teapot')
 			)
 
 			const response = await app.handle(req('/'))
@@ -140,8 +139,8 @@ describe('error', () => {
 	it.each([true, false])(
 		'return correct named status on error function with aot: %p',
 		async (aot) => {
-			const app = new Elysia({ aot }).get('/', ({ error }) =>
-				error("I'm a teapot", 'I am a teapot')
+			const app = new Elysia({ aot }).get('/', ({ status }) =>
+				status("I'm a teapot", 'I am a teapot')
 			)
 
 			const response = await app.handle(req('/'))
@@ -153,7 +152,7 @@ describe('error', () => {
 	it.each([true, false])(
 		'return correct number status without value on error function with aot: %p',
 		async (aot) => {
-			const app = new Elysia({ aot }).get('/', ({ error }) => error(418))
+			const app = new Elysia({ aot }).get('/', ({ status }) => status(418))
 
 			const response = await app.handle(req('/'))
 
@@ -165,8 +164,8 @@ describe('error', () => {
 	it.each([true, false])(
 		'return correct named status without value on error function with aot: %p',
 		async (aot) => {
-			const app = new Elysia({ aot }).get('/', ({ error }) =>
-				error("I'm a teapot")
+			const app = new Elysia({ aot }).get('/', ({ status }) =>
+				status("I'm a teapot")
 			)
 
 			const response = await app.handle(req('/'))

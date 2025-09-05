@@ -119,7 +119,6 @@ describe('Mount', () => {
 
 	it('preserve headers', async () => {
 		const app = new Elysia().mount((request) => {
-			// @ts-expect-error Bun has toJSON
 			return Response.json(request.headers.toJSON())
 		})
 

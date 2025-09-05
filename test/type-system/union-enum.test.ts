@@ -14,11 +14,10 @@ describe('TypeSystem - UnionEnum', () => {
 	})
 
 	it('Check', () => {
-		const schema = t.UnionEnum(['some', 'data', null])
+		const schema = t.UnionEnum(['some', 'data'])
 
 		expect(Value.Check(schema, 'some')).toBe(true)
 		expect(Value.Check(schema, 'data')).toBe(true)
-		expect(Value.Check(schema, null)).toBe(true)
 
 		expect(Value.Check(schema, { deep: 2 })).toBe(false)
 		expect(Value.Check(schema, 'yay')).toBe(false)
@@ -26,6 +25,7 @@ describe('TypeSystem - UnionEnum', () => {
 		expect(Value.Check(schema, {})).toBe(false)
 		expect(Value.Check(schema, undefined)).toBe(false)
 	})
+
 	it('JSON schema', () => {
 		expect(t.UnionEnum(['some', 'data'])).toMatchObject({
 			type: 'string',
@@ -36,27 +36,21 @@ describe('TypeSystem - UnionEnum', () => {
 			type: 'number',
 			enum: [2, 1]
 		})
-		expect(t.UnionEnum([null])).toMatchObject({
-			type: 'null',
-			enum: [null]
-		})
 	})
+
 	it('Integrate', async () => {
 		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Object({
-				value: t.UnionEnum(['some', 1, null])
+				value: t.UnionEnum(['some', 1])
 			})
 		})
 		const res1 = await app.handle(post('/', { value: 1 }))
 		expect(res1.status).toBe(200)
 
-		const res2 = await app.handle(post('/', { value: null }))
+		const res2 = await app.handle(post('/', { value: 'some' }))
 		expect(res2.status).toBe(200)
 
-		const res3 = await app.handle(post('/', { value: 'some' }))
-		expect(res3.status).toBe(200)
-
-		const res4 = await app.handle(post('/', { value: 'data' }))
-		expect(res4.status).toBe(422)
+		const res3 = await app.handle(post('/', { value: 'data' }))
+		expect(res3.status).toBe(422)
 	})
 })

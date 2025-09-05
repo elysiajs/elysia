@@ -1,19 +1,24 @@
-import { Elysia, t } from "../src"
-import { req } from "../test/utils"
+import { Elysia, t, UnwrapSchema } from '../src'
+import z from 'zod'
+import { req } from '../test/utils'
 
-const app = new Elysia().get('/', ({ query }) => query, {
-	query: t.Object(
-		{
-			name: t.String()
-		},
-		{ additionalProperties: true }
-	)
-})
+const app = new Elysia().get(
+	'/:name',
+	({ route }) => {
+		return {
+			id: 'a'
+		}
+	},
+	{
+		response: z.object({
+			id: z.number()
+		})
+	}
+)
 
-const response = await app
-	.handle(req('/?name=nagisa&hifumi=daisuki'))
-	.then((x) => x.json())
+const lilith = await app.handle(req('/lilith')).then((x) => x.json())
+const fouco = await app.handle(req('/fouco')).then((x) => x.json())
 
-console.log(response)
+// console.log(app.routes[0].compile().toString())
 
-console.log(app.routes[0].hooks)
+console.log(lilith)

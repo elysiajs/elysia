@@ -8,6 +8,7 @@ import type {
 
 import { StatusMap, InvertedStatusMap } from './utils'
 import type { ElysiaTypeCheck } from './schema'
+import { StandardSchemaV1Like } from './types'
 
 // ? Cloudflare worker support
 const env =
@@ -77,11 +78,6 @@ export const status = <
 	code: Code,
 	response?: T
 ) => new ElysiaCustomStatusResponse<Code, T>(code, response as any)
-
-/**
- * @deprecated use `Elysia.status` instead
- */
-export const error = status
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -254,118 +250,166 @@ export class ValidationError extends Error {
 
 	constructor(
 		public type: string,
-		public validator: TSchema | TypeCheck<any> | ElysiaTypeCheck<any>,
+		public validator:
+			| TSchema
+			| TypeCheck<any>
+			| ElysiaTypeCheck<any>
+			| StandardSchemaV1Like,
 		public value: unknown,
 		errors?: ValueErrorIterator
 	) {
-		if (
-			value &&
-			typeof value === 'object' &&
-			value instanceof ElysiaCustomStatusResponse
-		)
-			value = value.response
-
-		const error =
-			errors?.First() ??
-			('Errors' in validator
-				? validator.Errors(value).First()
-				: Value.Errors(validator, value).First())
-
-		const accessor = error?.path || 'root'
-
-		// @ts-ignore private field
-		const schema = validator?.schema ?? validator
-
+		let message = ''
+		let error
 		let expected
+		let customError
 
-		if (!isProduction) {
-			try {
-				expected = Value.Create(schema)
-			} catch (error) {
-				expected = {
-					type: 'Could not create expected value',
-					// @ts-expect-error
-					message: error?.message,
-					error
+		if (
+			// @ts-ignore
+			validator?.provider === 'standard' ||
+			'~standard' in validator ||
+			// @ts-ignore
+			(validator.schema && '~standard' in validator.schema)
+		) {
+			const standard = // @ts-ignore
+				('~standard' in validator ? validator : validator.schema)[
+					'~standard'
+				]
+
+			const _errors = errors ?? standard.validate(value).issues
+
+			error = _errors?.[0]
+
+			if (isProduction)
+				message = JSON.stringify({
+					type: 'validation',
+					on: type,
+					found: value
+				})
+			else
+				message = JSON.stringify(
+					{
+						type: 'validation',
+						on: type,
+						property: error.path?.[0] || 'root',
+						message: error?.message,
+						summary: error?.problem,
+						expected,
+						found: value,
+						errors
+					},
+					null,
+					2
+				)
+
+			customError = error?.message
+		} else {
+			if (
+				value &&
+				typeof value === 'object' &&
+				value instanceof ElysiaCustomStatusResponse
+			)
+				value = value.response
+
+			error =
+				errors?.First() ??
+				('Errors' in validator
+					? validator.Errors(value).First()
+					: Value.Errors(validator, value).First())
+
+			const accessor = error?.path || 'root'
+
+			// @ts-ignore private field
+			const schema = validator?.schema ?? validator
+
+			if (!isProduction) {
+				try {
+					expected = Value.Create(schema)
+				} catch (error) {
+					expected = {
+						type: 'Could not create expected value',
+						// @ts-expect-error
+						message: error?.message,
+						error
+					}
 				}
+			}
+
+			customError =
+				error?.schema?.message || error?.schema?.error !== undefined
+					? typeof error.schema.error === 'function'
+						? error.schema.error(
+								isProduction
+									? {
+											type: 'validation',
+											on: type,
+											found: value
+										}
+									: {
+											type: 'validation',
+											on: type,
+											value,
+											property: accessor,
+											message: error?.message,
+											summary:
+												mapValueError(error).summary,
+											found: value,
+											expected,
+											errors:
+												'Errors' in validator
+													? [
+															...validator.Errors(
+																value
+															)
+														].map(mapValueError)
+													: [
+															...Value.Errors(
+																validator,
+																value
+															)
+														].map(mapValueError)
+										},
+								validator
+							)
+						: error.schema.error
+					: undefined
+
+			if (customError !== undefined) {
+				message =
+					typeof customError === 'object'
+						? JSON.stringify(customError)
+						: customError + ''
+			} else if (isProduction) {
+				message = JSON.stringify({
+					type: 'validation',
+					on: type,
+					found: value
+				})
+			} else {
+				message = JSON.stringify(
+					{
+						type: 'validation',
+						on: type,
+						property: accessor,
+						message: error?.message,
+						summary: mapValueError(error).summary,
+						expected,
+						found: value,
+						errors:
+							'Errors' in validator
+								? [...validator.Errors(value)].map(
+										mapValueError
+									)
+								: [...Value.Errors(validator, value)].map(
+										mapValueError
+									)
+					},
+					null,
+					2
+				)
 			}
 		}
 
-		const customError =
-			error?.schema?.message || error?.schema?.error !== undefined
-				? typeof error.schema.error === 'function'
-					? error.schema.error(
-							isProduction
-								? {
-										type: 'validation',
-										on: type,
-										found: value
-									}
-								: {
-										type: 'validation',
-										on: type,
-										value,
-										property: accessor,
-										message: error?.message,
-										summary: mapValueError(error).summary,
-										found: value,
-										expected,
-										errors:
-											'Errors' in validator
-												? [
-														...validator.Errors(
-															value
-														)
-													].map(mapValueError)
-												: [
-														...Value.Errors(
-															validator,
-															value
-														)
-													].map(mapValueError)
-									},
-							validator
-						)
-					: error.schema.error
-				: undefined
-
-		let message = ''
-
-		if (customError !== undefined) {
-			message =
-				typeof customError === 'object'
-					? JSON.stringify(customError)
-					: customError + ''
-		} else if (isProduction) {
-			message = JSON.stringify({
-				type: 'validation',
-				on: type,
-				found: value
-			})
-		} else {
-			message = JSON.stringify(
-				{
-					type: 'validation',
-					on: type,
-					property: accessor,
-					message: error?.message,
-					summary: mapValueError(error).summary,
-					expected,
-					found: value,
-					errors:
-						'Errors' in validator
-							? [...validator.Errors(value)].map(mapValueError)
-							: [...Value.Errors(validator, value)].map(
-									mapValueError
-								)
-				},
-				null,
-				2
-			)
-		}
-
 		super(message)
-
 		this.valueError = error
 		this.expected = expected
 		this.customError = customError
@@ -394,6 +438,8 @@ export class ValidationError extends Error {
 	}
 
 	get model() {
+		if ('~standard' in this.validator) return this.validator
+
 		return ValidationError.simplifyModel(this.validator)
 	}
 

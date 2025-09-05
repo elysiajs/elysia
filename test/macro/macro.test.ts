@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import Elysia, { error, t } from '../../src'
+import Elysia, { t } from '../../src'
 import { req } from '../utils'
+import { status } from '../../dist/cjs'
 
 describe('Macro', () => {
 	it('work', async () => {
@@ -362,7 +363,7 @@ describe('Macro', () => {
 			requiredUser(value: boolean) {
 				onBeforeHandle(async () => {
 					if (value)
-						return error(401, {
+						return status(401, {
 							code: 'S000002',
 							message: 'Unauthorized'
 						})
@@ -416,8 +417,8 @@ describe('Macro', () => {
 		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
 			isAuth(shouldAuth: boolean) {
 				if (shouldAuth) {
-					onBeforeHandle(({ cookie: { session }, error }) => {
-						if (!session.value) return error(418)
+					onBeforeHandle(({ cookie: { session }, status }) => {
+						if (!session.value) return status(418)
 					})
 				}
 			}
@@ -438,8 +439,8 @@ describe('Macro', () => {
 		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
 			isAuth(shouldAuth: boolean) {
 				if (shouldAuth) {
-					onBeforeHandle(({ cookie: { session }, error }) => {
-						if (!session.value) return error(418)
+					onBeforeHandle(({ cookie: { session }, status }) => {
+						if (!session.value) return status(418)
 					})
 				}
 			}
@@ -456,12 +457,12 @@ describe('Macro', () => {
 		expect(status).toBe(418)
 	})
 
-	it('inherits macro in group', async () => {
+	it('inherits macro from plugin', async () => {
 		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
 			isAuth(shouldAuth: boolean) {
 				if (shouldAuth) {
-					onBeforeHandle(({ cookie: { session }, error }) => {
-						if (!session.value) return error(418)
+					onBeforeHandle(({ cookie: { session }, status }) => {
+						if (!session.value) return status(418)
 					})
 				}
 			}
@@ -482,6 +483,7 @@ describe('Macro', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia().get('/hello', () => 'hello', {
+			// @ts-ignore
 			hello: 'nagisa'
 		})
 
@@ -581,7 +583,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => ({
+					resolve: () => ({
 						account: 'A'
 					})
 				})
@@ -615,7 +617,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => ({
+					resolve: () => ({
 						account: 'A'
 					})
 				})
@@ -650,7 +652,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => ({
+					resolve: () => ({
 						account: 'A'
 					})
 				})
@@ -685,7 +687,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => ({
+					resolve: () => ({
 						account: 'A'
 					})
 				})
@@ -720,8 +722,8 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => {
-						if (Math.random() > 2) return error(401)
+					resolve: () => {
+						if (Math.random() > 2) return status(401)
 
 						return {
 							account: 'A'
@@ -758,8 +760,8 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: async ({ error }) => {
-						if (Math.random() > 2) return error(401)
+					resolve: async () => {
+						if (Math.random() > 2) return status(401)
 
 						return {
 							account: 'A'
@@ -809,8 +811,8 @@ describe('Macro', () => {
 			})
 			.get(
 				'/',
-				({ user, error }) => {
-					if (!user) return error(401)
+				({ user, status }) => {
+					if (!user) return status(401)
 
 					return { hello: 'hanabi' }
 				},
@@ -903,6 +905,7 @@ describe('Macro', () => {
 					// @ts-expect-error Property `a` does not exist
 					a,
 					b,
+					// @ts-expect-error Property `c` does not exist
 					c
 				}) => ({ a, b, c }),
 				{

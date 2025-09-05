@@ -33,11 +33,38 @@ import type {
 
 import type { AnyWSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
+
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 
 type PartialServe = Partial<Serve>
 
 export type IsNever<T> = [T] extends [never] ? true : false
+
+// Standard Schema reduce to bare minimum to save inference time
+export interface StandardSchemaV1Like<
+	in out Input = unknown,
+	in out Output = Input
+> {
+	readonly '~standard': {
+		readonly types?:
+			| {
+					readonly input: Input
+					readonly output: Output
+			  }
+			| undefined
+	}
+}
+
+// ? Fast check if the generic is enforced to StandardSchemaV1Like
+export interface FastStandardSchemaV1Like {
+	readonly '~standard': {}
+}
+
+export type StandardSchemaV1LikeValidate = <T>(
+	v: T
+) => MaybePromise<
+	{ value: T; issues?: never } | { value?: never; issues: unknown[] }
+>
 
 export interface ElysiaConfig<Prefix extends string | undefined> {
 	/**
@@ -166,6 +193,8 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	 * - 'exactMirror': use Elysia's custom exact-mirror which precompile a schema
 	 * - 'typebox': Since this uses dynamic Value.Clean, it have performance impact
 	 *
+	 * Note: This option only works when Elysia schema is provided, doesn't work with Standard Schema
+	 *
 	 * @default true
 	 */
 	normalize?: boolean | 'exactMirror' | 'typebox'
@@ -205,12 +234,14 @@ export interface ValidatorLayer {
 }
 
 export interface StandaloneInputSchema<Name extends string = string> {
-	body?: TSchema | Name | `${Name}[]`
-	headers?: TSchema | Name | `${Name}[]`
-	query?: TSchema | Name | `${Name}[]`
-	params?: TSchema | Name | `${Name}[]`
-	cookie?: TSchema | Name | `${Name}[]`
-	response?: { [status in number]: `${Name}[]` | Name | TSchema }
+	body?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
+	headers?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
+	query?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
+	params?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
+	cookie?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
+	response?: {
+		[status in number]: `${Name}[]` | Name | TSchema | StandardSchemaV1Like
+	}
 }
 
 export interface StandaloneValidator {
@@ -365,7 +396,7 @@ export interface EphemeralType {
 }
 
 export interface DefinitionBase {
-	typebox: Record<string, TAnySchema>
+	typebox: Record<string, TAnySchema | StandardSchemaV1Like>
 	error: Record<string, Error>
 }
 
@@ -395,7 +426,7 @@ interface OptionalField {
 type TrimArrayName<T extends string> = T extends `${infer Name}[]` ? Name : T
 
 export type UnwrapSchema<
-	Schema extends TSchema | string | undefined,
+	Schema extends TSchema | StandardSchemaV1Like | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
@@ -403,6 +434,7 @@ export type UnwrapSchema<
 		? Schema extends OptionalField
 			? Partial<
 					TImport<
+						// @ts-expect-error Internal typebox already filter for TSchema
 						Definitions & {
 							readonly __elysia: Schema
 						},
@@ -410,27 +442,31 @@ export type UnwrapSchema<
 					>['static']
 				>
 			: TImport<
+					// @ts-expect-error Internal typebox already filter for TSchema
 					Definitions & {
 						readonly __elysia: Schema
 					},
 					'__elysia'
 				>['static']
-		: Schema extends `${infer Key}[]`
-			? Definitions extends Record<
-					Key,
-					infer NamedSchema extends TAnySchema
-				>
-				? NamedSchema['static'][]
-				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
+		: Schema extends FastStandardSchemaV1Like
+			? // @ts-ignore Schema is StandardSchemaV1Like
+				NonNullable<Schema['~standard']['types']>['output']
 			: Schema extends string
-				? Definitions extends keyof Schema
-					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
-						NamedSchema['static']
-					: TImport<Definitions, Schema>['static']
+				? Schema extends keyof Definitions
+					? Definitions[Schema] extends TAnySchema
+						? TImport<
+								// @ts-expect-error Internal typebox already filter for TSchema
+								Definitions,
+								Schema
+							>['static']
+						: NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['output']
+					: unknown
 				: unknown
 
 export type UnwrapBodySchema<
-	Schema extends TSchema | string | undefined,
+	Schema extends TSchema | StandardSchemaV1Like | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
@@ -438,6 +474,7 @@ export type UnwrapBodySchema<
 		? Schema extends OptionalField
 			? Partial<
 					TImport<
+						// @ts-expect-error Internal typebox already filter for TSchema
 						Definitions & {
 							readonly __elysia: Schema
 						},
@@ -445,23 +482,28 @@ export type UnwrapBodySchema<
 					>['static']
 				> | null
 			: TImport<
+					// @ts-expect-error Internal typebox already filter for TSchema
 					Definitions & {
 						readonly __elysia: Schema
 					},
 					'__elysia'
 				>['static']
-		: Schema extends `${infer Key}[]`
-			? Definitions extends Record<
-					Key,
-					infer NamedSchema extends TAnySchema
-				>
-				? NamedSchema['static'][]
-				: TImport<Definitions, TrimArrayName<Schema>>['static'][]
+		: Schema extends FastStandardSchemaV1Like
+			? // @ts-ignore Schema is StandardSchemaV1Like
+				NonNullable<Schema['~standard']['types']>['output']
 			: Schema extends string
-				? Definitions extends keyof Schema
-					? // @ts-ignore Definitions is always a Record<string, TAnySchema>
-						NamedSchema['static']
-					: TImport<Definitions, Schema>['static']
+				? Schema extends keyof Definitions
+					? Definitions[Schema] extends TAnySchema
+						? TImport<
+								// @ts-expect-error Internal typebox already filter for TSchema
+								Definitions,
+								Schema
+							>['static']
+						: // @ts-ignore Schema is StandardSchemaV1Like
+							NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['output']
+					: unknown
 				: unknown
 
 export interface UnwrapRoute<
@@ -478,7 +520,10 @@ export interface UnwrapRoute<
 			? ResolvePath<Path>
 			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
-	response: Schema['response'] extends TSchema | string
+	response: Schema['response'] extends
+		| StandardSchemaV1Like
+		| TAnySchema
+		| string
 		? {
 				200: CoExist<
 					UnwrapSchema<Schema['response'], Definitions>,
@@ -486,7 +531,12 @@ export interface UnwrapRoute<
 					ElysiaFile | Blob
 				>
 			}
-		: Schema['response'] extends { [status in number]: TAnySchema | string }
+		: Schema['response'] extends {
+					[status in number]:
+						| StandardSchemaV1Like
+						| TAnySchema
+						| string
+			  }
 			? {
 					[k in keyof Schema['response']]: CoExist<
 						UnwrapSchema<Schema['response'][k], Definitions>,
@@ -516,7 +566,7 @@ export interface UnwrapGroupGuardRoute<
 	params: UnwrapSchema<Schema['params'], Definitions> extends infer A extends
 		Record<string, any>
 		? A
-		: Path extends `${string}/${':' | '*'}${string}`
+		: Path extends PathParameterLike
 			? Record<GetPathParameter<Path>, string>
 			: never
 	cookie: UnwrapSchema<Schema['cookie'], Definitions> extends infer A extends
@@ -622,18 +672,20 @@ export type HTTPMethod =
 	| 'UNSUBSCRIBE'
 	| 'ALL'
 
-export interface InputSchema<Name extends string = string> {
-	body?: TSchema | Name | `${Name}[]`
-	headers?: TSchema | Name | `${Name}[]`
-	query?: TSchema | Name | `${Name}[]`
-	params?: TSchema | Name | `${Name}[]`
-	cookie?: TSchema | Name | `${Name}[]`
+export interface InputSchema<in out Name extends string = string> {
+	body?: TSchema | StandardSchemaV1Like | Name
+	headers?: TSchema | StandardSchemaV1Like | Name
+	query?: TSchema | StandardSchemaV1Like | Name
+	params?: TSchema | StandardSchemaV1Like | Name
+	cookie?: TSchema | StandardSchemaV1Like | Name
 	response?:
 		| TSchema
-		| { [status in number]: TSchema }
+		| StandardSchemaV1Like
+		| { [status in number]: TSchema | StandardSchemaV1Like }
 		| Name
-		| `${Name}[]`
-		| { [status in number]: `${Name}[]` | Name | TSchema }
+		| {
+				[status in number]: Name | TSchema | StandardSchemaV1Like
+		  }
 }
 
 export interface PrettifySchema<in out A extends RouteSchema> {
@@ -649,30 +701,48 @@ export interface PrettifySchema<in out A extends RouteSchema> {
 		: Prettify<A['response']>
 }
 
-export interface MergeSchema<
-	in out A extends RouteSchema,
-	in out B extends RouteSchema,
+type PathParameterLike = `${string}/${':' | '*'}${string}`
+
+export type MergeSchema<
+	A extends RouteSchema,
+	B extends RouteSchema,
 	Path extends string = ''
-> {
-	body: undefined extends A['body'] ? B['body'] : A['body']
-	headers: undefined extends A['headers'] ? B['headers'] : A['headers']
-	query: undefined extends A['query'] ? B['query'] : A['query']
-	params: IsNever<keyof A['params']> extends true
-		? IsNever<keyof B['params']> extends true
-			? ResolvePath<Path>
-			: B['params']
-		: IsNever<keyof B['params']> extends true
-			? A['params']
-			: Prettify<B['params'] & Omit<A['params'], keyof B['params']>>
-	cookie: undefined extends A['cookie'] ? B['cookie'] : A['cookie']
-	response: {} extends A['response']
-		? {} extends B['response']
-			? {}
-			: B['response']
-		: {} extends B['response']
-			? A['response']
-			: A['response'] & Omit<B['response'], keyof A['response']>
-}
+> = {} extends A
+	? Path extends PathParameterLike
+		? Omit<B, 'params'> & { params: ResolvePath<Path> }
+		: B
+	: {} extends B
+		? Path extends PathParameterLike
+			? Omit<A, 'params'> & { params: ResolvePath<Path> }
+			: A
+		: {
+				body: undefined extends A['body'] ? B['body'] : A['body']
+				headers: undefined extends A['headers']
+					? B['headers']
+					: A['headers']
+				query: undefined extends A['query'] ? B['query'] : A['query']
+				params: IsNever<keyof A['params']> extends true
+					? IsNever<keyof B['params']> extends true
+						? ResolvePath<Path>
+						: B['params']
+					: IsNever<keyof B['params']> extends true
+						? A['params']
+						: Prettify<
+								B['params'] &
+									Omit<A['params'], keyof B['params']>
+							>
+				cookie: undefined extends A['cookie']
+					? B['cookie']
+					: A['cookie']
+				response: {} extends A['response']
+					? {} extends B['response']
+						? {}
+						: B['response']
+					: {} extends B['response']
+						? A['response']
+						: A['response'] &
+								Omit<B['response'], keyof A['response']>
+			}
 
 export interface MergeStandaloneSchema<
 	in out A extends RouteSchema,
@@ -801,16 +871,7 @@ type ResolveMacroPropertyLike = {
 
 type ResolveMacroFnLike = (...v: any[]) => ResolveMacroPropertyLike
 
-type MergeAllMacroContext<T> =
-	UnionToIntersection<T[keyof T]> extends infer O
-		? { [K in keyof O]: O[K] }
-		: never
-
-type UnionToIntersection<U> = (U extends any ? (x: U) => any : never) extends (
-	x: infer I
-) => any
-	? I
-	: never
+type MergeAllMacroContext<T> = Prettify<UnionToIntersect<T[keyof T]>>
 
 type ExtractMacroContext<A> =
 	IsNever<A> extends true
@@ -820,23 +881,52 @@ type ExtractMacroContext<A> =
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
 	MacroFn extends BaseMacroFn = {},
-	SelectedMacro extends MetadataBase['macro'] = {}
+	SelectedMacro extends BaseMacro = {},
+	Definitions extends DefinitionBase['typebox'] = {}
 > = {} extends SelectedMacro
 	? {}
 	: MergeAllMacroContext<{
-			[key in keyof SelectedMacro as MacroFn[key] extends ResolveMacroFnLike
-				? key
-				: MacroFn[key] extends ResolveMacroPropertyLike
-					? true extends SelectedMacro[key]
-						? key
-						: never
-					: never]: ExtractMacroContext<
-				ResolveResolutions<
-					// @ts-expect-error type is checked in key mapping
-					ReturnTypeIfPossible<MacroFn[key]>['resolve']
+			[key in keyof SelectedMacro]: (MacroFn[key] extends
+				| ResolveMacroFnLike
+				| ResolveMacroPropertyLike
+				? true extends SelectedMacro[key]
+					? ExtractMacroContext<
+							ResolveResolutions<
+								// @ts-expect-error type is checked in key mapping
+								ReturnTypeIfPossible<MacroFn[key]>['resolve']
+							>
+						>
+					: {}
+				: {}) &
+				UnwrapMacroSchema<
+					// @ts-ignore Trust me bro
+					ReturnTypeIfPossible<MacroFn[key]>,
+					Definitions
 				>
-			>
 		}>
+
+type UnwrapMacroSchema<
+	T extends Partial<InputSchema<any>>,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = Omit<
+	UnwrapRoute<
+		{
+			body: 'body' extends keyof T ? T['body'] : undefined
+			headers: 'headers' extends keyof T ? T['headers'] : undefined
+			query: 'query' extends keyof T ? T['query'] : undefined
+			params: 'params' extends keyof T ? T['params'] : undefined
+			cookie: 'cookie' extends keyof T ? T['cookie'] : undefined
+			response: 'response' extends keyof T ? T['response'] : undefined
+		},
+		Definitions
+	>,
+	| ('body' extends keyof T ? never : 'body')
+	| ('headers' extends keyof T ? never : 'headers')
+	| ('query' extends keyof T ? never : 'query')
+	| ('params' extends keyof T ? never : 'params')
+	| ('cookie' extends keyof T ? never : 'cookie')
+	| ('response' extends keyof T ? never : 'response')
+>
 
 type InlineHandlerResponse<Route extends RouteSchema['response']> = {
 	[Status in keyof Route]: ElysiaCustomStatusResponse<
@@ -874,7 +964,7 @@ export type InlineHandler<
 			: Route['response'] extends { 200: any }
 				? Route['response'][200]
 				: string | number | boolean | object)
-	| ElysiaCustomStatusResponse<any, any>
+	| AnyElysiaCustomStatusResponse
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
@@ -1218,7 +1308,7 @@ export type ErrorHandler<
 		)
 ) => any | Promise<any>
 
-export type DocumentDecoration = Partial<OpenAPIV3.OperationObject> & {
+export interface DocumentDecoration extends Partial<OpenAPIV3.OperationObject> {
 	/**
 	 * Pass `true` to hide route from OpenAPI/swagger document
 	 * */
@@ -1285,59 +1375,118 @@ export type ResolveResolutionsArray<
 		: ResolveResolutionsArray<Rest, Carry>
 	: Prettify<Carry>
 
-export type AnyLocalHook = LocalHook<any, any, any, any, any, any>
+export type AnyLocalHook = LocalHook<any, any, any, any, any>
+
+export interface BaseHookLifeCycle<
+	in out Schema extends RouteSchema,
+	in out Singleton extends SingletonBase,
+	in out Errors extends { [key in string]: Error },
+	in out Parser extends keyof any = ''
+> {
+	detail?: DocumentDecoration
+	/**
+	 * Short for 'Content-Type'
+	 *
+	 * Available:
+	 * - 'none': do not parse body
+	 * - 'text' / 'text/plain': parse body as string
+	 * - 'json' / 'application/json': parse body as json
+	 * - 'formdata' / 'multipart/form-data': parse body as form-data
+	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+	 * - 'arraybuffer': parse body as readable stream
+	 */
+	parse?: MaybeArray<BodyHandler<Schema, Singleton> | ContentType | Parser>
+	/**
+	 * Transform context's value
+	 */
+	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+	/**
+	 * Execute before main handler
+	 */
+	beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+	/**
+	 * Execute after main handler
+	 */
+	afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
+	/**
+	 * Execute after main handler
+	 */
+	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
+	/**
+	 * Execute after response is sent
+	 */
+	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
+	/**
+	 * Catch error
+	 */
+	error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
+	tags?: DocumentDecoration['tags']
+}
+
+export type CreateDecorator<
+	Singleton extends SingletonBase,
+	Ephemeral extends EphemeralType,
+	Volatile extends EphemeralType
+> = {} extends Ephemeral
+	? {} extends Volatile
+		? Singleton
+		: Singleton & Volatile
+	: {} extends Volatile
+		? Singleton & Ephemeral
+		: Singleton & Ephemeral & Volatile
+
+export type AnyBaseHookLifeCycle = BaseHookLifeCycle<any, any, any, any>
+
+export type NonResolvableMacroKey =
+	| keyof AnyBaseHookLifeCycle
+	| keyof InputSchema
 
 export type LocalHook<
-	LocalSchema extends InputSchema,
+	Input extends BaseMacro,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Errors extends { [key in string]: Error },
-	Macro extends BaseMacro,
 	Parser extends keyof any = ''
-> = Prettify<Macro> &
-	// Kind of an inference hack, I have no idea why it work either
-	(LocalSchema extends any ? LocalSchema : Prettify<LocalSchema>) & {
-		detail?: DocumentDecoration
-		/**
-		 * Short for 'Content-Type'
-		 *
-		 * Available:
-		 * - 'none': do not parse body
-		 * - 'text' / 'text/plain': parse body as string
-		 * - 'json' / 'application/json': parse body as json
-		 * - 'formdata' / 'multipart/form-data': parse body as form-data
-		 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-		 * - 'arraybuffer': parse body as readable stream
-		 */
-		parse?: MaybeArray<
-			BodyHandler<Schema, Singleton> | ContentType | Parser
-		>
-		/**
-		 * Transform context's value
-		 */
-		transform?: MaybeArray<TransformHandler<Schema, Singleton>>
-		/**
-		 * Execute before main handler
-		 */
-		beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
-		/**
-		 * Execute after main handler
-		 */
-		afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
-		/**
-		 * Execute after main handler
-		 */
-		mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
-		/**
-		 * Execute after response is sent
-		 */
-		afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
-		/**
-		 * Catch error
-		 */
-		error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
-		tags?: DocumentDecoration['tags']
-	}
+> = (Input extends any ? Input : Prettify<Input>) & {
+	detail?: DocumentDecoration
+	/**
+	 * Short for 'Content-Type'
+	 *
+	 * Available:
+	 * - 'none': do not parse body
+	 * - 'text' / 'text/plain': parse body as string
+	 * - 'json' / 'application/json': parse body as json
+	 * - 'formdata' / 'multipart/form-data': parse body as form-data
+	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+	 * - 'arraybuffer': parse body as readable stream
+	 */
+	parse?: MaybeArray<BodyHandler<Schema, Singleton> | ContentType | Parser>
+	/**
+	 * Transform context's value
+	 */
+	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+	/**
+	 * Execute before main handler
+	 */
+	beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+	/**
+	 * Execute after main handler
+	 */
+	afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
+	/**
+	 * Execute after main handler
+	 */
+	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
+	/**
+	 * Execute after response is sent
+	 */
+	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
+	/**
+	 * Catch error
+	 */
+	error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
+	tags?: DocumentDecoration['tags']
+}
 
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
@@ -1483,10 +1632,11 @@ export type HookMacroFn<
 		derive: {}
 		resolve: {}
 	},
-	in out Errors extends Record<string, Error> = {}
+	in out Errors extends Record<string, Error> = {},
+	in out Name extends string = ''
 > = {
 	[K in keyof any]:
-		| {
+		| ({
 				parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 				transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 				beforeHandle?: MaybeArray<
@@ -1499,25 +1649,39 @@ export type HookMacroFn<
 					AfterResponseHandler<TypedRoute, Singleton>
 				>
 				resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-		  }
-		| ((...a: any) => {
-				parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-				transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-				beforeHandle?: MaybeArray<
-					OptionalHandler<TypedRoute, Singleton>
-				>
-				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
-				afterResponse?: MaybeArray<
-					AfterResponseHandler<TypedRoute, Singleton>
-				>
-				resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-		  } | void)
+				detail?: AnyBaseHookLifeCycle['detail']
+		  } & InputSchema<Name>)
+		| ((...a: any) =>
+				| void
+				| ({
+						parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+						transform?: MaybeArray<
+							VoidHandler<TypedRoute, Singleton>
+						>
+						beforeHandle?: MaybeArray<
+							OptionalHandler<TypedRoute, Singleton>
+						>
+						afterHandle?: MaybeArray<
+							AfterHandler<TypedRoute, Singleton>
+						>
+						error?: MaybeArray<
+							ErrorHandler<Errors, TypedRoute, Singleton>
+						>
+						mapResponse?: MaybeArray<
+							MapResponse<TypedRoute, Singleton>
+						>
+						afterResponse?: MaybeArray<
+							AfterResponseHandler<TypedRoute, Singleton>
+						>
+						resolve?: MaybeArray<
+							ResolveHandler<TypedRoute, Singleton>
+						>
+						detail?: AnyBaseHookLifeCycle['detail']
+				  } & InputSchema<Name>))
 }
 
 export type MacroToProperty<
-	in out T extends BaseMacroFn | HookMacroFn<any, any, any>
+	in out T extends BaseMacroFn | HookMacroFn<any, any, any, any>
 > = Prettify<{
 	[K in keyof T]: T[K] extends Function
 		? T[K] extends (a: infer Params) => any
@@ -1640,7 +1804,7 @@ export type EmptyRouteSchema = {
 type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 	(Schema['response'] extends { 200: any }
 		? {
-				200: Replace<Schema['response'][200], ElysiaFile, File>
+				200: Schema['response'][200]
 			}
 		: {
 				200: Handle extends AnyElysiaCustomStatusResponse
@@ -1650,16 +1814,10 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 									Handle,
 									ElysiaCustomStatusResponse<200, any, 200>
 							  >['response']
-					: Handle extends Generator<infer A, infer B, infer C>
-						? AsyncGenerator<A, B, C>
-						: Handle extends ReadableStream<infer A>
-							? AsyncGenerator<A, void, unknown>
-							: Replace<Handle, ElysiaFile, File>
+					: Handle
 			}) &
 		ExtractErrorFromHandle<Handle> &
-		({} extends Omit<Schema['response'], 200>
-			? {}
-			: Omit<Schema['response'], 200>) &
+		Omit<Schema['response'], 200> &
 		(EmptyRouteSchema extends Schema
 			? {}
 			: {

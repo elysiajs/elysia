@@ -10,7 +10,11 @@ import {
 } from '@sinclair/typebox'
 
 import decode from 'fast-decode-uri-component'
-import { parseQuery, parseQueryFromURL } from './parse-query'
+import {
+	parseQuery,
+	parseQueryFromURL,
+	parseQueryStandardSchema
+} from './parse-query'
 
 import {
 	ELYSIA_REQUEST_ID,
@@ -40,7 +44,6 @@ import {
 	getCookieValidator,
 	getSchemaValidator,
 	hasElysiaMeta,
-	hasProperty,
 	hasType,
 	isUnion,
 	unwrapImportSchema
@@ -227,10 +230,10 @@ const composeValidationFactory = ({
 	isStaticResponse?: boolean
 	hasSanitize?: boolean
 }) => ({
-	validate: (type: string, value = `c.${type}`) =>
-		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
+	validate: (type: string, value = `c.${type}`, error?: string) =>
+		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value}${error ? ',' + error : ''})`,
 	response: (name = 'r') => {
-		if (isStaticResponse) return ''
+		if (isStaticResponse || !validator.response) return ''
 
 		let code = injectResponse + '\n'
 
@@ -239,10 +242,24 @@ const composeValidationFactory = ({
 			`c.set.status=${name}.code\n` +
 			`${name}=${name}.response` +
 			`}` +
+			`if(${name} instanceof Response === false)` +
 			`switch(c.set.status){`
 
 		for (const [status, value] of Object.entries(validator.response!)) {
-			code += `\ncase ${status}:if(${name} instanceof Response)break\n`
+			code += `\ncase ${status}:\n`
+
+			if (value.provider === 'standard') {
+				code +=
+					`let vare${status}=validator.response[${status}].Check(${name})\n` +
+					`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
+					`if(vare${status}.issues)` +
+					`throw new ValidationError('response',validator.response[${status}],${name},vare${status}.issues)\n` +
+					`${name}=vare${status}.value\n` +
+					`c.set.status=${status}\n` +
+					'break\n'
+
+				continue
+			}
 
 			const noValidate = value.schema?.noValidate === true
 
@@ -639,40 +656,39 @@ export const composeHandler = ({
 	}
 
 	if (hasQuery) {
-		const destructured = <
-			{
-				key: string
-				isArray: boolean
-				isNestedObjectArray: boolean
-				isObject: boolean
-				anyOf: boolean
-			}[]
-		>[]
-
-		const schema = unwrapImportSchema(validator.query?.schema)
 		let arrayProperties: Record<string, 1> = {}
 		let objectProperties: Record<string, 1> = {}
 		let hasArrayProperty = false
 		let hasObjectProperty = false
 
-		if (schema)
-			for (const [key, value] of Object.entries(schema.properties)) {
-				if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
-					arrayProperties[key] = 1
-					hasArrayProperty = true
-				}
+		if (validator.query?.schema) {
+			const schema = unwrapImportSchema(validator.query?.schema)
+			if (Kind in schema) {
+				for (const [key, value] of Object.entries(schema.properties)) {
+					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
+						arrayProperties[key] = 1
+						hasArrayProperty = true
+					}
 
-				if (hasElysiaMeta('ObjectString', value as TSchema)) {
-					objectProperties[key] = 1
-					hasObjectProperty = true
+					if (hasElysiaMeta('ObjectString', value as TSchema)) {
+						objectProperties[key] = 1
+						hasObjectProperty = true
+					}
 				}
 			}
+		}
 
 		fnLiteral +=
 			'if(c.qi===-1){' +
 			'c.query=Object.create(null)' +
 			'}else{' +
-			`c.query=parseQueryFromURL(c.url,c.qi+1,${hasArrayProperty ? JSON.stringify(arrayProperties) : undefined},${hasObjectProperty ? JSON.stringify(objectProperties) : undefined})` +
+			`c.query=parseQueryFromURL(c.url,c.qi+1,${
+				//
+				hasArrayProperty ? JSON.stringify(arrayProperties) : undefined
+			},${
+				//
+				hasObjectProperty ? JSON.stringify(objectProperties) : undefined
+			})` +
 			'}'
 	}
 
@@ -680,6 +696,12 @@ export const composeHandler = ({
 
 	const saveResponse =
 		hasTrace || hooks.afterResponse?.length ? 'c.response= ' : ''
+
+	const responseKeys = Object.keys(validator.response ?? {})
+	const hasMultipleResponses = responseKeys.length > 1
+	const hasSingle200 =
+		responseKeys.length === 0 ||
+		(responseKeys.length === 1 && responseKeys[0] === '200')
 
 	const maybeAsync =
 		hasCookie ||
@@ -689,19 +711,21 @@ export const composeHandler = ({
 		!!hooks.afterHandle?.some(isAsync) ||
 		!!hooks.beforeHandle?.some(isAsync) ||
 		!!hooks.transform?.some(isAsync) ||
-		!!hooks.mapResponse?.some(isAsync)
+		!!hooks.mapResponse?.some(isAsync) ||
+		validator.body?.provider === 'standard' ||
+		validator.headers?.provider === 'standard' ||
+		validator.query?.provider === 'standard' ||
+		validator.params?.provider === 'standard' ||
+		validator.cookie?.provider === 'standard' ||
+		Object.values(validator.response ?? {}).find(
+			(x) => x.provider === 'standard'
+		)
 
 	const maybeStream =
 		(typeof handler === 'function' ? isGenerator(handler as any) : false) ||
 		!!hooks.beforeHandle?.some(isGenerator) ||
 		!!hooks.afterHandle?.some(isGenerator) ||
 		!!hooks.transform?.some(isGenerator)
-
-	const responseKeys = Object.keys(validator.response ?? {})
-	const hasMultipleResponses = responseKeys.length > 1
-	const hasSingle200 =
-		responseKeys.length === 0 ||
-		(responseKeys.length === 1 && responseKeys[0] === '200')
 
 	const hasSet =
 		inference.cookie ||
@@ -1120,7 +1144,14 @@ export const composeHandler = ({
 			if (validator.headers.isOptional)
 				fnLiteral += `if(isNotEmpty(c.headers)){`
 
-			if (validator.body?.schema?.noValidate !== true)
+			if (validator.headers?.provider === 'standard') {
+				fnLiteral +=
+					`let vah=validator.headers.Check(c.headers)\n` +
+					`if(vah instanceof Promise)vah=await vah\n` +
+					`if(vah.issues){` +
+					validation.validate('headers', undefined, 'vah.issues') +
+					'}else{c.headers=vah.value}\n'
+			} else if (validator.headers?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.headers.Check(c.headers) === false){` +
 					validation.validate('headers') +
@@ -1155,7 +1186,14 @@ export const composeHandler = ({
 						fnLiteral += `c.params['${key}']??=${parsed}\n`
 				}
 
-			if (validator.params?.schema?.noValidate !== true)
+			if (validator.params.provider === 'standard') {
+				fnLiteral +=
+					`let vap=validator.params.Check(c.params)\n` +
+					`if(vap instanceof Promise)vap=await vap\n` +
+					`if(vap.issues){` +
+					validation.validate('params', undefined, 'vap.issues') +
+					'}else{c.params=vap.value}\n'
+			} else if (validator.params?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.params.Check(c.params)===false){` +
 					validation.validate('params') +
@@ -1169,7 +1207,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
-			if (validator.query.hasDefault)
+			if (Kind in validator.query?.schema && validator.query.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1198,7 +1236,14 @@ export const composeHandler = ({
 			if (validator.query.isOptional)
 				fnLiteral += `if(isNotEmpty(c.query)){`
 
-			if (validator.query?.schema?.noValidate !== true)
+			if (validator.query.provider === 'standard') {
+				fnLiteral +=
+					`let vaq=validator.query.Check(c.query)\n` +
+					`if(vaq instanceof Promise)vaq=await vaq\n` +
+					`if(vaq.issues){` +
+					validation.validate('query', undefined, 'vaq.issues') +
+					'}else{c.query=vaq.value}\n'
+			} else if (validator.query?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.query.Check(c.query)===false){` +
 					validation.validate('query') +
@@ -1278,7 +1323,14 @@ export const composeHandler = ({
 					normalize
 				})
 
-				if (validator.body?.schema?.noValidate !== true) {
+				if (validator.body.provider === 'standard') {
+					fnLiteral +=
+						`let vab=validator.body.Check(c.body)\n` +
+						`if(vab instanceof Promise)vab=await vab\n` +
+						`if(vab.issues){` +
+						validation.validate('body', undefined, 'vab.issues') +
+						'}else{c.body=vab.value}\n'
+				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
 						fnLiteral +=
 							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
@@ -1298,7 +1350,14 @@ export const composeHandler = ({
 					normalize
 				})
 
-				if (validator.body?.schema?.noValidate !== true) {
+				if (validator.body.provider === 'standard') {
+					fnLiteral +=
+						`let vab=validator.body.Check(c.body)\n` +
+						`if(vab instanceof Promise)vab=await vab\n` +
+						`if(vab.issues){` +
+						validation.validate('body', undefined, 'vab.issues') +
+						'}else{c.body=vab.value}\n'
+				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
 						fnLiteral +=
 							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
@@ -1419,26 +1478,19 @@ export const composeHandler = ({
 
 		if (validator.cookie) {
 			// ! Get latest app.config.cookie
-			const cookieValidator = getCookieValidator({
-				// @ts-expect-error private property
-				modules: app.definitions.typebox,
-				validator: validator.cookie as any,
-				defaultConfig: app.config.cookie,
-				dynamic: !!app.config.aot,
-				config: validator.cookie?.config ?? {},
-				normalize: app.config.normalize,
-				// @ts-expect-error
-				models: app.definitions.type
-			})!
+			validator.cookie.config = mergeCookie(
+				validator.cookie.config,
+				validator.cookie?.config ?? {}
+			)
 
 			fnLiteral +=
 				`const cookieValue={}\n` +
 				`for(const [key,value] of Object.entries(c.cookie))` +
 				`cookieValue[key]=value.value\n`
 
-			if (cookieValidator.hasDefault)
+			if (validator.cookie.hasDefault)
 				for (const [key, value] of Object.entries(
-					Value.Default(cookieValidator.schema, {}) as Object
+					Value.Default(validator.cookie.schema, {}) as Object
 				)) {
 					fnLiteral += `cookieValue['${key}'] = ${
 						typeof value === 'object'
@@ -1447,24 +1499,32 @@ export const composeHandler = ({
 					}\n`
 				}
 
-			if (cookieValidator.isOptional)
+			if (validator.cookie.isOptional)
 				fnLiteral += `if(isNotEmpty(c.cookie)){`
 
-			if (validator.body?.schema?.noValidate !== true) {
+			if (validator.cookie.provider === 'standard') {
+				fnLiteral +=
+					`let vac=validator.cookie.Check(c.body)\n` +
+					`if(vac instanceof Promise)vac=await vac\n` +
+					`if(vac.issues){` +
+					validation.validate('cookie', undefined, 'vac.issues') +
+					'}else{c.body=vac.value}\n'
+			} else if (validator.body?.schema?.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
 					validation.validate('cookie', 'cookieValue') +
 					'}'
 			}
 
-			if (cookieValidator.hasTransform)
-				fnLiteral += coerceTransformDecodeError(
-					`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue)))` +
-						`c.cookie[key].value=value\n`,
-					'cookie'
-				)
+			// if (validator.cookie.hasTransform)
+			// 	fnLiteral += coerceTransformDecodeError(
+			// 		`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
+			// 			`c.cookie[key].value=value` +
+			// 			`}`,
+			// 		'cookie'
+			// 	)
 
-			if (cookieValidator.isOptional) fnLiteral += `}`
+			if (validator.cookie.isOptional) fnLiteral += `}`
 		}
 	}
 
@@ -1546,11 +1606,13 @@ export const composeHandler = ({
 							total: hooks.afterHandle?.length
 						})
 
-						if(hooks.afterHandle?.length) {
+						if (hooks.afterHandle?.length) {
 							for (let i = 0; i < hooks.afterHandle.length; i++) {
 								const hook = hooks.afterHandle[i]
 								const returning = hasReturn(hook)
-								const endUnit = reporter.resolveChild(hook.fn.name)
+								const endUnit = reporter.resolveChild(
+									hook.fn.name
+								)
 
 								fnLiteral += `c.response = be\n`
 
@@ -1572,7 +1634,8 @@ export const composeHandler = ({
 						reporter.resolve()
 					}
 
-					if (validator.response) fnLiteral += validation.response('be')
+					if (validator.response)
+						fnLiteral += validation.response('be')
 
 					const mapResponseReporter = report('mapResponse', {
 						total: hooks.mapResponse?.length
@@ -1631,7 +1694,7 @@ export const composeHandler = ({
 			total: hooks.afterHandle?.length
 		})
 
-		if(hooks.afterHandle?.length) {
+		if (hooks.afterHandle?.length) {
 			for (let i = 0; i < hooks.afterHandle.length; i++) {
 				const hook = hooks.afterHandle[i]
 				const returning = hasReturn(hook)
@@ -1963,7 +2026,11 @@ export const composeHandler = ({
 			isNotEmpty,
 			utils: {
 				parseQuery: hasBody ? parseQuery : undefined,
-				parseQueryFromURL: hasQuery ? parseQueryFromURL : undefined
+				parseQueryFromURL: hasQuery
+					? validator.query?.provider === 'standard'
+						? parseQueryStandardSchema
+						: parseQueryFromURL
+					: undefined
 			},
 			error: {
 				ValidationError: hasValidation ? ValidationError : undefined,
@@ -2390,10 +2457,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	if (adapter.declare) fnLiteral += adapter.declare
 
 	const saveResponse =
-		hasTrace ||
-		!!hooks.afterResponse?.length
-			? 'context.response = '
-			: ''
+		hasTrace || !!hooks.afterResponse?.length ? 'context.response = ' : ''
 
 	if (app.event.error)
 		for (let i = 0; i < app.event.error.length; i++) {

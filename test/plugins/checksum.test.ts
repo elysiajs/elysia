@@ -304,7 +304,7 @@ describe('Checksum', () => {
 		let i = 0
 
 		const plugin = new Elysia().use(
-			new Elysia({ prefix: '/call', scoped: true })
+			new Elysia({ prefix: '/call' })
 				.derive(() => {
 					i++ // <-- should not be called, when requesting /asdf
 					return { test: 'test' }

@@ -235,6 +235,7 @@ describe('Web Standard - Map Early Response', () => {
 
 		expect(response).toBeInstanceOf(Response)
 		expect(await response?.text()).toEqual('Shiroko')
+		// @ts-ignore
 		expect(response?.headers.toJSON()).toEqual({
 			...headers,
 			name: 'Himari'
