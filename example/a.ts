@@ -1,5 +1,10 @@
-import { Elysia, fileType, file, form } from '../src'
+import { Elysia } from '../src'
 
-const app = new Elysia().post('/', ({ body }) => 'a').listen(3000)
+const app = new Elysia()
+	.all('/ws', () => 'hi')
+	.ws('/ws', {
+		message() {}
+	})
+	.listen(3000)
 
-app['~Routes']['post']
+console.log(app.fetch.toString())

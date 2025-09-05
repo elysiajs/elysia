@@ -2269,10 +2269,17 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		if ('GET' in methods || 'WS' in methods) {
 			switchMap += `case 'GET':`
 
-			if ('WS' in methods)
+			if ('WS' in methods) {
 				switchMap +=
 					`if(r.headers.get('upgrade')==='websocket')` +
 					`return ht[${methods.WS}].composed(c)\n`
+
+				if ('GET' in methods === false) {
+					if ('ALL' in methods)
+						switchMap += `return ht[${methods.ALL}].composed(c)\n`
+					else switchMap += `break map\n`
+				}
+			}
 
 			if ('GET' in methods)
 				switchMap += `return ht[${methods.GET}].composed(c)\n`
@@ -2284,7 +2291,8 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 			'HEAD' in methods === false
 		)
 			switchMap +=
-				`case 'HEAD':const _res=ht[${methods.GET}].composed(c)\n` +
+				`case 'HEAD':` +
+				`const _res=ht[${methods.GET ?? methods.ALL}].composed(c)\n` +
 				'return getResponseLength(_res).then((length)=>{' +
 				`_res.headers.set('content-length', length)\n` +
 				`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
