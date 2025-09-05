@@ -2,7 +2,6 @@
 import {
 	t,
 	Elysia,
-	RouteSchema,
 	Cookie,
 	file,
 	sse,
@@ -94,12 +93,10 @@ app.model({
 	'/',
 	({ body }) => {
 		// ? unwrap body type
-		expectTypeOf<
-			{
-				username: string
-				password: string
-			}
-		>().toEqualTypeOf<typeof body>()
+		expectTypeOf<{
+			username: string
+			password: string
+		}>().toEqualTypeOf<typeof body>()
 
 		return body
 	},

@@ -1523,14 +1523,12 @@ export const getResponseSchemaValidator = (
 	// @ts-ignore
 	if (typeof s !== 'string') maybeSchemaOrRecord = s!
 	else {
-		const isArray = s.endsWith('[]')
-		const key = isArray ? s.substring(0, s.length - 2) : s
+		maybeSchemaOrRecord = // @ts-expect-error private property
+			modules && s in modules.$defs
+				? (modules as TModule<{}, {}>).Import(s as never)
+				: models[s]
 
-		maybeSchemaOrRecord =
-			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
-
-		if (isArray)
-			maybeSchemaOrRecord = t.Array(maybeSchemaOrRecord as TSchema)
+		if (!maybeSchemaOrRecord) return undefined as any
 	}
 
 	if (!maybeSchemaOrRecord) return

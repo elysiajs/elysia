@@ -193,6 +193,8 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	 * - 'exactMirror': use Elysia's custom exact-mirror which precompile a schema
 	 * - 'typebox': Since this uses dynamic Value.Clean, it have performance impact
 	 *
+	 * Note: This option only works when Elysia schema is provided, doesn't work with Standard Schema
+	 *
 	 * @default true
 	 */
 	normalize?: boolean | 'exactMirror' | 'typebox'
@@ -518,7 +520,10 @@ export interface UnwrapRoute<
 			? ResolvePath<Path>
 			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
-	response: Schema['response'] extends TSchema | string
+	response: Schema['response'] extends
+		| StandardSchemaV1Like
+		| TAnySchema
+		| string
 		? {
 				200: CoExist<
 					UnwrapSchema<Schema['response'], Definitions>,
@@ -941,11 +946,7 @@ export type InlineHandler<
 	},
 	Path extends string | undefined = undefined
 > =
-	| ((
-			context: Context<Route, Singleton, Path> & {
-				route: Prettify<Route>
-			}
-	  ) =>
+	| ((context: Context<Route, Singleton, Path>) =>
 			| Response
 			| MaybePromise<
 					{} extends Route['response']

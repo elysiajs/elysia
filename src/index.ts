@@ -3611,10 +3611,11 @@ export default class Elysia<
 					if (!this.standaloneValidator[type])
 						this.standaloneValidator[type] = []
 
-					const response =
-						hook?.response ||
-						typeof hook?.response === 'string' ||
-						(hook?.response && Kind in hook.response)
+					const response = !hook?.response
+						? undefined
+						: typeof hook.response === 'string' ||
+							  Kind in hook.response ||
+							  '~standard' in hook.response
 							? {
 									200: hook.response
 								}
@@ -6366,7 +6367,9 @@ export default class Elysia<
 		return this
 	}
 
-	Ref<K extends keyof Definitions['typebox'] & string>(key: K) {
+	Ref<K extends keyof Extract<Definitions['typebox'], TAnySchema> & string>(
+		key: K
+	) {
 		return t.Ref(key)
 	}
 

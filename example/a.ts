@@ -1,18 +1,24 @@
 import { Elysia, t, UnwrapSchema } from '../src'
 import z from 'zod'
+import { req } from '../test/utils'
 
-const app = new Elysia()
-	.model({
-		id: z.object({
+const app = new Elysia().get(
+	'/:name',
+	({ route }) => {
+		return {
+			id: 'a'
+		}
+	},
+	{
+		response: z.object({
 			id: z.number()
-		}),
-		id2: t.Object({
-			id: t.Number()
 		})
-	})
-	.post('/', ({ body }) => body, {
-		body: 'id2'
-	})
-	.listen(3000)
+	}
+)
 
-type A = UnwrapSchema<'id2', typeof app['~Definitions']['typebox']>
+const lilith = await app.handle(req('/lilith')).then((x) => x.json())
+const fouco = await app.handle(req('/fouco')).then((x) => x.json())
+
+// console.log(app.routes[0].compile().toString())
+
+console.log(lilith)

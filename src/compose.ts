@@ -233,7 +233,7 @@ const composeValidationFactory = ({
 	validate: (type: string, value = `c.${type}`, error?: string) =>
 		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value}${error ? ',' + error : ''})`,
 	response: (name = 'r') => {
-		if (isStaticResponse) return ''
+		if (isStaticResponse || !validator.response) return ''
 
 		let code = injectResponse + '\n'
 
@@ -242,10 +242,11 @@ const composeValidationFactory = ({
 			`c.set.status=${name}.code\n` +
 			`${name}=${name}.response` +
 			`}` +
+			`if(${name} instanceof Response === false)` +
 			`switch(c.set.status){`
 
 		for (const [status, value] of Object.entries(validator.response!)) {
-			code += `\ncase ${status}:if(${name} instanceof Response)break\n`
+			code += `\ncase ${status}:\n`
 
 			if (value.provider === 'standard') {
 				code +=
@@ -254,7 +255,8 @@ const composeValidationFactory = ({
 					`if(vare${status}.issues)` +
 					`throw new ValidationError('response',validator.response[${status}],${name},vare${status}.issues)\n` +
 					`${name}=vare${status}.value\n` +
-					`c.set.status=${status}\n`
+					`c.set.status=${status}\n` +
+					'break\n'
 
 				continue
 			}
@@ -715,11 +717,9 @@ export const composeHandler = ({
 		validator.query?.provider === 'standard' ||
 		validator.params?.provider === 'standard' ||
 		validator.cookie?.provider === 'standard' ||
-		(hasMultipleResponses
-			? Object.values(validator.response ?? {}).find(
-					(x) => x.provider === 'standard'
-				)
-			: validator.response?.[200].provider === 'standard')
+		Object.values(validator.response ?? {}).find(
+			(x) => x.provider === 'standard'
+		)
 
 	const maybeStream =
 		(typeof handler === 'function' ? isGenerator(handler as any) : false) ||
@@ -1144,14 +1144,14 @@ export const composeHandler = ({
 			if (validator.headers.isOptional)
 				fnLiteral += `if(isNotEmpty(c.headers)){`
 
-			if (validator.body?.provider === 'standard') {
+			if (validator.headers?.provider === 'standard') {
 				fnLiteral +=
 					`let vah=validator.headers.Check(c.headers)\n` +
 					`if(vah instanceof Promise)vah=await vah\n` +
 					`if(vah.issues){` +
 					validation.validate('headers', undefined, 'vah.issues') +
 					'}else{c.headers=vah.value}\n'
-			} else if (validator.body?.schema?.noValidate !== true)
+			} else if (validator.headers?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.headers.Check(c.headers) === false){` +
 					validation.validate('headers') +
