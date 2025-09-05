@@ -1,31 +1,13 @@
 import { Elysia, t } from '../src'
-import { z } from 'zod'
-import * as v from 'valibot'
-import { type } from 'arktype'
+import z from 'zod'
 
 new Elysia()
-	.guard({
-		schema: 'standalone',
-		body: z.object({
-			age: z.coerce.number()
-		})
-	})
-	.guard({
-		schema: 'standalone',
-		body: v.object({
-			vali: v.literal('vali')
-		})
-	})
-	.guard({
-		schema: 'standalone',
-		body: type({
-			'+': 'delete',
-			ark: '"type"'
+	.model({
+		id: z.object({
+			id: z.number()
 		})
 	})
 	.post('/', ({ body }) => body, {
-		body: t.Object({
-			name: t.String()
-		})
+		body: 'id'
 	})
 	.listen(3000)

@@ -35,7 +35,6 @@ import type { AnyWSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
 
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
-import type { StandardSchemaV1 } from '@standard-schema/spec'
 
 type PartialServe = Partial<Serve>
 
@@ -54,6 +53,11 @@ export interface StandardSchemaV1Like<
 			  }
 			| undefined
 	}
+}
+
+// ? Fast check if the generic is enforced to StandardSchemaV1Like
+export interface FastStandardSchemaV1Like {
+	readonly '~standard': {}
 }
 
 export type StandardSchemaV1LikeValidate = <T>(
@@ -390,7 +394,7 @@ export interface EphemeralType {
 }
 
 export interface DefinitionBase {
-	typebox: Record<string, TAnySchema>
+	typebox: Record<string, TAnySchema | StandardSchemaV1Like>
 	error: Record<string, Error>
 }
 
@@ -428,6 +432,7 @@ export type UnwrapSchema<
 		? Schema extends OptionalField
 			? Partial<
 					TImport<
+						// @ts-ignore Schema is always a TSchema
 						Definitions & {
 							readonly __elysia: Schema
 						},
@@ -435,26 +440,27 @@ export type UnwrapSchema<
 					>['static']
 				>
 			: TImport<
+					// @ts-ignore Schema is always a TSchema
 					Definitions & {
 						readonly __elysia: Schema
 					},
 					'__elysia'
 				>['static']
-		: Schema extends StandardSchemaV1Like
-			? NonNullable<Schema['~standard']['types']>['output']
-			: Schema extends `${infer Key}[]`
-				? Definitions extends Record<
-						Key,
-						infer NamedSchema extends TAnySchema
-					>
-					? NamedSchema['static'][]
-					: TImport<Definitions, TrimArrayName<Schema>>['static'][]
-				: Schema extends string
-					? Definitions extends keyof Schema
-						? // @ts-ignore Definitions is always a Record<string, TAnySchema>
-							NamedSchema['static']
-						: TImport<Definitions, Schema>['static']
+		: Schema extends FastStandardSchemaV1Like
+			? // @ts-ignore Schema is StandardSchemaV1Like
+				NonNullable<Schema['~standard']['types']>['output']
+			: Schema extends string
+				? Schema extends keyof Definitions
+					? Definitions[Schema] extends TAnySchema
+						? TImport<
+								Extract<Definitions, TAnySchema>,
+								Schema
+							>['static']
+						: NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['output']
 					: unknown
+				: unknown
 
 export type UnwrapBodySchema<
 	Schema extends TSchema | StandardSchemaV1Like | string | undefined,
@@ -465,6 +471,7 @@ export type UnwrapBodySchema<
 		? Schema extends OptionalField
 			? Partial<
 					TImport<
+						// @ts-ignore Schema is always a TSchema
 						Definitions & {
 							readonly __elysia: Schema
 						},
@@ -472,26 +479,28 @@ export type UnwrapBodySchema<
 					>['static']
 				> | null
 			: TImport<
+					// @ts-ignore Schema is always a TSchema
 					Definitions & {
 						readonly __elysia: Schema
 					},
 					'__elysia'
 				>['static']
-		: Schema extends StandardSchemaV1Like
-			? NonNullable<Schema['~standard']['types']>['output']
-			: Schema extends `${infer Key}[]`
-				? Definitions extends Record<
-						Key,
-						infer NamedSchema extends TAnySchema
-					>
-					? NamedSchema['static'][]
-					: TImport<Definitions, TrimArrayName<Schema>>['static'][]
-				: Schema extends string
-					? Definitions extends keyof Schema
-						? // @ts-ignore Definitions is always a Record<string, TAnySchema>
-							NamedSchema['static']
-						: TImport<Definitions, Schema>['static']
+		: Schema extends FastStandardSchemaV1Like
+			? // @ts-ignore Schema is StandardSchemaV1Like
+				NonNullable<Schema['~standard']['types']>['output']
+			: Schema extends string
+				? Schema extends keyof Definitions
+					? Definitions[Schema] extends TAnySchema
+						? TImport<
+								Extract<Definitions, TAnySchema>,
+								Schema
+							>['static']
+						: // @ts-ignore Schema is StandardSchemaV1Like
+							NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['output']
 					: unknown
+				: unknown
 
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
@@ -657,23 +666,18 @@ export type HTTPMethod =
 	| 'ALL'
 
 export interface InputSchema<in out Name extends string = string> {
-	body?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
-	headers?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
-	query?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
-	params?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
-	cookie?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
+	body?: TSchema | StandardSchemaV1Like | Name
+	headers?: TSchema | StandardSchemaV1Like | Name
+	query?: TSchema | StandardSchemaV1Like | Name
+	params?: TSchema | StandardSchemaV1Like | Name
+	cookie?: TSchema | StandardSchemaV1Like | Name
 	response?:
 		| TSchema
 		| StandardSchemaV1Like
 		| { [status in number]: TSchema | StandardSchemaV1Like }
 		| Name
-		| `${Name}[]`
 		| {
-				[status in number]:
-					| `${Name}[]`
-					| Name
-					| TSchema
-					| StandardSchemaV1Like
+				[status in number]: Name | TSchema | StandardSchemaV1Like
 		  }
 }
 

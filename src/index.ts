@@ -6,7 +6,8 @@ import {
 	type TSchema,
 	type TModule,
 	type TRef,
-	type TProperties
+	type TProperties,
+	TAnySchema
 } from '@sinclair/typebox'
 
 import fastDecodeURIComponent from 'fast-decode-uri-component'
@@ -160,7 +161,8 @@ import type {
 	DocumentDecoration,
 	AfterHandler,
 	AnyBaseHookLifeCycle,
-	NonResolvableMacroKey
+	NonResolvableMacroKey,
+	StandardSchemaV1Like
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -244,7 +246,7 @@ export default class Elysia<
 
 	protected definitions = {
 		typebox: t.Module({}),
-		type: {} as Record<string, TSchema>,
+		type: {} as Record<string, TSchema | StandardSchemaV1Like>,
 		error: {} as Record<string, Error>
 	}
 
@@ -498,7 +500,9 @@ export default class Elysia<
 			Definitions['typebox'][K]
 		>
 	} & {
-		modules: TModule<Definitions['typebox']>
+		modules:
+			| TModule<Extract<Definitions['typebox'], TAnySchema>>
+			| Extract<Definitions['typebox'], StandardSchemaV1Like>
 	} {
 		const models: Record<string, ElysiaTypeCheck<TSchema>> = {}
 
@@ -6207,7 +6211,10 @@ export default class Elysia<
 		return this.onTransform(optionsOrTransform as any, hook as any) as any
 	}
 
-	model<const Name extends string, const Model extends TSchema>(
+	model<
+		const Name extends string,
+		const Model extends TSchema | StandardSchemaV1Like
+	>(
 		name: Name,
 		model: Model
 	): Elysia<
@@ -6225,7 +6232,9 @@ export default class Elysia<
 		Volatile
 	>
 
-	model<const Recorder extends TProperties>(
+	model<
+		const Recorder extends Record<string, TAnySchema | StandardSchemaV1Like>
+	>(
 		record: Recorder
 	): Elysia<
 		BasePath,
@@ -6240,13 +6249,15 @@ export default class Elysia<
 		Volatile
 	>
 
-	model<const NewType extends Record<string, TSchema>>(
+	model<
+		const NewType extends Record<string, TAnySchema | StandardSchemaV1Like>
+	>(
 		mapper: (
-			decorators: Definitions['typebox'] extends infer Models extends
-				Record<string, TSchema>
+			decorators: Definitions['typebox'] extends infer Models
 				? {
-						[type in keyof Models]: TRef<// @ts-ignore
-						type>
+						[Name in keyof Models]: Models[Name] extends TAnySchema
+							? TRef<Name & string>
+							: Models[Name]
 					}
 				: {}
 		) => NewType
@@ -6255,12 +6266,13 @@ export default class Elysia<
 		Singleton,
 		{
 			typebox: {
-				[key in keyof NewType]: NewType[key] extends TRef<key & string>
-					? // @ts-expect-error
-						Definitions['typebox'][key]
-					: NewType[key]
+				[Name in keyof NewType]: NewType[Name] extends TRef<
+					Name & string
+				>
+					? // @ts-ignore
+						Definitions['typebox'][Name]
+					: NewType[Name]
 			}
-			type: { [x in keyof NewType]: Static<NewType[x]> }
 			error: Definitions['error']
 		},
 		Metadata,
@@ -6269,10 +6281,29 @@ export default class Elysia<
 		Volatile
 	>
 
-	model(name: string | Record<string, TSchema> | Function, model?: TSchema) {
+	model(
+		name:
+			| string
+			| Record<string, TAnySchema | StandardSchemaV1Like>
+			| Function,
+		model?: TAnySchema | StandardSchemaV1Like
+	) {
+		const onlyTypebox = <
+			A extends Record<string, TAnySchema | StandardSchemaV1Like>
+		>(
+			a: A
+		): Extract<A, TAnySchema> => {
+			const res = {} as Record<string, TAnySchema>
+			for (const key in a) if (!('~standard' in a[key])) res[key] = a[key]
+			return res as Extract<A, TAnySchema>
+		}
+
 		switch (typeof name) {
 			case 'object':
-				const parsedSchemas = {} as Record<string, TSchema>
+				const parsedTypebox = {} as Record<
+					string,
+					TSchema | StandardSchemaV1Like
+				>
 
 				const kvs = Object.entries(name)
 
@@ -6281,14 +6312,18 @@ export default class Elysia<
 				for (const [key, value] of kvs) {
 					if (key in this.definitions.type) continue
 
-					parsedSchemas[key] = this.definitions.type[key] = value
-					parsedSchemas[key].$id ??= `#/components/schemas/${key}`
+					if ('~standard' in value) {
+						this.definitions.type[key] = value
+					} else {
+						parsedTypebox[key] = this.definitions.type[key] = value
+						parsedTypebox[key].$id ??= `#/components/schemas/${key}`
+					}
 				}
 
 				// @ts-expect-error
 				this.definitions.typebox = t.Module({
 					...(this.definitions.typebox['$defs'] as TModule<{}>),
-					...parsedSchemas
+					...parsedTypebox
 				} as any)
 
 				return this
@@ -6296,33 +6331,41 @@ export default class Elysia<
 			case 'function':
 				const result = name(this.definitions.type)
 				this.definitions.type = result
-				this.definitions.typebox = t.Module(result as any)
+				this.definitions.typebox = t.Module(onlyTypebox(result))
 
-				return this as any
+				return this
 
 			case 'string':
 				if (!model) break
+
+				this.definitions.type[name] = model
+
+				if ('~standard' in model) return this
 
 				const newModel = {
 					...model,
 					id: model.$id ?? `#/components/schemas/${name}`
 				}
 
-				this.definitions.type[name] = model
 				this.definitions.typebox = t.Module({
 					...(this.definitions.typebox['$defs'] as TModule<{}>),
 					...newModel
 				} as any)
-				return this as any
+
+				return this
 		}
 
-		;(this.definitions.type as Record<string, TSchema>)[name] = model!
+		if(!model) return this
+
+		this.definitions.type[name] = model!
+		if ('~standard' in model) return this
+
 		this.definitions.typebox = t.Module({
 			...this.definitions.typebox['$defs'],
 			[name]: model!
-		} as any)
+		})
 
-		return this as any
+		return this
 	}
 
 	Ref<K extends keyof Definitions['typebox'] & string>(key: K) {

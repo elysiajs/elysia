@@ -759,7 +759,7 @@ export const getSchemaValidator = <
 		validators,
 		sanitize
 	}: {
-		models?: Record<string, TSchema>
+		models?: Record<string, TSchema | StandardSchemaV1Like>
 		modules?: TModule<any, any>
 		additionalProperties?: boolean
 		forceAdditionalProperties?: boolean
@@ -809,29 +809,27 @@ export const getSchemaValidator = <
 		if (s && typeof s !== 'string' && '~standard' in s)
 			return s as StandardSchemaV1Like
 
-		let schema: TSchema
-
 		if (!s) return undefined as any
+
+		let schema: TSchema | StandardSchemaV1Like
 
 		if (typeof s !== 'string') schema = s
 		else {
-			// if (s in caches) return caches[s] as any
-
-			const isArray = s.endsWith('[]')
-			const key = isArray ? s.substring(0, s.length - 2) : s
-
 			schema =
-				(modules as TModule<{}, {}> | undefined)?.Import(
-					key as never
-				) ?? models[key]
+				// @ts-expect-error private property
+				modules && s in modules.$defs
+					? (modules as TModule<{}, {}>).Import(s as never)
+					: models[s]
 
-			if (isArray) schema = t.Array(schema)
+			if (!schema) return undefined as any
 		}
 
-		if (!schema) return undefined as any
-
 		let _doesHaveRef: boolean
-		if (schema[Kind] !== 'Import' && (_doesHaveRef = hasRef(schema))) {
+		if (
+			Kind in schema &&
+			schema[Kind] !== 'Import' &&
+			(_doesHaveRef = hasRef(schema))
+		) {
 			const id = randomId()
 
 			if (doesHaveRef === undefined) doesHaveRef = _doesHaveRef
@@ -845,7 +843,7 @@ export const getSchemaValidator = <
 			schema = model.Import(id)
 		}
 
-		if (schema[Kind] === 'Import') {
+		if (Kind in schema && schema[Kind] === 'Import') {
 			const newDefs: Record<string, TSchema> = {}
 
 			for (const [key, value] of Object.entries(schema.$defs))
@@ -907,8 +905,7 @@ export const getSchemaValidator = <
 					return {
 						value: vali.Decode(v)
 					}
-				}
-				else
+				} else
 					return {
 						issues: [...vali.Errors(v)]
 					}
@@ -1495,7 +1492,7 @@ export const getResponseSchemaValidator = (
 		sanitize
 	}: {
 		modules: TModule<any, any>
-		models?: Record<string, TSchema>
+		models?: Record<string, TSchema | StandardSchemaV1Like>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
@@ -1672,13 +1669,18 @@ export const getCookieValidator = ({
 	validators,
 	sanitize
 }: {
-	validator: TSchema | ElysiaTypeCheck<any> | string | undefined
+	validator:
+		| TSchema
+		| StandardSchemaV1Like
+		| ElysiaTypeCheck<any>
+		| string
+		| undefined
 	modules: TModule<any, any>
 	defaultConfig: CookieOptions | undefined
 	config: CookieOptions
 	dynamic: boolean
 	normalize: ElysiaConfig<''>['normalize'] | undefined
-	models: Record<string, TSchema> | undefined
+	models: Record<string, TSchema | StandardSchemaV1Like> | undefined
 	validators?: InputSchema['cookie'][]
 	sanitize?: () => ExactMirrorInstruction['sanitize']
 }) => {
