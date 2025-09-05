@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.4.0-exp.3",
+	"version": "1.4.0-exp.5",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -183,9 +183,8 @@
 		"release": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {
-		"arktype": "^2.1.22",
 		"cookie": "^1.0.2",
-		"exact-mirror": "0.1.6",
+		"exact-mirror": "0.2.1",
 		"fast-decode-uri-component": "^1.0.1"
 	},
 	"devDependencies": {
@@ -194,6 +193,7 @@
 		"@types/fast-decode-uri-component": "^1.0.0",
 		"@typescript-eslint/eslint-plugin": "^8.30.1",
 		"@typescript-eslint/parser": "^8.30.1",
+		"arktype": "^2.1.22",
 		"eslint": "^9.24.0",
 		"eslint-plugin-security": "^3.0.1",
 		"eslint-plugin-sonarjs": "^3.0.2",
