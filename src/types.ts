@@ -66,6 +66,9 @@ export type StandardSchemaV1LikeValidate = <T>(
 	{ value: T; issues?: never } | { value?: never; issues: unknown[] }
 >
 
+export type AnySchema = TSchema | StandardSchemaV1Like
+export type FastAnySchema = TAnySchema | FastStandardSchemaV1Like
+
 export interface ElysiaConfig<Prefix extends string | undefined> {
 	/**
 	 * @default BunAdapter
@@ -234,13 +237,13 @@ export interface ValidatorLayer {
 }
 
 export interface StandaloneInputSchema<Name extends string = string> {
-	body?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
-	headers?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
-	query?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
-	params?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
-	cookie?: TSchema | StandardSchemaV1Like | Name | `${Name}[]`
+	body?: AnySchema | Name | `${Name}[]`
+	headers?: AnySchema | Name | `${Name}[]`
+	query?: AnySchema | Name | `${Name}[]`
+	params?: AnySchema | Name | `${Name}[]`
+	cookie?: AnySchema | Name | `${Name}[]`
 	response?: {
-		[status in number]: `${Name}[]` | Name | TSchema | StandardSchemaV1Like
+		[status in number]: `${Name}[]` | Name | AnySchema
 	}
 }
 
@@ -396,7 +399,7 @@ export interface EphemeralType {
 }
 
 export interface DefinitionBase {
-	typebox: Record<string, TAnySchema | StandardSchemaV1Like>
+	typebox: Record<string, AnySchema>
 	error: Record<string, Error>
 }
 
@@ -423,10 +426,8 @@ interface OptionalField {
 	[OptionalKind]: 'Optional'
 }
 
-type TrimArrayName<T extends string> = T extends `${infer Name}[]` ? Name : T
-
 export type UnwrapSchema<
-	Schema extends TSchema | StandardSchemaV1Like | string | undefined,
+	Schema extends AnySchema | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
@@ -466,7 +467,7 @@ export type UnwrapSchema<
 				: unknown
 
 export type UnwrapBodySchema<
-	Schema extends TSchema | StandardSchemaV1Like | string | undefined,
+	Schema extends AnySchema | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
 > = undefined extends Schema
 	? unknown
@@ -520,29 +521,29 @@ export interface UnwrapRoute<
 			? ResolvePath<Path>
 			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
-	response: Schema['response'] extends
-		| StandardSchemaV1Like
-		| TAnySchema
-		| string
+	response: Schema['response'] extends FastAnySchema | string
 		? {
-				200: CoExist<
-					UnwrapSchema<Schema['response'], Definitions>,
-					File,
-					ElysiaFile | Blob
-				>
+				200: UnwrapSchema<
+					Schema['response'],
+					Definitions
+				> extends infer A
+					? A extends File
+						? File | ElysiaFile
+						: A
+					: unknown
 			}
 		: Schema['response'] extends {
-					[status in number]:
-						| StandardSchemaV1Like
-						| TAnySchema
-						| string
+					[status in number]: FastAnySchema | string
 			  }
 			? {
-					[k in keyof Schema['response']]: CoExist<
-						UnwrapSchema<Schema['response'][k], Definitions>,
-						File,
-						ElysiaFile | Blob
-					>
+					[k in keyof Schema['response']]: UnwrapSchema<
+						Schema['response'][k],
+						Definitions
+					> extends infer A
+						? A extends File
+							? File | ElysiaFile
+							: A
+						: unknown
 				}
 			: unknown | void
 }
@@ -673,18 +674,17 @@ export type HTTPMethod =
 	| 'ALL'
 
 export interface InputSchema<in out Name extends string = string> {
-	body?: TSchema | StandardSchemaV1Like | Name
-	headers?: TSchema | StandardSchemaV1Like | Name
-	query?: TSchema | StandardSchemaV1Like | Name
-	params?: TSchema | StandardSchemaV1Like | Name
-	cookie?: TSchema | StandardSchemaV1Like | Name
+	body?: AnySchema | Name
+	headers?: AnySchema | Name
+	query?: AnySchema | Name
+	params?: AnySchema | Name
+	cookie?: AnySchema | Name
 	response?:
-		| TSchema
-		| StandardSchemaV1Like
-		| { [status in number]: TSchema | StandardSchemaV1Like }
+		| AnySchema
+		| { [status in number]: AnySchema }
 		| Name
 		| {
-				[status in number]: Name | TSchema | StandardSchemaV1Like
+				[status in number]: Name | AnySchema
 		  }
 }
 
@@ -1781,31 +1781,33 @@ type RemoveStartingSlash<T> = T extends `/${infer Rest}` ? Rest : T
 export type CreateEden<
 	Path extends string,
 	Property extends Record<string, unknown> = {}
-> = Path extends '' | '/'
-	? Property
-	: _CreateEden<RemoveStartingSlash<Path>, Property>
+> = Path extends `/${infer Rest}`
+	? _CreateEden<Rest, Property>
+	: Path extends '' | '/'
+		? Property
+		: _CreateEden<Path, Property>
 
 export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
 	Handle
-> = Handle extends (...a: any[]) => infer A
+> = Handle extends (...a: any) => infer A
 	? _ComposeElysiaResponse<Schema, Awaited<A>>
 	: _ComposeElysiaResponse<Schema, Awaited<Handle>>
 
-export type EmptyRouteSchema = {
+export interface EmptyRouteSchema {
 	body: unknown
 	headers: unknown
 	query: unknown
 	params: {}
 	cookie: unknown
-	response: {}
+	response: unknown
 }
 
 type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 	(Schema['response'] extends { 200: any }
 		? {
 				200: Schema['response'][200]
-			}
+			} & Omit<Schema['response'], 200>
 		: {
 				200: Handle extends AnyElysiaCustomStatusResponse
 					?
@@ -1815,9 +1817,8 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 									ElysiaCustomStatusResponse<200, any, 200>
 							  >['response']
 					: Handle
-			}) &
+			} & Schema['response']) &
 		ExtractErrorFromHandle<Handle> &
-		Omit<Schema['response'], 200> &
 		(EmptyRouteSchema extends Schema
 			? {}
 			: {

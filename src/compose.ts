@@ -51,7 +51,7 @@ import {
 } from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
-import { validateFileExtension } from './type-system/utils'
+import { fileType } from './type-system/utils'
 
 import type { TraceEvent } from './trace'
 import type {
@@ -1420,7 +1420,7 @@ export const composeHandler = ({
 									continue
 
 								if (validatorLength) validateFile += ','
-								validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+								validateFile += `fileType(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
 
 								validatorLength++
 							}
@@ -1464,7 +1464,7 @@ export const composeHandler = ({
 						continue
 
 					if (i) validateFile += ','
-					validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+					validateFile += `fileType(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
 
 					i++
 				}
@@ -1984,7 +1984,7 @@ export const composeHandler = ({
 		allocateIf(`ValidationError,`, hasValidation) +
 		allocateIf(`ParseError`, hasBody) +
 		`},` +
-		`validateFileExtension,` +
+		`fileType,` +
 		`schema,` +
 		`definitions,` +
 		`ERROR_CODE,` +
@@ -2037,7 +2037,7 @@ export const composeHandler = ({
 				ValidationError: hasValidation ? ValidationError : undefined,
 				ParseError: hasBody ? ParseError : undefined
 			},
-			validateFileExtension,
+			fileType,
 			schema: app.router.history,
 			// @ts-expect-error
 			definitions: app.definitions.type,

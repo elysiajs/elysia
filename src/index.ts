@@ -2,12 +2,11 @@ import { Memoirist } from 'memoirist'
 import {
 	Kind,
 	type TObject,
-	type Static,
 	type TSchema,
 	type TModule,
 	type TRef,
 	type TProperties,
-	TAnySchema
+	type TAnySchema
 } from '@sinclair/typebox'
 
 import fastDecodeURIComponent from 'fast-decode-uri-component'
@@ -82,13 +81,13 @@ import {
 } from './dynamic-handle'
 
 import {
+	status,
 	ERROR_CODE,
 	ValidationError,
 	type ParseError,
 	type NotFoundError,
 	type InternalServerError,
-	ElysiaCustomStatusResponse,
-	status
+	ElysiaCustomStatusResponse
 } from './error'
 
 import type { TraceHandler } from './trace'
@@ -6792,11 +6791,7 @@ export default class Elysia<
 export { Elysia }
 
 export { t } from './type-system'
-export {
-	validationDetail,
-	validateFile,
-	validateFileExtension
-} from './type-system/utils'
+export { validationDetail, fileType } from './type-system/utils'
 export type {
 	ElysiaTypeCustomError,
 	ElysiaTypeCustomErrorCallback

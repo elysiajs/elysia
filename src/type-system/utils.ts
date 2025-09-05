@@ -125,7 +125,7 @@ export const fileTypeFromBlob = (file: Blob | File) => {
 	})
 }
 
-export const validateFileExtension = async (
+export const fileType = async (
 	file: MaybeArray<Blob | File | undefined>,
 	extension: FileType | FileType[],
 	// @ts-ignore
@@ -133,7 +133,7 @@ export const validateFileExtension = async (
 ): Promise<boolean> => {
 	if (Array.isArray(file)) {
 		await Promise.all(
-			file.map((f) => validateFileExtension(f, extension, name))
+			file.map((f) => fileType(f, extension, name))
 		)
 
 		return true
@@ -154,6 +154,10 @@ export const validateFileExtension = async (
 	throw new InvalidFileType(name, extension)
 }
 
+/**
+ * This only check file extension based on it's name / mimetype
+ * to actual check the file type, use `validateFileExtension` instead
+ */
 export const validateFile = (options: FileOptions, value: any) => {
 	if (value instanceof ElysiaFile) return true
 
@@ -165,8 +169,6 @@ export const validateFile = (options: FileOptions, value: any) => {
 	if (options.maxSize && value.size > parseFileUnit(options.maxSize))
 		return false
 
-	// This only check file extension based on it's name / mimetype
-	// to actual check the file type, use `validateFileExtension` instead
 	if (options.extension) {
 		if (typeof options.extension === 'string')
 			return checkFileExtension(value.type, options.extension)

@@ -1,13 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import {
-	t,
-	Elysia,
-	Cookie,
-	file,
-	sse,
-	SSEPayload,
-	status
-} from '../../src'
+import { t, Elysia, Cookie, file, sse, SSEPayload, status, form } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -1410,12 +1402,12 @@ app.get('/', ({ set }) => {
 	const child = new Elysia().get(
 		'/',
 		() => {
-			return {
+			return form({
 				a: file('test/kyuukurarin.mp4')
-			}
+			})
 		},
 		{
-			response: t.Object({
+			response: t.Form({
 				a: t.File()
 			})
 		}

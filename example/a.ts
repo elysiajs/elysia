@@ -1,12 +1,5 @@
-import { Elysia, t, UnwrapSchema } from '../src'
-import { req } from '../test/utils'
+import { Elysia, fileType, file, form } from '../src'
 
-const app = new Elysia().get('/', () => 'hello world')
+const app = new Elysia().post('/', ({ body }) => 'a').listen(3000)
 
-app.handle(
-	new Request('http://localhost', {
-		method: 'HEAD'
-	})
-)
-	.then((x) => x.headers.toJSON())
-	.then(console.log)
+app['~Routes']['post']
