@@ -1,3 +1,7 @@
+# 1.3.22 - 6 Sep 2025
+Bug fix:
+- safely unwrap t.Record
+
 # 1.3.21 - 31 Aug 2025
 Bug fix:
 - [#1356](https://github.com/elysiajs/elysia/pull/1356) webSocket validation error handling in BunAdapter

@@ -664,7 +664,8 @@ export const composeHandler = ({
 
 		if (validator.query?.schema) {
 			const schema = unwrapImportSchema(validator.query?.schema)
-			if (Kind in schema) {
+
+			if (Kind in schema && schema.properties) {
 				for (const [key, value] of Object.entries(schema.properties)) {
 					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
 						arrayProperties[key] = 1
