@@ -160,4 +160,14 @@ describe('Validator Additional Case', () => {
 		expect(res[0].status).toBe(422)
 		expect(res[1].status).toBe(200)
 	})
+
+	it('handle record', async () => {
+		const app = new Elysia().get('/', () => 'SAFE', {
+			query: t.Record(t.String(), t.String())
+		})
+
+		const response = await app.handle(req('/?x=1'))
+
+		expect(response.status).toBe(200)
+	})
 })

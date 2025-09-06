@@ -1,15 +1,11 @@
-import { Elysia } from '../src'
-
-const plugin1 = new Elysia().derive({ as: 'scoped' }, () => ({
-	hello: 'world'
-}))
-
-const plugin2 = new Elysia()
-	.use(plugin1)
-	.derive({ as: 'scoped' }, ({ hello }) => ({ hello }))
+import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
 const app = new Elysia()
-	.use(plugin2)
-	// This is undefined
-	.get('/', ({ hello }) => typeof hello)
-	.listen(3000)
+	.get('/', () => 'SAFE', {
+		query: t.Record(t.String(), t.String())
+	})
+
+const response = await app.handle(req('/?x=1'))
+
+console.log(response.status)

@@ -651,12 +651,12 @@ export const composeHandler = ({
 		if (
 			schema &&
 			(schema.type === 'object' ||
-				(schema[Kind] === 'Import' && schema.$defs[schema.$ref]))
+				(schema[Kind] === 'Import' && schema.$defs?.[schema.$ref]))
 		) {
 			const properties =
-				schema.properties ?? schema.$defs[schema.$ref].properties
+				schema.properties ?? schema.$defs?.[schema.$ref]?.properties
 
-			if (!validator.query!.hasAdditionalProperties)
+			if (properties && !validator.query!.hasAdditionalProperties)
 				for (const [key, _value] of Object.entries(properties)) {
 					let value = _value as TAnySchema
 
