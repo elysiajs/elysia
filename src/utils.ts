@@ -556,6 +556,7 @@ export const StatusMap = {
 	'Range Not Satisfiable': 416,
 	'Expectation Failed': 417,
 	"I'm a teapot": 418,
+	'Enhance Your Calm': 420,
 	'Misdirected Request': 421,
 	'Unprocessable Content': 422,
 	Locked: 423,

@@ -161,7 +161,14 @@ import type {
 	AfterHandler,
 	AnyBaseHookLifeCycle,
 	NonResolvableMacroKey,
-	StandardSchemaV1Like
+	StandardSchemaV1Like,
+	ElysiaHandlerToResponseSchema,
+	ElysiaHandlerToResponseSchemas,
+	ExtractErrorFromHandle,
+	UnionToIntersect,
+	ElysiaHandlerToResponseSchemaAmbiguous,
+	GuardLocalHook,
+	PickIfExists
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -198,6 +205,7 @@ export default class Elysia<
 		macro: {}
 		macroFn: {}
 		parser: {}
+		response: {}
 	},
 	const out Routes extends RouteBase = {},
 	// ? scoped
@@ -206,6 +214,7 @@ export default class Elysia<
 		resolve: {}
 		schema: {}
 		standaloneSchema: {}
+		response: {}
 	},
 	// ? local
 	const in out Volatile extends EphemeralType = {
@@ -213,6 +222,7 @@ export default class Elysia<
 		resolve: {}
 		schema: {}
 		standaloneSchema: {}
+		response: {}
 	}
 > {
 	config: ElysiaConfig<BasePath>
@@ -1137,31 +1147,101 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onRequest<const Schema extends RouteSchema>(
-		handler: MaybeArray<
-			PreHandler<
+	onRequest<
+		const Schema extends RouteSchema,
+		const Handler extends PreHandler<
+			MergeSchema<
+				Schema,
 				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'],
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['store']
-					derive: {}
-					resolve: {}
-				}
-			>
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: {}
+				resolve: {}
+			}
 		>
-	) {
+	>(
+		handler: Handler
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ElysiaHandlerToResponseSchema<Handler>
+		}
+	>
+
+	/**
+	 * ### request | Life cycle event
+	 * Called on every new request is accepted
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onRequest(({ method, url }) => {
+	 *         saveToAnalytic({ method, url })
+	 *     })
+	 * ```
+	 */
+	onRequest<
+		const Schema extends RouteSchema,
+		const Handlers extends PreHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			{
+				decorator: Singleton['decorator']
+				store: Singleton['store']
+				derive: {}
+				resolve: {}
+			}
+		>[]
+	>(
+		handler: Handlers
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ElysiaHandlerToResponseSchemas<Handlers>
+		}
+	>
+
+	onRequest(handler: MaybeArray<Handler>): any {
 		this.on('request', handler as any)
 
-		return this
+		return this as any
 	}
 
 	/**
@@ -1357,6 +1437,7 @@ export default class Elysia<
 			macro: Metadata['macro']
 			macroFn: Metadata['macroFn']
 			parser: Metadata['parser'] & { [K in Parser]: Handler }
+			response: Metadata['response']
 		},
 		Routes,
 		Ephemeral,
@@ -1565,7 +1646,15 @@ export default class Elysia<
 					>
 				},
 				Definitions,
-				Metadata,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ExtractErrorFromHandle<Resolver>
+				},
 				Routes,
 				Ephemeral,
 				Volatile
@@ -1585,6 +1674,8 @@ export default class Elysia<
 						>
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ExtractErrorFromHandle<Resolver>
 					},
 					Volatile
 				>
@@ -1603,6 +1694,8 @@ export default class Elysia<
 						>
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ExtractErrorFromHandle<Resolver>
 					}
 				>
 
@@ -1660,6 +1753,7 @@ export default class Elysia<
 			>
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] & ExtractErrorFromHandle<Resolver>
 		}
 	>
 
@@ -1713,6 +1807,7 @@ export default class Elysia<
 			resolve: ExcludeElysiaResponse<NewResolver>
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] & ExtractErrorFromHandle<NewResolver>
 		}
 	>
 
@@ -1767,7 +1862,15 @@ export default class Elysia<
 					resolve: ExcludeElysiaResponse<NewResolver>
 				},
 				Definitions,
-				Metadata,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ExtractErrorFromHandle<NewResolver>
+				},
 				Routes,
 				Ephemeral,
 				Volatile
@@ -1787,6 +1890,8 @@ export default class Elysia<
 						>
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ExtractErrorFromHandle<NewResolver>
 					},
 					Volatile
 				>
@@ -1805,6 +1910,8 @@ export default class Elysia<
 						>
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ExtractErrorFromHandle<NewResolver>
 					}
 				>
 
@@ -1844,27 +1951,43 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onBeforeHandle<const Schema extends RouteSchema>(
-		handler: MaybeArray<
-			OptionalHandler<
+	onBeforeHandle<
+		const Schema extends RouteSchema,
+		const Handler extends OptionalHandler<
+			MergeSchema<
+				Schema,
 				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
-					BasePath
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'],
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
-			>
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			}
 		>
-	): this
+	>(
+		handler: Handler
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ElysiaHandlerToResponseSchema<Handler>
+		}
+	>
 
 	/**
 	 * ### Before Handle | Life cycle event
@@ -1887,59 +2010,282 @@ export default class Elysia<
 	 */
 	onBeforeHandle<
 		const Schema extends RouteSchema,
-		const Type extends LifeCycleType
+		const Handlers extends OptionalHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			}
+		>[]
+	>(
+		handlers: Handlers
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ElysiaHandlerToResponseSchemas<Handlers>
+		}
+	>
+
+	/**
+	 * ### Before Handle | Life cycle event
+	 * Execute after validation and before the main route handler.
+	 *
+	 * If truthy value is returned, will be assigned as `Response` and skip the main handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onBeforeHandle(({ params: { id }, status }) => {
+	 *         if(id && !isExisted(id)) {
+	 * 	           status(401)
+	 *
+	 *             return "Unauthorized"
+	 * 	       }
+	 *     })
+	 * ```
+	 */
+	onBeforeHandle<
+		const Schema extends RouteSchema,
+		const Type extends LifeCycleType,
+		const Handler extends OptionalHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'] &
+				'global' extends Type
+				? { params: Record<string, string> }
+				: 'scoped' extends Type
+					? { params: Record<string, string> }
+					: {},
+			Singleton &
+				('global' extends Type
+					? {
+							derive: Partial<
+								Ephemeral['derive'] & Volatile['derive']
+							>
+							resolve: Partial<
+								Ephemeral['resolve'] & Volatile['resolve']
+							>
+						}
+					: 'scoped' extends Type
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+							}
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+							}),
+			BasePath
+		>
 	>(
 		options: { as?: Type },
-		handler: MaybeArray<
-			OptionalHandler<
-				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
-					BasePath
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'] &
-					'global' extends Type
-					? { params: Record<string, string> }
-					: 'scoped' extends Type
-						? { params: Record<string, string> }
-						: {},
-				Singleton &
-					('global' extends Type
-						? {
-								derive: Partial<
-									Ephemeral['derive'] & Volatile['derive']
-								>
-								resolve: Partial<
-									Ephemeral['resolve'] & Volatile['resolve']
-								>
-							}
-						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								}),
-				BasePath
+		handler: Handler
+	): Type extends 'global'
+		? Elysia<
+				BasePath,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ElysiaHandlerToResponseSchema<Handler>
+				},
+				Routes,
+				Ephemeral,
+				Volatile
 			>
-		>
-	): this
+		: Type extends 'scoped'
+			? Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					{
+						derive: Ephemeral['derive']
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ElysiaHandlerToResponseSchema<Handler>
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					Ephemeral,
+					{
+						derive: Volatile['derive']
+						resolve: Volatile['resolve']
+						schema: Volatile['schema']
+						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ElysiaHandlerToResponseSchema<Handler>
+					}
+				>
+
+	/**
+	 * ### Before Handle | Life cycle event
+	 * Execute after validation and before the main route handler.
+	 *
+	 * If truthy value is returned, will be assigned as `Response` and skip the main handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onBeforeHandle(({ params: { id }, status }) => {
+	 *         if(id && !isExisted(id)) {
+	 * 	           status(401)
+	 *
+	 *             return "Unauthorized"
+	 * 	       }
+	 *     })
+	 * ```
+	 */
+	onBeforeHandle<
+		const Schema extends RouteSchema,
+		const Type extends LifeCycleType,
+		const Handlers extends OptionalHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'] &
+				'global' extends Type
+				? { params: Record<string, string> }
+				: 'scoped' extends Type
+					? { params: Record<string, string> }
+					: {},
+			Singleton &
+				('global' extends Type
+					? {
+							derive: Partial<
+								Ephemeral['derive'] & Volatile['derive']
+							>
+							resolve: Partial<
+								Ephemeral['resolve'] & Volatile['resolve']
+							>
+						}
+					: 'scoped' extends Type
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+							}
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+							}),
+			BasePath
+		>[]
+	>(
+		options: { as?: Type },
+		handlers: Handlers
+	): Type extends 'global'
+		? Elysia<
+				BasePath,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ElysiaHandlerToResponseSchemas<Handlers>
+				},
+				Routes,
+				Ephemeral,
+				Volatile
+			>
+		: Type extends 'scoped'
+			? Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					{
+						derive: Ephemeral['derive']
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ElysiaHandlerToResponseSchemas<Handlers>
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					Ephemeral,
+					{
+						derive: Volatile['derive']
+						resolve: Volatile['resolve']
+						schema: Volatile['schema']
+						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ElysiaHandlerToResponseSchemas<Handlers>
+					}
+				>
 
 	onBeforeHandle(
 		options: { as?: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
-	) {
+	): any {
 		if (!handler) return this.on('beforeHandle', options as any)
 
 		return this.on(
@@ -1965,27 +2311,43 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onAfterHandle<const Schema extends RouteSchema>(
-		handler: MaybeArray<
-			AfterHandler<
+	onAfterHandle<
+		const Schema extends RouteSchema,
+		const Handler extends AfterHandler<
+			MergeSchema<
+				Schema,
 				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
-					BasePath
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'],
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
-			>
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			}
 		>
-	): this
+	>(
+		handler: Handler
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ElysiaHandlerToResponseSchema<Handler>
+		}
+	>
 
 	/**
 	 * ### After Handle | Life cycle event
@@ -2005,58 +2367,274 @@ export default class Elysia<
 	 */
 	onAfterHandle<
 		const Schema extends RouteSchema,
-		const Type extends LifeCycleType
+		const Handlers extends AfterHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			Singleton & {
+				derive: Ephemeral['derive'] & Volatile['derive']
+				resolve: Ephemeral['resolve'] & Volatile['resolve']
+			}
+		>[]
+	>(
+		handlers: Handlers
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ElysiaHandlerToResponseSchemas<Handlers>
+		}
+	>
+
+	/**
+	 * ### After Handle | Life cycle event
+	 * Intercept request **after** main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onAfterHandle((context, response) => {
+	 *         if(typeof response === "object")
+	 *             return JSON.stringify(response)
+	 *     })
+	 * ```
+	 */
+	onAfterHandle<
+		const Schema extends RouteSchema,
+		const Type extends LifeCycleType,
+		const Handler extends AfterHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'] &
+				'global' extends Type
+				? { params: Record<string, string> }
+				: 'scoped' extends Type
+					? { params: Record<string, string> }
+					: {},
+			Singleton &
+				('global' extends Type
+					? {
+							derive: Partial<
+								Ephemeral['derive'] & Volatile['derive']
+							>
+							resolve: Partial<
+								Ephemeral['resolve'] & Volatile['resolve']
+							>
+						}
+					: 'scoped' extends Type
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+							}
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+							})
+		>
 	>(
 		options: { as?: LifeCycleType },
-		handler: MaybeArray<
-			AfterHandler<
-				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
-					BasePath
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'] &
-					'global' extends Type
-					? { params: Record<string, string> }
-					: 'scoped' extends Type
-						? { params: Record<string, string> }
-						: {},
-				Singleton &
-					('global' extends Type
-						? {
-								derive: Partial<
-									Ephemeral['derive'] & Volatile['derive']
-								>
-								resolve: Partial<
-									Ephemeral['resolve'] & Volatile['resolve']
-								>
-							}
-						: 'scoped' extends Type
-							? {
-									derive: Ephemeral['derive'] &
-										Partial<Volatile['derive']>
-									resolve: Ephemeral['resolve'] &
-										Partial<Volatile['resolve']>
-								}
-							: {
-									derive: Ephemeral['derive'] &
-										Volatile['derive']
-									resolve: Ephemeral['resolve'] &
-										Volatile['resolve']
-								})
+		handler: Handler
+	): Type extends 'global'
+		? Elysia<
+				BasePath,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ElysiaHandlerToResponseSchema<Handler>
+				},
+				Routes,
+				Ephemeral,
+				Volatile
 			>
-		>
-	): this
+		: Type extends 'scoped'
+			? Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					{
+						derive: Ephemeral['derive']
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ElysiaHandlerToResponseSchema<Handler>
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					Ephemeral,
+					{
+						derive: Volatile['derive']
+						resolve: Volatile['resolve']
+						schema: Volatile['schema']
+						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ElysiaHandlerToResponseSchema<Handler>
+					}
+				>
+
+	/**
+	 * ### After Handle | Life cycle event
+	 * Intercept request **after** main handler is called.
+	 *
+	 * If truthy value is returned, will be assigned as `Response`
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onAfterHandle((context, response) => {
+	 *         if(typeof response === "object")
+	 *             return JSON.stringify(response)
+	 *     })
+	 * ```
+	 */
+	onAfterHandle<
+		const Schema extends RouteSchema,
+		const Type extends LifeCycleType,
+		const Handlers extends AfterHandler<
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>,
+				BasePath
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'] &
+				'global' extends Type
+				? { params: Record<string, string> }
+				: 'scoped' extends Type
+					? { params: Record<string, string> }
+					: {},
+			Singleton &
+				('global' extends Type
+					? {
+							derive: Partial<
+								Ephemeral['derive'] & Volatile['derive']
+							>
+							resolve: Partial<
+								Ephemeral['resolve'] & Volatile['resolve']
+							>
+						}
+					: 'scoped' extends Type
+						? {
+								derive: Ephemeral['derive'] &
+									Partial<Volatile['derive']>
+								resolve: Ephemeral['resolve'] &
+									Partial<Volatile['resolve']>
+							}
+						: {
+								derive: Ephemeral['derive'] & Volatile['derive']
+								resolve: Ephemeral['resolve'] &
+									Volatile['resolve']
+							})
+		>[]
+	>(
+		options: { as?: LifeCycleType },
+		handler: Handlers
+	): Type extends 'global'
+		? Elysia<
+				BasePath,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ElysiaHandlerToResponseSchemas<Handlers>
+				},
+				Routes,
+				Ephemeral,
+				Volatile
+			>
+		: Type extends 'scoped'
+			? Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					{
+						derive: Ephemeral['derive']
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ElysiaHandlerToResponseSchemas<Handlers>
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					Ephemeral,
+					{
+						derive: Volatile['derive']
+						resolve: Volatile['resolve']
+						schema: Volatile['schema']
+						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ElysiaHandlerToResponseSchemas<Handlers>
+					}
+				>
 
 	onAfterHandle(
 		options: { as?: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
-	) {
+	): any {
 		if (!handler) return this.on('afterHandle', options as any)
 
 		return this.on(
@@ -2553,26 +3131,42 @@ export default class Elysia<
 	 *     })
 	 * ```
 	 */
-	onError<const Schema extends RouteSchema>(
-		handler: MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
+	onError<
+		const Schema extends RouteSchema,
+		const Handler extends ErrorHandler<
+			Definitions['error'],
+			MergeSchema<
+				Schema,
 				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'],
-				Singleton,
-				Ephemeral,
-				Volatile
-			>
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			Singleton,
+			Ephemeral,
+			Volatile
 		>
-	): this
+	>(
+		handler: Handler
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ElysiaHandlerToResponseSchema<Handler>
+		}
+	>
 
 	/**
 	 * ### Error | Life cycle event
@@ -2590,64 +3184,288 @@ export default class Elysia<
 	 */
 	onError<
 		const Schema extends RouteSchema,
-		const Scope extends LifeCycleType
-	>(
-		options: { as?: Scope },
-		handler: MaybeArray<
-			ErrorHandler<
-				Definitions['error'],
+		const Handlers extends ErrorHandler<
+			Definitions['error'],
+			MergeSchema<
+				Schema,
 				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'],
-				Scope extends 'global'
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			Singleton,
+			Ephemeral,
+			Volatile
+		>[]
+	>(
+		handler: Handlers
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		{
+			derive: Volatile['derive']
+			resolve: Volatile['resolve']
+			schema: Volatile['schema']
+			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ElysiaHandlerToResponseSchemas<Handlers>
+		}
+	>
+
+	/**
+	 * ### Error | Life cycle event
+	 * Called when error is thrown during processing request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onError(({ code }) => {
+	 *         if(code === "NOT_FOUND")
+	 *             return "Path not found :("
+	 *     })
+	 * ```
+	 */
+	onError<
+		const Schema extends RouteSchema,
+		const Scope extends LifeCycleType,
+		const Handler extends ErrorHandler<
+			Definitions['error'],
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			Scope extends 'global'
+				? {
+						store: Singleton['store']
+						decorator: Singleton['decorator']
+						derive: Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+						resolve: Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					}
+				: Scope extends 'scoped'
 					? {
 							store: Singleton['store']
 							decorator: Singleton['decorator']
-							derive: Singleton['derive'] &
-								Ephemeral['derive'] &
-								Volatile['derive']
-							resolve: Singleton['resolve'] &
-								Ephemeral['resolve'] &
-								Volatile['resolve']
+							derive: Singleton['derive'] & Ephemeral['derive']
+							resolve: Singleton['resolve'] & Ephemeral['resolve']
 						}
-					: Scope extends 'scoped'
-						? {
-								store: Singleton['store']
-								decorator: Singleton['decorator']
-								derive: Singleton['derive'] &
-									Ephemeral['derive']
-								resolve: Singleton['resolve'] &
-									Ephemeral['resolve']
-							}
-						: Singleton,
-				Scope extends 'global'
+					: Singleton,
+			Scope extends 'global'
+				? Ephemeral
+				: {
+						derive: Partial<Ephemeral['derive']>
+						resolve: Partial<Ephemeral['resolve']>
+						schema: Ephemeral['schema']
+						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response']
+					},
+			Scope extends 'global'
+				? Ephemeral
+				: Scope extends 'scoped'
 					? Ephemeral
 					: {
 							derive: Partial<Ephemeral['derive']>
 							resolve: Partial<Ephemeral['resolve']>
 							schema: Ephemeral['schema']
 							standaloneSchema: Ephemeral['standaloneSchema']
-						},
-				Scope extends 'global'
-					? Ephemeral
-					: Scope extends 'scoped'
-						? Ephemeral
-						: {
-								derive: Partial<Ephemeral['derive']>
-								resolve: Partial<Ephemeral['resolve']>
-								schema: Ephemeral['schema']
-								standaloneSchema: Ephemeral['standaloneSchema']
-							}
-			>
+							response: Ephemeral['response']
+						}
 		>
-	): this
+	>(
+		options: { as?: Scope },
+		handler: Handler
+	): Scope extends 'global'
+		? Elysia<
+				BasePath,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ElysiaHandlerToResponseSchema<Handler>
+				},
+				Routes,
+				Ephemeral,
+				Volatile
+			>
+		: Scope extends 'scoped'
+			? Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					{
+						derive: Ephemeral['derive']
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ElysiaHandlerToResponseSchema<Handler>
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					Ephemeral,
+					{
+						derive: Volatile['derive']
+						resolve: Volatile['resolve']
+						schema: Volatile['schema']
+						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ElysiaHandlerToResponseSchema<Handler>
+					}
+				>
+
+	/**
+	 * ### Error | Life cycle event
+	 * Called when error is thrown during processing request
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * new Elysia()
+	 *     .onError(({ code }) => {
+	 *         if(code === "NOT_FOUND")
+	 *             return "Path not found :("
+	 *     })
+	 * ```
+	 */
+	onError<
+		const Schema extends RouteSchema,
+		const Scope extends LifeCycleType,
+		const Handlers extends ErrorHandler<
+			Definitions['error'],
+			MergeSchema<
+				Schema,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema'],
+			Scope extends 'global'
+				? {
+						store: Singleton['store']
+						decorator: Singleton['decorator']
+						derive: Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive']
+						resolve: Singleton['resolve'] &
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					}
+				: Scope extends 'scoped'
+					? {
+							store: Singleton['store']
+							decorator: Singleton['decorator']
+							derive: Singleton['derive'] & Ephemeral['derive']
+							resolve: Singleton['resolve'] & Ephemeral['resolve']
+						}
+					: Singleton,
+			Scope extends 'global'
+				? Ephemeral
+				: {
+						derive: Partial<Ephemeral['derive']>
+						resolve: Partial<Ephemeral['resolve']>
+						schema: Ephemeral['schema']
+						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response']
+					},
+			Scope extends 'global'
+				? Ephemeral
+				: Scope extends 'scoped'
+					? Ephemeral
+					: {
+							derive: Partial<Ephemeral['derive']>
+							resolve: Partial<Ephemeral['resolve']>
+							schema: Ephemeral['schema']
+							standaloneSchema: Ephemeral['standaloneSchema']
+							response: Ephemeral['response']
+						}
+		>[]
+	>(
+		options: { as?: Scope },
+		handler: Handlers
+	): Scope extends 'global'
+		? Elysia<
+				BasePath,
+				Singleton,
+				Definitions,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ElysiaHandlerToResponseSchemas<Handlers>
+				},
+				Routes,
+				Ephemeral,
+				Volatile
+			>
+		: Scope extends 'scoped'
+			? Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					{
+						derive: Ephemeral['derive']
+						resolve: Ephemeral['resolve']
+						schema: Ephemeral['schema']
+						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ElysiaHandlerToResponseSchemas<Handlers>
+					},
+					Volatile
+				>
+			: Elysia<
+					BasePath,
+					Singleton,
+					Definitions,
+					Metadata,
+					Routes,
+					Ephemeral,
+					{
+						derive: Volatile['derive']
+						resolve: Volatile['resolve']
+						schema: Volatile['schema']
+						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ElysiaHandlerToResponseSchemas<Handlers>
+					}
+				>
 
 	/**
 	 * ### Error | Life cycle event
@@ -2666,7 +3484,7 @@ export default class Elysia<
 	onError(
 		options: { as?: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
-	) {
+	): any {
 		if (!handler) return this.on('error', options as any)
 
 		return this.on(
@@ -2898,10 +3716,17 @@ export default class Elysia<
 				MergeSchema<Volatile['schema'], Ephemeral['schema']>,
 				Metadata['schema']
 			>
-			standaloneSchema: Metadata['standaloneSchema']
+			standaloneSchema: PrettifySchema<
+				Metadata['standaloneSchema'] &
+					Volatile['standaloneSchema'] &
+					Ephemeral['standaloneSchema']
+			>
 			macro: Metadata['macro']
 			macroFn: Metadata['macroFn']
 			parser: Metadata['parser']
+			response: Metadata['response'] &
+				Ephemeral['response'] &
+				Volatile['response']
 		},
 		Routes,
 		{
@@ -2909,12 +3734,14 @@ export default class Elysia<
 			resolve: {}
 			schema: {}
 			standaloneSchema: {}
+			response: {}
 		},
 		{
 			derive: {}
 			resolve: {}
 			schema: {}
 			standaloneSchema: {}
+			response: {}
 		}
 	>
 
@@ -2931,12 +3758,14 @@ export default class Elysia<
 			standaloneSchema: PrettifySchema<
 				Volatile['standaloneSchema'] & Ephemeral['standaloneSchema']
 			>
+			response: Prettify<Volatile['response'] & Ephemeral['response']>
 		},
 		{
 			derive: {}
 			resolve: {}
 			schema: {}
 			standaloneSchema: {}
+			response: {}
 		}
 	>
 
@@ -3022,6 +3851,7 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
+					response: Metadata['response']
 				},
 				{},
 				Ephemeral,
@@ -3098,6 +3928,7 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
+					response: Metadata['response']
 				},
 				{},
 				Ephemeral,
@@ -3219,6 +4050,24 @@ export default class Elysia<
 		return this as any
 	}
 
+	/**
+	 * ### guard
+	 * Encapsulate and pass hook into all child handler
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * import { t } from 'elysia'
+	 *
+	 * new Elysia()
+	 *     .guard({
+	 *         body: t.Object({
+	 *             username: t.String(),
+	 *             password: t.String()
+	 *         })
+	 *     })
+	 * ```
+	 */
 	guard<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
@@ -3231,27 +4080,28 @@ export default class Elysia<
 			NoInfer<Omit<Input, keyof InputSchema>>
 		>,
 		const GuardType extends GuardSchemaType,
-		const AsType extends LifeCycleType
+		const AsType extends LifeCycleType,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<Definitions['error'], Schema, Singleton>
+		>
 	>(
-		hook: {
-			/**
-			 * @default 'override'
-			 */
-			as?: AsType
-			/**
-			 * @default 'standalone'
-			 * @since 1.3.0
-			 */
-			schema?: GuardType
-		} & LocalHook<
+		hook: GuardLocalHook<
 			Input,
 			Schema,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
-			Definitions['error'],
-			keyof Metadata['parser']
+			keyof Metadata['parser'],
+			GuardType,
+			AsType,
+			BeforeHandle,
+			AfterHandle,
+			ErrorHandle
 		>
 	): Or<
 		GuardSchemaType extends GuardType ? true : false,
@@ -3271,13 +4121,22 @@ export default class Elysia<
 					{
 						derive: Volatile['derive']
 						resolve: Prettify<Volatile['resolve'] & MacroContext>
-						schema: Prettify<
-							MergeSchema<
-								UnwrapRoute<Input, Definitions['typebox']>,
-								Metadata['schema']
-							>
-						>
+						schema: {} extends PickIfExists<Input, keyof InputSchema>
+							? Volatile['schema']
+							: Prettify<
+									MergeSchema<
+										UnwrapRoute<
+											Input,
+											Definitions['typebox']
+										>,
+										Metadata['schema']
+									>
+								>
 						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 					}
 				>
 			: AsType extends 'global'
@@ -3293,20 +4152,26 @@ export default class Elysia<
 						},
 						Definitions,
 						{
-							schema: Prettify<
-								MergeSchema<
-									UnwrapRoute<
-										Input,
-										Definitions['typebox'],
-										BasePath
-									>,
-									Metadata['schema']
-								>
-							>
+							schema: {} extends PickIfExists<Input, keyof InputSchema>
+								? Metadata['schema']
+								: Prettify<
+										MergeSchema<
+											UnwrapRoute<
+												Input,
+												Definitions['typebox'],
+												BasePath
+											>,
+											Metadata['schema']
+										>
+									>
 							standaloneSchema: Metadata['standaloneSchema']
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
+							response: Metadata['response'] &
+								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 						},
 						Routes,
 						Ephemeral,
@@ -3323,13 +4188,23 @@ export default class Elysia<
 							resolve: Prettify<
 								Ephemeral['resolve'] & MacroContext
 							>
-							schema: Prettify<
-								MergeSchema<
-									UnwrapRoute<Input, Definitions['typebox']>,
-									Metadata['schema'] & Ephemeral['schema']
-								>
-							>
+							schema: {} extends PickIfExists<Input, keyof InputSchema>
+								? EphemeralType['schema']
+								: Prettify<
+										MergeSchema<
+											UnwrapRoute<
+												Input,
+												Definitions['typebox']
+											>,
+											Metadata['schema'] &
+												Ephemeral['schema']
+										>
+									>
 							standaloneSchema: Ephemeral['standaloneSchema']
+							response: Ephemeral['response'] &
+								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 						},
 						Volatile
 					>
@@ -3348,8 +4223,17 @@ export default class Elysia<
 						derive: Volatile['derive']
 						resolve: Prettify<Volatile['resolve'] & MacroContext>
 						schema: Volatile['schema']
-						standaloneSchema: Volatile['standaloneSchema'] &
-							UnwrapRoute<Input, Definitions['typebox']>
+						standaloneSchema: {} extends PickIfExists<
+							Input,
+							keyof InputSchema
+						>
+							? Volatile['standaloneSchema']
+							: Volatile['standaloneSchema'] &
+									UnwrapRoute<Input, Definitions['typebox']>
+						response: Volatile['response'] &
+							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 					}
 				>
 			: AsType extends 'global'
@@ -3366,15 +4250,24 @@ export default class Elysia<
 						Definitions,
 						{
 							schema: Metadata['schema']
-							standaloneSchema: UnwrapRoute<
+							standaloneSchema: {} extends PickIfExists<
 								Input,
-								Definitions['typebox'],
-								BasePath
-							> &
-								Metadata['standaloneSchema']
+								keyof InputSchema
+							>
+								? Metadata['standaloneSchema']
+								: UnwrapRoute<
+										Input,
+										Definitions['typebox'],
+										BasePath
+									> &
+										Metadata['standaloneSchema']
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
+							response: Metadata['response'] &
+								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 						},
 						Routes,
 						Ephemeral,
@@ -3392,105 +4285,23 @@ export default class Elysia<
 								Ephemeral['resolve'] & MacroContext
 							>
 							schema: Ephemeral['schema']
-							standaloneSchema: Ephemeral['standaloneSchema'] &
-								UnwrapRoute<Input, Definitions['typebox']>
+							standaloneSchema: {} extends PickIfExists<
+								Input,
+								keyof InputSchema
+							>
+								? Ephemeral['standaloneSchema']
+								: Ephemeral['standaloneSchema'] &
+										UnwrapRoute<
+											Input,
+											Definitions['typebox']
+										>
+							response: Ephemeral['response'] &
+								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 						},
 						Volatile
 					>
-
-	guard<
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			Metadata['schema']
-		>,
-		const MacroContext extends MacroToContext<
-			Metadata['macroFn'],
-			NoInfer<Omit<Input, keyof InputSchema>>
-		>
-	>(
-		hook: LocalHook<
-			Input,
-			Schema,
-			Singleton & {
-				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] &
-					Volatile['resolve'] &
-					MacroContext
-			},
-			Definitions['error'],
-			keyof Metadata['parser']
-		>
-	): Elysia<
-		BasePath,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes,
-		Ephemeral,
-		{
-			derive: Volatile['derive']
-			resolve: Prettify<Volatile['resolve'] & MacroContext>
-			schema: Prettify<
-				MergeSchema<
-					UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>
-				>
-			>
-			standaloneSchema: Metadata['standaloneSchema']
-		}
-	>
-
-	guard<
-		const LocalSchema extends InputSchema<
-			keyof Definitions['typebox'] & string
-		>,
-		const NewElysia extends AnyElysia,
-		const Schema extends MergeSchema<
-			UnwrapRoute<LocalSchema, Definitions['typebox'], BasePath>,
-			Metadata['schema']
-		>,
-		const Input extends Metadata['macro'],
-		const MacroContext extends MacroToContext<
-			Metadata['macroFn'],
-			NoInfer<Omit<Input, keyof InputSchema>>
-		>
-	>(
-		run: (
-			group: Elysia<
-				BasePath,
-				{
-					decorator: Singleton['decorator']
-					store: Singleton['store']
-					derive: Singleton['derive']
-					resolve: Singleton['resolve'] & MacroContext
-				},
-				Definitions,
-				{
-					schema: Prettify<Schema>
-					standaloneSchema: Metadata['standaloneSchema']
-					macro: Metadata['macro']
-					macroFn: Metadata['macroFn']
-					parser: Metadata['parser']
-				},
-				{},
-				Ephemeral,
-				Volatile
-			>
-		) => NewElysia
-	): Elysia<
-		BasePath,
-		Singleton,
-		Definitions,
-		Metadata,
-		Prettify<Routes & NewElysia['~Routes']>,
-		Ephemeral,
-		Volatile
-	>
 
 	guard<
 		const Input extends Metadata['macro'] &
@@ -3531,6 +4342,7 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
+					response: Metadata['response']
 				},
 				{},
 				Ephemeral,
@@ -3549,6 +4361,7 @@ export default class Elysia<
 			resolve: Prettify<Volatile['resolve'] & MacroContext>
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response']
 		}
 	>
 
@@ -3563,12 +4376,10 @@ export default class Elysia<
 	 *
 	 * new Elysia()
 	 *     .guard({
-	 *          schema: {
-	 *              body: t.Object({
-	 *                  username: t.String(),
-	 *                  password: t.String()
-	 *              })
-	 *          }
+	 *          body: t.Object({
+	 *              username: t.String(),
+	 *              password: t.String()
+	 *          })
 	 *     }, app => app
 	 *         .get("/", () => 'Hi')
 	 *         .get("/name", () => 'Elysia')
@@ -3798,6 +4609,9 @@ export default class Elysia<
 			derive: Prettify<
 				Ephemeral['derive'] & Partial<NewElysia['~Ephemeral']['derive']>
 			>
+			response: Prettify<
+				Ephemeral['response'] & NewElysia['~Ephemeral']['response']
+			>
 		},
 		{
 			schema: Prettify<
@@ -3812,6 +4626,9 @@ export default class Elysia<
 			>
 			derive: Prettify<
 				Volatile['derive'] & Partial<NewElysia['~Volatile']['derive']>
+			>
+			response: Prettify<
+				Volatile['response'] & NewElysia['~Volatile']['response']
 			>
 		}
 	>
@@ -3926,6 +4743,9 @@ export default class Elysia<
 			derive: Prettify<
 				Volatile['derive'] &
 					Partial<LazyLoadElysia['~Ephemeral']['derive']>
+			>
+			response: Prettify<
+				Volatile['response'] & LazyLoadElysia['~Ephemeral']['response']
 			>
 		}>
 	>
@@ -4372,6 +5192,7 @@ export default class Elysia<
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
 			macroFn: Metadata['macroFn'] & NewMacro
 			parser: Metadata['parser']
+			response: Metadata['response']
 		},
 		Routes,
 		Ephemeral,
@@ -4400,6 +5221,7 @@ export default class Elysia<
 			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
 			macroFn: Metadata['macroFn'] & NewMacro
 			parser: Metadata['parser']
+			response: Metadata['response']
 		},
 		Routes,
 		Ephemeral,
@@ -4655,7 +5477,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -4737,7 +5565,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -4819,7 +5653,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -4901,7 +5741,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -4983,7 +5829,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -5065,7 +5917,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -5147,7 +6005,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -5229,7 +6093,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -5311,7 +6181,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -5400,7 +6276,13 @@ export default class Elysia<
 							: Schema['params']
 						query: Schema['query']
 						headers: Schema['headers']
-						response: ComposeElysiaResponse<Schema, Handle>
+						response: ComposeElysiaResponse<
+							Schema,
+							Handle,
+							Metadata['response'] &
+								Ephemeral['response'] &
+								Volatile['response']
+						>
 					}
 				}
 			>,
@@ -6071,6 +6953,7 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] & ExtractErrorFromHandle<Derivative>
 		}
 	>
 
@@ -6153,7 +7036,15 @@ export default class Elysia<
 					resolve: Singleton['resolve']
 				},
 				Definitions,
-				Metadata,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ExtractErrorFromHandle<Derivative>
+				},
 				Routes,
 				Ephemeral,
 				Volatile
@@ -6173,6 +7064,8 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ExtractErrorFromHandle<Derivative>
 					},
 					Volatile
 				>
@@ -6191,6 +7084,8 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ExtractErrorFromHandle<Derivative>
 					}
 				>
 
@@ -6399,6 +7294,8 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
+			response: Volatile['response'] &
+				ExtractErrorFromHandle<NewDerivative>
 		}
 	>
 
@@ -6451,7 +7348,15 @@ export default class Elysia<
 					>
 				},
 				Definitions,
-				Metadata,
+				{
+					schema: Metadata['schema']
+					standaloneSchema: Metadata['standaloneSchema']
+					macro: Metadata['macro']
+					macroFn: Metadata['macroFn']
+					parser: Metadata['parser']
+					response: Metadata['response'] &
+						ExtractErrorFromHandle<NewDerivative>
+				},
 				Routes,
 				Ephemeral,
 				Volatile
@@ -6471,6 +7376,8 @@ export default class Elysia<
 						>
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
+						response: Ephemeral['response'] &
+							ExtractErrorFromHandle<NewDerivative>
 					},
 					Volatile
 				>
@@ -6489,6 +7396,8 @@ export default class Elysia<
 						>
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
+						response: Volatile['response'] &
+							ExtractErrorFromHandle<NewDerivative>
 					}
 				>
 

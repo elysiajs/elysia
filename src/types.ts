@@ -40,6 +40,11 @@ type PartialServe = Partial<Serve>
 
 export type IsNever<T> = [T] extends [never] ? true : false
 
+export type PickIfExists<T, K extends string> = {
+	// @ts-ignore
+	[P in K as P extends keyof T ? P : never]: T[P];
+}
+
 // Standard Schema reduce to bare minimum to save inference time
 export interface StandardSchemaV1Like<
 	in out Input = unknown,
@@ -391,11 +396,16 @@ export interface SingletonBase {
 	resolve: Record<string, unknown>
 }
 
+export interface PossibleResponse {
+	[status: number]: unknown
+}
+
 export interface EphemeralType {
 	derive: SingletonBase['derive']
 	resolve: SingletonBase['resolve']
 	schema: MetadataBase['schema']
 	standaloneSchema: MetadataBase['schema']
+	response: PossibleResponse
 }
 
 export interface DefinitionBase {
@@ -411,6 +421,7 @@ export interface MetadataBase {
 	macro: BaseMacro
 	macroFn: BaseMacroFn
 	parser: Record<string, BodyHandler<any, any>>
+	response: PossibleResponse
 }
 
 export interface RouteSchema {
@@ -1148,6 +1159,7 @@ export type ErrorHandler<
 		resolve: {}
 		schema: {}
 		standaloneSchema: {}
+		response: {}
 	},
 	// ? local
 	in out Volatile extends EphemeralType = {
@@ -1155,6 +1167,7 @@ export type ErrorHandler<
 		resolve: {}
 		schema: {}
 		standaloneSchema: {}
+		response: {}
 	}
 > = (
 	context: ErrorContext<
@@ -1488,6 +1501,67 @@ export type LocalHook<
 	tags?: DocumentDecoration['tags']
 }
 
+export type GuardLocalHook<
+	Input extends BaseMacro,
+	Schema extends RouteSchema,
+	Singleton extends SingletonBase,
+	Parser extends keyof any,
+	GuardType extends GuardSchemaType,
+	AsType extends LifeCycleType,
+	BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>,
+	AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+	ErrorHandle extends MaybeArray<ErrorHandler<any, Schema, Singleton>>
+> = (Input extends any ? Input : Prettify<Input>) & {
+	/**
+	 * @default 'override'
+	 */
+	as?: AsType
+	/**
+	 * @default 'standalone'
+	 * @since 1.3.0
+	 */
+	schema?: GuardType
+
+	detail?: DocumentDecoration
+	/**
+	 * Short for 'Content-Type'
+	 *
+	 * Available:
+	 * - 'none': do not parse body
+	 * - 'text' / 'text/plain': parse body as string
+	 * - 'json' / 'application/json': parse body as json
+	 * - 'formdata' / 'multipart/form-data': parse body as form-data
+	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
+	 * - 'arraybuffer': parse body as readable stream
+	 */
+	parse?: MaybeArray<BodyHandler<Schema, Singleton> | ContentType | Parser>
+	/**
+	 * Transform context's value
+	 */
+	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+	/**
+	 * Execute before main handler
+	 */
+	beforeHandle?: BeforeHandle
+	/**
+	 * Execute after main handler
+	 */
+	afterHandle?: AfterHandle
+	/**
+	 * Execute after main handler
+	 */
+	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
+	/**
+	 * Execute after response is sent
+	 */
+	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
+	/**
+	 * Catch error
+	 */
+	error?: ErrorHandle
+	tags?: DocumentDecoration['tags']
+}
+
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
 export interface InternalRoute {
@@ -1789,10 +1863,11 @@ export type CreateEden<
 
 export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
-	Handle
+	Handle,
+	Possibility extends PossibleResponse
 > = Handle extends (...a: any) => infer A
-	? _ComposeElysiaResponse<Schema, Awaited<A>>
-	: _ComposeElysiaResponse<Schema, Awaited<Handle>>
+	? _ComposeElysiaResponse<Schema, Awaited<A>, Possibility>
+	: _ComposeElysiaResponse<Schema, Awaited<Handle>, Possibility>
 
 export interface EmptyRouteSchema {
 	body: unknown
@@ -1803,7 +1878,52 @@ export interface EmptyRouteSchema {
 	response: unknown
 }
 
-type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
+type Extract200<T> = T extends AnyElysiaCustomStatusResponse
+	?
+			| Exclude<T, AnyElysiaCustomStatusResponse>
+			| Extract<T, ElysiaCustomStatusResponse<200, any, 200>>['response']
+	: T
+
+export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
+	Prettify<
+		Handle extends (...a: any) => MaybePromise<infer R>
+			? ExtractErrorFromHandle<R> &
+					(Extract200<R> extends infer R200
+						? undefined extends R200
+							? {}
+							: IsNever<R200> extends true
+								? {}
+								: { 200: R200 }
+						: {})
+			: {}
+	>
+
+export type ElysiaHandlerToResponseSchemaAmbiguous<
+	Schemas extends MaybeArray<Function> | undefined
+> = Schemas extends Function
+	? ElysiaHandlerToResponseSchema<Schemas>
+	: Schemas extends Function[]
+		? ElysiaHandlerToResponseSchemas<Schemas>
+		: {}
+
+export type ElysiaHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [
+	infer Current extends Function,
+	...infer Rest extends Function[]
+]
+	? ElysiaHandlerToResponseSchemas<
+			Rest,
+			Carry & ElysiaHandlerToResponseSchema<Current>
+		>
+	: Prettify<Carry>
+
+type _ComposeElysiaResponse<
+	Schema extends RouteSchema,
+	Handle,
+	Possibility extends PossibleResponse
+> = Prettify<
 	(Schema['response'] extends { 200: any }
 		? {
 				200: Schema['response'][200]
@@ -1831,10 +1951,11 @@ type _ComposeElysiaResponse<Schema extends RouteSchema, Handle> = Prettify<
 						property?: string
 						expected?: string
 					}
-				})
+				}) &
+		Possibility
 >
 
-type ExtractErrorFromHandle<Handle> = {
+export type ExtractErrorFromHandle<in out Handle> = {
 	[ErrorResponse in Extract<
 		Handle,
 		AnyElysiaCustomStatusResponse
@@ -1862,18 +1983,21 @@ export type MergeElysiaInstances<
 		macro: {}
 		macroFn: {}
 		parser: {}
+		response: {}
 	},
 	Ephemeral extends EphemeralType = {
 		derive: {}
 		resolve: {}
 		schema: {}
 		standaloneSchema: {}
+		response: {}
 	},
 	Volatile extends EphemeralType = {
 		derive: {}
 		resolve: {}
 		schema: {}
 		standaloneSchema: {}
+		response: {}
 	},
 	Routes extends RouteBase = {}
 > = Instances extends [
