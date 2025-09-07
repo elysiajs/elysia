@@ -869,12 +869,6 @@ type MacroResolveLike = MaybeArray<
 	>
 >
 
-type ResolveMacroPropertyLike = {
-	resolve: MacroResolveLike
-}
-
-type ResolveMacroFnLike = (...v: any[]) => ResolveMacroPropertyLike
-
 type MergeAllMacroContext<T> = Prettify<UnionToIntersect<T[keyof T]>>
 
 type ExtractMacroContext<A> =
@@ -882,18 +876,17 @@ type ExtractMacroContext<A> =
 		? {}
 		: Exclude<A, AnyElysiaCustomStatusResponse | void>
 
-type CustomResponseToSchema<T> =
-	T extends ElysiaCustomStatusResponse<
+type CustomResponseToSchema<T> = {
+	return: T extends ElysiaCustomStatusResponse<
 		infer Code,
-		infer Response,
+		infer Value,
 		infer Status
 	>
 		? {
-				response: {
-					[status in Status]: Response
-				}
+				[status in Status]: Value
 			}
 		: {}
+}
 
 type ExtractResponseFromMacro<A> =
 	IsNever<Awaited<A>> extends true
@@ -917,10 +910,8 @@ export type MacroToContext<
 			[key in keyof SelectedMacro]: ReturnTypeIfPossible<
 				MacroFn[key]
 			> extends infer Value
-				? (MacroFn[key] extends
-						| ResolveMacroFnLike
-						| ResolveMacroPropertyLike
-						? true extends SelectedMacro[key]
+				? {
+						resolve: true extends SelectedMacro[key]
 							? ExtractMacroContext<
 									ResolveResolutions<
 										// @ts-expect-error type is checked in key mapping
@@ -928,26 +919,21 @@ export type MacroToContext<
 									>
 								>
 							: {}
-						: {}) &
-						UnwrapMacroSchema<
-							// @ts-ignore Trust me bro
-							Value,
-							Definitions
-						> &
+					} & UnwrapMacroSchema<
+						// @ts-ignore Trust me bro
+						Value,
+						Definitions
+					> &
 						CustomResponseToSchema<
 							ExtractResponseFromMacro<
-								ResolveResolutions<
-									// @ts-expect-error type is checked in key mapping
-									Value['beforeHandle']
-								>
+								// @ts-expect-error type is checked in key mapping
+								ResolveResolutions<Value['beforeHandle']>
 							>
 						> &
 						CustomResponseToSchema<
 							ExtractResponseFromMacro<
-								ResolveResolutions<
-									// @ts-expect-error type is checked in key mapping
-									Value['afterHandle']
-								>
+								// @ts-expect-error type is checked in key mapping
+								ResolveResolutions<Value['afterHandle']>
 							>
 						>
 				: {}
@@ -956,24 +942,16 @@ export type MacroToContext<
 type UnwrapMacroSchema<
 	T extends Partial<InputSchema<any>>,
 	Definitions extends DefinitionBase['typebox'] = {}
-> = Omit<
-	UnwrapRoute<
-		{
-			body: 'body' extends keyof T ? T['body'] : undefined
-			headers: 'headers' extends keyof T ? T['headers'] : undefined
-			query: 'query' extends keyof T ? T['query'] : undefined
-			params: 'params' extends keyof T ? T['params'] : undefined
-			cookie: 'cookie' extends keyof T ? T['cookie'] : undefined
-			response: 'response' extends keyof T ? T['response'] : undefined
-		},
-		Definitions
-	>,
-	| ('body' extends keyof T ? never : 'body')
-	| ('headers' extends keyof T ? never : 'headers')
-	| ('query' extends keyof T ? never : 'query')
-	| ('params' extends keyof T ? never : 'params')
-	| ('cookie' extends keyof T ? never : 'cookie')
-	| ('response' extends keyof T ? never : 'response')
+> = UnwrapRoute<
+	{
+		body: 'body' extends keyof T ? T['body'] : undefined
+		headers: 'headers' extends keyof T ? T['headers'] : undefined
+		query: 'query' extends keyof T ? T['query'] : undefined
+		params: 'params' extends keyof T ? T['params'] : undefined
+		cookie: 'cookie' extends keyof T ? T['cookie'] : undefined
+		response: 'response' extends keyof T ? T['response'] : undefined
+	},
+	Definitions
 >
 
 type InlineHandlerResponse<Route extends RouteSchema['response']> = {
@@ -993,39 +971,41 @@ export type InlineHandler<
 		derive: {}
 		resolve: {}
 	},
-	Path extends string | undefined = undefined
+	MacroContext extends {
+		response: PossibleResponse
+		return: PossibleResponse
+		resolve: Record<string, unknown>
+	} = {
+		response: {}
+		return: {}
+		resolve: {}
+	}
 > =
 	| ((
 			context: Context<
-				Route &
-					({} extends Route['response']
-						? {}
-						: IsAny<Singleton['resolve']['response']> extends true
-							? {}
-							: { response: Singleton['resolve']['response'] }),
-				Singleton,
-				Path
+				Route & { response: MacroContext['response'] },
+				Singleton & { resolve: MacroContext['resolve'] }
 			>
-	  ) => MaybePromise<
-			{} extends Route['response']
-				? unknown
-				:
-						| (Route['response'] extends {
-								200: any
-						  }
-								? Route['response'][200]
-								: unknown)
-						// This could be possible because of set.status
-						| Route['response'][keyof Route['response']]
-						| InlineHandlerResponse<Route['response']>
-						| (IsAny<Singleton['resolve']['response']> extends true
-								? Response
-								:
-										| Response
-										| InlineHandlerResponse<
-												Singleton['resolve']['response']
-										  >)
-	  >)
+	  ) =>
+			| Response
+			| MaybePromise<
+					{} extends Route['response']
+						? unknown
+						:
+								| (Route['response'] extends {
+										200: any
+								  }
+										? Route['response'][200]
+										: unknown)
+								// This could be possible because of set.status
+								| Route['response'][keyof Route['response']]
+								| InlineHandlerResponse<
+										Route['response'] &
+											({} extends MacroContext['response']
+												? {}
+												: MacroContext['response'])
+								  >
+			  >)
 	| ({} extends Route['response']
 			? string | number | boolean | Record<any, unknown>
 			: Route['response'] extends { 200: any }
@@ -1569,9 +1549,13 @@ export type GuardLocalHook<
 	Parser extends keyof any,
 	GuardType extends GuardSchemaType,
 	AsType extends LifeCycleType,
-	BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>,
-	AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
-	ErrorHandle extends MaybeArray<ErrorHandler<any, Schema, Singleton>>
+	BeforeHandle extends
+		| MaybeArray<OptionalHandler<Schema, Singleton>>
+		| undefined,
+	AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>> | undefined,
+	ErrorHandle extends
+		| MaybeArray<ErrorHandler<any, Schema, Singleton>>
+		| undefined
 > = (Input extends any ? Input : Prettify<Input>) & {
 	/**
 	 * @default 'override'
@@ -1943,11 +1927,13 @@ export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 
 export type ElysiaHandlerToResponseSchemaAmbiguous<
 	Schemas extends MaybeArray<Function> | undefined
-> = Schemas extends Function
-	? ElysiaHandlerToResponseSchema<Schemas>
-	: Schemas extends Function[]
-		? ElysiaHandlerToResponseSchemas<Schemas>
-		: {}
+> = undefined extends Schemas
+	? {}
+	: Schemas extends Function
+		? ElysiaHandlerToResponseSchema<Schemas>
+		: Schemas extends Function[]
+			? ElysiaHandlerToResponseSchemas<Schemas>
+			: {}
 
 export type ElysiaHandlerToResponseSchemas<
 	Handle extends Function[],
@@ -2106,12 +2092,11 @@ export type InferHandler<
 	Path extends string = T['~Prefix'],
 	Schema extends RouteSchema = T['~Metadata']['schema']
 > = InlineHandler<
-	MergeSchema<Schema, T['~Metadata']['schema']>,
+	MergeSchema<Schema, T['~Metadata']['schema'], Path>,
 	T['~Singleton'] & {
 		derive: T['~Ephemeral']['derive'] & T['~Volatile']['derive']
 		resolve: T['~Ephemeral']['resolve'] & T['~Volatile']['resolve']
-	},
-	Path
+	}
 >
 
 export interface ModelValidatorError extends ValueError {

@@ -21,12 +21,13 @@ export const app = new Elysia()
 	)
 	.macro({
 		auth: {
-			body: t.Object({
-				a: t.String()
-			}),
+			response: {
+				201: t.Literal('a')
+			},
 			beforeHandle({ status }) {
 				if (Math.random() < 0.05) return status(410)
-			}
+			},
+			resolve: () => ({ a: 'a' })
 		}
 	})
 	.onError(({ status }) => {
@@ -59,14 +60,20 @@ export const app = new Elysia()
 			if (Math.random() < 0.05) return status(408)
 		}
 	})
-	.get(
+	.post(
 		'/',
-		({ body, status }) =>
-			Math.random() < 0.05 ? status(409) : ('Hello World' as const),
+		({ body, status }) => {
+			if (Math.random() < 0.05) return status(201, 'a')
+
+			return 'Hello World'
+		},
 		{
-			auth: true
+			auth: true,
+			response: {
+				200: t.Literal('Hello World')
+			}
 		}
 	)
 	.listen(3000)
 
-// app['~Routes']['get']['response']
+app['~Routes']['post']['response']['mac']

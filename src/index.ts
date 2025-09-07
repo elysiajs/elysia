@@ -4117,13 +4117,15 @@ export default class Elysia<
 		>,
 		const GuardType extends GuardSchemaType,
 		const AsType extends LifeCycleType,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
-		>,
-		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
-		const ErrorHandle extends MaybeArray<
-			ErrorHandler<Definitions['error'], Schema, Singleton>
-		>
+		const BeforeHandle extends
+			| MaybeArray<OptionalHandler<Schema, Singleton>>
+			| undefined,
+		const AfterHandle extends
+			| MaybeArray<AfterHandler<Schema, Singleton>>
+			| undefined,
+		const ErrorHandle extends
+			| MaybeArray<ErrorHandler<Definitions['error'], Schema, Singleton>>
+			| undefined
 	>(
 		hook: GuardLocalHook<
 			Input,
@@ -4156,7 +4158,11 @@ export default class Elysia<
 					Ephemeral,
 					{
 						derive: Volatile['derive']
-						resolve: Prettify<Volatile['resolve'] & MacroContext>
+						resolve: Prettify<
+							Volatile['resolve'] &
+								// @ts-ignore
+								MacroContext['resolve']
+						>
 						schema: {} extends PickIfExists<
 							Input,
 							keyof InputSchema
@@ -4186,7 +4192,9 @@ export default class Elysia<
 							store: Singleton['store']
 							derive: Singleton['derive']
 							resolve: Prettify<
-								Singleton['resolve'] & MacroContext
+								Singleton['resolve'] &
+									// @ts-ignore
+									MacroContext['resolve']
 							>
 						},
 						Definitions,
@@ -4228,7 +4236,9 @@ export default class Elysia<
 						{
 							derive: Ephemeral['derive']
 							resolve: Prettify<
-								Ephemeral['resolve'] & MacroContext
+								Ephemeral['resolve'] &
+									// @ts-ignore
+									MacroContext['resolve']
 							>
 							schema: {} extends PickIfExists<
 								Input,
@@ -4266,7 +4276,11 @@ export default class Elysia<
 					Ephemeral,
 					{
 						derive: Volatile['derive']
-						resolve: Prettify<Volatile['resolve'] & MacroContext>
+						resolve: Prettify<
+							Volatile['resolve'] &
+								// @ts-ignore
+								MacroContext['resolve']
+						>
 						schema: Volatile['schema']
 						standaloneSchema: {} extends PickIfExists<
 							Input,
@@ -4289,7 +4303,9 @@ export default class Elysia<
 							store: Singleton['store']
 							derive: Singleton['derive']
 							resolve: Prettify<
-								Singleton['resolve'] & MacroContext
+								Singleton['resolve'] &
+									// @ts-ignore
+									MacroContext['resolve']
 							>
 						},
 						Definitions,
@@ -4327,7 +4343,9 @@ export default class Elysia<
 						{
 							derive: Ephemeral['derive']
 							resolve: Prettify<
-								Ephemeral['resolve'] & MacroContext
+								Ephemeral['resolve'] &
+									// @ts-ignore
+									MacroContext['resolve']
 							>
 							schema: Ephemeral['schema']
 							standaloneSchema: {} extends PickIfExists<
@@ -4378,7 +4396,11 @@ export default class Elysia<
 					decorator: Singleton['decorator']
 					store: Singleton['store']
 					derive: Singleton['derive']
-					resolve: Prettify<Singleton['resolve'] & MacroContext>
+					resolve: Prettify<
+						Singleton['resolve'] &
+							// @ts-ignore
+							MacroContext['resolve']
+					>
 				},
 				Definitions,
 				{
@@ -4403,7 +4425,11 @@ export default class Elysia<
 		Ephemeral,
 		{
 			derive: Volatile['derive']
-			resolve: Prettify<Volatile['resolve'] & MacroContext>
+			resolve: Prettify<
+				Volatile['resolve'] &
+					// @ts-ignore
+					MacroContext['resolve']
+			>
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
 			response: Volatile['response']
@@ -5489,17 +5515,20 @@ export default class Elysia<
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema']
 		>,
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			Decorator,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5532,11 +5561,8 @@ export default class Elysia<
 							Metadata['response'] &
 								Ephemeral['response'] &
 								Volatile['response'] &
-								(IsAny<
-									Decorator['resolve']['response']
-								> extends true
-									? {}
-									: Decorator['resolve']['response'])
+								// @ts-ignore
+								MacroContext['response']
 						>
 					}
 				}
@@ -5585,14 +5611,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, NoInfer<Decorator>>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5623,8 +5654,12 @@ export default class Elysia<
 							Schema,
 							Handle,
 							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response']
+							Ephemeral['response'] &
+							Volatile['response'] &
+							// @ts-ignore
+							MacroContext['response'] &
+							// @ts-ignore
+							MacroContext['return']
 						>
 					}
 				}
@@ -6382,7 +6417,11 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema']
+			Volatile['standaloneSchema'],
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>
+		>
 	>(
 		path: Path,
 		options: WSLocalHook<
@@ -6392,10 +6431,8 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					MacroToContext<
-						Metadata['macroFn'],
-						Omit<Input, NonResolvableMacroKey>
-					>
+					// @ts-ignore
+					MacroContext['resolve']
 			}
 		>
 	): Elysia<
