@@ -277,7 +277,7 @@ export type GetPathParameter<Path extends string> =
 		? IsPathParameter<A> | GetPathParameter<B>
 		: IsPathParameter<Path>
 
-export type ResolvePath<Path extends string> = Prettify<
+type _ResolvePath<Path extends string> = Prettify<
 	{
 		[Param in GetPathParameter<Path> as Param extends `${string}?`
 			? never
@@ -288,6 +288,10 @@ export type ResolvePath<Path extends string> = Prettify<
 			: never]?: string
 	}
 >
+
+export type ResolvePath<Path extends string> = Path extends PathParameterLike
+	? _ResolvePath<Path>
+	: {}
 
 export type Or<T1 extends boolean, T2 extends boolean> = T1 extends true
 	? true

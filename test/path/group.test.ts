@@ -247,4 +247,23 @@ describe('group', () => {
 
 		expect(response).toEqual('a')
 	})
+
+	it('cast callback function schema to standaloneValidator', async () => {
+		const app = new Elysia().group(
+			'/group/:id',
+			{ params: t.Object({ id: t.Number() }) },
+			(app) =>
+				app.get('/:name', ({ params }) => params, {
+					params: t.Object({ name: t.String() })
+				})
+		)
+
+		const valid = app.handle(req('/group/1/saltyaom')).then((x) => x.json())
+		const invalid = app
+			.handle(req('/group/a/saltyaom'))
+			.then((x) => x.status)
+
+		expect(await valid).toEqual({ id: 1, name: 'saltyaom' })
+		expect(await invalid).toBe(422)
+	})
 })

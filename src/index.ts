@@ -3923,7 +3923,7 @@ export default class Elysia<
 				},
 				Definitions,
 				{
-					schema: Prettify<Schema>
+					schema: Schema
 					standaloneSchema: Metadata['standaloneSchema']
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
@@ -4121,7 +4121,10 @@ export default class Elysia<
 					{
 						derive: Volatile['derive']
 						resolve: Prettify<Volatile['resolve'] & MacroContext>
-						schema: {} extends PickIfExists<Input, keyof InputSchema>
+						schema: {} extends PickIfExists<
+							Input,
+							keyof InputSchema
+						>
 							? Volatile['schema']
 							: Prettify<
 									MergeSchema<
@@ -4152,7 +4155,10 @@ export default class Elysia<
 						},
 						Definitions,
 						{
-							schema: {} extends PickIfExists<Input, keyof InputSchema>
+							schema: {} extends PickIfExists<
+								Input,
+								keyof InputSchema
+							>
 								? Metadata['schema']
 								: Prettify<
 										MergeSchema<
@@ -4188,7 +4194,10 @@ export default class Elysia<
 							resolve: Prettify<
 								Ephemeral['resolve'] & MacroContext
 							>
-							schema: {} extends PickIfExists<Input, keyof InputSchema>
+							schema: {} extends PickIfExists<
+								Input,
+								keyof InputSchema
+							>
 								? EphemeralType['schema']
 								: Prettify<
 										MergeSchema<
@@ -4337,7 +4346,7 @@ export default class Elysia<
 				},
 				Definitions,
 				{
-					schema: Prettify<Schema>
+					schema: Schema
 					standaloneSchema: Metadata['standaloneSchema']
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
@@ -4506,7 +4515,13 @@ export default class Elysia<
 		this.model(sandbox.definitions.type)
 
 		Object.values(instance.router.history).forEach(
-			({ method, path, handler, hooks: localHook }) => {
+			({
+				method,
+				path,
+				handler,
+				hooks: localHook,
+				standaloneValidators
+			}) => {
 				this.add(
 					method,
 					path,
@@ -4524,7 +4539,9 @@ export default class Elysia<
 										localHook.error,
 										...(sandbox.event.error ?? [])
 									]
-					})
+					}),
+					undefined,
+					standaloneValidators
 				)
 			}
 		)
@@ -6325,7 +6342,10 @@ export default class Elysia<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
 			>
-		>
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema']
 	>(
 		path: Path,
 		options: WSLocalHook<

@@ -1,5 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { t, Elysia, Cookie, file, sse, SSEPayload, status, form } from '../../src'
+import {
+	t,
+	Elysia,
+	Cookie,
+	file,
+	sse,
+	SSEPayload,
+	status,
+	form
+} from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
@@ -722,7 +731,7 @@ app.use(plugin).group(
 	type Route = App['v1']['a']['subscribe']
 	expectTypeOf<Route>().toEqualTypeOf<{
 		body: string
-		params: Record<never, string>
+		params: {}
 		query: {
 			name: string
 		}
