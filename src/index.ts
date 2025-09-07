@@ -154,7 +154,6 @@ import type {
 	StandaloneValidator,
 	GuardSchemaType,
 	Or,
-	PrettifySchema,
 	MergeStandaloneSchema,
 	IsNever,
 	DocumentDecoration,
@@ -3738,7 +3737,7 @@ export default class Elysia<
 				MergeSchema<Volatile['schema'], Ephemeral['schema']>,
 				Metadata['schema']
 			>
-			standaloneSchema: PrettifySchema<
+			standaloneSchema: Prettify<
 				Metadata['standaloneSchema'] &
 					Volatile['standaloneSchema'] &
 					Ephemeral['standaloneSchema']
@@ -3777,7 +3776,7 @@ export default class Elysia<
 			derive: Prettify<Ephemeral['derive'] & Volatile['derive']>
 			resolve: Prettify<Ephemeral['resolve'] & Volatile['resolve']>
 			schema: MergeSchema<Volatile['schema'], Ephemeral['schema']>
-			standaloneSchema: PrettifySchema<
+			standaloneSchema: Prettify<
 				Volatile['standaloneSchema'] & Ephemeral['standaloneSchema']
 			>
 			response: Prettify<Volatile['response'] & Ephemeral['response']>
@@ -4661,7 +4660,7 @@ export default class Elysia<
 			schema: Prettify<
 				Ephemeral['schema'] & Partial<NewElysia['~Ephemeral']['schema']>
 			>
-			standaloneSchema: PrettifySchema<
+			standaloneSchema: Prettify<
 				Ephemeral['standaloneSchema'] &
 					Partial<NewElysia['~Ephemeral']['standaloneSchema']>
 			>
@@ -4680,7 +4679,7 @@ export default class Elysia<
 			schema: Prettify<
 				Volatile['schema'] & Partial<NewElysia['~Volatile']['schema']>
 			>
-			standaloneSchema: PrettifySchema<
+			standaloneSchema: Prettify<
 				Volatile['standaloneSchema'] &
 					Partial<NewElysia['~Volatile']['standaloneSchema']>
 			>
@@ -4795,7 +4794,7 @@ export default class Elysia<
 				Volatile['schema'] &
 					Partial<LazyLoadElysia['~Ephemeral']['schema']>
 			>
-			standaloneSchema: PrettifySchema<
+			standaloneSchema: Prettify<
 				Volatile['standaloneSchema'] &
 					Partial<LazyLoadElysia['~Ephemeral']['standaloneSchema']>
 			>

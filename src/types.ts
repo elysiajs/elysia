@@ -705,19 +705,6 @@ export interface InputSchema<in out Name extends string = string> {
 		  }
 }
 
-export interface PrettifySchema<in out A extends RouteSchema> {
-	body: unknown extends A['body'] ? A['body'] : Prettify<A['body']>
-	headers: unknown extends A['headers']
-		? A['headers']
-		: Prettify<A['headers']>
-	query: unknown extends A['query'] ? A['query'] : Prettify<A['query']>
-	params: unknown extends A['params'] ? A['params'] : Prettify<A['params']>
-	cookie: unknown extends A['cookie'] ? A['cookie'] : Prettify<A['cookie']>
-	response: unknown extends A['response']
-		? A['response']
-		: Prettify<A['response']>
-}
-
 type PathParameterLike = `${string}/${':' | '*'}${string}`
 
 export type MergeSchema<
