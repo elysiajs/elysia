@@ -893,7 +893,31 @@ type MergeAllMacroContext<T> = Prettify<UnionToIntersect<T[keyof T]>>
 type ExtractMacroContext<A> =
 	IsNever<A> extends true
 		? {}
-		: Exclude<Awaited<A>, AnyElysiaCustomStatusResponse | void>
+		: Exclude<A, AnyElysiaCustomStatusResponse | void>
+
+type CustomResponseToSchema<T> =
+	T extends ElysiaCustomStatusResponse<
+		infer Code,
+		infer Response,
+		infer Status
+	>
+		? {
+				response: {
+					[status in Status]: Response
+				}
+			}
+		: {}
+
+type ExtractResponseFromMacro<A> =
+	IsNever<Awaited<A>> extends true
+		? {}
+		: {} extends Awaited<A>
+			? {}
+			: Extract<Awaited<A>, AnyElysiaCustomStatusResponse> extends infer A
+				? IsNever<A> extends true
+					? {}
+					: A
+				: {}
 
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
@@ -903,23 +927,43 @@ export type MacroToContext<
 > = {} extends SelectedMacro
 	? {}
 	: MergeAllMacroContext<{
-			[key in keyof SelectedMacro]: (MacroFn[key] extends
-				| ResolveMacroFnLike
-				| ResolveMacroPropertyLike
-				? true extends SelectedMacro[key]
-					? ExtractMacroContext<
-							ResolveResolutions<
-								// @ts-expect-error type is checked in key mapping
-								ReturnTypeIfPossible<MacroFn[key]>['resolve']
+			[key in keyof SelectedMacro]: ReturnTypeIfPossible<
+				MacroFn[key]
+			> extends infer Value
+				? (MacroFn[key] extends
+						| ResolveMacroFnLike
+						| ResolveMacroPropertyLike
+						? true extends SelectedMacro[key]
+							? ExtractMacroContext<
+									ResolveResolutions<
+										// @ts-expect-error type is checked in key mapping
+										Value['resolve']
+									>
+								>
+							: {}
+						: {}) &
+						UnwrapMacroSchema<
+							// @ts-ignore Trust me bro
+							Value,
+							Definitions
+						> &
+						CustomResponseToSchema<
+							ExtractResponseFromMacro<
+								ResolveResolutions<
+									// @ts-expect-error type is checked in key mapping
+									Value['beforeHandle']
+								>
+							>
+						> &
+						CustomResponseToSchema<
+							ExtractResponseFromMacro<
+								ResolveResolutions<
+									// @ts-expect-error type is checked in key mapping
+									Value['afterHandle']
+								>
 							>
 						>
-					: {}
-				: {}) &
-				UnwrapMacroSchema<
-					// @ts-ignore Trust me bro
-					ReturnTypeIfPossible<MacroFn[key]>,
-					Definitions
-				>
+				: {}
 		}>
 
 type UnwrapMacroSchema<
@@ -949,7 +993,8 @@ type InlineHandlerResponse<Route extends RouteSchema['response']> = {
 	[Status in keyof Route]: ElysiaCustomStatusResponse<
 		// @ts-ignore Status is always a number
 		Status,
-		Route[Status]
+		Route[Status],
+		Status
 	>
 }[keyof Route]
 
@@ -966,33 +1011,33 @@ export type InlineHandler<
 	| ((
 			context: Context<
 				Route &
-					(IsNever<Singleton['resolve']['response']> extends false
+					(IsAny<Singleton['resolve']['response']> extends false
 						? { response: Singleton['resolve']['response'] }
 						: {}),
 				Singleton,
 				Path
 			>
-	  ) =>
-			| Response
-			| MaybePromise<
-					{} extends Route['response']
-						? unknown
-						:
-								| (Route['response'] extends { 200: any }
-										? Route['response'][200]
-										: unknown)
-								// This could be possible because of set.status
-								| Route['response'][keyof Route['response']]
-								| InlineHandlerResponse<Route['response']>
-								| IsNever<Singleton['resolve']['response']> extends false
-									? Singleton['resolve']['response']
-									: {}
-			  >)
+	  ) => MaybePromise<
+			| (IsAny<Singleton['resolve']['response']> extends false
+					? Response | InlineHandlerResponse<Singleton['resolve']['response']>
+					: Response)
+			| ({} extends Route['response']
+					? unknown
+					:
+							| (Route['response'] extends {
+									200: any
+							  }
+									? Route['response'][200]
+									: unknown)
+							// This could be possible because of set.status
+							| Route['response'][keyof Route['response']]
+							| InlineHandlerResponse<Route['response']>)
+	  >)
 	| ({} extends Route['response']
-			? string | number | boolean | object
+			? string | number | boolean | Record<any, unknown>
 			: Route['response'] extends { 200: any }
 				? Route['response'][200]
-				: string | number | boolean | object)
+				: string | number | boolean | Record<any, unknown>)
 	| AnyElysiaCustomStatusResponse
 
 export type OptionalHandler<
@@ -1392,8 +1437,10 @@ export type ResolveResolutions<T extends MaybeArray<unknown>> =
 		: IsNever<keyof T> extends true
 			? any[] extends T
 				? {}
-				: ReturnType<// @ts-ignore Trust me bro
-					T>
+				: Awaited<
+						ReturnType<// @ts-ignore Trust me bro
+						T>
+					>
 			: ResolveResolutionsArray<// @ts-ignore Trust me bro
 				T>
 
@@ -1401,7 +1448,10 @@ export type ResolveResolutionsArray<
 	T extends any[],
 	Carry extends Record<keyof any, unknown> = {}
 > = T extends [infer Fn extends AnyContextFn, ...infer Rest]
-	? ReturnType<Fn> extends infer Value extends Record<keyof any, unknown>
+	? Awaited<ReturnType<Fn>> extends infer Value extends Record<
+			keyof any,
+			unknown
+		>
 		? ResolveResolutionsArray<Rest, Value & Carry>
 		: ResolveResolutionsArray<Rest, Carry>
 	: Prettify<Carry>

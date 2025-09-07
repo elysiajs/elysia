@@ -5484,11 +5484,11 @@ export default class Elysia<
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
-			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] &
@@ -5531,12 +5531,7 @@ export default class Elysia<
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response'] &
-								(IsNever<
-									Decorator['resolve']['response']
-								> extends false
-									? Decorator['resolve']['response']
-									: {})
+								Volatile['response']
 						>
 					}
 				}

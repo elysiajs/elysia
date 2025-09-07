@@ -158,6 +158,15 @@ import { Prettify } from '../../../src/types'
 		407: 'Proxy Authentication Required'
 		408: 'Request Timeout'
 		409: 'Conflict'
+		422: {
+			type: 'validation'
+			on: string
+			summary?: string
+			message?: string
+			found?: unknown
+			property?: string
+			expected?: string
+		}
 	}>
 }
 
@@ -225,5 +234,14 @@ import { Prettify } from '../../../src/types'
 		407: 'Proxy Authentication Required'
 		408: 'Request Timeout'
 		409: 'Conflict'
+		422: {
+			type: 'validation'
+			on: string
+			summary?: string
+			message?: string
+			found?: unknown
+			property?: string
+			expected?: string
+		}
 	}>
 }

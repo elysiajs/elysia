@@ -79,6 +79,12 @@ export const status = <
 	response?: T
 ) => new ElysiaCustomStatusResponse<Code, T>(code, response as any)
 
+const a = status(403, 'a')
+const b = status(403, 'b')
+
+type a = typeof a
+type b = typeof b
+
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
 	status = 500

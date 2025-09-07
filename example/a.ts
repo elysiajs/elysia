@@ -1,6 +1,7 @@
-import { Elysia, t } from '../src'
+import { Elysia, status, t } from '../src'
+import z from 'zod'
 
-export const app = new Elysia()
+const app = new Elysia()
 	.macro({
 		a: {
 			query: t.Object({
@@ -20,16 +21,17 @@ export const app = new Elysia()
 	.get(
 		'/',
 		({ query, status }) => {
-			return status(403, 'Forbidden')
+			return status(404, 'Thing')
 		},
 		{
 			a: true,
 			response: {
+				200: t.Literal("Q"),
 				403: t.Literal('Forbidden')
-			}
-			// query: t.Object({
-			// 	name: t.String()
-			// })
+			},
+			query: t.Object({
+				name: t.String()
+			})
 		}
 	)
 
