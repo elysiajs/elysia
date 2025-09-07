@@ -476,6 +476,27 @@ export default class Elysia<
 					global: this.event,
 					local: localHook
 				},
+				get query() {
+					return manage('query') as any
+				},
+				get params() {
+					return manage('params') as any
+				},
+				get headers() {
+					return manage('headers') as any
+				},
+				get body() {
+					return manage('body') as any
+				},
+				get cookie() {
+					return manage('cookie') as any
+				},
+				get response() {
+					return manage('response') as any
+				},
+				get detail() {
+					return manage('detail') as any
+				},
 				get onParse() {
 					return manage('parse') as any
 				},
@@ -534,32 +555,34 @@ export default class Elysia<
 		options?: {
 			allowMeta?: boolean
 			skipPrefix?: boolean
-		},
-		standaloneValidators?: InputSchema<string>[]
+		}
 	) {
 		const skipPrefix = options?.skipPrefix ?? false
 		const allowMeta = options?.allowMeta ?? false
 
 		localHook ??= {}
 
-		if (standaloneValidators === undefined) {
-			standaloneValidators = []
+		let standaloneValidators = [] as InputSchema[]
 
-			if (this.standaloneValidator.local)
-				standaloneValidators = standaloneValidators.concat(
-					this.standaloneValidator.local
-				)
+		if (localHook.standaloneValidator)
+			standaloneValidators = standaloneValidators.concat(
+				localHook.standaloneValidator
+			)
 
-			if (this.standaloneValidator.scoped)
-				standaloneValidators = standaloneValidators.concat(
-					this.standaloneValidator.scoped
-				)
+		if (this.standaloneValidator.local)
+			standaloneValidators = standaloneValidators.concat(
+				this.standaloneValidator.local
+			)
 
-			if (this.standaloneValidator.global)
-				standaloneValidators = standaloneValidators.concat(
-					this.standaloneValidator.global
-				)
-		}
+		if (this.standaloneValidator.scoped)
+			standaloneValidators = standaloneValidators.concat(
+				this.standaloneValidator.scoped
+			)
+
+		if (this.standaloneValidator.global)
+			standaloneValidators = standaloneValidators.concat(
+				this.standaloneValidator.global
+			)
 
 		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
 		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
@@ -821,7 +844,12 @@ export default class Elysia<
 
 		const hooks = isNotEmpty(this.event)
 			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
-			: lifeCycleToArray(localHookToLifeCycleStore(localHook))
+			: { ...lifeCycleToArray(localHookToLifeCycleStore(localHook)) }
+
+		if (standaloneValidators.length)
+			Object.assign(hooks, {
+				standaloneValidator: standaloneValidators
+			})
 
 		if (this.config.aot === false) {
 			const validator = createValidator()
@@ -872,8 +900,7 @@ export default class Elysia<
 				composed: null,
 				handler: handle,
 				compile: undefined as any,
-				hooks,
-				standaloneValidators
+				hooks
 			})
 
 			return
@@ -1028,11 +1055,6 @@ export default class Elysia<
 						handler: handle,
 						hooks
 					},
-					standaloneValidators.length
-						? {
-								standaloneValidators
-							}
-						: undefined,
 					localHook.webSocket
 						? { websocket: localHook.websocket as any }
 						: undefined
@@ -4001,12 +4023,20 @@ export default class Elysia<
 		this.model(sandbox.definitions.type)
 
 		Object.values(instance.router.history).forEach(
-			({ method, path, handler, hooks, standaloneValidators }) => {
+			({ method, path, handler, hooks }) => {
 				path =
 					(isSchema ? '' : (this.config.prefix ?? '')) + prefix + path
 
 				if (isSchema) {
-					const hook = schemaOrRun
+					const {
+						body,
+						headers,
+						query,
+						params,
+						cookie,
+						response,
+						...hook
+					} = schemaOrRun
 					const localHook = hooks as AnyLocalHook
 
 					this.add(
@@ -4025,10 +4055,17 @@ export default class Elysia<
 									: [
 											localHook.error,
 											...(sandbox.event.error ?? [])
-										]
+										],
+							standaloneValidator: {
+								body,
+								headers,
+								query,
+								params,
+								cookie,
+								response
+							}
 						}),
-						undefined,
-						standaloneValidators
+						undefined
 					)
 				} else {
 					this.add(
@@ -4040,8 +4077,7 @@ export default class Elysia<
 						}),
 						{
 							skipPrefix: true
-						},
-						standaloneValidators
+						}
 					)
 				}
 			}
@@ -4515,13 +4551,17 @@ export default class Elysia<
 		this.model(sandbox.definitions.type)
 
 		Object.values(instance.router.history).forEach(
-			({
-				method,
-				path,
-				handler,
-				hooks: localHook,
-				standaloneValidators
-			}) => {
+			({ method, path, handler, hooks }) => {
+				const {
+					body,
+					headers,
+					query,
+					params,
+					cookie,
+					response,
+					...localHook
+				} = hooks
+
 				this.add(
 					method,
 					path,
@@ -4538,10 +4578,16 @@ export default class Elysia<
 								: [
 										localHook.error,
 										...(sandbox.event.error ?? [])
-									]
-					}),
-					undefined,
-					standaloneValidators
+									],
+						standaloneValidator: {
+							body,
+							headers,
+							query,
+							params,
+							cookie,
+							response
+						}
+					})
 				)
 			}
 		)
@@ -4921,16 +4967,14 @@ export default class Elysia<
 									method,
 									path,
 									handler,
-									hooks,
-									standaloneValidators
+									hooks
 								} of Object.values(plugin.router.history))
 									this.add(
 										method,
 										path,
 										handler,
 										hooks,
-										undefined,
-										standaloneValidators
+										undefined
 									)
 
 								if (plugin === this) return
@@ -5090,22 +5134,10 @@ export default class Elysia<
 				plugin.extender.macros
 			)
 
-		for (const {
-			method,
-			path,
-			handler,
-			hooks,
-			standaloneValidators
-		} of Object.values(plugin.router.history)) {
-			this.add(
-				method,
-				path,
-				handler,
-				hooks,
-				undefined,
-				standaloneValidators
-			)
-		}
+		for (const { method, path, handler, hooks } of Object.values(
+			plugin.router.history
+		))
+			this.add(method, path, handler, hooks)
 
 		if (name) {
 			if (!(name in this.dependencies)) this.dependencies[name] = []

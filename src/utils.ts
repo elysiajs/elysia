@@ -681,7 +681,7 @@ export const createMacroManager =
 		globalHook: Partial<LifeCycleStore>
 		localHook: Partial<AnyLocalHook>
 	}) =>
-	(stackName: keyof LifeCycleStore) =>
+	(stackOrSchema: keyof LifeCycleStore | keyof InputSchema | 'detail') =>
 	(
 		type:
 			| {
@@ -691,6 +691,59 @@ export const createMacroManager =
 			| MaybeArray<HookContainer>,
 		fn?: MaybeArray<HookContainer>
 	) => {
+		const schemaName = stackOrSchema as keyof InputSchema
+
+		if (
+			schemaName === 'query' ||
+			schemaName === 'params' ||
+			schemaName === 'headers' ||
+			schemaName === 'cookie' ||
+			schemaName === 'body' ||
+			schemaName === 'response'
+		) {
+			let schema = 'fn' in type ? type.fn : type
+			if (typeof schema === 'function') return
+
+			if (
+				!localHook.standaloneValidator ||
+				!localHook.standaloneValidator.length ||
+				Array.isArray(localHook.standaloneValidator)
+			) {
+				localHook.standaloneValidator = [
+					{
+						[schemaName]: schema
+					}
+				]
+				return
+			}
+
+			const last =
+				localHook.standaloneValidator[
+					localHook.standaloneValidator.length - 1
+				]
+
+			if (schemaName in last)
+				localHook.standaloneValidator.push({
+					[schemaName]: schema
+				})
+			else last[schemaName] = schema
+
+			return
+		}
+
+		if (stackOrSchema === 'detail') {
+			let schema = 'fn' in type ? type.fn : type
+			if (typeof schema === 'function' || Array.isArray(schema)) return
+
+			localHook.detail = localHook.detail
+				? mergeDeep(localHook.detail, schema)
+				: schema
+
+			return
+		}
+
+		const stackName = stackOrSchema as keyof LifeCycleStore
+
 		if (typeof type === 'function')
 			type = {
 				fn: type

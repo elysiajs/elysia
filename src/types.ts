@@ -1578,7 +1578,6 @@ export interface InternalRoute {
 	handler: Handler
 	hooks: AnyLocalHook
 	websocket?: AnyWSLocalHook
-	standaloneValidators?: InputSchema[]
 }
 
 export interface SchemaValidator {
@@ -1729,7 +1728,7 @@ export type HookMacroFn<
 					AfterResponseHandler<TypedRoute, Singleton>
 				>
 				resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-				detail?: AnyBaseHookLifeCycle['detail']
+				detail?: DocumentDecoration
 		  } & InputSchema<Name>)
 		| ((...a: any) =>
 				| void
@@ -1756,7 +1755,7 @@ export type HookMacroFn<
 						resolve?: MaybeArray<
 							ResolveHandler<TypedRoute, Singleton>
 						>
-						detail?: AnyBaseHookLifeCycle['detail']
+						detail?: DocumentDecoration
 				  } & InputSchema<Name>))
 }
 
@@ -1785,6 +1784,15 @@ export interface MacroManager<
 	},
 	in out Errors extends Record<string, Error> = {}
 > {
+	body(schema: InputSchema['body']): unknown
+	headers(schema: InputSchema['headers']): unknown
+	query(schema: InputSchema['query']): unknown
+	params(schema: InputSchema['params']): unknown
+	cookie(schema: InputSchema['cookie']): unknown
+	response(schema: InputSchema['response']): unknown
+
+	detail(detail: DocumentDecoration): unknown
+
 	onParse(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
 	onParse(
 		options: MacroOptions,

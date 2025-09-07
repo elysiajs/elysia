@@ -12,7 +12,8 @@ import type {
 	Prettify,
 	ResolvePath,
 	SingletonBase,
-	HTTPHeaders
+	HTTPHeaders,
+	InputSchema
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
@@ -121,27 +122,37 @@ export type Context<
 	Path extends string | undefined = undefined
 > = Prettify<
 	{
-		body: PrettifyIfObject<Route['body']>
+		body: PrettifyIfObject<Route['body'] & Singleton['resolve']['body']>
 		query: undefined extends Route['query']
-			? Record<string, string>
-			: PrettifyIfObject<Route['query']>
+			? Record<string, string> & Singleton['resolve']['query']
+			: PrettifyIfObject<Route['query'] & Singleton['resolve']['query']>
 		params: undefined extends Route['params']
 			? undefined extends Path
-				? Record<string, string>
+				? Record<string, string> & Singleton['resolve']['params']
 				: Path extends `${string}/${':' | '*'}${string}`
 					? ResolvePath<Path>
 					: never
-			: PrettifyIfObject<Route['params']>
+			: PrettifyIfObject<Route['params'] & Singleton['resolve']['params']>
 		headers: undefined extends Route['headers']
-			? Record<string, string | undefined>
-			: PrettifyIfObject<Route['headers']>
+			? Record<string, string | undefined> &
+					Singleton['resolve']['headers']
+			: PrettifyIfObject<
+					Route['headers'] & Singleton['resolve']['headers']
+				>
 		cookie: undefined extends Route['cookie']
 			? Record<string, Cookie<unknown>>
-			: Record<string, Cookie<unknown>> & {
-					[key in keyof Route['cookie']]-?: Cookie<
-						Route['cookie'][key]
+			: Record<string, Cookie<unknown>> &
+					Prettify<
+						{
+							[key in keyof Route['cookie']]-?: Cookie<
+								Route['cookie'][key]
+							>
+						} & {
+							[key in keyof Singleton['resolve']['cookie']]-?: Cookie<
+								Singleton['resolve']['cookie'][key]
+							>
+						}
 					>
-				}
 
 		server: Server | null
 		redirect: Redirect
@@ -208,7 +219,7 @@ export type Context<
 				) => ElysiaCustomStatusResponse<Code, T>
 	} & Singleton['decorator'] &
 		Singleton['derive'] &
-		Singleton['resolve']
+		Omit<Singleton['resolve'], keyof InputSchema>
 >
 
 // Use to mimic request before mapping route
