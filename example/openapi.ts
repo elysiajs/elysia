@@ -6,9 +6,7 @@ const openapi = (a: any) =>
 	new Elysia().use((app) => {
 		app.use(
 			// @ts-ignore
-			OpenAPI({
-				references: fromTypes('example/a.ts')
-			})
+			OpenAPI(a)
 		)
 
 		return app
@@ -18,40 +16,57 @@ const openapi = (a: any) =>
 export const app = new Elysia()
 	.use(
 		openapi({
-			references: fromTypes('example/a.ts')
+			references: fromTypes('example/openapi.ts')
 		})
 	)
+	.macro({
+		auth: {
+			body: t.Object({
+				a: t.String()
+			}),
+			beforeHandle({ status }) {
+				if (Math.random() < 0.05) return status(410)
+			}
+		}
+	})
 	.onError(({ status }) => {
-		if (Math.random() > 0.05) return status(400)
+		if (Math.random() < 0.05) return status(400)
 	})
 	.resolve(({ status }) => {
-		if (Math.random() > 0.05) return status(401)
+		if (Math.random() < 0.05) return status(401)
 	})
 	.onBeforeHandle([
 		({ status }) => {
-			if (Math.random() > 0.05) return status(402)
+			if (Math.random() < 0.05) return status(402)
 		},
 		({ status }) => {
-			if (Math.random() > 0.05) return status(403)
+			if (Math.random() < 0.05) return status(403)
 		}
 	])
 	.guard({
 		beforeHandle: [
 			({ status }) => {
-				if (Math.random() > 0.05) return status(405)
+				if (Math.random() < 0.05) return status(405)
 			},
 			({ status }) => {
-				if (Math.random() > 0.05) return status(406)
+				if (Math.random() < 0.05) return status(406)
 			}
 		],
 		afterHandle({ status }) {
-			if (Math.random() > 0.05) return status(407)
+			if (Math.random() < 0.05) return status(407)
 		},
 		error({ status }) {
-			if (Math.random() > 0.05) return status(408)
+			if (Math.random() < 0.05) return status(408)
 		}
 	})
-	.get('/', ({ body, status }) =>
-		Math.random() > 0.05 ? status(409) : ('Hello World' as const)
+	.get(
+		'/',
+		({ body, status }) =>
+			Math.random() < 0.05 ? status(409) : ('Hello World' as const),
+		{
+			auth: true
+		}
 	)
 	.listen(3000)
+
+// app['~Routes']['get']['response']

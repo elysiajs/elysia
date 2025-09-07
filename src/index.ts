@@ -167,7 +167,8 @@ import type {
 	UnionToIntersect,
 	ElysiaHandlerToResponseSchemaAmbiguous,
 	GuardLocalHook,
-	PickIfExists
+	PickIfExists,
+	IsAny
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -5530,7 +5531,12 @@ export default class Elysia<
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								(IsAny<
+									Decorator['resolve']['response']
+								> extends true
+									? {}
+									: Decorator['resolve']['response'])
 						>
 					}
 				}

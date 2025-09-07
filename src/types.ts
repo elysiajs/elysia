@@ -998,27 +998,33 @@ export type InlineHandler<
 	| ((
 			context: Context<
 				Route &
-					(IsAny<Singleton['resolve']['response']> extends false
-						? { response: Singleton['resolve']['response'] }
-						: {}),
+					({} extends Route['response']
+						? {}
+						: IsAny<Singleton['resolve']['response']> extends true
+							? {}
+							: { response: Singleton['resolve']['response'] }),
 				Singleton,
 				Path
 			>
 	  ) => MaybePromise<
-			| (IsAny<Singleton['resolve']['response']> extends false
-					? Response | InlineHandlerResponse<Singleton['resolve']['response']>
-					: Response)
-			| ({} extends Route['response']
-					? unknown
-					:
-							| (Route['response'] extends {
-									200: any
-							  }
-									? Route['response'][200]
-									: unknown)
-							// This could be possible because of set.status
-							| Route['response'][keyof Route['response']]
-							| InlineHandlerResponse<Route['response']>)
+			{} extends Route['response']
+				? unknown
+				:
+						| (Route['response'] extends {
+								200: any
+						  }
+								? Route['response'][200]
+								: unknown)
+						// This could be possible because of set.status
+						| Route['response'][keyof Route['response']]
+						| InlineHandlerResponse<Route['response']>
+						| (IsAny<Singleton['resolve']['response']> extends true
+								? Response
+								:
+										| Response
+										| InlineHandlerResponse<
+												Singleton['resolve']['response']
+										  >)
 	  >)
 	| ({} extends Route['response']
 			? string | number | boolean | Record<any, unknown>
