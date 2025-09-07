@@ -30,36 +30,36 @@ export const app = new Elysia()
 			resolve: () => ({ a: 'a' })
 		}
 	})
-	.onError(({ status }) => {
-		if (Math.random() < 0.05) return status(400)
-	})
-	.resolve(({ status }) => {
-		if (Math.random() < 0.05) return status(401)
-	})
-	.onBeforeHandle([
-		({ status }) => {
-			if (Math.random() < 0.05) return status(402)
-		},
-		({ status }) => {
-			if (Math.random() < 0.05) return status(403)
-		}
-	])
-	.guard({
-		beforeHandle: [
-			({ status }) => {
-				if (Math.random() < 0.05) return status(405)
-			},
-			({ status }) => {
-				if (Math.random() < 0.05) return status(406)
-			}
-		],
-		afterHandle({ status }) {
-			if (Math.random() < 0.05) return status(407)
-		},
-		error({ status }) {
-			if (Math.random() < 0.05) return status(408)
-		}
-	})
+	// .onError(({ status }) => {
+	// 	if (Math.random() < 0.05) return status(400)
+	// })
+	// .resolve(({ status }) => {
+	// 	if (Math.random() < 0.05) return status(401)
+	// })
+	// .onBeforeHandle([
+	// 	({ status }) => {
+	// 		if (Math.random() < 0.05) return status(402)
+	// 	},
+	// 	({ status }) => {
+	// 		if (Math.random() < 0.05) return status(403)
+	// 	}
+	// ])
+	// .guard({
+	// 	beforeHandle: [
+	// 		({ status }) => {
+	// 			if (Math.random() < 0.05) return status(405)
+	// 		},
+	// 		({ status }) => {
+	// 			if (Math.random() < 0.05) return status(406)
+	// 		}
+	// 	],
+	// 	afterHandle({ status }) {
+	// 		if (Math.random() < 0.05) return status(407)
+	// 	},
+	// 	error({ status }) {
+	// 		if (Math.random() < 0.05) return status(408)
+	// 	}
+	// })
 	.post(
 		'/',
 		({ body, status }) => {
@@ -70,10 +70,10 @@ export const app = new Elysia()
 		{
 			auth: true,
 			response: {
-				200: t.Literal('Hello World')
+				200: t.String()
 			}
 		}
 	)
 	.listen(3000)
 
-app['~Routes']['post']['response']['mac']
+app['~Routes']['post']['response']

@@ -861,14 +861,6 @@ type ReturnTypeIfPossible<T> = T extends AnyContextFn ? ReturnType<T> : T
 
 type AnyElysiaCustomStatusResponse = ElysiaCustomStatusResponse<any, any, any>
 
-type MacroResolveLike = MaybeArray<
-	(
-		...v: any
-	) => MaybePromise<
-		Record<keyof any, unknown> | void | AnyElysiaCustomStatusResponse
-	>
->
-
 type MergeAllMacroContext<T> = Prettify<UnionToIntersect<T[keyof T]>>
 
 type ExtractMacroContext<A> =
@@ -1968,7 +1960,7 @@ type _ComposeElysiaResponse<
 					: Handle
 			} & Schema['response']) &
 		ExtractErrorFromHandle<Handle> &
-		(EmptyRouteSchema extends Schema
+		(EmptyRouteSchema extends Pick<Schema, keyof EmptyRouteSchema>
 			? {}
 			: {
 					422: {

@@ -5556,13 +5556,13 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema & MacroContext,
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
 								Volatile['response'] &
 								// @ts-ignore
-								MacroContext['response']
+								MacroContext['return']
 						>
 					}
 				}
@@ -5651,15 +5651,13 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema & MacroContext,
 							Handle,
 							Metadata['response'] &
-							Ephemeral['response'] &
-							Volatile['response'] &
-							// @ts-ignore
-							MacroContext['response'] &
-							// @ts-ignore
-							MacroContext['return']
+								Ephemeral['response'] &
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
