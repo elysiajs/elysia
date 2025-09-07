@@ -22,7 +22,7 @@ export const app = new Elysia()
 	.macro({
 		auth: {
 			response: {
-				201: t.Literal('a')
+				409: t.Literal('Conflict')
 			},
 			beforeHandle({ status }) {
 				if (Math.random() < 0.05) return status(410)
@@ -30,50 +30,47 @@ export const app = new Elysia()
 			resolve: () => ({ a: 'a' })
 		}
 	})
-	// .onError(({ status }) => {
-	// 	if (Math.random() < 0.05) return status(400)
-	// })
-	// .resolve(({ status }) => {
-	// 	if (Math.random() < 0.05) return status(401)
-	// })
-	// .onBeforeHandle([
-	// 	({ status }) => {
-	// 		if (Math.random() < 0.05) return status(402)
-	// 	},
-	// 	({ status }) => {
-	// 		if (Math.random() < 0.05) return status(403)
-	// 	}
-	// ])
-	// .guard({
-	// 	beforeHandle: [
-	// 		({ status }) => {
-	// 			if (Math.random() < 0.05) return status(405)
-	// 		},
-	// 		({ status }) => {
-	// 			if (Math.random() < 0.05) return status(406)
-	// 		}
-	// 	],
-	// 	afterHandle({ status }) {
-	// 		if (Math.random() < 0.05) return status(407)
-	// 	},
-	// 	error({ status }) {
-	// 		if (Math.random() < 0.05) return status(408)
-	// 	}
-	// })
+	.onError(({ status }) => {
+		if (Math.random() < 0.05) return status(400)
+	})
+	.resolve(({ status }) => {
+		if (Math.random() < 0.05) return status(401)
+	})
+	.onBeforeHandle([
+		({ status }) => {
+			if (Math.random() < 0.05) return status(402)
+		},
+		({ status }) => {
+			if (Math.random() < 0.05) return status(403)
+		}
+	])
+	.guard({
+		beforeHandle: [
+			({ status }) => {
+				if (Math.random() < 0.05) return status(405)
+			},
+			({ status }) => {
+				if (Math.random() < 0.05) return status(406)
+			}
+		],
+		afterHandle({ status }) {
+			if (Math.random() < 0.05) return status(407)
+		},
+		error({ status }) {
+			if (Math.random() < 0.05) return status(408)
+		}
+	})
 	.post(
 		'/',
-		({ body, status }) => {
-			if (Math.random() < 0.05) return status(201, 'a')
-
-			return 'Hello World'
-		},
+		({ status }) =>
+			Math.random() < 0.05 ? status(409, 'Conflict') : 'Type Soundness',
 		{
 			auth: true,
 			response: {
-				200: t.String()
+				411: t.Literal('Length Required')
 			}
 		}
 	)
 	.listen(3000)
 
-app['~Routes']['post']['response']
+// app['~Routes']['post']['response']['409']
