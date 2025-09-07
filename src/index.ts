@@ -5531,7 +5531,12 @@ export default class Elysia<
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								(IsNever<
+									Decorator['resolve']['response']
+								> extends false
+									? Decorator['resolve']['response']
+									: {})
 						>
 					}
 				}

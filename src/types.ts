@@ -963,7 +963,16 @@ export type InlineHandler<
 	},
 	Path extends string | undefined = undefined
 > =
-	| ((context: Context<Route, Singleton, Path>) =>
+	| ((
+			context: Context<
+				Route &
+					(IsNever<Singleton['resolve']['response']> extends false
+						? { response: Singleton['resolve']['response'] }
+						: {}),
+				Singleton,
+				Path
+			>
+	  ) =>
 			| Response
 			| MaybePromise<
 					{} extends Route['response']
@@ -975,6 +984,9 @@ export type InlineHandler<
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
 								| InlineHandlerResponse<Route['response']>
+								| IsNever<Singleton['resolve']['response']> extends false
+									? Singleton['resolve']['response']
+									: {}
 			  >)
 	| ({} extends Route['response']
 			? string | number | boolean | object
@@ -1703,6 +1715,8 @@ export type BaseMacroFn<
 	}
 }
 
+type MaybeVoidFunction<T> = T | ((...a: any) => T)
+
 export type HookMacroFn<
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -1714,49 +1728,21 @@ export type HookMacroFn<
 	in out Errors extends Record<string, Error> = {},
 	in out Name extends string = ''
 > = {
-	[K in keyof any]:
-		| ({
-				parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-				transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-				beforeHandle?: MaybeArray<
-					OptionalHandler<TypedRoute, Singleton>
-				>
-				afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-				error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-				mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
-				afterResponse?: MaybeArray<
-					AfterResponseHandler<TypedRoute, Singleton>
-				>
-				resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-				detail?: DocumentDecoration
-		  } & InputSchema<Name>)
-		| ((...a: any) =>
-				| void
-				| ({
-						parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-						transform?: MaybeArray<
-							VoidHandler<TypedRoute, Singleton>
-						>
-						beforeHandle?: MaybeArray<
-							OptionalHandler<TypedRoute, Singleton>
-						>
-						afterHandle?: MaybeArray<
-							AfterHandler<TypedRoute, Singleton>
-						>
-						error?: MaybeArray<
-							ErrorHandler<Errors, TypedRoute, Singleton>
-						>
-						mapResponse?: MaybeArray<
-							MapResponse<TypedRoute, Singleton>
-						>
-						afterResponse?: MaybeArray<
-							AfterResponseHandler<TypedRoute, Singleton>
-						>
-						resolve?: MaybeArray<
-							ResolveHandler<TypedRoute, Singleton>
-						>
-						detail?: DocumentDecoration
-				  } & InputSchema<Name>))
+	[K in keyof any]: MaybeVoidFunction<
+		InputSchema<Name> & {
+			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+			afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+			error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+			mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+			afterResponse?: MaybeArray<
+				AfterResponseHandler<TypedRoute, Singleton>
+			>
+			resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+			detail?: DocumentDecoration
+		}
+	>
 }
 
 export type MacroToProperty<

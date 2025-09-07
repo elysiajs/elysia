@@ -124,18 +124,23 @@ export type Context<
 	{
 		body: PrettifyIfObject<Route['body'] & Singleton['resolve']['body']>
 		query: undefined extends Route['query']
-			? Record<string, string> & Singleton['resolve']['query']
+			? {} extends NonNullable<Singleton['resolve']['query']>
+				? Record<string, string>
+				: Singleton['resolve']['query']
 			: PrettifyIfObject<Route['query'] & Singleton['resolve']['query']>
 		params: undefined extends Route['params']
 			? undefined extends Path
-				? Record<string, string> & Singleton['resolve']['params']
+				? {} extends NonNullable<Singleton['resolve']['params']>
+					? Record<string, string>
+					: Singleton['resolve']['params']
 				: Path extends `${string}/${':' | '*'}${string}`
 					? ResolvePath<Path>
 					: never
 			: PrettifyIfObject<Route['params'] & Singleton['resolve']['params']>
 		headers: undefined extends Route['headers']
-			? Record<string, string | undefined> &
-					Singleton['resolve']['headers']
+			? {} extends NonNullable<Singleton['resolve']['query']>
+				? Record<string, string | undefined>
+				: Singleton['resolve']['headers']
 			: PrettifyIfObject<
 					Route['headers'] & Singleton['resolve']['headers']
 				>
