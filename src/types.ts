@@ -40,10 +40,12 @@ type PartialServe = Partial<Serve>
 
 export type IsNever<T> = [T] extends [never] ? true : false
 
-export type PickIfExists<T, K extends string> = {
-	// @ts-ignore
-	[P in K as P extends keyof T ? P : never]: T[P];
-}
+export type PickIfExists<T, K extends string> = {} extends T
+	? {}
+	: {
+			// @ts-ignore
+			[P in K as P extends keyof T ? P : never]: T[P]
+		}
 
 // Standard Schema reduce to bare minimum to save inference time
 export interface StandardSchemaV1Like<
@@ -1502,7 +1504,7 @@ export type LocalHook<
 }
 
 export type GuardLocalHook<
-	Input extends BaseMacro,
+	Input extends BaseMacro | undefined,
 	Schema extends RouteSchema,
 	Singleton extends SingletonBase,
 	Parser extends keyof any,
@@ -2030,10 +2032,19 @@ export type MergeElysiaInstances<
 export type LifeCycleType = 'global' | 'local' | 'scoped'
 export type GuardSchemaType = 'override' | 'standalone'
 
+type PartialIf<T, Condition extends boolean> = Condition extends true
+	? Partial<T>
+	: T
+
 // Exclude return error()
-export type ExcludeElysiaResponse<T> = Exclude<
-	undefined extends Awaited<T> ? Partial<Awaited<T>> : Awaited<T>,
-	AnyElysiaCustomStatusResponse
+export type ExcludeElysiaResponse<T> = PartialIf<
+	Exclude<Awaited<T>, AnyElysiaCustomStatusResponse> extends infer A
+		? IsNever<A> extends true
+			? {}
+			: // Intersect all union and fallback never to {}
+				UnionToIntersect<A & {}>
+		: {},
+	undefined extends Awaited<T> ? true : false
 >
 
 export type InferContext<

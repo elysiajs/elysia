@@ -1,7 +1,7 @@
 import { Elysia, t } from '../src'
 import { openapi as OpenAPI } from '@elysiajs/openapi'
 import { fromTypes } from '@elysiajs/openapi/gen'
-import { InputSchema, IsNever } from '../src/types'
+import { AnySchema, InputSchema, IsNever, PickIfExists } from '../src/types'
 import { TNumber } from '@sinclair/typebox'
 
 const openapi = (a: any) =>
@@ -57,15 +57,3 @@ export const app = new Elysia()
 		Math.random() > 0.05 ? status(409) : ('Hello World' as const)
 	)
 	.listen(3000)
-
-/**
- * From T, pick a set of properties whose keys are in the union K
- */
-type PickIfExists<T, K extends string> = {
-	// @ts-ignore
-	[P in K as P extends keyof T ? P : never]: T[P];
-}
-
-type B = PickIfExists<{ body: "A" }, 'response'>
-
-type A = (typeof app)['~Volatile']['schema']
