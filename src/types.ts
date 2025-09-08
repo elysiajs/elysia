@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Elysia, AnyElysia } from '.'
+import type { Elysia, AnyElysia, InvertedStatusMap } from '.'
 import type { ElysiaFile } from './universal/file'
 import type { Serve } from './universal/server'
 
@@ -35,8 +35,6 @@ import type { AnyWSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
 
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
-
-type PartialServe = Partial<Serve>
 
 export type IsNever<T> = [T] extends [never] ? true : false
 
@@ -103,7 +101,7 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	 *
 	 * @see https://bun.sh/docs/api/http
 	 */
-	serve?: PartialServe
+	serve?: Partial<Serve>
 	/**
 	 * OpenAPI documentation (use in Swagger)
 	 *
@@ -861,81 +859,134 @@ type ReturnTypeIfPossible<T> = T extends AnyContextFn ? ReturnType<T> : T
 
 type AnyElysiaCustomStatusResponse = ElysiaCustomStatusResponse<any, any, any>
 
-type MergeAllMacroContext<T> = Prettify<UnionToIntersect<T[keyof T]>>
-
 type ExtractMacroContext<A> =
 	IsNever<A> extends true
 		? {}
 		: Exclude<A, AnyElysiaCustomStatusResponse | void>
 
-type CustomResponseToSchema<T> = {
+type AllResponseToSchema<in out T> = {
 	return: T extends ElysiaCustomStatusResponse<
 		infer Code,
 		infer Value,
 		infer Status
 	>
 		? {
-				[status in Status]: Value
+				[status in Status]: IsAny<Value> extends true
+					? // @ts-ignore status is always in Status Map
+						InvertedStatusMap[Status]
+					: Value
 			}
-		: {}
+		: {
+				200: T
+			}
 }
 
-type ExtractResponseFromMacro<A> =
-	IsNever<Awaited<A>> extends true
-		? {}
-		: {} extends Awaited<A>
+type ExtractOnlyResponseFromMacro<T> =
+	T extends Awaited<infer A>
+		? IsNever<A> extends true
 			? {}
-			: Extract<Awaited<A>, AnyElysiaCustomStatusResponse> extends infer A
-				? IsNever<A> extends true
-					? {}
-					: A
-				: {}
+			: {} extends A
+				? {}
+				: Extract<A, AnyElysiaCustomStatusResponse> extends infer A
+					? IsNever<A> extends true
+						? {}
+						: {
+								return: A extends ElysiaCustomStatusResponse<
+									infer Code,
+									infer Value,
+									infer Status
+								>
+									? {
+											[status in Status]: IsAny<Value> extends true
+												? // @ts-ignore status is always in Status Map
+													InvertedStatusMap[Status]
+												: Value
+										}
+									: {}
+							}
+					: {}
+		: {}
+
+type ExtractAllResponseFromMacro<T> =
+	T extends Awaited<infer A>
+		? IsNever<A> extends true
+			? {}
+			: {} extends A
+				? {}
+				: {
+						return: A extends ElysiaCustomStatusResponse<
+							any,
+							infer Value,
+							infer Status
+						>
+							? {
+									[status in Status]: IsAny<Value> extends true
+										? // @ts-ignore status is always in Status Map
+											InvertedStatusMap[Status]
+										: Value
+								}
+							: Exclude<
+										A,
+										AnyElysiaCustomStatusResponse
+								  > extends infer A
+								? IsAny<A> extends true
+									? {}
+									: undefined extends A
+										? {}
+										: {
+												200: A
+											}
+								: {}
+					}
+		: {}
+
+type MergeAllMacroContext<T> = UnionToIntersect<T[keyof T]>
 
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
-	MacroFn extends BaseMacroFn = {},
-	SelectedMacro extends BaseMacro = {},
-	Definitions extends DefinitionBase['typebox'] = {}
-> = {} extends SelectedMacro
-	? {}
-	: MergeAllMacroContext<{
-			[key in keyof SelectedMacro]: ReturnTypeIfPossible<
-				MacroFn[key]
-			> extends infer Value
-				? {
-						resolve: true extends SelectedMacro[key]
-							? ExtractMacroContext<
-									ResolveResolutions<
-										// @ts-expect-error type is checked in key mapping
-										Value['resolve']
+	in out MacroFn extends BaseMacroFn = {},
+	in out SelectedMacro extends BaseMacro = {},
+	in out Definitions extends DefinitionBase['typebox'] = {}
+> = Prettify<
+	{} extends SelectedMacro
+		? {}
+		: MergeAllMacroContext<{
+				[key in keyof SelectedMacro]: ReturnTypeIfPossible<
+					MacroFn[key]
+				> extends infer Value
+					? {
+							resolve: true extends SelectedMacro[key]
+								? ExtractMacroContext<
+										ResolveResolutions<
+											// @ts-expect-error type is checked in key mapping
+											Value['resolve']
+										>
 									>
-								>
-							: {}
-					} & UnwrapMacroSchema<
-						// @ts-ignore Trust me bro
-						Value,
-						Definitions
-					> &
-						CustomResponseToSchema<
-							ExtractResponseFromMacro<
+								: {}
+						} & UnwrapMacroSchema<
+							// @ts-ignore Trust me bro
+							Value,
+							Definitions
+						> &
+							ExtractAllResponseFromMacro<
 								// @ts-expect-error type is checked in key mapping
 								ResolveResolutions<Value['beforeHandle']>
-							>
-						> &
-						CustomResponseToSchema<
-							ExtractResponseFromMacro<
+							> &
+							ExtractAllResponseFromMacro<
 								// @ts-expect-error type is checked in key mapping
 								ResolveResolutions<Value['afterHandle']>
-							>
-						> &
-						CustomResponseToSchema<
-							ExtractResponseFromMacro<
+							> &
+							ExtractAllResponseFromMacro<
 								// @ts-expect-error type is checked in key mapping
 								ResolveResolutions<Value['error']>
+							> &
+							ExtractOnlyResponseFromMacro<
+								// @ts-expect-error type is checked in key mapping
+								ResolveResolutions<Value['resolve']>
 							>
-						>
-				: {}
-		}>
+					: {}
+			}>
+>
 
 type UnwrapMacroSchema<
 	T extends Partial<InputSchema<any>>,
@@ -1903,9 +1954,9 @@ export type ComposeElysiaResponse<
 	Schema extends RouteSchema,
 	Handle,
 	Possibility extends PossibleResponse
-> = Handle extends (...a: any) => infer A
-	? _ComposeElysiaResponse<Schema, Awaited<A>, Possibility>
-	: _ComposeElysiaResponse<Schema, Awaited<Handle>, Possibility>
+> = Handle extends (...a: any) => MaybePromise<infer A>
+	? _ComposeElysiaResponse<Schema, A, Possibility>
+	: _ComposeElysiaResponse<Schema, Handle, Possibility>
 
 export interface EmptyRouteSchema {
 	body: unknown

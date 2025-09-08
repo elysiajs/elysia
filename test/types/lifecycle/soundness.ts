@@ -812,3 +812,50 @@ import { Prettify } from '../../../src/types'
 		}
 	>()
 }
+
+// Unwrap ElysiaCustomStatusResponse value in resolve macro automatically
+{
+	const app = new Elysia()
+		.macro({
+			auth: {
+				resolve({ status }) {
+					if (Math.random() > 0.5) return status(401)
+
+					return { user: 'saltyaom' } as const
+				}
+			}
+		})
+		.get('/', ({ user }) => user, {
+			auth: true
+		})
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'saltyaom'
+		401: 'Unauthorized'
+	}>()
+}
+
+// Unwrap beforeHandle 200 status
+{
+	const app = new Elysia()
+		.macro({
+			auth: {
+				beforeHandle({ status }) {
+					if (Math.random() > 0.5) return status(401)
+
+					return { user: 'saltyaom' }
+				}
+			}
+		})
+		.get('/', ({ status }) => {}, {
+			auth: true
+		})
+
+	// This could be improve
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: void & {
+			user: string
+		}
+		401: 'Unauthorized'
+	}>()
+}
