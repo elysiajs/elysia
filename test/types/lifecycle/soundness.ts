@@ -1684,3 +1684,24 @@ import { Prettify } from '../../../src/types'
 		408: 'Request Timeout'
 	}>()
 }
+
+// merge possible path
+{
+	const app = new Elysia()
+		.onBeforeHandle(({ status }) => {
+			if (Math.random() > 0.05) return 'fouco' as const
+			if (Math.random() > 0.05) return 'sartre' as const
+			if (Math.random() > 0.05) return status(404, 'lilith')
+		})
+		.get('/', () => 'lilith' as const)
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre'
+		404: 'lilith'
+	}>
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		404: 'lilith'
+	}>()
+}

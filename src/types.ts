@@ -1997,7 +1997,7 @@ export type ValueOrFunctionToResponseSchema<T> = T extends (
 export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 	Prettify<
 		Handle extends (...a: any) => MaybePromise<infer R>
-			? ValueToResponseSchema<R>
+			? ValueToResponseSchema<Exclude<R, undefined>>
 			: {}
 	>
 

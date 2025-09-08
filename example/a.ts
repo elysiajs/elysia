@@ -1,31 +1,11 @@
 import { Elysia, MaybeArray, status, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia().get(
-	'/council',
-	({ cookie: { council } }) => council.value,
-	{
-		cookie: t.Cookie({
-			council: t.Object({
-				name: t.String(),
-				affilation: t.String()
-			})
-		})
-	}
-)
-
-const expected = {
-	name: 'Rin',
-	affilation: 'Administration'
-}
-
-const response = await app.handle(
-	req('/council', {
-		headers: {
-			cookie: 'council=' + JSON.stringify(expected)
-		}
+const app = new Elysia()
+	.onBeforeHandle(() => {
+		if (Math.random() > 0.5) return 'a' as const
 	})
-)
+	.get('/', () => 'b' as const)
 
-console.log(await response.json())
-console.log(app.routes[0].compile().toString())
+app['~Volatile']['response']
+app['~Routes']['get']['response']
