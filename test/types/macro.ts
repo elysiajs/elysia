@@ -230,3 +230,22 @@ import { expectTypeOf } from 'expect-type'
 			}
 		)
 }
+
+// resolve with custom status
+{
+	const app = new Elysia()
+		.macro({
+			auth: {
+				resolve: [
+					({ status }) => {
+						if (Math.random() > 0.5) return status(401)
+
+						return { user: 'saltyaom' } as const
+					}
+				]
+			}
+		})
+		.get('/', ({ user }) => user, {
+			auth: true,
+		})
+}

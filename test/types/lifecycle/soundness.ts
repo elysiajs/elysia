@@ -364,7 +364,7 @@ import { Prettify } from '../../../src/types'
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		200: 'Hello World'
-		401: 'Unauthorized'
+		readonly 401: 'Unauthorized'
 		410: 'Gone'
 		422: {
 			type: 'validation'
@@ -842,20 +842,16 @@ import { Prettify } from '../../../src/types'
 			auth: {
 				beforeHandle({ status }) {
 					if (Math.random() > 0.5) return status(401)
-
-					return { user: 'saltyaom' }
 				}
 			}
 		})
-		.get('/', ({ status }) => {}, {
+		.get('/', ({ status }) => 'a' as const, {
 			auth: true
 		})
 
 	// This could be improve
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		200: void & {
-			user: string
-		}
+		200: 'a'
 		401: 'Unauthorized'
 	}>()
 }

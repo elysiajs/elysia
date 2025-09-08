@@ -855,7 +855,7 @@ export type MacroContextBlacklistKey =
 	| 'tags'
 	| keyof RouteSchema
 
-type ReturnTypeIfPossible<T> = T extends AnyContextFn ? ReturnType<T> : T
+type ReturnTypeIfPossible<T> = T extends (...a: any) => infer R ? R : T
 
 type AnyElysiaCustomStatusResponse = ElysiaCustomStatusResponse<any, any, any>
 
@@ -864,57 +864,38 @@ type ExtractMacroContext<A> =
 		? {}
 		: Exclude<A, AnyElysiaCustomStatusResponse | void>
 
-type AllResponseToSchema<in out T> = {
-	return: T extends ElysiaCustomStatusResponse<
-		infer Code,
-		infer Value,
-		infer Status
-	>
-		? {
-				[status in Status]: IsAny<Value> extends true
-					? // @ts-ignore status is always in Status Map
-						InvertedStatusMap[Status]
-					: Value
-			}
-		: {
-				200: T
-			}
-}
-
-type ExtractOnlyResponseFromMacro<T> =
-	T extends Awaited<infer A>
-		? IsNever<A> extends true
+type ExtractOnlyResponseFromMacro<A> =
+	IsNever<A> extends true
+		? {}
+		: {} extends A
 			? {}
-			: {} extends A
-				? {}
-				: Extract<A, AnyElysiaCustomStatusResponse> extends infer A
-					? IsNever<A> extends true
-						? {}
-						: {
-								return: A extends ElysiaCustomStatusResponse<
-									infer Code,
-									infer Value,
-									infer Status
-								>
-									? {
-											[status in Status]: IsAny<Value> extends true
-												? // @ts-ignore status is always in Status Map
-													InvertedStatusMap[Status]
-												: Value
-										}
-									: {}
-							}
-					: {}
-		: {}
+			: Extract<A, AnyElysiaCustomStatusResponse> extends infer A
+				? IsNever<A> extends true
+					? {}
+					: {
+							return: A extends ElysiaCustomStatusResponse<
+								any,
+								infer Value,
+								infer Status
+							>
+								? {
+										[status in Status]: IsAny<Value> extends true
+											? // @ts-ignore status is always in Status Map
+												InvertedStatusMap[Status]
+											: Value
+									}
+								: {}
+						}
+				: {}
 
-type ExtractAllResponseFromMacro<T> =
-	T extends Awaited<infer A>
-		? IsNever<A> extends true
+type ExtractAllResponseFromMacro<A> =
+	IsNever<A> extends true
+		? {}
+		: {} extends A
 			? {}
-			: {} extends A
-				? {}
-				: {
-						return: A extends ElysiaCustomStatusResponse<
+			: {
+					return: UnionToIntersect<
+						A extends ElysiaCustomStatusResponse<
 							any,
 							infer Value,
 							infer Status
@@ -937,10 +918,8 @@ type ExtractAllResponseFromMacro<T> =
 												200: A
 											}
 								: {}
-					}
-		: {}
-
-type MergeAllMacroContext<T> = UnionToIntersect<T[keyof T]>
+					>
+				}
 
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
@@ -950,42 +929,50 @@ export type MacroToContext<
 > = Prettify<
 	{} extends SelectedMacro
 		? {}
-		: MergeAllMacroContext<{
-				[key in keyof SelectedMacro]: ReturnTypeIfPossible<
-					MacroFn[key]
-				> extends infer Value
-					? {
-							resolve: true extends SelectedMacro[key]
-								? ExtractMacroContext<
-										ResolveResolutions<
-											// @ts-expect-error type is checked in key mapping
-											Value['resolve']
+		: UnionToIntersect<
+				{
+					[key in keyof SelectedMacro]: ReturnTypeIfPossible<
+						MacroFn[key]
+					> extends infer Value
+						? {
+								resolve: true extends SelectedMacro[key]
+									? ExtractMacroContext<
+											ResolveReturnType<
+												// @ts-expect-error type is checked in key mapping
+												Value['resolve']
+											>
 										>
+									: {}
+							} & UnwrapMacroSchema<
+								// @ts-ignore Trust me bro
+								Value,
+								Definitions
+							> &
+								ExtractAllResponseFromMacro<
+									UnionFunctionArrayReturnType<
+										// @ts-expect-error type is checked in key mapping
+										Value['beforeHandle']
 									>
-								: {}
-						} & UnwrapMacroSchema<
-							// @ts-ignore Trust me bro
-							Value,
-							Definitions
-						> &
-							ExtractAllResponseFromMacro<
-								// @ts-expect-error type is checked in key mapping
-								ResolveResolutions<Value['beforeHandle']>
-							> &
-							ExtractAllResponseFromMacro<
-								// @ts-expect-error type is checked in key mapping
-								ResolveResolutions<Value['afterHandle']>
-							> &
-							ExtractAllResponseFromMacro<
-								// @ts-expect-error type is checked in key mapping
-								ResolveResolutions<Value['error']>
-							> &
-							ExtractOnlyResponseFromMacro<
-								// @ts-expect-error type is checked in key mapping
-								ResolveResolutions<Value['resolve']>
-							>
-					: {}
-			}>
+								> &
+								ExtractAllResponseFromMacro<
+									UnionFunctionArrayReturnType<
+										// @ts-expect-error type is checked in key mapping
+										Value['afterHandle']
+									>
+								> &
+								ExtractAllResponseFromMacro<
+									// @ts-expect-error type is checked in key mapping
+									UnionFunctionArrayReturnType<Value['error']>
+								> &
+								ExtractOnlyResponseFromMacro<
+									UnionFunctionArrayReturnType<
+										// @ts-expect-error type is checked in key mapping
+										Value['resolve']
+									>
+								>
+						: {}
+				}[keyof SelectedMacro]
+			>
 >
 
 type UnwrapMacroSchema<
@@ -1430,14 +1417,6 @@ export interface DocumentDecoration extends Partial<OpenAPIV3.OperationObject> {
 	hide?: boolean
 }
 
-// export type DeriveHandler<
-// 	Singleton extends SingletonBase,
-// 	in out Derivative extends Record<string, unknown> | void = Record<
-// 		string,
-// 		unknown
-// 	> | void
-// > = (context: Context<{}, Singleton>) => MaybePromise<Derivative>
-
 export type ResolveHandler<
 	in out Route extends RouteSchema,
 	in out Singleton extends SingletonBase,
@@ -1447,52 +1426,65 @@ export type ResolveHandler<
 		| void = Record<string, unknown> | AnyElysiaCustomStatusResponse | void
 > = (context: Context<Route, Singleton>) => MaybePromise<Derivative>
 
-type AnyContextFn = (context?: any) => any
-
-// export type ResolveDerivatives<
-// 	T extends MaybeArray<DeriveHandler<any>> | undefined
-// > =
-// 	IsNever<keyof T> extends true
-// 		? any[] extends T
-// 			? {}
-// 			: ReturnType<// @ts-ignore Trust me bro
-// 				T>
-// 		: ResolveDerivativesArray<// @ts-ignore Trust me bro
-// 			T>
-
-export type ResolveDerivativesArray<
-	T extends any[],
-	Carry extends Record<keyof any, unknown> = {}
-> = T extends [infer Fn extends AnyContextFn, ...infer Rest]
-	? ReturnType<Fn> extends infer Value extends Record<keyof any, unknown>
-		? ResolveDerivativesArray<Rest, Value & Carry>
-		: ResolveDerivativesArray<Rest, Carry>
-	: Prettify<Carry>
-
-export type ResolveResolutions<T extends MaybeArray<unknown>> =
+export type ResolveReturnType<T extends MaybeArray<unknown>> =
 	// If no macro are provided, it will be resolved as any
 	any[] extends T
 		? {}
-		: IsNever<keyof T> extends true
-			? any[] extends T
-				? {}
-				: Awaited<
-						ReturnType<// @ts-ignore Trust me bro
-						T>
-					>
-			: ResolveResolutionsArray<// @ts-ignore Trust me bro
+		: // Is any, return
+			T extends any[]
+			? _ResolveReturnTypeArray<// @ts-ignore Trust me bro
 				T>
+			: Exclude<
+						// @ts-ignore Trust me bro
+						Awaited<ReturnType<T>>,
+						AnyElysiaCustomStatusResponse
+				  > extends infer Value extends Record<any, unknown>
+				? Value
+				: {}
 
-export type ResolveResolutionsArray<
-	T extends any[],
-	Carry extends Record<keyof any, unknown> = {}
-> = T extends [infer Fn extends AnyContextFn, ...infer Rest]
-	? Awaited<ReturnType<Fn>> extends infer Value extends Record<
-			keyof any,
-			unknown
+type _ResolveReturnTypeArray<T, Carry = {}> = T extends [
+	infer Fn,
+	...infer Rest
+]
+	? Exclude<
+			// @ts-ignore Trust me bro
+			Awaited<ReturnType<Fn>>,
+			AnyElysiaCustomStatusResponse
+		> extends infer Value extends Record<any, unknown>
+		? _ResolveReturnTypeArray<Rest, Value & Carry>
+		: _ResolveReturnTypeArray<Rest, Carry & {}>
+	: Prettify<Carry>
+
+type UnionFunctionArrayReturnType<T> =
+	// If nothing is provided, it will be resolved as any
+	any[] extends T
+		? {}
+		: // Merge all possible return type into one
+			// eg. () => condition ? { a: "a" } : { b: "b" }
+			// UnionToIntersect<
+			T extends any[]
+			? _UnionFunctionArrayReturnType<T>
+			: // @ts-ignore
+				NonNullable<Awaited<ReturnType<T>>>
+// >
+
+type _UnionFunctionArrayReturnType<T, Carry = {}> = T extends [
+	infer Fn,
+	...infer Rest
+]
+	? _UnionFunctionArrayReturnType<
+			Rest,
+			NonNullable<
+				Awaited<
+					// @ts-ignore Trust me bro
+					ReturnType<Fn>
+				>
+			> extends infer A
+				? IsNever<A> extends false
+					? A & Carry
+					: Carry
+				: Carry
 		>
-		? ResolveResolutionsArray<Rest, Value & Carry>
-		: ResolveResolutionsArray<Rest, Carry>
 	: Prettify<Carry>
 
 export type AnyLocalHook = LocalHook<any, any, any, any, any>
@@ -1992,8 +1984,6 @@ export type IsUnknown<T> = [unknown] extends [T]
 		? false
 		: true
 	: false
-
-type UnwrapToObjectIfUnknown<T> = IsUnknown<T> extends true ? {} : T
 
 export type ElysiaHandlerToResponseSchemaAmbiguous<
 	Schemas extends MaybeArray<Function>

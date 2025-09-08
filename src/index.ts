@@ -87,7 +87,7 @@ import {
 	type ParseError,
 	type NotFoundError,
 	type InternalServerError,
-	ElysiaCustomStatusResponse
+	type ElysiaCustomStatusResponse
 } from './error'
 
 import type { TraceHandler } from './trace'
@@ -147,28 +147,21 @@ import type {
 	ValidatorLayer,
 	MergeElysiaInstances,
 	HookMacroFn,
-	ResolveHandler,
-	ResolveResolutions,
-	UnwrapTypeModule,
 	MacroToContext,
 	StandaloneValidator,
 	GuardSchemaType,
 	Or,
-	MergeStandaloneSchema,
 	IsNever,
 	DocumentDecoration,
 	AfterHandler,
-	AnyBaseHookLifeCycle,
 	NonResolvableMacroKey,
 	StandardSchemaV1Like,
 	ElysiaHandlerToResponseSchema,
 	ElysiaHandlerToResponseSchemas,
 	ExtractErrorFromHandle,
-	UnionToIntersect,
 	ElysiaHandlerToResponseSchemaAmbiguous,
 	GuardLocalHook,
 	PickIfExists,
-	IsAny,
 	SimplifyToSchema
 } from './types'
 
@@ -3905,15 +3898,6 @@ export default class Elysia<
 			Metadata['schema']
 		> &
 			Metadata['standaloneSchema'],
-		const Resolutions extends MaybeArray<
-			ResolveHandler<
-				Schema,
-				Singleton & {
-					derive: Ephemeral['derive'] & Volatile['derive']
-					resolve: Ephemeral['resolve'] & Volatile['resolve']
-				}
-			>
-		>
 	>(
 		prefix: Prefix,
 		schema: LocalHook<
@@ -3940,8 +3924,7 @@ export default class Elysia<
 					resolve: Prettify<
 						Singleton['resolve'] &
 							Ephemeral['resolve'] &
-							Volatile['resolve'] &
-							ResolveResolutions<Resolutions>
+							Volatile['resolve']
 					>
 				},
 				Definitions,
@@ -5295,7 +5278,7 @@ export default class Elysia<
 	>
 
 	macro<
-		NewMacro extends HookMacroFn<
+		const NewMacro extends HookMacroFn<
 			Metadata['schema'],
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>

@@ -4,11 +4,13 @@ import z from 'zod'
 const app = new Elysia()
 	.macro({
 		auth: {
-			resolve({ status }) {
-				if (Math.random() > 0.5) return status(401)
+			resolve: [
+				({ status }) => {
+					if (Math.random() > 0.5) return status(401)
 
-				return { user: 'saltyaom' } as const
-			}
+					return { user: 'saltyaom' } as const
+				}
+			]
 		}
 	})
 	.get('/', ({ headers, user }) => user, {
