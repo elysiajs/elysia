@@ -282,15 +282,13 @@ export const ElysiaType = {
 		const schema = t.Object(properties, options)
 		const compiler = compile(schema)
 
-		const defaultValue = JSON.stringify(compiler.Create())
-
 		return t
 			.Transform(
 				t.Union(
 					[
 						t.String({
 							format: 'ObjectString',
-							default: defaultValue
+							default: '{}'
 						}),
 						schema
 					],

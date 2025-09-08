@@ -540,9 +540,9 @@ const _replaceSchemaType = (
 				v.default === '{}'
 			) {
 				transform = t.ObjectString(properties, rest)
-				value.default = JSON.stringify(
-					Value.Create(t.Object(properties))
-				)
+				// value.default = JSON.stringify(
+				// 	Value.Create(t.Object(properties))
+				// )
 				value.properties = properties
 			}
 
@@ -554,7 +554,7 @@ const _replaceSchemaType = (
 				v.default === '[]'
 			) {
 				transform = t.ArrayString(items, rest)
-				value.default = JSON.stringify(Value.Create(t.Array(items)))
+				// value.default = JSON.stringify(Value.Create(t.Array(items)))
 				value.items = items
 			}
 
