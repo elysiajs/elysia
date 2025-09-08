@@ -1490,17 +1490,6 @@ export const composeHandler = ({
 				`for(const [key,value] of Object.entries(c.cookie))` +
 				`cookieValue[key]=value.value\n`
 
-			if (validator.cookie.hasDefault)
-				for (const [key, value] of Object.entries(
-					Value.Default(validator.cookie.schema, {}) as Object
-				)) {
-					fnLiteral += `cookieValue['${key}'] = ${
-						typeof value === 'object'
-							? JSON.stringify(value)
-							: value
-					}\n`
-				}
-
 			if (validator.cookie.isOptional)
 				fnLiteral += `if(isNotEmpty(c.cookie)){`
 

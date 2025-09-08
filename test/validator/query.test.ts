@@ -1021,4 +1021,87 @@ describe('Query Validator', () => {
 			$test: 2
 		})
 	})
+
+	it("don't populate object query on failed validation", async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				filter: t.Object({
+					latlng: t.Object({
+						within: t.Object({
+							ne: t.Number(),
+							sw: t.Number()
+						})
+					}),
+					zoom: t.Object({
+						equalTo: t.Number({
+							minimum: 0,
+							maximum: 20,
+							multipleOf: 1
+						})
+					})
+				})
+			})
+		})
+
+		const filter = JSON.stringify({
+			latlng: {
+				within: {
+					ne: 1,
+					sw: 1
+				}
+			},
+			zoom: {
+				equalTo: 2
+			}
+		})
+
+		const valid = await app.handle(
+			new Request(`http://localhost:3000/?filter=${filter}`)
+		)
+		const invalid1 = await app.handle(new Request(`http://localhost:3000`))
+		const invalid2 = await app.handle(
+			new Request(
+				`http://localhost:3000?filter=${JSON.stringify({ zoom: { equalTo: 21 } })}`
+			)
+		)
+
+		expect(valid.status).toBe(200)
+		expect(invalid1.status).toBe(422)
+		expect(invalid2.status).toBe(422)
+	})
+
+	it("don't populate array query on failed validation", async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				party: t.Array(
+					t.Object({
+						name: t.String()
+					})
+				)
+			})
+		})
+
+		const filter = JSON.stringify([
+			{
+				name: 'lilith'
+			},
+			{
+				name: 'fouco'
+			}
+		])
+
+		const valid = await app.handle(
+			new Request(`http://localhost:3000/?party=${filter}`)
+		)
+		const invalid1 = await app.handle(new Request(`http://localhost:3000`))
+		const invalid2 = await app.handle(
+			new Request(
+				`http://localhost:3000?filter=[]`
+			)
+		)
+
+		expect(valid.status).toBe(200)
+		expect(invalid1.status).toBe(422)
+		expect(invalid2.status).toBe(422)
+	})
 })
