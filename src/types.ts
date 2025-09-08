@@ -927,6 +927,12 @@ export type MacroToContext<
 								// @ts-expect-error type is checked in key mapping
 								ResolveResolutions<Value['afterHandle']>
 							>
+						> &
+						CustomResponseToSchema<
+							ExtractResponseFromMacro<
+								// @ts-expect-error type is checked in key mapping
+								ResolveResolutions<Value['error']>
+							>
 						>
 				: {}
 		}>
@@ -944,6 +950,23 @@ type UnwrapMacroSchema<
 		response: 'response' extends keyof T ? T['response'] : undefined
 	},
 	Definitions
+>
+
+export type SimplifyToSchema<T extends InputSchema<any>> = Omit<
+	{
+		body: T['body']
+		headers: T['headers']
+		query: T['query']
+		params: T['params']
+		cookie: T['cookie']
+		response: T['response']
+	},
+	| ('body' extends keyof T ? never : 'body')
+	| ('headers' extends keyof T ? never : 'headers')
+	| ('query' extends keyof T ? never : 'query')
+	| ('params' extends keyof T ? never : 'params')
+	| ('cookie' extends keyof T ? never : 'cookie')
+	| ('response' extends keyof T ? never : 'response')
 >
 
 type InlineHandlerResponse<Route extends RouteSchema['response']> = {
@@ -975,7 +998,7 @@ export type InlineHandler<
 > =
 	| ((
 			context: Context<
-				Route & { response: MacroContext['response'] },
+				Route & MacroContext,
 				Singleton & { resolve: MacroContext['resolve'] }
 			>
 	  ) =>
@@ -1541,13 +1564,9 @@ export type GuardLocalHook<
 	Parser extends keyof any,
 	GuardType extends GuardSchemaType,
 	AsType extends LifeCycleType,
-	BeforeHandle extends
-		| MaybeArray<OptionalHandler<Schema, Singleton>>
-		| undefined,
-	AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>> | undefined,
-	ErrorHandle extends
-		| MaybeArray<ErrorHandler<any, Schema, Singleton>>
-		| undefined
+	BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>,
+	AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+	ErrorHandle extends MaybeArray<ErrorHandler<any, Schema, Singleton>>
 > = (Input extends any ? Input : Prettify<Input>) & {
 	/**
 	 * @default 'override'
@@ -1917,15 +1936,24 @@ export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
 			: {}
 	>
 
+export type IsUnknown<T> = [unknown] extends [T]
+	? IsAny<T> extends true
+		? false
+		: true
+	: false
+
+type UnwrapToObjectIfUnknown<T> = IsUnknown<T> extends true ? {} : T
+
 export type ElysiaHandlerToResponseSchemaAmbiguous<
-	Schemas extends MaybeArray<Function> | undefined
-> = undefined extends Schemas
-	? {}
-	: Schemas extends Function
-		? ElysiaHandlerToResponseSchema<Schemas>
-		: Schemas extends Function[]
-			? ElysiaHandlerToResponseSchemas<Schemas>
-			: {}
+	Schemas extends MaybeArray<Function>
+> =
+	MaybeArray<(...a: any) => any> extends Schemas
+		? {}
+		: Schemas extends Function
+			? ElysiaHandlerToResponseSchema<Schemas>
+			: Schemas extends Function[]
+				? ElysiaHandlerToResponseSchemas<Schemas>
+				: {}
 
 export type ElysiaHandlerToResponseSchemas<
 	Handle extends Function[],

@@ -168,7 +168,8 @@ import type {
 	ElysiaHandlerToResponseSchemaAmbiguous,
 	GuardLocalHook,
 	PickIfExists,
-	IsAny
+	IsAny,
+	SimplifyToSchema
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -4117,15 +4118,13 @@ export default class Elysia<
 		>,
 		const GuardType extends GuardSchemaType,
 		const AsType extends LifeCycleType,
-		const BeforeHandle extends
-			| MaybeArray<OptionalHandler<Schema, Singleton>>
-			| undefined,
-		const AfterHandle extends
-			| MaybeArray<AfterHandler<Schema, Singleton>>
-			| undefined,
-		const ErrorHandle extends
-			| MaybeArray<ErrorHandler<Definitions['error'], Schema, Singleton>>
-			| undefined
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<Definitions['error'], Schema, Singleton>
+		>
 	>(
 		hook: GuardLocalHook<
 			Input,
@@ -4177,11 +4176,14 @@ export default class Elysia<
 										Metadata['schema']
 									>
 								>
-						standaloneSchema: Volatile['standaloneSchema']
+						standaloneSchema: Volatile['standaloneSchema'] &
+							SimplifyToSchema<MacroContext>
 						response: Volatile['response'] &
 							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+							// @ts-ignore
+							MacroContext['return']
 					}
 				>
 			: AsType extends 'global'
@@ -4214,14 +4216,17 @@ export default class Elysia<
 											Metadata['schema']
 										>
 									>
-							standaloneSchema: Metadata['standaloneSchema']
+							standaloneSchema: Metadata['standaloneSchema'] &
+								SimplifyToSchema<MacroContext>
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
 							response: Metadata['response'] &
 								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+								// @ts-ignore
+								MacroContext['return']
 						},
 						Routes,
 						Ephemeral,
@@ -4255,11 +4260,14 @@ export default class Elysia<
 												Ephemeral['schema']
 										>
 									>
-							standaloneSchema: Ephemeral['standaloneSchema']
+							standaloneSchema: Ephemeral['standaloneSchema'] &
+								SimplifyToSchema<MacroContext>
 							response: Ephemeral['response'] &
 								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+								// @ts-ignore
+								MacroContext['return']
 						},
 						Volatile
 					>
@@ -4282,17 +4290,23 @@ export default class Elysia<
 								MacroContext['resolve']
 						>
 						schema: Volatile['schema']
-						standaloneSchema: {} extends PickIfExists<
+						standaloneSchema: ({} extends PickIfExists<
 							Input,
 							keyof InputSchema
 						>
 							? Volatile['standaloneSchema']
 							: Volatile['standaloneSchema'] &
-									UnwrapRoute<Input, Definitions['typebox']>
+									UnwrapRoute<
+										Input,
+										Definitions['typebox']
+									>) &
+							SimplifyToSchema<MacroContext>
 						response: Volatile['response'] &
 							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+							// @ts-ignore
+							MacroContext['return']
 					}
 				>
 			: AsType extends 'global'
@@ -4311,7 +4325,7 @@ export default class Elysia<
 						Definitions,
 						{
 							schema: Metadata['schema']
-							standaloneSchema: {} extends PickIfExists<
+							standaloneSchema: ({} extends PickIfExists<
 								Input,
 								keyof InputSchema
 							>
@@ -4321,14 +4335,17 @@ export default class Elysia<
 										Definitions['typebox'],
 										BasePath
 									> &
-										Metadata['standaloneSchema']
+										Metadata['standaloneSchema']) &
+								SimplifyToSchema<MacroContext>
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
 							response: Metadata['response'] &
 								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+								// @ts-ignore
+								MacroContext['return']
 						},
 						Routes,
 						Ephemeral,
@@ -4348,7 +4365,7 @@ export default class Elysia<
 									MacroContext['resolve']
 							>
 							schema: Ephemeral['schema']
-							standaloneSchema: {} extends PickIfExists<
+							standaloneSchema: ({} extends PickIfExists<
 								Input,
 								keyof InputSchema
 							>
@@ -4357,11 +4374,14 @@ export default class Elysia<
 										UnwrapRoute<
 											Input,
 											Definitions['typebox']
-										>
+										>) &
+								SimplifyToSchema<MacroContext>
 							response: Ephemeral['response'] &
 								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+								// @ts-ignore
+								MacroContext['return']
 						},
 						Volatile
 					>
@@ -5275,7 +5295,7 @@ export default class Elysia<
 	>
 
 	macro<
-		const NewMacro extends HookMacroFn<
+		NewMacro extends HookMacroFn<
 			Metadata['schema'],
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
@@ -5556,7 +5576,11 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema & MacroContext,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
@@ -5651,13 +5675,20 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema & MacroContext,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
 								Volatile['response'] &
 								// @ts-ignore
-								MacroContext['return']
+								MacroContext['return'] &
+								Metadata['standaloneSchema']['response'] &
+								Ephemeral['standaloneSchema']['response'] &
+								Volatile['standaloneSchema']['response']
 						>
 					}
 				}
@@ -5706,14 +5737,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5741,11 +5777,17 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
@@ -5794,14 +5836,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5829,11 +5876,17 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
@@ -5882,14 +5935,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5917,11 +5975,17 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
@@ -5970,14 +6034,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -6005,11 +6074,17 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
@@ -6058,14 +6133,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -6093,11 +6173,17 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
@@ -6146,14 +6232,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -6181,11 +6272,17 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
@@ -6234,14 +6331,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -6269,11 +6371,17 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
@@ -6323,14 +6431,19 @@ export default class Elysia<
 			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] &
-				Volatile['resolve'] &
-				MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>
-				>
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
-		const Handle extends InlineHandler<NoInfer<Schema>, Decorator>
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		method: Method,
 		path: Path,
@@ -6364,11 +6477,17 @@ export default class Elysia<
 						query: Schema['query']
 						headers: Schema['headers']
 						response: ComposeElysiaResponse<
-							Schema,
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
 							Handle,
 							Metadata['response'] &
 								Ephemeral['response'] &
-								Volatile['response']
+								Volatile['response'] &
+								// @ts-ignore
+								MacroContext['return']
 						>
 					}
 				}
