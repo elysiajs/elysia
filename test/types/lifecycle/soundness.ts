@@ -1705,3 +1705,65 @@ import { Prettify } from '../../../src/types'
 		404: 'lilith'
 	}>()
 }
+
+// Macro Context should add to output declaration
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				query: t.Object({
+					name: t.Literal('lilith')
+				}),
+				cookie: t.Object({
+					name: t.Literal('lilith')
+				}),
+				params: t.Object({
+					name: t.Literal('lilith')
+				}),
+				body: t.Object({
+					name: t.Literal('lilith')
+				}),
+				headers: t.Object({
+					name: t.Literal('lilith')
+				}),
+				response: {
+					403: t.Object({
+						name: t.Literal('lilith')
+					})
+				}
+			}
+		})
+		.post('/', ({ body }) => 'b' as const, {
+			a: true
+		})
+
+	expectTypeOf<(typeof app)['~Routes']['post']>().toEqualTypeOf<{
+		body: {
+			name: 'lilith'
+		}
+		params: {
+			name: 'lilith'
+		}
+		query: {
+			name: 'lilith'
+		}
+		headers: {
+			name: 'lilith'
+		}
+		response: {
+			200: 'b'
+			403: {
+				name: 'lilith'
+			}
+			422: {
+				type: 'validation'
+				on: string
+				summary?: string
+				message?: string
+				found?: unknown
+				property?: string
+				expected?: string
+			}
+		}
+	}>()
+}

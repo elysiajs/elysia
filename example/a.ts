@@ -2,10 +2,32 @@ import { Elysia, MaybeArray, status, t } from '../src'
 import { req } from '../test/utils'
 
 const app = new Elysia()
-	.onBeforeHandle(() => {
-		if (Math.random() > 0.5) return 'a' as const
+	.macro({
+		a: {
+			query: t.Object({
+				name: t.Literal('lilith')
+			}),
+			cookie: t.Object({
+				name: t.Literal('lilith')
+			}),
+			params: t.Object({
+				name: t.Literal('lilith')
+			}),
+			body: t.Object({
+				name: t.Literal('lilith')
+			}),
+			headers: t.Object({
+				name: t.Literal('lilith')
+			}),
+			response: {
+				403: t.Object({
+					name: t.Literal('lilith')
+				})
+			}
+		}
 	})
-	.get('/', () => 'b' as const)
+	.post('/', ({ body }) => 'b' as const, {
+		a: true
+	})
 
-app['~Volatile']['response']
-app['~Routes']['get']['response']
+app['~Routes']['post']
