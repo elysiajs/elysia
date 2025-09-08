@@ -891,35 +891,36 @@ type ExtractOnlyResponseFromMacro<A> =
 type ExtractAllResponseFromMacro<A> =
 	IsNever<A> extends true
 		? {}
-		: {} extends A
-			? {}
-			: {
-					return: UnionToIntersect<
-						A extends ElysiaCustomStatusResponse<
-							any,
-							infer Value,
-							infer Status
-						>
-							? {
-									[status in Status]: IsAny<Value> extends true
-										? // @ts-ignore status is always in Status Map
-											InvertedStatusMap[Status]
-										: Value
-								}
-							: Exclude<
-										A,
-										AnyElysiaCustomStatusResponse
-								  > extends infer A
-								? IsAny<A> extends true
+		: {
+				return: UnionToIntersect<
+					A extends ElysiaCustomStatusResponse<
+						any,
+						infer Value,
+						infer Status
+					>
+						? {
+								[status in Status]: IsAny<Value> extends true
+									? // @ts-ignore status is always in Status Map
+										InvertedStatusMap[Status]
+									: Value
+							}
+						: Exclude<
+									A,
+									AnyElysiaCustomStatusResponse
+							  > extends infer A
+							? IsAny<A> extends true
+								? {}
+								: // FunctionArrayReturnType
+									NonNullable<void> extends A
 									? {}
 									: undefined extends A
 										? {}
 										: {
 												200: A
 											}
-								: {}
-					>
-				}
+							: {}
+				>
+			}
 
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
@@ -949,23 +950,23 @@ export type MacroToContext<
 								Definitions
 							> &
 								ExtractAllResponseFromMacro<
-									UnionFunctionArrayReturnType<
+									FunctionArrayReturnType<
 										// @ts-expect-error type is checked in key mapping
 										Value['beforeHandle']
 									>
 								> &
 								ExtractAllResponseFromMacro<
-									UnionFunctionArrayReturnType<
+									FunctionArrayReturnType<
 										// @ts-expect-error type is checked in key mapping
 										Value['afterHandle']
 									>
 								> &
 								ExtractAllResponseFromMacro<
 									// @ts-expect-error type is checked in key mapping
-									UnionFunctionArrayReturnType<Value['error']>
+									FunctionArrayReturnType<Value['error']>
 								> &
 								ExtractOnlyResponseFromMacro<
-									UnionFunctionArrayReturnType<
+									FunctionArrayReturnType<
 										// @ts-expect-error type is checked in key mapping
 										Value['resolve']
 									>
@@ -990,7 +991,22 @@ type UnwrapMacroSchema<
 	Definitions
 >
 
-export type SimplifyToSchema<T extends InputSchema<any>> = Omit<
+export type SimplifyToSchema<T extends InputSchema<any>> =
+	IsUnknown<T['body']> extends false
+		? _SimplifyToSchema<T>
+		: IsUnknown<T['headers']> extends false
+			? _SimplifyToSchema<T>
+			: IsUnknown<T['query']> extends false
+				? _SimplifyToSchema<T>
+				: IsUnknown<T['params']> extends false
+					? _SimplifyToSchema<T>
+					: IsUnknown<T['cookie']> extends false
+						? _SimplifyToSchema<T>
+						: IsUnknown<T['response']> extends false
+							? _SimplifyToSchema<T>
+							: {}
+
+export type _SimplifyToSchema<T extends InputSchema<any>> = Omit<
 	{
 		body: T['body']
 		headers: T['headers']
@@ -1455,24 +1471,24 @@ type _ResolveReturnTypeArray<T, Carry = {}> = T extends [
 		: _ResolveReturnTypeArray<Rest, Carry & {}>
 	: Prettify<Carry>
 
-type UnionFunctionArrayReturnType<T> =
+type FunctionArrayReturnType<T> =
 	// If nothing is provided, it will be resolved as any
 	any[] extends T
-		? {}
+		? never
 		: // Merge all possible return type into one
 			// eg. () => condition ? { a: "a" } : { b: "b" }
 			// UnionToIntersect<
 			T extends any[]
-			? _UnionFunctionArrayReturnType<T>
+			? _FunctionArrayReturnType<T>
 			: // @ts-ignore
 				NonNullable<Awaited<ReturnType<T>>>
 // >
 
-type _UnionFunctionArrayReturnType<T, Carry = {}> = T extends [
+type _FunctionArrayReturnType<T, Carry = undefined> = T extends [
 	infer Fn,
 	...infer Rest
 ]
-	? _UnionFunctionArrayReturnType<
+	? _FunctionArrayReturnType<
 			Rest,
 			NonNullable<
 				Awaited<
@@ -1480,12 +1496,12 @@ type _UnionFunctionArrayReturnType<T, Carry = {}> = T extends [
 					ReturnType<Fn>
 				>
 			> extends infer A
-				? IsNever<A> extends false
-					? A & Carry
-					: Carry
+				? IsNever<A> extends true
+					? Carry
+					: A | Carry
 				: Carry
 		>
-	: Prettify<Carry>
+	: Carry
 
 export type AnyLocalHook = LocalHook<any, any, any, any, any>
 
@@ -1942,14 +1958,6 @@ export type CreateEden<
 		? Property
 		: _CreateEden<Path, Property>
 
-export type ComposeElysiaResponse<
-	Schema extends RouteSchema,
-	Handle,
-	Possibility extends PossibleResponse
-> = Handle extends (...a: any) => MaybePromise<infer A>
-	? _ComposeElysiaResponse<Schema, A, Possibility>
-	: _ComposeElysiaResponse<Schema, Handle, Possibility>
-
 export interface EmptyRouteSchema {
 	body: unknown
 	headers: unknown
@@ -1965,25 +1973,45 @@ type Extract200<T> = T extends AnyElysiaCustomStatusResponse
 			| Extract<T, ElysiaCustomStatusResponse<200, any, 200>>['response']
 	: T
 
-export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
-	Prettify<
-		Handle extends (...a: any) => MaybePromise<infer R>
-			? ExtractErrorFromHandle<R> &
-					(Extract200<R> extends infer R200
-						? undefined extends R200
-							? {}
-							: IsNever<R200> extends true
-								? {}
-								: { 200: R200 }
-						: {})
-			: {}
-	>
-
 export type IsUnknown<T> = [unknown] extends [T]
 	? IsAny<T> extends true
 		? false
 		: true
 	: false
+
+export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
+	(Extract200<Value> extends infer R200
+		? undefined extends R200
+			? {}
+			: IsNever<R200> extends true
+				? {}
+				: { 200: R200 }
+		: {})
+
+export type ValueOrFunctionToResponseSchema<T> = T extends (
+	...a: any
+) => MaybePromise<infer R>
+	? ValueToResponseSchema<R>
+	: ValueToResponseSchema<T>
+
+export type ElysiaHandlerToResponseSchema<in out Handle extends Function> =
+	Prettify<
+		Handle extends (...a: any) => MaybePromise<infer R>
+			? ValueToResponseSchema<R>
+			: {}
+	>
+
+export type ElysiaHandlerToResponseSchemas<
+	Handle extends Function[],
+	Carry extends PossibleResponse = {}
+> = Handle extends [infer Current, ...infer Rest]
+	? ElysiaHandlerToResponseSchemas<
+			// @ts-ignore Trust me bro
+			Rest,
+			// @ts-ignore trust me bro
+			UnionResponseStatus<ElysiaHandlerToResponseSchema<Current>, Carry>
+		>
+	: Prettify<Carry>
 
 export type ElysiaHandlerToResponseSchemaAmbiguous<
 	Schemas extends MaybeArray<Function>
@@ -1996,53 +2024,40 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 				? ElysiaHandlerToResponseSchemas<Schemas>
 				: {}
 
-export type ElysiaHandlerToResponseSchemas<
-	Handle extends Function[],
-	Carry extends PossibleResponse = {}
-> = Handle extends [
-	infer Current extends Function,
-	...infer Rest extends Function[]
-]
-	? ElysiaHandlerToResponseSchemas<
-			Rest,
-			Carry & ElysiaHandlerToResponseSchema<Current>
-		>
-	: Prettify<Carry>
+type ReconcileStatus<
+	A extends Record<number, unknown>,
+	B extends Record<number, unknown>
+> = {
+	// @ts-ignore Trust me bro
+	[K in keyof A | keyof B]: K extends keyof A ? A[K] : B[K]
+}
 
-type _ComposeElysiaResponse<
-	Schema extends RouteSchema,
-	Handle,
-	Possibility extends PossibleResponse
+export type ComposeElysiaResponse<
+	in out Schema extends RouteSchema,
+	in out Handle,
+	in out Possibility extends PossibleResponse
 > = Prettify<
-	(Schema['response'] extends { 200: any }
-		? {
-				200: Schema['response'][200]
-			} & Omit<Schema['response'], 200>
-		: {
-				200: Handle extends AnyElysiaCustomStatusResponse
-					?
-							| Exclude<Handle, AnyElysiaCustomStatusResponse>
-							| Extract<
-									Handle,
-									ElysiaCustomStatusResponse<200, any, 200>
-							  >['response']
-					: Handle
-			} & Schema['response']) &
-		ExtractErrorFromHandle<Handle> &
-		(EmptyRouteSchema extends Pick<Schema, keyof EmptyRouteSchema>
-			? {}
-			: {
-					422: {
-						type: 'validation'
-						on: string
-						summary?: string
-						message?: string
-						found?: unknown
-						property?: string
-						expected?: string
-					}
-				}) &
-		Possibility
+	ReconcileStatus<
+		// @ts-ignore
+		Schema['response'],
+		UnionResponseStatus<
+			ValueOrFunctionToResponseSchema<Handle>,
+			Possibility &
+				(EmptyRouteSchema extends Pick<Schema, keyof EmptyRouteSchema>
+					? {}
+					: {
+							422: {
+								type: 'validation'
+								on: string
+								summary?: string
+								message?: string
+								found?: unknown
+								property?: string
+								expected?: string
+							}
+						})
+		>
+	>
 >
 
 export type ExtractErrorFromHandle<in out Handle> = {
@@ -2433,3 +2448,17 @@ export type SSEPayload<
 	/** data to send */
 	data?: Data
 }
+
+export type UnionResponseStatus<A, B> = {} extends A
+	? B
+	: {} extends B
+		? A
+		: {
+				[key in keyof A | keyof B]: key extends keyof A
+					? key extends keyof B
+						? A[key] | B[key]
+						: A[key]
+					: key extends keyof B
+						? B[key]
+						: never
+			}

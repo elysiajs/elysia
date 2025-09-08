@@ -1329,20 +1329,16 @@ const a = app
 	}>()
 
 	expectTypeOf<app['error']['get']['response']>().toEqualTypeOf<{
-		200: never
 		418: 'a'
 	}>()
 
-	expectTypeOf<app['mirror']['post']['response']>().toEqualTypeOf<{
-		200: unknown
-	}>()
+	expectTypeOf<app['mirror']['post']['response']>().toEqualTypeOf<{}>()
 
 	expectTypeOf<app['immutable']['get']['response']>().toEqualTypeOf<{
 		200: '1'
 	}>()
 
 	expectTypeOf<app['immutable-error']['get']['response']>().toEqualTypeOf<{
-		200: never
 		418: 'a'
 	}>()
 

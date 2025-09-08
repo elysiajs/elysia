@@ -5,7 +5,6 @@ import {
 	type TSchema,
 	type TModule,
 	type TRef,
-	type TProperties,
 	type TAnySchema
 } from '@sinclair/typebox'
 
@@ -162,7 +161,9 @@ import type {
 	ElysiaHandlerToResponseSchemaAmbiguous,
 	GuardLocalHook,
 	PickIfExists,
-	SimplifyToSchema
+	SimplifyToSchema,
+	UnionResponseStatus,
+	ValueOrFunctionToResponseSchema
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -1197,8 +1198,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
+			response: UnionResponseStatus<
+				Volatile['response'],
 				ElysiaHandlerToResponseSchema<Handler>
+			>
 		}
 	>
 
@@ -1249,8 +1252,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
-				ElysiaHandlerToResponseSchemas<Handlers>
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ElysiaHandlerToResponseSchema<Handler>
+			>
 		}
 	>
 
@@ -1325,7 +1330,7 @@ export default class Elysia<
 	 * ```
 	 */
 	onParse<const Schema extends RouteSchema, const Type extends LifeCycleType>(
-		options: { as?: Type },
+		options: { as: Type },
 		parser: MaybeArray<
 			BodyHandler<
 				MergeSchema<
@@ -1380,7 +1385,7 @@ export default class Elysia<
 	): this
 
 	onParse(
-		options: { as?: LifeCycleType } | MaybeArray<Function> | string,
+		options: { as: LifeCycleType } | MaybeArray<Function> | string,
 		handler?: MaybeArray<Function>
 	): unknown {
 		if (!handler) {
@@ -1391,7 +1396,7 @@ export default class Elysia<
 		}
 
 		return this.on(
-			options as { as?: LifeCycleType },
+			options as { as: LifeCycleType },
 			'parse',
 			handler as any
 		)
@@ -1522,7 +1527,7 @@ export default class Elysia<
 		const Schema extends RouteSchema,
 		const Type extends LifeCycleType
 	>(
-		options: { as?: Type },
+		options: { as: Type },
 		handler: MaybeArray<
 			TransformHandler<
 				MergeSchema<
@@ -1573,13 +1578,13 @@ export default class Elysia<
 	): this
 
 	onTransform(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
 		if (!handler) return this.on('transform', options as any)
 
 		return this.on(
-			options as { as?: LifeCycleType },
+			options as { as: LifeCycleType },
 			'transform',
 			handler as any
 		)
@@ -1606,7 +1611,7 @@ export default class Elysia<
 			| ElysiaCustomStatusResponse<any, any, any>,
 		const Type extends LifeCycleType
 	>(
-		options: { as?: Type },
+		options: { as: Type },
 		resolver: (
 			context: Prettify<
 				Context<
@@ -1668,8 +1673,10 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ExtractErrorFromHandle<Resolver>
+					>
 				},
 				Routes,
 				Ephemeral,
@@ -1690,8 +1697,10 @@ export default class Elysia<
 						>
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ExtractErrorFromHandle<Resolver>
+						>
 					},
 					Volatile
 				>
@@ -1710,8 +1719,10 @@ export default class Elysia<
 						>
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ExtractErrorFromHandle<Resolver>
+						>
 					}
 				>
 
@@ -1769,12 +1780,15 @@ export default class Elysia<
 			>
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] & ExtractErrorFromHandle<Resolver>
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<Resolver>
+			>
 		}
 	>
 
 	resolve(
-		optionsOrResolve: { as?: LifeCycleType } | Function,
+		optionsOrResolve: { as: LifeCycleType } | Function,
 		resolve?: Function
 	) {
 		if (!resolve) {
@@ -1823,7 +1837,10 @@ export default class Elysia<
 			resolve: ExcludeElysiaResponse<NewResolver>
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] & ExtractErrorFromHandle<NewResolver>
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<NewResolver>
+			>
 		}
 	>
 
@@ -1833,7 +1850,7 @@ export default class Elysia<
 			| ElysiaCustomStatusResponse<any, any, any>,
 		const Type extends LifeCycleType
 	>(
-		options: { as?: Type },
+		options: { as: Type },
 		mapper: (
 			context: Context<
 				MergeSchema<
@@ -1884,8 +1901,10 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ExtractErrorFromHandle<NewResolver>
+					>
 				},
 				Routes,
 				Ephemeral,
@@ -1906,8 +1925,10 @@ export default class Elysia<
 						>
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ExtractErrorFromHandle<NewResolver>
+						>
 					},
 					Volatile
 				>
@@ -1926,13 +1947,15 @@ export default class Elysia<
 						>
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ExtractErrorFromHandle<NewResolver>
+						>
 					}
 				>
 
 	mapResolve(
-		optionsOrResolve: Function | { as?: LifeCycleType },
+		optionsOrResolve: Function | { as: LifeCycleType },
 		mapper?: Function
 	) {
 		if (!mapper) {
@@ -2000,8 +2023,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
+			response: UnionResponseStatus<
+				Volatile['response'],
 				ElysiaHandlerToResponseSchema<Handler>
+			>
 		}
 	>
 
@@ -2057,8 +2082,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
+			response: UnionResponseStatus<
+				Volatile['response'],
 				ElysiaHandlerToResponseSchemas<Handlers>
+			>
 		}
 	>
 
@@ -2126,7 +2153,7 @@ export default class Elysia<
 			BasePath
 		>
 	>(
-		options: { as?: Type },
+		options: { as: Type },
 		handler: Handler
 	): Type extends 'global'
 		? Elysia<
@@ -2139,8 +2166,10 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ElysiaHandlerToResponseSchema<Handler>
+					>
 				},
 				Routes,
 				Ephemeral,
@@ -2158,8 +2187,10 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ElysiaHandlerToResponseSchema<Handler>
+						>
 					},
 					Volatile
 				>
@@ -2175,8 +2206,10 @@ export default class Elysia<
 						resolve: Volatile['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ElysiaHandlerToResponseSchema<Handler>
+						>
 					}
 				>
 
@@ -2244,7 +2277,7 @@ export default class Elysia<
 			BasePath
 		>[]
 	>(
-		options: { as?: Type },
+		options: { as: Type },
 		handlers: Handlers
 	): Type extends 'global'
 		? Elysia<
@@ -2257,8 +2290,10 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ElysiaHandlerToResponseSchemas<Handlers>
+					>
 				},
 				Routes,
 				Ephemeral,
@@ -2276,8 +2311,10 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ElysiaHandlerToResponseSchemas<Handlers>
+						>
 					},
 					Volatile
 				>
@@ -2293,19 +2330,21 @@ export default class Elysia<
 						resolve: Volatile['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ElysiaHandlerToResponseSchemas<Handlers>
+						>
 					}
 				>
 
 	onBeforeHandle(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	): any {
 		if (!handler) return this.on('beforeHandle', options as any)
 
 		return this.on(
-			options as { as?: LifeCycleType },
+			options as { as: LifeCycleType },
 			'beforeHandle',
 			handler as any
 		)
@@ -2360,8 +2399,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
+			response: UnionResponseStatus<
+				Volatile['response'],
 				ElysiaHandlerToResponseSchema<Handler>
+			>
 		}
 	>
 
@@ -2414,8 +2455,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
+			response: UnionResponseStatus<
+				Volatile['response'],
 				ElysiaHandlerToResponseSchemas<Handlers>
+			>
 		}
 	>
 
@@ -2479,7 +2522,7 @@ export default class Elysia<
 							})
 		>
 	>(
-		options: { as?: LifeCycleType },
+		options: { as: Type },
 		handler: Handler
 	): Type extends 'global'
 		? Elysia<
@@ -2492,8 +2535,10 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ElysiaHandlerToResponseSchema<Handler>
+					>
 				},
 				Routes,
 				Ephemeral,
@@ -2511,8 +2556,10 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ElysiaHandlerToResponseSchema<Handler>
+						>
 					},
 					Volatile
 				>
@@ -2528,8 +2575,10 @@ export default class Elysia<
 						resolve: Volatile['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ElysiaHandlerToResponseSchema<Handler>
+						>
 					}
 				>
 
@@ -2593,7 +2642,7 @@ export default class Elysia<
 							})
 		>[]
 	>(
-		options: { as?: LifeCycleType },
+		options: { as: Type },
 		handler: Handlers
 	): Type extends 'global'
 		? Elysia<
@@ -2606,8 +2655,10 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ElysiaHandlerToResponseSchemas<Handlers>
+					>
 				},
 				Routes,
 				Ephemeral,
@@ -2625,8 +2676,10 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ElysiaHandlerToResponseSchemas<Handlers>
+						>
 					},
 					Volatile
 				>
@@ -2642,19 +2695,21 @@ export default class Elysia<
 						resolve: Volatile['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ElysiaHandlerToResponseSchemas<Handlers>
+						>
 					}
 				>
 
 	onAfterHandle(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	): any {
 		if (!handler) return this.on('afterHandle', options as any)
 
 		return this.on(
-			options as { as?: LifeCycleType },
+			options as { as: LifeCycleType },
 			'afterHandle',
 			handler as any
 		)
@@ -2715,7 +2770,7 @@ export default class Elysia<
 	 * ```
 	 */
 	mapResponse<const Schema extends RouteSchema, Type extends LifeCycleType>(
-		options: { as?: Type },
+		options: { as: Type },
 		handler: MaybeArray<
 			MapResponse<
 				MergeSchema<
@@ -2762,13 +2817,13 @@ export default class Elysia<
 	): this
 
 	mapResponse(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
 		if (!handler) return this.on('mapResponse', options as any)
 
 		return this.on(
-			options as { as?: LifeCycleType },
+			options as { as: LifeCycleType },
 			'mapResponse',
 			handler as any
 		)
@@ -2828,7 +2883,7 @@ export default class Elysia<
 		const Schema extends RouteSchema,
 		const Type extends LifeCycleType
 	>(
-		options: { as?: Type },
+		options: { as: Type },
 		handler: MaybeArray<
 			AfterResponseHandler<
 				MergeSchema<
@@ -2875,13 +2930,13 @@ export default class Elysia<
 	): this
 
 	onAfterResponse(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
 		if (!handler) return this.on('afterResponse', options as any)
 
 		return this.on(
-			options as { as?: LifeCycleType },
+			options as { as: LifeCycleType },
 			'afterResponse',
 			handler as any
 		)
@@ -2924,7 +2979,7 @@ export default class Elysia<
 	 * ```
 	 */
 	trace<const Schema extends RouteSchema>(
-		options: { as?: LifeCycleType },
+		options: { as: LifeCycleType },
 		handler: MaybeArray<TraceHandler<Schema, Singleton>>
 	): this
 
@@ -2945,7 +3000,7 @@ export default class Elysia<
 	 * ```
 	 */
 	trace(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	) {
 		if (!handler) {
@@ -2957,7 +3012,7 @@ export default class Elysia<
 
 		for (const fn of handler)
 			this.on(
-				options as { as?: LifeCycleType },
+				options as { as: LifeCycleType },
 				'trace',
 				createTracer(fn as any) as any
 			)
@@ -3179,8 +3234,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
+			response: UnionResponseStatus<
+				Volatile['response'],
 				ElysiaHandlerToResponseSchema<Handler>
+			>
 		}
 	>
 
@@ -3230,8 +3287,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
+			response: UnionResponseStatus<
+				Volatile['response'],
 				ElysiaHandlerToResponseSchemas<Handlers>
+			>
 		}
 	>
 
@@ -3251,7 +3310,7 @@ export default class Elysia<
 	 */
 	onError<
 		const Schema extends RouteSchema,
-		const Scope extends LifeCycleType,
+		const Type extends LifeCycleType,
 		const Handler extends ErrorHandler<
 			Definitions['error'],
 			MergeSchema<
@@ -3264,7 +3323,7 @@ export default class Elysia<
 				Metadata['standaloneSchema'] &
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema'],
-			Scope extends 'global'
+			Type extends 'global'
 				? {
 						store: Singleton['store']
 						decorator: Singleton['decorator']
@@ -3275,7 +3334,7 @@ export default class Elysia<
 							Ephemeral['resolve'] &
 							Volatile['resolve']
 					}
-				: Scope extends 'scoped'
+				: Type extends 'scoped'
 					? {
 							store: Singleton['store']
 							decorator: Singleton['decorator']
@@ -3283,7 +3342,7 @@ export default class Elysia<
 							resolve: Singleton['resolve'] & Ephemeral['resolve']
 						}
 					: Singleton,
-			Scope extends 'global'
+			Type extends 'global'
 				? Ephemeral
 				: {
 						derive: Partial<Ephemeral['derive']>
@@ -3292,9 +3351,9 @@ export default class Elysia<
 						standaloneSchema: Ephemeral['standaloneSchema']
 						response: Ephemeral['response']
 					},
-			Scope extends 'global'
+			Type extends 'global'
 				? Ephemeral
-				: Scope extends 'scoped'
+				: Type extends 'scoped'
 					? Ephemeral
 					: {
 							derive: Partial<Ephemeral['derive']>
@@ -3305,9 +3364,9 @@ export default class Elysia<
 						}
 		>
 	>(
-		options: { as?: Scope },
+		options: { as: Type },
 		handler: Handler
-	): Scope extends 'global'
+	): Type extends 'global'
 		? Elysia<
 				BasePath,
 				Singleton,
@@ -3318,14 +3377,16 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ElysiaHandlerToResponseSchema<Handler>
+					>
 				},
 				Routes,
 				Ephemeral,
 				Volatile
 			>
-		: Scope extends 'scoped'
+		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
 					Singleton,
@@ -3337,8 +3398,10 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ElysiaHandlerToResponseSchema<Handler>
+						>
 					},
 					Volatile
 				>
@@ -3354,8 +3417,10 @@ export default class Elysia<
 						resolve: Volatile['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ElysiaHandlerToResponseSchema<Handler>
+						>
 					}
 				>
 
@@ -3375,7 +3440,7 @@ export default class Elysia<
 	 */
 	onError<
 		const Schema extends RouteSchema,
-		const Scope extends LifeCycleType,
+		const Type extends LifeCycleType,
 		const Handlers extends ErrorHandler<
 			Definitions['error'],
 			MergeSchema<
@@ -3388,7 +3453,7 @@ export default class Elysia<
 				Metadata['standaloneSchema'] &
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema'],
-			Scope extends 'global'
+			Type extends 'global'
 				? {
 						store: Singleton['store']
 						decorator: Singleton['decorator']
@@ -3399,7 +3464,7 @@ export default class Elysia<
 							Ephemeral['resolve'] &
 							Volatile['resolve']
 					}
-				: Scope extends 'scoped'
+				: Type extends 'scoped'
 					? {
 							store: Singleton['store']
 							decorator: Singleton['decorator']
@@ -3407,7 +3472,7 @@ export default class Elysia<
 							resolve: Singleton['resolve'] & Ephemeral['resolve']
 						}
 					: Singleton,
-			Scope extends 'global'
+			Type extends 'global'
 				? Ephemeral
 				: {
 						derive: Partial<Ephemeral['derive']>
@@ -3416,9 +3481,9 @@ export default class Elysia<
 						standaloneSchema: Ephemeral['standaloneSchema']
 						response: Ephemeral['response']
 					},
-			Scope extends 'global'
+			Type extends 'global'
 				? Ephemeral
-				: Scope extends 'scoped'
+				: Type extends 'scoped'
 					? Ephemeral
 					: {
 							derive: Partial<Ephemeral['derive']>
@@ -3429,9 +3494,9 @@ export default class Elysia<
 						}
 		>[]
 	>(
-		options: { as?: Scope },
+		options: { as: Type },
 		handler: Handlers
-	): Scope extends 'global'
+	): Type extends 'global'
 		? Elysia<
 				BasePath,
 				Singleton,
@@ -3442,14 +3507,16 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ElysiaHandlerToResponseSchemas<Handlers>
+					>
 				},
 				Routes,
 				Ephemeral,
 				Volatile
 			>
-		: Scope extends 'scoped'
+		: Type extends 'scoped'
 			? Elysia<
 					BasePath,
 					Singleton,
@@ -3461,8 +3528,10 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ElysiaHandlerToResponseSchemas<Handlers>
+						>
 					},
 					Volatile
 				>
@@ -3478,8 +3547,10 @@ export default class Elysia<
 						resolve: Volatile['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ElysiaHandlerToResponseSchemas<Handlers>
+						>
 					}
 				>
 
@@ -3498,13 +3569,13 @@ export default class Elysia<
 	 * ```
 	 */
 	onError(
-		options: { as?: LifeCycleType } | MaybeArray<Function>,
+		options: { as: LifeCycleType } | MaybeArray<Function>,
 		handler?: MaybeArray<Function>
 	): any {
 		if (!handler) return this.on('error', options as any)
 
 		return this.on(
-			options as { as?: LifeCycleType },
+			options as { as: LifeCycleType },
 			'error',
 			handler as any
 		)
@@ -3569,13 +3640,13 @@ export default class Elysia<
 	 * ```
 	 */
 	on<const Event extends keyof LifeCycleStore>(
-		options: { as?: LifeCycleType },
+		options: { as: LifeCycleType },
 		type: Event,
 		handlers: MaybeArray<Extract<LifeCycleStore[Event], Function[]>[0]>
 	): this
 
 	on(
-		optionsOrType: { as?: LifeCycleType } | string,
+		optionsOrType: { as: LifeCycleType } | string,
 		typeOrHandlers: MaybeArray<Function | HookContainer> | string,
 		handlers?: MaybeArray<Function | HookContainer>
 	) {
@@ -3897,7 +3968,7 @@ export default class Elysia<
 			>,
 			Metadata['schema']
 		> &
-			Metadata['standaloneSchema'],
+			Metadata['standaloneSchema']
 	>(
 		prefix: Prefix,
 		schema: LocalHook<
@@ -4159,14 +4230,18 @@ export default class Elysia<
 										Metadata['schema']
 									>
 								>
-						standaloneSchema: Volatile['standaloneSchema'] &
-							SimplifyToSchema<MacroContext>
-						response: Volatile['response'] &
-							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-							// @ts-ignore
-							MacroContext['return']
+						standaloneSchema: Prettify<
+							Volatile['standaloneSchema'] &
+								SimplifyToSchema<MacroContext>
+						>
+						response: Prettify<
+							Volatile['response'] &
+								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+								// @ts-ignore
+								MacroContext['return']
+						>
 					}
 				>
 			: AsType extends 'global'
@@ -4199,17 +4274,21 @@ export default class Elysia<
 											Metadata['schema']
 										>
 									>
-							standaloneSchema: Metadata['standaloneSchema'] &
-								SimplifyToSchema<MacroContext>
+							standaloneSchema: Prettify<
+								Metadata['standaloneSchema'] &
+									SimplifyToSchema<MacroContext>
+							>
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
-							response: Metadata['response'] &
-								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
-								MacroContext['return']
+							response: Prettify<
+								Metadata['response'] &
+									ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+									// @ts-ignore
+									MacroContext['return']
+							>
 						},
 						Routes,
 						Ephemeral,
@@ -4243,14 +4322,18 @@ export default class Elysia<
 												Ephemeral['schema']
 										>
 									>
-							standaloneSchema: Ephemeral['standaloneSchema'] &
-								SimplifyToSchema<MacroContext>
-							response: Ephemeral['response'] &
-								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
-								MacroContext['return']
+							standaloneSchema: Prettify<
+								Ephemeral['standaloneSchema'] &
+									SimplifyToSchema<MacroContext>
+							>
+							response: Prettify<
+								Ephemeral['response'] &
+									ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+									// @ts-ignore
+									MacroContext['return']
+							>
 						},
 						Volatile
 					>
@@ -4273,23 +4356,27 @@ export default class Elysia<
 								MacroContext['resolve']
 						>
 						schema: Volatile['schema']
-						standaloneSchema: ({} extends PickIfExists<
-							Input,
-							keyof InputSchema
+						standaloneSchema: Prettify<
+							SimplifyToSchema<MacroContext> &
+								({} extends PickIfExists<
+									Input,
+									keyof InputSchema
+								>
+									? Volatile['standaloneSchema']
+									: Volatile['standaloneSchema'] &
+											UnwrapRoute<
+												Input,
+												Definitions['typebox']
+											>)
 						>
-							? Volatile['standaloneSchema']
-							: Volatile['standaloneSchema'] &
-									UnwrapRoute<
-										Input,
-										Definitions['typebox']
-									>) &
-							SimplifyToSchema<MacroContext>
-						response: Volatile['response'] &
-							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-							// @ts-ignore
-							MacroContext['return']
+						response: Prettify<
+							Volatile['response'] &
+								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+								// @ts-ignore
+								MacroContext['return']
+						>
 					}
 				>
 			: AsType extends 'global'
@@ -4308,27 +4395,31 @@ export default class Elysia<
 						Definitions,
 						{
 							schema: Metadata['schema']
-							standaloneSchema: ({} extends PickIfExists<
-								Input,
-								keyof InputSchema
-							>
-								? Metadata['standaloneSchema']
-								: UnwrapRoute<
+							standaloneSchema: Prettify<
+								SimplifyToSchema<MacroContext> &
+									({} extends PickIfExists<
 										Input,
-										Definitions['typebox'],
-										BasePath
-									> &
-										Metadata['standaloneSchema']) &
-								SimplifyToSchema<MacroContext>
+										keyof InputSchema
+									>
+										? Metadata['standaloneSchema']
+										: UnwrapRoute<
+												Input,
+												Definitions['typebox'],
+												BasePath
+											> &
+												Metadata['standaloneSchema'])
+							>
 							macro: Metadata['macro']
 							macroFn: Metadata['macroFn']
 							parser: Metadata['parser']
-							response: Metadata['response'] &
-								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
-								MacroContext['return']
+							response: Prettify<
+								Metadata['response'] &
+									ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+									// @ts-ignore
+									MacroContext['return']
+							>
 						},
 						Routes,
 						Ephemeral,
@@ -4348,23 +4439,27 @@ export default class Elysia<
 									MacroContext['resolve']
 							>
 							schema: Ephemeral['schema']
-							standaloneSchema: ({} extends PickIfExists<
-								Input,
-								keyof InputSchema
+							standaloneSchema: Prettify<
+								SimplifyToSchema<MacroContext> &
+									({} extends PickIfExists<
+										Input,
+										keyof InputSchema
+									>
+										? Ephemeral['standaloneSchema']
+										: Ephemeral['standaloneSchema'] &
+												UnwrapRoute<
+													Input,
+													Definitions['typebox']
+												>)
 							>
-								? Ephemeral['standaloneSchema']
-								: Ephemeral['standaloneSchema'] &
-										UnwrapRoute<
-											Input,
-											Definitions['typebox']
-										>) &
-								SimplifyToSchema<MacroContext>
-							response: Ephemeral['response'] &
-								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
-								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
-								MacroContext['return']
+							response: Prettify<
+								Ephemeral['response'] &
+									ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+									ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
+									// @ts-ignore
+									MacroContext['return']
+							>
 						},
 						Volatile
 					>
@@ -5565,11 +5660,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -5664,14 +5765,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return'] &
-								Metadata['standaloneSchema']['response'] &
-								Ephemeral['standaloneSchema']['response'] &
-								Volatile['standaloneSchema']['response']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -7147,7 +7251,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] & ExtractErrorFromHandle<Derivative>
+			response: UnionResponseStatus<
+				Volatile['response'],
+				ExtractErrorFromHandle<Derivative>
+			>
 		}
 	>
 
@@ -7173,7 +7280,7 @@ export default class Elysia<
 			| void,
 		const Type extends LifeCycleType
 	>(
-		options: { as?: Type },
+		options: { as: Type },
 		transform: (
 			context: Prettify<
 				Context<
@@ -7236,8 +7343,10 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ExtractErrorFromHandle<Derivative>
+					>
 				},
 				Routes,
 				Ephemeral,
@@ -7258,8 +7367,10 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ExtractErrorFromHandle<Derivative>
+						>
 					},
 					Volatile
 				>
@@ -7278,13 +7389,15 @@ export default class Elysia<
 						resolve: Ephemeral['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ExtractErrorFromHandle<Derivative>
+						>
 					}
 				>
 
 	derive(
-		optionsOrTransform: { as?: LifeCycleType } | Function,
+		optionsOrTransform: { as: LifeCycleType } | Function,
 		transform?: Function
 	) {
 		if (!transform) {
@@ -7488,8 +7601,10 @@ export default class Elysia<
 			resolve: Volatile['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response'] &
+			response: UnionResponseStatus<
+				Volatile['response'],
 				ExtractErrorFromHandle<NewDerivative>
+			>
 		}
 	>
 
@@ -7499,7 +7614,7 @@ export default class Elysia<
 			| ElysiaCustomStatusResponse<any, any, any>,
 		const Type extends LifeCycleType
 	>(
-		options: { as?: Type },
+		options: { as: Type },
 		mapper: (
 			context: Context<
 				{},
@@ -7535,11 +7650,11 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Singleton['derive']
-					resolve: Prettify<
-						Singleton['resolve'] &
+					derive: Prettify<
+						Singleton['derive'] &
 							ExcludeElysiaResponse<NewDerivative>
 					>
+					resolve: Singleton['resolve']
 				},
 				Definitions,
 				{
@@ -7548,8 +7663,10 @@ export default class Elysia<
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response'] &
+					response: UnionResponseStatus<
+						Metadata['response'],
 						ExtractErrorFromHandle<NewDerivative>
+					>
 				},
 				Routes,
 				Ephemeral,
@@ -7563,15 +7680,17 @@ export default class Elysia<
 					Metadata,
 					Routes,
 					{
-						derive: Ephemeral['derive']
-						resolve: Prettify<
-							Ephemeral['resolve'] &
+						derive: Prettify<
+							Ephemeral['derive'] &
 								ExcludeElysiaResponse<NewDerivative>
 						>
+						resolve: Ephemeral['resolve']
 						schema: Ephemeral['schema']
 						standaloneSchema: Ephemeral['standaloneSchema']
-						response: Ephemeral['response'] &
+						response: UnionResponseStatus<
+							Ephemeral['response'],
 							ExtractErrorFromHandle<NewDerivative>
+						>
 					},
 					Volatile
 				>
@@ -7590,13 +7709,15 @@ export default class Elysia<
 						>
 						schema: Volatile['schema']
 						standaloneSchema: Volatile['standaloneSchema']
-						response: Volatile['response'] &
+						response: UnionResponseStatus<
+							Volatile['response'],
 							ExtractErrorFromHandle<NewDerivative>
+						>
 					}
 				>
 
 	mapDerive(
-		optionsOrDerive: { as?: LifeCycleType } | Function,
+		optionsOrDerive: { as: LifeCycleType } | Function,
 		mapper?: Function
 	) {
 		if (!mapper) {

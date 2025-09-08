@@ -364,7 +364,7 @@ import { Prettify } from '../../../src/types'
 
 	expectTypeOf<Route>().toEqualTypeOf<{
 		200: 'Hello World'
-		readonly 401: 'Unauthorized'
+		401: 'Unauthorized'
 		410: 'Gone'
 		422: {
 			type: 'validation'
@@ -605,14 +605,11 @@ import { Prettify } from '../../../src/types'
 		]
 	})
 
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<
-		{
-			410: 'Gone'
-		} & {
-			412: 'Precondition Failed'
-			413: 'Payload Too Large'
-		}
-	>()
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		410: 'Gone'
+		412: 'Precondition Failed'
+		413: 'Payload Too Large'
+	}>()
 }
 
 // Guard should extract possible status 5
@@ -640,16 +637,12 @@ import { Prettify } from '../../../src/types'
 			]
 		})
 
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<
-		{
-			409: 'Conflict'
-		} & {
-			410: 'Gone'
-		} & {
-			412: 'Precondition Failed'
-			413: 'Payload Too Large'
-		}
-	>()
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		409: 'Conflict'
+		410: 'Gone'
+		412: 'Precondition Failed'
+		413: 'Payload Too Large'
+	}>()
 }
 
 // Macro should extract possible status 1
@@ -732,15 +725,11 @@ import { Prettify } from '../../../src/types'
 			b: true
 		})
 
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<
-		{
-			410: 'Gone'
-		} & {
-			411: 'Length Required'
-		} & {
-			412: 'Precondition Failed'
-		}
-	>()
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		410: 'Gone'
+		411: 'Length Required'
+		412: 'Precondition Failed'
+	}>()
 }
 
 // Guard should cast to scoped
@@ -767,15 +756,11 @@ import { Prettify } from '../../../src/types'
 			b: true
 		})
 
-	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<
-		{
-			410: 'Gone'
-		} & {
-			411: 'Length Required'
-		} & {
-			412: 'Precondition Failed'
-		}
-	>()
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		410: 'Gone'
+		411: 'Length Required'
+		412: 'Precondition Failed'
+	}>()
 }
 
 // Guard should cast to global
@@ -802,15 +787,11 @@ import { Prettify } from '../../../src/types'
 			b: true
 		})
 
-	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<
-		{
-			410: 'Gone'
-		} & {
-			411: 'Length Required'
-		} & {
-			412: 'Precondition Failed'
-		}
-	>()
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		410: 'Gone'
+		411: 'Length Required'
+		412: 'Precondition Failed'
+	}>()
 }
 
 // Unwrap ElysiaCustomStatusResponse value in resolve macro automatically
@@ -842,16 +823,864 @@ import { Prettify } from '../../../src/types'
 			auth: {
 				beforeHandle({ status }) {
 					if (Math.random() > 0.5) return status(401)
+
+					if (Math.random() > 0.5) return 'lilith'
 				}
 			}
 		})
-		.get('/', ({ status }) => 'a' as const, {
+		.get('/', () => 'fouco' as const, {
 			auth: true
 		})
 
-	// This could be improve
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
-		200: 'a'
+		200: 'lilith' | 'fouco'
 		401: 'Unauthorized'
+	}>()
+}
+
+// Reconcile response
+{
+	const app = new Elysia()
+		.onBeforeHandle(({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.get('/', ({ status }) =>
+			Math.random() > 0.5 ? status(404, 'fouco') : 'fouco'
+		)
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'lilith' | 'fouco'
+		404: 'lilith' | 'fouco'
+	}>()
+}
+
+// onBeforeHandle
+{
+	const app = new Elysia()
+		.onBeforeHandle(({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onBeforeHandle([
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// onBeforeHandle scoped
+{
+	const app = new Elysia()
+		.onBeforeHandle({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onBeforeHandle({ as: 'scoped' }, [
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// onBeforeHandle global
+{
+	const app = new Elysia()
+		.onBeforeHandle({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onBeforeHandle({ as: 'global' }, [
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// onAfterHandle local
+{
+	const app = new Elysia()
+		.onAfterHandle(({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onAfterHandle([
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// onAfterHandle scoped
+{
+	const app = new Elysia()
+		.onAfterHandle({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onAfterHandle({ as: 'scoped' }, [
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// onAfterHandle global
+{
+	const app = new Elysia()
+		.onAfterHandle({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onAfterHandle({ as: 'global' }, [
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// onError local
+{
+	const app = new Elysia()
+		.onError(({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onError([
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// onError scoped
+{
+	const app = new Elysia()
+		.onError({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onError({ as: 'scoped' }, [
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// onError global
+{
+	const app = new Elysia()
+		.onError({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5 ? status(404, 'lilith') : 'lilith'
+		)
+		.onError({ as: 'global' }, [
+			({ status }) =>
+				Math.random() > 0.5 ? status(401, 'fouco') : 'fouco',
+			({ status }) =>
+				Math.random() > 0.5 ? status(418, 'sartre') : 'sartre'
+		])
+
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		200: 'fouco' | 'sartre' | 'lilith'
+		401: 'fouco'
+		404: 'lilith'
+		418: 'sartre'
+	}>()
+}
+
+// resolve local
+{
+	const app = new Elysia()
+		.resolve(({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.resolve(({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Volatile']['resolve']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// resolve scoped
+{
+	const app = new Elysia()
+		.resolve({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.resolve({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Ephemeral']['resolve']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// resolve global
+{
+	const app = new Elysia()
+		.resolve({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.resolve({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Singleton']['resolve']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// mapResolve local
+{
+	const app = new Elysia()
+		.mapResolve(({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.mapResolve(({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Volatile']['resolve']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// mapResolve scoped
+{
+	const app = new Elysia()
+		.mapResolve({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.mapResolve({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Ephemeral']['resolve']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// mapResolve global
+{
+	const app = new Elysia()
+		.mapResolve({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.mapResolve({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Singleton']['resolve']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// derive local
+{
+	const app = new Elysia()
+		.derive(({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.derive(({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Volatile']['derive']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// derive scoped
+{
+	const app = new Elysia()
+		.derive({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.derive({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Ephemeral']['derive']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// derive global
+{
+	const app = new Elysia()
+		.derive({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.derive({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Singleton']['derive']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// mapDerive local
+{
+	const app = new Elysia()
+		.mapDerive(({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.mapDerive(({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Volatile']['derive']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// mapDerive scoped
+{
+	const app = new Elysia()
+		.mapDerive({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.mapDerive({ as: 'scoped' }, ({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Ephemeral']['derive']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// mapDerive global
+{
+	const app = new Elysia()
+		.mapDerive({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5
+				? status(401, 'sartre')
+				: { friends: ['lilith'] }
+		)
+		.mapDerive({ as: 'global' }, ({ status }) =>
+			Math.random() > 0.5 ? status(401, 'fouco') : { friends: ['lilith'] }
+		)
+		.get('/', ({ friends, status }) => {
+			if (Math.random() > 0.5) return status(401, friends[0])
+
+			return 'NOexistenceN'
+		})
+
+	expectTypeOf<(typeof app)['~Singleton']['derive']>().toEqualTypeOf<{
+		readonly friends: readonly ['lilith']
+	}>()
+
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		401: 'sartre' | 'fouco'
+	}>()
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'sartre' | 'fouco' | 'lilith'
+	}>()
+}
+
+// Guard local
+{
+	const app = new Elysia()
+		.macro({
+			q: {
+				beforeHandle: [
+					({ status }) => {
+						if (Math.random() > 0.05) return status(401)
+					},
+					({ status }) => {
+						if (Math.random() > 0.05) return status(402)
+					}
+				],
+				afterHandle({ status }) {
+					if (Math.random() > 0.05) return status(403)
+				},
+				error({ status }) {
+					if (Math.random() > 0.05) return status(404, 'lilith')
+				}
+			}
+		})
+		.guard({
+			q: true,
+			beforeHandle: [
+				({ status }) => {
+					if (Math.random() > 0.05) return status(405)
+				},
+				({ status }) => {
+					if (Math.random() > 0.05) return status(406)
+				}
+			],
+			afterHandle({ status }) {
+				if (Math.random() > 0.05) return status(407)
+			},
+			error({ status }) {
+				if (Math.random() > 0.05) return status(408)
+			}
+		})
+		.get('/', () => 'NOexistenceN' as const)
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		401: 'Unauthorized'
+		402: 'Payment Required'
+		403: 'Forbidden'
+		404: 'lilith'
+		405: 'Method Not Allowed'
+		406: 'Not Acceptable'
+		407: 'Proxy Authentication Required'
+		408: 'Request Timeout'
+	}>()
+
+	type A = keyof (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'Unauthorized'
+		402: 'Payment Required'
+		403: 'Forbidden'
+		404: 'lilith'
+		405: 'Method Not Allowed'
+		406: 'Not Acceptable'
+		407: 'Proxy Authentication Required'
+		408: 'Request Timeout'
+	}>()
+}
+
+// Guard scoped
+{
+	const app = new Elysia()
+		.macro({
+			q: {
+				beforeHandle: [
+					({ status }) => {
+						if (Math.random() > 0.05) return status(401)
+					},
+					({ status }) => {
+						if (Math.random() > 0.05) return status(402)
+					}
+				],
+				afterHandle({ status }) {
+					if (Math.random() > 0.05) return status(403)
+				},
+				error({ status }) {
+					if (Math.random() > 0.05) return status(404, 'lilith')
+				}
+			}
+		})
+		.guard({
+			as: 'scoped',
+			q: true,
+			beforeHandle: [
+				({ status }) => {
+					if (Math.random() > 0.05) return status(405)
+				},
+				({ status }) => {
+					if (Math.random() > 0.05) return status(406)
+				}
+			],
+			afterHandle({ status }) {
+				if (Math.random() > 0.05) return status(407)
+			},
+			error({ status }) {
+				if (Math.random() > 0.05) return status(408)
+			}
+		})
+		.get('/', () => 'NOexistenceN' as const)
+
+	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+		401: 'Unauthorized'
+		402: 'Payment Required'
+		403: 'Forbidden'
+		404: 'lilith'
+		405: 'Method Not Allowed'
+		406: 'Not Acceptable'
+		407: 'Proxy Authentication Required'
+		408: 'Request Timeout'
+	}>()
+
+	type A = keyof (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'Unauthorized'
+		402: 'Payment Required'
+		403: 'Forbidden'
+		404: 'lilith'
+		405: 'Method Not Allowed'
+		406: 'Not Acceptable'
+		407: 'Proxy Authentication Required'
+		408: 'Request Timeout'
+	}>()
+}
+
+// Guard global
+{
+	const app = new Elysia()
+		.macro({
+			q: {
+				beforeHandle: [
+					({ status }) => {
+						if (Math.random() > 0.05) return status(401)
+					},
+					({ status }) => {
+						if (Math.random() > 0.05) return status(402)
+					}
+				],
+				afterHandle({ status }) {
+					if (Math.random() > 0.05) return status(403)
+				},
+				error({ status }) {
+					if (Math.random() > 0.05) return status(404, 'lilith')
+				}
+			}
+		})
+		.guard({
+			as: 'global',
+			q: true,
+			beforeHandle: [
+				({ status }) => {
+					if (Math.random() > 0.05) return status(405)
+				},
+				({ status }) => {
+					if (Math.random() > 0.05) return status(406)
+				}
+			],
+			afterHandle({ status }) {
+				if (Math.random() > 0.05) return status(407)
+			},
+			error({ status }) {
+				if (Math.random() > 0.05) return status(408)
+			}
+		})
+		.get('/', () => 'NOexistenceN' as const)
+
+	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+		401: 'Unauthorized'
+		402: 'Payment Required'
+		403: 'Forbidden'
+		404: 'lilith'
+		405: 'Method Not Allowed'
+		406: 'Not Acceptable'
+		407: 'Proxy Authentication Required'
+		408: 'Request Timeout'
+	}>()
+
+	type A = keyof (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'Unauthorized'
+		402: 'Payment Required'
+		403: 'Forbidden'
+		404: 'lilith'
+		405: 'Method Not Allowed'
+		406: 'Not Acceptable'
+		407: 'Proxy Authentication Required'
+		408: 'Request Timeout'
+	}>()
+}
+
+// Multiple macro
+{
+	const app = new Elysia()
+		.macro({
+			q: {
+				beforeHandle: [
+					({ status }) => {
+						if (Math.random() > 0.05) return status(401)
+					},
+					({ status }) => {
+						if (Math.random() > 0.05) return status(402)
+					}
+				],
+				afterHandle({ status }) {
+					if (Math.random() > 0.05) return status(403)
+				},
+				error({ status }) {
+					if (Math.random() > 0.05) return status(404, 'lilith')
+				}
+			},
+			a: {
+				beforeHandle: ({ status }) => {
+					if (Math.random() > 0.05) return status(405)
+				},
+				afterHandle: [
+					({ status }) => {
+						if (Math.random() > 0.05) return status(406)
+					},
+					({ status }) => {
+						if (Math.random() > 0.05) return status(407)
+					}
+				],
+				error({ status }) {
+					if (Math.random() > 0.05) return status(408)
+				}
+			}
+		})
+
+		.guard({
+			q: true,
+			a: true
+		})
+		.get('/', () => 'NOexistenceN' as const)
+
+	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+		401: 'Unauthorized'
+		402: 'Payment Required'
+		403: 'Forbidden'
+		404: 'lilith'
+		405: 'Method Not Allowed'
+		406: 'Not Acceptable'
+		407: 'Proxy Authentication Required'
+		408: 'Request Timeout'
+	}>()
+
+	type A = keyof (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: 'NOexistenceN'
+		401: 'Unauthorized'
+		402: 'Payment Required'
+		403: 'Forbidden'
+		404: 'lilith'
+		405: 'Method Not Allowed'
+		406: 'Not Acceptable'
+		407: 'Proxy Authentication Required'
+		408: 'Request Timeout'
 	}>()
 }

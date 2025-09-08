@@ -3,21 +3,22 @@ import z from 'zod'
 
 const app = new Elysia()
 	.macro({
-		auth: {
-			resolve: [
+		q: {
+			beforeHandle: [
 				({ status }) => {
-					if (Math.random() > 0.5) return status(401)
-
-					return { user: 'saltyaom' } as const
+					if (Math.random() > 0.05) return status(401)
+				},
+				({ status }) => {
+					if (Math.random() > 0.05) return status(402)
 				}
 			]
 		}
 	})
-	.get('/', ({ headers, user }) => user, {
-		auth: true,
-		headers: t.Object({
-			'x-api-key': t.String()
-		})
+	.guard({
+		q: true
+	})
+	.get('/', () => {}, {
 	})
 
-app['~Routes']['get']['response']
+type A = (typeof app)['~Volatile']['standaloneSchema']
+type B = (typeof app)['~Routes']['get']['response']
