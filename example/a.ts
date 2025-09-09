@@ -1,33 +1,26 @@
-import { Elysia, MaybeArray, status, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from '../src'
 
-const app = new Elysia()
+const a = <T>(a: T) => a
+type a = typeof a
+
+new Elysia()
 	.macro({
-		a: {
-			query: t.Object({
-				name: t.Literal('lilith')
-			}),
-			cookie: t.Object({
-				name: t.Literal('lilith')
-			}),
-			params: t.Object({
-				name: t.Literal('lilith')
-			}),
-			body: t.Object({
-				name: t.Literal('lilith')
-			}),
-			headers: t.Object({
-				name: t.Literal('lilith')
-			}),
-			response: {
-				403: t.Object({
-					name: t.Literal('lilith')
-				})
-			}
-		}
-	})
-	.post('/', ({ body }) => 'b' as const, {
-		a: true
+		sartre: {
+			body: t.Object({ sartre: t.Literal('Sartre') }),
+		},
+		focou: {
+			body: t.Object({ focou: t.Literal('Focou') }),
+		},
+		lilith: {
+			sartre: true,
+			focou: true,
+			body: t.Object({ lilith: t.Literal('Lilith') }),
+		},
 	})
 
-app['~Routes']['post']
+
+
+
+	.post('/', ({ body }) => body, {
+		lilith: true
+	})

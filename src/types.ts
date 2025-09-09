@@ -926,54 +926,67 @@ type ExtractAllResponseFromMacro<A> =
 export type MacroToContext<
 	in out MacroFn extends BaseMacroFn = {},
 	in out SelectedMacro extends BaseMacro = {},
-	in out Definitions extends DefinitionBase['typebox'] = {}
+	in out Definitions extends DefinitionBase['typebox'] = {},
+	in out R extends 1[] = [1]
 > = Prettify<
 	{} extends SelectedMacro
 		? {}
-		: UnionToIntersect<
-				{
-					[key in keyof SelectedMacro]: ReturnTypeIfPossible<
-						MacroFn[key]
-					> extends infer Value
-						? {
-								resolve: true extends SelectedMacro[key]
-									? ExtractMacroContext<
-											ResolveReturnType<
-												// @ts-expect-error type is checked in key mapping
-												Value['resolve']
+		: R['length'] extends 16
+			? {}
+			: UnionToIntersect<
+					{
+						[key in keyof SelectedMacro]: ReturnTypeIfPossible<
+							MacroFn[key]
+						> extends infer Value
+							? {
+									resolve: true extends SelectedMacro[key]
+										? ExtractMacroContext<
+												ResolveReturnType<
+													// @ts-expect-error type is checked in key mapping
+													Value['resolve']
+												>
 											>
+										: {}
+								} & UnwrapMacroSchema<
+									// @ts-ignore Trust me bro
+									Value,
+									Definitions
+								> &
+									ExtractAllResponseFromMacro<
+										FunctionArrayReturnType<
+											// @ts-expect-error type is checked in key mapping
+											Value['beforeHandle']
 										>
-									: {}
-							} & UnwrapMacroSchema<
-								// @ts-ignore Trust me bro
-								Value,
-								Definitions
-							> &
-								ExtractAllResponseFromMacro<
-									FunctionArrayReturnType<
+									> &
+									ExtractAllResponseFromMacro<
+										FunctionArrayReturnType<
+											// @ts-expect-error type is checked in key mapping
+											Value['afterHandle']
+										>
+									> &
+									ExtractAllResponseFromMacro<
 										// @ts-expect-error type is checked in key mapping
-										Value['beforeHandle']
+										FunctionArrayReturnType<Value['error']>
+									> &
+									ExtractOnlyResponseFromMacro<
+										FunctionArrayReturnType<
+											// @ts-expect-error type is checked in key mapping
+											Value['resolve']
+										>
+									> &
+									MacroToContext<
+										MacroFn,
+										// @ts-ignore trust me bro
+										Pick<
+											Value,
+											Extract<keyof MacroFn, keyof Value>
+										>,
+										Definitions,
+										[...R, 1]
 									>
-								> &
-								ExtractAllResponseFromMacro<
-									FunctionArrayReturnType<
-										// @ts-expect-error type is checked in key mapping
-										Value['afterHandle']
-									>
-								> &
-								ExtractAllResponseFromMacro<
-									// @ts-expect-error type is checked in key mapping
-									FunctionArrayReturnType<Value['error']>
-								> &
-								ExtractOnlyResponseFromMacro<
-									FunctionArrayReturnType<
-										// @ts-expect-error type is checked in key mapping
-										Value['resolve']
-									>
-								>
-						: {}
-				}[keyof SelectedMacro]
-			>
+							: {}
+					}[keyof SelectedMacro]
+				>
 >
 
 type UnwrapMacroSchema<

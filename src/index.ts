@@ -5616,7 +5616,8 @@ export default class Elysia<
 		>,
 		const MacroContext extends MacroToContext<
 			Metadata['macroFn'],
-			Omit<Input, NonResolvableMacroKey>
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
 		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
