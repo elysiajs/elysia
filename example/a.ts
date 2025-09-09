@@ -13,7 +13,12 @@ const app = new Elysia()
 			body: t.Object({ lilith: t.Literal('Lilith') })
 		}
 	})
+	.macro('a', {
+		body: t.Object({ a: t.Literal('A') }),
+		beforeHandle({ body }) {}
+	})
 	.post('/:sartre', ({ body }) => body, {
+		a: true,
 		sartre: true,
 		focou: true,
 		lilith: true

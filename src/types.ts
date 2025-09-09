@@ -1796,9 +1796,9 @@ export type BaseMacro = Record<
 	string | number | boolean | Object | undefined | null
 >
 
-type MaybeValueOrVoidFunction<T> = T | ((...a: any) => void | T)
+export type MaybeValueOrVoidFunction<T> = T | ((...a: any) => void | T)
 
-export type Macro<
+export interface MacroProperty<
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
 		decorator: {}
@@ -1806,27 +1806,36 @@ export type Macro<
 		derive: {}
 		resolve: {}
 	},
-	in out Errors extends Record<string, Error> = {},
-	in out Name extends string = ''
-> = {
-	[K in keyof any]: MaybeValueOrVoidFunction<
-		InputSchema<Name> & {
-			/**
-			 * Deduplication similar to Elysia.constructor.seed
-			 */
-			seed?: unknown
-			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-			afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-			error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-			mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
-			afterResponse?: MaybeArray<
-				AfterResponseHandler<TypedRoute, Singleton>
-			>
-			resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
-			detail?: DocumentDecoration
-		}
+	in out Errors extends Record<string, Error> = {}
+> {
+	/**
+	 * Deduplication similar to Elysia.constructor.seed
+	 */
+	seed?: unknown
+	parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
+	transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
+	beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
+	afterHandle?: MaybeArray<AfterHandler<TypedRoute, Singleton>>
+	error?: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
+	mapResponse?: MaybeArray<MapResponse<TypedRoute, Singleton>>
+	afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
+	resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
+	detail?: DocumentDecoration
+}
+
+export interface Macro<
+	in out Input extends BaseMacro = {},
+	in out TypedRoute extends RouteSchema = {},
+	in out Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	},
+	in out Errors extends Record<string, Error> = {}
+> {
+	[K: keyof any]: MaybeValueOrVoidFunction<
+		Input & MacroProperty<TypedRoute, Singleton, Errors>
 	>
 }
 

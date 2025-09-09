@@ -1,4 +1,4 @@
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 // guard handle resolve macro
@@ -274,3 +274,21 @@ const app = new Elysia()
 			user: true
 		}
 	)
+
+// A
+{
+	new Elysia()
+		.macro('a', {
+			body: t.Object({ a: t.Literal('A') }),
+			beforeHandle({ body }) {
+				expectTypeOf(body).toEqualTypeOf<{ a: 'A' }>()
+			}
+		})
+		.macro('b', {
+			a: true,
+			body: t.Object({ a: t.Literal('A') }),
+			beforeHandle({ body }) {
+				expectTypeOf(body).toEqualTypeOf<{ a: 'A' }>()
+			}
+		})
+}

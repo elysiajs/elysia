@@ -160,7 +160,9 @@ import type {
 	PickIfExists,
 	SimplifyToSchema,
 	UnionResponseStatus,
-	CreateEdenResponse
+	CreateEdenResponse,
+	MacroProperty,
+	MaybeValueOrVoidFunction
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -5275,14 +5277,66 @@ export default class Elysia<
 	}
 
 	macro<
+		const Name extends string,
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const Schema extends MergeSchema<
+			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const Property extends MaybeValueOrVoidFunction<
+			MacroProperty<
+				Schema,
+				Singleton & {
+					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+				},
+				Definitions['error']
+			>
+		>
+	>(
+		name: Name,
+		macro: (Input extends any ? Input : Prettify<Input>) & Property
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			standaloneSchema: Metadata['standaloneSchema']
+			macro: Metadata['macro'] & {
+				[name in Name]?: Property extends (a: infer Params) => any
+					? Params
+					: boolean
+			}
+			macroFn: Metadata['macroFn'] & {
+				[name in Name]: Property
+			}
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro<
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
 		const NewMacro extends Macro<
+			Input,
 			Metadata['schema'],
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
 				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
 			},
-			Definitions['error'],
-			keyof Definitions['typebox'] & string
+			Definitions['error']
 		>
 	>(
 		macro: NewMacro
@@ -5303,11 +5357,17 @@ export default class Elysia<
 		Volatile
 	>
 
-	macro(macro: Macro) {
-		this.extender.macro = {
-			...this.extender.macro,
-			...macro
-		}
+	macro(macroOrName: string | Macro, macro?: Macro) {
+		if (typeof macroOrName === 'string' && !macro)
+			throw new Error('Macro function is required')
+
+		if (typeof macroOrName === 'string')
+			this.extender.macro[macroOrName] = macro!
+		else
+			this.extender.macro = {
+				...this.extender.macro,
+				...macroOrName
+			}
 
 		return this as any
 	}
