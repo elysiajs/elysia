@@ -1734,7 +1734,12 @@ import { Prettify } from '../../../src/types'
 			}
 		})
 		.post('/', ({ body }) => 'b' as const, {
-			a: true
+			a: true,
+			beforeHandle({ body }) {
+				expectTypeOf(body).toEqualTypeOf<{
+					name: 'lilith'
+				}>()
+			}
 		})
 
 	expectTypeOf<(typeof app)['~Routes']['post']>().toEqualTypeOf<{

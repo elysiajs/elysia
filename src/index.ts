@@ -5632,7 +5632,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -5647,12 +5647,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					get: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -5716,8 +5726,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
+			Volatile['standaloneSchema'],
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5738,7 +5747,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -5753,12 +5762,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					post: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -5844,7 +5863,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -5859,12 +5878,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					put: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -5872,11 +5901,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -5944,7 +5979,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -5959,12 +5994,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					patch: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -5972,11 +6017,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -6044,7 +6095,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -6059,12 +6110,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					delete: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6072,11 +6133,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -6144,7 +6211,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -6159,12 +6226,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					options: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6172,11 +6249,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -6244,7 +6327,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -6259,12 +6342,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					[method in string]: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6272,11 +6365,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -6344,7 +6443,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -6359,12 +6458,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					head: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6372,11 +6481,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -6444,7 +6559,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -6459,12 +6574,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					connect: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6472,11 +6597,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
@@ -6546,7 +6677,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			Schema,
+			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
@@ -6566,12 +6697,22 @@ export default class Elysia<
 				JoinPath<BasePath, Path>,
 				{
 					[method in Method]: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
+						// @ts-ignore
+						body: Schema['body'] & MacroContext['body']
+						params: IsNever<
+							// @ts-ignore
+							keyof (Schema['params'] & MacroContext['params'])
+						> extends true
 							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
+							: Schema['params'] &
+									// @ts-ignore
+									MacroContext['body']
+						query: Schema['query'] &
+							// @ts-ignore
+							MacroContext['body']
+						headers: Schema['headers'] &
+							// @ts-ignore
+							MacroContext['body']
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6579,11 +6720,17 @@ export default class Elysia<
 								Ephemeral['standaloneSchema'] &
 								Volatile['standaloneSchema'],
 							Handle,
-							Metadata['response'] &
-								Ephemeral['response'] &
-								Volatile['response'] &
-								// @ts-ignore
-								MacroContext['return']
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
 						>
 					}
 				}
