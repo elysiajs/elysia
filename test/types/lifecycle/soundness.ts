@@ -1772,3 +1772,63 @@ import { Prettify } from '../../../src/types'
 		}
 	}>()
 }
+
+// Macro Context schema and inline schema works together even in inline lifecycle
+{
+	const app = new Elysia()
+		.macro({
+			withFriends: {
+				body: t.Object({
+					friends: t.Tuple([t.Literal('Sartre'), t.Literal('Fouco')])
+				})
+			}
+		})
+		.post(
+			'/',
+			({ body }) => {
+				expectTypeOf(body).toEqualTypeOf<{
+					name: 'Lilith'
+					friends: ['Sartre', 'Fouco']
+				}>()
+
+				return body
+			},
+			{
+				body: t.Object({
+					name: t.Literal('Lilith')
+				}),
+				withFriends: true,
+				beforeHandle({ body }) {
+					expectTypeOf(body).toEqualTypeOf<{
+						name: 'Lilith'
+						friends: ['Sartre', 'Fouco']
+					}>()
+				}
+			}
+		)
+
+	expectTypeOf<(typeof app)['~Routes']['post']>().toEqualTypeOf<{
+		body: {
+			name: 'Lilith'
+			friends: ['Sartre', 'Fouco']
+		}
+		params: {}
+		query: {}
+		headers: {}
+		response: {
+			200: {
+				name: 'Lilith'
+				friends: ['Sartre', 'Fouco']
+			}
+			422: {
+				type: 'validation'
+				on: string
+				summary?: string
+				message?: string
+				found?: unknown
+				property?: string
+				expected?: string
+			}
+		}
+	}>()
+}

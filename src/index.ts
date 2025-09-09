@@ -5648,21 +5648,27 @@ export default class Elysia<
 				{
 					get: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -5763,21 +5769,27 @@ export default class Elysia<
 				{
 					post: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -5879,21 +5891,27 @@ export default class Elysia<
 				{
 					put: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -5995,21 +6013,27 @@ export default class Elysia<
 				{
 					patch: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6111,21 +6135,27 @@ export default class Elysia<
 				{
 					delete: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6227,21 +6257,27 @@ export default class Elysia<
 				{
 					options: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6343,21 +6379,27 @@ export default class Elysia<
 				{
 					[method in string]: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6459,21 +6501,27 @@ export default class Elysia<
 				{
 					head: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6575,21 +6623,27 @@ export default class Elysia<
 				{
 					connect: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
@@ -6698,21 +6752,27 @@ export default class Elysia<
 				{
 					[method in Method]: {
 						// @ts-ignore
-						body: Schema['body'] & MacroContext['body']
+						body: Prettify<Schema['body'] & MacroContext['body']>
 						params: IsNever<
 							// @ts-ignore
 							keyof (Schema['params'] & MacroContext['params'])
 						> extends true
 							? ResolvePath<Path>
-							: Schema['params'] &
-									// @ts-ignore
-									MacroContext['body']
-						query: Schema['query'] &
-							// @ts-ignore
-							MacroContext['body']
-						headers: Schema['headers'] &
-							// @ts-ignore
-							MacroContext['body']
+							: Prettify<
+									Schema['params'] &
+										// @ts-ignore
+										MacroContext['params']
+								>
+						query: Prettify<
+							Schema['query'] &
+								// @ts-ignore
+								MacroContext['query']
+						>
+						headers: Prettify<
+							Schema['headers'] &
+								// @ts-ignore
+								MacroContext['headers']
+						>
 						response: ComposeElysiaResponse<
 							Schema &
 								MacroContext &
