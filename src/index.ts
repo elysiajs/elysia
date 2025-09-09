@@ -5290,9 +5290,14 @@ export default class Elysia<
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema']
 		>,
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
 		const Property extends MaybeValueOrVoidFunction<
 			MacroProperty<
-				Schema,
+				Schema & MacroContext,
 				Singleton & {
 					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
 					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>

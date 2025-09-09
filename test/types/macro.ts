@@ -275,7 +275,7 @@ const app = new Elysia()
 		}
 	)
 
-// A
+// Macro name extends macro
 {
 	new Elysia()
 		.macro('a', {
@@ -286,9 +286,12 @@ const app = new Elysia()
 		})
 		.macro('b', {
 			a: true,
-			body: t.Object({ a: t.Literal('A') }),
+			body: t.Object({ b: t.Literal('B') }),
 			beforeHandle({ body }) {
-				expectTypeOf(body).toEqualTypeOf<{ a: 'A' }>()
+				expectTypeOf(body).toEqualTypeOf<{
+					a: 'A'
+					b: 'B'
+				}>()
 			}
 		})
 }

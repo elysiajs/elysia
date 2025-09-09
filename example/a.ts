@@ -1,6 +1,19 @@
 import { Elysia, t } from '../src'
 import { post, req } from '../test/utils'
 
+new Elysia()
+	.macro('a', {
+		body: t.Object({ a: t.Literal('A') }),
+		beforeHandle({ body }) {
+		}
+	})
+	.macro('b', {
+		a: true,
+		body: t.Object({ b: t.Literal('B') }),
+		beforeHandle({ body }) {
+		}
+	})
+
 const app = new Elysia()
 	.macro({
 		sartre: {
