@@ -42,7 +42,9 @@ import {
 	encodePath,
 	lifeCycleToArray,
 	supportPerMethodInlineHandler,
-	redirect
+	redirect,
+	emptySchema,
+	insertStandaloneValidator
 } from './utils'
 
 import {
@@ -68,9 +70,7 @@ import {
 	mergeLifeCycle,
 	filterGlobalHook,
 	asHookType,
-	traceBackMacro,
-	replaceUrlPath,
-	createMacroManager
+	replaceUrlPath
 } from './utils'
 
 import {
@@ -132,11 +132,9 @@ import type {
 	InlineHandler,
 	HookContainer,
 	LifeCycleType,
-	MacroQueue,
 	EphemeralType,
 	ExcludeElysiaResponse,
 	ModelValidator,
-	BaseMacroFn,
 	ContextAppendType,
 	Reconcile,
 	AfterResponseHandler,
@@ -145,12 +143,11 @@ import type {
 	JoinPath,
 	ValidatorLayer,
 	MergeElysiaInstances,
-	HookMacroFn,
+	Macro,
 	MacroToContext,
 	StandaloneValidator,
 	GuardSchemaType,
 	Or,
-	IsNever,
 	DocumentDecoration,
 	AfterHandler,
 	NonResolvableMacroKey,
@@ -163,7 +160,6 @@ import type {
 	PickIfExists,
 	SimplifyToSchema,
 	UnionResponseStatus,
-	ValueOrFunctionToResponseSchema,
 	CreateEdenResponse
 } from './types'
 
@@ -256,7 +252,7 @@ export default class Elysia<
 	}
 
 	protected extender = {
-		macros: <MacroQueue[]>[],
+		macro: <Macro>{},
 		higherOrderFunctions: <HookContainer<HigherOrderFunction>[]>[]
 	}
 
@@ -458,67 +454,6 @@ export default class Elysia<
 		})
 
 		return this
-	}
-
-	private applyMacro(localHook: AnyLocalHook) {
-		if (this.extender.macros.length) {
-			const manage = createMacroManager({
-				globalHook: this.event,
-				localHook
-			})
-
-			const manager: MacroManager = {
-				events: {
-					global: this.event,
-					local: localHook
-				},
-				get query() {
-					return manage('query') as any
-				},
-				get params() {
-					return manage('params') as any
-				},
-				get headers() {
-					return manage('headers') as any
-				},
-				get body() {
-					return manage('body') as any
-				},
-				get cookie() {
-					return manage('cookie') as any
-				},
-				get response() {
-					return manage('response') as any
-				},
-				get detail() {
-					return manage('detail') as any
-				},
-				get onParse() {
-					return manage('parse') as any
-				},
-				get onTransform() {
-					return manage('transform') as any
-				},
-				get onBeforeHandle() {
-					return manage('beforeHandle') as any
-				},
-				get onAfterHandle() {
-					return manage('afterHandle') as any
-				},
-				get mapResponse() {
-					return manage('mapResponse') as any
-				},
-				get onAfterResponse() {
-					return manage('afterResponse') as any
-				},
-				get onError() {
-					return manage('error') as any
-				}
-			}
-
-			for (const macro of this.extender.macros)
-				traceBackMacro(macro.fn(manager), localHook, manage)
-		}
 	}
 
 	get models(): {
@@ -5191,9 +5126,10 @@ export default class Elysia<
 					({ checksum }) => current === checksum
 				)
 			) {
-				this.extender.macros = this.extender.macros.concat(
-					plugin.extender.macros
-				)
+				this.extender.macro = {
+					...this.extender.macro,
+					...plugin.extender.macro
+				}
 
 				this.extender.higherOrderFunctions =
 					this.extender.higherOrderFunctions.concat(
@@ -5201,10 +5137,11 @@ export default class Elysia<
 					)
 			}
 		} else {
-			if (plugin.extender.macros.length)
-				this.extender.macros = this.extender.macros.concat(
-					plugin.extender.macros
-				)
+			if (isNotEmpty(plugin.extender.macro))
+				this.extender.macro = {
+					...this.extender.macro,
+					...plugin.extender.macro
+				}
 
 			if (plugin.extender.higherOrderFunctions.length)
 				this.extender.higherOrderFunctions =
@@ -5212,9 +5149,6 @@ export default class Elysia<
 						plugin.extender.higherOrderFunctions
 					)
 		}
-
-		// ! Deduplicate current instance
-		deduplicateChecksum(this.extender.macros)
 
 		if (plugin.extender.higherOrderFunctions.length) {
 			deduplicateChecksum(this.extender.higherOrderFunctions)
@@ -5254,10 +5188,11 @@ export default class Elysia<
 		if (isNotEmpty(plugin.definitions.error))
 			this.error(plugin.definitions.error as any)
 
-		if (isNotEmpty(plugin.definitions.error))
-			plugin.extender.macros = this.extender.macros.concat(
-				plugin.extender.macros
-			)
+		if (isNotEmpty(plugin.extender.macro))
+			this.extender.macro = {
+				...this.extender.macro,
+				...plugin.extender.macro
+			}
 
 		for (const { method, path, handler, hooks } of Object.values(
 			plugin.router.history
@@ -5339,42 +5274,8 @@ export default class Elysia<
 		return this
 	}
 
-	macro<const NewMacro extends BaseMacroFn>(
-		macro: (
-			route: MacroManager<
-				MergeSchema<
-					Metadata['schema'],
-					MergeSchema<Ephemeral['schema'], Volatile['schema']>
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'],
-				Singleton & {
-					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
-				},
-				Definitions['error']
-			>
-		) => NewMacro
-	): Elysia<
-		BasePath,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			standaloneSchema: Metadata['standaloneSchema']
-			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
-			macroFn: Metadata['macroFn'] & NewMacro
-			parser: Metadata['parser']
-			response: Metadata['response']
-		},
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
 	macro<
-		const NewMacro extends HookMacroFn<
+		const NewMacro extends Macro<
 			Metadata['schema'],
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
@@ -5402,47 +5303,106 @@ export default class Elysia<
 		Volatile
 	>
 
-	macro(macro: Function | Record<keyof any, Function>) {
-		if (typeof macro === 'function') {
-			const hook: MacroQueue = {
-				checksum: checksum(
-					JSON.stringify({
-						name: this.config.name,
-						seed: this.config.seed,
-						content: macro.toString()
-					})
-				),
-				fn: macro as any
-			}
-
-			this.extender.macros.push(hook)
-		} else if (typeof macro === 'object') {
-			for (const name of Object.keys(macro))
-				if (typeof macro[name] === 'object') {
-					const actualValue = { ...(macro[name] as Object) }
-
-					macro[name] = (v: boolean) => {
-						if (v === true) return actualValue
-					}
-				}
-
-			const hook: MacroQueue = {
-				checksum: checksum(
-					JSON.stringify({
-						name: this.config.name,
-						seed: this.config.seed,
-						content: Object.entries(macro)
-							.map(([k, v]) => `${k}+${v}`)
-							.join(',')
-					})
-				),
-				fn: () => macro
-			}
-
-			this.extender.macros.push(hook)
+	macro(macro: Macro) {
+		this.extender.macro = {
+			...this.extender.macro,
+			...macro
 		}
 
 		return this as any
+	}
+
+	private applyMacro(
+		localHook: AnyLocalHook,
+		appliable: AnyLocalHook = localHook,
+		{
+			iteration = 0,
+			applied = {}
+		}: { iteration?: number; applied?: { [key: number]: true } } = {}
+	) {
+		if (iteration >= 16) return
+
+		const macro = this.extender.macro
+
+		for (let [key, value] of Object.entries(appliable)) {
+			if (key in macro === false) continue
+
+			const macroHook =
+				typeof macro[key] === 'function'
+					? macro[key](value)
+					: macro[key]
+
+			if (!macroHook) return
+
+			if (typeof macro[key] === 'object' && value === false) return
+
+			const seed = checksum(key + JSON.stringify(macroHook.seed ?? value))
+
+			if (seed in applied) continue
+
+			applied[seed] = true
+
+			for (let [k, value] of Object.entries(macroHook)) {
+				if (k === 'seed') continue
+
+				if (k in emptySchema) {
+					insertStandaloneValidator(
+						localHook,
+						k as keyof RouteSchema,
+						value
+					)
+					delete localHook[key]
+					continue
+				}
+
+				if (k === 'detail') {
+					if (!localHook.detail) localHook.detail = {}
+					localHook.detail = mergeDeep(localHook.detail, value)
+
+					delete localHook[key]
+					continue
+				}
+
+				if (k in macro) {
+					this.applyMacro(
+						localHook,
+						{ [k]: value },
+						{ applied, iteration: iteration + 1 }
+					)
+
+					delete localHook[key]
+					continue
+				}
+
+				if (
+					(k === 'derive' || k === 'resolve') &&
+					typeof value === 'function'
+				)
+					// @ts-ignore
+					value = {
+						fn: value,
+						subType: k
+					} as HookContainer
+
+				switch (typeof localHook[k]) {
+					case 'function':
+						localHook[k] = [localHook[k], value]
+						break
+
+					case 'object':
+						if (Array.isArray(localHook[k]))
+							(localHook[k] as any[]).push(value)
+						else localHook[k] = [localHook[k]]
+						break
+
+					case 'undefined':
+						localHook[k] = value
+						break
+				}
+
+				delete localHook[key]
+			}
+		}
 	}
 
 	mount(
@@ -8136,12 +8096,9 @@ export type {
 	InferHandler,
 	ResolvePath,
 	MapResponse,
-	MacroQueue,
 	BaseMacro,
 	MacroManager,
-	BaseMacroFn,
 	MacroToProperty,
-	ResolveMacroContext,
 	MergeElysiaInstances,
 	MaybeArray,
 	ModelValidator,
@@ -8159,7 +8116,8 @@ export type {
 	InlineHandler,
 	ResolveHandler,
 	TransformHandler,
-	HTTPHeaders
+	HTTPHeaders,
+	EmptyRouteSchema
 } from './types'
 
 export { env } from './universal/env'

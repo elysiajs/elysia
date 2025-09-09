@@ -423,7 +423,7 @@ export interface MetadataBase {
 	schema: RouteSchema
 	standaloneSchema: MetadataBase['schema']
 	macro: BaseMacro
-	macroFn: BaseMacroFn
+	macroFn: Macro
 	parser: Record<string, BodyHandler<any, any>>
 	response: PossibleResponse
 }
@@ -855,14 +855,78 @@ export type MacroContextBlacklistKey =
 	| 'tags'
 	| keyof RouteSchema
 
-type ReturnTypeIfPossible<T> = T extends (...a: any) => infer R ? R : T
+type ReturnTypeIfPossible<T, Enabled = true> = false extends Enabled
+	? {}
+	: T extends (...a: any) => infer R
+		? R
+		: T
 
 type AnyElysiaCustomStatusResponse = ElysiaCustomStatusResponse<any, any, any>
 
-type ExtractMacroContext<A> =
+type FunctionArrayReturnType<T> =
+	// If nothing is provided, it will be resolved as any
+	any[] extends T
+		? never
+		: T extends any[]
+			? _FunctionArrayReturnType<T>
+			: // @ts-ignore
+				Awaited<ReturnType<T>>
+
+type _FunctionArrayReturnType<T, Carry = undefined> = T extends [
+	infer Fn,
+	...infer Rest
+]
+	? _FunctionArrayReturnType<
+			Rest,
+			Awaited<
+				// @ts-ignore Trust me bro
+				ReturnType<Fn>
+			> extends infer A
+				? IsNever<A> extends true
+					? Carry
+					: A | Carry
+				: Carry
+		>
+	: Carry
+
+type FunctionArrayReturnTypeNonNullable<T> =
+	// If nothing is provided, it will be resolved as any
+	any[] extends T
+		? never
+		: T extends any[]
+			? _FunctionArrayReturnTypeNonNullable<T>
+			: // @ts-ignore
+				NonNullable<Awaited<ReturnType<T>>>
+
+type _FunctionArrayReturnTypeNonNullable<T, Carry = undefined> = T extends [
+	infer Fn,
+	...infer Rest
+]
+	? _FunctionArrayReturnTypeNonNullable<
+			Rest,
+			NonNullable<
+				Awaited<
+					// @ts-ignore Trust me bro
+					ReturnType<Fn>
+				>
+			> extends infer A
+				? IsNever<A> extends true
+					? Carry
+					: A | Carry
+				: Carry
+		>
+	: Carry
+
+type ExtractResolveFromMacro<A> =
 	IsNever<A> extends true
 		? {}
-		: Exclude<A, AnyElysiaCustomStatusResponse | void>
+		: A extends AnyElysiaCustomStatusResponse
+			? A
+			: Exclude<A, AnyElysiaCustomStatusResponse> extends infer A
+				? IsAny<A> extends true
+					? {}
+					: A
+				: {}
 
 type ExtractOnlyResponseFromMacro<A> =
 	IsNever<A> extends true
@@ -924,7 +988,7 @@ type ExtractAllResponseFromMacro<A> =
 
 // There's only resolve that can add new properties to Context
 export type MacroToContext<
-	in out MacroFn extends BaseMacroFn = {},
+	in out MacroFn extends Macro = {},
 	in out SelectedMacro extends BaseMacro = {},
 	in out Definitions extends DefinitionBase['typebox'] = {},
 	in out R extends 1[] = [1]
@@ -936,14 +1000,21 @@ export type MacroToContext<
 			: UnionToIntersect<
 					{
 						[key in keyof SelectedMacro]: ReturnTypeIfPossible<
-							MacroFn[key]
+							MacroFn[key],
+							SelectedMacro[key]
 						> extends infer Value
 							? {
 									resolve: true extends SelectedMacro[key]
-										? ExtractMacroContext<
-												ResolveReturnType<
-													// @ts-expect-error type is checked in key mapping
-													Value['resolve']
+										? ExtractResolveFromMacro<
+												Extract<
+													Exclude<
+														FunctionArrayReturnType<
+															// @ts-ignore Trust me bro
+															Value['resolve']
+														>,
+														AnyElysiaCustomStatusResponse
+													>,
+													Record<any, unknown>
 												>
 											>
 										: {}
@@ -953,13 +1024,13 @@ export type MacroToContext<
 									Definitions
 								> &
 									ExtractAllResponseFromMacro<
-										FunctionArrayReturnType<
+										FunctionArrayReturnTypeNonNullable<
 											// @ts-expect-error type is checked in key mapping
 											Value['beforeHandle']
 										>
 									> &
 									ExtractAllResponseFromMacro<
-										FunctionArrayReturnType<
+										FunctionArrayReturnTypeNonNullable<
 											// @ts-expect-error type is checked in key mapping
 											Value['afterHandle']
 										>
@@ -969,7 +1040,7 @@ export type MacroToContext<
 										FunctionArrayReturnType<Value['error']>
 									> &
 									ExtractOnlyResponseFromMacro<
-										FunctionArrayReturnType<
+										FunctionArrayReturnTypeNonNullable<
 											// @ts-expect-error type is checked in key mapping
 											Value['resolve']
 										>
@@ -1483,38 +1554,6 @@ type _ResolveReturnTypeArray<T, Carry = {}> = T extends [
 		: _ResolveReturnTypeArray<Rest, Carry & {}>
 	: Prettify<Carry>
 
-type FunctionArrayReturnType<T> =
-	// If nothing is provided, it will be resolved as any
-	any[] extends T
-		? never
-		: // Merge all possible return type into one
-			// eg. () => condition ? { a: "a" } : { b: "b" }
-			// UnionToIntersect<
-			T extends any[]
-			? _FunctionArrayReturnType<T>
-			: // @ts-ignore
-				NonNullable<Awaited<ReturnType<T>>>
-// >
-
-type _FunctionArrayReturnType<T, Carry = undefined> = T extends [
-	infer Fn,
-	...infer Rest
-]
-	? _FunctionArrayReturnType<
-			Rest,
-			NonNullable<
-				Awaited<
-					// @ts-ignore Trust me bro
-					ReturnType<Fn>
-				>
-			> extends infer A
-				? IsNever<A> extends true
-					? Carry
-					: A | Carry
-				: Carry
-		>
-	: Carry
-
 export type AnyLocalHook = LocalHook<any, any, any, any, any>
 
 export interface BaseHookLifeCycle<
@@ -1757,76 +1796,9 @@ export type BaseMacro = Record<
 	string | number | boolean | Object | undefined | null
 >
 
-export type BaseMacroFn<
-	in out TypedRoute extends RouteSchema = {},
-	in out Singleton extends SingletonBase = {
-		decorator: {}
-		store: {}
-		derive: {}
-		resolve: {}
-	},
-	in out Errors extends Record<string, Error> = {}
-> = {
-	[K in keyof any]: (...a: any) => void | {
-		onParse?(fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>): unknown
-		onParse?(
-			options: MacroOptions,
-			fn: MaybeArray<BodyHandler<TypedRoute, Singleton>>
-		): unknown
+type MaybeValueOrVoidFunction<T> = T | ((...a: any) => void | T)
 
-		onTransform?(
-			fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-		): unknown
-		onTransform?(
-			options: MacroOptions,
-			fn: MaybeArray<VoidHandler<TypedRoute, Singleton>>
-		): unknown
-
-		onBeforeHandle?(
-			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-		): unknown
-		onBeforeHandle?(
-			options: MacroOptions,
-			fn: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
-		): unknown
-
-		onAfterHandle?(
-			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-		): unknown
-		onAfterHandle?(
-			options: MacroOptions,
-			fn: MaybeArray<AfterHandler<TypedRoute, Singleton>>
-		): unknown
-
-		onError?(
-			fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-		): unknown
-		onError?(
-			options: MacroOptions,
-			fn: MaybeArray<ErrorHandler<Errors, TypedRoute, Singleton>>
-		): unknown
-
-		mapResponse?(
-			fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
-		): unknown
-		mapResponse?(
-			options: MacroOptions,
-			fn: MaybeArray<MapResponse<TypedRoute, Singleton>>
-		): unknown
-
-		onAfterResponse?(
-			fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
-		): unknown
-		onAfterResponse?(
-			options: MacroOptions,
-			fn: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
-		): unknown
-	}
-}
-
-type MaybeVoidFunction<T> = T | ((...a: any) => T)
-
-export type HookMacroFn<
+export type Macro<
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
 		decorator: {}
@@ -1837,8 +1809,12 @@ export type HookMacroFn<
 	in out Errors extends Record<string, Error> = {},
 	in out Name extends string = ''
 > = {
-	[K in keyof any]: MaybeVoidFunction<
+	[K in keyof any]: MaybeValueOrVoidFunction<
 		InputSchema<Name> & {
+			/**
+			 * Deduplication similar to Elysia.constructor.seed
+			 */
+			seed?: unknown
 			parse?: MaybeArray<BodyHandler<TypedRoute, Singleton>>
 			transform?: MaybeArray<VoidHandler<TypedRoute, Singleton>>
 			beforeHandle?: MaybeArray<OptionalHandler<TypedRoute, Singleton>>
@@ -1854,15 +1830,14 @@ export type HookMacroFn<
 	>
 }
 
-export type MacroToProperty<
-	in out T extends BaseMacroFn | HookMacroFn<any, any, any, any>
-> = Prettify<{
-	[K in keyof T]: T[K] extends Function
-		? T[K] extends (a: infer Params) => any
-			? Params
+export type MacroToProperty<in out T extends Macro<any, any, any, any>> =
+	Prettify<{
+		[K in keyof T]: T[K] extends Function
+			? T[K] extends (a: infer Params) => any
+				? Params
+				: boolean
 			: boolean
-		: boolean
-}>
+	}>
 
 interface MacroOptions {
 	insert?: 'before' | 'after'
@@ -1941,10 +1916,6 @@ export interface MacroManager<
 		local: Partial<Prettify<LifeCycleStore & RouteSchema>>
 	}
 }
-
-export type MacroQueue = HookContainer<
-	(manager: MacroManager<any, any, any>) => unknown
->
 
 type _CreateEden<
 	Path extends string,
@@ -2209,23 +2180,6 @@ export type UnionToIntersect<U> = (
 ) extends (arg: infer I) => 0
 	? I
 	: never
-
-export type ResolveMacroContext<
-	Macro extends BaseMacro,
-	MacroFn extends BaseMacroFn
-> = UnionToIntersect<
-	{
-		[K in keyof Macro]-?: undefined extends Macro[K]
-			? never
-			: K extends keyof MacroFn
-				? ReturnType<MacroFn[K]> extends infer A extends {
-						[K in keyof any]: any
-					}
-					? A
-					: never
-				: never
-	}[keyof Macro]
->
 
 export type ContextAppendType = 'append' | 'override'
 

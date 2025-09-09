@@ -246,6 +246,31 @@ import { expectTypeOf } from 'expect-type'
 			}
 		})
 		.get('/', ({ user }) => user, {
-			auth: true,
+			auth: true
 		})
 }
+
+// retrieve resolve conditionally
+const app = new Elysia()
+	.macro({
+		user: (enabled: true) => ({
+			resolve() {
+				if (!enabled) return
+
+				return {
+					user: 'a'
+				}
+			}
+		})
+	})
+	.get(
+		'/',
+		({ user, status }) => {
+			if (!user) return status(401)
+
+			return { hello: 'hanabi' }
+		},
+		{
+			user: true
+		}
+	)

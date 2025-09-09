@@ -1171,10 +1171,8 @@ const a = app
 	})
 
 {
-	app.macro(() => {
-		return {
-			a(a: string) {}
-		}
+	app.macro({
+		a(a: string) {}
 	})
 		.get('/', () => {}, {
 			// ? Should contains macro
@@ -1185,10 +1183,8 @@ const a = app
 			// @ts-expect-error
 			a: 1
 		})
-		.macro(() => {
-			return {
-				b(a: number) {}
-			}
+		.macro({
+			b(a: number) {}
 		})
 		.get('/', () => {}, {
 			// ? Should merge macro
