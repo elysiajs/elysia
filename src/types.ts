@@ -1070,9 +1070,7 @@ export type InlineHandler<
 								| Route['response'][keyof Route['response']]
 								| InlineHandlerResponse<
 										Route['response'] &
-											({} extends MacroContext['response']
-												? {}
-												: MacroContext['response'])
+											MacroContext['response']
 								  >
 			  >)
 	| ({} extends Route['response']
@@ -1080,6 +1078,7 @@ export type InlineHandler<
 			: Route['response'] extends { 200: any }
 				? Route['response'][200]
 				: string | number | boolean | Record<any, unknown>)
+	| Response
 	| AnyElysiaCustomStatusResponse
 
 export type OptionalHandler<
