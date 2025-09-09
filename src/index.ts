@@ -5816,9 +5816,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const Decorator extends Singleton & {
+			Volatile['standaloneSchema'],		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
@@ -5919,9 +5917,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const Decorator extends Singleton & {
+			Volatile['standaloneSchema'],		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
@@ -6022,9 +6018,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const Decorator extends Singleton & {
+			Volatile['standaloneSchema'],		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
@@ -6125,9 +6119,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const Decorator extends Singleton & {
+			Volatile['standaloneSchema'],		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
@@ -6228,9 +6220,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const Decorator extends Singleton & {
+			Volatile['standaloneSchema'],		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
@@ -6331,9 +6321,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const Decorator extends Singleton & {
+			Volatile['standaloneSchema'],		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
@@ -6434,9 +6422,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const Decorator extends Singleton & {
+			Volatile['standaloneSchema'],		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
@@ -6538,9 +6524,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const Decorator extends Singleton & {
+			Volatile['standaloneSchema'],		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
 		},
@@ -6648,9 +6632,7 @@ export default class Elysia<
 		> &
 			Metadata['standaloneSchema'] &
 			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'] &
-			MacroContext,
-		const MacroContext extends MacroToContext<
+			Volatile['standaloneSchema'],		const MacroContext extends MacroToContext<
 			Metadata['macroFn'],
 			Omit<Input, NonResolvableMacroKey>
 		>
