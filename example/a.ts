@@ -1,32 +1,33 @@
 import { Elysia, t } from '../src'
-import { mergeDeep } from '../src/utils'
-
-console.log(
-	mergeDeep(
-		{
-			tags: ['a']
-		},
-		{
-			tags: ['b']
-		}
-	)
-)
+import { post, req } from '../test/utils'
 
 const app = new Elysia()
 	.macro({
 		sartre: {
-			body: t.Object({ sartre: t.Literal('Sartre') })
+			params: t.Object({ sartre: t.Literal('Sartre') })
 		},
 		focou: {
-			sartre: true,
-			body: t.Object({ focou: t.Literal('Focou') })
+			query: t.Object({ focou: t.Literal('Focou') })
 		},
 		lilith: {
-			sartre: true,
-			focou: true,
 			body: t.Object({ lilith: t.Literal('Lilith') })
 		}
 	})
-	.post('/', ({ body }) => body, {
+	.post('/:sartre', ({ body }) => body, {
+		sartre: true,
+		focou: true,
 		lilith: true
 	})
+
+const response = await app
+	.handle(
+		post('/Sartre', {
+			lilith: 'Lilith'
+		})
+	)
+	.then((x) => x.json())
+	.then(console.log)
+
+// console.log(app.routes[0].compile().toString())
+
+// console.log(app.routes[0].hooks)

@@ -493,6 +493,8 @@ export default class Elysia<
 
 		localHook ??= {}
 
+		this.applyMacro(localHook)
+
 		let standaloneValidators = [] as InputSchema[]
 
 		if (localHook.standaloneValidator)
@@ -770,8 +772,6 @@ export default class Elysia<
 				Object.assign({}, this.config.detail!),
 				localHook.detail
 			)
-
-		this.applyMacro(localHook)
 
 		const hooks = isNotEmpty(this.event)
 			? mergeHook(this.event, localHookToLifeCycleStore(localHook))
@@ -5392,7 +5392,7 @@ export default class Elysia<
 					case 'object':
 						if (Array.isArray(localHook[k]))
 							(localHook[k] as any[]).push(value)
-						else localHook[k] = [localHook[k]]
+						else localHook[k] = [localHook[k], value]
 						break
 
 					case 'undefined':

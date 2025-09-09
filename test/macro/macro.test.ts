@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
 import Elysia, { t } from '../../src'
-import { req } from '../utils'
+import { post, req } from '../utils'
 import { status } from '../../dist/cjs'
 
 describe('Macro', () => {
@@ -893,12 +893,136 @@ describe('Macro', () => {
 
 		expect(a).toEqual({ a: 'a' })
 		expect(b).toEqual({ b: 'b' })
-		// expect(c).toEqual({ a: 'a', b: 'b' })
+		expect(c).toEqual({ a: 'a', b: 'b' })
 		expect(d).toEqual({ a: 'a', b: undefined })
-		// expect(e).toEqual({ a: undefined, b: 'b', c: 10 })
+		expect(e).toEqual({ a: undefined, b: 'b', c: 10 })
 	})
 
-	it('extends', () => {
+	it('validate', async () => {
+		const app = new Elysia()
+			.macro({
+				sartre: {
+					params: t.Object({ sartre: t.Literal('Sartre') })
+				},
+				focou: {
+					query: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/:sartre', ({ body }) => body, {
+				sartre: true,
+				focou: true,
+				lilith: true
+			})
+
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+
+		const valid = await app.handle(
+			post('/Sartre?focou=Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(valid.status).toBe(200)
+		expect(await valid.json()).toEqual({
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/Sartre?focou=Focou', {
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/Not Sartre?focou=Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/Sartre?focou=Not Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
+	})
+
+	it('merge validation', async () => {
+		const app = new Elysia()
+			.macro({
+				sartre: {
+					body: t.Object({ sartre: t.Literal('Sartre') })
+				},
+				focou: {
+					body: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/', ({ body }) => body, {
+				sartre: true,
+				focou: true,
+				lilith: true
+			})
+
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+
+		const response = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			sartre: 'Sartre',
+			focou: 'Focou',
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/', {
+				sartre: 'Not Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Not Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
+	})
+
+	it('extends', async () => {
 		const app = new Elysia()
 			.macro({
 				sartre: {
@@ -917,9 +1041,52 @@ describe('Macro', () => {
 				lilith: true
 			})
 
-		const route = app.routes[0]
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
 
-		expect(route.hooks.standaloneValidator.length).toBe(3)
+		const response = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			sartre: 'Sartre',
+			focou: 'Focou',
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/', {
+				sartre: 'Not Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Not Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
 	})
 
 	it('create detail if not exists', () => {
@@ -966,30 +1133,6 @@ describe('Macro', () => {
 			summary: 'Lilith',
 			description: 'Lilith description'
 		})
-	})
-
-	it('extends', () => {
-		const app = new Elysia()
-			.macro({
-				sartre: {
-					body: t.Object({ sartre: t.Literal('Sartre') })
-				},
-				focou: {
-					body: t.Object({ focou: t.Literal('Focou') })
-				},
-				lilith: {
-					sartre: true,
-					focou: true,
-					body: t.Object({ lilith: t.Literal('Lilith') })
-				}
-			})
-			.post('/', ({ body }) => body, {
-				lilith: true
-			})
-
-		const route = app.routes[0]
-
-		expect(route.hooks.standaloneValidator.length).toBe(3)
 	})
 
 	it('deduplicate static object default', () => {
@@ -1082,40 +1225,7 @@ describe('Macro', () => {
 		expect(route.hooks.standaloneValidator.length).toBe(3)
 	})
 
-	it('deduplicate function macro by default', () => {
-		const app = new Elysia()
-			.macro({
-				sartre(enabled: boolean) {
-					return {
-						body: t.Object({ sartre: t.Literal('Sartre') })
-					}
-				},
-				focou: {
-					sartre: true,
-					body: t.Object({ focou: t.Literal('Focou') })
-				},
-				lilith: {
-					sartre: true,
-					focou: true,
-					body: t.Object({ lilith: t.Literal('Lilith') })
-				}
-			})
-			.post('/', ({ body }) => body, {
-				lilith: true,
-				sartre: false
-			})
-
-		const route = app.routes[0]
-
-		// This is 4 because
-		// 1. lilith
-		// 2. focou
-		// 3. sartre from focou
-		// 4. sartre with false flag
-		expect(route.hooks.standaloneValidator.length).toBe(4)
-	})
-
-	it('handle deduplication programmatically', () => {
+	it('deduplicate programmatically', () => {
 		const app = new Elysia()
 			.macro({
 				sartre(tag: string) {
