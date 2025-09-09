@@ -163,7 +163,8 @@ import type {
 	PickIfExists,
 	SimplifyToSchema,
 	UnionResponseStatus,
-	ValueOrFunctionToResponseSchema
+	ValueOrFunctionToResponseSchema,
+	CreateEdenResponse
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -5646,30 +5647,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					get: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					get: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -5688,7 +5670,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -5767,30 +5749,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					post: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					post: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -5809,7 +5772,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -5889,30 +5852,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					put: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					put: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -5931,7 +5875,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -6011,30 +5955,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					patch: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					patch: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -6053,7 +5978,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -6133,30 +6058,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					delete: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					delete: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -6175,7 +6081,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -6255,30 +6161,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					options: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					options: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -6297,7 +6184,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -6377,30 +6264,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					[method in string]: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					[method in string]: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -6419,7 +6287,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -6499,30 +6367,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					head: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					head: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -6541,7 +6390,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -6621,30 +6470,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					connect: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					connect: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -6663,7 +6493,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -6750,30 +6580,11 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					[method in Method]: {
-						// @ts-ignore
-						body: Prettify<Schema['body'] & MacroContext['body']>
-						params: IsNever<
-							// @ts-ignore
-							keyof (Schema['params'] & MacroContext['params'])
-						> extends true
-							? ResolvePath<Path>
-							: Prettify<
-									Schema['params'] &
-										// @ts-ignore
-										MacroContext['params']
-								>
-						query: Prettify<
-							Schema['query'] &
-								// @ts-ignore
-								MacroContext['query']
-						>
-						headers: Prettify<
-							Schema['headers'] &
-								// @ts-ignore
-								MacroContext['headers']
-						>
-						response: ComposeElysiaResponse<
+					[method in Method]: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
 							Schema &
 								MacroContext &
 								Metadata['standaloneSchema'] &
@@ -6792,7 +6603,7 @@ export default class Elysia<
 								>
 							>
 						>
-					}
+					>
 				}
 			>,
 		Ephemeral,
@@ -6865,19 +6676,34 @@ export default class Elysia<
 			CreateEden<
 				JoinPath<BasePath, Path>,
 				{
-					subscribe: {
-						body: Schema['body']
-						params: IsNever<keyof Schema['params']> extends true
-							? ResolvePath<Path>
-							: Schema['params']
-						query: Schema['query']
-						headers: Schema['headers']
-						response: {} extends Schema['response']
-							? unknown
-							: Schema['response'] extends { [200]: any }
-								? Schema['response'][200]
-								: unknown
-					}
+					subscribe: CreateEdenResponse<
+						Path,
+						Schema,
+						MacroContext,
+						ComposeElysiaResponse<
+							Schema &
+								MacroContext &
+								Metadata['standaloneSchema'] &
+								Ephemeral['standaloneSchema'] &
+								Volatile['standaloneSchema'],
+							{} extends Schema['response']
+								? unknown
+								: Schema['response'] extends { [200]: any }
+									? Schema['response'][200]
+									: unknown,
+							UnionResponseStatus<
+								Metadata['response'],
+								UnionResponseStatus<
+									Ephemeral['response'],
+									UnionResponseStatus<
+										Volatile['response'],
+										// @ts-ignore
+										MacroContext['return'] & {}
+									>
+								>
+							>
+						>
+					>
 				}
 			>,
 		Ephemeral,

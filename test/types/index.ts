@@ -690,10 +690,10 @@ app.use(plugin).group(
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
-		body: {}
+		body: unknown
 		params: {}
-		query: {}
-		headers: {}
+		query: unknown
+		headers: unknown
 		response: {
 			200: number
 		}
@@ -738,7 +738,17 @@ app.use(plugin).group(
 		headers: {
 			authorization: string
 		}
-		response: unknown
+		response: {
+			422: {
+				type: 'validation'
+				on: string
+				summary?: string
+				message?: string
+				found?: unknown
+				property?: string
+				expected?: string
+			}
+		}
 	}>()
 }
 
@@ -750,10 +760,10 @@ app.use(plugin).group(
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
-		body: {}
+		body: unknown
 		params: {}
-		query: {}
-		headers: {}
+		query: unknown
+		headers: unknown
 		response: {
 			200: string
 		}
@@ -956,10 +966,10 @@ app.group(
 	type Route = App['get']
 
 	expectTypeOf<Route>().toEqualTypeOf<{
-		body: {}
+		body: unknown
 		params: {}
-		query: {}
-		headers: {}
+		query: unknown
+		headers: unknown
 		response: {
 			200: string
 		}
@@ -983,10 +993,10 @@ app.group(
 			app: {
 				test: {
 					get: {
-						body: {}
+						body: unknown
 						params: {}
-						query: {}
-						headers: {}
+						query: unknown
+						headers: unknown
 						response: {
 							200: string
 						}
@@ -1219,10 +1229,10 @@ const a = app
 				'could-be-error': {
 					right: {
 						get: {
-							body: {}
+							body: unknown
 							params: {}
-							query: {}
-							headers: {}
+							query: unknown
+							headers: unknown
 							response: {
 								200: {
 									couldBeError: boolean
@@ -1241,7 +1251,7 @@ const a = app
 							params: {}
 							query: unknown
 							headers: unknown
-							response: unknown
+       response: {};
 						}
 					}
 				}

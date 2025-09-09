@@ -2462,3 +2462,31 @@ export type UnionResponseStatus<A, B> = {} extends A
 						? B[key]
 						: never
 			}
+
+export type CreateEdenResponse<
+	Path extends string,
+	Schema extends RouteSchema,
+	MacroContext extends RouteSchema,
+	// This should be handled by ComposeElysiaResponse
+	Res extends PossibleResponse
+> = RouteSchema extends MacroContext
+	? {
+			body: Schema['body']
+			params: IsNever<keyof Schema['params']> extends true
+				? ResolvePath<Path>
+				: Schema['params']
+			query: Schema['query']
+			headers: Schema['headers']
+			response: Res
+		}
+	: {
+			body: Prettify<Schema['body'] & MacroContext['body']>
+			params: IsNever<
+				keyof (Schema['params'] & MacroContext['params'])
+			> extends true
+				? ResolvePath<Path>
+				: Prettify<Schema['params'] & MacroContext['params']>
+			query: Prettify<Schema['query'] & MacroContext['query']>
+			headers: Prettify<Schema['headers'] & MacroContext['headers']>
+			response: Res
+		}

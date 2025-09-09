@@ -1466,8 +1466,6 @@ import { Prettify } from '../../../src/types'
 		408: 'Request Timeout'
 	}>()
 
-	type A = keyof (typeof app)['~Routes']['get']['response']
-
 	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
 		200: 'NOexistenceN'
 		401: 'Unauthorized'
@@ -1798,6 +1796,9 @@ import { Prettify } from '../../../src/types'
 					name: t.Literal('Lilith')
 				}),
 				withFriends: true,
+				response: {
+					418: t.Literal('Teapot')
+				},
 				beforeHandle({ body }) {
 					expectTypeOf(body).toEqualTypeOf<{
 						name: 'Lilith'
@@ -1820,6 +1821,7 @@ import { Prettify } from '../../../src/types'
 				name: 'Lilith'
 				friends: ['Sartre', 'Fouco']
 			}
+			418: 'Teapot'
 			422: {
 				type: 'validation'
 				on: string
