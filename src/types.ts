@@ -1165,10 +1165,10 @@ export type InlineHandler<
 										: unknown)
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
-					// | InlineHandlerResponse<
-					// 		Route['response'] &
-					// 			MacroContext['response']
-					//   >
+						| InlineHandlerResponse<
+								Route['response'] &
+									MacroContext['response']
+						  >
 			  >)
 
 export type OptionalHandler<
