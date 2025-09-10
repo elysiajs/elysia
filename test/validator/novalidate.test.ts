@@ -208,26 +208,25 @@ describe('ElysiaType.NoValidate', () => {
 	})
 
 	it('should work with NoValidate on nested object properties', async () => {
-		const app = new Elysia()
-			.get(
-				'/',
-				// @ts-expect-error
-				() => ({
-					user: { age: '123', name: true },
-					timestamp: '2025-01-01T00:00:00Z'
-				}),
-				{
-					response: t.NoValidate(
-						t.Object({
-							user: t.Object({
-								name: t.String(),
-								age: t.Number()
-							}),
-							timestamp: t.Date()
-						})
-					)
-				}
-			)
+		const app = new Elysia().get(
+			'/',
+			// @ts-expect-error
+			() => ({
+				user: { age: '123', name: true },
+				timestamp: '2025-01-01T00:00:00Z'
+			}),
+			{
+				response: t.NoValidate(
+					t.Object({
+						user: t.Object({
+							name: t.String(),
+							age: t.Number()
+						}),
+						timestamp: t.Date()
+					})
+				)
+			}
+		)
 
 		const res = await app.handle(req('/'))
 
@@ -308,5 +307,29 @@ describe('ElysiaType.NoValidate', () => {
 
 		expect(res.status).toBe(200)
 		expect(await res.text()).toBe('test')
+	})
+
+	it('bypasses Encode when encodeSchema=true (Date)', async () => {
+		const app = new Elysia({ encodeSchema: true }).get(
+			'/',
+			// @ts-expect-error
+			() => 'Hello Elysia',
+			{ response: t.NoValidate(t.Date()) }
+		)
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('Hello Elysia')
+	})
+
+	it('bypasses Encode with NoValidate(t.Ref(Date)) when encodeSchema=true', async () => {
+		const app = new Elysia({ encodeSchema: true })
+			.model({ createdAt: t.Date() })
+			// @ts-expect-error
+			.get('/', () => 'Hello', {
+				response: t.NoValidate(t.Ref('createdAt'))
+			})
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+		expect(await res.text()).toBe('Hello')
 	})
 })

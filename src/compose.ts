@@ -246,8 +246,10 @@ const composeValidationFactory = ({
 
 			if (!noValidate && value.schema?.$ref && value.schema?.$defs) {
 				const refKey = value.schema.$ref
-
-				const referencedDef = value.schema.$defs[refKey]
+				const defKey = typeof refKey === 'string' && refKey.includes('/')
+										? refKey.split('/').pop()!
+										: refKey
+				const referencedDef = value.schema.$defs[defKey as keyof typeof value.schema.$defs]
 				
 				if (referencedDef?.noValidate === true) {
 					noValidate = true
