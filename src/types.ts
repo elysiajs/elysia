@@ -1116,6 +1116,14 @@ type InlineHandlerResponse<Route extends RouteSchema['response']> = {
 	>
 }[keyof Route]
 
+type InlineResponse =
+	| string
+	| number
+	| boolean
+	| Record<any, unknown>
+	| Response
+	| AnyElysiaCustomStatusResponse
+
 export type InlineHandler<
 	Route extends RouteSchema = {},
 	Singleton extends SingletonBase = {
@@ -1134,10 +1142,15 @@ export type InlineHandler<
 		resolve: {}
 	}
 > =
+	| InlineResponse
 	| ((
 			context: Context<
 				Route & MacroContext,
-				Singleton & { resolve: MacroContext['resolve'] }
+				Singleton & { resolve: MacroContext['resolve'] } & {
+					resolve: {
+						q: Prettify<Route>
+					}
+				}
 			>
 	  ) =>
 			| Response
@@ -1152,18 +1165,11 @@ export type InlineHandler<
 										: unknown)
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
-								| InlineHandlerResponse<
-										Route['response'] &
-											MacroContext['response']
-								  >
+					// | InlineHandlerResponse<
+					// 		Route['response'] &
+					// 			MacroContext['response']
+					//   >
 			  >)
-	| ({} extends Route['response']
-			? string | number | boolean | Record<any, unknown>
-			: Route['response'] extends { 200: any }
-				? Route['response'][200]
-				: string | number | boolean | Record<any, unknown>)
-	| Response
-	| AnyElysiaCustomStatusResponse
 
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
