@@ -5386,7 +5386,6 @@ export default class Elysia<
 		}: { iteration?: number; applied?: { [key: number]: true } } = {}
 	) {
 		if (iteration >= 16) return
-
 		const macro = this.extender.macro
 
 		for (let [key, value] of Object.entries(appliable)) {
@@ -5397,12 +5396,13 @@ export default class Elysia<
 					? macro[key](value)
 					: macro[key]
 
-			if (!macroHook) return
-
-			if (typeof macro[key] === 'object' && value === false) return
+			if (
+				!macroHook ||
+				(typeof macro[key] === 'object' && value === false)
+			)
+				return
 
 			const seed = checksum(key + JSON.stringify(macroHook.seed ?? value))
-
 			if (seed in applied) continue
 
 			applied[seed] = true
