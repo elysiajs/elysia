@@ -419,6 +419,12 @@ export const ElysiaType = {
 	MaybeEmpty: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
 		t.Union([schema, t.Null(), t.Undefined()], options),
 
+	/**
+	 * Allow Optional and Undefined
+	 */
+	Undefinable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
+		t.Union([schema, t.Undefined()], options),
+
 	Cookie: <T extends TProperties>(
 		properties: T,
 		{
@@ -574,6 +580,7 @@ t.Files = (arg) => {
 
 t.Nullable = ElysiaType.Nullable
 t.MaybeEmpty = ElysiaType.MaybeEmpty
+t.Undefinable = ElysiaType.Undefinable
 t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date
 t.UnionEnum = ElysiaType.UnionEnum

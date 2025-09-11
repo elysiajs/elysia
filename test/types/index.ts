@@ -2671,3 +2671,19 @@ type a = keyof {}
 		(typeof app)['~Routes']['get']['response'][200]
 	>().toEqualTypeOf<AsyncGenerator<'a', void, unknown>>()
 }
+
+// infer Undefinable query, headers and body correctly
+{
+	const app = new Elysia().post("/", ({ query: { name = 'Elysia' } = {} }) => {
+		return `Hello ${name}`;
+	}, {
+		query: t.Undefinable(t.Object({ name: t.String() })),
+		headers: t.Undefinable(t.Object({ token: t.String() })),
+		body: t.Undefinable(t.Object({ id: t.Number() })),
+	});
+
+	expectTypeOf(app["~Routes"].post.query).not.toEqualTypeOf<unknown>();
+	expectTypeOf(app["~Routes"].post.query).toEqualTypeOf<{ name: string } | undefined>();
+	expectTypeOf(app["~Routes"].post.headers).toEqualTypeOf<{ token: string } | undefined>();
+	expectTypeOf(app["~Routes"].post.body).toEqualTypeOf<{ id: number } | undefined>();
+}
