@@ -654,9 +654,9 @@ export interface MergeSchema<
 	in out B extends RouteSchema,
 	Path extends string = ''
 > {
-	body: undefined extends A['body'] ? B['body'] : A['body']
-	headers: undefined extends A['headers'] ? B['headers'] : A['headers']
-	query: undefined extends A['query'] ? B['query'] : A['query']
+	body: IsSkipped<A['body']> extends true ? B['body'] : A['body']
+	headers: IsSkipped<A['headers']> extends true ? B['headers'] : A['headers']
+	query: IsSkipped<A['query']> extends true ? B['query'] : A['query']
 	params: IsNever<keyof A['params']> extends true
 		? IsNever<keyof B['params']> extends true
 			? ResolvePath<Path>
@@ -679,25 +679,25 @@ export interface MergeStandaloneSchema<
 	in out B extends RouteSchema,
 	Path extends string = ''
 > {
-	body: undefined extends A['body']
-		? undefined extends B['body']
+	body: IsSkipped<A['body']> extends true
+		? IsSkipped<B['body']> extends true
 			? undefined
 			: B['body']
-		: undefined extends B['body']
+		: IsSkipped<B['body']> extends true
 			? A['body']
 			: Prettify<A['body'] & B['body']>
-	headers: undefined extends A['headers']
-		? undefined extends B['headers']
+	headers: IsSkipped<A['headers']> extends true
+		? IsSkipped<B['headers']> extends true
 			? undefined
 			: B['headers']
-		: undefined extends B['headers']
+		: IsSkipped<B['headers']> extends true
 			? A['headers']
 			: Prettify<A['headers'] & B['headers']>
-	query: undefined extends A['query']
-		? undefined extends B['query']
+	query: IsSkipped<A['query']> extends true
+		? IsSkipped<B['query']> extends true
 			? undefined
 			: B['query']
-		: undefined extends B['query']
+		: IsSkipped<B['query']> extends true
 			? A['query']
 			: Prettify<A['query'] & B['query']>
 	params: IsNever<keyof A['params']> extends true
@@ -707,11 +707,11 @@ export interface MergeStandaloneSchema<
 		: IsNever<keyof B['params']> extends true
 			? A['params']
 			: Prettify<A['params'] & B['params']>
-	cookie: undefined extends A['cookie']
-		? undefined extends B['cookie']
+	cookie: IsSkipped<A['cookie']> extends true
+		? IsSkipped<B['cookie']> extends true
 			? undefined
 			: B['cookie']
-		: undefined extends B['cookie']
+		: IsSkipped<B['cookie']> extends true
 			? A['cookie']
 			: Prettify<A['cookie'] & B['cookie']>
 	response: {} extends A['response']
@@ -741,6 +741,16 @@ export type Handler<
 >
 
 export type IsAny<T> = 0 extends 1 & T ? true : false
+
+export type IsUnknown<T> = IsAny<T> extends true
+    ? false
+    : unknown extends T
+    ? true
+    : false
+
+export type IsUndefined<T> = [T] extends [undefined] ? true : false;
+
+export type IsSkipped<T> = IsUnknown<T> extends true ? true : IsUndefined<T> extends true ? true : false;
 
 export type Replace<Original, Target, With> =
 	IsAny<Target> extends true

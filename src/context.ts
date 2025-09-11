@@ -12,7 +12,8 @@ import type {
 	Prettify,
 	ResolvePath,
 	SingletonBase,
-	HTTPHeaders
+	HTTPHeaders,
+	IsSkipped
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
@@ -29,18 +30,18 @@ export type ErrorContext<
 > = Prettify<
 	{
 		body: Route['body']
-		query: undefined extends Route['query']
+		query: IsSkipped<Route['query']> extends true
 			? Record<string, string | undefined>
 			: Route['query']
-		params: undefined extends Route['params']
+		params: IsSkipped<Route['params']> extends true
 			? Path extends `${string}/${':' | '*'}${string}`
 				? ResolvePath<Path>
 				: { [key in string]: string }
 			: Route['params']
-		headers: undefined extends Route['headers']
+		headers: IsSkipped<Route['headers']> extends true
 			? Record<string, string | undefined>
 			: Route['headers']
-		cookie: undefined extends Route['cookie']
+		cookie: IsSkipped<Route['cookie']> extends true
 			? Record<string, Cookie<string | undefined>>
 			: Record<string, Cookie<string | undefined>> & {
 					[key in keyof Route['cookie']]-?: NonNullable<
@@ -122,20 +123,20 @@ export type Context<
 > = Prettify<
 	{
 		body: PrettifyIfObject<Route['body']>
-		query: undefined extends Route['query']
+		query: IsSkipped<Route['query']> extends true
 			? Record<string, string>
 			: PrettifyIfObject<Route['query']>
-		params: undefined extends Route['params']
+		params: IsSkipped<Route['params']> extends true
 			? undefined extends Path
 				? Record<string, string>
 				: Path extends `${string}/${':' | '*'}${string}`
 					? ResolvePath<Path>
 					: never
 			: PrettifyIfObject<Route['params']>
-		headers: undefined extends Route['headers']
+		headers: IsSkipped<Route['headers']> extends true
 			? Record<string, string | undefined>
 			: PrettifyIfObject<Route['headers']>
-		cookie: undefined extends Route['cookie']
+		cookie: IsSkipped<Route['cookie']> extends true
 			? Record<string, Cookie<string | undefined>>
 			: Record<string, Cookie<string | undefined>> & {
 					[key in keyof Route['cookie']]-?: Cookie<
