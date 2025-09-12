@@ -262,7 +262,19 @@ const composeValidationFactory = ({
 				continue
 			}
 
-			const noValidate = value.schema?.noValidate === true
+			let noValidate = value.schema?.noValidate === true 
+
+			if (!noValidate && value.schema?.$ref && value.schema?.$defs) {
+				const refKey = value.schema.$ref
+				const defKey = typeof refKey === 'string' && refKey.includes('/')
+										? refKey.split('/').pop()!
+										: refKey
+				const referencedDef = value.schema.$defs[defKey as keyof typeof value.schema.$defs]
+				
+				if (referencedDef?.noValidate === true) {
+					noValidate = true
+				}
+			}
 
 			const appliedCleaner = noValidate || hasSanitize
 
@@ -282,7 +294,7 @@ const composeValidationFactory = ({
 				!appliedCleaner && normalize && !noValidate
 
 			// Encode call TypeCheck.Check internally
-			if (encodeSchema && value.hasTransform) {
+			if (encodeSchema && value.hasTransform && !noValidate) {
 				code +=
 					`try{` +
 					`${name}=validator.response[${status}].Encode(${name})\n`
