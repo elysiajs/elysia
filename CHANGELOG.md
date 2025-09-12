@@ -1,3 +1,7 @@
+# 1.4.2 - 13 Sep 2025
+Bug fix:
+- remove debug `q` from inline handler
+
 # 1.4.1 - 13 Sep 2025
 Bug fix:
 - type error for inline Elysia.file
@@ -17,8 +21,6 @@ Change
 - ObjectString/ArrayString no longer produce default value by default due to security reasons
 - Cookie now dynamically parse when format is likely JSON
 - export `fileType` for external file type validation for accurate response
-- ObjectString/ArrayString no longer produce default value by default due to security reasons
-- Cookie now dynamically parse when format is likely JSON
 
 Breaking Change
 - remove macro v1 due to non type soundness

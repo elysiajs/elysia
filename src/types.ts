@@ -1148,11 +1148,7 @@ export type InlineHandler<
 	| ((
 			context: Context<
 				Route & MacroContext,
-				Singleton & { resolve: MacroContext['resolve'] } & {
-					resolve: {
-						q: Prettify<Route>
-					}
-				}
+				Singleton & { resolve: MacroContext['resolve'] }
 			>
 	  ) =>
 			| Response
