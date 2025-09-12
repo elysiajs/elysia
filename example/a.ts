@@ -1,4 +1,6 @@
-import { Elysia, t, InferHandler, file } from '../src'
+import { Elysia } from '../src'
 
-new Elysia()
-	.get('/file', file('public/takodachi.png'))
+new Elysia().onError(({ code, error }) => {
+	if (code === 'VALIDATION')
+		return error.all[0].message
+})

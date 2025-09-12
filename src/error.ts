@@ -130,6 +130,9 @@ export const mapValueError = (error: ValueError | undefined) => {
 	if (!error)
 		return {
 			summary: undefined
+		} as any as {
+			summary: string
+			message?: string
 		}
 
 	const { message, path, value, type } = error

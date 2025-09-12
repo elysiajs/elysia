@@ -1124,6 +1124,7 @@ type InlineResponse =
 	| Response
 	| AnyElysiaCustomStatusResponse
 	| ElysiaFile
+	| Record<any, unknown>
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
