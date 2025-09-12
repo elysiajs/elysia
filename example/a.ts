@@ -1,16 +1,4 @@
-import { Elysia, t } from 'elysia'
+import { Elysia, t, InferHandler, file } from '../src'
 
-new Elysia().group(
-	'/id/:id',
-	{
-		params: t.Object({
-			id: t.Number()
-		})
-	},
-	(app) =>
-		app.get('/:name', ({ params }) => params, {
-			params: t.Object({
-				name: t.String()
-			})
-		})
-)
+new Elysia()
+	.get('/file', file('public/takodachi.png'))

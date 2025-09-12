@@ -2680,3 +2680,8 @@ type a = keyof {}
 		(typeof app)['~Routes']['get']['response'][200]
 	>().toEqualTypeOf<ReadableStream<'a'>>()
 }
+
+// Inline Elysia file
+{
+	new Elysia().get('/file', file('public/takodachi.png'))
+}
