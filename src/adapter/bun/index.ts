@@ -485,7 +485,7 @@ export const BunAdapter: ElysiaAdapter = {
 					) as any
 
 				const handleResponse = createHandleWSResponse(validateResponse)
-				const parseMessage = createWSMessageParser(parse)
+				const parseMessage = createWSMessageParser(parse as any)
 
 				let _id: string | undefined
 

@@ -6,7 +6,6 @@ import { signCookie } from '../../src/utils'
 const secrets = 'We long for the seven wailings. We bear the koan of Jericho.'
 
 const getCookies = (response: Response) =>
-	// @ts-expect-error
 	response.headers.getAll('Set-Cookie').map((x) => {
 		return decodeURIComponent(x)
 	})

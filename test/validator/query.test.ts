@@ -256,15 +256,13 @@ describe('Query Validator', () => {
 			'/',
 			({ query }) => query?.name ?? 'sucrose',
 			{
-				query: t.Optional(
-					t.Object(
-						{
-							name: t.String()
-						},
-						{
-							additionalProperties: true
-						}
-					)
+				query: t.Object(
+					{
+						name: t.Optional(t.String())
+					},
+					{
+						additionalProperties: true
+					}
 				)
 			}
 		)
@@ -332,7 +330,6 @@ describe('Query Validator', () => {
 					check() {
 						const { state } = ctx.query
 
-						// @ts-expect-error
 						if (!checker.check(ctx, name, state ?? ctx.query.state))
 							throw new Error('State mismatch')
 					}
@@ -930,7 +927,7 @@ describe('Query Validator', () => {
 			{
 				query: t.Object({
 					id: t
-						.Transform(t.Array(t.UnionEnum(['test', 'foo'])))
+						.Transform(t.UnionEnum(['test', 'foo']))
 						.Decode((id) => ({ value: id }))
 						.Encode((id) => id.value)
 				})
@@ -943,7 +940,7 @@ describe('Query Validator', () => {
 
 		expect(response).toEqual({
 			id: {
-				value: ['test']
+				value: 'test'
 			},
 			type: 'object'
 		})
@@ -970,19 +967,17 @@ describe('Query Validator', () => {
 	it('handle coerce TransformDecodeError', async () => {
 		let err: Error | undefined
 
-		const app = new Elysia()
-			.get('/', ({ query }) => query, {
-				query: t.Object({
-					year: t.Numeric({ minimum: 1900, maximum: 2160 })
-				}),
-				error({ code, error }) {
-					switch (code) {
-						case 'VALIDATION':
-							err = error
-					}
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				year: t.Numeric({ minimum: 1900, maximum: 2160 })
+			}),
+			error({ code, error }) {
+				switch (code) {
+					case 'VALIDATION':
+						err = error
 				}
-			})
-			.listen(0)
+			}
+		})
 
 		await app.handle(req('?year=3000'))
 
@@ -1025,5 +1020,88 @@ describe('Query Validator', () => {
 			test: 1,
 			$test: 2
 		})
+	})
+
+	it("don't populate object query on failed validation", async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				filter: t.Object({
+					latlng: t.Object({
+						within: t.Object({
+							ne: t.Number(),
+							sw: t.Number()
+						})
+					}),
+					zoom: t.Object({
+						equalTo: t.Number({
+							minimum: 0,
+							maximum: 20,
+							multipleOf: 1
+						})
+					})
+				})
+			})
+		})
+
+		const filter = JSON.stringify({
+			latlng: {
+				within: {
+					ne: 1,
+					sw: 1
+				}
+			},
+			zoom: {
+				equalTo: 2
+			}
+		})
+
+		const valid = await app.handle(
+			new Request(`http://localhost:3000/?filter=${filter}`)
+		)
+		const invalid1 = await app.handle(new Request(`http://localhost:3000`))
+		const invalid2 = await app.handle(
+			new Request(
+				`http://localhost:3000?filter=${JSON.stringify({ zoom: { equalTo: 21 } })}`
+			)
+		)
+
+		expect(valid.status).toBe(200)
+		expect(invalid1.status).toBe(422)
+		expect(invalid2.status).toBe(422)
+	})
+
+	it("don't populate array query on failed validation", async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				party: t.Array(
+					t.Object({
+						name: t.String()
+					})
+				)
+			})
+		})
+
+		const filter = JSON.stringify([
+			{
+				name: 'lilith'
+			},
+			{
+				name: 'fouco'
+			}
+		])
+
+		const valid = await app.handle(
+			new Request(`http://localhost:3000/?party=${filter}`)
+		)
+		const invalid1 = await app.handle(new Request(`http://localhost:3000`))
+		const invalid2 = await app.handle(
+			new Request(
+				`http://localhost:3000?filter=[]`
+			)
+		)
+
+		expect(valid.status).toBe(200)
+		expect(invalid1.status).toBe(422)
+		expect(invalid2.status).toBe(422)
 	})
 })

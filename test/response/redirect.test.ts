@@ -10,7 +10,6 @@ describe('Response Redirect', () => {
 		const { headers, status } = await app.handle(req('/'))
 
 		expect(status).toBe(302)
-		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi'
 		})
@@ -24,7 +23,6 @@ describe('Response Redirect', () => {
 		const { headers, status } = await app.handle(req('/'))
 
 		expect(status).toBe(301)
-		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi'
 		})
@@ -40,7 +38,6 @@ describe('Response Redirect', () => {
 		const { headers, status } = await app.handle(req('/'))
 
 		expect(status).toBe(302)
-		// @ts-expect-error
 		expect(headers.toJSON()).toEqual({
 			location: '/skadi',
 			alias: 'Abyssal Hunter'

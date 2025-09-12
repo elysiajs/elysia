@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { inferBodyReference } from '../../src/sucrose'
+import { inferBodyReference, Sucrose } from '../../src/sucrose'
 
 describe('infer body reference', () => {
 	it('infer dot notation', () => {
@@ -11,12 +11,15 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: false
-		}
+			server: false,
+			path: false,
+			route: false,
+			url: false
+		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
 
-		expect(inference.body).toBe(true)
+		expect(inference.body as boolean).toBe(true)
 	})
 
 	it('infer property access', () => {
@@ -28,12 +31,15 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: false
-		}
+			server: false,
+			path: false,
+			route: false,
+			url: false
+		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
 
-		expect(inference.body).toBe(true)
+		expect(inference.body as boolean).toBe(true)
 	})
 
 	it('infer multiple query', () => {
@@ -52,8 +58,11 @@ describe('infer body reference', () => {
 			headers: false,
 			query: true,
 			set: true,
-			server: false
-		}
+			server: false,
+			path: false,
+			route: false,
+			url: false
+		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
 
@@ -63,7 +72,10 @@ describe('infer body reference', () => {
 			headers: false,
 			query: true,
 			set: true,
-			server: false
+			server: false,
+			path: false,
+			route: false,
+			url: false
 		})
 	})
 
@@ -141,8 +153,11 @@ describe('infer body reference', () => {
 			headers: false,
 			query: true,
 			set: true,
-			server: false
-		}
+			server: false,
+			path: false,
+			route: false,
+			url: false
+		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
 
@@ -152,7 +167,10 @@ describe('infer body reference', () => {
 			headers: false,
 			query: true,
 			set: true,
-			server: false
+			server: false,
+			path: false,
+			route: false,
+			url: false
 		})
 	})
 
@@ -167,11 +185,14 @@ describe('infer body reference', () => {
 			body: false,
 			cookie: false,
 			set: false,
-			server: false
-		}
+			server: false,
+			path: false,
+			route: false,
+			url: false
+		} satisfies Sucrose.Inference
 
 		inferBodyReference(code, aliases, inference)
 
-		expect(inference.server).toBe(true)
+		expect(inference.server as boolean).toBe(true)
 	})
 })

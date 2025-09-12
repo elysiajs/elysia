@@ -1,4 +1,4 @@
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
 // guard handle resolve macro
@@ -6,7 +6,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => ({
+				resolve: () => ({
 					account: 'A'
 				})
 			})
@@ -32,7 +32,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => ({
+				resolve: () => ({
 					account: 'A'
 				})
 			})
@@ -60,7 +60,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => ({
+				resolve: () => ({
 					account: 'A'
 				})
 			})
@@ -89,7 +89,7 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => ({
+				resolve: () => ({
 					account: 'A'
 				})
 			})
@@ -116,8 +116,8 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: ({ error }) => {
-					if (Math.random() > 0.5) return error(401)
+				resolve: ({ status }) => {
+					if (Math.random() > 0.5) return status(401)
 
 					return {
 						account: 'A'
@@ -146,8 +146,8 @@ import { expectTypeOf } from 'expect-type'
 	const plugin = new Elysia()
 		.macro({
 			account: (a: boolean) => ({
-				resolve: async ({ error }) => {
-					if (Math.random() > 0.5) return error(401)
+				resolve: async ({ status }) => {
+					if (Math.random() > 0.5) return status(401)
 
 					return {
 						account: 'A'
@@ -229,4 +229,69 @@ import { expectTypeOf } from 'expect-type'
 				user: false
 			}
 		)
+}
+
+// resolve with custom status
+{
+	const app = new Elysia()
+		.macro({
+			auth: {
+				resolve: [
+					({ status }) => {
+						if (Math.random() > 0.5) return status(401)
+
+						return { user: 'saltyaom' } as const
+					}
+				]
+			}
+		})
+		.get('/', ({ user }) => user, {
+			auth: true
+		})
+}
+
+// retrieve resolve conditionally
+const app = new Elysia()
+	.macro({
+		user: (enabled: true) => ({
+			resolve() {
+				if (!enabled) return
+
+				return {
+					user: 'a'
+				}
+			}
+		})
+	})
+	.get(
+		'/',
+		({ user, status }) => {
+			if (!user) return status(401)
+
+			return { hello: 'hanabi' }
+		},
+		{
+			user: true
+		}
+	)
+
+// Macro name extends macro
+{
+	new Elysia()
+		.macro('a', {
+			body: t.Object({ a: t.Literal('A') }),
+			beforeHandle({ body }) {
+				expectTypeOf(body).toEqualTypeOf<{ a: 'A' }>()
+			}
+		})
+		.macro('b', {
+			a: true,
+			body: t.Object({ b: t.Literal('B') }),
+			beforeHandle({ body }) {
+				expectTypeOf(body).toEqualTypeOf<{
+					a: 'A'
+					b: 'B'
+				}>()
+			}
+		})
 }

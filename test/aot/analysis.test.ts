@@ -102,7 +102,7 @@ describe('Static code analysis', () => {
 		}
 
 		const app = new Elysia().post('/json', (c) => c.body, {
-			type: 'json'
+			parse: 'json'
 		})
 
 		const res = await app.handle(post('/json', body)).then((x) => x.json())

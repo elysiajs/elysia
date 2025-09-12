@@ -1,18 +1,19 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import Elysia, { error, t } from '../../src'
-import { req } from '../utils'
+import Elysia, { t } from '../../src'
+import { post, req } from '../utils'
+import { status } from '../../dist/cjs'
 
 describe('Macro', () => {
-	it('work', async () => {
+	it('trace back', async () => {
 		let answer: string | undefined
 
 		const app = new Elysia()
-			.macro(() => ({
+			.macro({
 				hi(config: string) {
 					answer = config
 				}
-			}))
+			})
 			.get('/', () => 'Hello World', {
 				hi: 'Hello World'
 			})
@@ -22,33 +23,15 @@ describe('Macro', () => {
 		expect(answer).toBe('Hello World')
 	})
 
-	it('accept function', async () => {
-		let answer: string | undefined
-
+	it('work', async () => {
 		const app = new Elysia()
-			.macro(() => ({
-				hi(fn: () => any) {
-					fn()
-				}
-			}))
-			.get('/', () => 'Hello World', {
-				hi() {
-					answer = 'Hello World'
+			.macro({
+				hi(beforeHandle: () => any) {
+					return {
+						beforeHandle
+					}
 				}
 			})
-
-		await app.handle(req('/'))
-
-		expect(answer).toBe('Hello World')
-	})
-
-	it('create custom life-cycle', async () => {
-		const app = new Elysia()
-			.macro(({ onBeforeHandle }) => ({
-				hi(fn: () => any) {
-					onBeforeHandle(fn)
-				}
-			}))
 			.get('/', () => 'Hello World', {
 				hi: () => 'Hello World'
 			})
@@ -58,143 +41,15 @@ describe('Macro', () => {
 		expect(response).toBe('Hello World')
 	})
 
-	it('insert after on local stack by default', async () => {
-		const orders: number[] = []
-
+	it('appends parse', async () => {
 		const app = new Elysia()
-			.macro(({ onBeforeHandle }) => ({
+			.macro({
 				hi(fn: () => any) {
-					onBeforeHandle(fn)
-				}
-			}))
-			.onBeforeHandle(() => {
-				orders.push(1)
-			})
-			.get('/', () => 'Hello World', {
-				beforeHandle() {
-					orders.push(2)
-				},
-				hi: () => {
-					orders.push(3)
+					return {
+						parse: fn
+					}
 				}
 			})
-
-		await app.handle(req('/'))
-
-		expect(orders).toEqual([1, 2, 3])
-	})
-
-	it('insert after on local stack', async () => {
-		const orders: number[] = []
-
-		const app = new Elysia()
-			.macro(({ onBeforeHandle }) => ({
-				hi(fn: () => any) {
-					onBeforeHandle({ insert: 'after', stack: 'local' }, fn)
-				}
-			}))
-			.onBeforeHandle(() => {
-				orders.push(1)
-			})
-			.get('/', () => 'Hello World', {
-				beforeHandle() {
-					orders.push(2)
-				},
-				hi: () => {
-					orders.push(3)
-				}
-			})
-
-		await app.handle(req('/'))
-
-		expect(orders).toEqual([1, 2, 3])
-	})
-
-	it('insert before on local stack', async () => {
-		const orders: number[] = []
-
-		const app = new Elysia()
-			.macro(({ onBeforeHandle }) => ({
-				hi(fn: () => any) {
-					onBeforeHandle({ insert: 'before', stack: 'local' }, fn)
-				}
-			}))
-			.onBeforeHandle(() => {
-				orders.push(1)
-			})
-			.get('/', () => 'Hello World', {
-				beforeHandle() {
-					orders.push(3)
-				},
-				hi: () => {
-					orders.push(2)
-				}
-			})
-
-		await app.handle(req('/'))
-
-		expect(orders).toEqual([1, 2, 3])
-	})
-
-	it('insert after on global stack', async () => {
-		const orders: number[] = []
-
-		const app = new Elysia()
-			.macro(({ onBeforeHandle }) => ({
-				hi(fn: () => any) {
-					onBeforeHandle({ insert: 'after', stack: 'global' }, fn)
-				}
-			}))
-			.onBeforeHandle(() => {
-				orders.push(1)
-			})
-			.get('/', () => 'Hello World', {
-				beforeHandle() {
-					orders.push(3)
-				},
-				hi: () => {
-					orders.push(2)
-				}
-			})
-
-		await app.handle(req('/'))
-
-		expect(orders).toEqual([1, 2, 3])
-	})
-
-	it('insert before on global stack', async () => {
-		const orders: number[] = []
-
-		const app = new Elysia()
-			.macro(({ onBeforeHandle }) => ({
-				hi(fn: () => any) {
-					onBeforeHandle({ insert: 'before', stack: 'global' }, fn)
-				}
-			}))
-			.onBeforeHandle(() => {
-				orders.push(2)
-			})
-			.get('/', () => 'Hello World', {
-				beforeHandle() {
-					orders.push(3)
-				},
-				hi: () => {
-					orders.push(1)
-				}
-			})
-
-		await app.handle(req('/'))
-
-		expect(orders).toEqual([1, 2, 3])
-	})
-
-	it('appends onParse', async () => {
-		const app = new Elysia()
-			.macro(({ onParse }) => ({
-				hi(fn: () => any) {
-					onParse(fn)
-				}
-			}))
 			.get('/', () => 'Hello World', {
 				hi: () => {}
 			})
@@ -202,13 +57,31 @@ describe('Macro', () => {
 		expect(app.router.history[0].hooks.parse?.length).toEqual(1)
 	})
 
-	it('appends onTransform', async () => {
+	it('appends parse array', async () => {
 		const app = new Elysia()
-			.macro(({ onTransform }) => ({
+			.macro({
 				hi(fn: () => any) {
-					onTransform(fn)
+					return {
+						parse: [fn, () => {}]
+					}
 				}
-			}))
+			})
+			.get('/', () => 'Hello World', {
+				hi: () => {}
+			})
+
+		expect(app.router.history[0].hooks.parse?.length).toEqual(2)
+	})
+
+	it('appends transform', async () => {
+		const app = new Elysia()
+			.macro({
+				hi(fn: () => any) {
+					return {
+						transform: fn
+					}
+				}
+			})
 			.get('/', () => 'Hello World', {
 				hi: () => {}
 			})
@@ -216,13 +89,31 @@ describe('Macro', () => {
 		expect(app.router.history[0].hooks.transform?.length).toEqual(1)
 	})
 
-	it('appends onBeforeHandle', async () => {
+	it('appends transform array', async () => {
 		const app = new Elysia()
-			.macro(({ onBeforeHandle }) => ({
+			.macro({
 				hi(fn: () => any) {
-					onBeforeHandle(fn)
+					return {
+						transform: [fn, () => {}]
+					}
 				}
-			}))
+			})
+			.get('/', () => 'Hello World', {
+				hi: () => {}
+			})
+
+		expect(app.router.history[0].hooks.transform?.length).toEqual(2)
+	})
+
+	it('appends beforeHandle', async () => {
+		const app = new Elysia()
+			.macro({
+				hi(fn: () => any) {
+					return {
+						beforeHandle: fn
+					}
+				}
+			})
 			.get('/', () => 'Hello World', {
 				hi: () => {}
 			})
@@ -230,13 +121,31 @@ describe('Macro', () => {
 		expect(app.router.history[0].hooks.beforeHandle?.length).toEqual(1)
 	})
 
-	it('appends onAfterHandle', async () => {
+	it('appends beforeHandle array', async () => {
 		const app = new Elysia()
-			.macro(({ onAfterHandle }) => ({
+			.macro({
 				hi(fn: () => any) {
-					onAfterHandle(fn)
+					return {
+						beforeHandle: [fn, () => {}]
+					}
 				}
-			}))
+			})
+			.get('/', () => 'Hello World', {
+				hi: () => {}
+			})
+
+		expect(app.router.history[0].hooks.beforeHandle?.length).toEqual(2)
+	})
+
+	it('appends afterHandle', async () => {
+		const app = new Elysia()
+			.macro({
+				hi(fn: () => any) {
+					return {
+						afterHandle: fn
+					}
+				}
+			})
 			.get('/', () => 'Hello World', {
 				hi: () => {}
 			})
@@ -244,13 +153,31 @@ describe('Macro', () => {
 		expect(app.router.history[0].hooks.afterHandle?.length).toEqual(1)
 	})
 
-	it('appends onError', async () => {
+	it('appends afterHandle array', async () => {
 		const app = new Elysia()
-			.macro(({ onError }) => ({
+			.macro({
 				hi(fn: () => any) {
-					onError(fn)
+					return {
+						afterHandle: [fn, () => {}]
+					}
 				}
-			}))
+			})
+			.get('/', () => 'Hello World', {
+				hi: () => {}
+			})
+
+		expect(app.router.history[0].hooks.afterHandle?.length).toEqual(2)
+	})
+
+	it('appends error', async () => {
+		const app = new Elysia()
+			.macro({
+				hi(fn: () => any) {
+					return {
+						error: fn
+					}
+				}
+			})
 			.get('/', () => 'Hello World', {
 				hi: () => {}
 			})
@@ -258,13 +185,31 @@ describe('Macro', () => {
 		expect(app.router.history[0].hooks.error?.length).toEqual(1)
 	})
 
-	it('appends onAfterResponse', async () => {
+	it('appends error array', async () => {
 		const app = new Elysia()
-			.macro(({ onAfterResponse }) => ({
+			.macro({
 				hi(fn: () => any) {
-					onAfterResponse(fn)
+					return {
+						error: [fn, () => {}]
+					}
 				}
-			}))
+			})
+			.get('/', () => 'Hello World', {
+				hi: () => {}
+			})
+
+		expect(app.router.history[0].hooks.error?.length).toEqual(2)
+	})
+
+	it('appends afterResponse', async () => {
+		const app = new Elysia()
+			.macro({
+				hi(fn: () => any) {
+					return {
+						afterResponse: fn
+					}
+				}
+			})
 			.get('/', () => 'Hello World', {
 				hi: () => {}
 			})
@@ -272,18 +217,32 @@ describe('Macro', () => {
 		expect(app.router.history[0].hooks.afterResponse?.length).toEqual(1)
 	})
 
+	it('appends afterResponse array', async () => {
+		const app = new Elysia()
+			.macro({
+				hi(fn: () => any) {
+					return {
+						afterResponse: [fn, () => {}]
+					}
+				}
+			})
+			.get('/', () => 'Hello World', {
+				hi: () => {}
+			})
+
+		expect(app.router.history[0].hooks.afterResponse?.length).toEqual(2)
+	})
+
 	it('handle deduplication', async () => {
 		let call = 0
 
-		const a = new Elysia({ name: 'a', seed: 'awdawd' }).macro(
-			({ onBeforeHandle }) => ({
-				a(_: string) {
-					onBeforeHandle(() => {
-						call++
-					})
+		const a = new Elysia({ name: 'a', seed: 'awdawd' }).macro({
+			a: {
+				beforeHandle() {
+					call++
 				}
-			})
-		)
+			}
+		})
 
 		const b = new Elysia({ name: 'b', seed: 'add' })
 			.use(a)
@@ -293,7 +252,7 @@ describe('Macro', () => {
 			.use(a)
 			.use(b)
 			.get('/', () => 'Hello World', {
-				a: 'a'
+				a: true
 			})
 
 		await app.handle(req('/'))
@@ -301,18 +260,18 @@ describe('Macro', () => {
 		expect(call).toBe(1)
 	})
 
-	it('propagation macro without inaccurate deduplication in guard', async () => {
+	it('propagate macro without inaccurate deduplication in guard', async () => {
 		let call = 0
 
-		const base = new Elysia({ name: 'base' }).macro(
-			({ onBeforeHandle }) => ({
-				auth: (role: 'teacher' | 'student' | 'admin' | 'noLogin') => {
-					onBeforeHandle(() => {
+		const base = new Elysia({ name: 'base' }).macro({
+			auth(role: 'teacher' | 'student' | 'admin' | 'noLogin') {
+				return {
+					beforeHandle() {
 						call++
-					})
+					}
 				}
-			})
-		)
+			}
+		})
 
 		const app = new Elysia()
 			// ? Deduplication check
@@ -338,11 +297,11 @@ describe('Macro', () => {
 	it('inherits macro from plugin without name', async () => {
 		let called = 0
 
-		const plugin = new Elysia().macro(() => ({
-			hi(config: string) {
+		const plugin = new Elysia().macro({
+			hi(_: string) {
 				called++
 			}
-		}))
+		})
 
 		const app = new Elysia()
 			.use(plugin)
@@ -357,18 +316,20 @@ describe('Macro', () => {
 		expect(called).toBe(1)
 	})
 
-	it('handle nested macro', async () => {
-		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+	it('handle macro from plugin', async () => {
+		const authGuard = new Elysia().macro({
 			requiredUser(value: boolean) {
-				onBeforeHandle(async () => {
-					if (value)
-						return error(401, {
-							code: 'S000002',
-							message: 'Unauthorized'
-						})
-				})
+				return {
+					beforeHandle: async () => {
+						if (value)
+							return status(401, {
+								code: 'S000002',
+								message: 'Unauthorized'
+							})
+					}
+				}
 			}
-		}))
+		})
 
 		const testRoute = new Elysia({
 			prefix: '/test',
@@ -394,13 +355,15 @@ describe('Macro', () => {
 		let called = 0
 
 		const plugin = new Elysia()
-			.macro(({ onBeforeHandle }) => ({
+			.macro({
 				count(_: boolean) {
-					onBeforeHandle((ctx) => {
-						called++
-					})
+					return {
+						beforeHandle(ctx) {
+							called++
+						}
+					}
 				}
-			}))
+			})
 			.get('/', () => 'hi', {
 				count: true
 			})
@@ -413,15 +376,16 @@ describe('Macro', () => {
 	})
 
 	it('inherits macro in group', async () => {
-		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+		const authGuard = new Elysia().macro({
 			isAuth(shouldAuth: boolean) {
-				if (shouldAuth) {
-					onBeforeHandle(({ cookie: { session }, error }) => {
-						if (!session.value) return error(418)
-					})
-				}
+				if (shouldAuth)
+					return {
+						beforeHandle({ cookie: { session }, status }) {
+							if (!session.value) return status(418)
+						}
+					}
 			}
-		}))
+		})
 
 		const app = new Elysia().use(authGuard).group('/posts', (app) =>
 			app.get('/', () => 'a', {
@@ -435,15 +399,16 @@ describe('Macro', () => {
 	})
 
 	it('inherits macro in guard', async () => {
-		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+		const authGuard = new Elysia().macro({
 			isAuth(shouldAuth: boolean) {
-				if (shouldAuth) {
-					onBeforeHandle(({ cookie: { session }, error }) => {
-						if (!session.value) return error(418)
-					})
-				}
+				if (shouldAuth)
+					return {
+						beforeHandle({ cookie: { session }, status }) {
+							if (!session.value) return status(418)
+						}
+					}
 			}
-		}))
+		})
 
 		const app = new Elysia().use(authGuard).guard({}, (app) =>
 			app.get('/posts', () => 'a', {
@@ -456,16 +421,17 @@ describe('Macro', () => {
 		expect(status).toBe(418)
 	})
 
-	it('inherits macro in group', async () => {
-		const authGuard = new Elysia().macro(({ onBeforeHandle }) => ({
+	it('inherits macro from plugin', async () => {
+		const authGuard = new Elysia().macro({
 			isAuth(shouldAuth: boolean) {
-				if (shouldAuth) {
-					onBeforeHandle(({ cookie: { session }, error }) => {
-						if (!session.value) return error(418)
-					})
-				}
+				if (shouldAuth)
+					return {
+						beforeHandle({ cookie: { session }, status }) {
+							if (!session.value) return status(418)
+						}
+					}
 			}
-		}))
+		})
 
 		const app = new Elysia().use(authGuard).use((app) =>
 			app.get('/posts', () => 'a', {
@@ -482,15 +448,14 @@ describe('Macro', () => {
 		const called = <string[]>[]
 
 		const plugin = new Elysia().get('/hello', () => 'hello', {
+			// @ts-ignore
 			hello: 'nagisa'
 		})
 
 		new Elysia()
-			.macro(() => {
-				return {
-					hello(a: string) {
-						called.push(a)
-					}
+			.macro({
+				hello(a: string) {
+					called.push(a)
 				}
 			})
 			.use(plugin)
@@ -505,13 +470,14 @@ describe('Macro', () => {
 		let registered = 0
 		let called = 0
 
-		const a = new Elysia({ name: 'a' }).macro(({ onBeforeHandle }) => {
-			return {
-				isSignIn() {
-					registered++
-					onBeforeHandle(() => {
+		const a = new Elysia({ name: 'a' }).macro({
+			isSignIn() {
+				registered++
+
+				return {
+					beforeHandle() {
 						called++
-					})
+					}
 				}
 			}
 		})
@@ -581,7 +547,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => ({
+					resolve: () => ({
 						account: 'A'
 					})
 				})
@@ -615,7 +581,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => ({
+					resolve: () => ({
 						account: 'A'
 					})
 				})
@@ -650,7 +616,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => ({
+					resolve: () => ({
 						account: 'A'
 					})
 				})
@@ -685,7 +651,7 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => ({
+					resolve: () => ({
 						account: 'A'
 					})
 				})
@@ -720,8 +686,8 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: ({ error }) => {
-						if (Math.random() > 2) return error(401)
+					resolve: () => {
+						if (Math.random() > 2) return status(401)
 
 						return {
 							account: 'A'
@@ -758,8 +724,8 @@ describe('Macro', () => {
 		const plugin = new Elysia()
 			.macro({
 				account: (a: boolean) => ({
-					resolve: async ({ error }) => {
-						if (Math.random() > 2) return error(401)
+					resolve: async () => {
+						if (Math.random() > 2) return status(401)
 
 						return {
 							account: 'A'
@@ -809,8 +775,8 @@ describe('Macro', () => {
 			})
 			.get(
 				'/',
-				({ user, error }) => {
-					if (!user) return error(401)
+				({ user, status }) => {
+					if (!user) return status(401)
 
 					return { hello: 'hanabi' }
 				},
@@ -903,6 +869,7 @@ describe('Macro', () => {
 					// @ts-expect-error Property `a` does not exist
 					a,
 					b,
+					// @ts-expect-error Property `c` does not exist
 					c
 				}) => ({ a, b, c }),
 				{
@@ -929,5 +896,547 @@ describe('Macro', () => {
 		expect(c).toEqual({ a: 'a', b: 'b' })
 		expect(d).toEqual({ a: 'a', b: undefined })
 		expect(e).toEqual({ a: undefined, b: 'b', c: 10 })
+	})
+
+	it('validate', async () => {
+		const app = new Elysia()
+			.macro({
+				sartre: {
+					params: t.Object({ sartre: t.Literal('Sartre') })
+				},
+				focou: {
+					query: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/:sartre', ({ body }) => body, {
+				sartre: true,
+				focou: true,
+				lilith: true
+			})
+
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+
+		const valid = await app.handle(
+			post('/Sartre?focou=Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(valid.status).toBe(200)
+		expect(await valid.json()).toEqual({
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/Sartre?focou=Focou', {
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/Not Sartre?focou=Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/Sartre?focou=Not Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
+	})
+
+	it('merge validation', async () => {
+		const app = new Elysia()
+			.macro({
+				sartre: {
+					body: t.Object({ sartre: t.Literal('Sartre') })
+				},
+				focou: {
+					body: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/', ({ body }) => body, {
+				sartre: true,
+				focou: true,
+				lilith: true
+			})
+
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+
+		const response = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			sartre: 'Sartre',
+			focou: 'Focou',
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/', {
+				sartre: 'Not Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Not Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
+	})
+
+	it('extends', async () => {
+		const app = new Elysia()
+			.macro({
+				sartre: {
+					body: t.Object({ sartre: t.Literal('Sartre') })
+				},
+				focou: {
+					body: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					sartre: true,
+					focou: true,
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/', ({ body }) => body, {
+				lilith: true
+			})
+
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+
+		const response = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			sartre: 'Sartre',
+			focou: 'Focou',
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/', {
+				sartre: 'Not Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Not Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
+	})
+
+	it('create detail if not exists', () => {
+		const app = new Elysia()
+			.macro({
+				lilith: {
+					detail: {
+						summary: 'Lilith',
+						description: 'Lilith description'
+					}
+				}
+			})
+			.post('/', ({ body }) => body, {
+				lilith: true
+			})
+
+		const route = app.routes[0]
+
+		expect(route.hooks.detail).toEqual({
+			summary: 'Lilith',
+			description: 'Lilith description'
+		})
+	})
+
+	it('modify detail', () => {
+		const app = new Elysia()
+			.macro({
+				lilith: {
+					detail: {
+						summary: 'Lilith'
+					}
+				}
+			})
+			.post('/', ({ body }) => body, {
+				lilith: true,
+				detail: {
+					description: 'Lilith description'
+				}
+			})
+
+		const route = app.routes[0]
+
+		expect(route.hooks.detail).toEqual({
+			summary: 'Lilith',
+			description: 'Lilith description'
+		})
+	})
+
+	it('deduplicate static object default', () => {
+		const app = new Elysia()
+			.macro({
+				sartre: {
+					body: t.Object({ sartre: t.Literal('Sartre') })
+				},
+				focou: {
+					sartre: true,
+					body: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					sartre: true,
+					focou: true,
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/', ({ body }) => body, {
+				lilith: true
+			})
+
+		const route = app.routes[0]
+
+		expect(route.hooks.standaloneValidator.length).toBe(3)
+	})
+
+	it('deduplicate function macro by default', () => {
+		const app = new Elysia()
+			.macro({
+				sartre(enabled: boolean) {
+					return {
+						body: t.Object({ sartre: t.Literal('Sartre') })
+					}
+				},
+				focou: {
+					sartre: true,
+					body: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					sartre: true,
+					focou: true,
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/', ({ body }) => body, {
+				lilith: true,
+				sartre: false
+			})
+
+		const route = app.routes[0]
+
+		// This is 4 because
+		// 1. lilith
+		// 2. focou
+		// 3. sartre from focou
+		// 4. sartre with false flag
+		expect(route.hooks.standaloneValidator.length).toBe(4)
+	})
+
+	it('deduplicate function macro when argument is similar', () => {
+		const app = new Elysia()
+			.macro({
+				sartre(enabled: boolean) {
+					return {
+						body: t.Object({ sartre: t.Literal('Sartre') })
+					}
+				},
+				focou: {
+					sartre: true,
+					body: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					sartre: true,
+					focou: true,
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/', ({ body }) => body, {
+				lilith: true,
+				sartre: true
+			})
+
+		const route = app.routes[0]
+
+		// This is 4 because
+		// 1. lilith
+		// 2. focou
+		// 3. sartre from focou
+		expect(route.hooks.standaloneValidator.length).toBe(3)
+	})
+
+	it('deduplicate programmatically', () => {
+		const app = new Elysia()
+			.macro({
+				sartre(tag: string) {
+					return {
+						seed: tag,
+						body: t.Object({ sartre: t.Literal('Sartre') }),
+						detail: {
+							tags: [tag]
+						}
+					}
+				},
+				focou: {
+					sartre: 'npc',
+					body: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					sartre: 'philosopher',
+					focou: true,
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/', ({ body }) => body, {
+				lilith: true
+			})
+
+		const route = app.routes[0]
+
+		expect(route.hooks.standaloneValidator.length).toBe(4)
+		expect(route.hooks.detail).toEqual({
+			tags: ['philosopher', 'npc']
+		})
+	})
+
+	it('handle macro name', async () => {
+		const app = new Elysia()
+			.macro('sartre', {
+				params: t.Object({ sartre: t.Literal('Sartre') })
+			})
+			.macro({
+				focou: {
+					query: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/:sartre', ({ body }) => body, {
+				sartre: true,
+				focou: true,
+				lilith: true
+			})
+
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+
+		const valid = await app.handle(
+			post('/Sartre?focou=Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(valid.status).toBe(200)
+		expect(await valid.json()).toEqual({
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/Sartre?focou=Focou', {
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/Not Sartre?focou=Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/Sartre?focou=Not Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
+	})
+
+	it('handle macro name with function', async () => {
+		const app = new Elysia()
+			.macro('sartre', (_: boolean) => ({
+				params: t.Object({ sartre: t.Literal('Sartre') })
+			}))
+			.macro({
+				focou: {
+					query: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/:sartre', ({ body }) => body, {
+				sartre: true,
+				focou: true,
+				lilith: true
+			})
+
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(1)
+
+		const valid = await app.handle(
+			post('/Sartre?focou=Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(valid.status).toBe(200)
+		expect(await valid.json()).toEqual({
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/Sartre?focou=Focou', {
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/Not Sartre?focou=Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/Sartre?focou=Not Focou', {
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
+	})
+
+	it('handle macro name extends', async () => {
+		const app = new Elysia()
+			.macro('sartre', {
+				body: t.Object({ sartre: t.Literal('Sartre') })
+			})
+			.macro({
+				focou: {
+					sartre: true,
+					body: t.Object({ focou: t.Literal('Focou') })
+				},
+				lilith: {
+					focou: true,
+					body: t.Object({ lilith: t.Literal('Lilith') })
+				}
+			})
+			.post('/', ({ body }) => body, {
+				lilith: true
+			})
+
+		expect(app.routes[0].hooks.standaloneValidator.length).toBe(3)
+
+		const response = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			sartre: 'Sartre',
+			focou: 'Focou',
+			lilith: 'Lilith'
+		})
+
+		const invalid1 = await app.handle(
+			post('/', {
+				sartre: 'Not Sartre',
+				focou: 'Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid1.status).toBe(422)
+
+		const invalid2 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Not Focou',
+				lilith: 'Lilith'
+			})
+		)
+
+		expect(invalid2.status).toBe(422)
+
+		const invalid3 = await app.handle(
+			post('/', {
+				sartre: 'Sartre',
+				focou: 'Focou',
+				lilith: 'Not Lilith'
+			})
+		)
+
+		expect(invalid3.status).toBe(422)
 	})
 })

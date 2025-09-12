@@ -869,7 +869,7 @@ import { expectTypeOf } from 'expect-type'
 					}>()
 
 					expectTypeOf<typeof cookie>().toEqualTypeOf<
-						Record<string, Cookie<string | undefined>> & {
+						Record<string, Cookie<unknown>> & {
 							family: Cookie<string>
 							name: Cookie<string>
 						}
@@ -907,7 +907,7 @@ import { expectTypeOf } from 'expect-type'
 				}>()
 
 				expectTypeOf<typeof cookie>().toEqualTypeOf<
-					Record<string, Cookie<string | undefined>> & {
+					Record<string, Cookie<unknown>> & {
 						name: Cookie<string>
 					}
 				>()
@@ -944,7 +944,7 @@ import { expectTypeOf } from 'expect-type'
 				}>()
 
 				expectTypeOf<typeof cookie>().toEqualTypeOf<
-					Record<string, Cookie<string | undefined>> & {
+					Record<string, Cookie<unknown>> & {
 						name: Cookie<string>
 					}
 				>()
@@ -1002,7 +1002,7 @@ import { expectTypeOf } from 'expect-type'
 					}>()
 
 					expectTypeOf<typeof cookie>().toEqualTypeOf<
-						Record<string, Cookie<string | undefined>> & {
+						Record<string, Cookie<unknown>> & {
 							family: Cookie<string>
 							name: Cookie<string>
 						}
@@ -1044,7 +1044,7 @@ import { expectTypeOf } from 'expect-type'
 				}>()
 
 				expectTypeOf<typeof cookie>().toEqualTypeOf<
-					Record<string, Cookie<string | undefined>> & {
+					Record<string, Cookie<unknown>> & {
 						family: Cookie<string>
 						name: Cookie<string>
 					}
@@ -1082,7 +1082,7 @@ import { expectTypeOf } from 'expect-type'
 				}>()
 
 				expectTypeOf<typeof cookie>().toEqualTypeOf<
-					Record<string, Cookie<string | undefined>> & {
+					Record<string, Cookie<unknown>> & {
 						name: Cookie<string>
 					}
 				>()
@@ -1140,7 +1140,7 @@ import { expectTypeOf } from 'expect-type'
 					}>()
 
 					expectTypeOf<typeof cookie>().toEqualTypeOf<
-						Record<string, Cookie<string | undefined>> & {
+						Record<string, Cookie<unknown>> & {
 							family: Cookie<string>
 							name: Cookie<string>
 						}
@@ -1182,7 +1182,7 @@ import { expectTypeOf } from 'expect-type'
 				}>()
 
 				expectTypeOf<typeof cookie>().toEqualTypeOf<
-					Record<string, Cookie<string | undefined>> & {
+					Record<string, Cookie<unknown>> & {
 						family: Cookie<string>
 						name: Cookie<string>
 					}
@@ -1224,7 +1224,7 @@ import { expectTypeOf } from 'expect-type'
 				}>()
 
 				expectTypeOf<typeof cookie>().toEqualTypeOf<
-					Record<string, Cookie<string | undefined>> & {
+					Record<string, Cookie<unknown>> & {
 						family: Cookie<string>
 						name: Cookie<string>
 					}

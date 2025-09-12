@@ -1,3 +1,4 @@
+import { isStringTextContainingNode } from 'typescript'
 import type { Sucrose } from './sucrose'
 import type { TraceHandler } from './trace'
 
@@ -20,7 +21,8 @@ import type {
 	SchemaValidator,
 	AnyLocalHook,
 	SSEPayload,
-	Prettify
+	Prettify,
+	RouteSchema
 } from './types'
 import { ElysiaFile } from './universal/file'
 
@@ -56,15 +58,27 @@ export const mergeDeep = <
 	options?: {
 		skipKeys?: string[]
 		override?: boolean
+		mergeArray?: boolean
 	}
 ): A & B => {
 	const skipKeys = options?.skipKeys
 	const override = options?.override ?? true
+	const mergeArray = options?.mergeArray ?? true
 
 	if (!isObject(target) || !isObject(source)) return target as A & B
 
 	for (const [key, value] of Object.entries(source)) {
 		if (skipKeys?.includes(key)) continue
+
+		if (mergeArray && Array.isArray(value)) {
+			target[key as keyof typeof target] = Array.isArray(
+				(target as any)[key]
+			)
+				? [...(target as any)[key], ...value]
+				: (target[key as keyof typeof target] = value as any)
+
+			continue
+		}
 
 		if (!isObject(value) || !(key in target) || isClass(value)) {
 			if (override || !(key in target))
@@ -76,7 +90,7 @@ export const mergeDeep = <
 		target[key as keyof typeof target] = mergeDeep(
 			(target as any)[key] as any,
 			value,
-			{ skipKeys, override }
+			{ skipKeys, override, mergeArray }
 		)
 	}
 
@@ -87,7 +101,8 @@ export const mergeCookie = <const A extends Object, const B extends Object>(
 	b: B
 ): A & B => {
 	const v = mergeDeep(Object.assign({}, a), b, {
-		skipKeys: ['properties']
+		skipKeys: ['properties'],
+		mergeArray: false
 	}) as A & B
 
 	// @ts-expect-error
@@ -556,6 +571,7 @@ export const StatusMap = {
 	'Range Not Satisfiable': 416,
 	'Expectation Failed': 417,
 	"I'm a teapot": 418,
+	'Enhance Your Calm': 420,
 	'Misdirected Request': 421,
 	'Unprocessable Content': 422,
 	Locked: 423,
@@ -644,119 +660,31 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 	return expectedInput === input ? tentativeValue : false
 }
 
-export const traceBackMacro = (
-	extension: unknown,
-	property: Record<string, unknown>,
-	manage: ReturnType<typeof createMacroManager>
+export const insertStandaloneValidator = <const Name extends keyof InputSchema>(
+	hook: { standaloneValidator: InputSchema[] },
+	name: Name,
+	value: InputSchema[Name]
 ) => {
-	if (!extension || typeof extension !== 'object' || !property) return
-
-	for (const [key, value] of Object.entries(property)) {
-		if (primitiveHookMap[key] || !(key in extension)) continue
-
-		const v = extension[
-			key as unknown as keyof typeof extension
-		] as BaseMacro[string]
-
-		if (typeof v === 'function') {
-			const hook = v(value)
-
-			if (typeof hook === 'object')
-				for (const [k, v] of Object.entries(hook))
-					manage(k as keyof LifeCycleStore)({
-						fn: v as any
-					})
-		}
-
-		delete property[key as unknown as keyof typeof extension]
+	if (
+		!hook.standaloneValidator?.length ||
+		!Array.isArray(hook.standaloneValidator)
+	) {
+		hook.standaloneValidator = [
+			{
+				[name]: value
+			}
+		]
+		return
 	}
+
+	const last = hook.standaloneValidator[hook.standaloneValidator.length - 1]
+
+	if (name in last)
+		hook.standaloneValidator.push({
+			[name]: value
+		})
+	else last[name] = value
 }
-
-export const createMacroManager =
-	({
-		globalHook,
-		localHook
-	}: {
-		globalHook: Partial<LifeCycleStore>
-		localHook: Partial<AnyLocalHook>
-	}) =>
-	(stackName: keyof LifeCycleStore) =>
-	(
-		type:
-			| {
-					insert?: 'before' | 'after'
-					stack?: 'global' | 'local'
-			  }
-			| MaybeArray<HookContainer>,
-		fn?: MaybeArray<HookContainer>
-	) => {
-		if (typeof type === 'function')
-			type = {
-				fn: type
-			}
-
-		// @ts-expect-error this is available in macro v2
-		if (stackName === 'resolve') {
-			type = {
-				...type,
-				subType: 'resolve'
-			}
-		}
-
-		if (!localHook[stackName]) localHook[stackName] = []
-		if (typeof localHook[stackName] === 'function')
-			localHook[stackName] = [localHook[stackName]]
-		if (!Array.isArray(localHook[stackName]))
-			localHook[stackName] = [localHook[stackName]]
-
-		if ('fn' in type || Array.isArray(type)) {
-			if (Array.isArray(type))
-				localHook[stackName] = (
-					localHook[stackName] as unknown[]
-				).concat(type) as any
-			else localHook[stackName].push(type)
-
-			return
-		}
-
-		const { insert = 'after', stack = 'local' } = type
-
-		if (typeof fn === 'function') fn = { fn }
-
-		if (stack === 'global') {
-			if (!Array.isArray(fn)) {
-				if (insert === 'before') {
-					;(globalHook[stackName] as any[]).unshift(fn)
-				} else {
-					;(globalHook[stackName] as any[]).push(fn)
-				}
-			} else {
-				if (insert === 'before') {
-					globalHook[stackName] = fn.concat(
-						globalHook[stackName] as any
-					) as any
-				} else {
-					globalHook[stackName] = (
-						globalHook[stackName] as any[]
-					).concat(fn)
-				}
-			}
-		} else {
-			if (!Array.isArray(fn)) {
-				if (insert === 'before') {
-					;(localHook[stackName] as any[]).unshift(fn)
-				} else {
-					;(localHook[stackName] as any[]).push(fn)
-				}
-			} else {
-				if (insert === 'before') {
-					localHook[stackName] = fn.concat(localHook[stackName])
-				} else {
-					localHook[stackName] = localHook[stackName].concat(fn)
-				}
-			}
-		}
-	}
 
 const parseNumericString = (message: string | number): number | null => {
 	if (typeof message === 'number') return message
@@ -1209,3 +1137,27 @@ export const sse = <
 
 	return payload as any
 }
+
+export async function getResponseLength(response: Response) {
+	if (response.bodyUsed || !response.body) return 0
+
+	let length = 0
+	const reader = response.body.getReader()
+
+	while (true) {
+		const { done, value } = await reader.read()
+		if (done) break
+		length += value.byteLength
+	}
+
+	return length
+}
+
+export const emptySchema = {
+	headers: true,
+	cookie: true,
+	query: true,
+	params: true,
+	body: true,
+	response: true
+} as const satisfies RouteSchema

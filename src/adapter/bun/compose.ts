@@ -7,7 +7,7 @@ import { status } from '../../error'
 import { ELYSIA_TRACE } from '../../trace'
 
 import type { AnyElysia } from '../..'
-import type { InternalRoute } from '../../types'
+import type { InternalRoute, InputSchema } from '../../types'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -38,7 +38,9 @@ const createContext = (
 	const needsQuery =
 		inference.query ||
 		!!route.hooks.query ||
-		!!route.standaloneValidators?.find((x) => x.query) ||
+		!!(route.hooks.standaloneValidator as InputSchema[])?.find(
+			(x) => x.query
+		) ||
 		app.event.request?.length
 
 	if (needsQuery) fnLiteral += getQi
@@ -65,7 +67,6 @@ const createContext = (
 			hasTrace || inference.url || needsQuery
 		) +
 		`redirect,` +
-		`error:status,` +
 		`status,` +
 		`set:{headers:` +
 		(isNotEmpty(defaultHeaders)
@@ -131,7 +132,9 @@ export const createBunRouteHandler = (app: AnyElysia, route: InternalRoute) => {
 	const needsQuery =
 		inference.query ||
 		!!route.hooks.query ||
-		!!route.standaloneValidators?.find((x) => x.query)
+		!!(route.hooks.standaloneValidator as InputSchema[])?.find(
+			(x) => x.query
+		)
 
 	// inference.query require declaring const 'qi'
 	if (hasTrace || needsQuery || app.event.request?.length) {

@@ -10,7 +10,11 @@ import {
 } from '@sinclair/typebox'
 
 import decode from 'fast-decode-uri-component'
-import { parseQuery, parseQueryFromURL } from './parse-query'
+import {
+	parseQuery,
+	parseQueryFromURL,
+	parseQueryStandardSchema
+} from './parse-query'
 
 import {
 	ELYSIA_REQUEST_ID,
@@ -21,7 +25,8 @@ import {
 	signCookie,
 	isNotEmpty,
 	encodePath,
-	mergeCookie
+	mergeCookie,
+	getResponseLength
 } from './utils'
 import { isBun } from './universal/utils'
 import { ParseError, status } from './error'
@@ -39,13 +44,14 @@ import {
 	ElysiaTypeCheck,
 	getCookieValidator,
 	getSchemaValidator,
+	hasElysiaMeta,
 	hasType,
 	isUnion,
 	unwrapImportSchema
 } from './schema'
 import { Sucrose, sucrose } from './sucrose'
 import { parseCookie, type CookieOptions } from './cookies'
-import { validateFileExtension } from './type-system/utils'
+import { fileType } from './type-system/utils'
 
 import type { TraceEvent } from './trace'
 import type {
@@ -225,10 +231,10 @@ const composeValidationFactory = ({
 	isStaticResponse?: boolean
 	hasSanitize?: boolean
 }) => ({
-	validate: (type: string, value = `c.${type}`) =>
-		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value})`,
+	validate: (type: string, value = `c.${type}`, error?: string) =>
+		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value}${error ? ',' + error : ''})`,
 	response: (name = 'r') => {
-		if (isStaticResponse) return ''
+		if (isStaticResponse || !validator.response) return ''
 
 		let code = injectResponse + '\n'
 
@@ -237,10 +243,24 @@ const composeValidationFactory = ({
 			`c.set.status=${name}.code\n` +
 			`${name}=${name}.response` +
 			`}` +
+			`if(${name} instanceof Response === false)` +
 			`switch(c.set.status){`
 
 		for (const [status, value] of Object.entries(validator.response!)) {
-			code += `\ncase ${status}:if(${name} instanceof Response)break\n`
+			code += `\ncase ${status}:\n`
+
+			if (value.provider === 'standard') {
+				code +=
+					`let vare${status}=validator.response[${status}].Check(${name})\n` +
+					`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
+					`if(vare${status}.issues)` +
+					`throw new ValidationError('response',validator.response[${status}],${name},vare${status}.issues)\n` +
+					`${name}=vare${status}.value\n` +
+					`c.set.status=${status}\n` +
+					'break\n'
+
+				continue
+			}
 
 			let noValidate = value.schema?.noValidate === true 
 
@@ -649,216 +669,53 @@ export const composeHandler = ({
 	}
 
 	if (hasQuery) {
-		const destructured = <
-			{
-				key: string
-				isArray: boolean
-				isNestedObjectArray: boolean
-				isObject: boolean
-				anyOf: boolean
-			}[]
-		>[]
+		let arrayProperties: Record<string, 1> = {}
+		let objectProperties: Record<string, 1> = {}
+		let hasArrayProperty = false
+		let hasObjectProperty = false
 
-		const schema = validator.query?.schema
-		if (
-			schema &&
-			(schema.type === 'object' ||
-				(schema[Kind] === 'Import' && schema.$defs?.[schema.$ref]))
-		) {
-			const properties =
-				schema.properties ?? schema.$defs?.[schema.$ref]?.properties
+		if (validator.query?.schema) {
+			const schema = unwrapImportSchema(validator.query?.schema)
 
-			if (properties && !validator.query!.hasAdditionalProperties)
-				for (const [key, _value] of Object.entries(properties)) {
-					let value = _value as TAnySchema
+			if (Kind in schema && schema.properties) {
+				for (const [key, value] of Object.entries(schema.properties)) {
+					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
+						arrayProperties[key] = 1
+						hasArrayProperty = true
+					}
 
-					const isArray =
-						value.type === 'array' ||
-						!!value.anyOf?.some(
-							(v: TSchema) =>
-								v.type === 'string' &&
-								v.format === 'ArrayString'
-						)
-
-					// @ts-ignore
-					if (
-						value &&
-						OptionalKind in value &&
-						value.type === 'array' &&
-						value.items
-					)
-						value = value.items
-
-					const { type, anyOf } = value
-
-					destructured.push({
-						key,
-						isArray,
-						isNestedObjectArray:
-							(isArray && value.items?.type === 'object') ||
-							!!value.items?.anyOf?.some(
-								(x: TSchema) =>
-									x.type === 'object' || x.type === 'array'
-							),
-						isObject:
-							type === 'object' ||
-							anyOf?.some(
-								(v: TSchema) =>
-									v.type === 'string' &&
-									v.format === 'ArrayString'
-							),
-						anyOf: !!anyOf
-					})
+					if (hasElysiaMeta('ObjectString', value as TSchema)) {
+						objectProperties[key] = 1
+						hasObjectProperty = true
+					}
 				}
-		}
-
-		if (!destructured.length) {
-			fnLiteral +=
-				'if(c.qi===-1){' +
-				'c.query={}' +
-				'}else{' +
-				'c.query=parseQueryFromURL(c.url,c.qi+1)' +
-				'}'
-		} else {
-			fnLiteral += 'if(c.qi!==-1){' + `let url='&'+c.url.slice(c.qi+1)\n`
-
-			let index = 0
-			for (const {
-				key,
-				isArray,
-				isObject,
-				isNestedObjectArray,
-				anyOf
-			} of destructured) {
-				const encoded = encodeURIComponent(key)
-
-				const init =
-					(index === 0 ? 'let ' : '') +
-					`memory=url.indexOf('&${encoded}=')` +
-					`\nlet a${index}\n`
-
-				if (isArray) {
-					fnLiteral += init
-
-					if (isNestedObjectArray)
-						fnLiteral +=
-							`while(memory!==-1){` +
-							`const start=memory+${encoded.length + 2}\n` +
-							`memory=url.indexOf('&',start)\n` +
-							`if(a${index}===undefined)\n` +
-							`a${index}=''\n` +
-							`else\n` +
-							`a${index}+=','\n` +
-							`let temp\n` +
-							`if(memory===-1)temp=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-							`else temp=decodeURIComponent(url.slice(start, memory).replace(/\\+/g,' '))\n` +
-							`const charCode=temp.charCodeAt(0)\n` +
-							`if(charCode!==91&&charCode !== 123)\n` +
-							`temp='"'+temp+'"'\n` +
-							`a${index}+=temp\n` +
-							`if(memory===-1)break\n` +
-							`memory=url.indexOf('&${encoded}=',memory)\n` +
-							`if(memory===-1)break` +
-							`}` +
-							`try{` +
-							`if(a${index}.charCodeAt(0)===91)` +
-							`a${index} = JSON.parse(a${index})\n` +
-							`else\n` +
-							`a${index}=JSON.parse('['+a${index}+']')` +
-							`}catch{}\n`
-					else
-						fnLiteral +=
-							`while(memory!==-1){` +
-							`const start=memory+${encoded.length + 2}\n` +
-							`memory=url.indexOf('&',start)\n` +
-							`if(a${index}===undefined)` +
-							`a${index}=[]\n` +
-							`if(memory===-1){` +
-							`const temp=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
-							`else{a${index}.push(decodeURIComponent(url.slice(start).replace(/\\+/g,' ')))}\n` +
-							`break` +
-							`}else{` +
-							`const temp=decodeURIComponent(url.slice(start, memory).replace(/\\+/g,' '))\n` +
-							`if(temp.includes(',')){a${index}=a${index}.concat(temp.split(','))}` +
-							`else{a${index}.push(temp)}\n` +
-							`}` +
-							`memory=url.indexOf('&${encoded}=',memory)\n` +
-							`if(memory===-1) break\n` +
-							`}`
-				} else if (isObject)
-					fnLiteral +=
-						init +
-						`if(memory!==-1){` +
-						`const start=memory+${encoded.length + 2}\n` +
-						`memory=url.indexOf('&',start)\n` +
-						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))` +
-						`else a${index}=decodeURIComponent(url.slice(start,memory).replace(/\\+/g,' '))` +
-						`if(a${index}!==undefined)` +
-						`try{` +
-						`a${index}=JSON.parse(a${index})` +
-						`}catch{}` +
-						'}'
-				// Might be union primitive and array
-				else {
-					fnLiteral +=
-						init +
-						`if(memory!==-1){` +
-						`const start=memory+${encoded.length + 2}\n` +
-						`memory=url.indexOf('&',start)\n` +
-						`if(memory===-1)a${index}=decodeURIComponent(url.slice(start).replace(/\\+/g,' '))\n` +
-						`else{` +
-						`a${index}=decodeURIComponent(url.slice(start,memory).replace(/\\+/g,' '))`
-
-					if (anyOf)
-						fnLiteral +=
-							`\nlet deepMemory=url.indexOf('&${encoded}=',memory)\n` +
-							`if(deepMemory!==-1){` +
-							`a${index}=[a${index}]\n` +
-							`let first=true\n` +
-							`while(true){` +
-							`const start=deepMemory+${encoded.length + 2}\n` +
-							`if(first)first=false\n` +
-							`else deepMemory = url.indexOf('&', start)\n` +
-							`let value\n` +
-							`if(deepMemory===-1)value=url.slice(start).replace(/\\+/g,' ')\n` +
-							`else value=url.slice(start, deepMemory).replace(/\\+/g,' ')\n` +
-							`value=decodeURIComponent(value)\n` +
-							`if(value===null){if(deepMemory===-1){break}else{continue}}\n` +
-							`const vStart=value.charCodeAt(0)\n` +
-							`const vEnd=value.charCodeAt(value.length - 1)\n` +
-							`if((vStart===91&&vEnd===93)||(vStart===123&&vEnd===125))\n` +
-							`try{` +
-							`a${index}.push(JSON.parse(value))` +
-							`}catch{` +
-							`a${index}.push(value)` +
-							`}` +
-							`if(deepMemory===-1)break` +
-							`}}`
-
-					fnLiteral += '}}'
-				}
-
-				index++
-				fnLiteral += '\n'
 			}
-
-			fnLiteral +=
-				`c.query={` +
-				destructured
-					.map(({ key }, index) => `'${key}':a${index}`)
-					.join(',') +
-				`}`
-
-			// If there are no query parameters, set it to an empty object
-			fnLiteral += `} else c.query = {}\n`
 		}
+
+		fnLiteral +=
+			'if(c.qi===-1){' +
+			'c.query=Object.create(null)' +
+			'}else{' +
+			`c.query=parseQueryFromURL(c.url,c.qi+1,${
+				//
+				hasArrayProperty ? JSON.stringify(arrayProperties) : undefined
+			},${
+				//
+				hasObjectProperty ? JSON.stringify(objectProperties) : undefined
+			})` +
+			'}'
 	}
 
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 
 	const saveResponse =
-		hasTrace || hooks.afterResponse?.length ? 'c.response= ' : ''
+		hasTrace || hooks.afterResponse?.length ? 'c.response=c.responseValue= ' : ''
+
+	const responseKeys = Object.keys(validator.response ?? {})
+	const hasMultipleResponses = responseKeys.length > 1
+	const hasSingle200 =
+		responseKeys.length === 0 ||
+		(responseKeys.length === 1 && responseKeys[0] === '200')
 
 	const maybeAsync =
 		hasCookie ||
@@ -868,19 +725,21 @@ export const composeHandler = ({
 		!!hooks.afterHandle?.some(isAsync) ||
 		!!hooks.beforeHandle?.some(isAsync) ||
 		!!hooks.transform?.some(isAsync) ||
-		!!hooks.mapResponse?.some(isAsync)
+		!!hooks.mapResponse?.some(isAsync) ||
+		validator.body?.provider === 'standard' ||
+		validator.headers?.provider === 'standard' ||
+		validator.query?.provider === 'standard' ||
+		validator.params?.provider === 'standard' ||
+		validator.cookie?.provider === 'standard' ||
+		Object.values(validator.response ?? {}).find(
+			(x) => x.provider === 'standard'
+		)
 
 	const maybeStream =
 		(typeof handler === 'function' ? isGenerator(handler as any) : false) ||
 		!!hooks.beforeHandle?.some(isGenerator) ||
 		!!hooks.afterHandle?.some(isGenerator) ||
 		!!hooks.transform?.some(isGenerator)
-
-	const responseKeys = Object.keys(validator.response ?? {})
-	const hasMultipleResponses = responseKeys.length > 1
-	const hasSingle200 =
-		responseKeys.length === 0 ||
-		(responseKeys.length === 1 && responseKeys[0] === '200')
 
 	const hasSet =
 		inference.cookie ||
@@ -1299,7 +1158,14 @@ export const composeHandler = ({
 			if (validator.headers.isOptional)
 				fnLiteral += `if(isNotEmpty(c.headers)){`
 
-			if (validator.body?.schema?.noValidate !== true)
+			if (validator.headers?.provider === 'standard') {
+				fnLiteral +=
+					`let vah=validator.headers.Check(c.headers)\n` +
+					`if(vah instanceof Promise)vah=await vah\n` +
+					`if(vah.issues){` +
+					validation.validate('headers', undefined, 'vah.issues') +
+					'}else{c.headers=vah.value}\n'
+			} else if (validator.headers?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.headers.Check(c.headers) === false){` +
 					validation.validate('headers') +
@@ -1334,7 +1200,14 @@ export const composeHandler = ({
 						fnLiteral += `c.params['${key}']??=${parsed}\n`
 				}
 
-			if (validator.params?.schema?.noValidate !== true)
+			if (validator.params.provider === 'standard') {
+				fnLiteral +=
+					`let vap=validator.params.Check(c.params)\n` +
+					`if(vap instanceof Promise)vap=await vap\n` +
+					`if(vap.issues){` +
+					validation.validate('params', undefined, 'vap.issues') +
+					'}else{c.params=vap.value}\n'
+			} else if (validator.params?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.params.Check(c.params)===false){` +
 					validation.validate('params') +
@@ -1348,7 +1221,7 @@ export const composeHandler = ({
 		}
 
 		if (validator.query) {
-			if (validator.query.hasDefault)
+			if (Kind in validator.query?.schema && validator.query.hasDefault)
 				for (const [key, value] of Object.entries(
 					Value.Default(
 						// @ts-ignore
@@ -1365,29 +1238,44 @@ export const composeHandler = ({
 
 					if (parsed !== undefined)
 						fnLiteral += `if(c.query['${key}']===undefined)c.query['${key}']=${parsed}\n`
-
-					fnLiteral += composeCleaner({
-						name: 'c.query',
-						schema: validator.query,
-						type: 'query',
-						normalize
-					})
 				}
+
+			fnLiteral += composeCleaner({
+				name: 'c.query',
+				schema: validator.query,
+				type: 'query',
+				normalize
+			})
 
 			if (validator.query.isOptional)
 				fnLiteral += `if(isNotEmpty(c.query)){`
 
-			if (validator.query?.schema?.noValidate !== true)
+			if (validator.query.provider === 'standard') {
+				fnLiteral +=
+					`let vaq=validator.query.Check(c.query)\n` +
+					`if(vaq instanceof Promise)vaq=await vaq\n` +
+					`if(vaq.issues){` +
+					validation.validate('query', undefined, 'vaq.issues') +
+					'}else{c.query=vaq.value}\n'
+			} else if (validator.query?.schema?.noValidate !== true)
 				fnLiteral +=
 					`if(validator.query.Check(c.query)===false){` +
 					validation.validate('query') +
 					`}`
 
-			if (validator.query.hasTransform)
+			if (validator.query.hasTransform) {
+				// TypeBox Decode only work with single Decode at the time
+				// If we have multiple Decode, it will handle only the first one
+				// For query, we decode it twice to ensure that it works
 				fnLiteral += coerceTransformDecodeError(
-					`c.query=validator.query.Decode(Object.assign({},c.query))\n`,
+					`c.query=validator.query.Decode(c.query)\n`,
 					'query'
 				)
+				fnLiteral += coerceTransformDecodeError(
+					`c.query=validator.query.Decode(c.query)\n`,
+					'query'
+				)
+			}
 
 			if (validator.query.isOptional) fnLiteral += `}`
 		}
@@ -1403,10 +1291,8 @@ export const composeHandler = ({
 				let value = Value.Default(
 					validator.body.schema,
 					validator.body.schema.type === 'object' ||
-						(validator.body.schema[Kind] === 'Import' &&
-							validator.body.schema.$defs[
-								validator.body.schema.$ref
-							][Kind] === 'Object')
+						unwrapImportSchema(validator.body.schema)[Kind] ===
+							'Object'
 						? {}
 						: undefined
 				)
@@ -1451,7 +1337,14 @@ export const composeHandler = ({
 					normalize
 				})
 
-				if (validator.body?.schema?.noValidate !== true) {
+				if (validator.body.provider === 'standard') {
+					fnLiteral +=
+						`let vab=validator.body.Check(c.body)\n` +
+						`if(vab instanceof Promise)vab=await vab\n` +
+						`if(vab.issues){` +
+						validation.validate('body', undefined, 'vab.issues') +
+						'}else{c.body=vab.value}\n'
+				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
 						fnLiteral +=
 							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
@@ -1471,7 +1364,14 @@ export const composeHandler = ({
 					normalize
 				})
 
-				if (validator.body?.schema?.noValidate !== true) {
+				if (validator.body.provider === 'standard') {
+					fnLiteral +=
+						`let vab=validator.body.Check(c.body)\n` +
+						`if(vab instanceof Promise)vab=await vab\n` +
+						`if(vab.issues){` +
+						validation.validate('body', undefined, 'vab.issues') +
+						'}else{c.body=vab.value}\n'
+				} else if (validator.body?.schema?.noValidate !== true) {
 					if (validator.body.isOptional)
 						fnLiteral +=
 							`if(isNotEmptyObject&&validator.body.Check(c.body)===false){` +
@@ -1533,7 +1433,7 @@ export const composeHandler = ({
 									continue
 
 								if (validatorLength) validateFile += ','
-								validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+								validateFile += `fileType(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
 
 								validatorLength++
 							}
@@ -1577,7 +1477,7 @@ export const composeHandler = ({
 						continue
 
 					if (i) validateFile += ','
-					validateFile += `validateFileExtension(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+					validateFile += `fileType(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
 
 					i++
 				}
@@ -1592,52 +1492,42 @@ export const composeHandler = ({
 
 		if (validator.cookie) {
 			// ! Get latest app.config.cookie
-			const cookieValidator = getCookieValidator({
-				// @ts-expect-error private property
-				modules: app.definitions.typebox,
-				validator: validator.cookie as any,
-				defaultConfig: app.config.cookie,
-				dynamic: !!app.config.aot,
-				config: validator.cookie?.config ?? {},
-				normalize: app.config.normalize,
-				// @ts-expect-error
-				models: app.definitions.type
-			})!
+			validator.cookie.config = mergeCookie(
+				validator.cookie.config,
+				validator.cookie?.config ?? {}
+			)
 
 			fnLiteral +=
 				`const cookieValue={}\n` +
 				`for(const [key,value] of Object.entries(c.cookie))` +
 				`cookieValue[key]=value.value\n`
 
-			if (cookieValidator.hasDefault)
-				for (const [key, value] of Object.entries(
-					Value.Default(cookieValidator.schema, {}) as Object
-				)) {
-					fnLiteral += `cookieValue['${key}'] = ${
-						typeof value === 'object'
-							? JSON.stringify(value)
-							: value
-					}\n`
-				}
-
-			if (cookieValidator.isOptional)
+			if (validator.cookie.isOptional)
 				fnLiteral += `if(isNotEmpty(c.cookie)){`
 
-			if (validator.body?.schema?.noValidate !== true) {
+			if (validator.cookie.provider === 'standard') {
+				fnLiteral +=
+					`let vac=validator.cookie.Check(c.body)\n` +
+					`if(vac instanceof Promise)vac=await vac\n` +
+					`if(vac.issues){` +
+					validation.validate('cookie', undefined, 'vac.issues') +
+					'}else{c.body=vac.value}\n'
+			} else if (validator.body?.schema?.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
 					validation.validate('cookie', 'cookieValue') +
 					'}'
 			}
 
-			if (cookieValidator.hasTransform)
-				fnLiteral += coerceTransformDecodeError(
-					`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue)))` +
-						`c.cookie[key].value=value\n`,
-					'cookie'
-				)
+			// if (validator.cookie.hasTransform)
+			// 	fnLiteral += coerceTransformDecodeError(
+			// 		`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
+			// 			`c.cookie[key].value=value` +
+			// 			`}`,
+			// 		'cookie'
+			// 	)
 
-			if (cookieValidator.isOptional) fnLiteral += `}`
+			if (validator.cookie.isOptional) fnLiteral += `}`
 		}
 	}
 
@@ -1719,11 +1609,13 @@ export const composeHandler = ({
 							total: hooks.afterHandle?.length
 						})
 
-						if(hooks.afterHandle?.length) {
+						if (hooks.afterHandle?.length) {
 							for (let i = 0; i < hooks.afterHandle.length; i++) {
 								const hook = hooks.afterHandle[i]
 								const returning = hasReturn(hook)
-								const endUnit = reporter.resolveChild(hook.fn.name)
+								const endUnit = reporter.resolveChild(
+									hook.fn.name
+								)
 
 								fnLiteral += `c.response = be\n`
 
@@ -1736,7 +1628,7 @@ export const composeHandler = ({
 										? `af=await e.afterHandle[${i}](c)\n`
 										: `af=e.afterHandle[${i}](c)\n`
 
-									fnLiteral += `if(af!==undefined) c.response=be=af\n`
+									fnLiteral += `if(af!==undefined) c.response=c.responseValue=be=af\n`
 								}
 
 								endUnit('af')
@@ -1745,14 +1637,15 @@ export const composeHandler = ({
 						reporter.resolve()
 					}
 
-					if (validator.response) fnLiteral += validation.response('be')
+					if (validator.response)
+						fnLiteral += validation.response('be')
 
 					const mapResponseReporter = report('mapResponse', {
 						total: hooks.mapResponse?.length
 					})
 
 					if (hooks.mapResponse?.length) {
-						fnLiteral += `c.response=be\n`
+						fnLiteral += `c.response=c.responseValue=be\n`
 
 						for (let i = 0; i < hooks.mapResponse.length; i++) {
 							const mapResponse = hooks.mapResponse[i]
@@ -1764,7 +1657,7 @@ export const composeHandler = ({
 							fnLiteral +=
 								`if(mr===undefined){` +
 								`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
-								`if(mr!==undefined)be=c.response=mr` +
+								`if(mr!==undefined)be=c.response=c.responseValue=mr` +
 								'}'
 
 							endUnit()
@@ -1791,8 +1684,8 @@ export const composeHandler = ({
 
 		if (hooks.afterHandle?.length)
 			fnLiteral += isAsyncHandler
-				? `let r=c.response=await ${handle}\n`
-				: `let r=c.response=${handle}\n`
+				? `let r=c.response=c.responseValue=await ${handle}\n`
+				: `let r=c.response=c.responseValue=${handle}\n`
 		else
 			fnLiteral += isAsyncHandler
 				? `let r=await ${handle}\n`
@@ -1804,7 +1697,7 @@ export const composeHandler = ({
 			total: hooks.afterHandle?.length
 		})
 
-		if(hooks.afterHandle?.length) {
+		if (hooks.afterHandle?.length) {
 			for (let i = 0; i < hooks.afterHandle.length; i++) {
 				const hook = hooks.afterHandle[i]
 				const returning = hasReturn(hook)
@@ -1829,12 +1722,12 @@ export const composeHandler = ({
 
 						fnLiteral += validation.response('af')
 
-						fnLiteral += `c.response=af}`
+						fnLiteral += `c.response=c.responseValue=af}`
 					} else {
 						fnLiteral += `if(af!==undefined){`
 						reporter.resolve()
 
-						fnLiteral += `c.response=af}`
+						fnLiteral += `c.response=c.responseValue=af}`
 					}
 				}
 			}
@@ -1863,7 +1756,7 @@ export const composeHandler = ({
 					`mr=${
 						isAsyncName(mapResponse) ? 'await ' : ''
 					}e.mapResponse[${i}](c)\n` +
-					`if(mr!==undefined)r=c.response=mr\n`
+					`if(mr!==undefined)r=c.response=c.responseValue=mr\n`
 
 				endUnit()
 			}
@@ -1890,7 +1783,7 @@ export const composeHandler = ({
 			})
 
 			if (hooks.mapResponse?.length) {
-				fnLiteral += '\nc.response=r\n'
+				fnLiteral += '\nc.response=c.responseValue=r\n'
 
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					const mapResponse = hooks.mapResponse[i]
@@ -1902,7 +1795,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						`\nif(mr===undefined){` +
 						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
-						`if(mr!==undefined)r=c.response=mr` +
+						`if(mr!==undefined)r=c.response=c.responseValue=mr` +
 						`}\n`
 
 					endUnit()
@@ -1939,7 +1832,7 @@ export const composeHandler = ({
 				total: hooks.mapResponse?.length
 			})
 			if (hooks.mapResponse?.length) {
-				fnLiteral += 'c.response= r\n'
+				fnLiteral += 'c.response=c.responseValue= r\n'
 
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					const mapResponse = hooks.mapResponse[i]
@@ -1951,7 +1844,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						`if(mr===undefined){` +
 						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
-						`if(mr!==undefined)r=c.response=mr` +
+						`if(mr!==undefined)r=c.response=c.responseValue=mr` +
 						`}`
 
 					endUnit()
@@ -2041,7 +1934,7 @@ export const composeHandler = ({
 					)
 
 					fnLiteral +=
-						`c.response=er\n` +
+						`c.response=c.responseValue=er\n` +
 						`mep=e.mapResponse[${i}](c)\n` +
 						`if(mep instanceof Promise)er=await er\n` +
 						`if(mep!==undefined)er=mep\n`
@@ -2093,7 +1986,7 @@ export const composeHandler = ({
 		allocateIf(`ValidationError,`, hasValidation) +
 		allocateIf(`ParseError`, hasBody) +
 		`},` +
-		`validateFileExtension,` +
+		`fileType,` +
 		`schema,` +
 		`definitions,` +
 		`ERROR_CODE,` +
@@ -2136,13 +2029,17 @@ export const composeHandler = ({
 			isNotEmpty,
 			utils: {
 				parseQuery: hasBody ? parseQuery : undefined,
-				parseQueryFromURL: hasQuery ? parseQueryFromURL : undefined
+				parseQueryFromURL: hasQuery
+					? validator.query?.provider === 'standard'
+						? parseQueryStandardSchema
+						: parseQueryFromURL
+					: undefined
 			},
 			error: {
 				ValidationError: hasValidation ? ValidationError : undefined,
 				ParseError: hasBody ? ParseError : undefined
 			},
-			validateFileExtension,
+			fileType,
 			schema: app.router.history,
 			// @ts-expect-error
 			definitions: app.definitions.type,
@@ -2293,6 +2190,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
 
+	const isWebstandard = app['~adapter'].isWebStandard
 	const hasTrace = app.event.trace?.length
 
 	let fnLiteral = ''
@@ -2300,13 +2198,30 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 	const router = app.router
 
 	let findDynamicRoute = router.http.root.WS
-		? `const route=router.find(r.method === "GET" && r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
+		? `const route=router.find(r.method==='GET'&&r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
 		: `const route=router.find(r.method,p)`
 
-	findDynamicRoute += router.http.root.ALL ? '??router.find("ALL",p)\n' : '\n'
+	findDynamicRoute += router.http.root.ALL ? `??router.find('ALL',p)\n` : '\n'
+
+	if (isWebstandard)
+		findDynamicRoute +=
+			`if(r.method==='HEAD'){` +
+			`const route=router.find('GET',p)\n` +
+			'if(route){' +
+			`c.params=route.params\n` +
+			`const _res=route.store.handler?route.store.handler(c):route.store.compile()(c)\n` +
+			`if(_res)` +
+			'return getResponseLength(_res).then((length)=>{' +
+			`_res.headers.set('content-length', length)\n` +
+			`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
+			'})' +
+			'}' +
+			'}'
 
 	let afterResponse = `c.error=notFound\n`
 	if (app.event.afterResponse?.length && !app.event.error) {
+		afterResponse = '\nc.error=notFound\n'
+
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse += `\nsetImmediate(${prefix}()=>{`
 
@@ -2322,7 +2237,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 	// @ts-ignore
 	if (app.inference.query)
 		afterResponse +=
-			'if(c.qi===-1){' +
+			'\nif(c.qi===-1){' +
 			'c.query={}' +
 			'}else{' +
 			'c.query=parseQueryFromURL(c.url,c.qi+1)' +
@@ -2356,14 +2271,34 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		if ('GET' in methods || 'WS' in methods) {
 			switchMap += `case 'GET':`
 
-			if ('WS' in methods)
+			if ('WS' in methods) {
 				switchMap +=
 					`if(r.headers.get('upgrade')==='websocket')` +
 					`return ht[${methods.WS}].composed(c)\n`
 
+				if ('GET' in methods === false) {
+					if ('ALL' in methods)
+						switchMap += `return ht[${methods.ALL}].composed(c)\n`
+					else switchMap += `break map\n`
+				}
+			}
+
 			if ('GET' in methods)
 				switchMap += `return ht[${methods.GET}].composed(c)\n`
 		}
+
+		if (
+			isWebstandard &&
+			('GET' in methods || 'ALL' in methods) &&
+			'HEAD' in methods === false
+		)
+			switchMap +=
+				`case 'HEAD':` +
+				`const _res=ht[${methods.GET ?? methods.ALL}].composed(c)\n` +
+				'return getResponseLength(_res).then((length)=>{' +
+				`_res.headers.set('content-length', length)\n` +
+				`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
+				'})\n'
 
 		for (const [method, index] of Object.entries(methods)) {
 			if (method === 'ALL' || method === 'GET' || method === 'WS')
@@ -2394,6 +2329,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		`handleError,` +
 		`status,` +
 		`redirect,` +
+		`getResponseLength,` +
 		// @ts-ignore
 		allocateIf(`parseQueryFromURL,`, app.inference.query) +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
@@ -2459,6 +2395,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		handleError,
 		status,
 		redirect,
+		getResponseLength,
 		// @ts-ignore
 		parseQueryFromURL: app.inference.query ? parseQueryFromURL : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
@@ -2563,10 +2500,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	if (adapter.declare) fnLiteral += adapter.declare
 
 	const saveResponse =
-		hasTrace ||
-		!!hooks.afterResponse?.length
-			? 'context.response = '
-			: ''
+		hasTrace || !!hooks.afterResponse?.length ? 'context.response = ' : ''
 
 	if (app.event.error)
 		for (let i = 0; i < app.event.error.length; i++) {
@@ -2604,7 +2538,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 						)
 
 						fnLiteral +=
-							`context.response=_r` +
+							`context.response=context.responseValue=_r` +
 							`_r=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n`
 
 						endUnit()
@@ -2632,7 +2566,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	fnLiteral +=
 		`if(error instanceof Error){` +
 		afterResponse() +
-		`\nif(typeof error.toResponse==='function')return context.response=error.toResponse()\n` +
+		`\nif(typeof error.toResponse==='function')return context.response=context.responseValue=error.toResponse()\n` +
 		adapter.unknownError +
 		`\n}`
 
@@ -2642,7 +2576,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	})
 
 	fnLiteral +=
-		'\nif(!context.response)context.response=error.message??error\n'
+		'\nif(!context.response)context.response=context.responseValue=error.message??error\n'
 
 	if (hooks.mapResponse?.length) {
 		fnLiteral += 'let mr\n'
@@ -2657,7 +2591,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 			fnLiteral +=
 				`if(mr===undefined){` +
 				`mr=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n` +
-				`if(mr!==undefined)error=context.response=mr` +
+				`if(mr!==undefined)error=context.response=context.responseValue=mr` +
 				'}'
 
 			endUnit()

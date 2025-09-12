@@ -420,4 +420,23 @@ describe('guard', () => {
 			'500'
 		])
 	})
+
+	it('cast callback function schema to standaloneValidator', async () => {
+		const app = new Elysia().guard(
+			{ params: t.Object({ id: t.Number() }) },
+			(app) =>
+				app.get('/guard/:id/:name', ({ params }) => params, {
+					params: t.Object({ name: t.String() })
+				})
+		)
+
+		const valid = app.handle(req('/guard/1/saltyaom')).then((x) => x.json())
+		const invalid = app
+			.handle(req('/guard/a/saltyaom'))
+			.then((x) => x.status)
+
+		expect(await valid).toEqual({ id: 1, name: 'saltyaom' })
+		expect(await invalid).toBe(422)
+	})
+
 })

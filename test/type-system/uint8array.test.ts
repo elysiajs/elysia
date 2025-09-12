@@ -63,11 +63,7 @@ describe('TypeSystem - Uint8Array', () => {
 	// })
 
 	it('Integrate', async () => {
-		const app = new Elysia().post('/', ({ body }) => {
-			console.log(body)
-
-			return body
-		}, {
+		const app = new Elysia().post('/', ({ body }) => body, {
 			body: t.Uint8Array(),
 			response: t.Uint8Array()
 		})

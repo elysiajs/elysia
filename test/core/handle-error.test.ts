@@ -1,4 +1,4 @@
-import { Elysia, InternalServerError, NotFoundError, error, t } from '../../src'
+import { Elysia, InternalServerError, NotFoundError, status, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -142,8 +142,8 @@ describe('Handle Error', () => {
 	})
 
 	it('handle thrown error function', async () => {
-		const app = new Elysia().get('/', () => {
-			throw error(404, 'Not Found :(')
+		const app = new Elysia().get('/', ({ status }) => {
+			throw status(404, 'Not Found :(')
 		})
 
 		const response = await app.handle(req('/'))
@@ -153,8 +153,8 @@ describe('Handle Error', () => {
 	})
 
 	it('handle thrown Response', async () => {
-		const app = new Elysia().get('/', () => {
-			throw error(404, 'Not Found :(')
+		const app = new Elysia().get('/', ({ status }) => {
+			throw status(404, 'Not Found :(')
 		})
 
 		const response = await app.handle(req('/'))
@@ -253,8 +253,8 @@ describe('Handle Error', () => {
 
 		const response: Response = await new Elysia()
 			.get('/', () => 'Hello', {
-				beforeHandle({ error }) {
-					throw error("I'm a teapot", { message: 'meow!' })
+				beforeHandle({ status }) {
+					throw status("I'm a teapot", { message: 'meow!' })
 				}
 			})
 			// @ts-expect-error private property
@@ -265,7 +265,7 @@ describe('Handle Error', () => {
 						headers: {}
 					}
 				},
-				error(422, value) as any
+				status(422, value) as any
 			)
 
 		expect(await response.json()).toEqual(value)
@@ -288,8 +288,8 @@ describe('Handle Error', () => {
 					})
 			})
 			.get('/', () => 'Hello', {
-				beforeHandle({ error }) {
-					throw error("I'm a teapot", { message: 'meow!' })
+				beforeHandle({ status }) {
+					throw status("I'm a teapot", { message: 'meow!' })
 				}
 			})
 			// @ts-expect-error private property
@@ -300,7 +300,7 @@ describe('Handle Error', () => {
 						headers: {}
 					}
 				},
-				error(422, value) as any
+				status(422, value) as any
 			)
 
 		expect(await response.text()).toBe('Don Quixote')

@@ -16,6 +16,7 @@ import type { TypeCheck } from '@sinclair/typebox/compiler'
 import { ElysiaFormData } from '../utils'
 import type { CookieOptions } from '../cookies'
 import type { MaybeArray } from '../types'
+import { ElysiaFile } from '../universal/file'
 
 export type FileUnit = number | `${number}${'k' | 'm'}`
 

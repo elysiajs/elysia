@@ -285,9 +285,7 @@ describe('Cookie Response', () => {
 		const response = await app.handle(
 			req('/council', {
 				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(JSON.stringify(expected))
+					cookie: 'council=' + JSON.stringify(expected)
 				}
 			})
 		)
@@ -296,32 +294,33 @@ describe('Cookie Response', () => {
 		expect(await response.json()).toEqual(expected)
 	})
 
-	it("don't parse cookie type unless specified", async () => {
-		let value: string | undefined
+	// this is removed there's no way to accurately determine object on Standard Schema
+	// it("don't parse cookie type unless specified", async () => {
+	// 	let value: unknown
 
-		const app = new Elysia().get(
-			'/council',
-			({ cookie: { council } }) => (value = council.value)
-		)
+	// 	const app = new Elysia().get(
+	// 		'/council',
+	// 		({ cookie: { council } }) => (value = council.value)
+	// 	)
 
-		const expected = {
-			name: 'Rin',
-			affilation: 'Administration'
-		}
+	// 	const expected = {
+	// 		name: 'Rin',
+	// 		affilation: 'Administration'
+	// 	}
 
-		const response = await app.handle(
-			req('/council', {
-				headers: {
-					cookie:
-						'council=' +
-						encodeURIComponent(JSON.stringify(expected))
-				}
-			})
-		)
+	// 	const response = await app.handle(
+	// 		req('/council', {
+	// 			headers: {
+	// 				cookie:
+	// 					'council=' +
+	// 					encodeURIComponent(JSON.stringify(expected))
+	// 			}
+	// 		})
+	// 	)
 
-		expect(response.status).toBe(200)
-		expect(value).toEqual(JSON.stringify(expected))
-	})
+	// 	expect(response.status).toBe(200)
+	// 	expect(value).toEqual(JSON.stringify(expected))
+	// })
 
 	it('handle optional at root', async () => {
 		const app = new Elysia().get('/', ({ cookie: { id } }) => id.value, {
@@ -355,7 +354,6 @@ describe('Cookie Response', () => {
 			return 'a'
 		})
 
-		// @ts-expect-error
 		const res = app.handle(req('/')).then((x) => x.headers.toJSON())
 
 		// @ts-expect-error
@@ -392,13 +390,14 @@ describe('Cookie Response', () => {
 			})
 			.get('/', () => 'Hello, world!')
 
-		const res = await app.handle(
-			new Request('http://localhost:3000/', {
-				headers: {
-					cookie: 'test=Hello, world!'
-				}
-			})
-		)
+		const res = await app
+			.handle(
+				new Request('http://localhost:3000/', {
+					headers: {
+						cookie: 'test=Hello, world!'
+					}
+				})
+			)
 			.then((x) => x.headers)
 
 		expect(res.getSetCookie()).toEqual([])

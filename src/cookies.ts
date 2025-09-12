@@ -322,12 +322,24 @@ export const parseCookie = async (
 
 	const jar: Record<string, ElysiaCookie> = {}
 
-
 	const cookies = parse(cookieString)
 	for (const [name, v] of Object.entries(cookies)) {
 		if (v === undefined) continue
 
 		let value = decode(v)
+
+		if (value) {
+			const starts = value.charCodeAt(0)
+			const ends = value.charCodeAt(value.length - 1)
+
+			if (
+				(starts === 123 && ends === 125) ||
+				(starts === 91 && ends === 93)
+			)
+				try {
+					value = JSON.parse(value)
+				} catch {}
+		}
 
 		if (sign === true || sign?.includes(name)) {
 			if (!secrets)

@@ -18,7 +18,7 @@ import {
 
 import { t, type TypeCheck } from './type-system'
 
-import { mergeCookie, randomId } from './utils'
+import { mergeCookie, mergeDeep, randomId } from './utils'
 import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
@@ -26,13 +26,17 @@ import type {
 	ElysiaConfig,
 	InputSchema,
 	MaybeArray,
-	StandaloneInputSchema
+	StandaloneInputSchema,
+	StandardSchemaV1LikeValidate
 } from './types'
+
+import type { StandardSchemaV1Like } from './types'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
 export interface ElysiaTypeCheck<T extends TSchema>
 	extends Omit<TypeCheck<T>, 'schema'> {
+	provider: 'typebox' | 'standard'
 	schema: T
 	config: Object
 	Clean?(v: unknown): T
@@ -148,6 +152,59 @@ export const hasType = (type: string, schema: TAnySchema) => {
 		Kind in schema.properties &&
 		schema.properties[Kind] === type
 	)
+}
+
+export const hasElysiaMeta = (meta: string, _schema: TAnySchema): boolean => {
+	if (!_schema) return false
+
+	// @ts-expect-error private property
+	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? _schema
+
+	if (schema.elysiaMeta === meta) return true
+
+	if (schema[Kind] === 'Import' && _schema.References)
+		return _schema
+			.References()
+			.some((schema: TSchema) => hasElysiaMeta(meta, schema))
+
+	if (schema.anyOf)
+		return schema.anyOf.some((schema: TSchema) =>
+			hasElysiaMeta(meta, schema)
+		)
+	if (schema.someOf)
+		return schema.someOf.some((schema: TSchema) =>
+			hasElysiaMeta(meta, schema)
+		)
+	if (schema.allOf)
+		return schema.allOf.some((schema: TSchema) =>
+			hasElysiaMeta(meta, schema)
+		)
+	if (schema.not)
+		return schema.not.some((schema: TSchema) => hasElysiaMeta(meta, schema))
+
+	if (schema.type === 'object') {
+		const properties = schema.properties as Record<string, TAnySchema>
+
+		for (const key of Object.keys(properties)) {
+			const property = properties[key]
+
+			if (property.type === 'object') {
+				if (hasElysiaMeta(meta, property)) return true
+			} else if (property.anyOf) {
+				for (let i = 0; i < property.anyOf.length; i++)
+					if (hasElysiaMeta(meta, property.anyOf[i])) return true
+			}
+
+			return schema.elysiaMeta === meta
+		}
+
+		return false
+	}
+
+	if (schema.type === 'array' && schema.items && !Array.isArray(schema.items))
+		return hasElysiaMeta(meta, schema.items)
+
+	return false
 }
 
 export const hasProperty = (
@@ -483,9 +540,9 @@ const _replaceSchemaType = (
 				v.default === '{}'
 			) {
 				transform = t.ObjectString(properties, rest)
-				value.default = JSON.stringify(
-					Value.Create(t.Object(properties))
-				)
+				// value.default = JSON.stringify(
+				// 	Value.Create(t.Object(properties))
+				// )
 				value.properties = properties
 			}
 
@@ -497,7 +554,7 @@ const _replaceSchemaType = (
 				v.default === '[]'
 			) {
 				transform = t.ArrayString(items, rest)
-				value.default = JSON.stringify(Value.Create(t.Array(items)))
+				// value.default = JSON.stringify(Value.Create(t.Array(items)))
 				value.items = items
 			}
 
@@ -686,7 +743,9 @@ const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
 
-export const getSchemaValidator = <T extends TSchema | string | undefined>(
+export const getSchemaValidator = <
+	T extends TSchema | StandardSchemaV1Like | string | undefined
+>(
 	s: T,
 	{
 		models = {},
@@ -694,14 +753,16 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		modules,
 		normalize = false,
 		additionalProperties = false,
+		forceAdditionalProperties = false,
 		coerce = false,
 		additionalCoerce = [],
 		validators,
 		sanitize
 	}: {
-		models?: Record<string, TSchema>
+		models?: Record<string, TSchema | StandardSchemaV1Like>
 		modules?: TModule<any, any>
 		additionalProperties?: boolean
+		forceAdditionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
 		coerce?: boolean
@@ -742,30 +803,33 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		return replaceSchemaType(schema, additionalCoerce)
 	}
 
-	const mapSchema = (s: string | TSchema | undefined): TSchema => {
-		let schema: TSchema
+	const mapSchema = (
+		s: string | TSchema | StandardSchemaV1Like | undefined
+	): TSchema | StandardSchemaV1Like => {
+		if (s && typeof s !== 'string' && '~standard' in s)
+			return s as StandardSchemaV1Like
 
 		if (!s) return undefined as any
 
+		let schema: TSchema | StandardSchemaV1Like
+
 		if (typeof s !== 'string') schema = s
 		else {
-			// if (s in caches) return caches[s] as any
-
-			const isArray = s.endsWith('[]')
-			const key = isArray ? s.substring(0, s.length - 2) : s
-
 			schema =
-				(modules as TModule<{}, {}> | undefined)?.Import(
-					key as never
-				) ?? models[key]
+				// @ts-expect-error private property
+				modules && s in modules.$defs
+					? (modules as TModule<{}, {}>).Import(s as never)
+					: models[s]
 
-			if (isArray) schema = t.Array(schema)
+			if (!schema) return undefined as any
 		}
 
-		if (!schema) return undefined as any
-
 		let _doesHaveRef: boolean
-		if (schema[Kind] !== 'Import' && (_doesHaveRef = hasRef(schema))) {
+		if (
+			Kind in schema &&
+			schema[Kind] !== 'Import' &&
+			(_doesHaveRef = hasRef(schema))
+		) {
 			const id = randomId()
 
 			if (doesHaveRef === undefined) doesHaveRef = _doesHaveRef
@@ -779,133 +843,39 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			schema = model.Import(id)
 		}
 
-		if (schema[Kind] === 'Import') {
-			const newDefs: Record<string, TSchema> = {}
+		if (Kind in schema) {
+			if (schema[Kind] === 'Import') {
+				const newDefs: Record<string, TSchema> = {}
 
-			for (const [key, value] of Object.entries(schema.$defs))
-				newDefs[key] = replaceSchema(value as TSchema)
+				for (const [key, value] of Object.entries(schema.$defs))
+					newDefs[key] = replaceSchema(value as TSchema)
 
-			const key = schema.$ref
-			schema = t.Module(newDefs).Import(key)
-		} else if (coerce || additionalCoerce) schema = replaceSchema(schema)
+				const key = schema.$ref
+				schema = t.Module(newDefs).Import(key)
+			} else if (coerce || additionalCoerce)
+				schema = replaceSchema(schema)
+		}
 
 		return schema
 	}
 
 	let schema = mapSchema(s)
+	let _validators = validators
 
-	if (validators?.length) {
-		let hasAdditional = false
-
-		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas([
-			schema,
-			...validators.map(mapSchema)
-		])
-
-		if (notObjects) {
-			schema = t.Intersect([
-				...(mergedObjectSchema ? [mergedObjectSchema] : []),
-				...notObjects.map((x) => {
-					const schema = mapSchema(x)
-
-					if (
-						schema.type === 'object' &&
-						'additionalProperties' in schema
-					) {
-						if (
-							!hasAdditional &&
-							schema.additionalProperties === false
-						) {
-							hasAdditional = true
-						}
-
-						delete schema.additionalProperties
-					}
-
-					return schema
-				})
-			])
-
-			if (schema.type === 'object' && hasAdditional)
-				schema.additionalProperties = false
-		}
-	} else {
-		if (
-			schema.type === 'object' &&
-			'additionalProperties' in schema === false
-		)
-			schema.additionalProperties = additionalProperties
-		else
-			schema = replaceSchemaType(schema, {
-				onlyFirst: 'object',
-				from: t.Object({}),
-				// @ts-ignore
-				to({ properties, ...options }) {
-					// If nothing is return, use the original schema
-					if (!properties) return
-					if ('additionalProperties' in schema) return
-
-					return t.Object(properties, {
-						...options,
-						additionalProperties: false
-					})
-				}
-			})
-	}
-
-	if (dynamic) {
-		const validator: ElysiaTypeCheck<any> = {
-			schema,
-			references: '',
-			checkFunc: () => {},
-			code: '',
-			// @ts-expect-error
-			Check: (value: unknown) => Value.Check(schema, value),
-			Errors: (value: unknown) => Value.Errors(schema, value),
-			Code: () => '',
-			Clean: createCleaner(schema),
-			Decode: (value: unknown) => Value.Decode(schema, value),
-			Encode: (value: unknown) => Value.Encode(schema, value),
-			get hasAdditionalProperties() {
-				if ('~hasAdditionalProperties' in this)
-					return this['~hasAdditionalProperties'] as boolean
-
-				return (this['~hasAdditionalProperties'] =
-					hasAdditionalProperties(schema))
-			},
-			get hasDefault() {
-				if ('~hasDefault' in this) return this['~hasDefault']
-
-				return (this['~hasDefault'] = hasProperty('default', schema))
-			},
-			get isOptional() {
-				if ('~isOptional' in this) return this['~isOptional']!
-
-				return (this['~isOptional'] = isOptional(schema))
-			},
-			get hasTransform() {
-				if ('~hasTransform' in this) return this['~hasTransform']!
-
-				return (this['~hasTransform'] = hasTransform(schema))
-			},
-			'~hasRef': doesHaveRef,
-			get hasRef() {
-				if ('~hasRef' in this) return this['~hasRef']!
-
-				return (this['~hasRef'] = hasTransform(schema))
-			}
-		}
-
-		if (schema.config) {
-			validator.config = schema.config
-
-			if (validator?.schema?.config) delete validator.schema.config
-		}
-
-		if (normalize && schema.additionalProperties === false) {
-			if (normalize === true || normalize === 'exactMirror') {
+	if (
+		'~standard' in schema ||
+		(validators?.length &&
+			validators.some(
+				(x) => x && typeof x !== 'string' && '~standard' in x
+			))
+	) {
+		const typeboxSubValidator = (
+			schema: TSchema
+		): StandardSchemaV1LikeValidate => {
+			let mirror: Function
+			if (normalize === true || normalize === 'exactMirror')
 				try {
-					validator.Clean = createMirror(schema, {
+					mirror = createMirror(schema as TSchema, {
 						TypeCompiler,
 						sanitize: sanitize?.(),
 						modules
@@ -915,9 +885,109 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
 					)
 					console.warn(schema)
-					validator.Clean = createCleaner(schema)
+					mirror = createCleaner(schema as TSchema)
 				}
-			} else validator.Clean = createCleaner(schema)
+
+			const vali = getSchemaValidator(schema, {
+				models,
+				modules,
+				dynamic,
+				normalize,
+				additionalProperties: true,
+				forceAdditionalProperties: true,
+				coerce,
+				additionalCoerce
+			})!
+
+			// @ts-ignore
+			vali.Decode = mirror
+
+			// @ts-ignore
+			return (v) => {
+				if (vali.Check(v)) {
+					return {
+						value: vali.Decode(v)
+					}
+				} else
+					return {
+						issues: [...vali.Errors(v)]
+					}
+			}
+		}
+
+		const mainCheck = schema['~standard']
+			? schema['~standard'].validate
+			: typeboxSubValidator(schema as TSchema)
+
+		let checkers = <StandardSchemaV1LikeValidate[]>[]
+		if (validators?.length)
+			for (const validator of validators) {
+				if (!validator) continue
+				if (typeof validator === 'string') continue
+
+				if (validator?.['~standard']) {
+					checkers.push(validator['~standard'])
+					continue
+				}
+
+				if (Kind in validator) {
+					checkers.push(typeboxSubValidator(validator))
+					continue
+				}
+			}
+
+		async function Check(value: unknown) {
+			let v = mainCheck(value)
+			if (v instanceof Promise) v = await v
+			if (v.issues) return v
+
+			const values = <(Record<string, unknown> | unknown[])[]>[]
+
+			if (v && typeof v === 'object') values.push(v.value as any)
+
+			for (let i = 0; i < checkers.length; i++) {
+				// @ts-ignore
+				v = checkers[i].validate(value)
+				if (v instanceof Promise) v = await v
+				if (v.issues) return v
+
+				// @ts-ignore
+				if (v && typeof v === 'object') values.push(v.value)
+			}
+
+			if (!values.length) return { value: v }
+			if (values.length === 1) return { value: values[0] }
+			if (values.length === 2)
+				return { value: mergeDeep(values[0], values[1]) }
+
+			let newValue = mergeDeep(values[0], values[1])
+
+			for (let i = 2; i < values.length; i++)
+				newValue = mergeDeep(newValue, values[i])
+
+			return { value: newValue }
+		}
+
+		const validator: ElysiaTypeCheck<any> = {
+			provider: 'standard',
+			schema,
+			references: '',
+			checkFunc: () => {},
+			code: '',
+			// @ts-ignore
+			Check,
+			// @ts-ignore
+			Errors: (value: unknown) => Check(value)?.then?.((x) => x?.issues),
+			Code: () => '',
+			// @ts-ignore
+			Decode: Check,
+			// @ts-ignore
+			Encode: (value: unknown) => value,
+			hasAdditionalProperties: false,
+			hasDefault: false,
+			isOptional: false,
+			hasTransform: false,
+			hasRef: false
 		}
 
 		validator.parse = (v) => {
@@ -947,40 +1017,334 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 			}
 		}
 
-		// if (cacheKey) caches[cacheKey] = validator
-
 		return validator as any
-	}
+	} else if (validators?.length) {
+		let hasAdditional = false
 
-	const compiled = TypeCompiler.Compile(
-		schema,
-		Object.values(models)
-	) as any as ElysiaTypeCheck<any>
+		const validators = _validators as TSchema[]
 
-	if (schema.config) {
-		compiled.config = schema.config
+		const { schema: mergedObjectSchema, notObjects } = mergeObjectSchemas([
+			schema,
+			...(validators.map(mapSchema) as TSchema[])
+		])
 
-		if (compiled?.schema?.config) delete compiled.schema.config
-	}
+		if (notObjects) {
+			schema = t.Intersect([
+				...(mergedObjectSchema ? [mergedObjectSchema] : []),
+				...notObjects.map((x) => {
+					const schema = mapSchema(x) as TSchema
 
-	if (normalize === true || normalize === 'exactMirror') {
-		try {
-			compiled.Clean = createMirror(schema, {
-				TypeCompiler,
-				sanitize: sanitize?.(),
-				modules
-			})
-		} catch (error) {
-			console.warn(
-				'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-			)
-			console.dir(schema, {
-				depth: null
-			})
+					if (
+						schema.type === 'object' &&
+						'additionalProperties' in schema
+					) {
+						if (
+							!hasAdditional &&
+							schema.additionalProperties === false
+						) {
+							hasAdditional = true
+						}
 
-			compiled.Clean = createCleaner(schema)
+						delete schema.additionalProperties
+					}
+
+					return schema
+				})
+			])
+
+			if (schema.type === 'object' && hasAdditional)
+				schema.additionalProperties = false
 		}
-	} else if (normalize === 'typebox') compiled.Clean = createCleaner(schema)
+	} else {
+		if (
+			schema.type === 'object' &&
+			('additionalProperties' in schema === false ||
+				forceAdditionalProperties)
+		)
+			schema.additionalProperties = additionalProperties
+		else
+			schema = replaceSchemaType(schema, {
+				onlyFirst: 'object',
+				from: t.Object({}),
+				// @ts-ignore
+				to({ properties, ...options }) {
+					// If nothing is return, use the original schema
+					if (!properties) return
+					if ('additionalProperties' in schema) return
+
+					return t.Object(properties, {
+						...options,
+						additionalProperties: false
+					})
+				}
+			})
+	}
+
+	if (dynamic) {
+		if (Kind in schema) {
+			const validator: ElysiaTypeCheck<any> = {
+				provider: 'typebox',
+				schema,
+				references: '',
+				checkFunc: () => {},
+				code: '',
+				// @ts-expect-error
+				Check: (value: unknown) => Value.Check(schema, value),
+				Errors: (value: unknown) => Value.Errors(schema, value),
+				Code: () => '',
+				Clean: createCleaner(schema),
+				Decode: (value: unknown) => Value.Decode(schema, value),
+				Encode: (value: unknown) => Value.Encode(schema, value),
+				get hasAdditionalProperties() {
+					if ('~hasAdditionalProperties' in this)
+						return this['~hasAdditionalProperties'] as boolean
+
+					return (this['~hasAdditionalProperties'] =
+						hasAdditionalProperties(schema))
+				},
+				get hasDefault() {
+					if ('~hasDefault' in this) return this['~hasDefault']
+
+					return (this['~hasDefault'] = hasProperty(
+						'default',
+						schema
+					))
+				},
+				get isOptional() {
+					if ('~isOptional' in this) return this['~isOptional']!
+
+					return (this['~isOptional'] = isOptional(schema))
+				},
+				get hasTransform() {
+					if ('~hasTransform' in this) return this['~hasTransform']!
+
+					return (this['~hasTransform'] = hasTransform(schema))
+				},
+				'~hasRef': doesHaveRef,
+				get hasRef() {
+					if ('~hasRef' in this) return this['~hasRef']!
+
+					return (this['~hasRef'] = hasTransform(schema))
+				}
+			}
+
+			if (schema.config) {
+				validator.config = schema.config
+
+				if (validator?.schema?.config) delete validator.schema.config
+			}
+
+			if (normalize && schema.additionalProperties === false) {
+				if (normalize === true || normalize === 'exactMirror') {
+					try {
+						validator.Clean = createMirror(schema, {
+							TypeCompiler,
+							sanitize: sanitize?.(),
+							modules
+						})
+					} catch {
+						console.warn(
+							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+						)
+						console.warn(schema)
+						validator.Clean = createCleaner(schema)
+					}
+				} else validator.Clean = createCleaner(schema)
+			}
+
+			validator.parse = (v) => {
+				try {
+					return validator.Decode(validator.Clean?.(v) ?? v)
+				} catch (error) {
+					throw [...validator.Errors(v)].map(mapValueError)
+				}
+			}
+
+			validator.safeParse = (v) => {
+				try {
+					return {
+						success: true,
+						data: validator.Decode(validator.Clean?.(v) ?? v),
+						error: null
+					}
+				} catch (error) {
+					const errors = [...compiled.Errors(v)].map(mapValueError)
+
+					return {
+						success: false,
+						data: null,
+						error: errors[0]?.summary,
+						errors
+					}
+				}
+			}
+
+			// if (cacheKey) caches[cacheKey] = validator
+
+			return validator as any
+		} else {
+			const validator: ElysiaTypeCheck<any> = {
+				provider: 'standard',
+				schema,
+				references: '',
+				checkFunc: () => {},
+				code: '',
+				// @ts-ignore
+				Check: (v) => schema['~standard'].validate(v),
+				// @ts-ignore
+				Errors(value: unknown) {
+					// @ts-ignore
+					const response = schema['~standard'].validate(value)
+
+					if (response instanceof Promise)
+						throw Error(
+							'Async validation is not supported in non-dynamic schema'
+						)
+
+					return response.issues
+				},
+				Code: () => '',
+				// @ts-ignore
+				Decode(value) {
+					// @ts-ignore
+					const response = schema['~standard'].validate(value)
+
+					if (response instanceof Promise)
+						throw Error(
+							'Async validation is not supported in non-dynamic schema'
+						)
+
+					return response
+				},
+				// @ts-ignore
+				Encode: (value: unknown) => value,
+				hasAdditionalProperties: false,
+				hasDefault: false,
+				isOptional: false,
+				hasTransform: false,
+				hasRef: false
+			}
+
+			validator.parse = (v) => {
+				try {
+					return validator.Decode(validator.Clean?.(v) ?? v)
+				} catch (error) {
+					throw [...validator.Errors(v)].map(mapValueError)
+				}
+			}
+
+			validator.safeParse = (v) => {
+				try {
+					return {
+						success: true,
+						data: validator.Decode(validator.Clean?.(v) ?? v),
+						error: null
+					}
+				} catch (error) {
+					const errors = [...compiled.Errors(v)].map(mapValueError)
+
+					return {
+						success: false,
+						data: null,
+						error: errors[0]?.summary,
+						errors
+					}
+				}
+			}
+
+			// if (cacheKey) caches[cacheKey] = validator
+
+			return validator as any
+		}
+	}
+
+	let compiled: ElysiaTypeCheck<any>
+
+	if (Kind in schema) {
+		compiled = TypeCompiler.Compile(
+			schema,
+			Object.values(models).filter((x) => Kind in x)
+		) as any
+		compiled.provider = 'typebox'
+
+		if (schema.config) {
+			compiled.config = schema.config
+
+			if (compiled?.schema?.config) delete compiled.schema.config
+		}
+
+		if (normalize === true || normalize === 'exactMirror') {
+			try {
+				compiled.Clean = createMirror(schema, {
+					TypeCompiler,
+					sanitize: sanitize?.(),
+					modules
+				})
+			} catch (error) {
+				console.warn(
+					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+				)
+				console.dir(schema, {
+					depth: null
+				})
+
+				compiled.Clean = createCleaner(schema)
+			}
+		} else if (normalize === 'typebox')
+			compiled.Clean = createCleaner(schema)
+	} else {
+		compiled = {
+			provider: 'standard',
+			schema,
+			references: '',
+			checkFunc(value: unknown) {
+				// @ts-ignore
+				const response = schema['~standard'].validate(value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response
+			},
+			code: '',
+			// @ts-ignore
+			Check: (v) => schema['~standard'].validate(v),
+			// @ts-ignore
+			Errors(value: unknown) {
+				// @ts-ignore
+				const response = schema['~standard'].validate(value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response.issues
+			},
+			Code: () => '',
+			// @ts-ignore
+			Decode(value) {
+				// @ts-ignore
+				const response = schema['~standard'].validate(value)
+
+				if (response instanceof Promise)
+					throw Error(
+						'Async validation is not supported in non-dynamic schema'
+					)
+
+				return response
+			},
+			// @ts-ignore
+			Encode: (value: unknown) => value,
+			hasAdditionalProperties: false,
+			hasDefault: false,
+			isOptional: false,
+			hasTransform: false,
+			hasRef: false
+		}
+	}
 
 	compiled.parse = (v) => {
 		try {
@@ -1009,36 +1373,37 @@ export const getSchemaValidator = <T extends TSchema | string | undefined>(
 		}
 	}
 
-	Object.assign(compiled, {
-		get hasAdditionalProperties() {
-			if ('~hasAdditionalProperties' in this)
-				return this['~hasAdditionalProperties']
+	if (Kind in schema)
+		Object.assign(compiled, {
+			get hasAdditionalProperties() {
+				if ('~hasAdditionalProperties' in this)
+					return this['~hasAdditionalProperties']
 
-			return (this['~hasAdditionalProperties'] =
-				hasAdditionalProperties(compiled))
-		},
-		get hasDefault() {
-			if ('~hasDefault' in this) return this['~hasDefault']
+				return (this['~hasAdditionalProperties'] =
+					hasAdditionalProperties(compiled))
+			},
+			get hasDefault() {
+				if ('~hasDefault' in this) return this['~hasDefault']
 
-			return (this['~hasDefault'] = hasProperty('default', compiled))
-		},
-		get isOptional() {
-			if ('~isOptional' in this) return this['~isOptional']!
+				return (this['~hasDefault'] = hasProperty('default', compiled))
+			},
+			get isOptional() {
+				if ('~isOptional' in this) return this['~isOptional']!
 
-			return (this['~isOptional'] = isOptional(compiled))
-		},
-		get hasTransform() {
-			if ('~hasTransform' in this) return this['~hasTransform']!
+				return (this['~isOptional'] = isOptional(compiled))
+			},
+			get hasTransform() {
+				if ('~hasTransform' in this) return this['~hasTransform']!
 
-			return (this['~hasTransform'] = hasTransform(schema))
-		},
-		get hasRef() {
-			if ('~hasRef' in this) return this['~hasRef']!
+				return (this['~hasTransform'] = hasTransform(schema))
+			},
+			get hasRef() {
+				if ('~hasRef' in this) return this['~hasRef']!
 
-			return (this['~hasRef'] = hasRef(schema))
-		},
-		'~hasRef': doesHaveRef
-	} as ElysiaTypeCheck<any>)
+				return (this['~hasRef'] = hasRef(schema))
+			},
+			'~hasRef': doesHaveRef
+		} as ElysiaTypeCheck<any>)
 
 	// if (cacheKey) caches[cacheKey] = compiled
 
@@ -1133,7 +1498,7 @@ export const getResponseSchemaValidator = (
 		sanitize
 	}: {
 		modules: TModule<any, any>
-		models?: Record<string, TSchema>
+		models?: Record<string, TSchema | StandardSchemaV1Like>
 		additionalProperties?: boolean
 		dynamic?: boolean
 		normalize?: ElysiaConfig<''>['normalize']
@@ -1150,37 +1515,41 @@ export const getResponseSchemaValidator = (
 		validators = validators.slice(1)
 	}
 
-	let maybeSchemaOrRecord: TSchema | Record<number, string | TSchema>
+	let maybeSchemaOrRecord:
+		| TSchema
+		| StandardSchemaV1Like
+		| Record<number, string | TSchema | StandardSchemaV1Like>
 
+	// @ts-ignore
 	if (typeof s !== 'string') maybeSchemaOrRecord = s!
 	else {
-		const isArray = s.endsWith('[]')
-		const key = isArray ? s.substring(0, s.length - 2) : s
+		maybeSchemaOrRecord = // @ts-expect-error private property
+			modules && s in modules.$defs
+				? (modules as TModule<{}, {}>).Import(s as never)
+				: models[s]
 
-		maybeSchemaOrRecord =
-			(modules as TModule<{}, {}>).Import(key as never) ?? models[key]
-
-		if (isArray)
-			maybeSchemaOrRecord = t.Array(maybeSchemaOrRecord as TSchema)
+		if (!maybeSchemaOrRecord) return undefined as any
 	}
 
 	if (!maybeSchemaOrRecord) return
 
-	if (Kind in maybeSchemaOrRecord) {
+	if (Kind in maybeSchemaOrRecord || '~standard' in maybeSchemaOrRecord)
 		return {
-			200: getSchemaValidator(maybeSchemaOrRecord, {
-				modules,
-				models,
-				additionalProperties,
-				dynamic,
-				normalize,
-				coerce: false,
-				additionalCoerce: [],
-				validators: validators.map((x) => x![200]),
-				sanitize
-			})
+			200: getSchemaValidator(
+				maybeSchemaOrRecord as TSchema | StandardSchemaV1Like,
+				{
+					modules,
+					models,
+					additionalProperties,
+					dynamic,
+					normalize,
+					coerce: false,
+					additionalCoerce: [],
+					validators: validators.map((x) => x![200]),
+					sanitize
+				}
+			)!
 		}
-	}
 
 	const record: Record<number, ElysiaTypeCheck<any>> = {}
 
@@ -1193,10 +1562,12 @@ export const getResponseSchemaValidator = (
 			if (maybeNameOrSchema in models) {
 				const schema = models[maybeNameOrSchema]
 
+				if (!schema) return
+
 				// Inherits model maybe already compiled
 				record[+status] =
-					Kind in schema
-						? getSchemaValidator(schema, {
+					Kind in schema || '~standard' in schema
+						? getSchemaValidator(schema as TSchema, {
 								modules,
 								models,
 								additionalProperties,
@@ -1206,8 +1577,8 @@ export const getResponseSchemaValidator = (
 								additionalCoerce: [],
 								validators: validators.map((x) => x![+status]),
 								sanitize
-							})
-						: schema
+							})!
+						: (schema as ElysiaTypeCheck<any>)
 			}
 
 			return undefined
@@ -1215,7 +1586,7 @@ export const getResponseSchemaValidator = (
 
 		// Inherits model maybe already compiled
 		record[+status] =
-			Kind in maybeNameOrSchema
+			Kind in maybeNameOrSchema || '~standard' in maybeNameOrSchema
 				? getSchemaValidator(maybeNameOrSchema as TSchema, {
 						modules,
 						models,
@@ -1227,7 +1598,7 @@ export const getResponseSchemaValidator = (
 						validators: validators.map((x) => x![+status]),
 						sanitize
 					})
-				: maybeNameOrSchema
+				: (maybeNameOrSchema as ElysiaTypeCheck<any>)
 	})
 
 	return record
@@ -1251,6 +1622,26 @@ export const stringToStructureCoercions = () => {
 	}
 
 	return _stringToStructureCoercions
+}
+
+let _queryCoercions: ReplaceSchemaTypeOptions[]
+
+export const queryCoercions = () => {
+	if (!_queryCoercions) {
+		_queryCoercions = [
+			{
+				from: t.Object({}),
+				to: () => t.ObjectString({}),
+				excludeRoot: true
+			},
+			{
+				from: t.Array(t.Any()),
+				to: () => t.ArrayQuery(t.Any())
+			}
+		] satisfies ReplaceSchemaTypeOptions[]
+	}
+
+	return _queryCoercions
 }
 
 let _coercePrimitiveRoot: ReplaceSchemaTypeOptions[]
@@ -1284,27 +1675,37 @@ export const getCookieValidator = ({
 	validators,
 	sanitize
 }: {
-	validator: TSchema | string | undefined
+	validator:
+		| TSchema
+		| StandardSchemaV1Like
+		| ElysiaTypeCheck<any>
+		| string
+		| undefined
 	modules: TModule<any, any>
 	defaultConfig: CookieOptions | undefined
 	config: CookieOptions
 	dynamic: boolean
 	normalize: ElysiaConfig<''>['normalize'] | undefined
-	models: Record<string, TSchema> | undefined
+	models: Record<string, TSchema | StandardSchemaV1Like> | undefined
 	validators?: InputSchema['cookie'][]
 	sanitize?: () => ExactMirrorInstruction['sanitize']
 }) => {
-	let cookieValidator = getSchemaValidator(validator, {
-		modules,
-		dynamic,
-		models,
-		normalize,
-		additionalProperties: true,
-		coerce: true,
-		additionalCoerce: stringToStructureCoercions(),
-		validators,
-		sanitize
-	})
+	let cookieValidator =
+		// @ts-ignore
+		validator?.provider
+			? (validator as ElysiaTypeCheck<any>)
+			: // @ts-ignore
+				getSchemaValidator(validator, {
+					modules,
+					dynamic,
+					models,
+					normalize,
+					additionalProperties: true,
+					coerce: true,
+					additionalCoerce: stringToStructureCoercions(),
+					validators,
+					sanitize
+				})
 
 	if (cookieValidator)
 		cookieValidator.config = mergeCookie(cookieValidator.config, config)
@@ -1364,6 +1765,8 @@ export const getCookieValidator = ({
 // }
 
 export const unwrapImportSchema = (schema: TSchema): TSchema =>
-	schema[Kind] === 'Import' && schema.$defs[schema.$ref][Kind] === 'Object'
+	schema &&
+	schema[Kind] === 'Import' &&
+	schema.$defs[schema.$ref][Kind] === 'Object'
 		? schema.$defs[schema.$ref]
 		: schema

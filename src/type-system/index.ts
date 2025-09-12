@@ -49,6 +49,7 @@ import { ValidationError } from '../error'
 import { parseDateTimeEmptySpace } from './format'
 import { replaceSchemaType } from '../schema'
 import { isJSDocDeprecatedTag } from 'typescript'
+import { ElysiaFile } from '../universal/file'
 
 const t = Object.assign({}, Type) as unknown as Omit<
 	JavaScriptTypeBuilder,
@@ -281,17 +282,20 @@ export const ElysiaType = {
 		const schema = t.Object(properties, options)
 		const compiler = compile(schema)
 
-		const defaultValue = JSON.stringify(compiler.Create())
-
 		return t
 			.Transform(
-				t.Union([
-					t.String({
-						format: 'ObjectString',
-						default: defaultValue
-					}),
-					schema
-				])
+				t.Union(
+					[
+						t.String({
+							format: 'ObjectString',
+							default: '{}'
+						}),
+						schema
+					],
+					{
+						elysiaMeta: 'ObjectString'
+					}
+				)
 			)
 			.Decode((value) => {
 				if (typeof value === 'string') {
@@ -333,13 +337,13 @@ export const ElysiaType = {
 			}
 
 			// has , (as used in nuqs)
-			if (value.indexOf(',') !== -1) {
-				// const newValue = value.split(',').map((v) => v.trim())
+			// if (value.indexOf(',') !== -1) {
+			// 	// const newValue = value.split(',').map((v) => v.trim())
 
-				if (!compiler.Check(value)) throw compiler.Error(value)
+			// 	if (!compiler.Check(value)) throw compiler.Error(value)
 
-				return compiler.Decode(value)
-			}
+			// 	return compiler.Decode(value)
+			// }
 
 			if (isProperty) return value
 
@@ -364,6 +368,72 @@ export const ElysiaType = {
 						const v = value[i]
 						if (typeof v === 'string') {
 							const t = decode(v, true)
+							if (Array.isArray(t)) values = values.concat(t)
+							else values.push(t)
+
+							continue
+						}
+
+						values.push(v)
+					}
+
+					return values
+				}
+
+				if (typeof value === 'string') return decode(value)
+
+				// Is probably transformed, unable to check schema
+				return value
+			})
+			.Encode((value) => {
+				let original
+				if (typeof value === 'string')
+					value = tryParse((original = value), schema)
+
+				if (!compiler.Check(value))
+					throw new ValidationError('property', schema, value)
+
+				return original ?? JSON.stringify(value)
+			}) as any as TArray<T>
+	},
+
+	ArrayQuery: <T extends TSchema = TString>(
+		children: T = t.String() as any,
+		options?: ArrayOptions
+	) => {
+		const schema = t.Array(children, options)
+		const compiler = compile(schema)
+
+		const decode = (value: string) => {
+			// has , (as used in nuqs)
+			if (value.indexOf(',') !== -1)
+				return compiler.Decode(value.split(','))
+
+			return [value]
+		}
+
+		return t
+			.Transform(
+				t.Union(
+					[
+						t.String({
+							default: options?.default
+						}),
+						schema
+					],
+					{
+						elysiaMeta: 'ArrayQuery'
+					}
+				)
+			)
+			.Decode((value) => {
+				if (Array.isArray(value)) {
+					let values = <unknown[]>[]
+
+					for (let i = 0; i < value.length; i++) {
+						const v = value[i]
+						if (typeof v === 'string') {
+							const t = decode(v)
 							if (Array.isArray(t)) values = values.concat(t)
 							else values.push(t)
 
@@ -539,6 +609,7 @@ export const ElysiaType = {
 t.BooleanString = ElysiaType.BooleanString
 t.ObjectString = ElysiaType.ObjectString
 t.ArrayString = ElysiaType.ArrayString
+t.ArrayQuery = ElysiaType.ArrayQuery
 t.Numeric = ElysiaType.Numeric
 t.Integer = ElysiaType.Integer
 

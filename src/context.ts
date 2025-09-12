@@ -12,7 +12,8 @@ import type {
 	Prettify,
 	ResolvePath,
 	SingletonBase,
-	HTTPHeaders
+	HTTPHeaders,
+	InputSchema
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
@@ -102,7 +103,6 @@ export type ErrorContext<
 		route: string
 		request: Request
 		store: Singleton['store']
-		response: Route['response']
 	} & Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']
@@ -121,27 +121,42 @@ export type Context<
 	Path extends string | undefined = undefined
 > = Prettify<
 	{
-		body: PrettifyIfObject<Route['body']>
+		body: PrettifyIfObject<Route['body'] & Singleton['resolve']['body']>
 		query: undefined extends Route['query']
-			? Record<string, string>
-			: PrettifyIfObject<Route['query']>
+			? {} extends NonNullable<Singleton['resolve']['query']>
+				? Record<string, string>
+				: Singleton['resolve']['query']
+			: PrettifyIfObject<Route['query'] & Singleton['resolve']['query']>
 		params: undefined extends Route['params']
 			? undefined extends Path
-				? Record<string, string>
+				? {} extends NonNullable<Singleton['resolve']['params']>
+					? Record<string, string>
+					: Singleton['resolve']['params']
 				: Path extends `${string}/${':' | '*'}${string}`
 					? ResolvePath<Path>
 					: never
-			: PrettifyIfObject<Route['params']>
+			: PrettifyIfObject<Route['params'] & Singleton['resolve']['params']>
 		headers: undefined extends Route['headers']
-			? Record<string, string | undefined>
-			: PrettifyIfObject<Route['headers']>
+			? {} extends NonNullable<Singleton['resolve']['query']>
+				? Record<string, string | undefined>
+				: Singleton['resolve']['headers']
+			: PrettifyIfObject<
+					Route['headers'] & Singleton['resolve']['headers']
+				>
 		cookie: undefined extends Route['cookie']
-			? Record<string, Cookie<string | undefined>>
-			: Record<string, Cookie<string | undefined>> & {
-					[key in keyof Route['cookie']]-?: Cookie<
-						Route['cookie'][key]
+			? Record<string, Cookie<unknown>>
+			: Record<string, Cookie<unknown>> &
+					Prettify<
+						{
+							[key in keyof Route['cookie']]-?: Cookie<
+								Route['cookie'][key]
+							>
+						} & {
+							[key in keyof Singleton['resolve']['cookie']]-?: Cookie<
+								Singleton['resolve']['cookie'][key]
+							>
+						}
 					>
-				}
 
 		server: Server | null
 		redirect: Redirect
@@ -206,37 +221,9 @@ export type Context<
 					response: T
 					// @ts-ignore trust me bro
 				) => ElysiaCustomStatusResponse<Code, T>
-
-		/**
-		* @deprecated use `status` instead
-		*/
-		error: {} extends Route['response']
-			? typeof status
-			: <
-					const Code extends
-						| keyof Route['response']
-						| InvertedStatusMap[Extract<
-								InvertedStatusMapKey,
-								keyof Route['response']
-						  >],
-					const T extends Code extends keyof Route['response']
-						? Route['response'][Code]
-						: Code extends keyof StatusMap
-							? // @ts-ignore StatusMap[Code] always valid because Code generic check
-								Route['response'][StatusMap[Code]]
-							: never
-				>(
-					code: Code,
-					response: T
-					// @ts-ignore trust me bro
-				) => ElysiaCustomStatusResponse<Code, T>
-
-		// response?: IsNever<keyof Route['response']> extends true
-		// 	? unknown
-		// 	: Route['response'][keyof Route['response']]
 	} & Singleton['decorator'] &
 		Singleton['derive'] &
-		Singleton['resolve']
+		Omit<Singleton['resolve'], keyof InputSchema>
 >
 
 // Use to mimic request before mapping route
@@ -261,10 +248,6 @@ export type PreContext<
 			redirect?: string
 		}
 
-		/**
-		 * @deprecated use `status` instead
-		 */
-		error: typeof status
 		status: typeof status
 	} & Singleton['decorator']
 >

@@ -1,11 +1,16 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t } from 'elysia'
 
-const app = new Elysia()
-	.get('/', () => 'SAFE', {
-		query: t.Record(t.String(), t.String())
-	})
-
-const response = await app.handle(req('/?x=1'))
-
-console.log(response.status)
+new Elysia().group(
+	'/id/:id',
+	{
+		params: t.Object({
+			id: t.Number()
+		})
+	},
+	(app) =>
+		app.get('/:name', ({ params }) => params, {
+			params: t.Object({
+				name: t.String()
+			})
+		})
+)

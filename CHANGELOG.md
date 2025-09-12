@@ -1,3 +1,26 @@
+# 1.4.0 - 13 Sep 2025
+Feature:
+- standard validator
+- macro schema, macro extension, macro detail
+- lifecycle type soundness
+- type inference reduced by ~11%
+- [#861](https://github.com/elysiajs/elysia/issues/861) missing HEAD method when register route with GET
+
+Improvement
+- [#861](https://github.com/elysiajs/elysia/issues/861) automatically add HEAD method when defining GET route
+
+Change
+- ObjectString/ArrayString no longer produce default value by default due to security reasons
+- Cookie now dynamically parse when format is likely JSON
+- export `fileType` for external file type validation for accurate response
+- ObjectString/ArrayString no longer produce default value by default due to security reasons
+- Cookie now dynamically parse when format is likely JSON
+
+Breaking Change
+- remove macro v1 due to non type soundness
+- remove `error` function, use `status` instead
+- deprecation notice for `response` in `mapResponse`, `afterResponse`, use `responseValue` instead
+
 # 1.3.22 - 6 Sep 2025
 Bug fix:
 - safely unwrap t.Record

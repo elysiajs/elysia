@@ -1,4 +1,4 @@
-import { Elysia, error } from '../../src'
+import { Elysia } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
@@ -182,9 +182,7 @@ describe('derive', () => {
 
 	it('handle error', async () => {
 		const app = new Elysia()
-			.derive(() => {
-				return error(418)
-			})
+			.derive(({ status }) => status(418))
 			.get('/', () => '')
 
 		const res = await app.handle(req('/')).then((x) => x.text())

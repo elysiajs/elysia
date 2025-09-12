@@ -75,7 +75,8 @@ describe('Normalize', () => {
 	it('normalize multiple response', async () => {
 		const app = new Elysia().get(
 			'/',
-			({ error }) => error(418, { name: 'Nagisa', hifumi: 'daisuki' }),
+			// @ts-ignore
+			({ status }) => status(418, { name: 'Nagisa', hifumi: 'daisuki' }),
 			{
 				response: {
 					200: t.Object({
@@ -100,7 +101,8 @@ describe('Normalize', () => {
 			normalize: false
 		}).get(
 			'/',
-			({ error }) => error(418, { name: 'Nagisa', hifumi: 'daisuki' }),
+			// @ts-ignore
+			({ status }) => status(418, { name: 'Nagisa', hifumi: 'daisuki' }),
 			{
 				response: {
 					200: t.Object({
