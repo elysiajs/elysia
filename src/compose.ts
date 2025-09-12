@@ -697,7 +697,7 @@ export const composeHandler = ({
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 
 	const saveResponse =
-		hasTrace || hooks.afterResponse?.length ? 'c.response= ' : ''
+		hasTrace || hooks.afterResponse?.length ? 'c.response=c.responseValue= ' : ''
 
 	const responseKeys = Object.keys(validator.response ?? {})
 	const hasMultipleResponses = responseKeys.length > 1
@@ -1616,7 +1616,7 @@ export const composeHandler = ({
 										? `af=await e.afterHandle[${i}](c)\n`
 										: `af=e.afterHandle[${i}](c)\n`
 
-									fnLiteral += `if(af!==undefined) c.response=be=af\n`
+									fnLiteral += `if(af!==undefined) c.response=c.responseValue=be=af\n`
 								}
 
 								endUnit('af')
@@ -1633,7 +1633,7 @@ export const composeHandler = ({
 					})
 
 					if (hooks.mapResponse?.length) {
-						fnLiteral += `c.response=be\n`
+						fnLiteral += `c.response=c.responseValue=be\n`
 
 						for (let i = 0; i < hooks.mapResponse.length; i++) {
 							const mapResponse = hooks.mapResponse[i]
@@ -1645,7 +1645,7 @@ export const composeHandler = ({
 							fnLiteral +=
 								`if(mr===undefined){` +
 								`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
-								`if(mr!==undefined)be=c.response=mr` +
+								`if(mr!==undefined)be=c.response=c.responseValue=mr` +
 								'}'
 
 							endUnit()
@@ -1672,8 +1672,8 @@ export const composeHandler = ({
 
 		if (hooks.afterHandle?.length)
 			fnLiteral += isAsyncHandler
-				? `let r=c.response=await ${handle}\n`
-				: `let r=c.response=${handle}\n`
+				? `let r=c.response=c.responseValue=await ${handle}\n`
+				: `let r=c.response=c.responseValue=${handle}\n`
 		else
 			fnLiteral += isAsyncHandler
 				? `let r=await ${handle}\n`
@@ -1710,12 +1710,12 @@ export const composeHandler = ({
 
 						fnLiteral += validation.response('af')
 
-						fnLiteral += `c.response=af}`
+						fnLiteral += `c.response=c.responseValue=af}`
 					} else {
 						fnLiteral += `if(af!==undefined){`
 						reporter.resolve()
 
-						fnLiteral += `c.response=af}`
+						fnLiteral += `c.response=c.responseValue=af}`
 					}
 				}
 			}
@@ -1744,7 +1744,7 @@ export const composeHandler = ({
 					`mr=${
 						isAsyncName(mapResponse) ? 'await ' : ''
 					}e.mapResponse[${i}](c)\n` +
-					`if(mr!==undefined)r=c.response=mr\n`
+					`if(mr!==undefined)r=c.response=c.responseValue=mr\n`
 
 				endUnit()
 			}
@@ -1771,7 +1771,7 @@ export const composeHandler = ({
 			})
 
 			if (hooks.mapResponse?.length) {
-				fnLiteral += '\nc.response=r\n'
+				fnLiteral += '\nc.response=c.responseValue=r\n'
 
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					const mapResponse = hooks.mapResponse[i]
@@ -1783,7 +1783,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						`\nif(mr===undefined){` +
 						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
-						`if(mr!==undefined)r=c.response=mr` +
+						`if(mr!==undefined)r=c.response=c.responseValue=mr` +
 						`}\n`
 
 					endUnit()
@@ -1820,7 +1820,7 @@ export const composeHandler = ({
 				total: hooks.mapResponse?.length
 			})
 			if (hooks.mapResponse?.length) {
-				fnLiteral += 'c.response= r\n'
+				fnLiteral += 'c.response=c.responseValue= r\n'
 
 				for (let i = 0; i < hooks.mapResponse.length; i++) {
 					const mapResponse = hooks.mapResponse[i]
@@ -1832,7 +1832,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						`if(mr===undefined){` +
 						`mr=${isAsyncName(mapResponse) ? 'await ' : ''}e.mapResponse[${i}](c)\n` +
-						`if(mr!==undefined)r=c.response=mr` +
+						`if(mr!==undefined)r=c.response=c.responseValue=mr` +
 						`}`
 
 					endUnit()
@@ -1922,7 +1922,7 @@ export const composeHandler = ({
 					)
 
 					fnLiteral +=
-						`c.response=er\n` +
+						`c.response=c.responseValue=er\n` +
 						`mep=e.mapResponse[${i}](c)\n` +
 						`if(mep instanceof Promise)er=await er\n` +
 						`if(mep!==undefined)er=mep\n`
@@ -2526,7 +2526,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 						)
 
 						fnLiteral +=
-							`context.response=_r` +
+							`context.response=context.responseValue=_r` +
 							`_r=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n`
 
 						endUnit()
@@ -2554,7 +2554,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	fnLiteral +=
 		`if(error instanceof Error){` +
 		afterResponse() +
-		`\nif(typeof error.toResponse==='function')return context.response=error.toResponse()\n` +
+		`\nif(typeof error.toResponse==='function')return context.response=context.responseValue=error.toResponse()\n` +
 		adapter.unknownError +
 		`\n}`
 
@@ -2564,7 +2564,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	})
 
 	fnLiteral +=
-		'\nif(!context.response)context.response=error.message??error\n'
+		'\nif(!context.response)context.response=context.responseValue=error.message??error\n'
 
 	if (hooks.mapResponse?.length) {
 		fnLiteral += 'let mr\n'
@@ -2579,7 +2579,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 			fnLiteral +=
 				`if(mr===undefined){` +
 				`mr=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n` +
-				`if(mr!==undefined)error=context.response=mr` +
+				`if(mr!==undefined)error=context.response=context.responseValue=mr` +
 				'}'
 
 			endUnit()

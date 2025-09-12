@@ -1,12 +1,14 @@
-import { Elysia, t } from '../src'
+import { Elysia, t } from 'elysia'
 
 new Elysia()
 	.macro('auth', {
 		headers: t.Object({ authorization: t.String() }),
 		resolve: ({ status }) =>
-			Math.random() > 0.5 ? { role: 'user' } : status(401, 'not authorized')
+			Math.random() > 0.5 ? { role: 'user' } : status(400)
 	})
-	.post('/', ({ role }) => role, {
+	.post('/', ({ role }) => `Hello ${role}`, {
 		auth: true,
-		beforeHandle: ({ role }) => {}
+		beforeHandle({ role, status }) {
+			if (role !== 'admin') return status(401)
+		}
 	})

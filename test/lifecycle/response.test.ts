@@ -60,22 +60,57 @@ describe('On After Response', () => {
 		expect(order).toEqual(['A', 'B'])
 	})
 
-	// it('inherits from plugin', async () => {
-	// 	const transformType = new Elysia().onResponse(
-	// 		{ as: 'global' },
-	// 		({ response }) => {
-	// 			if (response === 'string') return 'number'
-	// 		}
-	// 	)
+	it('inherits from plugin', async () => {
+		let type = ''
 
-	// 	const app = new Elysia()
-	// 		.use(transformType)
-	// 		.get('/id/:id', ({ params: { id } }) => typeof id)
+		const afterResponse = new Elysia().onAfterResponse(
+			{ as: 'global' },
+			({ response }) => {
+				type = typeof response
+			}
+		)
 
-	// 	const res = await app.handle(req('/id/1'))
+		const app = new Elysia()
+			.use(afterResponse)
+			.get('/id/:id', ({ params: { id } }) => id, {
+				params: t.Object({
+					id: t.Number()
+				})
+			})
 
-	// 	expect(await res.text()).toBe('number')
-	// })
+		await app.handle(req('/id/1'))
+
+		// wait for next tick
+		await Bun.sleep(1)
+
+		expect(type).toBe('number')
+	})
+
+	it('inherits from plugin using responseValue', async () => {
+		let type = ''
+
+		const afterResponse = new Elysia().onAfterResponse(
+			{ as: 'global' },
+			({ responseValue }) => {
+				type = typeof responseValue
+			}
+		)
+
+		const app = new Elysia()
+			.use(afterResponse)
+			.get('/id/:id', ({ params: { id } }) => id, {
+				params: t.Object({
+					id: t.Number()
+				})
+			})
+
+		await app.handle(req('/id/1'))
+
+		// wait for next tick
+		await Bun.sleep(1)
+
+		expect(type).toBe('number')
+	})
 
 	it('as global', async () => {
 		const called = <string[]>[]

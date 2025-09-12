@@ -103,7 +103,6 @@ export type ErrorContext<
 		route: string
 		request: Request
 		store: Singleton['store']
-		response: Route['response']
 	} & Singleton['decorator'] &
 		Singleton['derive'] &
 		Singleton['resolve']

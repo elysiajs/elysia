@@ -103,6 +103,19 @@ describe('Map Response', () => {
 		expect(res).toBe('Hutao')
 	})
 
+	it('inherit response using responseValue', async () => {
+		const app = new Elysia().get('/', () => 'Hu', {
+			mapResponse({ responseValue }) {
+				if (typeof responseValue === 'string')
+					return new Response(responseValue + 'tao')
+			}
+		})
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toBe('Hutao')
+	})
+
 	it('inherit set', async () => {
 		const app = new Elysia().get('/', () => 'Hu', {
 			mapResponse({ response, set }) {
@@ -110,6 +123,26 @@ describe('Map Response', () => {
 
 				if (typeof response === 'string')
 					return new Response(response + 'tao', {
+						headers: {
+							'X-Series': 'Genshin'
+						}
+					})
+			}
+		})
+
+		const res = await app.handle(req('/')).then((x) => x.headers)
+
+		expect(res.get('X-Powered-By')).toBe('Elysia')
+		expect(res.get('X-Series')).toBe('Genshin')
+	})
+
+	it('inherit set using responseValue', async () => {
+		const app = new Elysia().get('/', () => 'Hu', {
+			mapResponse({ responseValue, set }) {
+				set.headers['X-Powered-By'] = 'Elysia'
+
+				if (typeof responseValue === 'string')
+					return new Response(responseValue + 'tao', {
 						headers: {
 							'X-Series': 'Genshin'
 						}
@@ -238,12 +271,46 @@ describe('Map Response', () => {
 		expect(response).toBe('aru')
 	})
 
+	it('mapResponse in error using responseValue', async () => {
+		class CustomClass {
+			constructor(public name: string) {}
+		}
+
+		const app = new Elysia()
+			.trace(() => {})
+			.onError(() => new CustomClass('aru'))
+			.mapResponse(({ responseValue }) => {
+				if (responseValue instanceof CustomClass)
+					return new Response(responseValue.name)
+			})
+			.get('/', () => {
+				throw new Error('Hello')
+			})
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toBe('aru')
+	})
+
 	// https://github.com/elysiajs/elysia/issues/965
 	it('mapResponse with after handle', async () => {
 		const app = new Elysia()
 			.onAfterHandle(() => {})
 			.mapResponse((context) => {
 				return new Response(context.response + '')
+			})
+			.get('/', async () => 'aru')
+
+		const response = await app.handle(req('/')).then((x) => x.text())
+
+		expect(response).toBe('aru')
+	})
+
+	it('mapResponse with after handle using responseValue', async () => {
+		const app = new Elysia()
+			.onAfterHandle(() => {})
+			.mapResponse((context) => {
+				return new Response(context.responseValue + '')
 			})
 			.get('/', async () => 'aru')
 

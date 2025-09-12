@@ -88,6 +88,24 @@ describe('After Handle', () => {
 		const app = new Elysia().get('/', () => 'NOOP', {
 			afterHandle({ response }) {
 				return response
+			},
+			mapResponse() {
+
+			}
+		})
+
+		const res = await app.handle(req('/')).then((x) => x.text())
+
+		expect(res).toBe('NOOP')
+	})
+
+	it('accept responseValue', async () => {
+		const app = new Elysia().get('/', () => 'NOOP', {
+			afterHandle({ responseValue }) {
+				return responseValue
+			},
+			mapResponse() {
+
 			}
 		})
 
