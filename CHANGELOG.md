@@ -1,3 +1,7 @@
+# 1.4.1
+Bug fix:
+- type error for inline Elysia.file
+
 # 1.4.0 - 13 Sep 2025
 Feature:
 - standard validator
