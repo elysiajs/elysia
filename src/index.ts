@@ -3911,7 +3911,12 @@ export default class Elysia<
 		prefix: Prefix,
 		schema: LocalHook<
 			Input,
-			Schema,
+			// @ts-ignore
+			Schema & {
+				response: {}
+				return: {}
+				resolve: {}
+			},
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -4417,7 +4422,8 @@ export default class Elysia<
 	>(
 		schema: LocalHook<
 			Input,
-			Schema,
+			// @ts-ignore
+			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5659,8 +5665,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -5761,6 +5767,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -5863,8 +5870,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -5965,8 +5972,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6067,8 +6074,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6169,8 +6176,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6271,8 +6278,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6373,8 +6380,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6475,8 +6482,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6579,8 +6586,8 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
+			// @ts-ignore
 			Schema & MacroContext,
-			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		> & {

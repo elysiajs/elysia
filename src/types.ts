@@ -1165,10 +1165,10 @@ export type InlineHandler<
 										: unknown)
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
-						| InlineHandlerResponse<
-								Route['response'] &
-									MacroContext['response']
-						  >
+								| InlineHandlerResponse<
+										Route['response'] &
+											MacroContext['response']
+								  >
 			  >)
 
 export type OptionalHandler<
@@ -1626,9 +1626,15 @@ export type NonResolvableMacroKey =
 	| keyof AnyBaseHookLifeCycle
 	| keyof InputSchema
 
+interface RouteSchemaWithResolvedMacro extends RouteSchema {
+	response: PossibleResponse
+	return: PossibleResponse
+	resolve: Record<string, unknown>
+}
+
 export type LocalHook<
 	Input extends BaseMacro,
-	Schema extends RouteSchema,
+	Schema extends RouteSchemaWithResolvedMacro,
 	Singleton extends SingletonBase,
 	Errors extends { [key in string]: Error },
 	Parser extends keyof any = ''
@@ -1645,31 +1651,35 @@ export type LocalHook<
 	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
 	 * - 'arraybuffer': parse body as readable stream
 	 */
-	parse?: MaybeArray<BodyHandler<Schema, Singleton> | ContentType | Parser>
+	parse?: MaybeArray<
+		| BodyHandler<Schema, Singleton & { resolve: Schema['resolve'] }>
+		| ContentType
+		| Parser
+	>
 	/**
 	 * Transform context's value
 	 */
-	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
+	transform?: MaybeArray<TransformHandler<Schema, Singleton & { resolve: Schema['resolve'] }>>
 	/**
 	 * Execute before main handler
 	 */
-	beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton>>
+	beforeHandle?: MaybeArray<OptionalHandler<Schema, Singleton & { resolve: Schema['resolve'] }>>
 	/**
 	 * Execute after main handler
 	 */
-	afterHandle?: MaybeArray<AfterHandler<Schema, Singleton>>
+	afterHandle?: MaybeArray<AfterHandler<Schema, Singleton & { resolve: Schema['resolve'] }>>
 	/**
 	 * Execute after main handler
 	 */
-	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
+	mapResponse?: MaybeArray<MapResponse<Schema, Singleton & { resolve: Schema['resolve'] }>>
 	/**
 	 * Execute after response is sent
 	 */
-	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
+	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton & { resolve: Schema['resolve'] }>>
 	/**
 	 * Catch error
 	 */
-	error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton>>
+	error?: MaybeArray<ErrorHandler<Errors, Schema, Singleton & { resolve: Schema['resolve'] }>>
 	tags?: DocumentDecoration['tags']
 }
 

@@ -1,19 +1,12 @@
 import { Elysia, t } from '../src'
-import { post, req } from '../test/utils'
 
-new Elysia().post(
-	'/user',
-	({ q }) => {
-		return { q: 'a' }
-	},
-	{
-		response: {
-			200: t.Object({
-				name: t.String()
-			}),
-			401: t.Object({
-				q: t.String()
-			})
-		}
-	}
-)
+new Elysia()
+	.macro('auth', {
+		headers: t.Object({ authorization: t.String() }),
+		resolve: ({ status }) =>
+			Math.random() > 0.5 ? { role: 'user' } : status(401, 'not authorized')
+	})
+	.post('/', ({ role }) => role, {
+		auth: true,
+		beforeHandle: ({ role }) => {}
+	})
