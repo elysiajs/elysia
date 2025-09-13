@@ -5010,8 +5010,12 @@ export default class Elysia<
 	private _use(
 		plugin: AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 	) {
+		console.log("1", plugin.toString())
+
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
+
+			console.log("2")
 
 			if (instance instanceof Promise) {
 				this.promisedModules.add(
@@ -5667,6 +5671,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>

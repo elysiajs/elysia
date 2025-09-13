@@ -8,7 +8,7 @@ import type {
 
 import { StatusMap, InvertedStatusMap } from './utils'
 import type { ElysiaTypeCheck } from './schema'
-import { StandardSchemaV1Like } from './types'
+import { Prettify, StandardSchemaV1Like } from './types'
 
 // ? Cloudflare worker support
 const env =
@@ -126,13 +126,23 @@ export class InvalidCookieSignature extends Error {
 	}
 }
 
-export const mapValueError = (error: ValueError | undefined) => {
+type MapValueError =
+	| {
+			summary: undefined
+	  }
+	| {
+			summary: string
+	  }
+	| Prettify<
+			{
+				summary: string
+			} & ValueError
+	  >
+
+export const mapValueError = (error: ValueError | undefined): MapValueError => {
 	if (!error)
 		return {
 			summary: undefined
-		} as any as {
-			summary: string
-			message?: string
 		}
 
 	const { message, path, value, type } = error

@@ -1004,20 +1004,18 @@ export type MacroToContext<
 							SelectedMacro[key]
 						> extends infer Value
 							? {
-									resolve: true extends SelectedMacro[key]
-										? ExtractResolveFromMacro<
-												Extract<
-													Exclude<
-														FunctionArrayReturnType<
-															// @ts-ignore Trust me bro
-															Value['resolve']
-														>,
-														AnyElysiaCustomStatusResponse
-													>,
-													Record<any, unknown>
-												>
-											>
-										: {}
+									resolve: ExtractResolveFromMacro<
+										Extract<
+											Exclude<
+												FunctionArrayReturnType<
+													// @ts-ignore Trust me bro
+													Value['resolve']
+												>,
+												AnyElysiaCustomStatusResponse
+											>,
+											Record<any, unknown>
+										>
+									>
 								} & UnwrapMacroSchema<
 									// @ts-ignore Trust me bro
 									Value,
@@ -2180,6 +2178,9 @@ export type ExcludeElysiaResponse<T> = PartialIf<
 	undefined extends Awaited<T> ? true : false
 >
 
+/**
+ * @deprecated
+ */
 export type InferContext<
 	T extends AnyElysia,
 	Path extends string = T['~Prefix'],
@@ -2193,6 +2194,9 @@ export type InferContext<
 	Path
 >
 
+/**
+ * @deprecated
+ */
 export type InferHandler<
 	T extends AnyElysia,
 	Path extends string = T['~Prefix'],

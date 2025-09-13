@@ -1850,3 +1850,34 @@ import { Prettify } from '../../../src/types'
 			beforeHandle: ({ role }) => {}
 		})
 }
+
+// handle macro with arguments
+{
+	new Elysia()
+		.macro({
+			role: (role: 'user' | 'admin') => ({
+				resolve({ status, headers: { authorization } }) {
+					const user = {
+						role: Math.random() > 0.5 ? 'user' : 'admin'
+					} as {
+						role: 'user' | 'admin'
+					}
+
+					if (user.role !== role) return status(401)
+
+					return {
+						user
+					}
+				}
+			})
+		})
+		.get(
+			'/token',
+			({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<{ role: 'admin' | 'user' }>()
+			},
+			{
+				role: 'admin'
+			}
+		)
+}

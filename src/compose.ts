@@ -262,15 +262,19 @@ const composeValidationFactory = ({
 				continue
 			}
 
-			let noValidate = value.schema?.noValidate === true 
+			let noValidate = value.schema?.noValidate === true
 
 			if (!noValidate && value.schema?.$ref && value.schema?.$defs) {
 				const refKey = value.schema.$ref
-				const defKey = typeof refKey === 'string' && refKey.includes('/')
-										? refKey.split('/').pop()!
-										: refKey
-				const referencedDef = value.schema.$defs[defKey as keyof typeof value.schema.$defs]
-				
+				const defKey =
+					typeof refKey === 'string' && refKey.includes('/')
+						? refKey.split('/').pop()!
+						: refKey
+				const referencedDef =
+					value.schema.$defs[
+						defKey as keyof typeof value.schema.$defs
+					]
+
 				if (referencedDef?.noValidate === true) {
 					noValidate = true
 				}
@@ -709,7 +713,9 @@ export const composeHandler = ({
 	const isAsyncHandler = typeof handler === 'function' && isAsync(handler)
 
 	const saveResponse =
-		hasTrace || hooks.afterResponse?.length ? 'c.response=c.responseValue= ' : ''
+		hasTrace || hooks.afterResponse?.length
+			? 'c.response=c.responseValue= '
+			: ''
 
 	const responseKeys = Object.keys(validator.response ?? {})
 	const hasMultipleResponses = responseKeys.length > 1

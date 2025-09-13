@@ -1,3 +1,8 @@
+# 1.4.3 - 13 Sep 2025
+Bug fix:
+- `mapValueError` should return all possible value both in dev environment and production environment
+- inline lifecycle get method doesn't inherit Singleton
+
 # 1.4.2 - 13 Sep 2025
 Bug fix:
 - remove debug `q` from inline handler
@@ -26,6 +31,7 @@ Breaking Change
 - remove macro v1 due to non type soundness
 - remove `error` function, use `status` instead
 - deprecation notice for `response` in `mapResponse`, `afterResponse`, use `responseValue` instead
+- remove reference array model by string eg. `user[]`, use `t.Array(t.Ref('user'))` instead
 
 # 1.3.22 - 6 Sep 2025
 Bug fix:

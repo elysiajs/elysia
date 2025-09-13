@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.4.2",
+	"version": "1.4.3",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -184,6 +184,7 @@
 	},
 	"dependencies": {
 		"cookie": "^1.0.2",
+		"elysia": "1.4.3-beta.0",
 		"exact-mirror": "0.2.2",
 		"fast-decode-uri-component": "^1.0.1"
 	},
