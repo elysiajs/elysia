@@ -1,3 +1,8 @@
+# 1.4.4 - 13 Sep 2025
+Bug fix:
+- merge schema in GET method
+- remove accidental console.log
+
 # 1.4.3 - 13 Sep 2025
 Bug fix:
 - `mapValueError` should return all possible value both in dev environment and production environment

@@ -5010,12 +5010,8 @@ export default class Elysia<
 	private _use(
 		plugin: AnyElysia | ((app: AnyElysia) => MaybePromise<AnyElysia>)
 	) {
-		console.log("1", plugin.toString())
-
 		if (typeof plugin === 'function') {
 			const instance = plugin(this as unknown as any) as unknown as any
-
-			console.log("2")
 
 			if (instance instanceof Promise) {
 				this.promisedModules.add(
@@ -5644,20 +5640,20 @@ export default class Elysia<
 			MergeSchema<
 				Volatile['schema'],
 				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			> &
-				Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
-		>,
+			>
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
+		const Decorator extends Singleton & {
+			derive: Ephemeral['derive'] & Volatile['derive']
+			resolve: Ephemeral['resolve'] & Volatile['resolve']
+		},
 		const MacroContext extends MacroToContext<
 			Metadata['macroFn'],
 			Omit<Input, NonResolvableMacroKey>,
 			Definitions['typebox']
 		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] & Volatile['resolve']
-		},
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
 			Decorator,

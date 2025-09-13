@@ -1881,3 +1881,19 @@ import { Prettify } from '../../../src/types'
 			}
 		)
 }
+
+// Get schema in GET
+{
+new Elysia()
+	.guard({
+		schema: 'standalone',
+		body: t.Object({
+			id: t.Number()
+		})
+	})
+	.get('/user/:id', ({ body }) => body, {
+		body: t.Object({
+			name: t.Literal('lilith')
+		})
+	})
+}

@@ -1,29 +1,16 @@
-import { Elysia } from 'elysia'
+import { Elysia } from '../src'
+import z from 'zod'
+import * as v from 'valibot'
 
-const findUser = (authorization?: string) => {
-	return {
-		name: 'Jane Doe',
-		role: 'admin' as const
-	}
-}
-// ---cut---
-
-const app = new Elysia()
-	.macro({
-		role: (role: 'user' | 'admin') => ({
-			resolve({ status, headers: { authorization } }) {
-				const user = findUser(authorization)
-
-				if(user.role !== role)
-					return status(401)
-
-				return {
-					user
-				}
-			}
+new Elysia()
+	.guard({
+		schema: 'standalone',
+		body: z.object({
+			id: z.coerce.number()
 		})
 	})
-	.get('/token', ({ user }) => user, {
-	//                 ^?
-		role: 'admin'
+	.get('/user/:id', ({ body }) => body, {
+		body: v.object({
+			name: v.literal('lilith')
+		})
 	})
