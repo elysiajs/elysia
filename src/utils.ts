@@ -251,11 +251,11 @@ export const mergeHook = (
 	// 		customBStore[union]
 	// 	)
 
-	if (!Object.values(b).find((x) => x !== undefined && x !== null))
-		return { ...a } as any
-
 	if (!b) return (a as any) ?? {}
 	if (!a) return b ?? {}
+
+	if (!Object.values(b).find((x) => x !== undefined && x !== null))
+		return { ...a } as any
 
 	const hook = {
 		...a,
@@ -1213,6 +1213,7 @@ export function deepClone<T>(source: T, weak = new WeakMap<object, any>()): T {
 
 		const cloned: Partial<T> = {}
 
+		weak.set(source as object, cloned)
 		for (const key of keys)
 			cloned[key as keyof T] = deepClone((source as any)[key], weak)
 
