@@ -2025,3 +2025,22 @@ import { Prettify } from '../../../src/types'
 			)
 	)
 }
+
+// Inherit macro context
+{
+	new Elysia()
+		.macro('guestOrUser', {
+			resolve: () => {
+				return {
+					user: 'Lilith' as const
+				}
+			}
+		})
+		.macro('user', {
+			guestOrUser: true,
+			body: t.String(),
+			resolve: ({ user }) => {
+				expectTypeOf(user).toEqualTypeOf<'Lilith'>()
+			}
+		})
+}

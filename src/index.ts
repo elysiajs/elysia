@@ -3918,19 +3918,31 @@ export default class Elysia<
 			Omit<Input, NonResolvableMacroKey>,
 			Definitions['typebox']
 		>,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<Definitions['error'], Schema, Singleton>
+		>,
 		const NewElysia extends AnyElysia
 	>(
 		prefix: Prefix,
-		schema: LocalHook<
+		schema: GuardLocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					// @ts-ignore
+					MacroContext['response']
 			},
-			Definitions['error'],
-			keyof Metadata['parser']
+			keyof Metadata['parser'],
+			BeforeHandle,
+			AfterHandle,
+			ErrorHandle
 		>,
 		run: (
 			group: Elysia<
@@ -4142,17 +4154,21 @@ export default class Elysia<
 	>(
 		hook: GuardLocalHook<
 			Input,
-			Schema,
+			// @ts-ignore
+			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					// @ts-ignore
+					MacroContext['response']
 			},
 			keyof Metadata['parser'],
-			GuardType,
-			AsType,
 			BeforeHandle,
 			AfterHandle,
-			ErrorHandle
+			ErrorHandle,
+			GuardType,
+			AsType
 		>
 	): Or<
 		GuardSchemaType extends GuardType ? true : false,
@@ -4442,9 +4458,16 @@ export default class Elysia<
 			Omit<Input, NonResolvableMacroKey>,
 			Definitions['typebox']
 		>,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<any, Schema, Singleton>
+		>,
 		const NewElysia extends AnyElysia
 	>(
-		schema: LocalHook<
+		schema: GuardLocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
@@ -4452,8 +4475,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
-			Definitions['error'],
-			keyof Metadata['parser']
+			keyof Metadata['parser'],
+			BeforeHandle,
+			AfterHandle,
+			ErrorHandle
 		>,
 		run: (
 			group: Elysia<
@@ -5342,7 +5367,11 @@ export default class Elysia<
 				Schema & MacroContext,
 				Singleton & {
 					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+					resolve: Partial<
+						Ephemeral['resolve'] & Volatile['resolve']
+					> &
+						// @ts-ignore
+						MacroContext['resolve']
 				},
 				Definitions['error']
 			>
