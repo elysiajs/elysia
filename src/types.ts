@@ -1784,67 +1784,6 @@ export type GuardLocalHook<
 	tags?: DocumentDecoration['tags']
 }
 
-export type GuardLocalHook<
-	Input extends BaseMacro | undefined,
-	Schema extends RouteSchema,
-	Singleton extends SingletonBase,
-	Parser extends keyof any,
-	BeforeHandle extends MaybeArray<OptionalHandler<any, any>>,
-	AfterHandle extends MaybeArray<AfterHandler<any, any>>,
-	ErrorHandle extends MaybeArray<ErrorHandler<any, any, any>>,
-	GuardType extends GuardSchemaType = 'standalone',
-	AsType extends LifeCycleType = 'local',
-> = (Input extends any ? Input : Prettify<Input>) & {
-	/**
-	 * @default 'override'
-	 */
-	as?: AsType
-	/**
-	 * @default 'standalone'
-	 * @since 1.3.0
-	 */
-	schema?: GuardType
-
-	detail?: DocumentDecoration
-	/**
-	 * Short for 'Content-Type'
-	 *
-	 * Available:
-	 * - 'none': do not parse body
-	 * - 'text' / 'text/plain': parse body as string
-	 * - 'json' / 'application/json': parse body as json
-	 * - 'formdata' / 'multipart/form-data': parse body as form-data
-	 * - 'urlencoded' / 'application/x-www-form-urlencoded: parse body as urlencoded
-	 * - 'arraybuffer': parse body as readable stream
-	 */
-	parse?: MaybeArray<BodyHandler<Schema, Singleton> | ContentType | Parser>
-	/**
-	 * Transform context's value
-	 */
-	transform?: MaybeArray<TransformHandler<Schema, Singleton>>
-	/**
-	 * Execute before main handler
-	 */
-	beforeHandle?: BeforeHandle
-	/**
-	 * Execute after main handler
-	 */
-	afterHandle?: AfterHandle
-	/**
-	 * Execute after main handler
-	 */
-	mapResponse?: MaybeArray<MapResponse<Schema, Singleton>>
-	/**
-	 * Execute after response is sent
-	 */
-	afterResponse?: MaybeArray<AfterResponseHandler<Schema, Singleton>>
-	/**
-	 * Catch error
-	 */
-	error?: ErrorHandle
-	tags?: DocumentDecoration['tags']
-}
-
 export type ComposedHandler = (context: Context) => MaybePromise<Response>
 
 export interface InternalRoute {

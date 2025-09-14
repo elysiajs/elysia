@@ -1982,6 +1982,25 @@ import { Prettify } from '../../../src/types'
 					)
 			)
 	)
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: {
+			playing: boolean
+			name: 'lilith'
+			limit: number
+		}
+		400: 'Bad Request'
+		401: 'Unauthorized'
+		422: {
+			type: 'validation'
+			on: string
+			summary?: string
+			message?: string
+			found?: unknown
+			property?: string
+			expected?: string
+		}
+	}>()
 }
 
 {
@@ -2024,6 +2043,25 @@ import { Prettify } from '../../../src/types'
 					)
 			)
 	)
+
+	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+		200: {
+			playing: boolean
+			name: 'lilith'
+			limit: number
+		}
+		400: 'Bad Request'
+		401: 'Unauthorized'
+		422: {
+			type: 'validation'
+			on: string
+			summary?: string
+			message?: string
+			found?: unknown
+			property?: string
+			expected?: string
+		}
+	}>()
 }
 
 // Inherit macro context
