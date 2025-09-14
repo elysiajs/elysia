@@ -525,7 +525,7 @@ export type UnwrapBodySchema<
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['typebox'] = {},
-	Path extends string = ''
+	in out Path extends string = ''
 > {
 	body: UnwrapBodySchema<Schema['body'], Definitions>
 	headers: UnwrapSchema<Schema['headers'], Definitions>
@@ -704,6 +704,24 @@ export interface InputSchema<in out Name extends string = string> {
 }
 
 type PathParameterLike = `${string}/${':' | '*'}${string}`
+
+export type IntersectIfObject<A, B> =
+	A extends Record<any, any>
+		? B extends Record<any, any>
+			? A & B
+			: A
+		: B extends Record<any, any>
+			? B
+			: A
+
+export type IntersectIfObjectSchema<A extends RouteSchema, B extends RouteSchema> = {
+	body: IntersectIfObject<A['body'], B['body']>
+	headers: IntersectIfObject<A['headers'], B['headers']>
+	query: IntersectIfObject<A['query'], B['query']>
+	params: IntersectIfObject<A['params'], B['params']>
+	cookie: IntersectIfObject<A['cookie'], B['cookie']>
+	response: IntersectIfObject<A['response'], B['response']>
+}
 
 export type MergeSchema<
 	A extends RouteSchema,

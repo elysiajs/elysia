@@ -475,6 +475,7 @@ describe('guard', () => {
 		const error = await app
 			.handle(req('/?name=lilith&playing=true'))
 			.then((x) => x.status)
+
 		expect(error).toBe(422)
 	})
 })

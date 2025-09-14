@@ -864,6 +864,7 @@ app.group(
 			{
 				beforeHandle({ body, query }) {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
+						username: string
 						password: string
 					}>()
 
@@ -880,6 +881,7 @@ app.group(
 			(app) =>
 				app.get('/', ({ body }) => {
 					expectTypeOf<typeof body>().toEqualTypeOf<{
+						username: string
 						password: string
 					}>()
 
@@ -1049,7 +1051,7 @@ app.group(
 		'/id/:id',
 		{
 			params: t.Object({
-				id: t.Numeric()
+				id: t.Number()
 			}),
 			beforeHandle({ params }) {
 				expectTypeOf<typeof params>().toEqualTypeOf<{

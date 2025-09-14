@@ -1884,16 +1884,144 @@ import { Prettify } from '../../../src/types'
 
 // Get schema in GET
 {
-new Elysia()
-	.guard({
-		schema: 'standalone',
-		body: t.Object({
-			id: t.Number()
+	new Elysia()
+		.guard({
+			schema: 'standalone',
+			body: t.Object({
+				id: t.Number()
+			})
 		})
-	})
-	.get('/user/:id', ({ body }) => body, {
-		body: t.Object({
-			name: t.Literal('lilith')
+		.get('/user/:id', ({ body }) => body, {
+			body: t.Object({
+				name: t.Literal('lilith')
+			})
 		})
-	})
+}
+
+// Merge multiple guard schema
+{
+	const app = new Elysia().guard(
+		{
+			query: t.Object({
+				name: t.Literal('lilith')
+			}),
+			beforeHandle({ status }) {
+				if (Math.random() > 0.5) return status(401)
+			}
+		},
+		(app) =>
+			app.guard(
+				{
+					query: t.Object({
+						limit: t.Number()
+					}),
+					beforeHandle({ status }) {
+						if (Math.random() > 0.5) return status(400)
+					}
+				},
+				(app) =>
+					app.get(
+						'/',
+						({ query }) => {
+							expectTypeOf(query).toEqualTypeOf<{
+								playing: boolean
+								name: 'lilith'
+								limit: number
+							}>()
+
+							return query
+						},
+						{
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						}
+					)
+			)
+	)
+}
+
+// Merge multiple group schema
+{
+	const app = new Elysia().guard(
+		{
+			query: t.Object({
+				name: t.Literal('lilith')
+			}),
+			beforeHandle({ status }) {
+				if (Math.random() > 0.5) return status(401)
+			}
+		},
+		(app) =>
+			app.guard(
+				{
+					query: t.Object({
+						limit: t.Number()
+					}),
+					beforeHandle({ status }) {
+						if (Math.random() > 0.5) return status(400)
+					}
+				},
+				(app) =>
+					app.get(
+						'/',
+						({ query }) => {
+							expectTypeOf(query).toEqualTypeOf<{
+								playing: boolean
+								name: 'lilith'
+								limit: number
+							}>()
+
+							return query
+						},
+						{
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						}
+					)
+			)
+	)
+}
+
+{
+	const app = new Elysia().guard(
+		{
+			query: t.Object({
+				name: t.Literal('lilith')
+			}),
+			beforeHandle({ status }) {
+				if (Math.random() > 0.5) return status(401)
+			}
+		},
+		(app) =>
+			app.guard(
+				{
+					query: t.Object({
+						limit: t.Number()
+					}),
+					beforeHandle({ status }) {
+						if (Math.random() > 0.5) return status(400)
+					}
+				},
+				(app) =>
+					app.get(
+						'/',
+						({ query }) => {
+							expectTypeOf(query).toEqualTypeOf<{
+								playing: boolean
+								name: 'lilith'
+								limit: number
+							}>()
+
+							return query
+						},
+						{
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						}
+					)
+			)
+	)
 }

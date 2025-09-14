@@ -1,9 +1,13 @@
 # 1.4.5
+Improvement:
+- soundness for guard, group
+- overwrite primitive value if collide (intersectIfObject)
+
 Bug fix:
 - standard schema incorrectly validate cookie and coercion
 
 Breaking Change:
-- Elysia no longer coerce type for .model with `t.Ref` by default
+- no longer coerce type for .model with `t.Ref` by default
 
 # 1.4.4 - 13 Sep 2025
 Bug fix:
