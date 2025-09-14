@@ -1,25 +1,20 @@
-import { Elysia } from '../src'
-import { z } from 'zod'
+import { Elysia, t } from '../src'
+import { post } from '../test/utils'
 
-const app = new Elysia().get(
-	'test',
-	({ cookie: { test } }) => {
-		console.log(test.value)
-
-		return typeof test
-	},
-	{
-		cookie: z.object({ test: z.coerce.number() })
-	}
-)
-
-const value = await app
-	.handle(
-		new Request('http://localhost:3000/test', {
-			headers: {
-				cookie: 'test=123'
-			}
+const app = new Elysia()
+	.model({
+		q: t.Number(),
+		number: t.Object({
+			value: t.Number(),
+			number: t.Ref('q')
 		})
-	)
-	.then((x) => x.headers.toJSON())
+	})
+	.post('/', ({ body }) => body, { body: 'number' })
+
+const result = await app
+	.handle(post('/', {
+		value: '1',
+		number: '2'
+	}))
+	.then((x) => x.text())
 	.then(console.log)

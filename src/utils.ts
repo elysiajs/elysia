@@ -1161,3 +1161,40 @@ export const emptySchema = {
 	body: true,
 	response: true
 } as const satisfies RouteSchema
+
+export function deepClone<T>(source: T, weak = new WeakMap<object, any>()): T {
+	if (
+		source === null ||
+		typeof source !== 'object' ||
+		typeof source === 'function'
+	)
+		return source
+
+	// Circular‑reference guard
+	if (weak.has(source as object)) return weak.get(source as object)
+
+	if (Array.isArray(source)) {
+		const copy: any[] = new Array(source.length)
+		weak.set(source, copy)
+
+		for (let i = 0; i < source.length; i++)
+			copy[i] = deepClone(source[i], weak)
+
+		return copy as any
+	}
+
+	if (typeof source === 'object') {
+		const keys = Object.keys(source).concat(
+			Object.getOwnPropertySymbols(source) as any[]
+		)
+
+		const cloned: Partial<T> = {}
+
+		for (const key of keys)
+			cloned[key as keyof T] = deepClone((source as any)[key], weak)
+
+		return cloned as T
+	}
+
+	return source
+}

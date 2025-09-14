@@ -835,8 +835,8 @@ describe('Query Validator', () => {
 	it('handle ref transform with ref inside reference model', async () => {
 		const app = new Elysia()
 			.model({
-				num2: t.Number(),
-				myModel: t.Object({ num: t.Number(), num2: t.Ref('num2') })
+				num2: t.Numeric(),
+				myModel: t.Object({ num: t.Numeric(), num2: t.Ref('num2') })
 			})
 			.get(
 				'/',
@@ -1095,9 +1095,7 @@ describe('Query Validator', () => {
 		)
 		const invalid1 = await app.handle(new Request(`http://localhost:3000`))
 		const invalid2 = await app.handle(
-			new Request(
-				`http://localhost:3000?filter=[]`
-			)
+			new Request(`http://localhost:3000?filter=[]`)
 		)
 
 		expect(valid.status).toBe(200)

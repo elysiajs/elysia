@@ -2,6 +2,9 @@
 Bug fix:
 - standard schema incorrectly validate cookie and coercion
 
+Breaking Change:
+- Elysia no longer coerce type for .model with `t.Ref` by default
+
 # 1.4.4 - 13 Sep 2025
 Bug fix:
 - merge schema in GET method
