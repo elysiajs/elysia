@@ -1,16 +1,25 @@
 import { Elysia } from '../src'
-import z from 'zod'
-import * as v from 'valibot'
+import { z } from 'zod'
 
-new Elysia()
-	.guard({
-		schema: 'standalone',
-		body: z.object({
-			id: z.coerce.number()
+const app = new Elysia().get(
+	'test',
+	({ cookie: { test } }) => {
+		console.log(test.value)
+
+		return typeof test
+	},
+	{
+		cookie: z.object({ test: z.coerce.number() })
+	}
+)
+
+const value = await app
+	.handle(
+		new Request('http://localhost:3000/test', {
+			headers: {
+				cookie: 'test=123'
+			}
 		})
-	})
-	.get('/user/:id', ({ body }) => body, {
-		body: v.object({
-			name: v.literal('lilith')
-		})
-	})
+	)
+	.then((x) => x.headers.toJSON())
+	.then(console.log)

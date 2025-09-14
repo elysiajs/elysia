@@ -260,6 +260,10 @@ export class Cookie<T> implements ElysiaCookie {
 		return this
 	}
 
+	private set innerValue(value: T) {
+		this.value = value
+	}
+
 	remove() {
 		if (this.value === undefined) return
 

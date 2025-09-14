@@ -299,4 +299,26 @@ describe('Standard Schema Validate', () => {
 		expect(responses[4]).toEqual(422)
 		expect(responses[5]).toEqual(422)
 	})
+
+	it('handle cookie', async () => {
+		const app = new Elysia().get(
+			'test',
+			({ cookie: { test } }) => typeof test.value,
+			{
+				cookie: z.object({ test: z.coerce.number() })
+			}
+		)
+
+		const value = await app
+			.handle(
+				new Request('http://localhost:3000/test', {
+					headers: {
+						cookie: 'test=123'
+					}
+				})
+			)
+			.then((x) => x.text())
+
+		expect(value).toBe('number')
+	})
 })

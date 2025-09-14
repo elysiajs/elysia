@@ -1504,7 +1504,7 @@ export const composeHandler = ({
 			)
 
 			fnLiteral +=
-				`const cookieValue={}\n` +
+				`let cookieValue={}\n` +
 				`for(const [key,value] of Object.entries(c.cookie))` +
 				`cookieValue[key]=value.value\n`
 
@@ -1513,25 +1513,29 @@ export const composeHandler = ({
 
 			if (validator.cookie.provider === 'standard') {
 				fnLiteral +=
-					`let vac=validator.cookie.Check(c.body)\n` +
+					`let vac=validator.cookie.Check(cookieValue)\n` +
 					`if(vac instanceof Promise)vac=await vac\n` +
 					`if(vac.issues){` +
 					validation.validate('cookie', undefined, 'vac.issues') +
-					'}else{c.body=vac.value}\n'
+					'}else{cookieValue=vac.value}\n'
+
+				fnLiteral +=
+					`for(const k of Object.keys(cookieValue))` +
+					`c.cookie[k].innerValue=cookieValue[k]\n`
 			} else if (validator.body?.schema?.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
 					validation.validate('cookie', 'cookieValue') +
 					'}'
-			}
 
-			// if (validator.cookie.hasTransform)
-			// 	fnLiteral += coerceTransformDecodeError(
-			// 		`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
-			// 			`c.cookie[key].value=value` +
-			// 			`}`,
-			// 		'cookie'
-			// 	)
+				if (validator.cookie.hasTransform)
+					fnLiteral += coerceTransformDecodeError(
+						`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
+							`c.cookie[key].value=value` +
+							`}`,
+						'cookie'
+					)
+			}
 
 			if (validator.cookie.isOptional) fnLiteral += `}`
 		}
