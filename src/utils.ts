@@ -254,55 +254,78 @@ export const mergeHook = (
 	if (!Object.values(b).find((x) => x !== undefined && x !== null))
 		return { ...a } as any
 
+	if (!b) return (a as any) ?? {}
+	if (!a) return b ?? {}
+
 	const hook = {
 		...a,
 		...b,
 		// Merge local hook first
 		// @ts-ignore
-		body: b?.body ?? a?.body,
+		body: b.body ?? a.body,
 		// @ts-ignore
-		headers: b?.headers ?? a?.headers,
+		headers: b.headers ?? a.headers,
 		// @ts-ignore
-		params: b?.params ?? a?.params,
+		params: b.params ?? a.params,
 		// @ts-ignore
-		query: b?.query ?? a?.query,
+		query: b.query ?? a.query,
 		// @ts-ignore
-		cookie: b?.cookie ?? a?.cookie,
+		cookie: b.cookie ?? a.cookie,
 		// ? This order is correct - SaltyAom
 		response: mergeResponse(
 			// @ts-ignore
-			a?.response,
+			a.response,
 			// @ts-ignore
-			b?.response
+			b.response
 		),
-		type: a?.type || b?.type,
+		type: a.type || b.type,
 		detail: mergeDeep(
 			// @ts-ignore
-			b?.detail ?? {},
+			b.detail ?? {},
 			// @ts-ignore
-			a?.detail ?? {}
+			a.detail ?? {}
 		),
-		parse: mergeObjectArray(a?.parse as any, b?.parse),
-		transform: mergeObjectArray(a?.transform, b?.transform),
+		parse: mergeObjectArray(a.parse as any, b.parse),
+		transform: mergeObjectArray(a.transform, b.transform),
 		beforeHandle: mergeObjectArray(
 			mergeObjectArray(
 				// @ts-ignore
-				fnToContainer(a?.resolve, 'resolve'),
-				a?.beforeHandle
+				fnToContainer(a.resolve, 'resolve'),
+				a.beforeHandle
 			),
 			mergeObjectArray(
 				fnToContainer(b.resolve, 'resolve'),
-				b?.beforeHandle
+				b.beforeHandle
 			)
 		),
-		afterHandle: mergeObjectArray(a?.afterHandle, b?.afterHandle),
-		mapResponse: mergeObjectArray(a?.mapResponse, b?.mapResponse) as any,
+		afterHandle: mergeObjectArray(a.afterHandle, b.afterHandle),
+		mapResponse: mergeObjectArray(a.mapResponse, b.mapResponse) as any,
 		afterResponse: mergeObjectArray(
-			a?.afterResponse,
-			b?.afterResponse
+			a.afterResponse,
+			b.afterResponse
 		) as any,
-		trace: mergeObjectArray(a?.trace, b?.trace) as any,
-		error: mergeObjectArray(a?.error, b?.error)
+		trace: mergeObjectArray(a.trace, b.trace) as any,
+		error: mergeObjectArray(a.error, b.error),
+		// @ts-ignore
+		standaloneSchema:
+			// @ts-ignore
+			a.standaloneSchema || b.standaloneSchema
+				? // @ts-ignore
+
+					a.standaloneSchema && !b.standaloneSchema
+					? // @ts-ignore
+
+						a.standaloneSchema
+					: // @ts-ignore
+
+						b.standaloneSchema && !a.standaloneSchema
+						? b.standaloneSchema
+						: [
+								// @ts-ignore
+								...(a.standaloneSchema ?? []),
+								...(b.standaloneSchema ?? [])
+							]
+				: undefined
 	}
 
 	if (hook.resolve) delete hook.resolve

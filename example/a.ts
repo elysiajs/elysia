@@ -1,20 +1,44 @@
 import { Elysia, t } from '../src'
-import { post } from '../test/utils'
+import z from 'zod'
+import { req } from '../test/utils'
 
-const app = new Elysia()
-	.model({
-		q: t.Number(),
-		number: t.Object({
-			value: t.Number(),
-			number: t.Ref('q')
+const app = new Elysia().guard(
+	{
+		query: t.Object({
+			name: t.Literal('lilith')
 		})
-	})
-	.post('/', ({ body }) => body, { body: 'number' })
+	},
+	(app) =>
+		app.guard(
+			{
+				query: t.Object({
+					limit: t.Number()
+				})
+			},
+			(app) =>
+				app.get(
+					'/',
+					({ query }) => {
+						console.log(query)
 
-const result = await app
-	.handle(post('/', {
-		value: '1',
-		number: '2'
-	}))
-	.then((x) => x.text())
-	.then(console.log)
+						return query
+					},
+					{
+						query: t.Object({
+							playing: t.Boolean()
+						})
+					}
+				)
+		)
+)
+
+const value = await app
+	.handle(req('/?name=lilith&playing=true&limit=10'))
+	.then((x) => x.json())
+
+console.log(value)
+// expect(value).toEqual({
+// 	name: 'lilith',
+// 	playing: true,
+// 	limit: 10
+// })

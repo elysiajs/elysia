@@ -4037,6 +4037,9 @@ export default class Elysia<
 					} = schemaOrRun
 					const localHook = hooks as AnyLocalHook
 
+					const hasStandaloneSchema =
+						body || headers || query || params || cookie || response
+
 					this.add(
 						method,
 						path,
@@ -4054,14 +4057,20 @@ export default class Elysia<
 											localHook.error,
 											...(sandbox.event.error ?? [])
 										],
-							standaloneValidator: {
-								body,
-								headers,
-								query,
-								params,
-								cookie,
-								response
-							}
+							standaloneValidator: !hasStandaloneSchema
+								? localHook.standaloneValidator
+								: [
+										...(localHook.standaloneValidator ??
+											[]),
+										{
+											body,
+											headers,
+											query,
+											params,
+											cookie,
+											response
+										}
+									]
 						}),
 						undefined
 					)
@@ -4619,7 +4628,7 @@ export default class Elysia<
 		this.model(sandbox.definitions.type)
 
 		Object.values(instance.router.history).forEach(
-			({ method, path, handler, hooks }) => {
+			({ method, path, handler, hooks: localHook }) => {
 				const {
 					body,
 					headers,
@@ -4627,14 +4636,17 @@ export default class Elysia<
 					params,
 					cookie,
 					response,
-					...localHook
-				} = hooks
+					...guardHook
+				} = hook
+
+				const hasStandaloneSchema =
+					body || headers || query || params || cookie || response
 
 				this.add(
 					method,
 					path,
 					handler,
-					mergeHook(hook as AnyLocalHook, {
+					mergeHook(guardHook as AnyLocalHook, {
 						...((localHook || {}) as AnyLocalHook),
 						error: !localHook.error
 							? sandbox.event.error
@@ -4647,14 +4659,19 @@ export default class Elysia<
 										localHook.error,
 										...(sandbox.event.error ?? [])
 									],
-						standaloneValidator: {
-							body,
-							headers,
-							query,
-							params,
-							cookie,
-							response
-						}
+						standaloneValidator: !hasStandaloneSchema
+							? localHook.standaloneValidator
+							: [
+									...(localHook.standaloneValidator ?? []),
+									{
+										body,
+										headers,
+										query,
+										params,
+										cookie,
+										response
+									}
+								]
 					})
 				)
 			}

@@ -439,4 +439,42 @@ describe('guard', () => {
 		expect(await invalid).toBe(422)
 	})
 
+	it('handle multiple nested guard with schema', async () => {
+		const app = new Elysia().guard(
+			{
+				query: t.Object({
+					name: t.Literal('lilith')
+				})
+			},
+			(app) =>
+				app.guard(
+					{
+						query: t.Object({
+							limit: t.Number()
+						})
+					},
+					(app) =>
+						app.get('/', ({ query }) => query, {
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						})
+				)
+		)
+
+		const value = await app
+			.handle(req('/?name=lilith&playing=true&limit=10'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			name: 'lilith',
+			playing: true,
+			limit: 10
+		})
+
+		const error = await app
+			.handle(req('/?name=lilith&playing=true'))
+			.then((x) => x.status)
+		expect(error).toBe(422)
+	})
 })
