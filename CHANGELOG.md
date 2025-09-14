@@ -1,3 +1,7 @@
+# 1.4.5
+Bug fix:
+- standard schema incorrectly validate cookie and coercion
+
 # 1.4.4 - 13 Sep 2025
 Bug fix:
 - merge schema in GET method
