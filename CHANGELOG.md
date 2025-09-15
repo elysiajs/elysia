@@ -5,7 +5,8 @@ Improvement:
 - add `BunHTMLBundleLike` to Elysia inline handler
 
 Bug fix:
-- [#1410](https://github.com/elysiajs/elysia/issues/1410) handle union derive/resolve
+- [#1410](https://github.com/elysiajs/elysia/issues/1410) handle union derive/resolve property
+- probably fix mergeDeep attempted to assign to readonly property
 
 # 1.4.5 - 15 Sep 2025
 Improvement:

@@ -63,7 +63,7 @@ export const mergeDeep = <
 ): A & B => {
 	const skipKeys = options?.skipKeys
 	const override = options?.override ?? true
-	const mergeArray = options?.mergeArray ?? true
+	const mergeArray = options?.mergeArray ?? false
 
 	if (!isObject(target) || !isObject(source)) return target as A & B
 

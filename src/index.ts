@@ -3918,7 +3918,9 @@ export default class Elysia<
 			Omit<Input, NonResolvableMacroKey>,
 			Definitions['typebox']
 		>,
-		const BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>	,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
 		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<Definitions['error'], Schema, Singleton>
@@ -3932,9 +3934,10 @@ export default class Elysia<
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve'] &
-				// @ts-ignore
-				MacroContext['response']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					// @ts-ignore
+					MacroContext['response']
 			},
 			keyof Metadata['parser'],
 			BeforeHandle,
@@ -4144,7 +4147,9 @@ export default class Elysia<
 		>,
 		const GuardType extends GuardSchemaType,
 		const AsType extends LifeCycleType,
-		const BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>	,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
 		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<Definitions['error'], Schema, Singleton>
@@ -4156,9 +4161,10 @@ export default class Elysia<
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve'] &
-			// @ts-ignore
-			 MacroContext['response']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					// @ts-ignore
+					MacroContext['response']
 			},
 			keyof Metadata['parser'],
 			BeforeHandle,
@@ -5495,7 +5501,9 @@ export default class Elysia<
 
 				if (k === 'detail') {
 					if (!localHook.detail) localHook.detail = {}
-					localHook.detail = mergeDeep(localHook.detail, value)
+					localHook.detail = mergeDeep(localHook.detail, value, {
+						mergeArray: true
+					})
 
 					delete localHook[key]
 					continue
