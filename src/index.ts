@@ -162,7 +162,9 @@ import type {
 	UnionResponseStatus,
 	CreateEdenResponse,
 	MacroProperty,
-	MaybeValueOrVoidFunction
+	MaybeValueOrVoidFunction,
+	IntersectIfObject,
+	IntersectIfObjectSchema
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -3895,7 +3897,6 @@ export default class Elysia<
 
 	group<
 		const Prefix extends string,
-		const NewElysia extends AnyElysia,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
 		const Schema extends MergeSchema<
@@ -3904,25 +3905,41 @@ export default class Elysia<
 				Definitions['typebox'],
 				JoinPath<BasePath, Prefix>
 			>,
-			Metadata['schema']
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
 		> &
-			Metadata['standaloneSchema']
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>	,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<Definitions['error'], Schema, Singleton>
+		>,
+		const NewElysia extends AnyElysia
 	>(
 		prefix: Prefix,
-		schema: LocalHook<
+		schema: GuardLocalHook<
 			Input,
 			// @ts-ignore
-			Schema & {
-				response: {}
-				return: {}
-				resolve: {}
-			},
+			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] & Volatile['resolve'] &
+				// @ts-ignore
+				MacroContext['response']
 			},
-			Definitions['error'],
-			keyof Metadata['parser']
+			keyof Metadata['parser'],
+			BeforeHandle,
+			AfterHandle,
+			ErrorHandle
 		>,
 		run: (
 			group: Elysia<
@@ -3930,25 +3947,28 @@ export default class Elysia<
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
-					derive: Prettify<
-						Singleton['derive'] &
-							Ephemeral['derive'] &
-							Volatile['derive']
-					>
+					derive: Singleton['derive']
 					resolve: Prettify<
 						Singleton['resolve'] &
-							Ephemeral['resolve'] &
-							Volatile['resolve']
+							// @ts-ignore
+							MacroContext['resolve']
 					>
 				},
 				Definitions,
 				{
 					schema: Schema
-					standaloneSchema: Metadata['standaloneSchema']
+					standaloneSchema: Metadata['standaloneSchema'] &
+						Schema &
+						MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response']
+					response: Metadata['response'] &
+						// @ts-ignore
+						MacroContext['response'] &
+						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+						ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 				},
 				{},
 				Ephemeral,
@@ -4037,6 +4057,9 @@ export default class Elysia<
 					} = schemaOrRun
 					const localHook = hooks as AnyLocalHook
 
+					const hasStandaloneSchema =
+						body || headers || query || params || cookie || response
+
 					this.add(
 						method,
 						path,
@@ -4054,14 +4077,20 @@ export default class Elysia<
 											localHook.error,
 											...(sandbox.event.error ?? [])
 										],
-							standaloneValidator: {
-								body,
-								headers,
-								query,
-								params,
-								cookie,
-								response
-							}
+							standaloneValidator: !hasStandaloneSchema
+								? localHook.standaloneValidator
+								: [
+										...(localHook.standaloneValidator ??
+											[]),
+										{
+											body,
+											headers,
+											query,
+											params,
+											cookie,
+											response
+										}
+									]
 						}),
 						undefined
 					)
@@ -4115,9 +4144,7 @@ export default class Elysia<
 		>,
 		const GuardType extends GuardSchemaType,
 		const AsType extends LifeCycleType,
-		const BeforeHandle extends MaybeArray<
-			OptionalHandler<Schema, Singleton>
-		>,
+		const BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>	,
 		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<Definitions['error'], Schema, Singleton>
@@ -4125,17 +4152,20 @@ export default class Elysia<
 	>(
 		hook: GuardLocalHook<
 			Input,
-			Schema,
+			// @ts-ignore
+			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve']
+				resolve: Ephemeral['resolve'] & Volatile['resolve'] &
+			// @ts-ignore
+			 MacroContext['response']
 			},
 			keyof Metadata['parser'],
-			GuardType,
-			AsType,
 			BeforeHandle,
 			AfterHandle,
-			ErrorHandle
+			ErrorHandle,
+			GuardType,
+			AsType
 		>
 	): Or<
 		GuardSchemaType extends GuardType ? true : false,
@@ -4410,17 +4440,31 @@ export default class Elysia<
 	guard<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const NewElysia extends AnyElysia,
 		const Schema extends MergeSchema<
 			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			Metadata['schema']
-		>,
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], Metadata['schema']>
+			>
+		> &
+			Metadata['standaloneSchema'] &
+			Ephemeral['standaloneSchema'] &
+			Volatile['standaloneSchema'],
 		const MacroContext extends MacroToContext<
 			Metadata['macroFn'],
-			NoInfer<Omit<Input, keyof InputSchema>>
-		>
+			Omit<Input, NonResolvableMacroKey>,
+			Definitions['typebox']
+		>,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
+		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
+		const ErrorHandle extends MaybeArray<
+			ErrorHandler<any, Schema, Singleton>
+		>,
+		const NewElysia extends AnyElysia
 	>(
-		schema: LocalHook<
+		schema: GuardLocalHook<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
@@ -4428,8 +4472,10 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] & Volatile['resolve']
 			},
-			Definitions['error'],
-			keyof Metadata['parser']
+			keyof Metadata['parser'],
+			BeforeHandle,
+			AfterHandle,
+			ErrorHandle
 		>,
 		run: (
 			group: Elysia<
@@ -4447,11 +4493,18 @@ export default class Elysia<
 				Definitions,
 				{
 					schema: Schema
-					standaloneSchema: Metadata['standaloneSchema']
+					standaloneSchema: Metadata['standaloneSchema'] &
+						Schema &
+						MacroContext
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
-					response: Metadata['response']
+					response: Metadata['response'] &
+						// @ts-ignore
+						MacroContext['response'] &
+						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
+						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
+						ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle>
 				},
 				{},
 				Ephemeral,
@@ -4474,7 +4527,9 @@ export default class Elysia<
 			>
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
-			response: Volatile['response']
+			response: Volatile['response'] &
+				// @ts-ignore
+				MacroContext['response']
 		}
 	>
 
@@ -4619,7 +4674,7 @@ export default class Elysia<
 		this.model(sandbox.definitions.type)
 
 		Object.values(instance.router.history).forEach(
-			({ method, path, handler, hooks }) => {
+			({ method, path, handler, hooks: localHook }) => {
 				const {
 					body,
 					headers,
@@ -4627,14 +4682,17 @@ export default class Elysia<
 					params,
 					cookie,
 					response,
-					...localHook
-				} = hooks
+					...guardHook
+				} = hook
+
+				const hasStandaloneSchema =
+					body || headers || query || params || cookie || response
 
 				this.add(
 					method,
 					path,
 					handler,
-					mergeHook(hook as AnyLocalHook, {
+					mergeHook(guardHook as AnyLocalHook, {
 						...((localHook || {}) as AnyLocalHook),
 						error: !localHook.error
 							? sandbox.event.error
@@ -4647,14 +4705,19 @@ export default class Elysia<
 										localHook.error,
 										...(sandbox.event.error ?? [])
 									],
-						standaloneValidator: {
-							body,
-							headers,
-							query,
-							params,
-							cookie,
-							response
-						}
+						standaloneValidator: !hasStandaloneSchema
+							? localHook.standaloneValidator
+							: [
+									...(localHook.standaloneValidator ?? []),
+									{
+										body,
+										headers,
+										query,
+										params,
+										cookie,
+										response
+									}
+								]
 					})
 				)
 			}
@@ -5306,7 +5369,11 @@ export default class Elysia<
 				Schema & MacroContext,
 				Singleton & {
 					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+					resolve: Partial<
+						Ephemeral['resolve'] & Volatile['resolve']
+					> &
+						// @ts-ignore
+						MacroContext['resolve']
 				},
 				Definitions['error']
 			>
@@ -5631,20 +5698,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5734,20 +5803,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5837,20 +5908,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5939,20 +6012,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -6041,20 +6116,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -6143,20 +6220,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -6245,20 +6324,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -6347,20 +6428,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -6449,20 +6532,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -6552,20 +6637,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -6661,20 +6748,22 @@ export default class Elysia<
 		const Path extends string,
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<
-				Input,
-				Definitions['typebox'],
-				JoinPath<BasePath, Path>
-			>,
+		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			>
-		> &
+				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
 			Metadata['standaloneSchema'] &
-			Ephemeral['standaloneSchema'] &
-			Volatile['standaloneSchema'],
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const MacroContext extends MacroToContext<
 			Metadata['macroFn'],
 			Omit<Input, NonResolvableMacroKey>

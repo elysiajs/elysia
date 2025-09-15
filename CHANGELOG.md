@@ -1,3 +1,15 @@
+# 1.4.5 - 15 Sep 2025
+Improvement:
+- soundness for guard, group
+- overwrite primitive value if collide (intersectIfObject)
+
+Bug fix:
+- standard schema incorrectly validate cookie and coercion
+- merge nested guard, group standalone schema properly
+
+Breaking Change:
+- no longer coerce type for .model with `t.Ref` by default
+
 # 1.4.4 - 13 Sep 2025
 Bug fix:
 - merge schema in GET method

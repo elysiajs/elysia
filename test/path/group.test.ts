@@ -266,4 +266,68 @@ describe('group', () => {
 		expect(await valid).toEqual({ id: 1, name: 'saltyaom' })
 		expect(await invalid).toBe(422)
 	})
+
+	it('handle multiple nested guard group', async () => {
+		const app = new Elysia().group('', {}, (app) =>
+			app.group('', {}, (app) =>
+				app.get('/', ({ query }) => query, {
+					query: t.Object({
+						playing: t.Boolean(),
+						limit: t.Number()
+					})
+				})
+			)
+		)
+
+		const value = await app
+			.handle(req('/?playing=true&limit=10'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			playing: true,
+			limit: 10
+		})
+	})
+
+	it('handle multiple nested guard with schema', async () => {
+		const app = new Elysia().group(
+			'',
+			{
+				query: t.Object({
+					name: t.Literal('lilith')
+				})
+			},
+			(app) =>
+				app.group(
+					'',
+					{
+						query: t.Object({
+							limit: t.Number()
+						})
+					},
+					(app) =>
+						app.get('/', ({ query }) => query, {
+							query: t.Object({
+								playing: t.Boolean()
+							})
+						})
+				)
+		)
+
+		const value = await app
+			.handle(req('/?name=lilith&playing=true&limit=10'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({
+			name: 'lilith',
+			playing: true,
+			limit: 10
+		})
+
+		const error = await app
+			.handle(req('/?name=lilith&playing=true'))
+			.then((x) => x.status)
+
+		expect(error).toBe(422)
+	})
 })

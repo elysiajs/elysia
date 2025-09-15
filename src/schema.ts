@@ -18,7 +18,7 @@ import {
 
 import { t, type TypeCheck } from './type-system'
 
-import { mergeCookie, mergeDeep, randomId } from './utils'
+import { deepClone, mergeCookie, mergeDeep, randomId } from './utils'
 import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
@@ -540,21 +540,16 @@ const _replaceSchemaType = (
 				v.default === '{}'
 			) {
 				transform = t.ObjectString(properties, rest)
-				// value.default = JSON.stringify(
-				// 	Value.Create(t.Object(properties))
-				// )
 				value.properties = properties
 			}
-
 			// Create default value for ArrayString
-			if (
+			else if (
 				items &&
 				v.type === 'string' &&
 				v.format === 'ArrayString' &&
 				v.default === '[]'
 			) {
 				transform = t.ArrayString(items, rest)
-				// value.default = JSON.stringify(Value.Create(t.Array(items)))
 				value.items = items
 			}
 
@@ -824,36 +819,28 @@ export const getSchemaValidator = <
 			if (!schema) return undefined as any
 		}
 
-		let _doesHaveRef: boolean
-		if (
-			Kind in schema &&
-			schema[Kind] !== 'Import' &&
-			(_doesHaveRef = hasRef(schema))
-		) {
-			const id = randomId()
-
-			if (doesHaveRef === undefined) doesHaveRef = _doesHaveRef
-
-			const model: any = t.Module({
-				// @ts-expect-error private property
-				...modules?.$defs,
-				[id]: schema
-			})
-
-			schema = model.Import(id)
-		}
-
 		if (Kind in schema) {
 			if (schema[Kind] === 'Import') {
-				const newDefs: Record<string, TSchema> = {}
+				if (!hasRef(schema.$defs[schema.$ref])) {
+					schema = schema.$defs[schema.$ref]
 
-				for (const [key, value] of Object.entries(schema.$defs))
-					newDefs[key] = replaceSchema(value as TSchema)
+					if (coerce || additionalCoerce)
+						schema = replaceSchema(schema as TSchema)
+				}
+			} else {
+				if (hasRef(schema)) {
+					const id = randomId()
 
-				const key = schema.$ref
-				schema = t.Module(newDefs).Import(key)
-			} else if (coerce || additionalCoerce)
-				schema = replaceSchema(schema)
+					const model: any = t.Module({
+						// @ts-expect-error private property
+						...modules?.$defs,
+						[id]: schema
+					})
+
+					schema = model.Import(id)
+				} else if (coerce || additionalCoerce)
+					schema = replaceSchema(schema as TSchema)
+			}
 		}
 
 		return schema

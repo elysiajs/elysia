@@ -126,7 +126,7 @@ describe('Model', () => {
 			})
 			.post('/arr', ({ body }) => body, {
 				response: 'number',
-				body: 'number',
+				body: 'number'
 			})
 
 		const correct = await app.handle(
@@ -225,35 +225,35 @@ describe('Model', () => {
 		expect(correct.status).toBe(200)
 	})
 
-	it('use coerce with reference model', async () => {
-		const app = new Elysia()
-			.model({
-				number: t.Number(),
-				optionalNumber: t.Optional(t.Ref('number'))
-			})
-			.post('/', ({ body }) => body, {
-				body: 'optionalNumber'
-			})
+	// it('use coerce with reference model', async () => {
+	// 	const app = new Elysia()
+	// 		.model({
+	// 			number: t.Number(),
+	// 			optionalNumber: t.Optional(t.Ref('number'))
+	// 		})
+	// 		.post('/', ({ body }) => body, {
+	// 			body: 'optionalNumber'
+	// 		})
 
-		const error = await app.handle(post('/'))
-		expect(error.status).toBe(422)
+	// 	const error = await app.handle(post('/'))
+	// 	expect(error.status).toBe(422)
 
-		const correct = await app.handle(
-			new Request('http://localhost/', {
-				method: 'POST',
-				headers: {
-					'content-type': 'text/plain; charset=utf-8'
-				},
-				body: '0'
-			})
-		)
-		expect(correct.status).toBe(200)
-	})
+	// 	const correct = await app.handle(
+	// 		new Request('http://localhost/', {
+	// 			method: 'POST',
+	// 			headers: {
+	// 				'content-type': 'text/plain; charset=utf-8'
+	// 			},
+	// 			body: '0'
+	// 		})
+	// 	)
+	// 	expect(correct.status).toBe(200)
+	// })
 
 	it('create default value with nested reference model', async () => {
 		const app = new Elysia()
 			.model({
-				number: t.Number({ default: 0 }),
+				number: t.Numeric({ default: 0 }),
 				optionalNumber: t.Optional(t.Ref('number'))
 			})
 			.post('/', ({ body }) => body, {
@@ -281,7 +281,7 @@ describe('Model', () => {
 	it('use reference model with cookie', async () => {
 		const app = new Elysia()
 			.model({
-				session: t.Cookie({ token: t.Number() }),
+				session: t.Cookie({ token: t.Numeric() }),
 				optionalSession: t.Optional(t.Ref('session'))
 			})
 			.get('/', () => 'Hello Elysia', { cookie: 'optionalSession' })
@@ -354,5 +354,46 @@ describe('Model', () => {
 
 		const correct400 = await app.handle(req('/400'))
 		expect(correct400.status).toBe(400)
+	})
+
+	it("coerce model when there's no reference", async () => {
+		const app = new Elysia()
+			.model({
+				idParam: t.Object({
+					id: t.Union([
+						t.String({ format: 'uuid' }),
+						t.Number({
+							minimum: 1,
+							maximum: Number.MAX_SAFE_INTEGER
+						})
+					])
+				}),
+				response200: t.Object({
+					message: t.String(),
+					content: t.Array(
+						t.Object({
+							id: t.Union([t.String(), t.Number()])
+						})
+					)
+				})
+			})
+			.get(
+				'/:id',
+				({ params: { id } }) => ({
+					message: 'ok',
+					content: [{ id }]
+				}),
+				{
+					params: 'idParam',
+					response: 'response200'
+				}
+			)
+			.listen(3000)
+
+		const value = await app
+			.handle(new Request('http://localhost/3'))
+			.then((x) => x.json())
+
+		expect(value).toEqual({ message: 'ok', content: [{ id: 3 }] })
 	})
 })

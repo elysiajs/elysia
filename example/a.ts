@@ -1,16 +1,17 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 import z from 'zod'
-import * as v from 'valibot'
+import { req } from '../test/utils'
 
-new Elysia()
-	.guard({
-		schema: 'standalone',
-		body: z.object({
-			id: z.coerce.number()
-		})
+const app = new Elysia()
+	.macro('guestOrUser', {
+		resolve: () => {
+			return {
+				user: null
+			}
+		}
 	})
-	.get('/user/:id', ({ body }) => body, {
-		body: v.object({
-			name: v.literal('lilith')
-		})
+	.macro('user', {
+		guestOrUser: true,
+		body: t.String(),
+		resolve: ({ body, status, user }) => {}
 	})
