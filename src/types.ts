@@ -1148,21 +1148,22 @@ type InlineResponse =
 	| BunHTMLBundlelike
 
 type LastOf<T> =
-    UnionToIntersect<T extends any ? () => T : never> extends () => infer R
-        ? R
-        : never;
+	UnionToIntersect<T extends any ? () => T : never> extends () => infer R
+		? R
+		: never
 
-type Push<T extends any[], V> = [...T, V];
+type Push<T extends any[], V> = [...T, V]
 
-type TuplifyUnion<T, L = LastOf<T>, N = [T] extends [never] ? true : false> =
-    true extends N
-        ? []
-        : Push<TuplifyUnion<Exclude<T, L>>, L>;
+type TuplifyUnion<
+	T,
+	L = LastOf<T>,
+	N = [T] extends [never] ? true : false
+> = true extends N ? [] : Push<TuplifyUnion<Exclude<T, L>>, L>
 
-export type Tuple<T, A extends T[] = []> =
-    TuplifyUnion<T>['length'] extends A['length']
-        ? [...A]
-        : Tuple<T, [T, ...A]>;
+export type Tuple<
+	T,
+	A extends T[] = []
+> = TuplifyUnion<T>['length'] extends A['length'] ? [...A] : Tuple<T, [T, ...A]>
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
@@ -2216,10 +2217,10 @@ type PartialIf<T, Condition extends boolean> = Condition extends true
 // Exclude return error()
 export type ExcludeElysiaResponse<T> = PartialIf<
 	Exclude<Awaited<T>, AnyElysiaCustomStatusResponse> extends infer A
-		? IsNever<A> extends true
+		? IsNever<A & {}> extends true
 			? {}
 			: // Intersect all union and fallback never to {}
-				UnionToIntersect<A & {}>
+				A & {}
 		: {},
 	undefined extends Awaited<T> ? true : false
 >

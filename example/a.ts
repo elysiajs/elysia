@@ -1,27 +1,19 @@
-import { Prettify } from 'elysia/types'
-import { Elysia, ElysiaCustomStatusResponse, t } from '../src'
-import { req } from '../test/utils'
-import { Tuple } from '../src/types'
+import { Elysia } from '../src'
 
-type PickOne<T> = T extends any ? T : never
+export interface AuthData {
+	id: number
+}
 
-new Elysia().get(
-	'/test',
-	({ status }) => {
-		return status(200, { key2: 's', id: 2 })
-	},
-	{
-		response: {
-			200: t.Union([
-				t.Object({
-					key2: t.String(),
-					id: t.Literal(2)
-				}),
-				t.Object({
-					key: t.Number(),
-					id: t.Literal(1)
-				})
-			])
-		}
-	}
-)
+const app = new Elysia()
+	.derive(({ request }) => {
+		const apiKey = request.headers.get('x-api-key')
+		if (!apiKey) return { auth: null }
+
+		return { auth: { id: 1 } satisfies AuthData }
+	})
+	.onBeforeHandle(({ auth, set }) => {
+		console.log(auth?.id)
+		console.log(set.status)
+	})
+
+app['~Volatile']

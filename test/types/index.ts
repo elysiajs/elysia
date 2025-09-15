@@ -2687,3 +2687,39 @@ type a = keyof {}
 {
 	new Elysia().get('/file', file('public/takodachi.png'))
 }
+
+// derive should add property union correctly
+{
+	const app = new Elysia()
+		.derive(({ request, status }) => {
+			const apiKey = request.headers.get('x-api-key')
+			if (!apiKey) return { auth: null }
+
+			if (Math.random() > 0.5) return status(401)
+
+			return { auth: { id: 1 } }
+		})
+		.onBeforeHandle(({ auth }) => {
+			expectTypeOf<typeof auth>().toEqualTypeOf<{
+				readonly id: 1
+			} | null>()
+		})
+}
+
+// resolve should add property union correctly
+{
+	const app = new Elysia()
+		.resolve(({ request, status }) => {
+			const apiKey = request.headers.get('x-api-key')
+			if (!apiKey) return { auth: null }
+
+			if (Math.random() > 0.5) return status(401)
+
+			return { auth: { id: 1 } }
+		})
+		.onBeforeHandle(({ auth }) => {
+			expectTypeOf<typeof auth>().toEqualTypeOf<{
+				readonly id: 1
+			} | null>()
+		})
+}

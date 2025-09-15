@@ -1,7 +1,11 @@
 # 1.4.6 - 15 Sep 2025
 Improvement:
-- strictly check for 200 inline status code
+- [#1406](https://github.com/elysiajs/elysia/issues/1406) strictly check for 200 inline status code
 - coerce union status value and return type
+- add `BunHTMLBundleLike` to Elysia inline handler
+
+Bug fix:
+- [#1410](https://github.com/elysiajs/elysia/issues/1410) handle union derive/resolve
 
 # 1.4.5 - 15 Sep 2025
 Improvement:
