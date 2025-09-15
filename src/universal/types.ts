@@ -206,3 +206,18 @@ export abstract class WebStandardResponse implements BodyMixin {
 		return Response.redirect(url, status)
 	}
 }
+
+export interface BunHTMLBundlelike {
+	index: string
+	files?: {
+		input?: string
+		path: string
+		loader: any
+		isEntry: boolean
+		headers: {
+			etag: string
+			'content-type': string
+			[key: string]: string
+		}
+	}[]
+}

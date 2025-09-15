@@ -35,6 +35,7 @@ import type { AnyWSLocalHook } from './ws/types'
 import type { WebSocketHandler } from './ws/bun'
 
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
+import { BunHTMLBundlelike } from './universal/types'
 
 export type IsNever<T> = [T] extends [never] ? true : false
 
@@ -1063,7 +1064,8 @@ export type MacroToContext<
 											// @ts-expect-error type is checked in key mapping
 											Value['resolve']
 										>
-									> & MacroToContext<
+									> &
+									MacroToContext<
 										MacroFn,
 										// @ts-ignore trust me bro
 										Pick<
@@ -1143,6 +1145,24 @@ type InlineResponse =
 	| AnyElysiaCustomStatusResponse
 	| ElysiaFile
 	| Record<any, unknown>
+	| BunHTMLBundlelike
+
+type LastOf<T> =
+    UnionToIntersect<T extends any ? () => T : never> extends () => infer R
+        ? R
+        : never;
+
+type Push<T extends any[], V> = [...T, V];
+
+type TuplifyUnion<T, L = LastOf<T>, N = [T] extends [never] ? true : false> =
+    true extends N
+        ? []
+        : Push<TuplifyUnion<Exclude<T, L>>, L>;
+
+export type Tuple<T, A extends T[] = []> =
+    TuplifyUnion<T>['length'] extends A['length']
+        ? [...A]
+        : Tuple<T, [T, ...A]>;
 
 export type InlineHandler<
 	Route extends RouteSchema = {},
@@ -1177,7 +1197,13 @@ export type InlineHandler<
 								| (Route['response'] extends {
 										200: any
 								  }
-										? Route['response'][200]
+										?
+												| Route['response'][200]
+												| ElysiaCustomStatusResponse<
+														200,
+														Route['response'][200],
+														200
+												  >
 										: unknown)
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]
@@ -1732,7 +1758,7 @@ export type GuardLocalHook<
 	AfterHandle extends MaybeArray<AfterHandler<any, any>>,
 	ErrorHandle extends MaybeArray<ErrorHandler<any, any, any>>,
 	GuardType extends GuardSchemaType = 'standalone',
-	AsType extends LifeCycleType = 'local',
+	AsType extends LifeCycleType = 'local'
 > = (Input extends any ? Input : Prettify<Input>) & {
 	/**
 	 * @default 'override'
