@@ -184,7 +184,6 @@
 	},
 	"dependencies": {
 		"cookie": "^1.0.2",
-		"elysia": "1.4.3-beta.0",
 		"exact-mirror": "0.2.2",
 		"fast-decode-uri-component": "^1.0.1"
 	},
