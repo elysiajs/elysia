@@ -3,7 +3,7 @@ Improvement:
 - [#1406](https://github.com/elysiajs/elysia/issues/1406) strictly check for 200 inline status code
 - coerce union status value and return type
 - add `BunHTMLBundleLike` to Elysia inline handler
-- prevent Elysia from being a dependency of itself
+- [#1405](https://github.com/elysiajs/elysia/issues/1405) prevent Elysia from being a dependency of itself
 - [#1416](https://github.com/elysiajs/elysia/issues/1416) check if object is frozen before merging, add try-catch to prevent crash
 - [#1419](https://github.com/elysiajs/elysia/issues/1419) guard doesn't apply scoped/global schema to object macro
 - [#1425](https://github.com/elysiajs/elysia/issues/1425) DELETE doesn't ihnerit derive/resolve type
