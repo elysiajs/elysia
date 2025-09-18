@@ -6,7 +6,7 @@ Improvement:
 - [#1405](https://github.com/elysiajs/elysia/issues/1405) prevent Elysia from being a dependency of itself
 - [#1416](https://github.com/elysiajs/elysia/issues/1416) check if object is frozen before merging, add try-catch to prevent crash
 - [#1419](https://github.com/elysiajs/elysia/issues/1419) guard doesn't apply scoped/global schema to object macro
-- [#1425](https://github.com/elysiajs/elysia/issues/1425) DELETE doesn't ihnerit derive/resolve type
+- [#1425](https://github.com/elysiajs/elysia/issues/1425) DELETE doesn't inherit derive/resolve type
 
 Change:
 - [#1409](https://github.com/elysiajs/elysia/issues/1409) onTransform now doesn't include type as it isn't validated yet, creating confusion
