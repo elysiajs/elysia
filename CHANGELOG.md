@@ -1,4 +1,4 @@
-# 1.4.6 - 15 Sep 2025
+# 1.4.6 - 18 Sep 2025
 Improvement:
 - [#1406](https://github.com/elysiajs/elysia/issues/1406) strictly check for 200 inline status code
 - coerce union status value and return type

@@ -1,5 +1,18 @@
 import { Elysia, t } from '../src'
 
 new Elysia()
-  .decorate("db", Object.freeze({ hello: "world" }))
-  .guard({}, app => app)
+	.macro({
+		token: {
+			resolve: () => {
+				return {
+					__token: '123'
+				}
+			}
+		}
+	})
+	.macro('some', {
+		token: true,
+		beforeHandle: ({ __token }) => {
+			console.log('__token', __token)
+		}
+	})
