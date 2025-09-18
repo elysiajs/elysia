@@ -80,4 +80,10 @@ describe('mergeDeep', () => {
 
 		expect(response).toBe('ok')
 	})
+
+	it('handle freezed object', () => {
+		new Elysia()
+			.decorate('db', Object.freeze({ hello: 'world' }))
+			.guard({}, (app) => app)
+	})
 })

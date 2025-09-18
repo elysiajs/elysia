@@ -81,17 +81,22 @@ export const mergeDeep = <
 		}
 
 		if (!isObject(value) || !(key in target) || isClass(value)) {
-			if (override || !(key in target))
-				target[key as keyof typeof target] = value
+			if ((override || !(key in target)) && !Object.isFrozen(target))
+				try {
+					target[key as keyof typeof target] = value
+				} catch {}
 
 			continue
 		}
 
-		target[key as keyof typeof target] = mergeDeep(
-			(target as any)[key] as any,
-			value,
-			{ skipKeys, override, mergeArray }
-		)
+		if (!Object.isFrozen(target[key]))
+			try {
+				target[key as keyof typeof target] = mergeDeep(
+					(target as any)[key] as any,
+					value,
+					{ skipKeys, override, mergeArray }
+				)
+			} catch {}
 	}
 
 	return target as A & B
