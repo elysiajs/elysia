@@ -1,5 +1,9 @@
 import { $ } from 'bun'
 import { build, type Options } from 'tsup'
+import pack from './package.json'
+
+if ('elysia' in pack.dependencies)
+	throw new Error("Error can't be a dependency of itself")
 
 const external = ['@sinclair/typebox', 'file-type']
 

@@ -2042,6 +2042,17 @@ export interface EmptyRouteSchema {
 	response: unknown
 }
 
+export interface UnknownRouteSchema<
+	Params = { [name: string]: string | undefined }
+> {
+	body: unknown
+	headers: { [name: string]: string | undefined }
+	query: { [name: string]: string | undefined }
+	params: Params
+	cookie: {}
+	response: unknown
+}
+
 type Extract200<T> = T extends AnyElysiaCustomStatusResponse
 	?
 			| Exclude<T, AnyElysiaCustomStatusResponse>
