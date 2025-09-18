@@ -84,7 +84,7 @@ import { expectTypeOf } from 'expect-type'
 			response: z.literal('lilith')
 		})
 		// @ts-expect-error
-		.get('/lilith', () => 'focou' as const, {
+		.get('/lilith', () => 'a' as const, {
 			response: z.literal('lilith')
 		})
 }

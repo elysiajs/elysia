@@ -5,13 +5,12 @@
       "name": "elysia",
       "dependencies": {
         "cookie": "^1.0.2",
-        "elysia": "1.4.3-beta.0",
         "exact-mirror": "0.2.2",
         "fast-decode-uri-component": "^1.0.1",
       },
       "devDependencies": {
-        "@elysiajs/openapi": "^1.3.11",
-        "@types/bun": "^1.2.16",
+        "@elysiajs/openapi": "^1.4.1",
+        "@types/bun": "^1.2.12",
         "@types/cookie": "^1.0.0",
         "@types/fast-decode-uri-component": "^1.0.0",
         "@typescript-eslint/eslint-plugin": "^8.30.1",
@@ -47,7 +46,7 @@
 
     "@ark/util": ["@ark/util@0.49.0", "", {}, "sha512-/BtnX7oCjNkxi2vi6y1399b+9xd1jnCrDYhZ61f0a+3X8x8DxlK52VgEEzyuC2UQMPACIfYrmHkhD3lGt2GaMA=="],
 
-    "@elysiajs/openapi": ["@elysiajs/openapi@1.3.11", "", { "dependencies": { "@sinclair/typemap": "^0.10.1", "openapi-types": "^12.1.3" }, "peerDependencies": { "elysia": ">= 1.3.0" } }, "sha512-+jwAEIDbIGmSKjl/kePwdDaHFgsIX/cEpw01sSjzm7SosjwZuQjJDVgDCab2p68lIO+VUOsvkKuP+5Sm5ehCvQ=="],
+    "@elysiajs/openapi": ["@elysiajs/openapi@1.4.2", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-i+9YYVmX9Qx40dGRI9DE9zZJrEo4qXo5h2lfuxf1WuQZKYY8RonnYQZYbdWr/Azs8upTfIdyCifgjfu3Cht8rw=="],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.25.4", "", { "os": "aix", "cpu": "ppc64" }, "sha512-1VCICWypeQKhVbE9oW/sJaAmjLxhVqacdkvPLEjwlttjfwENRSClS8EjBz0KzRyFSCPDIkuXW34Je/vk7zdB7Q=="],
 
@@ -188,8 +187,6 @@
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.40.2", "", { "os": "win32", "cpu": "x64" }, "sha512-bwspbWB04XJpeElvsp+DCylKfF4trJDa2Y9Go8O6A7YLX2LIKGcNK/CYImJN6ZP4DcuOHB4Utl3iCbnR62DudA=="],
 
     "@sinclair/typebox": ["@sinclair/typebox@0.34.41", "", {}, "sha512-6gS8pZzSXdyRHTIqoqSVknxolr1kzfy4/CeDnrzsVz8TTIWUbOBr6gnzOmTYJ3eXQNh4IYHIGi5aIL7sOZ2G/g=="],
-
-    "@sinclair/typemap": ["@sinclair/typemap@0.10.1", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.30", "valibot": "^1.0.0", "zod": "^3.24.1" } }, "sha512-UXR0fhu/n3c9B6lB+SLI5t1eVpt9i9CdDrp2TajRe3LbKiUhCTZN2kSfJhjPnpc3I59jMRIhgew7+0HlMi08mg=="],
 
     "@tokenizer/inflate": ["@tokenizer/inflate@0.2.7", "", { "dependencies": { "debug": "^4.4.0", "fflate": "^0.8.2", "token-types": "^6.0.0" } }, "sha512-MADQgmZT1eKjp06jpI2yozxaU9uVs4GzzgSL+uEq7bVcJ9V1ZXQkeGNql1fsSI0gMy1vhvNTNbUqrx+pZfJVmg=="],
 

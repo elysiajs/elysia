@@ -41,7 +41,8 @@ const emptyHttpStatus = {
 
 export class ElysiaCustomStatusResponse<
 	const in out Code extends number | keyof StatusMap,
-	in out T = Code extends keyof InvertedStatusMap
+	// no in out here so the response can be sub type of return type
+	T = Code extends keyof InvertedStatusMap
 		? InvertedStatusMap[Code]
 		: Code,
 	const in out Status extends Code extends keyof StatusMap
@@ -78,12 +79,6 @@ export const status = <
 	code: Code,
 	response?: T
 ) => new ElysiaCustomStatusResponse<Code, T>(code, response as any)
-
-const a = status(403, 'a')
-const b = status(403, 'b')
-
-type a = typeof a
-type b = typeof b
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'

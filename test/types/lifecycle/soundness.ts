@@ -2082,3 +2082,91 @@ import { Prettify } from '../../../src/types'
 			}
 		})
 }
+
+// Handle 200 status for inline status
+{
+	new Elysia().get(
+		'/test',
+		({ status }) => {
+			if (Math.random() > 0.1)
+				return status(200, {
+					key: 1,
+					id: 1
+				})
+
+			if (Math.random() > 0.1)
+				return status(200, {
+					// @ts-expect-error
+					key: 'a',
+					id: 1
+				})
+
+			return status(200, { key2: 's', id: 2 })
+		},
+		{
+			response: {
+				200: t.Union([
+					t.Object({
+						key2: t.String(),
+						id: t.Literal(2)
+					}),
+					t.Object({
+						key: t.Number(),
+						id: t.Literal(1)
+					})
+				])
+			}
+		}
+	)
+}
+
+// coerce union status value and return type
+{
+	new Elysia().get(
+		'/test',
+		({ status }) => {
+			return status(200, { key2: 's', id: 2 })
+		},
+		{
+			response: {
+				200: t.Union([
+					t.Object({
+						key2: t.String(),
+						id: t.Literal(2)
+					}),
+					t.Object({
+						key: t.Number(),
+						id: t.Literal(1)
+					})
+				])
+			}
+		}
+	)
+}
+
+// Macro should inherit schema type
+{
+	new Elysia({ name: 'my-middleware-1' })
+		.guard({
+			as: 'scoped',
+			headers: t.Object({
+				role: t.UnionEnum(['admin', 'user'])
+			}),
+			body: t.Object({
+				foo: t.String()
+			})
+		})
+		.macro({
+			auth: {
+				resolve: ({ headers, body }) => {
+					expectTypeOf(headers).toEqualTypeOf<{
+						role: 'admin' | 'user'
+					}>()
+
+					expectTypeOf(body).toEqualTypeOf<{
+						foo: string
+					}>()
+				}
+			}
+		})
+}

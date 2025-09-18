@@ -164,7 +164,9 @@ import type {
 	MacroProperty,
 	MaybeValueOrVoidFunction,
 	IntersectIfObject,
-	IntersectIfObjectSchema
+	IntersectIfObjectSchema,
+	EmptyRouteSchema,
+	UnknownRouteSchema
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -1285,9 +1287,9 @@ export default class Elysia<
 					Ephemeral['standaloneSchema'] &
 					Volatile['standaloneSchema'] &
 					'global' extends Type
-					? { params: Record<string, string> }
+					? { params: { [name: string]: string | undefined } }
 					: 'scoped' extends Type
-						? { params: Record<string, string> }
+						? { params: { [name: string]: string | undefined } }
 						: {},
 				'global' extends Type
 					? {
@@ -1426,17 +1428,7 @@ export default class Elysia<
 	onTransform<const Schema extends RouteSchema>(
 		handler: MaybeArray<
 			TransformHandler<
-				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
-					BasePath
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'],
+				UnknownRouteSchema<ResolvePath<BasePath>>,
 				{
 					decorator: Singleton['decorator']
 					store: Singleton['store']
@@ -1470,22 +1462,13 @@ export default class Elysia<
 		options: { as: Type },
 		handler: MaybeArray<
 			TransformHandler<
-				MergeSchema<
-					Schema,
-					MergeSchema<
-						Volatile['schema'],
-						MergeSchema<Ephemeral['schema'], Metadata['schema']>
-					>,
-					BasePath
-				> &
-					Metadata['standaloneSchema'] &
-					Ephemeral['standaloneSchema'] &
-					Volatile['standaloneSchema'] &
+				UnknownRouteSchema<
 					'global' extends Type
-					? { params: Record<string, string> }
-					: 'scoped' extends Type
-						? { params: Record<string, string> }
-						: {},
+						? { [name: string]: string | undefined }
+						: 'scoped' extends Type
+							? { [name: string]: string | undefined }
+							: ResolvePath<BasePath>
+				>,
 				'global' extends Type
 					? {
 							decorator: Singleton['decorator']
@@ -1564,9 +1547,9 @@ export default class Elysia<
 						Ephemeral['standaloneSchema'] &
 						Volatile['standaloneSchema'] &
 						'global' extends Type
-						? { params: Record<string, string> }
+						? { params: { [name: string]: string | undefined } }
 						: 'scoped' extends Type
-							? { params: Record<string, string> }
+							? { params: { [name: string]: string | undefined } }
 							: {},
 					Singleton &
 						('global' extends Type
@@ -2064,9 +2047,9 @@ export default class Elysia<
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema'] &
 				'global' extends Type
-				? { params: Record<string, string> }
+				? { params: { [name: string]: string | undefined } }
 				: 'scoped' extends Type
-					? { params: Record<string, string> }
+					? { params: { [name: string]: string | undefined } }
 					: {},
 			Singleton &
 				('global' extends Type
@@ -2188,9 +2171,9 @@ export default class Elysia<
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema'] &
 				'global' extends Type
-				? { params: Record<string, string> }
+				? { params: { [name: string]: string | undefined } }
 				: 'scoped' extends Type
-					? { params: Record<string, string> }
+					? { params: { [name: string]: string | undefined } }
 					: {},
 			Singleton &
 				('global' extends Type
@@ -2434,9 +2417,9 @@ export default class Elysia<
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema'] &
 				'global' extends Type
-				? { params: Record<string, string> }
+				? { params: { [name: string]: string | undefined } }
 				: 'scoped' extends Type
-					? { params: Record<string, string> }
+					? { params: { [name: string]: string | undefined } }
 					: {},
 			Singleton &
 				('global' extends Type
@@ -2554,9 +2537,9 @@ export default class Elysia<
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema'] &
 				'global' extends Type
-				? { params: Record<string, string> }
+				? { params: { [name: string]: string | undefined } }
 				: 'scoped' extends Type
-					? { params: Record<string, string> }
+					? { params: { [name: string]: string | undefined } }
 					: {},
 			Singleton &
 				('global' extends Type
@@ -2725,9 +2708,9 @@ export default class Elysia<
 					Ephemeral['standaloneSchema'] &
 					Volatile['standaloneSchema'] &
 					'global' extends Type
-					? { params: Record<string, string> }
+					? { params: { [name: string]: string | undefined } }
 					: 'scoped' extends Type
-						? { params: Record<string, string> }
+						? { params: { [name: string]: string | undefined } }
 						: {},
 				Singleton &
 					('global' extends Type
@@ -2838,9 +2821,9 @@ export default class Elysia<
 					Ephemeral['standaloneSchema'] &
 					Volatile['standaloneSchema'] &
 					'global' extends Type
-					? { params: Record<string, string> }
+					? { params: { [name: string]: string | undefined } }
 					: 'scoped' extends Type
-						? { params: Record<string, string> }
+						? { params: { [name: string]: string | undefined } }
 						: {},
 				Singleton &
 					('global' extends Type
@@ -3918,7 +3901,9 @@ export default class Elysia<
 			Omit<Input, NonResolvableMacroKey>,
 			Definitions['typebox']
 		>,
-		const BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>	,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
 		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<Definitions['error'], Schema, Singleton>
@@ -3932,9 +3917,10 @@ export default class Elysia<
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve'] &
-				// @ts-ignore
-				MacroContext['response']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					// @ts-ignore
+					MacroContext['response']
 			},
 			keyof Metadata['parser'],
 			BeforeHandle,
@@ -4144,7 +4130,9 @@ export default class Elysia<
 		>,
 		const GuardType extends GuardSchemaType,
 		const AsType extends LifeCycleType,
-		const BeforeHandle extends MaybeArray<OptionalHandler<Schema, Singleton>>	,
+		const BeforeHandle extends MaybeArray<
+			OptionalHandler<Schema, Singleton>
+		>,
 		const AfterHandle extends MaybeArray<AfterHandler<Schema, Singleton>>,
 		const ErrorHandle extends MaybeArray<
 			ErrorHandler<Definitions['error'], Schema, Singleton>
@@ -4156,9 +4144,10 @@ export default class Elysia<
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
-				resolve: Ephemeral['resolve'] & Volatile['resolve'] &
-			// @ts-ignore
-			 MacroContext['response']
+				resolve: Ephemeral['resolve'] &
+					Volatile['resolve'] &
+					// @ts-ignore
+					MacroContext['response']
 			},
 			keyof Metadata['parser'],
 			BeforeHandle,
@@ -5409,7 +5398,22 @@ export default class Elysia<
 			InputSchema<keyof Definitions['typebox'] & string>,
 		const NewMacro extends Macro<
 			Input,
-			Metadata['schema'],
+			IntersectIfObjectSchema<
+				MergeSchema<
+					UnwrapRoute<
+						Input,
+						Definitions['typebox'],
+						BasePath
+					>,
+					MergeSchema<
+						Volatile['schema'],
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>
+					>
+				>,
+				Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema']
+			>,
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
 				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
@@ -5495,7 +5499,9 @@ export default class Elysia<
 
 				if (k === 'detail') {
 					if (!localHook.detail) localHook.detail = {}
-					localHook.detail = mergeDeep(localHook.detail, value)
+					localHook.detail = mergeDeep(localHook.detail, value, {
+						mergeArray: true
+					})
 
 					delete localHook[key]
 					continue
@@ -5946,6 +5952,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6050,6 +6057,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6154,6 +6162,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6258,6 +6267,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6362,6 +6372,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6466,6 +6477,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6570,6 +6582,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		>
@@ -6676,6 +6689,7 @@ export default class Elysia<
 			Input,
 			// @ts-ignore
 			Schema & MacroContext,
+			Decorator,
 			Definitions['error'],
 			keyof Metadata['parser']
 		> & {
@@ -7450,9 +7464,9 @@ export default class Elysia<
 						Ephemeral['standaloneSchema'] &
 						Volatile['standaloneSchema'] &
 						'global' extends Type
-						? { params: Record<string, string> }
+						? { params: { [name: string]: string | undefined } }
 						: 'scoped' extends Type
-							? { params: Record<string, string> }
+							? { params: { [name: string]: string | undefined } }
 							: {},
 					Singleton &
 						('global' extends Type

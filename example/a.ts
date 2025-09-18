@@ -1,17 +1,18 @@
 import { Elysia, t } from '../src'
-import z from 'zod'
-import { req } from '../test/utils'
 
-const app = new Elysia()
-	.macro('guestOrUser', {
-		resolve: () => {
-			return {
-				user: null
+new Elysia()
+	.macro({
+		token: {
+			resolve: () => {
+				return {
+					__token: '123'
+				}
 			}
 		}
 	})
-	.macro('user', {
-		guestOrUser: true,
-		body: t.String(),
-		resolve: ({ body, status, user }) => {}
+	.macro('some', {
+		token: true,
+		beforeHandle: ({ __token }) => {
+			console.log('__token', __token)
+		}
 	})
