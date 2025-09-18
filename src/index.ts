@@ -5398,7 +5398,22 @@ export default class Elysia<
 			InputSchema<keyof Definitions['typebox'] & string>,
 		const NewMacro extends Macro<
 			Input,
-			Metadata['schema'],
+			IntersectIfObjectSchema<
+				MergeSchema<
+					UnwrapRoute<
+						Input,
+						Definitions['typebox'],
+						BasePath
+					>,
+					MergeSchema<
+						Volatile['schema'],
+						MergeSchema<Ephemeral['schema'], Metadata['schema']>
+					>
+				>,
+				Metadata['standaloneSchema'] &
+					Ephemeral['standaloneSchema'] &
+					Volatile['standaloneSchema']
+			>,
 			Singleton & {
 				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
 				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>

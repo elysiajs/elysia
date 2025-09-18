@@ -2143,3 +2143,30 @@ import { Prettify } from '../../../src/types'
 		}
 	)
 }
+
+// Macro should inherit schema type
+{
+	new Elysia({ name: 'my-middleware-1' })
+		.guard({
+			as: 'scoped',
+			headers: t.Object({
+				role: t.UnionEnum(['admin', 'user'])
+			}),
+			body: t.Object({
+				foo: t.String()
+			})
+		})
+		.macro({
+			auth: {
+				resolve: ({ headers, body }) => {
+					expectTypeOf(headers).toEqualTypeOf<{
+						role: 'admin' | 'user'
+					}>()
+
+					expectTypeOf(body).toEqualTypeOf<{
+						foo: string
+					}>()
+				}
+			}
+		})
+}
