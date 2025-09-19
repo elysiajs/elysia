@@ -3873,7 +3873,7 @@ export default class Elysia<
 		Singleton,
 		Definitions,
 		Metadata,
-		Prettify<Routes & NewElysia['~Routes']>,
+		Routes & NewElysia['~Routes'],
 		Ephemeral,
 		Volatile
 	>
@@ -4505,7 +4505,7 @@ export default class Elysia<
 		Singleton,
 		Definitions,
 		Metadata,
-		Prettify<Routes & NewElysia['~Routes']>,
+		Routes & NewElysia['~Routes'],
 		Ephemeral,
 		{
 			derive: Volatile['derive']

@@ -1,3 +1,7 @@
+# 1.4.7
+Change:
+- do not prettify routes when using `guard`, `group`
+
 # 1.4.6 - 18 Sep 2025
 Improvement:
 - [#1406](https://github.com/elysiajs/elysia/issues/1406) strictly check for 200 inline status code
