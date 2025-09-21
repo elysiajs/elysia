@@ -4,7 +4,6 @@ import { type stat as Stat } from 'fs/promises'
 import type { BunFile } from 'bun'
 
 import { isBun } from './utils'
-import type { MaybePromise } from '../types'
 
 export const mime = {
 	aac: 'audio/aac',
