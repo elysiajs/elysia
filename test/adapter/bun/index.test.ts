@@ -76,4 +76,14 @@ describe('Bun adapter', () => {
 		expect(response.headers.get('x-header')).toBe('test')
 		expect(caughtError!.message).toBe('A')
 	})
+
+	it('handle non-ASCII path', async () => {
+		const app = new Elysia().get('/สวัสดี', 'สบายดีไหม').listen(0)
+
+		const response = await fetch(
+			`http://localhost:${app.server!.port}/สวัสดี`
+		)
+		const text = await response.text()
+		expect(text).toBe('สบายดีไหม')
+	})
 })

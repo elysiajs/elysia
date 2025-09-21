@@ -1,12 +1,8 @@
 import { Elysia, t } from '../src'
 
-new Elysia({ prefix: "/a" })
-	.get(
-    "/todo/:id",
-    ({ params }) => {
-        // O `params.id` aqui já é totalmente tipado!
-      return {
-        id: params.id,
-      };
-    }
-  )
+const app = new Elysia().get('/สวัสดี', 'สบายดีไหม').listen(0)
+
+const response = await fetch(`http://localhost:${app.server!.port}/สวัสดี`)
+const text = await response.text()
+
+console.log(text)

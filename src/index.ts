@@ -5400,11 +5400,7 @@ export default class Elysia<
 			Input,
 			IntersectIfObjectSchema<
 				MergeSchema<
-					UnwrapRoute<
-						Input,
-						Definitions['typebox'],
-						BasePath
-					>,
+					UnwrapRoute<Input, Definitions['typebox'], BasePath>,
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
