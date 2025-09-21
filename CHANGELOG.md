@@ -1,7 +1,7 @@
 # 1.4.7
 Change:
 - do not prettify routes when using `guard`, `group`
-- use `process.getBuiltinModule` instead of dynamic import
+- use `process.getBuiltinModule` instead of dynamic import for file
 
 # 1.4.6 - 18 Sep 2025
 Improvement:
