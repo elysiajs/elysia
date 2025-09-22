@@ -22,7 +22,7 @@ export function isCloudflareWorker() {
 }
 
 /**
- * Experimental Cloudflare Adapter
+ * Cloudflare Adapter (Experimental)
  * @see https://elysiajs.com/integrations/cloudflare-worker
  *
  * @example
