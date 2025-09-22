@@ -3873,7 +3873,7 @@ export default class Elysia<
 		Singleton,
 		Definitions,
 		Metadata,
-		Prettify<Routes & NewElysia['~Routes']>,
+		Routes & NewElysia['~Routes'],
 		Ephemeral,
 		Volatile
 	>
@@ -4505,7 +4505,7 @@ export default class Elysia<
 		Singleton,
 		Definitions,
 		Metadata,
-		Prettify<Routes & NewElysia['~Routes']>,
+		Routes & NewElysia['~Routes'],
 		Ephemeral,
 		{
 			derive: Volatile['derive']
@@ -5400,11 +5400,7 @@ export default class Elysia<
 			Input,
 			IntersectIfObjectSchema<
 				MergeSchema<
-					UnwrapRoute<
-						Input,
-						Definitions['typebox'],
-						BasePath
-					>,
+					UnwrapRoute<Input, Definitions['typebox'], BasePath>,
 					MergeSchema<
 						Volatile['schema'],
 						MergeSchema<Ephemeral['schema'], Metadata['schema']>
@@ -8043,6 +8039,8 @@ export default class Elysia<
 	}
 
 	compile() {
+		this['~adapter'].beforeCompile?.(this)
+
 		if (this['~adapter'].isWebStandard) {
 			this.fetch = this.config.aot
 				? composeGeneralHandler(this)

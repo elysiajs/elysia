@@ -95,13 +95,15 @@ const mapRoutes = (app: AnyElysia) => {
 		},
 		handler: Function
 	) => {
-		if (routes[route.path]) {
+		const path = encodeURI(route.path)
+
+		if (routes[path]) {
 			// @ts-ignore
-			if (!routes[route.path][route.method])
+			if (!routes[path][route.method])
 				// @ts-ignore
-				routes[route.path][route.method] = handler
+				routes[path][route.method] = handler
 		} else
-			routes[route.path] = {
+			routes[path] = {
 				[route.method]: handler
 			}
 	}
@@ -249,7 +251,9 @@ export const BunAdapter: ElysiaAdapter = {
 				>{}
 				const ops = <Promise<any>[]>[]
 
-				for (const [path, route] of Object.entries(iterator)) {
+				for (let [path, route] of Object.entries(iterator)) {
+					path = encodeURI(path)
+
 					if (supportPerMethodInlineHandler) {
 						if (!route) continue
 
@@ -505,7 +509,7 @@ export const BunAdapter: ElysiaAdapter = {
 					)
 				].filter((x) => x)
 
-                const hasCustomErrorHandlers = errorHandlers.length > 0
+				const hasCustomErrorHandlers = errorHandlers.length > 0
 
 				const handleErrors = !hasCustomErrorHandlers
 					? () => {}
@@ -561,18 +565,20 @@ export const BunAdapter: ElysiaAdapter = {
 								const message = await parseMessage(ws, _message)
 
 								if (validateMessage?.Check(message) === false) {
-                                    const validationError = new ValidationError(
-                                        'message',
-                                        validateMessage,
-                                        message
-                                    )
+									const validationError = new ValidationError(
+										'message',
+										validateMessage,
+										message
+									)
 
-                                    if (!hasCustomErrorHandlers) {
-                                        return void ws.send(validationError.message as string)
-                                    }
+									if (!hasCustomErrorHandlers) {
+										return void ws.send(
+											validationError.message as string
+										)
+									}
 
-                                    return handleErrors(ws, validationError)
-                                }
+									return handleErrors(ws, validationError)
+								}
 
 								try {
 									await handleResponse(

@@ -1,10 +1,9 @@
 /* eslint-disable sonarjs/no-duplicate-string */
 import { type createReadStream as CreateReadStream } from 'fs'
 import { type stat as Stat } from 'fs/promises'
+import type { BunFile } from 'bun'
 
 import { isBun } from './utils'
-import type { BunFile } from 'bun'
-import type { MaybePromise } from '../types'
 
 export const mime = {
 	aac: 'audio/aac',
@@ -98,7 +97,7 @@ let createReadStream: typeof CreateReadStream
 let stat: typeof Stat
 
 export class ElysiaFile {
-	readonly value: MaybePromise<unknown>
+	readonly value: unknown
 	readonly stats: ReturnType<typeof Stat> | undefined
 
 	constructor(public path: string) {
@@ -106,29 +105,49 @@ export class ElysiaFile {
 		else {
 			// Browser
 			// @ts-ignore
-			if (typeof window !== 'undefined') {
-				console.warn('Browser environment does not support file')
-			} else {
-				if (!createReadStream || !stat) {
-					try {
-						this.value = import('fs').then((fs) => {
-							createReadStream = fs.createReadStream
-
-							return fs.createReadStream(path)
-						})
-						this.stats = import('fs/promises').then((fs) => {
-							stat = fs.stat
-
-							return fs.stat(path)
-						})
-					} catch {
-						// not empty
-					}
-				} else {
-					this.value = createReadStream(path)
-					this.stats = stat(path)!
+			if (!createReadStream || !stat) {
+				// @ts-ignore
+				if (typeof window !== 'undefined') {
+					console.warn('Browser environment does not support file')
+					return
 				}
+
+				const warnMissing = (name?: string) =>
+					console.warn(
+						new Error(
+							`[elysia] \`file\` require \`fs${name ? '.' + name : ''}\` ${name?.includes('.') ? 'module ' : ''}which is not available in this environment`
+						)
+					)
+
+				if (
+					typeof process === 'undefined' ||
+					typeof process.getBuiltinModule !== 'function'
+				) {
+					warnMissing()
+					return
+				}
+
+				const fs = process.getBuiltinModule('fs')
+				if (!fs) {
+					warnMissing()
+					return
+				}
+
+				if (typeof fs.createReadStream !== 'function') {
+					warnMissing()
+					return
+				}
+				if (typeof fs.promises?.stat !== 'function') {
+					warnMissing()
+					return
+				}
+
+				createReadStream = fs.createReadStream
+				stat = fs.promises.stat
 			}
+
+			this.value = createReadStream(path)
+			this.stats = stat(path)!
 		}
 	}
 

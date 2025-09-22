@@ -1,3 +1,13 @@
+# 1.4.7 - 22 Sep 2025
+Feature:
+- experimental `adapter/cloudflare-worker`
+- add `ElysiaAdapter.beforeCompile`
+
+Change:
+- do not prettify routes when using `guard`, `group`
+- use `process.getBuiltinModule` instead of dynamic import for file
+- `Elysia.file.value` on Web Standard Adapter now is not a promise
+
 # 1.4.6 - 18 Sep 2025
 Improvement:
 - [#1406](https://github.com/elysiajs/elysia/issues/1406) strictly check for 200 inline status code

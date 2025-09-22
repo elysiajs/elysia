@@ -162,4 +162,9 @@ export interface ElysiaAdapter {
 		hook: AnyLocalHook,
 		app: AnyElysia
 	): void
+
+	/**
+	 * Call thing before compile
+	 */
+	beforeCompile?(app: AnyElysia): void
 }
