@@ -166,8 +166,11 @@ import type {
 	IntersectIfObject,
 	IntersectIfObjectSchema,
 	EmptyRouteSchema,
-	UnknownRouteSchema
+	UnknownRouteSchema,
+	FileSystemRouterOptions,
+	FileSystemRouteExport
 } from './types'
+import { resolve } from 'node:path'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -5450,6 +5453,62 @@ export default class Elysia<
 		return this as any
 	}
 
+	/**
+	 * ### fileSystemRouter
+	 * Enable file system routing using Bun.FileSystemRouter
+	 *
+	 * Route files can export either:
+	 * - A function (handles all HTTP methods)
+	 * - An object with method keys (GET, POST, PUT, PATCH, DELETE, etc.)
+	 *
+	 * Note: This feature disables AOT (Ahead of Time) compilation mode
+	 * due to the dynamic nature of file system routing.
+	 *
+	 * ---
+	 * @example
+	 * ```typescript
+	 * // Single function for all methods
+	 * export default ({ params, query, request }) => {
+	 *     return { message: 'Hello' }
+	 * }
+	 *
+	 * // Method-specific handlers
+	 * export default {
+	 *     GET: ({ params, query, request }) => ({ message: 'Get data' }),
+	 *     POST: ({ params, query, request }) => ({ message: 'Create data' }),
+	 *     PUT: ({ params, query, request }) => ({ message: 'Update data' }),
+	 *     DELETE: ({ params, query, request }) => ({ message: 'Delete data' })
+	 * }
+	 * ```
+	 */
+	fileSystemRouter(options: FileSystemRouterOptions): this {
+		if (typeof Bun === 'undefined' || !Bun.FileSystemRouter)
+			throw new Error(
+				'Bun.FileSystemRouter is not available. This feature requires Bun runtime v1.0.0 or later. ' +
+					'For other runtimes, consider using traditional route registration methods.'
+			)
+
+		// File system router requires dynamic handling, disable AOT
+		this.config.aot = false
+
+		this['~fileSystemRouter'] = new Bun.FileSystemRouter({
+			...options,
+			style: options.style ?? 'nextjs'
+		})
+		;(this as any)['~fileSystemRouterDir'] = resolve(options.dir)
+
+		// Clear cache when router is initialized
+		this['~fileSystemRouterCache'].clear()
+
+		// Ensure dynamic handler is active if already compiled
+		if (this.server) this.compile()
+		return this
+	}
+
+	private '~fileSystemRouter': Bun.FileSystemRouter | undefined
+	private '~fileSystemRouterDir': string | undefined
+	private '~fileSystemRouterCache': Map<string, FileSystemRouteExport> = new Map()
+
 	private applyMacro(
 		localHook: AnyLocalHook,
 		appliable: AnyLocalHook = localHook,
@@ -8292,6 +8351,14 @@ export type {
 	TransformHandler,
 	HTTPHeaders,
 	EmptyRouteSchema
+} from './types'
+
+export type {
+	FileSystemRouterOptions,
+	FileSystemRouterMatch,
+	FileSystemRouteContext,
+	FileSystemRouteHandler,
+	FileSystemRouteExport
 } from './types'
 
 export { env } from './universal/env'

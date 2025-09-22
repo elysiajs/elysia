@@ -11,7 +11,8 @@ import {
 	ElysiaErrors,
 	status,
 	NotFoundError,
-	ValidationError
+	ValidationError,
+	InternalServerError
 } from './error'
 
 import { parseQuery } from './parse-query'
@@ -19,7 +20,14 @@ import { parseQuery } from './parse-query'
 import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
 
-import type { Handler, LifeCycleStore, SchemaValidator } from './types'
+import type {
+	FileSystemRouterMatch,
+	Handler,
+	LifeCycleStore,
+	SchemaValidator
+} from './types'
+import { pathToFileURL } from 'node:url'
+import { relative } from 'node:path'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -102,15 +110,116 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 			const methodKey = isWS ? 'WS' : request.method
 
-			const handler =
+			let handler =
 				app.router.dynamic.find(request.method, path) ??
 				app.router.dynamic.find(methodKey, path) ??
 				app.router.dynamic.find('ALL', path)
 
+			let fileSystemMatch: FileSystemRouterMatch | null = null
+
+			// Check file system router if no handler found
+			if (!handler && app['~fileSystemRouter']) {
+				const match = app['~fileSystemRouter'].match(request)
+				if (match) {
+					fileSystemMatch = match
+					// Check cache first
+					let fileHandler = app['~fileSystemRouterCache'].get(
+						match.filePath
+					)
+
+					if (!fileHandler) {
+						// Import the file dynamically
+						try {
+							const module = await import(
+								pathToFileURL(match.filePath).href
+							)
+							fileHandler = module.default || module
+
+							// Cache the handler
+							app['~fileSystemRouterCache'].set(
+								match.filePath,
+								fileHandler
+							)
+						} catch (error) {
+							const root = app['~fileSystemRouterDir'] || ''
+							const relativePath = (root
+								? relative(root, match.filePath)
+								: match.filePath
+							).replaceAll('\\', '/')
+							console.error(
+								`Failed to load route file: ${relativePath}:`,
+								error
+							)
+							// Throw a 500 error for failed imports
+							throw new InternalServerError(
+								`Failed to load route file: ${relativePath}`
+							)
+						}
+					}
+
+					const createWrappedHandler = (handlerFn: any) => {
+						if (typeof handlerFn !== 'function') return null
+
+						return (context: any) => {
+							return handlerFn({
+								params: context.params || {},
+								query: context.query || {},
+								request: context.request
+							})
+						}
+					}
+
+					if (typeof fileHandler === 'function') {
+						// Single function handler for all methods
+						const wrappedHandler = createWrappedHandler(fileHandler)
+
+						handler = {
+							store: {
+								handle: wrappedHandler,
+								hooks: {},
+								validator: undefined,
+								content: undefined,
+								route: match.pathname
+							},
+							params: match.params || {}
+						}
+					} else if (
+						typeof fileHandler === 'object' &&
+						fileHandler !== null
+					) {
+						// Method-specific handlers
+						const method = request.method.toUpperCase()
+						const methodHandler =
+							fileHandler[method as keyof typeof fileHandler] ??
+							(method === 'HEAD' ? fileHandler.GET : undefined) ??
+							fileHandler.ALL
+
+						const wrappedHandler =
+							createWrappedHandler(methodHandler)
+
+						if (wrappedHandler) {
+							handler = {
+								store: {
+									handle: wrappedHandler,
+									hooks: {},
+									validator: undefined,
+									content: undefined,
+									route: match.pathname
+								},
+								params: match.params || {}
+							}
+						}
+					} else {
+						// Matched a file but its export shape is invalid
+						throw new InternalServerError('Invalid file-system route export')
+					}
+				}
+			}
+
 			if (!handler) {
 				// @ts-ignore
-				context.query =
-					qi === -1 ? {} : parseQuery(url.substring(qi + 1))
+				context.query = fileSystemMatch?.query ??
+					(qi === -1 ? {} : parseQuery(url.substring(qi + 1)))
 
 				throw new NotFoundError()
 			}
@@ -285,7 +394,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			context.params = handler?.params || undefined
 
 			// @ts-ignore
-			context.query = qi === -1 ? {} : parseQuery(url.substring(qi + 1))
+			context.query = fileSystemMatch?.query ??
+				(qi === -1 ? {} : parseQuery(url.substring(qi + 1)))
 
 			context.headers = {}
 			for (const [key, value] of request.headers.entries())

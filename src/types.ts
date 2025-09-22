@@ -235,6 +235,77 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	sanitize?: ExactMirrorInstruction['sanitize']
 }
 
+export interface FileSystemRouterOptions {
+	/**
+	 * Directory to scan for routes
+	 */
+	dir: string
+	/**
+	 * Style of file system routing
+	 *
+	 * @default "nextjs"
+	 */
+	style?: 'nextjs'
+	/**
+	 * Origin URL for resolving assets
+	 */
+	origin?: string
+	/**
+	 * Asset prefix for static files
+	 */
+	assetPrefix?: string
+	/**
+	 * File extensions to include
+	 */
+	fileExtensions?: string[]
+}
+
+export interface FileSystemRouterMatch {
+	filePath: string
+	kind: 'exact' | 'catch-all' | 'optional-catch-all' | 'dynamic'
+	name: string
+	pathname: string
+	src: string
+	params?: Record<string, string>
+	query?: Record<string, string | string[]>
+}
+
+/**
+ * Context passed to file system route handlers
+ */
+export interface FileSystemRouteContext {
+	params: Record<string, string>
+	query: Record<string, string | string[]>
+	request: Request
+	[key: string]: unknown // Allow for extensions
+}
+
+/**
+ * Function signature for file system route handlers
+ */
+export type FileSystemRouteHandler = (
+	context: FileSystemRouteContext
+) => any | Promise<any>
+
+/**
+ * What can be exported from a file system route file
+ */
+export type FileSystemRouteExport =
+	| FileSystemRouteHandler
+	| {
+			default?: FileSystemRouteHandler
+			GET?: FileSystemRouteHandler
+			POST?: FileSystemRouteHandler
+			PUT?: FileSystemRouteHandler
+			PATCH?: FileSystemRouteHandler
+			DELETE?: FileSystemRouteHandler
+			HEAD?: FileSystemRouteHandler
+			OPTIONS?: FileSystemRouteHandler
+			CONNECT?: FileSystemRouteHandler
+			TRACE?: FileSystemRouteHandler
+			ALL?: FileSystemRouteHandler
+	  }
+
 export interface ValidatorLayer {
 	global: SchemaValidator | null
 	scoped: SchemaValidator | null
