@@ -6,6 +6,7 @@ Feature:
 Change:
 - do not prettify routes when using `guard`, `group`
 - use `process.getBuiltinModule` instead of dynamic import for file
+- `Elysia.file.value` on Web Standard Adapter now is not a promise
 
 # 1.4.6 - 18 Sep 2025
 Improvement:
