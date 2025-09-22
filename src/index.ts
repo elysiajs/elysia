@@ -8039,6 +8039,8 @@ export default class Elysia<
 	}
 
 	compile() {
+		this['~adapter'].beforeCompile?.(this)
+
 		if (this['~adapter'].isWebStandard) {
 			this.fetch = this.config.aot
 				? composeGeneralHandler(this)
