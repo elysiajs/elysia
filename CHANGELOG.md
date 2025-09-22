@@ -1,9 +1,11 @@
 # 1.4.7 - 22 Sep 2025
+Feature:
+- experimental `adapter/cloudflare-worker`
+- add `ElysiaAdapter.beforeCompile`
+
 Change:
 - do not prettify routes when using `guard`, `group`
 - use `process.getBuiltinModule` instead of dynamic import for file
-- experimental `adapter/cloudflare-worker`
-- add `ElysiaAdapter.beforeCompile`
 
 # 1.4.6 - 18 Sep 2025
 Improvement:
