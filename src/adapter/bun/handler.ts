@@ -39,7 +39,10 @@ export const mapResponse = (
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File)
+				return handleFile(
+					(response as ElysiaFile).value as File,
+					set as any
+				)
 
 			case 'File':
 				return handleFile(response as File, set as any)
