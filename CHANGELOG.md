@@ -1,3 +1,7 @@
+# 1.4.8
+Change:
+- make `file-type` optional to reduce bundle size
+
 # 1.4.7 - 22 Sep 2025
 Feature:
 - experimental `adapter/cloudflare-worker`
