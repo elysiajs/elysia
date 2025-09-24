@@ -159,6 +159,7 @@ export const createStreamHandler =
 			| IteratorResult<unknown>
 			| undefined
 
+		if (set) handleSet(set)
 		if (init instanceof Promise) init = await init
 
 		// Generator or ReadableStream is returned from a generator function

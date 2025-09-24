@@ -96,6 +96,31 @@ describe('Stream', () => {
 		expect(response).toBe('ab')
 	})
 
+	it('include multiple set-cookie headers in streamed response', async () => {
+		const app = new Elysia().get('/', async function* (context) {
+			context.cookie['cookie1'].set({
+				value: 'value1'
+			})
+			context.cookie['cookie2'].set({
+				value: 'value2'
+			})
+
+			yield sse({ event: 'test', data: { count: 1 } })
+			yield sse({ event: 'test', data: { count: 2 } })
+		})
+
+		const response = await app.handle(req('/'))
+
+		const cookieHeaders = response.headers.getSetCookie()
+		expect(cookieHeaders).toHaveLength(2)
+		expect(cookieHeaders.some((h) => h.includes('cookie1=value1'))).toBe(
+			true
+		)
+		expect(cookieHeaders.some((h) => h.includes('cookie2=value2'))).toBe(
+			true
+		)
+	})
+
 	it('mutate set before yield is called', async () => {
 		const expected = ['a', 'b', 'c']
 
