@@ -37,6 +37,7 @@
       },
       "optionalPeers": [
         "file-type",
+        "typescript",
       ],
     },
   },

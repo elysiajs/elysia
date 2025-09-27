@@ -642,7 +642,9 @@ export const sucrose = (
 		if (typeof event !== 'function') continue
 
 		const content = event.toString()
+		console.log(content)
 		const key = checksum(content)
+		console.log(key)
 		const cachedInference = caches[key]
 		if (cachedInference) {
 			inference = mergeInference(inference, cachedInference)

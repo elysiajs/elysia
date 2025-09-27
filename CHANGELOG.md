@@ -1,6 +1,8 @@
 # 1.4.8
 Change:
 - make `file-type` optional to reduce bundle size
+- [#1432](https://github.com/elysiajs/elysia/pull/1432) missing context (set) in mapResponse for ElysiaFile
+- [#1435](https://github.com/elysiajs/elysia/pull/1435) missing cookies in SSE
 
 # 1.4.7 - 22 Sep 2025
 Feature:

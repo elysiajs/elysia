@@ -8,9 +8,7 @@ import {
 	createResponseHandler,
 	createStreamHandler,
 	handleFile,
-	handleSet,
-	responseToSetHeaders,
-	streamResponse
+	handleSet
 } from '../utils'
 
 import { ElysiaFile } from '../../universal/file'
