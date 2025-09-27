@@ -39,14 +39,14 @@ export const mapResponse = (
 			case 'ElysiaFile':
 				return handleFile(
 					(response as ElysiaFile).value as File,
-					set as any
+					set
 				)
 
 			case 'File':
-				return handleFile(response as File, set as any)
+				return handleFile(response as File, set)
 
 			case 'Blob':
-				return handleFile(response as Blob, set as any)
+				return handleFile(response as Blob, set)
 
 			case 'ElysiaCustomStatusResponse':
 				set.status = (response as ElysiaCustomStatusResponse<200>).code
@@ -180,10 +180,10 @@ export const mapEarlyResponse = (
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File)
+				return handleFile((response as ElysiaFile).value as File, set)
 
 			case 'File':
-				return handleFile(response as File, set as any)
+				return handleFile(response as File, set)
 
 			case 'Blob':
 				return handleFile(response as File | Blob, set)
@@ -298,10 +298,10 @@ export const mapEarlyResponse = (
 				return new Response(JSON.stringify(response), set as any)
 
 			case 'ElysiaFile':
-				return handleFile((response as ElysiaFile).value as File)
+				return handleFile((response as ElysiaFile).value as File, set)
 
 			case 'File':
-				return handleFile(response as File, set as any)
+				return handleFile(response as File, set)
 
 			case 'Blob':
 				return handleFile(response as File | Blob, set)
