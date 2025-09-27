@@ -28,10 +28,6 @@
         "valibot": "^1.1.0",
         "zod": "^4.1.5",
       },
-      "optionalDependencies": {
-        "@sinclair/typebox": ">= 0.34.0 < 1",
-        "openapi-types": ">= 12.0.0",
-      },
       "peerDependencies": {
         "@sinclair/typebox": ">= 0.34.0 < 1",
         "exact-mirror": ">= 0.0.9",
@@ -39,6 +35,10 @@
         "openapi-types": ">= 12.0.0",
         "typescript": ">= 5.0.0",
       },
+      "optionalPeers": [
+        "file-type",
+        "typescript",
+      ],
     },
   },
   "packages": {

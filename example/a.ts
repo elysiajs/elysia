@@ -1,30 +1,9 @@
 import { Elysia, t } from '../src'
+import { sucrose } from '../src/sucrose'
 import { req } from '../test/utils'
 
 const app = new Elysia()
-	.wrap((fn, request) => {
-		const _request = request.clone()
-
-		return () => {
-			try {
-				return fn(request.clone())
-			} catch {
-				console.log('ER')
-			}
-		}
-	})
-	.onError(({ error }) => {
-		if (error) throw error
-	})
-	.get('/', () => {
-		throw new Error('A')
-
-		return 'Hello World!'
-	})
+	.get('/:id', ({ params: { id } }) => 'hello')
 	.listen(3000)
 
-// console.log(app.fetch.toString())
-
-app.handle(req('/'))
-	.then((x) => x.text())
-	.then(console.log)
+// app.handle(req('/1'))

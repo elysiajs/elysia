@@ -484,11 +484,8 @@ export const composeHandler = ({
 	const hasTrace = !!hooks.trace?.length
 	let fnLiteral = ''
 
-	inference = sucrose(hooks, inference)
 	inference = sucrose(
-		{
-			handler: handler as any
-		},
+		Object.assign({ handler: handler as any }, hooks),
 		inference
 	)
 

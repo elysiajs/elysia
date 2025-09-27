@@ -219,8 +219,12 @@
 		"openapi-types": ">= 12.0.0",
 		"typescript": ">= 5.0.0"
 	},
-	"optionalDependencies": {
-		"@sinclair/typebox": ">= 0.34.0 < 1",
-		"openapi-types": ">= 12.0.0"
+	"peerDependenciesMeta": {
+		"file-type": {
+			"optional": true
+		},
+		"typescript": {
+			"optional": true
+		}
 	}
 }
