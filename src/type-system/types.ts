@@ -220,7 +220,7 @@ export declare class ElysiaTransformEncodeBuilder<
 	private EncodeSchema
 	Encode<E extends TransformFunction<ReturnType<D>, StaticDecode<T>>>(
 		encode: E
-	): TTransform<T, ReturnType<D>>
+	): TTransform<T, ReturnType<E>>
 }
 export type TransformFunction<T = any, U = any> = (value: T) => U
 export interface TransformOptions<
