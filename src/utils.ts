@@ -392,8 +392,6 @@ const hasBunHash = isBun && typeof Bun.hash === 'function'
 
 // https://stackoverflow.com/a/52171480
 export const checksum = (s: string) => {
-	if (hasBunHash) return Bun.hash(s) as unknown as number
-
 	let h = 9
 
 	for (let i = 0; i < s.length; ) h = Math.imul(h ^ s.charCodeAt(i++), 9 ** 9)

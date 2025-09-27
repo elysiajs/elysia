@@ -13,7 +13,6 @@ import type { Context, PreContext } from './context'
 
 import { t } from './type-system'
 import {
-	clearSucroseCache,
 	mergeInference,
 	sucrose,
 	type Sucrose
@@ -8129,12 +8128,6 @@ export default class Elysia<
 		callback?: ListenCallback
 	) => {
 		this['~adapter'].listen(this)(options, callback)
-
-		if (this.promisedModules.size) clearSucroseCache(5000)
-
-		this.promisedModules.then(() => {
-			clearSucroseCache(1000)
-		})
 
 		return this
 	}

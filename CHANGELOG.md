@@ -1,4 +1,8 @@
-# 1.4.8
+# 1.4.8 - 27 Sep 2025
+Improvement:
+- automatically clear up sucrose cache when not used
+- remove `Bun.hash` from checksum calculation
+
 Change:
 - make `file-type` optional to reduce bundle size
 - [#1432](https://github.com/elysiajs/elysia/pull/1432) missing context (set) in mapResponse for ElysiaFile

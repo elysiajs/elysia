@@ -642,14 +642,18 @@ export const sucrose = (
 		if (typeof event !== 'function') continue
 
 		const content = event.toString()
-		console.log(content)
 		const key = checksum(content)
-		console.log(key)
 		const cachedInference = caches[key]
 		if (cachedInference) {
 			inference = mergeInference(inference, cachedInference)
 			continue
 		}
+
+		// If no sucrose usage is found in 4:55 minutes
+		// it's likely that server is either idle or
+		// no new compilation is happening
+		// Clear the cache to free up memory
+		clearSucroseCache(4 * 60 * 1000 + 55 * 1000)
 
 		const fnInference: Sucrose.Inference = {
 			query: false,
