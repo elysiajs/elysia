@@ -4,5 +4,19 @@
     ],
     "project": [
         "src/**/*.{js,ts}"
+    ],
+    "ignoreDependencies": [
+        "@types/cookie",
+        "arktype",
+        "@elysiajs/openapi",
+        "eslint-plugin-security",
+        "expect-type",
+        "prettier",
+        "valibot",
+        "zod",
+        "file-type"
+    ],
+    "ignoreBinaries": [
+        "dist/bun/index.js"
     ]
 }
