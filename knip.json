@@ -1,0 +1,8 @@
+{
+    "entry": [
+        "src/index.ts"
+    ],
+    "project": [
+        "src/**/*.{js,ts}"
+    ]
+}
