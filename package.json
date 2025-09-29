@@ -186,6 +186,7 @@
 		"test:cf": "cd test/cloudflare && rm -rf node_modules && bun install -f && bun run cf-typegen && bun run test",
 		"dev": "bun run --watch example/a.ts",
 		"build": "rm -rf dist && bun build.ts",
+		"deadcode": "knip",
 		"release": "bun run build && bun run test && bun publish"
 	},
 	"dependencies": {
@@ -206,6 +207,7 @@
 		"eslint-plugin-sonarjs": "^3.0.2",
 		"expect-type": "^1.2.1",
 		"file-type": "^20.4.1",
+		"knip": "^5.64.1",
 		"memoirist": "^0.4.0",
 		"prettier": "^3.5.3",
 		"tsup": "^8.4.0",
