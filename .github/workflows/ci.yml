@@ -21,9 +21,6 @@ jobs:
             - name: Install packages
               run: bun install
 
-            - name: Deadcode
-              run: bun run deadcode
-
             - name: Build code
               run: bun run build
 

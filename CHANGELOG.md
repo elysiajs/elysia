@@ -1,3 +1,8 @@
+# 1.4.9 - 29 Sep 2025
+Improvement:
+- add Cloudflare Worker test
+- add `Sucrose.Settings`
+
 # 1.4.8 - 27 Sep 2025
 Improvement:
 - automatically clear up sucrose cache when not used
