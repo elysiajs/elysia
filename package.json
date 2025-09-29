@@ -178,8 +178,8 @@
 	],
 	"license": "MIT",
 	"scripts": {
-		"test": "npm run test:functionality && npm run test:types",
-		"test:functionality": "bun test && bun run test:imports && npm run test:node",
+		"test": "bun run test:functionality && bun run test:types",
+		"test:functionality": "bun test && bun run test:imports && bun run test:node",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
 		"test:node": "npm install --prefix test/node/cjs/ && npm install --prefix test/node/esm/ && node test/node/cjs/index.js && node test/node/esm/index.js && bun dist/bun/index.js",
@@ -187,7 +187,7 @@
 		"dev": "bun run --watch example/a.ts",
 		"build": "rm -rf dist && bun build.ts",
 		"deadcode": "knip",
-		"release": "npm run build && npm run test && npm publish"
+		"release": "bun run build && bun run test && bun publish"
 	},
 	"dependencies": {
 		"cookie": "^1.0.2",
