@@ -1,3 +1,8 @@
+# 1.4.9
+Bug fix:
+Change:
+- `Elysia.file` readstream value is now IIFE to re-read
+
 # 1.4.8 - 27 Sep 2025
 Improvement:
 - automatically clear up sucrose cache when not used
