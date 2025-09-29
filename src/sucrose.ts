@@ -4,6 +4,7 @@ import { checksum } from './utils'
 import { isBun } from './universal/utils'
 
 import type { Handler, HookContainer, LifeCycleStore } from './types'
+import { isCloudflareWorker } from './adapter/cloudflare-worker'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -20,6 +21,18 @@ export namespace Sucrose {
 
 	export interface LifeCycle extends Partial<LifeCycleStore> {
 		handler?: Handler
+	}
+
+	export interface Settings {
+		/**
+		 * If no sucrose usage is found in time
+		 * it's likely that server is either idle or
+		 * no new compilation is happening
+		 * clear the cache to free up memory
+		 *
+		 * @default 4 * 60 * 1000 + 55 * 1000 (4 minutes 55 seconds)
+		 */
+		gcTime?: number | null
 	}
 }
 
@@ -579,7 +592,11 @@ export const isContextPassToFunction = (
 let pendingGC: number | undefined
 let caches = <Record<number, Sucrose.Inference>>{}
 
-export const clearSucroseCache = (delay = 0) => {
+export const clearSucroseCache = (delay: Sucrose.Settings['gcTime']) => {
+	// Can't setTimeout outside fetch in Cloudflare Worker
+	if (delay === null || isCloudflareWorker()) return
+	if (delay === undefined) delay = 4 * 60 * 1000 + 55 * 1000
+
 	if (pendingGC) clearTimeout(pendingGC)
 
 	pendingGC = setTimeout(() => {
@@ -616,7 +633,8 @@ export const sucrose = (
 		url: false,
 		route: false,
 		path: false
-	}
+	},
+	settings: Sucrose.Settings = {}
 ): Sucrose.Inference => {
 	const events = <(Handler | HookContainer)[]>[]
 
@@ -653,7 +671,7 @@ export const sucrose = (
 		// it's likely that server is either idle or
 		// no new compilation is happening
 		// Clear the cache to free up memory
-		clearSucroseCache(4 * 60 * 1000 + 55 * 1000)
+		clearSucroseCache(settings.gcTime)
 
 		const fnInference: Sucrose.Inference = {
 			query: false,
