@@ -1,7 +1,13 @@
-# 1.4.9
+# 1.4.10
 Bug fix:
 Change:
 - `Elysia.file` readstream value is now IIFE to re-read
+
+# 1.4.9 - 29 Sep 2025
+Improvement:
+- add Cloudflare Worker test
+- add `Sucrose.Settings`
+- [#1443](https://github.com/elysiajs/elysia/pull/1443) add knip for detecting deadcode
 
 # 1.4.8 - 27 Sep 2025
 Improvement:
