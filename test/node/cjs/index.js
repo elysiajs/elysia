@@ -2,6 +2,11 @@ if ('Bun' in globalThis) {
 	throw new Error('❌ Use Node.js to run this test!')
 }
 
+setTimeout(() => {
+	console.log('❌ CJS Node.js timed out')
+	process.exit(1)
+}, 5000)
+
 const { Elysia } = require('elysia')
 
 const app = new Elysia().get('/', () => 'Node.js')

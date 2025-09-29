@@ -4,6 +4,11 @@ if ('Bun' in globalThis) {
 	throw new Error('❌ Use Node.js to run this test!')
 }
 
+setTimeout(() => {
+	console.log('❌ ESM Node.js timed out')
+	process.exit(1)
+}, 5000)
+
 const app = new Elysia().get('/', () => 'Node.js')
 
 const response = await app.handle(new Request('http://localhost'))
@@ -13,3 +18,5 @@ if ((await response.text()) !== 'Node.js') {
 }
 
 console.log('✅ ESM Node.js works!')
+
+process.exit()
