@@ -178,7 +178,7 @@
 	],
 	"license": "MIT",
 	"scripts": {
-		"test": "bun run test:functionality && bun run test:types",
+		"test": "npm run test:functionality && npm run test:types",
 		"test:functionality": "bun test && bun run test:imports && bun run test:node",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
@@ -187,7 +187,7 @@
 		"dev": "bun run --watch example/a.ts",
 		"build": "rm -rf dist && bun build.ts",
 		"deadcode": "knip",
-		"release": "bun run build && bun run test && bun publish"
+		"release": "npm run build && npm run test && npm publish"
 	},
 	"dependencies": {
 		"cookie": "^1.0.2",
