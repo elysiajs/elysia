@@ -179,7 +179,7 @@
 	"license": "MIT",
 	"scripts": {
 		"test": "npm run test:functionality && npm run test:types",
-		"test:functionality": "bun test && bun run test:imports && bun run test:node",
+		"test:functionality": "bun test && bun run test:imports && npm run test:node",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
 		"test:node": "npm install --prefix test/node/cjs/ && npm install --prefix test/node/esm/ && node test/node/cjs/index.js && node test/node/esm/index.js && bun dist/bun/index.js",
