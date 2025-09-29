@@ -663,11 +663,31 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-expect-error private
 			return app.handleError(context, reportedError)
 		} finally {
-			if (app.event.afterResponse)
-				setImmediate(async () => {
+			if (app.event.afterResponse) {
+				// Use a polyfill that works in Cloudflare Workers
+				const runAfterResponse = async () => {
 					for (const afterResponse of app.event.afterResponse!)
 						await afterResponse.fn(context as any)
-				})
+				}
+				
+				// Check if we're in a Cloudflare Worker environment with ctx.waitUntil
+				if (typeof globalThis !== 'undefined' && 
+					// @ts-ignore - Check for Cloudflare Workers context
+					globalThis.ctx && 
+					// @ts-ignore
+					typeof globalThis.ctx.waitUntil === 'function') {
+					
+					// Use ctx.waitUntil to ensure the hooks complete in Cloudflare Workers
+					// @ts-ignore
+					globalThis.ctx.waitUntil(runAfterResponse())
+				} else if (typeof setImmediate !== 'undefined') {
+					// Use setImmediate for Node.js environments
+					setImmediate(runAfterResponse)
+				} else {
+					// Fallback to Promise.resolve for other environments
+					Promise.resolve().then(runAfterResponse)
+				}
+			}
 		}
 	}
 }
