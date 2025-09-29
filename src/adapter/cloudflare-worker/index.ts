@@ -1,6 +1,40 @@
 import { ElysiaAdapter } from '../..'
 import { WebStandardAdapter } from '../web-standard/index'
 
+/**
+ * Global variable to store the current ExecutionContext
+ * This gets set by the Cloudflare Worker runtime for each request
+ */
+declare global {
+	var __cloudflareExecutionContext: ExecutionContext | undefined
+}
+
+/**
+ * Creates a setImmediate that automatically detects and uses the current ExecutionContext
+ * This works with the standard export default app pattern
+ * @returns setImmediate function that uses the current ExecutionContext if available
+ */
+export function createAutoDetectingSetImmediate(): (callback: () => void) => void {
+	return (callback: () => void) => {
+		// Check if we're in a Cloudflare Worker environment and have an ExecutionContext
+		if (typeof globalThis.__cloudflareExecutionContext !== 'undefined' && 
+			globalThis.__cloudflareExecutionContext && 
+			typeof globalThis.__cloudflareExecutionContext.waitUntil === 'function') {
+			// Use the current ExecutionContext with proper error handling
+			globalThis.__cloudflareExecutionContext.waitUntil(
+				Promise.resolve().then(callback).catch(error => {
+					console.error('Error in setImmediate callback (ExecutionContext):', error)
+				})
+			)
+		} else {
+			// Fallback to Promise.resolve with error handling
+			Promise.resolve().then(callback).catch(error => {
+				console.error('Error in setImmediate callback (Promise.resolve):', error)
+			})
+		}
+	}
+}
+
 export function isCloudflareWorker() {
 	try {
 		// Check for the presence of caches.default, which is a global in Workers
@@ -43,38 +77,17 @@ export const CloudflareAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
 	name: 'cloudflare-worker',
 	async stop(app, closeActiveConnections) {
-		if (app.server) {	
 		// Call onStop lifecycle hooks for Cloudflare Workers
 		if (app.event.stop)
 			for (let i = 0; i < app.event.stop.length; i++)
 				app.event.stop[i].fn(app)
-		} else {
-				console.log(
-					"Elysia isn't running. Call `app.listen` to start the server.",
-					new Error().stack
-				)
-		}
 	},
 	beforeCompile(app) {
-		// Polyfill setImmediate for Cloudflare Workers - set it globally
+		// Polyfill setImmediate for Cloudflare Workers - use auto-detecting version
+		// This will automatically use ExecutionContext when available
 		if (typeof globalThis.setImmediate === 'undefined') {
 			// @ts-ignore - Polyfill for Cloudflare Workers
-			globalThis.setImmediate = (callback: () => void) => {
-				// Check if we're in a Cloudflare Worker environment with ctx.waitUntil
-				if (typeof globalThis !== 'undefined' && 
-					// @ts-ignore - Check for Cloudflare Workers context
-					globalThis.ctx && 
-					// @ts-ignore
-					typeof globalThis.ctx.waitUntil === 'function') {
-					
-					// Use ctx.waitUntil to ensure the callback completes
-					// @ts-ignore
-					globalThis.ctx.waitUntil(Promise.resolve().then(callback))
-				} else {
-					// Fallback to Promise.resolve for non-Cloudflare environments
-					Promise.resolve().then(callback)
-				}
-			}
+			globalThis.setImmediate = createAutoDetectingSetImmediate()
 		}
 		
 		// Also set it on the global object for compatibility
@@ -96,22 +109,8 @@ export const CloudflareAdapter: ElysiaAdapter = {
 		inject: {
 			...WebStandardAdapter.composeHandler.inject,
 			// Provide setImmediate for composed handlers in Workers
-			setImmediate: (callback: () => void) => {
-				// Same logic as above - use ctx.waitUntil if available
-				if (typeof globalThis !== 'undefined' && 
-					// @ts-ignore - Checking for Worker context
-					globalThis.ctx && 
-					// @ts-ignore
-					typeof globalThis.ctx.waitUntil === 'function') {
-					
-					// Let the Worker runtime handle the async work
-					// @ts-ignore
-					globalThis.ctx.waitUntil(Promise.resolve().then(callback))
-				} else {
-					// Standard promise-based fallback
-					Promise.resolve().then(callback)
-				}
-			}
+			// This uses the auto-detecting version that will use ExecutionContext when available
+			setImmediate: createAutoDetectingSetImmediate()
 		}
 	},
 	composeGeneralHandler: {
@@ -141,11 +140,6 @@ export const CloudflareAdapter: ElysiaAdapter = {
 			)
 
 			app.compile()
-
-			// Call onStart lifecycle hooks
-			if (app.event.start)
-				for (let i = 0; i < app.event.start.length; i++)
-					app.event.start[i].fn(app)
 		}
 	}
 }

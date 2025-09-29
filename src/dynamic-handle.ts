@@ -54,7 +54,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 	// @ts-ignore
 	const defaultHeader = app.setHeaders
 
-	return async (request: Request): Promise<Response> => {
+	return async (request: Request, requestContext?: { executionContext?: ExecutionContext }): Promise<Response> => {
 		const url = request.url,
 			s = url.indexOf('/', 11),
 			qi = url.indexOf('?', s + 1),
@@ -670,18 +670,12 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						await afterResponse.fn(context as any)
 				}
 				
-				// Check if we're in a Cloudflare Worker environment with ctx.waitUntil
-				if (typeof globalThis !== 'undefined' && 
-					// @ts-ignore - Check for Cloudflare Workers context
-					globalThis.ctx && 
-					// @ts-ignore
-					typeof globalThis.ctx.waitUntil === 'function') {
-					
-					// Use ctx.waitUntil to ensure the hooks complete in Cloudflare Workers
-					// @ts-ignore
-					globalThis.ctx.waitUntil(runAfterResponse())
+				// Use ExecutionContext-aware setImmediate if available (Cloudflare Workers)
+				if (requestContext?.executionContext && typeof requestContext.executionContext.waitUntil === 'function') {
+					// Use ctx.waitUntil to ensure the callback completes in Cloudflare Workers
+					requestContext.executionContext.waitUntil(Promise.resolve().then(runAfterResponse))
 				} else if (typeof setImmediate !== 'undefined') {
-					// Use setImmediate for Node.js environments
+					// Use setImmediate (which may be polyfilled by the adapter to auto-detect ExecutionContext)
 					setImmediate(runAfterResponse)
 				} else {
 					// Fallback to Promise.resolve for other environments
