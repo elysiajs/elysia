@@ -102,9 +102,14 @@ export const CloudflareAdapter: ElysiaAdapter = {
 	name: 'cloudflare-worker',
 	async stop(app, closeActiveConnections) {
 		// Call onStop lifecycle hooks for Cloudflare Workers
-		if (app.event.stop)
-			for (let i = 0; i < app.event.stop.length; i++)
-				app.event.stop[i].fn(app)
+		if (app.event.stop) {
+			try {
+				for (let i = 0; i < app.event.stop.length; i++)
+					await app.event.stop[i].fn(app)
+			} catch (error) {
+				console.error('Error in Cloudflare Worker stop hooks:', error)
+			}
+		}
 	},
 	beforeCompile(app) {
 		// Polyfill setImmediate for Cloudflare Workers - use auto-detecting version
@@ -130,10 +135,18 @@ export const CloudflareAdapter: ElysiaAdapter = {
 			env?: any,
 			ctx?: ExecutionContext
 		) {
-			if (ctx) {
-				globalThis.__cloudflareExecutionContext = ctx
+			try {
+				if (ctx) {
+					globalThis.__cloudflareExecutionContext = ctx
+				}
+				return originalFetch(request)
+			} catch (error) {
+				console.error(
+					'Error in Cloudflare Worker fetch override:',
+					error
+				)
+				throw error
 			}
-			return originalFetch(request)
 		} as any
 
 		for (const route of app.routes) route.compile()
