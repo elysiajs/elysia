@@ -2,6 +2,15 @@ import { ElysiaAdapter } from '../..'
 import { WebStandardAdapter } from '../web-standard/index'
 
 /**
+ * ExecutionContext interface for Cloudflare Workers
+ */
+interface ExecutionContext<Props = unknown> {
+	waitUntil(promise: Promise<any>): void
+	passThroughOnException(): void
+	readonly props: Props
+}
+
+/**
  * Global variable to store the current ExecutionContext
  * This gets set by the Cloudflare Worker runtime for each request
  */
@@ -14,23 +23,38 @@ declare global {
  * This works with the standard export default app pattern
  * @returns setImmediate function that uses the current ExecutionContext if available
  */
-export function createAutoDetectingSetImmediate(): (callback: () => void) => void {
+export function createAutoDetectingSetImmediate(): (
+	callback: () => void
+) => void {
 	return (callback: () => void) => {
 		// Check if we're in a Cloudflare Worker environment and have an ExecutionContext
-		if (typeof globalThis.__cloudflareExecutionContext !== 'undefined' && 
-			globalThis.__cloudflareExecutionContext && 
-			typeof globalThis.__cloudflareExecutionContext.waitUntil === 'function') {
+		if (
+			typeof globalThis.__cloudflareExecutionContext !== 'undefined' &&
+			globalThis.__cloudflareExecutionContext &&
+			typeof globalThis.__cloudflareExecutionContext.waitUntil ===
+				'function'
+		) {
 			// Use the current ExecutionContext with proper error handling
 			globalThis.__cloudflareExecutionContext.waitUntil(
-				Promise.resolve().then(callback).catch(error => {
-					console.error('Error in setImmediate callback (ExecutionContext):', error)
-				})
+				Promise.resolve()
+					.then(callback)
+					.catch((error) => {
+						console.error(
+							'Error in setImmediate callback (ExecutionContext):',
+							error
+						)
+					})
 			)
 		} else {
 			// Fallback to Promise.resolve with error handling
-			Promise.resolve().then(callback).catch(error => {
-				console.error('Error in setImmediate callback (Promise.resolve):', error)
-			})
+			Promise.resolve()
+				.then(callback)
+				.catch((error) => {
+					console.error(
+						'Error in setImmediate callback (Promise.resolve):',
+						error
+					)
+				})
 		}
 	}
 }
@@ -89,15 +113,31 @@ export const CloudflareAdapter: ElysiaAdapter = {
 			// @ts-ignore - Polyfill for Cloudflare Workers
 			globalThis.setImmediate = createAutoDetectingSetImmediate()
 		}
-		
+
 		// Also set it on the global object for compatibility
-		if (typeof global !== 'undefined' && typeof global.setImmediate === 'undefined') {
+		if (
+			typeof global !== 'undefined' &&
+			typeof global.setImmediate === 'undefined'
+		) {
 			// @ts-ignore
 			global.setImmediate = globalThis.setImmediate
 		}
-		
+
+		// Override app.fetch to accept ExecutionContext and set it globally
+		const originalFetch = app.fetch.bind(app)
+		app.fetch = function (
+			request: Request,
+			env?: any,
+			ctx?: ExecutionContext
+		) {
+			if (ctx) {
+				globalThis.__cloudflareExecutionContext = ctx
+			}
+			return originalFetch(request)
+		} as any
+
 		for (const route of app.routes) route.compile()
-		
+
 		// Call onStart lifecycle hooks for Cloudflare Workers
 		// since they use the compile pattern instead of listen
 		if (app.event.start)

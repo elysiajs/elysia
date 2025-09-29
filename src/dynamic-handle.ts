@@ -6,6 +6,15 @@ import { TypeCheck } from './type-system'
 import type { Context } from './context'
 import type { ElysiaTypeCheck } from './schema'
 
+/**
+ * ExecutionContext interface for Cloudflare Workers
+ */
+interface ExecutionContext<Props = unknown> {
+	waitUntil(promise: Promise<any>): void
+	passThroughOnException(): void
+	readonly props: Props
+}
+
 import {
 	ElysiaCustomStatusResponse,
 	ElysiaErrors,
@@ -54,7 +63,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 	// @ts-ignore
 	const defaultHeader = app.setHeaders
 
-	return async (request: Request, requestContext?: { executionContext?: ExecutionContext }): Promise<Response> => {
+	return async (
+		request: Request,
+		requestContext?: { executionContext?: ExecutionContext }
+	): Promise<Response> => {
 		const url = request.url,
 			s = url.indexOf('/', 11),
 			qi = url.indexOf('?', s + 1),
@@ -669,11 +681,26 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					for (const afterResponse of app.event.afterResponse!)
 						await afterResponse.fn(context as any)
 				}
-				
+
 				// Use ExecutionContext-aware setImmediate if available (Cloudflare Workers)
-				if (requestContext?.executionContext && typeof requestContext.executionContext.waitUntil === 'function') {
+				if (
+					requestContext?.executionContext &&
+					typeof requestContext.executionContext.waitUntil ===
+						'function'
+				) {
 					// Use ctx.waitUntil to ensure the callback completes in Cloudflare Workers
-					requestContext.executionContext.waitUntil(Promise.resolve().then(runAfterResponse))
+					requestContext.executionContext.waitUntil(
+						Promise.resolve().then(runAfterResponse)
+					)
+				} else if (
+					globalThis.__cloudflareExecutionContext &&
+					typeof globalThis.__cloudflareExecutionContext.waitUntil ===
+						'function'
+				) {
+					// Fallback to global ExecutionContext set by Cloudflare adapter
+					globalThis.__cloudflareExecutionContext.waitUntil(
+						Promise.resolve().then(runAfterResponse)
+					)
 				} else if (typeof setImmediate !== 'undefined') {
 					// Use setImmediate (which may be polyfilled by the adapter to auto-detect ExecutionContext)
 					setImmediate(runAfterResponse)
