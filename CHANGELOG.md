@@ -2,6 +2,7 @@
 Improvement:
 - add Cloudflare Worker test
 - add `Sucrose.Settings`
+- [#1443](https://github.com/elysiajs/elysia/pull/1443) add knip for detecting deadcode
 
 # 1.4.8 - 27 Sep 2025
 Improvement:
