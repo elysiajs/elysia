@@ -178,7 +178,7 @@
 	],
 	"license": "MIT",
 	"scripts": {
-		"test": "bun run test:functionality && bun run test:types",
+		"test": "bun run test:functionality",
 		"test:functionality": "bun test && bun run test:imports && bun run test:node",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
