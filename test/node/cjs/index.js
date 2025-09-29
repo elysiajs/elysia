@@ -19,5 +19,7 @@ const main = async () => {
 	}
 
 	console.log('✅ CommonJS Node.js works!')
+
+	process.exit()
 }
 main()
