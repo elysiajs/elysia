@@ -36,6 +36,7 @@ import type { WebSocketHandler } from './ws/bun'
 
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import { BunHTMLBundlelike } from './universal/types'
+import { Sucrose } from './sucrose'
 
 export type IsNever<T> = [T] extends [never] ? true : false
 
@@ -233,6 +234,10 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	 * @since 1.3.0
 	 */
 	sanitize?: ExactMirrorInstruction['sanitize']
+	/**
+	 * Sucrose (Static Code Analysis) configuration
+	 */
+	sucrose?: Sucrose.Settings
 }
 
 export interface ValidatorLayer {

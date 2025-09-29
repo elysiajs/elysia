@@ -3621,7 +3621,8 @@ export default class Elysia<
 				{
 					[type]: handles.map((x) => x.fn)
 				},
-				this.inference
+				this.inference,
+				this.config.sucrose
 			)
 
 		for (const handle of handles) {

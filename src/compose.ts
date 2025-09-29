@@ -486,7 +486,8 @@ export const composeHandler = ({
 
 	inference = sucrose(
 		Object.assign({ handler: handler as any }, hooks),
-		inference
+		inference,
+		app.config.sucrose
 	)
 
 	if (adapter.declare) {
