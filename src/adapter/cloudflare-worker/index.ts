@@ -1,9 +1,6 @@
 import { ElysiaAdapter } from '../..'
 import { WebStandardAdapter } from '../web-standard/index'
 
-/**
- * ExecutionContext interface for Cloudflare Workers
- */
 interface ExecutionContext<Props = unknown> {
 	waitUntil(promise: Promise<any>): void
 	passThroughOnException(): void
