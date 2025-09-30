@@ -5,15 +5,7 @@ import { TypeCheck } from './type-system'
 
 import type { Context } from './context'
 import type { ElysiaTypeCheck } from './schema'
-
-/**
- * ExecutionContext interface for Cloudflare Workers
- */
-interface ExecutionContext<Props = unknown> {
-	waitUntil(promise: Promise<any>): void
-	passThroughOnException(): void
-	readonly props: Props
-}
+import type { ExecutionContext, RequestContext } from './adapter/types'
 
 import {
 	ElysiaCustomStatusResponse,
@@ -29,6 +21,14 @@ import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
+
+/**
+ * Global variable to store the current ExecutionContext
+ * This gets set by the Cloudflare Worker runtime for each request
+ */
+declare global {
+	var __cloudflareExecutionContext: ExecutionContext | undefined
+}
 
 // JIT Handler
 export type DynamicHandler = {
@@ -65,7 +65,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 	return async (
 		request: Request,
-		requestContext?: { executionContext?: ExecutionContext }
+		requestContext?: RequestContext
 	): Promise<Response> => {
 		const url = request.url,
 			s = url.indexOf('/', 11),
@@ -682,27 +682,16 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						await afterResponse.fn(context as any)
 				}
 
-				// Use ExecutionContext-aware setImmediate if available (Cloudflare Workers)
-				if (
-					requestContext?.executionContext &&
-					typeof requestContext.executionContext.waitUntil ===
-						'function'
-				) {
-					// Use ctx.waitUntil to ensure the callback completes in Cloudflare Workers
-					requestContext.executionContext.waitUntil(
-						Promise.resolve().then(runAfterResponse)
-					)
-				} else if (
-					globalThis.__cloudflareExecutionContext &&
-					typeof globalThis.__cloudflareExecutionContext.waitUntil ===
-						'function'
-				) {
-					// Fallback to global ExecutionContext set by Cloudflare adapter
-					globalThis.__cloudflareExecutionContext.waitUntil(
-						Promise.resolve().then(runAfterResponse)
-					)
+				// Get the best available async execution method
+				const waitUntil =
+					requestContext?.executionContext?.waitUntil ||
+					globalThis.__cloudflareExecutionContext?.waitUntil
+
+				if (waitUntil) {
+					// Use ExecutionContext.waitUntil for Cloudflare Workers
+					waitUntil(Promise.resolve().then(runAfterResponse))
 				} else if (typeof setImmediate !== 'undefined') {
-					// Use setImmediate (which may be polyfilled by the adapter to auto-detect ExecutionContext)
+					// Use setImmediate (may be polyfilled by adapter)
 					setImmediate(runAfterResponse)
 				} else {
 					// Fallback to Promise.resolve for other environments

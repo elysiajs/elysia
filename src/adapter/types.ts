@@ -7,6 +7,22 @@ import type { Sucrose } from '../sucrose'
 import type { Prettify, AnyLocalHook, MaybePromise } from '../types'
 import type { AnyWSLocalHook } from '../ws/types'
 
+/**
+ * ExecutionContext interface for Cloudflare Workers
+ */
+export interface ExecutionContext<Props = unknown> {
+	waitUntil(promise: Promise<any>): void
+	passThroughOnException(): void
+	readonly props: Props
+}
+
+/**
+ * Request context for adapters that need additional runtime information
+ */
+export interface RequestContext {
+	executionContext?: ExecutionContext
+}
+
 export interface ElysiaAdapter {
 	name: string
 	listen(

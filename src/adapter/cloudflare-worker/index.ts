@@ -1,11 +1,6 @@
 import { ElysiaAdapter } from '../..'
 import { WebStandardAdapter } from '../web-standard/index'
-
-interface ExecutionContext<Props = unknown> {
-	waitUntil(promise: Promise<any>): void
-	passThroughOnException(): void
-	readonly props: Props
-}
+import type { ExecutionContext } from '../types'
 
 /**
  * Global variable to store the current ExecutionContext
@@ -112,8 +107,12 @@ export const CloudflareAdapter: ElysiaAdapter = {
 		// Polyfill setImmediate for Cloudflare Workers - use auto-detecting version
 		// This will automatically use ExecutionContext when available
 		if (typeof globalThis.setImmediate === 'undefined') {
-			// @ts-ignore - Polyfill for Cloudflare Workers
-			globalThis.setImmediate = createAutoDetectingSetImmediate()
+			Object.defineProperty(globalThis, 'setImmediate', {
+				value: createAutoDetectingSetImmediate(),
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
 		}
 
 		// Also set it on the global object for compatibility
@@ -121,8 +120,12 @@ export const CloudflareAdapter: ElysiaAdapter = {
 			typeof global !== 'undefined' &&
 			typeof global.setImmediate === 'undefined'
 		) {
-			// @ts-ignore
-			global.setImmediate = globalThis.setImmediate
+			Object.defineProperty(global, 'setImmediate', {
+				value: globalThis.setImmediate,
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
 		}
 
 		// Override app.fetch to accept ExecutionContext and set it globally
@@ -136,7 +139,10 @@ export const CloudflareAdapter: ElysiaAdapter = {
 				if (ctx) {
 					globalThis.__cloudflareExecutionContext = ctx
 				}
-				return originalFetch(request)
+				const result = originalFetch(request)
+				// Clean up context after request to prevent memory leaks and context bleeding
+				globalThis.__cloudflareExecutionContext = undefined
+				return result
 			} catch (error) {
 				console.error(
 					'Error in Cloudflare Worker fetch override:',
@@ -144,7 +150,7 @@ export const CloudflareAdapter: ElysiaAdapter = {
 				)
 				throw error
 			}
-		} as any
+		}
 
 		for (const route of app.routes) route.compile()
 
