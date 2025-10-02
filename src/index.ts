@@ -12,7 +12,11 @@ import fastDecodeURIComponent from 'fast-decode-uri-component'
 import type { Context, PreContext } from './context'
 
 import { t } from './type-system'
-import { mergeInference, sucrose, type Sucrose } from './sucrose'
+import {
+	mergeInference,
+	sucrose,
+	type Sucrose
+} from './sucrose'
 
 import type { WSLocalHook } from './ws/types'
 
