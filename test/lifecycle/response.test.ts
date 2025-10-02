@@ -267,4 +267,41 @@ describe('On After Response Error', () => {
 			expect(counter).toBe(1)
 		}
 	)
+
+	it.each([
+		{ aot: true, onErrorReturnsValue: "error handled" },
+		{ aot: false, onErrorReturnsValue: "error handled" },
+
+		{ aot: true, onErrorReturnsValue: { message: "error handled" } },
+		{ aot: false, onErrorReturnsValue: { message: "error handled" } },
+	])('should execute onAfterResponse when onError returns a value aot=$aot,\tonErrorReturnsValue=$onErrorReturnsValue', async ({ aot, onErrorReturnsValue }) => {
+		let counter = 0
+
+		const app = new Elysia({ aot })
+			.onError(() => {
+				return onErrorReturnsValue
+			})
+			.onAfterResponse(() => {
+				counter++
+			})
+			.get('/error', () => {
+				throw new Error('test error')
+			})
+
+		expect(counter).toBe(0)
+
+		const req = new Request('http://localhost/error')
+		const res = await app.handle(req)
+		const text = await res.text()
+
+		expect(text).toStrictEqual(
+			typeof onErrorReturnsValue === 'string'
+				? onErrorReturnsValue
+				: JSON.stringify(onErrorReturnsValue)
+		)
+
+		await Bun.sleep(1)
+
+		expect(counter).toBe(1)
+	})
 })
