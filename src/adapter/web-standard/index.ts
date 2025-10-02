@@ -66,7 +66,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 			)
 
 		if (app.server) {
-			app.server.stop(closeActiveConnections)
+			await app.server.stop(closeActiveConnections)
 			app.server = null
 
 			if (app.event.stop?.length)
