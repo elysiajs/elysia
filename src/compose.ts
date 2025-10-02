@@ -1,13 +1,12 @@
 import type { AnyElysia } from '.'
 
-import { Value } from '@sinclair/typebox/value'
 import {
 	Kind,
-	OptionalKind,
 	TypeBoxError,
 	type TAnySchema,
 	type TSchema
 } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 
 import decode from 'fast-decode-uri-component'
 import {
@@ -16,33 +15,33 @@ import {
 	parseQueryStandardSchema
 } from './parse-query'
 
+import { ParseError, status } from './error'
+import { isBun } from './universal/utils'
 import {
 	ELYSIA_REQUEST_ID,
+	encodePath,
 	getLoosePath,
+	getResponseLength,
+	isNotEmpty,
 	lifeCycleToFn,
+	mergeCookie,
 	randomId,
 	redirect,
-	signCookie,
-	isNotEmpty,
-	encodePath,
-	mergeCookie,
-	getResponseLength
+	signCookie
 } from './utils'
-import { isBun } from './universal/utils'
-import { ParseError, status } from './error'
 
 import {
-	NotFoundError,
-	ValidationError,
+	ElysiaCustomStatusResponse,
 	ERROR_CODE,
-	ElysiaCustomStatusResponse
+	NotFoundError,
+	ValidationError
 } from './error'
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
+import { parseCookie, type CookieOptions } from './cookies'
 import {
 	coercePrimitiveRoot,
 	ElysiaTypeCheck,
-	getCookieValidator,
 	getSchemaValidator,
 	hasElysiaMeta,
 	hasType,
@@ -50,7 +49,6 @@ import {
 	unwrapImportSchema
 } from './schema'
 import { Sucrose, sucrose } from './sucrose'
-import { parseCookie, type CookieOptions } from './cookies'
 import { fileType } from './type-system/utils'
 
 import type { TraceEvent } from './trace'
@@ -96,16 +94,16 @@ const createReport = ({
 		return () => {
 			return {
 				resolveChild() {
-					return () => {}
+					return () => { }
 				},
-				resolve() {}
+				resolve() { }
 			}
 		}
 
 	for (let i = 0; i < trace.length; i++)
 		addFn(
 			`let report${i},reportChild${i},reportErr${i},reportErrChild${i};` +
-				`let trace${i}=${context}[ELYSIA_TRACE]?.[${i}]??trace[${i}](${context});\n`
+			`let trace${i}=${context}[ELYSIA_TRACE]?.[${i}]??trace[${i}](${context});\n`
 		)
 
 	return (
@@ -135,12 +133,12 @@ const createReport = ({
 		for (let i = 0; i < trace.length; i++)
 			addFn(
 				`${reporter}${i} = trace${i}.${event}({` +
-					`id,` +
-					`event:'${event}',` +
-					`name:'${name}',` +
-					`begin:performance.now(),` +
-					`total:${total}` +
-					`})\n`
+				`id,` +
+				`event:'${event}',` +
+				`name:'${name}',` +
+				`begin:performance.now(),` +
+				`total:${total}` +
+				`})\n`
 			)
 
 		return {
@@ -152,11 +150,11 @@ const createReport = ({
 				for (let i = 0; i < trace.length; i++)
 					addFn(
 						`${reporter}Child${i}=${reporter}${i}.resolveChild?.shift()?.({` +
-							`id,` +
-							`event:'${event}',` +
-							`name:'${name}',` +
-							`begin:performance.now()` +
-							`})\n`
+						`id,` +
+						`event:'${event}',` +
+						`name:'${name}',` +
+						`begin:performance.now()` +
+						`})\n`
 					)
 
 				return (binding?: string) => {
@@ -169,10 +167,10 @@ const createReport = ({
 							// } else
 							addFn(
 								`if(${binding} instanceof Error){` +
-									`${reporter}Child${i}?.(${binding}) ` +
-									`}else{` +
-									`${reporter}Child${i}?.()` +
-									'}'
+								`${reporter}Child${i}?.(${binding}) ` +
+								`}else{` +
+								`${reporter}Child${i}?.()` +
+								'}'
 							)
 						else addFn(`${reporter}Child${i}?.()\n`)
 					}
@@ -272,7 +270,7 @@ const composeValidationFactory = ({
 						: refKey
 				const referencedDef =
 					value.schema.$defs[
-						defKey as keyof typeof value.schema.$defs
+					defKey as keyof typeof value.schema.$defs
 					]
 
 				if (referencedDef?.noValidate === true) {
@@ -310,11 +308,11 @@ const composeValidationFactory = ({
 					`}catch{` +
 					(applyErrorCleaner
 						? `try{\n` +
-							clean({ ignoreTryCatch: true }) +
-							`${name}=validator.response[${status}].Encode(${name})\n` +
-							`}catch{` +
-							`throw new ValidationError('response',validator.response[${status}],${name})` +
-							`}`
+						clean({ ignoreTryCatch: true }) +
+						`${name}=validator.response[${status}].Encode(${name})\n` +
+						`}catch{` +
+						`throw new ValidationError('response',validator.response[${status}],${name})` +
+						`}`
 						: `throw new ValidationError('response',validator.response[${status}],${name})`) +
 					`}`
 			} else {
@@ -549,8 +547,8 @@ export const composeHandler = ({
 		sign: string[] | true
 		properties: { [x: string]: Object }
 	} = validator.cookie?.config
-		? mergeCookie(validator?.cookie?.config, app.config.cookie as any)
-		: app.config.cookie
+			? mergeCookie(validator?.cookie?.config, app.config.cookie as any)
+			: app.config.cookie
 
 	let _encodeCookie = ''
 	const encodeCookie = () => {
@@ -629,39 +627,37 @@ export const composeHandler = ({
 		}
 
 		const options = cookieMeta
-			? `{secrets:${
-					cookieMeta.secrets !== undefined
-						? typeof cookieMeta.secrets === 'string'
-							? `'${cookieMeta.secrets}'`
-							: '[' +
-								cookieMeta.secrets.reduce(
-									(a, b) => a + `'${b}',`,
-									''
-								) +
-								']'
-						: 'undefined'
-				},` +
-				`sign:${
-					cookieMeta.sign === true
-						? true
-						: cookieMeta.sign !== undefined
-							? '[' +
-								cookieMeta.sign.reduce(
-									(a, b) => a + `'${b}',`,
-									''
-								) +
-								']'
-							: 'undefined'
-				},` +
-				get('domain') +
-				get('expires') +
-				get('httpOnly') +
-				get('maxAge') +
-				get('path', '/') +
-				get('priority') +
-				get('sameSite') +
-				get('secure') +
-				'}'
+			? `{secrets:${cookieMeta.secrets !== undefined
+				? typeof cookieMeta.secrets === 'string'
+					? `'${cookieMeta.secrets}'`
+					: '[' +
+					cookieMeta.secrets.reduce(
+						(a, b) => a + `'${b}',`,
+						''
+					) +
+					']'
+				: 'undefined'
+			},` +
+			`sign:${cookieMeta.sign === true
+				? true
+				: cookieMeta.sign !== undefined
+					? '[' +
+					cookieMeta.sign.reduce(
+						(a, b) => a + `'${b}',`,
+						''
+					) +
+					']'
+					: 'undefined'
+			},` +
+			get('domain') +
+			get('expires') +
+			get('httpOnly') +
+			get('maxAge') +
+			get('path', '/') +
+			get('priority') +
+			get('sameSite') +
+			get('secure') +
+			'}'
 			: 'undefined'
 
 		if (hasHeaders)
@@ -699,11 +695,11 @@ export const composeHandler = ({
 			'c.query=Object.create(null)' +
 			'}else{' +
 			`c.query=parseQueryFromURL(c.url,c.qi+1,${
-				//
-				hasArrayProperty ? JSON.stringify(arrayProperties) : undefined
+			//
+			hasArrayProperty ? JSON.stringify(arrayProperties) : undefined
 			},${
-				//
-				hasObjectProperty ? JSON.stringify(objectProperties) : undefined
+			//
+			hasObjectProperty ? JSON.stringify(objectProperties) : undefined
 			})` +
 			'}'
 	}
@@ -1296,7 +1292,7 @@ export const composeHandler = ({
 					validator.body.schema,
 					validator.body.schema.type === 'object' ||
 						unwrapImportSchema(validator.body.schema)[Kind] ===
-							'Object'
+						'Object'
 						? {}
 						: undefined
 				)
@@ -1498,7 +1494,7 @@ export const composeHandler = ({
 			// ! Get latest app.config.cookie
 			validator.cookie.config = mergeCookie(
 				validator.cookie.config,
-				validator.cookie?.config ?? {}
+				app.config.cookie ?? {}
 			)
 
 			fnLiteral +=
@@ -1520,7 +1516,7 @@ export const composeHandler = ({
 				fnLiteral +=
 					`for(const k of Object.keys(cookieValue))` +
 					`c.cookie[k].value=cookieValue[k]\n`
-			} else if (validator.body?.schema?.noValidate !== true) {
+			} else if (validator.cookie?.schema?.noValidate !== true) {
 				fnLiteral +=
 					`if(validator.cookie.Check(cookieValue)===false){` +
 					validation.validate('cookie', 'cookieValue') +
@@ -1529,8 +1525,8 @@ export const composeHandler = ({
 				if (validator.cookie.hasTransform)
 					fnLiteral += coerceTransformDecodeError(
 						`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
-							`c.cookie[key].value=value` +
-							`}`,
+						`c.cookie[key].value=value` +
+						`}`,
 						'cookie'
 					)
 			}
@@ -1618,14 +1614,14 @@ export const composeHandler = ({
 						})
 
 						if (hooks.afterHandle?.length) {
+							fnLiteral += `c.response = be\n`
+
 							for (let i = 0; i < hooks.afterHandle.length; i++) {
 								const hook = hooks.afterHandle[i]
 								const returning = hasReturn(hook)
 								const endUnit = reporter.resolveChild(
 									hook.fn.name
 								)
-
-								fnLiteral += `c.response = be\n`
 
 								if (!returning) {
 									fnLiteral += isAsync(hook.fn)
@@ -1675,9 +1671,8 @@ export const composeHandler = ({
 					mapResponseReporter.resolve()
 
 					fnLiteral += encodeCookie()
-					fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${
-						mapResponseContext
-					})}\n`
+					fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${mapResponseContext
+						})}\n`
 				}
 			}
 		}
@@ -1761,8 +1756,7 @@ export const composeHandler = ({
 				)
 
 				fnLiteral +=
-					`mr=${
-						isAsyncName(mapResponse) ? 'await ' : ''
+					`mr=${isAsyncName(mapResponse) ? 'await ' : ''
 					}e.mapResponse[${i}](c)\n` +
 					`if(mr!==undefined)r=c.response=c.responseValue=mr\n`
 
@@ -1818,13 +1812,12 @@ export const composeHandler = ({
 
 				fnLiteral += inference.set
 					? `if(` +
-						`isNotEmpty(c.set.headers)||` +
-						`c.set.status!==200||` +
-						`c.set.redirect||` +
-						`c.set.cookie)return mapResponse(${saveResponse}${handle}.clone(),c.set${
-							mapResponseContext
-						})\n` +
-						`else return ${handle}.clone()`
+					`isNotEmpty(c.set.headers)||` +
+					`c.set.status!==200||` +
+					`c.set.redirect||` +
+					`c.set.cookie)return mapResponse(${saveResponse}${handle}.clone(),c.set${mapResponseContext
+					})\n` +
+					`else return ${handle}.clone()`
 					: `return ${handle}.clone()`
 
 				fnLiteral += '\n'
@@ -1871,13 +1864,12 @@ export const composeHandler = ({
 
 				fnLiteral += inference.set
 					? `if(isNotEmpty(c.set.headers)||` +
-						`c.set.status!==200||` +
-						`c.set.redirect||` +
-						`c.set.cookie)` +
-						`return mapResponse(${saveResponse}${handle}.clone(),c.set${
-							mapResponseContext
-						})\n` +
-						`else return ${handle}.clone()\n`
+					`c.set.status!==200||` +
+					`c.set.redirect||` +
+					`c.set.cookie)` +
+					`return mapResponse(${saveResponse}${handle}.clone(),c.set${mapResponseContext
+					})\n` +
+					`else return ${handle}.clone()\n`
 					: `return ${handle}.clone()\n`
 			} else fnLiteral += mapResponse(handled)
 		}
@@ -1944,7 +1936,7 @@ export const composeHandler = ({
 					fnLiteral +=
 						`c.response=c.responseValue=er\n` +
 						`mep=e.mapResponse[${i}](c)\n` +
-						`if(mep instanceof Promise)er=await er\n` +
+						`if(mep instanceof Promise)mep=await mep\n` +
 						`if(mep!==undefined)er=mep\n`
 
 					endUnit()
@@ -2441,11 +2433,10 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		adapterVariables +
 		`}=inject\n`
 
-	fnLiteral += `return ${
-		app.event.error?.find(isAsync) || app.event.mapResponse?.find(isAsync)
-			? 'async '
-			: ''
-	}function(context,error,skipGlobal){`
+	fnLiteral += `return ${app.event.error?.find(isAsync) || app.event.mapResponse?.find(isAsync)
+		? 'async '
+		: ''
+		}function(context,error,skipGlobal){`
 
 	fnLiteral += ''
 
@@ -2514,9 +2505,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		for (let i = 0; i < app.event.error.length; i++) {
 			const handler = app.event.error[i]
 
-			const response = `${
-				isAsync(handler) ? 'await ' : ''
-			}onError[${i}](context)\n`
+			const response = `${isAsync(handler) ? 'await ' : ''
+				}onError[${i}](context)\n`
 
 			fnLiteral += 'if(skipGlobal!==true){'
 
