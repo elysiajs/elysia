@@ -1,21 +1,17 @@
-import { Elysia } from 'elysia'
+import { Equal } from '@sinclair/typebox/value'
+import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-class YourError extends Error {
-	status = 418
-
-	constructor(message: string) {
-		super(message)
-	}
-}
-
-new Elysia()
-	.error({
-		"YOUR_ERROR": YourError
-	})
+const app = new Elysia()
 	.onError(({ code }) => {
-		return "OHi there"
+		console.log(code)
 	})
-	.get('/', () => {
-		throw new YourError("A")
+	.get('/', () => 'a', {
+		query: t.Object({
+			a: t.Number()
+		})
 	})
-	.listen(3000)
+
+app.handle(req('/?a=a'))
+	.then((x) => x.status)
+	.then(console.log)
