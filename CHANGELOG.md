@@ -1,5 +1,8 @@
-# 1.4.10
+# 1.4.10 - 9 Oct 2025
 Bug fix:
+- static handlers in Bun 1.3
+- conditional use `crypto` randomUUID if not available (eg. iOS Safari)
+
 Change:
 - `Elysia.file` readstream value is now IIFE to re-read
 
