@@ -388,7 +388,6 @@ describe('Model', () => {
 					response: 'response200'
 				}
 			)
-			.listen(3000)
 
 		const value = await app
 			.handle(new Request('http://localhost/3'))

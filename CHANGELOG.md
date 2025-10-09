@@ -1,3 +1,8 @@
+# 1.4.10
+Bug fix:
+Change:
+- `Elysia.file` readstream value is now IIFE to re-read
+
 # 1.4.9 - 29 Sep 2025
 Improvement:
 - add Cloudflare Worker test

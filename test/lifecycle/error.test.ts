@@ -323,7 +323,7 @@ describe('error', () => {
 				throw status(401)
 			})
 
-		const app = new Elysia().use(plugin).listen(3000)
+		const app = new Elysia().use(plugin)
 
 		const response = await app.handle(req('/'))
 		expect(response.status).toBe(401)
