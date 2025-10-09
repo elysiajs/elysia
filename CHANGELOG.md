@@ -1,5 +1,6 @@
 # 1.4.10 - 9 Oct 2025
 Bug fix:
+- [#1406](https://github.com/elysiajs/elysia/issues/1406) enforce return type in OptionalHandler
 - static handlers in Bun 1.3
 - conditional use `crypto` randomUUID if not available (eg. iOS Safari)
 

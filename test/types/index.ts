@@ -2470,8 +2470,10 @@ type a = keyof {}
 // Type AfterHandler according to known schema
 {
 	new Elysia().get('/', () => 'yay', {
-		afterResponse({ response }) {
-			expectTypeOf<typeof response>().toEqualTypeOf<string | number>()
+		afterResponse({ responseValue }) {
+			expectTypeOf<typeof responseValue>().toEqualTypeOf<
+				string | number
+			>()
 		},
 		response: {
 			200: t.String(),
@@ -2753,4 +2755,29 @@ type a = keyof {}
 				[name: string]: string | undefined
 			}>()
 		})
+}
+
+// Enforce return type in OptionalHandler
+{
+	new Elysia().get(
+		'/',
+		({ status }) => {
+			return status(401, { error: 'Unauthorized' })
+		},
+		{
+			beforeHandle: ({ status }) => {
+				if (Math.random() > 0.5) {
+					// @ts-expect-error
+					return status(401, { a: 'Unauthorized' })
+				}
+
+				return status(401, { error: 'Unauthorized' })
+			},
+			response: {
+				401: t.Object({
+					error: t.String()
+				})
+			}
+		}
+	)
 }

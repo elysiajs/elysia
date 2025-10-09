@@ -3,15 +3,20 @@ import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
 const app = new Elysia()
-	.onError(({ code }) => {
-		console.log(code)
-	})
-	.get('/', () => 'a', {
-		query: t.Object({
-			a: t.Number()
-		})
-	})
-
-app.handle(req('/?a=a'))
-	.then((x) => x.status)
-	.then(console.log)
+	.get(
+		'/',
+		({ status }) => {
+			// this one is ok
+			return status(401, { error: 'Unauthorized' })
+		},
+		{
+			beforeHandle: ({ status }) => {
+				return status(401, { error: 'Unauthorized' })
+			},
+			response: {
+				401: t.Object({
+					error: t.String()
+				})
+			}
+		}
+	)
