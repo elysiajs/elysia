@@ -1,5 +1,55 @@
 import { ElysiaAdapter } from '../..'
 import { WebStandardAdapter } from '../web-standard/index'
+import type { ExecutionContext } from '../types'
+
+/**
+ * Global variable to store the current ExecutionContext
+ * This gets set by the Cloudflare Worker runtime for each request
+ */
+declare global {
+	var __cloudflareExecutionContext: ExecutionContext | undefined
+}
+
+/**
+ * Creates a setImmediate that automatically detects and uses the current ExecutionContext
+ * This works with the standard export default app pattern
+ * @returns setImmediate function that uses the current ExecutionContext if available
+ */
+export function createAutoDetectingSetImmediate(): (
+	callback: () => void
+) => void {
+	return (callback: () => void) => {
+		// Check if we're in a Cloudflare Worker environment and have an ExecutionContext
+		if (
+			typeof globalThis.__cloudflareExecutionContext !== 'undefined' &&
+			globalThis.__cloudflareExecutionContext &&
+			typeof globalThis.__cloudflareExecutionContext.waitUntil ===
+				'function'
+		) {
+			// Use the current ExecutionContext with proper error handling
+			globalThis.__cloudflareExecutionContext.waitUntil(
+				Promise.resolve()
+					.then(callback)
+					.catch((error) => {
+						console.error(
+							'Error in setImmediate callback (ExecutionContext):',
+							error
+						)
+					})
+			)
+		} else {
+			// Fallback to Promise.resolve with error handling
+			Promise.resolve()
+				.then(callback)
+				.catch((error) => {
+					console.error(
+						'Error in setImmediate callback (Promise.resolve):',
+						error
+					)
+				})
+		}
+	}
+}
 
 export function isCloudflareWorker() {
 	try {
@@ -42,6 +92,83 @@ export function isCloudflareWorker() {
 export const CloudflareAdapter: ElysiaAdapter = {
 	...WebStandardAdapter,
 	name: 'cloudflare-worker',
+	async stop(app, closeActiveConnections) {
+		// Call onStop lifecycle hooks for Cloudflare Workers
+		if (app.event.stop) {
+			try {
+				for (let i = 0; i < app.event.stop.length; i++)
+					await app.event.stop[i].fn(app)
+			} catch (error) {
+				console.error('Error in Cloudflare Worker stop hooks:', error)
+			}
+		}
+	},
+	beforeCompile(app) {
+		// Polyfill setImmediate for Cloudflare Workers - use auto-detecting version
+		// This will automatically use ExecutionContext when available
+		if (typeof globalThis.setImmediate === 'undefined') {
+			Object.defineProperty(globalThis, 'setImmediate', {
+				value: createAutoDetectingSetImmediate(),
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
+		}
+
+		// Also set it on the global object for compatibility
+		if (
+			typeof global !== 'undefined' &&
+			typeof global.setImmediate === 'undefined'
+		) {
+			Object.defineProperty(global, 'setImmediate', {
+				value: globalThis.setImmediate,
+				writable: true,
+				enumerable: true,
+				configurable: true
+			})
+		}
+
+		// Override app.fetch to accept ExecutionContext and set it globally
+		const originalFetch = app.fetch.bind(app)
+		app.fetch = function (
+			request: Request,
+			env?: any,
+			ctx?: ExecutionContext
+		) {
+			try {
+				if (ctx) {
+					globalThis.__cloudflareExecutionContext = ctx
+				}
+				const result = originalFetch(request)
+				// Clean up context after request to prevent memory leaks and context bleeding
+				globalThis.__cloudflareExecutionContext = undefined
+				return result
+			} catch (error) {
+				console.error(
+					'Error in Cloudflare Worker fetch override:',
+					error
+				)
+				throw error
+			}
+		}
+
+		for (const route of app.routes) route.compile()
+
+		// Call onStart lifecycle hooks for Cloudflare Workers
+		// since they use the compile pattern instead of listen
+		if (app.event.start)
+			for (let i = 0; i < app.event.start.length; i++)
+				app.event.start[i].fn(app)
+	},
+	composeHandler: {
+		...WebStandardAdapter.composeHandler,
+		inject: {
+			...WebStandardAdapter.composeHandler.inject,
+			// Provide setImmediate for composed handlers in Workers
+			// This uses the auto-detecting version that will use ExecutionContext when available
+			setImmediate: createAutoDetectingSetImmediate()
+		}
+	},
 	composeGeneralHandler: {
 		...WebStandardAdapter.composeGeneralHandler,
 		error404(hasEventHook, hasErrorHook, afterHandle) {
@@ -61,9 +188,7 @@ export const CloudflareAdapter: ElysiaAdapter = {
 			}
 		}
 	},
-	beforeCompile(app) {
-		for (const route of app.routes) route.compile()
-	},
+
 	listen(app) {
 		return (options, callback) => {
 			console.warn(
