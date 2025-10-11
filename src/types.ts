@@ -319,7 +319,7 @@ export type Partial2<T> = {
 }
 
 export type NeverKey<T> = {
-	[K in keyof T]?: T[K]
+	[K in keyof T]?: never
 } & {}
 
 type IsBothObject<A, B> =
@@ -1233,7 +1233,10 @@ export type OptionalHandler<
 ) => MaybePromise<
 	{} extends Route['response']
 		? unknown
-		: Route['response'][keyof Route['response']] | void
+		:
+				| Route['response'][keyof Route['response']]
+				| InlineHandlerResponse<Route['response']>
+				| void
 >
 
 export type AfterHandler<
@@ -1370,7 +1373,11 @@ export type PreHandler<
 		derive: {}
 		resolve: {}
 	}
-> = (context: PreContext<Singleton>) => MaybePromise<Route['response'] | void>
+> = (
+	context: PreContext<Singleton>
+) => MaybePromise<
+	Route['response'] | InlineHandlerResponse<Route['response']> | void
+>
 
 export type AfterResponseHandler<
 	in out Route extends RouteSchema = {},
@@ -1390,7 +1397,9 @@ export type AfterResponseHandler<
 		 */
 		response: {} extends Route['response']
 			? unknown
-			: Route['response'][keyof Route['response']]
+			:
+					| Route['response'][keyof Route['response']]
+					| InlineHandlerResponse<Route['response']>
 	}
 ) => MaybePromise<unknown>
 
@@ -1485,14 +1494,14 @@ export type ErrorHandler<
 						code: 'PARSE'
 						error: Readonly<ParseError>
 						set: Context['set']
-					} & Singleton['derive'] &
-						Ephemeral['derive'] &
-						Volatile['derive'] &
-						NeverKey<
+					} & NeverKey<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive'] &
 							Singleton['resolve'] &
-								Ephemeral['resolve'] &
-								Volatile['resolve']
-						>
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					>
 			  >
 			| Prettify<
 					{

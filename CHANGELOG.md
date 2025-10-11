@@ -1,3 +1,20 @@
+# 1.4.11 - 12 Oct 2025
+Bug fix:
+- [#1469](https://github.com/elysiajs/elysia/issues/1469) incorrect ping, pong type signature
+- [#1467](https://github.com/elysiajs/elysia/issues/1467) better error union handling in `onError`
+- [#1463](https://github.com/elysiajs/elysia/issues/1463) responseValue is undefined in afterHandle when beforeHandle returns status
+- [#1460](https://github.com/elysiajs/elysia/issues/1460) compressed response in mapResponse is corrupted if status !== 200
+- make `file-type` non optional dependency to fix default build problem
+
+# 1.4.10 - 9 Oct 2025
+Bug fix:
+- [#1406](https://github.com/elysiajs/elysia/issues/1406) enforce return type in OptionalHandler
+- static handlers in Bun 1.3
+- conditional use `crypto` randomUUID if not available (eg. iOS Safari)
+
+Change:
+- `Elysia.file` readstream value is now IIFE to re-read
+
 # 1.4.9 - 29 Sep 2025
 Improvement:
 - add Cloudflare Worker test

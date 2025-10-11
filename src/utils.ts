@@ -950,10 +950,26 @@ export const form = <const T extends Record<keyof any, unknown>>(
 	return formData as any
 }
 
-export const randomId = () => {
-	const uuid = crypto.randomUUID()
-	return uuid.slice(0, 8) + uuid.slice(24, 32)
-}
+export const randomId =
+	typeof crypto === 'undefined'
+		? () => {
+				let result = ''
+
+				const characters =
+					'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+				const charactersLength = characters.length
+
+				for (let i = 0; i < 16; i++)
+					result += characters.charAt(
+						Math.floor(Math.random() * charactersLength)
+					)
+
+				return result
+			}
+		: () => {
+				const uuid = crypto.randomUUID()
+				return uuid.slice(0, 8) + uuid.slice(24, 32)
+			}
 
 // ! Deduplicate current instance
 export const deduplicateChecksum = <T extends Function>(
@@ -1078,10 +1094,9 @@ export const encodePath = (path: string, { dynamic = false } = {}) => {
 export const supportPerMethodInlineHandler = (() => {
 	if (typeof Bun === 'undefined') return true
 
-	const semver = Bun.version.split('.')
-	if (+semver[0] < 1 || +semver[1] < 2 || +semver[2] < 14) return false
+	if (Bun.semver?.satisfies?.(Bun.version, '>=1.2.14')) return true
 
-	return true
+	return false
 })()
 
 type FormatSSEPayload<T = unknown> = T extends string

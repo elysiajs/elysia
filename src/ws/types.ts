@@ -87,6 +87,7 @@ interface TypedWebSocketHandler<
 		  >
 	>
 	ping?(
+		ws: Prettify<ElysiaWS<Context>>,
 		message: Route['body']
 	): MaybePromise<
 		| FlattenResponse<Route['response']>
@@ -101,6 +102,7 @@ interface TypedWebSocketHandler<
 		  >
 	>
 	pong?(
+		ws: Prettify<ElysiaWS<Context>>,
 		message: Route['body']
 	): MaybePromise<
 		| FlattenResponse<Route['response']>
@@ -126,7 +128,7 @@ export type AnyWSLocalHook = WSLocalHook<any, any, any>
 export type WSLocalHook<
 	Input extends BaseMacro,
 	Schema extends RouteSchema,
-	Singleton extends SingletonBase,
+	Singleton extends SingletonBase
 > = Prettify<Input> & {
 	detail?: DocumentDecoration
 	/**

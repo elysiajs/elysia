@@ -146,7 +146,9 @@ export class ElysiaFile {
 				stat = fs.promises.stat
 			}
 
-			this.value = createReadStream(path)
+			// Readstream can be only readonce
+			// IIFE to ensure it's created immediately
+			this.value = (() => createReadStream(path))()
 			this.stats = stat(path)!
 		}
 	}
