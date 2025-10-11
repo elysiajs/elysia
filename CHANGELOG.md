@@ -4,6 +4,7 @@ Bug fix:
 - [#1467](https://github.com/elysiajs/elysia/issues/1467) better error union handling in `onError`
 - [#1463](https://github.com/elysiajs/elysia/issues/1463) responseValue is undefined in afterHandle when beforeHandle returns status
 - [#1460](https://github.com/elysiajs/elysia/issues/1460) compressed response in mapResponse is corrupted if status !== 200
+- [#1451](https://github.com/elysiajs/elysia/issues/1451) cookie validation is not running when there's no body schema
 - make `file-type` non optional dependency to fix default build problem
 
 # 1.4.10 - 9 Oct 2025
