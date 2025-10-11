@@ -755,7 +755,11 @@ export const composeHandler = ({
 		(isHandleFn && hasDefaultHeaders) ||
 		maybeStream
 
+	let _afterResponse: string | undefined
+
 	const afterResponse = () => {
+		if (_afterResponse !== undefined) return _afterResponse
+
 		if (!hooks.afterResponse?.length && !hasTrace) return ''
 
 		let afterResponse = ''
@@ -787,7 +791,7 @@ export const composeHandler = ({
 
 		afterResponse += '})\n'
 
-		return afterResponse
+		return (_afterResponse = afterResponse)
 	}
 
 	const mapResponse = (r = 'r') => {
@@ -1625,7 +1629,7 @@ export const composeHandler = ({
 									hook.fn.name
 								)
 
-								fnLiteral += `c.response = be\n`
+								fnLiteral += `c.response=c.responseValue=be\n`
 
 								if (!returning) {
 									fnLiteral += isAsync(hook.fn)
@@ -1673,6 +1677,8 @@ export const composeHandler = ({
 					}
 
 					mapResponseReporter.resolve()
+
+					fnLiteral += afterResponse()
 
 					fnLiteral += encodeCookie()
 					fnLiteral += `return mapEarlyResponse(${saveResponse}be,c.set${

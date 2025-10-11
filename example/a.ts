@@ -1,18 +1,23 @@
-// app-context.ts
 import { Elysia, sse } from '../src'
 
 const app = new Elysia()
-	.get('/', () => 'hello world')
-	.mapResponse(async ({ responseValue, set }) => {
-		const compressed = Bun.gzipSync(responseValue as string)
-
-		set.status = 201
-		return new Response(compressed, {
-			headers: {
-				'Content-Encoding': 'gzip',
-				'Content-Type': 'text/plain'
+	.get(
+		'/handler',
+		({ status }) => {
+			return status(401, 'unauthorized handler')
+		},
+		{
+			afterHandle: ({ responseValue, response }) => {
+				console.log('afterHandle', { responseValue, response })
+			},
+			beforeHandle: ({ status }) => {
+				return status(401, 'unauthorized beforeHandle')
+			},
+			afterResponse: ({ responseValue, response }) => {
+				console.log('afterResponse', { responseValue, response })
 			}
-		})
-	})
-	.get('/', () => 'Hello')
+		}
+	)
 	.listen(3000)
+
+// console.log(app.routes[0].compile().toString())

@@ -266,4 +266,32 @@ describe('Before Handle', () => {
 
 		expect(total).toEqual(2)
 	})
+
+	it('add responseValue to afterHandle, and afterResponse when beforeHandle returns a value', async () => {
+		let hasAfterHandleResponse = false
+		let hasAfterResponseResponse = false
+
+		const app = new Elysia().get(
+			'/handler',
+			({ status }) => {
+				return status(401, 'unauthorized handler')
+			},
+			{
+				afterHandle: ({ responseValue }) => {
+					hasAfterHandleResponse = !!responseValue
+				},
+				beforeHandle: ({ status }) =>
+					status(401, 'unauthorized beforeHandle'),
+				afterResponse: ({ responseValue }) => {
+					hasAfterResponseResponse = !!responseValue
+				}
+			}
+		)
+
+		await app.handle(req('/handler'))
+		await delay(10)
+
+		expect(hasAfterHandleResponse).toBe(true)
+		expect(hasAfterResponseResponse).toBe(true)
+	})
 })
