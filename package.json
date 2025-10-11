@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.4.10",
+	"version": "1.4.11",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -226,9 +226,6 @@
 		"esbuild": "0.25.4"
 	},
 	"peerDependenciesMeta": {
-		"file-type": {
-			"optional": true
-		},
 		"typescript": {
 			"optional": true
 		}

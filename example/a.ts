@@ -20,3 +20,4 @@ const app = new Elysia()
 			}
 		}
 	)
+	.state('a', 'b')

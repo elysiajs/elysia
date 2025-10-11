@@ -540,11 +540,11 @@ export const BunAdapter: ElysiaAdapter = {
 								return (_id = randomId())
 							},
 							validator: validateResponse,
-							ping(data?: unknown) {
-								options.ping?.(data)
+							ping(ws: ServerWebSocket<any>, data?: unknown) {
+								options.ping?.(ws as any, data)
 							},
-							pong(data?: unknown) {
-								options.pong?.(data)
+							pong(ws: ServerWebSocket<any>, data?: unknown) {
+								options.pong?.(ws as any, data)
 							},
 							open: async (ws: ServerWebSocket<any>) => {
 								try {
