@@ -2,6 +2,7 @@
 Bug fix:
 - [#1469](https://github.com/elysiajs/elysia/issues/1469) incorrect ping, pong type signature
 - [#1467](https://github.com/elysiajs/elysia/issues/1467) better error union handling in `onError`
+- [#1460](https://github.com/elysiajs/elysia/issues/1460) compressed response in mapResponse is corrupted if status !== 200
 - make `file-type` non optional dependency to fix default build problem
 
 # 1.4.10 - 9 Oct 2025

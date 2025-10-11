@@ -1,23 +1,18 @@
 // app-context.ts
-import { Elysia } from '../src'
+import { Elysia, sse } from '../src'
 
 const app = new Elysia()
-	.derive(() => ({
-		derivedValue: 'I come from derive'
-	}))
-	.onError(({ error, code, derivedValue }) => {
-		if (code === 'NOT_FOUND') {
-			// string | undefined
-			derivedValue
-		}
+	.get('/', () => 'hello world')
+	.mapResponse(async ({ responseValue, set }) => {
+		const compressed = Bun.gzipSync(responseValue as string)
 
-		if(code === "PARSE") {
-			// undefined
-			derivedValue
-		}
-
-		if(code === "UNKNOWN") {
-			// string | undefined
-			derivedValue
-		}
+		set.status = 201
+		return new Response(compressed, {
+			headers: {
+				'Content-Encoding': 'gzip',
+				'Content-Type': 'text/plain'
+			}
+		})
 	})
+	.get('/', () => 'Hello')
+	.listen(3000)

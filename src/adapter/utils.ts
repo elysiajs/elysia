@@ -361,27 +361,25 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 			status !== 200 &&
 			((response.status as number) <= 300 ||
 				(response.status as number) > 400)
-		)
-			return response.text().then((value) => {
-				const newResponse = new Response(value, {
-					headers: response.headers,
-					status: set.status as number
-				})
-
-				if (
-					!(newResponse as Response).headers.has('content-length') &&
-					(newResponse as Response).headers.get(
-						'transfer-encoding'
-					) === 'chunked'
-				)
-					return handleStream(
-						streamResponse(newResponse as Response),
-						responseToSetHeaders(newResponse as Response, set),
-						request
-					) as any
-
-				return newResponse
+		) {
+			const newResponse = new Response(response.body, {
+				headers: response.headers,
+				status: set.status as number
 			})
+
+			if (
+				!(newResponse as Response).headers.has('content-length') &&
+				(newResponse as Response).headers.get('transfer-encoding') ===
+					'chunked'
+			)
+				return handleStream(
+					streamResponse(newResponse as Response),
+					responseToSetHeaders(newResponse as Response, set),
+					request
+				) as any
+
+			return newResponse
+		}
 
 		if (
 			!(response as Response).headers.has('content-length') &&
