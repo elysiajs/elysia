@@ -1,23 +1,23 @@
-import { Equal } from '@sinclair/typebox/value'
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+// app-context.ts
+import { Elysia } from '../src'
 
 const app = new Elysia()
-	.get(
-		'/',
-		({ status }) => {
-			// this one is ok
-			return status(401, { error: 'Unauthorized' })
-		},
-		{
-			beforeHandle: ({ status }) => {
-				return status(401, { error: 'Unauthorized' })
-			},
-			response: {
-				401: t.Object({
-					error: t.String()
-				})
-			}
+	.derive(() => ({
+		derivedValue: 'I come from derive'
+	}))
+	.onError(({ error, code, derivedValue }) => {
+		if (code === 'NOT_FOUND') {
+			// string | undefined
+			derivedValue
 		}
-	)
-	.state('a', 'b')
+
+		if(code === "PARSE") {
+			// undefined
+			derivedValue
+		}
+
+		if(code === "UNKNOWN") {
+			// string | undefined
+			derivedValue
+		}
+	})

@@ -319,7 +319,7 @@ export type Partial2<T> = {
 }
 
 export type NeverKey<T> = {
-	[K in keyof T]?: T[K]
+	[K in keyof T]?: never
 } & {}
 
 type IsBothObject<A, B> =
@@ -1494,14 +1494,14 @@ export type ErrorHandler<
 						code: 'PARSE'
 						error: Readonly<ParseError>
 						set: Context['set']
-					} & Singleton['derive'] &
-						Ephemeral['derive'] &
-						Volatile['derive'] &
-						NeverKey<
+					} & NeverKey<
+						Singleton['derive'] &
+							Ephemeral['derive'] &
+							Volatile['derive'] &
 							Singleton['resolve'] &
-								Ephemeral['resolve'] &
-								Volatile['resolve']
-						>
+							Ephemeral['resolve'] &
+							Volatile['resolve']
+					>
 			  >
 			| Prettify<
 					{
