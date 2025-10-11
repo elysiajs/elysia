@@ -1,20 +1,30 @@
-import { Elysia, sse } from '../src'
+import { Elysia, sse, t } from '../src'
+
+const message = t.Object({
+	event: t.String(),
+	data: t.Object({
+		message: t.String(),
+		timestamp: t.String()
+	})
+})
+type message = typeof message.static
 
 const app = new Elysia()
 	.get(
-		'/handler',
-		({ status }) => {
-			return status(401, 'unauthorized handler')
+		'/sse',
+		function* () {
+			// <-- Here's the problem
+			yield sse({
+				event: 'message',
+				data: {
+					message: 'This is a message',
+					timestamp: new Date().toISOString()
+				}
+			})
 		},
 		{
-			afterHandle: ({ responseValue, response }) => {
-				console.log('afterHandle', { responseValue, response })
-			},
-			beforeHandle: ({ status }) => {
-				return status(401, 'unauthorized beforeHandle')
-			},
-			afterResponse: ({ responseValue, response }) => {
-				console.log('afterResponse', { responseValue, response })
+			response: {
+				200: message // <-- If I remove this, the error goes away, but I have no openapi documentation for this endpoint
 			}
 		}
 	)

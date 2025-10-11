@@ -1210,6 +1210,12 @@ export type InlineHandler<
 														Route['response'][200],
 														200
 												  >
+												| Generator<
+														Route['response'][200]
+												  >
+												| AsyncGenerator<
+														Route['response'][200]
+												  >
 										: unknown)
 								// This could be possible because of set.status
 								| Route['response'][keyof Route['response']]

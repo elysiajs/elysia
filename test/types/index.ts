@@ -2781,3 +2781,61 @@ type a = keyof {}
 		}
 	)
 }
+
+// Enforce return type of Generator
+{
+	const message = t.Object({
+		event: t.String(),
+		data: t.Object({
+			message: t.String(),
+			timestamp: t.String()
+		})
+	})
+
+	new Elysia().get(
+		'/sse',
+		function* () {
+			yield sse({
+				event: 'message',
+				data: {
+					message: 'This is a message',
+					timestamp: new Date().toISOString()
+				}
+			})
+		},
+		{
+			response: {
+				200: message
+			}
+		}
+	)
+}
+
+// Enforce return type of AsyncGenerator
+{
+	const message = t.Object({
+		event: t.String(),
+		data: t.Object({
+			message: t.String(),
+			timestamp: t.String()
+		})
+	})
+
+	new Elysia().get(
+		'/sse',
+		async function* () {
+			yield sse({
+				event: 'message',
+				data: {
+					message: 'This is a message',
+					timestamp: new Date().toISOString()
+				}
+			})
+		},
+		{
+			response: {
+				200: message
+			}
+		}
+	)
+}
