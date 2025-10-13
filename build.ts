@@ -12,7 +12,7 @@ const tsupConfig: Options = {
 	splitting: false,
 	sourcemap: false,
 	clean: true,
-	bundle: true,
+	bundle: false,
 	minifySyntax: true,
 	minifyWhitespace: false,
 	minifyIdentifiers: false,
