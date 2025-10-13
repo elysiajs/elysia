@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect } from 'bun:test'
-import Elysia, { t } from '../../src'
+import { Elysia, t, status } from '../../src'
 import { post, req } from '../utils'
-import { status } from '../../dist/cjs'
 
 describe('Macro', () => {
 	it('trace back', async () => {
