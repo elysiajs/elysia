@@ -7,7 +7,7 @@
 		"url": "https://github.com/SaltyAom",
 		"email": "saltyaom@gmail.com"
 	},
-	"main": "./dist/cjs/index.js",
+	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
 	"exports": {
@@ -16,152 +16,152 @@
 			"types": "./dist/index.d.ts",
 			"bun": "./dist/bun/index.js",
 			"import": "./dist/index.mjs",
-			"require": "./dist/cjs/index.js"
+			"require": "./dist/index.js"
 		},
 		"./ws": {
 			"types": "./dist/ws/index.d.ts",
 			"import": "./dist/ws/index.mjs",
-			"require": "./dist/cjs/ws/index.js"
+			"require": "./dist/ws/index.js"
 		},
 		"./ws/types": {
 			"types": "./dist/ws/types.d.ts",
 			"import": "./dist/ws/types.mjs",
-			"require": "./dist/cjs/ws/types.js"
+			"require": "./dist/ws/types.js"
 		},
 		"./ws/bun": {
 			"types": "./dist/ws/bun.d.ts",
 			"import": "./dist/ws/bun.mjs",
-			"require": "./dist/cjs/ws/bun.js"
+			"require": "./dist/ws/bun.js"
 		},
 		"./compose": {
 			"types": "./dist/compose.d.ts",
 			"import": "./dist/compose.mjs",
-			"require": "./dist/cjs/compose.js"
+			"require": "./dist/compose.js"
 		},
 		"./context": {
 			"types": "./dist/context.d.ts",
 			"import": "./dist/context.mjs",
-			"require": "./dist/cjs/context.js"
+			"require": "./dist/context.js"
 		},
 		"./cookies": {
 			"types": "./dist/cookies.d.ts",
 			"import": "./dist/cookies.mjs",
-			"require": "./dist/cjs/cookies.js"
+			"require": "./dist/cookies.js"
 		},
 		"./error": {
 			"types": "./dist/error.d.ts",
 			"import": "./dist/error.mjs",
-			"require": "./dist/cjs/error.js"
+			"require": "./dist/error.js"
 		},
 		"./schema": {
 			"types": "./dist/schema.d.ts",
 			"import": "./dist/schema.mjs",
-			"require": "./dist/cjs/schema.js"
+			"require": "./dist/schema.js"
 		},
 		"./sucrose": {
 			"types": "./dist/sucrose.d.ts",
 			"import": "./dist/sucrose.mjs",
-			"require": "./dist/cjs/sucrose.js"
+			"require": "./dist/sucrose.js"
 		},
 		"./trace": {
 			"types": "./dist/trace.d.ts",
 			"import": "./dist/trace.mjs",
-			"require": "./dist/cjs/trace.js"
+			"require": "./dist/trace.js"
 		},
 		"./type-system": {
 			"types": "./dist/type-system/index.d.ts",
 			"import": "./dist/type-system/index.mjs",
-			"require": "./dist/cjs/type-system/index.js"
+			"require": "./dist/type-system/index.js"
 		},
 		"./type-system/format": {
 			"types": "./dist/type-system/format.d.ts",
 			"import": "./dist/type-system/format.mjs",
-			"require": "./dist/cjs/type-system/format.js"
+			"require": "./dist/type-system/format.js"
 		},
 		"./type-system/utils": {
 			"types": "./dist/type-system/utils.d.ts",
 			"import": "./dist/type-system/utils.mjs",
-			"require": "./dist/cjs/type-system/utils.js"
+			"require": "./dist/type-system/utils.js"
 		},
 		"./type-system/types": {
 			"types": "./dist/type-system/types.d.ts",
 			"import": "./dist/type-system/types.mjs",
-			"require": "./dist/cjs/type-system/types.js"
+			"require": "./dist/type-system/types.js"
 		},
 		"./types": {
 			"types": "./dist/types.d.ts",
 			"import": "./dist/types.mjs",
-			"require": "./dist/cjs/types.js"
+			"require": "./dist/types.js"
 		},
 		"./utils": {
 			"types": "./dist/utils.d.ts",
 			"import": "./dist/utils.mjs",
-			"require": "./dist/cjs/utils.js"
+			"require": "./dist/utils.js"
 		},
 		"./parse-query": {
 			"types": "./dist/parse-query.d.ts",
 			"import": "./dist/parse-query.mjs",
-			"require": "./dist/cjs/parse-query.js"
+			"require": "./dist/parse-query.js"
 		},
 		"./adapter": {
 			"types": "./dist/adapter/index.d.ts",
 			"import": "./dist/adapter/index.mjs",
-			"require": "./dist/cjs/adapter/index.js"
+			"require": "./dist/adapter/index.js"
 		},
 		"./adapter/utils": {
 			"types": "./dist/adapter/utils.d.ts",
 			"import": "./dist/adapter/utils.mjs",
-			"require": "./dist/cjs/adapter/utils.js"
+			"require": "./dist/adapter/utils.js"
 		},
 		"./adapter/bun": {
 			"types": "./dist/adapter/bun/index.d.ts",
 			"import": "./dist/adapter/bun/index.mjs",
-			"require": "./dist/cjs/adapter/bun/index.js"
+			"require": "./dist/adapter/bun/index.js"
 		},
 		"./adapter/bun/handler": {
 			"types": "./dist/adapter/bun/handler.d.ts",
 			"import": "./dist/adapter/bun/handler.mjs",
-			"require": "./dist/cjs/adapter/bun/handler.js"
+			"require": "./dist/adapter/bun/handler.js"
 		},
 		"./adapter/bun/compose": {
 			"types": "./dist/adapter/bun/compose.d.ts",
 			"import": "./dist/adapter/bun/compose.mjs",
-			"require": "./dist/cjs/adapter/bun/compose.js"
+			"require": "./dist/adapter/bun/compose.js"
 		},
 		"./adapter/cloudflare-worker": {
 			"types": "./dist/adapter/cloudflare-worker/index.d.ts",
 			"import": "./dist/adapter/cloudflare-worker/index.mjs",
-			"require": "./dist/cjs/adapter/cloudflare-worker/index.js"
+			"require": "./dist/adapter/cloudflare-worker/index.js"
 		},
 		"./adapter/web-standard": {
 			"types": "./dist/adapter/web-standard/index.d.ts",
 			"import": "./dist/adapter/web-standard/index.mjs",
-			"require": "./dist/cjs/adapter/web-standard/index.js"
+			"require": "./dist/adapter/web-standard/index.js"
 		},
 		"./adapter/web-standard/handler": {
 			"types": "./dist/adapter/web-standard/handler.d.ts",
 			"import": "./dist/adapter/web-standard/handler.mjs",
-			"require": "./dist/cjs/adapter/web-standard/handler.js"
+			"require": "./dist/adapter/web-standard/handler.js"
 		},
 		"./universal": {
 			"types": "./dist/universal/index.d.ts",
 			"import": "./dist/universal/index.mjs",
-			"require": "./dist/cjs/universal/index.js"
+			"require": "./dist/universal/index.js"
 		},
 		"./universal/server": {
 			"types": "./dist/universal/server.d.ts",
 			"import": "./dist/universal/server.mjs",
-			"require": "./dist/cjs/universal/server.js"
+			"require": "./dist/universal/server.js"
 		},
 		"./universal/env": {
 			"types": "./dist/universal/env.d.ts",
 			"import": "./dist/universal/env.mjs",
-			"require": "./dist/cjs/universal/env.js"
+			"require": "./dist/universal/env.js"
 		},
 		"./universal/file": {
 			"types": "./dist/universal/file.d.ts",
 			"import": "./dist/universal/file.mjs",
-			"require": "./dist/cjs/universal/file.js"
+			"require": "./dist/universal/file.js"
 		}
 	},
 	"repository": {
@@ -182,7 +182,7 @@
 		"test:functionality": "bun test && bun run test:imports",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
-		"test:node": "npm install --prefix test/node/cjs/ && npm install --prefix test/node/esm/ && node test/node/cjs/index.js && node test/node/esm/index.js",
+		"test:node": "npm install --prefix test/node/ && npm install --prefix test/node/esm/ && node test/node/index.js && node test/node/esm/index.js",
 		"test:cf": "npm install --prefix test/cloudflare && cd test/cloudflare && bun run cf-typegen && bun run test",
 		"dev": "bun run --watch example/a.ts",
 		"build": "rm -rf dist && bun build.ts",

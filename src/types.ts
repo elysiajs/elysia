@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Elysia, AnyElysia, InvertedStatusMap } from '.'
+import type { Elysia, AnyElysia, InvertedStatusMap } from './index'
 import type { ElysiaFile } from './universal/file'
 import type { Serve } from './universal/server'
 

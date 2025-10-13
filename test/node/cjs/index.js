@@ -7,9 +7,11 @@ setTimeout(() => {
 	process.exit(1)
 }, 5000)
 
-const { Elysia } = require('elysia')
+const { Elysia, t } = require('elysia')
 
-const app = new Elysia().get('/', () => 'Node.js')
+const app = new Elysia().get('/', () => 'Node.js', {
+	response: t.String()
+})
 
 const main = async () => {
 	const response = await app.handle(new Request('http://localhost'))

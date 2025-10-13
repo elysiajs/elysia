@@ -1,4 +1,4 @@
-import { isHTMLBundle } from '.'
+import { isHTMLBundle } from './index'
 import type { Context } from '../../context'
 import type { AnyLocalHook, MaybePromise } from '../../types'
 

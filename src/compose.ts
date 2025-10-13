@@ -1,4 +1,4 @@
-import type { AnyElysia } from '.'
+import type { AnyElysia } from './index'
 
 import { Value } from '@sinclair/typebox/value'
 import {

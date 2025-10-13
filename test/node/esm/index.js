@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia'
+import { Elysia, t } from 'elysia'
 
 if ('Bun' in globalThis) {
 	throw new Error('❌ Use Node.js to run this test!')
@@ -9,7 +9,9 @@ setTimeout(() => {
 	process.exit(1)
 }, 5000)
 
-const app = new Elysia().get('/', () => 'Node.js')
+const app = new Elysia().get('/', () => 'Node.js', {
+	response: t.String()
+})
 
 const response = await app.handle(new Request('http://localhost'))
 

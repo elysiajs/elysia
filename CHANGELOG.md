@@ -1,3 +1,7 @@
+# 1.4.12 - 14 Oct 2025
+Improvement:
+- adjust build script
+
 # 1.4.11 - 12 Oct 2025
 Bug fix:
 - [#1469](https://github.com/elysiajs/elysia/issues/1469) incorrect ping, pong type signature

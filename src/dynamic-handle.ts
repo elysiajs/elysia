@@ -1,4 +1,4 @@
-import type { AnyElysia, CookieOptions } from '.'
+import type { AnyElysia, CookieOptions } from './index'
 
 import { TransformDecodeError } from '@sinclair/typebox/value'
 import { TypeCheck } from './type-system'
