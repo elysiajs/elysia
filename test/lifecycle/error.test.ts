@@ -9,6 +9,7 @@ import {
 } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
+import * as z from 'zod'
 
 describe('error', () => {
 	it('use custom 404', async () => {
@@ -449,5 +450,82 @@ describe('error', () => {
 		const value = (await response.json()) as Record<string, unknown>
 		expect(value.type).toBe('validation')
 		expect(value.message).not.toStartWith('{')
+	})
+
+	it('ValidationError.all works with Zod validators', async () => {
+		const app = new Elysia()
+			.onError(({ error, code }) => {
+				if (error instanceof ValidationError) {
+					const errors = error.all
+
+					return {
+						message: 'Validation failed',
+						errors: errors
+					}
+				}
+			})
+			.post('/login', ({ body }) => body, {
+				body: z.object({
+					username: z.string(),
+					password: z.string()
+				})
+			})
+
+		const res = await app.handle(post('/login', {}))
+		const data = (await res.json()) as any
+
+		expect(data).toHaveProperty('message', 'Validation failed')
+		expect(data).toHaveProperty('errors')
+		expect(data.errors).toBeArray()
+		expect(data.errors.length).toBeGreaterThan(0)
+		expect(res.status).toBe(422)
+	})
+
+	it('ValidationError.all provides error details with Zod validators', async () => {
+		const app = new Elysia()
+			.onError(({ error, code }) => {
+				expect(code).toBe('VALIDATION')
+				if (error instanceof ValidationError) {
+					const errors = error.all
+
+					return {
+						message: 'Validation failed',
+						errors: errors.map((e: any) => ({
+							path: e.path,
+							message: e.message,
+							summary: e.summary
+						}))
+					}
+				}
+			})
+			.post('/user', ({ body }) => body, {
+				body: z.object({
+					name: z.string().min(3),
+					email: z.string(),
+					age: z.number().min(18)
+				})
+			})
+
+		const res = await app.handle(
+			post('/user', {
+				name: 'ab',
+				email: 'invalid',
+				age: 10
+			})
+		)
+		const data = (await res.json()) as any
+
+		expect(data).toHaveProperty('message', 'Validation failed')
+		expect(data).toHaveProperty('errors')
+		expect(data.errors).toBeArray()
+		expect(data.errors.length).toBeGreaterThan(0)
+
+		for (const error of data.errors) {
+			expect(error).toHaveProperty('path')
+			expect(error).toHaveProperty('message')
+			expect(error).toHaveProperty('summary')
+		}
+
+		expect(res.status).toBe(422)
 	})
 })

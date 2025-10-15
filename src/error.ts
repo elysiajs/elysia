@@ -431,7 +431,33 @@ export class ValidationError extends Error {
 		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
 
-	get all() {
+	get all(): MapValueError[] {
+		// Handle standard schema validators (Zod, Valibot, etc.)
+		if (
+			// @ts-ignore
+			this.validator?.provider === 'standard' ||
+			'~standard' in this.validator ||
+			// @ts-ignore
+			('schema' in this.validator && this.validator.schema && '~standard' in this.validator.schema)
+		) {
+			const standard = // @ts-ignore
+				('~standard' in this.validator
+					? this.validator
+					: // @ts-ignore
+						this.validator.schema)['~standard']
+
+			const issues = standard.validate(this.value).issues
+
+			// Map standard schema issues to the expected format
+			return issues?.map((issue: any) => ({
+				summary: issue.message,
+				path: issue.path?.join('.') || 'root',
+				message: issue.message,
+				value: this.value
+			})) || []
+		}
+
+		// Handle TypeBox validators
 		return 'Errors' in this.validator
 			? [...this.validator.Errors(this.value)].map(mapValueError)
 			: // @ts-ignore
