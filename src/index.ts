@@ -12,11 +12,7 @@ import fastDecodeURIComponent from 'fast-decode-uri-component'
 import type { Context, PreContext } from './context'
 
 import { t } from './type-system'
-import {
-	mergeInference,
-	sucrose,
-	type Sucrose
-} from './sucrose'
+import { mergeInference, sucrose, type Sucrose } from './sucrose'
 
 import type { WSLocalHook } from './ws/types'
 
@@ -165,7 +161,8 @@ import type {
 	IntersectIfObject,
 	IntersectIfObjectSchema,
 	EmptyRouteSchema,
-	UnknownRouteSchema
+	UnknownRouteSchema,
+	MaybeFunction
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -5415,6 +5412,50 @@ export default class Elysia<
 				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
 			},
 			Definitions['error']
+		>
+	>(
+		macro: NewMacro
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			standaloneSchema: Metadata['standaloneSchema']
+			macro: Metadata['macro'] & Partial<MacroToProperty<NewMacro>>
+			macroFn: Metadata['macroFn'] & NewMacro
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	macro<
+		const Input extends Metadata['macro'] &
+			InputSchema<keyof Definitions['typebox'] & string>,
+		const NewMacro extends MaybeFunction<
+			Macro<
+				Input,
+				IntersectIfObjectSchema<
+					MergeSchema<
+						UnwrapRoute<Input, Definitions['typebox'], BasePath>,
+						MergeSchema<
+							Volatile['schema'],
+							MergeSchema<Ephemeral['schema'], Metadata['schema']>
+						>
+					>,
+					Metadata['standaloneSchema'] &
+						Ephemeral['standaloneSchema'] &
+						Volatile['standaloneSchema']
+				>,
+				Singleton & {
+					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+					resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']>
+				},
+				Definitions['error']
+			>
 		>
 	>(
 		macro: NewMacro

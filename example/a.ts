@@ -10,24 +10,12 @@ const message = t.Object({
 type message = typeof message.static
 
 const app = new Elysia()
-	.get(
-		'/sse',
-		function* () {
-			// <-- Here's the problem
-			yield sse({
-				event: 'message',
-				data: {
-					message: 'This is a message',
-					timestamp: new Date().toISOString()
-				}
-			})
-		},
-		{
-			response: {
-				200: message // <-- If I remove this, the error goes away, but I have no openapi documentation for this endpoint
-			}
-		}
-	)
+	.macro('a', (a: 'a') => ({
+		resolve: () => ({ a: 'a' })
+	}))
+	.get('/', ({ a }) => a, {
+		a: 'a'
+	})
 	.listen(3000)
 
 // console.log(app.routes[0].compile().toString())

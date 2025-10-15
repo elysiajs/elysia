@@ -1,5 +1,6 @@
 # 1.4.12 - 14 Oct 2025
 Improvement:
+- named macro function callback
 - adjust build script
 
 # 1.4.11 - 12 Oct 2025

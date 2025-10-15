@@ -1942,6 +1942,8 @@ export interface Macro<
 	>
 }
 
+export type MaybeFunction<T> = T | ((...args: any[]) => T)
+
 export type MacroToProperty<in out T extends Macro<any, any, any, any>> =
 	Prettify<{
 		[K in keyof T]: T[K] extends Function

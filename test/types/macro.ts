@@ -295,3 +295,27 @@ const app = new Elysia()
 			}
 		})
 }
+
+// handle function
+{
+	new Elysia()
+		.macro('a', (a: 'a') => ({
+			resolve: () => ({ a: 'a' as const })
+		}))
+		.get(
+			'/',
+			({ a }) => {
+				expectTypeOf(a).toEqualTypeOf<'a'>()
+
+				return a
+			},
+			{
+				a: 'a'
+			}
+		)
+		.get('/', 'ok', {
+			// @ts-expect-error
+			a: 'b'
+		})
+		.listen(3000)
+}
