@@ -1,4 +1,4 @@
-import type { Serve as BunServe, Server as BunServer } from 'bun'
+import { Serve as BunServe, type Server as BunServer } from 'bun'
 import type { IsAny, MaybePromise } from '../types'
 
 export interface ErrorLike extends Error {
@@ -122,8 +122,8 @@ export interface ServeOptions extends GenericServeOptions {
 	>
 }
 
-export type Serve = IsAny<BunServe> extends false ? BunServe : ServeOptions
-export type Server = IsAny<BunServer> extends false ? BunServer : ServerOptions
+export type Serve = IsAny<BunServe.Options<unknown>> extends false ? BunServe.Options<unknown> : ServeOptions
+export type Server = IsAny<BunServer<unknown>> extends false ? BunServer<unknown> : ServerOptions
 
 export type ServerWebSocketSendStatus = number
 
