@@ -15,7 +15,7 @@ Bug fix:
 - [#1499](https://github.com/elysiajs/elysia/pull/1449) fails when merging with t.Optional schema
 - remove encoding chunk from native static response in Bun adapter
 
-change:
+Change:
 - make `@types/bun` an optional dependency
 
 # 1.4.12 - 14 Oct 2025
