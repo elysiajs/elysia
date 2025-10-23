@@ -222,7 +222,8 @@ const composeValidationFactory = ({
 	validator,
 	encodeSchema = false,
 	isStaticResponse = false,
-	hasSanitize = false
+	hasSanitize = false,
+	allowUnsafeValidationDetails = false
 }: {
 	injectResponse?: string
 	normalize?: ElysiaConfig<''>['normalize']
@@ -230,9 +231,10 @@ const composeValidationFactory = ({
 	encodeSchema?: boolean
 	isStaticResponse?: boolean
 	hasSanitize?: boolean
+	allowUnsafeValidationDetails?: boolean
 }) => ({
 	validate: (type: string, value = `c.${type}`, error?: string) =>
-		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value}${error ? ',' + error : ''})`,
+		`c.set.status=422;throw new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails}${error ? ',' + error : ''})`,
 	response: (name = 'r') => {
 		if (isStaticResponse || !validator.response) return ''
 
@@ -254,7 +256,7 @@ const composeValidationFactory = ({
 					`let vare${status}=validator.response[${status}].Check(${name})\n` +
 					`if(vare${status} instanceof Promise)vare${status}=await vare${status}\n` +
 					`if(vare${status}.issues)` +
-					`throw new ValidationError('response',validator.response[${status}],${name},vare${status}.issues)\n` +
+					`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails},vare${status}.issues)\n` +
 					`${name}=vare${status}.value\n` +
 					`c.set.status=${status}\n` +
 					'break\n'
@@ -313,9 +315,9 @@ const composeValidationFactory = ({
 							clean({ ignoreTryCatch: true }) +
 							`${name}=validator.response[${status}].Encode(${name})\n` +
 							`}catch{` +
-							`throw new ValidationError('response',validator.response[${status}],${name})` +
+							`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails})` +
 							`}`
-						: `throw new ValidationError('response',validator.response[${status}],${name})`) +
+						: `throw new ValidationError('response',validator.response[${status}],${name}),${allowUnsafeValidationDetails}`) +
 					`}`
 			} else {
 				if (!appliedCleaner) code += clean()
@@ -323,7 +325,7 @@ const composeValidationFactory = ({
 				if (!noValidate)
 					code +=
 						`if(validator.response[${status}].Check(${name})===false)` +
-						`throw new ValidationError('response',validator.response[${status}],${name})\n` +
+						`throw new ValidationError('response',validator.response[${status}],${name},${allowUnsafeValidationDetails})\n` +
 						`c.set.status=${status}\n`
 			}
 
@@ -411,12 +413,13 @@ const isGenerator = (v: Function | HookContainer) => {
 const coerceTransformDecodeError = (
 	fnLiteral: string,
 	type: string,
+	allowUnsafeValidationDetails = false,
 	value = `c.${type}`
 ) =>
 	`try{${fnLiteral}}catch(error){` +
 	`if(error.constructor.name === 'TransformDecodeError'){` +
 	`c.set.status=422\n` +
-	`throw error.error ?? new ValidationError('${type}',validator.${type},${value})}` +
+	`throw error.error ?? new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails})}` +
 	`}`
 
 export const composeHandler = ({
@@ -590,13 +593,15 @@ export const composeHandler = ({
 
 	const normalize = app.config.normalize
 	const encodeSchema = app.config.encodeSchema
+	const allowUnsafeValidationDetails = app.config.allowUnsafeValidationDetails
 
 	const validation = composeValidationFactory({
 		normalize,
 		validator,
 		encodeSchema,
 		isStaticResponse: handler instanceof Response,
-		hasSanitize: !!app.config.sanitize
+		hasSanitize: !!app.config.sanitize,
+		allowUnsafeValidationDetails
 	})
 
 	if (hasHeaders) fnLiteral += adapter.headers
@@ -763,11 +768,14 @@ export const composeHandler = ({
 		if (!hooks.afterResponse?.length && !hasTrace) return ''
 
 		let afterResponse = ''
-		const prefix = hooks.afterResponse?.some(isAsync) ? 'async ' : ''
 
 		afterResponse +=
-			`\nsetImmediate(${prefix}()=>{` +
-			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
+			`\nsetImmediate(async()=>{` +
+			`if(c.responseValue){` +
+			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
+			`else if(c.responseValue[Symbol.iterator]) for (const v of c.responseValue) { }` +
+			`else if(c.responseValue[Symbol.asyncIterator]) for await (const v of c.responseValue) { }` +
+			`}`
 
 		const reporter = createReport({
 			trace: hooks.trace,
@@ -1184,7 +1192,8 @@ export const composeHandler = ({
 			if (validator.headers.hasTransform)
 				fnLiteral += coerceTransformDecodeError(
 					`c.headers=validator.headers.Decode(c.headers)\n`,
-					'headers'
+					'headers',
+					allowUnsafeValidationDetails
 				)
 
 			if (validator.headers.isOptional) fnLiteral += '}'
@@ -1226,7 +1235,8 @@ export const composeHandler = ({
 			if (validator.params.hasTransform)
 				fnLiteral += coerceTransformDecodeError(
 					`c.params=validator.params.Decode(c.params)\n`,
-					'params'
+					'params',
+					allowUnsafeValidationDetails
 				)
 		}
 
@@ -1279,11 +1289,13 @@ export const composeHandler = ({
 				// For query, we decode it twice to ensure that it works
 				fnLiteral += coerceTransformDecodeError(
 					`c.query=validator.query.Decode(c.query)\n`,
-					'query'
+					'query',
+					allowUnsafeValidationDetails
 				)
 				fnLiteral += coerceTransformDecodeError(
 					`c.query=validator.query.Decode(c.query)\n`,
-					'query'
+					'query',
+					allowUnsafeValidationDetails
 				)
 			}
 
@@ -1398,7 +1410,8 @@ export const composeHandler = ({
 			if (validator.body.hasTransform)
 				fnLiteral += coerceTransformDecodeError(
 					`if(isNotEmptyObject)c.body=validator.body.Decode(c.body)\n`,
-					'body'
+					'body',
+					allowUnsafeValidationDetails
 				)
 
 			if (hasUnion && validator.body.schema.anyOf?.length) {
@@ -1537,7 +1550,8 @@ export const composeHandler = ({
 						`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
 							`c.cookie[key].value=value` +
 							`}`,
-						'cookie'
+						'cookie',
+						allowUnsafeValidationDetails
 					)
 			}
 

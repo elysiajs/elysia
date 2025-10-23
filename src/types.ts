@@ -238,6 +238,16 @@ export interface ElysiaConfig<Prefix extends string | undefined> {
 	 * Sucrose (Static Code Analysis) configuration
 	 */
 	sucrose?: Sucrose.Settings
+
+	/**
+	 * Allow unsafe validation details in errors thrown by Elysia's schema validator (422 status code)
+	 *
+	 * Ideally, this should only be used in development environment or public APIs
+	 * This may leak sensitive information about the server implementation and should be used with caution in production environments.
+	 *
+	 * @default false
+	 */
+	allowUnsafeValidationDetails?: boolean
 }
 
 export interface ValidatorLayer {

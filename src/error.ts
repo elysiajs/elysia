@@ -42,9 +42,7 @@ const emptyHttpStatus = {
 export class ElysiaCustomStatusResponse<
 	const in out Code extends number | keyof StatusMap,
 	// no in out here so the response can be sub type of return type
-	T = Code extends keyof InvertedStatusMap
-		? InvertedStatusMap[Code]
-		: Code,
+	T = Code extends keyof InvertedStatusMap ? InvertedStatusMap[Code] : Code,
 	const in out Status extends Code extends keyof StatusMap
 		? StatusMap[Code]
 		: Code = Code extends keyof StatusMap ? StatusMap[Code] : Code
@@ -270,7 +268,8 @@ export class ValidationError extends Error {
 			| ElysiaTypeCheck<any>
 			| StandardSchemaV1Like,
 		public value: unknown,
-		errors?: ValueErrorIterator
+		private allowUnsafeValidationDetails = false,
+		errors?: ValueErrorIterator,
 	) {
 		let message = ''
 		let error
@@ -335,7 +334,7 @@ export class ValidationError extends Error {
 			// @ts-ignore private field
 			const schema = validator?.schema ?? validator
 
-			if (!isProduction) {
+			if (!isProduction && !allowUnsafeValidationDetails) {
 				try {
 					expected = Value.Create(schema)
 				} catch (error) {
@@ -352,7 +351,7 @@ export class ValidationError extends Error {
 				error?.schema?.message || error?.schema?.error !== undefined
 					? typeof error.schema.error === 'function'
 						? error.schema.error(
-								isProduction
+								isProduction && !allowUnsafeValidationDetails
 									? {
 											type: 'validation',
 											on: type,
@@ -392,7 +391,7 @@ export class ValidationError extends Error {
 					typeof customError === 'object'
 						? JSON.stringify(customError)
 						: customError + ''
-			} else if (isProduction) {
+			} else if (isProduction && !allowUnsafeValidationDetails) {
 				message = JSON.stringify({
 					type: 'validation',
 					on: type,
@@ -438,23 +437,29 @@ export class ValidationError extends Error {
 			this.validator?.provider === 'standard' ||
 			'~standard' in this.validator ||
 			// @ts-ignore
-			('schema' in this.validator && this.validator.schema && '~standard' in this.validator.schema)
+			('schema' in this.validator &&
+				this.validator.schema &&
+				'~standard' in this.validator.schema)
 		) {
 			const standard = // @ts-ignore
-				('~standard' in this.validator
-					? this.validator
-					: // @ts-ignore
-						this.validator.schema)['~standard']
+				(
+					'~standard' in this.validator
+						? this.validator
+						: // @ts-ignore
+							this.validator.schema
+				)['~standard']
 
 			const issues = standard.validate(this.value).issues
 
 			// Map standard schema issues to the expected format
-			return issues?.map((issue: any) => ({
-				summary: issue.message,
-				path: issue.path?.join('.') || 'root',
-				message: issue.message,
-				value: this.value
-			})) || []
+			return (
+				issues?.map((issue: any) => ({
+					summary: issue.message,
+					path: issue.path?.join('.') || 'root',
+					message: issue.message,
+					value: this.value
+				})) || []
+			)
 		}
 
 		// Handle TypeBox validators
@@ -521,7 +526,7 @@ export class ValidationError extends Error {
 		const expected = this.expected
 		const errors = this.all
 
-		return isProduction
+		return isProduction && !this.allowUnsafeValidationDetails
 			? {
 					type: 'validation',
 					on: this.type,

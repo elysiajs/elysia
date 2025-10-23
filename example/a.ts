@@ -1,8 +1,15 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia().onAfterResponse(({ set, responseValue }) => {
-	console.log(responseValue)
-	console.log(set.status)
+const app = new Elysia({
+	allowUnsafeValidationDetails: true
 })
-.listen(3000)
+	.onError(({ error }) => {
+		// console.log(error)
+	})
+	.get('/q', () => {}, {
+		query: t.Object({
+			a: t.String()
+		})
+	})
+	.listen(3000)
