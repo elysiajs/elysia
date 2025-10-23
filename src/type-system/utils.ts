@@ -44,6 +44,7 @@ export const compile = <T extends TAnySchema>(schema: T) => {
 
 		compiler.Create = () => Value.Create(schema)
 		compiler.Error = (v: unknown) =>
+			// @ts-ignore
 			new ValidationError('property', schema, v, compiler.Errors(v))
 
 		return compiler
@@ -56,6 +57,7 @@ export const compile = <T extends TAnySchema>(schema: T) => {
 						'property',
 						schema,
 						v,
+						// @ts-ignore
 						Value.Errors(schema, v)
 					)
 			},
@@ -66,6 +68,7 @@ export const compile = <T extends TAnySchema>(schema: T) => {
 					'property',
 					schema,
 					v,
+					// @ts-ignore
 					Value.Errors(schema, v)
 				)
 		}
@@ -132,9 +135,7 @@ export const fileType = async (
 	name = file?.name ?? ''
 ): Promise<boolean> => {
 	if (Array.isArray(file)) {
-		await Promise.all(
-			file.map((f) => fileType(f, extension, name))
-		)
+		await Promise.all(file.map((f) => fileType(f, extension, name)))
 
 		return true
 	}

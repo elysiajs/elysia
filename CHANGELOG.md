@@ -1,14 +1,17 @@
 # 1.4.13 - 23 Oct 2025
-Improvement:
+Feature:
 - [#1453](https://github.com/elysiajs/elysia/issues/1453) add `allowUnsafeValidationDetails` for disabling unsafe validation details in production mode
+- allow rapid stream in non browser mode or `ELYSIA_RAPID_STREAM` is set
 
 Bug fix:
-- [#1502](https://github.com/elysiajs/elysia/issues/1502) afterHandle doesn't update status
+- [#1502](https://github.com/elysiajs/elysia/issues/1502), [#1501](https://github.com/elysiajs/elysia/issues/1501) afterHandle doesn't update status
+- [#1500](https://github.com/elysiajs/elysia/issues/1500) export `InvalidFileType` from root
 - [#1495](https://github.com/elysiajs/elysia/pull/1495) request server hook parameters are typed as any (Bun 1.3.0)
 - [#1483](https://github.com/elysiajs/elysia/pull/1483) handle standard schema validators in ValidationError.all
 - [#1459](https://github.com/elysiajs/elysia/pull/1459) fix strictPath behavior when aot: false is set
 - [#1455](https://github.com/elysiajs/elysia/pull/1455) graceful shutdown not awaiting server.stop
 - [#1499](https://github.com/elysiajs/elysia/pull/1449) fails when merging with t.Optional schema
+- remove encoding chunk from native static response in Bun adapter
 
 change:
 - make `@types/bun` an optional dependency

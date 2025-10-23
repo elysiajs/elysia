@@ -1,15 +1,7 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, file } from '../src'
 
 const app = new Elysia({
 	allowUnsafeValidationDetails: true
 })
-	.onError(({ error }) => {
-		// console.log(error)
-	})
-	.get('/q', () => {}, {
-		query: t.Object({
-			a: t.String()
-		})
-	})
+	.get('/', file('test/images/aris-yuzu.jpg'))
 	.listen(3000)

@@ -269,7 +269,7 @@ export class ValidationError extends Error {
 			| StandardSchemaV1Like,
 		public value: unknown,
 		private allowUnsafeValidationDetails = false,
-		errors?: ValueErrorIterator,
+		errors?: ValueErrorIterator
 	) {
 		let message = ''
 		let error
@@ -438,7 +438,9 @@ export class ValidationError extends Error {
 			'~standard' in this.validator ||
 			// @ts-ignore
 			('schema' in this.validator &&
+				// @ts-ignore
 				this.validator.schema &&
+				// @ts-ignore
 				'~standard' in this.validator.schema)
 		) {
 			const standard = // @ts-ignore

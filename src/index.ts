@@ -8264,6 +8264,7 @@ export {
 	ParseError,
 	NotFoundError,
 	ValidationError,
+	InvalidFileType,
 	InternalServerError,
 	InvalidCookieSignature,
 	ERROR_CODE,

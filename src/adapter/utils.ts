@@ -20,15 +20,12 @@ export const handleFile = (
 			set.status === 416)
 
 	const defaultHeader = immutable
-		? ({
-				'transfer-encoding': 'chunked'
-			} as Record<string, string>)
+		? {}
 		: ({
 				'accept-ranges': 'bytes',
 				'content-range': size
 					? `bytes 0-${size - 1}/${size}`
-					: undefined,
-				'transfer-encoding': 'chunked'
+					: undefined
 			} as Record<string, string>)
 
 	if (!set && !size) return new Response(response as Blob)
@@ -147,6 +144,8 @@ type CreateHandlerParameter = {
 	mapCompactResponse(response: unknown, request?: Request): Response
 }
 
+const allowRapidStream = process.env.ELYSIA_RAPID_STREAM === 'true'
+
 export const createStreamHandler =
 	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
 	async (
@@ -207,6 +206,8 @@ export const createStreamHandler =
 				}
 			}
 
+		const isBrowser = request?.headers.has('Origin')
+
 		return new Response(
 			new ReadableStream({
 				async start(controller) {
@@ -265,7 +266,7 @@ export const createStreamHandler =
 								else
 									controller.enqueue(format(chunk.toString()))
 
-								if (!isSSE)
+								if (!allowRapidStream && isBrowser && !isSSE)
 									/**
 									 * Wait for the next event loop
 									 * otherwise the data will be mixed up

@@ -340,13 +340,11 @@ export const BunAdapter: ElysiaAdapter = {
 									createStaticRoute(app.router.response),
 									mapRoutes(app)
 								),
-								// @ts-expect-error private property
 								app.config.serve?.routes
 							),
 							websocket: {
 								...(app.config.websocket || {}),
 								...(websocket || {}),
-								// @ts-expect-error not available in this variant of options type
 								...(options.websocket || {})
 							},
 							fetch: app.fetch
@@ -362,7 +360,6 @@ export const BunAdapter: ElysiaAdapter = {
 									createStaticRoute(app.router.response),
 									mapRoutes(app)
 								),
-								// @ts-expect-error private property
 								app.config.serve?.routes
 							),
 							websocket: {
@@ -405,7 +402,6 @@ export const BunAdapter: ElysiaAdapter = {
 							}),
 							mapRoutes(app)
 						),
-						// @ts-expect-error private property
 						app.config.serve?.routes
 					)
 				})
@@ -528,7 +524,7 @@ export const BunAdapter: ElysiaAdapter = {
 						}
 
 				if (
-					server?.upgrade<any>(context.request, {
+					server?.upgrade(context.request, {
 						headers: isNotEmpty(set.headers)
 							? (set.headers as Record<string, string>)
 							: undefined,
