@@ -3,6 +3,7 @@ import { hasHeaderShorthand, isNotEmpty, StatusMap } from '../utils'
 
 import type { Context } from '../context'
 import { isBun } from '../universal/utils'
+import { env } from '../universal'
 
 export const handleFile = (
 	response: File | Blob,
@@ -144,7 +145,7 @@ type CreateHandlerParameter = {
 	mapCompactResponse(response: unknown, request?: Request): Response
 }
 
-const allowRapidStream = process.env.ELYSIA_RAPID_STREAM === 'true'
+const allowRapidStream = env.ELYSIA_RAPID_STREAM === 'true'
 
 export const createStreamHandler =
 	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>

@@ -847,7 +847,7 @@ export default class Elysia<
 						const context: PreContext = {
 							redirect,
 							request: this['~adapter'].isWebStandard
-								? new Request(`http://e.ly${path}`, {
+								? new Request(`http://ely.sia${path}`, {
 										method
 									})
 								: (undefined as any as Request),
