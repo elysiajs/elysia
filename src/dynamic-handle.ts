@@ -5,6 +5,7 @@ import { TypeCheck } from './type-system'
 
 import type { Context } from './context'
 import type { ElysiaTypeCheck } from './schema'
+import type { ExecutionContext, RequestContext } from './adapter/types'
 
 import {
 	ElysiaCustomStatusResponse,
@@ -20,6 +21,14 @@ import { redirect, signCookie, StatusMap } from './utils'
 import { parseCookie } from './cookies'
 
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
+
+/**
+ * Global variable to store the current ExecutionContext
+ * This gets set by the Cloudflare Worker runtime for each request
+ */
+declare global {
+	var __cloudflareExecutionContext: ExecutionContext | undefined
+}
 
 // JIT Handler
 export type DynamicHandler = {
@@ -54,7 +63,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 	// @ts-ignore
 	const defaultHeader = app.setHeaders
 
-	return async (request: Request): Promise<Response> => {
+	return async (
+		request: Request,
+		requestContext?: RequestContext
+	): Promise<Response> => {
 		const url = request.url,
 			s = url.indexOf('/', 11),
 			qi = url.indexOf('?', s + 1),
@@ -663,11 +675,29 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-expect-error private
 			return app.handleError(context, reportedError)
 		} finally {
-			if (app.event.afterResponse)
-				setImmediate(async () => {
+			if (app.event.afterResponse) {
+				// Use a polyfill that works in Cloudflare Workers
+				const runAfterResponse = async () => {
 					for (const afterResponse of app.event.afterResponse!)
 						await afterResponse.fn(context as any)
-				})
+				}
+
+				// Get the best available async execution method
+				const waitUntil =
+					requestContext?.executionContext?.waitUntil ||
+					globalThis.__cloudflareExecutionContext?.waitUntil
+
+				if (waitUntil) {
+					// Use ExecutionContext.waitUntil for Cloudflare Workers
+					waitUntil(Promise.resolve().then(runAfterResponse))
+				} else if (typeof setImmediate !== 'undefined') {
+					// Use setImmediate (may be polyfilled by adapter)
+					setImmediate(runAfterResponse)
+				} else {
+					// Fallback to Promise.resolve for other environments
+					Promise.resolve().then(runAfterResponse)
+				}
+			}
 		}
 	}
 }
