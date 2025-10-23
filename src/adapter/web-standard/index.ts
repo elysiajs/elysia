@@ -127,17 +127,17 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		},
 		error404(hasEventHook, hasErrorHook, afterHandle = '') {
 			let findDynamicRoute =
-				`if(route===null){` + afterHandle + '\nreturn '
+				`if(route===null){` + afterHandle + (hasErrorHook ? '' : 'c.set.status=404') + '\nreturn '
 
 			if (hasErrorHook)
 				findDynamicRoute += `app.handleError(c,notFound,false,${this.parameters})`
 			else
 				findDynamicRoute += hasEventHook
-					? `new Response(error404Message,{` +
+					? `c.response=c.responseValue=new Response(error404Message,{` +
 						`status:c.set.status===200?404:c.set.status,` +
 						`headers:c.set.headers` +
 						`})`
-					: `error404.clone()`
+					: `c.response=c.responseValue=error404.clone()`
 
 			findDynamicRoute += '}'
 

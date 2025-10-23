@@ -765,7 +765,9 @@ export const composeHandler = ({
 		let afterResponse = ''
 		const prefix = hooks.afterResponse?.some(isAsync) ? 'async ' : ''
 
-		afterResponse += `\nsetImmediate(${prefix}()=>{`
+		afterResponse +=
+			`\nsetImmediate(${prefix}()=>{` +
+			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
 
 		const reporter = createReport({
 			trace: hooks.trace,
@@ -2237,7 +2239,9 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		afterResponse = '\nc.error=notFound\n'
 
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
-		afterResponse += `\nsetImmediate(${prefix}()=>{`
+		afterResponse +=
+			`\nsetImmediate(${prefix}()=>{` +
+			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
 
 		for (let i = 0; i < app.event.afterResponse.length; i++) {
 			const fn = app.event.afterResponse[i].fn
@@ -2344,6 +2348,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		`status,` +
 		`redirect,` +
 		`getResponseLength,` +
+		`ElysiaCustomStatusResponse,` +
 		// @ts-ignore
 		allocateIf(`parseQueryFromURL,`, app.inference.query) +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
@@ -2410,6 +2415,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		status,
 		redirect,
 		getResponseLength,
+		ElysiaCustomStatusResponse,
 		// @ts-ignore
 		parseQueryFromURL: app.inference.query ? parseQueryFromURL : undefined,
 		ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,

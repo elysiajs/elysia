@@ -1,21 +1,8 @@
-import { Elysia, sse, t } from '../src'
+import { Elysia } from '../src'
+import { req } from '../test/utils'
 
-const message = t.Object({
-	event: t.String(),
-	data: t.Object({
-		message: t.String(),
-		timestamp: t.String()
-	})
+const app = new Elysia().onAfterResponse(({ set, responseValue }) => {
+	console.log(responseValue)
+	console.log(set.status)
 })
-type message = typeof message.static
-
-const app = new Elysia()
-	.macro('a', (a: 'a') => ({
-		resolve: () => ({ a: 'a' })
-	}))
-	.get('/', ({ a }) => a, {
-		a: 'a'
-	})
-	.listen(3000)
-
-// console.log(app.routes[0].compile().toString())
+.listen(3000)
