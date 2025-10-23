@@ -15,6 +15,6 @@ describe('WebSocket with AoT disabled', () => {
 		await wsOpen(ws)
 		await wsClosed(ws)
 
-		await app.stop()
+		await app.stop(true)
 	})
 })

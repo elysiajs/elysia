@@ -381,9 +381,9 @@ export const BunAdapter: ElysiaAdapter = {
 
 			if (callback) callback(app.server!)
 
-			process.on('beforeExit', () => {
+			process.on('beforeExit', async () => {
 				if (app.server) {
-					app.server.stop?.()
+					await app.server.stop?.()
 					app.server = null
 
 					if (app.event.stop)
@@ -416,7 +416,7 @@ export const BunAdapter: ElysiaAdapter = {
 	},
 	async stop(app, closeActiveConnections) {
 		if (app.server) {
-			app.server.stop(closeActiveConnections)
+			await app.server.stop(closeActiveConnections)
 			app.server = null
 
 			if (app.event.stop?.length)
