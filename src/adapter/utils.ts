@@ -397,3 +397,37 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 		return response
 	}
 }
+
+export async function tee<T>(
+	source: AsyncIterable<T>,
+	branches = 2
+): Promise<AsyncIterableIterator<T>[]> {
+	const buffer: T[] = []
+	let done = false
+	let waiting: { resolve: () => void }[] = []
+
+	;(async () => {
+		for await (const value of source) {
+			buffer.push(value)
+			waiting.forEach((w) => w.resolve())
+			waiting = []
+		}
+		done = true
+		waiting.forEach((w) => w.resolve())
+	})()
+
+	async function* makeIterator(): AsyncIterableIterator<T> {
+		let i = 0
+		while (true) {
+			if (i < buffer.length) {
+				yield buffer[i++]
+			} else if (done) {
+				return
+			} else {
+				await new Promise<void>((resolve) => waiting.push({ resolve }))
+			}
+		}
+	}
+
+	return Array.from({ length: branches }, makeIterator)
+}

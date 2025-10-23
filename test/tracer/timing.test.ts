@@ -3,7 +3,7 @@ import { Elysia } from '../../src'
 import { describe, expect, it } from 'bun:test'
 import { post, req } from '../utils'
 
-const delay = (delay = 10) =>
+const delay = (delay = 7) =>
 	new Promise((resolve) => setTimeout(resolve, delay))
 
 describe('Trace Timing', async () => {

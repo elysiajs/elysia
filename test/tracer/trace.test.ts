@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia, type TraceProcess, type TraceEvent } from '../../src'
-import { req } from '../utils'
+import { delay, req } from '../utils'
 
 describe('trace', () => {
 	it('inherits plugin', async () => {
@@ -84,7 +84,7 @@ describe('trace', () => {
 						'beforeHandle',
 						'handle',
 						'afterHandle',
-						'mapResponse',
+						'mapResponse'
 						// afterResponse is being called so we can't check it yet
 					])
 				})
@@ -154,7 +154,7 @@ describe('trace', () => {
 							'beforeHandle',
 							'handle',
 							'afterHandle',
-							'mapResponse',
+							'mapResponse'
 							// afterResponse is being called so we can't check it yet
 						])
 					})
@@ -474,5 +474,36 @@ describe('trace', () => {
 		await app.handle(req('/id/1'))
 
 		expect(route).toBe('/id/:id')
+	})
+
+	it('defers stream for onHandle, and onAfterResponse', async () => {
+		const order = <string[]>[]
+
+		const app = new Elysia()
+			.trace(({ onHandle, onAfterResponse }) => {
+				onHandle(({ onStop }) => {
+					onStop(({ error }) => {
+						order.push('HANDLE')
+					})
+				})
+
+				onAfterResponse(() => {
+					order.push('AFTER')
+				})
+			})
+			.get('/', async function* () {
+				for (let i = 0; i < 5; i++) {
+					yield `${i}`
+					await delay(1)
+				}
+			})
+
+		expect(order).toEqual([])
+
+		await app.handle(req('/'))
+		expect(order).toEqual([])
+
+		await delay(10)
+		expect(order).toEqual(['HANDLE', 'AFTER'])
 	})
 })

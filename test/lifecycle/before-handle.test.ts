@@ -283,6 +283,7 @@ describe('Before Handle', () => {
 				beforeHandle: ({ status }) =>
 					status(401, 'unauthorized beforeHandle'),
 				afterResponse: ({ responseValue }) => {
+					console.log("Q")
 					hasAfterResponseResponse = !!responseValue
 				}
 			}

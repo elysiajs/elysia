@@ -62,6 +62,7 @@ import type {
 	LifeCycleStore,
 	SchemaValidator
 } from './types'
+import { tee } from './adapter/utils'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -108,15 +109,19 @@ const createReport = ({
 				`let trace${i}=${context}[ELYSIA_TRACE]?.[${i}]??trace[${i}](${context});\n`
 		)
 
+	// const aliases: string[] = []
+
 	return (
 		event: TraceEvent,
 		{
 			name,
-			total = 0
+			total = 0,
+			alias
 		}: {
 			name?: string
 			attribute?: string
 			total?: number
+			alias?: string
 		} = {}
 	) => {
 		// ? For debug specific event
@@ -132,9 +137,9 @@ const createReport = ({
 
 		const reporter = event === 'error' ? 'reportErr' : 'report'
 
-		for (let i = 0; i < trace.length; i++)
+		for (let i = 0; i < trace.length; i++) {
 			addFn(
-				`${reporter}${i} = trace${i}.${event}({` +
+				`${alias ? 'const ' : ''}${alias ?? reporter}${i}=trace${i}.${event}({` +
 					`id,` +
 					`event:'${event}',` +
 					`name:'${name}',` +
@@ -143,13 +148,29 @@ const createReport = ({
 					`})\n`
 			)
 
+			if (alias) addFn(`${reporter}${i}=${alias}${i}\n`)
+		}
+
+		// if (event === 'error')
+		// 	for (const alias of aliases)
+		// 		for (let i = 0; i < trace.length; i++)
+		// 			addFn(
+		// 				`const ${alias}Err${i}=trace${i}.${event}({` +
+		// 					`id,` +
+		// 					`event:'${event}',` +
+		// 					`name:'${name}',` +
+		// 					`begin:performance.now(),` +
+		// 					`total:${total}` +
+		// 					`})\n`
+		// 			)
+
 		return {
 			resolve() {
 				for (let i = 0; i < trace.length; i++)
-					addFn(`${reporter}${i}.resolve()\n`)
+					addFn(`${alias ?? reporter}${i}.resolve()\n`)
 			},
 			resolveChild(name: string) {
-				for (let i = 0; i < trace.length; i++)
+				for (let i = 0; i < trace.length; i++) {
 					addFn(
 						`${reporter}Child${i}=${reporter}${i}.resolveChild?.shift()?.({` +
 							`id,` +
@@ -158,6 +179,7 @@ const createReport = ({
 							`begin:performance.now()` +
 							`})\n`
 					)
+				}
 
 				return (binding?: string) => {
 					for (let i = 0; i < trace.length; i++) {
@@ -773,9 +795,8 @@ export const composeHandler = ({
 			`\nsetImmediate(async()=>{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
-			`else if(c.responseValue[Symbol.iterator]) for (const v of c.responseValue) { }` +
-			`else if(c.responseValue[Symbol.asyncIterator]) for await (const v of c.responseValue) { }` +
-			`}`
+			`if(afterHandlerStreamListener)for await(const v of afterHandlerStreamListener){}\n` +
+			`}\n`
 
 		const reporter = createReport({
 			trace: hooks.trace,
@@ -819,6 +840,8 @@ export const composeHandler = ({
 			: ''
 
 	if (hasTrace || inference.route) fnLiteral += `c.route=\`${path}\`\n`
+	if (hasTrace || hooks.afterResponse?.length)
+		fnLiteral += 'let afterHandlerStreamListener\n'
 
 	const parseReporter = report('parse', {
 		total: hooks.parse?.length
@@ -1707,10 +1730,37 @@ export const composeHandler = ({
 		reporter.resolve()
 	}
 
-	if (hooks.afterHandle?.length || hasTrace) {
+	function reportHandler(name: string | undefined) {
 		const handleReporter = report('handle', {
-			name: isHandleFn ? (handler as Function).name : undefined
+			name,
+			alias: 'reportHandler'
 		})
+
+		return () => {
+			if (hasTrace) {
+				fnLiteral +=
+					`if(r&&(r[Symbol.iterator]||r[Symbol.asyncIterator])&&typeof r.next==="function"){` +
+					(maybeAsync ? '' : `(async()=>{`) +
+					`const stream=await tee(r,3)\n` +
+					`r=stream[0]\n` +
+					`const listener=stream[1]\n` +
+					(hasTrace || hooks.afterResponse?.length
+						? `afterHandlerStreamListener=stream[2]\n`
+						: '') +
+					`setImmediate(async ()=>{` +
+					`if(listener)for await(const v of listener){}\n`
+				handleReporter.resolve()
+				fnLiteral += `})` + (maybeAsync ? '' : `})()`) + `}else{`
+				handleReporter.resolve()
+				fnLiteral += '}\n'
+			}
+		}
+	}
+
+	if (hooks.afterHandle?.length || hasTrace) {
+		const resolveHandler = reportHandler(
+			isHandleFn ? (handler as Function).name : undefined
+		)
 
 		if (hooks.afterHandle?.length)
 			fnLiteral += isAsyncHandler
@@ -1721,7 +1771,7 @@ export const composeHandler = ({
 				? `let r=await ${handle}\n`
 				: `let r=${handle}\n`
 
-		handleReporter.resolve()
+		resolveHandler()
 
 		const reporter = report('afterHandle', {
 			total: hooks.afterHandle?.length
@@ -1795,16 +1845,16 @@ export const composeHandler = ({
 
 		fnLiteral += mapResponse()
 	} else {
-		const handleReporter = report('handle', {
-			name: isHandleFn ? (handler as Function).name : undefined
-		})
+		const resolveHandler = reportHandler(
+			isHandleFn ? (handler as Function).name : undefined
+		)
 
 		if (validator.response || hooks.mapResponse?.length || hasTrace) {
 			fnLiteral += isAsyncHandler
 				? `let r=await ${handle}\n`
 				: `let r=${handle}\n`
 
-			handleReporter.resolve()
+			resolveHandler()
 
 			if (validator.response) fnLiteral += validation.response()
 
@@ -1856,7 +1906,7 @@ export const composeHandler = ({
 				? `let r=await ${handle}\n`
 				: `let r=${handle}\n`
 
-			handleReporter.resolve()
+			resolveHandler()
 
 			const mapResponseReporter = report('mapResponse', {
 				total: hooks.mapResponse?.length
@@ -1884,7 +1934,7 @@ export const composeHandler = ({
 
 			fnLiteral += encodeCookie() + mapResponse()
 		} else {
-			handleReporter.resolve()
+			resolveHandler()
 
 			const handled = isAsyncHandler ? `await ${handle}` : handle
 
@@ -2019,6 +2069,7 @@ export const composeHandler = ({
 		`fileType,` +
 		`schema,` +
 		`definitions,` +
+		`tee,` +
 		`ERROR_CODE,` +
 		allocateIf(`parseCookie,`, hasCookie) +
 		allocateIf(`signCookie,`, hasCookie) +
@@ -2073,6 +2124,7 @@ export const composeHandler = ({
 			schema: app.router.history,
 			// @ts-expect-error
 			definitions: app.definitions.type,
+			tee,
 			ERROR_CODE,
 			parseCookie: hasCookie ? parseCookie : undefined,
 			signCookie: hasCookie ? signCookie : undefined,

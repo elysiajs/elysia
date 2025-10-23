@@ -2,6 +2,8 @@
 Feature:
 - [#1453](https://github.com/elysiajs/elysia/issues/1453) add `allowUnsafeValidationDetails` for disabling unsafe validation details in production mode
 - allow rapid stream in non browser mode or `ELYSIA_RAPID_STREAM` is set
+- `afterResponse` now wait for generator stream to finish
+- trace of `handle`, and `afterResponse` now wait for generator stream to finish
 
 Bug fix:
 - [#1502](https://github.com/elysiajs/elysia/issues/1502), [#1501](https://github.com/elysiajs/elysia/issues/1501) afterHandle doesn't update status
