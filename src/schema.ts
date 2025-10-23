@@ -1454,7 +1454,7 @@ export const mergeObjectSchemas = (
 				...newSchema.properties,
 				...schema.properties
 			},
-			required: [...(newSchema?.required ?? []), ...schema.required]
+			required: [...(newSchema?.required ?? []), ...(schema.required ?? [])]
 		} as TObject
 	}
 
