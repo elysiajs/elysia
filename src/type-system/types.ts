@@ -238,3 +238,13 @@ export interface TTransform<
 	[TransformKind]: TransformOptions<I, O>
 	[key: string]: any
 }
+
+export type AssertNumericEnum<T extends Record<string, string | number>> = {
+	[K in keyof T]: K extends number
+		? string
+		: K extends `${number}`
+			? string
+			: K extends string
+				? number
+				: never
+}

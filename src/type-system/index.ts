@@ -20,7 +20,8 @@ import type {
 	JavaScriptTypeBuilder,
 	StringOptions,
 	TUnsafe,
-	Uint8ArrayOptions
+	Uint8ArrayOptions,
+	TEnum
 } from '@sinclair/typebox'
 
 import {
@@ -40,7 +41,8 @@ import {
 	TForm,
 	TUnionEnum,
 	ElysiaTransformDecodeBuilder,
-	TArrayBuffer
+	TArrayBuffer,
+	AssertNumericEnum
 } from './types'
 
 import { ELYSIA_FORM_DATA, form } from '../utils'
@@ -149,6 +151,23 @@ export const ElysiaType = {
 				return number
 			})
 			.Encode((value) => value) as any as TNumber
+	},
+
+	NumericEnum<T extends AssertNumericEnum<T>>(item: T, property?: SchemaOptions) {
+		const schema = Type.Enum(item, property)
+		const compiler = compile(schema)
+
+		return t
+			.Transform(
+				t.Union([t.String({ format: 'numeric' }), t.Number()], property)
+			)
+			.Decode((value) => {
+				const number = +value
+				if (isNaN(number)) throw compiler.Error(number)
+				if (!compiler.Check(number)) throw compiler.Error(number)
+				return number
+			})
+			.Encode((value) => value) as any as TEnum<T>
 	},
 
 	Integer: (property?: IntegerOptions): TInteger => {
@@ -607,6 +626,7 @@ t.ObjectString = ElysiaType.ObjectString
 t.ArrayString = ElysiaType.ArrayString
 t.ArrayQuery = ElysiaType.ArrayQuery
 t.Numeric = ElysiaType.Numeric
+t.NumericEnum = ElysiaType.NumericEnum
 t.Integer = ElysiaType.Integer
 
 t.File = (arg) => {

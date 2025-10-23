@@ -142,6 +142,30 @@ describe('Query Validator', () => {
 		expect(res.status).toBe(200)
 	})
 
+	it('parse numeric enum', async () => {
+		enum Gender {
+			MALE = 1,
+			FEMALE = 2,
+			UNKNOWN = 3
+		}
+
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				name: t.String(),
+				gender: t.NumericEnum(Gender)
+			})
+		})
+		const res = await app.handle(
+			req(`/?name=sucrose&gender=${Gender.MALE}`)
+		)
+
+		expect(await res.json()).toEqual({
+			name: 'sucrose',
+			gender: Gender.MALE
+		})
+		expect(res.status).toBe(200)
+	})
+
 	it('parse single integer', async () => {
 		const app = new Elysia().get('/', ({ query: { limit } }) => limit, {
 			query: t.Object({

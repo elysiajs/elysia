@@ -98,6 +98,15 @@ describe('Has Transform', () => {
 		expect(hasTransform(schema)).toBe(true)
 	})
 
+	it('Found t.NumericEnum', () => {
+		const schema = t.Object({
+			gender: t.NumericEnum({ UNKNOWN: 0, MALE: 1, FEMALE: 2 }),
+			liyue: t.String()
+		})
+
+		expect(hasTransform(schema)).toBe(true)
+	})
+
 	it('Found t.ObjectString', () => {
 		const schema = t.Object({
 			id: t.String(),
