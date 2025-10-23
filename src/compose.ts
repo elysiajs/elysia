@@ -2034,6 +2034,7 @@ export const composeHandler = ({
 				errorReporter.resolve()
 			}
 
+			fnLiteral += afterResponse()
 			fnLiteral += `return er}`
 		}
 	}
