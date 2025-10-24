@@ -11,15 +11,15 @@ jobs:
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v4
+              uses: actions/checkout@v5
 
             - name: Setup bun
-              uses: oven-sh/setup-bun@v1
+              uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
 
             - name: Install packages
-              run: bun install
+              run: bun install --frozen-lockfile
 
             - name: Build code
               run: bun run build
