@@ -567,5 +567,6 @@ const handleResponse = createResponseHandler({
 
 const handleStream = createStreamHandler({
 	mapResponse,
-	mapCompactResponse
+	mapCompactResponse,
+	streamOptions: {}
 })
