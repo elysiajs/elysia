@@ -2378,7 +2378,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		)
 			switchMap +=
 				`case 'HEAD':` +
-				`return ht[${methods.GET ?? methods.ALL}].composed(c).then(_res => getResponseLength(_res).then((length)=>{` +
+				`return ht[${methods.GET ?? methods.ALL}].composed(c).then(_res=>getResponseLength(_res).then((length)=>{` +
 				`_res.headers.set('content-length', length)\n` +
 				`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
 				'}))\n'
