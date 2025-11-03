@@ -1,12 +1,21 @@
-import { Elysia, status, t } from '../src'
-import { delay, req } from '../test/utils'
+import Elysia, { t } from '../src'
 
-const a = new Elysia()
-	.macro({
-		a: {
-			resolve: () => ({ a: 'a' })
+new Elysia()
+	.post(
+		'/mirror',
+		async ({ status, body }) => status(201, { success: false }),
+		{
+			body: t.Object({
+				code: t.String()
+			}),
+			response: {
+				200: t.Object({
+					success: t.Literal(true)
+				}),
+				201: t.Object({
+					success: t.Literal(false)
+				})
+			}
 		}
-	})
-	.post('/', (c) => {}, {
-		a: true
-	})
+	)
+	.listen(3333)

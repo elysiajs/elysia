@@ -1,6 +1,7 @@
-# 1.4.14
+# 1.4.14 - 3 Nov 2025
 Feature:
 - [#1520](https://github.com/elysiajs/elysia/issues/1520), [#1522](https://github.com/elysiajs/elysia/issues/1522) async handlers crash on HEAD request
+- [#1510](https://github.com/elysiajs/elysia/issues/1510) strict status response
 - [#1503](https://github.com/elysiajs/elysia/pull/1503) add t.NumericEnum() for numeric enum query handling
 - [#1450](https://github.com/elysiajs/elysia/pull/1450) call onAfterResponse when onError returns a value
 - remove redundant `Prettify`

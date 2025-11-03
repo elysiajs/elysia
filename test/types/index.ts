@@ -2839,3 +2839,37 @@ type a = keyof {}
 		}
 	)
 }
+
+// Strict status response
+{
+	new Elysia().post(
+		'/mirror',
+		async ({ status, body }) => {
+			if (Math.random() > 0.5)
+				// @ts-ignore
+				return status(201, { body, success: false })
+
+			// @ts-expect-error
+			if (Math.random() > 0.5) return status(200, { success: false })
+
+			// @ts-expect-error
+			if (Math.random() > 0.5) return status(201, { success: true })
+			if (Math.random() > 0.5) return status(200, { success: true })
+
+			return status(201, { success: false })
+		},
+		{
+			body: t.Object({
+				code: t.String()
+			}),
+			response: {
+				200: t.Object({
+					success: t.Literal(true)
+				}),
+				201: t.Object({
+					success: t.Literal(false)
+				})
+			}
+		}
+	)
+}
