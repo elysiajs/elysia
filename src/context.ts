@@ -6,15 +6,14 @@ import type {
 	redirect as Redirect
 } from './utils'
 
-import { ElysiaCustomStatusResponse, status } from './error'
+import { ElysiaCustomStatusResponse, status, type SelectiveStatus } from './error'
 import type {
 	RouteSchema,
 	Prettify,
 	ResolvePath,
 	SingletonBase,
 	HTTPHeaders,
-	InputSchema,
-	PossibleResponse
+	InputSchema
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
@@ -110,21 +109,6 @@ export type ErrorContext<
 >
 
 type PrettifyIfObject<T> = T extends object ? Prettify<T> : T
-
-export type SelectiveStatus<Res> = <
-	const Code extends
-		| keyof Res
-		| InvertedStatusMap[Extract<InvertedStatusMapKey, keyof Res>]
->(
-	code: Code,
-	response: Code extends keyof Res
-		? Res[Code]
-		: Code extends keyof StatusMap
-			? // @ts-ignore StatusMap[Code] always valid because Code generic check
-				Res[StatusMap[Code]]
-			: never
-	// @ts-ignore trust me bro
-) => ElysiaCustomStatusResponse<Code, T>
 
 export type Context<
 	in out Route extends RouteSchema = {},

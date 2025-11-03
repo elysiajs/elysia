@@ -8124,8 +8124,7 @@ export { serializeCookie, Cookie, type CookieOptions } from './cookies'
 export type {
 	Context,
 	PreContext,
-	ErrorContext,
-	SelectiveStatus
+	ErrorContext
 } from './context'
 export {
 	ELYSIA_TRACE,
@@ -8168,7 +8167,8 @@ export {
 	InternalServerError,
 	InvalidCookieSignature,
 	ERROR_CODE,
-	ElysiaCustomStatusResponse
+	ElysiaCustomStatusResponse,
+	type SelectiveStatus
 } from './error'
 
 export type {

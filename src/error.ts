@@ -39,6 +39,21 @@ const emptyHttpStatus = {
 	308: undefined
 } as const
 
+export type SelectiveStatus<Res> = <
+	const Code extends
+		| keyof Res
+		| InvertedStatusMap[Extract<keyof InvertedStatusMap, keyof Res>]
+>(
+	code: Code,
+	response: Code extends keyof Res
+		? Res[Code]
+		: Code extends keyof StatusMap
+			? // @ts-ignore StatusMap[Code] always valid because Code generic check
+				Res[StatusMap[Code]]
+			: never
+	// @ts-ignore trust me bro
+) => ElysiaCustomStatusResponse<Code, T>
+
 export class ElysiaCustomStatusResponse<
 	const in out Code extends number | keyof StatusMap,
 	// no in out here so the response can be sub type of return type

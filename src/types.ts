@@ -1984,13 +1984,14 @@ export interface Macro<
 
 export type MaybeFunction<T> = T | ((...args: any[]) => T)
 
-export type MacroToProperty<in out T extends Macro<any, any, any, any>> = {
-	[K in keyof T]: T[K] extends Function
-		? T[K] extends (a: infer Params) => any
-			? Params
+export type MacroToProperty<in out T extends Macro<any, any, any, any>> =
+	Prettify<{
+		[K in keyof T]: T[K] extends Function
+			? T[K] extends (a: infer Params) => any
+				? Params
+				: boolean
 			: boolean
-		: boolean
-}
+	}>
 
 interface MacroOptions {
 	insert?: 'before' | 'after'
