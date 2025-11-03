@@ -13,7 +13,8 @@ import type {
 	ResolvePath,
 	SingletonBase,
 	HTTPHeaders,
-	InputSchema
+	InputSchema,
+	PossibleResponse
 } from './types'
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
@@ -110,6 +111,21 @@ export type ErrorContext<
 
 type PrettifyIfObject<T> = T extends object ? Prettify<T> : T
 
+export type SelectiveStatus<Res> = <
+	const Code extends
+		| keyof Res
+		| InvertedStatusMap[Extract<InvertedStatusMapKey, keyof Res>]
+>(
+	code: Code,
+	response: Code extends keyof Res
+		? Res[Code]
+		: Code extends keyof StatusMap
+			? // @ts-ignore StatusMap[Code] always valid because Code generic check
+				Res[StatusMap[Code]]
+			: never
+	// @ts-ignore trust me bro
+) => ElysiaCustomStatusResponse<Code, T>
+
 export type Context<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -203,23 +219,7 @@ export type Context<
 
 		status: {} extends Route['response']
 			? typeof status
-			: <
-					const Code extends
-						| keyof Route['response']
-						| InvertedStatusMap[Extract<
-								InvertedStatusMapKey,
-								keyof Route['response']
-						  >]
-				>(
-					code: Code,
-					response: Code extends keyof Route['response']
-						? Route['response'][Code]
-						: Code extends keyof StatusMap
-							? // @ts-ignore StatusMap[Code] always valid because Code generic check
-								Route['response'][StatusMap[Code]]
-							: never
-					// @ts-ignore trust me bro
-				) => ElysiaCustomStatusResponse<Code, T>
+			: SelectiveStatus<Route['response']>
 	} & Singleton['decorator'] &
 		Singleton['derive'] &
 		Omit<Singleton['resolve'], keyof InputSchema>

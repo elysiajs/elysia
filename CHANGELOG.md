@@ -1,3 +1,7 @@
+# 1.4.15 - 3 Nov 2025
+Bug fix:
+- 1.4.14 regression with Eden Treaty, and OpenAPI type gen
+
 # 1.4.14 - 3 Nov 2025
 Feature:
 - [#1520](https://github.com/elysiajs/elysia/issues/1520), [#1522](https://github.com/elysiajs/elysia/issues/1522) async handlers crash on HEAD request

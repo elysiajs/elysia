@@ -2132,7 +2132,7 @@ export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
 			? {}
 			: IsNever<R200> extends true
 				? {}
-				: { 200: Prettify<R200> }
+				: { 200: R200 }
 		: {})
 
 export type ValueOrFunctionToResponseSchema<T> = T extends (

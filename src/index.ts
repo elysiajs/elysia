@@ -8121,7 +8121,12 @@ export type {
 } from './type-system/types'
 
 export { serializeCookie, Cookie, type CookieOptions } from './cookies'
-export type { Context, PreContext, ErrorContext } from './context'
+export type {
+	Context,
+	PreContext,
+	ErrorContext,
+	SelectiveStatus
+} from './context'
 export {
 	ELYSIA_TRACE,
 	type TraceEvent,
