@@ -1,3 +1,9 @@
+# 1.4.14
+Feature:
+- [#1520](https://github.com/elysiajs/elysia/issues/1520), [#1522](https://github.com/elysiajs/elysia/issues/1522) async handlers crash on HEAD request
+- [#1503](https://github.com/elysiajs/elysia/pull/1503) add t.NumericEnum() for numeric enum query handling
+- [#1450](https://github.com/elysiajs/elysia/pull/1450) call onAfterResponse when onError returns a value
+
 # 1.4.13 - 23 Oct 2025
 Feature:
 - [#1453](https://github.com/elysiajs/elysia/issues/1453) add `allowUnsafeValidationDetails` for disabling unsafe validation details in production mode

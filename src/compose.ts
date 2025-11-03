@@ -784,7 +784,7 @@ export const composeHandler = ({
 
 	let _afterResponse: string | undefined
 
-	const afterResponse = () => {
+	const afterResponse = (hasStream = true) => {
 		if (_afterResponse !== undefined) return _afterResponse
 
 		if (!hooks.afterResponse?.length && !hasTrace) return ''
@@ -795,7 +795,9 @@ export const composeHandler = ({
 			`\nsetImmediate(async()=>{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
-			`if(afterHandlerStreamListener)for await(const v of afterHandlerStreamListener){}\n` +
+			(hasStream
+				? `if(typeof afterHandlerStreamListener!=='undefined')for await(const v of afterHandlerStreamListener){}\n`
+				: '') +
 			`}\n`
 
 		const reporter = createReport({
@@ -2034,7 +2036,7 @@ export const composeHandler = ({
 				errorReporter.resolve()
 			}
 
-			fnLiteral += afterResponse()
+			fnLiteral += afterResponse(false)
 			fnLiteral += `return er}`
 		}
 	}
@@ -2379,10 +2381,18 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		)
 			switchMap +=
 				`case 'HEAD':` +
-				`return ht[${methods.GET ?? methods.ALL}].composed(c).then(_res=>getResponseLength(_res).then((length)=>{` +
+				`const _ht=ht[${methods.GET ?? methods.ALL}].composed(c)\n` +
+				`if(typeof _ht === 'function') {return _ht` +
+				`.then(_res=>getResponseLength(_res).then((length)=>{` +
 				`_res.headers.set('content-length', length)\n` +
 				`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
-				'}))\n'
+				'}))\n' +
+				`}else{` +
+				`return getResponseLength(_ht).then((length)=>{` +
+				`_ht.headers.set('content-length', length)\n` +
+				`return new Response(null,{status:_ht.status,statusText:_ht.statusText,headers:_ht.headers})\n` +
+				`})` +
+				`}\n`
 
 		for (const [method, index] of Object.entries(methods)) {
 			if (method === 'ALL' || method === 'GET' || method === 'WS')
