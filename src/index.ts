@@ -5871,7 +5871,12 @@ export default class Elysia<
 			Omit<Input, NonResolvableMacroKey>,
 			Definitions['typebox']
 		>,
-		const Handle extends InlineHandler<NoInfer<Schema>, NoInfer<Decorator>>
+		const Handle extends InlineHandler<
+			NoInfer<Schema>,
+			NoInfer<Decorator>,
+			// @ts-ignore
+			MacroContext
+		>
 	>(
 		path: Path,
 		handler: Handle,
@@ -5920,96 +5925,8 @@ export default class Elysia<
 			>,
 		Ephemeral,
 		Volatile
-	>
-
-	/**
-	 * ### post
-	 * Register handler for path with method [POST]
-	 *
-	 * ---
-	 * @example
-	 * ```typescript
-	 * import { Elysia, t } from 'elysia'
-	 *
-	 * new Elysia()
-	 *     .post('/', () => 'hi')
-	 *     .post('/with-hook', () => 'hi', {
-	 *         response: t.String()
-	 *     })
-	 * ```
-	 */
-	post<
-		const Path extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends IntersectIfObjectSchema<
-			MergeSchema<
-				UnwrapRoute<
-					Input,
-					Definitions['typebox'],
-					JoinPath<BasePath, Path>
-				>,
-				MergeSchema<
-					Volatile['schema'],
-					MergeSchema<Ephemeral['schema'], Metadata['schema']>
-				>
-			>,
-			Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
-		>,
-		const Decorator extends Singleton & {
-			derive: Ephemeral['derive'] & Volatile['derive']
-			resolve: Ephemeral['resolve'] & Volatile['resolve']
-		},
-		const Handle extends InlineHandler<NoInfer<Schema>, NoInfer<Decorator>>
-	>(
-		path: Path,
-		handler: Handle,
-		hook?: LocalHook<
-			Input,
-			// @ts-ignore
-			Schema,
-			Decorator,
-			Definitions['error'],
-			keyof Metadata['parser']
-		>
-	): Elysia<
-		BasePath,
-		Singleton,
-		Definitions,
-		Metadata,
-		Routes &
-			CreateEden<
-				JoinPath<BasePath, Path>,
-				{
-					post: CreateEdenResponse<
-						Path,
-						Schema,
-						{},
-						ComposeElysiaResponse<
-							Schema &
-								Metadata['standaloneSchema'] &
-								Ephemeral['standaloneSchema'] &
-								Volatile['standaloneSchema'],
-							Handle,
-							UnionResponseStatus<
-								Metadata['response'],
-								UnionResponseStatus<
-									Ephemeral['response'],
-									Volatile['response']
-								>
-							>
-						>
-					>
-				}
-			>,
-		Ephemeral,
-		Volatile
-	>
-
-	post(path: string, handler: unknown, hook: Object) {
-		this.add('POST', path, handler, hook)
+	> {
+		this.add('POST', path, handler as any, hook)
 
 		return this as any
 	}
