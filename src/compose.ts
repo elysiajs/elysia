@@ -2378,11 +2378,10 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 		)
 			switchMap +=
 				`case 'HEAD':` +
-				`const _res=ht[${methods.GET ?? methods.ALL}].composed(c)\n` +
-				'return getResponseLength(_res).then((length)=>{' +
+				`return ht[${methods.GET ?? methods.ALL}].composed(c).then(_res=>getResponseLength(_res).then((length)=>{` +
 				`_res.headers.set('content-length', length)\n` +
 				`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
-				'})\n'
+				'}))\n'
 
 		for (const [method, index] of Object.entries(methods)) {
 			if (method === 'ALL' || method === 'GET' || method === 'WS')
