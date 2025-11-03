@@ -7,6 +7,6 @@ const a = new Elysia()
 			resolve: () => ({ a: 'a' })
 		}
 	})
-	.post('/', ({ a }) => {}, {
+	.post('/', (c) => {}, {
 		a: true
 	})

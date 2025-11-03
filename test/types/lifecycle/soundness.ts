@@ -605,7 +605,9 @@ import { Prettify } from '../../../src/types'
 		]
 	})
 
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Volatile']['response']>
+	>().toEqualTypeOf<{
 		410: 'Gone'
 		412: 'Precondition Failed'
 		413: 'Payload Too Large'
@@ -637,7 +639,9 @@ import { Prettify } from '../../../src/types'
 			]
 		})
 
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Volatile']['response']>
+	>().toEqualTypeOf<{
 		409: 'Conflict'
 		410: 'Gone'
 		412: 'Precondition Failed'
@@ -725,7 +729,9 @@ import { Prettify } from '../../../src/types'
 			b: true
 		})
 
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Volatile']['response']>
+	>().toEqualTypeOf<{
 		410: 'Gone'
 		411: 'Length Required'
 		412: 'Precondition Failed'
@@ -756,7 +762,9 @@ import { Prettify } from '../../../src/types'
 			b: true
 		})
 
-	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Ephemeral']['response']>
+	>().toEqualTypeOf<{
 		410: 'Gone'
 		411: 'Length Required'
 		412: 'Precondition Failed'
@@ -787,7 +795,9 @@ import { Prettify } from '../../../src/types'
 			b: true
 		})
 
-	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Metadata']['response']>
+	>().toEqualTypeOf<{
 		410: 'Gone'
 		411: 'Length Required'
 		412: 'Precondition Failed'
@@ -1455,7 +1465,9 @@ import { Prettify } from '../../../src/types'
 		})
 		.get('/', () => 'NOexistenceN' as const)
 
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Volatile']['response']>
+	>().toEqualTypeOf<{
 		401: 'Unauthorized'
 		402: 'Payment Required'
 		403: 'Forbidden'
@@ -1466,7 +1478,9 @@ import { Prettify } from '../../../src/types'
 		408: 'Request Timeout'
 	}>()
 
-	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Routes']['get']['response']>
+	>().toEqualTypeOf<{
 		200: 'NOexistenceN'
 		401: 'Unauthorized'
 		402: 'Payment Required'
@@ -1520,7 +1534,9 @@ import { Prettify } from '../../../src/types'
 		})
 		.get('/', () => 'NOexistenceN' as const)
 
-	expectTypeOf<(typeof app)['~Ephemeral']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Ephemeral']['response']>
+	>().toEqualTypeOf<{
 		401: 'Unauthorized'
 		402: 'Payment Required'
 		403: 'Forbidden'
@@ -1533,7 +1549,9 @@ import { Prettify } from '../../../src/types'
 
 	type A = keyof (typeof app)['~Routes']['get']['response']
 
-	expectTypeOf<(typeof app)['~Routes']['get']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Routes']['get']['response']>
+	>().toEqualTypeOf<{
 		200: 'NOexistenceN'
 		401: 'Unauthorized'
 		402: 'Payment Required'
@@ -1587,7 +1605,9 @@ import { Prettify } from '../../../src/types'
 		})
 		.get('/', () => 'NOexistenceN' as const)
 
-	expectTypeOf<(typeof app)['~Metadata']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Metadata']['response']>
+	>().toEqualTypeOf<{
 		401: 'Unauthorized'
 		402: 'Payment Required'
 		403: 'Forbidden'
@@ -1657,7 +1677,9 @@ import { Prettify } from '../../../src/types'
 		})
 		.get('/', () => 'NOexistenceN' as const)
 
-	expectTypeOf<(typeof app)['~Volatile']['response']>().toEqualTypeOf<{
+	expectTypeOf<
+		Prettify<(typeof app)['~Volatile']['response']>
+	>().toEqualTypeOf<{
 		401: 'Unauthorized'
 		402: 'Payment Required'
 		403: 'Forbidden'

@@ -314,21 +314,11 @@ export type Or<T1 extends boolean, T2 extends boolean> = T1 extends true
 		: false
 
 // https://twitter.com/mattpocockuk/status/1622730173446557697?s=20
-export type Prettify<T> = {
+export type Prettify<in out T> = {
 	[K in keyof T]: T[K]
 } & {}
 
-export type Prettify2<T> = {
-	[K in keyof T]: T extends { [key in keyof any]: unknown }
-		? Prettify<T[K]>
-		: T[K]
-} & {}
-
-export type Partial2<T> = {
-	[K in keyof T]?: Partial<T[K]>
-}
-
-export type NeverKey<T> = {
+export type NeverKey<in out T> = {
 	[K in keyof T]?: never
 } & {}
 
@@ -730,10 +720,10 @@ export type IntersectIfObject<A, B> =
 			? B
 			: A
 
-export type IntersectIfObjectSchema<
+export interface IntersectIfObjectSchema<
 	A extends RouteSchema,
 	B extends RouteSchema
-> = {
+> {
 	body: IntersectIfObject<A['body'], B['body']>
 	headers: IntersectIfObject<A['headers'], B['headers']>
 	query: IntersectIfObject<A['query'], B['query']>
@@ -1028,11 +1018,11 @@ export type MacroToContext<
 	in out MacroFn extends Macro = {},
 	in out SelectedMacro extends BaseMacro = {},
 	in out Definitions extends DefinitionBase['typebox'] = {},
-	in out R extends 1[] = [1]
+	in out R extends 1[] = []
 > = Prettify<
 	{} extends SelectedMacro
 		? {}
-		: R['length'] extends 16
+		: R['length'] extends 15
 			? {}
 			: UnionToIntersect<
 					{
@@ -1235,6 +1225,44 @@ export type InlineHandler<
 								  >
 			  >)
 
+export type InlineHandlerNonMacro<
+	Route extends RouteSchema = {},
+	Singleton extends SingletonBase = {
+		decorator: {}
+		store: {}
+		derive: {}
+		resolve: {}
+	}
+> =
+	| InlineResponse
+	| ((context: Context<Route, Singleton>) =>
+			| Response
+			| MaybePromise<
+					{} extends Route['response']
+						? unknown
+						:
+								| (Route['response'] extends {
+										200: any
+								  }
+										?
+												| Route['response'][200]
+												| ElysiaCustomStatusResponse<
+														200,
+														Route['response'][200],
+														200
+												  >
+												| Generator<
+														Route['response'][200]
+												  >
+												| AsyncGenerator<
+														Route['response'][200]
+												  >
+										: unknown)
+								// This could be possible because of set.status
+								| Route['response'][keyof Route['response']]
+								| InlineHandlerResponse<Route['response']>
+			  >)
+
 export type OptionalHandler<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -1338,14 +1366,12 @@ export type TransformHandler<
 	},
 	Path extends string | undefined = undefined
 > = (
-	context: Prettify<
-		Context<
-			Route,
-			Omit<Singleton, 'resolve'> & {
-				resolve: {}
-			},
-			Path
-		>
+	context: Context<
+		Route,
+		Omit<Singleton, 'resolve'> & {
+			resolve: {}
+		},
+		Path
 	>
 ) => MaybePromise<void>
 
@@ -1359,10 +1385,14 @@ export type BodyHandler<
 	},
 	Path extends string | undefined = undefined
 > = (
-	context: Prettify<
-		{
-			contentType: string
-		} & Context<Route, Singleton, Path>
+	context: Context<
+		Route & {
+			decorator: {
+				contentType: string
+			}
+		},
+		Singleton,
+		Path
 	>,
 	/**
 	 * @deprecated
@@ -1868,19 +1898,19 @@ export interface SchemaValidator {
 	response?: Record<number, ElysiaTypeCheck<any>>
 }
 
-export type AddPrefix<Prefix extends string, T> = {
+export type AddPrefix<in out Prefix extends string, in out T> = {
 	[K in keyof T as Prefix extends string ? `${Prefix}${K & string}` : K]: T[K]
 }
 
-export type AddPrefixCapitalize<Prefix extends string, T> = {
+export type AddPrefixCapitalize<in out Prefix extends string, in out T> = {
 	[K in keyof T as `${Prefix}${Capitalize<K & string>}`]: T[K]
 }
 
-export type AddSuffix<Suffix extends string, T> = {
+export type AddSuffix<in out Suffix extends string, in out T> = {
 	[K in keyof T as `${K & string}${Suffix}`]: T[K]
 }
 
-export type AddSuffixCapitalize<Suffix extends string, T> = {
+export type AddSuffixCapitalize<in out Suffix extends string, in out T> = {
 	[K in keyof T as `${K & string}${Capitalize<Suffix>}`]: T[K]
 }
 
@@ -1954,14 +1984,13 @@ export interface Macro<
 
 export type MaybeFunction<T> = T | ((...args: any[]) => T)
 
-export type MacroToProperty<in out T extends Macro<any, any, any, any>> =
-	Prettify<{
-		[K in keyof T]: T[K] extends Function
-			? T[K] extends (a: infer Params) => any
-				? Params
-				: boolean
+export type MacroToProperty<in out T extends Macro<any, any, any, any>> = {
+	[K in keyof T]: T[K] extends Function
+		? T[K] extends (a: infer Params) => any
+			? Params
 			: boolean
-	}>
+		: boolean
+}
 
 interface MacroOptions {
 	insert?: 'before' | 'after'
@@ -2036,8 +2065,8 @@ export interface MacroManager<
 	): unknown
 
 	events: {
-		global: Partial<Prettify<LifeCycleStore & RouteSchema>>
-		local: Partial<Prettify<LifeCycleStore & RouteSchema>>
+		global: Partial<LifeCycleStore & RouteSchema>
+		local: Partial<LifeCycleStore & RouteSchema>
 	}
 }
 
@@ -2143,8 +2172,8 @@ export type ElysiaHandlerToResponseSchemaAmbiguous<
 				: {}
 
 type ReconcileStatus<
-	A extends Record<number, unknown>,
-	B extends Record<number, unknown>
+	in out A extends Record<number, unknown>,
+	in out B extends Record<number, unknown>
 > = {
 	// @ts-ignore Trust me bro
 	[K in keyof A | keyof B]: K extends keyof A ? A[K] : B[K]
@@ -2240,12 +2269,17 @@ export type MergeElysiaInstances<
 		>
 	: Elysia<
 			Prefix,
-			Prettify2<Singleton>,
+			{
+				decorator: Singleton['decorator']
+				store: Prettify<Singleton['store']>
+				derive: Singleton['derive']
+				resolve: Singleton['resolve']
+			},
 			Definitions,
-			Prettify2<Metadata>,
+			Metadata,
 			Routes,
 			Ephemeral,
-			Prettify2<Volatile>
+			Volatile
 		>
 
 export type LifeCycleType = 'global' | 'local' | 'scoped'
