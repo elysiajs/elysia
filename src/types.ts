@@ -2610,12 +2610,12 @@ export type CreateEdenResponse<
 	Res extends PossibleResponse
 > = RouteSchema extends MacroContext
 	? {
-			body: Prettify<Schema['body']>
-			params: Prettify<IsNever<keyof Schema['params']> extends true
+			body: Schema['body']
+			params: IsNever<keyof Schema['params']> extends true
 				? ResolvePath<Path>
-				: Schema['params']>
-			query: Prettify<Schema['query']>
-			headers: Prettify<Schema['headers']>
+				: Schema['params']
+			query: Schema['query']
+			headers: Schema['headers']
 			response: Prettify<Res>
 		}
 	: {
