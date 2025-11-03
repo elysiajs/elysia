@@ -291,21 +291,21 @@ export type GetPathParameter<Path extends string> =
 		? IsPathParameter<A> | GetPathParameter<B>
 		: IsPathParameter<Path>
 
-type _ResolvePath<Path extends string> = Prettify<
-	{
-		[Param in GetPathParameter<Path> as Param extends `${string}?`
-			? never
-			: Param]: string
-	} & {
-		[Param in GetPathParameter<Path> as Param extends `${infer OptionalParam}?`
-			? OptionalParam
-			: never]?: string
-	}
->
+type _ResolvePath<Path extends string> = {
+	[Param in GetPathParameter<Path> as Param extends `${string}?`
+		? never
+		: Param]: string
+} & {
+	[Param in GetPathParameter<Path> as Param extends `${infer OptionalParam}?`
+		? OptionalParam
+		: never]?: string
+}
 
-export type ResolvePath<Path extends string> = Path extends PathParameterLike
-	? _ResolvePath<Path>
-	: {}
+export type ResolvePath<Path extends string> = Path extends ''
+	? {}
+	: Path extends PathParameterLike
+		? _ResolvePath<Path>
+		: {}
 
 export type Or<T1 extends boolean, T2 extends boolean> = T1 extends true
 	? true
@@ -2103,7 +2103,7 @@ export type ValueToResponseSchema<Value> = ExtractErrorFromHandle<Value> &
 			? {}
 			: IsNever<R200> extends true
 				? {}
-				: { 200: R200 }
+				: { 200: Prettify<R200> }
 		: {})
 
 export type ValueOrFunctionToResponseSchema<T> = T extends (
@@ -2151,30 +2151,28 @@ type ReconcileStatus<
 }
 
 export type ComposeElysiaResponse<
-	in out Schema extends RouteSchema,
-	in out Handle,
-	in out Possibility extends PossibleResponse
-> = Prettify<
-	ReconcileStatus<
-		// @ts-ignore
-		Schema['response'],
-		UnionResponseStatus<
-			ValueOrFunctionToResponseSchema<Handle>,
-			Possibility &
-				(EmptyRouteSchema extends Pick<Schema, keyof EmptyRouteSchema>
-					? {}
-					: {
-							422: {
-								type: 'validation'
-								on: string
-								summary?: string
-								message?: string
-								found?: unknown
-								property?: string
-								expected?: string
-							}
-						})
-		>
+	Schema extends RouteSchema,
+	Handle,
+	Possibility extends PossibleResponse
+> = ReconcileStatus<
+	// @ts-ignore
+	Schema['response'],
+	UnionResponseStatus<
+		ValueOrFunctionToResponseSchema<Handle>,
+		Possibility &
+			(EmptyRouteSchema extends Pick<Schema, keyof EmptyRouteSchema>
+				? {}
+				: {
+						422: {
+							type: 'validation'
+							on: string
+							summary?: string
+							message?: string
+							found?: unknown
+							property?: string
+							expected?: string
+						}
+					})
 	>
 >
 
@@ -2184,7 +2182,7 @@ export type ExtractErrorFromHandle<in out Handle> = {
 		AnyElysiaCustomStatusResponse
 	> as ErrorResponse extends AnyElysiaCustomStatusResponse
 		? ErrorResponse['code']
-		: never]: ErrorResponse['response']
+		: never]: Prettify<ErrorResponse['response']>
 }
 
 export type MergeElysiaInstances<
