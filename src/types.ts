@@ -37,6 +37,8 @@ import type { WebSocketHandler } from './ws/bun'
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import { BunHTMLBundlelike } from './universal/types'
 import { Sucrose } from './sucrose'
+import type Memoirist from 'memoirist'
+import type { DynamicHandler } from './dynamic-handle'
 
 export type IsNever<T> = [T] extends [never] ? true : false
 
@@ -76,7 +78,7 @@ export type StandardSchemaV1LikeValidate = <T>(
 export type AnySchema = TSchema | StandardSchemaV1Like
 export type FastAnySchema = TAnySchema | FastStandardSchemaV1Like
 
-export interface ElysiaConfig<Prefix extends string | undefined> {
+export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	/**
 	 * @default BunAdapter
 	 * @since 1.1.11
@@ -1753,7 +1755,7 @@ export type LocalHook<
 	Singleton extends SingletonBase,
 	Errors extends { [key in string]: Error },
 	Parser extends keyof any = ''
-> = (Input extends any ? Input : Prettify<Input>) & {
+> = {
 	detail?: DocumentDecoration
 	/**
 	 * Short for 'Content-Type'
@@ -1808,7 +1810,7 @@ export type LocalHook<
 		ErrorHandler<Errors, Schema, Singleton & { resolve: Schema['resolve'] }>
 	>
 	tags?: DocumentDecoration['tags']
-}
+} & (Input extends any ? Input : Prettify<Input>)
 
 export type GuardLocalHook<
 	Input extends BaseMacro | undefined,
@@ -2630,3 +2632,27 @@ export type CreateEdenResponse<
 			headers: Prettify<Schema['headers'] & MacroContext['headers']>
 			response: Prettify<Res>
 		}
+
+export interface Router {
+	'~http':
+		| Memoirist<{
+				compile: Function
+				handler?: ComposedHandler
+		  }>
+		| undefined
+	get http(): Memoirist<{
+		compile: Function
+		handler?: ComposedHandler
+	}>
+	'~dynamic': Memoirist<DynamicHandler> | undefined
+	get dynamic(): Memoirist<DynamicHandler>
+	// Static Router
+	static: { [path: string]: { [method: string]: number } }
+	// Native Static Response
+	response: {
+		[path: string]:
+			| MaybePromise<Response | undefined>
+			| { [method: string]: MaybePromise<Response | undefined> }
+	}
+	history: InternalRoute[]
+}

@@ -162,7 +162,8 @@ import type {
 	EmptyRouteSchema,
 	UnknownRouteSchema,
 	MaybeFunction,
-	InlineHandlerNonMacro
+	InlineHandlerNonMacro,
+	Router
 } from './types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
@@ -201,7 +202,7 @@ export default class Elysia<
 		parser: {}
 		response: {}
 	},
-	const out Routes extends RouteBase = {},
+	const in out Routes extends RouteBase = {},
 	// ? scoped
 	const in out Ephemeral extends EphemeralType = {
 		derive: {}
@@ -222,7 +223,7 @@ export default class Elysia<
 	config: ElysiaConfig<BasePath>
 
 	server: Server | null = null
-	private dependencies: { [key in string]: Checksum[] } = {}
+	private dependencies: { [key: string]: Checksum[] } = {}
 
 	'~Prefix' = '' as BasePath
 	'~Singleton' = null as unknown as Singleton
@@ -295,12 +296,7 @@ export default class Elysia<
 		  }
 
 	router = {
-		'~http': undefined as
-			| Memoirist<{
-					compile: Function
-					handler?: ComposedHandler
-			  }>
-			| undefined,
+		'~http': undefined,
 		get http() {
 			if (!this['~http'])
 				this['~http'] = new Memoirist({
@@ -310,7 +306,7 @@ export default class Elysia<
 
 			return this['~http']
 		},
-		'~dynamic': undefined as Memoirist<DynamicHandler> | undefined,
+		'~dynamic': undefined,
 		// Use in non-AOT mode
 		get dynamic() {
 			if (!this['~dynamic'])
@@ -321,15 +317,11 @@ export default class Elysia<
 			return this['~dynamic']
 		},
 		// Static Router
-		static: {} as { [path in string]: { [method in string]: number } },
+		static: {},
 		// Native Static Response
-		response: {} as {
-			[path: string]:
-				| MaybePromise<Response | undefined>
-				| { [method: string]: MaybePromise<Response | undefined> }
-		},
-		history: [] as InternalRoute[]
-	}
+		response: {},
+		history: []
+	} as Router
 
 	protected routeTree: Record<string, number> = {}
 
@@ -365,7 +357,7 @@ export default class Elysia<
 		return null
 	}
 
-	'~parser': { [K in string]: BodyHandler<any, any> } = {}
+	'~parser': { [K: string]: BodyHandler<any, any> } = {}
 
 	private _promisedModules: PromiseGroup | undefined
 	private get promisedModules() {
@@ -8121,11 +8113,7 @@ export type {
 } from './type-system/types'
 
 export { serializeCookie, Cookie, type CookieOptions } from './cookies'
-export type {
-	Context,
-	PreContext,
-	ErrorContext
-} from './context'
+export type { Context, PreContext, ErrorContext } from './context'
 export {
 	ELYSIA_TRACE,
 	type TraceEvent,
