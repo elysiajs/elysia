@@ -5,6 +5,7 @@ Improvement:
 
 Bug fix:
 - [#1528](https://github.com/elysiajs/elysia/issues/1528) error in parsing request body validation errors with Zod
+- [#1527](https://github.com/elysiajs/elysia/issues/1527) bracket handling in exact mirror
 
 # 1.4.15 - 3 Nov 2025
 Bug fix:
