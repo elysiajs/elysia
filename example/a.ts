@@ -1,21 +1,38 @@
-import Elysia, { t } from '../src'
+import { Elysia } from '../src'
+import * as z from 'zod'
 
-new Elysia()
+const sendOtpEmailSchema = z.object({
+	channel: z.literal('email'),
+	otpTo: z.email({ error: 'Must be a valid email address' })
+})
+
+const sendOtpSmsSchema = z.object({
+	channel: z.literal('sms'),
+	otpTo: z.e164({ error: 'Must be a valid phone number with country code' })
+})
+
+const sendOtpSchema = z.discriminatedUnion('channel', [
+	sendOtpEmailSchema,
+	sendOtpSmsSchema
+])
+
+export const app = new Elysia()
+	.onError(({ code, error, status }) => {
+		switch (code) {
+			case 'VALIDATION':
+				return error.detail(error.message)
+			// console.log('error', {error: JSON.parse(error.message)});
+			// console.log('error', {error, code, status});
+			// return status(422, { type: 'VALIDATION', message: 'Validation error', userMessage: error.message } as OtpErrorInfo)
+		}
+	})
 	.post(
-		'/mirror',
-		async ({ status, body }) => status(201, { success: false }),
+		'/',
+		async ({ body, set }) => {
+			return 'ok'
+		},
 		{
-			body: t.Object({
-				code: t.String()
-			}),
-			response: {
-				200: t.Object({
-					success: t.Literal(true)
-				}),
-				201: t.Object({
-					success: t.Literal(false)
-				})
-			}
+			body: sendOtpSchema
 		}
 	)
-	.listen(3333)
+	.listen(3000)

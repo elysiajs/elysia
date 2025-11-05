@@ -1,3 +1,11 @@
+# 1.4.16 - 5 Nov 2025
+Improvement:
+- ValidationError: add `messageValue` as an alias of `errorValue`
+- ValidationError.detail now accept optional 2nd parameter `allowUnsafeValidatorDetails`
+
+Bug fix:
+- [#1528](https://github.com/elysiajs/elysia/issues/1528) error in parsing request body validation errors with Zod
+
 # 1.4.15 - 3 Nov 2025
 Bug fix:
 - 1.4.14 regression with Eden Treaty, and OpenAPI type gen
