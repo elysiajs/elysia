@@ -49,7 +49,8 @@ import {
 	getResponseSchemaValidator,
 	getCookieValidator,
 	ElysiaTypeCheck,
-	queryCoercions
+	queryCoercions,
+	mergeObjectSchemas
 } from './schema'
 import {
 	composeHandler,
@@ -331,6 +332,153 @@ export default class Elysia<
 
 	protected getGlobalRoutes(): InternalRoute[] {
 		return this.router.history
+	}
+
+	/**
+	 * Get routes with standaloneValidator schemas merged into direct hook properties.
+	 * This is useful for plugins that need to access guard() schemas.
+	 *
+	 * @returns Routes with flattened schema structure
+	 */
+	protected getFlattenedRoutes(): InternalRoute[] {
+		return this.router.history.map((route) => {
+			if (!route.hooks?.standaloneValidator?.length) {
+				return route
+			}
+
+			return {
+				...route,
+				hooks: this.mergeStandaloneValidators(route.hooks)
+			}
+		})
+	}
+
+	/**
+	 * Merge standaloneValidator array into direct hook properties
+	 */
+	private mergeStandaloneValidators(hooks: AnyLocalHook): AnyLocalHook {
+		const merged = { ...hooks }
+
+		if (!hooks.standaloneValidator?.length) return merged
+
+		for (const validator of hooks.standaloneValidator) {
+			// Merge each schema property
+			if (validator.body) {
+				merged.body = this.mergeSchemaProperty(
+					merged.body,
+					validator.body
+				)
+			}
+			if (validator.headers) {
+				merged.headers = this.mergeSchemaProperty(
+					merged.headers,
+					validator.headers
+				)
+			}
+			if (validator.query) {
+				merged.query = this.mergeSchemaProperty(
+					merged.query,
+					validator.query
+				)
+			}
+			if (validator.params) {
+				merged.params = this.mergeSchemaProperty(
+					merged.params,
+					validator.params
+				)
+			}
+			if (validator.cookie) {
+				merged.cookie = this.mergeSchemaProperty(
+					merged.cookie,
+					validator.cookie
+				)
+			}
+			if (validator.response) {
+				merged.response = this.mergeResponseSchema(
+					merged.response,
+					validator.response
+				)
+			}
+		}
+
+		return merged
+	}
+
+	/**
+	 * Merge two schema properties (body, query, headers, params, cookie)
+	 */
+	private mergeSchemaProperty(
+		existing: TSchema | string | undefined,
+		incoming: TSchema | string | undefined
+	): TSchema | string | undefined {
+		if (!existing) return incoming
+		if (!incoming) return existing
+
+		// If either is a string reference, we can't merge - use incoming
+		if (typeof existing === 'string' || typeof incoming === 'string') {
+			return incoming
+		}
+
+		// If both are object schemas, merge them
+		const { schema: mergedSchema, notObjects } = mergeObjectSchemas([
+			existing,
+			incoming
+		])
+
+		// If we have non-object schemas, create an Intersect
+		if (notObjects.length > 0) {
+			if (mergedSchema) {
+				return t.Intersect([mergedSchema, ...notObjects])
+			}
+			return notObjects.length === 1 ? notObjects[0] : t.Intersect(notObjects)
+		}
+
+		return mergedSchema
+	}
+
+	/**
+	 * Merge response schemas (handles status code objects)
+	 */
+	private mergeResponseSchema(
+		existing:
+			| TSchema
+			| { [status: number]: TSchema }
+			| string
+			| { [status: number]: string | TSchema }
+			| undefined,
+		incoming:
+			| TSchema
+			| { [status: number]: TSchema }
+			| string
+			| { [status: number]: string | TSchema }
+			| undefined
+	):
+		| TSchema
+		| { [status: number]: TSchema | string }
+		| string
+		| undefined {
+		if (!existing) return incoming
+		if (!incoming) return existing
+
+		// If either is a string, we can't merge - use incoming
+		if (typeof existing === 'string' || typeof incoming === 'string') {
+			return incoming
+		}
+
+		// Check if either is a TSchema (has 'type' property) vs status code object
+		const existingIsSchema = 'type' in existing
+		const incomingIsSchema = 'type' in incoming
+
+		// If either is a plain schema, we can't easily merge - use incoming
+		if (existingIsSchema || incomingIsSchema) {
+			return incoming
+		}
+
+		// Both are status code objects, merge them
+		return {
+			...existing,
+			...incoming
+		}
 	}
 
 	protected getGlobalDefinitions() {
