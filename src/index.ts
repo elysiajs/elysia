@@ -496,8 +496,8 @@ export default class Elysia<
 
 		// Both are status code objects, merge them
 		return {
-			...existing,
-			...incoming
+			...incoming,
+			...existing
 		}
 	}
 
