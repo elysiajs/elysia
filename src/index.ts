@@ -477,10 +477,12 @@ export default class Elysia<
 		// If existing is status code object and incoming is plain schema,
 		// merge incoming as status 200 to preserve other status codes
 		if (!existingIsSchema && incomingIsSchema) {
-			return {
-				...existing,
-				200: incoming
-			}
+			return (existing as Record<number, TSchema | string>)[200] === undefined
+				? {
+						...existing,
+						200: incoming
+					}
+				: existing
 		}
 
 		// If existing is plain schema and incoming is status code object,
@@ -488,7 +490,7 @@ export default class Elysia<
 		if (existingIsSchema && !incomingIsSchema) {
 			return {
 				...incoming,
-				200: (incoming as Record<number, TSchema | string>)[200] ?? existing
+				200: existing
 			}
 		}
 
