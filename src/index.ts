@@ -488,7 +488,7 @@ export default class Elysia<
 		if (existingIsSchema && !incomingIsSchema) {
 			return {
 				...incoming,
-				200: existing
+				200: incoming[200] ?? existing
 			}
 		}
 
