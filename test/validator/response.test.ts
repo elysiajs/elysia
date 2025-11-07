@@ -533,7 +533,7 @@ describe('Response Validator', () => {
 
 	it('validate SSE with Zod schema (bug report scenario)', async () => {
 		// This test reproduces the exact bug report:
-		// https://github.com/elysiajs/elysia/issues/XXX
+		// https://github.com/elysiajs/elysia/issues/1490
 		const Schema = z.object({
 			data: z.object({
 				name: z.string()
