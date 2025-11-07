@@ -168,4 +168,41 @@ describe('getFlattenedRoutes', () => {
 		expect(statusRoute?.hooks.response).toBeDefined()
 		expect(statusRoute?.hooks.response[200]).toBeDefined()
 	})
+
+	it('merges status-code map response with plain schema without data loss', () => {
+		// Test case for the coderabbitai feedback - ensure we don't lose status-code schemas
+		const app = new Elysia().guard(
+			{
+				response: {
+					200: t.Object({ data: t.String() }),
+					404: t.Object({ error: t.String() }),
+					500: t.Object({ message: t.String() })
+				}
+			},
+			(app) =>
+				app.get('/data', () => ({ data: 'test' }), {
+					response: t.String() // Plain schema should be merged as 200, not replace entire map
+				})
+		)
+
+		// @ts-expect-error - accessing protected method for testing
+		const flatRoutes = app.getFlattenedRoutes()
+
+		const dataRoute = flatRoutes.find((r) => r.path === '/data')
+
+		expect(dataRoute).toBeDefined()
+		expect(dataRoute?.hooks.response).toBeDefined()
+
+		// The plain schema should override 200 but preserve 404 and 500
+		expect(dataRoute?.hooks.response[200]).toBeDefined()
+		expect(dataRoute?.hooks.response[404]).toBeDefined()
+		expect(dataRoute?.hooks.response[500]).toBeDefined()
+
+		// The 200 response should be the plain schema from the route (more specific)
+		expect(dataRoute?.hooks.response[200].type).toBe('string')
+
+		// Other status codes should be preserved from guard
+		expect(dataRoute?.hooks.response[404].type).toBe('object')
+		expect(dataRoute?.hooks.response[500].type).toBe('object')
+	})
 })

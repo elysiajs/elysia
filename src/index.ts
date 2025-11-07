@@ -469,9 +469,27 @@ export default class Elysia<
 		const existingIsSchema = 'type' in existing
 		const incomingIsSchema = 'type' in incoming
 
-		// If either is a plain schema, we can't easily merge - use incoming
-		if (existingIsSchema || incomingIsSchema) {
+		// If both are plain schemas, incoming overrides
+		if (existingIsSchema && incomingIsSchema) {
 			return incoming
+		}
+
+		// If existing is status code object and incoming is plain schema,
+		// merge incoming as status 200 to preserve other status codes
+		if (!existingIsSchema && incomingIsSchema) {
+			return {
+				...existing,
+				200: incoming
+			}
+		}
+
+		// If existing is plain schema and incoming is status code object,
+		// merge existing as status 200 into incoming (spread incoming first to preserve all status codes)
+		if (existingIsSchema && !incomingIsSchema) {
+			return {
+				...incoming,
+				200: existing
+			}
 		}
 
 		// Both are status code objects, merge them
