@@ -267,7 +267,7 @@ const composeValidationFactory = ({
 			`c.set.status=${name}.code\n` +
 			`${name}=${name}.response` +
 			`}` +
-			`if(${name} instanceof Response === false)` +
+			`if(${name} instanceof Response === false && typeof ${name}?.next !== 'function' && !(${name} instanceof ReadableStream))` +
 			`switch(c.set.status){`
 
 		for (const [status, value] of Object.entries(validator.response!)) {
