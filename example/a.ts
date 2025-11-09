@@ -1,27 +1,31 @@
 import { Elysia } from '../src'
 import { req } from '../test/utils'
 
-new Elysia()
-  .ws("/", {
-    ping() {
-      console.log("onping")
-    },
+const app = new Elysia()
+	.macro('a', {
+		introspect(option) {
+			console.log('a', option)
+		},
+		beforeHandle() {
+			console.log('before handle a')
+		}
+	})
+	.macro({
+		b: {
+			introspect(option) {
+				console.log('b', option)
+			},
+			beforeHandle() {
+				console.log('before handle a')
+			}
+		}
+	})
+	.get('/', () => 'hello world', {
+		a: true,
+		b: true,
+		detail: {
+			description: 'a'
+		}
+	})
 
-    pong() {
-      console.log("onpong")
-    },
-
-    async message(ws) {
-      console.log("onmessage")
-      console.log(ws.body)
-    },
-  })
-  .listen(3005)
-
-const ws = new WebSocket("ws://localhost:3005")
-
-ws.addEventListener("open", () => {
-  ws.ping()
-  ws.send("df")
-  ws.ping()
-})
+app.handle(req('/'))

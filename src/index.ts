@@ -5235,6 +5235,10 @@ export default class Elysia<
 				>,
 		const Property extends MaybeValueOrVoidFunction<
 			MacroProperty<
+				Metadata['macro'] &
+					InputSchema<keyof Definitions['typebox'] & string> & {
+						[name in Name]?: boolean
+					},
 				Schema & MacroContext,
 				Singleton & {
 					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
@@ -5277,6 +5281,8 @@ export default class Elysia<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
 		const NewMacro extends Macro<
+			Metadata['macro'] &
+				InputSchema<keyof Definitions['typebox'] & string>,
 			Input,
 			IntersectIfObjectSchema<
 				MergeSchema<
@@ -5321,6 +5327,7 @@ export default class Elysia<
 		const NewMacro extends MaybeFunction<
 			Macro<
 				Input,
+				// @ts-ignore trust me bro
 				IntersectIfObjectSchema<
 					MergeSchema<
 						UnwrapRoute<Input, Definitions['typebox'], BasePath>,
@@ -5413,6 +5420,13 @@ export default class Elysia<
 						k as keyof RouteSchema,
 						value
 					)
+					delete localHook[key]
+					continue
+				}
+
+				if (k === 'introspect') {
+					value?.(localHook)
+
 					delete localHook[key]
 					continue
 				}
