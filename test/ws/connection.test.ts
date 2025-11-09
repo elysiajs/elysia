@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { Elysia } from '../../src'
+import { Elysia, t } from '../../src'
 import { newWebsocket, wsOpen, wsClose, wsClosed } from './utils'
 import { req } from '../utils'
 
@@ -172,5 +172,42 @@ describe('WebSocket connection', () => {
 			id: '123',
 			name: 'Jane Doe'
 		})
+	})
+
+	it('call ping/pong', async () => {
+		let pinged = false
+		let ponged = false
+
+		const app = new Elysia()
+			.ws('/', {
+				ping() {
+					pinged = true
+				},
+				pong() {
+					ponged = true
+				},
+				async message(ws) {
+				}
+			})
+			.listen(0)
+
+		const ws = new WebSocket(`ws://localhost:${app.server?.port}`)
+
+		await new Promise<void>((resolve) => {
+			ws.addEventListener('open', () => {
+				ws.ping()
+				ws.send('df')
+				ws.pong()
+
+				resolve()
+			}, {
+				once: true
+			})
+		})
+
+		await Bun.sleep(3)
+
+		expect(pinged).toBe(true)
+		expect(ponged).toBe(true)
 	})
 })

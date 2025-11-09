@@ -1,38 +1,27 @@
 import { Elysia } from '../src'
-import * as z from 'zod'
+import { req } from '../test/utils'
 
-const sendOtpEmailSchema = z.object({
-	channel: z.literal('email'),
-	otpTo: z.email({ error: 'Must be a valid email address' })
+new Elysia()
+  .ws("/", {
+    ping() {
+      console.log("onping")
+    },
+
+    pong() {
+      console.log("onpong")
+    },
+
+    async message(ws) {
+      console.log("onmessage")
+      console.log(ws.body)
+    },
+  })
+  .listen(3005)
+
+const ws = new WebSocket("ws://localhost:3005")
+
+ws.addEventListener("open", () => {
+  ws.ping()
+  ws.send("df")
+  ws.ping()
 })
-
-const sendOtpSmsSchema = z.object({
-	channel: z.literal('sms'),
-	otpTo: z.e164({ error: 'Must be a valid phone number with country code' })
-})
-
-const sendOtpSchema = z.discriminatedUnion('channel', [
-	sendOtpEmailSchema,
-	sendOtpSmsSchema
-])
-
-export const app = new Elysia()
-	.onError(({ code, error, status }) => {
-		switch (code) {
-			case 'VALIDATION':
-				return error.detail(error.message)
-			// console.log('error', {error: JSON.parse(error.message)});
-			// console.log('error', {error, code, status});
-			// return status(422, { type: 'VALIDATION', message: 'Validation error', userMessage: error.message } as OtpErrorInfo)
-		}
-	})
-	.post(
-		'/',
-		async ({ body, set }) => {
-			return 'ok'
-		},
-		{
-			body: sendOtpSchema
-		}
-	)
-	.listen(3000)

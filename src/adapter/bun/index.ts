@@ -10,7 +10,7 @@ import { createBunRouteHandler } from './compose'
 import { createNativeStaticHandler } from './handler-native'
 
 import { serializeCookie } from '../../cookies'
-import { isProduction, ValidationError } from '../../error'
+import { isProduction, status, ValidationError } from '../../error'
 import { getSchemaValidator } from '../../schema'
 import {
 	hasHeaderShorthand,
@@ -627,8 +627,7 @@ export const BunAdapter: ElysiaAdapter = {
 				)
 					return
 
-				set.status = 400
-				return 'Expected a websocket connection'
+				return status(400, 'Expected a websocket connection')
 			},
 			{
 				...rest,
