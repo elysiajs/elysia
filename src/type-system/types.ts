@@ -157,7 +157,7 @@ export type ElysiaTypeCustomErrorCallback = (
 		/**
 		 * Error type
 		 */
-		type: 'valdation'
+		type: 'validation'
 		/**
 		 * Where the error was found
 		 */
