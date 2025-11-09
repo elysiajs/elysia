@@ -4,8 +4,13 @@ Improvement:
 - ValidationError.detail now accept optional 2nd parameter `allowUnsafeValidatorDetails`
 
 Bug fix:
+- [#1537](https://github.com/elysiajs/elysia/issues/1537) websocket: ping/pong not being called
+- [#1536](https://github.com/elysiajs/elysia/pull/1536) export ExtractErrorFromHandle
+- [#1535](https://github.com/elysiajs/elysia/pull/1535) skip response validation for generators and streams
+- [#1531](https://github.com/elysiajs/elysia/pull/1531) typo in ElysiaTypeCustomErrorCallback: valdation to validation
 - [#1528](https://github.com/elysiajs/elysia/issues/1528) error in parsing request body validation errors with Zod
 - [#1527](https://github.com/elysiajs/elysia/issues/1527) bracket handling in exact mirror
+- [#1524](https://github.com/elysiajs/elysia/pull/1524) head request handler not working
 
 # 1.4.15 - 3 Nov 2025
 Bug fix:
