@@ -2529,11 +2529,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		adapterVariables +
 		`}=inject\n`
 
-	fnLiteral += `return ${
-		app.event.error?.find(isAsync) || app.event.mapResponse?.find(isAsync)
-			? 'async '
-			: ''
-	}function(context,error,skipGlobal){`
+	// Always make error handler async since toResponse() may return promises
+	fnLiteral += `return async function(context,error,skipGlobal){`
 
 	fnLiteral += ''
 
@@ -2598,19 +2595,12 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	const saveResponse =
 		hasTrace || !!hooks.afterResponse?.length ? 'context.response = ' : ''
 
-	// Check for toResponse() first to handle errors with custom response methods
-	// This takes precedence over onError hooks, as the error defines its own response
-	// BUT exclude ValidationError and TransformDecodeError to allow proper validation error handling
 	fnLiteral +=
 		`if(typeof error?.toResponse==='function'&&error.constructor.name!=="ValidationError"&&error.constructor.name!=="TransformDecodeError"){` +
-		`const raw=error.toResponse()\n` +
-		`const apply=(resolved)=>{` +
-		`if(resolved instanceof Response)set.status=resolved.status\n` +
-		afterResponse() +
-		`return context.response=context.responseValue=mapResponse(${saveResponse}resolved,set${adapter.mapResponseContext})\n` +
-		`}\n` +
-		`if(typeof raw?.then==='function')return raw.then(apply)\n` +
-		`return apply(raw)\n` +
+		`let raw=error.toResponse()\n` +
+		`if(typeof raw?.then==='function')raw=await raw\n` +
+		`if(raw instanceof Response)set.status=raw.status\n` +
+		`context.response=context.responseValue=raw\n` +
 		`}\n`
 
 	if (app.event.error)
@@ -2621,7 +2611,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 				isAsync(handler) ? 'await ' : ''
 			}onError[${i}](context)\n`
 
-			fnLiteral += 'if(skipGlobal!==true){'
+			fnLiteral += 'if(skipGlobal!==true&&!context.response){'
 
 			if (hasReturn(handler)) {
 				fnLiteral +=
@@ -2675,7 +2665,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`\n}\n`
 
 	fnLiteral +=
-		`if(error instanceof Error){` +
+		`if(!context.response&&error instanceof Error){` +
 		afterResponse() +
 		adapter.unknownError +
 		`\n}`
