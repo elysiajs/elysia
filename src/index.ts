@@ -335,10 +335,39 @@ export default class Elysia<
 	}
 
 	/**
-	 * Get routes with standaloneValidator schemas merged into direct hook properties.
-	 * This is useful for plugins that need to access guard() schemas.
+	 * Get routes with guard() schemas merged into direct hook properties.
 	 *
-	 * @returns Routes with flattened schema structure
+	 * This method flattens the `standaloneValidator` array (created by `guard()` calls)
+	 * into direct hook properties (body, query, headers, params, cookie, response).
+	 * This makes it easier for plugins to access the complete validation schema for each route,
+	 * including schemas defined in parent guards.
+	 *
+	 * @example
+	 * ```ts
+	 * const app = new Elysia().guard(
+	 *   { headers: t.Object({ authorization: t.String() }) },
+	 *   (app) => app.get('/users', () => users, {
+	 *     query: t.Object({ page: t.Number() })
+	 *   })
+	 * )
+	 *
+	 * // Without flattening:
+	 * // route.hooks.standaloneValidator = [{ headers: ... }]
+	 * // route.hooks.query = { page: ... }
+	 *
+	 * // With flattening:
+	 * // route.hooks.headers = { authorization: ... }
+	 * // route.hooks.query = { page: ... }
+	 * ```
+	 *
+	 * @returns Routes with flattened schema structure where guard schemas are merged
+	 * into direct properties. Routes without guards are returned unchanged.
+	 *
+	 * @remarks
+	 * - Route-level schemas take precedence over guard schemas when merging
+	 * - String schema references (from `.model()`) are preserved as TRef nodes
+	 * - Response schemas properly handle both plain schemas and status code objects
+	 * - This is a protected method intended for plugin authors who need schema introspection
 	 */
 	protected getFlattenedRoutes(): InternalRoute[] {
 		return this.router.history.map((route) => {
@@ -453,6 +482,29 @@ export default class Elysia<
 	}
 
 	/**
+	 * Check if a value is a TypeBox schema (vs a status code object)
+	 * Uses the TypeBox Kind symbol which all schemas have.
+	 *
+	 * This method distinguishes between:
+	 * - TypeBox schemas: Have the Kind symbol (unions, intersects, objects, etc.)
+	 * - Status code objects: Plain objects with numeric keys like { 200: schema, 404: schema }
+	 */
+	private isTSchema(value: any): value is TSchema {
+		if (!value || typeof value !== 'object') return false
+
+		// All TypeBox schemas have the Kind symbol
+		if (Kind in value) return true
+
+		// Additional check: if it's an object with only numeric keys, it's likely a status code map
+		const keys = Object.keys(value)
+		if (keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
+			return false
+		}
+
+		return false
+	}
+
+	/**
 	 * Merge two schema properties (body, query, headers, params, cookie)
 	 */
 	private mergeSchemaProperty(
@@ -519,9 +571,10 @@ export default class Elysia<
 		if (!normalizedExisting) return incoming
 		if (!normalizedIncoming) return existing
 
-		// Check if either is a TSchema (has 'type' or '$ref' property) vs status code object
-		const existingIsSchema = 'type' in normalizedExisting || '$ref' in normalizedExisting
-		const incomingIsSchema = 'type' in normalizedIncoming || '$ref' in normalizedIncoming
+		// Check if either is a TSchema (using Kind symbol) vs status code object
+		// This correctly handles all TypeBox schemas including unions, intersects, etc.
+		const existingIsSchema = this.isTSchema(normalizedExisting)
+		const incomingIsSchema = this.isTSchema(normalizedIncoming)
 
 		// If both are plain schemas, preserve existing (route-specific schema takes precedence)
 		if (existingIsSchema && incomingIsSchema) {
