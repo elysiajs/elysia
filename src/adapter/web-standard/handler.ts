@@ -571,10 +571,8 @@ export const errorToResponse = (error: Error, set?: Context['set']) => {
 			return mapResponse(resolved, targetSet)
 		}
 
-		// @ts-expect-error
 		return typeof raw?.then === 'function'
-			? // @ts-expect-error
-			  raw.then(apply)
+			? raw.then(apply)
 			: apply(raw)
 	}
 
