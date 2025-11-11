@@ -2598,6 +2598,17 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	const saveResponse =
 		hasTrace || !!hooks.afterResponse?.length ? 'context.response = ' : ''
 
+	// Check for toResponse() first to handle errors with custom response methods
+	// This takes precedence over onError hooks, as the error defines its own response
+	// BUT exclude ValidationError and TransformDecodeError to allow proper validation error handling
+	fnLiteral +=
+		`if(typeof error?.toResponse==='function'&&error.constructor.name!=="ValidationError"&&error.constructor.name!=="TransformDecodeError"){` +
+		`const errorResponse=error.toResponse()\n` +
+		`if(errorResponse instanceof Response)set.status=errorResponse.status\n` +
+		afterResponse() +
+		`return context.response=context.responseValue=mapResponse(${saveResponse}errorResponse,set${adapter.mapResponseContext})\n` +
+		`}\n`
+
 	if (app.event.error)
 		for (let i = 0; i < app.event.error.length; i++) {
 			const handler = app.event.error[i]
@@ -2662,7 +2673,6 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	fnLiteral +=
 		`if(error instanceof Error){` +
 		afterResponse() +
-		`\nif(typeof error.toResponse==='function')return context.response=context.responseValue=error.toResponse()\n` +
 		adapter.unknownError +
 		`\n}`
 

@@ -337,4 +337,99 @@ describe('Handle Error', () => {
 		expect(await res.text()).toBe('a')
 		expect(res.status).toBe(500)
 	})
+
+	it('handle Error with toResponse() when returned', async () => {
+		class ErrorA extends Error {
+			toResponse() {
+				return Response.json({ error: 'hello' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/A', () => {
+			return new ErrorA()
+		})
+
+		const res = await app.handle(req('/A'))
+
+		expect(await res.json()).toEqual({ error: 'hello' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle Error with toResponse() when thrown', async () => {
+		class ErrorA extends Error {
+			toResponse() {
+				return Response.json({ error: 'hello' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/A', () => {
+			throw new ErrorA()
+		})
+
+		const res = await app.handle(req('/A'))
+
+		expect(await res.json()).toEqual({ error: 'hello' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle non-Error with toResponse() when returned', async () => {
+		class ErrorB {
+			toResponse() {
+				return Response.json({ error: 'hello' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/B', () => {
+			return new ErrorB()
+		})
+
+		const res = await app.handle(req('/B'))
+
+		expect(await res.json()).toEqual({ error: 'hello' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle non-Error with toResponse() when thrown', async () => {
+		class ErrorB {
+			toResponse() {
+				return Response.json({ error: 'hello' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/B', () => {
+			throw new ErrorB()
+		})
+
+		const res = await app.handle(req('/B'))
+
+		expect(await res.json()).toEqual({ error: 'hello' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle Error with toResponse() that includes custom headers', async () => {
+		class ErrorWithHeaders extends Error {
+			toResponse() {
+				return Response.json(
+					{ error: 'custom error' },
+					{
+						status: 418,
+						headers: {
+							'X-Custom-Header': 'custom-value',
+							'Content-Type': 'application/json; charset=utf-8'
+						}
+					}
+				)
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new ErrorWithHeaders()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'custom error' })
+		expect(res.status).toBe(418)
+		expect(res.headers.get('X-Custom-Header')).toBe('custom-value')
+	})
 })
