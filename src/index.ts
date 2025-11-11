@@ -1,171 +1,156 @@
-import { Memoirist } from 'memoirist'
 import {
 	Kind,
-	type TObject,
-	type TSchema,
+	type TAnySchema,
 	type TModule,
+	type TObject,
 	type TRef,
-	type TAnySchema
+	type TSchema
 } from '@sinclair/typebox'
-
 import fastDecodeURIComponent from 'fast-decode-uri-component'
-import type { Context, PreContext } from './context'
-
-import { t } from './type-system'
-import { mergeInference, sucrose, type Sucrose } from './sucrose'
-
-import type { WSLocalHook } from './ws/types'
-
+import { Memoirist } from 'memoirist'
 import { BunAdapter } from './adapter/bun/index'
-import { WebStandardAdapter } from './adapter/web-standard/index'
 import type { ElysiaAdapter } from './adapter/types'
-
-import { env } from './universal/env'
-import type { ListenCallback, Serve, Server } from './universal/server'
-
+import { WebStandardAdapter } from './adapter/web-standard/index'
 import {
-	cloneInference,
-	deduplicateChecksum,
-	fnToContainer,
-	getLoosePath,
-	localHookToLifeCycleStore,
-	mergeDeep,
-	mergeSchemaValidator,
-	PromiseGroup,
-	promoteEvent,
-	isNotEmpty,
-	encodePath,
-	lifeCycleToArray,
-	supportPerMethodInlineHandler,
-	redirect,
-	emptySchema,
-	insertStandaloneValidator
-} from './utils'
-
-import {
-	coercePrimitiveRoot,
-	stringToStructureCoercions,
-	getSchemaValidator,
-	getResponseSchemaValidator,
-	getCookieValidator,
-	ElysiaTypeCheck,
-	queryCoercions,
-	mergeObjectSchemas
-} from './schema'
-import {
-	composeHandler,
+	composeErrorHandler,
 	composeGeneralHandler,
-	composeErrorHandler
+	composeHandler
 } from './compose'
-
-import { createTracer } from './trace'
-
-import {
-	mergeHook,
-	checksum,
-	mergeLifeCycle,
-	filterGlobalHook,
-	asHookType,
-	replaceUrlPath
-} from './utils'
-
+import type { Context, PreContext } from './context'
 import {
 	createDynamicErrorHandler,
 	createDynamicHandler,
 	type DynamicHandler
 } from './dynamic-handle'
-
 import {
-	status,
+	type ElysiaCustomStatusResponse,
 	ERROR_CODE,
-	ValidationError,
-	type ParseError,
-	type NotFoundError,
 	type InternalServerError,
-	type ElysiaCustomStatusResponse
+	type NotFoundError,
+	type ParseError,
+	status,
+	ValidationError
 } from './error'
-
+import {
+	coercePrimitiveRoot,
+	type ElysiaTypeCheck,
+	getCookieValidator,
+	getResponseSchemaValidator,
+	getSchemaValidator,
+	mergeObjectSchemas,
+	queryCoercions,
+	stringToStructureCoercions
+} from './schema'
+import { mergeInference, type Sucrose, sucrose } from './sucrose'
 import type { TraceHandler } from './trace'
-
+import { createTracer } from './trace'
+import { t } from './type-system'
 import type {
-	ElysiaConfig,
-	SingletonBase,
-	DefinitionBase,
-	Handler,
-	ComposedHandler,
-	InputSchema,
-	LocalHook,
-	AnyLocalHook,
-	MergeSchema,
-	RouteSchema,
-	UnwrapRoute,
-	InternalRoute,
-	HTTPMethod,
-	SchemaValidator,
-	PreHandler,
-	BodyHandler,
-	OptionalHandler,
-	ErrorHandler,
-	LifeCycleStore,
-	MaybePromise,
-	Prettify,
 	AddPrefix,
-	AddSuffix,
 	AddPrefixCapitalize,
+	AddSuffix,
 	AddSuffixCapitalize,
-	MaybeArray,
-	GracefulHandler,
-	MapResponse,
-	Checksum,
-	MacroManager,
-	MacroToProperty,
-	TransformHandler,
-	MetadataBase,
-	RouteBase,
-	CreateEden,
-	ComposeElysiaResponse,
-	InlineHandler,
-	HookContainer,
-	LifeCycleType,
-	EphemeralType,
-	ExcludeElysiaResponse,
-	ModelValidator,
-	ContextAppendType,
-	Reconcile,
-	AfterResponseHandler,
-	HigherOrderFunction,
-	ResolvePath,
-	JoinPath,
-	ValidatorLayer,
-	MergeElysiaInstances,
-	Macro,
-	MacroToContext,
-	StandaloneValidator,
-	GuardSchemaType,
-	Or,
-	DocumentDecoration,
 	AfterHandler,
-	NonResolvableMacroKey,
-	StandardSchemaV1Like,
-	ElysiaHandlerToResponseSchema,
-	ElysiaHandlerToResponseSchemas,
-	ExtractErrorFromHandle,
-	ElysiaHandlerToResponseSchemaAmbiguous,
-	GuardLocalHook,
-	PickIfExists,
-	SimplifyToSchema,
-	UnionResponseStatus,
+	AfterResponseHandler,
+	AnyLocalHook,
+	BodyHandler,
+	Checksum,
+	ComposedHandler,
+	ComposeElysiaResponse,
+	ContextAppendType,
+	CreateEden,
 	CreateEdenResponse,
-	MacroProperty,
-	MaybeValueOrVoidFunction,
+	DefinitionBase,
+	DocumentDecoration,
+	ElysiaConfig,
+	ElysiaHandlerToResponseSchema,
+	ElysiaHandlerToResponseSchemaAmbiguous,
+	ElysiaHandlerToResponseSchemas,
+	EmptyRouteSchema,
+	EphemeralType,
+	ErrorHandler,
+	ExcludeElysiaResponse,
+	ExtractErrorFromHandle,
+	GracefulHandler,
+	GuardLocalHook,
+	GuardSchemaType,
+	Handler,
+	HigherOrderFunction,
+	HookContainer,
+	HTTPMethod,
+	InlineHandler,
+	InlineHandlerNonMacro,
+	InputSchema,
+	InternalRoute,
 	IntersectIfObject,
 	IntersectIfObjectSchema,
-	EmptyRouteSchema,
-	UnknownRouteSchema,
+	JoinPath,
+	LifeCycleStore,
+	LifeCycleType,
+	LocalHook,
+	Macro,
+	MacroManager,
+	MacroProperty,
+	MacroToContext,
+	MacroToProperty,
+	MapResponse,
+	MaybeArray,
 	MaybeFunction,
-	InlineHandlerNonMacro,
-	Router
+	MaybePromise,
+	MaybeValueOrVoidFunction,
+	MergeElysiaInstances,
+	MergeSchema,
+	MetadataBase,
+	ModelValidator,
+	NonResolvableMacroKey,
+	OptionalHandler,
+	Or,
+	PickIfExists,
+	PreHandler,
+	Prettify,
+	Reconcile,
+	ResolvePath,
+	RouteBase,
+	Router,
+	RouteSchema,
+	SchemaValidator,
+	SimplifyToSchema,
+	SingletonBase,
+	StandaloneValidator,
+	StandardSchemaV1Like,
+	TransformHandler,
+	UnionResponseStatus,
+	UnknownRouteSchema,
+	UnwrapRoute,
+	ValidatorLayer
 } from './types'
+import { env } from './universal/env'
+import type { ListenCallback, Serve, Server } from './universal/server'
+import {
+	asHookType,
+	checksum,
+	cloneInference,
+	deduplicateChecksum,
+	emptySchema,
+	encodePath,
+	filterGlobalHook,
+	fnToContainer,
+	getLoosePath,
+	insertStandaloneValidator,
+	isNotEmpty,
+	lifeCycleToArray,
+	localHookToLifeCycleStore,
+	mergeDeep,
+	mergeHook,
+	mergeLifeCycle,
+	mergeSchemaValidator,
+	PromiseGroup,
+	promoteEvent,
+	redirect,
+	replaceUrlPath,
+	supportPerMethodInlineHandler
+} from './utils'
+import type { WSLocalHook } from './ws/types'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -430,7 +415,9 @@ export default class Elysia<
 			if (mergedSchema) {
 				return t.Intersect([mergedSchema, ...notObjects])
 			}
-			return notObjects.length === 1 ? notObjects[0] : t.Intersect(notObjects)
+			return notObjects.length === 1
+				? notObjects[0]
+				: t.Intersect(notObjects)
 		}
 
 		return mergedSchema
@@ -452,11 +439,7 @@ export default class Elysia<
 			| string
 			| { [status: number]: string | TSchema }
 			| undefined
-	):
-		| TSchema
-		| { [status: number]: TSchema | string }
-		| string
-		| undefined {
+	): TSchema | { [status: number]: TSchema | string } | string | undefined {
 		if (!existing) return incoming
 		if (!incoming) return existing
 
@@ -469,15 +452,16 @@ export default class Elysia<
 		const existingIsSchema = 'type' in existing
 		const incomingIsSchema = 'type' in incoming
 
-		// If both are plain schemas, incoming overrides
+		// If both are plain schemas, preserve existing (route-specific schema takes precedence)
 		if (existingIsSchema && incomingIsSchema) {
-			return incoming
+			return existing
 		}
 
 		// If existing is status code object and incoming is plain schema,
 		// merge incoming as status 200 to preserve other status codes
 		if (!existingIsSchema && incomingIsSchema) {
-			return (existing as Record<number, TSchema | string>)[200] === undefined
+			return (existing as Record<number, TSchema | string>)[200] ===
+				undefined
 				? {
 						...existing,
 						200: incoming
@@ -1024,12 +1008,12 @@ export default class Elysia<
 								if (typeof x.fn === 'function')
 									return x.fn(context)
 
-								// @ts-ignore just in case
+								// @ts-expect-error just in case
 								if (typeof x === 'function') return x(context)
 							})
 						} catch (error) {
 							let res
-							// @ts-ignore
+							// @ts-expect-error
 							context.error = error
 
 							this.event.error?.some((x) => {
@@ -1037,7 +1021,7 @@ export default class Elysia<
 									return (res = x.fn(context))
 
 								if (typeof x === 'function')
-									// @ts-ignore just in case
+									// @ts-expect-error just in case
 									return (res = x(context))
 							})
 
@@ -3227,10 +3211,10 @@ export default class Elysia<
 	): AnyElysia {
 		switch (typeof name) {
 			case 'string':
-				// @ts-ignore
+				// @ts-expect-error
 				error.prototype[ERROR_CODE] = name
 
-				// @ts-ignore
+				// @ts-expect-error
 				this.definitions.error[name] = error
 
 				return this
@@ -3242,7 +3226,7 @@ export default class Elysia<
 		}
 
 		for (const [code, error] of Object.entries(name)) {
-			// @ts-ignore
+			// @ts-expect-error
 			error.prototype[ERROR_CODE] = code as any
 
 			this.definitions.error[code] = error as any
@@ -4049,13 +4033,13 @@ export default class Elysia<
 		prefix: Prefix,
 		schema: GuardLocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					// @ts-ignore
+					// @ts-expect-error
 					MacroContext['response']
 			},
 			keyof Metadata['parser'],
@@ -4071,7 +4055,7 @@ export default class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive']
 					resolve: Singleton['resolve'] &
-						// @ts-ignore
+						// @ts-expect-error
 						MacroContext['resolve']
 				},
 				Definitions,
@@ -4084,7 +4068,7 @@ export default class Elysia<
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
 					response: Metadata['response'] &
-						// @ts-ignore
+						// @ts-expect-error
 						MacroContext['response'] &
 						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
@@ -4274,13 +4258,13 @@ export default class Elysia<
 	>(
 		hook: GuardLocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					// @ts-ignore
+					// @ts-expect-error
 					MacroContext['response']
 			},
 			keyof Metadata['parser'],
@@ -4308,7 +4292,7 @@ export default class Elysia<
 					{
 						derive: Volatile['derive']
 						resolve: Volatile['resolve'] &
-							// @ts-ignore
+							// @ts-expect-error
 							MacroContext['resolve']
 						schema: {} extends PickIfExists<
 							Input,
@@ -4325,7 +4309,7 @@ export default class Elysia<
 							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
 							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-							// @ts-ignore
+							// @ts-expect-error
 							MacroContext['return']
 					}
 				>
@@ -4337,7 +4321,7 @@ export default class Elysia<
 							store: Singleton['store']
 							derive: Singleton['derive']
 							resolve: Singleton['resolve'] &
-								// @ts-ignore
+								// @ts-expect-error
 								MacroContext['resolve']
 						},
 						Definitions,
@@ -4364,7 +4348,7 @@ export default class Elysia<
 								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
+								// @ts-expect-error
 								MacroContext['return']
 						},
 						Routes,
@@ -4380,7 +4364,7 @@ export default class Elysia<
 						{
 							derive: Ephemeral['derive']
 							resolve: Ephemeral['resolve'] &
-								// @ts-ignore
+								// @ts-expect-error
 								MacroContext['resolve']
 							schema: {} extends PickIfExists<
 								Input,
@@ -4400,7 +4384,7 @@ export default class Elysia<
 								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
+								// @ts-expect-error
 								MacroContext['return']
 						},
 						Volatile
@@ -4419,7 +4403,7 @@ export default class Elysia<
 					{
 						derive: Volatile['derive']
 						resolve: Volatile['resolve'] &
-							// @ts-ignore
+							// @ts-expect-error
 							MacroContext['resolve']
 						schema: Volatile['schema']
 						standaloneSchema: SimplifyToSchema<MacroContext> &
@@ -4434,7 +4418,7 @@ export default class Elysia<
 							ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 							ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
 							ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-							// @ts-ignore
+							// @ts-expect-error
 							MacroContext['return']
 					}
 				>
@@ -4446,7 +4430,7 @@ export default class Elysia<
 							store: Singleton['store']
 							derive: Singleton['derive']
 							resolve: Singleton['resolve'] &
-								// @ts-ignore
+								// @ts-expect-error
 								MacroContext['resolve']
 						},
 						Definitions,
@@ -4471,7 +4455,7 @@ export default class Elysia<
 								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
+								// @ts-expect-error
 								MacroContext['return']
 						},
 						Routes,
@@ -4487,7 +4471,7 @@ export default class Elysia<
 						{
 							derive: Ephemeral['derive']
 							resolve: Ephemeral['resolve'] &
-								// @ts-ignore
+								// @ts-expect-error
 								MacroContext['resolve']
 							schema: Ephemeral['schema']
 							standaloneSchema: SimplifyToSchema<MacroContext> &
@@ -4505,7 +4489,7 @@ export default class Elysia<
 								ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
 								ElysiaHandlerToResponseSchemaAmbiguous<ErrorHandle> &
-								// @ts-ignore
+								// @ts-expect-error
 								MacroContext['return']
 						},
 						Volatile
@@ -4542,7 +4526,7 @@ export default class Elysia<
 	>(
 		schema: GuardLocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Singleton & {
 				derive: Ephemeral['derive'] & Volatile['derive']
@@ -4561,7 +4545,7 @@ export default class Elysia<
 					store: Singleton['store']
 					derive: Singleton['derive']
 					resolve: Singleton['resolve'] &
-						// @ts-ignore
+						// @ts-expect-error
 						MacroContext['resolve']
 				},
 				Definitions,
@@ -4574,7 +4558,7 @@ export default class Elysia<
 					macroFn: Metadata['macroFn']
 					parser: Metadata['parser']
 					response: Metadata['response'] &
-						// @ts-ignore
+						// @ts-expect-error
 						MacroContext['response'] &
 						ElysiaHandlerToResponseSchemaAmbiguous<BeforeHandle> &
 						ElysiaHandlerToResponseSchemaAmbiguous<AfterHandle> &
@@ -4595,12 +4579,12 @@ export default class Elysia<
 		{
 			derive: Volatile['derive']
 			resolve: Volatile['resolve'] &
-				// @ts-ignore
+				// @ts-expect-error
 				MacroContext['resolve']
 			schema: Volatile['schema']
 			standaloneSchema: Volatile['standaloneSchema']
 			response: Volatile['response'] &
-				// @ts-ignore
+				// @ts-expect-error
 				MacroContext['response']
 		}
 	>
@@ -5366,13 +5350,13 @@ export default class Elysia<
 		}
 
 		if (plugin.validator.global)
-			// @ts-ignore
+			// @ts-expect-error
 			this.validator.global = mergeHook(this.validator.global, {
 				...plugin.validator.global
 			}) as any
 
 		if (plugin.validator.scoped)
-			// @ts-ignore
+			// @ts-expect-error
 			this.validator.local = mergeHook(this.validator.local, {
 				...plugin.validator.scoped
 			})
@@ -5409,7 +5393,7 @@ export default class Elysia<
 					resolve: Partial<
 						Ephemeral['resolve'] & Volatile['resolve']
 					> &
-						// @ts-ignore
+						// @ts-expect-error
 						MacroContext['resolve']
 				},
 				Definitions['error']
@@ -5553,7 +5537,7 @@ export default class Elysia<
 		if (iteration >= 16) return
 		const macro = this.extender.macro
 
-		for (let [key, value] of Object.entries(appliable)) {
+		for (const [key, value] of Object.entries(appliable)) {
 			if (key in macro === false) continue
 
 			const macroHook =
@@ -5610,7 +5594,7 @@ export default class Elysia<
 					(k === 'derive' || k === 'resolve') &&
 					typeof value === 'function'
 				)
-					// @ts-ignore
+					// @ts-expect-error
 					value = {
 						fn: value,
 						subType: k
@@ -5824,7 +5808,7 @@ export default class Elysia<
 			: InlineHandler<
 					NoInfer<Schema>,
 					NoInfer<Decorator>,
-					// @ts-ignore
+					// @ts-expect-error
 					MacroContext
 				>
 	>(
@@ -5832,7 +5816,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -5864,7 +5848,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -5933,7 +5917,7 @@ export default class Elysia<
 			: InlineHandler<
 					NoInfer<Schema>,
 					NoInfer<Decorator>,
-					// @ts-ignore
+					// @ts-expect-error
 					MacroContext
 				>
 	>(
@@ -5941,7 +5925,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -5973,7 +5957,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6042,7 +6026,7 @@ export default class Elysia<
 			: InlineHandler<
 					NoInfer<Schema>,
 					NoInfer<Decorator>,
-					// @ts-ignore
+					// @ts-expect-error
 					MacroContext
 				>
 	>(
@@ -6050,7 +6034,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -6082,7 +6066,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6149,7 +6133,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
 			NoInfer<Decorator>,
-			// @ts-ignore
+			// @ts-expect-error
 			MacroContext
 		>
 	>(
@@ -6157,7 +6141,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -6189,7 +6173,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6256,7 +6240,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
 			NoInfer<Decorator>,
-			// @ts-ignore
+			// @ts-expect-error
 			MacroContext
 		>
 	>(
@@ -6264,7 +6248,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -6296,7 +6280,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6363,7 +6347,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
 			NoInfer<Decorator>,
-			// @ts-ignore
+			// @ts-expect-error
 			MacroContext
 		>
 	>(
@@ -6371,7 +6355,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -6403,7 +6387,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6470,7 +6454,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
 			NoInfer<Decorator>,
-			// @ts-ignore
+			// @ts-expect-error
 			MacroContext
 		>
 	>(
@@ -6478,7 +6462,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -6510,7 +6494,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6577,7 +6561,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
 			NoInfer<Decorator>,
-			// @ts-ignore
+			// @ts-expect-error
 			MacroContext
 		>
 	>(
@@ -6585,7 +6569,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -6617,7 +6601,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6684,7 +6668,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
 			NoInfer<Decorator>,
-			// @ts-ignore
+			// @ts-expect-error
 			MacroContext
 		>
 	>(
@@ -6692,7 +6676,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -6724,7 +6708,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6792,7 +6776,7 @@ export default class Elysia<
 		const Handle extends InlineHandler<
 			NoInfer<Schema>,
 			NoInfer<Decorator>,
-			// @ts-ignore
+			// @ts-expect-error
 			MacroContext
 		>
 	>(
@@ -6801,7 +6785,7 @@ export default class Elysia<
 		handler: Handle,
 		hook?: LocalHook<
 			Input,
-			// @ts-ignore
+			// @ts-expect-error
 			Schema & MacroContext,
 			Decorator,
 			Definitions['error'],
@@ -6838,7 +6822,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -6905,7 +6889,7 @@ export default class Elysia<
 				derive: Ephemeral['derive'] & Volatile['derive']
 				resolve: Ephemeral['resolve'] &
 					Volatile['resolve'] &
-					// @ts-ignore
+					// @ts-expect-error
 					MacroContext['resolve']
 			}
 		>
@@ -6939,7 +6923,7 @@ export default class Elysia<
 									Ephemeral['response'],
 									UnionResponseStatus<
 										Volatile['response'],
-										// @ts-ignore
+										// @ts-expect-error
 										MacroContext['return'] & {}
 									>
 								>
@@ -7768,7 +7752,7 @@ export default class Elysia<
 		}
 
 		switch (typeof name) {
-			case 'object':
+			case 'object': {
 				const parsedTypebox = {} as Record<
 					string,
 					TSchema | StandardSchemaV1Like
@@ -7796,15 +7780,17 @@ export default class Elysia<
 				} as any)
 
 				return this
+			}
 
-			case 'function':
+			case 'function': {
 				const result = name(this.definitions.type)
 				this.definitions.type = result
 				this.definitions.typebox = t.Module(onlyTypebox(result))
 
 				return this
+			}
 
-			case 'string':
+			case 'string': {
 				if (!model) break
 
 				this.definitions.type[name] = model
@@ -7822,6 +7808,7 @@ export default class Elysia<
 				} as any)
 
 				return this
+			}
 		}
 
 		if (!model) return this
@@ -8273,122 +8260,116 @@ export default class Elysia<
 
 export { Elysia }
 
+export type { Static, TSchema } from '@sinclair/typebox'
+export { TypeSystemPolicy } from '@sinclair/typebox/system'
+export type { ElysiaAdapter } from './adapter'
+export type { Context, ErrorContext, PreContext } from './context'
+export { Cookie, type CookieOptions, serializeCookie } from './cookies'
+export {
+	ElysiaCustomStatusResponse,
+	ERROR_CODE,
+	InternalServerError,
+	InvalidCookieSignature,
+	InvalidFileType,
+	mapValueError,
+	NotFoundError,
+	ParseError,
+	type SelectiveStatus,
+	status,
+	ValidationError
+} from './error'
+
+export {
+	getResponseSchemaValidator,
+	getSchemaValidator,
+	replaceSchemaType
+} from './schema'
+export {
+	ELYSIA_TRACE,
+	type TraceEvent,
+	type TraceHandler,
+	type TraceListener,
+	type TraceProcess,
+	type TraceStream
+} from './trace'
 export { t } from './type-system'
-export { validationDetail, fileType } from './type-system/utils'
 export type {
 	ElysiaTypeCustomError,
 	ElysiaTypeCustomErrorCallback
 } from './type-system/types'
-
-export { serializeCookie, Cookie, type CookieOptions } from './cookies'
-export type { Context, PreContext, ErrorContext } from './context'
+export { fileType, validationDetail } from './type-system/utils'
+export type {
+	AfterHandler,
+	AfterResponseHandler,
+	BaseMacro,
+	BodyHandler,
+	Checksum,
+	ComposedHandler,
+	ComposeElysiaResponse,
+	CreateEden,
+	DefinitionBase,
+	DocumentDecoration,
+	ElysiaConfig,
+	EmptyRouteSchema,
+	EphemeralType,
+	ErrorHandler,
+	ExcludeElysiaResponse,
+	GracefulHandler,
+	Handler,
+	HTTPHeaders,
+	HTTPMethod,
+	InferContext,
+	InferHandler,
+	InlineHandler,
+	InputSchema,
+	InternalRoute,
+	LifeCycleEvent,
+	LifeCycleStore,
+	LifeCycleType,
+	LocalHook,
+	MacroManager,
+	MacroToProperty,
+	MapResponse,
+	MaybeArray,
+	MaybePromise,
+	MergeElysiaInstances,
+	MergeSchema,
+	MergeStandaloneSchema,
+	MergeTypeModule,
+	MetadataBase,
+	ModelValidator,
+	ModelValidatorError,
+	OptionalHandler,
+	PreHandler,
+	ResolveHandler,
+	ResolvePath,
+	RouteBase,
+	RouteSchema,
+	SchemaValidator,
+	SingletonBase,
+	SSEPayload,
+	StandaloneInputSchema,
+	TransformHandler,
+	UnwrapBodySchema,
+	UnwrapGroupGuardRoute,
+	UnwrapRoute,
+	UnwrapSchema,
+	VoidHandler
+} from './types'
+export { env } from './universal/env'
+export { ElysiaFile, file } from './universal/file'
 export {
-	ELYSIA_TRACE,
-	type TraceEvent,
-	type TraceListener,
-	type TraceHandler,
-	type TraceProcess,
-	type TraceStream
-} from './trace'
-
-export {
-	getSchemaValidator,
-	getResponseSchemaValidator,
-	replaceSchemaType
-} from './schema'
-
-export {
-	mergeHook,
-	mergeObjectArray,
-	redirect,
-	StatusMap,
-	InvertedStatusMap,
-	form,
-	replaceUrlPath,
 	checksum,
 	cloneInference,
 	deduplicateChecksum,
 	ELYSIA_FORM_DATA,
 	ELYSIA_REQUEST_ID,
+	form,
+	InvertedStatusMap,
+	mergeHook,
+	mergeObjectArray,
+	redirect,
+	replaceUrlPath,
+	StatusMap,
 	sse
 } from './utils'
-
-export {
-	status,
-	mapValueError,
-	ParseError,
-	NotFoundError,
-	ValidationError,
-	InvalidFileType,
-	InternalServerError,
-	InvalidCookieSignature,
-	ERROR_CODE,
-	ElysiaCustomStatusResponse,
-	type SelectiveStatus
-} from './error'
-
-export type {
-	EphemeralType,
-	CreateEden,
-	ComposeElysiaResponse,
-	ElysiaConfig,
-	SingletonBase,
-	DefinitionBase,
-	RouteBase,
-	Handler,
-	ComposedHandler,
-	InputSchema,
-	LocalHook,
-	MergeSchema,
-	RouteSchema,
-	UnwrapRoute,
-	InternalRoute,
-	HTTPMethod,
-	SchemaValidator,
-	VoidHandler,
-	PreHandler,
-	BodyHandler,
-	OptionalHandler,
-	AfterResponseHandler,
-	ErrorHandler,
-	LifeCycleEvent,
-	LifeCycleStore,
-	LifeCycleType,
-	MaybePromise,
-	UnwrapSchema,
-	Checksum,
-	DocumentDecoration,
-	InferContext,
-	InferHandler,
-	ResolvePath,
-	MapResponse,
-	BaseMacro,
-	MacroManager,
-	MacroToProperty,
-	MergeElysiaInstances,
-	MaybeArray,
-	ModelValidator,
-	MetadataBase,
-	UnwrapBodySchema,
-	UnwrapGroupGuardRoute,
-	ModelValidatorError,
-	ExcludeElysiaResponse,
-	SSEPayload,
-	StandaloneInputSchema,
-	MergeStandaloneSchema,
-	MergeTypeModule,
-	GracefulHandler,
-	AfterHandler,
-	InlineHandler,
-	ResolveHandler,
-	TransformHandler,
-	HTTPHeaders,
-	EmptyRouteSchema
-} from './types'
-
-export { env } from './universal/env'
-export { file, ElysiaFile } from './universal/file'
-export type { ElysiaAdapter } from './adapter'
-
-export { TypeSystemPolicy } from '@sinclair/typebox/system'
-export type { Static, TSchema } from '@sinclair/typebox'
