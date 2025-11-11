@@ -563,7 +563,19 @@ export const errorToResponse = (error: Error, set?: Context['set']) => {
 	// @ts-expect-error
 	if (typeof error?.toResponse === 'function') {
 		// @ts-expect-error
-		return mapResponse(error.toResponse(), set ?? { headers: {}, status: 200, redirect: '' })
+		const raw = error.toResponse()
+		const targetSet =
+			set ?? ({ headers: {}, status: 200, redirect: '' } as Context['set'])
+		const apply = (resolved: unknown) => {
+			if (resolved instanceof Response) targetSet.status = resolved.status
+			return mapResponse(resolved, targetSet)
+		}
+
+		// @ts-expect-error
+		return typeof raw?.then === 'function'
+			? // @ts-expect-error
+			  raw.then(apply)
+			: apply(raw)
 	}
 
 	return new Response(

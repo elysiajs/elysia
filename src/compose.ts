@@ -2603,10 +2603,14 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	// BUT exclude ValidationError and TransformDecodeError to allow proper validation error handling
 	fnLiteral +=
 		`if(typeof error?.toResponse==='function'&&error.constructor.name!=="ValidationError"&&error.constructor.name!=="TransformDecodeError"){` +
-		`const errorResponse=error.toResponse()\n` +
-		`if(errorResponse instanceof Response)set.status=errorResponse.status\n` +
+		`const raw=error.toResponse()\n` +
+		`const apply=(resolved)=>{` +
+		`if(resolved instanceof Response)set.status=resolved.status\n` +
 		afterResponse() +
-		`return context.response=context.responseValue=mapResponse(${saveResponse}errorResponse,set${adapter.mapResponseContext})\n` +
+		`return context.response=context.responseValue=mapResponse(${saveResponse}resolved,set${adapter.mapResponseContext})\n` +
+		`}\n` +
+		`if(typeof raw?.then==='function')return raw.then(apply)\n` +
+		`return apply(raw)\n` +
 		`}\n`
 
 	if (app.event.error)

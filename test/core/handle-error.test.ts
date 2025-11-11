@@ -432,4 +432,87 @@ describe('Handle Error', () => {
 		expect(res.status).toBe(418)
 		expect(res.headers.get('X-Custom-Header')).toBe('custom-value')
 	})
+
+	it('handle async toResponse() when thrown', async () => {
+		class AsyncError extends Error {
+			async toResponse() {
+				// Simulate async operation
+				await new Promise(resolve => setTimeout(resolve, 10))
+				return Response.json({ error: 'async error' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new AsyncError()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'async error' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle async toResponse() when returned', async () => {
+		class AsyncError extends Error {
+			async toResponse() {
+				// Simulate async operation
+				await new Promise(resolve => setTimeout(resolve, 10))
+				return Response.json({ error: 'async error' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			return new AsyncError()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'async error' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle async toResponse() with custom headers', async () => {
+		class AsyncErrorWithHeaders extends Error {
+			async toResponse() {
+				await new Promise(resolve => setTimeout(resolve, 10))
+				return Response.json(
+					{ error: 'async with headers' },
+					{
+						status: 419,
+						headers: {
+							'X-Async-Header': 'async-value'
+						}
+					}
+				)
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new AsyncErrorWithHeaders()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'async with headers' })
+		expect(res.status).toBe(419)
+		expect(res.headers.get('X-Async-Header')).toBe('async-value')
+	})
+
+	it('handle non-Error with async toResponse()', async () => {
+		class AsyncNonError {
+			async toResponse() {
+				await new Promise(resolve => setTimeout(resolve, 10))
+				return Response.json({ error: 'non-error async' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new AsyncNonError()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'non-error async' })
+		expect(res.status).toBe(418)
+	})
 })
