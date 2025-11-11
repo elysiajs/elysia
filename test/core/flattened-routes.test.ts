@@ -105,6 +105,64 @@ describe('getFlattenedRoutes', () => {
 		expect(mixedRoute?.hooks.body.type).toBe('object')
 	})
 
+	it('preserves standaloneValidator array when flattening', () => {
+		const app = new Elysia().guard(
+			{
+				headers: t.Object({
+					authorization: t.String()
+				}),
+				body: t.Object({
+					data: t.String()
+				}),
+				response: {
+					401: t.Object({ error: t.String() }),
+					500: t.Object({ message: t.String() })
+				}
+			},
+			(app) =>
+				app.post('/protected', ({ body }) => body, {
+					response: t.Object({
+						success: t.Boolean(),
+						data: t.String()
+					})
+				})
+		)
+
+		// @ts-expect-error - accessing protected method for testing
+		const flatRoutes = app.getFlattenedRoutes()
+
+		const protectedRoute = flatRoutes.find((r) => r.path === '/protected')
+
+		expect(protectedRoute).toBeDefined()
+
+		// The standaloneValidator array should still exist after flattening
+		expect(protectedRoute?.hooks.standaloneValidator).toBeDefined()
+		expect(Array.isArray(protectedRoute?.hooks.standaloneValidator)).toBe(
+			true
+		)
+
+		// Should have at least one validator from the guard
+		expect(protectedRoute?.hooks.standaloneValidator?.length).toBeGreaterThan(
+			0
+		)
+
+		// Verify the standaloneValidator contains the guard schemas
+		const validator = protectedRoute?.hooks.standaloneValidator?.[0]
+		expect(validator).toBeDefined()
+		expect(validator?.headers).toBeDefined()
+		expect(validator?.body).toBeDefined()
+		expect(validator?.response).toBeDefined()
+
+		// Verify schemas were also flattened into direct properties
+		expect(protectedRoute?.hooks.headers).toBeDefined()
+		expect(protectedRoute?.hooks.headers.type).toBe('object')
+		expect(protectedRoute?.hooks.body).toBeDefined()
+		expect(protectedRoute?.hooks.body.type).toBe('object')
+		expect(protectedRoute?.hooks.response).toBeDefined()
+		expect(protectedRoute?.hooks.response[401]).toBeDefined()
+		expect(protectedRoute?.hooks.response[500]).toBeDefined()
+	})
+
 	it('handles query and params schemas from guard', () => {
 		const app = new Elysia().guard(
 			{
