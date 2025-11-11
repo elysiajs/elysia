@@ -205,4 +205,70 @@ describe('getFlattenedRoutes', () => {
 		expect(dataRoute?.hooks.response[404].type).toBe('object')
 		expect(dataRoute?.hooks.response[500].type).toBe('object')
 	})
+
+	it('preserves string schema aliases during merging', () => {
+		// Define models that will be referenced by string aliases
+		const app = new Elysia()
+			.model({
+				UserPayload: t.Object({
+					name: t.String(),
+					email: t.String()
+				}),
+				UserResponse: t.Object({
+					id: t.String(),
+					name: t.String()
+				}),
+				ErrorResponse: t.Object({
+					error: t.String(),
+					message: t.String()
+				})
+			})
+			.guard(
+				{
+					headers: t.Object({
+						authorization: t.String()
+					}),
+					response: {
+						401: 'ErrorResponse',
+						500: 'ErrorResponse'
+					}
+				},
+				(app) =>
+					app.post('/users', ({ body }) => body, {
+						body: 'UserPayload',
+						response: 'UserResponse'
+					})
+			)
+
+		// @ts-expect-error - accessing protected method for testing
+		const flatRoutes = app.getFlattenedRoutes()
+
+		const usersRoute = flatRoutes.find((r) => r.path === '/users')
+
+		expect(usersRoute).toBeDefined()
+
+		// Body should be a TRef to UserPayload
+		expect(usersRoute?.hooks.body).toBeDefined()
+		expect(usersRoute?.hooks.body.$ref).toBe('UserPayload')
+
+		// Headers should be merged from guard
+		expect(usersRoute?.hooks.headers).toBeDefined()
+		expect(usersRoute?.hooks.headers.type).toBe('object')
+		expect(usersRoute?.hooks.headers.properties).toHaveProperty(
+			'authorization'
+		)
+
+		// Response should preserve both route-level (200) and guard-level (401, 500) schemas
+		expect(usersRoute?.hooks.response).toBeDefined()
+		expect(usersRoute?.hooks.response[200]).toBeDefined()
+		expect(usersRoute?.hooks.response[401]).toBeDefined()
+		expect(usersRoute?.hooks.response[500]).toBeDefined()
+
+		// The 200 response should be the TRef from the route
+		expect(usersRoute?.hooks.response[200].$ref).toBe('UserResponse')
+
+		// The error responses should be TRefs from the guard
+		expect(usersRoute?.hooks.response[401].$ref).toBe('ErrorResponse')
+		expect(usersRoute?.hooks.response[500].$ref).toBe('ErrorResponse')
+	})
 })

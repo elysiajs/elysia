@@ -401,7 +401,55 @@ export default class Elysia<
 			}
 		}
 
+		// Normalize any remaining string references in the final result
+		if (typeof merged.body === 'string') {
+			merged.body = this.normalizeSchemaReference(merged.body)
+		}
+		if (typeof merged.headers === 'string') {
+			merged.headers = this.normalizeSchemaReference(merged.headers)
+		}
+		if (typeof merged.query === 'string') {
+			merged.query = this.normalizeSchemaReference(merged.query)
+		}
+		if (typeof merged.params === 'string') {
+			merged.params = this.normalizeSchemaReference(merged.params)
+		}
+		if (typeof merged.cookie === 'string') {
+			merged.cookie = this.normalizeSchemaReference(merged.cookie)
+		}
+		if (merged.response && typeof merged.response !== 'string') {
+			// Normalize string references in status code objects
+			const response = merged.response as any
+			if ('type' in response || '$ref' in response) {
+				// It's a schema, not a status code object
+				if (typeof response === 'string') {
+					merged.response = this.normalizeSchemaReference(response)
+				}
+			} else {
+				// It's a status code object, normalize each value
+				for (const [status, schema] of Object.entries(response)) {
+					if (typeof schema === 'string') {
+						response[status] = this.normalizeSchemaReference(schema)
+					}
+				}
+			}
+		}
+
 		return merged
+	}
+
+	/**
+	 * Normalize string schema references to TRef nodes for proper merging
+	 */
+	private normalizeSchemaReference(
+		schema: TSchema | string | undefined
+	): TSchema | undefined {
+		if (!schema) return undefined
+		if (typeof schema !== 'string') return schema
+
+		// Convert string reference to t.Ref node
+		// This allows string aliases to participate in schema composition
+		return t.Ref(schema)
 	}
 
 	/**
@@ -414,15 +462,17 @@ export default class Elysia<
 		if (!existing) return incoming
 		if (!incoming) return existing
 
-		// If either is a string reference, we can't merge - use incoming
-		if (typeof existing === 'string' || typeof incoming === 'string') {
-			return incoming
-		}
+		// Normalize string references to TRef nodes so they can be merged
+		const existingSchema = this.normalizeSchemaReference(existing)
+		const incomingSchema = this.normalizeSchemaReference(incoming)
+
+		if (!existingSchema) return incoming
+		if (!incomingSchema) return existing
 
 		// If both are object schemas, merge them
 		const { schema: mergedSchema, notObjects } = mergeObjectSchemas([
-			existing,
-			incoming
+			existingSchema,
+			incomingSchema
 		])
 
 		// If we have non-object schemas, create an Intersect
@@ -458,45 +508,51 @@ export default class Elysia<
 		if (!existing) return incoming
 		if (!incoming) return existing
 
-		// If either is a string, we can't merge - use incoming
-		if (typeof existing === 'string' || typeof incoming === 'string') {
-			return incoming
-		}
+		// Normalize string references to TRef nodes
+		const normalizedExisting = typeof existing === 'string'
+			? this.normalizeSchemaReference(existing)
+			: existing
+		const normalizedIncoming = typeof incoming === 'string'
+			? this.normalizeSchemaReference(incoming)
+			: incoming
 
-		// Check if either is a TSchema (has 'type' property) vs status code object
-		const existingIsSchema = 'type' in existing
-		const incomingIsSchema = 'type' in incoming
+		if (!normalizedExisting) return incoming
+		if (!normalizedIncoming) return existing
+
+		// Check if either is a TSchema (has 'type' or '$ref' property) vs status code object
+		const existingIsSchema = 'type' in normalizedExisting || '$ref' in normalizedExisting
+		const incomingIsSchema = 'type' in normalizedIncoming || '$ref' in normalizedIncoming
 
 		// If both are plain schemas, preserve existing (route-specific schema takes precedence)
 		if (existingIsSchema && incomingIsSchema) {
-			return existing
+			return normalizedExisting
 		}
 
 		// If existing is status code object and incoming is plain schema,
 		// merge incoming as status 200 to preserve other status codes
 		if (!existingIsSchema && incomingIsSchema) {
-			return (existing as Record<number, TSchema | string>)[200] ===
+			return (normalizedExisting as Record<number, TSchema | string>)[200] ===
 				undefined
 				? {
-						...existing,
-						200: incoming
+						...normalizedExisting,
+						200: normalizedIncoming
 					}
-				: existing
+				: normalizedExisting
 		}
 
 		// If existing is plain schema and incoming is status code object,
 		// merge existing as status 200 into incoming (spread incoming first to preserve all status codes)
 		if (existingIsSchema && !incomingIsSchema) {
 			return {
-				...incoming,
-				200: existing
+				...normalizedIncoming,
+				200: normalizedExisting
 			}
 		}
 
 		// Both are status code objects, merge them
 		return {
-			...incoming,
-			...existing
+			...normalizedIncoming,
+			...normalizedExisting
 		}
 	}
 
