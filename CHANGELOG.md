@@ -3,6 +3,7 @@ Improvement:
 - ValidationError: add `messageValue` as an alias of `errorValue`
 - ValidationError.detail now accept optional 2nd parameter `allowUnsafeValidatorDetails`
 - macro: add `introspect`
+- prevent redundant route compilation
 
 Bug fix:
 - [#1537](https://github.com/elysiajs/elysia/issues/1537) websocket: ping/pong not being called

@@ -1,31 +1,19 @@
-import { Elysia } from '../src'
+import { InternalSymbolName } from 'typescript'
+import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-const app = new Elysia()
-	.macro('a', {
-		introspect(option) {
-			console.log('a', option)
-		},
-		beforeHandle() {
-			console.log('before handle a')
-		}
-	})
-	.macro({
-		b: {
-			introspect(option) {
-				console.log('b', option)
-			},
-			beforeHandle() {
-				console.log('before handle a')
-			}
-		}
-	})
-	.get('/', () => 'hello world', {
-		a: true,
-		b: true,
-		detail: {
-			description: 'a'
-		}
-	})
+const app = new Elysia().get('/', () => 'ok').compile()
+for (const route of app.routes) route.compile()
 
-app.handle(req('/'))
+console.log(app.fetch.toString())
+console.log(app.routes[0].compile().toString())
+
+// Bun.sleepSync(7)
+// console.log('Slept')
+
+const res = app
+	.handle(req('/'))
+	.then((x) => x.text())
+	.then(console.log)
+
+// process.exit(0)

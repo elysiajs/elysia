@@ -909,11 +909,8 @@ export default class Elysia<
 
 		addResponsePath(path)
 
-		let _compiled: ComposedHandler
 		const compile = () => {
-			if (_compiled) return _compiled
-
-			return (_compiled = composeHandler({
+			const compiled = composeHandler({
 				app: this,
 				path,
 				method,
@@ -926,7 +923,12 @@ export default class Elysia<
 						: handle,
 				allowMeta,
 				inference: this.inference
-			}))
+			})
+
+			if (this.router.history[index])
+				this.router.history[index].composed = compiled
+
+			return compiled
 		}
 
 		let oldIndex: number | undefined
@@ -941,14 +943,14 @@ export default class Elysia<
 		else this.routeTree[`${method}_${path}`] = this.router.history.length
 
 		const index = oldIndex ?? this.router.history.length
+		const route = this.router.history
 
 		const mainHandler = shouldPrecompile
 			? compile()
 			: (ctx: Context) =>
-					(
-						(this.router.history[index].composed =
-							compile!()) as ComposedHandler
-					)(ctx)
+					((route[index].composed = compile!()) as ComposedHandler)(
+						ctx
+					)
 
 		if (oldIndex !== undefined)
 			this.router.history[oldIndex] = Object.assign(
@@ -956,7 +958,7 @@ export default class Elysia<
 					method,
 					path,
 					composed: mainHandler,
-					compile: compile!,
+					compile,
 					handler: handle,
 					hooks
 				},
@@ -976,7 +978,7 @@ export default class Elysia<
 						method,
 						path,
 						composed: mainHandler,
-						compile: compile!,
+						compile,
 						handler: handle,
 						hooks
 					},
@@ -987,7 +989,9 @@ export default class Elysia<
 			)
 
 		const handler = {
-			handler: shouldPrecompile ? mainHandler : undefined,
+			handler: shouldPrecompile
+				? (route[index].composed as ComposedHandler)
+				: undefined,
 			compile() {
 				return (this.handler = compile!())
 			}
