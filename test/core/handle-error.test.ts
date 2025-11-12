@@ -515,4 +515,38 @@ describe('Handle Error', () => {
 		expect(await res.json()).toEqual({ error: 'non-error async' })
 		expect(res.status).toBe(418)
 	})
+
+	it('handle toResponse() that throws an error', async () => {
+		class BrokenError extends Error {
+			toResponse() {
+				throw new Error('toResponse failed')
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new BrokenError('original error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		expect(await res.text()).toBe('original error')
+	})
+
+	it('handle async toResponse() that throws an error', async () => {
+		class BrokenAsyncError extends Error {
+			async toResponse() {
+				throw new Error('async toResponse failed')
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new BrokenAsyncError('original error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		expect(await res.text()).toBe('original error')
+	})
 })

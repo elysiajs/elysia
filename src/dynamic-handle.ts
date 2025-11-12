@@ -686,13 +686,18 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 
 		// @ts-expect-error
 		if (typeof error?.toResponse === 'function' &&
-			error.constructor.name !== 'ValidationError' &&
-			error.constructor.name !== 'TransformDecodeError') {
-			// @ts-expect-error
-			let raw = error.toResponse()
-			if (typeof raw?.then === 'function') raw = await raw
-			if (raw instanceof Response) context.set.status = raw.status
-			context.response = raw
+			!(error instanceof ValidationError) &&
+			!(error instanceof TransformDecodeError)) {
+			try {
+				// @ts-expect-error
+				let raw = error.toResponse()
+				if (typeof raw?.then === 'function') raw = await raw
+				if (raw instanceof Response) context.set.status = raw.status
+				context.response = raw
+			} catch (toResponseError) {
+				// If toResponse() throws, fall through to normal error handling
+				// Don't set context.response so onError hooks will run
+			}
 		}
 
 		if (!context.response && app.event.error)

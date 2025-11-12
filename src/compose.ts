@@ -1,6 +1,6 @@
 import type { AnyElysia } from './index'
 
-import { Value } from '@sinclair/typebox/value'
+import { Value, TransformDecodeError } from '@sinclair/typebox/value'
 import {
 	Kind,
 	OptionalKind,
@@ -2520,6 +2520,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`mapResponse,` +
 		`ERROR_CODE,` +
 		`ElysiaCustomStatusResponse,` +
+		`ValidationError,` +
+		`TransformDecodeError,` +
 		allocateIf(`onError,`, app.event.error) +
 		allocateIf(`afterResponse,`, app.event.afterResponse) +
 		allocateIf(`trace,`, app.event.trace) +
@@ -2596,11 +2598,14 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		hasTrace || !!hooks.afterResponse?.length ? 'context.response = ' : ''
 
 	fnLiteral +=
-		`if(typeof error?.toResponse==='function'&&error.constructor.name!=="ValidationError"&&error.constructor.name!=="TransformDecodeError"){` +
+		`if(typeof error?.toResponse==='function'&&!(error instanceof ValidationError)&&!(error instanceof TransformDecodeError)){` +
+		`try{` +
 		`let raw=error.toResponse()\n` +
 		`if(typeof raw?.then==='function')raw=await raw\n` +
 		`if(raw instanceof Response)set.status=raw.status\n` +
 		`context.response=context.responseValue=raw\n` +
+		`}catch(toResponseError){\n` +
+		`}\n` +
 		`}\n`
 
 	if (app.event.error)
@@ -2657,7 +2662,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		}
 
 	fnLiteral +=
-		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){\n` +
+		`if(error instanceof ValidationError||error instanceof TransformDecodeError){\n` +
 		`if(error.error)error=error.error\n` +
 		`set.status=error.status??422\n` +
 		afterResponse() +
@@ -2714,6 +2719,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		mapResponse: app['~adapter'].handler.mapResponse,
 		ERROR_CODE,
 		ElysiaCustomStatusResponse,
+		ValidationError,
+		TransformDecodeError,
 		onError: app.event.error?.map(mapFn),
 		afterResponse: app.event.afterResponse?.map(mapFn),
 		trace: app.event.trace?.map(mapFn),
