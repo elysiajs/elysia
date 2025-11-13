@@ -337,4 +337,216 @@ describe('Handle Error', () => {
 		expect(await res.text()).toBe('a')
 		expect(res.status).toBe(500)
 	})
+
+	it('handle Error with toResponse() when returned', async () => {
+		class ErrorA extends Error {
+			toResponse() {
+				return Response.json({ error: 'hello' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/A', () => {
+			return new ErrorA()
+		})
+
+		const res = await app.handle(req('/A'))
+
+		expect(await res.json()).toEqual({ error: 'hello' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle Error with toResponse() when thrown', async () => {
+		class ErrorA extends Error {
+			toResponse() {
+				return Response.json({ error: 'hello' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/A', () => {
+			throw new ErrorA()
+		})
+
+		const res = await app.handle(req('/A'))
+
+		expect(await res.json()).toEqual({ error: 'hello' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle non-Error with toResponse() when returned', async () => {
+		class ErrorB {
+			toResponse() {
+				return Response.json({ error: 'hello' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/B', () => {
+			return new ErrorB()
+		})
+
+		const res = await app.handle(req('/B'))
+
+		expect(await res.json()).toEqual({ error: 'hello' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle non-Error with toResponse() when thrown', async () => {
+		class ErrorB {
+			toResponse() {
+				return Response.json({ error: 'hello' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/B', () => {
+			throw new ErrorB()
+		})
+
+		const res = await app.handle(req('/B'))
+
+		expect(await res.json()).toEqual({ error: 'hello' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle Error with toResponse() that includes custom headers', async () => {
+		class ErrorWithHeaders extends Error {
+			toResponse() {
+				return Response.json(
+					{ error: 'custom error' },
+					{
+						status: 418,
+						headers: {
+							'X-Custom-Header': 'custom-value',
+							'Content-Type': 'application/json; charset=utf-8'
+						}
+					}
+				)
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new ErrorWithHeaders()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'custom error' })
+		expect(res.status).toBe(418)
+		expect(res.headers.get('X-Custom-Header')).toBe('custom-value')
+	})
+
+	it('handle async toResponse() when thrown', async () => {
+		class AsyncError extends Error {
+			async toResponse() {
+				// Simulate async operation
+				await new Promise(resolve => setTimeout(resolve, 10))
+				return Response.json({ error: 'async error' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new AsyncError()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'async error' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle async toResponse() when returned', async () => {
+		class AsyncError extends Error {
+			async toResponse() {
+				// Simulate async operation
+				await new Promise(resolve => setTimeout(resolve, 10))
+				return Response.json({ error: 'async error' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			return new AsyncError()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'async error' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle async toResponse() with custom headers', async () => {
+		class AsyncErrorWithHeaders extends Error {
+			async toResponse() {
+				await new Promise(resolve => setTimeout(resolve, 10))
+				return Response.json(
+					{ error: 'async with headers' },
+					{
+						status: 419,
+						headers: {
+							'X-Async-Header': 'async-value'
+						}
+					}
+				)
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new AsyncErrorWithHeaders()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'async with headers' })
+		expect(res.status).toBe(419)
+		expect(res.headers.get('X-Async-Header')).toBe('async-value')
+	})
+
+	it('handle non-Error with async toResponse()', async () => {
+		class AsyncNonError {
+			async toResponse() {
+				await new Promise(resolve => setTimeout(resolve, 10))
+				return Response.json({ error: 'non-error async' }, { status: 418 })
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new AsyncNonError()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(await res.json()).toEqual({ error: 'non-error async' })
+		expect(res.status).toBe(418)
+	})
+
+	it('handle toResponse() that throws an error', async () => {
+		class BrokenError extends Error {
+			toResponse() {
+				throw new Error('toResponse failed')
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new BrokenError('original error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		expect(await res.text()).toBe('original error')
+	})
+
+	it('handle async toResponse() that throws an error', async () => {
+		class BrokenAsyncError extends Error {
+			async toResponse() {
+				throw new Error('async toResponse failed')
+			}
+		}
+
+		const app = new Elysia().get('/', () => {
+			throw new BrokenAsyncError('original error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		expect(await res.text()).toBe('original error')
+	})
 })

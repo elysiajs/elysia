@@ -684,7 +684,23 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
-		if (app.event.error)
+		// @ts-expect-error
+		if (typeof error?.toResponse === 'function' &&
+			!(error instanceof ValidationError) &&
+			!(error instanceof TransformDecodeError)) {
+			try {
+				// @ts-expect-error
+				let raw = error.toResponse()
+				if (typeof raw?.then === 'function') raw = await raw
+				if (raw instanceof Response) context.set.status = raw.status
+				context.response = raw
+			} catch (toResponseError) {
+				// If toResponse() throws, fall through to normal error handling
+				// Don't set context.response so onError hooks will run
+			}
+		}
+
+		if (!context.response && app.event.error)
 			for (let i = 0; i < app.event.error.length; i++) {
 				const hook = app.event.error[i]
 				let response = hook.fn(errorContext as any)
@@ -695,6 +711,19 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 						context.set
 					))
 			}
+
+		if (context.response) {
+			if (app.event.mapResponse)
+				for (let i = 0; i < app.event.mapResponse.length; i++) {
+					const hook = app.event.mapResponse[i]
+					let response = hook.fn(errorContext as any)
+					if (response instanceof Promise) response = await response
+					if (response !== undefined && response !== null)
+						context.response = response
+				}
+
+			return mapResponse(context.response, context.set)
+		}
 
 		return new Response(
 			typeof error.cause === 'string' ? error.cause : error.message,

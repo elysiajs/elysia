@@ -526,8 +526,24 @@ export const mapCompactResponse = (
 	}
 }
 
-export const errorToResponse = (error: Error, set?: Context['set']) =>
-	new Response(
+export const errorToResponse = (error: Error, set?: Context['set']) => {
+	// @ts-expect-error
+	if (typeof error?.toResponse === 'function') {
+		// @ts-expect-error
+		const raw = error.toResponse()
+		const targetSet =
+			set ?? ({ headers: {}, status: 200, redirect: '' } as Context['set'])
+		const apply = (resolved: unknown) => {
+			if (resolved instanceof Response) targetSet.status = resolved.status
+			return mapResponse(resolved, targetSet)
+		}
+
+		return typeof raw?.then === 'function'
+			? raw.then(apply)
+			: apply(raw)
+	}
+
+	return new Response(
 		JSON.stringify({
 			name: error?.name,
 			message: error?.message,
@@ -539,6 +555,7 @@ export const errorToResponse = (error: Error, set?: Context['set']) =>
 			headers: set?.headers as any
 		}
 	)
+}
 
 export const createStaticHandler = (
 	handle: unknown,

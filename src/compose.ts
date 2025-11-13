@@ -1,6 +1,6 @@
 import type { AnyElysia } from './index'
 
-import { Value } from '@sinclair/typebox/value'
+import { Value, TransformDecodeError } from '@sinclair/typebox/value'
 import {
 	Kind,
 	OptionalKind,
@@ -2512,6 +2512,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`mapResponse,` +
 		`ERROR_CODE,` +
 		`ElysiaCustomStatusResponse,` +
+		`ValidationError,` +
+		`TransformDecodeError,` +
 		allocateIf(`onError,`, app.event.error) +
 		allocateIf(`afterResponse,`, app.event.afterResponse) +
 		allocateIf(`trace,`, app.event.trace) +
@@ -2521,11 +2523,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		adapterVariables +
 		`}=inject\n`
 
-	fnLiteral += `return ${
-		app.event.error?.find(isAsync) || app.event.mapResponse?.find(isAsync)
-			? 'async '
-			: ''
-	}function(context,error,skipGlobal){`
+	// Always make error handler async since toResponse() may return promises
+	fnLiteral += `return async function(context,error,skipGlobal){`
 
 	fnLiteral += ''
 
@@ -2590,6 +2589,17 @@ export const composeErrorHandler = (app: AnyElysia) => {
 	const saveResponse =
 		hasTrace || !!hooks.afterResponse?.length ? 'context.response = ' : ''
 
+	fnLiteral +=
+		`if(typeof error?.toResponse==='function'&&!(error instanceof ValidationError)&&!(error instanceof TransformDecodeError)){` +
+		`try{` +
+		`let raw=error.toResponse()\n` +
+		`if(typeof raw?.then==='function')raw=await raw\n` +
+		`if(raw instanceof Response)set.status=raw.status\n` +
+		`context.response=context.responseValue=raw\n` +
+		`}catch(toResponseError){\n` +
+		`}\n` +
+		`}\n`
+
 	if (app.event.error)
 		for (let i = 0; i < app.event.error.length; i++) {
 			const handler = app.event.error[i]
@@ -2598,7 +2608,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 				isAsync(handler) ? 'await ' : ''
 			}onError[${i}](context)\n`
 
-			fnLiteral += 'if(skipGlobal!==true){'
+			fnLiteral += 'if(skipGlobal!==true&&!context.response){'
 
 			if (hasReturn(handler)) {
 				fnLiteral +=
@@ -2644,7 +2654,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		}
 
 	fnLiteral +=
-		`if(error.constructor.name==="ValidationError"||error.constructor.name==="TransformDecodeError"){\n` +
+		`if(error instanceof ValidationError||error instanceof TransformDecodeError){\n` +
 		`if(error.error)error=error.error\n` +
 		`set.status=error.status??422\n` +
 		afterResponse() +
@@ -2652,9 +2662,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		`\n}\n`
 
 	fnLiteral +=
-		`if(error instanceof Error){` +
+		`if(!context.response&&error instanceof Error){` +
 		afterResponse() +
-		`\nif(typeof error.toResponse==='function')return context.response=context.responseValue=error.toResponse()\n` +
 		adapter.unknownError +
 		`\n}`
 
@@ -2702,6 +2711,8 @@ export const composeErrorHandler = (app: AnyElysia) => {
 		mapResponse: app['~adapter'].handler.mapResponse,
 		ERROR_CODE,
 		ElysiaCustomStatusResponse,
+		ValidationError,
+		TransformDecodeError,
 		onError: app.event.error?.map(mapFn),
 		afterResponse: app.event.afterResponse?.map(mapFn),
 		trace: app.event.trace?.map(mapFn),
