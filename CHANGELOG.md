@@ -1,4 +1,4 @@
-# 1.4.16 - 5 Nov 2025
+# 1.4.16 - 13 Nov 2025
 Improvement:
 - ValidationError: add `messageValue` as an alias of `errorValue`
 - ValidationError.detail now accept optional 2nd parameter `allowUnsafeValidatorDetails`
@@ -7,6 +7,7 @@ Improvement:
 - merge multiple macro resolve response
 
 Bug fix:
+- [#1543](https://github.com/elysiajs/elysia/pull/1524) respect toResponse() method on Error classes
 - [#1537](https://github.com/elysiajs/elysia/issues/1537) websocket: ping/pong not being called
 - [#1536](https://github.com/elysiajs/elysia/pull/1536) export ExtractErrorFromHandle
 - [#1535](https://github.com/elysiajs/elysia/pull/1535) skip response validation for generators and streams
