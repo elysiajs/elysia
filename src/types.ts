@@ -966,7 +966,7 @@ type ExtractOnlyResponseFromMacro<A> =
 				? IsNever<A> extends true
 					? {}
 					: {
-							return: A extends ElysiaCustomStatusResponse<
+							return: UnionToIntersect< A extends ElysiaCustomStatusResponse<
 								any,
 								infer Value,
 								infer Status
@@ -977,7 +977,7 @@ type ExtractOnlyResponseFromMacro<A> =
 												InvertedStatusMap[Status]
 											: Value
 									}
-								: {}
+								: {}>
 						}
 				: {}
 

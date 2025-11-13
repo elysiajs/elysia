@@ -2192,3 +2192,91 @@ import { Prettify } from '../../../src/types'
 			}
 		})
 }
+
+// intersect multiple resolve macro response
+{
+	const app = new Elysia()
+		.macro({
+			multiple: {
+				resolve({ status }) {
+					if (Math.random() > 0.5) return status(401)
+					return status(403)
+				}
+			}
+		})
+		.get('/multiple', () => 'Ok', { multiple: true })
+
+	expectTypeOf<
+		(typeof app)['~Routes']['multiple']['get']['response']
+	>().toEqualTypeOf<{
+		200: string
+		401: 'Unauthorized'
+		403: 'Forbidden'
+	}>()
+}
+
+// intersect multiple resolve macro response
+{
+	// intersect multiple resolve macro response
+	{
+		const app = new Elysia()
+			.macro({
+				multiple: {
+					resolve({ status }) {
+						if (Math.random() > 0.5) return status(401)
+						return status(403)
+					}
+				}
+			})
+			.get('/multiple', () => 'Ok', { multiple: true })
+
+		expectTypeOf<
+			(typeof app)['~Routes']['multiple']['get']['response']
+		>().toEqualTypeOf<{
+			200: string
+			401: 'Unauthorized'
+			403: 'Forbidden'
+		}>()
+
+		const app = new Elysia()
+			.macro('multiple', {
+				resolve({ status }) {
+					if (Math.random() > 0.5) return status(401)
+					return status(403)
+				}
+			})
+			.get('/multiple', () => 'Ok', { multiple: true })
+
+		expectTypeOf<
+			(typeof app)['~Routes']['multiple']['get']['response']
+		>().toEqualTypeOf<{
+			200: string
+			401: 'Unauthorized'
+			403: 'Forbidden'
+		}>()
+	}
+	const app = new Elysia()
+		.macro('multiple', {
+			resolve({ status }) {
+				if (Math.random() > 0.5) return status(401)
+				return status(403)
+			}
+		})
+		.get('/multiple', () => 'Ok', { multiple: true })
+
+	expectTypeOf<
+		(typeof app)['~Routes']['multiple']['get']['response']
+	>().toEqualTypeOf<{
+		200: string
+		401: 'Unauthorized'
+		403: 'Forbidden'
+	}>()
+
+	expectTypeOf<
+		(typeof app)['~Routes']['multiple']['get']['response']
+	>().toEqualTypeOf<{
+		200: string
+		401: 'Unauthorized'
+		403: 'Forbidden'
+	}>()
+}

@@ -39,7 +39,7 @@ const emptyHttpStatus = {
 	308: undefined
 } as const
 
-export type SelectiveStatus<Res> = <
+export type SelectiveStatus<in out Res> = <
 	const Code extends
 		| keyof Res
 		| InvertedStatusMap[Extract<keyof InvertedStatusMap, keyof Res>]
@@ -91,7 +91,7 @@ export const status = <
 >(
 	code: Code,
 	response?: T
-) => new ElysiaCustomStatusResponse<Code, T>(code, response as any)
+) => new ElysiaCustomStatusResponse<Code, T>(code, response as T)
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'

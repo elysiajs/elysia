@@ -1,19 +1,16 @@
-import { InternalSymbolName } from 'typescript'
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, status, t } from '../src'
 
-const app = new Elysia().get('/', () => 'ok').compile()
-for (const route of app.routes) route.compile()
+status(401)
 
-console.log(app.fetch.toString())
-console.log(app.routes[0].compile().toString())
+const app = new Elysia()
+	.macro({
+		multiple: {
+			resolve({ status }) {
+				if (Math.random() > 0.5) return status(401)
+				return status(403)
+			}
+		}
+	})
+	.get('/multiple', () => 'Ok', { multiple: true })
 
-// Bun.sleepSync(7)
-// console.log('Slept')
-
-const res = app
-	.handle(req('/'))
-	.then((x) => x.text())
-	.then(console.log)
-
-// process.exit(0)
+app['~Routes']['multiple']['get']['response']
