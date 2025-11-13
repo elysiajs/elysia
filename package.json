@@ -1,7 +1,7 @@
 {
 	"name": "elysia",
 	"description": "Ergonomic Framework for Human",
-	"version": "1.4.15",
+	"version": "1.4.16",
 	"author": {
 		"name": "saltyAom",
 		"url": "https://github.com/SaltyAom",
@@ -178,7 +178,7 @@
 	],
 	"license": "MIT",
 	"scripts": {
-		"test": "bun run test:functionality && bun run test:types && bun run test:node && bun run test:cf",
+		"test": "bun run test:functionality && bun run test:types && bun run test:node",
 		"test:functionality": "bun test && bun run test:imports",
 		"test:imports": "bun run test/type-system/import.ts",
 		"test:types": "tsc --project tsconfig.test.json",
@@ -191,7 +191,7 @@
 	},
 	"dependencies": {
 		"cookie": "^1.0.2",
-		"exact-mirror": "0.2.2",
+		"exact-mirror": "0.2.3",
 		"fast-decode-uri-component": "^1.0.1",
 		"memoirist": "^0.4.0"
 	},

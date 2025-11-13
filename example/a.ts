@@ -1,21 +1,22 @@
-import Elysia, { t } from '../src'
+import { Elysia, status, t } from '../src'
 
-new Elysia()
-	.post(
-		'/mirror',
-		async ({ status, body }) => status(201, { success: false }),
-		{
-			body: t.Object({
-				code: t.String()
-			}),
-			response: {
-				200: t.Object({
-					success: t.Literal(true)
-				}),
-				201: t.Object({
-					success: t.Literal(false)
-				})
+const auth = (app: Elysia) =>
+	app.derive(({ headers, status }) => {
+		try {
+			const token = headers['authorization']?.replace('Bearer ', '') || ''
+			return {
+				isAuthenticated: true
 			}
+		} catch (e) {
+			const error = e as Error
+			console.error('Authentication error:', error.message)
+			return status(401, 'Unauthorized')
 		}
-	)
-	.listen(3333)
+	})
+
+const app = new Elysia()
+	.use(auth)
+	.get('/', ({ isAuthenticated }) => isAuthenticated)
+	.listen(5000)
+
+app['~Routes']

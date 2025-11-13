@@ -43,6 +43,9 @@ jobs:
       - name: Test
         run: bun run test
 
+      - name: Test
+        run: bun run test:cf
+
       - name: 'Publish'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

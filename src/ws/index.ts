@@ -27,6 +27,12 @@ export const websocket: WebSocketHandler<any> = {
 	},
 	close(ws, code, reason) {
 		ws.data.close?.(ws, code, reason)
+	},
+	ping(ws) {
+		ws.data.ping?.(ws)
+	},
+	pong(ws) {
+		ws.data.pong?.(ws)
 	}
 }
 

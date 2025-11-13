@@ -909,11 +909,8 @@ export default class Elysia<
 
 		addResponsePath(path)
 
-		let _compiled: ComposedHandler
 		const compile = () => {
-			if (_compiled) return _compiled
-
-			return (_compiled = composeHandler({
+			const compiled = composeHandler({
 				app: this,
 				path,
 				method,
@@ -926,7 +923,12 @@ export default class Elysia<
 						: handle,
 				allowMeta,
 				inference: this.inference
-			}))
+			})
+
+			if (this.router.history[index])
+				this.router.history[index].composed = compiled
+
+			return compiled
 		}
 
 		let oldIndex: number | undefined
@@ -941,14 +943,14 @@ export default class Elysia<
 		else this.routeTree[`${method}_${path}`] = this.router.history.length
 
 		const index = oldIndex ?? this.router.history.length
+		const route = this.router.history
 
 		const mainHandler = shouldPrecompile
 			? compile()
 			: (ctx: Context) =>
-					(
-						(this.router.history[index].composed =
-							compile!()) as ComposedHandler
-					)(ctx)
+					((route[index].composed = compile!()) as ComposedHandler)(
+						ctx
+					)
 
 		if (oldIndex !== undefined)
 			this.router.history[oldIndex] = Object.assign(
@@ -956,7 +958,7 @@ export default class Elysia<
 					method,
 					path,
 					composed: mainHandler,
-					compile: compile!,
+					compile,
 					handler: handle,
 					hooks
 				},
@@ -976,7 +978,7 @@ export default class Elysia<
 						method,
 						path,
 						composed: mainHandler,
-						compile: compile!,
+						compile,
 						handler: handle,
 						hooks
 					},
@@ -987,7 +989,9 @@ export default class Elysia<
 			)
 
 		const handler = {
-			handler: shouldPrecompile ? mainHandler : undefined,
+			handler: shouldPrecompile
+				? (route[index].composed as ComposedHandler)
+				: undefined,
 			compile() {
 				return (this.handler = compile!())
 			}
@@ -5235,6 +5239,10 @@ export default class Elysia<
 				>,
 		const Property extends MaybeValueOrVoidFunction<
 			MacroProperty<
+				Metadata['macro'] &
+					InputSchema<keyof Definitions['typebox'] & string> & {
+						[name in Name]?: boolean
+					},
 				Schema & MacroContext,
 				Singleton & {
 					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
@@ -5277,6 +5285,8 @@ export default class Elysia<
 		const Input extends Metadata['macro'] &
 			InputSchema<keyof Definitions['typebox'] & string>,
 		const NewMacro extends Macro<
+			Metadata['macro'] &
+				InputSchema<keyof Definitions['typebox'] & string>,
 			Input,
 			IntersectIfObjectSchema<
 				MergeSchema<
@@ -5321,6 +5331,7 @@ export default class Elysia<
 		const NewMacro extends MaybeFunction<
 			Macro<
 				Input,
+				// @ts-ignore trust me bro
 				IntersectIfObjectSchema<
 					MergeSchema<
 						UnwrapRoute<Input, Definitions['typebox'], BasePath>,
@@ -5413,6 +5424,13 @@ export default class Elysia<
 						k as keyof RouteSchema,
 						value
 					)
+					delete localHook[key]
+					continue
+				}
+
+				if (k === 'introspect') {
+					value?.(localHook)
+
 					delete localHook[key]
 					continue
 				}

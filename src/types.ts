@@ -966,7 +966,7 @@ type ExtractOnlyResponseFromMacro<A> =
 				? IsNever<A> extends true
 					? {}
 					: {
-							return: A extends ElysiaCustomStatusResponse<
+							return: UnionToIntersect< A extends ElysiaCustomStatusResponse<
 								any,
 								infer Value,
 								infer Status
@@ -977,7 +977,7 @@ type ExtractOnlyResponseFromMacro<A> =
 												InvertedStatusMap[Status]
 											: Value
 									}
-								: {}
+								: {}>
 						}
 				: {}
 
@@ -1944,6 +1944,7 @@ export type BaseMacro = Record<
 export type MaybeValueOrVoidFunction<T> = T | ((...a: any) => void | T)
 
 export interface MacroProperty<
+	in out Macro extends BaseMacro = {},
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
 		decorator: {}
@@ -1966,9 +1967,16 @@ export interface MacroProperty<
 	afterResponse?: MaybeArray<AfterResponseHandler<TypedRoute, Singleton>>
 	resolve?: MaybeArray<ResolveHandler<TypedRoute, Singleton>>
 	detail?: DocumentDecoration
+	/**
+	 * Introspect hook option for documentation generation or analysis
+	 *
+	 * @param option
+	 */
+	introspect?(option: Prettify<Macro>): unknown
 }
 
 export interface Macro<
+	in out Macro extends BaseMacro = {},
 	in out Input extends BaseMacro = {},
 	in out TypedRoute extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -1980,7 +1988,7 @@ export interface Macro<
 	in out Errors extends Record<string, Error> = {}
 > {
 	[K: keyof any]: MaybeValueOrVoidFunction<
-		Input & MacroProperty<TypedRoute, Singleton, Errors>
+		Input & MacroProperty<Macro, TypedRoute, Singleton, Errors>
 	>
 }
 

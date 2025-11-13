@@ -39,7 +39,7 @@ const emptyHttpStatus = {
 	308: undefined
 } as const
 
-export type SelectiveStatus<Res> = <
+export type SelectiveStatus<in out Res> = <
 	const Code extends
 		| keyof Res
 		| InvertedStatusMap[Extract<keyof InvertedStatusMap, keyof Res>]
@@ -91,7 +91,7 @@ export const status = <
 >(
 	code: Code,
 	response?: T
-) => new ElysiaCustomStatusResponse<Code, T>(code, response as any)
+) => new ElysiaCustomStatusResponse<Code, T>(code, response as T)
 
 export class InternalServerError extends Error {
 	code = 'INTERNAL_SERVER_ERROR'
@@ -153,9 +153,15 @@ export const mapValueError = (error: ValueError | undefined): MapValueError => {
 			summary: undefined
 		}
 
-	const { message, path, value, type } = error
+	let { message, path, value, type } = error
 
-	const property = path.slice(1).replaceAll('/', '.')
+	if (Array.isArray(path)) path = path[0]
+
+	const property =
+		typeof path === 'string'
+			? path.slice(1).replaceAll('/', '.')
+			: 'unknown'
+
 	const isRoot = path === ''
 
 	switch (type) {
@@ -271,8 +277,29 @@ export class ValidationError extends Error {
 	code = 'VALIDATION'
 	status = 422
 
+	/**
+	 * An actual value of `message`
+	 *
+	 * Since `message` is string
+	 * use this instead of message
+	 */
 	valueError?: ValueError
+
+	/**
+	 * Alias of `valueError`
+	 */
+	get messageValue() {
+		return this.valueError
+	}
+
+	/**
+	 * Expected value of the schema
+	 */
 	expected?: unknown
+
+	/**
+	 * Custom error if provided
+	 */
 	customError?: string
 
 	constructor(
@@ -282,6 +309,9 @@ export class ValidationError extends Error {
 			| TypeCheck<any>
 			| ElysiaTypeCheck<any>
 			| StandardSchemaV1Like,
+		/**
+		 * Input value
+		 */
 		public value: unknown,
 		private allowUnsafeValidationDetails = false,
 		errors?: ValueErrorIterator
@@ -535,15 +565,17 @@ export class ValidationError extends Error {
 	 *		})
 	 * ```
 	 */
-	detail(message: unknown) {
+	detail(
+		message: unknown,
+		allowUnsafeValidatorDetails = this.allowUnsafeValidationDetails
+	) {
 		if (!this.customError) return this.message
 
-		const validator = this.validator
 		const value = this.value
 		const expected = this.expected
 		const errors = this.all
 
-		return isProduction && !this.allowUnsafeValidationDetails
+		return isProduction && !allowUnsafeValidatorDetails
 			? {
 					type: 'validation',
 					on: this.type,
