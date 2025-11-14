@@ -560,4 +560,122 @@ describe('Stream', () => {
 		expect(result).toEqual(['Elysia', 'Eden'].map((x) => `data: ${x}\n\n`))
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 	})
+
+
+	it('continue stream when autoCancellation is disabled', async () => {
+		const { createStreamHandler } = await import('../../src/adapter/utils')
+		const sideEffects: string[] = []
+
+		const mockMapResponse = (value: any) =>
+			new Response(value)
+		const mockMapCompactResponse = (value: any) =>
+			new Response(value)
+
+		const streamHandler = createStreamHandler({
+			mapResponse: mockMapResponse,
+			mapCompactResponse: mockMapCompactResponse,
+			streamOptions: { autoCancellation: false }
+		})
+
+		async function* testGenerator() {
+			sideEffects.push('a')
+			yield 'a'
+			await Bun.sleep(20)
+
+			sideEffects.push('b')
+			yield 'b'
+			await Bun.sleep(20)
+
+			sideEffects.push('c')
+			yield 'c'
+		}
+
+		const controller = new AbortController()
+		const request = new Request('http://e.ly', {
+			signal: controller.signal
+		})
+
+		setTimeout(() => {
+			controller.abort()
+		}, 15)
+
+		const response = await streamHandler(testGenerator(), undefined, request)
+		const reader = response.body?.getReader()
+
+		if (!reader) throw new Error('No reader')
+
+		const results: string[] = []
+		try {
+			while (true) {
+				const { done, value } = await reader.read()
+				if (done) break
+				results.push(new TextDecoder().decode(value))
+			}
+		} catch (e) {
+			// Expected to error when abort happens
+		}
+
+		await Bun.sleep(100)
+
+		expect(sideEffects).toEqual(['a', 'b', 'c'])
+	})
+
+	it('stop stream when autoCancellation is enabled (default)', async () => {
+		const { createStreamHandler } = await import('../../src/adapter/utils')
+		const sideEffects: string[] = []
+
+		const mockMapResponse = (value: any) =>
+			new Response(value)
+		const mockMapCompactResponse = (value: any) =>
+			new Response(value)
+
+		const streamHandler = createStreamHandler({
+			mapResponse: mockMapResponse,
+			mapCompactResponse: mockMapCompactResponse,
+			streamOptions: { autoCancellation: true }
+		})
+
+		async function* testGenerator() {
+			sideEffects.push('a')
+			yield 'a'
+			await Bun.sleep(20)
+
+			sideEffects.push('b')
+			yield 'b'
+			await Bun.sleep(20)
+
+			sideEffects.push('c')
+			yield 'c'
+		}
+
+		const controller = new AbortController()
+		const request = new Request('http://e.ly', {
+			signal: controller.signal
+		})
+
+		setTimeout(() => {
+			controller.abort()
+		}, 15)
+
+		const response = await streamHandler(testGenerator(), undefined, request)
+		const reader = response.body?.getReader()
+
+		if (!reader) throw new Error('No reader')
+
+		const results: string[] = []
+		try {
+			while (true) {
+				const { done, value } = await reader.read()
+				if (done) break
+				results.push(new TextDecoder().decode(value))
+			}
+		} catch (e) {
+			// Expected to error when abort happens
+		}
+
+		await Bun.sleep(100)
+
+		expect(sideEffects).toHaveLength(2)
+		expect(sideEffects).toEqual(['a', 'b'])
+	})
 })
