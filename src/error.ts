@@ -51,8 +51,16 @@ export type SelectiveStatus<in out Res> = <
 			? // @ts-ignore StatusMap[Code] always valid because Code generic check
 				Res[StatusMap[Code]]
 			: never
+) => ElysiaCustomStatusResponse<
 	// @ts-ignore trust me bro
-) => ElysiaCustomStatusResponse<Code, T>
+	Code,
+	Code extends keyof Res
+		? Res[Code]
+		: Code extends keyof StatusMap
+			? // @ts-ignore StatusMap[Code] always valid because Code generic check
+				Res[StatusMap[Code]]
+			: never
+>
 
 export class ElysiaCustomStatusResponse<
 	const in out Code extends number | keyof StatusMap,
