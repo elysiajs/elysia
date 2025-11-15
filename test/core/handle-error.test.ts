@@ -643,4 +643,17 @@ describe('Handle Error', () => {
 		expect(setCookie).toContain('session=session-123')
 		expect(setCookie).toContain('user=user-456')
 	})
+
+	it('send set-cookie header when error has custom headers', async () => {
+		const app = new Elysia().get('/', ({ cookie, set }) => {
+			cookie.session.value = 'test-session-id'
+			set.headers['x-custom'] = 'value'
+			throw new Error('test error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+		expect(res.headers.get('x-custom')).toBe('value')
+	})
 })
