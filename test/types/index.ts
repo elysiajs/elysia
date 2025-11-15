@@ -2878,7 +2878,7 @@ type a = keyof {}
 {
 	const app = new Elysia().get(
 		'/',
-		() => ({ message: 'Hello Elysia' }),
+		() => ({ message: 'Hello Elysia' as const }),
 		{
 			response: {
 				200: t.Object({
@@ -2902,7 +2902,7 @@ type a = keyof {}
 		'/test',
 		({ status }) => {
 			if (Math.random() > 0.5) {
-				return status(200, { message: 'Hello Elysia' })
+				return status(200, { message: 'Hello Elysia' as const })
 			}
 			return status(422, { error: 'Validation error' })
 		},
