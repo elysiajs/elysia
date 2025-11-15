@@ -385,7 +385,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							_header
 						)
 				} else if (validator.headers?.Decode)
-					// @ts-expect-error
+					// @ts-ignore
 					context.headers = validator.headers.Decode(context.headers)
 
 				if (paramsValidator?.Check(context.params) === false) {
@@ -395,7 +395,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 						context.params
 					)
 				} else if (validator.params?.Decode)
-					// @ts-expect-error
+					// @ts-ignore
 					context.params = validator.params.Decode(context.params)
 
 				if (validator.query?.schema) {
@@ -682,8 +682,8 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
-		// @ts-expect-error
 		if (
+			// @ts-expect-error
 			typeof error?.toResponse === 'function' &&
 			!(error instanceof ValidationError) &&
 			!(error instanceof TransformDecodeError)
