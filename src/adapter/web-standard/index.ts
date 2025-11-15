@@ -151,21 +151,11 @@ export const WebStandardAdapter: ElysiaAdapter = {
 	composeError: {
 		mapResponseContext: '',
 		validationError:
-			`return new Response(` +
-			`error.message,` +
-			`{` +
-			`headers:Object.assign(` +
-			`{'content-type':'application/json'},` +
-			`set.headers` +
-			`),` +
-			`status:set.status` +
-			`}` +
-			`)`,
+			`set.headers['content-type']='application/json';` +
+			`return mapResponse(error.message,set)`,
 		unknownError:
-			`return new Response(` +
-			`error.message,` +
-			`{headers:set.headers,status:error.status??set.status??500}` +
-			`)`
+			`set.status=error.status??set.status??500;` +
+			`return mapResponse(error.message,set)`
 	},
 	listen() {
 		return () => {

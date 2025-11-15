@@ -1,25 +1,19 @@
-import type { AnyElysia, CookieOptions } from './index'
-
 import { TransformDecodeError } from '@sinclair/typebox/value'
-import { TypeCheck } from './type-system'
-
 import type { Context } from './context'
-import type { ElysiaTypeCheck } from './schema'
-
+import { parseCookie } from './cookies'
 import {
 	ElysiaCustomStatusResponse,
-	ElysiaErrors,
-	status,
+	type ElysiaErrors,
 	NotFoundError,
+	status,
 	ValidationError
 } from './error'
-
+import type { AnyElysia, CookieOptions } from './index'
 import { parseQuery } from './parse-query'
-
-import { redirect, signCookie, StatusMap } from './utils'
-import { parseCookie } from './cookies'
-
+import type { ElysiaTypeCheck } from './schema'
+import type { TypeCheck } from './type-system'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
+import { redirect, StatusMap, signCookie } from './utils'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -51,7 +45,7 @@ const injectDefaultValues = (
 export const createDynamicHandler = (app: AnyElysia) => {
 	const { mapResponse, mapEarlyResponse } = app['~adapter'].handler
 
-	// @ts-ignore
+	// @ts-expect-error
 	const defaultHeader = app.setHeaders
 
 	return async (request: Request): Promise<Response> => {
@@ -108,7 +102,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				app.router.dynamic.find('ALL', path)
 
 			if (!handler) {
-				// @ts-ignore
+				// @ts-expect-error
 				context.query =
 					qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
@@ -137,7 +131,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							body = await request.arrayBuffer()
 							break
 
-						case 'multipart/form-data':
+						case 'multipart/form-data': {
 							body = {}
 
 							const form = await request.formData()
@@ -150,6 +144,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							}
 
 							break
+						}
 					}
 				} else {
 					let contentType
@@ -193,7 +188,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 											break
 
 										case 'formdata':
-										case 'multipart/form-data':
+										case 'multipart/form-data': {
 											body = {}
 
 											const form =
@@ -208,8 +203,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 											}
 
 											break
+										}
 
-										default:
+										default: {
 											const parser = app['~parser'][hook]
 											if (parser) {
 												let temp = parser(
@@ -225,6 +221,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 												}
 											}
 											break
+										}
 									}
 								else {
 									let temp = hook(context as any, contentType)
@@ -260,7 +257,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 									body = await request.arrayBuffer()
 									break
 
-								case 'multipart/form-data':
+								case 'multipart/form-data': {
 									body = {}
 
 									const form = await request.formData()
@@ -274,6 +271,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 									}
 
 									break
+								}
 							}
 						}
 					}
@@ -284,7 +282,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			context.body = body
 			context.params = handler?.params || undefined
 
-			// @ts-ignore
+			// @ts-expect-error
 			context.query = qi === -1 ? {} : parseQuery(url.substring(qi + 1))
 
 			context.headers = {}
@@ -294,43 +292,43 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			const cookieMeta = {
 				domain:
 					app.config.cookie?.domain ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.domain,
 				expires:
 					app.config.cookie?.expires ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.expires,
 				httpOnly:
 					app.config.cookie?.httpOnly ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.httpOnly,
 				maxAge:
 					app.config.cookie?.maxAge ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.maxAge,
-				// @ts-ignore
+				// @ts-expect-error
 				path: app.config.cookie?.path ?? validator?.cookie?.config.path,
 				priority:
 					app.config.cookie?.priority ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.priority,
 				partitioned:
 					app.config.cookie?.partitioned ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.partitioned,
 				sameSite:
 					app.config.cookie?.sameSite ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.sameSite,
 				secure:
 					app.config.cookie?.secure ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.secure,
 				secrets:
 					app.config.cookie?.secrets ??
-					// @ts-ignore
+					// @ts-expect-error
 					validator?.cookie?.config.secrets,
-				// @ts-ignore
+				// @ts-expect-error
 				sign: app.config.cookie?.sign ?? validator?.cookie?.config.sign
 			} as CookieOptions & {
 				sign?: true | string | string[]
@@ -363,7 +361,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 					if (response instanceof Promise) response = await response
 
-					// @ts-ignore jusut in case
+					// @ts-expect-error just in case
 					if (response instanceof ElysiaCustomStatusResponse) {
 						const result = mapEarlyResponse(response, context.set)
 						if (result)
@@ -415,7 +413,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							typeof context.query[property] === 'string' &&
 							context.query[property]
 						) {
-							// @ts-ignore
+							// @ts-expect-error
 							context.query[property] =
 								context.query[property].split(',')
 						}
@@ -609,7 +607,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							responseValidator.Clean(response)
 
 					const result = mapEarlyResponse(response, context.set)
-					// @ts-ignore
+					// @ts-expect-error
 					if (result !== undefined) return (context.response = result)
 				}
 			}
@@ -684,10 +682,12 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 		const errorContext = Object.assign(context, { error, code: error.code })
 		errorContext.set = context.set
 
-		// @ts-expect-error
-		if (typeof error?.toResponse === 'function' &&
+		if (
+			// @ts-expect-error
+			typeof error?.toResponse === 'function' &&
 			!(error instanceof ValidationError) &&
-			!(error instanceof TransformDecodeError)) {
+			!(error instanceof TransformDecodeError)
+		) {
 			try {
 				// @ts-expect-error
 				let raw = error.toResponse()
@@ -725,12 +725,10 @@ export const createDynamicErrorHandler = (app: AnyElysia) => {
 			return mapResponse(context.response, context.set)
 		}
 
-		return new Response(
+		context.set.status = error.status ?? 500
+		return mapResponse(
 			typeof error.cause === 'string' ? error.cause : error.message,
-			{
-				headers: context.set.headers as any,
-				status: error.status ?? 500
-			}
+			context.set
 		)
 	}
 }
