@@ -361,7 +361,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 					if (response instanceof Promise) response = await response
 
-					// @ts-expect-error jusut in case
+					// @ts-expect-error just in case
 					if (response instanceof ElysiaCustomStatusResponse) {
 						const result = mapEarlyResponse(response, context.set)
 						if (result)
