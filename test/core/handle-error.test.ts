@@ -549,4 +549,98 @@ describe('Handle Error', () => {
 		expect(res.status).toBe(500)
 		expect(await res.text()).toBe('original error')
 	})
+
+	it('send set-cookie header when error is thrown', async () => {
+		const app = new Elysia().get('/', ({ cookie }) => {
+			cookie.session.value = 'test-session-id'
+			throw new Error('test error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+	})
+
+	it('send set-cookie header when response validation error occurs', async () => {
+		const app = new Elysia().get('/', ({ cookie }) => {
+			cookie.session.value = 'test-session-id'
+			return 'invalid response'
+		}, {
+			response: t.Number()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(422)
+		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+	})
+
+	it('send set-cookie header when error is thrown with onError hook', async () => {
+		const app = new Elysia()
+			.onError(({ error }) => {
+				return error.message
+			})
+			.get('/', ({ cookie }) => {
+				cookie.session.value = 'test-session-id'
+				throw new Error('custom error')
+			})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		expect(await res.text()).toBe('custom error')
+		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+	})
+
+	it('send set-cookie header when NotFoundError is thrown', async () => {
+		const app = new Elysia().get('/', ({ cookie }) => {
+			cookie.session.value = 'test-session-id'
+			throw new NotFoundError()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(404)
+		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+	})
+
+	it('send set-cookie header when InternalServerError is thrown', async () => {
+		const app = new Elysia().get('/', ({ cookie }) => {
+			cookie.session.value = 'test-session-id'
+			throw new InternalServerError()
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+	})
+
+	it('send set-cookie header in AOT mode when error is thrown', async () => {
+		const app = new Elysia({ aot: true }).get('/', ({ cookie }) => {
+			cookie.session.value = 'test-session-id'
+			throw new Error('test error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
+	})
+
+	it('preserve multiple cookies when error is thrown', async () => {
+		const app = new Elysia().get('/', ({ cookie }) => {
+			cookie.session.value = 'session-123'
+			cookie.user.value = 'user-456'
+			throw new Error('test error')
+		})
+
+		const res = await app.handle(req('/'))
+
+		expect(res.status).toBe(500)
+		const setCookie = res.headers.get('set-cookie')
+		expect(setCookie).toContain('session=session-123')
+		expect(setCookie).toContain('user=user-456')
+	})
 })
