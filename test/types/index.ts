@@ -2846,7 +2846,7 @@ type a = keyof {}
 		'/mirror',
 		async ({ status, body }) => {
 			if (Math.random() > 0.5)
-				// @ts-ignore
+				// @ts-expect-error - should reject extra 'body' property
 				return status(201, { body, success: false })
 
 			// @ts-expect-error
