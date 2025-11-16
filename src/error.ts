@@ -44,7 +44,7 @@ type CheckExcessProps<T, U> = 0 extends 1 & T
 	: U extends U
 		? Exclude<keyof T, keyof U> extends never
 			? T
-			: never
+			: { [K in keyof U]: U[K] } & { [K in Exclude<keyof T, keyof U>]: never }
 		: never
 
 export type SelectiveStatus<in out Res> = <
