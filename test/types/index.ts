@@ -1,15 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import {
-	t,
-	Elysia,
-	Cookie,
-	file,
-	sse,
-	SSEPayload,
-	status,
-	form
-} from '../../src'
+
 import { expectTypeOf } from 'expect-type'
+import {
+	type Cookie,
+	Elysia,
+	file,
+	form,
+	SSEPayload,
+	sse,
+	status,
+	t
+} from '../../src'
 
 const app = new Elysia()
 
@@ -2603,9 +2604,7 @@ type a = keyof {}
 		yield 'b'
 	}
 
-	const app = new Elysia().get('/', function () {
-		return sse(a())
-	})
+	const app = new Elysia().get('/', () => sse(a()))
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
@@ -2630,9 +2629,7 @@ type a = keyof {}
 		yield 'b'
 	}
 
-	const app = new Elysia().get('/', function () {
-		return sse(a())
-	})
+	const app = new Elysia().get('/', () => sse(a()))
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
@@ -2657,9 +2654,9 @@ type a = keyof {}
 		yield 'b'
 	}
 
-	const app = new Elysia().get('/', function () {
-		return sse(undefined as any as ReadableStream<'a'>)
-	})
+	const app = new Elysia().get('/', () =>
+		sse(undefined as any as ReadableStream<'a'>)
+	)
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
@@ -2673,9 +2670,7 @@ type a = keyof {}
 // infer ReadableStream to Iterable
 {
 	const app = new Elysia()
-		.get('/', function () {
-			return undefined as any as ReadableStream<'a'>
-		})
+		.get('/', () => undefined as any as ReadableStream<'a'>)
 		.listen(3000)
 
 	expectTypeOf<
@@ -2874,7 +2869,7 @@ type a = keyof {}
 	)
 }
 
-// Status code 200 type inference (issue #200)
+// Status code 200 type inference (issue #1584)
 {
 	const app = new Elysia().get(
 		'/',
