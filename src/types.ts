@@ -452,7 +452,7 @@ interface OptionalField {
 export type UnwrapSchema<
 	Schema extends AnySchema | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
-> = undefined extends Schema
+> = Schema extends undefined
 	? unknown
 	: Schema extends TSchema
 		? Schema extends OptionalField

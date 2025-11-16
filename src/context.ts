@@ -72,18 +72,25 @@ export type ErrorContext<
 						| InvertedStatusMap[Extract<
 								InvertedStatusMapKey,
 								keyof Route['response']
-						  >],
-					T extends Code extends keyof Route['response']
+						  >]
+				>(
+					code: Code,
+					response: Code extends keyof Route['response']
 						? Route['response'][Code]
 						: Code extends keyof StatusMap
 							? // @ts-ignore StatusMap[Code] always valid because Code generic check
 								Route['response'][StatusMap[Code]]
 							: never
-				>(
-					code: Code,
-					response: T
+				) => ElysiaCustomStatusResponse<
 					// @ts-ignore trust me bro
-				) => ElysiaCustomStatusResponse<Code, T>
+					Code,
+					Code extends keyof Route['response']
+						? Route['response'][Code]
+						: Code extends keyof StatusMap
+							? // @ts-ignore StatusMap[Code] always valid because Code generic check
+								Route['response'][StatusMap[Code]]
+							: never
+				>
 
 		/**
 		 * Path extracted from incoming URL
