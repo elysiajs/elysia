@@ -18,6 +18,14 @@ import type {
 
 type InvertedStatusMapKey = keyof InvertedStatusMap
 
+type CheckExcessProps<T, U> = 0 extends 1 & T
+	? T // T is any
+	: U extends U
+		? Exclude<keyof T, keyof U> extends never
+			? T
+			: never
+		: never
+
 export type ErrorContext<
 	in out Route extends RouteSchema = {},
 	in out Singleton extends SingletonBase = {
@@ -72,24 +80,28 @@ export type ErrorContext<
 						| InvertedStatusMap[Extract<
 								InvertedStatusMapKey,
 								keyof Route['response']
-						  >]
-				>(
-					code: Code,
-					response: Code extends keyof Route['response']
+						  >],
+					T extends Code extends keyof Route['response']
 						? Route['response'][Code]
 						: Code extends keyof StatusMap
 							? // @ts-ignore StatusMap[Code] always valid because Code generic check
 								Route['response'][StatusMap[Code]]
 							: never
+				>(
+					code: Code,
+					response: CheckExcessProps<
+						T,
+						Code extends keyof Route['response']
+							? Route['response'][Code]
+							: Code extends keyof StatusMap
+								? // @ts-ignore StatusMap[Code] always valid because Code generic check
+									Route['response'][StatusMap[Code]]
+								: never
+					>
 				) => ElysiaCustomStatusResponse<
 					// @ts-ignore trust me bro
 					Code,
-					Code extends keyof Route['response']
-						? Route['response'][Code]
-						: Code extends keyof StatusMap
-							? // @ts-ignore StatusMap[Code] always valid because Code generic check
-								Route['response'][StatusMap[Code]]
-							: never
+					T
 				>
 
 		/**
