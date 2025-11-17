@@ -1,3 +1,8 @@
+# 1.4.17
+Change:
+- conditional parseQuery parameter
+- conditional pass `c.request` to handler for streaming response
+
 # 1.4.16 - 13 Nov 2025
 Improvement:
 - ValidationError: add `messageValue` as an alias of `errorValue`

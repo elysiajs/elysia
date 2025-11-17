@@ -1,22 +1,13 @@
 import { Elysia, status, t } from '../src'
 
-const auth = (app: Elysia) =>
-	app.derive(({ headers, status }) => {
-		try {
-			const token = headers['authorization']?.replace('Bearer ', '') || ''
-			return {
-				isAuthenticated: true
-			}
-		} catch (e) {
-			const error = e as Error
-			console.error('Authentication error:', error.message)
-			return status(401, 'Unauthorized')
-		}
-	})
-
 const app = new Elysia()
-	.use(auth)
-	.get('/', ({ isAuthenticated }) => isAuthenticated)
-	.listen(5000)
+	.get('/', ({ query }) => 'thing', {
+		query: t.Object({
+			a: t.Object({
+				b: t.String()
+			})
+		})
+	})
+	.listen(3000)
 
-app['~Routes']
+console.log(app.routes[0].compile().toString())
