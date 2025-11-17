@@ -117,6 +117,7 @@ import type {
 	MapResponse,
 	Checksum,
 	MacroManager,
+	MacroIntrospectionMetadata,
 	MacroToProperty,
 	TransformHandler,
 	MetadataBase,
@@ -280,6 +281,16 @@ export default class Elysia<
 			)
 		}
 	}
+
+	// Stores macro options applied via `.guard({ ...macros })`
+	// so we can run macro `introspect` once per route with full metadata.
+	// Is there a way to do this without a separate store?
+	protected guardMacroOptions: Record<string, any> = {}
+
+	// Flag to skip macro introspection for routes added to child instances inside groups
+	// Macro introspection will happen when routes are added to the parent with the fully-resolved path
+	// Is there a way to do this without a flag?
+	protected skipMacroIntrospection?: boolean
 
 	protected standaloneValidator: StandaloneValidator = {
 		global: null,
@@ -487,7 +498,65 @@ export default class Elysia<
 
 		localHook ??= {}
 
-		this.applyMacro(localHook)
+		// Normalize path before macro introspection to ensure metadata has the correct path
+		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
+		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
+
+		// Run macro introspection for guard-level macros (configured via `.guard({ macro: ... })`)
+		// once per route with the fully-resolved path.
+		// Skip introspection for routes added to child instances inside groups
+		// Macro introspection will happen when routes are added to the parent with the fully-resolved path
+		if (
+			!this.skipMacroIntrospection &&
+			this.guardMacroOptions &&
+			Object.keys(this.guardMacroOptions).length
+		) {
+			const macro = this.extender.macro
+
+			for (const [key, value] of Object.entries(this.guardMacroOptions)) {
+				if (!(key in macro)) continue
+
+				const macroDef = macro[key]
+				const macroHook =
+					typeof macroDef === 'function' ? macroDef(value) : macroDef
+
+				if (
+					!macroHook ||
+					(typeof macroDef === 'object' && value === false)
+				)
+					continue
+
+				const introspectFn =
+					typeof macroHook === 'object' &&
+					macroHook !== null &&
+					'introspect' in macroHook
+						? (
+								macroHook as {
+									introspect?: (
+										option: Record<string, any>,
+										context: MacroIntrospectionMetadata
+									) => unknown
+								}
+							).introspect
+						: undefined
+
+				if (typeof introspectFn === 'function') {
+					const introspectOptions: Record<string, any> = {
+						[key]: value
+					}
+
+					introspectFn(introspectOptions, { path, method })
+				}
+			}
+		}
+
+		// Skip macro introspection for routes added to child instances inside groups
+		// Macro introspection will happen when routes are added to the parent with the fully-resolved path
+		if (!this.skipMacroIntrospection) {
+			this.applyMacro(localHook, localHook, {
+				metadata: { path, method }
+			})
+		}
 
 		let standaloneValidators = [] as InputSchema[]
 
@@ -510,9 +579,6 @@ export default class Elysia<
 			standaloneValidators = standaloneValidators.concat(
 				this.standaloneValidator.global
 			)
-
-		if (path !== '' && path.charCodeAt(0) !== 47) path = '/' + path
-		if (this.config.prefix && !skipPrefix) path = this.config.prefix + path
 
 		if (localHook?.type)
 			switch (localHook.type) {
@@ -3976,11 +4042,21 @@ export default class Elysia<
 			scoped: [...(this.standaloneValidator.scoped ?? [])],
 			global: [...(this.standaloneValidator.global ?? [])]
 		}
+		// Mark this instance as being inside a group to skip macro introspection
+		// Macro introspection will happen when routes are added to the parent with the fully-resolved path
+		instance.skipMacroIntrospection = true
 
 		const isSchema = typeof schemaOrRun === 'object'
 		const sandbox = (isSchema ? run! : schemaOrRun)(instance)
 		this.singleton = mergeDeep(this.singleton, instance.singleton) as any
 		this.definitions = mergeDeep(this.definitions, instance.definitions)
+		// Merge macros from the group instance so introspect can be called when routes are added to the parent
+		if (isNotEmpty(instance.extender.macro)) {
+			this.extender.macro = {
+				...this.extender.macro,
+				...instance.extender.macro
+			}
+		}
 
 		if (sandbox.event.request?.length)
 			this.event.request = [
@@ -3995,6 +4071,20 @@ export default class Elysia<
 			]
 
 		this.model(sandbox.definitions.type)
+
+		// Merge guardMacroOptions from group instance to parent during route merging
+		// so guard macro introspection happens with correct options when routes are added
+		// The parent's guardMacroOptions will be restored after merging is complete
+		const originalGuardMacroOptions = this.guardMacroOptions
+		if (
+			instance.guardMacroOptions &&
+			Object.keys(instance.guardMacroOptions).length
+		) {
+			this.guardMacroOptions = {
+				...this.guardMacroOptions,
+				...instance.guardMacroOptions
+			}
+		}
 
 		Object.values(instance.router.history).forEach(
 			({ method, path, handler, hooks }) => {
@@ -4065,6 +4155,9 @@ export default class Elysia<
 				}
 			}
 		)
+
+		// Restore original guardMacroOptions
+		this.guardMacroOptions = originalGuardMacroOptions
 
 		return this as any
 	}
@@ -4472,6 +4565,38 @@ export default class Elysia<
 	): AnyElysia {
 		if (!run) {
 			if (typeof hook === 'object') {
+				// Capture guard-level macro options so we can introspect them per-route later
+				const macro = this.extender.macro
+				if (macro && typeof macro === 'object') {
+					const updatedGuardMacroOptions = {
+						...this.guardMacroOptions
+					}
+					let guardMacroOptionsChanged = false
+
+					for (const [key, value] of Object.entries(hook)) {
+						if (!(key in macro)) continue
+
+						const macroDef = macro[key]
+
+						// Match object-style macro semantics: value=false disables the macro entirely
+						if (typeof macroDef === 'object' && value === false) {
+							if (key in updatedGuardMacroOptions) {
+								delete updatedGuardMacroOptions[key]
+								guardMacroOptionsChanged = true
+							}
+							continue
+						}
+
+						if (updatedGuardMacroOptions[key] !== value) {
+							updatedGuardMacroOptions[key] = value
+							guardMacroOptionsChanged = true
+						}
+					}
+
+					if (guardMacroOptionsChanged)
+						this.guardMacroOptions = updatedGuardMacroOptions
+				}
+
 				this.applyMacro(hook)
 
 				if (hook.detail) {
@@ -4558,6 +4683,41 @@ export default class Elysia<
 		instance.definitions = { ...this.definitions }
 		instance.inference = cloneInference(this.inference)
 		instance.extender = { ...this.extender }
+		instance.guardMacroOptions = { ...this.guardMacroOptions }
+		// Apply guard hook's macro options to child instance so routes are introspected
+		// with the correct options when added (not when merged)
+		if (typeof hook === 'object') {
+			const macro = this.extender.macro
+			if (macro && typeof macro === 'object') {
+				const updatedGuardMacroOptions = {
+					...instance.guardMacroOptions
+				}
+				let guardMacroOptionsChanged = false
+
+				for (const [key, value] of Object.entries(hook)) {
+					if (!(key in macro)) continue
+
+					const macroDef = macro[key]
+
+					// Match object-style macro semantics: value=false disables the macro entirely
+					if (typeof macroDef === 'object' && value === false) {
+						if (key in updatedGuardMacroOptions) {
+							delete updatedGuardMacroOptions[key]
+							guardMacroOptionsChanged = true
+						}
+						continue
+					}
+
+					if (updatedGuardMacroOptions[key] !== value) {
+						updatedGuardMacroOptions[key] = value
+						guardMacroOptionsChanged = true
+					}
+				}
+
+				if (guardMacroOptionsChanged)
+					instance.guardMacroOptions = updatedGuardMacroOptions
+			}
+		}
 		instance.getServer = () => this.getServer()
 
 		const sandbox = run(instance)
@@ -4581,6 +4741,15 @@ export default class Elysia<
 
 		this.model(sandbox.definitions.type)
 
+		// Routes are already introspected for guard-level macros when added to child instances
+		// so we don't need to introspect guard-level macros again when merging routes back
+		// Temporarily skip macro introspection and set guardMacroOptions to empty
+		// Then manually apply macros without introspection to ensure macros are still applied
+		const originalGuardMacroOptions = this.guardMacroOptions
+		const originalSkipMacroIntrospection = this.skipMacroIntrospection
+		this.skipMacroIntrospection = true
+		this.guardMacroOptions = {}
+
 		Object.values(instance.router.history).forEach(
 			({ method, path, handler, hooks: localHook }) => {
 				const {
@@ -4596,40 +4765,49 @@ export default class Elysia<
 				const hasStandaloneSchema =
 					body || headers || query || params || cookie || response
 
+				const mergedHook = mergeHook(guardHook as AnyLocalHook, {
+					...((localHook || {}) as AnyLocalHook),
+					error: !localHook.error
+						? sandbox.event.error
+						: Array.isArray(localHook.error)
+							? [
+									...(localHook.error ?? []),
+									...(sandbox.event.error ?? [])
+								]
+							: [
+									localHook.error,
+									...(sandbox.event.error ?? [])
+								],
+					standaloneValidator: !hasStandaloneSchema
+						? localHook.standaloneValidator
+						: [
+								...(localHook.standaloneValidator ?? []),
+								{
+									body,
+									headers,
+									query,
+									params,
+									cookie,
+									response
+								}
+							]
+				})
+
+				// Apply macros without introspection (no metadata passed) before adding route
+				this.applyMacro(mergedHook, mergedHook)
+
 				this.add(
 					method,
 					path,
 					handler,
-					mergeHook(guardHook as AnyLocalHook, {
-						...((localHook || {}) as AnyLocalHook),
-						error: !localHook.error
-							? sandbox.event.error
-							: Array.isArray(localHook.error)
-								? [
-										...(localHook.error ?? []),
-										...(sandbox.event.error ?? [])
-									]
-								: [
-										localHook.error,
-										...(sandbox.event.error ?? [])
-									],
-						standaloneValidator: !hasStandaloneSchema
-							? localHook.standaloneValidator
-							: [
-									...(localHook.standaloneValidator ?? []),
-									{
-										body,
-										headers,
-										query,
-										params,
-										cookie,
-										response
-									}
-								]
-					})
+					mergedHook
 				)
 			}
 		)
+
+		// Restore original guardMacroOptions and skipMacroIntrospection
+		this.guardMacroOptions = originalGuardMacroOptions
+		this.skipMacroIntrospection = originalSkipMacroIntrospection
 
 		return this as any
 	}
@@ -5390,8 +5568,13 @@ export default class Elysia<
 		appliable: AnyLocalHook = localHook,
 		{
 			iteration = 0,
-			applied = {}
-		}: { iteration?: number; applied?: { [key: number]: true } } = {}
+			applied = {},
+			metadata
+		}: {
+			iteration?: number
+			applied?: { [key: number]: true }
+			metadata?: MacroIntrospectionMetadata
+		} = {}
 	) {
 		if (iteration >= 16) return
 		const macro = this.extender.macro
@@ -5429,7 +5612,17 @@ export default class Elysia<
 				}
 
 				if (k === 'introspect') {
-					value?.(localHook)
+					// Only run introspect when route metadata is available.
+					// Guard-level macros (configured via `.guard({ macro: ... })`)
+					// are introspected per-route in `add`.
+					if (metadata) {
+						// Call introspect with only the options relevant to the current macro key
+						const introspectOptions: Record<string, any> = {
+							[key]: appliable[key]
+						}
+
+						value?.(introspectOptions, metadata)
+					}
 
 					delete localHook[key]
 					continue
@@ -5449,7 +5642,7 @@ export default class Elysia<
 					this.applyMacro(
 						localHook,
 						{ [k]: value },
-						{ applied, iteration: iteration + 1 }
+						{ applied, iteration: iteration + 1, metadata }
 					)
 
 					delete localHook[key]
@@ -8214,6 +8407,7 @@ export type {
 	MapResponse,
 	BaseMacro,
 	MacroManager,
+	MacroIntrospectionMetadata,
 	MacroToProperty,
 	MergeElysiaInstances,
 	MaybeArray,
