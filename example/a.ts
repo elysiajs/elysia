@@ -1,13 +1,8 @@
-import { Elysia, status, t } from '../src'
+import { Elysia } from '../src'
 
-const app = new Elysia()
-	.get('/', ({ query }) => 'thing', {
-		query: t.Object({
-			a: t.Object({
-				b: t.String()
-			})
-		})
+new Elysia()
+	.parser('a', ({ contentType }) => {
+
 	})
-	.listen(3000)
 
-console.log(app.routes[0].compile().toString())
+// const app = new Elysia().get('/', () => `▲`).listen(3000)
