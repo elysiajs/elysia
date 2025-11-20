@@ -158,10 +158,10 @@ export class Cookie<T> implements ElysiaCookie {
 	set value(value: T) {
 		// Check if value actually changed before creating entry in jar
 		const current = this.cookie.value
-		
+
 		// Simple equality check
 		if (current === value) return
-		
+
 		// For objects, do a deep equality check
 		if (
 			typeof current === 'object' &&
@@ -175,7 +175,7 @@ export class Cookie<T> implements ElysiaCookie {
 				// If stringify fails, proceed with setting the value
 			}
 		}
-		
+
 		// Only create entry in jar if value actually changed
 		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
 		this.jar[this.name].value = value
@@ -186,7 +186,11 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set expires(expires: Date | undefined) {
-		if (this.cookie.expires === expires) return
+		// Handle undefined values and compare timestamps instead of Date objects
+		const currentExpires = this.cookie.expires
+		if (currentExpires === undefined && expires === undefined) return
+		if (currentExpires?.getTime() === expires?.getTime()) return
+
 		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
 		this.jar[this.name].expires = expires
 	}
@@ -245,7 +249,9 @@ export class Cookie<T> implements ElysiaCookie {
 		return this.cookie.sameSite
 	}
 
-	set sameSite(sameSite: true | false | 'lax' | 'strict' | 'none' | undefined) {
+	set sameSite(
+		sameSite: true | false | 'lax' | 'strict' | 'none' | undefined
+	) {
 		if (this.cookie.sameSite === sameSite) return
 		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
 		this.jar[this.name].sameSite = sameSite
