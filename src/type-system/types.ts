@@ -17,6 +17,7 @@ import { ElysiaFormData } from '../utils'
 import type { CookieOptions } from '../cookies'
 import type { MaybeArray } from '../types'
 import { ElysiaFile } from '../universal/file'
+import { BunFile } from 'bun'
 
 export type FileUnit = number | `${number}${'k' | 'm'}`
 
@@ -119,11 +120,11 @@ export interface CookieValidatorOptions<T extends Object = {}>
 
 export type TFile = (
 	options?: Partial<FileOptions> | undefined
-) => TUnsafe<File>
+) => TUnsafe<File | BunFile>
 
 export type TFiles = (
 	options?: Partial<FilesOptions> | undefined
-) => TUnsafe<File[]>
+) => TUnsafe<Array<File | BunFile>>
 
 export type NonEmptyArray<T> = [T, ...T[]]
 

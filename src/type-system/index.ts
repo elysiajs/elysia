@@ -48,6 +48,7 @@ import {
 import { ELYSIA_FORM_DATA, form } from '../utils'
 import { ValidationError } from '../error'
 import { parseDateTimeEmptySpace } from './format'
+import { BunFile } from 'bun'
 
 const t = Object.assign({}, Type) as unknown as Omit<
 	JavaScriptTypeBuilder,
@@ -73,7 +74,7 @@ createType<TArrayBuffer>(
 	(schema, value) => value instanceof ArrayBuffer
 )
 
-const internalFiles = createType<FilesOptions, File[]>(
+const internalFiles = createType<FilesOptions, Array<File | BunFile>>(
 	'Files',
 	(options, value) => {
 		if (options.minItems && options.minItems > 1 && !Array.isArray(value))
@@ -478,19 +479,19 @@ export const ElysiaType = {
 			}) as any as TArray<T>
 	},
 
-	File: createType<FileOptions, File>(
+	File: createType<FileOptions, File | BunFile>(
 		'File',
 		validateFile
 	) as unknown as TFile,
 
-	Files: (options: FilesOptions = {}): TUnsafe<File[]> =>
+	Files: (options: FilesOptions = {}): TUnsafe<Array<File | BunFile>> =>
 		t
 			.Transform(internalFiles(options))
 			.Decode((value) => {
 				if (Array.isArray(value)) return value
 				return [value]
 			})
-			.Encode((value) => value) as unknown as TUnsafe<File[]>,
+			.Encode((value) => value) as unknown as TUnsafe<Array<File | BunFile>>,
 
 	Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
 		t.Union([schema, t.Null()], {

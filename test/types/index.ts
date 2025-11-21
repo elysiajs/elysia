@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import { BunFile } from 'bun'
 import {
 	t,
 	Elysia,
@@ -1432,7 +1433,7 @@ app.get('/', ({ set }) => {
 	const child = new Elysia().get(
 		'/',
 		({ body: { file } }) => {
-			expectTypeOf<typeof file>().toEqualTypeOf<File>()
+			expectTypeOf<typeof file>().toEqualTypeOf<File | BunFile>()
 
 			return file
 		},

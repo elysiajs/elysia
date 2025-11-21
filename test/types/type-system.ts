@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import { BunFile } from 'bun'
 import { t, Elysia, form, file } from '../../src'
 import { expectTypeOf } from 'expect-type'
 
@@ -54,7 +55,7 @@ import { expectTypeOf } from 'expect-type'
 		'/',
 		({ body }) => {
 			expectTypeOf<typeof body>().toEqualTypeOf<{
-				images: File[]
+				images: Array<File | BunFile>
 			}>()
 		},
 		{
