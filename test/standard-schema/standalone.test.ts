@@ -216,25 +216,25 @@ describe('Standard Schema Standalone', () => {
 			.onError(({ error, code }) => {
 				if (code !== 'VALIDATION') console.log(error)
 			})
-			.guard({
-				schema: 'standalone',
+			.model({
 				body: z.object({
+					id: z.number(),
 					name: z.string()
 				}),
 				query: z.object({
-					id: z.coerce.number()
+					id: z.coerce.number(),
+					limit: z.coerce.number()
 				}),
 				params: z.object({
-					id: z.coerce.number()
+					id: z.coerce.number(),
+					name: z.literal('fouco').or(z.literal('lilith'))
 				}),
-				response: {
-					404: z.object({
-						id: z.number()
-					}),
-					418: z.object({
-						id: z.number()
-					})
-				}
+				'response.404': z.object({
+					name: z.literal('lilith')
+				}),
+				'response.418': z.object({
+					name: z.literal('fouco')
+				})
 			})
 			.post(
 				'/:name/:id',
@@ -251,18 +251,13 @@ describe('Standard Schema Standalone', () => {
 								extra: true
 							}),
 				{
-					body: t.Object({
-						id: t.Number()
-					}),
-					query: t.Object({
-						limit: t.Number()
-					}),
-					params: t.Object({
-						name: t.UnionEnum(['fouco', 'lilith'])
-					}),
+					schema: 'standalone',
+					body: 'body',
+					query: 'query',
+					params: 'params',
 					response: {
-						404: z.object({ name: z.literal('lilith') }),
-						418: z.object({ name: z.literal('fouco') })
+						404: 'response.404',
+						418: 'response.418'
 					}
 				}
 			)

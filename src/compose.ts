@@ -792,7 +792,7 @@ export const composeHandler = ({
 		let afterResponse = ''
 
 		afterResponse +=
-			`\nsetImmediate(async()=>{` +
+			`\nqueueMicrotask(async()=>{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
 			(hasStream
@@ -1749,7 +1749,7 @@ export const composeHandler = ({
 					(hasTrace || hooks.afterResponse?.length
 						? `afterHandlerStreamListener=stream[2]\n`
 						: '') +
-					`setImmediate(async ()=>{` +
+					`queueMicrotask(async ()=>{` +
 					`if(listener)for await(const v of listener){}\n`
 				handleReporter.resolve()
 				fnLiteral += `})` + (maybeAsync ? '' : `})()`) + `}else{`
