@@ -142,7 +142,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	protected get setCookie() {
-		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
 
 		return this.jar[this.name]
 	}
@@ -156,87 +156,135 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set value(value: T) {
-		this.setCookie.value = value
+		// Check if value actually changed before creating entry in jar
+		const current = this.cookie.value
+
+		// Simple equality check
+		if (current === value) return
+
+		// For objects, do a deep equality check
+		if (
+			typeof current === 'object' &&
+			current !== null &&
+			typeof value === 'object' &&
+			value !== null
+		) {
+			try {
+				if (JSON.stringify(current) === JSON.stringify(value)) return
+			} catch {
+				// If stringify fails, proceed with setting the value
+			}
+		}
+
+		// Only create entry in jar if value actually changed
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].value = value
 	}
 
 	get expires() {
 		return this.cookie.expires
 	}
 
-	set expires(expires) {
-		this.setCookie.expires = expires
+	set expires(expires: Date | undefined) {
+		// Handle undefined values and compare timestamps instead of Date objects
+		const currentExpires = this.cookie.expires
+		if (currentExpires === undefined && expires === undefined) return
+		if (currentExpires?.getTime() === expires?.getTime()) return
+
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].expires = expires
 	}
 
 	get maxAge() {
 		return this.cookie.maxAge
 	}
 
-	set maxAge(maxAge) {
-		this.setCookie.maxAge = maxAge
+	set maxAge(maxAge: number | undefined) {
+		if (this.cookie.maxAge === maxAge) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].maxAge = maxAge
 	}
 
 	get domain() {
 		return this.cookie.domain
 	}
 
-	set domain(domain) {
-		this.setCookie.domain = domain
+	set domain(domain: string | undefined) {
+		if (this.cookie.domain === domain) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].domain = domain
 	}
 
 	get path() {
 		return this.cookie.path
 	}
 
-	set path(path) {
-		this.setCookie.path = path
+	set path(path: string | undefined) {
+		if (this.cookie.path === path) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].path = path
 	}
 
 	get secure() {
 		return this.cookie.secure
 	}
 
-	set secure(secure) {
-		this.setCookie.secure = secure
+	set secure(secure: boolean | undefined) {
+		if (this.cookie.secure === secure) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].secure = secure
 	}
 
 	get httpOnly() {
 		return this.cookie.httpOnly
 	}
 
-	set httpOnly(httpOnly) {
-		this.setCookie.httpOnly = httpOnly
+	set httpOnly(httpOnly: boolean | undefined) {
+		if (this.cookie.httpOnly === httpOnly) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].httpOnly = httpOnly
 	}
 
 	get sameSite() {
 		return this.cookie.sameSite
 	}
 
-	set sameSite(sameSite) {
-		this.setCookie.sameSite = sameSite
+	set sameSite(
+		sameSite: true | false | 'lax' | 'strict' | 'none' | undefined
+	) {
+		if (this.cookie.sameSite === sameSite) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].sameSite = sameSite
 	}
 
 	get priority() {
 		return this.cookie.priority
 	}
 
-	set priority(priority) {
-		this.setCookie.priority = priority
+	set priority(priority: 'low' | 'medium' | 'high' | undefined) {
+		if (this.cookie.priority === priority) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].priority = priority
 	}
 
 	get partitioned() {
 		return this.cookie.partitioned
 	}
 
-	set partitioned(partitioned) {
-		this.setCookie.partitioned = partitioned
+	set partitioned(partitioned: boolean | undefined) {
+		if (this.cookie.partitioned === partitioned) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].partitioned = partitioned
 	}
 
 	get secrets() {
 		return this.cookie.secrets
 	}
 
-	set secrets(secrets) {
-		this.setCookie.secrets = secrets
+	set secrets(secrets: string | string[] | undefined) {
+		if (this.cookie.secrets === secrets) return
+		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		this.jar[this.name].secrets = secrets
 	}
 
 	update(config: Updater<Partial<ElysiaCookie>>) {

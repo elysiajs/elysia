@@ -1,5 +1,6 @@
 # 1.4.17
 Change:
+- [#1556](https://github.com/elysiajs/elysia/issues/1556) prevent sending set-cookie header when cookie value is not modified
 - conditional parseQuery parameter
 - conditional pass `c.request` to handler for streaming response
 - fix missing `contentType` type on `parser`

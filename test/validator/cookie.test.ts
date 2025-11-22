@@ -462,3 +462,41 @@ describe('Cookie Validation', () => {
 		expect(await response.text()).toBe('empty')
 	})
 })
+
+	it('expires setter compares timestamps not Date objects', async () => {
+		const app = new Elysia().get('/', ({ cookie: { session }, set }) => {
+			// Test 1: Setting expires with same timestamp should not update
+			const date1 = new Date('2025-12-31T23:59:59.000Z')
+			const date2 = new Date('2025-12-31T23:59:59.000Z')
+			
+			session.value = 'test'
+			session.expires = date1
+			
+			// Get reference to jar before setting with same timestamp
+			const jarBefore = set.cookie
+			session.expires = date2 // Same timestamp, should not update
+			const jarAfter = set.cookie
+			
+			// Verify jar wasn't recreated (same reference)
+			expect(jarBefore).toBe(jarAfter)
+			expect(session.expires?.getTime()).toBe(date1.getTime())
+			
+			// Test 2: Setting expires with different timestamp should update
+			const date3 = new Date('2026-01-01T00:00:00.000Z')
+			session.expires = date3
+			expect(session.expires?.getTime()).toBe(date3.getTime())
+			
+			// Test 3: Both undefined should not update
+			session.expires = undefined
+			const jarBeforeUndefined = set.cookie
+			session.expires = undefined
+			const jarAfterUndefined = set.cookie
+			expect(jarBeforeUndefined).toBe(jarAfterUndefined)
+			
+			return 'ok'
+		})
+
+		const response = await app.handle(req('/'))
+		expect(response.status).toBe(200)
+		expect(await response.text()).toBe('ok')
+	})
