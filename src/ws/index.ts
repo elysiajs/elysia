@@ -284,9 +284,9 @@ export const createHandleWSResponse = (
 			return (async () => {
 				const first = await init
 
-				if (validateResponse?.Check(first) === false)
+				if (validateResponse && validateResponse(first))
 					return ws.send(
-						new ValidationError('message', validateResponse, first)
+						new ValidationError('message', responseValidator!, first)
 							.message
 					)
 
