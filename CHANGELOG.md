@@ -1,3 +1,7 @@
+# 1.4.17 - TBD
+Bug fix:
+- [#1556](https://github.com/elysiajs/elysia/issues/1556) prevent sending set-cookie header when cookie value is not modified
+
 # 1.4.16 - 13 Nov 2025
 Improvement:
 - ValidationError: add `messageValue` as an alias of `errorValue`
