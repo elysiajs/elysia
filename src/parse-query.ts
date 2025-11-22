@@ -89,9 +89,9 @@ export function parseQueryFromURL(
 
 		const currentValue = result[finalKey]
 
-		if (array?.[finalKey]) {
+		if (array && array?.[finalKey]) {
 			if (finalValue.charCodeAt(0) === 91) {
-				if (object?.[finalKey])
+				if (object && object?.[finalKey])
 					finalValue = JSON.parse(finalValue) as any
 				else finalValue = finalValue.slice(1, -1).split(',') as any
 

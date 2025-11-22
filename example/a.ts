@@ -1,22 +1,42 @@
-import { Elysia, status, t } from '../src'
-
-const auth = (app: Elysia) =>
-	app.derive(({ headers, status }) => {
-		try {
-			const token = headers['authorization']?.replace('Bearer ', '') || ''
-			return {
-				isAuthenticated: true
-			}
-		} catch (e) {
-			const error = e as Error
-			console.error('Authentication error:', error.message)
-			return status(401, 'Unauthorized')
-		}
-	})
+import { Elysia, t } from '../src'
+import z from 'zod'
 
 const app = new Elysia()
-	.use(auth)
-	.get('/', ({ isAuthenticated }) => isAuthenticated)
-	.listen(5000)
+	.get('/', () => 'Hello Elysia')
+	.ws('/typebox', {
+		body: t.Object({
+			type: t.Literal('test-one'),
+			message: t.String()
+		}),
+		open(ws) {
+			console.log('Connection opened')
+		},
+		message(ws, message) {
+			console.log('Received message:', message)
+			ws.send(`Echo: ${JSON.stringify(message)}`)
+		},
+		close(ws) {
+			console.log('Connection closed')
+		}
+	})
+	.ws('/zod', {
+		body: z.object({
+			type: z.literal('test-one'),
+			message: z.string()
+		}),
+		open(ws) {
+			console.log('Connection opened')
+		},
+		message(ws, message) {
+			console.log('Received message:', message)
+			ws.send(`Echo: ${JSON.stringify(message)}`)
+		},
+		close(ws) {
+			console.log('Connection closed')
+		}
+	})
+	.listen(3000)
 
-app['~Routes']
+console.log(
+	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+)
