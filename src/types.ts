@@ -1943,6 +1943,23 @@ export type BaseMacro = Record<
 
 export type MaybeValueOrVoidFunction<T> = T | ((...a: any) => void | T)
 
+export interface MacroIntrospectionMetadata {
+	/**
+	 * Metadata of the unresolved route being introspected.
+	 *
+	 * @example
+	 * '/route/:id'
+	 */
+	path: string
+	/**
+	 * HTTP method of the unresolved route being introspected.
+	 *
+	 * @example
+	 * 'GET'
+	 */
+	method: HTTPMethod
+}
+
 export interface MacroProperty<
 	in out Macro extends BaseMacro = {},
 	in out TypedRoute extends RouteSchema = {},
@@ -1970,9 +1987,13 @@ export interface MacroProperty<
 	/**
 	 * Introspect hook option for documentation generation or analysis
 	 *
-	 * @param option
+	 * @param option The options passed to the macro
+	 * @param context The metadata of the introspection.
 	 */
-	introspect?(option: Prettify<Macro>): unknown
+	introspect?(
+		option: Record<string, any>,
+		context: MacroIntrospectionMetadata
+	): unknown
 }
 
 export interface Macro<
