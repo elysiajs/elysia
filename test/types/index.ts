@@ -1,15 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import {
-	t,
-	Elysia,
-	Cookie,
-	file,
-	sse,
-	SSEPayload,
-	status,
-	form
-} from '../../src'
+
 import { expectTypeOf } from 'expect-type'
+import {
+	type Cookie,
+	Elysia,
+	file,
+	form,
+	SSEPayload,
+	sse,
+	status,
+	t
+} from '../../src'
 
 const app = new Elysia()
 
@@ -2603,9 +2604,7 @@ type a = keyof {}
 		yield 'b'
 	}
 
-	const app = new Elysia().get('/', function () {
-		return sse(a())
-	})
+	const app = new Elysia().get('/', () => sse(a()))
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
@@ -2630,9 +2629,7 @@ type a = keyof {}
 		yield 'b'
 	}
 
-	const app = new Elysia().get('/', function () {
-		return sse(a())
-	})
+	const app = new Elysia().get('/', () => sse(a()))
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
@@ -2657,9 +2654,9 @@ type a = keyof {}
 		yield 'b'
 	}
 
-	const app = new Elysia().get('/', function () {
-		return sse(undefined as any as ReadableStream<'a'>)
-	})
+	const app = new Elysia().get('/', () =>
+		sse(undefined as any as ReadableStream<'a'>)
+	)
 
 	expectTypeOf<
 		(typeof app)['~Routes']['get']['response'][200]
@@ -2673,9 +2670,7 @@ type a = keyof {}
 // infer ReadableStream to Iterable
 {
 	const app = new Elysia()
-		.get('/', function () {
-			return undefined as any as ReadableStream<'a'>
-		})
+		.get('/', () => undefined as any as ReadableStream<'a'>)
 		.listen(3000)
 
 	expectTypeOf<
@@ -2846,7 +2841,7 @@ type a = keyof {}
 		'/mirror',
 		async ({ status, body }) => {
 			if (Math.random() > 0.5)
-				// @ts-ignore
+				// @ts-expect-error - should reject extra 'body' property
 				return status(201, { body, success: false })
 
 			// @ts-expect-error
@@ -2872,4 +2867,58 @@ type a = keyof {}
 			}
 		}
 	)
+}
+
+// Status code 200 type inference (issue #1584)
+{
+	const app = new Elysia().get(
+		'/',
+		() => ({ message: 'Hello Elysia' as const }),
+		{
+			response: {
+				200: t.Object({
+					message: t.Literal('Hello Elysia')
+				})
+			}
+		}
+	)
+
+	type AppResponse = (typeof app)['~Routes']['get']['response']
+
+	// Should properly infer the 200 response type, not [x: string]: any
+	const _typeTest: AppResponse extends {
+		200: { message: 'Hello Elysia' }
+	}
+		? true
+		: false = true
+
+	// Test with multiple status codes including 200
+	const app2 = new Elysia().post(
+		'/test',
+		({ status }) => {
+			if (Math.random() > 0.5) {
+				return status(200, { message: 'Hello Elysia' as const })
+			}
+			return status(422, { error: 'Validation error' })
+		},
+		{
+			response: {
+				200: t.Object({
+					message: t.Literal('Hello Elysia')
+				}),
+				422: t.Object({
+					error: t.String()
+				})
+			}
+		}
+	)
+
+	type App2Response = (typeof app2)['~Routes']['test']['post']['response']
+
+	const _typeTest2: App2Response extends {
+		200: { message: 'Hello Elysia' }
+		422: { error: string }
+	}
+		? true
+		: false = true
 }
