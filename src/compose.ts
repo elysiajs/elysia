@@ -792,7 +792,7 @@ export const composeHandler = ({
 		let afterResponse = ''
 
 		afterResponse +=
-			`\nsetImmediate(async()=>{` +
+			`\nqueueMicrotask(async()=>{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
 			(hasStream
@@ -1732,6 +1732,16 @@ export const composeHandler = ({
 		reporter.resolve()
 	}
 
+	/**
+	 * Creates a closure that injects reporting code for handler execution and stream responses.
+	 *
+	 * The returned function, when invoked, appends generated code to the current function literal to
+	 * clone/tee streaming responses when present, schedule a background listener to drain the clone,
+	 * and resolve the associated "handle" reporter for tracing.
+	 *
+	 * @param name - Optional name used to identify the handler in the report metadata
+	 * @returns A function that emits the reporting and stream-management code into the generated handler
+	 */
 	function reportHandler(name: string | undefined) {
 		const handleReporter = report('handle', {
 			name,
@@ -1749,7 +1759,7 @@ export const composeHandler = ({
 					(hasTrace || hooks.afterResponse?.length
 						? `afterHandlerStreamListener=stream[2]\n`
 						: '') +
-					`setImmediate(async ()=>{` +
+					`queueMicrotask(async ()=>{` +
 					`if(listener)for await(const v of listener){}\n`
 				handleReporter.resolve()
 				fnLiteral += `})` + (maybeAsync ? '' : `})()`) + `}else{`
