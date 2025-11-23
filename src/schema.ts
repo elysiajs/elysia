@@ -1127,7 +1127,7 @@ export const getSchemaValidator = <
 		const typeboxSubValidator = (
 			schema: TSchema
 		): StandardSchemaV1LikeValidate => {
-			let mirror: Function
+			let mirror: Function | undefined
 			if (normalize === true || normalize === 'exactMirror') {
 				// Use TypeBox's Value.Clean for schemas with unions as exact-mirror doesn't handle them properly
 				if (hasUnionType(schema)) {
@@ -1162,7 +1162,7 @@ export const getSchemaValidator = <
 			})!
 
 			// @ts-ignore
-			vali.Decode = mirror
+			if (mirror) vali.Decode = mirror
 
 			// @ts-ignore
 			return (v) => {
