@@ -727,13 +727,281 @@ const _replaceSchemaType = (
 	return schema
 }
 
-const createCleaner = (schema: TAnySchema) => (value: unknown) => {
-	if (typeof value === 'object')
+/**
+ * Recursively checks if a schema contains union types (anyOf, oneOf, allOf)
+ * This is used to determine if exact-mirror can handle the schema properly
+ */
+const hasUnionType = (schema: TAnySchema): boolean => {
+	if (!schema) return false
+
+	// Check for union/intersection types
+	if (schema.anyOf || schema.oneOf || schema.allOf) return true
+
+	// Check array items
+	if (schema.type === 'array' && schema.items && !Array.isArray(schema.items))
+		return hasUnionType(schema.items)
+
+	// Check object properties
+	if (schema.type === 'object' && schema.properties) {
+		for (const prop of Object.values(
+			schema.properties as Record<string, TAnySchema>
+		)) {
+			if (hasUnionType(prop)) return true
+		}
+	}
+
+	return false
+}
+
+const createCleaner = (
+	schema: TAnySchema,
+	sanitizeFn?: ExactMirrorInstruction['sanitize']
+) => {
+	const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+		typeof value === 'object' && value !== null && !Array.isArray(value)
+
+	const clean = (currentSchema: TAnySchema, value: unknown): unknown => {
+		if (typeof value !== 'object' || value === null) return value
+
+		// Manually handle unions so we can try cleaning against each branch.
+		// Value.Clean bails out early when the union doesn't initially pass
+		// validation (eg. additionalProperties: false), which prevents
+		// normalization for cases like t.Omit(t.Union(...)).
+		if (currentSchema.anyOf) {
+			for (const branch of currentSchema.anyOf) {
+				const cleaned = clean(branch, deepClone(value))
+
+				try {
+					if (Value.Check(branch, cleaned)) return cleaned
+				} catch {}
+			}
+
+			// Fallback to TypeBox behaviour if nothing matched
+			try {
+				return Value.Clean(currentSchema, value)
+			} catch {}
+
+			return value
+		}
+
+		if (currentSchema.oneOf) {
+			for (const branch of currentSchema.oneOf) {
+				const cleaned = clean(branch, deepClone(value))
+
+				try {
+					if (Value.Check(branch, cleaned)) return cleaned
+				} catch {}
+			}
+
+			try {
+				return Value.Clean(currentSchema, value)
+			} catch {}
+
+			return value
+		}
+
+		if (currentSchema.allOf) {
+			const cleaned = currentSchema.allOf.map((branch: TAnySchema) =>
+				clean(branch, deepClone(value))
+			)
+
+			const mergedObjects = cleaned.filter(isPlainObject) as (
+				| Record<string, unknown>
+				| undefined
+			)[]
+
+			if (mergedObjects.length)
+				return mergedObjects.reduce(
+					(acc, current) => ({ ...acc, ...current }),
+					{}
+				)
+
+			return cleaned.at(-1) ?? value
+		}
+
+		// Handle arrays - recursively clean each item
+		if (
+			Array.isArray(value) &&
+			currentSchema.type === 'array' &&
+			currentSchema.items &&
+			!Array.isArray(currentSchema.items)
+		) {
+			return value.map((item) =>
+				clean(currentSchema.items as TAnySchema, item)
+			)
+		}
+
+		// For all other cases including unions, use TypeBox's Value.Clean
+		// It handles unions, intersections, and objects correctly
 		try {
-			return Value.Clean(schema, value)
+			let cleaned = Value.Clean(currentSchema, value)
+
+			// Apply sanitize function if provided
+			if (sanitizeFn && isPlainObject(cleaned)) {
+				cleaned = applySanitize(currentSchema, cleaned, sanitizeFn)
+			}
+
+			return cleaned
 		} catch {}
 
-	return value
+		return value
+	}
+
+	const applySanitize = (
+		currentSchema: TAnySchema,
+		value: any,
+		sanitizeFn: ExactMirrorInstruction['sanitize']
+	): any => {
+		if (!isPlainObject(value)) return value
+
+		const result: any = {}
+
+		if (currentSchema.type === 'object' && currentSchema.properties) {
+			const sanitizeProperty = (
+				propSchema: TAnySchema,
+				propValue: any,
+				key: string
+			): any => {
+				// Resolve $ref using root schema or its definitions if present
+				if (propSchema?.$ref) {
+					if (schema?.$defs && propSchema.$ref in schema.$defs)
+						return sanitizeProperty(
+							(schema.$defs as Record<string, TAnySchema>)[
+								propSchema.$ref
+							],
+							propValue,
+							key
+						)
+
+					return sanitizeProperty(
+						schema as TAnySchema,
+						propValue,
+						key
+					)
+				}
+
+				if (propSchema.anyOf) {
+					for (const branch of propSchema.anyOf) {
+						// null branch
+						if (branch.type === 'null') {
+							if (propValue === null) return propValue
+							continue
+						}
+
+						// array branch
+						if (
+							branch.type === 'array' &&
+							Array.isArray(propValue) &&
+							branch.items &&
+							!Array.isArray(branch.items)
+						)
+							return propValue.map((item: any) =>
+								sanitizeProperty(
+									branch.items as TAnySchema,
+									item,
+									key
+								)
+							)
+
+						// object branch
+						if (
+							branch.type === 'object' &&
+							isPlainObject(propValue)
+						)
+							return applySanitize(branch, propValue, sanitizeFn)
+
+						// reference branch (recursive)
+						if (branch.$ref) {
+							if (isPlainObject(propValue))
+								return applySanitize(
+									(
+										schema.$defs as
+											| Record<string, TAnySchema>
+											| undefined
+									)?.[branch.$ref] ?? (schema as TAnySchema),
+									propValue,
+									sanitizeFn
+								)
+							continue
+						}
+
+						// nested union
+						if (branch.anyOf) {
+							const result = sanitizeProperty(
+								branch as TAnySchema,
+								propValue,
+								key
+							)
+
+							if (result !== propValue) return result
+						}
+					}
+
+					// Fallback if no branch matched
+					return propValue
+				}
+
+				if (propSchema.type === 'object' && isPlainObject(propValue))
+					return applySanitize(propSchema, propValue, sanitizeFn)
+
+				if (
+					propSchema.type === 'array' &&
+					Array.isArray(propValue) &&
+					propSchema.items &&
+					!Array.isArray(propSchema.items)
+				)
+					return propValue.map((item: any) =>
+						sanitizeProperty(
+							propSchema.items as TAnySchema,
+							item,
+							key
+						)
+					)
+
+				// Only apply sanitize to string values
+				if (!sanitizeFn || typeof propValue !== 'string')
+					return propValue
+
+				if (Array.isArray(sanitizeFn)) {
+					let result = propValue
+					for (const fn of sanitizeFn) {
+						result = fn(result)
+					}
+					return result
+				}
+
+				return sanitizeFn(propValue)
+			}
+
+			for (const [key, propSchema] of Object.entries(
+				currentSchema.properties as Record<string, TAnySchema>
+			)) {
+				if (!(key in value)) continue
+
+				result[key] = sanitizeProperty(propSchema, value[key], key)
+			}
+		} else {
+			// If no properties defined, copy all properties and apply sanitize
+			for (const [key, propValue] of Object.entries(value)) {
+				// Only apply sanitize to string values
+				if (!sanitizeFn || typeof propValue !== 'string') {
+					result[key] = propValue
+				} else if (Array.isArray(sanitizeFn)) {
+					let sanitized = propValue
+					for (const fn of sanitizeFn) {
+						sanitized = fn(sanitized)
+					}
+					result[key] = sanitized
+				} else {
+					result[key] = sanitizeFn(propValue)
+				}
+			}
+		}
+
+		return result
+	}
+
+	return (value: unknown) => clean(schema, value)
 }
 
 // const caches = <Record<string, ElysiaTypeCheck<any>>>{}
@@ -859,21 +1127,27 @@ export const getSchemaValidator = <
 		const typeboxSubValidator = (
 			schema: TSchema
 		): StandardSchemaV1LikeValidate => {
-			let mirror: Function
-			if (normalize === true || normalize === 'exactMirror')
-				try {
-					mirror = createMirror(schema as TSchema, {
-						TypeCompiler,
-						sanitize: sanitize?.(),
-						modules
-					})
-				} catch {
-					console.warn(
-						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-					)
-					console.warn(schema)
-					mirror = createCleaner(schema as TSchema)
+			let mirror: Function | undefined
+			if (normalize === true || normalize === 'exactMirror') {
+				// Use TypeBox's Value.Clean for schemas with unions as exact-mirror doesn't handle them properly
+				if (hasUnionType(schema)) {
+					mirror = createCleaner(schema, sanitize?.())
+				} else {
+					try {
+						mirror = createMirror(schema, {
+							TypeCompiler,
+							sanitize: sanitize?.(),
+							modules
+						})
+					} catch {
+						console.warn(
+							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+						)
+						console.warn(schema)
+						mirror = createCleaner(schema, sanitize?.())
+					}
 				}
+			}
 
 			const vali = getSchemaValidator(schema, {
 				models,
@@ -883,11 +1157,12 @@ export const getSchemaValidator = <
 				additionalProperties: true,
 				forceAdditionalProperties: true,
 				coerce,
-				additionalCoerce
+				additionalCoerce,
+				sanitize
 			})!
 
 			// @ts-ignore
-			vali.Decode = mirror
+			if (mirror) vali.Decode = mirror
 
 			// @ts-ignore
 			return (v) => {
@@ -1079,7 +1354,7 @@ export const getSchemaValidator = <
 				Check: (value: unknown) => Value.Check(schema, value),
 				Errors: (value: unknown) => Value.Errors(schema, value),
 				Code: () => '',
-				Clean: createCleaner(schema),
+				Clean: createCleaner(schema, sanitize?.()),
 				Decode: (value: unknown) => Value.Decode(schema, value),
 				Encode: (value: unknown) => Value.Encode(schema, value),
 				get hasAdditionalProperties() {
@@ -1121,22 +1396,30 @@ export const getSchemaValidator = <
 				if (validator?.schema?.config) delete validator.schema.config
 			}
 
-			if (normalize && schema.additionalProperties === false) {
+			if (normalize && !hasAdditionalProperties(schema)) {
 				if (normalize === true || normalize === 'exactMirror') {
-					try {
-						validator.Clean = createMirror(schema, {
-							TypeCompiler,
-							sanitize: sanitize?.(),
-							modules
-						})
-					} catch {
-						console.warn(
-							'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-						)
-						console.warn(schema)
-						validator.Clean = createCleaner(schema)
+					// Use TypeBox's Value.Clean for schemas with unions as exact-mirror doesn't handle them properly
+					if (hasUnionType(schema)) {
+						validator.Clean = createCleaner(schema, sanitize?.())
+					} else {
+						try {
+							validator.Clean = createMirror(schema, {
+								TypeCompiler,
+								sanitize: sanitize?.(),
+								modules
+							})
+						} catch {
+							console.warn(
+								'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+							)
+							console.warn(schema)
+							validator.Clean = createCleaner(
+								schema,
+								sanitize?.()
+							)
+						}
 					}
-				} else validator.Clean = createCleaner(schema)
+				} else validator.Clean = createCleaner(schema, sanitize?.())
 			}
 
 			validator.parse = (v) => {
@@ -1261,24 +1544,29 @@ export const getSchemaValidator = <
 		}
 
 		if (normalize === true || normalize === 'exactMirror') {
-			try {
-				compiled.Clean = createMirror(schema, {
-					TypeCompiler,
-					sanitize: sanitize?.(),
-					modules
-				})
-			} catch (error) {
-				console.warn(
-					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-				)
-				console.dir(schema, {
-					depth: null
-				})
+			// Use TypeBox's Value.Clean for schemas with unions as exact-mirror doesn't handle them properly
+			if (hasUnionType(schema)) {
+				compiled.Clean = createCleaner(schema, sanitize?.())
+			} else {
+				try {
+					compiled.Clean = createMirror(schema, {
+						TypeCompiler,
+						sanitize: sanitize?.(),
+						modules
+					})
+				} catch (error) {
+					console.warn(
+						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+					)
+					console.dir(schema, {
+						depth: null
+					})
 
-				compiled.Clean = createCleaner(schema)
+					compiled.Clean = createCleaner(schema, sanitize?.())
+				}
 			}
 		} else if (normalize === 'typebox')
-			compiled.Clean = createCleaner(schema)
+			compiled.Clean = createCleaner(schema, sanitize?.())
 	} else {
 		compiled = {
 			provider: 'standard',
@@ -1454,7 +1742,10 @@ export const mergeObjectSchemas = (
 				...newSchema.properties,
 				...schema.properties
 			},
-			required: [...(newSchema?.required ?? []), ...(schema.required ?? [])]
+			required: [
+				...(newSchema?.required ?? []),
+				...(schema.required ?? [])
+			]
 		} as TObject
 	}
 

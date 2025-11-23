@@ -1,6 +1,7 @@
 # 1.4.17 - TBD
 Bug fix:
 - [#1556](https://github.com/elysiajs/elysia/issues/1556) prevent sending set-cookie header when cookie value is not modified
+- [#1553](https://github.com/elysiajs/elysia/issues/1553) normalize t.Array with t.Omit(t.Union) elements
 
 # 1.4.16 - 13 Nov 2025
 Improvement:
