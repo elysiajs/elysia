@@ -185,4 +185,50 @@ describe('Cookie - Unchanged Values', () => {
 		// Should only produce one Set-Cookie header
 		expect(res.headers.getAll('set-cookie').length).toBe(1)
 	})
+
+	it('should invalidate hash cache when using update() method', async () => {
+		const app = new Elysia().post('/cache-invalidation', ({ cookie: { data } }) => {
+			// Set initial value
+			data.value = { id: 1, name: 'first' }
+
+			// Modify via update() - should invalidate cache
+			data.update({ value: { id: 2, name: 'second' } })
+
+			// Set to the updated value again - should detect as unchanged
+			data.value = { id: 2, name: 'second' }
+
+			return 'ok'
+		})
+
+		const res = await app.handle(
+			new Request('http://localhost/cache-invalidation', { method: 'POST' })
+		)
+
+		// Should only have one Set-Cookie header (for final value)
+		const setCookieHeaders = res.headers.getAll('set-cookie')
+		expect(setCookieHeaders.length).toBe(1)
+		expect(setCookieHeaders[0]).toContain('id')
+	})
+
+	it('should invalidate hash cache when using set() method', async () => {
+		const app = new Elysia().post('/cache-set', ({ cookie: { data } }) => {
+			// Set initial value
+			data.value = { id: 1 }
+
+			// Modify via set() - should invalidate cache
+			data.set({ value: { id: 2 } })
+
+			// Set to the updated value again - should detect as unchanged
+			data.value = { id: 2 }
+
+			return 'ok'
+		})
+
+		const res = await app.handle(
+			new Request('http://localhost/cache-set', { method: 'POST' })
+		)
+
+		// Should only have one Set-Cookie header
+		expect(res.headers.getAll('set-cookie').length).toBe(1)
+	})
 })

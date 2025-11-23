@@ -157,6 +157,8 @@ export class Cookie<T> implements ElysiaCookie {
 		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
 
 		this.jar[this.name] = jar
+		// Invalidate hash cache when jar is modified directly
+		this.valueHash = undefined
 	}
 
 	protected get setCookie() {
