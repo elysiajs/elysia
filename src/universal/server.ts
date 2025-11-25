@@ -1,5 +1,5 @@
 import { Serve as BunServe, type Server as BunServer } from 'bun'
-import type { IsAny, MaybePromise } from '../types'
+import type { Equal, MaybePromise } from '../types'
 
 export interface ErrorLike extends Error {
 	code?: string
@@ -122,8 +122,14 @@ export interface ServeOptions extends GenericServeOptions {
 	>
 }
 
-export type Serve = IsAny<BunServe.Options<unknown>> extends false ? BunServe.Options<unknown> : ServeOptions
-export type Server = IsAny<BunServer<unknown>> extends false ? BunServer<unknown> : ServerOptions
+export type Serve =
+	Equal<BunServe.Options<unknown>, unknown> extends false
+		? BunServe.Options<unknown>
+		: ServeOptions
+export type Server =
+	Equal<BunServer<unknown>, unknown> extends false
+		? BunServer<unknown>
+		: ServerOptions
 
 export type ServerWebSocketSendStatus = number
 
@@ -291,21 +297,21 @@ export interface ServerOptions extends Disposable {
 	 */
 	requestIP(request: Request): SocketAddress | null
 
- 	/**
-     * Reset the idleTimeout of the given Request to the number in seconds. 0 means no timeout.
-     *
-     * @example
-     * ```js
-     * export default {
-     *  async fetch(request, server) {
-     *    server.timeout(request, 60);
-     *    await Bun.sleep(30000);
-     *    return new Response("30 seconds have passed");
-     *  }
-     * }
-     * ```
-     */
-    timeout(request: Request, seconds: number): void;
+	/**
+	 * Reset the idleTimeout of the given Request to the number in seconds. 0 means no timeout.
+	 *
+	 * @example
+	 * ```js
+	 * export default {
+	 *  async fetch(request, server) {
+	 *    server.timeout(request, 60);
+	 *    await Bun.sleep(30000);
+	 *    return new Response("30 seconds have passed");
+	 *  }
+	 * }
+	 * ```
+	 */
+	timeout(request: Request, seconds: number): void
 
 	/**
 	 * Undo a call to {@link Server.unref}
