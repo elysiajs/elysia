@@ -1,5 +1,6 @@
 # 1.4.17
 Improvement:
+- [#1573](https://github.com/elysiajs/elysia/pull/1573) `Server` is always resolved to `any` when `@types/bun` is missing
 - [#1568](https://github.com/elysiajs/elysia/pull/1568) optimize cookie value comparison using FNV-1a hash
 
 Change:
