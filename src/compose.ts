@@ -1,4 +1,4 @@
-import type { AnyElysia } from './index'
+import { AnyElysia, Cookie } from './index'
 
 import { Value, TransformDecodeError } from '@sinclair/typebox/value'
 import {
@@ -1573,7 +1573,7 @@ export const composeHandler = ({
 				if (validator.cookie.hasTransform)
 					fnLiteral += coerceTransformDecodeError(
 						`for(const [key,value] of Object.entries(validator.cookie.Decode(cookieValue))){` +
-							`c.cookie[key].value=value` +
+							`c.cookie[key].cookie.value = value` +
 							`}`,
 						'cookie',
 						allowUnsafeValidationDetails
@@ -2131,6 +2131,7 @@ export const composeHandler = ({
 			ERROR_CODE,
 			parseCookie: hasCookie ? parseCookie : undefined,
 			signCookie: hasCookie ? signCookie : undefined,
+			Cookie: hasCookie ? Cookie : undefined,
 			decodeURIComponent: hasQuery ? decode : undefined,
 			ElysiaCustomStatusResponse,
 			ELYSIA_TRACE: hasTrace ? ELYSIA_TRACE : undefined,
