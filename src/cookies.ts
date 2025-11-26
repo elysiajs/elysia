@@ -8,6 +8,22 @@ import { InvalidCookieSignature } from './error'
 import type { Context } from './context'
 import type { Prettify } from './types'
 
+// FNV-1a hash for fast string hashing
+const hashString = (str: string): number => {
+	const FNV_OFFSET_BASIS = 2166136261
+	const FNV_PRIME = 16777619
+
+	let hash = FNV_OFFSET_BASIS
+	const len = str.length
+
+	for (let i = 0; i < len; i++) {
+		hash ^= str.charCodeAt(i)
+		hash = Math.imul(hash, FNV_PRIME)
+	}
+
+	return hash >>> 0
+}
+
 export interface CookieOptions {
 	/**
 	 * Specifies the value for the {@link https://tools.ietf.org/html/rfc6265#section-5.2.3|Domain Set-Cookie attribute}. By default, no
@@ -125,6 +141,8 @@ export type ElysiaCookie = Prettify<
 type Updater<T> = T | ((value: T) => T)
 
 export class Cookie<T> implements ElysiaCookie {
+	private valueHash?: number
+
 	constructor(
 		private name: string,
 		private jar: Record<string, ElysiaCookie>,
@@ -139,10 +157,12 @@ export class Cookie<T> implements ElysiaCookie {
 		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
 
 		this.jar[this.name] = jar
+		// Invalidate hash cache when jar is modified directly
+		this.valueHash = undefined
 	}
 
 	protected get setCookie() {
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
 
 		return this.jar[this.name]
 	}
@@ -162,7 +182,9 @@ export class Cookie<T> implements ElysiaCookie {
 		// Simple equality check
 		if (current === value) return
 
-		// For objects, do a deep equality check
+		// For objects, use hash-based comparison for performance
+		// Note: Uses JSON.stringify for comparison, so key order matters
+		// { a: 1, b: 2 } and { b: 2, a: 1 } are treated as different values
 		if (
 			typeof current === 'object' &&
 			current !== null &&
@@ -170,10 +192,23 @@ export class Cookie<T> implements ElysiaCookie {
 			value !== null
 		) {
 			try {
-				if (JSON.stringify(current) === JSON.stringify(value)) return
-			} catch {
-				// If stringify fails, proceed with setting the value
-			}
+				// Cache stringified value to avoid duplicate stringify calls
+				const valueStr = JSON.stringify(value)
+				const newHash = hashString(valueStr)
+
+				// If hash differs from cached hash, value definitely changed
+				if (this.valueHash !== undefined && this.valueHash !== newHash) {
+					this.valueHash = newHash
+				}
+				// First set (valueHash undefined) OR hashes match: do deep comparison
+				else {
+					if (JSON.stringify(current) === valueStr) {
+						this.valueHash = newHash
+						return // Values are identical, skip update
+					}
+					this.valueHash = newHash
+				}
+			} catch {}
 		}
 
 		// Only create entry in jar if value actually changed
@@ -186,13 +221,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set expires(expires: Date | undefined) {
-		// Handle undefined values and compare timestamps instead of Date objects
-		const currentExpires = this.cookie.expires
-		if (currentExpires === undefined && expires === undefined) return
-		if (currentExpires?.getTime() === expires?.getTime()) return
-
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].expires = expires
+		this.setCookie.expires = expires
 	}
 
 	get maxAge() {
@@ -200,9 +229,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set maxAge(maxAge: number | undefined) {
-		if (this.cookie.maxAge === maxAge) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].maxAge = maxAge
+		this.setCookie.maxAge = maxAge;
 	}
 
 	get domain() {
@@ -210,9 +237,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set domain(domain: string | undefined) {
-		if (this.cookie.domain === domain) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].domain = domain
+		this.setCookie.domain = domain;
 	}
 
 	get path() {
@@ -220,9 +245,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set path(path: string | undefined) {
-		if (this.cookie.path === path) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].path = path
+		this.setCookie.path = path
 	}
 
 	get secure() {
@@ -230,9 +253,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set secure(secure: boolean | undefined) {
-		if (this.cookie.secure === secure) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].secure = secure
+		this.setCookie.secure = secure
 	}
 
 	get httpOnly() {
@@ -240,9 +261,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set httpOnly(httpOnly: boolean | undefined) {
-		if (this.cookie.httpOnly === httpOnly) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].httpOnly = httpOnly
+		this.setCookie.httpOnly = httpOnly
 	}
 
 	get sameSite() {
@@ -252,9 +271,7 @@ export class Cookie<T> implements ElysiaCookie {
 	set sameSite(
 		sameSite: true | false | 'lax' | 'strict' | 'none' | undefined
 	) {
-		if (this.cookie.sameSite === sameSite) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].sameSite = sameSite
+		this.setCookie.sameSite = sameSite
 	}
 
 	get priority() {
@@ -262,9 +279,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set priority(priority: 'low' | 'medium' | 'high' | undefined) {
-		if (this.cookie.priority === priority) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].priority = priority
+		this.setCookie.priority = priority
 	}
 
 	get partitioned() {
@@ -272,9 +287,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set partitioned(partitioned: boolean | undefined) {
-		if (this.cookie.partitioned === partitioned) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].partitioned = partitioned
+		this.setCookie.partitioned = partitioned
 	}
 
 	get secrets() {
@@ -282,9 +295,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set secrets(secrets: string | string[] | undefined) {
-		if (this.cookie.secrets === secrets) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].secrets = secrets
+		this.setCookie.secrets = secrets
 	}
 
 	update(config: Updater<Partial<ElysiaCookie>>) {
