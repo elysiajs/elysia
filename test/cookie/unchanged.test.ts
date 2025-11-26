@@ -72,7 +72,7 @@ describe('Cookie - Unchanged Values', () => {
 		).toBeGreaterThan(0)
 	})
 
-	it('should not send set-cookie header when setting same value', async () => {
+	it('should send set-cookie header when setting same value', async () => {
 		const app = new Elysia().get('/same', ({ cookie: { session } }) => {
 			// Setting the same value that came from request
 			session.value = 'existing'
@@ -87,7 +87,7 @@ describe('Cookie - Unchanged Values', () => {
 			})
 		)
 
-		expect(response.headers.getAll('set-cookie').length).toBe(0)
+		expect(response.headers.getAll('set-cookie').length).toBeGreaterThan(0)
 	})
 
 	it('should send set-cookie header when value actually changes', async () => {

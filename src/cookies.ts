@@ -162,7 +162,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	protected get setCookie() {
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
+		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
 
 		return this.jar[this.name]
 	}
@@ -221,13 +221,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set expires(expires: Date | undefined) {
-		// Handle undefined values and compare timestamps instead of Date objects
-		const currentExpires = this.cookie.expires
-		if (currentExpires === undefined && expires === undefined) return
-		if (currentExpires?.getTime() === expires?.getTime()) return
-
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].expires = expires
+		this.setCookie.expires = expires
 	}
 
 	get maxAge() {
@@ -235,9 +229,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set maxAge(maxAge: number | undefined) {
-		if (this.cookie.maxAge === maxAge) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].maxAge = maxAge
+		this.setCookie.maxAge = maxAge;
 	}
 
 	get domain() {
@@ -245,9 +237,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set domain(domain: string | undefined) {
-		if (this.cookie.domain === domain) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].domain = domain
+		this.setCookie.domain = domain;
 	}
 
 	get path() {
@@ -255,9 +245,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set path(path: string | undefined) {
-		if (this.cookie.path === path) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].path = path
+		this.setCookie.path = path
 	}
 
 	get secure() {
@@ -265,9 +253,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set secure(secure: boolean | undefined) {
-		if (this.cookie.secure === secure) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].secure = secure
+		this.setCookie.secure = secure
 	}
 
 	get httpOnly() {
@@ -275,9 +261,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set httpOnly(httpOnly: boolean | undefined) {
-		if (this.cookie.httpOnly === httpOnly) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].httpOnly = httpOnly
+		this.setCookie.httpOnly = httpOnly
 	}
 
 	get sameSite() {
@@ -287,9 +271,7 @@ export class Cookie<T> implements ElysiaCookie {
 	set sameSite(
 		sameSite: true | false | 'lax' | 'strict' | 'none' | undefined
 	) {
-		if (this.cookie.sameSite === sameSite) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].sameSite = sameSite
+		this.setCookie.sameSite = sameSite
 	}
 
 	get priority() {
@@ -297,9 +279,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set priority(priority: 'low' | 'medium' | 'high' | undefined) {
-		if (this.cookie.priority === priority) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].priority = priority
+		this.setCookie.priority = priority
 	}
 
 	get partitioned() {
@@ -307,9 +287,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set partitioned(partitioned: boolean | undefined) {
-		if (this.cookie.partitioned === partitioned) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].partitioned = partitioned
+		this.setCookie.partitioned = partitioned
 	}
 
 	get secrets() {
@@ -317,9 +295,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set secrets(secrets: string | string[] | undefined) {
-		if (this.cookie.secrets === secrets) return
-		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
-		this.jar[this.name].secrets = secrets
+		this.setCookie.secrets = secrets
 	}
 
 	update(config: Updater<Partial<ElysiaCookie>>) {
