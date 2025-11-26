@@ -340,6 +340,7 @@ export const BunAdapter: ElysiaAdapter = {
 									createStaticRoute(app.router.response),
 									mapRoutes(app)
 								),
+								// @ts-ignore
 								app.config.serve?.routes
 							),
 							websocket: {
@@ -360,6 +361,7 @@ export const BunAdapter: ElysiaAdapter = {
 									createStaticRoute(app.router.response),
 									mapRoutes(app)
 								),
+								// @ts-ignore
 								app.config.serve?.routes
 							),
 							websocket: {
@@ -402,6 +404,7 @@ export const BunAdapter: ElysiaAdapter = {
 							}),
 							mapRoutes(app)
 						),
+						// @ts-ignore
 						app.config.serve?.routes
 					)
 				})
