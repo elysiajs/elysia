@@ -2,6 +2,7 @@
 Improvement:
 - [#1573](https://github.com/elysiajs/elysia/pull/1573) `Server` is always resolved to `any` when `@types/bun` is missing
 - [#1568](https://github.com/elysiajs/elysia/pull/1568) optimize cookie value comparison using FNV-1a hash
+- [#1549](https://github.com/elysiajs/elysia/pull/1549) Set-Cookie headers not sent when errors are thrown
 
 Change:
 - [#1556](https://github.com/elysiajs/elysia/issues/1556) prevent sending set-cookie header when cookie value is not modified
