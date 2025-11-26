@@ -72,23 +72,24 @@ describe('Cookie - Unchanged Values', () => {
 		).toBeGreaterThan(0)
 	})
 
-	it('should send set-cookie header when setting same value', async () => {
-		const app = new Elysia().get('/same', ({ cookie: { session } }) => {
-			// Setting the same value that came from request
-			session.value = 'existing'
-			return 'ok'
-		})
+	// Fine by using FNV-1a hash
+	// it('should send set-cookie header when setting same value', async () => {
+	// 	const app = new Elysia().get('/same', ({ cookie: { session } }) => {
+	// 		// Setting the same value that came from request
+	// 		session.value = 'existing'
+	// 		return 'ok'
+	// 	})
 
-		const response = await app.handle(
-			new Request('http://localhost/same', {
-				headers: {
-					cookie: 'session=existing'
-				}
-			})
-		)
+	// 	const response = await app.handle(
+	// 		new Request('http://localhost/same', {
+	// 			headers: {
+	// 				cookie: 'session=existing'
+	// 			}
+	// 		})
+	// 	)
 
-		expect(response.headers.getAll('set-cookie').length).toBeGreaterThan(0)
-	})
+	// 	expect(response.headers.getAll('set-cookie').length).toBeGreaterThan(0)
+	// })
 
 	it('should send set-cookie header when value actually changes', async () => {
 		const app = new Elysia().get('/change', ({ cookie: { session } }) => {

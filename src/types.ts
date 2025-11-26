@@ -40,6 +40,11 @@ import { Sucrose } from './sucrose'
 import type Memoirist from 'memoirist'
 import type { DynamicHandler } from './dynamic-handle'
 
+export type Equal<X, Y> =
+	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
+		? true
+		: false
+
 export type IsNever<T> = [T] extends [never] ? true : false
 
 export type PickIfExists<T, K extends string> = {} extends T
@@ -966,18 +971,20 @@ type ExtractOnlyResponseFromMacro<A> =
 				? IsNever<A> extends true
 					? {}
 					: {
-							return: UnionToIntersect< A extends ElysiaCustomStatusResponse<
-								any,
-								infer Value,
-								infer Status
+							return: UnionToIntersect<
+								A extends ElysiaCustomStatusResponse<
+									any,
+									infer Value,
+									infer Status
+								>
+									? {
+											[status in Status]: IsAny<Value> extends true
+												? // @ts-ignore status is always in Status Map
+													InvertedStatusMap[Status]
+												: Value
+										}
+									: {}
 							>
-								? {
-										[status in Status]: IsAny<Value> extends true
-											? // @ts-ignore status is always in Status Map
-												InvertedStatusMap[Status]
-											: Value
-									}
-								: {}>
 						}
 				: {}
 
