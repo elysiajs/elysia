@@ -500,10 +500,10 @@ describe('trace', () => {
 
 		expect(order).toEqual([])
 
-		await app.handle(req('/'))
+		const response = await app.handle(req('/'))
 		expect(order).toEqual([])
 
-		await delay(10)
+		await response.text()
 		expect(order).toEqual(['HANDLE', 'AFTER'])
 	})
 })
