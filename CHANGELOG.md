@@ -4,6 +4,9 @@ Improvement:
 - [#1568](https://github.com/elysiajs/elysia/pull/1568) optimize cookie value comparison using FNV-1a hash
 - [#1549](https://github.com/elysiajs/elysia/pull/1549) Set-Cookie headers not sent when errors are thrown
 
+Bug fix:
+- [#1550](https://github.com/elysiajs/elysia/pull/1550) excess property checking
+
 Change:
 - [#1556](https://github.com/elysiajs/elysia/issues/1556) prevent sending set-cookie header when cookie value is not modified
 - [#1563](https://github.com/elysiajs/elysia/issues/1563) standard schema on websocket
