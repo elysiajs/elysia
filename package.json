@@ -190,7 +190,7 @@
 		"release": "bun run build && bun run test && bun publish"
 	},
 	"dependencies": {
-		"cookie": "1.0.2",
+		"cookie": "^1.1.1",
 		"exact-mirror": "0.2.5",
 		"fast-decode-uri-component": "^1.0.1",
 		"memoirist": "^0.4.0"
