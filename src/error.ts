@@ -39,20 +39,40 @@ const emptyHttpStatus = {
 	308: undefined
 } as const
 
+type CheckExcessProps<T, U> = 0 extends 1 & T
+	? T // T is any
+	: U extends U
+		? Exclude<keyof T, keyof U> extends never
+			? T
+			: { [K in keyof U]: U[K] } & { [K in Exclude<keyof T, keyof U>]: never }
+		: never
+
 export type SelectiveStatus<in out Res> = <
 	const Code extends
 		| keyof Res
-		| InvertedStatusMap[Extract<keyof InvertedStatusMap, keyof Res>]
->(
-	code: Code,
-	response: Code extends keyof Res
+		| InvertedStatusMap[Extract<keyof InvertedStatusMap, keyof Res>],
+	T extends Code extends keyof Res
 		? Res[Code]
 		: Code extends keyof StatusMap
 			? // @ts-ignore StatusMap[Code] always valid because Code generic check
 				Res[StatusMap[Code]]
 			: never
+>(
+	code: Code,
+	response: CheckExcessProps<
+		T,
+		Code extends keyof Res
+			? Res[Code]
+			: Code extends keyof StatusMap
+				? // @ts-ignore StatusMap[Code] always valid because Code generic check
+					Res[StatusMap[Code]]
+				: never
+	>
+) => ElysiaCustomStatusResponse<
 	// @ts-ignore trust me bro
-) => ElysiaCustomStatusResponse<Code, T>
+	Code,
+	T
+>
 
 export class ElysiaCustomStatusResponse<
 	const in out Code extends number | keyof StatusMap,
