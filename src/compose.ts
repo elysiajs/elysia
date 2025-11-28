@@ -2291,18 +2291,21 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 
 	if (isWebstandard)
 		findDynamicRoute +=
-			`if(r.method==='HEAD'){` +
-			`const route=router.find('GET',p)\n` +
-			'if(route){' +
-			`c.params=route.params\n` +
-			`const _res=route.store.handler?route.store.handler(c):route.store.compile()(c)\n` +
+			`if(r.method==="HEAD"){` +
+			`const route=router.find("GET",p);` +
+			`if(route){` +
+			`c.params=route.params;` +
+			`const _res=route.store.handler?route.store.handler(c):route.store.compile()(c);` +
 			`if(_res)` +
-			'return getResponseLength(_res).then((length)=>{' +
-			`_res.headers.set('content-length', length)\n` +
-			`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers})\n` +
-			'})' +
-			'}' +
-			'}'
+			`return Promise.resolve(_res).then((_res)=>{` +
+			`if(!_res.headers)_res.headers=new Headers();` +
+			`return getResponseLength(_res).then((length)=>{` +
+			`_res.headers.set("content-length", length);` +
+			`return new Response(null,{status:_res.status,statusText:_res.statusText,headers:_res.headers});` +
+			`})` +
+			`});` +
+			`}` +
+			`}`
 
 	let afterResponse = `c.error=notFound\n`
 	if (app.event.afterResponse?.length && !app.event.error) {
