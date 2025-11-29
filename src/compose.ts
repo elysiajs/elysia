@@ -698,8 +698,8 @@ export const composeHandler = ({
 	}
 
 	if (hasQuery) {
-		let arrayProperties: Record<string, 1> = {}
-		let objectProperties: Record<string, 1> = {}
+		let arrayProperties: Record<string, true> = {}
+		let objectProperties: Record<string, true> = {}
 		let hasArrayProperty = false
 		let hasObjectProperty = false
 
@@ -709,12 +709,12 @@ export const composeHandler = ({
 			if (Kind in schema && schema.properties) {
 				for (const [key, value] of Object.entries(schema.properties)) {
 					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
-						arrayProperties[key] = 1
+						arrayProperties[key] = true
 						hasArrayProperty = true
 					}
 
 					if (hasElysiaMeta('ObjectString', value as TSchema)) {
-						objectProperties[key] = 1
+						objectProperties[key] = true
 						hasObjectProperty = true
 					}
 				}
@@ -725,12 +725,16 @@ export const composeHandler = ({
 			'if(c.qi===-1){' +
 			'c.query=Object.create(null)' +
 			'}else{' +
-			`c.query=parseQueryFromURL(c.url,c.qi+1,${
+			`c.query=parseQueryFromURL(c.url,c.qi+1${
 				//
-				hasArrayProperty ? JSON.stringify(arrayProperties) : undefined
-			},${
+				hasArrayProperty
+					? ',' + JSON.stringify(arrayProperties)
+					: hasObjectProperty
+						? ',undefined'
+						: ''
+			}${
 				//
-				hasObjectProperty ? JSON.stringify(objectProperties) : undefined
+				hasObjectProperty ? ',' + JSON.stringify(objectProperties) : ''
 			})` +
 			'}'
 	}
@@ -837,7 +841,7 @@ export const composeHandler = ({
 	}
 
 	const mapResponseContext =
-		maybeStream || adapter.mapResponseContext
+		maybeStream && adapter.mapResponseContext
 			? `,${adapter.mapResponseContext}`
 			: ''
 

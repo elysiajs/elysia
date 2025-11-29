@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia, t } from '../../src'
 import { newWebsocket, wsOpen, wsMessage, wsClosed } from './utils'
+import z from 'zod'
 
 describe('WebSocket message', () => {
 	it('should send & receive', async () => {
@@ -182,6 +183,64 @@ describe('WebSocket message', () => {
 
 		expect(type).toBe('message')
 		expect(data).toInclude('Expected')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should validate standard schema success', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				body: z.object({
+					message: z.string()
+				}),
+				message(ws, { message }) {
+					ws.send(message)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send(JSON.stringify({ message: 'Hello!' }))
+
+		const { type, data } = await message
+
+		expect(type).toBe('message')
+		expect(data).toBe('Hello!')
+
+		await wsClosed(ws)
+		app.stop()
+	})
+
+	it('should validate standard schema fail', async () => {
+		const app = new Elysia()
+			.ws('/ws', {
+				body: z.object({
+					message: z.string()
+				}),
+				message(ws, { message }) {
+					ws.send(message)
+				}
+			})
+			.listen(0)
+
+		const ws = newWebsocket(app.server!)
+
+		await wsOpen(ws)
+
+		const message = wsMessage(ws)
+
+		ws.send('Hello!')
+
+		const { type, data } = await message
+
+		expect(type).toBe('message')
+		expect(data).toInclude('validation')
 
 		await wsClosed(ws)
 		app.stop()

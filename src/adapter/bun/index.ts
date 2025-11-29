@@ -340,6 +340,7 @@ export const BunAdapter: ElysiaAdapter = {
 									createStaticRoute(app.router.response),
 									mapRoutes(app)
 								),
+								// @ts-ignore
 								app.config.serve?.routes
 							),
 							websocket: {
@@ -360,6 +361,7 @@ export const BunAdapter: ElysiaAdapter = {
 									createStaticRoute(app.router.response),
 									mapRoutes(app)
 								),
+								// @ts-ignore
 								app.config.serve?.routes
 							),
 							websocket: {
@@ -402,6 +404,7 @@ export const BunAdapter: ElysiaAdapter = {
 							}),
 							mapRoutes(app)
 						),
+						// @ts-ignore
 						app.config.serve?.routes
 					)
 				})
@@ -428,7 +431,7 @@ export const BunAdapter: ElysiaAdapter = {
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		const { parse, body, response, ...rest } = options
 
-		const validateMessage = getSchemaValidator(body, {
+		const messageValidator = getSchemaValidator(body, {
 			// @ts-expect-error private property
 			modules: app.definitions.typebox,
 			// @ts-expect-error private property
@@ -436,7 +439,13 @@ export const BunAdapter: ElysiaAdapter = {
 			normalize: app.config.normalize
 		})
 
-		const validateResponse = getSchemaValidator(response as any, {
+		const validateMessage = messageValidator ?
+			messageValidator.provider === 'standard'
+				? (data: unknown) => messageValidator.schema['~standard'].validate(data).issues
+				: (data: unknown) => messageValidator.Check(data) === false
+				: undefined
+
+		const responseValidator = getSchemaValidator(response as any, {
 			// @ts-expect-error private property
 			modules: app.definitions.typebox,
 			// @ts-expect-error private property
@@ -456,7 +465,7 @@ export const BunAdapter: ElysiaAdapter = {
 				const { set, path, qi, headers, query, params } = context
 
 				// @ts-ignore
-				context.validator = validateResponse
+				context.validator = responseValidator
 
 				if (options.upgrade) {
 					if (typeof options.upgrade === 'function') {
@@ -484,7 +493,7 @@ export const BunAdapter: ElysiaAdapter = {
 						set.headers['set-cookie']
 					) as any
 
-				const handleResponse = createHandleWSResponse(validateResponse)
+				const handleResponse = createHandleWSResponse(responseValidator)
 				const parseMessage = createWSMessageParser(parse as any)
 
 				let _id: string | undefined
@@ -535,7 +544,7 @@ export const BunAdapter: ElysiaAdapter = {
 
 								return (_id = randomId())
 							},
-							validator: validateResponse,
+							validator: responseValidator,
 							ping(ws: ServerWebSocket<any>, data?: unknown) {
 								options.ping?.(ws as any, data)
 							},
@@ -560,18 +569,17 @@ export const BunAdapter: ElysiaAdapter = {
 							) => {
 								const message = await parseMessage(ws, _message)
 
-								if (validateMessage?.Check(message) === false) {
+								if (validateMessage && validateMessage(message)) {
 									const validationError = new ValidationError(
 										'message',
-										validateMessage,
+										messageValidator!,
 										message
 									)
 
-									if (!hasCustomErrorHandlers) {
+									if (!hasCustomErrorHandlers)
 										return void ws.send(
 											validationError.message as string
 										)
-									}
 
 									return handleErrors(ws, validationError)
 								}
