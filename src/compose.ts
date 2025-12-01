@@ -606,7 +606,7 @@ export const composeHandler = ({
 			if (cookieMeta.sign === true)
 				_encodeCookie +=
 					'for(const [key, cookie] of Object.entries(_setCookie)){' +
-					`c.set.cookie[key].value=await signCookie(cookie.value,\`${secret}\`)` +
+					`c.set.cookie[key].value=await signCookie(cookie.value,${!secret ? 'undefined' : overrideUnsafeQuote(secret)})` +
 					'}'
 			else {
 				if (typeof cookieMeta.sign === 'string')
@@ -614,8 +614,8 @@ export const composeHandler = ({
 
 				for (const name of cookieMeta.sign)
 					_encodeCookie +=
-						`if(_setCookie['${name}']?.value)` +
-						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,\`${secret}\`)\n`
+						`if(_setCookie[${overrideUnsafeQuote(name)}]?.value)` +
+						`c.set.cookie[${overrideUnsafeQuote(name)}].value=await signCookie(_setCookie[${overrideUnsafeQuote(name)}].value,${!secret ? 'undefined' : overrideUnsafeQuote(secret)})\n`
 			}
 
 			_encodeCookie += '}\n'

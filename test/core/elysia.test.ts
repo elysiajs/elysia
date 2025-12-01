@@ -420,7 +420,7 @@ describe('Edge Case', () => {
 		})
 	})
 
-	it('handle arbitary code execution from cookie', async () => {
+	it('handle arbitrary code execution from cookie', async () => {
 		const app = new Elysia({
 			cookie: {
 				secrets: `\` + console.log(c.q='pwn') + \``,
