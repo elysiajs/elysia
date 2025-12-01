@@ -3,7 +3,7 @@ import * as z from 'zod'
 import { post, req } from '../test/utils'
 
 const app = new Elysia({
-	cookie: { secrets: 'secrets', sign: ['session'] }
+	cookie: { secrets: 'secrets', sign: 'session' }
 })
 	.onError(({ code, error }) => {
 		console.log({ code })

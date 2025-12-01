@@ -608,11 +608,15 @@ export const composeHandler = ({
 					'for(const [key, cookie] of Object.entries(_setCookie)){' +
 					`c.set.cookie[key].value=await signCookie(cookie.value,\`${secret}\`)` +
 					'}'
-			else
+			else {
+				if (typeof cookieMeta.sign === 'string')
+					cookieMeta.sign = [cookieMeta.sign]
+
 				for (const name of cookieMeta.sign)
 					_encodeCookie +=
 						`if(_setCookie['${name}']?.value)` +
 						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,\`${secret}\`)\n`
+			}
 
 			_encodeCookie += '}\n'
 		}
@@ -682,11 +686,13 @@ export const composeHandler = ({
 					cookieMeta.sign === true
 						? true
 						: cookieMeta.sign !== undefined
-							? '[' +
-								cookieMeta.sign
-									.map(overrideUnsafeQuoteArrayValue)
-									.reduce((a, b) => a + `'${b}',`, '') +
-								']'
+							? typeof cookieMeta.sign === 'string'
+								? overrideUnsafeQuote(cookieMeta.sign)
+								: '[' +
+									cookieMeta.sign
+										.map(overrideUnsafeQuoteArrayValue)
+										.reduce((a, b) => a + `'${b}',`, '') +
+									']'
 							: 'undefined'
 				},` +
 				get('domain') +

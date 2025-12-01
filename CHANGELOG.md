@@ -10,6 +10,7 @@ Security:
 
 Bug fix:
 - [#1550](https://github.com/elysiajs/elysia/pull/1550) excess property checking
+- allow cookie.sign to be string
 
 Change:
 - [#1584](https://github.com/elysiajs/elysia/pull/1584) change customError property to unknown
