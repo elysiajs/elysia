@@ -2,23 +2,25 @@ import { Elysia, t } from '../src'
 import * as z from 'zod'
 import { post, req } from '../test/utils'
 
-const app = new Elysia()
-	.guard({
-		schema: 'standalone',
-		body: z.object({
-			data: z.any()
-		})
-	})
-	.post('/', ({ body }) => ({ body, win: {}.foo }), {
-		body: z.object({
-			data: z.object({
-				messageId: z.string('pollute-me')
-			})
-		})
-	})
-	.get('/cold-route', () => 'hello world')
-	.listen(3000)
+const app = new Elysia({
+	cookie: { secrets: 'secrets', sign: ['session'] }
+})
+	.onError(({ code, error }) => {
+		console.log({ code })
 
-console.log(
-	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+		if (code === 'INVALID_COOKIE_SIGNATURE')
+			return 'Where is the signature?'
+	})
+	.get('/', ({ cookie: { session } }) => 'awd')
+
+console.log(app.routes[0].compile().toString())
+
+const root = await app.handle(
+	new Request('http://localhost/', {
+		headers: {
+			Cookie: 'session=1234'
+		}
+	})
 )
+
+console.log(await root.text())

@@ -71,6 +71,9 @@ const overrideUnsafeQuote = (value: string) =>
 	// '`' + value + '`'
 	'`' + value.replace(/`/g, '\\`').replace(/\${/g, '$\\{') + '`'
 
+const overrideUnsafeQuoteArrayValue = (value: string) =>
+	value.replace(/`/g, '\\`').replace(/\${/g, '$\\{')
+
 const defaultParsers = [
 	'json',
 	'text',
@@ -670,7 +673,7 @@ export const composeHandler = ({
 							? overrideUnsafeQuote(cookieMeta.secrets)
 							: '[' +
 								cookieMeta.secrets
-									.map(overrideUnsafeQuote)
+									.map(overrideUnsafeQuoteArrayValue)
 									.reduce((a, b) => a + `'${b}',`, '') +
 								']'
 						: 'undefined'
@@ -681,7 +684,7 @@ export const composeHandler = ({
 						: cookieMeta.sign !== undefined
 							? '[' +
 								cookieMeta.sign
-									.map(overrideUnsafeQuote)
+									.map(overrideUnsafeQuoteArrayValue)
 									.reduce((a, b) => a + `'${b}',`, '') +
 								']'
 							: 'undefined'
