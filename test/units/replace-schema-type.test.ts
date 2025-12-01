@@ -3,8 +3,8 @@ import type { TSchema } from '@sinclair/typebox'
 import { Elysia, t } from '../../src'
 import {
 	replaceSchemaTypeFromManyOptions as replaceSchemaType,
-	extractArrayFromArrayString,
-	extractObjectFromObjectString
+	revertObjAndArrStr,
+	coerceFormData
 } from '../../src/replace-schema'
 import { req } from '../utils'
 
@@ -568,7 +568,7 @@ describe('Replace Schema Type', () => {
 				age: t.Number()
 			})
 
-			const result = extractObjectFromObjectString(objectString)
+			const result = revertObjAndArrStr(objectString)
 
 			expect(result).toMatchObject({
 				type: 'object'
@@ -586,7 +586,7 @@ describe('Replace Schema Type', () => {
 				name: t.String()
 			})
 
-			const result = extractObjectFromObjectString(plainObject)
+			const result = revertObjAndArrStr(plainObject)
 
 			expect(result).toBe(plainObject)
 		})
@@ -594,7 +594,7 @@ describe('Replace Schema Type', () => {
 		it('should extract plain Array from ArrayString', () => {
 			const arrayString = t.ArrayString(t.String())
 
-			const result = extractArrayFromArrayString(arrayString)
+			const result = revertObjAndArrStr(arrayString)
 
 			expect(result).toMatchObject({
 				type: 'array'
@@ -609,7 +609,7 @@ describe('Replace Schema Type', () => {
 		it('should return unchanged if not ArrayString', () => {
 			const plainArray = t.Array(t.String())
 
-			const result = extractArrayFromArrayString(plainArray)
+			const result = revertObjAndArrStr(plainArray)
 
 			expect(result).toBe(plainArray)
 		})
@@ -623,7 +623,7 @@ describe('Replace Schema Type', () => {
 				}),
 				{
 					from: t.ObjectString({}),
-					to: (s) => extractObjectFromObjectString(s),
+					to: (s) => revertObjAndArrStr(s),
 					excludeRoot: true
 				}
 			)
@@ -647,7 +647,7 @@ describe('Replace Schema Type', () => {
 				}),
 				{
 					from: t.ArrayString(t.Any()),
-					to: (s) => extractArrayFromArrayString(s),
+					to: (s) => revertObjAndArrStr(s),
 					excludeRoot: true
 				}
 			)
@@ -657,6 +657,288 @@ describe('Replace Schema Type', () => {
 			})
 			expect(result.properties.tags.elysiaMeta).toBeUndefined()
 			expect(result.properties.tags.anyOf).toBeUndefined()
+		})
+	})
+
+	describe('coerceFormData', () => {
+		it('should convert first-level Object to ObjectString (excluding root)', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					user: t.Object({
+						name: t.String(),
+						age: t.Number()
+					})
+				}),
+				coerceFormData()
+			)
+
+			// Root should remain plain Object
+			expect(result).toMatchObject({
+				type: 'object'
+			})
+			expect(result.elysiaMeta).toBeUndefined()
+
+			// First-level nested object should be converted to ObjectString
+			expect(result.properties.user).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+		})
+
+		it('should NOT convert deeper nested Objects', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					level1: t.Object({
+						level2: t.Object({
+							level3: t.Object({
+								value: t.String()
+							})
+						})
+					})
+				}),
+				coerceFormData()
+			)
+
+			// level1 should be ObjectString
+			expect(result.properties.level1).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			// level2 should remain plain Object (not converted)
+			const level1ObjBranch = result.properties.level1.anyOf.find(
+				(x: TSchema) => x.type === 'object'
+			)
+			expect(level1ObjBranch.properties.level2).toMatchObject({
+				type: 'object'
+			})
+			expect(level1ObjBranch.properties.level2.elysiaMeta).toBeUndefined()
+
+			// level3 should also remain plain Object
+			expect(level1ObjBranch.properties.level2.properties.level3).toMatchObject({
+				type: 'object'
+			})
+			expect(level1ObjBranch.properties.level2.properties.level3.elysiaMeta).toBeUndefined()
+		})
+
+		it('should convert first-level Array to ArrayString', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					tags: t.Array(t.String())
+				}),
+				coerceFormData()
+			)
+
+			// tags should be converted to ArrayString
+			expect(result.properties.tags).toMatchObject({
+				elysiaMeta: 'ArrayString'
+			})
+		})
+
+		it('should NOT convert deeper nested Arrays', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					level1: t.Array(
+						t.Array(
+							t.Array(t.String())
+						)
+					)
+				}),
+				coerceFormData()
+			)
+
+			// First-level array should be ArrayString
+			expect(result.properties.level1).toMatchObject({
+				elysiaMeta: 'ArrayString'
+			})
+
+			// Second-level array should remain plain Array
+			const level1ArrBranch = result.properties.level1.anyOf.find(
+				(x: TSchema) => x.type === 'array'
+			)
+			expect(level1ArrBranch.items).toMatchObject({
+				type: 'array'
+			})
+			expect(level1ArrBranch.items.elysiaMeta).toBeUndefined()
+
+			// Third-level array should also remain plain Array
+			expect(level1ArrBranch.items.items).toMatchObject({
+				type: 'array'
+			})
+			expect(level1ArrBranch.items.items.elysiaMeta).toBeUndefined()
+		})
+
+		it('should handle Object with File and nested Object', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					avatar: t.File(),
+					metadata: t.Object({
+						tags: t.Array(t.String()),
+						settings: t.Object({
+							theme: t.String()
+						})
+					})
+				}),
+				coerceFormData()
+			)
+
+			// Root should remain Object
+			expect(result.type).toBe('object')
+			expect(result.elysiaMeta).toBeUndefined()
+
+			// File should remain as File
+			expect(result.properties.avatar).toMatchObject({
+				type: 'string',
+				format: 'binary'
+			})
+
+			// First-level metadata should be ObjectString
+			expect(result.properties.metadata).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			// Nested tags array should remain plain Array (not converted)
+			const metadataObjBranch = result.properties.metadata.anyOf.find(
+				(x: TSchema) => x.type === 'object'
+			)
+			expect(metadataObjBranch.properties.tags).toMatchObject({
+				type: 'array'
+			})
+			expect(metadataObjBranch.properties.tags.elysiaMeta).toBeUndefined()
+
+			// Nested settings object should remain plain Object (not converted)
+			expect(metadataObjBranch.properties.settings).toMatchObject({
+				type: 'object'
+			})
+			expect(metadataObjBranch.properties.settings.elysiaMeta).toBeUndefined()
+		})
+
+		it('should handle Object with Files (array) and nested structures', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					images: t.Files(),
+					data: t.Object({
+						items: t.Array(
+							t.Object({
+								name: t.String()
+							})
+						)
+					})
+				}),
+				coerceFormData()
+			)
+
+			// Files should remain as Files
+			expect(result.properties.images).toMatchObject({
+				type: 'array',
+				items: {
+					type: 'string',
+					format: 'binary'
+				},
+				elysiaMeta: 'Files'
+			})
+
+			// First-level data should be ObjectString
+			expect(result.properties.data).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			// Nested items array should remain plain Array
+			const dataObjBranch = result.properties.data.anyOf.find(
+				(x: TSchema) => x.type === 'object'
+			)
+			expect(dataObjBranch.properties.items).toMatchObject({
+				type: 'array'
+			})
+			expect(dataObjBranch.properties.items.elysiaMeta).toBeUndefined()
+
+			// Array items (objects) should remain plain Objects
+			expect(dataObjBranch.properties.items.items).toMatchObject({
+				type: 'object'
+			})
+			expect(dataObjBranch.properties.items.items.elysiaMeta).toBeUndefined()
+		})
+
+		it('should convert all first-level siblings', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					obj1: t.Object({ a: t.String() }),
+					obj2: t.Object({ b: t.Number() }),
+					arr1: t.Array(t.String()),
+					arr2: t.Array(t.Number()),
+					file: t.File(),
+					str: t.String()
+				}),
+				coerceFormData()
+			)
+
+			// All first-level objects should be ObjectString
+			expect(result.properties.obj1).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+			expect(result.properties.obj2).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			// All first-level arrays should be ArrayString
+			expect(result.properties.arr1).toMatchObject({
+				elysiaMeta: 'ArrayString'
+			})
+			expect(result.properties.arr2).toMatchObject({
+				elysiaMeta: 'ArrayString'
+			})
+
+			// Other types should remain unchanged
+			expect(result.properties.file).toMatchObject({
+				type: 'string',
+				format: 'binary'
+			})
+			expect(result.properties.str).toMatchObject({
+				type: 'string'
+			})
+		})
+
+		it('should handle mixed nested structures correctly', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					upload: t.File(),
+					config: t.Object({
+						nested: t.Object({
+							deep: t.Array(
+								t.Object({
+									value: t.String()
+								})
+							)
+						})
+					})
+				}),
+				coerceFormData()
+			)
+
+			// config should be ObjectString
+			expect(result.properties.config).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			const configObjBranch = result.properties.config.anyOf.find(
+				(x: TSchema) => x.type === 'object'
+			)
+
+			// nested should remain plain Object
+			expect(configObjBranch.properties.nested).toMatchObject({
+				type: 'object'
+			})
+			expect(configObjBranch.properties.nested.elysiaMeta).toBeUndefined()
+
+			// deep array should remain plain Array
+			expect(configObjBranch.properties.nested.properties.deep).toMatchObject({
+				type: 'array'
+			})
+			expect(configObjBranch.properties.nested.properties.deep.elysiaMeta).toBeUndefined()
+
+			// Array items should remain plain Objects
+			expect(configObjBranch.properties.nested.properties.deep.items).toMatchObject({
+				type: 'object'
+			})
+			expect(configObjBranch.properties.nested.properties.deep.items.elysiaMeta).toBeUndefined()
 		})
 	})
 })

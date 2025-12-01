@@ -47,6 +47,7 @@ import {
 	getResponseSchemaValidator,
 	getCookieValidator,
 	ElysiaTypeCheck,
+	hasType,
 } from './schema'
 import {
 	composeHandler,
@@ -162,7 +163,7 @@ import type {
 	InlineHandlerNonMacro,
 	Router
 } from './types'
-import { coercePrimitiveRoot, queryCoercions, stringToStructureCoercions } from './replace-schema'
+import { coercePrimitiveRoot, coerceFormData, queryCoercions, stringToStructureCoercions } from './replace-schema'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -586,7 +587,9 @@ export default class Elysia<
 							dynamic,
 							models,
 							normalize,
-							additionalCoerce: coercePrimitiveRoot(),
+							additionalCoerce: (cloned.body && (hasType('File', cloned.body) || hasType('Files', cloned.body))) 
+								? coerceFormData()
+								: coercePrimitiveRoot(),
 							validators: standaloneValidators.map((x) => x.body),
 							sanitize
 						}),
@@ -648,7 +651,7 @@ export default class Elysia<
 									dynamic,
 									models,
 									normalize,
-									additionalCoerce: coercePrimitiveRoot(),
+									additionalCoerce: (cloned.body && (hasType('File', cloned.body) || hasType('Files', cloned.body))) ? coerceFormData() : coercePrimitiveRoot(),
 									validators: standaloneValidators.map(
 										(x) => x.body
 									),
