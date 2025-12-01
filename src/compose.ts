@@ -40,7 +40,6 @@ import {
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
 import {
-	coercePrimitiveRoot,
 	ElysiaTypeCheck,
 	getCookieValidator,
 	getSchemaValidator,
@@ -63,6 +62,7 @@ import type {
 	SchemaValidator
 } from './types'
 import { tee } from './adapter/utils'
+import { coercePrimitiveRoot } from './replace-schema'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''

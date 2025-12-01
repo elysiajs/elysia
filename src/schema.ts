@@ -31,6 +31,7 @@ import type {
 } from './types'
 
 import type { StandardSchemaV1Like } from './types'
+import { replaceSchemaTypeFromManyOptions, type ReplaceSchemaTypeOptions, stringToStructureCoercions } from './replace-schema'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
@@ -337,396 +338,6 @@ export const hasTransform = (schema: TAnySchema): boolean => {
 	return TransformKind in schema
 }
 
-interface ReplaceSchemaTypeOptions {
-	from: TSchema
-	to(options: Object): TSchema | null
-	excludeRoot?: boolean
-	rootOnly?: boolean
-	original?: TAnySchema
-	/**
-	 * Traverse until object is found except root object
-	 **/
-	untilObjectFound?: boolean
-	/**
-	 * Only replace first object type
-	 **/
-	onlyFirst?: 'object' | 'array' | (string & {})
-}
-
-interface ReplaceSchemaTypeConfig {
-	root: boolean
-	definitions?: Record<string, TSchema> | undefined
-}
-
-export const replaceSchemaType = (
-	schema: TSchema,
-	options: MaybeArray<ReplaceSchemaTypeOptions>,
-	_config: Partial<Omit<ReplaceSchemaTypeConfig, 'root'>> = {}
-) => {
-	const config = _config as ReplaceSchemaTypeConfig
-	config.root = true
-
-	// if (schema.$defs)
-	// 	config.definitions = {
-	// 		...config.definitions,
-	// 		...schema.$defs
-	// 	}
-
-	// const corceDefinitions = (option: ReplaceSchemaTypeOptions) => {
-	// 	if (!config.definitions) return
-
-	// 	for (const [key, value] of Object.entries(config.definitions)) {
-	// 		const fromSymbol = option.from[Kind]
-
-	// 		if (fromSymbol === 'Ref') continue
-
-	// 		config.definitions[key] = _replaceSchemaType(value, option, config)
-	// 	}
-	// }
-
-	if (!Array.isArray(options)) {
-		options.original = schema
-
-		// corceDefinitions(options)
-
-		return _replaceSchemaType(schema, options, config)
-	}
-
-	for (const option of options) {
-		option.original = schema
-
-		// corceDefinitions(option)
-
-		schema = _replaceSchemaType(schema, option, config)
-	}
-
-	return schema
-}
-
-const _replaceSchemaType = (
-	schema: TSchema,
-	options: ReplaceSchemaTypeOptions,
-	config: ReplaceSchemaTypeConfig
-): TSchema => {
-	if (!schema) return schema
-
-	const root = config.root
-
-	if (options.onlyFirst && schema.type === options.onlyFirst)
-		return options.to(schema) ?? schema
-
-	if (options.untilObjectFound && !root && schema.type === 'object')
-		return schema
-
-	const fromSymbol = options.from[Kind]
-
-	// if (schema.$ref) {
-	// 	if (schema.$defs && schema.$ref in schema.$defs) {
-	// 		const definitions: Record<string, TSchema> = {}
-
-	// 		for (const [key, value] of Object.entries(schema.$defs))
-	// 			definitions[key] = _replaceSchemaType(
-	// 				value as TSchema,
-	// 				options,
-	// 				config
-	// 			)
-
-	// 		config.definitions = { ...config.definitions, ...definitions }
-	// 	}
-
-	// 	return schema
-	// }
-
-	if (schema.oneOf) {
-		for (let i = 0; i < schema.oneOf.length; i++)
-			schema.oneOf[i] = _replaceSchemaType(
-				schema.oneOf[i],
-				options,
-				config
-			)
-
-		return schema
-	}
-
-	if (schema.anyOf) {
-		for (let i = 0; i < schema.anyOf.length; i++)
-			schema.anyOf[i] = _replaceSchemaType(
-				schema.anyOf[i],
-				options,
-				config
-			)
-
-		return schema
-	}
-
-	if (schema.allOf) {
-		for (let i = 0; i < schema.allOf.length; i++)
-			schema.allOf[i] = _replaceSchemaType(
-				schema.allOf[i],
-				options,
-				config
-			)
-
-		return schema
-	}
-
-	if (schema.not) return _replaceSchemaType(schema.not, options, config)
-
-	const isRoot = root && !!options.excludeRoot
-
-	if (schema[Kind] === fromSymbol) {
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const { anyOf, oneOf, allOf, not, properties, items, ...rest } = schema
-
-		const to = options.to(rest)
-
-		if (!to) return schema
-
-		// If t.Transform is used, we need to re-calculate Encode, Decode
-		let transform
-
-		const composeProperties = (schema: TSchema) => {
-			const v = _composeProperties(schema)
-
-			// $id is removed because it's used in Union inside an Import
-			if (v.$id) delete v.$id
-
-			return v
-		}
-
-		const _composeProperties = (v: TSchema) => {
-			if (properties && v.type === 'object') {
-				const newProperties = <Record<string, unknown>>{}
-				for (const [key, value] of Object.entries(properties))
-					newProperties[key] = _replaceSchemaType(
-						value as TSchema,
-						options,
-						{
-							...config,
-							root: false
-						}
-					)
-
-				return {
-					...rest,
-					...v,
-					properties: newProperties
-				}
-			}
-
-			if (items && v.type === 'array')
-				return {
-					...rest,
-					...v,
-					items: _replaceSchemaType(items, options, {
-						...config,
-						root: false
-					})
-				}
-
-			const value = {
-				...rest,
-				...v
-			}
-
-			// Remove required as it's not object
-			delete value['required']
-
-			// Create default value for ObjectString
-			if (
-				properties &&
-				v.type === 'string' &&
-				v.format === 'ObjectString' &&
-				v.default === '{}'
-			) {
-				transform = t.ObjectString(properties, rest)
-				value.properties = properties
-			}
-			// Create default value for ArrayString
-			else if (
-				items &&
-				v.type === 'string' &&
-				v.format === 'ArrayString' &&
-				v.default === '[]'
-			) {
-				transform = t.ArrayString(items, rest)
-				value.items = items
-			}
-
-			return value
-		}
-
-		if (isRoot) {
-			if (properties) {
-				const newProperties = <Record<string, unknown>>{}
-				for (const [key, value] of Object.entries(properties))
-					newProperties[key] = _replaceSchemaType(
-						value as TSchema,
-						options,
-						{
-							...config,
-							root: false
-						}
-					)
-
-				return {
-					...rest,
-					properties: newProperties
-				}
-			} else if (items?.map)
-				return {
-					...rest,
-					items: items.map((v: TSchema) =>
-						_replaceSchemaType(v, options, {
-							...config,
-							root: false
-						})
-					)
-				}
-
-			return rest
-		}
-
-		if (to.anyOf)
-			for (let i = 0; i < to.anyOf.length; i++)
-				to.anyOf[i] = composeProperties(to.anyOf[i])
-		else if (to.oneOf)
-			for (let i = 0; i < to.oneOf.length; i++)
-				to.oneOf[i] = composeProperties(to.oneOf[i])
-		else if (to.allOf)
-			for (let i = 0; i < to.allOf.length; i++)
-				to.allOf[i] = composeProperties(to.allOf[i])
-		else if (to.not) to.not = composeProperties(to.not)
-
-		if (transform) to[TransformKind as any] = transform[TransformKind]
-
-		if (to.anyOf || to.oneOf || to.allOf || to.not) return to
-
-		if (properties) {
-			const newProperties = <Record<string, unknown>>{}
-			for (const [key, value] of Object.entries(properties))
-				newProperties[key] = _replaceSchemaType(
-					value as TSchema,
-					options,
-					{
-						...config,
-						root: false
-					}
-				)
-
-			return {
-				...rest,
-				...to,
-				properties: newProperties
-			}
-		} else if (items?.map)
-			return {
-				...rest,
-				...to,
-				items: items.map((v: TSchema) =>
-					_replaceSchemaType(v, options, {
-						...config,
-						root: false
-					})
-				)
-			}
-
-		return {
-			...rest,
-			...to
-		}
-	}
-
-	const properties = schema?.properties as Record<string, TSchema>
-
-	if (properties && root && options.rootOnly !== true)
-		for (const [key, value] of Object.entries(properties)) {
-			switch (value[Kind]) {
-				case fromSymbol:
-					// eslint-disable-next-line @typescript-eslint/no-unused-vars
-					const { anyOf, oneOf, allOf, not, type, ...rest } = value
-					const to = options.to(rest)
-
-					if (!to) return schema
-
-					if (to.anyOf)
-						for (let i = 0; i < to.anyOf.length; i++)
-							to.anyOf[i] = { ...rest, ...to.anyOf[i] }
-					else if (to.oneOf)
-						for (let i = 0; i < to.oneOf.length; i++)
-							to.oneOf[i] = { ...rest, ...to.oneOf[i] }
-					else if (to.allOf)
-						for (let i = 0; i < to.allOf.length; i++)
-							to.allOf[i] = { ...rest, ...to.allOf[i] }
-					else if (to.not) to.not = { ...rest, ...to.not }
-
-					properties[key] = {
-						...rest,
-						..._replaceSchemaType(rest, options, {
-							...config,
-							root: false
-						})
-					}
-					break
-
-				case 'Object':
-				case 'Union':
-					properties[key] = _replaceSchemaType(value, options, {
-						...config,
-						root: false
-					})
-					break
-
-				default:
-					if (Array.isArray(value.items)) {
-						for (let i = 0; i < value.items.length; i++) {
-							value.items[i] = _replaceSchemaType(
-								value.items[i],
-								options,
-								{
-									...config,
-									root: false
-								}
-							)
-						}
-					} else if (
-						value.anyOf ||
-						value.oneOf ||
-						value.allOf ||
-						value.not
-					)
-						properties[key] = _replaceSchemaType(value, options, {
-							...config,
-							root: false
-						})
-					else if (value.type === 'array') {
-						value.items = _replaceSchemaType(value.items, options, {
-							...config,
-							root: false
-						})
-					}
-
-					break
-			}
-		}
-
-	if (schema.type === 'array' && schema.items)
-		if (Array.isArray(schema.items))
-			schema.items = schema.items.map((item) =>
-				_replaceSchemaType(item, options, {
-					...config,
-					root: false
-				})
-			)
-		else
-			schema.items = _replaceSchemaType(schema.items, options, {
-				...config,
-				root: false
-			})
-
-	return schema
-}
-
 const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	if (typeof value === 'object')
 		try {
@@ -779,7 +390,7 @@ export const getSchemaValidator = <
 
 	const replaceSchema = (schema: TAnySchema): TAnySchema => {
 		if (coerce)
-			return replaceSchemaType(schema, [
+			return replaceSchemaTypeFromManyOptions(schema, [
 				{
 					from: t.Number(),
 					to: (options) => t.Numeric(options),
@@ -795,7 +406,7 @@ export const getSchemaValidator = <
 					: [additionalCoerce])
 			])
 
-		return replaceSchemaType(schema, additionalCoerce)
+		return replaceSchemaTypeFromManyOptions(schema, additionalCoerce)
 	}
 
 	const mapSchema = (
@@ -824,8 +435,12 @@ export const getSchemaValidator = <
 				if (!hasRef(schema.$defs[schema.$ref])) {
 					schema = schema.$defs[schema.$ref]
 
-					if (coerce || additionalCoerce)
+					if (coerce || additionalCoerce) {
 						schema = replaceSchema(schema as TSchema)
+						if ('$id' in schema && !schema.$defs) {
+                            schema.$id = `${schema.$id}_coerced_${randomId()}`;
+                        }
+					}
 				}
 			} else {
 				if (hasRef(schema)) {
@@ -1050,21 +665,20 @@ export const getSchemaValidator = <
 		)
 			schema.additionalProperties = additionalProperties
 		else
-			schema = replaceSchemaType(schema, {
-				onlyFirst: 'object',
-				from: t.Object({}),
-				// @ts-ignore
-				to({ properties, ...options }) {
-					// If nothing is return, use the original schema
-					if (!properties) return
-					if ('additionalProperties' in schema) return
+    		schema = replaceSchemaTypeFromManyOptions(schema, {
+                onlyFirst: "object",
+                from: t.Object({}),
+                to({ properties, ...options }) {
+                   	// If nothing is return, use the original schema
+                   	if (!properties) return { properties, ...options };
+                   	if ("additionalProperties" in schema) return { properties, ...options };
 
-					return t.Object(properties, {
-						...options,
-						additionalProperties: false
-					})
-				}
-			})
+                   	return t.Object(properties, {
+                  		...options,
+                  		additionalProperties: false,
+                   	});
+                },
+            });
 	}
 
 	if (dynamic) {
@@ -1589,66 +1203,6 @@ export const getResponseSchemaValidator = (
 	})
 
 	return record
-}
-
-let _stringToStructureCoercions: ReplaceSchemaTypeOptions[]
-
-export const stringToStructureCoercions = () => {
-	if (!_stringToStructureCoercions) {
-		_stringToStructureCoercions = [
-			{
-				from: t.Object({}),
-				to: () => t.ObjectString({}),
-				excludeRoot: true
-			},
-			{
-				from: t.Array(t.Any()),
-				to: () => t.ArrayString(t.Any())
-			}
-		] satisfies ReplaceSchemaTypeOptions[]
-	}
-
-	return _stringToStructureCoercions
-}
-
-let _queryCoercions: ReplaceSchemaTypeOptions[]
-
-export const queryCoercions = () => {
-	if (!_queryCoercions) {
-		_queryCoercions = [
-			{
-				from: t.Object({}),
-				to: () => t.ObjectString({}),
-				excludeRoot: true
-			},
-			{
-				from: t.Array(t.Any()),
-				to: () => t.ArrayQuery(t.Any())
-			}
-		] satisfies ReplaceSchemaTypeOptions[]
-	}
-
-	return _queryCoercions
-}
-
-let _coercePrimitiveRoot: ReplaceSchemaTypeOptions[]
-
-export const coercePrimitiveRoot = () => {
-	if (!_coercePrimitiveRoot)
-		_coercePrimitiveRoot = [
-			{
-				from: t.Number(),
-				to: (options) => t.Numeric(options),
-				rootOnly: true
-			},
-			{
-				from: t.Boolean(),
-				to: (options) => t.BooleanString(options),
-				rootOnly: true
-			}
-		] satisfies ReplaceSchemaTypeOptions[]
-
-	return _coercePrimitiveRoot
 }
 
 export const getCookieValidator = ({

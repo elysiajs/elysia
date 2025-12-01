@@ -373,7 +373,10 @@ export const ElysiaType = {
 						default: options?.default
 					}),
 					schema
-				])
+				],
+				{
+					elysiaMeta: 'ArrayString'
+				})
 			)
 			.Decode((value) => {
 				if (Array.isArray(value)) {

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'bun:test'
+import type { TSchema } from '@sinclair/typebox'
 import { Elysia, t } from '../../src'
-import { replaceSchemaType } from '../../src/schema'
+import {
+	replaceSchemaTypeFromManyOptions as replaceSchemaType,
+	extractArrayFromArrayString,
+	extractObjectFromObjectString
+} from '../../src/replace-schema'
 import { req } from '../utils'
 
 describe('Replace Schema Type', () => {
@@ -95,7 +100,7 @@ describe('Replace Schema Type', () => {
 				}),
 				{
 					from: t.Number(),
-					to: () => t.Numeric()
+					to: (options) => t.Numeric(options)
 				}
 			)
 		).toMatchObject(
@@ -145,7 +150,7 @@ describe('Replace Schema Type', () => {
 				}),
 				{
 					from: t.Object({}),
-					to: () => t.ObjectString({}),
+					to: (schema) => t.ObjectString(schema.properties),
 					excludeRoot: true,
 					untilObjectFound: false
 				}
@@ -212,5 +217,446 @@ describe('Replace Schema Type', () => {
 				arr: t.Array(t.Numeric())
 			})
 		)
+	})
+
+	describe('Basic Transformation', () => {
+		it('should transform Object to ObjectString', () => {
+			expect(
+				replaceSchemaType(
+					t.Object({
+						name: t.String()
+					}),
+					{
+						from: t.Object({}),
+						to: (s) => t.ObjectString(s.properties || {}, s)
+					}
+				)
+			).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+		})
+
+		it('should transform Array to ArrayString', () => {
+			expect(
+				replaceSchemaType(t.Array(t.String()), {
+					from: t.Array(t.Any()),
+					to: (s) => t.ArrayString(s.items || t.Any(), s)
+				})
+			).toMatchObject({
+				elysiaMeta: 'ArrayString'
+			})
+		})
+
+		it('should preserve properties after transformation', () => {
+			expect(
+				replaceSchemaType(
+					t.Object({
+						name: t.String(),
+						age: t.Number()
+					}),
+					{
+						from: t.Object({}),
+						to: (s) => t.ObjectString(s.properties || {}, s)
+					}
+				)
+			).toMatchObject(
+				t.ObjectString({
+					name: t.String(),
+					age: t.Number()
+				})
+			)
+		})
+	})
+
+	describe('excludeRoot Option', () => {
+		it('should NOT transform root when excludeRoot is true', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					metadata: t.Object({
+						category: t.String()
+					})
+				}),
+				{
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s),
+					excludeRoot: true
+				}
+			)
+
+			expect(result).toMatchObject({
+				type: 'object'
+			})
+			expect(result.elysiaMeta).toBeUndefined()
+			expect(result.properties.metadata).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+		})
+
+		it('should transform root when excludeRoot is false', () => {
+			expect(
+				replaceSchemaType(
+					t.Object({
+						name: t.String()
+					}),
+					{
+						from: t.Object({}),
+						to: (s) => t.ObjectString(s.properties || {}, s),
+						excludeRoot: false
+					}
+				)
+			).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+		})
+	})
+
+	describe('onlyFirst Option', () => {
+		it('should stop traversal after first match', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					level1: t.Object({
+						level2: t.Object({
+							level3: t.String()
+						})
+					})
+				}),
+				{
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s),
+					onlyFirst: 'object',
+					excludeRoot: true
+				}
+			)
+
+			expect(result.properties.level1).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			const level1ObjBranch = result.properties.level1.anyOf.find(
+				(x: TSchema) => x.type === 'object'
+			)
+			expect(level1ObjBranch.properties.level2).toMatchObject({
+				type: 'object'
+			})
+			expect(level1ObjBranch.properties.level2.elysiaMeta).toBeUndefined()
+		})
+
+		it('should transform all siblings at same level', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					obj1: t.Object({ a: t.String() }),
+					obj2: t.Object({ b: t.String() }),
+					str: t.String()
+				}),
+				{
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s),
+					onlyFirst: 'object',
+					excludeRoot: true
+				}
+			)
+
+			expect(result.properties.obj1).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+			expect(result.properties.obj2).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+			expect(result.properties.str).toMatchObject({
+				type: 'string'
+			})
+		})
+	})
+
+	describe('rootOnly Option', () => {
+		it('should only transform root, not children', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					nested: t.Object({
+						deep: t.String()
+					})
+				}),
+				{
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s),
+					rootOnly: true
+				}
+			)
+
+			expect(result).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			const objBranch = result.anyOf.find(
+				(x: TSchema) => x.type === 'object'
+			)
+			expect(objBranch.properties.nested).toMatchObject({
+				type: 'object'
+			})
+			expect(objBranch.properties.nested.elysiaMeta).toBeUndefined()
+		})
+
+		it('should not transform if root does not match', () => {
+			expect(
+				replaceSchemaType(t.String(), {
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s),
+					rootOnly: true
+				})
+			).toMatchObject({
+				type: 'string'
+			})
+		})
+	})
+
+	describe('Double-wrapping Protection', () => {
+		it('should NOT double-wrap ObjectString', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					metadata: t.ObjectString({
+						category: t.String()
+					})
+				}),
+				{
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s),
+					excludeRoot: true
+				}
+			)
+
+			expect(result.properties.metadata).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			const anyOf = result.properties.metadata.anyOf
+			const objBranch = anyOf.find((x: TSchema) => x.type === 'object')
+			expect(objBranch.elysiaMeta).toBeUndefined()
+			expect(objBranch.anyOf).toBeUndefined()
+		})
+
+		it('should NOT double-wrap ArrayString', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					items: t.ArrayString(t.String())
+				}),
+				{
+					from: t.Array(t.Any()),
+					to: (s) => t.ArrayString(s.items || t.Any(), s),
+					excludeRoot: true
+				}
+			)
+
+			expect(result.properties.items).toMatchObject({
+				elysiaMeta: 'ArrayString'
+			})
+
+			const anyOf = result.properties.items.anyOf
+			const arrBranch = anyOf.find((x: TSchema) => x.type === 'array')
+			expect(arrBranch.elysiaMeta).toBeUndefined()
+		})
+	})
+
+	describe('Bottom-up Traversal', () => {
+		it('should transform children before parents', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					level1: t.Object({
+						level2: t.Object({
+							level3: t.String()
+						})
+					})
+				}),
+				{
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s),
+					excludeRoot: true
+				}
+			)
+
+			expect(result.properties.level1).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+
+			const level1ObjBranch = result.properties.level1.anyOf.find(
+				(x: TSchema) => x.type === 'object'
+			)
+			expect(level1ObjBranch.properties.level2).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+		})
+	})
+
+	describe('Array of Options', () => {
+		it('should apply multiple transformations in order', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					metadata: t.Object({
+						category: t.String()
+					}),
+					tags: t.Array(t.String())
+				}),
+				[
+					{
+						from: t.Object({}),
+						to: (s) => t.ObjectString(s.properties || {}, s),
+						excludeRoot: true
+					},
+					{
+						from: t.Array(t.Any()),
+						to: (s) => t.ArrayString(s.items || t.Any(), s),
+						excludeRoot: true
+					}
+				]
+			)
+
+			expect(result.properties.metadata).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+			expect(result.properties.tags).toMatchObject({
+				elysiaMeta: 'ArrayString'
+			})
+		})
+	})
+
+	describe('Composition Types', () => {
+		it('should traverse anyOf branches', () => {
+			const result = replaceSchemaType(
+				{
+					anyOf: [
+						t.Object({ a: t.String() }),
+						t.Object({ b: t.Number() })
+					]
+				} as any,
+				{
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s)
+				}
+			)
+
+			expect(result.anyOf[0]).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+			expect(result.anyOf[1]).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+		})
+
+		it('should traverse oneOf branches', () => {
+			const result = replaceSchemaType(
+				{
+					oneOf: [t.Object({ type: t.String() }), t.Array(t.String())]
+				} as any,
+				{
+					from: t.Object({}),
+					to: (s) => t.ObjectString(s.properties || {}, s)
+				}
+			)
+
+			expect(result.oneOf[0]).toMatchObject({
+				elysiaMeta: 'ObjectString'
+			})
+			expect(result.oneOf[1]).toMatchObject({
+				type: 'array'
+			})
+		})
+	})
+
+	describe('Reverse Transformation Helpers', () => {
+		it('should extract plain Object from ObjectString', () => {
+			const objectString = t.ObjectString({
+				name: t.String(),
+				age: t.Number()
+			})
+
+			const result = extractObjectFromObjectString(objectString)
+
+			expect(result).toMatchObject({
+				type: 'object'
+			})
+			expect(result.elysiaMeta).toBeUndefined()
+			expect(result.anyOf).toBeUndefined()
+			expect(result.properties).toMatchObject({
+				name: { type: 'string' },
+				age: { type: 'number' }
+			})
+		})
+
+		it('should return unchanged if not ObjectString', () => {
+			const plainObject = t.Object({
+				name: t.String()
+			})
+
+			const result = extractObjectFromObjectString(plainObject)
+
+			expect(result).toBe(plainObject)
+		})
+
+		it('should extract plain Array from ArrayString', () => {
+			const arrayString = t.ArrayString(t.String())
+
+			const result = extractArrayFromArrayString(arrayString)
+
+			expect(result).toMatchObject({
+				type: 'array'
+			})
+			expect(result.elysiaMeta).toBeUndefined()
+			expect(result.anyOf).toBeUndefined()
+			expect(result.items).toMatchObject({
+				type: 'string'
+			})
+		})
+
+		it('should return unchanged if not ArrayString', () => {
+			const plainArray = t.Array(t.String())
+
+			const result = extractArrayFromArrayString(plainArray)
+
+			expect(result).toBe(plainArray)
+		})
+
+		it('should transform ObjectString back to Object', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					metadata: t.ObjectString({
+						category: t.String()
+					})
+				}),
+				{
+					from: t.ObjectString({}),
+					to: (s) => extractObjectFromObjectString(s),
+					excludeRoot: true
+				}
+			)
+
+			expect(result.properties.metadata).toMatchObject({
+				type: 'object'
+			})
+			expect(result.properties.metadata.elysiaMeta).toBeUndefined()
+			expect(result.properties.metadata.anyOf).toBeUndefined()
+			expect(result.properties.metadata.properties.category).toMatchObject(
+				{
+					type: 'string'
+				}
+			)
+		})
+
+		it('should transform ArrayString back to Array', () => {
+			const result = replaceSchemaType(
+				t.Object({
+					tags: t.ArrayString(t.String())
+				}),
+				{
+					from: t.ArrayString(t.Any()),
+					to: (s) => extractArrayFromArrayString(s),
+					excludeRoot: true
+				}
+			)
+
+			expect(result.properties.tags).toMatchObject({
+				type: 'array'
+			})
+			expect(result.properties.tags.elysiaMeta).toBeUndefined()
+			expect(result.properties.tags.anyOf).toBeUndefined()
+		})
 	})
 })

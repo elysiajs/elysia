@@ -43,13 +43,10 @@ import {
 } from './utils'
 
 import {
-	coercePrimitiveRoot,
-	stringToStructureCoercions,
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	getCookieValidator,
 	ElysiaTypeCheck,
-	queryCoercions
 } from './schema'
 import {
 	composeHandler,
@@ -165,6 +162,7 @@ import type {
 	InlineHandlerNonMacro,
 	Router
 } from './types'
+import { coercePrimitiveRoot, queryCoercions, stringToStructureCoercions } from './replace-schema'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -8144,8 +8142,10 @@ export {
 export {
 	getSchemaValidator,
 	getResponseSchemaValidator,
-	replaceSchemaType
 } from './schema'
+export {
+    replaceSchemaTypeFromManyOptions
+} from './replace-schema'
 
 export {
 	mergeHook,
