@@ -1,4 +1,4 @@
-import { Type, Kind } from '@sinclair/typebox'
+import { Type, Kind, Static } from '@sinclair/typebox'
 import type {
 	ArrayOptions,
 	DateOptions,
@@ -492,10 +492,19 @@ export const ElysiaType = {
 			})
 			.Encode((value) => value) as unknown as TUnsafe<File[]>,
 
+	/**
+	 * @deprecated Use MaybeNull instead which is OpenAPI 3.0 compliant. Will be removed in the next major release
+	 */
 	Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
 		t.Union([schema, t.Null()], {
 			...options,
 			nullable: true
+		}),
+
+	MaybeNull: <T extends TSchema>(schema: T): TUnsafe<Static<T> | null> =>
+		Type.Unsafe({
+			...schema,
+			nullable: true,
 		}),
 
 	/**
@@ -660,6 +669,7 @@ t.Files = (arg) => {
 }
 
 t.Nullable = ElysiaType.Nullable
+t.MaybeNull = ElysiaType.MaybeNull
 t.MaybeEmpty = ElysiaType.MaybeEmpty
 t.Cookie = ElysiaType.Cookie
 t.Date = ElysiaType.Date
