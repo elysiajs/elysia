@@ -1,51 +1,24 @@
 import { Elysia, t } from '../src'
+import * as z from 'zod'
+import { post, req } from '../test/utils'
 
-const app = new Elysia().get(
-	'/',
-	() => ({ message: 'Hello Elysia' as const }),
-	{
-		response: {
-			200: t.Object({
-				message: t.Literal('Hello Elysia')
+const app = new Elysia()
+	.guard({
+		schema: 'standalone',
+		body: z.object({
+			data: z.any()
+		})
+	})
+	.post('/', ({ body }) => ({ body, win: {}.foo }), {
+		body: z.object({
+			data: z.object({
+				messageId: z.string('pollute-me')
 			})
-		}
-	}
+		})
+	})
+	.get('/cold-route', () => 'hello world')
+	.listen(3000)
+
+console.log(
+	`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
 )
-
-type AppResponse = (typeof app)['~Routes']['get']['response']
-
-// Should properly infer the 200 response type, not [x: string]: any
-const _typeTest: AppResponse extends {
-	200: { message: 'Hello Elysia' }
-}
-	? true
-	: false = true
-
-// Test with multiple status codes including 200
-const app2 = new Elysia().post(
-	'/test',
-	({ status }) => {
-		if (Math.random() > 0.5) {
-			return status(200, { message: 'Hello Elysia' as const })
-		}
-
-		return status(422, { error: 'Validation error' })
-	},
-	{
-		response: {
-			200: t.Object({
-				message: t.Literal('Hello Elysia')
-			}),
-			422: t.Object({
-				error: t.String()
-			})
-		}
-	}
-)
-
-type App2Response = (typeof app2)['~Routes']['test']['post']['response']
-
-type A = App2Response extends {
-	200: { message: 'Hello Elysia' }
-	422: { error: string }
-} ? true : false

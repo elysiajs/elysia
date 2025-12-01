@@ -67,6 +67,10 @@ import { tee } from './adapter/utils'
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
 
+const overrideUnsafeQuote = (value: string) =>
+	// '`' + value + '`'
+	'`' + value.replace(/`/g, '\\`').replace(/\${/g, '$\\{') + '`'
+
 const defaultParsers = [
 	'json',
 	'text',
@@ -599,13 +603,13 @@ export const composeHandler = ({
 			if (cookieMeta.sign === true)
 				_encodeCookie +=
 					'for(const [key, cookie] of Object.entries(_setCookie)){' +
-					`c.set.cookie[key].value=await signCookie(cookie.value,'${secret}')` +
+					`c.set.cookie[key].value=await signCookie(cookie.value,\`${secret}\`)` +
 					'}'
 			else
 				for (const name of cookieMeta.sign)
 					_encodeCookie +=
 						`if(_setCookie['${name}']?.value)` +
-						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')\n`
+						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,\`${secret}\`)\n`
 
 			_encodeCookie += '}\n'
 		}
@@ -643,12 +647,16 @@ export const composeHandler = ({
 		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
 			// @ts-ignore
 			const value = cookieMeta?.[name] ?? defaultValue
+
+			if (value === undefined) return ''
+
 			if (!value)
 				return typeof defaultValue === 'string'
 					? `${name}:"${defaultValue}",`
 					: `${name}:${defaultValue},`
 
-			if (typeof value === 'string') return `${name}:'${value}',`
+			if (typeof value === 'string')
+				return `${name}:${overrideUnsafeQuote(value)},`
 			if (value instanceof Date)
 				return `${name}: new Date(${value.getTime()}),`
 
@@ -659,12 +667,11 @@ export const composeHandler = ({
 			? `{secrets:${
 					cookieMeta.secrets !== undefined
 						? typeof cookieMeta.secrets === 'string'
-							? `'${cookieMeta.secrets}'`
+							? overrideUnsafeQuote(cookieMeta.secrets)
 							: '[' +
-								cookieMeta.secrets.reduce(
-									(a, b) => a + `'${b}',`,
-									''
-								) +
+								cookieMeta.secrets
+									.map(overrideUnsafeQuote)
+									.reduce((a, b) => a + `'${b}',`, '') +
 								']'
 						: 'undefined'
 				},` +
@@ -673,10 +680,9 @@ export const composeHandler = ({
 						? true
 						: cookieMeta.sign !== undefined
 							? '[' +
-								cookieMeta.sign.reduce(
-									(a, b) => a + `'${b}',`,
-									''
-								) +
+								cookieMeta.sign
+									.map(overrideUnsafeQuote)
+									.reduce((a, b) => a + `'${b}',`, '') +
 								']'
 							: 'undefined'
 				},` +

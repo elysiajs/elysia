@@ -68,7 +68,11 @@ export const mergeDeep = <
 	if (!isObject(target) || !isObject(source)) return target as A & B
 
 	for (const [key, value] of Object.entries(source)) {
-		if (skipKeys?.includes(key)) continue
+		if (
+			skipKeys?.includes(key) ||
+			['__proto__', 'constructor', 'prototype'].includes(key)
+		)
+			continue
 
 		if (mergeArray && Array.isArray(value)) {
 			target[key as keyof typeof target] = Array.isArray(

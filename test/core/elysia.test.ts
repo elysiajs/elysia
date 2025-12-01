@@ -2,6 +2,7 @@ import { Elysia, t } from '../../src'
 
 import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
+import z from 'zod'
 
 describe('Edge Case', () => {
 	it('handle state', async () => {
@@ -244,11 +245,12 @@ describe('Edge Case', () => {
 		expect(responses).toEqual(['AB', 'BA'])
 	})
 
-	it('handle complex union with json accelerate, exact mirror, and sanitize', async () => {
+	it('handle complex union with json exact mirror, and sanitize', async () => {
 		const app = new Elysia({
 			sanitize: (v) => v && 'Elysia'
 		}).get(
 			'/',
+			// @ts-ignore
 			() => ({
 				type: 'ok',
 				data: [
@@ -399,7 +401,7 @@ describe('Edge Case', () => {
 
 		expect(response.status).toBe(200)
 		expect(response.headers.toJSON()).toEqual({
-			'content-length': '11',
+			'content-length': '11'
 		})
 	})
 
@@ -414,7 +416,75 @@ describe('Edge Case', () => {
 
 		expect(response.status).toBe(200)
 		expect(response.headers.toJSON()).toEqual({
-			'content-length': '11',
+			'content-length': '11'
 		})
+	})
+
+	it('handle arbitary code execution from cookie', async () => {
+		const app = new Elysia({
+			cookie: {
+				secrets: `\` + console.log(c.q='pwn') + \``,
+				domain: process.env.COOKIE_DOMAIN || 'localhost'
+			}
+		}).get(
+			'/',
+			(c) =>
+				// @ts-ignore
+				c.q ?? 'safe',
+			{
+				cookie: t.Cookie({
+					foo: t.Optional(t.Any())
+				})
+			}
+		)
+
+		const response = await app
+			.handle(req('/?name=saltyaom'))
+			.then((x) => x.text())
+
+		expect(response).toBe('safe')
+	})
+
+	it('prototype pollution from input', () => {
+		const app = new Elysia()
+			.guard({
+				schema: 'standalone',
+				body: z.object({
+					data: z.any()
+				})
+			})
+			.post(
+				'/',
+				({ body }) => ({
+					body,
+					win:
+						// @ts-ignore
+						{}.foo
+				}),
+				{
+					body: z.object({
+						data: z.object({
+							messageId: z.string('pollute-me')
+						})
+					})
+				}
+			)
+
+		app.handle(
+			new Request('http://localhost:3000/', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: `{
+					"data": {
+						"messageId": "pollute-me",
+						"__proto__": {
+							"foo": "bar"
+						}
+					}
+				}`
+			})
+		).then((x) => x.json())
 	})
 })
