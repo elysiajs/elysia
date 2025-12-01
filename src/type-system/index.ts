@@ -1,14 +1,17 @@
-import { Type, Kind, Static } from '@sinclair/typebox'
 import type {
 	ArrayOptions,
 	DateOptions,
 	IntegerOptions,
+	JavaScriptTypeBuilder,
+	NumberOptions,
 	ObjectOptions,
 	SchemaOptions,
+	StringOptions,
 	TAnySchema,
 	TArray,
 	TBoolean,
 	TDate,
+	TEnum,
 	TEnumValue,
 	TInteger,
 	TNumber,
@@ -16,13 +19,14 @@ import type {
 	TProperties,
 	TSchema,
 	TString,
-	NumberOptions,
-	JavaScriptTypeBuilder,
-	StringOptions,
 	TUnsafe,
-	Uint8ArrayOptions,
-	TEnum
+	Uint8ArrayOptions
 } from '@sinclair/typebox'
+import { Kind, Type } from '@sinclair/typebox'
+import {
+	DefaultErrorFunction,
+	SetErrorFunction
+} from '@sinclair/typebox/errors'
 
 import {
 	compile,
@@ -32,22 +36,25 @@ import {
 	validateFile
 } from './utils'
 import {
+	AssertNumericEnum,
 	CookieValidatorOptions,
-	TFile,
-	TFiles,
+	ElysiaTransformDecodeBuilder,
 	FileOptions,
 	FilesOptions,
 	NonEmptyArray,
-	TForm,
-	TUnionEnum,
-	ElysiaTransformDecodeBuilder,
 	TArrayBuffer,
-	AssertNumericEnum
+	TFile,
+	TFiles,
+	TForm,
+	TMaybeNull,
+	TUnionEnum,
+	WrappedKind
 } from './types'
 
 import { ELYSIA_FORM_DATA, form } from '../utils'
 import { ValidationError } from '../error'
 import { parseDateTimeEmptySpace } from './format'
+import { Value } from '@sinclair/typebox/value'
 
 const t = Object.assign({}, Type) as unknown as Omit<
 	JavaScriptTypeBuilder,
@@ -72,6 +79,30 @@ createType<TArrayBuffer>(
 	'ArrayBuffer',
 	(schema, value) => value instanceof ArrayBuffer
 )
+
+createType<TMaybeNull>(
+	'MaybeNull',
+	({ [Kind]: kind, [WrappedKind]: wrappedKind, ...schema }, value) => {
+		return (
+			Value.Check(
+				{
+					[Kind]: wrappedKind,
+					...schema
+				},
+				value
+			) || value === null
+		)
+	}
+)
+
+SetErrorFunction((error) => {
+	switch (error.schema[Kind]) {
+		case 'MaybeNull':
+			return `Expected either ${error.schema.type} or null`
+		default:
+			return DefaultErrorFunction(error)
+	}
+})
 
 const internalFiles = createType<FilesOptions, File[]>(
 	'Files',
@@ -153,7 +184,10 @@ export const ElysiaType = {
 			.Encode((value) => value) as any as TNumber
 	},
 
-	NumericEnum<T extends AssertNumericEnum<T>>(item: T, property?: SchemaOptions) {
+	NumericEnum<T extends AssertNumericEnum<T>>(
+		item: T,
+		property?: SchemaOptions
+	) {
 		const schema = Type.Enum(item, property)
 		const compiler = compile(schema)
 
@@ -501,11 +535,15 @@ export const ElysiaType = {
 			nullable: true
 		}),
 
-	MaybeNull: <T extends TSchema>(schema: T): TUnsafe<Static<T> | null> =>
-		Type.Unsafe({
+	MaybeNull: <T extends TSchema>({ [Kind]: kind, ...schema }: T): TSchema => {
+		return {
+			[Kind]: 'MaybeNull',
+			[WrappedKind]: kind,
 			...schema,
-			nullable: true,
-		}),
+			default: undefined,
+			nullable: true
+		} as unknown as TMaybeNull
+	},
 
 	/**
 	 * Allow Optional, Nullable and Undefined
