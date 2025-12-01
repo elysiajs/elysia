@@ -100,7 +100,7 @@ createType<TMaybeNull>(
 SetErrorFunction((error) => {
 	switch (error.schema[Kind]) {
 		case 'MaybeNull':
-			return `Expected '${error.schema.type ?? error.schema[WrappedKind]}' or 'null'`
+			return `Expected '${error.schema.type ?? (error.schema as TMaybeNull)[WrappedKind]}' or 'null'`
 		default:
 			return DefaultErrorFunction(error)
 	}
