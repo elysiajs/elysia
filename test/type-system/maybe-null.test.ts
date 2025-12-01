@@ -213,4 +213,18 @@ describe('TypeSystem - MaybeNull', () => {
 
 		expect(res8.status).toBe(422)
 	})
+
+	it("Validates with default", async () => {
+		const appWithDefault = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({
+				name: t.MaybeNull(t.Number({
+					default: 1
+				}))
+			})
+		});
+
+		const res = await appWithDefault.handle(post('/', {}));
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ name: 1 });
+	});
 })

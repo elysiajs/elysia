@@ -84,13 +84,14 @@ createType<TMaybeNull>(
 	'MaybeNull',
 	({ [Kind]: kind, [WrappedKind]: wrappedKind, ...schema }, value) => {
 		return (
+			value === null ||
 			Value.Check(
 				{
 					[Kind]: wrappedKind,
 					...schema
 				},
 				value
-			) || value === null
+			)
 		)
 	}
 )
@@ -539,8 +540,8 @@ export const ElysiaType = {
 		return {
 			[Kind]: 'MaybeNull',
 			[WrappedKind]: kind,
-			...schema,
 			default: undefined,
+			...schema,
 			nullable: true
 		} as unknown as TMaybeNull
 	},
