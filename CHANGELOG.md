@@ -12,6 +12,7 @@ Bug fix:
 - [#1550](https://github.com/elysiajs/elysia/pull/1550) excess property checking
 
 Change:
+- [#1584](https://github.com/elysiajs/elysia/pull/1584) change customError property to unknown
 - [#1556](https://github.com/elysiajs/elysia/issues/1556) prevent sending set-cookie header when cookie value is not modified
 - [#1563](https://github.com/elysiajs/elysia/issues/1563) standard schema on websocket
 - conditional parseQuery parameter
