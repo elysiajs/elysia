@@ -587,7 +587,7 @@ export default class Elysia<
 							dynamic,
 							models,
 							normalize,
-							additionalCoerce: (cloned.body && (hasType('File', cloned.body) || hasType('Files', cloned.body))) 
+							additionalCoerce: (cloned.body && typeof cloned.body === 'object' && (hasType('File', cloned.body) || hasType('Files', cloned.body)))
 								? coerceFormData()
 								: coercePrimitiveRoot(),
 							validators: standaloneValidators.map((x) => x.body),
@@ -651,7 +651,7 @@ export default class Elysia<
 									dynamic,
 									models,
 									normalize,
-									additionalCoerce: (cloned.body && (hasType('File', cloned.body) || hasType('Files', cloned.body))) ? coerceFormData() : coercePrimitiveRoot(),
+									additionalCoerce: (cloned.body && typeof cloned.body === 'object' && (hasType('File', cloned.body) || hasType('Files', cloned.body))) ? coerceFormData() : coercePrimitiveRoot(),
 									validators: standaloneValidators.map(
 										(x) => x.body
 									),

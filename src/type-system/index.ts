@@ -303,7 +303,7 @@ export const ElysiaType = {
 					[
 						t.String({
 							format: 'ObjectString',
-							default: '{}'
+                            default: options?.default
 						}),
 						schema
 					],

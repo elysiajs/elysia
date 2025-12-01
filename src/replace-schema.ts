@@ -210,12 +210,12 @@ export const queryCoercions = () => {
 		_queryCoercions = [
 			{
 				from: t.Object({}),
-				to: (schema) => t.ObjectString(schema.properties || {}, schema),
+				to: (schema) => t.ObjectString(schema.properties ?? {}, schema),
 				excludeRoot: true,
 			},
 			{
 				from: t.Array(t.Any()),
-				to: (schema) => t.ArrayQuery(schema.items || t.Any(), schema),
+				to: (schema) => t.ArrayQuery(schema.items ?? t.Any(), schema),
 			},
 		] satisfies ReplaceSchemaTypeOptions[];
 	}
@@ -243,26 +243,6 @@ export const coercePrimitiveRoot = () => {
 	return _coercePrimitiveRoot;
 };
 
-/**
- * Helper to remove default from anyOf branches in ObjectString/ArrayString
- * This prevents optional fields from getting default values like '{}' or '[]'
- */
-const removeDefaultFromStringBranch = (schema: TSchema): TSchema => {
-	if (!schema.anyOf) return schema;
-
-	const result = { ...schema };
-	result.anyOf = schema.anyOf.map((branch: TSchema) => {
-		// Remove default from string branch (format: ObjectString or ArrayString)
-		if (branch.type === 'string' && (branch.format === 'ObjectString' || branch.format === 'ArrayString')) {
-			const { default: _, ...rest } = branch;
-			return rest as TSchema;
-		}
-		return branch;
-	});
-
-	return result;
-};
-
 let _coerceFormData: ReplaceSchemaTypeOptions[];
 
 export const coerceFormData = () => {
@@ -270,26 +250,14 @@ export const coerceFormData = () => {
 		_coerceFormData = [
 			{
 				from: t.Object({}),
-				to: (schema) => removeDefaultFromStringBranch(t.ObjectString(schema.properties || {}, schema)),
+				to: (schema) => t.ObjectString(schema.properties ?? {}, schema),
 				onlyFirst: 'object',
 				excludeRoot: true
 			},
 			{
 				from: t.Array(t.Any()),
-				to: (schema) => removeDefaultFromStringBranch(t.ArrayString(schema.items || t.Any(), schema)),
+				to: (schema) => t.ArrayString(schema.items ?? t.Any(), schema),
 				onlyFirst: 'array',
-				excludeRoot: true
-			},
-			// Also strip defaults from existing ObjectString/ArrayString
-			// This handles schemas that explicitly use t.Optional(t.ObjectString(...))
-			{
-				from: t.ObjectString({}),
-				to: (schema) => removeDefaultFromStringBranch(schema),
-				excludeRoot: true
-			},
-			{
-				from: t.ArrayString(t.Any()),
-				to: (schema) => removeDefaultFromStringBranch(schema),
 				excludeRoot: true
 			},
 		] satisfies ReplaceSchemaTypeOptions[];
