@@ -320,7 +320,7 @@ export class ValidationError extends Error {
 	/**
 	 * Custom error if provided
 	 */
-	customError?: string
+	customError?: unknown
 
 	constructor(
 		public type: string,
