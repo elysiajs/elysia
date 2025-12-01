@@ -1,8 +1,9 @@
-import type {
+import {
 	ArrayOptions,
 	DateOptions,
 	IntegerOptions,
 	JavaScriptTypeBuilder,
+	Kind,
 	NumberOptions,
 	ObjectOptions,
 	SchemaOptions,
@@ -20,9 +21,9 @@ import type {
 	TSchema,
 	TString,
 	TUnsafe,
+	Type,
 	Uint8ArrayOptions
 } from '@sinclair/typebox'
-import { Kind, Type } from '@sinclair/typebox'
 import {
 	DefaultErrorFunction,
 	SetErrorFunction
@@ -99,7 +100,7 @@ createType<TMaybeNull>(
 SetErrorFunction((error) => {
 	switch (error.schema[Kind]) {
 		case 'MaybeNull':
-			return `Expected either ${error.schema.type} or null`
+			return `Expected '${error.schema.type ?? error.schema[WrappedKind]}' or 'null'`
 		default:
 			return DefaultErrorFunction(error)
 	}
@@ -536,7 +537,7 @@ export const ElysiaType = {
 			nullable: true
 		}),
 
-	MaybeNull: <T extends TSchema>({ [Kind]: kind, ...schema }: T): TSchema => {
+	MaybeNull: <T extends TSchema>({ [Kind]: kind, ...schema }: T) => {
 		return {
 			[Kind]: 'MaybeNull',
 			[WrappedKind]: kind,

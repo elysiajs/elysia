@@ -227,4 +227,20 @@ describe('TypeSystem - MaybeNull', () => {
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ name: 1 });
 	});
+
+	it("Validates with correct error on complex types", async () => {
+		const appWithDefault = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({
+				name: t.MaybeNull(t.ArrayBuffer())
+			})
+		});
+
+		const res = await appWithDefault.handle(post('/', {
+			name: 1
+		}));
+		expect(res.status).toBe(422);
+		expect(await res.json()).toMatchObject({
+			message: "Expected 'ArrayBuffer' or 'null'"
+		})
+	});
 })
