@@ -1,6 +1,24 @@
-# 1.4.17 - TBD
+# 1.4.17 - 2 Dec 2025
+Improvement:
+- [#1573](https://github.com/elysiajs/elysia/pull/1573) `Server` is always resolved to `any` when `@types/bun` is missing
+- [#1568](https://github.com/elysiajs/elysia/pull/1568) optimize cookie value comparison using FNV-1a hash
+- [#1549](https://github.com/elysiajs/elysia/pull/1549) Set-Cookie headers not sent when errors are thrown
+- [#1579](https://github.com/elysiajs/elysia/pull/1579) HEAD to handle Promise value
+
+Security:
+- cookie injection, prototype pollution, and RCE
+
 Bug fix:
+- [#1550](https://github.com/elysiajs/elysia/pull/1550) excess property checking
+- allow cookie.sign to be string
+
+Change:
+- [#1584](https://github.com/elysiajs/elysia/pull/1584) change customError property to unknown
 - [#1556](https://github.com/elysiajs/elysia/issues/1556) prevent sending set-cookie header when cookie value is not modified
+- [#1563](https://github.com/elysiajs/elysia/issues/1563) standard schema on websocket
+- conditional parseQuery parameter
+- conditional pass `c.request` to handler for streaming response
+- fix missing `contentType` type on `parser`
 
 # 1.4.16 - 13 Nov 2025
 Improvement:

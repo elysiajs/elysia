@@ -67,6 +67,13 @@ import { tee } from './adapter/utils'
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
 
+const overrideUnsafeQuote = (value: string) =>
+	// '`' + value + '`'
+	'`' + value.replace(/`/g, '\\`').replace(/\${/g, '$\\{') + '`'
+
+const overrideUnsafeQuoteArrayValue = (value: string) =>
+	value.replace(/`/g, '\\`').replace(/\${/g, '$\\{')
+
 const defaultParsers = [
 	'json',
 	'text',
@@ -599,13 +606,17 @@ export const composeHandler = ({
 			if (cookieMeta.sign === true)
 				_encodeCookie +=
 					'for(const [key, cookie] of Object.entries(_setCookie)){' +
-					`c.set.cookie[key].value=await signCookie(cookie.value,'${secret}')` +
+					`c.set.cookie[key].value=await signCookie(cookie.value,${!secret ? 'undefined' : overrideUnsafeQuote(secret)})` +
 					'}'
-			else
+			else {
+				if (typeof cookieMeta.sign === 'string')
+					cookieMeta.sign = [cookieMeta.sign]
+
 				for (const name of cookieMeta.sign)
 					_encodeCookie +=
-						`if(_setCookie['${name}']?.value)` +
-						`c.set.cookie['${name}'].value=await signCookie(_setCookie['${name}'].value,'${secret}')\n`
+						`if(_setCookie[${overrideUnsafeQuote(name)}]?.value)` +
+						`c.set.cookie[${overrideUnsafeQuote(name)}].value=await signCookie(_setCookie[${overrideUnsafeQuote(name)}].value,${!secret ? 'undefined' : overrideUnsafeQuote(secret)})\n`
+			}
 
 			_encodeCookie += '}\n'
 		}
@@ -643,12 +654,16 @@ export const composeHandler = ({
 		const get = (name: keyof CookieOptions, defaultValue?: unknown) => {
 			// @ts-ignore
 			const value = cookieMeta?.[name] ?? defaultValue
+
+			if (value === undefined) return ''
+
 			if (!value)
 				return typeof defaultValue === 'string'
 					? `${name}:"${defaultValue}",`
 					: `${name}:${defaultValue},`
 
-			if (typeof value === 'string') return `${name}:'${value}',`
+			if (typeof value === 'string')
+				return `${name}:${overrideUnsafeQuote(value)},`
 			if (value instanceof Date)
 				return `${name}: new Date(${value.getTime()}),`
 
@@ -659,12 +674,11 @@ export const composeHandler = ({
 			? `{secrets:${
 					cookieMeta.secrets !== undefined
 						? typeof cookieMeta.secrets === 'string'
-							? `'${cookieMeta.secrets}'`
+							? overrideUnsafeQuote(cookieMeta.secrets)
 							: '[' +
-								cookieMeta.secrets.reduce(
-									(a, b) => a + `'${b}',`,
-									''
-								) +
+								cookieMeta.secrets
+									.map(overrideUnsafeQuoteArrayValue)
+									.reduce((a, b) => a + `'${b}',`, '') +
 								']'
 						: 'undefined'
 				},` +
@@ -672,12 +686,13 @@ export const composeHandler = ({
 					cookieMeta.sign === true
 						? true
 						: cookieMeta.sign !== undefined
-							? '[' +
-								cookieMeta.sign.reduce(
-									(a, b) => a + `'${b}',`,
-									''
-								) +
-								']'
+							? typeof cookieMeta.sign === 'string'
+								? overrideUnsafeQuote(cookieMeta.sign)
+								: '[' +
+									cookieMeta.sign
+										.map(overrideUnsafeQuoteArrayValue)
+										.reduce((a, b) => a + `'${b}',`, '') +
+									']'
 							: 'undefined'
 				},` +
 				get('domain') +
@@ -698,8 +713,8 @@ export const composeHandler = ({
 	}
 
 	if (hasQuery) {
-		let arrayProperties: Record<string, 1> = {}
-		let objectProperties: Record<string, 1> = {}
+		let arrayProperties: Record<string, true> = {}
+		let objectProperties: Record<string, true> = {}
 		let hasArrayProperty = false
 		let hasObjectProperty = false
 
@@ -709,12 +724,12 @@ export const composeHandler = ({
 			if (Kind in schema && schema.properties) {
 				for (const [key, value] of Object.entries(schema.properties)) {
 					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
-						arrayProperties[key] = 1
+						arrayProperties[key] = true
 						hasArrayProperty = true
 					}
 
 					if (hasElysiaMeta('ObjectString', value as TSchema)) {
-						objectProperties[key] = 1
+						objectProperties[key] = true
 						hasObjectProperty = true
 					}
 				}
@@ -725,12 +740,16 @@ export const composeHandler = ({
 			'if(c.qi===-1){' +
 			'c.query=Object.create(null)' +
 			'}else{' +
-			`c.query=parseQueryFromURL(c.url,c.qi+1,${
+			`c.query=parseQueryFromURL(c.url,c.qi+1${
 				//
-				hasArrayProperty ? JSON.stringify(arrayProperties) : undefined
-			},${
+				hasArrayProperty
+					? ',' + JSON.stringify(arrayProperties)
+					: hasObjectProperty
+						? ',undefined'
+						: ''
+			}${
 				//
-				hasObjectProperty ? JSON.stringify(objectProperties) : undefined
+				hasObjectProperty ? ',' + JSON.stringify(objectProperties) : ''
 			})` +
 			'}'
 	}
@@ -837,7 +856,7 @@ export const composeHandler = ({
 	}
 
 	const mapResponseContext =
-		maybeStream || adapter.mapResponseContext
+		maybeStream && adapter.mapResponseContext
 			? `,${adapter.mapResponseContext}`
 			: ''
 
