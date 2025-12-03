@@ -123,6 +123,26 @@ export const hasAdditionalProperties = (
 	return false
 }
 
+/**
+ * Resolve a schema that might be a model reference (string) to the actual schema
+ */
+export const resolveSchema = (
+	schema: TAnySchema | string,
+	models?: Record<string, TAnySchema | StandardSchemaV1Like>,
+	modules?: TModule<any, any>
+): TAnySchema | StandardSchemaV1Like | undefined => {
+	if (typeof schema !== 'string') return schema
+
+	// Check modules first (higher priority)
+	// @ts-expect-error private property
+	if (modules && schema in modules.$defs) {
+		return (modules as TModule<{}, {}>).Import(schema as never)
+	}
+
+	// Then check models
+	return models?.[schema]
+}
+
 export const hasType = (type: string, schema: TAnySchema) => {
 	if (!schema) return false
 

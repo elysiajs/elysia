@@ -634,4 +634,38 @@ describe("Nested FormData with file(s) support", () => {
 			expect(data.type).toBe("validation");
 		});
 	});
+
+	describe("Model reference with File and nested Object", () => {
+		const bunFilePath5 = `${import.meta.dir}/../images/aris-yuzu.jpg`;
+		const bunFile = Bun.file(bunFilePath5) as File;
+
+		it("should coerce nested Object to ObjectString when using model reference", async () => {
+			const app = new Elysia()
+				.model('userWithAvatar', t.Object({
+					name: t.String(),
+					avatar: t.File(),
+					metadata: t.Object({
+						age: t.Number()
+					})
+				}))
+				.post('/user', ({ body }) => body, {
+					body: 'userWithAvatar'
+				})
+
+			const formData = new FormData()
+			formData.append('name', 'John')
+			formData.append('avatar', bunFile)
+			formData.append('metadata', JSON.stringify({ age: 25 }))
+
+			const response = await app.handle(new Request('http://localhost/user', {
+				method: 'POST',
+				body: formData
+			}))
+
+			expect(response.status).toBe(200)
+			const data = await response.json() as any
+			expect(data.name).toBe('John')
+			expect(data.metadata).toEqual({ age: 25 })
+		})
+	})
 });

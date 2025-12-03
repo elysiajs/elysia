@@ -48,6 +48,7 @@ import {
 	getCookieValidator,
 	ElysiaTypeCheck,
 	hasType,
+	resolveSchema,
 } from './schema'
 import {
 	composeHandler,
@@ -587,9 +588,13 @@ export default class Elysia<
 							dynamic,
 							models,
 							normalize,
-							additionalCoerce: (cloned.body && typeof cloned.body === 'object' && (hasType('File', cloned.body) || hasType('Files', cloned.body)))
-								? coerceFormData()
-								: coercePrimitiveRoot(),
+							additionalCoerce: (() => {
+								const resolved = resolveSchema(cloned.body, models, modules)
+								// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
+								return (resolved && Kind in resolved && (hasType('File', resolved) || hasType('Files', resolved)))
+									? coerceFormData()
+									: coercePrimitiveRoot()
+							})(),
 							validators: standaloneValidators.map((x) => x.body),
 							sanitize
 						}),
@@ -651,7 +656,13 @@ export default class Elysia<
 									dynamic,
 									models,
 									normalize,
-									additionalCoerce: (cloned.body && typeof cloned.body === 'object' && (hasType('File', cloned.body) || hasType('Files', cloned.body))) ? coerceFormData() : coercePrimitiveRoot(),
+									additionalCoerce: (() => {
+										const resolved = resolveSchema(cloned.body, models, modules)
+										// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
+										return (resolved && Kind in resolved && (hasType('File', resolved) || hasType('Files', resolved)))
+											? coerceFormData()
+											: coercePrimitiveRoot()
+									})(),
 									validators: standaloneValidators.map(
 										(x) => x.body
 									),
