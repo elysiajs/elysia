@@ -86,4 +86,78 @@ describe('mergeDeep', () => {
 			.decorate('db', Object.freeze({ hello: 'world' }))
 			.guard({}, (app) => app)
 	})
+
+	it('handle circular references', () => {
+		const a: {
+			x: number
+			toB?: typeof b
+		} = { x: 1 }
+		const b: {
+			y: number
+			toA?: typeof a
+		} = { y: 2 }
+
+		a.toB = b
+		b.toA = a
+
+		const target = {}
+		const source = { prop: a }
+
+		const result = mergeDeep(target, source)
+
+		expect(result.prop.x).toBe(1)
+		expect(result.prop.toB?.y).toBe(2)
+	})
+
+	it('handle shared references in different branches', () => {
+		const shared = { value: 123 }
+		const target = { x: {}, y: {} }
+		const source = { x: shared, y: shared }
+
+		const result = mergeDeep(target, source)
+
+		expect(result.x.value).toBe(123)
+		expect(result.y.value).toBe(123)
+	})
+
+	it('deduplicate plugin with circular decorators', async () => {
+		const a: {
+			x: number
+			toB?: typeof b
+		} = { x: 1 }
+		const b: {
+			y: number
+			toA?: typeof a
+		} = { y: 2 }
+		a.toB = b
+		b.toA = a
+
+		const complex = { a }
+
+		const Plugin = new Elysia({ name: 'Plugin', seed: 'seed' })
+			.decorate('dep', complex)
+			.as('scoped')
+
+		const ModuleA = new Elysia({ name: 'ModuleA' })
+			.use(Plugin)
+			.get('/moda/a', ({ dep }) => dep.a.x)
+			.get('/moda/b', ({ dep }) => dep.a.toB?.y)
+
+		const ModuleB = new Elysia({ name: 'ModuleB' })
+			.use(Plugin)
+			.get('/modb/a', ({ dep }) => dep.a.x)
+			.get('/modb/b', ({ dep }) => dep.a.toB?.y)
+
+		const app = new Elysia().use(ModuleA).use(ModuleB)
+
+		const resA = await app.handle(req('/moda/a')).then((x) => x.text())
+		const resB = await app.handle(req('/modb/a')).then((x) => x.text())
+		const resC = await app.handle(req('/moda/b')).then((x) => x.text())
+		const resD = await app.handle(req('/modb/b')).then((x) => x.text())
+
+		expect(resA).toBe('1')
+		expect(resB).toBe('1')
+		expect(resC).toBe('2')
+		expect(resD).toBe('2')
+	})
 })
