@@ -338,6 +338,7 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	return (response: Response, set: Context['set'], request?: Request) => {
 		let isCookieSet = false
 
+		// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
 		if (set.headers instanceof Headers)
 			for (const key of set.headers.keys()) {
 				if (key === 'set-cookie') {
@@ -347,14 +348,21 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 
 					for (const cookie of set.headers.getSetCookie())
 						response.headers.append('set-cookie', cookie)
-				} else response.headers.append(key, set.headers?.get(key) ?? '')
+				} else if (!response.headers.has(key))
+					response.headers.set(key, set.headers?.get(key) ?? '')
 			}
 		else
 			for (const key in set.headers)
-				(response as Response).headers.append(
-					key,
-					set.headers[key] as any
-				)
+				if (key === 'set-cookie')
+					(response as Response).headers.append(
+						key,
+						set.headers[key] as any
+					)
+				else if (!response.headers.has(key))
+					(response as Response).headers.set(
+						key,
+						set.headers[key] as any
+					)
 
 		const status = set.status ?? 200
 
