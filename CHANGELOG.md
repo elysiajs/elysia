@@ -1,3 +1,7 @@
+# 1.4.18 - 4 Dec 2025
+Security:
+- use `JSON.stringify` over custom escape implementation
+
 # 1.4.17 - 2 Dec 2025
 Improvement:
 - [#1573](https://github.com/elysiajs/elysia/pull/1573) `Server` is always resolved to `any` when `@types/bun` is missing
