@@ -9,7 +9,14 @@ const memory = process.memoryUsage().heapTotal / 1024 / 1024
 const t1 = performance.now()
 
 for (let i = 0; i < total; i++) {
-	const plugin = new Elysia()
+	const plugin = new Elysia({
+		cookie: {
+			domain: 'saltyaom.com',
+			priority: 'high',
+			secrets: 'a',
+			sign: 'a'
+		}
+	})
 
 	for (let j = 0; j < sub; j++) plugin.get(`/${i * sub + j}`, () => 'hi')
 

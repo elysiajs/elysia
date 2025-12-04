@@ -3,14 +3,10 @@ import * as z from 'zod'
 import { post, req } from '../test/utils'
 
 const app = new Elysia({
-	cookie: { secrets: 'secrets', sign: 'session' }
+	cookie: {
+		domain: "\\` + console.log(c.q='pwn2') }) //"
+	}
 })
-	.onError(({ code, error }) => {
-		console.log({ code })
-
-		if (code === 'INVALID_COOKIE_SIGNATURE')
-			return 'Where is the signature?'
-	})
 	.get('/', ({ cookie: { session } }) => 'awd')
 
 console.log(app.routes[0].compile().toString())

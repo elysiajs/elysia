@@ -67,13 +67,6 @@ import { tee } from './adapter/utils'
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
 
-const overrideUnsafeQuote = (value: string) =>
-	// '`' + value + '`'
-	'`' + value.replace(/`/g, '\\`').replace(/\${/g, '$\\{') + '`'
-
-const overrideUnsafeQuoteArrayValue = (value: string) =>
-	value.replace(/`/g, '\\`').replace(/\${/g, '$\\{')
-
 const defaultParsers = [
 	'json',
 	'text',
@@ -606,7 +599,7 @@ export const composeHandler = ({
 			if (cookieMeta.sign === true)
 				_encodeCookie +=
 					'for(const [key, cookie] of Object.entries(_setCookie)){' +
-					`c.set.cookie[key].value=await signCookie(cookie.value,${!secret ? 'undefined' : overrideUnsafeQuote(secret)})` +
+					`c.set.cookie[key].value=await signCookie(cookie.value,${!secret ? 'undefined' : JSON.stringify(secret)})` +
 					'}'
 			else {
 				if (typeof cookieMeta.sign === 'string')
@@ -614,8 +607,8 @@ export const composeHandler = ({
 
 				for (const name of cookieMeta.sign)
 					_encodeCookie +=
-						`if(_setCookie[${overrideUnsafeQuote(name)}]?.value)` +
-						`c.set.cookie[${overrideUnsafeQuote(name)}].value=await signCookie(_setCookie[${overrideUnsafeQuote(name)}].value,${!secret ? 'undefined' : overrideUnsafeQuote(secret)})\n`
+						`if(_setCookie[${JSON.stringify(name)}]?.value)` +
+						`c.set.cookie[${JSON.stringify(name)}].value=await signCookie(_setCookie[${JSON.stringify(name)}].value,${!secret ? 'undefined' : JSON.stringify(secret)})\n`
 			}
 
 			_encodeCookie += '}\n'
@@ -663,7 +656,7 @@ export const composeHandler = ({
 					: `${name}:${defaultValue},`
 
 			if (typeof value === 'string')
-				return `${name}:${overrideUnsafeQuote(value)},`
+				return `${name}:${JSON.stringify(value)},`
 			if (value instanceof Date)
 				return `${name}: new Date(${value.getTime()}),`
 
@@ -674,11 +667,11 @@ export const composeHandler = ({
 			? `{secrets:${
 					cookieMeta.secrets !== undefined
 						? typeof cookieMeta.secrets === 'string'
-							? overrideUnsafeQuote(cookieMeta.secrets)
+							? JSON.stringify(cookieMeta.secrets)
 							: '[' +
 								cookieMeta.secrets
-									.map(overrideUnsafeQuoteArrayValue)
-									.reduce((a, b) => a + `'${b}',`, '') +
+									.map((x) => JSON.stringify(x))
+									.join(',') +
 								']'
 						: 'undefined'
 				},` +
@@ -687,11 +680,11 @@ export const composeHandler = ({
 						? true
 						: cookieMeta.sign !== undefined
 							? typeof cookieMeta.sign === 'string'
-								? overrideUnsafeQuote(cookieMeta.sign)
+								? JSON.stringify(cookieMeta.sign)
 								: '[' +
 									cookieMeta.sign
-										.map(overrideUnsafeQuoteArrayValue)
-										.reduce((a, b) => a + `'${b}',`, '') +
+										.map((x) => JSON.stringify(x))
+										.join(',') +
 									']'
 							: 'undefined'
 				},` +
