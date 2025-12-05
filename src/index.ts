@@ -452,7 +452,7 @@ export default class Elysia<
 
 	get models(): {
 		[K in keyof Definitions['typebox']]: ModelValidator<
-			Definitions['typebox'][K]
+			Extract<Definitions['typebox'][K], TSchema>
 		>
 	} & {
 		modules:

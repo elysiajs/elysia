@@ -6,7 +6,8 @@ import {
 	TObject,
 	TransformKind,
 	TSchema,
-	type TAnySchema
+	type TAnySchema,
+	type Static
 } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
@@ -39,10 +40,10 @@ export interface ElysiaTypeCheck<T extends TSchema>
 	provider: 'typebox' | 'standard'
 	schema: T
 	config: Object
-	Clean?(v: unknown): T
-	parse(v: unknown): T
+  Clean?(v: unknown): Static<T>
+	parse(v: unknown): Static<T>
 	safeParse(v: unknown):
-		| { success: true; data: T; error: null }
+		| { success: true; data: Static<T>; error: null }
 		| {
 				success: false
 				data: null
@@ -993,7 +994,7 @@ export const getSchemaValidator = <
 					error: null
 				}
 			} catch (error) {
-				const errors = [...compiled.Errors(v)].map(mapValueError)
+				const errors = [...validator.Errors(v)].map(mapValueError)
 
 				return {
 					success: false,
@@ -1155,7 +1156,7 @@ export const getSchemaValidator = <
 						error: null
 					}
 				} catch (error) {
-					const errors = [...compiled.Errors(v)].map(mapValueError)
+					const errors = [...validator.Errors(v)].map(mapValueError)
 
 					return {
 						success: false,
@@ -1228,7 +1229,7 @@ export const getSchemaValidator = <
 						error: null
 					}
 				} catch (error) {
-					const errors = [...compiled.Errors(v)].map(mapValueError)
+					const errors = [...validator.Errors(v)].map(mapValueError)
 
 					return {
 						success: false,
