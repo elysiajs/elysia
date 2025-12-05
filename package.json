@@ -162,6 +162,11 @@
 			"types": "./dist/universal/file.d.ts",
 			"import": "./dist/universal/file.mjs",
 			"require": "./dist/universal/file.js"
+		},
+		"./logger": {
+			"types": "./dist/logger.d.ts",
+			"import": "./dist/logger.mjs",
+			"require": "./dist/logger.js"
 		}
 	},
 	"repository": {
