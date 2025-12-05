@@ -994,7 +994,7 @@ export const getSchemaValidator = <
 					error: null
 				}
 			} catch (error) {
-				const errors = [...compiled.Errors(v)].map(mapValueError)
+				const errors = [...validator.Errors(v)].map(mapValueError)
 
 				return {
 					success: false,
@@ -1156,7 +1156,7 @@ export const getSchemaValidator = <
 						error: null
 					}
 				} catch (error) {
-					const errors = [...compiled.Errors(v)].map(mapValueError)
+					const errors = [...validator.Errors(v)].map(mapValueError)
 
 					return {
 						success: false,
@@ -1229,7 +1229,7 @@ export const getSchemaValidator = <
 						error: null
 					}
 				} catch (error) {
-					const errors = [...compiled.Errors(v)].map(mapValueError)
+					const errors = [...validator.Errors(v)].map(mapValueError)
 
 					return {
 						success: false,

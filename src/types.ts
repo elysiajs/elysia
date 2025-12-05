@@ -2354,8 +2354,8 @@ export interface ModelValidatorError extends ValueError {
 }
 
 export interface ModelValidator<T extends TSchema> extends TypeCheck<T> {
-	parse(a: T): Static<T>
-	safeParse(a: T):
+	parse(a: unknown): Static<T>
+	safeParse(a: unknown):
 		| { success: true; data: Static<T>; error: null }
 		| {
 				success: false
