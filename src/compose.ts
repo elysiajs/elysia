@@ -1757,6 +1757,9 @@ export const composeHandler = ({
 					(maybeAsync ? '' : `(async()=>{`) +
 					`const stream=await tee(r,3)\n` +
 					`r=stream[0]\n` +
+					(hooks.afterHandle?.length
+						? `c.response=c.responseValue=r\n`
+						: '') +
 					`const listener=stream[1]\n` +
 					(hasTrace || hooks.afterResponse?.length
 						? `afterHandlerStreamListener=stream[2]\n`
