@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Elysia, AnyElysia, InvertedStatusMap } from './index'
+import type { Elysia, AnyElysia, InvertedStatusMap, Static } from './index'
 import type { ElysiaFile } from './universal/file'
 import type { Serve } from './universal/server'
 
@@ -2353,13 +2353,12 @@ export interface ModelValidatorError extends ValueError {
 	summary: string
 }
 
-// @ts-ignore trust me bro
-export interface ModelValidator<T> extends TypeCheck<T> {
-	parse(a: T): T
+export interface ModelValidator<T extends TSchema> extends TypeCheck<T> {
+	parse(a: T): Static<T>
 	safeParse(a: T):
-		| { success: true; data: T; error: null }
+		| { success: true; data: Static<T>; error: null }
 		| {
-				success: true
+				success: false
 				data: null
 				error: string
 				errors: ModelValidatorError[]
