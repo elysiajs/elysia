@@ -143,36 +143,42 @@ export const resolveSchema = (
 	return models?.[schema]
 }
 
-export const hasType = (type: string, schema: TAnySchema) => {
+export const hasType = (type: string, schema: TAnySchema): boolean => {
 	if (!schema) return false
 
 	if (Kind in schema && schema[Kind] === type) return true
+
+	// Handle Import/Ref schemas (unwrap)
+	if (Kind in schema && schema[Kind] === 'Import') {
+		if (schema.$defs && schema.$ref) {
+			const ref = schema.$ref.replace('#/$defs/', '')
+			if (schema.$defs[ref]) {
+				return hasType(type, schema.$defs[ref])
+			}
+		}
+	}
+
+	if (schema.anyOf) return schema.anyOf.some((s: TSchema) => hasType(type, s))
+	if (schema.oneOf) return schema.oneOf.some((s: TSchema) => hasType(type, s))
+	if (schema.allOf) return schema.allOf.some((s: TSchema) => hasType(type, s))
+
+	if (schema.type === 'array' && schema.items) {
+		if (type === 'Files' && Kind in schema.items && schema.items[Kind] === 'File') {
+			return true
+		}
+		return hasType(type, schema.items)
+	}
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
 		if (!properties) return false
 
 		for (const key of Object.keys(properties)) {
-			const property = properties[key]
-
-			if (property.type === 'object') {
-				if (hasType(type, property)) return true
-			} else if (property.anyOf) {
-				for (let i = 0; i < property.anyOf.length; i++)
-					if (hasType(type, property.anyOf[i])) return true
-			}
-
-			if (Kind in property && property[Kind] === type) return true
+			if (hasType(type, properties[key])) return true
 		}
-
-		return false
 	}
 
-	return (
-		!!schema.properties &&
-		Kind in schema.properties &&
-		schema.properties[Kind] === type
-	)
+	return false
 }
 
 export const hasElysiaMeta = (meta: string, _schema: TAnySchema): boolean => {
