@@ -126,11 +126,12 @@ export const hasAdditionalProperties = (
 /**
  * Resolve a schema that might be a model reference (string) to the actual schema
  */
-export const resolveSchema = (
-	schema: TAnySchema | string,
+ export const resolveSchema = (
+	schema: TAnySchema | string | undefined,
 	models?: Record<string, TAnySchema | StandardSchemaV1Like>,
 	modules?: TModule<any, any>
-): TAnySchema | StandardSchemaV1Like | undefined => {
+ ): TAnySchema | StandardSchemaV1Like | undefined => {
+    if (!schema) return undefined
 	if (typeof schema !== 'string') return schema
 
 	// Check modules first (higher priority)
@@ -141,7 +142,7 @@ export const resolveSchema = (
 
 	// Then check models
 	return models?.[schema]
-}
+ }
 
 export const hasType = (type: string, schema: TAnySchema): boolean => {
 	if (!schema) return false
@@ -456,12 +457,14 @@ export const getSchemaValidator = <
 			if (!schema) return undefined as any
 		}
 
+		const hasAdditionalCoerce = Array.isArray(additionalCoerce) ?
+		                                additionalCoerce.length > 0 : !!additionalCoerce
 		if (Kind in schema) {
 			if (schema[Kind] === 'Import') {
 				if (!hasRef(schema.$defs[schema.$ref])) {
 					schema = schema.$defs[schema.$ref]
 
-					if (coerce || additionalCoerce) {
+					if (coerce || hasAdditionalCoerce) {
 						schema = replaceSchema(schema as TSchema)
 						if ('$id' in schema && !schema.$defs) {
                             schema.$id = `${schema.$id}_coerced_${randomId()}`;
@@ -479,7 +482,7 @@ export const getSchemaValidator = <
 					})
 
 					schema = model.Import(id)
-				} else if (coerce || additionalCoerce)
+				} else if (coerce || hasAdditionalCoerce)
 					schema = replaceSchema(schema as TSchema)
 			}
 		}
@@ -694,16 +697,15 @@ export const getSchemaValidator = <
     		schema = replaceSchemaTypeFromManyOptions(schema, {
                 onlyFirst: "object",
                 from: t.Object({}),
-                to({ properties, ...options }) {
-                   	// If nothing is return, use the original schema
-                   	if (!properties) return { properties, ...options };
-                   	if ("additionalProperties" in schema) return { properties, ...options };
+                to(schema) {
+                    if (!schema.properties) return schema;
+                    if ("additionalProperties" in schema) return schema;
 
-                   	return t.Object(properties, {
-                  		...options,
-                  		additionalProperties: false,
-                   	});
-                },
+                    return t.Object(schema.properties, {
+                        ...schema,
+                        additionalProperties: false,
+                    });
+                }
             });
 	}
 

@@ -85,7 +85,7 @@ const replaceSchemaTypeFromOption = (
 			if (shouldTransform) {
 				return option.to(s) as TSchema;
 			}
-			return s
+            return s;
 		}
 
 		if (isRoot && option.rootOnly) {

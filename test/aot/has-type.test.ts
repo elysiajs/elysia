@@ -68,6 +68,21 @@ describe('Has Transform', () => {
 		expect(hasType('File', schema)).toBe(true)
 	})
 
+	it('found on direct Union', () => {
+		const schema = t.Union([
+			t.Object({
+			    id: t.Number(),
+			    liyue: t.File()
+			}),
+			t.Object({
+			    id: t.Number(),
+			    liyue: t.Number(),
+			}),
+		])
+
+		expect(hasType('File', schema)).toBe(true)
+	})
+
 	it('find in Import wrapping File', () => {
 		const schema = t.Module({
 			Avatar: t.File()
