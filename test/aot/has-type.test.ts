@@ -67,4 +67,73 @@ describe('Has Transform', () => {
 
 		expect(hasType('File', schema)).toBe(true)
 	})
+
+	it('find in Import wrapping File', () => {
+		const schema = t.Module({
+			Avatar: t.File()
+		}).Import('Avatar')
+
+		expect(hasType('File', schema)).toBe(true)
+	})
+
+	it('find in Import wrapping Object with File', () => {
+		const schema = t.Module({
+			Upload: t.Object({
+				name: t.String(),
+				file: t.File()
+			})
+		}).Import('Upload')
+
+		expect(hasType('File', schema)).toBe(true)
+	})
+
+	it('return false for Import wrapping Object without File', () => {
+		const schema = t.Module({
+			User: t.Object({
+				name: t.String(),
+				age: t.Number()
+			})
+		}).Import('User')
+
+		expect(hasType('File', schema)).toBe(false)
+	})
+
+	it('find in Import wrapping Union with File', () => {
+		const schema = t.Module({
+			Data: t.Union([
+				t.Object({ file: t.File() }),
+				t.Null()
+			])
+		}).Import('Data')
+
+		expect(hasType('File', schema)).toBe(true)
+	})
+
+	it('find in Import wrapping Array of Files', () => {
+		const schema = t.Module({
+			Uploads: t.Array(t.File())
+		}).Import('Uploads')
+
+		expect(hasType('Files', schema)).toBe(true)
+	})
+
+	it('find in Import wrapping Array of Files using t.Files', () => {
+		const schema = t.Module({
+			Uploads: t.Files()
+		}).Import('Uploads')
+
+		expect(hasType('Files', schema)).toBe(true)
+	})
+
+	it('find in Array of Files (direct)', () => {
+		const schema = t.Array(t.File())
+
+		expect(hasType('Files', schema)).toBe(true)
+	})
+
+	it('find in Array of Files using t.Files (direct)', () => {
+		const schema = t.Files()
+
+		expect(hasType('Files', schema)).toBe(true)
+	})
 })
