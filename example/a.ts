@@ -1,22 +1,22 @@
-import { Elysia, status, t } from '../src'
+import { Elysia, t } from '../src'
+import * as z from 'zod'
+import { post, req } from '../test/utils'
 
-const auth = (app: Elysia) =>
-	app.derive(({ headers, status }) => {
-		try {
-			const token = headers['authorization']?.replace('Bearer ', '') || ''
-			return {
-				isAuthenticated: true
-			}
-		} catch (e) {
-			const error = e as Error
-			console.error('Authentication error:', error.message)
-			return status(401, 'Unauthorized')
+const app = new Elysia({
+	cookie: {
+		domain: "\\` + console.log(c.q='pwn2') }) //"
+	}
+})
+	.get('/', ({ cookie: { session } }) => 'awd')
+
+console.log(app.routes[0].compile().toString())
+
+const root = await app.handle(
+	new Request('http://localhost/', {
+		headers: {
+			Cookie: 'session=1234'
 		}
 	})
+)
 
-const app = new Elysia()
-	.use(auth)
-	.get('/', ({ isAuthenticated }) => isAuthenticated)
-	.listen(5000)
-
-app['~Routes']
+console.log(await root.text())

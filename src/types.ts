@@ -1395,12 +1395,12 @@ export type BodyHandler<
 	Path extends string | undefined = undefined
 > = (
 	context: Context<
-		Route & {
+		Route,
+		Singleton & {
 			decorator: {
 				contentType: string
 			}
 		},
-		Singleton,
 		Path
 	>,
 	/**

@@ -240,7 +240,7 @@ export const createWSMessageParser = (
 }
 
 export const createHandleWSResponse = (
-	validateResponse: TypeCheck<any> | ElysiaTypeCheck<any> | undefined
+	responseValidator: TypeCheck<any> | ElysiaTypeCheck<any> | undefined
 ) => {
 	const handleWSResponse = (
 		ws: ServerWebSocket<any>,
@@ -253,16 +253,26 @@ export const createHandleWSResponse = (
 
 		if (data === undefined) return
 
+		const validateResponse = responseValidator
+			? // @ts-ignore
+				responseValidator.provider === 'standard'
+				? (data: unknown) =>
+						// @ts-ignore
+						responseValidator.schema['~standard'].validate(data)
+							.issues
+				: (data: unknown) => responseValidator.Check(data) === false
+			: undefined
+
 		const send = (datum: unknown) => {
-			if (validateResponse?.Check(datum) === false)
+			if (validateResponse && validateResponse(datum) === false)
 				return ws.send(
-					new ValidationError('message', validateResponse, datum)
+					new ValidationError('message', responseValidator!, datum)
 						.message
 				)
 
 			if (typeof datum === 'object') return ws.send(JSON.stringify(datum))
 
-			ws.send(datum)
+			ws.send(datum as any)
 		}
 
 		if (typeof (data as Generator)?.next !== 'function')
@@ -274,9 +284,9 @@ export const createHandleWSResponse = (
 			return (async () => {
 				const first = await init
 
-				if (validateResponse?.Check(first) === false)
+				if (validateResponse && validateResponse(first))
 					return ws.send(
-						new ValidationError('message', validateResponse, first)
+						new ValidationError('message', responseValidator!, first)
 							.message
 					)
 
