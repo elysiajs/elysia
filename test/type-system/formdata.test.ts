@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { Elysia, t, type ValidationError } from "../../src";
+import { z } from "zod";
+import { Elysia, fileType, t, type ValidationError } from "../../src";
 
 const variantObject = t.Object({
 			price: t.Number({ minimum: 0 }),
@@ -46,35 +47,34 @@ const patchProductModelComplex = t.Object({
 });
 type patchProductModelComplex = typeof patchProductModelComplex.static;
 
-const app = new Elysia()
-	.post("/product", async ({ body, status }) => status("Created", body), {
-		body: postProductModel,
-	})
-	.patch(
-		"/product/:id",
-		({ body, params }) => ({
-			id: params.id,
-			...body,
-		}),
-		{
-			body: patchProductModel,
-		},
-	)
-	.post("/product-complex", async ({ body, status }) => status("Created", body), {
-		body: postProductModelComplex,
-	})
-	.patch(
-		"/product-complex/:id",
-		({ body, params }) => ({
-			id: params.id,
-			...body,
-		}),
-		{
-			body: patchProductModelComplex,
-		},
-	);
-
-describe("Nested FormData with file(s) support", () => {
+describe.each([{ aot: true }, { aot: false }])("Nested FormData with file(s) support (aot: $aot)", ({ aot }) => {
+	const app = new Elysia({ aot })
+		.post("/product", async ({ body, status }) => status("Created", body), {
+			body: postProductModel,
+		})
+		.patch(
+			"/product/:id",
+			({ body, params }) => ({
+				id: params.id,
+				...body,
+			}),
+			{
+				body: patchProductModel,
+			},
+		)
+		.post("/product-complex", async ({ body, status }) => status("Created", body), {
+			body: postProductModelComplex,
+		})
+		.patch(
+			"/product-complex/:id",
+			({ body, params }) => ({
+				id: params.id,
+				...body,
+			}),
+			{
+				body: patchProductModelComplex,
+			},
+		);
 	describe("Nested FormData with mandatory bunFile (post operation)", async () => {
 		const bunFilePath1 = `${import.meta.dir}/../images/aris-yuzu.jpg`;
 		const bunFile = Bun.file(bunFilePath1) as File;
@@ -666,6 +666,218 @@ describe("Nested FormData with file(s) support", () => {
 			const data = await response.json() as any
 			expect(data.name).toBe('John')
 			expect(data.metadata).toEqual({ age: 25 })
+		})
+	})
+
+	describe.skip("Zod (for standard schema) with File and nested Object", () => {
+		const bunFilePath6 = `${import.meta.dir}/../images/aris-yuzu.jpg`;
+		const bunFile = Bun.file(bunFilePath6) as File;
+
+		it("should handle Zod schema with File and nested object (without manual coercion)", async () => {
+			const app = new Elysia({ aot })
+				.post('/upload', ({ body }) => body, {
+					body: z.object({
+						name: z.string(),
+						file: z.file().refine((file) => fileType(file, 'image/jpeg')),
+						metadata: z.object({
+							age: z.number()
+						})
+					})
+				})
+
+			const formData = new FormData()
+			formData.append('name', 'John')
+			formData.append('file', bunFile)
+			formData.append('metadata', JSON.stringify({ age: 25 }))
+
+			const response = await app.handle(new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			}))
+
+			expect(response.status).toBe(200)
+			const data = await response.json() as any
+			expect(data.name).toBe('John')
+			expect(data.metadata).toEqual({ age: 25 })
+		})
+
+		it("should handle array JSON strings in FormData", async () => {
+			const app = new Elysia({ aot })
+				.post('/upload', ({ body }) => body, {
+					body: z.object({
+						file: z.file().refine((file) => fileType(file, 'image/jpeg')),
+						tags: z.array(z.string())
+					})
+				})
+
+			const formData = new FormData()
+			formData.append('file', bunFile)
+			formData.append('tags', JSON.stringify(['tag1', 'tag2', 'tag3']))
+
+			const response = await app.handle(new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			}))
+
+			expect(response.status).toBe(200)
+			const data = await response.json() as any
+			expect(data.tags).toEqual(['tag1', 'tag2', 'tag3'])
+		})
+
+		it("should keep invalid JSON as string", async () => {
+			const app = new Elysia({ aot })
+				.post('/upload', ({ body }) => body, {
+					body: z.object({
+						file: z.file().refine((file) => fileType(file, 'image/jpeg')),
+						description: z.string()
+					})
+				})
+
+			const formData = new FormData()
+			formData.append('file', bunFile)
+			formData.append('description', '{invalid json}')
+
+			const response = await app.handle(new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			}))
+
+			expect(response.status).toBe(200)
+			const data = await response.json() as any
+			expect(data.description).toBe('{invalid json}')
+		})
+
+		it("should keep plain strings that are not JSON", async () => {
+			const app = new Elysia({ aot })
+				.post('/upload', ({ body }) => body, {
+					body: z.object({
+						file: z.file().refine((file) => fileType(file, 'image/jpeg')),
+						comment: z.string()
+					})
+				})
+
+			const formData = new FormData()
+			formData.append('file', bunFile)
+			formData.append('comment', 'This is a plain comment')
+
+			const response = await app.handle(new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			}))
+
+			expect(response.status).toBe(200)
+			const data = await response.json() as any
+			expect(data.comment).toBe('This is a plain comment')
+		})
+
+		it("should handle nested objects in JSON", async () => {
+			const app = new Elysia({ aot })
+				.post('/upload', ({ body }) => body, {
+					body: z.object({
+						file: z.file().refine((file) => fileType(file, 'image/jpeg')),
+						profile: z.object({
+							user: z.object({
+								name: z.string(),
+								age: z.number()
+							}),
+							settings: z.object({
+								notifications: z.boolean()
+							})
+						})
+					})
+				})
+
+			const formData = new FormData()
+			formData.append('file', bunFile)
+			formData.append('profile', JSON.stringify({
+				user: { name: 'Alice', age: 30 },
+				settings: { notifications: true }
+			}))
+
+			const response = await app.handle(new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			}))
+
+			expect(response.status).toBe(200)
+			const data = await response.json() as any
+			expect(data.profile).toEqual({
+				user: { name: 'Alice', age: 30 },
+				settings: { notifications: true }
+			})
+		})
+
+		it("should handle Zod schema with optional fields", async () => {
+			const app = new Elysia({ aot })
+				.post('/upload', ({ body }) => body, {
+					body: z.object({
+						file: z.file().refine((file) => fileType(file, 'image/jpeg')),
+						name: z.string(),
+						description: z.string().optional(),
+						metadata: z.object({
+							category: z.string(),
+							tags: z.array(z.string()).optional(),
+							featured: z.boolean().optional()
+						}).optional()
+					})
+				})
+
+			const formData = new FormData()
+			formData.append('file', bunFile)
+			formData.append('name', 'Test Product')
+			// Omit optional fields
+
+			const response = await app.handle(new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			}))
+
+			expect(response.status).toBe(200)
+			const data = await response.json() as any
+			expect(data.name).toBe('Test Product')
+			expect(data.description).toBeUndefined()
+			expect(data.metadata).toBeUndefined()
+		})
+
+		it("should handle Zod schema with optional fields provided", async () => {
+			const app = new Elysia({ aot })
+				.post('/upload', ({ body }) => body, {
+					body: z.object({
+						file: z.file().refine((file) => fileType(file, 'image/jpeg')),
+						name: z.string(),
+						description: z.string().optional(),
+						metadata: z.object({
+							category: z.string(),
+							tags: z.array(z.string()).optional(),
+							featured: z.boolean().optional()
+						}).optional()
+					})
+				})
+
+			const formData = new FormData()
+			formData.append('file', bunFile)
+			formData.append('name', 'Test Product')
+			formData.append('description', 'A test description')
+			formData.append('metadata', JSON.stringify({
+				category: 'electronics',
+				tags: ['phone', 'mobile'],
+				featured: true
+			}))
+
+			const response = await app.handle(new Request('http://localhost/upload', {
+				method: 'POST',
+				body: formData
+			}))
+
+			expect(response.status).toBe(200)
+			const data = await response.json() as any
+			expect(data.name).toBe('Test Product')
+			expect(data.description).toBe('A test description')
+			expect(data.metadata).toEqual({
+				category: 'electronics',
+				tags: ['phone', 'mobile'],
+				featured: true
+			})
 		})
 	})
 });

@@ -8158,7 +8158,7 @@ export {
 	getResponseSchemaValidator,
 } from './schema'
 export {
-    replaceSchemaTypeFromManyOptions
+    replaceSchemaTypeFromManyOptions as replaceSchemaType
 } from './replace-schema'
 
 export {
