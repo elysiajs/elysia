@@ -146,6 +146,20 @@ export type TForm<T extends TProperties = TProperties> = TUnsafe<
 	ElysiaFormData<TObject<T>['static']>
 >
 
+/**
+ * Augment this interface to extend allowed values for SchemaOptions['error'].
+ * Defining custom string templates will add autocomplete while allowing any arbitrary string, number, etc.
+ *
+ * ```ts
+ * declare module 'elysia/type-system/types' {
+ *   interface ElysiaTypeCustomErrors {
+ *     myPlugin: 'my.plugin.error' | `my.plugin.${string}`
+ *   }
+ * }
+ *
+ * const schema = t.String({ error: 'my.plugin.hello' })
+ * ```
+ */
 export interface ElysiaTypeCustomErrors {
   string: (string & {})
   boolean: boolean
