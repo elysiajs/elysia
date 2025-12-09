@@ -1,13 +1,9 @@
-import { t, getSchemaValidator } from '../src'
-import { sucrose } from '../src/sucrose'
+import { Elysia } from '../src'
 
-const v = sucrose({
-	handler: (context) => {
-		console.log('path >>> ', context.path)
-		console.log(context)
+const app = new Elysia()
+	.group('', (app) => {
+		return app.get('/ok', () => 'Hello World')
+	})
+	.listen(3000)
 
-		return { id: 'test' }
-	}
-})
-
-console.log(v)
+type Routes = keyof typeof app['~Routes']

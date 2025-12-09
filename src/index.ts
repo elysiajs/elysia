@@ -48,7 +48,7 @@ import {
 	getCookieValidator,
 	ElysiaTypeCheck,
 	hasType,
-	resolveSchema,
+	resolveSchema
 } from './schema'
 import {
 	composeHandler,
@@ -164,7 +164,12 @@ import type {
 	InlineHandlerNonMacro,
 	Router
 } from './types'
-import { coercePrimitiveRoot, coerceFormData, queryCoercions, stringToStructureCoercions } from './replace-schema'
+import {
+	coercePrimitiveRoot,
+	coerceFormData,
+	queryCoercions,
+	stringToStructureCoercions
+} from './replace-schema'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -589,9 +594,16 @@ export default class Elysia<
 							models,
 							normalize,
 							additionalCoerce: (() => {
-								const resolved = resolveSchema(cloned.body, models, modules)
+								const resolved = resolveSchema(
+									cloned.body,
+									models,
+									modules
+								)
 								// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
-								return (resolved && Kind in resolved && (hasType('File', resolved) || hasType('Files', resolved)))
+								return resolved &&
+									Kind in resolved &&
+									(hasType('File', resolved) ||
+										hasType('Files', resolved))
 									? coerceFormData()
 									: coercePrimitiveRoot()
 							})(),
@@ -657,9 +669,16 @@ export default class Elysia<
 									models,
 									normalize,
 									additionalCoerce: (() => {
-										const resolved = resolveSchema(cloned.body, models, modules)
+										const resolved = resolveSchema(
+											cloned.body,
+											models,
+											modules
+										)
 										// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
-										return (resolved && Kind in resolved && (hasType('File', resolved) || hasType('Files', resolved)))
+										return resolved &&
+											Kind in resolved &&
+											(hasType('File', resolved) ||
+												hasType('Files', resolved))
 											? coerceFormData()
 											: coercePrimitiveRoot()
 									})(),
@@ -819,7 +838,6 @@ export default class Elysia<
 					handle,
 					route: path
 				})
-
 
 				const encoded = encodePath(loosePath)
 				if (loosePath !== encoded)
@@ -3823,7 +3841,7 @@ export default class Elysia<
 		prefix: Prefix,
 		run: (
 			group: Elysia<
-				JoinPath<BasePath, Prefix>,
+				Prefix extends '' ? BasePath : JoinPath<BasePath, Prefix>,
 				Singleton,
 				Definitions,
 				{
@@ -8154,13 +8172,8 @@ export {
 	type TraceStream
 } from './trace'
 
-export {
-	getSchemaValidator,
-	getResponseSchemaValidator,
-} from './schema'
-export {
-    replaceSchemaTypeFromManyOptions as replaceSchemaType
-} from './replace-schema'
+export { getSchemaValidator, getResponseSchemaValidator } from './schema'
+export { replaceSchemaTypeFromManyOptions as replaceSchemaType } from './replace-schema'
 
 export {
 	mergeHook,

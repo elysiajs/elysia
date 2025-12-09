@@ -9,6 +9,7 @@ Bug fix:
 - add set immediate fallback
 - [#1596](https://github.com/elysiajs/elysia/issues/1596) handle context pass to function with sub context
 - [#1597](https://github.com/elysiajs/elysia/issues/1597) safeParse, parse to static type
+- handle group with empty prefix
 
 # 1.4.18 - 4 Dec 2025
 Security:
