@@ -820,6 +820,7 @@ export default class Elysia<
 					route: path
 				})
 
+
 				const encoded = encodePath(loosePath)
 				if (loosePath !== encoded)
 					this.router.dynamic.add(method, loosePath, {
