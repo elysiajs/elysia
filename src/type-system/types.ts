@@ -146,11 +146,14 @@ export type TForm<T extends TProperties = TProperties> = TUnsafe<
 	ElysiaFormData<TObject<T>['static']>
 >
 
-export type ElysiaTypeCustomError =
-	| string
-	| boolean
-	| number
-	| ElysiaTypeCustomErrorCallback
+export interface ElysiaTypeCustomErrors {
+  string: (string & {})
+  boolean: boolean
+  number: number
+  ElysiaTypeCustomErrorCallback: ElysiaTypeCustomErrorCallback
+}
+
+export type ElysiaTypeCustomError = ElysiaTypeCustomErrors[keyof ElysiaTypeCustomErrors]
 
 export type ElysiaTypeCustomErrorCallback = (
 	error: {
