@@ -36,4 +36,29 @@ describe('Custom Response Type', () => {
 
         expect(await response.text()).toBe('Shuba Shuba')
     })
+
+    it('Response headers take precedence, set.headers merge non-conflicting', async () => {
+        const app = new Elysia()
+            .onRequest(({ set }) => {
+                set.headers['Content-Type'] = 'application/json'
+                set.headers['X-Framework'] = 'Elysia'
+            })
+            .get('/', () => {
+                return new Response('{"message":"hello"}', {
+                    headers: {
+                        'Content-Type': 'text/plain',
+                        'X-Custom': 'custom-value'
+                    }
+                })
+            })
+
+        const response = await app.handle(req('/'))
+
+        // Response's Content-Type takes precedence
+        expect(response.headers.get('Content-Type')).toBe('text/plain')
+        // set.headers adds non-conflicting headers
+        expect(response.headers.get('X-Framework')).toBe('Elysia')
+        // Response's own headers are preserved
+        expect(response.headers.get('X-Custom')).toBe('custom-value')
+    })
 })
