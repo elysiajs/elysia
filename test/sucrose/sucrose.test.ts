@@ -307,4 +307,25 @@ describe('sucrose', () => {
 			route: true
 		})
 	})
+
+	it('handle context pass to function with sub context', () => {
+		expect(
+			sucrose({
+				handler: (context) => {
+					console.log('path >>> ', context.path)
+					console.log(context)
+				}
+			})
+		).toEqual({
+			query: true,
+			headers: true,
+			body: true,
+			cookie: true,
+			set: true,
+			server: true,
+			path: true,
+			url: true,
+			route: true
+		})
+	})
 })

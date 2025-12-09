@@ -7,6 +7,7 @@ Improvement
 Bug fix:
 - [#1591](https://github.com/elysiajs/elysia/pull/1591), [#1590](https://github.com/elysiajs/elysia/pull/1591) merge set.headers without duplicating Response
 - add set immediate fallback
+- [#1596](https://github.com/elysiajs/elysia/issues/1596) handle context pass to function with sub context
 - [#1597](https://github.com/elysiajs/elysia/issues/1597) safeParse, parse to static type
 
 # 1.4.18 - 4 Dec 2025

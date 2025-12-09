@@ -1,13 +1,13 @@
-import { Elysia, t } from '../src'
+import { t, getSchemaValidator } from '../src'
+import { sucrose } from '../src/sucrose'
 
-new Elysia({ aot: false })
-	.guard(
-		{
-			afterResponse: () => {
-				console.log('afterResponse')
-			}
-		},
-		(app) => app.get('/test', () => 'afterResponse')
-	)
-	.get('/', () => 'hi')
-	.listen(3000)
+const v = sucrose({
+	handler: (context) => {
+		console.log('path >>> ', context.path)
+		console.log(context)
+
+		return { id: 'test' }
+	}
+})
+
+console.log(v)
