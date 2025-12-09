@@ -221,7 +221,7 @@ export default class Elysia<
 	}
 > {
 	config: ElysiaConfig<BasePath>
-
+	_isListening = false
 	server: Server | null = null
 	private dependencies: { [key: string]: Checksum[] } = {}
 
@@ -8016,10 +8016,20 @@ export default class Elysia<
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
+
+	private _compiledFetch?: (request: Request) => MaybePromise<Response>
 	fetch = (request: Request): MaybePromise<Response> => {
-		return (this.fetch = this.config.aot
-			? composeGeneralHandler(this)
-			: createDynamicHandler(this))(request)
+		if (!this._compiledFetch) {
+			if (!this._isListening && this.config.systemRouter) {
+				this.config.systemRouter = false
+			}
+
+			this._compiledFetch = this.config.aot
+				? composeGeneralHandler(this)
+				: createDynamicHandler(this)
+		}
+
+		return this._compiledFetch!(request)
 	}
 
 	/**
@@ -8074,6 +8084,7 @@ export default class Elysia<
 		options: string | number | Partial<Serve>,
 		callback?: ListenCallback
 	) => {
+		this._isListening = true
 		this['~adapter'].listen(this)(options, callback)
 
 		return this
