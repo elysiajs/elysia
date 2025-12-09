@@ -399,6 +399,7 @@ export const lifeCycleToArray = (a: LifeCycleStore) => {
 
 const isBun = typeof Bun !== 'undefined'
 const hasBunHash = isBun && typeof Bun.hash === 'function'
+export const hasSetImmediate = typeof setImmediate === 'function'
 
 // https://stackoverflow.com/a/52171480
 export const checksum = (s: string) => {

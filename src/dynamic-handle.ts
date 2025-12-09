@@ -13,7 +13,7 @@ import { parseQuery } from './parse-query'
 import type { ElysiaTypeCheck } from './schema'
 import type { TypeCheck } from './type-system'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
-import { redirect, StatusMap, signCookie } from './utils'
+import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
 
 // JIT Handler
 export type DynamicHandler = {
@@ -79,6 +79,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			response: unknown
 		}
 
+		let hooks: DynamicHandler['hooks']
+
 		try {
 			if (app.event.request)
 				for (let i = 0; i < app.event.request.length; i++) {
@@ -109,7 +111,8 @@ export const createDynamicHandler = (app: AnyElysia) => {
 				throw new NotFoundError()
 			}
 
-			const { handle, hooks, validator, content, route } = handler.store
+			const { handle, validator, content, route } = handler.store
+			hooks = handler.store.hooks
 
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -661,11 +664,22 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-expect-error private
 			return app.handleError(context, reportedError)
 		} finally {
-			if (app.event.afterResponse)
-				setImmediate(async () => {
-					for (const afterResponse of app.event.afterResponse!)
-						await afterResponse.fn(context as any)
-				})
+			const afterResponses = hooks!
+				? hooks.afterResponse
+				: app.event.afterResponse
+
+			if (afterResponses) {
+				if (hasSetImmediate)
+					setImmediate(async () => {
+						for (const afterResponse of afterResponses)
+							await afterResponse.fn(context as any)
+					})
+				else
+					Promise.resolve().then(async () => {
+						for (const afterResponse of afterResponses)
+							await afterResponse.fn(context as any)
+					})
+			}
 		}
 	}
 }
