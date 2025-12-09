@@ -1,4 +1,3 @@
-import { isStringTextContainingNode } from 'typescript'
 import type { Sucrose } from './sucrose'
 import type { TraceHandler } from './trace'
 
@@ -59,13 +58,18 @@ export const mergeDeep = <
 		skipKeys?: string[]
 		override?: boolean
 		mergeArray?: boolean
+		seen?: WeakSet<object>
 	}
 ): A & B => {
 	const skipKeys = options?.skipKeys
 	const override = options?.override ?? true
 	const mergeArray = options?.mergeArray ?? false
+	const seen = options?.seen ?? new WeakSet<object>()
 
 	if (!isObject(target) || !isObject(source)) return target as A & B
+
+	if (seen.has(source)) return target as A & B
+	seen.add(source)
 
 	for (const [key, value] of Object.entries(source)) {
 		if (
@@ -98,10 +102,12 @@ export const mergeDeep = <
 				target[key as keyof typeof target] = mergeDeep(
 					(target as any)[key] as any,
 					value,
-					{ skipKeys, override, mergeArray }
+					{ skipKeys, override, mergeArray, seen }
 				)
 			} catch {}
 	}
+
+	seen.delete(source)
 
 	return target as A & B
 }
