@@ -2,6 +2,7 @@
 Improvement
 - [#1588](https://github.com/elysiajs/elysia/pull/1588), [#1587](https://github.com/elysiajs/elysia/pull/1587) add seen weakset during mergeDeep
 - [#1607](https://github.com/elysiajs/elysia/issues/1607), [#1606](https://github.com/elysiajs/elysia/issues/1606), [#1139](https://github.com/elysiajs/elysia/issues/1138) data coercion on nested form data
+- [#1609](https://github.com/elysiajs/elysia/issues/1609) calling afterResponse with aot: false
 
 Bug fix:
 - [#1591](https://github.com/elysiajs/elysia/pull/1591), [#1590](https://github.com/elysiajs/elysia/pull/1591) merge set.headers without duplicating Response
