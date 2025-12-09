@@ -40,7 +40,6 @@ import {
 import { ELYSIA_TRACE, type TraceHandler } from './trace'
 
 import {
-	coercePrimitiveRoot,
 	ElysiaTypeCheck,
 	getCookieValidator,
 	getSchemaValidator,
@@ -63,6 +62,7 @@ import type {
 	SchemaValidator
 } from './types'
 import { tee } from './adapter/utils'
+import { coercePrimitiveRoot } from './replace-schema'
 
 const allocateIf = (value: string, condition: unknown) =>
 	condition ? value : ''
@@ -1473,9 +1473,21 @@ export const composeHandler = ({
 
 						if (candidate) {
 							const isFirst = fileUnions.length === 0
+							// Handle case where schema is wrapped in a Union (e.g., ObjectString coercion)
+							let properties = candidate.schema?.properties ?? type.properties
+
+							// If no properties but schema is a Union, try to find the Object in anyOf
+							if (!properties && candidate.schema?.anyOf) {
+								const objectSchema = candidate.schema.anyOf.find((s: any) => s.type === 'object')
+								if (objectSchema) {
+									properties = objectSchema.properties
+								}
+							}
+
+							if (!properties) continue
 
 							const iterator = Object.entries(
-								type.properties
+								properties
 							) as [string, TSchema][]
 
 							let validator = isFirst ? '\n' : ' else '

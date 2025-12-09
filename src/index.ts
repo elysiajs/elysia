@@ -43,13 +43,12 @@ import {
 } from './utils'
 
 import {
-	coercePrimitiveRoot,
-	stringToStructureCoercions,
 	getSchemaValidator,
 	getResponseSchemaValidator,
 	getCookieValidator,
 	ElysiaTypeCheck,
-	queryCoercions
+	hasType,
+	resolveSchema,
 } from './schema'
 import {
 	composeHandler,
@@ -165,6 +164,7 @@ import type {
 	InlineHandlerNonMacro,
 	Router
 } from './types'
+import { coercePrimitiveRoot, coerceFormData, queryCoercions, stringToStructureCoercions } from './replace-schema'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -588,7 +588,13 @@ export default class Elysia<
 							dynamic,
 							models,
 							normalize,
-							additionalCoerce: coercePrimitiveRoot(),
+							additionalCoerce: (() => {
+								const resolved = resolveSchema(cloned.body, models, modules)
+								// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
+								return (resolved && Kind in resolved && (hasType('File', resolved) || hasType('Files', resolved)))
+									? coerceFormData()
+									: coercePrimitiveRoot()
+							})(),
 							validators: standaloneValidators.map((x) => x.body),
 							sanitize
 						}),
@@ -650,7 +656,13 @@ export default class Elysia<
 									dynamic,
 									models,
 									normalize,
-									additionalCoerce: coercePrimitiveRoot(),
+									additionalCoerce: (() => {
+										const resolved = resolveSchema(cloned.body, models, modules)
+										// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
+										return (resolved && Kind in resolved && (hasType('File', resolved) || hasType('Files', resolved)))
+											? coerceFormData()
+											: coercePrimitiveRoot()
+									})(),
 									validators: standaloneValidators.map(
 										(x) => x.body
 									),
@@ -8144,8 +8156,10 @@ export {
 export {
 	getSchemaValidator,
 	getResponseSchemaValidator,
-	replaceSchemaType
 } from './schema'
+export {
+    replaceSchemaTypeFromManyOptions as replaceSchemaType
+} from './replace-schema'
 
 export {
 	mergeHook,
