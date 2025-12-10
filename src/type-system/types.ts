@@ -166,9 +166,9 @@ export interface ElysiaTypeCustomErrors {
   /**
    * The default error types that the library supports.
    *
-   * `string & {}` is used to allow defining custom string template errors.
+   * `string & {}` `number & {}` are used to allow string templates and numbers respectively.
    */
-  default: (string & {}) | boolean | number | ElysiaTypeCustomErrorCallback
+  default: (string & {}) | boolean | (number & {}) | ElysiaTypeCustomErrorCallback
 }
 
 export type ElysiaTypeCustomError = ElysiaTypeCustomErrors[keyof ElysiaTypeCustomErrors]
