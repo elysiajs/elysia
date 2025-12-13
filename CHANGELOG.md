@@ -1,15 +1,17 @@
 # 1.4.19 - 9 Dec 2025
 Improvement
-- [#1588](https://github.com/elysiajs/elysia/pull/1588), [#1587](https://github.com/elysiajs/elysia/pull/1587) add seen weakset during mergeDeep
-- [#1607](https://github.com/elysiajs/elysia/issues/1607), [#1606](https://github.com/elysiajs/elysia/issues/1606), [#1139](https://github.com/elysiajs/elysia/issues/1138) data coercion on nested form data
 - [#1609](https://github.com/elysiajs/elysia/issues/1609) calling afterResponse with aot: false
+- [#1607](https://github.com/elysiajs/elysia/issues/1607), [#1606](https://github.com/elysiajs/elysia/issues/1606), [#1139](https://github.com/elysiajs/elysia/issues/1138) data coercion on nested form data
+- [#1588](https://github.com/elysiajs/elysia/pull/1588), [#1587](https://github.com/elysiajs/elysia/pull/1587) add seen weakset during mergeDeep
 
 Bug fix:
-- [#1591](https://github.com/elysiajs/elysia/pull/1591), [#1590](https://github.com/elysiajs/elysia/pull/1591) merge set.headers without duplicating Response
+- [#1614](https://github.com/elysiajs/elysia/issues/1614) Cloudflare Worker with dynamic path
 - add set immediate fallback
-- [#1596](https://github.com/elysiajs/elysia/issues/1596) handle context pass to function with sub context
 - [#1597](https://github.com/elysiajs/elysia/issues/1597) safeParse, parse to static type
-- handle group with empty prefix
+- [#1596](https://github.com/elysiajs/elysia/issues/1596) handle context pass to function with sub context
+- [#1591](https://github.com/elysiajs/elysia/pull/1591), [#1590](https://github.com/elysiajs/elysia/pull/1591) merge set.headers without duplicating Response
+- [#1526](https://github.com/elysiajs/elysia/issues/1526) default error handler doesn't work in Cloudflare Workers
+- handle group with empty prefix in type-level
 
 # 1.4.18 - 4 Dec 2025
 Security:

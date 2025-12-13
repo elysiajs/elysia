@@ -940,7 +940,11 @@ export default class Elysia<
 
 		addResponsePath(path)
 
+		// For pre-compilation stage, eg. Cloudflare Worker
+		let _compiled: ComposedHandler
 		const compile = () => {
+			if (_compiled) return _compiled
+
 			const compiled = composeHandler({
 				app: this,
 				path,
@@ -957,7 +961,7 @@ export default class Elysia<
 			})
 
 			if (this.router.history[index])
-				this.router.history[index].composed = compiled
+				_compiled = this.router.history[index].composed = compiled
 
 			return compiled
 		}
@@ -979,9 +983,12 @@ export default class Elysia<
 		const mainHandler = shouldPrecompile
 			? compile()
 			: (ctx: Context) =>
-					((route[index].composed = compile!()) as ComposedHandler)(
-						ctx
-					)
+					_compiled
+						? _compiled(ctx)
+						: (
+								(route[index].composed =
+									compile!()) as ComposedHandler
+							)(ctx)
 
 		if (oldIndex !== undefined)
 			this.router.history[oldIndex] = Object.assign(
@@ -8019,7 +8026,7 @@ export default class Elysia<
 		this['~adapter'].beforeCompile?.(this)
 
 		if (this['~adapter'].isWebStandard) {
-			this.fetch = this.config.aot
+			this._handle = this.fetch = this.config.aot
 				? composeGeneralHandler(this)
 				: createDynamicHandler(this)
 

@@ -2222,7 +2222,8 @@ export const composeHandler = ({
 		})
 		console.log('---')
 
-		process.exit(1)
+		if (typeof process?.exit === 'function') process.exit(1)
+		return () => new Response('Internal Server Error', { status: 500 })
 	}
 }
 
@@ -2297,7 +2298,6 @@ export const createHoc = (app: AnyElysia, fnName = 'map') => {
 	if (!hoc.length) return 'return ' + fnName
 
 	const adapter = app['~adapter'].composeGeneralHandler
-
 	let handler = fnName
 
 	for (let i = 0; i < hoc.length; i++)

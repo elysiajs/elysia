@@ -1,5 +1,6 @@
 import { ElysiaAdapter } from '../..'
 import { WebStandardAdapter } from '../web-standard/index'
+import { composeErrorHandler } from '../../compose'
 
 export function isCloudflareWorker() {
 	try {
@@ -62,15 +63,15 @@ export const CloudflareAdapter: ElysiaAdapter = {
 		}
 	},
 	beforeCompile(app) {
+		// @ts-ignore
+		app.handleError = composeErrorHandler(app)
 		for (const route of app.routes) route.compile()
 	},
-	listen(app) {
-		return (options, callback) => {
+	listen() {
+		return () => {
 			console.warn(
 				'Cloudflare Worker does not support listen method. Please export default Elysia instance instead.'
 			)
-
-			app.compile()
 		}
 	}
 }
