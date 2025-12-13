@@ -8022,7 +8022,7 @@ export default class Elysia<
 				: createDynamicHandler(this)
 
 			Object.defineProperty(this, 'fetch', {
-				value: this.fetch,
+				value: this._handle,
 				configurable: true,
 				writable: true
 			})

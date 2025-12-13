@@ -393,6 +393,8 @@ export const BunAdapter: ElysiaAdapter = {
 
 			// @ts-expect-error private
 			app.promisedModules.then(async () => {
+				if (typeof app.config.aot) app.compile()
+
 				app.server?.reload({
 					...serve,
 					fetch: app.fetch,

@@ -730,10 +730,6 @@ export const sucrose = (
 			)
 				code = code.slice(1, -1).trim()
 
-			console.log(
-				isContextPassToFunction(mainParameter, code, fnInference)
-			)
-
 			if (!isContextPassToFunction(mainParameter, code, fnInference))
 				inferBodyReference(code, aliases, fnInference)
 
