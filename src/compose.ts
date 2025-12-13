@@ -1486,7 +1486,9 @@ export const composeHandler = ({
 							if (!properties && candidate.schema?.anyOf) {
 								const objectSchema =
 									candidate.schema.anyOf.find(
-										(s: any) => s.type === 'object'
+										(s: any) =>
+											s.type === 'object' ||
+											(Kind in s && s[Kind] === 'Object')
 									)
 								if (objectSchema) {
 									properties = objectSchema.properties
