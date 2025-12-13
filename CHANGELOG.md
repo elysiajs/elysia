@@ -1,11 +1,11 @@
-# 1.4.19 - 
+# 1.4.19 - 13 Dec 2025
 Security:
 - reject invalid cookie signature when using cookie rotation
 
 Improvement
 - [#1609](https://github.com/elysiajs/elysia/issues/1609) calling afterResponse with aot: false
 - [#1607](https://github.com/elysiajs/elysia/issues/1607), [#1606](https://github.com/elysiajs/elysia/issues/1606), [#1139](https://github.com/elysiajs/elysia/issues/1138) data coercion on nested form data
-- [#1604](https://github.com/elysiajs/elysia/issues/1604) save lazy compilation of `Elysia.fetch` for upto 45x performance improvement
+- [#1604](https://github.com/elysiajs/elysia/issues/1604) save lazy compilation of `Elysia.fetch` for up to 45x performance improvement
 - [#1588](https://github.com/elysiajs/elysia/pull/1588), [#1587](https://github.com/elysiajs/elysia/pull/1587) add seen weakset during mergeDeep
 
 Bug fix:
