@@ -3,6 +3,7 @@ import { CloudflareAdapter } from 'elysia/adapter/cloudflare-worker'
 
 const sub = new Elysia().get('/test', () => 'hello')
 
-export default new Elysia({ aot: true, adapter: CloudflareAdapter })
+export default new Elysia({ adapter: CloudflareAdapter })
+	.get('/', () => 'Elysia on Cloudflare Worker!')
 	.use(sub)
 	.compile()
