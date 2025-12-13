@@ -551,8 +551,36 @@ export const isContextPassToFunction = (
 ) => {
 	// ! Function is passed to another function, assume as all is accessed
 	try {
-		const captureFunction = new RegExp(`\\w\\((.*?)?${context}`, 'gs')
-		captureFunction.test(body)
+		const captureFunction = new RegExp(
+			`\\w\\((?:.*?)?${context}(?:.*?)?\\)`,
+			'gs'
+		)
+		const exactParameter = new RegExp(`${context}(,|\\))`, 'gs')
+
+		const length = body.length
+		let fn
+
+		fn = captureFunction.exec(body) + ''
+		while (
+			captureFunction.lastIndex !== 0 &&
+			captureFunction.lastIndex < length + (fn ? fn.length : 0)
+		) {
+			if (fn && exactParameter.test(fn)) {
+				inference.query = true
+				inference.headers = true
+				inference.body = true
+				inference.cookie = true
+				inference.set = true
+				inference.server = true
+				inference.url = true
+				inference.route = true
+				inference.path = true
+
+				return true
+			}
+
+			fn = captureFunction.exec(body) + ''
+		}
 
 		/*
 		Since JavaScript engine already format the code (removing whitespace, newline, etc.),
@@ -700,7 +728,7 @@ export const sucrose = (
 				code.charCodeAt(0) === 123 &&
 				code.charCodeAt(body.length - 1) === 125
 			)
-				code = code.slice(1, -1)
+				code = code.slice(1, -1).trim()
 
 			if (!isContextPassToFunction(mainParameter, code, fnInference))
 				inferBodyReference(code, aliases, fnInference)

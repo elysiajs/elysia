@@ -48,7 +48,7 @@ import {
 	getCookieValidator,
 	ElysiaTypeCheck,
 	hasType,
-	resolveSchema,
+	resolveSchema
 } from './schema'
 import {
 	composeHandler,
@@ -164,7 +164,12 @@ import type {
 	InlineHandlerNonMacro,
 	Router
 } from './types'
-import { coercePrimitiveRoot, coerceFormData, queryCoercions, stringToStructureCoercions } from './replace-schema'
+import {
+	coercePrimitiveRoot,
+	coerceFormData,
+	queryCoercions,
+	stringToStructureCoercions
+} from './replace-schema'
 
 export type AnyElysia = Elysia<any, any, any, any, any, any, any>
 
@@ -381,7 +386,6 @@ export default class Elysia<
 		this.config = {
 			aot: env.ELYSIA_AOT !== 'false',
 			nativeStaticResponse: true,
-			systemRouter: true,
 			encodeSchema: true,
 			normalize: true,
 			...config,
@@ -589,9 +593,16 @@ export default class Elysia<
 							models,
 							normalize,
 							additionalCoerce: (() => {
-								const resolved = resolveSchema(cloned.body, models, modules)
+								const resolved = resolveSchema(
+									cloned.body,
+									models,
+									modules
+								)
 								// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
-								return (resolved && Kind in resolved && (hasType('File', resolved) || hasType('Files', resolved)))
+								return resolved &&
+									Kind in resolved &&
+									(hasType('File', resolved) ||
+										hasType('Files', resolved))
 									? coerceFormData()
 									: coercePrimitiveRoot()
 							})(),
@@ -657,9 +668,16 @@ export default class Elysia<
 									models,
 									normalize,
 									additionalCoerce: (() => {
-										const resolved = resolveSchema(cloned.body, models, modules)
+										const resolved = resolveSchema(
+											cloned.body,
+											models,
+											modules
+										)
 										// Only check for Files if resolved schema is a TypeBox schema (has Kind symbol)
-										return (resolved && Kind in resolved && (hasType('File', resolved) || hasType('Files', resolved)))
+										return resolved &&
+											Kind in resolved &&
+											(hasType('File', resolved) ||
+												hasType('Files', resolved))
 											? coerceFormData()
 											: coercePrimitiveRoot()
 									})(),
@@ -921,7 +939,11 @@ export default class Elysia<
 
 		addResponsePath(path)
 
+		// For pre-compilation stage, eg. Cloudflare Worker
+		let _compiled: ComposedHandler
 		const compile = () => {
+			if (_compiled) return _compiled
+
 			const compiled = composeHandler({
 				app: this,
 				path,
@@ -938,7 +960,7 @@ export default class Elysia<
 			})
 
 			if (this.router.history[index])
-				this.router.history[index].composed = compiled
+				_compiled = this.router.history[index].composed = compiled
 
 			return compiled
 		}
@@ -960,9 +982,12 @@ export default class Elysia<
 		const mainHandler = shouldPrecompile
 			? compile()
 			: (ctx: Context) =>
-					((route[index].composed = compile!()) as ComposedHandler)(
-						ctx
-					)
+					_compiled
+						? _compiled(ctx)
+						: (
+								(route[index].composed =
+									compile!()) as ComposedHandler
+							)(ctx)
 
 		if (oldIndex !== undefined)
 			this.router.history[oldIndex] = Object.assign(
@@ -3822,23 +3847,15 @@ export default class Elysia<
 		prefix: Prefix,
 		run: (
 			group: Elysia<
-				JoinPath<BasePath, Prefix>,
+				Prefix extends '' ? BasePath : JoinPath<BasePath, Prefix>,
 				Singleton,
 				Definitions,
 				{
 					schema: MergeSchema<
-						UnwrapRoute<
-							{},
-							Definitions['typebox'],
-							JoinPath<BasePath, Prefix>
-						>,
+						UnwrapRoute<{}, Definitions['typebox']>,
 						Metadata['schema']
 					>
-					standaloneSchema: UnwrapRoute<
-						{},
-						Definitions['typebox'],
-						JoinPath<BasePath, Prefix>
-					> &
+					standaloneSchema: UnwrapRoute<{}, Definitions['typebox']> &
 						Metadata['standaloneSchema']
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
@@ -8000,9 +8017,15 @@ export default class Elysia<
 		this['~adapter'].beforeCompile?.(this)
 
 		if (this['~adapter'].isWebStandard) {
-			this.fetch = this.config.aot
+			this._handle = this.config.aot
 				? composeGeneralHandler(this)
 				: createDynamicHandler(this)
+
+			Object.defineProperty(this, 'fetch', {
+				value: this._handle,
+				configurable: true,
+				writable: true
+			})
 
 			if (typeof this.server?.reload === 'function')
 				this.server.reload({
@@ -8028,10 +8051,18 @@ export default class Elysia<
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	fetch = (request: Request): MaybePromise<Response> => {
-		return (this.fetch = this.config.aot
+	get fetch() {
+		const fetch = this.config.aot
 			? composeGeneralHandler(this)
-			: createDynamicHandler(this))(request)
+			: createDynamicHandler(this)
+
+		Object.defineProperty(this, 'fetch', {
+			value: fetch,
+			configurable: true,
+			writable: true
+		})
+
+		return fetch
 	}
 
 	/**
@@ -8153,13 +8184,8 @@ export {
 	type TraceStream
 } from './trace'
 
-export {
-	getSchemaValidator,
-	getResponseSchemaValidator,
-} from './schema'
-export {
-    replaceSchemaTypeFromManyOptions as replaceSchemaType
-} from './replace-schema'
+export { getSchemaValidator, getResponseSchemaValidator } from './schema'
+export { replaceSchemaTypeFromManyOptions as replaceSchemaType } from './replace-schema'
 
 export {
 	mergeHook,

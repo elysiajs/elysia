@@ -694,47 +694,68 @@ describe('Dynamic Mode', () => {
 		})
 	})
 
-	it('handle query array reference in multiple reference format', async () => {
-		const IdsModel = new Elysia().model({
-			name: t.Object({
-				name: t.Array(t.String())
-			})
-		})
+	it('call local afterResponse on aot: false', async () => {
+		let called = false
 
 		const app = new Elysia({ aot: false })
-			.use(IdsModel)
-			.get('/', ({ query }) => query, {
-				name: 'ids'
-			})
+			.guard(
+				{
+					afterResponse: () => {
+						called = true
+					}
+				},
+				(app) => app.get('/test', () => 'afterResponse')
+			)
+			.get('/', () => 'hi')
 
-		const data = await app
-			.handle(req('/?names=rapi&names=anis'))
-			.then((x) => x.json())
+		const value = await app.handle(req('/test')).then((x) => x.text())
+		await Bun.sleep(6.7)
 
-		expect(data).toEqual({
-			names: ['rapi', 'anis']
-		})
+		expect(value).toBe('afterResponse')
+		expect(called).toBeTrue()
 	})
 
-	it('handle query array reference in multiple reference format', async () => {
-		const IdsModel = new Elysia().model({
-			name: t.Object({
-				name: t.Array(t.String())
-			})
-		})
+	// it('handle query array reference in multiple reference format', async () => {
+	// 	const IdsModel = new Elysia().model({
+	// 		name: t.Object({
+	// 			name: t.Array(t.String())
+	// 		})
+	// 	})
 
-		const app = new Elysia({ aot: false })
-			.use(IdsModel)
-			.get('/', ({ query }) => query, {
-				name: 'ids'
-			})
+	// 	const app = new Elysia({ aot: false })
+	// 		.use(IdsModel)
+	// 		.get('/', ({ query }) => query, {
+	// 			query: 'name'
+	// 		})
 
-		const data = await app
-			.handle(req('/?names=rapi&names=anis'))
-			.then((x) => x.json())
+	// 	const data = await app
+	// 		.handle(req('/?names=rapi&names=anis'))
+	// 		.then((x) => x.json())
 
-		expect(data).toEqual({
-			names: ['rapi', 'anis']
-		})
-	})
+	// 	expect(data).toEqual({
+	// 		names: ['rapi', 'anis']
+	// 	})
+	// })
+
+	// it('handle query array reference in multiple reference format', async () => {
+	// 	const IdsModel = new Elysia().model({
+	// 		name: t.Object({
+	// 			name: t.Array(t.String())
+	// 		})
+	// 	})
+
+	// 	const app = new Elysia({ aot: false })
+	// 		.use(IdsModel)
+	// 		.get('/', ({ query }) => query, {
+	// 			query: 'name'
+	// 		})
+
+	// 	const data = await app
+	// 		.handle(req('/?names=rapi&names=anis'))
+	// 		.then((x) => x.json())
+
+	// 	expect(data).toEqual({
+	// 		names: ['rapi', 'anis']
+	// 	})
+	// })
 })

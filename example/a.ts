@@ -1,22 +1,11 @@
-import { Elysia, t } from '../src'
-import * as z from 'zod'
-import { post, req } from '../test/utils'
+import { Elysia } from '../src'
 
-const app = new Elysia({
-	cookie: {
-		domain: "\\` + console.log(c.q='pwn2') }) //"
-	}
+// This uses aot: true by default in 1.4 (broken on Bun)
+const app = new Elysia({ systemRouter: true })
+  .get("/", "Hello Elysia")
+  .get("/json", () => ({ message: "Hello World", timestamp: Date.now() }))
+
+Bun.serve({
+	port: 3000,
+	fetch: app.fetch
 })
-	.get('/', ({ cookie: { session } }) => 'awd')
-
-console.log(app.routes[0].compile().toString())
-
-const root = await app.handle(
-	new Request('http://localhost/', {
-		headers: {
-			Cookie: 'session=1234'
-		}
-	})
-)
-
-console.log(await root.text())

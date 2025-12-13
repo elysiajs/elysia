@@ -2922,3 +2922,33 @@ type a = keyof {}
 		? true
 		: false = true
 }
+
+// group empty prefix
+{
+	const app = new Elysia()
+		.group('', (app) => {
+			return app.get('/ok', () => 'Hello World')
+		})
+		.listen(3000)
+
+	type Routes = keyof (typeof app)['~Routes']
+
+	expectTypeOf<Routes>().toEqualTypeOf<'ok'>()
+}
+
+// override group prefix type
+{
+	new Elysia().group('/:example', (app) =>
+		app.get(
+			'/',
+			({ params: { example } }) => {
+				expectTypeOf<typeof example>().toBeNumber()
+			},
+			{
+				params: t.Object({
+					example: t.Numeric()
+				})
+			}
+		)
+	)
+}

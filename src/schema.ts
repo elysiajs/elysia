@@ -27,7 +27,8 @@ import type {
 	InputSchema,
 	MaybeArray,
 	StandaloneInputSchema,
-	StandardSchemaV1LikeValidate
+	StandardSchemaV1LikeValidate,
+UnwrapSchema
 } from './types'
 
 import type { StandardSchemaV1Like } from './types'
@@ -40,10 +41,10 @@ export interface ElysiaTypeCheck<T extends TSchema>
 	provider: 'typebox' | 'standard'
 	schema: T
 	config: Object
-	Clean?(v: unknown): T
-	parse(v: unknown): T
+	Clean?(v: unknown): UnwrapSchema<T>
+	parse(v: unknown): UnwrapSchema<T>
 	safeParse(v: unknown):
-		| { success: true; data: T; error: null }
+		| { success: true; data: UnwrapSchema<T>; error: null }
 		| {
 				success: false
 				data: null

@@ -19,6 +19,7 @@ import {
 import {
 	ELYSIA_REQUEST_ID,
 	getLoosePath,
+	hasSetImmediate,
 	lifeCycleToFn,
 	randomId,
 	redirect,
@@ -444,6 +445,10 @@ const coerceTransformDecodeError = (
 	`throw error.error ?? new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails})}` +
 	`}`
 
+const setImmediateFn = hasSetImmediate
+	? 'setImmediate'
+	: 'Promise.resolve().then'
+
 export const composeHandler = ({
 	app,
 	path,
@@ -804,7 +809,7 @@ export const composeHandler = ({
 		let afterResponse = ''
 
 		afterResponse +=
-			`\nsetImmediate(async()=>{` +
+			`\n${setImmediateFn}(async()=>{` +
 			`if(c.responseValue){` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n` +
 			(hasStream
@@ -1474,11 +1479,17 @@ export const composeHandler = ({
 						if (candidate) {
 							const isFirst = fileUnions.length === 0
 							// Handle case where schema is wrapped in a Union (e.g., ObjectString coercion)
-							let properties = candidate.schema?.properties ?? type.properties
+							let properties =
+								candidate.schema?.properties ?? type.properties
 
 							// If no properties but schema is a Union, try to find the Object in anyOf
 							if (!properties && candidate.schema?.anyOf) {
-								const objectSchema = candidate.schema.anyOf.find((s: any) => s.type === 'object')
+								const objectSchema =
+									candidate.schema.anyOf.find(
+										(s: any) =>
+											s.type === 'object' ||
+											(Kind in s && s[Kind] === 'Object')
+									)
 								if (objectSchema) {
 									properties = objectSchema.properties
 								}
@@ -1486,9 +1497,10 @@ export const composeHandler = ({
 
 							if (!properties) continue
 
-							const iterator = Object.entries(
-								properties
-							) as [string, TSchema][]
+							const iterator = Object.entries(properties) as [
+								string,
+								TSchema
+							][]
 
 							let validator = isFirst ? '\n' : ' else '
 							validator += `if(fileUnions[${fileUnions.length}].Check(c.body)){`
@@ -1773,7 +1785,7 @@ export const composeHandler = ({
 					(hasTrace || hooks.afterResponse?.length
 						? `afterHandlerStreamListener=stream[2]\n`
 						: '') +
-					`setImmediate(async ()=>{` +
+					`${setImmediateFn}(async ()=>{` +
 					`if(listener)for await(const v of listener){}\n`
 				handleReporter.resolve()
 				fnLiteral += `})` + (maybeAsync ? '' : `})()`) + `}else{`
@@ -2212,7 +2224,8 @@ export const composeHandler = ({
 		})
 		console.log('---')
 
-		process.exit(1)
+		if (typeof process?.exit === 'function') process.exit(1)
+		return () => new Response('Internal Server Error', { status: 500 })
 	}
 }
 
@@ -2287,7 +2300,6 @@ export const createHoc = (app: AnyElysia, fnName = 'map') => {
 	if (!hoc.length) return 'return ' + fnName
 
 	const adapter = app['~adapter'].composeGeneralHandler
-
 	let handler = fnName
 
 	for (let i = 0; i < hoc.length; i++)
@@ -2337,7 +2349,7 @@ export const composeGeneralHandler = (app: AnyElysia) => {
 
 		const prefix = app.event.afterResponse.some(isAsync) ? 'async' : ''
 		afterResponse +=
-			`\nsetImmediate(${prefix}()=>{` +
+			`\n${setImmediateFn}(${prefix}()=>{` +
 			`if(c.responseValue instanceof ElysiaCustomStatusResponse) c.set.status=c.responseValue.code\n`
 
 		for (let i = 0; i < app.event.afterResponse.length; i++) {
@@ -2571,7 +2583,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 
 		let afterResponse = ''
 		const prefix = hooks.afterResponse?.some(isAsync) ? 'async' : ''
-		afterResponse += `\nsetImmediate(${prefix}()=>{`
+		afterResponse += `\n${setImmediateFn}(${prefix}()=>{`
 
 		const reporter = createReport({
 			context: 'context',
