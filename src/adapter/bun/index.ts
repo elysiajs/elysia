@@ -439,11 +439,13 @@ export const BunAdapter: ElysiaAdapter = {
 			normalize: app.config.normalize
 		})
 
-		const validateMessage = messageValidator ?
-			messageValidator.provider === 'standard'
-				? (data: unknown) => messageValidator.schema['~standard'].validate(data).issues
+		const validateMessage = messageValidator
+			? messageValidator.provider === 'standard'
+				? (data: unknown) =>
+						messageValidator.schema['~standard'].validate(data)
+							.issues
 				: (data: unknown) => messageValidator.Check(data) === false
-				: undefined
+			: undefined
 
 		const responseValidator = getSchemaValidator(response as any, {
 			// @ts-expect-error private property
@@ -569,7 +571,10 @@ export const BunAdapter: ElysiaAdapter = {
 							) => {
 								const message = await parseMessage(ws, _message)
 
-								if (validateMessage && validateMessage(message)) {
+								if (
+									validateMessage &&
+									validateMessage(message)
+								) {
 									const validationError = new ValidationError(
 										'message',
 										messageValidator!,

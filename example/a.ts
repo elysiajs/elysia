@@ -1,18 +1,11 @@
-import { Elysia, t } from '../src'
+import { Elysia } from '../src'
 
-const test2 = new Elysia()
-	.group('/:example', (app) =>
-		app.get(
-			'/',
-			({ params: { example } }) => ({
-				value: example,
-				type: typeof example
-			}),
-			{
-				params: t.Object({
-					example: t.Numeric()
-				})
-			}
-		)
-	)
-	.listen(8081)
+// This uses aot: true by default in 1.4 (broken on Bun)
+const app = new Elysia({ systemRouter: true })
+  .get("/", "Hello Elysia")
+  .get("/json", () => ({ message: "Hello World", timestamp: Date.now() }))
+
+Bun.serve({
+	port: 3000,
+	fetch: app.fetch
+})

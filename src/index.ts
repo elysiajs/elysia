@@ -386,7 +386,6 @@ export default class Elysia<
 		this.config = {
 			aot: env.ELYSIA_AOT !== 'false',
 			nativeStaticResponse: true,
-			systemRouter: true,
 			encodeSchema: true,
 			normalize: true,
 			...config,
@@ -8046,10 +8045,18 @@ export default class Elysia<
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	fetch = (request: Request): MaybePromise<Response> => {
-		return (this.fetch = this.config.aot
+	get fetch() {
+		const fetch = this.config.aot
 			? composeGeneralHandler(this)
-			: createDynamicHandler(this))(request)
+			: createDynamicHandler(this)
+
+		Object.defineProperty(this, 'fetch', {
+			value: fetch,
+			configurable: true,
+			writable: true
+		})
+
+		return fetch
 	}
 
 	/**
