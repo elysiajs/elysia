@@ -8017,9 +8017,15 @@ export default class Elysia<
 		this['~adapter'].beforeCompile?.(this)
 
 		if (this['~adapter'].isWebStandard) {
-			this._handle = this.fetch = this.config.aot
+			this._handle = this.config.aot
 				? composeGeneralHandler(this)
 				: createDynamicHandler(this)
+
+			Object.defineProperty(this, 'fetch', {
+				value: this.fetch,
+				configurable: true,
+				writable: true
+			})
 
 			if (typeof this.server?.reload === 'function')
 				this.server.reload({
