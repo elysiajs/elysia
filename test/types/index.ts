@@ -2935,3 +2935,20 @@ type a = keyof {}
 
 	expectTypeOf<Routes>().toEqualTypeOf<'ok'>()
 }
+
+// override group prefix type
+{
+	new Elysia().group('/:example', (app) =>
+		app.get(
+			'/',
+			({ params: { example } }) => {
+				expectTypeOf<typeof example>().toBeNumber()
+			},
+			{
+				params: t.Object({
+					example: t.Numeric()
+				})
+			}
+		)
+	)
+}

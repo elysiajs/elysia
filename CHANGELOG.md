@@ -13,6 +13,7 @@ Bug fix:
 - [#1597](https://github.com/elysiajs/elysia/issues/1597) safeParse, parse to static type
 - [#1596](https://github.com/elysiajs/elysia/issues/1596) handle context pass to function with sub context
 - [#1591](https://github.com/elysiajs/elysia/pull/1591), [#1590](https://github.com/elysiajs/elysia/pull/1591) merge set.headers without duplicating Response
+- [#1546](https://github.com/elysiajs/elysia/issues/1546) override group prefix type
 - [#1526](https://github.com/elysiajs/elysia/issues/1526) default error handler doesn't work in Cloudflare Workers
 - handle group with empty prefix in type-level
 

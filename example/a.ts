@@ -1,8 +1,18 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-const app = new Elysia()
-	.get('/fail', () => {
-		throw new Error('oops')
-	})
-	.compile()
-	.listen(8787)
+const test2 = new Elysia()
+	.group('/:example', (app) =>
+		app.get(
+			'/',
+			({ params: { example } }) => ({
+				value: example,
+				type: typeof example
+			}),
+			{
+				params: t.Object({
+					example: t.Numeric()
+				})
+			}
+		)
+	)
+	.listen(8081)

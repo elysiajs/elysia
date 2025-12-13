@@ -3853,18 +3853,10 @@ export default class Elysia<
 				Definitions,
 				{
 					schema: MergeSchema<
-						UnwrapRoute<
-							{},
-							Definitions['typebox'],
-							JoinPath<BasePath, Prefix>
-						>,
+						UnwrapRoute<{}, Definitions['typebox']>,
 						Metadata['schema']
 					>
-					standaloneSchema: UnwrapRoute<
-						{},
-						Definitions['typebox'],
-						JoinPath<BasePath, Prefix>
-					> &
+					standaloneSchema: UnwrapRoute<{}, Definitions['typebox']> &
 						Metadata['standaloneSchema']
 					macro: Metadata['macro']
 					macroFn: Metadata['macroFn']
