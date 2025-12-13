@@ -410,7 +410,7 @@ export const parseCookie = async (
 
 				value = temp
 			} else {
-				let decoded = true
+				let decoded = false
 				for (let i = 0; i < secrets.length; i++) {
 					const temp = await unsignCookie(value as string, secrets[i])
 

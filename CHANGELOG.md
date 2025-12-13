@@ -1,4 +1,7 @@
-# 1.4.19 - 9 Dec 2025
+# 1.4.19 - 
+Security:
+- reject invalid cookie signature when using cookie rotation
+
 Improvement
 - [#1609](https://github.com/elysiajs/elysia/issues/1609) calling afterResponse with aot: false
 - [#1607](https://github.com/elysiajs/elysia/issues/1607), [#1606](https://github.com/elysiajs/elysia/issues/1606), [#1139](https://github.com/elysiajs/elysia/issues/1138) data coercion on nested form data
