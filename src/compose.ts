@@ -402,18 +402,33 @@ const hasReturn = (v: string | HookContainer<any> | Function) => {
 		? v.fn.toString()
 		: typeof v === 'string'
 			? v.toString()
-			: v
+			: v.toString()
 
 	const parenthesisEnd = fnLiteral.indexOf(')')
 
-	// Is direct arrow function return eg. () => 1
-	if (
-		fnLiteral.charCodeAt(parenthesisEnd + 2) === 61 &&
-		fnLiteral.charCodeAt(parenthesisEnd + 5) !== 123
-	) {
-		if (isObject) v.hasReturn = true
+	// Check for arrow function expression (direct return without braces)
+	// Handle both `) => x` and `)=>x` formats (with or without spaces)
+	const arrowIndex = fnLiteral.indexOf('=>', parenthesisEnd)
 
-		return true
+	if (arrowIndex !== -1) {
+		// Skip any whitespace after `=>`
+		let afterArrow = arrowIndex + 2
+		while (
+			afterArrow < fnLiteral.length &&
+			fnLiteral.charCodeAt(afterArrow) === 32
+		) {
+			afterArrow++
+		}
+
+		// If the first non-whitespace char after `=>` is not `{`, it's a direct return
+		if (
+			afterArrow < fnLiteral.length &&
+			fnLiteral.charCodeAt(afterArrow) !== 123
+		) {
+			if (isObject) v.hasReturn = true
+
+			return true
+		}
 	}
 
 	const result = fnLiteral.includes('return')
