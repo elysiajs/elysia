@@ -46,10 +46,6 @@ describe('beforeHandle with arrow functions', () => {
 	})
 
 	it('should execute beforeHandle with complex arrow expression', async () => {
-		const createValidator = () => () => {
-			// Simulates authentication/validation middleware
-		}
-
 		let validatorCalled = false
 		const validator = () => {
 			validatorCalled = true
@@ -59,7 +55,7 @@ describe('beforeHandle with arrow functions', () => {
 			.get('/test', () => 'ok', {
 				// Complex arrow expression like: async ({status}) => requireSignature()({status})
 				// This pattern was broken when code is minified
-				beforeHandle: ({ set }) => validator()
+				beforeHandle: () => validator()
 			})
 
 		const response = await app.handle(new Request('http://localhost/test'))
@@ -105,6 +101,21 @@ describe('beforeHandle with arrow functions', () => {
 		const response = await app.handle(new Request('http://localhost/test'))
 		expect(response.status).toBe(200)
 		expect(callOrder).toEqual([1, 2, 3])
+	})
+
+	// Test with truly minified code (no spaces around arrow)
+	// This simulates what happens when code is bundled and minified
+	it('should execute beforeHandle with truly minified arrow function (no spaces)', async () => {
+		// Construct a function with no spaces: async()=>'intercepted'
+		// This is what real minifiers produce
+		const minifiedHandler = Function("return async()=>'intercepted'")()
+
+		const app = new Elysia().get('/test', () => 'should not reach', {
+			beforeHandle: minifiedHandler
+		})
+
+		const response = await app.handle(new Request('http://localhost/test'))
+		expect(await response.text()).toBe('intercepted')
 	})
 
 	// Test with actual HTTP server (not just app.handle)

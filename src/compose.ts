@@ -411,11 +411,15 @@ const hasReturn = (v: string | HookContainer<any> | Function) => {
 	const arrowIndex = fnLiteral.indexOf('=>', parenthesisEnd)
 
 	if (arrowIndex !== -1) {
-		// Skip any whitespace after `=>`
+		// Skip any whitespace after `=>` (space, tab, newline, carriage return)
 		let afterArrow = arrowIndex + 2
+		let charCode: number
 		while (
 			afterArrow < fnLiteral.length &&
-			fnLiteral.charCodeAt(afterArrow) === 32
+			((charCode = fnLiteral.charCodeAt(afterArrow)) === 32 || // space
+				charCode === 9 || // tab
+				charCode === 10 || // newline
+				charCode === 13) // carriage return
 		) {
 			afterArrow++
 		}
