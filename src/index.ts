@@ -4042,6 +4042,10 @@ export default class Elysia<
 					} = schemaOrRun
 					const localHook = hooks as AnyLocalHook
 
+					// Apply macros to expand group options before merging
+					// This ensures macro-defined hooks run before nested plugin hooks
+					this.applyMacro(hook)
+
 					const hasStandaloneSchema =
 						body || headers || query || params || cookie || response
 
