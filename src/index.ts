@@ -4066,20 +4066,29 @@ export default class Elysia<
 											localHook.error,
 											...(sandbox.event.error ?? [])
 										],
-							standaloneValidator: !hasStandaloneSchema
-								? localHook.standaloneValidator
-								: [
-										...(localHook.standaloneValidator ??
-											[]),
-										{
-											body,
-											headers,
-											query,
-											params,
-											cookie,
-											response
-										}
-									]
+							// Merge macro's standaloneValidator with local and group schema
+							standaloneValidator:
+								hook.standaloneValidator ||
+								localHook.standaloneValidator ||
+								hasStandaloneSchema
+									? [
+											...(hook.standaloneValidator ?? []),
+											...(localHook.standaloneValidator ??
+												[]),
+											...(hasStandaloneSchema
+												? [
+														{
+															body,
+															headers,
+															query,
+															params,
+															cookie,
+															response
+														}
+													]
+												: [])
+										]
+									: undefined
 						}),
 						undefined
 					)

@@ -139,4 +139,54 @@ describe('macro beforeHandle lifecycle order', () => {
 			'data.resolve'
 		])
 	})
+
+	it('should preserve macro schema when merging with nested plugin hooks', async () => {
+		const { t } = await import('../../src')
+
+		// Macro that adds both beforeHandle and body schema
+		const validatedMacro = new Elysia({ name: 'validated-macro' })
+			.macro({
+				validatePayload: {
+					body: t.Object({
+						name: t.String()
+					}),
+					beforeHandle() {
+						// Macro's beforeHandle
+					}
+				}
+			})
+			.as('scoped')
+
+		const nestedPlugin = new Elysia({ name: 'nested' })
+			.resolve(() => ({ nested: true }))
+			.as('scoped')
+
+		const app = new Elysia()
+			.use(validatedMacro)
+			.group('/api', { validatePayload: true }, (app) =>
+				app.use(nestedPlugin).post('/', ({ body }) => body.name)
+			)
+
+		// Valid request - should pass validation
+		const validResponse = await app.handle(
+			new Request('http://localhost/api/', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: 'test' })
+			})
+		)
+		expect(validResponse.status).toBe(200)
+		expect(await validResponse.text()).toBe('test')
+
+		// Invalid request - should fail validation (macro schema should be preserved)
+		const invalidResponse = await app.handle(
+			new Request('http://localhost/api/', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ invalid: 'data' })
+			})
+		)
+		// If macro schema is lost, this would be 200 instead of 422
+		expect(invalidResponse.status).toBe(422)
+	})
 })
