@@ -15,7 +15,7 @@
 
 <br>
 
-![Elysia chan cover | bun creeate elysia app](https://github.com/user-attachments/assets/28fa651f-8f23-4799-90dd-0248be2d1311)
+![Elysia chan cover | bun creeate elysia app](https://github.com/user-attachments/assets/a649731a-8cba-4ca2-8424-6656cbf84956)
 
 <!---
 ```bash
