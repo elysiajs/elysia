@@ -7,6 +7,4 @@ new Elysia()
 			name: t.String()
 		})
 	})
-	.get('/id/:id/name/:name', ({ params }) => {}, {
-		params: 'character.thing'
-	})
+	.get('/id/:id/name/:name', ({ params }) => {})

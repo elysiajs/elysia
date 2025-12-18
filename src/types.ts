@@ -535,8 +535,6 @@ export type UnwrapBodySchema<
 					: unknown
 				: unknown
 
-				type A = Prettify<InputSchema<never>>
-
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['typebox'] = {},
@@ -547,7 +545,7 @@ export interface UnwrapRoute<
 	query: UnwrapSchema<Schema['query'], Definitions>
 	params: {} extends Schema['params']
 		? ResolvePath<Path>
-		: InputSchema<never> extends Schema
+		: {} extends Schema
 			? ResolvePath<Path>
 			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>

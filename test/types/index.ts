@@ -2952,3 +2952,20 @@ type a = keyof {}
 		)
 	)
 }
+
+// ? params with model
+{
+	new Elysia()
+		.model({
+			'character.name': t.String(),
+			'character.thing': t.Object({
+				name: t.String()
+			})
+		})
+		.get('/id/:id/name/:name', ({ params }) => {
+			expectTypeOf<typeof params>().toEqualTypeOf<{
+				id: string
+				name: string
+			}>()
+		})
+}
