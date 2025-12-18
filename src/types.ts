@@ -535,6 +535,8 @@ export type UnwrapBodySchema<
 					: unknown
 				: unknown
 
+				type A = Prettify<InputSchema<never>>
+
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['typebox'] = {},
