@@ -97,7 +97,7 @@ export const hasPatternProperties = (
 	if (schema.oneOf) return schema.oneOf.some(hasPatternProperties)
 	if (schema.someOf) return schema.someOf.some(hasPatternProperties)
 	if (schema.allOf) return schema.allOf.some(hasPatternProperties)
-	if (schema.not) return schema.not.some(hasPatternProperties)
+	if (schema.not) return hasPatternProperties(schema.not)
 
 	if (schema.type === 'object' && schema.properties) {
 		const properties = schema.properties as Record<string, TAnySchema>
@@ -799,7 +799,7 @@ export const getSchemaValidator = <
 				if (validator?.schema?.config) delete validator.schema.config
 			}
 
-			if (normalize && schema.additionalProperties === false && !hasPatternProperties(schema)) {
+			if (normalize && !hasPatternProperties(schema)) {
 				if (normalize === true || normalize === 'exactMirror') {
 					try {
 						validator.Clean = createMirror(schema, {

@@ -563,8 +563,6 @@ describe('Response Validator', () => {
 		expect(result.join('')).toContain('data: {"name":"Name"}')
 	})
 
-	// Regression tests for t.Record validation bug
-	// https://github.com/elysiajs/elysia/issues/XXXX
 	it('validate Record with nested objects (original bug)', async () => {
 		const app = new Elysia().get(
 			'',
@@ -656,7 +654,8 @@ describe('Response Validator', () => {
 	it('reject invalid Record response values', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({ foo: 123 }) as any,
+			// @ts-expect-error - Testing validation failure with wrong type
+			() => ({ foo: 123 }),
 			{
 				response: t.Record(t.String(), t.String())
 			}
@@ -691,7 +690,8 @@ describe('Response Validator', () => {
 	it('preserve additionalProperties=false on regular Objects', async () => {
 		const app = new Elysia().get(
 			'/',
-			() => ({ name: 'test', extra: 'should be removed' }) as any,
+			// @ts-expect-error - Testing Clean removes extra properties
+			() => ({ name: 'test', extra: 'should be removed' }),
 			{
 				response: t.Object({
 					name: t.String()
