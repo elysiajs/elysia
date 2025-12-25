@@ -2355,6 +2355,7 @@ export interface ModelValidatorError extends ValueError {
 
 // @ts-ignore trust me bro
 export interface ModelValidator<T> extends TypeCheck<T> {
+	schema: T
 	parse(a: T): T
 	safeParse(a: T):
 		| { success: true; data: T; error: null }

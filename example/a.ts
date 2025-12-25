@@ -1,10 +1,22 @@
 import { Elysia, t } from '../src'
+import { z } from 'zod'
 
-new Elysia()
+const app = new Elysia()
 	.model({
-		'character.name': t.String(),
-		'character.thing': t.Object({
-			name: t.String()
+		sign: t.Object({
+			username: t.String(),
+			password: t.String()
+		}),
+		zodSign: z.object({
+			username: z.string(),
+			password: z.string()
 		})
 	})
-	.get('/id/:id/name/:name', ({ params }) => {})
+
+// For TypeBox
+// const zodSign = app.models.zodSign.Schema()
+// type zodSign = z.infer<typeof zodSign>
+//    ^?
+
+
+console.log(app.models.sign.schema)

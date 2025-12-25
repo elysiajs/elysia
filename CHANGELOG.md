@@ -1,3 +1,10 @@
+# 1.4.20
+Improvement:
+- add `ModelValidator.schema` for accessing raw schema
+
+Bug fix:
+- `Elysia.models` broke when referencing non typebox model
+
 # 1.4.19 - 13 Dec 2025
 Security:
 - reject invalid cookie signature when using cookie rotation
