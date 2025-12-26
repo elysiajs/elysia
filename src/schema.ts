@@ -540,7 +540,7 @@ export const getSchemaValidator = <
 			let mirror: Function
 			if (normalize === true || normalize === 'exactMirror')
 				try {
-					mirror = createMirror(schema as TSchema, {
+					mirror = createMirror(schema as TAnySchema, {
 						TypeCompiler,
 						sanitize: sanitize?.(),
 						modules
@@ -802,7 +802,7 @@ export const getSchemaValidator = <
 			if (normalize && !hasPatternProperties(schema)) {
 				if (normalize === true || normalize === 'exactMirror') {
 					try {
-						validator.Clean = createMirror(schema, {
+						validator.Clean = createMirror(schema as TAnySchema, {
 							TypeCompiler,
 							sanitize: sanitize?.(),
 							modules
@@ -941,7 +941,7 @@ export const getSchemaValidator = <
 		if (normalize && !hasPatternProperties(schema)) {
 			if (normalize === true || normalize === 'exactMirror') {
 				try {
-					compiled.Clean = createMirror(schema, {
+					compiled.Clean = createMirror(schema as TAnySchema, {
 						TypeCompiler,
 						sanitize: sanitize?.(),
 						modules

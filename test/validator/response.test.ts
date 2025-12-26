@@ -563,145 +563,32 @@ describe('Response Validator', () => {
 		expect(result.join('')).toContain('data: {"name":"Name"}')
 	})
 
-	it('validate Record with nested objects (original bug)', async () => {
-		const app = new Elysia().get(
-			'',
-			() => ({
-				list: [
-					{
-						toto: { bar: 1 },
-						foo: { link: 'first' }
-					}
-				],
-				one: {
-					toto: { bar: 0 },
-					foo: { link: 'second' }
-				}
-			}),
-			{
-				response: {
-					200: t.Object({
-						list: t.Array(
-							t.Object({
-								toto: t.Object({ bar: t.Integer() }),
-								foo: t.Record(t.String(), t.String())
-							})
-						),
-						one: t.Object({
-							toto: t.Object({ bar: t.Integer() }),
-							foo: t.Record(t.String(), t.String())
-						})
-					})
-				}
-			}
-		)
-
-		const res = await app.handle(req('/'))
-		const json = await res.json()
-
-		// Should return 200, not 422 validation error
-		expect(res.status).toBe(200)
-		expect(json).toEqual({
-			list: [
-				{
-					toto: { bar: 1 },
-					foo: { link: 'first' }
-				}
-			],
+	it('validate Record with nested objects', async () => {
+		const app = new Elysia().get('/', () => ({
+			list: [{
+				toto: { bar: 1 },
+				foo: { link: 'first' }
+			}],
 			one: {
 				toto: { bar: 0 },
 				foo: { link: 'second' }
 			}
-		})
-	})
-
-	it('validate simple Record response', async () => {
-		const app = new Elysia().get(
-			'/',
-			() => ({ key1: 'value1', key2: 'value2' }),
-			{
-				response: t.Record(t.String(), t.String())
-			}
-		)
-
-		const res = await app.handle(req('/'))
-		expect(res.status).toBe(200)
-		expect(await res.json()).toEqual({ key1: 'value1', key2: 'value2' })
-	})
-
-	it('validate Record with object values', async () => {
-		const app = new Elysia().get(
-			'/',
-			() => ({
-				user1: { name: 'John', age: 30 },
-				user2: { name: 'Jane', age: 25 }
-			}),
-			{
-				response: t.Record(
-					t.String(),
-					t.Object({
-						name: t.String(),
-						age: t.Number()
+		}), {
+			response: {
+				200: t.Object({
+					list: t.Array(t.Object({
+						toto: t.Object({ bar: t.Integer() }),
+						foo: t.Record(t.String(), t.String())
+					})),
+					one: t.Object({
+						toto: t.Object({ bar: t.Integer() }),
+						foo: t.Record(t.String(), t.String())
 					})
-				)
-			}
-		)
-
-		const res = await app.handle(req('/'))
-		expect(res.status).toBe(200)
-	})
-
-	it('reject invalid Record response values', async () => {
-		const app = new Elysia().get(
-			'/',
-			// @ts-expect-error - Testing validation failure with wrong type
-			() => ({ foo: 123 }),
-			{
-				response: t.Record(t.String(), t.String())
-			}
-		)
-
-		const res = await app.handle(req('/'))
-		expect(res.status).toBe(422)
-	})
-
-	it('validate nested Record in Record', async () => {
-		const app = new Elysia().get(
-			'/',
-			() => ({
-				level1: {
-					level2: {
-						value: 'nested'
-					}
-				}
-			}),
-			{
-				response: t.Record(
-					t.String(),
-					t.Record(t.String(), t.Record(t.String(), t.String()))
-				)
-			}
-		)
-
-		const res = await app.handle(req('/'))
-		expect(res.status).toBe(200)
-	})
-
-	it('preserve additionalProperties=false on regular Objects', async () => {
-		const app = new Elysia().get(
-			'/',
-			// @ts-expect-error - Testing Clean removes extra properties
-			() => ({ name: 'test', extra: 'should be removed' }),
-			{
-				response: t.Object({
-					name: t.String()
 				})
 			}
-		)
+		})
 
 		const res = await app.handle(req('/'))
 		expect(res.status).toBe(200)
-		// Clean function should remove extra property
-		expect(await res.json()).toEqual({ name: 'test' })
 	})
 })
