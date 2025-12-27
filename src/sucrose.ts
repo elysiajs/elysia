@@ -617,7 +617,7 @@ export const isContextPassToFunction = (
 	}
 }
 
-let pendingGC: number | undefined
+let pendingGC: Timer | undefined
 let caches = <Record<number, Sucrose.Inference>>{}
 
 export const clearSucroseCache = (delay: Sucrose.Settings['gcTime']) => {
@@ -632,7 +632,7 @@ export const clearSucroseCache = (delay: Sucrose.Settings['gcTime']) => {
 
 		pendingGC = undefined
 		if (isBun) Bun.gc(false)
-	}, delay) as unknown as number
+	}, delay).unref()
 }
 
 export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
