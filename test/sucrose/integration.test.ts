@@ -1,4 +1,4 @@
-import { describe, it } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
 
 describe('Integration', () => {
 	it(
@@ -12,7 +12,8 @@ describe('Integration', () => {
 				]
 			})
 
-			await res.exited
+			const status = await res.exited;
+			expect(status).toEqual(0);
 		},
 		{
 			timeout: 500
