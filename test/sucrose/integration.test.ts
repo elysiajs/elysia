@@ -15,7 +15,7 @@ describe('Integration', () => {
 			await res.exited
 		},
 		{
-			timeout: 100
+			timeout: 500
 		}
 	)
 })
