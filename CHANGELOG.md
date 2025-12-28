@@ -3,6 +3,9 @@ Improvement:
 - add `ModelValidator.schema` for accessing raw schema
 
 Bug fix:
+- [#1639](https://github.com/elysiajs/elysia/issues/1639) compose: ReferenceError: "_r_r is not defined" when onError returns plain object & mapResponse exists
+
+Bug fix:
 - `Elysia.models` broke when referencing non typebox model
 
 # 1.4.19 - 13 Dec 2025

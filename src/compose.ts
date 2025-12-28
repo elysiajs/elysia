@@ -2658,7 +2658,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 					`return mapResponse(_r,set${adapter.mapResponseContext})}` +
 					`if(_r instanceof ElysiaCustomStatusResponse){` +
 					`error.status=error.code\n` +
-					`error.message = error.response` +
+					`error.message=error.response` +
 					`}` +
 					`if(set.status===200||!set.status)set.status=error.status\n`
 
@@ -2676,7 +2676,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 						)
 
 						fnLiteral +=
-							`context.response=context.responseValue=_r` +
+							`context.response=context.responseValue=_r\n` +
 							`_r=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n`
 
 						endUnit()
