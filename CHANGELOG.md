@@ -1,6 +1,7 @@
 # 1.4.20
 Improvement:
 - add `ModelValidator.schema` for accessing raw schema
+- [#1638](https://github.com/elysiajs/elysia/pull/1638) unref Sucrose gc
 
 Bug fix:
 - [#1639](https://github.com/elysiajs/elysia/issues/1639) compose: ReferenceError: "_r_r is not defined" when onError returns plain object & mapResponse exists
