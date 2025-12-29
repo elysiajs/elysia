@@ -8044,14 +8044,14 @@ export default class Elysia<
 		return this
 	}
 
-	handle = async (request: Request) => this.fetch(request)
+	handle = async (request: Request): Promise<Response> => this.fetch(request)
 
 	/**
 	 * Use handle can be either sync or async to save performance.
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	get fetch() {
+	get fetch(): (request: Request) => Response | Promise<Response> {
 		const fetch = this.config.aot
 			? composeGeneralHandler(this)
 			: createDynamicHandler(this)
