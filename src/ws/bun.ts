@@ -317,6 +317,61 @@ export interface ServerWebSocket<T = undefined> {
 }
 
 /**
+ * WebSocket configuration options (without handler methods).
+ * Use this type when you only need to configure WebSocket behavior
+ * without defining message handlers.
+ */
+export type WebSocketConfig = {
+	/**
+	 * Sets the maximum size of messages in bytes.
+	 * @default 16 MB (1024 * 1024 * 16)
+	 */
+	maxPayloadLength?: number
+
+	/**
+	 * Sets the maximum number of bytes that can be buffered on a single connection.
+	 * @default 16 MB (1024 * 1024 * 16)
+	 */
+	backpressureLimit?: number
+
+	/**
+	 * Sets if the connection should be closed if `backpressureLimit` is reached.
+	 * @default false
+	 */
+	closeOnBackpressureLimit?: boolean
+
+	/**
+	 * Sets the number of seconds to wait before timing out a connection
+	 * due to no messages or pings.
+	 * @default 120 (2 minutes)
+	 */
+	idleTimeout?: number
+
+	/**
+	 * Should `ws.publish()` also send a message to `ws` (itself), if it is subscribed?
+	 * @default false
+	 */
+	publishToSelf?: boolean
+
+	/**
+	 * Should the server automatically send and respond to pings to clients?
+	 * @default true
+	 */
+	sendPings?: boolean
+
+	/**
+	 * Sets the compression level for messages, for clients that support it.
+	 * @default false (disabled)
+	 */
+	perMessageDeflate?:
+		| boolean
+		| {
+				compress?: WebSocketCompressor | boolean
+				decompress?: WebSocketCompressor | boolean
+		  }
+}
+
+/**
  * Compression options for WebSocket messages.
  */
 export type WebSocketCompressor =
@@ -371,7 +426,7 @@ export type WebSocketCompressor =
  * });
  * ```
  */
-export interface WebSocketHandler<in out T = undefined> {
+export interface WebSocketHandler<in out T = undefined> extends WebSocketConfig {
 	/**
 	 * Called when the server receives an incoming message.
 	 *
@@ -431,65 +486,4 @@ export interface WebSocketHandler<in out T = undefined> {
 	 * @param data The data sent with the ping
 	 */
 	pong?(ws: ServerWebSocket<T>, data: Buffer): void | Promise<void>
-
-	/**
-	 * Sets the maximum size of messages in bytes.
-	 *
-	 * Default is 16 MB, or `1024 * 1024 * 16` in bytes.
-	 */
-	maxPayloadLength?: number
-
-	/**
-	 * Sets the maximum number of bytes that can be buffered on a single connection.
-	 *
-	 * Default is 16 MB, or `1024 * 1024 * 16` in bytes.
-	 */
-	backpressureLimit?: number
-
-	/**
-	 * Sets if the connection should be closed if `backpressureLimit` is reached.
-	 *
-	 * Default is `false`.
-	 */
-	closeOnBackpressureLimit?: boolean
-
-	/**
-	 * Sets the the number of seconds to wait before timing out a connection
-	 * due to no messages or pings.
-	 *
-	 * Default is 2 minutes, or `120` in seconds.
-	 */
-	idleTimeout?: number
-
-	/**
-	 * Should `ws.publish()` also send a message to `ws` (itself), if it is subscribed?
-	 *
-	 * Default is `false`.
-	 */
-	publishToSelf?: boolean
-
-	/**
-	 * Should the server automatically send and respond to pings to clients?
-	 *
-	 * Default is `true`.
-	 */
-	sendPings?: boolean
-
-	/**
-	 * Sets the compression level for messages, for clients that supports it. By default, compression is disabled.
-	 *
-	 * Default is `false`.
-	 */
-	perMessageDeflate?:
-		| boolean
-		| {
-				/**
-				 * Sets the compression level.
-				 */
-				compress?: WebSocketCompressor | boolean
-				/**
-				 * Sets the decompression level.
-				 */
-				decompress?: WebSocketCompressor | boolean
-		  }
 }
