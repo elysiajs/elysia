@@ -1,28 +1,10 @@
 import { parse, serialize } from 'cookie'
 
-import decode from 'fast-decode-uri-component'
-
 import { isNotEmpty, unsignCookie } from './utils'
 import { InvalidCookieSignature } from './error'
 
 import type { Context } from './context'
 import type { Prettify } from './types'
-
-// FNV-1a hash for fast string hashing
-const hashString = (str: string): number => {
-	const FNV_OFFSET_BASIS = 2166136261
-	const FNV_PRIME = 16777619
-
-	let hash = FNV_OFFSET_BASIS
-	const len = str.length
-
-	for (let i = 0; i < len; i++) {
-		hash ^= str.charCodeAt(i)
-		hash = Math.imul(hash, FNV_PRIME)
-	}
-
-	return hash >>> 0
-}
 
 export interface CookieOptions {
 	/**
@@ -141,12 +123,11 @@ export type ElysiaCookie = Prettify<
 type Updater<T> = T | ((value: T) => T)
 
 export class Cookie<T> implements ElysiaCookie {
-	private valueHash?: number
-
 	constructor(
 		private name: string,
+		// Modifications here lead to changes in the response headers. Initially empty.
 		private jar: Record<string, ElysiaCookie>,
-		private initial: Partial<ElysiaCookie> = {}
+		private readonly initial: Partial<ElysiaCookie> = {}
 	) {}
 
 	get cookie() {
@@ -157,8 +138,6 @@ export class Cookie<T> implements ElysiaCookie {
 		if (!(this.name in this.jar)) this.jar[this.name] = this.initial
 
 		this.jar[this.name] = jar
-		// Invalidate hash cache when jar is modified directly
-		this.valueHash = undefined
 	}
 
 	protected get setCookie() {
@@ -176,42 +155,6 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set value(value: T) {
-		// Check if value actually changed before creating entry in jar
-		const current = this.cookie.value
-
-		// Simple equality check
-		if (current === value) return
-
-		// For objects, use hash-based comparison for performance
-		// Note: Uses JSON.stringify for comparison, so key order matters
-		// { a: 1, b: 2 } and { b: 2, a: 1 } are treated as different values
-		if (
-			typeof current === 'object' &&
-			current !== null &&
-			typeof value === 'object' &&
-			value !== null
-		) {
-			try {
-				// Cache stringified value to avoid duplicate stringify calls
-				const valueStr = JSON.stringify(value)
-				const newHash = hashString(valueStr)
-
-				// If hash differs from cached hash, value definitely changed
-				if (this.valueHash !== undefined && this.valueHash !== newHash) {
-					this.valueHash = newHash
-				}
-				// First set (valueHash undefined) OR hashes match: do deep comparison
-				else {
-					if (JSON.stringify(current) === valueStr) {
-						this.valueHash = newHash
-						return // Values are identical, skip update
-					}
-					this.valueHash = newHash
-				}
-			} catch {}
-		}
-
-		// Only create entry in jar if value actually changed
 		if (!(this.name in this.jar)) this.jar[this.name] = { ...this.initial }
 		this.jar[this.name].value = value
 	}
@@ -347,18 +290,10 @@ export const createCookieJar = (
 
 	return new Proxy(store, {
 		get(_, key: string) {
-			if (key in store)
-				return new Cookie(
-					key,
-					set.cookie as Record<string, ElysiaCookie>,
-					Object.assign({}, initial ?? {}, store[key])
-				)
-
-			return new Cookie(
-				key,
-				set.cookie as Record<string, ElysiaCookie>,
-				Object.assign({}, initial)
-			)
+			return new Cookie(key, set.cookie as Record<string, ElysiaCookie>, {
+				...initial,
+				...(store[key] ?? {})
+			})
 		}
 	}) as Record<string, Cookie<unknown>>
 }
@@ -385,7 +320,7 @@ export const parseCookie = async (
 	for (const [name, v] of Object.entries(cookies)) {
 		if (v === undefined) continue
 
-		let value = decode(v)
+		let value = v
 
 		if (value) {
 			const starts = value.charCodeAt(0)

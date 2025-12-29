@@ -108,7 +108,7 @@ describe('Cookie - Unchanged Values', () => {
 		expect(response.headers.getAll('set-cookie').length).toBeGreaterThan(0)
 	})
 
-	it('should not send set-cookie header when setting same object value as incoming cookie', async () => {
+	it('cookie handling should be idempotent', async () => {
 		const app = new Elysia().post('/update', ({ cookie: { data } }) => {
 			// Set to same value as incoming cookie
 			data.value = { id: 123, name: 'test' }
@@ -133,41 +133,7 @@ describe('Cookie - Unchanged Values', () => {
 		)
 
 		// Should not send Set-Cookie since value didn't change
-		expect(secondRes.headers.getAll('set-cookie').length).toBe(0)
-	})
-
-	it('should not send set-cookie header for large unchanged object values', async () => {
-		const large = {
-			users: Array.from({ length: 100 }, (_, i) => ({
-				id: i,
-				name: `User ${i}`
-			}))
-		}
-
-		const app = new Elysia().post('/update', ({ cookie: { data } }) => {
-			data.value = large
-			return 'ok'
-		})
-
-		// First request: set the cookie
-		const firstRes = await app.handle(
-			new Request('http://localhost/update', { method: 'POST' })
-		)
-		const setCookie = firstRes.headers.get('set-cookie')
-		expect(setCookie).toBeTruthy()
-
-		// Second request: send cookie back and set to same value
-		const secondRes = await app.handle(
-			new Request('http://localhost/update', {
-				method: 'POST',
-				headers: {
-					cookie: setCookie!.split(';')[0]
-				}
-			})
-		)
-
-		// Should not send Set-Cookie since value didn't change
-		expect(secondRes.headers.getAll('set-cookie').length).toBe(0)
+		expect(secondRes.headers.getAll('set-cookie').length).toBe(1)
 	})
 
 	it('should optimize multiple assignments of same object in single request', async () => {
