@@ -127,7 +127,7 @@ export class Cookie<T> implements ElysiaCookie {
 		private name: string,
 		// Modifications here lead to changes in the response headers. Empty at the start of a request.
 		private jar: Record<string, ElysiaCookie>,
-		private readonly initial: Partial<ElysiaCookie> = {}
+		private initial: Partial<ElysiaCookie> = {}
 	) {}
 
 	get cookie() {
