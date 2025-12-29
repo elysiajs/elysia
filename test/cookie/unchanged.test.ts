@@ -108,7 +108,7 @@ describe('Cookie - Unchanged Values', () => {
 		expect(response.headers.getAll('set-cookie').length).toBeGreaterThan(0)
 	})
 
-	it('cookie handling should be idempotent', async () => {
+	it('should idempotently create headers on cookie modifications', async () => {
 		const app = new Elysia().post('/update', ({ cookie: { data } }) => {
 			// Set to same value as incoming cookie
 			data.value = { id: 123, name: 'test' }
@@ -132,7 +132,6 @@ describe('Cookie - Unchanged Values', () => {
 			})
 		)
 
-		// Should not send Set-Cookie since value didn't change
 		expect(secondRes.headers.getAll('set-cookie').length).toBe(1)
 	})
 

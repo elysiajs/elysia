@@ -125,7 +125,7 @@ type Updater<T> = T | ((value: T) => T)
 export class Cookie<T> implements ElysiaCookie {
 	constructor(
 		private name: string,
-		// Modifications here lead to changes in the response headers. Initially empty.
+		// Modifications here lead to changes in the response headers. Empty at the start of a request.
 		private jar: Record<string, ElysiaCookie>,
 		private readonly initial: Partial<ElysiaCookie> = {}
 	) {}
