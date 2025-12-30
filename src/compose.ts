@@ -874,6 +874,18 @@ export const composeHandler = ({
 
 		fnLiteral += '\ntry{'
 
+		// When hooks access request.body/arrayBuffer, preserve raw body before parsing
+		// Clone request first so hooks can still read from it
+		// Skip if custom parse hooks exist - they'll read the request themselves
+		// Note: FormData requests cannot be cloned for reuse - derive/resolve cannot
+		// re-read the body for multipart/form-data requests (protocol limitation)
+		if (inference.request && !hooks.parse?.length) {
+			fnLiteral +=
+				`const _ct=c.request.headers.get('content-type')\n` +
+				`if(!_ct||!_ct.includes('multipart/form-data')){` +
+				`c.rawBody=await c.request.clone().arrayBuffer()}\n`
+		}
+
 		let parser: string | undefined =
 			typeof hooks.parse === 'string'
 				? hooks.parse
@@ -904,55 +916,108 @@ export const composeHandler = ({
 
 			const isOptionalBody = !!validator.body?.isOptional
 
-			switch (parser) {
-				case 'json':
-				case 'application/json':
-					fnLiteral += adapter.parser.json(isOptionalBody)
-					break
+			// When inference.request is true and rawBody exists, parse from it
+			// For FormData (no rawBody), use standard parser
+			if (inference.request) {
+				switch (parser) {
+					case 'json':
+					case 'application/json':
+						if (isOptionalBody)
+							fnLiteral += 'if(c.rawBody){try{c.body=JSON.parse(new TextDecoder().decode(c.rawBody))}catch{}}else{try{c.body=await c.request.json()}catch{}}\n'
+						else
+							fnLiteral += 'c.body=c.rawBody?JSON.parse(new TextDecoder().decode(c.rawBody)):await c.request.json()\n'
+						break
 
-				case 'text':
-				case 'text/plain':
-					fnLiteral += adapter.parser.text(isOptionalBody)
+					case 'text':
+					case 'text/plain':
+						fnLiteral += 'c.body=c.rawBody?new TextDecoder().decode(c.rawBody):await c.request.text()\n'
+						break
 
-					break
+					case 'urlencoded':
+					case 'application/x-www-form-urlencoded':
+						fnLiteral += 'c.body=c.rawBody?parseQuery(new TextDecoder().decode(c.rawBody)):parseQuery(await c.request.text())\n'
+						break
 
-				case 'urlencoded':
-				case 'application/x-www-form-urlencoded':
-					fnLiteral += adapter.parser.urlencoded(isOptionalBody)
+					case 'arrayBuffer':
+					case 'application/octet-stream':
+						fnLiteral += 'c.body=c.rawBody??await c.request.arrayBuffer()\n'
+						break
 
-					break
+					case 'formdata':
+					case 'multipart/form-data':
+						// FormData reads from original request (cannot be cloned for reuse)
+						fnLiteral += adapter.parser.formData(isOptionalBody)
+						break
 
-				case 'arrayBuffer':
-				case 'application/octet-stream':
-					fnLiteral += adapter.parser.arrayBuffer(isOptionalBody)
+					default:
+						// Custom parser - let it access rawBody via context
+						if (parser in app['~parser']) {
+							fnLiteral += hasHeaders
+								? `let contentType = c.headers['content-type']`
+								: `let contentType = c.request.headers.get('content-type')`
 
-					break
+							fnLiteral +=
+								`\nif(contentType){` +
+								`const index=contentType.indexOf(';')\n` +
+								`if(index!==-1)contentType=contentType.substring(0,index)}\n` +
+								`else{contentType=''}` +
+								`c.contentType=contentType\n` +
+								`let result=parser['${parser}'](c, contentType)\n` +
+								`if(result instanceof Promise)result=await result\n` +
+								`if(result instanceof ElysiaCustomStatusResponse)throw result\n` +
+								`if(result!==undefined)c.body=result\n` +
+								'delete c.contentType\n'
+						}
+				}
+			} else {
+				switch (parser) {
+					case 'json':
+					case 'application/json':
+						fnLiteral += adapter.parser.json(isOptionalBody)
+						break
 
-				case 'formdata':
-				case 'multipart/form-data':
-					fnLiteral += adapter.parser.formData(isOptionalBody)
-					break
+					case 'text':
+					case 'text/plain':
+						fnLiteral += adapter.parser.text(isOptionalBody)
 
-				default:
-					if ((parser[0] as string) in app['~parser']) {
-						fnLiteral += hasHeaders
-							? `let contentType = c.headers['content-type']`
-							: `let contentType = c.request.headers.get('content-type')`
+						break
 
-						fnLiteral +=
-							`\nif(contentType){` +
-							`const index=contentType.indexOf(';')\n` +
-							`if(index!==-1)contentType=contentType.substring(0,index)}\n` +
-							`else{contentType=''}` +
-							`c.contentType=contentType\n` +
-							`let result=parser['${parser}'](c, contentType)\n` +
-							`if(result instanceof Promise)result=await result\n` +
-							`if(result instanceof ElysiaCustomStatusResponse)throw result\n` +
-							`if(result!==undefined)c.body=result\n` +
-							'delete c.contentType\n'
-					}
+					case 'urlencoded':
+					case 'application/x-www-form-urlencoded':
+						fnLiteral += adapter.parser.urlencoded(isOptionalBody)
 
-					break
+						break
+
+					case 'arrayBuffer':
+					case 'application/octet-stream':
+						fnLiteral += adapter.parser.arrayBuffer(isOptionalBody)
+
+						break
+
+					case 'formdata':
+					case 'multipart/form-data':
+						fnLiteral += adapter.parser.formData(isOptionalBody)
+						break
+
+					default:
+						if (parser in app['~parser']) {
+							fnLiteral += hasHeaders
+								? `let contentType = c.headers['content-type']`
+								: `let contentType = c.request.headers.get('content-type')`
+
+							fnLiteral +=
+								`\nif(contentType){` +
+								`const index=contentType.indexOf(';')\n` +
+								`if(index!==-1)contentType=contentType.substring(0,index)}\n` +
+								`else{contentType=''}` +
+								`c.contentType=contentType\n` +
+								`let result=parser['${parser}'](c, contentType)\n` +
+								`if(result instanceof Promise)result=await result\n` +
+								`if(result instanceof ElysiaCustomStatusResponse)throw result\n` +
+								`if(result!==undefined)c.body=result\n` +
+								'delete c.contentType\n'
+						}
+				}
 			}
 
 			reporter.resolve()
@@ -977,31 +1042,62 @@ export const composeHandler = ({
 				hasDefaultParser = true
 				const isOptionalBody = !!validator.body?.isOptional
 
-				fnLiteral +=
-					`if(contentType)` +
-					`switch(contentType.charCodeAt(12)){` +
-					`\ncase 106:` +
-					adapter.parser.json(isOptionalBody) +
-					'break' +
-					`\n` +
-					`case 120:` +
-					adapter.parser.urlencoded(isOptionalBody) +
-					`break` +
-					`\n` +
-					`case 111:` +
-					adapter.parser.arrayBuffer(isOptionalBody) +
-					`break` +
-					`\n` +
-					`case 114:` +
-					adapter.parser.formData(isOptionalBody) +
-					`break` +
-					`\n` +
-					`default:` +
-					`if(contentType.charCodeAt(0)===116){` +
-					adapter.parser.text(isOptionalBody) +
-					`}` +
-					`break\n` +
-					`}`
+				// When rawBody is preserved, parse from it; for FormData use cloned request
+				if (inference.request) {
+					fnLiteral +=
+						`if(contentType)` +
+						`switch(contentType.charCodeAt(12)){` +
+						`\ncase 106:` + // application/json
+						(isOptionalBody
+							? 'if(c.rawBody){try{c.body=JSON.parse(new TextDecoder().decode(c.rawBody))}catch{}}else{try{c.body=await c.request.json()}catch{}}\n'
+							: 'c.body=c.rawBody?JSON.parse(new TextDecoder().decode(c.rawBody)):await c.request.json()\n') +
+						'break' +
+						`\n` +
+						`case 120:` + // application/x-www-form-urlencoded
+						'c.body=c.rawBody?parseQuery(new TextDecoder().decode(c.rawBody)):parseQuery(await c.request.text())\n' +
+						`break` +
+						`\n` +
+						`case 111:` + // application/octet-stream
+						'c.body=c.rawBody??await c.request.arrayBuffer()\n' +
+						`break` +
+						`\n` +
+						`case 114:` + // multipart/form-data
+						adapter.parser.formData(isOptionalBody) +
+						`break` +
+						`\n` +
+						`default:` +
+						`if(contentType.charCodeAt(0)===116){` + // text/plain
+						'c.body=c.rawBody?new TextDecoder().decode(c.rawBody):await c.request.text()\n' +
+						`}` +
+						`break\n` +
+						`}`
+				} else {
+					fnLiteral +=
+						`if(contentType)` +
+						`switch(contentType.charCodeAt(12)){` +
+						`\ncase 106:` +
+						adapter.parser.json(isOptionalBody) +
+						'break' +
+						`\n` +
+						`case 120:` +
+						adapter.parser.urlencoded(isOptionalBody) +
+						`break` +
+						`\n` +
+						`case 111:` +
+						adapter.parser.arrayBuffer(isOptionalBody) +
+						`break` +
+						`\n` +
+						`case 114:` +
+						adapter.parser.formData(isOptionalBody) +
+						`break` +
+						`\n` +
+						`default:` +
+						`if(contentType.charCodeAt(0)===116){` +
+						adapter.parser.text(isOptionalBody) +
+						`}` +
+						`break\n` +
+						`}`
+				}
 			}
 
 			const reporter = report('parse', {
