@@ -699,7 +699,8 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
 
-	if (secret === null) throw new TypeError('Secret key must be provided.')
+	if (secret === null)
+		throw new TypeError('Secret key must be provided.')
 
 	const dot = input.lastIndexOf('.')
 	if (dot <= 0) return false
