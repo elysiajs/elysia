@@ -162,7 +162,8 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router
+	Router,
+    ServerStartHandler
 } from './types'
 import {
 	coercePrimitiveRoot,
@@ -1116,7 +1117,7 @@ export default class Elysia<
 	 *     .listen(3000)
 	 * ```
 	 */
-	onStart(handler: MaybeArray<GracefulHandler<this>>) {
+	onStart(handler: MaybeArray<ServerStartHandler<this>>) {
 		this.on('start', handler as any)
 
 		return this
