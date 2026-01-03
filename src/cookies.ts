@@ -405,14 +405,17 @@ export const parseCookie = async (
 				throw new Error('No secret is provided to cookie plugin')
 
 			if (isStringKey) {
-				const temp = await unsignCookie(value as string, secrets)
+				if (typeof value !== 'string') throw new InvalidCookieSignature(name)
+				
+				const temp = await unsignCookie(value, secrets)
 				if (temp === false) throw new InvalidCookieSignature(name)
 
 				value = temp
 			} else {
 				let decoded = false
 				for (let i = 0; i < secrets.length; i++) {
-					const temp = await unsignCookie(value as string, secrets[i])
+					if (typeof value !== 'string') throw new InvalidCookieSignature(name)
+					const temp = await unsignCookie(value, secrets[i])
 
 					if (temp !== false) {
 						decoded = true

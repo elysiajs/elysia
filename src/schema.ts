@@ -221,6 +221,7 @@ export const hasElysiaMeta = (meta: string, _schema: TAnySchema): boolean => {
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
+		if (!properties) return false
 
 		for (const key of Object.keys(properties)) {
 			const property = properties[key]
