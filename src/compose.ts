@@ -60,6 +60,7 @@ import type {
 	Handler,
 	HookContainer,
 	LifeCycleStore,
+	MaybePromise,
 	SchemaValidator
 } from './types'
 import { tee } from './adapter/utils'
@@ -2308,7 +2309,9 @@ export const createHoc = (app: AnyElysia, fnName = 'map') => {
 	return `return function hocMap(${adapter.parameters}){return ${handler}(${adapter.parameters})}`
 }
 
-export const composeGeneralHandler = (app: AnyElysia) => {
+export const composeGeneralHandler = (
+	app: AnyElysia
+): ((request: Request) => MaybePromise<Response>) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
 

@@ -9,11 +9,4 @@ export const app = new Elysia()
 		}
 	})
 
-Bun.serve({
-	fetch() {},
-	websocket: {
-		message(a) {
-			a.subscriptions
-		}
-	}
-})
+const a = app.fetch(req('/'))
