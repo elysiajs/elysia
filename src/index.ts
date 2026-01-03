@@ -467,7 +467,10 @@ export default class Elysia<
 
 		for (const name of Object.keys(this.definitions.type))
 			models[name] = getSchemaValidator(
-				this.definitions.typebox.Import(name as never)
+				this.definitions.typebox.Import(name as never),
+				{
+					models: this.definitions.type
+				}
 			)
 
 		// @ts-expect-error

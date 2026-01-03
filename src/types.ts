@@ -545,7 +545,7 @@ export interface UnwrapRoute<
 	query: UnwrapSchema<Schema['query'], Definitions>
 	params: {} extends Schema['params']
 		? ResolvePath<Path>
-		: InputSchema<never> extends Schema
+		: {} extends Schema
 			? ResolvePath<Path>
 			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
@@ -2355,6 +2355,7 @@ export interface ModelValidatorError extends ValueError {
 
 // @ts-ignore trust me bro
 export interface ModelValidator<T> extends TypeCheck<T> {
+	schema: T
 	parse(a: T): T
 	safeParse(a: T):
 		| { success: true; data: T; error: null }

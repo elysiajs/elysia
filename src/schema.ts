@@ -18,7 +18,7 @@ import {
 
 import { t, type TypeCheck } from './type-system'
 
-import { deepClone, mergeCookie, mergeDeep, randomId } from './utils'
+import { mergeCookie, mergeDeep, randomId } from './utils'
 import { mapValueError } from './error'
 
 import type { CookieOptions } from './cookies'
@@ -28,11 +28,15 @@ import type {
 	MaybeArray,
 	StandaloneInputSchema,
 	StandardSchemaV1LikeValidate,
-UnwrapSchema
+	UnwrapSchema
 } from './types'
 
 import type { StandardSchemaV1Like } from './types'
-import { replaceSchemaTypeFromManyOptions, type ReplaceSchemaTypeOptions, stringToStructureCoercions } from './replace-schema'
+import {
+	replaceSchemaTypeFromManyOptions,
+	type ReplaceSchemaTypeOptions,
+	stringToStructureCoercions
+} from './replace-schema'
 
 type MapValueError = ReturnType<typeof mapValueError>
 
@@ -127,12 +131,12 @@ export const hasAdditionalProperties = (
 /**
  * Resolve a schema that might be a model reference (string) to the actual schema
  */
- export const resolveSchema = (
+export const resolveSchema = (
 	schema: TAnySchema | string | undefined,
 	models?: Record<string, TAnySchema | StandardSchemaV1Like>,
 	modules?: TModule<any, any>
- ): TAnySchema | StandardSchemaV1Like | undefined => {
-    if (!schema) return undefined
+): TAnySchema | StandardSchemaV1Like | undefined => {
+	if (!schema) return undefined
 	if (typeof schema !== 'string') return schema
 
 	// Check modules first (higher priority)
@@ -143,7 +147,7 @@ export const hasAdditionalProperties = (
 
 	// Then check models
 	return models?.[schema]
- }
+}
 
 export const hasType = (type: string, schema: TAnySchema): boolean => {
 	if (!schema) return false
@@ -165,7 +169,11 @@ export const hasType = (type: string, schema: TAnySchema): boolean => {
 	if (schema.allOf) return schema.allOf.some((s: TSchema) => hasType(type, s))
 
 	if (schema.type === 'array' && schema.items) {
-		if (type === 'Files' && Kind in schema.items && schema.items[Kind] === 'File') {
+		if (
+			type === 'Files' &&
+			Kind in schema.items &&
+			schema.items[Kind] === 'File'
+		) {
 			return true
 		}
 		return hasType(type, schema.items)
@@ -459,18 +467,20 @@ export const getSchemaValidator = <
 			if (!schema) return undefined as any
 		}
 
-		const hasAdditionalCoerce = Array.isArray(additionalCoerce) ?
-		                                additionalCoerce.length > 0 : !!additionalCoerce
+		const hasAdditionalCoerce = Array.isArray(additionalCoerce)
+			? additionalCoerce.length > 0
+			: !!additionalCoerce
+
 		if (Kind in schema) {
 			if (schema[Kind] === 'Import') {
 				if (!hasRef(schema.$defs[schema.$ref])) {
-					schema = schema.$defs[schema.$ref]
+					schema = schema.$defs[schema.$ref] ?? models[schema.$ref]
 
 					if (coerce || hasAdditionalCoerce) {
 						schema = replaceSchema(schema as TSchema)
-						if ('$id' in schema && !schema.$defs) {
-                            schema.$id = `${schema.$id}_coerced_${randomId()}`;
-                        }
+
+						if ('$id' in schema && !schema.$defs)
+							schema.$id = `${schema.$id}_coerced_${randomId()}`
 					}
 				}
 			} else {
@@ -493,6 +503,7 @@ export const getSchemaValidator = <
 	}
 
 	let schema = mapSchema(s)
+	// console.log([s, schema])
 	let _validators = validators
 
 	if (
@@ -696,19 +707,19 @@ export const getSchemaValidator = <
 		)
 			schema.additionalProperties = additionalProperties
 		else
-    		schema = replaceSchemaTypeFromManyOptions(schema, {
-                onlyFirst: "object",
-                from: t.Object({}),
-                to(schema) {
-                    if (!schema.properties) return schema;
-                    if ("additionalProperties" in schema) return schema;
+			schema = replaceSchemaTypeFromManyOptions(schema, {
+				onlyFirst: 'object',
+				from: t.Object({}),
+				to(schema) {
+					if (!schema.properties) return schema
+					if ('additionalProperties' in schema) return schema
 
-                    return t.Object(schema.properties, {
-                        ...schema,
-                        additionalProperties: false,
-                    });
-                }
-            });
+					return t.Object(schema.properties, {
+						...schema,
+						additionalProperties: false
+					})
+				}
+			})
 	}
 
 	if (dynamic) {
@@ -1098,7 +1109,10 @@ export const mergeObjectSchemas = (
 				...newSchema.properties,
 				...schema.properties
 			},
-			required: [...(newSchema?.required ?? []), ...(schema.required ?? [])]
+			required: [
+				...(newSchema?.required ?? []),
+				...(schema.required ?? [])
+			]
 		} as TObject
 	}
 

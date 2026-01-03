@@ -1,3 +1,19 @@
+# 1.4.20 - 3 Jan 2026
+Improvement:
+- add `ModelValidator.schema` for accessing raw schema
+- [#1636](https://github.com/elysiajs/elysia/issues/1636) add `subscriptions` to `Elysia.ws` context
+- [#1638](https://github.com/elysiajs/elysia/pull/1638) unref Sucrose gc
+
+Bug fix:
+- [#1649](https://github.com/elysiajs/elysia/pull/1649) add null check for object properties (t.Record)
+- [#1646](https://github.com/elysiajs/elysia/pull/1646) use constant-time comparison for signed cookie verification
+- [#1639](https://github.com/elysiajs/elysia/issues/1639) compose: ReferenceError: "_r_r is not defined" when onError returns plain object & mapResponse exists
+- [#1631](https://github.com/elysiajs/elysia/issues/1631) update Exact Mirror to 0.2.6
+- [#1630](https://github.com/elysiajs/elysia/issues/1630) enforce fetch to return MaybePromise<Response>
+
+Bug fix:
+- `Elysia.models` broke when referencing non typebox model
+
 # 1.4.19 - 13 Dec 2025
 Security:
 - reject invalid cookie signature when using cookie rotation

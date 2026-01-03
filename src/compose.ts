@@ -60,6 +60,7 @@ import type {
 	Handler,
 	HookContainer,
 	LifeCycleStore,
+	MaybePromise,
 	SchemaValidator
 } from './types'
 import { tee } from './adapter/utils'
@@ -2308,7 +2309,9 @@ export const createHoc = (app: AnyElysia, fnName = 'map') => {
 	return `return function hocMap(${adapter.parameters}){return ${handler}(${adapter.parameters})}`
 }
 
-export const composeGeneralHandler = (app: AnyElysia) => {
+export const composeGeneralHandler = (
+	app: AnyElysia
+): ((request: Request) => MaybePromise<Response>) => {
 	const adapter = app['~adapter'].composeGeneralHandler
 	app.router.http.build()
 
@@ -2658,7 +2661,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 					`return mapResponse(_r,set${adapter.mapResponseContext})}` +
 					`if(_r instanceof ElysiaCustomStatusResponse){` +
 					`error.status=error.code\n` +
-					`error.message = error.response` +
+					`error.message=error.response` +
 					`}` +
 					`if(set.status===200||!set.status)set.status=error.status\n`
 
@@ -2676,7 +2679,7 @@ export const composeErrorHandler = (app: AnyElysia) => {
 						)
 
 						fnLiteral +=
-							`context.response=context.responseValue=_r` +
+							`context.response=context.responseValue=_r\n` +
 							`_r=${isAsyncName(mapResponse) ? 'await ' : ''}onMapResponse[${i}](context)\n`
 
 						endUnit()
