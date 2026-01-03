@@ -8275,7 +8275,8 @@ export type {
 	TransformHandler,
 	HTTPHeaders,
 	EmptyRouteSchema,
-	ExtractErrorFromHandle
+	ExtractErrorFromHandle,
+        ServerStartHandler
 } from './types'
 
 export { env } from './universal/env'
