@@ -1,6 +1,7 @@
 # 1.4.20
 Improvement:
 - add `ModelValidator.schema` for accessing raw schema
+- [#1636](https://github.com/elysiajs/elysia/issues/1636) add `subscriptions` to `Elysia.ws` context
 - [#1638](https://github.com/elysiajs/elysia/pull/1638) unref Sucrose gc
 
 Bug fix:
