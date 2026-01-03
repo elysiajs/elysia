@@ -6,6 +6,7 @@ Improvement:
 
 Bug fix:
 - [#1639](https://github.com/elysiajs/elysia/issues/1639) compose: ReferenceError: "_r_r is not defined" when onError returns plain object & mapResponse exists
+- [#1631](https://github.com/elysiajs/elysia/issues/1631) update Exact Mirror to 0.2.6
 - [#1630](https://github.com/elysiajs/elysia/issues/1630) enforce fetch to return MaybePromise<Response>
 
 Bug fix:

@@ -191,7 +191,7 @@
 	},
 	"dependencies": {
 		"cookie": "^1.1.1",
-		"exact-mirror": "0.2.5",
+		"exact-mirror": "^0.2.6",
 		"fast-decode-uri-component": "^1.0.1",
 		"memoirist": "^0.4.0"
 	},
