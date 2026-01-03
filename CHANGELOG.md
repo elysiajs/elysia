@@ -1,4 +1,4 @@
-# 1.4.20
+# 1.4.20 - 3 Jan 2026
 Improvement:
 - add `ModelValidator.schema` for accessing raw schema
 - [#1636](https://github.com/elysiajs/elysia/issues/1636) add `subscriptions` to `Elysia.ws` context

@@ -4,9 +4,11 @@ import { req } from '../test/utils'
 
 export const app = new Elysia()
 	.ws('/', {
+		open(ws) {
+			ws.subscribe('a')
+		},
 		message(a) {
-			a.subscriptions
+			console.log(a.subscriptions)
 		}
 	})
-
-const a = app.fetch(req('/'))
+	.listen(3000)
