@@ -1112,7 +1112,7 @@ export default class Elysia<
 	 * ```typescript
 	 * new Elysia()
 	 *     .onStart(({ server }) => {
-	 *         console.log("Running at ${server?.url}:${server?.port}")
+	 *         console.log("Running at ${server.url}:${server.port}")
 	 *     })
 	 *     .listen(3000)
 	 * ```
