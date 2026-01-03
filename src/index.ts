@@ -4045,6 +4045,10 @@ export default class Elysia<
 					} = schemaOrRun
 					const localHook = hooks as AnyLocalHook
 
+					// Apply macros to expand group options before merging
+					// This ensures macro-defined hooks run before nested plugin hooks
+					this.applyMacro(hook)
+
 					const hasStandaloneSchema =
 						body || headers || query || params || cookie || response
 
@@ -4065,20 +4069,29 @@ export default class Elysia<
 											localHook.error,
 											...(sandbox.event.error ?? [])
 										],
-							standaloneValidator: !hasStandaloneSchema
-								? localHook.standaloneValidator
-								: [
-										...(localHook.standaloneValidator ??
-											[]),
-										{
-											body,
-											headers,
-											query,
-											params,
-											cookie,
-											response
-										}
-									]
+							// Merge macro's standaloneValidator with local and group schema
+							standaloneValidator:
+								hook.standaloneValidator ||
+								localHook.standaloneValidator ||
+								hasStandaloneSchema
+									? [
+											...(hook.standaloneValidator ?? []),
+											...(localHook.standaloneValidator ??
+												[]),
+											...(hasStandaloneSchema
+												? [
+														{
+															body,
+															headers,
+															query,
+															params,
+															cookie,
+															response
+														}
+													]
+												: [])
+										]
+									: undefined
 						}),
 						undefined
 					)
