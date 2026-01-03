@@ -246,14 +246,12 @@ export const ElysiaType = {
 			.Encode((value) => {
 				if (value instanceof Date) return value.toISOString()
 				if (typeof value === 'string') {
-					if (
-						isNaN(
-							new Date(parseDateTimeEmptySpace(value)).getTime()
-						)
-					)
+					const parsed = new Date(parseDateTimeEmptySpace(value))
+
+					if (isNaN(parsed.getTime()))
 						throw new ValidationError('property', schema, value)
 
-					return value
+					return parsed.toISOString()
 				}
 
 				if (!compiler.Check(value)) throw compiler.Error(value)
