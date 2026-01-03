@@ -562,4 +562,33 @@ describe('Response Validator', () => {
 
 		expect(result.join('')).toContain('data: {"name":"Name"}')
 	})
+
+	it('validate Record with nested objects', async () => {
+		const app = new Elysia().get('/', () => ({
+			list: [{
+				toto: { bar: 1 },
+				foo: { link: 'first' }
+			}],
+			one: {
+				toto: { bar: 0 },
+				foo: { link: 'second' }
+			}
+		}), {
+			response: {
+				200: t.Object({
+					list: t.Array(t.Object({
+						toto: t.Object({ bar: t.Integer() }),
+						foo: t.Record(t.String(), t.String())
+					})),
+					one: t.Object({
+						toto: t.Object({ bar: t.Integer() }),
+						foo: t.Record(t.String(), t.String())
+					})
+				})
+			}
+		})
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+	})
 })

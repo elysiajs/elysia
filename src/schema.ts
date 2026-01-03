@@ -80,6 +80,39 @@ export const isOptional = (
 	return !!schema && OptionalKind in schema
 }
 
+export const hasPatternProperties = (
+	_schema: TAnySchema | TypeCheck<any> | ElysiaTypeCheck<any>
+): boolean => {
+	if (!_schema) return false
+
+	// @ts-expect-error private property
+	const schema: TAnySchema = (_schema as TypeCheck<any>)?.schema ?? _schema
+
+	if ('patternProperties' in schema) return true
+
+	if (schema[Kind] === 'Import' && _schema.References)
+		return _schema.References().some(hasPatternProperties)
+
+	if (schema.anyOf) return schema.anyOf.some(hasPatternProperties)
+	if (schema.oneOf) return schema.oneOf.some(hasPatternProperties)
+	if (schema.someOf) return schema.someOf.some(hasPatternProperties)
+	if (schema.allOf) return schema.allOf.some(hasPatternProperties)
+	if (schema.not) return hasPatternProperties(schema.not)
+
+	if (schema.type === 'object' && schema.properties) {
+		const properties = schema.properties as Record<string, TAnySchema>
+
+		for (const key of Object.keys(properties)) {
+			if (hasPatternProperties(properties[key])) return true
+		}
+	}
+
+	if (schema.type === 'array' && schema.items && !Array.isArray(schema.items))
+		return hasPatternProperties(schema.items)
+
+	return false
+}
+
 export const hasAdditionalProperties = (
 	_schema: TAnySchema | TypeCheck<any> | ElysiaTypeCheck<any>
 ): boolean => {
@@ -508,7 +541,7 @@ export const getSchemaValidator = <
 			let mirror: Function
 			if (normalize === true || normalize === 'exactMirror')
 				try {
-					mirror = createMirror(schema as TSchema, {
+					mirror = createMirror(schema as TAnySchema, {
 						TypeCompiler,
 						sanitize: sanitize?.(),
 						modules
@@ -685,14 +718,15 @@ export const getSchemaValidator = <
 				})
 			])
 
-			if (schema.type === 'object' && hasAdditional)
+			if (schema.type === 'object' && hasAdditional && !('patternProperties' in schema))
 				schema.additionalProperties = false
 		}
 	} else {
 		if (
 			schema.type === 'object' &&
 			('additionalProperties' in schema === false ||
-				forceAdditionalProperties)
+				forceAdditionalProperties) &&
+			!('patternProperties' in schema)
 		)
 			schema.additionalProperties = additionalProperties
 		else
@@ -702,6 +736,7 @@ export const getSchemaValidator = <
                 to(schema) {
                     if (!schema.properties) return schema;
                     if ("additionalProperties" in schema) return schema;
+                    if ("patternProperties" in schema) return schema;
 
                     return t.Object(schema.properties, {
                         ...schema,
@@ -765,10 +800,10 @@ export const getSchemaValidator = <
 				if (validator?.schema?.config) delete validator.schema.config
 			}
 
-			if (normalize && schema.additionalProperties === false) {
+			if (normalize && !hasPatternProperties(schema)) {
 				if (normalize === true || normalize === 'exactMirror') {
 					try {
-						validator.Clean = createMirror(schema, {
+						validator.Clean = createMirror(schema as TAnySchema, {
 							TypeCompiler,
 							sanitize: sanitize?.(),
 							modules
@@ -904,25 +939,27 @@ export const getSchemaValidator = <
 			if (compiled?.schema?.config) delete compiled.schema.config
 		}
 
-		if (normalize === true || normalize === 'exactMirror') {
-			try {
-				compiled.Clean = createMirror(schema, {
-					TypeCompiler,
-					sanitize: sanitize?.(),
-					modules
-				})
-			} catch (error) {
-				console.warn(
-					'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
-				)
-				console.dir(schema, {
-					depth: null
-				})
+		if (normalize && !hasPatternProperties(schema)) {
+			if (normalize === true || normalize === 'exactMirror') {
+				try {
+					compiled.Clean = createMirror(schema as TAnySchema, {
+						TypeCompiler,
+						sanitize: sanitize?.(),
+						modules
+					})
+				} catch (error) {
+					console.warn(
+						'Failed to create exactMirror. Please report the following code to https://github.com/elysiajs/elysia/issues'
+					)
+					console.dir(schema, {
+						depth: null
+					})
 
+					compiled.Clean = createCleaner(schema)
+				}
+			} else if (normalize === 'typebox')
 				compiled.Clean = createCleaner(schema)
-			}
-		} else if (normalize === 'typebox')
-			compiled.Clean = createCleaner(schema)
+		}
 	} else {
 		compiled = {
 			provider: 'standard',
