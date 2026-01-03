@@ -1,5 +1,6 @@
 import type { Sucrose } from './sucrose'
 import type { TraceHandler } from './trace'
+import { timingSafeEqual } from 'crypto'
 
 import type {
 	LifeCycleStore,
@@ -685,16 +686,29 @@ export const signCookie = async (val: string, secret: string | null) => {
 	)
 }
 
+const constantTimeEqual = (a: string, b: string) => {
+	// Compare as UTF-8 bytes; timingSafeEqual requires equal length
+	const ab = Buffer.from(a, 'utf8')
+	const bb = Buffer.from(b, 'utf8')
+
+	if (ab.length !== bb.length) return false
+	return timingSafeEqual(ab, bb)
+}
+
 export const unsignCookie = async (input: string, secret: string | null) => {
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
 
-	if (null === secret) throw new TypeError('Secret key must be provided.')
+	if (secret === null)
+		throw new TypeError('Secret key must be provided.')
 
-	const tentativeValue = input.slice(0, input.lastIndexOf('.'))
+	const dot = input.lastIndexOf('.')
+	if (dot <= 0) return false
+
+	const tentativeValue = input.slice(0, dot)
 	const expectedInput = await signCookie(tentativeValue, secret)
 
-	return expectedInput === input ? tentativeValue : false
+	return constantTimeEqual(expectedInput, input) ? tentativeValue : false
 }
 
 export const insertStandaloneValidator = <const Name extends keyof InputSchema>(
