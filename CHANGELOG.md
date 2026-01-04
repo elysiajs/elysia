@@ -1,3 +1,8 @@
+# 1.4.21 - 4 Jan 2026
+Bug fix:
+- call Sucrose GC unref when possible (browser fallback)
+- add allowUnsafeValidationDetails to Standard Validator
+
 # 1.4.20 - 3 Jan 2026
 Improvement:
 - add `ModelValidator.schema` for accessing raw schema

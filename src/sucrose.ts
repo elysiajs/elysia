@@ -632,7 +632,9 @@ export const clearSucroseCache = (delay: Sucrose.Settings['gcTime']) => {
 
 		pendingGC = undefined
 		if (isBun) Bun.gc(false)
-	}, delay).unref()
+	}, delay)
+
+	pendingGC.unref?.()
 }
 
 export const mergeInference = (a: Sucrose.Inference, b: Sucrose.Inference) => {
