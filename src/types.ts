@@ -625,7 +625,7 @@ export type HookContainer<T extends Function = Function> = {
 
 export interface LifeCycleStore {
 	type?: ContentType
-	start: HookContainer<GracefulHandler<any>>[]
+	start: HookContainer<ServerStartHandler<any>>[]
 	request: HookContainer<PreHandler<any, any>>[]
 	parse: HookContainer<BodyHandler<any, any>>[]
 	transform: HookContainer<TransformHandler<any, any>>[]
@@ -1458,6 +1458,9 @@ export type AfterResponseHandler<
 	}
 ) => MaybePromise<unknown>
 
+export type ServerStartHandler<in Instance extends AnyElysia> = (
+    data: Instance & { server: NonNullable<Instance["server"]> }
+) => any
 export type GracefulHandler<in Instance extends AnyElysia> = (
 	data: Instance
 ) => any

@@ -162,7 +162,8 @@ import type {
 	UnknownRouteSchema,
 	MaybeFunction,
 	InlineHandlerNonMacro,
-	Router
+	Router,
+    ServerStartHandler
 } from './types'
 import {
 	coercePrimitiveRoot,
@@ -1114,12 +1115,12 @@ export default class Elysia<
 	 * ```typescript
 	 * new Elysia()
 	 *     .onStart(({ server }) => {
-	 *         console.log("Running at ${server?.url}:${server?.port}")
+	 *         console.log("Running at ${server.url}:${server.port}")
 	 *     })
 	 *     .listen(3000)
 	 * ```
 	 */
-	onStart(handler: MaybeArray<GracefulHandler<this>>) {
+	onStart(handler: MaybeArray<ServerStartHandler<this>>) {
 		this.on('start', handler as any)
 
 		return this
@@ -8290,7 +8291,8 @@ export type {
 	TransformHandler,
 	HTTPHeaders,
 	EmptyRouteSchema,
-	ExtractErrorFromHandle
+	ExtractErrorFromHandle,
+        ServerStartHandler
 } from './types'
 
 export { env } from './universal/env'
