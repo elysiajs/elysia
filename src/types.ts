@@ -32,7 +32,7 @@ import type {
 } from './error'
 
 import type { AnyWSLocalHook } from './ws/types'
-import type { WebSocketHandler } from './ws/bun'
+import type { WebSocketHandler, WebSocketConfig } from './ws/bun'
 
 import type { Instruction as ExactMirrorInstruction } from 'exact-mirror'
 import { BunHTMLBundlelike } from './universal/types'
@@ -171,10 +171,7 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 	 *
 	 * @see https://bun.sh/docs/api/websockets
 	 */
-	websocket?: Omit<
-		WebSocketHandler<any>,
-		'open' | 'close' | 'message' | 'drain'
-	>
+	websocket?: WebSocketConfig
 	cookie?: CookieOptions & {
 		/**
 		 * Specified cookie name to be signed globally
