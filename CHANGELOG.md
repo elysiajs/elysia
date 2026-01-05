@@ -1,3 +1,7 @@
+# 1.4.22
+Bug fix:
+- ValueError with summary missing types
+
 # 1.4.21 - 4 Jan 2026
 Improvement:
 - [#1654](https://github.com/elysiajs/elysia/pull/1654) encode t.Date() to iso string
