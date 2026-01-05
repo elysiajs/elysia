@@ -1,3 +1,12 @@
+# 1.4.21 - 4 Jan 2026
+Improvement:
+- [#1654](https://github.com/elysiajs/elysia/pull/1654) encode t.Date() to iso string
+- [#1624](https://github.com/elysiajs/elysia/pull/1624) apply macros before merging hooks in group method
+
+Bug fix:
+- call Sucrose GC unref when possible (browser fallback)
+- add allowUnsafeValidationDetails to Standard Validator
+
 # 1.4.20 - 3 Jan 2026
 Improvement:
 - add `ModelValidator.schema` for accessing raw schema

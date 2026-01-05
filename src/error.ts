@@ -357,7 +357,7 @@ export class ValidationError extends Error {
 
 			error = _errors?.[0]
 
-			if (isProduction)
+			if (isProduction && !allowUnsafeValidationDetails)
 				message = JSON.stringify({
 					type: 'validation',
 					on: type,
