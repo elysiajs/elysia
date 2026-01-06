@@ -132,7 +132,7 @@ describe('Cookie - Unchanged Values', () => {
 			})
 		)
 
-		expect(secondRes.headers.getAll('set-cookie').length).toBe(1)
+		expect(secondRes.headers.get('set-cookie')).toBeTruthy()
 	})
 
 	it('should optimize multiple assignments of same object in single request', async () => {

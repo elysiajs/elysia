@@ -291,7 +291,7 @@ export const createCookieJar = (
 	return new Proxy(store, {
 		get(_, key: string) {
 			return new Cookie(key, set.cookie as Record<string, ElysiaCookie>, {
-				...initial,
+				...(initial ?? {}),
 				...(store[key] ?? {})
 			})
 		}
