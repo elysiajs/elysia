@@ -47,13 +47,7 @@ describe('SSE - Response Double Wrapping', () => {
 		})
 
 		const response = await app
-			.handle(
-				new Request('http://localhost/', {
-					headers: {
-						'content-type': 'text/event-stream'
-					}
-				})
-			)
+			.handle(new Request('http://localhost/'))
 			.then((r) => r.text())
 
 		// Generator without explicit SSE should format as plain text
