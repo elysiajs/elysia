@@ -60,4 +60,27 @@ describe('SSE - Response Double Wrapping', () => {
 		expect(response).toContain('hello')
 		expect(response).toContain('world')
 	})
+
+	it('should format SSE correctly for generators with explicit SSE configuration', async () => {
+		const { sse } = await import('../../src')
+		
+		const app = new Elysia().get('/', ({ set }) => {
+			set.headers['content-type'] = 'text/event-stream'
+			
+			return (async function* () {
+				yield sse({ data: 'first message' })
+				yield sse({ data: 'second message' })
+			})()
+		})
+
+		const response = await app
+			.handle(new Request('http://localhost/'))
+			.then((r) => r.text())
+
+		// Generator WITH explicit SSE markers should get properly formatted
+		expect(response).toContain('data: first message\n\n')
+		expect(response).toContain('data: second message\n\n')
+		// Should NOT double-wrap
+		expect(response).not.toContain('data: data:')
+	})
 })
