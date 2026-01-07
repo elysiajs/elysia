@@ -152,7 +152,8 @@ export const createStreamHandler =
 	async (
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
-		request?: Request
+		request?: Request,
+		skipFormat?: boolean
 	) => {
 		// Since ReadableStream doesn't have next, init might be undefined
 		let init = (generator as Generator).next?.() as
@@ -171,13 +172,17 @@ export const createStreamHandler =
 			return mapCompactResponse(init.value, request)
 		}
 
+		// Check if stream is from a pre-formatted Response body
 		const isSSE =
-			// @ts-ignore First SSE result is wrapped with sse()
-			init?.value?.sse ??
-			// @ts-ignore ReadableStream is wrapped with sse()
-			generator?.sse ??
-			// User explicitly set content-type to SSE
-			set?.headers['content-type']?.startsWith('text/event-stream')
+			!skipFormat &&
+			(
+				// @ts-ignore First SSE result is wrapped with sse()
+				init?.value?.sse ??
+				// @ts-ignore ReadableStream is wrapped with sse()
+				generator?.sse ??
+				// User explicitly set content-type to SSE
+				set?.headers['content-type']?.startsWith('text/event-stream')
+			)
 
 		const format = isSSE
 			? (data: string) => `data: ${data}\n\n`
@@ -385,7 +390,8 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 				return handleStream(
 					streamResponse(newResponse as Response),
 					responseToSetHeaders(newResponse as Response, set),
-					request
+					request,
+					true // skipFormat: don't auto-format SSE for pre-formatted Response
 				) as any
 
 			return newResponse
@@ -399,7 +405,8 @@ export const createResponseHandler = (handler: CreateHandlerParameter) => {
 			return handleStream(
 				streamResponse(response as Response),
 				responseToSetHeaders(response as Response, set),
-				request
+				request,
+				true // skipFormat: don't auto-format SSE for pre-formatted Response
 			) as any
 
 		return response
