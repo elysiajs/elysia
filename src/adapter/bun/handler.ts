@@ -504,7 +504,7 @@ export const mapCompactResponse = (
 			// @ts-expect-error
 			if (typeof response?.then === 'function')
 				// @ts-expect-error
-				return response.then((x) => mapResponse(x, set)) as any
+				return response.then((x) => mapCompactResponse(x, request)) as any
 
 			// @ts-expect-error
 			if (typeof response?.toResponse === 'function')
