@@ -53,6 +53,9 @@ describe('SSE - Response Double Wrapping', () => {
 		// Generator without explicit SSE should format as plain text
 		expect(response).toContain('hello')
 		expect(response).toContain('world')
+		// Verify it's NOT SSE formatted
+		expect(response).not.toContain('data: hello')
+		expect(response).not.toContain('data: world')
 	})
 
 	it('should format SSE correctly for generators with explicit SSE configuration', async () => {
