@@ -1126,4 +1126,67 @@ describe('Query Validator', () => {
 		expect(invalid1.status).toBe(422)
 		expect(invalid2.status).toBe(422)
 	})
+
+	// Issue #1660: Validation error metadata should have correct 'on' and 'property' fields
+	// for constraint violations (min/max), not just type errors
+	it('should return correct validation error fields for constraint violations', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				limit: t.Number({ minimum: 1, maximum: 100, default: 10 })
+			})
+		})
+
+		// Test constraint violation (value exceeds maximum)
+		const constraintViolation = await app.handle(
+			new Request('http://localhost:3000/?limit=200')
+		)
+		expect(constraintViolation.status).toBe(422)
+
+		const constraintError = await constraintViolation.json()
+		expect(constraintError.type).toBe('validation')
+		expect(constraintError.on).toBe('query')
+		expect(constraintError.property).toBe('/limit')
+		expect(constraintError.message).toContain('100')
+
+		// Test type error (non-numeric string)
+		const typeError = await app.handle(
+			new Request('http://localhost:3000/?limit=invalid')
+		)
+		expect(typeError.status).toBe(422)
+
+		const typeErrorBody = await typeError.json()
+		expect(typeErrorBody.type).toBe('validation')
+		expect(typeErrorBody.on).toBe('query')
+		expect(typeErrorBody.property).toBe('/limit')
+
+		// Test valid value
+		const validResponse = await app.handle(
+			new Request('http://localhost:3000/?limit=50')
+		)
+		expect(validResponse.status).toBe(200)
+		expect(await validResponse.json()).toEqual({ limit: 50 })
+	})
+
+	it('should return correct validation error fields for nested constraint violations', async () => {
+		const app = new Elysia().get('/', ({ query }) => query, {
+			query: t.Object({
+				config: t.Object({
+					maxItems: t.Number({ minimum: 1, maximum: 1000 })
+				})
+			})
+		})
+
+		const filter = JSON.stringify({ maxItems: 9999 })
+		const response = await app.handle(
+			new Request(`http://localhost:3000/?config=${filter}`)
+		)
+
+		expect(response.status).toBe(422)
+		const error = await response.json()
+		expect(error.type).toBe('validation')
+		expect(error.on).toBe('query')
+		// Path captures the query parameter where the constraint violation occurred
+		expect(error.property).toBe('/config')
+		expect(error.message).toContain('1000')
+	})
 })

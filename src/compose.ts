@@ -458,6 +458,16 @@ const coerceTransformDecodeError = (
 	`try{${fnLiteral}}catch(error){` +
 	`if(error.constructor.name === 'TransformDecodeError'){` +
 	`c.set.status=422\n` +
+	// Fix #1660: When error.error is a ValidationError with wrong 'type' field,
+	// extract valueError and fix its path using TransformDecodeError.path
+	`if(error.error?.valueError){` +
+	`const ve=error.error.valueError;` +
+	`const fe={...ve,path:error.path};` +
+	`const errs={[Symbol.iterator]:function*(){yield fe},First:()=>fe};` +
+	`throw new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails},errs)` +
+	`}` +
+	// If error.error exists but is not a ValidationError (e.g., NotFoundError),
+	// re-throw it directly. Otherwise, create new ValidationError.
 	`throw error.error ?? new ValidationError('${type}',validator.${type},${value},${allowUnsafeValidationDetails})}` +
 	`}`
 
