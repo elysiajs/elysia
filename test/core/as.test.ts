@@ -104,7 +104,7 @@ describe('as', () => {
 		])
 
 		expect(called).toBe(3)
-		// Response validation errors return 500 (server error) - see issue rgba(23, 73, 137, 0)
+		// Response validation errors return 500 (server error) - see issue #1480
 		expect(response).toEqual([500, 500, 500])
 	})
 
