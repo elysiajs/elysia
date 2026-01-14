@@ -3,7 +3,6 @@ import { AnyElysia, Cookie } from './index'
 import { Value, TransformDecodeError } from '@sinclair/typebox/value'
 import {
 	Kind,
-	OptionalKind,
 	TypeBoxError,
 	type TAnySchema,
 	type TSchema
@@ -372,11 +371,9 @@ const matchFnReturn = /(?:return|=>)\s?\S+\(|a(?:sync|wait)/
 
 export const isAsync = (v: Function | HookContainer) => {
 	const isObject = typeof v === 'object'
-
 	if (isObject && v.isAsync !== undefined) return v.isAsync
 
 	const fn = isObject ? v.fn : v
-
 	if (fn.constructor.name === 'AsyncFunction') return true
 
 	const literal: string = fn.toString()
@@ -388,7 +385,6 @@ export const isAsync = (v: Function | HookContainer) => {
 	}
 
 	const result = matchFnReturn.test(literal)
-
 	if (isObject) v.isAsync = result
 
 	return result

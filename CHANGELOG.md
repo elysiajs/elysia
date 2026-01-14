@@ -1,6 +1,7 @@
 # 1.4.22
 Bug fix:
 - ValueError with summary missing types
+- Elysia not using Bun.routes
 
 # 1.4.21 - 4 Jan 2026
 Improvement:
