@@ -137,4 +137,37 @@ describe('Mount', () => {
 			'x-test': 'test'
 		})
 	})
+
+	it('mount without prefix - strips mount path', async () => {
+		const app = new Elysia().mount('/sdk/problems-domain', (request) => {
+			return Response.json({ path: new URL(request.url).pathname })
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/sdk/problems-domain/problems')
+			)
+			.then((x) => x.json() as Promise<{ path: string }>)
+
+		expect(response.path).toBe('/problems')
+	})
+
+	it('mount with prefix - should strip both prefix and mount path', async () => {
+		const sdkApp = new Elysia({ prefix: '/sdk' }).mount(
+			'/problems-domain',
+			(request) => {
+				return Response.json({ path: new URL(request.url).pathname })
+			}
+		)
+
+		const app = new Elysia().use(sdkApp)
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/sdk/problems-domain/problems')
+			)
+			.then((x) => x.json() as Promise<{ path: string }>)
+
+		expect(response.path).toBe('/problems')
+	})
 })

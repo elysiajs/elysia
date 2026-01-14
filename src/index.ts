@@ -5613,8 +5613,12 @@ export default class Elysia<
 							throw new Error('Invalid handler')
 						})()
 
-		const length = path.length - (path.endsWith('*') ? 1 : 0)
+		const fullPath =
+			typeof path === 'string' && this.config.prefix
+				? this.config.prefix + path
+				: path
 
+		const length = fullPath.length - (path.endsWith('*') ? 1 : 0)
 		const handler: Handler = ({ request, path }) =>
 			handle(
 				new Request(

@@ -28,9 +28,13 @@ import { ElysiaFile } from './universal/file'
 export const hasHeaderShorthand = 'toJSON' in new Headers()
 
 export const replaceUrlPath = (url: string, pathname: string) => {
-	const urlObject = new URL(url)
-	urlObject.pathname = pathname
-	return urlObject.toString()
+	const pathStartIndex = url.indexOf('/', 11)
+	const queryIndex = url.indexOf('?', pathStartIndex)
+
+	if (queryIndex === -1)
+		return `${url.slice(0, pathStartIndex)}${pathname.charCodeAt(0) === 47 ? '' : '/'}${pathname}`
+
+	return `${url.slice(0, pathStartIndex)}${pathname.charCodeAt(0) === 47 ? '' : '/'}${pathname}${url.slice(queryIndex)}`
 }
 
 export const isClass = (v: Object) =>
