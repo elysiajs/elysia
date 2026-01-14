@@ -140,6 +140,12 @@ export const mapResponse = (
 					}
 				}
 
+				// Handle Array subclasses (e.g., Bun SQL results)
+				if (Array.isArray(response)) {
+					set.headers['content-type'] = 'application/json'
+					return new Response(JSON.stringify(response), set as any)
+				}
+
 				return new Response(response as any, set as any)
 		}
 	}
@@ -279,6 +285,12 @@ export const mapEarlyResponse = (
 					}
 				}
 
+				// Handle Array subclasses (e.g., Bun SQL results)
+				if (Array.isArray(response)) {
+					set.headers['content-type'] = 'application/json'
+					return new Response(JSON.stringify(response), set as any)
+				}
+
 				return new Response(response as any, set as any)
 		}
 	} else
@@ -397,6 +409,13 @@ export const mapEarlyResponse = (
 					}
 				}
 
+				// Handle Array subclasses (e.g., Bun SQL results)
+				if (Array.isArray(response)) {
+					return new Response(JSON.stringify(response), {
+						headers: { 'content-type': 'application/json' }
+					})
+				}
+
 				return new Response(response as any)
 		}
 }
@@ -513,6 +532,13 @@ export const mapCompactResponse = (
 						}
 					}) as any
 				}
+			}
+
+			// Handle Array subclasses (e.g., Bun SQL results)
+			if (Array.isArray(response)) {
+				return new Response(JSON.stringify(response), {
+					headers: { 'Content-Type': 'application/json' }
+				})
 			}
 
 			return new Response(response as any)
