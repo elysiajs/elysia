@@ -2,6 +2,7 @@
 Improvement:
 - use imperative check for `replaceURLPath` instead of allocating `new URL`
 - reduce ts-ignore/ts-expect-error on promise map handler
+- [#1655](https://github.com/elysiajs/elysia/pull/1655) decode single values in ArrayQuery
 
 Bug fix:
 - [#1671](https://github.com/elysiajs/elysia/issues/1671) mount produces incorrect URL path when Elysia instance has prefix option
