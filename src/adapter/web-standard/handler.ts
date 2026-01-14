@@ -13,7 +13,7 @@ import { Cookie } from '../../cookies'
 import { ElysiaCustomStatusResponse } from '../../error'
 
 import type { Context } from '../../context'
-import type { AnyLocalHook } from '../../types'
+import type { AnyLocalHook, MaybePromise } from '../../types'
 
 const handleElysiaFile = (
 	file: ElysiaFile,
@@ -149,10 +149,10 @@ export const mapResponse = (
 				)
 					return handleStream(response as any, set, request) as any
 
-				// @ts-expect-error
-				if (typeof response?.then === 'function')
-					// @ts-expect-error
-					return response.then((x) => mapResponse(x, set)) as any
+				if (typeof (response as Promise<unknown>)?.then === 'function')
+					return (response as Promise<unknown>).then((x) =>
+						mapResponse(x, set)
+					) as any
 
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
@@ -234,10 +234,9 @@ export const mapEarlyResponse = (
 				return handleResponse(response as Response, set, request)
 
 			case 'Promise':
-				// @ts-ignore
 				return (response as Promise<unknown>).then((x) =>
 					mapEarlyResponse(x, set)
-				)
+				) as any
 
 			case 'Error':
 				return errorToResponse(response as Error, set)
@@ -290,10 +289,10 @@ export const mapEarlyResponse = (
 				)
 					return handleStream(response as any, set, request) as any
 
-				// @ts-expect-error
-				if (typeof response?.then === 'function')
-					// @ts-expect-error
-					return response.then((x) => mapEarlyResponse(x, set)) as any
+				if (typeof (response as Promise<unknown>)?.then === 'function')
+					return (response as Promise<unknown>).then((x) =>
+						mapEarlyResponse(x, set)
+					) as any
 
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
@@ -357,11 +356,10 @@ export const mapEarlyResponse = (
 				return response as Response
 
 			case 'Promise':
-				// @ts-ignore
 				return (response as Promise<unknown>).then((x) => {
 					const r = mapEarlyResponse(x, set)
 					if (r !== undefined) return r
-				})
+				}) as any
 
 			case 'Error':
 				return errorToResponse(response as Error, set)
@@ -410,10 +408,10 @@ export const mapEarlyResponse = (
 				)
 					return handleStream(response as any, set, request) as any
 
-				// @ts-expect-error
-				if (typeof response?.then === 'function')
-					// @ts-expect-error
-					return response.then((x) => mapEarlyResponse(x, set)) as any
+				if (typeof (response as Promise<unknown>)?.then === 'function')
+					return (response as Promise<unknown>).then((x) =>
+						mapEarlyResponse(x, set)
+					) as any
 
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
@@ -534,10 +532,10 @@ export const mapCompactResponse = (
 			)
 				return handleStream(response as any, undefined, request) as any
 
-			// @ts-expect-error
-			if (typeof response?.then === 'function')
-				// @ts-expect-error
-				return response.then((x) => mapCompactResponse(x, request)) as any
+			if (typeof (response as Promise<unknown>)?.then === 'function')
+				return (response as Promise<unknown>).then((x) =>
+					mapCompactResponse(x, request)
+				) as any
 
 			// @ts-expect-error
 			if (typeof response?.toResponse === 'function')
@@ -559,21 +557,23 @@ export const mapCompactResponse = (
 	}
 }
 
-export const errorToResponse = (error: Error, set?: Context['set']) => {
-	// @ts-expect-error
+export const errorToResponse = (
+	error: Error & { toResponse?(): MaybePromise<Response> },
+	set?: Context['set']
+) => {
 	if (typeof error?.toResponse === 'function') {
-		// @ts-expect-error
 		const raw = error.toResponse()
 		const targetSet =
-			set ?? ({ headers: {}, status: 200, redirect: '' } as Context['set'])
+			set ??
+			({ headers: {}, status: 200, redirect: '' } as Context['set'])
+
 		const apply = (resolved: unknown) => {
 			if (resolved instanceof Response) targetSet.status = resolved.status
 			return mapResponse(resolved, targetSet)
 		}
 
-		return typeof raw?.then === 'function'
-			? raw.then(apply)
-			: apply(raw)
+		// @ts-ignore
+		return typeof raw?.then === 'function' ? raw.then(apply) : apply(raw)
 	}
 
 	return new Response(

@@ -1,11 +1,13 @@
 # 1.4.22
 Improvement:
 - use imperative check for `replaceURLPath` instead of allocating `new URL`
+- reduce ts-ignore/ts-expect-error on promise map handler
 
 Bug fix:
 - [#1671](https://github.com/elysiajs/elysia/issues/1671) mount produces incorrect URL path when Elysia instance has prefix option
 - [https://github.com/elysiajs/elysia/issues/1617](https://github.com/elysiajs/elysia/issues/1617), [#1623](https://github.com/elysiajs/elysia/pull/1623) AOT compilation removes beforeHandle when using arrow function expression
 - [#1667](https://github.com/elysiajs/elysia/issues/1667) skip body parsing on mount with dynamic mode
+- [#1662](https://github.com/elysiajs/elysia/pull/1662) custom thenable fallback in `mapCompactResponse` causing runtime crash with undefined variable
 - [#1661](https://github.com/elysiajs/elysia/pull/1661), [#1663](https://github.com/elysiajs/elysia/pull/1663) fix SSE double-wrapping bug when returning pre-formatted Response
 - ValueError with summary missing types
 - Elysia not using Bun.routes by default
