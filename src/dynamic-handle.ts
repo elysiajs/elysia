@@ -114,6 +114,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			const { handle, validator, content, route } = handler.store
 			hooks = handler.store.hooks
 
+			// @ts-ignore
+			if (hooks.config?.mount)
+				// @ts-ignore
+				return hooks.config.mount(request)
+
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
 				if (content) {

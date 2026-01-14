@@ -138,7 +138,7 @@ describe('Mount', () => {
 		})
 	})
 
-	it('mount without prefix - strips mount path', async () => {
+	it('without prefix - strips mount path', async () => {
 		const app = new Elysia().mount('/sdk/problems-domain', (request) => {
 			return Response.json({ path: new URL(request.url).pathname })
 		})
@@ -152,7 +152,7 @@ describe('Mount', () => {
 		expect(response.path).toBe('/problems')
 	})
 
-	it('mount with prefix - should strip both prefix and mount path', async () => {
+	it('with prefix - should strip both prefix and mount path', async () => {
 		const sdkApp = new Elysia({ prefix: '/sdk' }).mount(
 			'/problems-domain',
 			(request) => {
@@ -169,5 +169,28 @@ describe('Mount', () => {
 			.then((x) => x.json() as Promise<{ path: string }>)
 
 		expect(response.path).toBe('/problems')
+	})
+
+	it('handle body in aot: false', async () => {
+		const app = new Elysia({ aot: false }).mount('/api', async (request) =>
+			Response.json(await request.json())
+		)
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/api', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json'
+					},
+					body: JSON.stringify({ message: 'hello world' })
+				})
+			)
+
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			message: 'hello world'
+		})
 	})
 })

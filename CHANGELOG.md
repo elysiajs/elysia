@@ -1,6 +1,7 @@
 # 1.4.22
 Bug fix:
-- [#1671](https://github.com/elysiajs/elysia/issues/1671) mount() produces incorrect URL path when Elysia instance has prefix option
+- [#1671](https://github.com/elysiajs/elysia/issues/1671) mount produces incorrect URL path when Elysia instance has prefix option
+- [#1667](https://github.com/elysiajs/elysia/issues/1667) skip body parsing on mount with dynamic mode
 - ValueError with summary missing types
 - Elysia not using Bun.routes
 
