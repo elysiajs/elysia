@@ -136,7 +136,7 @@ export const responseToSetHeaders = (
 	return set
 }
 
-type CreateHandlerParameter = {
+interface CreateHandlerParameter {
 	mapResponse(
 		response: unknown,
 		set: Context['set'],

@@ -1,14 +1,18 @@
-import { Elysia, t } from '../src'
-import { z } from 'zod'
-import { req } from '../test/utils'
+import { Elysia } from '../src'
 
-export const app = new Elysia()
-	.ws('/', {
-		open(ws) {
-			ws.subscribe('a')
-		},
-		message(a) {
-			console.log(a.subscriptions)
-		}
-	})
-	.listen(3000)
+new Elysia()
+.post(
+    "/create-post",
+    async (ctx) => {
+      return {
+        message: "Post Created",
+        data: ctx.body,
+      };
+    },
+    {
+      body: t.Object({
+        name: t.String(),
+        content: t.String(),
+        safeAge: t.Number(),
+      }),
+    },

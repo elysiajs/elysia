@@ -44,7 +44,9 @@ type CheckExcessProps<T, U> = 0 extends 1 & T
 	: U extends U
 		? Exclude<keyof T, keyof U> extends never
 			? T
-			: { [K in keyof U]: U[K] } & { [K in Exclude<keyof T, keyof U>]: never }
+			: { [K in keyof U]: U[K] } & {
+					[K in Exclude<keyof T, keyof U>]: never
+				}
 		: never
 
 export type SelectiveStatus<in out Res> = <
@@ -154,27 +156,14 @@ export class InvalidCookieSignature extends Error {
 	}
 }
 
-type MapValueError =
-	| {
-			summary: undefined
-	  }
-	| {
-			summary: string
-	  }
-	| Prettify<
-			{
-				summary: string
-			} & ValueError
-	  >
+interface ValueErrorWithSummary extends ValueError {
+	summary?: string
+}
 
-export const mapValueError = (error: ValueError | undefined): MapValueError => {
-	if (!error)
-		return {
-			summary: undefined
-		}
+export const mapValueError = (error: ValueError): ValueErrorWithSummary => {
+	if (!error) return error
 
 	let { message, path, value, type } = error
-
 	if (Array.isArray(path)) path = path[0]
 
 	const property =
@@ -495,7 +484,7 @@ export class ValidationError extends Error {
 		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
 
-	get all(): MapValueError[] {
+	get all(): ValueErrorWithSummary[] {
 		// Handle standard schema validators (Zod, Valibot, etc.)
 		if (
 			// @ts-ignore
@@ -607,7 +596,9 @@ export class ValidationError extends Error {
 					on: this.type,
 					property: this.valueError?.path || 'root',
 					message,
-					summary: mapValueError(this.valueError).summary,
+					summary: this.valueError
+						? mapValueError(this.valueError).summary
+						: undefined,
 					found: value,
 					expected,
 					errors

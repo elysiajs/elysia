@@ -84,7 +84,7 @@ const supportedMethods = {
 } as const
 
 const mapRoutes = (app: AnyElysia) => {
-	if (!app.config.aot || !app.config.systemRouter) return undefined
+	if (!app.config.aot || app.config.systemRouter === false) return undefined
 
 	const routes = <Record<string, Function | Record<string, unknown>>>{}
 
