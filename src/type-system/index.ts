@@ -425,7 +425,7 @@ export const ElysiaType = {
 			if (value.indexOf(',') !== -1)
 				return compiler.Decode(value.split(','))
 
-			return [value]
+			return compiler.Decode([value])
 		}
 
 		return t
