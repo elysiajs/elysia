@@ -1,9 +1,18 @@
 import { Elysia } from '../src'
 
-async function mountedHandler(request: Request): Promise<Response> {
-	return Response.json(await request.json())
-}
-
-const serverAotFalse = new Elysia({ aot: false })
-	.mount('/api', async (request) => Response.json(await request.json()))
-	.listen(3002)
+new Elysia()
+.post(
+    "/create-post",
+    async (ctx) => {
+      return {
+        message: "Post Created",
+        data: ctx.body,
+      };
+    },
+    {
+      body: t.Object({
+        name: t.String(),
+        content: t.String(),
+        safeAge: t.Number(),
+      }),
+    },

@@ -1,9 +1,12 @@
 # 1.4.22
+Improvement:
+- use imperative check for `replaceURLPath` instead of allocating `new URL`
+
 Bug fix:
 - [#1671](https://github.com/elysiajs/elysia/issues/1671) mount produces incorrect URL path when Elysia instance has prefix option
 - [#1667](https://github.com/elysiajs/elysia/issues/1667) skip body parsing on mount with dynamic mode
 - ValueError with summary missing types
-- Elysia not using Bun.routes
+- Elysia not using Bun.routes by default
 
 # 1.4.21 - 4 Jan 2026
 Improvement:
