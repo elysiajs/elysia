@@ -1,4 +1,4 @@
-# 1.4.22
+# 1.4.22 - 14 Jan 2026
 Improvement:
 - use imperative check for `replaceURLPath` instead of allocating `new URL`
 - reduce ts-ignore/ts-expect-error on promise map handler

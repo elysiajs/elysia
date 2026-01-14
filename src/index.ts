@@ -8071,7 +8071,7 @@ export default class Elysia<
 	 *
 	 * Beside benchmark purpose, please use 'handle' instead.
 	 */
-	get fetch() {
+	get fetch(): (request: Request) => MaybePromise<Response> {
 		const fetch = this.config.aot
 			? composeGeneralHandler(this)
 			: createDynamicHandler(this)

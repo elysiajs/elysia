@@ -145,8 +145,6 @@ export const fileType = async (
 	const result = await fileTypeFromBlob(file)
 	if (!result) throw new InvalidFileType(name, extension)
 
-	console.log(result, extension)
-
 	if (typeof extension === 'string')
 		if (!checkFileExtension(result.mime, extension))
 			throw new InvalidFileType(name, extension)

@@ -117,7 +117,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 			// @ts-ignore
 			if (hooks.config?.mount)
 				// @ts-ignore
-				return hooks.config.mount(request)
+				return await hooks.config.mount(request)
 
 			let body: string | Record<string, any> | undefined
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
