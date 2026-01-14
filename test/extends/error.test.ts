@@ -88,7 +88,8 @@ describe('Error', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(response.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(response.status).toBe(500)
 		expect(response.headers.get('content-type')).toBe('application/json')
 	})
 

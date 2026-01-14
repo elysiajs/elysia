@@ -284,7 +284,15 @@ export class InvalidFileType extends Error {
 
 export class ValidationError extends Error {
 	code = 'VALIDATION'
-	status = 422
+	/**
+	 * HTTP status code for this validation error.
+	 *
+	 * - Response validation errors (type === 'response') return 500 (Internal Server Error)
+	 *   because they indicate a server-side bug where the response doesn't match the schema.
+	 * - Request validation errors (query, body, headers, params, cookie) return 422 (Unprocessable Entity)
+	 *   because they indicate client sent invalid data.
+	 */
+	status: number
 
 	/**
 	 * An actual value of `message`
@@ -481,6 +489,10 @@ export class ValidationError extends Error {
 		this.expected = expected
 		this.customError = customError
 
+		// Response validation errors are server bugs (500), not client errors (422)
+		// If the server returns data that doesn't match its own schema, that's an internal error
+		this.status = type === 'response' ? 500 : 422
+
 		Object.setPrototypeOf(this, ValidationError.prototype)
 	}
 
@@ -546,7 +558,7 @@ export class ValidationError extends Error {
 
 	toResponse(headers?: Record<string, any>) {
 		return new Response(this.message, {
-			status: 400,
+			status: this.status,
 			headers: {
 				...headers,
 				'content-type': 'application/json'

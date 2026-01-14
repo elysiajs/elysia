@@ -158,7 +158,8 @@ describe('Standard Schema Standalone', () => {
 		expect(valid).toEqual({ id: 1, name: 'lilith' })
 
 		const invalid = await app.handle(req('/focou'))
-		expect(invalid.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate and normalize multiple response', async () => {
@@ -208,7 +209,8 @@ describe('Standard Schema Standalone', () => {
 		expect(fouco).toEqual({ id: 2, name: 'fouco' })
 
 		const invalid = await app.handle(req('/unknown'))
-		expect(invalid.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate multiple schema together', async () => {
@@ -354,7 +356,8 @@ describe('Standard Schema Standalone', () => {
 		expect(fouco).toEqual({ id: 2, name: 'fouco' })
 
 		const invalid = await app.handle(req('/unknown'))
-		expect(invalid.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate non-typebox schema', async () => {

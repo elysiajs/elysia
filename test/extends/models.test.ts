@@ -315,7 +315,8 @@ describe('Model', () => {
 			.get('/error', () => 1, { response: 'res' })
 
 		const error = await app.handle(req('/error'))
-		expect(error.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(error.status).toBe(500)
 
 		const correct = await app.handle(req('/correct'))
 		expect(correct.status).toBe(200)
@@ -347,7 +348,8 @@ describe('Model', () => {
 			})
 
 		const error = await app.handle(req('/error'))
-		expect(error.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(error.status).toBe(500)
 
 		const correct = await app.handle(req('/correct'))
 		expect(correct.status).toBe(200)

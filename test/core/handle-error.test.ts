@@ -572,7 +572,8 @@ describe('Handle Error', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(res.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(res.status).toBe(500)
 		expect(res.headers.get('set-cookie')).toContain('session=test-session-id')
 	})
 

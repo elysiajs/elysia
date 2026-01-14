@@ -138,7 +138,8 @@ describe('group', () => {
 		const correct = await app.handle(req('/v1/correct'))
 
 		expect(correct.status).toBe(200)
-		expect(error.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(error.status).toBe(500)
 	})
 
 	it('validate request with prefix', async () => {

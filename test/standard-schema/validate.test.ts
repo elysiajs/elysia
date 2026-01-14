@@ -100,7 +100,8 @@ describe('Standard Schema Validate', () => {
 		const nonExists = await app.handle(req('/lilith'))
 
 		expect(exists.status).toBe(200)
-		expect(nonExists.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(nonExists.status).toBe(500)
 	})
 
 	it('validate multiple response', async () => {
@@ -125,7 +126,8 @@ describe('Standard Schema Validate', () => {
 		expect(nonExists.status).toBe(404)
 
 		const invalid = await app.handle(req('/unknown'))
-		expect(invalid.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(invalid.status).toBe(500)
 	})
 
 	it('validate multiple schema together', async () => {

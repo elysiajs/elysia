@@ -69,7 +69,8 @@ describe('Normalize', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(response.status).toEqual(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(response.status).toEqual(500)
 	})
 
 	it('normalize multiple response', async () => {
@@ -117,7 +118,8 @@ describe('Normalize', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(response.status).toEqual(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(response.status).toEqual(500)
 	})
 
 	it('normalize multiple response using 200', async () => {
@@ -171,7 +173,8 @@ describe('Normalize', () => {
 
 		const response = await app.handle(req('/'))
 
-		expect(response.status).toEqual(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(response.status).toEqual(500)
 	})
 
 	it('do not normalize response when allowing additional properties', async () => {

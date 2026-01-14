@@ -529,8 +529,9 @@ describe('Dynamic Mode', () => {
 			.handle(req('/valid-201'))
 			.then((x) => x.status)
 
-		expect(invalid).toBe(422)
-		expect(invalid201).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(invalid).toBe(500)
+		expect(invalid201).toBe(500)
 		expect(valid).toBe(200)
 		expect(valid201).toBe(201)
 	})
@@ -552,7 +553,8 @@ describe('Dynamic Mode', () => {
 		const invalid = await app.handle(req('/invalid')).then((x) => x.status)
 		const valid = await app.handle(req('/valid')).then((x) => x.json())
 
-		expect(invalid).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(invalid).toBe(500)
 		expect(valid).toEqual({
 			foo: 'bar'
 		})
@@ -608,8 +610,9 @@ describe('Dynamic Mode', () => {
 			.handle(req('/valid-201'))
 			.then((x) => x.status)
 
-		expect(invalid).toBe(422)
-		expect(invalid201).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(invalid).toBe(500)
+		expect(invalid201).toBe(500)
 		expect(valid).toBe(200)
 		expect(valid201).toBe(201)
 	})
@@ -634,7 +637,8 @@ describe('Dynamic Mode', () => {
 		const invalid = await app.handle(req('/invalid')).then((x) => x.status)
 		const valid = await app.handle(req('/valid')).then((x) => x.json())
 
-		expect(invalid).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(invalid).toBe(500)
 		expect(valid).toEqual({
 			foo: 'bar'
 		})

@@ -191,7 +191,8 @@ describe('Response Validator', () => {
 
 		const res = await app.handle(req('/'))
 
-		expect(res.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(res.status).toBe(500)
 	})
 
 	it('handle File', async () => {
@@ -291,9 +292,10 @@ describe('Response Validator', () => {
 		)
 
 		expect(r200valid.status).toBe(200)
-		expect(r200invalid.status).toBe(422)
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(r200invalid.status).toBe(500)
 		expect(r201valid.status).toBe(201)
-		expect(r201invalid.status).toBe(422)
+		expect(r201invalid.status).toBe(500)
 	})
 
 	it('validate response per status with error()', async () => {
@@ -422,7 +424,8 @@ describe('Response Validator', () => {
 			app.handle(req('/validate-error')).then((x) => x.status)
 		])
 
-		expect(response).toEqual([200, 418, 422])
+		// Response validation errors return 500 (server error) - see issue #1480
+		expect(response).toEqual([200, 418, 500])
 	})
 
 	it('validate nested references', async () => {
@@ -561,5 +564,196 @@ describe('Response Validator', () => {
 		}
 
 		expect(result.join('')).toContain('data: {"name":"Name"}')
+	})
+})
+
+// https://github.com/elysiajs/elysia/issues/1480
+describe('Response Validation Error Status Code', () => {
+	it('should return 500 for response validation errors', async () => {
+		// Response validation errors are server bugs - the server is returning
+		// data that doesn't match its own declared schema
+		const app = new Elysia().get(
+			'/',
+			() => ({ wrong: 'field' }),
+			{
+				response: t.Object({ name: t.String() })
+			}
+		)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(500)
+	})
+
+	it('should return 500 with correct error structure for response validation', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => ({ count: 'not a number' }),
+			{
+				response: t.Object({ count: t.Number() })
+			}
+		)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(500)
+
+		const body = await res.json()
+		expect(body.type).toBe('validation')
+		expect(body.on).toBe('response')
+	})
+
+	it('should return 500 for response validation with status-specific schema', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => ({ invalid: 'data' }),
+			{
+				response: {
+					200: t.Object({ success: t.Boolean() })
+				}
+			}
+		)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(500)
+	})
+
+	it('should return 500 when response has missing required fields', async () => {
+		const app = new Elysia().get(
+			'/',
+			// @ts-ignore - intentionally returning incomplete object
+			() => ({ name: 'test' }),
+			{
+				response: t.Object({
+					name: t.String(),
+					age: t.Number(),
+					email: t.String()
+				})
+			}
+		)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(500)
+	})
+
+	it('should return 500 when response has wrong type', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => 'string instead of object',
+			{
+				response: t.Object({ name: t.String() })
+			}
+		)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(500)
+	})
+
+	it('should return 200 when response passes validation', async () => {
+		const app = new Elysia().get(
+			'/',
+			() => ({ name: 'valid', count: 42 }),
+			{
+				response: t.Object({
+					name: t.String(),
+					count: t.Number()
+				})
+			}
+		)
+
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(200)
+	})
+
+	it('should return 422 for request body validation errors (not 500)', async () => {
+		// Request validation errors are client errors - the client sent invalid data
+		const app = new Elysia().post(
+			'/',
+			({ body }) => body,
+			{
+				body: t.Object({ name: t.String() })
+			}
+		)
+
+		const res = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ wrong: 'field' })
+			})
+		)
+		expect(res.status).toBe(422)
+	})
+
+	it('should return 422 for query validation errors (not 500)', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ query }) => query,
+			{
+				query: t.Object({ required: t.String() })
+			}
+		)
+
+		// Missing required query parameter
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(422)
+	})
+
+	it('should return 422 for params validation errors (not 500)', async () => {
+		const app = new Elysia().get(
+			'/user/:id',
+			({ params }) => params,
+			{
+				params: t.Object({ id: t.Numeric() })
+			}
+		)
+
+		// Invalid param (not numeric)
+		const res = await app.handle(req('/user/not-a-number'))
+		expect(res.status).toBe(422)
+	})
+
+	it('should return 422 for headers validation errors (not 500)', async () => {
+		const app = new Elysia().get(
+			'/',
+			({ headers }) => headers,
+			{
+				headers: t.Object({ 'x-required-header': t.String() })
+			}
+		)
+
+		// Missing required header
+		const res = await app.handle(req('/'))
+		expect(res.status).toBe(422)
+	})
+
+	it('should distinguish between response (500) and request (422) errors in same route', async () => {
+		const app = new Elysia().post(
+			'/',
+			// @ts-ignore - intentionally returning wrong type
+			({ body }) => ({ wrong: body.name }),
+			{
+				body: t.Object({ name: t.String() }),
+				response: t.Object({ greeting: t.String() })
+			}
+		)
+
+		// Valid request but invalid response - should be 500
+		const validRequest = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name: 'test' })
+			})
+		)
+		expect(validRequest.status).toBe(500)
+
+		// Invalid request - should be 422
+		const invalidRequest = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ wrong: 'field' })
+			})
+		)
+		expect(invalidRequest.status).toBe(422)
 	})
 })
