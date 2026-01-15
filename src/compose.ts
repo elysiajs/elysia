@@ -460,7 +460,7 @@ const coerceTransformDecodeError = (
 	`c.set.status=422\n` +
 	// Fix #1660: When error.error is a ValidationError with wrong 'type' field,
 	// extract valueError and fix its path using TransformDecodeError.path
-	`if(error.error instanceof ValidationError && error.error.valueError){` +
+	`if(error.error?.constructor?.name === 'ValidationError' && error.error.valueError){` +
 	`const ve=error.error.valueError;` +
 	`const fe={...ve,path:error.path};` +
 	`const errs={[Symbol.iterator]:function*(){yield fe},First:()=>fe};` +
