@@ -374,7 +374,14 @@ export const isAsync = (v: Function | HookContainer) => {
 	if (isObject && v.isAsync !== undefined) return v.isAsync
 
 	const fn = isObject ? v.fn : v
-	if (fn.constructor.name === 'AsyncFunction') return true
+	// Check for both AsyncFunction and AsyncGeneratorFunction
+	// AsyncGeneratorFunction needs to be treated as async because generator.next()
+	// returns a Promise that may reject (e.g., when throwing from the generator)
+	if (
+		fn.constructor.name === 'AsyncFunction' ||
+		fn.constructor.name === 'AsyncGeneratorFunction'
+	)
+		return true
 
 	const literal: string = fn.toString()
 
@@ -862,7 +869,12 @@ export const composeHandler = ({
 
 	const mapResponse = (r = 'r') => {
 		const after = afterResponse()
-		const response = `${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
+		// When maybeStream is true, mapResponse may return a Promise (from handleStream)
+		// that can reject if the generator throws. We need to await it so the try-catch
+		// can properly catch the rejection and route it to error handling.
+		// Only add await if the function is async (maybeAsync), otherwise it would be a syntax error.
+		const awaitStream = maybeStream && maybeAsync ? 'await ' : ''
+		const response = `${awaitStream}${hasSet ? 'mapResponse' : 'mapCompactResponse'}(${saveResponse}${r}${hasSet ? ',c.set' : ''}${mapResponseContext})\n`
 
 		if (!after) return `return ${response}`
 
