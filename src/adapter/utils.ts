@@ -143,18 +143,23 @@ interface CreateHandlerParameter {
 		request?: Request
 	): Response
 	mapCompactResponse(response: unknown, request?: Request): Response
+	streamOptions?: {
+		autoCancellation?: boolean
+	}
 }
 
 const allowRapidStream = env.ELYSIA_RAPID_STREAM === 'true'
+const defaultAutoCancellation = env.ELYSIA_STREAM_AUTO_CANCELLATION !== 'false'
 
 export const createStreamHandler =
-	({ mapResponse, mapCompactResponse }: CreateHandlerParameter) =>
+	({ mapResponse, mapCompactResponse, streamOptions }: CreateHandlerParameter) =>
 	async (
 		generator: Generator | AsyncGenerator | ReadableStream,
 		set?: Context['set'],
 		request?: Request,
 		skipFormat?: boolean
 	) => {
+		const autoCancellation = streamOptions?.autoCancellation ?? defaultAutoCancellation
 		// Since ReadableStream doesn't have next, init might be undefined
 		let init = (generator as Generator).next?.() as
 			| IteratorResult<unknown>
@@ -219,13 +224,15 @@ export const createStreamHandler =
 				async start(controller) {
 					let end = false
 
-					request?.signal?.addEventListener('abort', () => {
-						end = true
+					if (autoCancellation) {
+						request?.signal?.addEventListener('abort', () => {
+							end = true
 
-						try {
-							controller.close()
-						} catch {}
-					})
+							try {
+								controller.close()
+							} catch {}
+						})
+					}
 
 					if (!init || init.value instanceof ReadableStream) {
 					} else if (

@@ -175,6 +175,20 @@ export interface ElysiaConfig<in out Prefix extends string | undefined> {
 		WebSocketHandler<any>,
 		'open' | 'close' | 'message' | 'drain'
 	>
+	/**
+	 * Stream response configuration
+	 */
+	stream?: {
+		/**
+		 * Enable automatic cancellation of streams when the client disconnects
+		 *
+		 * When enabled, Elysia will automatically stop generator functions
+		 * if the client cancels the request before streaming is completed
+		 *
+		 * @default true
+		 */
+		autoCancellation?: boolean
+	}
 	cookie?: CookieOptions & {
 		/**
 		 * Specified cookie name to be signed globally
