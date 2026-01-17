@@ -193,4 +193,96 @@ describe('Mount', () => {
 			message: 'hello world'
 		})
 	})
+
+	// https://github.com/elysiajs/elysia/issues/1618
+	it('preserve cookie header in mounted handler', async () => {
+		const app = new Elysia().mount('/auth', (request) => {
+			return Response.json({
+				cookie: request.headers.get('cookie')
+			})
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/auth/session', {
+					headers: {
+						Cookie: 'session_token=abc123'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			cookie: 'session_token=abc123'
+		})
+	})
+
+	// https://github.com/elysiajs/elysia/issues/1618
+	it('preserve cookie header in mounted handler with prefix option', async () => {
+		const app = new Elysia({ prefix: '/auth' }).mount((request) => {
+			return Response.json({
+				cookie: request.headers.get('cookie')
+			})
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/auth/session', {
+					headers: {
+						Cookie: 'session_token=abc123'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			cookie: 'session_token=abc123'
+		})
+	})
+
+	// https://github.com/elysiajs/elysia/issues/1618
+	it('preserve cookie header in mounted handler with aot: false', async () => {
+		const app = new Elysia({ aot: false }).mount('/auth', (request) => {
+			return Response.json({
+				cookie: request.headers.get('cookie')
+			})
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/auth/session', {
+					headers: {
+						Cookie: 'session_token=abc123'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			cookie: 'session_token=abc123'
+		})
+	})
+
+	// https://github.com/elysiajs/elysia/issues/1618
+	it('preserve multiple cookies in mounted handler', async () => {
+		const app = new Elysia().mount('/auth', (request) => {
+			return Response.json({
+				cookie: request.headers.get('cookie')
+			})
+		})
+
+		const response = await app
+			.handle(
+				new Request('http://localhost/auth/session', {
+					headers: {
+						Cookie: 'session_token=abc123; csrf_token=xyz789'
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			cookie: 'session_token=abc123; csrf_token=xyz789'
+		})
+	})
 })
