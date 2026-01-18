@@ -193,4 +193,158 @@ describe('Mount', () => {
 			message: 'hello world'
 		})
 	})
+
+	// https://github.com/elysiajs/elysia/issues/1682
+	// Mount should not be overridden by less specific wildcard routes
+	describe('mount with wildcard routes (issue #1682)', () => {
+		it('should prefer mounted route over root wildcard', async () => {
+			const backend = new Elysia().get('/test', () => 'mounted test')
+
+			const app = new Elysia()
+				.mount('/api', backend)
+				.get('/*', () => 'static file')
+
+			const response = await app
+				.handle(new Request('http://localhost/api/test'))
+				.then((x) => x.text())
+
+			expect(response).toBe('mounted test')
+		})
+
+		it('should use wildcard for non-mounted paths', async () => {
+			const backend = new Elysia().get('/test', () => 'mounted test')
+
+			const app = new Elysia()
+				.mount('/api', backend)
+				.get('/*', () => 'static file')
+
+			const response = await app
+				.handle(new Request('http://localhost/other/path'))
+				.then((x) => x.text())
+
+			expect(response).toBe('static file')
+		})
+
+		it('should handle wildcard registered before mount', async () => {
+			const backend = new Elysia().get('/test', () => 'mounted test')
+
+			const app = new Elysia()
+				.get('/*', () => 'static file')
+				.mount('/api', backend)
+
+			const response = await app
+				.handle(new Request('http://localhost/api/test'))
+				.then((x) => x.text())
+
+			expect(response).toBe('mounted test')
+		})
+
+		it('should handle multiple mounts with wildcard', async () => {
+			const apiBackend = new Elysia().get('/users', () => 'api users')
+			const v2Backend = new Elysia().get('/users', () => 'v2 users')
+
+			const app = new Elysia()
+				.mount('/api', apiBackend)
+				.mount('/v2', v2Backend)
+				.get('/*', () => 'static')
+
+			const results = await Promise.all([
+				app
+					.handle(new Request('http://localhost/api/users'))
+					.then((x) => x.text()),
+				app
+					.handle(new Request('http://localhost/v2/users'))
+					.then((x) => x.text()),
+				app
+					.handle(new Request('http://localhost/other'))
+					.then((x) => x.text())
+			])
+
+			expect(results).toEqual(['api users', 'v2 users', 'static'])
+		})
+
+		it('should prefer method-specific route when equally specific', async () => {
+			const app = new Elysia()
+				.all('/api/*', () => 'all api/*')
+				.get('/api/*', () => 'get api/*')
+
+			const getResponse = await app
+				.handle(new Request('http://localhost/api/test'))
+				.then((x) => x.text())
+
+			const postResponse = await app
+				.handle(
+					new Request('http://localhost/api/test', { method: 'POST' })
+				)
+				.then((x) => x.text())
+
+			expect(getResponse).toBe('get api/*')
+			expect(postResponse).toBe('all api/*')
+		})
+
+		it('should handle POST mount with POST wildcard', async () => {
+			const backend = new Elysia().post('/data', () => 'mounted POST')
+
+			const app = new Elysia()
+				.mount('/api', backend)
+				.post('/*', () => 'post wildcard')
+
+			const mountedResponse = await app
+				.handle(
+					new Request('http://localhost/api/data', { method: 'POST' })
+				)
+				.then((x) => x.text())
+
+			const wildcardResponse = await app
+				.handle(
+					new Request('http://localhost/other', { method: 'POST' })
+				)
+				.then((x) => x.text())
+
+			expect(mountedResponse).toBe('mounted POST')
+			expect(wildcardResponse).toBe('post wildcard')
+		})
+
+		it('should handle multiple HTTP methods in mount', async () => {
+			const backend = new Elysia()
+				.get('/data', () => 'GET data')
+				.post('/data', () => 'POST data')
+				.put('/data', () => 'PUT data')
+
+			const app = new Elysia()
+				.mount('/api', backend)
+				.get('/*', () => 'GET wildcard')
+				.post('/*', () => 'POST wildcard')
+
+			const results = await Promise.all([
+				app
+					.handle(new Request('http://localhost/api/data'))
+					.then((x) => x.text()),
+				app
+					.handle(
+						new Request('http://localhost/api/data', {
+							method: 'POST'
+						})
+					)
+					.then((x) => x.text()),
+				app
+					.handle(
+						new Request('http://localhost/api/data', {
+							method: 'PUT'
+						})
+					)
+					.then((x) => x.text()),
+				app
+					.handle(new Request('http://localhost/other'))
+					.then((x) => x.text())
+			])
+
+			expect(results).toEqual([
+				'GET data',
+				'POST data',
+				'PUT data',
+				'GET wildcard'
+			])
+		})
+	})
 })

@@ -2340,11 +2340,35 @@ export const composeGeneralHandler = (
 
 	const router = app.router
 
-	let findDynamicRoute = router.http.root.WS
-		? `const route=router.find(r.method==='GET'&&r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
-		: `const route=router.find(r.method,p)`
+	let findDynamicRoute: string
+	if (router.http.root.ALL) {
+		// When ALL routes exist, we need to compare specificity between
+		// method-specific and ALL routes to handle cases like:
+		// - GET /* (less specific) vs ALL /api/* (more specific)
+		// The route with shorter wildcard capture is more specific
+		const methodExpr = router.http.root.WS
+			? `router.find(r.method==='GET'&&r.headers.get('upgrade')==='websocket'?'WS':r.method,p)`
+			: `router.find(r.method,p)`
 
-	findDynamicRoute += router.http.root.ALL ? `??router.find('ALL',p)\n` : '\n'
+		findDynamicRoute =
+			`const mr=${methodExpr};` +
+			`const ar=router.find('ALL',p);` +
+			`let route;` +
+			`if(mr&&ar){` +
+			// Both matched - compare wildcard specificity
+			// Shorter wildcard capture = more specific route
+			`const mw=mr.params?.['*']||'';` +
+			`const aw=ar.params?.['*']||'';` +
+			// If method route has no wildcard (exact match), prefer it
+			// If ALL route has strictly shorter wildcard, prefer it (more specific)
+			// If wildcards are equal length, prefer method-specific (mr)
+			`route=mw.length===0?mr:aw.length<mw.length?ar:mr;` +
+			`}else{route=mr??ar;}\n`
+	} else {
+		findDynamicRoute = router.http.root.WS
+			? `const route=router.find(r.method==='GET'&&r.headers.get('upgrade')==='websocket'?'WS':r.method,p)\n`
+			: `const route=router.find(r.method,p)\n`
+	}
 
 	if (isWebstandard)
 		findDynamicRoute +=
