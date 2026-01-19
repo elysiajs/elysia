@@ -226,6 +226,20 @@ export const BunAdapter: ElysiaAdapter = {
 				options = parseInt(options)
 			}
 
+			// Collect mount prefixes to prevent wildcard static routes from overriding them
+			// Mount routes are registered as ALL with config.mount, often with paths like /api/*
+			const mountPrefixes = new Set<string>()
+			for (const route of app.router.history) {
+				if (route.hooks?.config?.mount && route.path.includes('*')) {
+					// Extract prefix from paths like /api/* or /v1/*
+					const prefix = route.path.slice(
+						0,
+						route.path.lastIndexOf('/*')
+					)
+					if (prefix) mountPrefixes.add(prefix)
+				}
+			}
+
 			const createStaticRoute = <
 				WithAsync extends boolean | undefined = false
 			>(
@@ -253,6 +267,20 @@ export const BunAdapter: ElysiaAdapter = {
 
 				for (let [path, route] of Object.entries(iterator)) {
 					path = encodeURI(path)
+
+					// Skip wildcard static routes that would override mount prefixes
+					// e.g., skip GET /* or /*/ if we have mounts like /api/* or /v1/*
+					// Note: Elysia registers both /* and /*/ variants for wildcard routes
+					if (mountPrefixes.size > 0) {
+						const isRootWildcard =
+							path === '/*' ||
+							path === '/*/' ||
+							path === '/' ||
+							path === ''
+						if (isRootWildcard) {
+							continue
+						}
+					}
 
 					if (supportPerMethodInlineHandler) {
 						if (!route) continue
