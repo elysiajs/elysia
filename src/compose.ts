@@ -2356,13 +2356,17 @@ export const composeGeneralHandler = (
 			`let route;` +
 			`if(mr&&ar){` +
 			// Both matched - compare wildcard specificity
-			// Shorter wildcard capture = more specific route
-			`const mw=mr.params?.['*']||'';` +
-			`const aw=ar.params?.['*']||'';` +
+			// Explicitly check for '*' param presence to distinguish:
+			// - no wildcard (exact match) vs empty capture vs non-empty capture
+			`const mHas=mr.params&&Object.prototype.hasOwnProperty.call(mr.params,'*');` +
+			`const aHas=ar.params&&Object.prototype.hasOwnProperty.call(ar.params,'*');` +
+			`const mw=mHas?mr.params['*']:'';` +
+			`const aw=aHas?ar.params['*']:'';` +
 			// If method route has no wildcard (exact match), prefer it
-			// If ALL route has strictly shorter wildcard, prefer it (more specific)
-			// If wildcards are equal length, prefer method-specific (mr)
-			`route=mw.length===0?mr:aw.length<mw.length?ar:mr;` +
+			// Else if ALL route has no wildcard (exact match), prefer it
+			// Otherwise compare capture lengths - shorter is more specific
+			// If equal length, prefer method-specific (mr)
+			`route=!mHas?mr:!aHas?ar:aw.length<mw.length?ar:mr;` +
 			`}else{route=mr??ar;}\n`
 	} else {
 		findDynamicRoute = router.http.root.WS
