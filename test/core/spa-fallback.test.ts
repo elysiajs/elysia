@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'bun:test'
 import { Elysia } from '../../src'
 
+// Note: These tests use fetch() to the actual server instead of .handle()
+// because the fix is in Bun's static route table optimization, which only
+// applies when using Bun.serve, not when using .handle() directly.
+
 describe('SPA Fallback Routing - Issue #1515', () => {
 	it('handles mount routes with root wildcard static response', async () => {
 		const backend = new Elysia().get('/users', () => ({
@@ -16,13 +20,9 @@ describe('SPA Fallback Routing - Issue #1515', () => {
 			.get('/*', staticHtml)
 			.listen(0)
 
-		const apiResponse = await app
-			.handle(new Request(`http://localhost/api/users`))
-			.then((r) => r.json())
-
-		const spaResponse = await app
-			.handle(new Request(`http://localhost/other`))
-			.then((r) => r.text())
+		const port = app.server!.port
+		const apiResponse = await fetch(`http://localhost:${port}/api/users`).then((r) => r.json())
+		const spaResponse = await fetch(`http://localhost:${port}/other`).then((r) => r.text())
 
 		expect(apiResponse).toEqual({ users: ['alice', 'bob'] })
 		expect(spaResponse).toContain('SPA')
@@ -43,17 +43,10 @@ describe('SPA Fallback Routing - Issue #1515', () => {
 			.get('/*', staticHtml)
 			.listen(0)
 
-		const api1 = await app
-			.handle(new Request('http://localhost/api/users'))
-			.then((r) => r.json())
-
-		const api2 = await app
-			.handle(new Request('http://localhost/v2/users'))
-			.then((r) => r.json())
-
-		const spa = await app
-			.handle(new Request('http://localhost/other'))
-			.then((r) => r.text())
+		const port = app.server!.port
+		const api1 = await fetch(`http://localhost:${port}/api/users`).then((r) => r.json())
+		const api2 = await fetch(`http://localhost:${port}/v2/users`).then((r) => r.json())
+		const spa = await fetch(`http://localhost:${port}/other`).then((r) => r.text())
 
 		expect(api1).toEqual({ users: ['test'] })
 		expect(api2).toEqual({ users: ['test'] })
@@ -74,13 +67,9 @@ describe('SPA Fallback Routing - Issue #1515', () => {
 			.mount('/api', backend)
 			.listen(0)
 
-		const api = await app
-			.handle(new Request('http://localhost/api/users'))
-			.then((r) => r.json())
-
-		const spa = await app
-			.handle(new Request('http://localhost/other'))
-			.then((r) => r.text())
+		const port = app.server!.port
+		const api = await fetch(`http://localhost:${port}/api/users`).then((r) => r.json())
+		const spa = await fetch(`http://localhost:${port}/other`).then((r) => r.text())
 
 		expect(api).toEqual({ data: 'api' })
 		expect(spa).toContain('SPA')
@@ -100,9 +89,8 @@ describe('SPA Fallback Routing - Issue #1515', () => {
 			.get('/*', staticHtml)
 			.listen(0)
 
-		const response = await app
-			.handle(new Request('http://localhost/api/auth', { method: 'POST' }))
-			.then((r) => r.json())
+		const port = app.server!.port
+		const response = await fetch(`http://localhost:${port}/api/auth`, { method: 'POST' }).then((r) => r.json())
 
 		expect(response).toEqual({ token: 'xyz' })
 
@@ -121,13 +109,9 @@ describe('SPA Fallback Routing - Issue #1515', () => {
 			.get('/public/*', publicHtml)
 			.listen(0)
 
-		const api = await app
-			.handle(new Request('http://localhost/api/users'))
-			.then((r) => r.json())
-
-		const publicAsset = await app
-			.handle(new Request('http://localhost/public/asset.js'))
-			.then((r) => r.text())
+		const port = app.server!.port
+		const api = await fetch(`http://localhost:${port}/api/users`).then((r) => r.json())
+		const publicAsset = await fetch(`http://localhost:${port}/public/asset.js`).then((r) => r.text())
 
 		expect(api).toEqual({ data: 'api' })
 		expect(publicAsset).toContain('Public')
@@ -145,13 +129,9 @@ describe('SPA Fallback Routing - Issue #1515', () => {
 			.get('/*', staticHtml)
 			.listen(0)
 
-		const api = await app
-			.handle(new Request('http://localhost/api/users'))
-			.then((r) => r.json())
-
-		const spa = await app
-			.handle(new Request('http://localhost/other'))
-			.then((r) => r.text())
+		const port = app.server!.port
+		const api = await fetch(`http://localhost:${port}/api/users`).then((r) => r.json())
+		const spa = await fetch(`http://localhost:${port}/other`).then((r) => r.text())
 
 		expect(api).toEqual({ users: ['alice'] })
 		expect(spa).toContain('SPA')
@@ -171,13 +151,9 @@ describe('SPA Fallback Routing - Issue #1515', () => {
 			.get('/*', staticHtml)
 			.listen(0)
 
-		const api = await app
-			.handle(new Request('http://localhost/api/v1/status'))
-			.then((r) => r.json())
-
-		const spa = await app
-			.handle(new Request('http://localhost/other'))
-			.then((r) => r.text())
+		const port = app.server!.port
+		const api = await fetch(`http://localhost:${port}/api/v1/status`).then((r) => r.json())
+		const spa = await fetch(`http://localhost:${port}/other`).then((r) => r.text())
 
 		expect(api).toEqual({ status: 'ok' })
 		expect(spa).toContain('SPA')

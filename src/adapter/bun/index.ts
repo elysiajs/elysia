@@ -266,12 +266,15 @@ export const BunAdapter: ElysiaAdapter = {
 					path = encodeURI(path)
 
 					// Skip wildcard static routes that would override mount prefixes
-					// e.g., skip GET /* if we have mounts like /api/* or /v1/*
-					if (path.endsWith('/*') && mountPrefixes.size > 0) {
-						const wildcardPrefix = path.slice(0, -2) // Remove /*
-						// If this is a root wildcard /* and we have any mounts, skip it
-						// to let the dynamic router handle route priority correctly
-						if (wildcardPrefix === '' || wildcardPrefix === '/') {
+					// e.g., skip GET /* or /*/ if we have mounts like /api/* or /v1/*
+					// Note: Elysia registers both /* and /*/ variants for wildcard routes
+					if (mountPrefixes.size > 0) {
+						const isRootWildcard =
+							path === '/*' ||
+							path === '/*/' ||
+							path === '/' ||
+							path === ''
+						if (isRootWildcard) {
 							continue
 						}
 					}
