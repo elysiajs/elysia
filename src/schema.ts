@@ -659,8 +659,12 @@ export const getSchemaValidator = <
 			// @see https://github.com/elysiajs/elysia/issues/1670
 			// @ts-ignore - type predicate signature mismatch is intentional for Standard Schema
 			Check: (value: unknown) => Check(serializeDates(value)),
-			// @ts-ignore
-			Errors: (value: unknown) => Check(serializeDates(value))?.then?.((x) => x?.issues),
+			// @ts-ignore - returns iterable synchronously for spread/First() usage
+			Errors: (value: unknown) => {
+				const res = Check(serializeDates(value))
+				if (res && typeof (res as any).then === 'function') return []
+				return (res as { issues?: unknown[] })?.issues ?? []
+			},
 			Code: () => '',
 			// @ts-ignore
 			Decode: Check,
