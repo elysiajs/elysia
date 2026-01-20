@@ -619,6 +619,38 @@ export const ElysiaType = {
 				return value
 			})
 			.Encode((value) => value) as any as TUnsafe<Uint8Array>
+	},
+
+	/**
+	 * Wraps an external TypeBox schema to make it compatible with Elysia's type system.
+	 *
+	 * This is useful when using schemas from packages that use a different TypeBox instance,
+	 * such as `drizzle-typebox`, where TypeScript's unique symbol for `Kind` causes
+	 * type incompatibility even though the schemas are structurally identical.
+	 *
+	 * @example
+	 * ```typescript
+	 * import { createSelectSchema } from 'drizzle-typebox'
+	 * import { t, Elysia } from 'elysia'
+	 *
+	 * const userTable = pgTable('users', { id: integer('id'), name: text('name') })
+	 * const UserSchema = createSelectSchema(userTable)
+	 *
+	 * // Wrap the external schema to make it compatible
+	 * const app = new Elysia()
+	 *   .get('/users', () => [], {
+	 *     response: t.Array(t.External(UserSchema))
+	 *   })
+	 * ```
+	 *
+	 * @param schema - An external TypeBox schema
+	 * @returns The schema cast to Elysia's TSchema type
+	 * @see https://github.com/elysiajs/elysia/issues/1688
+	 */
+	External: <T extends { static: unknown; params: unknown[] }>(
+		schema: T
+	): TUnsafe<T['static']> => {
+		return schema as unknown as TUnsafe<T['static']>
 	}
 }
 
@@ -670,6 +702,7 @@ t.Form = ElysiaType.Form
 
 t.ArrayBuffer = ElysiaType.ArrayBuffer
 t.Uint8Array = ElysiaType.Uint8Array as any
+t.External = ElysiaType.External
 
 export { t }
 
