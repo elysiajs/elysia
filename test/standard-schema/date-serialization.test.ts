@@ -152,6 +152,7 @@ describe('Date Serialization', () => {
 			'~standard': {
 				version: 1,
 				vendor: 'mock',
+				types: undefined as unknown as { input: unknown; output: Date | string },
 				validate: (value: unknown) => {
 					if (typeof value === 'string') {
 						// Check if valid ISO date string
@@ -198,6 +199,7 @@ describe('Date Serialization', () => {
 				'~standard': {
 					version: 1,
 					vendor: 'mock',
+					types: undefined as unknown as { input: unknown; output: { name: string; createdAt: Date | string } },
 					validate: (value: unknown) => {
 						if (
 							typeof value === 'object' &&
