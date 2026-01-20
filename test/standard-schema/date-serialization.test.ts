@@ -99,6 +99,51 @@ describe('Date Serialization', () => {
 			const result = serializeDates([invalidDate, validDate])
 			expect(result).toEqual([null, '2026-01-20T12:00:00.000Z'])
 		})
+
+		it('should call toJSON method on objects (matching JSON.stringify)', () => {
+			const customObj = {
+				value: 42,
+				toJSON() {
+					return { serialized: this.value }
+				}
+			}
+			const result = serializeDates(customObj)
+			expect(result).toEqual({ serialized: 42 })
+			// Verify it matches JSON.stringify behavior
+			expect(result).toEqual(JSON.parse(JSON.stringify(customObj)))
+		})
+
+		it('should handle nested toJSON with Date inside', () => {
+			const date = new Date('2026-01-20T12:00:00.000Z')
+			const customObj = {
+				toJSON() {
+					return { timestamp: date }
+				}
+			}
+			const result = serializeDates(customObj)
+			expect(result).toEqual({ timestamp: '2026-01-20T12:00:00.000Z' })
+		})
+
+		it('should handle toJSON returning primitive', () => {
+			const customObj = {
+				toJSON() {
+					return 'custom-string'
+				}
+			}
+			const result = serializeDates(customObj)
+			expect(result).toBe('custom-string')
+		})
+
+		it('should handle toJSON returning array with dates', () => {
+			const date = new Date('2026-01-20T12:00:00.000Z')
+			const customObj = {
+				toJSON() {
+					return [date, 'other']
+				}
+			}
+			const result = serializeDates(customObj)
+			expect(result).toEqual(['2026-01-20T12:00:00.000Z', 'other'])
+		})
 	})
 
 	describe('Standard Schema with Date response', () => {

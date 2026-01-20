@@ -390,6 +390,11 @@ export const serializeDates = (value: unknown): unknown => {
 	if (value instanceof Date)
 		return Number.isNaN(value.getTime()) ? null : value.toISOString()
 
+	// Handle objects with toJSON method to maintain JSON.stringify semantics
+	// This must come before array/object traversal to properly handle custom serialization
+	if (value && typeof (value as any).toJSON === 'function')
+		return serializeDates((value as any).toJSON())
+
 	if (Array.isArray(value)) return value.map(serializeDates)
 
 	if (typeof value === 'object') {
