@@ -375,6 +375,36 @@ export const hasTransform = (schema: TAnySchema): boolean => {
 	return TransformKind in schema
 }
 
+/**
+ * Recursively serialize Date objects to ISO strings.
+ *
+ * This mimics JSON.stringify's behavior for Date objects,
+ * ensuring that response validation works correctly when
+ * using Standard Schema validators (Zod, Effect, etc.) with dates.
+ *
+ * @see https://github.com/elysiajs/elysia/issues/1670
+ */
+export const serializeDates = (value: unknown): unknown => {
+	if (value === null || value === undefined) return value
+
+	if (value instanceof Date)
+		return Number.isNaN(value.getTime()) ? null : value.toISOString()
+
+	if (Array.isArray(value)) return value.map(serializeDates)
+
+	if (typeof value === 'object') {
+		const result: Record<string, unknown> = {}
+		for (const key in value) {
+			if (Object.prototype.hasOwnProperty.call(value, key)) {
+				result[key] = serializeDates((value as Record<string, unknown>)[key])
+			}
+		}
+		return result
+	}
+
+	return value
+}
+
 const createCleaner = (schema: TAnySchema) => (value: unknown) => {
 	if (typeof value === 'object')
 		try {
@@ -618,15 +648,20 @@ export const getSchemaValidator = <
 			references: '',
 			checkFunc: () => {},
 			code: '',
+			// Wrap Check to serialize dates before validation
+			// This ensures Date objects are converted to ISO strings
+			// before the schema validates them, matching JSON.stringify behavior
+			// @see https://github.com/elysiajs/elysia/issues/1670
+			// @ts-ignore - type predicate signature mismatch is intentional for Standard Schema
+			Check: (value: unknown) => Check(serializeDates(value)),
 			// @ts-ignore
-			Check,
-			// @ts-ignore
-			Errors: (value: unknown) => Check(value)?.then?.((x) => x?.issues),
+			Errors: (value: unknown) => Check(serializeDates(value))?.then?.((x) => x?.issues),
 			Code: () => '',
 			// @ts-ignore
 			Decode: Check,
-			// @ts-ignore
-			Encode: (value: unknown) => value,
+			// Serialize Date objects to ISO strings for JSON compatibility
+			// @ts-ignore - return type mismatch is intentional for Standard Schema
+			Encode: serializeDates,
 			hasAdditionalProperties: false,
 			hasDefault: false,
 			isOptional: false,
@@ -831,12 +866,14 @@ export const getSchemaValidator = <
 				references: '',
 				checkFunc: () => {},
 				code: '',
-				// @ts-ignore
-				Check: (v) => schema['~standard'].validate(v),
+				// Serialize dates before validation to match JSON.stringify behavior
+				// @see https://github.com/elysiajs/elysia/issues/1670
+				// @ts-ignore - type predicate signature mismatch is intentional for Standard Schema
+				Check: (v) => schema['~standard'].validate(serializeDates(v)),
 				// @ts-ignore
 				Errors(value: unknown) {
 					// @ts-ignore
-					const response = schema['~standard'].validate(value)
+					const response = schema['~standard'].validate(serializeDates(value))
 
 					if (response instanceof Promise)
 						throw Error(
@@ -858,8 +895,9 @@ export const getSchemaValidator = <
 
 					return response
 				},
-				// @ts-ignore
-				Encode: (value: unknown) => value,
+				// Serialize Date objects to ISO strings for JSON compatibility
+				// @ts-ignore - return type mismatch is intentional for Standard Schema
+				Encode: serializeDates,
 				hasAdditionalProperties: false,
 				hasDefault: false,
 				isOptional: false,
@@ -941,7 +979,7 @@ export const getSchemaValidator = <
 			references: '',
 			checkFunc(value: unknown) {
 				// @ts-ignore
-				const response = schema['~standard'].validate(value)
+				const response = schema['~standard'].validate(serializeDates(value))
 
 				if (response instanceof Promise)
 					throw Error(
@@ -951,12 +989,14 @@ export const getSchemaValidator = <
 				return response
 			},
 			code: '',
-			// @ts-ignore
-			Check: (v) => schema['~standard'].validate(v),
+			// Serialize dates before validation to match JSON.stringify behavior
+			// @see https://github.com/elysiajs/elysia/issues/1670
+			// @ts-ignore - type predicate signature mismatch is intentional for Standard Schema
+			Check: (v) => schema['~standard'].validate(serializeDates(v)),
 			// @ts-ignore
 			Errors(value: unknown) {
 				// @ts-ignore
-				const response = schema['~standard'].validate(value)
+				const response = schema['~standard'].validate(serializeDates(value))
 
 				if (response instanceof Promise)
 					throw Error(
@@ -978,8 +1018,9 @@ export const getSchemaValidator = <
 
 				return response
 			},
-			// @ts-ignore
-			Encode: (value: unknown) => value,
+			// Serialize Date objects to ISO strings for JSON compatibility
+			// @ts-ignore - return type mismatch is intentional for Standard Schema
+			Encode: serializeDates,
 			hasAdditionalProperties: false,
 			hasDefault: false,
 			isOptional: false,
