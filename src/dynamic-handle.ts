@@ -24,6 +24,24 @@ export type DynamicHandler = {
 	route: string
 }
 
+const setNestedValue = (
+	obj: Record<string, any>,
+	path: string,
+	value: any
+) => {
+	const keys = path.split('.')
+	const lastKey = keys.pop()!
+
+	let current = obj
+	for (const key of keys) {
+		if (!(key in current) || typeof current[key] !== 'object' || current[key] === null)
+			current[key] = {}
+		current = current[key]
+	}
+
+	current[lastKey] = value
+}
+
 const injectDefaultValues = (
 	typeChecker: TypeCheck<any> | ElysiaTypeCheck<any>,
 	obj: Record<string, any>
@@ -147,8 +165,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								if (body[key]) continue
 
 								const value = form.getAll(key)
-								if (value.length === 1) body[key] = value[0]
-								else body[key] = value
+								const finalValue = value.length === 1 ? value[0] : value
+
+								if (key.includes('.'))
+									setNestedValue(body, key, finalValue)
+								else body[key] = finalValue
 							}
 
 							break
@@ -205,9 +226,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 												if (body[key]) continue
 
 												const value = form.getAll(key)
-												if (value.length === 1)
-													body[key] = value[0]
-												else body[key] = value
+												const finalValue = value.length === 1 ? value[0] : value
+
+												if (key.includes('.'))
+													setNestedValue(body, key, finalValue)
+												else body[key] = finalValue
 											}
 
 											break
@@ -273,9 +296,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 										if (body[key]) continue
 
 										const value = form.getAll(key)
-										if (value.length === 1)
-											body[key] = value[0]
-										else body[key] = value
+										const finalValue = value.length === 1 ? value[0] : value
+
+										if (key.includes('.'))
+											setNestedValue(body, key, finalValue)
+										else body[key] = finalValue
 									}
 
 									break

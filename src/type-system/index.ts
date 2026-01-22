@@ -311,6 +311,15 @@ export const ElysiaType = {
 				)
 			)
 			.Decode((value) => {
+				// Case 1: Already an object (from dot notation reconstruction)
+				if (typeof value === 'object' && value !== null) {
+					if (!compiler.Check(value))
+						throw compiler.Error(value)
+
+					return compiler.Decode(value)
+				}
+
+				// Case 2: JSON string (from stringify or manual)
 				if (typeof value === 'string') {
 					if (value.charCodeAt(0) !== 123)
 						throw new ValidationError('property', schema, value)
@@ -331,7 +340,7 @@ export const ElysiaType = {
 				if (!compiler.Check(value)) throw compiler.Error(value)
 
 				return original ?? JSON.stringify(value)
-			}) as any as TObject<T>
+			}) as any as TObject<T> & { readonly __elysia_objectstring__?: unique symbol }
 	},
 
 	ArrayString: <T extends TSchema = TString>(
@@ -410,7 +419,7 @@ export const ElysiaType = {
 					throw new ValidationError('property', schema, value)
 
 				return original ?? JSON.stringify(value)
-			}) as any as TArray<T>
+			}) as any as TArray<T> & { readonly __elysia_arraystring__?: unique symbol }
 	},
 
 	ArrayQuery: <T extends TSchema = TString>(

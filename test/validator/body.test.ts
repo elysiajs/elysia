@@ -1156,4 +1156,146 @@ describe('Body Validator', () => {
 
 		expect(err instanceof ValidationError).toBe(true)
 	})
+
+	it('handle nested file upload with dot notation', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				userName: body.user.name,
+				fileSize: body.user.avatar.size
+			}),
+			{
+				body: t.Object({
+					user: t.Object({
+						name: t.String(),
+						avatar: t.File()
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('user.name', 'John')
+		formData.append('user.avatar', Bun.file('test/images/millenium.jpg'))
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result.userName).toBe('John')
+		expect(result.fileSize).toBeGreaterThan(0)
+	})
+
+	it('handle deeply nested file upload', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				bio: body.user.profile.bio,
+				photoSize: body.user.profile.photo.size
+			}),
+			{
+				body: t.Object({
+					user: t.Object({
+						profile: t.Object({
+							bio: t.String(),
+							photo: t.File()
+						})
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('user.profile.bio', 'Hello World')
+		formData.append('user.profile.photo', Bun.file('test/images/millenium.jpg'))
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result.bio).toBe('Hello World')
+		expect(result.photoSize).toBeGreaterThan(0)
+	})
+
+	it('handle multiple nested files', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				avatarSize: body.user.avatar.size,
+				coverSize: body.user.cover.size
+			}),
+			{
+				body: t.Object({
+					user: t.Object({
+						avatar: t.File(),
+						cover: t.File()
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('user.avatar', Bun.file('test/images/millenium.jpg'))
+		formData.append('user.cover', Bun.file('test/images/kozeki-ui.webp'))
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result.avatarSize).toBeGreaterThan(0)
+		expect(result.coverSize).toBeGreaterThan(0)
+	})
+
+	it('handle mixed nested and flat fields', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				flatValue: body.flat,
+				nestedName: body.user.name,
+				nestedFileSize: body.user.avatar.size
+			}),
+			{
+				body: t.Object({
+					flat: t.String(),
+					user: t.Object({
+						name: t.String(),
+						avatar: t.File()
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('flat', 'I am flat')
+		formData.append('user.name', 'Jane')
+		formData.append('user.avatar', Bun.file('test/images/millenium.jpg'))
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result.flatValue).toBe('I am flat')
+		expect(result.nestedName).toBe('Jane')
+		expect(result.nestedFileSize).toBeGreaterThan(0)
+	})
 })
