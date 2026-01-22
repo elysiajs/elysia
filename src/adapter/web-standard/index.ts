@@ -51,9 +51,18 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`for(const key of form.keys()){` +
 					`if(c.body[key]) continue\n` +
 					`const value=form.getAll(key)\n` +
-					`if(value.length===1)` +
-					`c.body[key]=value[0]\n` +
-					`else c.body[key]=value` +
+					`const finalValue=value.length===1?value[0]:value\n` +
+					`if(key.includes('.')){` +
+					`const keys=key.split('.')\n` +
+					`const lastKey=keys.pop()\n` +
+					`let current=c.body\n` +
+					`for(const k of keys){` +
+					`if(!(k in current)||typeof current[k]!=='object'||current[k]===null)` +
+					`current[k]={}\n` +
+					`current=current[k]` +
+					`}\n` +
+					`current[lastKey]=finalValue` +
+					`}else c.body[key]=finalValue` +
 					`}`
 				)
 			}
