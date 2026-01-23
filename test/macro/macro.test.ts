@@ -1438,4 +1438,35 @@ describe('Macro', () => {
 
 		expect(invalid3.status).toBe(422)
 	})
+
+	// Issue #1574: Named macros with function syntax should infer previous macro resolve types
+	it('infer previous macro resolve in function syntax (issue #1574)', async () => {
+		const app = new Elysia()
+			.macro('auth', {
+				resolve: () => ({
+					user: 'authenticated-user' as const
+				})
+			})
+			.macro('permission', (permission: string) => ({
+				auth: true,
+				// The 'user' type should be inferred from the 'auth' macro's resolve
+				resolve: ({ user }) => ({
+					permission,
+					userFromAuth: user
+				})
+			}))
+			.get('/', ({ userFromAuth, permission }) => ({
+				user: userFromAuth,
+				permission
+			}), {
+				permission: 'admin'
+			})
+
+		const response = await app.handle(req('/')).then((x) => x.json())
+
+		expect(response).toEqual({
+			user: 'authenticated-user',
+			permission: 'admin'
+		})
+	})
 })
