@@ -5261,6 +5261,101 @@ export default class Elysia<
 		return this
 	}
 
+	/**
+	 * Named macro with explicit dependencies (function syntax)
+	 *
+	 * Use this overload when you need a function-syntax named macro that
+	 * accesses resolve values from previous macros. The `dependencies` array
+	 * explicitly declares which macros this macro depends on, enabling proper
+	 * TypeScript inference for the resolve context.
+	 *
+	 * @example
+	 * ```typescript
+	 * .macro("auth", { resolve: () => ({ user: "bob" }) })
+	 * .macro("permission", ["auth"], (perm: string) => ({
+	 *     auth: true,
+	 *     resolve: ({ user }) => {
+	 *         // `user` is properly inferred from auth's resolve
+	 *         return { hasPermission: checkPermission(user, perm) }
+	 *     }
+	 * }))
+	 * ```
+	 *
+	 * @see https://github.com/elysiajs/elysia/issues/1574
+	 */
+	macro<
+		const Name extends string,
+		const Dependencies extends ReadonlyArray<
+			keyof Metadata['macroFn'] & string
+		>,
+		const DependencyMacros extends Pick<
+			Metadata['macroFn'],
+			Dependencies[number]
+		>,
+		const MacroContext extends MacroToContext<
+			Metadata['macroFn'],
+			// Create a selector object with all dependencies set to true
+			{ [K in Dependencies[number]]: true },
+			Definitions['typebox']
+		>,
+		const Schema extends MergeSchema<
+			Metadata['schema'],
+			MergeSchema<
+				Volatile['schema'],
+				MergeSchema<Ephemeral['schema'], MacroContext>
+			> &
+				Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const Params,
+		const Property extends (
+			param: Params
+		) => MacroProperty<
+			Metadata['macro'] &
+				InputSchema<keyof Definitions['typebox'] & string> & {
+					[name in Name]?: boolean
+				} & { [K in Dependencies[number]]?: boolean },
+			Schema,
+			Singleton & {
+				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
+				resolve: Partial<Ephemeral['resolve'] & Volatile['resolve']> &
+					// @ts-ignore
+					MacroContext['resolve']
+			},
+			Definitions['error']
+		>
+	>(
+		name: Name,
+		dependencies: Dependencies,
+		macro: Property
+	): Elysia<
+		BasePath,
+		Singleton,
+		Definitions,
+		{
+			schema: Metadata['schema']
+			standaloneSchema: Metadata['standaloneSchema']
+			macro: Metadata['macro'] & {
+				[name in Name]?: Params
+			}
+			macroFn: Metadata['macroFn'] & {
+				[name in Name]: Property
+			}
+			parser: Metadata['parser']
+			response: Metadata['response']
+		},
+		Routes,
+		Ephemeral,
+		Volatile
+	>
+
+	/**
+	 * Named macro (object or simple function syntax)
+	 *
+	 * For macros that don't need to access previous macro resolve values,
+	 * or for object-syntax named macros.
+	 */
 	macro<
 		const Name extends string,
 		const Input extends Metadata['macro'] &
@@ -5415,7 +5510,23 @@ export default class Elysia<
 		Volatile
 	>
 
-	macro(macroOrName: string | Macro, macro?: Macro) {
+	macro(
+		macroOrName: string | Macro,
+		dependenciesOrMacro?: ReadonlyArray<string> | Macro,
+		macroDep?: Macro
+	) {
+		// Handle new overload: macro(name, dependencies, macro)
+		if (
+			typeof macroOrName === 'string' &&
+			Array.isArray(dependenciesOrMacro)
+		) {
+			if (!macroDep) throw new Error('Macro function is required')
+			this.extender.macro[macroOrName] = macroDep
+			return this as any
+		}
+
+		const macro = dependenciesOrMacro as Macro | undefined
+
 		if (typeof macroOrName === 'string' && !macro)
 			throw new Error('Macro function is required')
 

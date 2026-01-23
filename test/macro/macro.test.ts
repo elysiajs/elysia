@@ -1438,4 +1438,117 @@ describe('Macro', () => {
 
 		expect(invalid3.status).toBe(422)
 	})
+
+	it('infer previous macro resolve in function syntax with explicit dependencies (issue #1574)', async () => {
+		// This test verifies the fix for issue #1574
+		// https://github.com/elysiajs/elysia/issues/1574
+		//
+		// The new overload macro(name, dependencies, fn) allows function-syntax
+		// named macros to properly infer resolve types from previous macros
+		// by explicitly declaring dependencies.
+
+		const app = new Elysia()
+			.macro('auth', {
+				resolve: () => ({ user: 'bob' as const })
+			})
+			// Using the new explicit dependencies syntax
+			.macro('permission', ['auth'], (permission: string) => ({
+				auth: true,
+				resolve: ({ user }) => {
+					// `user` should be properly inferred as 'bob'
+					// This would fail TypeScript compilation if inference doesn't work
+					const typedUser: 'bob' = user
+					return { hasPermission: user === 'bob' && permission === 'admin' }
+				}
+			}))
+			.get('/check', ({ hasPermission }) => ({ hasPermission }), {
+				permission: 'admin'
+			})
+
+		const response = await app.handle(req('/check'))
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ hasPermission: true })
+	})
+
+	it('handle multiple dependencies in function syntax macro', async () => {
+		const app = new Elysia()
+			.macro('auth', {
+				resolve: () => ({ user: { id: 1, name: 'Alice' } })
+			})
+			.macro('tenant', {
+				resolve: () => ({ tenantId: 'tenant-123' })
+			})
+			// Depending on both auth and tenant
+			.macro('permissions', ['auth', 'tenant'], (role: string) => ({
+				auth: true,
+				tenant: true,
+				resolve: ({ user, tenantId }) => ({
+					canAccess: user.id === 1 && tenantId === 'tenant-123' && role === 'admin'
+				})
+			}))
+			.get('/access', ({ canAccess }) => ({ canAccess }), {
+				permissions: 'admin'
+			})
+
+		const response = await app.handle(req('/access'))
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ canAccess: true })
+	})
+
+	it('chain function syntax macros with dependencies', async () => {
+		const app = new Elysia()
+			.macro('a', {
+				resolve: () => ({ valueA: 'A' as const })
+			})
+			.macro('b', ['a'], (_: boolean) => ({
+				a: true,
+				resolve: ({ valueA }) => ({
+					valueB: `${valueA}-B` as const
+				})
+			}))
+			.macro('c', ['a', 'b'], (_: boolean) => ({
+				a: true,
+				b: true,
+				resolve: ({ valueA, valueB }) => ({
+					valueC: `${valueA}-${valueB}-C` as const
+				})
+			}))
+			// Use the macro at route level - the handler receives the resolved values
+			// Note: Type inference for route handler when using transitive macro dependencies
+			// is complex; the runtime behavior is correct even if types need explicit annotation
+			.get('/chain', (ctx) => ({
+				valueA: (ctx as any).valueA,
+				valueB: (ctx as any).valueB,
+				valueC: (ctx as any).valueC
+			}), {
+				c: true
+			})
+
+		const response = await app.handle(req('/chain'))
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({
+			valueA: 'A',
+			valueB: 'A-B',
+			valueC: 'A-A-B-C'
+		})
+	})
+
+	it('function syntax macro without dependencies still works', async () => {
+		// Verify that simple function macros without resolve dependencies
+		// continue to work with the existing syntax (no dependencies array)
+		const app = new Elysia()
+			.macro('logger', (prefix: string) => ({
+				beforeHandle: () => {
+					// Just a side effect, no resolve needed
+				},
+				resolve: () => ({ logPrefix: prefix })
+			}))
+			.get('/', ({ logPrefix }) => ({ prefix: logPrefix }), {
+				logger: 'TEST'
+			})
+
+		const response = await app.handle(req('/'))
+		expect(response.status).toBe(200)
+		expect(await response.json()).toEqual({ prefix: 'TEST' })
+	})
 })
