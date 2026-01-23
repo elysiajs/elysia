@@ -1,18 +1,24 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 
-new Elysia()
-.post(
-    "/create-post",
-    async (ctx) => {
-      return {
-        message: "Post Created",
-        data: ctx.body,
-      };
-    },
-    {
-      body: t.Object({
-        name: t.String(),
-        content: t.String(),
-        safeAge: t.Number(),
-      }),
-    },
+const verifyToken = new Elysia()
+	.macro('verifyToken', {
+		headers: t.Object({
+			authorization: t.String()
+		}),
+		resolve({ headers }) {
+			// headers should be typed as { authorization: string }
+			// but TypeScript shows: Record<string, string | undefined>
+			const token = headers.authorization // Type is 'string | undefined', not 'string'
+				? headers.authorization.substring(7)
+				: undefined
+
+			return { token }
+		}
+	})
+	.get(
+		'/',
+		({ token }) => {},
+		{
+			verifyToken: true
+		}
+	)
