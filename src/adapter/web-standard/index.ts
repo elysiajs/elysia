@@ -52,16 +52,35 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`if(c.body[key]) continue\n` +
 					`const value=form.getAll(key)\n` +
 					`const finalValue=value.length===1?value[0]:value\n` +
-					`if(key.includes('.')){` +
+					`if(key.includes('.')||key.includes('[')){` +
 					`const keys=key.split('.')\n` +
 					`const lastKey=keys.pop()\n` +
 					`let current=c.body\n` +
 					`for(const k of keys){` +
+					`const arrayMatch=k.match(/^(.+)\\[(\\d+)\\]$/)\n` +
+					`if(arrayMatch){` +
+					`const arrayKey=arrayMatch[1]\n` +
+					`const index=parseInt(arrayMatch[2],10)\n` +
+					`if(!(arrayKey in current))current[arrayKey]=[]\n` +
+					`if(!Array.isArray(current[arrayKey]))current[arrayKey]=[]\n` +
+					`if(!current[arrayKey][index])current[arrayKey][index]={}\n` +
+					`current=current[arrayKey][index]` +
+					`}else{` +
 					`if(!(k in current)||typeof current[k]!=='object'||current[k]===null)` +
 					`current[k]={}\n` +
 					`current=current[k]` +
+					`}` +
 					`}\n` +
+					`const lastArrayMatch=lastKey.match(/^(.+)\\[(\\d+)\\]$/)\n` +
+					`if(lastArrayMatch){` +
+					`const arrayKey=lastArrayMatch[1]\n` +
+					`const index=parseInt(lastArrayMatch[2],10)\n` +
+					`if(!(arrayKey in current))current[arrayKey]=[]\n` +
+					`if(!Array.isArray(current[arrayKey]))current[arrayKey]=[]\n` +
+					`current[arrayKey][index]=finalValue` +
+					`}else{` +
 					`current[lastKey]=finalValue` +
+					`}` +
 					`}else c.body[key]=finalValue` +
 					`}`
 				)
