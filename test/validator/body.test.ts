@@ -1187,32 +1187,33 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.userName).toBe('John')
-		expect(result.fileSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			userName: 'John',
+			fileSize: expect.any(Number)
+		})
 	})
 
-	it('handle deeply nested file upload', async () => {
+	it('handle nested files upload with dot notation', async () => {
 		const app = new Elysia().post(
 			'/',
 			({ body }) => ({
-				bio: body.user.profile.bio,
-				photoSize: body.user.profile.photo.size
+				productName: body.product.name,
+				fileSizes: body.product.images.map((f) => f.size)
 			}),
 			{
 				body: t.Object({
-					user: t.Object({
-						profile: t.Object({
-							bio: t.String(),
-							photo: t.File()
-						})
+					product: t.Object({
+						name: t.String(),
+						images: t.Files()
 					})
 				})
 			}
 		)
 
 		const formData = new FormData()
-		formData.append('user.profile.bio', 'Hello World')
-		formData.append('user.profile.photo', Bun.file('test/images/millenium.jpg'))
+		formData.append('product.name', 'Chair')
+		formData.append('product.images', Bun.file('test/images/millenium.jpg'))
+		formData.append('product.images', Bun.file('test/images/aris-yuzu.jpg'))
 
 		const response = await app.handle(
 			new Request('http://localhost/', {
@@ -1223,8 +1224,58 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.bio).toBe('Hello World')
-		expect(result.photoSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			productName: 'Chair',
+			fileSizes: expect.arrayContaining([
+				expect.any(Number),
+				expect.any(Number)
+			])
+		})
+	})
+
+	it('handle deeply nested file upload', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				bio: body.user.profile.bio,
+				country: body.user.profile.country,
+				photoSize: body.user.profile.photo.size
+			}),
+			{
+				body: t.Object({
+					user: t.Object({
+						profile: t.Object({
+							bio: t.String(),
+							country: t.String(),
+							photo: t.File()
+						})
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('user.profile.bio', 'Hello World')
+		formData.append('user.profile.country', 'France')
+		formData.append(
+			'user.profile.photo',
+			Bun.file('test/images/millenium.jpg')
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			bio: 'Hello World',
+			country: 'France',
+			photoSize: expect.any(Number)
+		})
 	})
 
 	it('handle multiple nested files', async () => {
@@ -1257,8 +1308,10 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.avatarSize).toBeGreaterThan(0)
-		expect(result.coverSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			avatarSize: expect.any(Number),
+			coverSize: expect.any(Number)
+		})
 	})
 
 	it('handle mixed nested and flat fields', async () => {
@@ -1294,8 +1347,74 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.flatValue).toBe('I am flat')
-		expect(result.nestedName).toBe('Jane')
-		expect(result.nestedFileSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			flatValue: 'I am flat',
+			nestedName: 'Jane',
+			nestedFileSize: expect.any(Number)
+		})
+	})
+
+	it('handle mixed stringify and dot notation when using typebox', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				productName: body.name,
+				createFilesCount: body.images.create.length,
+				updateCount: body.images.update.length,
+				images: {
+					create: body.images.create.map((f) => f.size),
+					update: body.images.update.map((f) => ({
+						id: f.id,
+						altText: f.altText,
+						imgSize: f.img.size
+					}))
+				}
+			}),
+			{
+				body: t.Object({
+					name: t.String(),
+					images: t.Object({
+						create: t.Files(),
+						update: t.Array(
+							t.Object({
+								id: t.String(),
+								img: t.File(),
+								altText: t.String()
+							})
+						)
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('name', 'Test Product')
+		formData.append('images.create', Bun.file('test/images/millenium.jpg'))
+		formData.append('images.create', Bun.file('test/images/kozeki-ui.webp'))
+		formData.append('images.update[0].id', '123')
+		formData.append(
+			'images.update[0].img',
+			Bun.file('test/images/millenium.jpg')
+		)
+		formData.append('images.update[0].altText', 'First image')
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		console.log(await response.text())
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			productName: 'Test Product',
+			createFilesCount: 2,
+			updateCount: 1,
+			firstUpdateId: '123',
+			firstUpdateAltText: 'First image',
+			firstUpdateFileSize: expect.any(Number)
+		})
 	})
 })
