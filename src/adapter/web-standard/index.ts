@@ -48,6 +48,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 
 				return (
 					fnLiteral +
+					`const dangerousKeys=['__proto__','constructor','prototype']\n` +
 					`for(const key of form.keys()){` +
 					`if(c.body[key]) continue\n` +
 					`const value=form.getAll(key)\n` +
@@ -55,6 +56,14 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`if(key.includes('.')||key.includes('[')){` +
 					`const keys=key.split('.')\n` +
 					`const lastKey=keys.pop()\n` +
+					`if(dangerousKeys.includes(lastKey))continue\n` +
+					`let hasBlockedKey=false\n` +
+					`for(const k of keys){` +
+					`const arrayMatch=k.match(/^(.+)\\[(\\d+)\\]$/)\n` +
+					`const keyToCheck=arrayMatch?arrayMatch[1]:k\n` +
+					`if(dangerousKeys.includes(keyToCheck)){hasBlockedKey=true;break}` +
+					`}\n` +
+					`if(hasBlockedKey)continue\n` +
 					`let current=c.body\n` +
 					`for(const k of keys){` +
 					`const arrayMatch=k.match(/^(.+)\\[(\\d+)\\]$/)\n` +
@@ -74,6 +83,7 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`const lastArrayMatch=lastKey.match(/^(.+)\\[(\\d+)\\]$/)\n` +
 					`if(lastArrayMatch){` +
 					`const arrayKey=lastArrayMatch[1]\n` +
+					`if(dangerousKeys.includes(arrayKey))continue\n` +
 					`const index=parseInt(lastArrayMatch[2],10)\n` +
 					`if(!(arrayKey in current))current[arrayKey]=[]\n` +
 					`if(!Array.isArray(current[arrayKey]))current[arrayKey]=[]\n` +
@@ -153,7 +163,10 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		},
 		error404(hasEventHook, hasErrorHook, afterHandle = '') {
 			let findDynamicRoute =
-				`if(route===null){` + afterHandle + (hasErrorHook ? '' : 'c.set.status=404') + '\nreturn '
+				`if(route===null){` +
+				afterHandle +
+				(hasErrorHook ? '' : 'c.set.status=404') +
+				'\nreturn '
 
 			if (hasErrorHook)
 				findDynamicRoute += `app.handleError(c,notFound,false,${this.parameters})`
