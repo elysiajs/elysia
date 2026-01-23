@@ -1417,4 +1417,70 @@ describe('Body Validator', () => {
 			firstUpdateFileSize: expect.any(Number)
 		})
 	})
+
+	it('handle complex nested array with files', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				productName: body.name,
+				createFilesCount: body.images.create.length,
+				updateCount: body.images.update.length,
+				images: {
+					create: body.images.create.map((f) => f.size),
+					update: body.images.update.map((f) => ({
+						id: f.id,
+						altText: f.altText,
+						imgSize: f.img.size
+					}))
+				}
+			}),
+			{
+				body: t.Object({
+					name: t.String(),
+					images: t.Object({
+						create: t.Files(),
+						update: t.Array(
+							t.Object({
+								id: t.String(),
+								img: t.File(),
+								altText: t.String()
+							})
+						)
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('name', 'My Product')
+		formData.append('images.create[0]', Bun.file('test/images/millenium.jpg'))
+		formData.append('images.create[1]', Bun.file('test/images/kozeki-ui.webp'))
+		formData.append('images.update[0].id', '1')
+		formData.append('images.update[0].img', Bun.file('test/images/midori.png'))
+		formData.append('images.update[0].altText', 'First image')
+		formData.append('images.update[1].id', '2')
+		formData.append('images.update[1].img', Bun.file('test/images/aris-yuzu.jpg'))
+		formData.append('images.update[1].altText', 'Second image')
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result.productName).toBe('My Product')
+		expect(result.createFilesCount).toBe(2)
+		expect(result.updateCount).toBe(2)
+		expect(result.images.create[0]).toBeGreaterThan(0)
+		expect(result.images.create[1]).toBeGreaterThan(0)
+		expect(result.images.update[0].id).toBe('1')
+		expect(result.images.update[0].altText).toBe('First image')
+		expect(result.images.update[0].imgSize).toBeGreaterThan(0)
+		expect(result.images.update[1].id).toBe('2')
+		expect(result.images.update[1].altText).toBe('Second image')
+		expect(result.images.update[1].imgSize).toBeGreaterThan(0)
+	})
 })

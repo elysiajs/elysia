@@ -29,17 +29,50 @@ const setNestedValue = (
 	path: string,
 	value: any
 ) => {
+	// Split by dots, but preserve array indices
 	const keys = path.split('.')
 	const lastKey = keys.pop()!
 
 	let current = obj
 	for (const key of keys) {
-		if (!(key in current) || typeof current[key] !== 'object' || current[key] === null)
-			current[key] = {}
-		current = current[key]
+		// Check if key has array index notation: key[0], key[1], etc.
+		const arrayMatch = key.match(/^(.+)\[(\d+)\]$/)
+
+		if (arrayMatch) {
+			const [, arrayKey, indexStr] = arrayMatch
+			const index = parseInt(indexStr, 10)
+
+			// Initialize array if needed
+			if (!(arrayKey in current)) current[arrayKey] = []
+
+			// Ensure it's an array
+			if (!Array.isArray(current[arrayKey])) current[arrayKey] = []
+
+			// Initialize object at index if needed
+			if (!current[arrayKey][index]) current[arrayKey][index] = {}
+
+			current = current[arrayKey][index]
+		} else {
+			// Regular object property
+			if (!(key in current) || typeof current[key] !== 'object' || current[key] === null)
+				current[key] = {}
+			current = current[key]
+		}
 	}
 
-	current[lastKey] = value
+	// Handle array index in last key
+	const arrayMatch = lastKey.match(/^(.+)\[(\d+)\]$/)
+	if (arrayMatch) {
+		const [, arrayKey, indexStr] = arrayMatch
+		const index = parseInt(indexStr, 10)
+
+		if (!(arrayKey in current)) current[arrayKey] = []
+		if (!Array.isArray(current[arrayKey])) current[arrayKey] = []
+
+		current[arrayKey][index] = value
+	} else {
+		current[lastKey] = value
+	}
 }
 
 const injectDefaultValues = (
@@ -167,7 +200,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								const value = form.getAll(key)
 								const finalValue = value.length === 1 ? value[0] : value
 
-								if (key.includes('.'))
+								if (key.includes('.') || key.includes('['))
 									setNestedValue(body, key, finalValue)
 								else body[key] = finalValue
 							}
@@ -228,7 +261,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 												const value = form.getAll(key)
 												const finalValue = value.length === 1 ? value[0] : value
 
-												if (key.includes('.'))
+												if (key.includes('.') || key.includes('['))
 													setNestedValue(body, key, finalValue)
 												else body[key] = finalValue
 											}
@@ -298,7 +331,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 										const value = form.getAll(key)
 										const finalValue = value.length === 1 ? value[0] : value
 
-										if (key.includes('.'))
+										if (key.includes('.') || key.includes('['))
 											setNestedValue(body, key, finalValue)
 										else body[key] = finalValue
 									}
