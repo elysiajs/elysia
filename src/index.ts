@@ -5261,126 +5261,6 @@ export default class Elysia<
 		return this
 	}
 
-	// Overload 1: Named macro with function syntax (fixes issue #1574)
-	// This overload handles: .macro("name", (param) => ({ resolve: ... }))
-	// For function syntax, we compute MacroContext from ALL previous macros
-	// because we can't infer which macros are selected before the function returns
-	macro<
-		const Name extends string,
-		// Compute MacroContext from all previous macros, assuming all are enabled
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					// Use all macro keys set to true to include all possible resolves
-					{ [K in keyof Metadata['macroFn']]: true },
-					Definitions['typebox']
-				>,
-		const Param,
-		const Property extends Metadata['macro'] &
-			MacroProperty<
-				Metadata['macro'] &
-					InputSchema<keyof Definitions['typebox'] & string> & {
-						[name in Name]?: boolean
-					},
-				MacroContext,
-				Singleton & {
-					derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-					resolve: Partial<
-						Ephemeral['resolve'] & Volatile['resolve']
-					> &
-						// @ts-ignore
-						MacroContext['resolve']
-				},
-				Definitions['error']
-			>
-	>(
-		name: Name,
-		macro: (param: Param) => Property
-	): Elysia<
-		BasePath,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			standaloneSchema: Metadata['standaloneSchema']
-			macro: Metadata['macro'] & {
-				[name in Name]?: Param
-			}
-			macroFn: Metadata['macroFn'] & {
-				[name in Name]: (param: Param) => Property
-			}
-			parser: Metadata['parser']
-			response: Metadata['response']
-		},
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
-	// Overload 2: Named macro with object syntax (original)
-	// This overload handles: .macro("name", { resolve: ... })
-	macro<
-		const Name extends string,
-		const Input extends Metadata['macro'] &
-			InputSchema<keyof Definitions['typebox'] & string>,
-		const Schema extends MergeSchema<
-			UnwrapRoute<Input, Definitions['typebox'], BasePath>,
-			MergeSchema<
-				Volatile['schema'],
-				MergeSchema<Ephemeral['schema'], Metadata['schema']>
-			> &
-				Metadata['standaloneSchema'] &
-				Ephemeral['standaloneSchema'] &
-				Volatile['standaloneSchema']
-		>,
-		const MacroContext extends {} extends Metadata['macroFn']
-			? {}
-			: MacroToContext<
-					Metadata['macroFn'],
-					Omit<Input, NonResolvableMacroKey>,
-					Definitions['typebox']
-				>,
-		const Property extends MacroProperty<
-			Metadata['macro'] &
-				InputSchema<keyof Definitions['typebox'] & string> & {
-					[name in Name]?: boolean
-				},
-			Schema & MacroContext,
-			Singleton & {
-				derive: Partial<Ephemeral['derive'] & Volatile['derive']>
-				resolve: Partial<
-					Ephemeral['resolve'] & Volatile['resolve']
-				> &
-					// @ts-ignore
-					MacroContext['resolve']
-			},
-			Definitions['error']
-		>
-	>(
-		name: Name,
-		macro: (Input extends any ? Input : Prettify<Input>) & Property
-	): Elysia<
-		BasePath,
-		Singleton,
-		Definitions,
-		{
-			schema: Metadata['schema']
-			standaloneSchema: Metadata['standaloneSchema']
-			macro: Metadata['macro'] & {
-				[name in Name]?: boolean
-			}
-			macroFn: Metadata['macroFn'] & {
-				[name in Name]: Property
-			}
-			parser: Metadata['parser']
-			response: Metadata['response']
-		},
-		Routes,
-		Ephemeral,
-		Volatile
-	>
-
 	macro<
 		const Name extends string,
 		const Input extends Metadata['macro'] &
@@ -5535,10 +5415,7 @@ export default class Elysia<
 		Volatile
 	>
 
-	macro(
-		macroOrName: string | Macro,
-		macro?: Macro | ((...args: any[]) => any)
-	) {
+	macro(macroOrName: string | Macro, macro?: Macro) {
 		if (typeof macroOrName === 'string' && !macro)
 			throw new Error('Macro function is required')
 
