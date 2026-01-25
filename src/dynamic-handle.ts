@@ -672,15 +672,25 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 				if (responseValidator?.Check(response) === false) {
 					if (responseValidator?.Clean) {
-						const temp = responseValidator.Clean(response)
-						if (responseValidator?.Check(temp) === false)
+						try {
+							const temp = responseValidator.Clean(response)
+							if (responseValidator?.Check(temp) === false)
+								throw new ValidationError(
+									'response',
+									responseValidator,
+									response
+								)
+
+							response = temp
+						} catch (error) {
+							if (error instanceof ValidationError) throw error
+
 							throw new ValidationError(
 								'response',
 								responseValidator,
 								response
 							)
-
-						response = temp
+						}
 					} else
 						throw new ValidationError(
 							'response',
@@ -693,7 +703,9 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					response = responseValidator.Encode(response)
 
 				if (responseValidator?.Clean)
-					response = responseValidator.Clean(response)
+					try {
+						response = responseValidator.Clean(response)
+					} catch {}
 			} else {
 				;(
 					context as Context & {
@@ -731,15 +743,25 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 					if (responseValidator?.Check(response) === false) {
 						if (responseValidator?.Clean) {
-							const temp = responseValidator.Clean(response)
-							if (responseValidator?.Check(temp) === false)
+							try {
+								const temp = responseValidator.Clean(response)
+								if (responseValidator?.Check(temp) === false)
+									throw new ValidationError(
+										'response',
+										responseValidator,
+										response
+									)
+
+								response = temp
+							} catch (error) {
+								if (error instanceof ValidationError) throw error
+
 								throw new ValidationError(
 									'response',
 									responseValidator,
 									response
 								)
-
-							response = temp
+							}
 						} else
 							throw new ValidationError(
 								'response',
@@ -753,8 +775,10 @@ export const createDynamicHandler = (app: AnyElysia) => {
 							responseValidator.Encode(response)
 
 					if (responseValidator?.Clean)
-						context.response = response =
-							responseValidator.Clean(response)
+						try {
+							context.response = response =
+								responseValidator.Clean(response)
+						} catch {}
 
 					const result = mapEarlyResponse(response, context.set)
 					// @ts-expect-error

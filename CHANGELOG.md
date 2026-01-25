@@ -1,3 +1,6 @@
+# 1.4.23
+- [#1683](https://github.com/elysiajs/elysia/pull/1683) response validation returns 500 instead of 422 for nested schemas in dynamic mode
+
 # 1.4.22 - 14 Jan 2026
 Improvement:
 - use imperative check for `replaceURLPath` instead of allocating `new URL`
