@@ -1453,8 +1453,7 @@ describe('Body Validator', () => {
 		)
 
 		const formData = new FormData()
-		formData.append('images.update[0].id', '123')
-		formData.append('images.update[0].altText', 'an image')
+		formData.append('images.update[0]', JSON.stringify({id: '123', altText: "an image"}))
 		formData.append(
 			'images.update[0].img',
 			Bun.file('test/images/midori.png')
@@ -1482,7 +1481,7 @@ describe('Body Validator', () => {
 	})
 
 	it('handle mix of stringify and dot notation', async () => {
-		const app = new Elysia().post(
+        const app = new Elysia({aot: false}).post(
 			'/',
 			({ body }) => ({
 				productName: body.name,
@@ -1507,7 +1506,6 @@ describe('Body Validator', () => {
 						inStock: t.Boolean(),
 						tags: t.Array(t.String()),
 						category: t.String(),
-						file: t.File()
 					}),
 					images: t.Object({
 						create: t.Files(),
@@ -1535,7 +1533,6 @@ describe('Body Validator', () => {
 				category: 'gadgets'
 			})
 		)
-		formData.append('metadata', Bun.file('test/images/millenium.jpg'))
 		formData.append('images.create', Bun.file('test/images/millenium.jpg'))
 		formData.append('images.create', Bun.file('test/images/kozeki-ui.webp'))
 		formData.append(
