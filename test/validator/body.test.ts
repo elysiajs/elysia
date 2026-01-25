@@ -1481,7 +1481,7 @@ describe('Body Validator', () => {
 	})
 
 	it('handle mix of stringify and dot notation', async () => {
-        const app = new Elysia({aot: false}).post(
+        const app = new Elysia().post(
 			'/',
 			({ body }) => ({
 				productName: body.name,
