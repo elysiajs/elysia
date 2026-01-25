@@ -48,36 +48,65 @@ export const WebStandardAdapter: ElysiaAdapter = {
 
 				return (
 					fnLiteral +
+					`const dangerousKeys=new Set(['__proto__','constructor','prototype'])\n` +
+					`const isDangerousKey=(k)=>{` +
+					`if(dangerousKeys.has(k))return true;` +
+					`const m=k.match(/^(.+)\\[(\\d+)\\]$/);` +
+					`return m?dangerousKeys.has(m[1]):false` +
+					`}\n` +
+					`const parseArrayKey=(k)=>{` +
+					`const m=k.match(/^(.+)\\[(\\d+)\\]$/);` +
+					`return m?{name:m[1],index:parseInt(m[2],10)}:null` +
+					`}\n` +
 					`for(const key of form.keys()){` +
-					`if(c.body[key]) continue\n` +
+					`if(c.body[key])continue\n` +
 					`const value=form.getAll(key)\n` +
-					`const finalValue=value.length===1?value[0]:value\n` +
+					`let finalValue=value.length===1?value[0]:value\n` +
+					`if(Array.isArray(finalValue)){\n` +
+					`const stringValue=finalValue.find((entry)=>typeof entry==='string')\n` +
+					`const files=typeof File==='undefined'?[]:finalValue.filter((entry)=>entry instanceof File)\n` +
+					`if(stringValue&&files.length&&stringValue.charCodeAt(0)===123){\n` +
+					`try{\n` +
+					`const parsed=JSON.parse(stringValue)\n` +
+					`if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){\n` +
+					`if(!('file' in parsed)&&files.length===1)parsed.file=files[0]\n` +
+					`else if(!('files' in parsed)&&files.length>1)parsed.files=files\n` +
+					`finalValue=parsed\n` +
+					`}\n` +
+					`}catch{}\n` +
+					`}\n` +
+					`}\n` +
 					`if(key.includes('.')||key.includes('[')){` +
 					`const keys=key.split('.')\n` +
 					`const lastKey=keys.pop()\n` +
+					`if(isDangerousKey(lastKey)||keys.some(isDangerousKey))continue\n` +
 					`let current=c.body\n` +
 					`for(const k of keys){` +
-					`const arrayMatch=k.match(/^(.+)\\[(\\d+)\\]$/)\n` +
-					`if(arrayMatch){` +
-					`const arrayKey=arrayMatch[1]\n` +
-					`const index=parseInt(arrayMatch[2],10)\n` +
-					`if(!(arrayKey in current))current[arrayKey]=[]\n` +
-					`if(!Array.isArray(current[arrayKey]))current[arrayKey]=[]\n` +
-					`if(!current[arrayKey][index])current[arrayKey][index]={}\n` +
-					`current=current[arrayKey][index]` +
+					`const arrayInfo=parseArrayKey(k)\n` +
+					`if(arrayInfo){` +
+					`if(!Array.isArray(current[arrayInfo.name]))current[arrayInfo.name]=[]\n` +
+					`const existing=current[arrayInfo.name][arrayInfo.index]\n` +
+					`const isFile=typeof File!=='undefined'&&existing instanceof File\n` +
+					`if(!existing||typeof existing!=='object'||Array.isArray(existing)||isFile){\n` +
+					`let parsed\n` +
+					`if(typeof existing==='string'&&existing.charCodeAt(0)===123){\n` +
+					`try{` +
+					`parsed=JSON.parse(existing)\n` +
+					`if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))parsed=undefined` +
+					`}catch{}\n` +
+					`}\n` +
+					`current[arrayInfo.name][arrayInfo.index]=parsed||{}\n` +
+					`}\n` +
+					`current=current[arrayInfo.name][arrayInfo.index]` +
 					`}else{` +
-					`if(!(k in current)||typeof current[k]!=='object'||current[k]===null)` +
-					`current[k]={}\n` +
+					`if(!current[k]||typeof current[k]!=='object')current[k]={}\n` +
 					`current=current[k]` +
 					`}` +
 					`}\n` +
-					`const lastArrayMatch=lastKey.match(/^(.+)\\[(\\d+)\\]$/)\n` +
-					`if(lastArrayMatch){` +
-					`const arrayKey=lastArrayMatch[1]\n` +
-					`const index=parseInt(lastArrayMatch[2],10)\n` +
-					`if(!(arrayKey in current))current[arrayKey]=[]\n` +
-					`if(!Array.isArray(current[arrayKey]))current[arrayKey]=[]\n` +
-					`current[arrayKey][index]=finalValue` +
+					`const arrayInfo=parseArrayKey(lastKey)\n` +
+					`if(arrayInfo){` +
+					`if(!Array.isArray(current[arrayInfo.name]))current[arrayInfo.name]=[]\n` +
+					`current[arrayInfo.name][arrayInfo.index]=finalValue` +
 					`}else{` +
 					`current[lastKey]=finalValue` +
 					`}` +
@@ -153,7 +182,10 @@ export const WebStandardAdapter: ElysiaAdapter = {
 		},
 		error404(hasEventHook, hasErrorHook, afterHandle = '') {
 			let findDynamicRoute =
-				`if(route===null){` + afterHandle + (hasErrorHook ? '' : 'c.set.status=404') + '\nreturn '
+				`if(route===null){` +
+				afterHandle +
+				(hasErrorHook ? '' : 'c.set.status=404') +
+				'\nreturn '
 
 			if (hasErrorHook)
 				findDynamicRoute += `app.handleError(c,notFound,false,${this.parameters})`

@@ -1187,32 +1187,33 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.userName).toBe('John')
-		expect(result.fileSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			userName: 'John',
+			fileSize: expect.any(Number)
+		})
 	})
 
-	it('handle deeply nested file upload', async () => {
+	it('handle nested files upload with dot notation', async () => {
 		const app = new Elysia().post(
 			'/',
 			({ body }) => ({
-				bio: body.user.profile.bio,
-				photoSize: body.user.profile.photo.size
+				productName: body.product.name,
+				fileSizes: body.product.images.map((f) => f.size)
 			}),
 			{
 				body: t.Object({
-					user: t.Object({
-						profile: t.Object({
-							bio: t.String(),
-							photo: t.File()
-						})
+					product: t.Object({
+						name: t.String(),
+						images: t.Files()
 					})
 				})
 			}
 		)
 
 		const formData = new FormData()
-		formData.append('user.profile.bio', 'Hello World')
-		formData.append('user.profile.photo', Bun.file('test/images/millenium.jpg'))
+		formData.append('product.name', 'Chair')
+		formData.append('product.images', Bun.file('test/images/millenium.jpg'))
+		formData.append('product.images', Bun.file('test/images/aris-yuzu.jpg'))
 
 		const response = await app.handle(
 			new Request('http://localhost/', {
@@ -1223,8 +1224,58 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.bio).toBe('Hello World')
-		expect(result.photoSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			productName: 'Chair',
+			fileSizes: expect.arrayContaining([
+				expect.any(Number),
+				expect.any(Number)
+			])
+		})
+	})
+
+	it('handle deeply nested file upload', async () => {
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				bio: body.user.profile.bio,
+				country: body.user.profile.country,
+				photoSize: body.user.profile.photo.size
+			}),
+			{
+				body: t.Object({
+					user: t.Object({
+						profile: t.Object({
+							bio: t.String(),
+							country: t.String(),
+							photo: t.File()
+						})
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('user.profile.bio', 'Hello World')
+		formData.append('user.profile.country', 'France')
+		formData.append(
+			'user.profile.photo',
+			Bun.file('test/images/millenium.jpg')
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			bio: 'Hello World',
+			country: 'France',
+			photoSize: expect.any(Number)
+		})
 	})
 
 	it('handle multiple nested files', async () => {
@@ -1257,8 +1308,10 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.avatarSize).toBeGreaterThan(0)
-		expect(result.coverSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			avatarSize: expect.any(Number),
+			coverSize: expect.any(Number)
+		})
 	})
 
 	it('handle mixed nested and flat fields', async () => {
@@ -1294,9 +1347,11 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.flatValue).toBe('I am flat')
-		expect(result.nestedName).toBe('Jane')
-		expect(result.nestedFileSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			flatValue: 'I am flat',
+			nestedName: 'Jane',
+			nestedFileSize: expect.any(Number)
+		})
 	})
 
 	it('handle complex nested array with files', async () => {
@@ -1333,15 +1388,15 @@ describe('Body Validator', () => {
 		)
 
 		const formData = new FormData()
-		formData.append('name', 'My Product')
-		formData.append('images.create[0]', Bun.file('test/images/millenium.jpg'))
-		formData.append('images.create[1]', Bun.file('test/images/kozeki-ui.webp'))
-		formData.append('images.update[0].id', '1')
-		formData.append('images.update[0].img', Bun.file('test/images/midori.png'))
-		formData.append('images.update[0].altText', 'First image')
-		formData.append('images.update[1].id', '2')
-		formData.append('images.update[1].img', Bun.file('test/images/aris-yuzu.jpg'))
-		formData.append('images.update[1].altText', 'Second image')
+		formData.append('name', 'Test Product')
+		formData.append('images.create', Bun.file('test/images/millenium.jpg'))
+		formData.append('images.create', Bun.file('test/images/kozeki-ui.webp'))
+		formData.append('images.update[0].id', '123')
+		formData.append(
+			'images.update[0].img',
+			Bun.file('test/images/midori.png')
+		)
+		formData.append('images.update[0].altText', 'an image')
 
 		const response = await app.handle(
 			new Request('http://localhost/', {
@@ -1352,16 +1407,251 @@ describe('Body Validator', () => {
 
 		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.productName).toBe('My Product')
-		expect(result.createFilesCount).toBe(2)
-		expect(result.updateCount).toBe(2)
-		expect(result.images.create[0]).toBeGreaterThan(0)
-		expect(result.images.create[1]).toBeGreaterThan(0)
-		expect(result.images.update[0].id).toBe('1')
-		expect(result.images.update[0].altText).toBe('First image')
-		expect(result.images.update[0].imgSize).toBeGreaterThan(0)
-		expect(result.images.update[1].id).toBe('2')
-		expect(result.images.update[1].altText).toBe('Second image')
-		expect(result.images.update[1].imgSize).toBeGreaterThan(0)
+		expect(result).toMatchObject({
+			productName: 'Test Product',
+			createFilesCount: 2,
+			updateCount: 1,
+			images: {
+				create: [expect.any(Number), expect.any(Number)],
+				update: [
+					{
+						id: '123',
+						altText: 'an image',
+						imgSize: expect.any(Number)
+					}
+				]
+			}
+		})
+	})
+
+	it('handle dot notation for standard schema with array and nested file', async () => {
+		const { z } = await import('zod')
+
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				updateCount: body.images.update.length,
+				updates: body.images.update.map((item) => ({
+					id: item.id,
+					altText: item.altText,
+					imgSize: item.img.size
+				}))
+			}),
+			{
+				body: z.object({
+					images: z.object({
+						update: z.array(
+							z.object({
+								id: z.string(),
+								img: z.file(),
+								altText: z.string()
+							})
+						)
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('images.update[0]', JSON.stringify({id: '123', altText: "an image"}))
+		formData.append(
+			'images.update[0].img',
+			Bun.file('test/images/midori.png')
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			updateCount: 1,
+			updates: [
+				{
+					id: '123',
+					altText: 'an image',
+					imgSize: expect.any(Number)
+				}
+			]
+		})
+	})
+
+	it('handle mix of stringify and dot notation', async () => {
+        const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				productName: body.name,
+				metadata: body.metadata,
+				createFilesCount: body.images.create.length,
+				updateCount: body.images.update.length,
+				images: {
+					create: body.images.create.map((f) => f.size),
+					update: body.images.update.map((f) => ({
+						id: f.id,
+						altText: f.altText,
+						imgSize: f.img.size
+					}))
+				}
+			}),
+			{
+				body: t.Object({
+					name: t.String(),
+					metadata: t.Object({
+						description: t.String(),
+						price: t.Number(),
+						inStock: t.Boolean(),
+						tags: t.Array(t.String()),
+						category: t.String(),
+					}),
+					images: t.Object({
+						create: t.Files(),
+						update: t.Array(
+							t.Object({
+								id: t.String(),
+								img: t.File(),
+								altText: t.String()
+							})
+						)
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('name', 'Test Product')
+		formData.append(
+			'metadata',
+			JSON.stringify({
+				description: 'A high-quality product',
+				price: 29.99,
+				inStock: true,
+				tags: ['electronics', 'featured', 'sale'],
+				category: 'gadgets'
+			})
+		)
+		formData.append('images.create', Bun.file('test/images/millenium.jpg'))
+		formData.append('images.create', Bun.file('test/images/kozeki-ui.webp'))
+		formData.append(
+			'images.update[0]',
+			JSON.stringify({ id: '123', altText: 'an image' })
+		)
+		formData.append(
+			'images.update[0].img',
+			Bun.file('test/images/midori.png')
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			productName: 'Test Product',
+			createFilesCount: 2,
+			updateCount: 1,
+			metadata: {
+				description: 'A high-quality product',
+				price: 29.99,
+				inStock: true,
+				tags: ['electronics', 'featured', 'sale'],
+				category: 'gadgets'
+			},
+			images: {
+				create: [expect.any(Number), expect.any(Number)],
+				update: [
+					{
+						id: '123',
+						altText: 'an image',
+						imgSize: expect.any(Number)
+					}
+				]
+			}
+		})
+	})
+
+	it('prevent prototype pollution with __proto__ in nested multipart', async () => {
+		const app = new Elysia().post('/', ({ body }) => body)
+
+		const formData = new FormData()
+		formData.append('user.name', 'John')
+		formData.append('__proto__.isAdmin', 'true')
+		formData.append('user.__proto__.isAdmin', 'true')
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			user: { name: 'John' }
+		})
+
+		// Check that Object.prototype wasn't polluted
+		const testObj = {}
+		expect('isAdmin' in testObj).toBe(false)
+		expect('isAdmin' in {}).toBe(false)
+	})
+
+	it('prevent prototype pollution with constructor in nested multipart', async () => {
+		const app = new Elysia().post('/', ({ body }) => body)
+
+		const formData = new FormData()
+		formData.append('user.name', 'John')
+		formData.append('constructor.prototype.isAdmin', 'true')
+		formData.append('user.constructor', 'bad')
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			user: { name: 'John' }
+		})
+
+		// Check that Object.prototype wasn't polluted
+		expect('isAdmin' in {}).toBe(false)
+	})
+
+	it('prevent prototype pollution in array notation', async () => {
+		const app = new Elysia().post('/', ({ body }) => body)
+
+		const formData = new FormData()
+		formData.append('items[0].name', 'Item 1')
+		formData.append('items[__proto__].isAdmin', 'true')
+		formData.append('__proto__[0]', 'bad')
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			items: [{ name: 'Item 1' }]
+		})
+
+		// Check that Object.prototype wasn't polluted
+		const testObj = {}
+		expect('isAdmin' in testObj).toBe(false)
 	})
 })

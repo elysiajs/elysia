@@ -24,55 +24,134 @@ export type DynamicHandler = {
 	route: string
 }
 
-const setNestedValue = (
-	obj: Record<string, any>,
-	path: string,
-	value: any
-) => {
-	// Split by dots, but preserve array indices
+/**
+ * Matches array index notation in property paths
+ * Examples:
+ *   "users[0]"  → Group 1: "users", Group 2: "0"
+ *   "items[42]" → Group 1: "items", Group 2: "42"
+ *   "a[123]"    → Group 1: "a",     Group 2: "123"
+ *
+ * Does not match:
+ *   "users"     → no brackets
+ *   "users[]"   → no index
+ *   "users[ab]" → non-numeric index
+ */
+const ARRAY_INDEX_REGEX = /^(.+)\[(\d+)\]$/
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+const isDangerousKey = (key: string): boolean => {
+	if (DANGEROUS_KEYS.has(key)) return true
+
+	const match = key.match(ARRAY_INDEX_REGEX)
+	return match ? DANGEROUS_KEYS.has(match[1]) : false
+}
+
+const parseArrayKey = (key: string) => {
+	const match = key.match(ARRAY_INDEX_REGEX)
+	if (!match) return null
+
+	return {
+		name: match[1],
+		index: parseInt(match[2], 10)
+	}
+}
+
+const parseObjectString = (entry: unknown) => {
+	if (typeof entry !== 'string' || entry.charCodeAt(0) !== 123) return
+
+	try {
+		const parsed = JSON.parse(entry)
+		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+			return parsed
+	} catch {
+		return
+	}
+}
+
+const setNestedValue = (obj: Record<string, any>, path: string, value: any) => {
 	const keys = path.split('.')
-	const lastKey = keys.pop()!
+	const lastKey = keys.pop() as string
+
+	// Validate all keys upfront
+	if (isDangerousKey(lastKey) || keys.some(isDangerousKey)) return
 
 	let current = obj
+
+	// Traverse intermediate keys
 	for (const key of keys) {
-		// Check if key has array index notation: key[0], key[1], etc.
-		const arrayMatch = key.match(/^(.+)\[(\d+)\]$/)
+		const arrayInfo = parseArrayKey(key)
 
-		if (arrayMatch) {
-			const [, arrayKey, indexStr] = arrayMatch
-			const index = parseInt(indexStr, 10)
-
+		if (arrayInfo) {
 			// Initialize array if needed
-			if (!(arrayKey in current)) current[arrayKey] = []
+			if (!Array.isArray(current[arrayInfo.name]))
+				current[arrayInfo.name] = []
 
-			// Ensure it's an array
-			if (!Array.isArray(current[arrayKey])) current[arrayKey] = []
+			const existing = current[arrayInfo.name][arrayInfo.index]
+			const isFile =
+				typeof File !== 'undefined' && existing instanceof File
 
 			// Initialize object at index if needed
-			if (!current[arrayKey][index]) current[arrayKey][index] = {}
+			if (
+				!existing ||
+				typeof existing !== 'object' ||
+				Array.isArray(existing) ||
+				isFile
+			)
+				current[arrayInfo.name][arrayInfo.index] =
+					parseObjectString(existing) ?? {}
 
-			current = current[arrayKey][index]
+			current = current[arrayInfo.name][arrayInfo.index]
 		} else {
-			// Regular object property
-			if (!(key in current) || typeof current[key] !== 'object' || current[key] === null)
+			// Initialize object property if needed
+			if (!current[key] || typeof current[key] !== 'object')
 				current[key] = {}
+
 			current = current[key]
 		}
 	}
 
-	// Handle array index in last key
-	const arrayMatch = lastKey.match(/^(.+)\[(\d+)\]$/)
-	if (arrayMatch) {
-		const [, arrayKey, indexStr] = arrayMatch
-		const index = parseInt(indexStr, 10)
+	// Set final value
+	const arrayInfo = parseArrayKey(lastKey)
 
-		if (!(arrayKey in current)) current[arrayKey] = []
-		if (!Array.isArray(current[arrayKey])) current[arrayKey] = []
+	if (arrayInfo) {
+		if (!Array.isArray(current[arrayInfo.name]))
+			current[arrayInfo.name] = []
 
-		current[arrayKey][index] = value
+		current[arrayInfo.name][arrayInfo.index] = value
 	} else {
 		current[lastKey] = value
 	}
+}
+
+const normalizeFormValue = (value: unknown[]) => {
+	if (value.length === 1) return value[0]
+
+	const stringValue = value.find(
+		(entry): entry is string => typeof entry === 'string'
+	)
+	if (!stringValue) return value
+
+	if (typeof File === 'undefined') return value
+	const files = value.filter((entry): entry is File => entry instanceof File)
+	if (!files.length) return value
+
+	if (stringValue.charCodeAt(0) !== 123) return value
+
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(stringValue)
+	} catch {
+		return value
+	}
+
+	if (typeof parsed !== 'object' || parsed === null) return value
+
+	if (!('file' in parsed) && files.length === 1)
+		(parsed as Record<string, unknown>).file = files[0]
+	else if (!('files' in parsed) && files.length > 1)
+		(parsed as Record<string, unknown>).files = files
+
+	return parsed
 }
 
 const injectDefaultValues = (
@@ -198,7 +277,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								if (body[key]) continue
 
 								const value = form.getAll(key)
-								const finalValue = value.length === 1 ? value[0] : value
+								const finalValue = normalizeFormValue(value)
 
 								if (key.includes('.') || key.includes('['))
 									setNestedValue(body, key, finalValue)
@@ -253,13 +332,12 @@ export const createDynamicHandler = (app: AnyElysia) => {
 										case 'multipart/form-data': {
 											body = {}
 
-											const form =
-												await request.formData()
+											const form = await request.formData()
 											for (const key of form.keys()) {
 												if (body[key]) continue
 
 												const value = form.getAll(key)
-												const finalValue = value.length === 1 ? value[0] : value
+												const finalValue = normalizeFormValue(value)
 
 												if (key.includes('.') || key.includes('['))
 													setNestedValue(body, key, finalValue)
@@ -329,7 +407,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 										if (body[key]) continue
 
 										const value = form.getAll(key)
-										const finalValue = value.length === 1 ? value[0] : value
+										const finalValue = normalizeFormValue(value)
 
 										if (key.includes('.') || key.includes('['))
 											setNestedValue(body, key, finalValue)
@@ -514,8 +592,14 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 				if (validator.createBody?.()?.Check(body) === false)
 					throw new ValidationError('body', validator.body!, body)
-				else if (validator.body?.Decode)
-					context.body = validator.body.Decode(body) as any
+				else if (validator.body?.Decode) {
+						let decoded = validator.body.Decode(body) as any
+						if (decoded instanceof Promise)
+							decoded = await decoded
+
+						// Zod returns { value: ... } wrapper
+						context.body = decoded?.value ?? decoded
+				}
 			}
 
 			if (hooks.beforeHandle)
