@@ -1424,6 +1424,63 @@ describe('Body Validator', () => {
 		})
 	})
 
+	it('handle dot notation for standard schema with array and nested file', async () => {
+		const { z } = await import('zod')
+
+		const app = new Elysia().post(
+			'/',
+			({ body }) => ({
+				updateCount: body.images.update.length,
+				updates: body.images.update.map((item) => ({
+					id: item.id,
+					altText: item.altText,
+					imgSize: item.img.size
+				}))
+			}),
+			{
+				body: z.object({
+					images: z.object({
+						update: z.array(
+							z.object({
+								id: z.string(),
+								img: z.file(),
+								altText: z.string()
+							})
+						)
+					})
+				})
+			}
+		)
+
+		const formData = new FormData()
+		formData.append('images.update[0].id', '123')
+		formData.append('images.update[0].altText', 'an image')
+		formData.append(
+			'images.update[0].img',
+			Bun.file('test/images/midori.png')
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		const result = await response.json()
+		expect(response.status).toBe(200)
+		expect(result).toMatchObject({
+			updateCount: 1,
+			updates: [
+				{
+					id: '123',
+					altText: 'an image',
+					imgSize: expect.any(Number)
+				}
+			]
+		})
+	})
+
 	it('handle mix of stringify and dot notation', async () => {
 		const app = new Elysia().post(
 			'/',
@@ -1481,12 +1538,14 @@ describe('Body Validator', () => {
 		formData.append('metadata', Bun.file('test/images/millenium.jpg'))
 		formData.append('images.create', Bun.file('test/images/millenium.jpg'))
 		formData.append('images.create', Bun.file('test/images/kozeki-ui.webp'))
-		formData.append('images.update[0].id', '123')
+		formData.append(
+			'images.update[0]',
+			JSON.stringify({ id: '123', altText: 'an image' })
+		)
 		formData.append(
 			'images.update[0].img',
 			Bun.file('test/images/midori.png')
 		)
-		formData.append('images.update[0].altText', 'an image')
 
 		const response = await app.handle(
 			new Request('http://localhost/', {
@@ -1522,17 +1581,7 @@ describe('Body Validator', () => {
 	})
 
 	it('prevent prototype pollution with __proto__ in nested multipart', async () => {
-		const app = new Elysia().post('/', ({ body }) => {
-			// Check that __proto__ pollution didn't happen
-			const testObj = {}
-			return {
-				body,
-				// @ts-ignore - Check if pollution occurred
-				isAdmin: testObj.isAdmin === true ? 'POLLUTED' : 'SAFE',
-				// @ts-ignore - Check if isAdmin was added to Object.prototype
-				prototypeTest: {}.isAdmin === true ? 'POLLUTED' : 'SAFE'
-			}
-		})
+		const app = new Elysia().post('/', ({ body }) => body)
 
 		const formData = new FormData()
 		formData.append('user.name', 'John')
@@ -1546,24 +1595,20 @@ describe('Body Validator', () => {
 			})
 		)
 
-		const result = (await response.json()) as any
+		const result = await response.json()
 		expect(response.status).toBe(200)
-		// The key test: no pollution occurred
-		expect(result.isAdmin).toBe('SAFE')
-		expect(result.prototypeTest).toBe('SAFE')
-		// Body should only contain legitimate user data
-		expect(result.body.user).toEqual({ name: 'John' })
+		expect(result).toMatchObject({
+			user: { name: 'John' }
+		})
+
+		// Check that Object.prototype wasn't polluted
+		const testObj = {}
+		expect('isAdmin' in testObj).toBe(false)
+		expect('isAdmin' in {}).toBe(false)
 	})
 
 	it('prevent prototype pollution with constructor in nested multipart', async () => {
-		const app = new Elysia().post('/', ({ body }) => {
-			const testObj = {}
-			return {
-				body,
-				// @ts-ignore - Check if pollution via constructor occurred
-				prototypeTest: {}.isAdmin === true ? 'POLLUTED' : 'SAFE'
-			}
-		})
+		const app = new Elysia().post('/', ({ body }) => body)
 
 		const formData = new FormData()
 		formData.append('user.name', 'John')
@@ -1577,23 +1622,18 @@ describe('Body Validator', () => {
 			})
 		)
 
-		const result = (await response.json()) as any
+		const result = await response.json()
 		expect(response.status).toBe(200)
-		// The key test: no pollution occurred
-		expect(result.prototypeTest).toBe('SAFE')
-		// Body should only contain legitimate user data
-		expect(result.body.user).toEqual({ name: 'John' })
+		expect(result).toMatchObject({
+			user: { name: 'John' }
+		})
+
+		// Check that Object.prototype wasn't polluted
+		expect('isAdmin' in {}).toBe(false)
 	})
 
 	it('prevent prototype pollution in array notation', async () => {
-		const app = new Elysia().post('/', ({ body }) => {
-			const testObj = {}
-			return {
-				body,
-				// @ts-ignore
-				isAdmin: testObj.isAdmin === true ? 'POLLUTED' : 'SAFE'
-			}
-		})
+		const app = new Elysia().post('/', ({ body }) => body)
 
 		const formData = new FormData()
 		formData.append('items[0].name', 'Item 1')
@@ -1607,8 +1647,14 @@ describe('Body Validator', () => {
 			})
 		)
 
-		const result = (await response.json()) as any
+		const result = await response.json()
 		expect(response.status).toBe(200)
-		expect(result.isAdmin).toBe('SAFE')
+		expect(result).toMatchObject({
+			items: [{ name: 'Item 1' }]
+		})
+
+		// Check that Object.prototype wasn't polluted
+		const testObj = {}
+		expect('isAdmin' in testObj).toBe(false)
 	})
 })

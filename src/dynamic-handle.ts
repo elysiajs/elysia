@@ -28,6 +28,17 @@ const setNestedValue = (obj: Record<string, any>, path: string, value: any) => {
 	// Split by dots, but preserve array indices
 	const keys = path.split('.')
 	const lastKey = keys.pop()!
+	const parseObjectString = (entry: unknown) => {
+		if (typeof entry !== 'string' || entry.charCodeAt(0) !== 123) return
+
+		try {
+			const parsed = JSON.parse(entry)
+			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+				return parsed
+		} catch {
+			return
+		}
+	}
 
 	// Prevent prototype pollution - block dangerous keys
 	const dangerousKeys = ['__proto__', 'constructor', 'prototype']
@@ -57,8 +68,17 @@ const setNestedValue = (obj: Record<string, any>, path: string, value: any) => {
 			// Ensure it's an array
 			if (!Array.isArray(current[arrayKey])) current[arrayKey] = []
 
-			// Initialize object at index if needed
-			if (!current[arrayKey][index]) current[arrayKey][index] = {}
+			const existing = current[arrayKey][index]
+			const isFile =
+				typeof File !== 'undefined' && existing instanceof File
+			if (
+				existing === undefined ||
+				existing === null ||
+				typeof existing !== 'object' ||
+				Array.isArray(existing) ||
+				isFile
+			)
+				current[arrayKey][index] = parseObjectString(existing) ?? {}
 
 			current = current[arrayKey][index]
 		} else {
@@ -89,6 +109,37 @@ const setNestedValue = (obj: Record<string, any>, path: string, value: any) => {
 	} else {
 		current[lastKey] = value
 	}
+}
+
+const normalizeFormValue = (value: unknown[]) => {
+	if (value.length === 1) return value[0]
+
+	const stringValue = value.find(
+		(entry): entry is string => typeof entry === 'string'
+	)
+	if (!stringValue) return value
+
+	if (typeof File === 'undefined') return value
+	const files = value.filter((entry): entry is File => entry instanceof File)
+	if (!files.length) return value
+
+	if (stringValue.charCodeAt(0) !== 123) return value
+
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(stringValue)
+	} catch {
+		return value
+	}
+
+	if (typeof parsed !== 'object' || parsed === null) return value
+
+	if (!('file' in parsed) && files.length === 1)
+		(parsed as Record<string, unknown>).file = files[0]
+	else if (!('files' in parsed) && files.length > 1)
+		(parsed as Record<string, unknown>).files = files
+
+	return parsed
 }
 
 const injectDefaultValues = (
@@ -214,8 +265,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								if (body[key]) continue
 
 								const value = form.getAll(key)
-								const finalValue =
-									value.length === 1 ? value[0] : value
+								const finalValue = normalizeFormValue(value)
 
 								if (key.includes('.') || key.includes('['))
 									setNestedValue(body, key, finalValue)
@@ -277,9 +327,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 												const value = form.getAll(key)
 												const finalValue =
-													value.length === 1
-														? value[0]
-														: value
+													normalizeFormValue(value)
 
 												if (
 													key.includes('.') ||
@@ -357,9 +405,7 @@ export const createDynamicHandler = (app: AnyElysia) => {
 
 										const value = form.getAll(key)
 										const finalValue =
-											value.length === 1
-												? value[0]
-												: value
+											normalizeFormValue(value)
 
 										if (
 											key.includes('.') ||

@@ -52,7 +52,21 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`for(const key of form.keys()){` +
 					`if(c.body[key]) continue\n` +
 					`const value=form.getAll(key)\n` +
-					`const finalValue=value.length===1?value[0]:value\n` +
+					`let finalValue=value.length===1?value[0]:value\n` +
+					`if(Array.isArray(finalValue)){\n` +
+					`const stringValue=finalValue.find((entry)=>typeof entry==='string')\n` +
+					`const files=typeof File==='undefined'?[]:finalValue.filter((entry)=>entry instanceof File)\n` +
+					`if(stringValue&&files.length&&stringValue.charCodeAt(0)===123){\n` +
+					`try{\n` +
+					`const parsed=JSON.parse(stringValue)\n` +
+					`if(parsed&&typeof parsed==='object'){\n` +
+					`if(!('file' in parsed)&&files.length===1)parsed.file=files[0]\n` +
+					`else if(!('files' in parsed)&&files.length>1)parsed.files=files\n` +
+					`finalValue=parsed\n` +
+					`}\n` +
+					`}catch{}\n` +
+					`}\n` +
+					`}\n` +
 					`if(key.includes('.')||key.includes('[')){` +
 					`const keys=key.split('.')\n` +
 					`const lastKey=keys.pop()\n` +
@@ -72,7 +86,16 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`const index=parseInt(arrayMatch[2],10)\n` +
 					`if(!(arrayKey in current))current[arrayKey]=[]\n` +
 					`if(!Array.isArray(current[arrayKey]))current[arrayKey]=[]\n` +
-					`if(!current[arrayKey][index])current[arrayKey][index]={}\n` +
+					`let existing=current[arrayKey][index]\n` +
+					`const isFile=typeof File!=='undefined'&&existing instanceof File\n` +
+					`if(existing===undefined||existing===null||typeof existing!=='object'||Array.isArray(existing)||isFile){\n` +
+					`let parsed\n` +
+					`if(typeof existing==='string'&&existing.charCodeAt(0)===123){\n` +
+					`try{parsed=JSON.parse(existing)}catch{}\n` +
+					`if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))parsed=undefined\n` +
+					`}\n` +
+					`current[arrayKey][index]=parsed?parsed:{}\n` +
+					`}\n` +
 					`current=current[arrayKey][index]` +
 					`}else{` +
 					`if(!(k in current)||typeof current[k]!=='object'||current[k]===null)` +
