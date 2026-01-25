@@ -61,7 +61,17 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`for(const key of form.keys()){` +
 					`if(c.body[key])continue\n` +
 					`const value=form.getAll(key)\n` +
-					`let finalValue=value.length===1?value[0]:value\n` +
+					`let finalValue\n` +
+    				`if(value.length===1){\n` +
+    				`const sv=value[0]\n` +
+    				`if(typeof sv==='string'&&sv.charCodeAt(0)===123){\n` +
+    				`try{\n` +
+    				`const p=JSON.parse(sv)\n` +
+    				`if(p&&typeof p==='object'&&!Array.isArray(p))finalValue=p\n` +
+    				`}catch{}\n` +
+    				`}\n` +
+    				`if(finalValue===undefined)finalValue=sv\n` +
+    				`}else finalValue=value\n` +
 					`if(Array.isArray(finalValue)){\n` +
 					`const stringValue=finalValue.find((entry)=>typeof entry==='string')\n` +
 					`const files=typeof File==='undefined'?[]:finalValue.filter((entry)=>entry instanceof File)\n` +

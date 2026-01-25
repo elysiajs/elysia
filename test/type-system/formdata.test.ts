@@ -696,7 +696,7 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 		const formData = new FormData()
 		formData.append('name', 'John')
 		formData.append('file', bunFile)
-		formData.append('metadata.age', '25')
+		formData.append('metadata', JSON.stringify({ age: '25' }))
 
 		const response = await app.handle(
 			new Request('http://localhost/upload', {
@@ -723,9 +723,9 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
-		formData.append('tags[0]', 'tag1')
-		formData.append('tags[1]', 'tag2')
-		formData.append('tags[2]', 'tag3')
+		formData.append('tags', 'tag1')
+		formData.append('tags', 'tag2')
+		formData.append('tags', 'tag3')
 
 		const response = await app.handle(
 			new Request('http://localhost/upload', {
@@ -811,9 +811,16 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 
 		const formData = new FormData()
 		formData.append('file', bunFile)
-		formData.append('profile.user.name', 'Alice')
-		formData.append('profile.user.age', '30')
-		formData.append('profile.settings.notifications', 'true')
+		formData.append(
+			'profile',
+			JSON.stringify({
+				user: {
+					name: 'Alice',
+					age: 30
+				},
+				settings: { notifications: true }
+			})
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost/upload', {
@@ -889,10 +896,14 @@ describe('Zod (for standard schema) with File and nested Object', () => {
 		formData.append('file', bunFile)
 		formData.append('name', 'Test Product')
 		formData.append('description', 'A test description')
-		formData.append('metadata.category', 'electronics')
-		formData.append('metadata.tags[0]', 'phone')
-		formData.append('metadata.tags[1]', 'mobile')
-		formData.append('metadata.featured', 'true')
+		formData.append(
+			'metadata',
+			JSON.stringify({
+				category: 'electronics',
+				tags: ['phone', 'mobile'],
+				featured: true
+			})
+		)
 
 		const response = await app.handle(
 			new Request('http://localhost/upload', {

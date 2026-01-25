@@ -124,7 +124,18 @@ const setNestedValue = (obj: Record<string, any>, path: string, value: any) => {
 }
 
 const normalizeFormValue = (value: unknown[]) => {
-	if (value.length === 1) return value[0]
+    if (value.length === 1) {
+        const stringValue = value[0]
+        if (typeof stringValue === 'string' && stringValue.charCodeAt(0) === 123) {
+            try {
+                const parsed = JSON.parse(stringValue)
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    return parsed
+                }
+            } catch {}
+        }
+        return value[0]
+    }
 
 	const stringValue = value.find(
 		(entry): entry is string => typeof entry === 'string'
