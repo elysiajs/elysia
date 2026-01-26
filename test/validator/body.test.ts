@@ -1453,7 +1453,10 @@ describe('Body Validator', () => {
 		)
 
 		const formData = new FormData()
-		formData.append('images.update[0]', JSON.stringify({id: '123', altText: "an image"}))
+		formData.append(
+			'images.update[0]',
+			JSON.stringify({ id: '123', altText: 'an image' })
+		)
 		formData.append(
 			'images.update[0].img',
 			Bun.file('test/images/midori.png')
@@ -1481,7 +1484,7 @@ describe('Body Validator', () => {
 	})
 
 	it('handle mix of stringify and dot notation', async () => {
-        const app = new Elysia().post(
+		const app = new Elysia().post(
 			'/',
 			({ body }) => ({
 				productName: body.name,
@@ -1505,7 +1508,7 @@ describe('Body Validator', () => {
 						price: t.Number(),
 						inStock: t.Boolean(),
 						tags: t.Array(t.String()),
-						category: t.String(),
+						category: t.String()
 					}),
 					images: t.Object({
 						create: t.Files(),
@@ -1575,6 +1578,40 @@ describe('Body Validator', () => {
 				]
 			}
 		})
+	})
+
+	it('should parse sub-array correctly', async () => {
+		const app = new Elysia().post('/', ({ body }) => body, {
+			body: t.Object({
+				imagesOps: t.Object({
+					options: t.Array(
+						t.Object({
+							id: t.String(),
+							value: t.String()
+						})
+					)
+				})
+			})
+		})
+
+		const formData = new FormData()
+		formData.append(
+			'imagesOps.options',
+			JSON.stringify([{ id: 'test-id', value: 'test-value' }])
+		)
+
+		const response = await app.handle(
+			new Request('http://localhost/', {
+				method: 'POST',
+				body: formData
+			})
+		)
+
+		expect(response.status).toBe(200)
+		const result = (await response.json()) as any
+		expect(result.imagesOps.options).toEqual([
+			{ id: 'test-id', value: 'test-value' }
+		])
 	})
 
 	it('prevent prototype pollution with __proto__ in nested multipart', async () => {

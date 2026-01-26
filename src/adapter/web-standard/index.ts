@@ -64,10 +64,10 @@ export const WebStandardAdapter: ElysiaAdapter = {
 					`let finalValue\n` +
     				`if(value.length===1){\n` +
     				`const sv=value[0]\n` +
-    				`if(typeof sv==='string'&&sv.charCodeAt(0)===123){\n` +
+    				`if(typeof sv==='string'&&(sv.charCodeAt(0)===123||sv.charCodeAt(0)===91)){\n` +
     				`try{\n` +
     				`const p=JSON.parse(sv)\n` +
-    				`if(p&&typeof p==='object'&&!Array.isArray(p))finalValue=p\n` +
+    				`if(p&&typeof p==='object')finalValue=p\n` +
     				`}catch{}\n` +
     				`}\n` +
     				`if(finalValue===undefined)finalValue=sv\n` +
