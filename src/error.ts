@@ -458,7 +458,7 @@ export class ValidationError extends Error {
 						on: type,
 						property: accessor,
 						message: error?.message,
-						summary: mapValueError(error).summary,
+						summary: mapValueError(error)?.summary,
 						expected,
 						found: value,
 						errors:
