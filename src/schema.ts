@@ -1055,6 +1055,28 @@ export const getSchemaValidator = <
 export const isUnion = (schema: TSchema) =>
 	schema[Kind] === 'Union' || (!schema.schema && !!schema.anyOf)
 
+// Returns all properties as a flat map, handling Union/Intersect
+// See: https://github.com/sinclairzx81/typebox/blob/0.34.3/src/type/indexed/indexed.ts#L152-L162
+export const getSchemaProperties = (
+	schema: TAnySchema | undefined
+): Record<string, TAnySchema> | undefined => {
+	if (!schema) return undefined
+
+	if (schema.properties) return schema.properties
+
+	if (schema.allOf || schema.anyOf) {
+		const members = schema.allOf ?? schema.anyOf
+		const result: Record<string, TAnySchema> = {}
+		for (const member of members) {
+			const props = getSchemaProperties(member)
+			if (props) Object.assign(result, props)
+		}
+		return Object.keys(result).length > 0 ? result : undefined
+	}
+
+	return undefined
+}
+
 export const mergeObjectSchemas = (
 	schemas: TSchema[]
 ): {
