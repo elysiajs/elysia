@@ -1077,8 +1077,8 @@ export const getSchemaProperties = (
 
 	if (schema.properties) return schema.properties
 
-	if (schema.allOf || schema.anyOf) {
-		const members = schema.allOf ?? schema.anyOf
+	const members = schema.allOf ?? schema.anyOf ?? schema.oneOf
+	if (members) {
 		const result: Record<string, TAnySchema> = {}
 		for (const member of members) {
 			const props = getSchemaProperties(member)
