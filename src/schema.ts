@@ -758,7 +758,7 @@ export const getSchemaValidator = <
 						hasAdditionalProperties(schema))
 				},
 				get hasDefault() {
-					if ('~hasDefault' in this) return this['~hasDefault']
+					if ('~hasDefault' in this) return this['~hasDefault']!
 
 					return (this['~hasDefault'] = hasProperty(
 						'default',

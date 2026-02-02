@@ -10,7 +10,7 @@ import {
 } from './error'
 import type { AnyElysia, CookieOptions } from './index'
 import { parseQuery } from './parse-query'
-import type { ElysiaTypeCheck } from './schema'
+import { getSchemaProperties, type ElysiaTypeCheck } from './schema'
 import type { TypeCheck } from './type-system'
 import type { Handler, LifeCycleStore, SchemaValidator } from './types'
 import { hasSetImmediate, redirect, StatusMap, signCookie } from './utils'
@@ -34,10 +34,10 @@ const injectDefaultValues = (
 
 	if (schema.$defs?.[schema.$ref]) schema = schema.$defs[schema.$ref]
 
-	if (!schema?.properties) return
+	const properties = getSchemaProperties(schema)
+	if (!properties) return
 
-	for (const [key, keySchema] of Object.entries(schema.properties)) {
-		// @ts-expect-error private
+	for (const [key, keySchema] of Object.entries(properties)) {
 		obj[key] ??= keySchema.default
 	}
 }
@@ -411,19 +411,21 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					if (schema.$defs?.[schema.$ref])
 						schema = schema.$defs[schema.$ref]
 
-					const properties = schema.properties
+					const properties = getSchemaProperties(schema)
 
-					for (const property of Object.keys(properties)) {
-						const value = properties[property]
-						if (
-							(value.type === 'array' ||
-								value.items?.type === 'string') &&
-							typeof context.query[property] === 'string' &&
-							context.query[property]
-						) {
-							// @ts-expect-error
-							context.query[property] =
-								context.query[property].split(',')
+					if (properties) {
+						for (const property of Object.keys(properties)) {
+							const value = properties[property]
+							if (
+								(value.type === 'array' ||
+									value.items?.type === 'string') &&
+								typeof context.query[property] === 'string' &&
+								context.query[property]
+							) {
+								// @ts-expect-error
+								context.query[property] =
+									context.query[property].split(',')
+							}
 						}
 					}
 				}
@@ -637,11 +639,11 @@ export const createDynamicHandler = (app: AnyElysia) => {
 								secret
 							)
 				} else {
-					const properties = validator?.cookie?.schema?.properties
+					const properties = getSchemaProperties(validator?.cookie?.schema)
 
 					if (secret)
 						for (const name of cookieMeta.sign) {
-							if (!(name in properties)) continue
+							if (!properties || !(name in properties)) continue
 
 							if (context.set.cookie[name]?.value) {
 								context.set.cookie[name].value =

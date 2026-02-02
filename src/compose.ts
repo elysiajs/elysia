@@ -42,6 +42,7 @@ import { ELYSIA_TRACE, type TraceHandler } from './trace'
 import {
 	ElysiaTypeCheck,
 	getCookieValidator,
+	getSchemaProperties,
 	getSchemaValidator,
 	hasElysiaMeta,
 	hasType,
@@ -734,9 +735,10 @@ export const composeHandler = ({
 
 		if (validator.query?.schema) {
 			const schema = unwrapImportSchema(validator.query?.schema)
+			const properties = getSchemaProperties(schema)
 
-			if (Kind in schema && schema.properties) {
-				for (const [key, value] of Object.entries(schema.properties)) {
+			if (properties) {
+				for (const [key, value] of Object.entries(properties)) {
 					if (hasElysiaMeta('ArrayQuery', value as TSchema)) {
 						arrayProperties[key] = true
 						hasArrayProperty = true
@@ -1494,22 +1496,10 @@ export const composeHandler = ({
 
 						if (candidate) {
 							const isFirst = fileUnions.length === 0
-							// Handle case where schema is wrapped in a Union (e.g., ObjectString coercion)
-							let properties =
-								candidate.schema?.properties ?? type.properties
-
-							// If no properties but schema is a Union, try to find the Object in anyOf
-							if (!properties && candidate.schema?.anyOf) {
-								const objectSchema =
-									candidate.schema.anyOf.find(
-										(s: any) =>
-											s.type === 'object' ||
-											(Kind in s && s[Kind] === 'Object')
-									)
-								if (objectSchema) {
-									properties = objectSchema.properties
-								}
-							}
+							// Handle case where schema is wrapped in a Union/Intersect (e.g., ObjectString coercion)
+							const properties =
+								getSchemaProperties(candidate.schema) ??
+								getSchemaProperties(type)
 
 							if (!properties) continue
 
@@ -1566,20 +1556,27 @@ export const composeHandler = ({
 			) {
 				let validateFile = ''
 
+				const bodyProperties = getSchemaProperties(
+					unwrapImportSchema(validator.body.schema)
+				)
+
 				let i = 0
-				for (const [k, v] of Object.entries(
-					unwrapImportSchema(validator.body.schema).properties
-				) as [string, TSchema][]) {
-					if (
-						!v.extension ||
-						(v[Kind] !== 'File' && v[Kind] !== 'Files')
-					)
-						continue
+				if (bodyProperties) {
+					for (const [k, v] of Object.entries(bodyProperties) as [
+						string,
+						TSchema
+					][]) {
+						if (
+							!v.extension ||
+							(v[Kind] !== 'File' && v[Kind] !== 'Files')
+						)
+							continue
 
-					if (i) validateFile += ','
-					validateFile += `fileType(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
+						if (i) validateFile += ','
+						validateFile += `fileType(c.body.${k},${JSON.stringify(v.extension)},'body.${k}')`
 
-					i++
+						i++
+					}
 				}
 
 				if (i) fnLiteral += '\n'
