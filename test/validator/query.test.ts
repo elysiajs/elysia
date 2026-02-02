@@ -1126,4 +1126,43 @@ describe('Query Validator', () => {
 		expect(invalid1.status).toBe(422)
 		expect(invalid2.status).toBe(422)
 	})
+
+	// Union schema tests
+	it('handle query array in Union schema', async () => {
+		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+			query: t.Union([
+				t.Object({
+					ids: t.Array(t.String())
+				}),
+				t.Object({
+					id: t.String()
+				})
+			])
+		})
+
+		const response = await app
+			.handle(req('/?ids=1&ids=2'))
+			.then((x) => x.json())
+
+		expect(response.ids).toEqual(['1', '2'])
+	})
+
+	it('handle numeric coercion in Union schema', async () => {
+		const app = new Elysia({ aot: false }).get('/', ({ query }) => query, {
+			query: t.Union([
+				t.Object({
+					page: t.Numeric()
+				}),
+				t.Object({
+					cursor: t.String()
+				})
+			])
+		})
+
+		const response = await app
+			.handle(req('/?page=5'))
+			.then((x) => x.json())
+
+		expect(response.page).toBe(5)
+	})
 })

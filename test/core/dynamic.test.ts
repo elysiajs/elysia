@@ -758,4 +758,28 @@ describe('Dynamic Mode', () => {
 	// 		names: ['rapi', 'anis']
 	// 	})
 	// })
+
+	// Union schema test - verifies getSchemaProperties handles Union without crashing
+	it('handle Union query schema', async () => {
+		const app = new Elysia({ aot: false }).get(
+			'/',
+			({ query }) => query,
+			{
+				query: t.Union([
+					t.Object({
+						search: t.String()
+					}),
+					t.Object({
+						id: t.Numeric()
+					})
+				])
+			}
+		)
+
+		const response = await app
+			.handle(req('/?search=test'))
+			.then((x) => x.json())
+
+		expect(response.search).toBe('test')
+	})
 })
