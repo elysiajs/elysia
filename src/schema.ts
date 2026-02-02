@@ -248,8 +248,8 @@ export const hasElysiaMeta = (meta: string, _schema: TAnySchema): boolean => {
 export const hasProperty = (
 	expectedProperty: string,
 	_schema: TAnySchema | TypeCheck<any> | ElysiaTypeCheck<any>
-) => {
-	if (!_schema) return
+): boolean => {
+	if (!_schema) return false
 
 	// @ts-expect-error private property
 	const schema = _schema.schema ?? _schema
@@ -258,6 +258,19 @@ export const hasProperty = (
 		return _schema
 			.References()
 			.some((schema: TAnySchema) => hasProperty(expectedProperty, schema))
+
+	if (schema.anyOf)
+		return schema.anyOf.some((s: TSchema) =>
+			hasProperty(expectedProperty, s)
+		)
+	if (schema.allOf)
+		return schema.allOf.some((s: TSchema) =>
+			hasProperty(expectedProperty, s)
+		)
+	if (schema.oneOf)
+		return schema.oneOf.some((s: TSchema) =>
+			hasProperty(expectedProperty, s)
+		)
 
 	if (schema.type === 'object') {
 		const properties = schema.properties as Record<string, TAnySchema>
