@@ -71,80 +71,71 @@ describe('Has Transform', () => {
 	it('found on direct Union', () => {
 		const schema = t.Union([
 			t.Object({
-				id: t.Number(),
-				liyue: t.File()
+			    id: t.Number(),
+			    liyue: t.File()
 			}),
 			t.Object({
-				id: t.Number(),
-				liyue: t.Number()
-			})
+			    id: t.Number(),
+			    liyue: t.Number(),
+			}),
 		])
 
 		expect(hasType('File', schema)).toBe(true)
 	})
 
 	it('find in Import wrapping File', () => {
-		const schema = t
-			.Module({
-				Avatar: t.File()
-			})
-			.Import('Avatar')
+		const schema = t.Module({
+			Avatar: t.File()
+		}).Import('Avatar')
 
 		expect(hasType('File', schema)).toBe(true)
 	})
 
 	it('find in Import wrapping Object with File', () => {
-		const schema = t
-			.Module({
-				Upload: t.Object({
-					name: t.String(),
-					file: t.File()
-				})
+		const schema = t.Module({
+			Upload: t.Object({
+				name: t.String(),
+				file: t.File()
 			})
-			.Import('Upload')
+		}).Import('Upload')
 
 		expect(hasType('File', schema)).toBe(true)
 	})
 
 	it('return false for Import wrapping Object without File', () => {
-		const schema = t
-			.Module({
-				User: t.Object({
-					name: t.String(),
-					age: t.Number()
-				})
+		const schema = t.Module({
+			User: t.Object({
+				name: t.String(),
+				age: t.Number()
 			})
-			.Import('User')
+		}).Import('User')
 
 		expect(hasType('File', schema)).toBe(false)
 	})
 
 	it('find in Import wrapping Union with File', () => {
-		const schema = t
-			.Module({
-				Data: t.Union([t.Object({ file: t.File() }), t.Null()])
-			})
-			.Import('Data')
+		const schema = t.Module({
+			Data: t.Union([
+				t.Object({ file: t.File() }),
+				t.Null()
+			])
+		}).Import('Data')
 
 		expect(hasType('File', schema)).toBe(true)
 	})
 
 	it('find in Import wrapping Array of Files', () => {
-		const schema = t
-			.Module({
-				Uploads: t.Array(t.File())
-			})
-			.Import('Uploads')
+		const schema = t.Module({
+			Uploads: t.Array(t.File())
+		}).Import('Uploads')
 
 		expect(hasType('Files', schema)).toBe(true)
 	})
 
 	it('find in Import wrapping Array of Files using t.Files', () => {
-		const schema = t
-			.Module({
-				Uploads: t.Files()
-			})
-			.Import('Uploads')
+		const schema = t.Module({
+			Uploads: t.Files()
+		}).Import('Uploads')
 
 		expect(hasType('Files', schema)).toBe(true)
 	})
