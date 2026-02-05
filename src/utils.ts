@@ -978,26 +978,45 @@ export const form = <const T extends Record<keyof any, unknown>>(
 	return formData as any
 }
 
-export const randomId =
-	typeof crypto === 'undefined'
-		? () => {
-				let result = ''
+/**
+ * Generates a random ID using Math.random() fallback.
+ * Used when crypto.randomUUID() is not available or throws an error.
+ */
+const generateRandomIdFallback = (): string => {
+	let result = ''
+	const characters =
+		'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+	const charactersLength = characters.length
 
-				const characters =
-					'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-				const charactersLength = characters.length
+	for (let i = 0; i < 16; i++)
+		result += characters.charAt(Math.floor(Math.random() * charactersLength))
 
-				for (let i = 0; i < 16; i++)
-					result += characters.charAt(
-						Math.floor(Math.random() * charactersLength)
-					)
+	return result
+}
 
-				return result
-			}
-		: () => {
-				const uuid = crypto.randomUUID()
-				return uuid.slice(0, 8) + uuid.slice(24, 32)
-			}
+/**
+ * Generates a random ID for schema identification.
+ *
+ * Uses crypto.randomUUID() when available, with a Math.random() fallback
+ * for environments where crypto.randomUUID() throws an error
+ * (e.g., Cloudflare Workers global scope).
+ *
+ * @see https://developers.cloudflare.com/workers/runtime-apis/handlers/
+ */
+export const randomId = (): string => {
+	if (typeof crypto === 'undefined') {
+		return generateRandomIdFallback()
+	}
+
+	try {
+		const uuid = crypto.randomUUID()
+		return uuid.slice(0, 8) + uuid.slice(24, 32)
+	} catch {
+		// Fallback for environments where crypto.randomUUID() throws
+		// in global scope (e.g., Cloudflare Workers)
+		return generateRandomIdFallback()
+	}
+}
 
 // ! Deduplicate current instance
 export const deduplicateChecksum = <T extends Function>(
