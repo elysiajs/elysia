@@ -37,7 +37,7 @@ export namespace Sucrose {
 }
 
 /**
- * Separate stringified function body and paramter
+ * Separate stringified function body and parameter
  *
  * @example
  * ```typescript
@@ -138,7 +138,7 @@ export const separateFunction = (
  *
  * @example
  * ```typescript
- * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
+ * bracketPairRange('hello: { world: { a } }, elysia') // [7, 23]
  * ```
  */
 export const bracketPairRange = (parameter: string): [number, number] => {
@@ -170,7 +170,7 @@ export const bracketPairRange = (parameter: string): [number, number] => {
  *
  * @example
  * ```typescript
- * bracketPairRange('hello: { world: { a } }, elysia') // [6, 20]
+ * bracketPairRangeReverse('hello: { world: { a } }, elysia') // [7, 23]
  * ```
  */
 export const bracketPairRangeReverse = (
@@ -214,7 +214,7 @@ export const removeColonAlias = (parameter: string) => {
 }
 
 /**
- * Retrieve only root paramters of a function
+ * Retrieve only root parameters of a function
  *
  * @example
  * ```typescript
@@ -224,7 +224,7 @@ export const removeColonAlias = (parameter: string) => {
  * }
  * ```
  */
-export const retrieveRootParamters = (parameter: string) => {
+export const retrieveRootParameters = (parameter: string) => {
 	let hasParenthesis = false
 
 	// Remove () from parameter
@@ -279,7 +279,7 @@ export const findParameterReference = (
 	parameter: string,
 	inference: Sucrose.Inference
 ) => {
-	const { parameters, hasParenthesis } = retrieveRootParamters(parameter)
+	const { parameters, hasParenthesis } = retrieveRootParameters(parameter)
 
 	// Check if root is an object destructuring
 	if (parameters.query) inference.query = true
@@ -460,7 +460,7 @@ export const inferBodyReference = (
 
 		// Scan object destructured property
 		if (alias.charCodeAt(0) === 123) {
-			const parameters = retrieveRootParamters(alias).parameters
+			const parameters = retrieveRootParameters(alias).parameters
 
 			if (parameters.query) inference.query = true
 			if (parameters.headers) inference.headers = true
