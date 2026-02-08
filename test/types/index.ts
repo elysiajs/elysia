@@ -3,6 +3,7 @@
 import { expectTypeOf } from 'expect-type'
 import {
 	type Cookie,
+	createElysia,
 	Elysia,
 	file,
 	form,
@@ -2968,4 +2969,52 @@ type a = keyof {}
 				name: string
 			}>()
 		})
+}
+
+// ? createElysia preserves prefix literal type (issue #1725)
+// Factory-created sub-apps should NOT cause response type intersection
+{
+	const SessionsListDto = t.Object({
+		sessions: t.Array(t.Object({ id: t.String(), name: t.String() }))
+	})
+
+	const QSessionsListDto = t.Object({
+		sessions: t.Array(
+			t.Object({ sessionId: t.String(), bankName: t.String() })
+		)
+	})
+
+	function createSessionApp() {
+		return createElysia({ prefix: '/sessions' }).get(
+			'/',
+			() => ({ sessions: [{ id: '1', name: 'S1' }] }),
+			{ response: SessionsListDto }
+		)
+	}
+
+	function createQSessionApp() {
+		return createElysia({ prefix: '/question-sessions' }).get(
+			'/',
+			() => ({ sessions: [{ sessionId: 'qs-1', bankName: 'B1' }] }),
+			{ response: QSessionsListDto }
+		)
+	}
+
+	const app = new Elysia().group('/api', (app) =>
+		app.use(createSessionApp()).use(createQSessionApp())
+	)
+
+	type Routes = (typeof app)['~Routes']
+	type SessionsResponse = Routes['api']['sessions']['get']['response'][200]
+	type QSessionsResponse =
+		Routes['api']['question-sessions']['get']['response'][200]
+
+	// Each response type should be independent — no intersection
+	expectTypeOf<SessionsResponse>().toEqualTypeOf<{
+		sessions: { id: string; name: string }[]
+	}>()
+
+	expectTypeOf<QSessionsResponse>().toEqualTypeOf<{
+		sessions: { sessionId: string; bankName: string }[]
+	}>()
 }
