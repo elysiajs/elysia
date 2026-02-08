@@ -21,7 +21,7 @@ import { WebStandardAdapter } from './adapter/web-standard/index'
 import type { ElysiaAdapter } from './adapter/types'
 
 import { env } from './universal/env'
-import type { ListenCallback, Serve, Server } from './universal/server'
+import type { ListenCallback, Server } from './universal/server'
 
 import {
 	cloneInference,
