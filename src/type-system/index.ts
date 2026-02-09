@@ -153,7 +153,10 @@ export const ElysiaType = {
 			.Encode((value) => value) as any as TNumber
 	},
 
-	NumericEnum<T extends AssertNumericEnum<T>>(item: T, property?: SchemaOptions) {
+	NumericEnum<T extends AssertNumericEnum<T>>(
+		item: T,
+		property?: SchemaOptions
+	) {
 		const schema = Type.Enum(item, property)
 		const compiler = compile(schema)
 
@@ -301,7 +304,7 @@ export const ElysiaType = {
 					[
 						t.String({
 							format: 'ObjectString',
-                            default: options?.default
+							default: options?.default
 						}),
 						schema
 					],
@@ -365,16 +368,18 @@ export const ElysiaType = {
 
 		return t
 			.Transform(
-				t.Union([
-					t.String({
-						format: 'ArrayString',
-						default: options?.default
-					}),
-					schema
-				],
-				{
-					elysiaMeta: 'ArrayString'
-				})
+				t.Union(
+					[
+						t.String({
+							format: 'ArrayString',
+							default: options?.default
+						}),
+						schema
+					],
+					{
+						elysiaMeta: 'ArrayString'
+					}
+				)
 			)
 			.Decode((value) => {
 				if (Array.isArray(value)) {
