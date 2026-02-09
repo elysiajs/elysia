@@ -151,4 +151,55 @@ describe('Has Transform', () => {
 
 		expect(hasType('Files', schema)).toBe(true)
 	})
+
+	// Intersect schema tests
+	it('find on direct Intersect', () => {
+		const schema = t.Intersect([
+			t.Object({
+				id: t.Number()
+			}),
+			t.Object({
+				file: t.File()
+			})
+		])
+
+		expect(hasType('File', schema)).toBe(true)
+	})
+
+	it('do not find on Intersect without File', () => {
+		const schema = t.Intersect([
+			t.Object({
+				id: t.Number()
+			}),
+			t.Object({
+				name: t.String()
+			})
+		])
+
+		expect(hasType('File', schema)).toBe(false)
+	})
+
+	it('find on nested Union in Intersect', () => {
+		const schema = t.Intersect([
+			t.Object({
+				id: t.Number()
+			}),
+			t.Union([t.Object({ file: t.File() }), t.Null()])
+		])
+
+		expect(hasType('File', schema)).toBe(true)
+	})
+
+	it('find File in Intersect referenced via Module.Import()', () => {
+		const schema = t
+			.Module({
+				Data: t.Intersect([
+					t.Object({ id: t.Number() }),
+					t.Object({ file: t.File() })
+				])
+			})
+			.Import('Data')
+
+		expect(hasType('File', schema)).toBe(true)
+	})
 })
