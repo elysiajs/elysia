@@ -47,8 +47,8 @@ describe('macro beforeHandle lifecycle order', () => {
 		// So we should get "Unauthorized" error, not "User ID is required"
 		const body = await response.text()
 
-		console.log('Execution order:', executionOrder)
-		console.log('Response:', body)
+		// console.log('Execution order:', executionOrder)
+		// console.log('Response:', body)
 
 		// Expected order: authService.resolve -> isSignedIn.beforeHandle (throws)
 		// dbClient.resolve should NOT run because beforeHandle throws first
@@ -80,7 +80,7 @@ describe('macro beforeHandle lifecycle order', () => {
 
 		await app.handle(new Request('http://localhost/'))
 
-		console.log('Execution order:', executionOrder)
+		// console.log('Execution order:', executionOrder)
 
 		// According to docs, resolve and beforeHandle share the same queue
 		// Order should be: resolve1 -> beforeHandle1 -> resolve2 -> beforeHandle2
@@ -121,15 +121,18 @@ describe('macro beforeHandle lifecycle order', () => {
 		const app = new Elysia()
 			.use(authPlugin)
 			.onError(({ error }) => {
+				// @ts-ignore
 				errorMessage = error.message
-				return error.message
+				return errorMessage
 			})
-			.group('/api', { requireAuth: true }, (app) => app.use(dataPlugin).get('/', ({ data }) => data))
+			.group('/api', { requireAuth: true }, (app) =>
+				app.use(dataPlugin).get('/', ({ data }) => data)
+			)
 
 		const response = await app.handle(new Request('http://localhost/api/'))
 
-		console.log('Execution order:', executionOrder)
-		console.log('Error:', errorMessage)
+		// console.log('Execution order:', executionOrder)
+		// console.log('Error:', errorMessage)
 
 		// With auth succeeding (userId = 'user123'), all should run
 		// Expected: auth.resolve -> requireAuth.beforeHandle -> data.resolve

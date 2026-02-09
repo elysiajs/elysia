@@ -23,7 +23,7 @@ import type {
 	RouteSchema
 } from './types'
 import { ElysiaFile } from './universal/file'
-import { isBun } from './universal/utils'
+import { isBun, isCloudflareWorker } from './universal/utils'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const pathStartIndex = url.indexOf('/', 11)
@@ -978,22 +978,6 @@ export const form = <const T extends Record<keyof any, unknown>>(
 }
 
 /**
- * Generates a random ID using Math.random() fallback.
- * Used when crypto.randomUUID() is not available or throws an error.
- */
-const generateRandomIdFallback = (): string => {
-	let result = ''
-	const characters =
-		'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-	const charactersLength = characters.length
-
-	for (let i = 0; i < 16; i++)
-		result += characters.charAt(Math.floor(Math.random() * charactersLength))
-
-	return result
-}
-
-/**
  * Generates a random ID for schema identification.
  *
  * Uses crypto.randomUUID() when available, with a Math.random() fallback
@@ -1002,20 +986,26 @@ const generateRandomIdFallback = (): string => {
  *
  * @see https://developers.cloudflare.com/workers/runtime-apis/handlers/
  */
-export const randomId = (): string => {
-	if (typeof crypto === 'undefined') {
-		return generateRandomIdFallback()
-	}
+export const randomId =
+	typeof crypto === 'undefined' || isCloudflareWorker()
+		? (): string => {
+				let result = ''
 
-	try {
-		const uuid = crypto.randomUUID()
-		return uuid.slice(0, 8) + uuid.slice(24, 32)
-	} catch {
-		// Fallback for environments where crypto.randomUUID() throws
-		// in global scope (e.g., Cloudflare Workers)
-		return generateRandomIdFallback()
-	}
-}
+				const characters =
+					'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+
+				for (let i = 0; i < 16; i++)
+					result += characters.charAt(
+						// 62 is characters.length
+						Math.floor(Math.random() * 62)
+					)
+
+				return result
+			}
+		: (): string => {
+				const uuid = crypto.randomUUID()
+				return uuid.slice(0, 8) + uuid.slice(24, 32)
+			}
 
 // ! Deduplicate current instance
 export const deduplicateChecksum = <T extends Function>(

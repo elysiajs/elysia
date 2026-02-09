@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-constant-condition */
 import { checksum } from './utils'
-import { isBun } from './universal/utils'
+import { isBun, isCloudflareWorker } from './universal/utils'
 
 import type { Handler, HookContainer, LifeCycleStore } from './types'
-import { isCloudflareWorker } from './adapter/cloudflare-worker'
 
 export namespace Sucrose {
 	export interface Inference {
@@ -37,7 +36,7 @@ export namespace Sucrose {
 }
 
 /**
- * Separate stringified function body and paramter
+ * Separate stringified function body and parameter
  *
  * @example
  * ```typescript
@@ -214,7 +213,7 @@ export const removeColonAlias = (parameter: string) => {
 }
 
 /**
- * Retrieve only root paramters of a function
+ * Retrieve only root parameters of a function
  *
  * @example
  * ```typescript
@@ -224,7 +223,7 @@ export const removeColonAlias = (parameter: string) => {
  * }
  * ```
  */
-export const retrieveRootParamters = (parameter: string) => {
+export const retrieveRootparameters = (parameter: string) => {
 	let hasParenthesis = false
 
 	// Remove () from parameter
@@ -279,7 +278,7 @@ export const findParameterReference = (
 	parameter: string,
 	inference: Sucrose.Inference
 ) => {
-	const { parameters, hasParenthesis } = retrieveRootParamters(parameter)
+	const { parameters, hasParenthesis } = retrieveRootparameters(parameter)
 
 	// Check if root is an object destructuring
 	if (parameters.query) inference.query = true
@@ -460,7 +459,7 @@ export const inferBodyReference = (
 
 		// Scan object destructured property
 		if (alias.charCodeAt(0) === 123) {
-			const parameters = retrieveRootParamters(alias).parameters
+			const parameters = retrieveRootparameters(alias).parameters
 
 			if (parameters.query) inference.query = true
 			if (parameters.headers) inference.headers = true

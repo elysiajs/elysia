@@ -2,26 +2,6 @@ import { ElysiaAdapter } from '../..'
 import { WebStandardAdapter } from '../web-standard/index'
 import { composeErrorHandler } from '../../compose'
 
-export function isCloudflareWorker() {
-	try {
-		// Check for the presence of caches.default, which is a global in Workers
-		if (
-			// @ts-ignore
-			typeof caches !== 'undefined' &&
-			// @ts-ignore
-			typeof caches.default !== 'undefined'
-		)
-			return true
-
-		// @ts-ignore
-		if (typeof WebSocketPair !== 'undefined') return true
-	} catch {
-		return false
-	}
-
-	return false
-}
-
 /**
  * Cloudflare Adapter (Experimental)
  * @see https://elysiajs.com/integrations/cloudflare-worker

@@ -604,6 +604,8 @@ describe('Stream', () => {
 		expect(onErrorCalled).toBe(true)
 		expect(errorCode).toBe(500)
 		expect(response.headers.get('x-custom-header')).toBe('test-value')
+	})
+
 	it('handle sse with plugin global hooks and trace', async () => {
 		const PluginA = () =>
 			new Elysia({ name: 'PluginA' })
