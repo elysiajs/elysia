@@ -122,6 +122,33 @@ export interface CookieOptions {
 	secure?: boolean | undefined
 
 	/**
+	 * Specifies a function that will be used to encode a
+	 * [cookie-value](https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1).
+	 * Since value of a cookie has a limited character set (and must be a
+	 * simple string), this function can be used to encode a value into a
+	 * string suited for a cookie's value, and should mirror `decode` when
+	 * parsing.
+	 *
+	 * @default encodeURIComponent
+	 */
+	encode?: ((value: string) => string) | undefined
+
+	/**
+	 * Specifies a function that will be used to decode a
+	 * [cookie-value](https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1).
+	 * Since the value of a cookie has a limited character set (and must be a
+	 * simple string), this function can be used to decode a
+	 * previously-encoded cookie value into a JavaScript string.
+	 *
+	 * When not provided, uses `fast-decode-uri-component` (the default
+	 * Elysia behavior). If you provide your own encode/decode scheme you
+	 * must ensure errors are appropriately handled.
+	 *
+	 * @default undefined (uses fast-decode-uri-component)
+	 */
+	decode?: ((value: string) => string | undefined) | undefined
+
+	/**
 	 * Secret key for signing cookie
 	 *
 	 * If array is passed, will use Key Rotation.
@@ -369,6 +396,7 @@ export const parseCookie = async (
 	{
 		secrets,
 		sign,
+		decode: customDecode,
 		...initial
 	}: CookieOptions & {
 		sign?: true | string | string[]
@@ -385,7 +413,7 @@ export const parseCookie = async (
 	for (const [name, v] of Object.entries(cookies)) {
 		if (v === undefined) continue
 
-		let value = decode(v)
+		let value = customDecode ? customDecode(v) : decode(v)
 
 		if (value) {
 			const starts = value.charCodeAt(0)

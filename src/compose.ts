@@ -602,6 +602,8 @@ export const composeHandler = ({
 		secrets?: string | string[]
 		sign: string[] | true
 		properties: { [x: string]: Object }
+		encode?: ((value: string) => string) | undefined
+		decode?: ((value: string) => string | undefined) | undefined
 	} = validator.cookie?.config
 		? mergeCookie(validator?.cookie?.config, app.config.cookie as any)
 		: app.config.cookie
@@ -725,6 +727,8 @@ export const composeHandler = ({
 				get('priority') +
 				get('sameSite') +
 				get('secure') +
+				(cookieMeta.encode ? 'encode:cookieEncoder,' : '') +
+				(cookieMeta.decode ? 'decode:cookieDecoder,' : '') +
 				'}'
 			: 'undefined'
 
@@ -2140,6 +2144,8 @@ export const composeHandler = ({
 		`ERROR_CODE,` +
 		allocateIf(`parseCookie,`, hasCookie) +
 		allocateIf(`signCookie,`, hasCookie) +
+		allocateIf(`cookieEncoder,`, hasCookie && cookieMeta?.encode) +
+		allocateIf(`cookieDecoder,`, hasCookie && cookieMeta?.decode) +
 		allocateIf(`decodeURIComponent,`, hasQuery) +
 		`ElysiaCustomStatusResponse,` +
 		allocateIf(`ELYSIA_TRACE,`, hasTrace) +
@@ -2195,6 +2201,8 @@ export const composeHandler = ({
 			ERROR_CODE,
 			parseCookie: hasCookie ? parseCookie : undefined,
 			signCookie: hasCookie ? signCookie : undefined,
+			cookieEncoder: hasCookie && cookieMeta?.encode ? cookieMeta.encode : undefined,
+			cookieDecoder: hasCookie && cookieMeta?.decode ? cookieMeta.decode : undefined,
 			Cookie: hasCookie ? Cookie : undefined,
 			decodeURIComponent: hasQuery ? decode : undefined,
 			ElysiaCustomStatusResponse,

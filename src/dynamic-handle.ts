@@ -487,7 +487,15 @@ export const createDynamicHandler = (app: AnyElysia) => {
 					// @ts-expect-error
 					validator?.cookie?.config.secrets,
 				// @ts-expect-error
-				sign: app.config.cookie?.sign ?? validator?.cookie?.config.sign
+				sign: app.config.cookie?.sign ?? validator?.cookie?.config.sign,
+				encode:
+					app.config.cookie?.encode ??
+					// @ts-expect-error
+					validator?.cookie?.config.encode,
+				decode:
+					app.config.cookie?.decode ??
+					// @ts-expect-error
+					validator?.cookie?.config.decode
 			} as CookieOptions & {
 				sign?: true | string | string[]
 			}
