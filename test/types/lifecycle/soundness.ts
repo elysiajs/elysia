@@ -1790,6 +1790,20 @@ import { Prettify } from '../../../src/types'
 				expected?: string
 			}
 		}
+		input: {
+			body: {
+				name: 'lilith'
+			}
+			params: {
+				name: 'lilith'
+			}
+			query: {
+				name: 'lilith'
+			}
+			headers: {
+				name: 'lilith'
+			}
+		}
 	}>()
 }
 
@@ -1853,6 +1867,15 @@ import { Prettify } from '../../../src/types'
 				property?: string
 				expected?: string
 			}
+		}
+		input: {
+			body: {
+				name: 'Lilith'
+				friends: ['Sartre', 'Fouco']
+			}
+			params: {}
+			query: {}
+			headers: {}
 		}
 	}>()
 }

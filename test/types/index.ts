@@ -672,6 +672,16 @@ app.use(plugin).group(
 				expected?: string
 			}
 		}
+		input: {
+			body: string
+			headers: {
+				authorization: string
+			}
+			query: {
+				name: string
+			}
+			params: Record<never, string>
+		}
 	}>()
 }
 
@@ -698,6 +708,12 @@ app.use(plugin).group(
 		headers: unknown
 		response: {
 			200: number
+		}
+		input: {
+			body: unknown
+			params: {}
+			query: unknown
+			headers: unknown
 		}
 	}>()
 }
@@ -751,6 +767,16 @@ app.use(plugin).group(
 				expected?: string
 			}
 		}
+		input: {
+			body: string
+			params: {}
+			query: {
+				name: string
+			}
+			headers: {
+				authorization: string
+			}
+		}
 	}>()
 }
 
@@ -768,6 +794,12 @@ app.use(plugin).group(
 		headers: unknown
 		response: {
 			200: string
+		}
+		input: {
+			body: unknown
+			params: {}
+			query: unknown
+			headers: unknown
 		}
 	}>()
 }
@@ -977,6 +1009,12 @@ app.group(
 		response: {
 			200: string
 		}
+		input: {
+			body: unknown
+			params: {}
+			query: unknown
+			headers: unknown
+		}
 	}>()
 }
 
@@ -1003,6 +1041,12 @@ app.group(
 						headers: unknown
 						response: {
 							200: string
+						}
+						input: {
+							body: unknown
+							params: {}
+							query: unknown
+							headers: unknown
 						}
 					}
 				}
@@ -1238,6 +1282,12 @@ const a = app
 									couldBeError: boolean
 								}
 							}
+							input: {
+								body: unknown
+								params: {}
+								query: unknown
+								headers: unknown
+							}
 						}
 					}
 				}
@@ -1252,6 +1302,12 @@ const a = app
 							query: unknown
 							headers: unknown
 							response: {}
+							input: {
+								body: unknown
+								params: {}
+								query: unknown
+								headers: unknown
+							}
 						}
 					}
 				}
