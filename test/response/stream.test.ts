@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test'
+import { describe, expect, it } from 'bun:test'
 import { req } from '../utils'
 
 import { Elysia, sse } from '../../src'
@@ -604,5 +604,38 @@ describe('Stream', () => {
 		expect(onErrorCalled).toBe(true)
 		expect(errorCode).toBe(500)
 		expect(response.headers.get('x-custom-header')).toBe('test-value')
+	it('handle sse with plugin global hooks and trace', async () => {
+		const PluginA = () =>
+			new Elysia({ name: 'PluginA' })
+				.onBeforeHandle(() => {})
+				.onAfterHandle(() => {})
+				.onParse(() => {})
+				.onTransform(() => {})
+				.onError(() => {})
+				.onAfterResponse(() => {})
+				.onStart(() => {})
+				.onStop(() => {})
+				.onRequest(() => {})
+				.trace(() => {})
+				.as('global')
+
+		const app = new Elysia().use(PluginA()).get('/sse', async function* () {
+			yield sse({ event: 'message', data: { meow: '1' } })
+			yield sse({ event: 'message', data: { meow: '2' } })
+			yield sse({ event: 'message', data: { meow: '3' } })
+		})
+
+		const response = await app.handle(req('/sse'))
+		expect(response.headers.get('content-type')).toBe('text/event-stream')
+
+		const result = []
+
+		for await (const chunk of streamResponse(response)) result.push(chunk)
+		expect(result).toHaveLength(3)
+		expect(result).toEqual([
+			'event: message\ndata: {"meow":"1"}\n\n',
+			'event: message\ndata: {"meow":"2"}\n\n',
+			'event: message\ndata: {"meow":"3"}\n\n'
+		])
 	})
 })

@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import { expectTypeOf } from 'expect-type'
 import {
 	type Cookie,
 	Elysia,
@@ -11,6 +10,8 @@ import {
 	status,
 	t
 } from '../../src'
+
+import { expectTypeOf } from 'expect-type'
 
 const app = new Elysia()
 
@@ -2968,4 +2969,18 @@ type a = keyof {}
 				name: string
 			}>()
 		})
+}
+
+// ? Promise<Response>
+{
+	async function handler() {
+		return new Response(JSON.stringify({ text: 'hello' }), {
+			status: 200,
+			headers: { 'Content-Type': 'application/json' }
+		})
+	}
+
+	new Elysia().get('/hello', () => handler(), {
+		response: { 200: t.Object({ text: t.String() }) }
+	})
 }

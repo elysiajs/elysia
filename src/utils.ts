@@ -5,7 +5,6 @@ import type {
 	LifeCycleStore,
 	MaybeArray,
 	InputSchema,
-	BaseMacro,
 	LifeCycleType,
 	HookContainer,
 	GracefulHandler,
@@ -24,8 +23,7 @@ import type {
 	RouteSchema
 } from './types'
 import { ElysiaFile } from './universal/file'
-
-export const hasHeaderShorthand = 'toJSON' in new Headers()
+import { isBun } from './universal/utils'
 
 export const replaceUrlPath = (url: string, pathname: string) => {
 	const pathStartIndex = url.indexOf('/', 11)
@@ -401,8 +399,7 @@ export const lifeCycleToArray = (a: LifeCycleStore) => {
 	return a
 }
 
-const isBun = typeof Bun !== 'undefined'
-const hasBunHash = isBun && typeof Bun.hash === 'function'
+export const hasHeaderShorthand = isBun ? 'toJSON' in new Headers() : false
 export const hasSetImmediate = typeof setImmediate === 'function'
 
 // https://stackoverflow.com/a/52171480

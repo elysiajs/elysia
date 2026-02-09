@@ -1,3 +1,14 @@
+# 1.4.23
+Bug fix:
+- [#1721](https://github.com/elysiajs/elysia/issues/1721) Promise<Response> with response schema
+- [#1700](https://github.com/elysiajs/elysia/issues/1700) distinct union object
+- [#1683](https://github.com/elysiajs/elysia/pull/1683) response validation returns 500 instead of 422 for nested schemas in dynamic mode
+- [#1595](https://github.com/elysiajs/elysia/pull/1595) stream reference should point to teed value
+- fix can't modify immutable headers error
+
+Change:
+- update exact-mirror to 0.2.7
+
 # 1.4.22 - 14 Jan 2026
 Improvement:
 - use imperative check for `replaceURLPath` instead of allocating `new URL`

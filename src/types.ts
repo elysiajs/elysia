@@ -1197,14 +1197,14 @@ export type InlineHandler<
 		resolve: {}
 	}
 > =
-	| InlineResponse
+	| MaybePromise<InlineResponse>
 	| ((
 			context: Context<
 				Route & MacroContext,
 				Singleton & { resolve: MacroContext['resolve'] }
 			>
 	  ) =>
-			| Response
+			| MaybePromise<Response>
 			| MaybePromise<
 					{} extends Route['response']
 						? unknown
@@ -1243,9 +1243,9 @@ export type InlineHandlerNonMacro<
 		resolve: {}
 	}
 > =
-	| InlineResponse
+	| MaybePromise<InlineResponse>
 	| ((context: Context<Route, Singleton>) =>
-			| Response
+			| MaybePromise<Response>
 			| MaybePromise<
 					{} extends Route['response']
 						? unknown

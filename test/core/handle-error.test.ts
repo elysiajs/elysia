@@ -279,8 +279,8 @@ describe('Handle Error', () => {
 		const value = { message: 'meow!' }
 
 		const response: Response = await new Elysia()
-			.mapResponse(({ response }) => {
-				if (typeof response === 'object')
+			.mapResponse(({ responseValue }) => {
+				if (typeof responseValue === 'object')
 					return new Response('Don Quixote', {
 						headers: {
 							'content-type': 'text/plain'

@@ -370,7 +370,7 @@ describe('Response Validator', () => {
 	})
 
 	it('return static undefined with status based schema', async () => {
-		const app = new Elysia().get('/', undefined, {
+		const app = new Elysia().get('/', undefined as any, {
 			response: {
 				200: t.Union([
 					t.Void(),
@@ -561,5 +561,25 @@ describe('Response Validator', () => {
 		}
 
 		expect(result.join('')).toContain('data: {"name":"Name"}')
+	})
+
+	it('handle distinct union', () => {
+		const app = new Elysia()
+			.get('/health', () => ({ status: 'healthy' }) as const, {
+				response: {
+					200: t.Union([
+						t.Object({
+							status: t.Literal('a'),
+							a: t.Object({ b: t.Integer() })
+						}),
+						t.Object({ status: t.Literal('healthy') })
+					])
+				}
+			})
+			.listen(3000)
+
+		const status = app.handle(req('/health')).then((x) => x.status)
+
+		expect(status).resolves.toBe(200)
 	})
 })
