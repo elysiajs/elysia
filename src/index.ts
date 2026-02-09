@@ -7105,7 +7105,8 @@ export default class Elysia<
 						SchemaInput,
 						MacroToContextInput<
 							Metadata['macroFn'],
-							Omit<Input, NonResolvableMacroKey>
+							Omit<Input, NonResolvableMacroKey>,
+							Definitions['typebox']
 						>
 					>
 				}
