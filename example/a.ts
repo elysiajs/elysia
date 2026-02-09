@@ -1,24 +1,20 @@
 import { Elysia, t } from '../src'
+import { req } from '../test/utils'
 
-const verifyToken = new Elysia()
-	.macro('verifyToken', {
-		headers: t.Object({
-			authorization: t.String()
-		}),
-		resolve({ headers }) {
-			// headers should be typed as { authorization: string }
-			// but TypeScript shows: Record<string, string | undefined>
-			const token = headers.authorization // Type is 'string | undefined', not 'string'
-				? headers.authorization.substring(7)
-				: undefined
-
-			return { token }
+const app = new Elysia()
+	.get('/health', () => ({ status: 'healthy' }) as const, {
+		response: {
+			200: t.Union([
+				t.Object({
+					status: t.Literal('a'),
+					a: t.Object({ b: t.Integer() }) // <-- if you comment this line, you won't have an error
+				}),
+				t.Object({ status: t.Literal('healthy') })
+			])
 		}
 	})
-	.get(
-		'/',
-		({ token }) => {},
-		{
-			verifyToken: true
-		}
-	)
+	.listen(3000)
+
+app.handle(req('/health'))
+	.then((x) => x.status)
+	.then(console.log)

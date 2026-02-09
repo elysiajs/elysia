@@ -8,7 +8,7 @@ import type {
 
 import { StatusMap, InvertedStatusMap } from './utils'
 import type { ElysiaTypeCheck } from './schema'
-import { Prettify, StandardSchemaV1Like } from './types'
+import { StandardSchemaV1Like } from './types'
 
 // ? Cloudflare worker support
 const env =
@@ -160,7 +160,7 @@ interface ValueErrorWithSummary extends ValueError {
 	summary?: string
 }
 
-export const mapValueError = (error: ValueError): ValueErrorWithSummary => {
+export const mapValueError = (error: ValueError | undefined): ValueErrorWithSummary | undefined => {
 	if (!error) return error
 
 	let { message, path, value, type } = error
@@ -388,7 +388,7 @@ export class ValidationError extends Error {
 			// @ts-ignore private field
 			const schema = validator?.schema ?? validator
 
-			if (!isProduction && !allowUnsafeValidationDetails) {
+			if (!isProduction && !allowUnsafeValidationDetails)
 				try {
 					expected = Value.Create(schema)
 				} catch (error) {
@@ -399,7 +399,6 @@ export class ValidationError extends Error {
 						error
 					}
 				}
-			}
 
 			customError =
 				error?.schema?.message || error?.schema?.error !== undefined
@@ -418,7 +417,7 @@ export class ValidationError extends Error {
 											property: accessor,
 											message: error?.message,
 											summary:
-												mapValueError(error).summary,
+												mapValueError(error)?.summary,
 											found: value,
 											expected,
 											errors:
@@ -458,7 +457,7 @@ export class ValidationError extends Error {
 						on: type,
 						property: accessor,
 						message: error?.message,
-						summary: mapValueError(error).summary,
+						summary: mapValueError(error)?.summary,
 						expected,
 						found: value,
 						errors:
@@ -596,9 +595,7 @@ export class ValidationError extends Error {
 					on: this.type,
 					property: this.valueError?.path || 'root',
 					message,
-					summary: this.valueError
-						? mapValueError(this.valueError).summary
-						: undefined,
+					summary: mapValueError(this.valueError)?.summary,
 					found: value,
 					expected,
 					errors
