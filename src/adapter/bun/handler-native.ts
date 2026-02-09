@@ -14,7 +14,11 @@ export const createNativeStaticHandler = (
 	if (isHTMLBundle(handle)) return () => handle as any
 
 	const response = mapResponse(
-		handle,
+		handle instanceof Response
+			? handle.clone()
+			: handle instanceof Promise
+				? handle.then((x) => (x instanceof Response ? x.clone() : x))
+				: handle,
 		set ?? {
 			headers: {}
 		}

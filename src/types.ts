@@ -1197,7 +1197,7 @@ export type InlineHandler<
 		resolve: {}
 	}
 > =
-	| InlineResponse
+	| MaybePromise<InlineResponse>
 	| ((
 			context: Context<
 				Route & MacroContext,
@@ -1243,7 +1243,7 @@ export type InlineHandlerNonMacro<
 		resolve: {}
 	}
 > =
-	| InlineResponse
+	| MaybePromise<InlineResponse>
 	| ((context: Context<Route, Singleton>) =>
 			| MaybePromise<Response>
 			| MaybePromise<

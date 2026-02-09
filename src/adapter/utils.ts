@@ -175,14 +175,12 @@ export const createStreamHandler =
 		// Check if stream is from a pre-formatted Response body
 		const isSSE =
 			!skipFormat &&
-			(
-				// @ts-ignore First SSE result is wrapped with sse()
-				init?.value?.sse ??
+			// @ts-ignore First SSE result is wrapped with sse()
+			(init?.value?.sse ??
 				// @ts-ignore ReadableStream is wrapped with sse()
 				generator?.sse ??
 				// User explicitly set content-type to SSE
-				set?.headers['content-type']?.startsWith('text/event-stream')
-			)
+				set?.headers['content-type']?.startsWith('text/event-stream'))
 
 		const format = isSSE
 			? (data: string) => `data: ${data}\n\n`
@@ -337,79 +335,75 @@ export const handleSet = (set: Context['set']) => {
 	}
 }
 
+// Merge header by allocating a new one
+// In Bun, response.headers can be mutable
+// while in Node and Cloudflare Worker is not
+// default to creating a new one instead
+export function mergeHeaders(
+	responseHeaders: Headers,
+	setHeaders: Context['set']['headers']
+) {
+	const headers = new Headers(
+		hasHeaderShorthand
+			? // @ts-ignore
+				responseHeaders.toJSON()
+			: Object.fromEntries(responseHeaders.entries())
+	)
+
+	// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
+	if (setHeaders instanceof Headers)
+		for (const key of setHeaders.keys()) {
+			if (key === 'set-cookie') {
+				if (headers.has('set-cookie')) continue
+
+				for (const cookie of setHeaders.getSetCookie())
+					headers.append('set-cookie', cookie)
+			} else if (!responseHeaders.has(key))
+				headers.set(key, setHeaders?.get(key) ?? '')
+		}
+	else
+		for (const key in setHeaders)
+			if (key === 'set-cookie')
+				headers.append(key, setHeaders[key] as any)
+			else if (!responseHeaders.has(key))
+				headers.set(key, setHeaders[key] as any)
+
+	return headers
+}
+
+export function mergeStatus(
+	responseStatus: number,
+	setStatus: Context['set']['status']
+) {
+	if (typeof setStatus === 'string') setStatus = StatusMap[setStatus]
+
+	if (responseStatus === 200) return setStatus
+
+	return responseStatus
+}
+
 export const createResponseHandler = (handler: CreateHandlerParameter) => {
 	const handleStream = createStreamHandler(handler)
 
 	return (response: Response, set: Context['set'], request?: Request) => {
-		let isCookieSet = false
-
-		// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
-		if (set.headers instanceof Headers)
-			for (const key of set.headers.keys()) {
-				if (key === 'set-cookie') {
-					if (isCookieSet) continue
-
-					isCookieSet = true
-
-					for (const cookie of set.headers.getSetCookie())
-						response.headers.append('set-cookie', cookie)
-				} else if (!response.headers.has(key))
-					response.headers.set(key, set.headers?.get(key) ?? '')
-			}
-		else
-			for (const key in set.headers)
-				if (key === 'set-cookie')
-					(response as Response).headers.append(
-						key,
-						set.headers[key] as any
-					)
-				else if (!response.headers.has(key))
-					(response as Response).headers.set(
-						key,
-						set.headers[key] as any
-					)
-
-		const status = set.status ?? 200
+		const newResponse = new Response(response.body, {
+			headers: mergeHeaders(response.headers, set.headers),
+			status: mergeStatus(response.status, set.status)
+		})
 
 		if (
-			(response as Response).status !== status &&
-			status !== 200 &&
-			((response.status as number) <= 300 ||
-				(response.status as number) > 400)
-		) {
-			const newResponse = new Response(response.body, {
-				headers: response.headers,
-				status: set.status as number
-			})
-
-			if (
-				!(newResponse as Response).headers.has('content-length') &&
-				(newResponse as Response).headers.get('transfer-encoding') ===
-					'chunked'
-			)
-				return handleStream(
-					streamResponse(newResponse as Response),
-					responseToSetHeaders(newResponse as Response, set),
-					request,
-					true // skipFormat: don't auto-format SSE for pre-formatted Response
-				) as any
-
-			return newResponse
-		}
-
-		if (
-			!(response as Response).headers.has('content-length') &&
-			(response as Response).headers.get('transfer-encoding') ===
+			!(newResponse as Response).headers.has('content-length') &&
+			(newResponse as Response).headers.get('transfer-encoding') ===
 				'chunked'
 		)
 			return handleStream(
-				streamResponse(response as Response),
-				responseToSetHeaders(response as Response, set),
+				streamResponse(newResponse as Response),
+				responseToSetHeaders(newResponse as Response, set),
 				request,
-				true // skipFormat: don't auto-format SSE for pre-formatted Response
+				true // don't auto-format SSE for pre-formatted Response
 			) as any
 
-		return response
+		return newResponse
 	}
 }
 
