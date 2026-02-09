@@ -8297,6 +8297,31 @@ export type {
 	ExtractErrorFromHandle
 } from './types'
 
+/**
+ * Type-safe factory function for creating Elysia instances.
+ *
+ * Unlike `new Elysia(options)` wrapped in a plain function, this
+ * preserves the **literal** prefix type through TypeScript's `const`
+ * generic inference — preventing route-type intersections when
+ * multiple factory-created sub-apps are composed via `.use()`.
+ *
+ * @example
+ * ```typescript
+ * import { createElysia, t } from 'elysia'
+ *
+ * // ✅ Prefix literal '/sessions' is preserved in the type
+ * const sessionsApp = createElysia({ prefix: '/sessions' })
+ *   .get('/', () => ({ sessions: [] }), {
+ *     response: t.Object({ sessions: t.Array(t.String()) })
+ *   })
+ * ```
+ *
+ * @see https://github.com/elysiajs/elysia/issues/1725
+ */
+export const createElysia = <const BasePath extends string = ''>(
+	config?: ElysiaConfig<BasePath>
+): Elysia<BasePath> => new Elysia<BasePath>(config)
+
 export { env } from './universal/env'
 export { file, ElysiaFile } from './universal/file'
 export type { ElysiaAdapter } from './adapter'
