@@ -561,6 +561,49 @@ describe('Stream', () => {
 		expect(response.headers.get('content-type')).toBe('text/event-stream')
 	})
 
+	// Issue #1677: Throwing from AsyncGenerator should preserve headers
+	it('should preserve headers when throwing from async generator', async () => {
+		const { status: statusFn } = await import('../../src')
+
+		const app = new Elysia().get('/', async function* ({ set }) {
+			set.headers['access-control-allow-origin'] = '*'
+			set.headers['x-custom-header'] = 'test-value'
+			// Throw before yielding - this is the bug scenario from #1677
+			if (true) throw statusFn(500)
+			yield 'unreachable'
+		})
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(500)
+		expect(response.headers.get('access-control-allow-origin')).toBe('*')
+		expect(response.headers.get('x-custom-header')).toBe('test-value')
+	})
+
+	// Issue #1677: onError hook should be called when throwing from generator
+	it('should call onError hook when throwing from async generator', async () => {
+		const { status: statusFn } = await import('../../src')
+		let onErrorCalled = false
+		let errorCode: string | number | undefined
+
+		const app = new Elysia()
+			.onError(({ code }) => {
+				onErrorCalled = true
+				errorCode = code
+			})
+			.get('/', async function* ({ set }) {
+				set.headers['x-custom-header'] = 'test-value'
+				// Throw before yielding - this is the bug scenario from #1677
+				if (true) throw statusFn(500)
+				yield 'unreachable'
+			})
+
+		const response = await app.handle(req('/'))
+
+		expect(response.status).toBe(500)
+		expect(onErrorCalled).toBe(true)
+		expect(errorCode).toBe(500)
+		expect(response.headers.get('x-custom-header')).toBe('test-value')
 	it('handle sse with plugin global hooks and trace', async () => {
 		const PluginA = () =>
 			new Elysia({ name: 'PluginA' })
