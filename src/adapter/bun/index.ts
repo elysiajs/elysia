@@ -502,6 +502,30 @@ export const BunAdapter: ElysiaAdapter = {
 
 				let _id: string | undefined
 
+				// Cache ElysiaWS wrappers per raw ServerWebSocket to
+				// guarantee stable object identity across open / message /
+				// drain / close hooks (fixes #1716).
+				const elysiaWSCache = new WeakMap<
+					ServerWebSocket<any>,
+					ElysiaWS<any, any>
+				>()
+
+				const getElysiaWS = (
+					ws: ServerWebSocket<any>,
+					body?: unknown
+				): ElysiaWS<any, any> => {
+					let cached = elysiaWSCache.get(ws)
+
+					if (!cached) {
+						cached = new ElysiaWS(ws, context as any, body)
+						elysiaWSCache.set(ws, cached)
+					} else if (body !== undefined) {
+						cached.body = body
+					}
+
+					return cached
+				}
+
 				if (typeof options.beforeHandle === 'function') {
 					const result = options.beforeHandle(context)
 					if (result instanceof Promise) await result
@@ -559,9 +583,7 @@ export const BunAdapter: ElysiaAdapter = {
 								try {
 									await handleResponse(
 										ws,
-										options.open?.(
-											new ElysiaWS(ws, context as any)
-										)
+										options.open?.(getElysiaWS(ws) as any)
 									)
 								} catch (error) {
 									handleErrors(ws, error)
@@ -592,14 +614,12 @@ export const BunAdapter: ElysiaAdapter = {
 								}
 
 								try {
+									const elysiaWs = getElysiaWS(ws, message)
+
 									await handleResponse(
 										ws,
 										options.message?.(
-											new ElysiaWS(
-												ws,
-												context as any,
-												message
-											),
+											elysiaWs,
 											message as any
 										)
 									)
@@ -611,9 +631,7 @@ export const BunAdapter: ElysiaAdapter = {
 								try {
 									await handleResponse(
 										ws,
-										options.drain?.(
-											new ElysiaWS(ws, context as any)
-										)
+										options.drain?.(getElysiaWS(ws) as any)
 									)
 								} catch (error) {
 									handleErrors(ws, error)
@@ -628,7 +646,7 @@ export const BunAdapter: ElysiaAdapter = {
 									await handleResponse(
 										ws,
 										options.close?.(
-											new ElysiaWS(ws, context as any),
+											getElysiaWS(ws) as any,
 											code,
 											reason
 										)
