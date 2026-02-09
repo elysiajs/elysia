@@ -139,6 +139,7 @@ import type {
 	MergeElysiaInstances,
 	Macro,
 	MacroToContext,
+	MacroToContextInput,
 	StandaloneValidator,
 	GuardSchemaType,
 	Or,
@@ -5786,7 +5787,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -5912,7 +5920,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -6038,7 +6053,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -6162,7 +6184,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -6286,7 +6315,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -6410,7 +6446,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -6534,7 +6577,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -6658,7 +6708,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -6782,7 +6839,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -6913,7 +6977,14 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						{} extends Metadata['macroFn']
+							? {}
+							: MacroToContextInput<
+									Metadata['macroFn'],
+									Omit<Input, NonResolvableMacroKey>,
+									Definitions['typebox']
+								>
 					>
 				}
 			>,
@@ -7031,7 +7102,11 @@ export default class Elysia<
 								>
 							>
 						>,
-						SchemaInput
+						SchemaInput,
+						MacroToContextInput<
+							Metadata['macroFn'],
+							Omit<Input, NonResolvableMacroKey>
+						>
 					>
 				}
 			>,
@@ -8465,6 +8540,7 @@ export type {
 	BaseMacro,
 	MacroManager,
 	MacroToProperty,
+	MacroToContextInput,
 	MergeElysiaInstances,
 	MaybeArray,
 	ModelValidator,

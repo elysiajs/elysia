@@ -1252,6 +1252,103 @@ type UnwrapMacroSchema<
 	Definitions
 >
 
+/**
+ * Like `UnwrapMacroSchema` but resolves to **input** (pre-transform) types.
+ */
+type UnwrapMacroSchemaInput<
+	T extends Partial<InputSchema<any>>,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = UnwrapRouteInput<
+	{
+		body: 'body' extends keyof T ? T['body'] : undefined
+		headers: 'headers' extends keyof T ? T['headers'] : undefined
+		query: 'query' extends keyof T ? T['query'] : undefined
+		params: 'params' extends keyof T ? T['params'] : undefined
+		cookie: 'cookie' extends keyof T ? T['cookie'] : undefined
+		response: 'response' extends keyof T ? T['response'] : undefined
+	},
+	Definitions
+>
+
+/**
+ * Like `MacroToContext` but resolves schema fields to their **input**
+ * (pre-transform) types via `UnwrapMacroSchemaInput`.
+ *
+ * Used to correctly expose macro-contributed schemas in
+ * `CreateEdenResponse['input']` so Eden Treaty clients see the
+ * pre-transform shape.
+ */
+export type MacroToContextInput<
+	in out MacroFn extends Macro = {},
+	in out SelectedMacro extends BaseMacro = {},
+	in out Definitions extends DefinitionBase['typebox'] = {},
+	in out R extends 1[] = []
+> = Prettify<
+	{} extends SelectedMacro
+		? {}
+		: R['length'] extends 15
+			? {}
+			: UnionToIntersect<
+					{
+						[key in keyof SelectedMacro]: ReturnTypeIfPossible<
+							MacroFn[key],
+							SelectedMacro[key]
+						> extends infer Value
+							? {
+									resolve: ExtractResolveFromMacro<
+										Extract<
+											Exclude<
+												FunctionArrayReturnType<
+													// @ts-ignore Trust me bro
+													Value['resolve']
+												>,
+												AnyElysiaCustomStatusResponse
+											>,
+											Record<any, unknown>
+										>
+									>
+								} & UnwrapMacroSchemaInput<
+									// @ts-ignore Trust me bro
+									Value,
+									Definitions
+								> &
+									ExtractAllResponseFromMacro<
+										FunctionArrayReturnTypeNonNullable<
+											// @ts-expect-error type is checked in key mapping
+											Value['beforeHandle']
+										>
+									> &
+									ExtractAllResponseFromMacro<
+										FunctionArrayReturnTypeNonNullable<
+											// @ts-expect-error type is checked in key mapping
+											Value['afterHandle']
+										>
+									> &
+									ExtractAllResponseFromMacro<
+										// @ts-expect-error type is checked in key mapping
+										FunctionArrayReturnType<Value['error']>
+									> &
+									ExtractOnlyResponseFromMacro<
+										FunctionArrayReturnTypeNonNullable<
+											// @ts-expect-error type is checked in key mapping
+											Value['resolve']
+										>
+									> &
+									MacroToContextInput<
+										MacroFn,
+										// @ts-ignore trust me bro
+										Pick<
+											Value,
+											Extract<keyof MacroFn, keyof Value>
+										>,
+										Definitions,
+										[...R, 1]
+									>
+							: {}
+					}[keyof SelectedMacro]
+				>
+>
+
 export type SimplifyToSchema<T extends InputSchema<any>> =
 	IsUnknown<T['body']> extends false
 		? _SimplifyToSchema<T>
@@ -2782,7 +2879,16 @@ export type CreateEdenResponse<
 	 * Defaults to `Schema` for backward compatibility (input === output
 	 * when no transforms are involved or TypeBox is used).
 	 */
-	SchemaInput extends RouteSchema = Schema
+	SchemaInput extends RouteSchema = Schema,
+	/**
+	 * Pre-transform (input) macro context types.
+	 *
+	 * When a macro contributes a Standard Schema with `.transform()`,
+	 * `MacroContextInput` preserves the pre-transform shape for Eden
+	 * Treaty clients.  Defaults to `MacroContext` for backward
+	 * compatibility.
+	 */
+	MacroContextInput extends RouteSchema = MacroContext
 > = RouteSchema extends MacroContext
 	? {
 			body: Schema['body']
@@ -2812,14 +2918,14 @@ export type CreateEdenResponse<
 			headers: Prettify<Schema['headers'] & MacroContext['headers']>
 			response: Prettify<Res>
 			input: {
-				body: Prettify<SchemaInput['body'] & MacroContext['body']>
+				body: Prettify<SchemaInput['body'] & MacroContextInput['body']>
 				params: IsNever<
-					keyof (SchemaInput['params'] & MacroContext['params'])
+					keyof (SchemaInput['params'] & MacroContextInput['params'])
 				> extends true
 					? ResolvePath<Path>
-					: Prettify<SchemaInput['params'] & MacroContext['params']>
-				query: Prettify<SchemaInput['query'] & MacroContext['query']>
-				headers: Prettify<SchemaInput['headers'] & MacroContext['headers']>
+					: Prettify<SchemaInput['params'] & MacroContextInput['params']>
+				query: Prettify<SchemaInput['query'] & MacroContextInput['query']>
+				headers: Prettify<SchemaInput['headers'] & MacroContextInput['headers']>
 			}
 		}
 

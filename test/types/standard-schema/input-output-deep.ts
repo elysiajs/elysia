@@ -861,3 +861,205 @@ import { expectTypeOf } from 'expect-type'
 		page: number
 	}>()
 }
+
+// =========================================================================
+// 40. Macro with Standard Schema transforms: input vs output separation
+//     (CodeRabbit review: MacroContext used to leak output types into input)
+// =========================================================================
+{
+	const app = new Elysia()
+		.macro({
+			auth: (enabled: boolean) => ({
+				headers: z.object({
+					'x-token': z.string().transform(Number)
+				}),
+				resolve: () => ({
+					user: 'saltyaom'
+				})
+			})
+		})
+		.post('/macro-transform', ({ user }) => user, {
+			auth: true,
+			body: z.object({
+				name: z.string().transform((s) => s.toUpperCase())
+			})
+		})
+
+	type Routes = (typeof app)['~Routes']
+	type Route = Routes['macro-transform']['post']
+
+	// Output: handler receives post-transform types
+	expectTypeOf<Route['body']>().toEqualTypeOf<{ name: string }>()
+	expectTypeOf<Route['headers']>().toEqualTypeOf<{
+		'x-token': number
+	}>()
+
+	// Input: client sends pre-transform types
+	expectTypeOf<Route['input']['body']>().toEqualTypeOf<{
+		name: string
+	}>()
+	expectTypeOf<Route['input']['headers']>().toEqualTypeOf<{
+		'x-token': string
+	}>()
+}
+
+// =========================================================================
+// 41. Macro with z.coerce in schema: input is unknown
+// =========================================================================
+{
+	const app = new Elysia()
+		.macro({
+			validate: (enabled: boolean) => ({
+				query: z.object({
+					page: z.coerce.number(),
+					active: z.coerce.boolean()
+				})
+			})
+		})
+		.get('/macro-coerce', () => 'ok', {
+			validate: true
+		})
+
+	type Routes = (typeof app)['~Routes']
+	type Route = Routes['macro-coerce']['get']
+
+	// Output: coerced to final types
+	expectTypeOf<Route['query']>().toEqualTypeOf<{
+		page: number
+		active: boolean
+	}>()
+
+	// Input: coerce accepts unknown inputs
+	expectTypeOf<Route['input']['query']>().toEqualTypeOf<{
+		page: unknown
+		active: unknown
+	}>()
+}
+
+// =========================================================================
+// 42. Macro schema merged with route schema, both with transforms
+// =========================================================================
+{
+	const app = new Elysia()
+		.macro({
+			auth: (enabled: boolean) => ({
+				headers: z.object({
+					authorization: z.string().transform((s) => s.split(' ')[1])
+				}),
+				resolve: () => ({
+					userId: '123'
+				})
+			})
+		})
+		.post(
+			'/macro-plus-route',
+			({ userId }) => userId,
+			{
+				auth: true,
+				body: z.object({
+					score: z.string().transform(Number)
+				})
+			}
+		)
+
+	type Routes = (typeof app)['~Routes']
+	type Route = Routes['macro-plus-route']['post']
+
+	// Output: both macro and route schemas post-transform
+	expectTypeOf<Route['body']>().toEqualTypeOf<{ score: number }>()
+	expectTypeOf<Route['headers']>().toEqualTypeOf<{
+		authorization: string
+	}>()
+
+	// Input: both macro and route schemas pre-transform
+	expectTypeOf<Route['input']['body']>().toEqualTypeOf<{
+		score: string
+	}>()
+	expectTypeOf<Route['input']['headers']>().toEqualTypeOf<{
+		authorization: string
+	}>()
+}
+
+// =========================================================================
+// 43. Macro with TypeBox schema (input === output, no transforms)
+// =========================================================================
+{
+	const app = new Elysia()
+		.macro({
+			validated: (enabled: boolean) => ({
+				body: t.Object({
+					name: t.String(),
+					age: t.Number()
+				})
+			})
+		})
+		.post('/macro-typebox', () => 'ok', {
+			validated: true
+		})
+
+	type Routes = (typeof app)['~Routes']
+	type Route = Routes['macro-typebox']['post']
+
+	// TypeBox: input === output (no transforms)
+	expectTypeOf<Route['body']>().toEqualTypeOf<{
+		name: string
+		age: number
+	}>()
+	expectTypeOf<Route['input']['body']>().toEqualTypeOf<{
+		name: string
+		age: number
+	}>()
+}
+
+// =========================================================================
+// 44. Macro with z.default: input has optional properties
+// =========================================================================
+{
+	const app = new Elysia()
+		.macro({
+			withDefaults: (enabled: boolean) => ({
+				body: z.object({
+					role: z.string().default('user'),
+					active: z.boolean().default(true)
+				})
+			})
+		})
+		.post('/macro-defaults', () => 'ok', {
+			withDefaults: true
+		})
+
+	type Routes = (typeof app)['~Routes']
+	type Route = Routes['macro-defaults']['post']
+
+	// Output: defaults applied — all required
+	expectTypeOf<Route['body']>().toEqualTypeOf<{
+		role: string
+		active: boolean
+	}>()
+
+	// Input: with defaults, properties are optional
+	expectTypeOf<Route['input']['body']>().toEqualTypeOf<{
+		role?: string | undefined
+		active?: boolean | undefined
+	}>()
+}
+
+// =========================================================================
+// 45. No macro: CreateEdenResponse MacroContextInput defaults to MacroContext
+// =========================================================================
+{
+	const app = new Elysia().post('/no-macro', () => 'ok', {
+		body: z.object({
+			value: z.string().transform(Number)
+		})
+	})
+
+	type Routes = (typeof app)['~Routes']
+	type Route = Routes['no-macro']['post']
+
+	// Without macros, input/output separation still works normally
+	expectTypeOf<Route['body']>().toEqualTypeOf<{ value: number }>()
+	expectTypeOf<Route['input']['body']>().toEqualTypeOf<{
+		value: string
+	}>()
+}
