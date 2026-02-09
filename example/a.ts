@@ -1,24 +1,21 @@
-import { Elysia, status } from '../src'
+import { Elysia } from '../src'
 import { req } from '../test/utils'
 
-const value = { message: 'meow!' }
+import { SQL } from 'bun'
 
-const app = new Elysia().get('/', ({ set }) => {
-	set.headers.hello = 'world'
+const sql = new SQL(':memory:')
 
-	return new Response('data: hello\n\ndata: world\n\n', {
-		headers: {
-			'content-type': 'text/event-stream',
-			'transfer-encoding': 'chunked'
-		},
-		status: 200
-	})
-})
+await sql`CREATE TABLE elysia_repro_users (id SERIAL PRIMARY KEY, name TEXT)`
+const { count } =
+	await sql`SELECT COUNT(*) as count FROM elysia_repro_users`.then(
+		(x) => x[0]
+	)
 
-const response = await app
-	.handle(new Request('http://localhost/'))
-	.then((r) => r.text())
+if (!count)
+	await sql`INSERT INTO elysia_repro_users (name) VALUES ('Alice'), ('Bob')`
 
-// Should NOT double-wrap with "data: data:"
-console.log(response)
-// expect(response).not.toContain('data: data:')
+const app = new Elysia().get('/', () => sql`SELECT * FROM elysia_repro_users`)
+
+app.handle(req('/'))
+	.then((x) => x.json())
+	.then(console.log)

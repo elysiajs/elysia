@@ -154,6 +154,15 @@ export const mapResponse = (
 						mapResponse(x, set)
 					) as any
 
+				// custom class with an array-like value
+				// eg. Bun.sql`` result
+				if (Array.isArray(response))
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'Content-Type': 'application/json'
+						}
+					}) as any
+
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
 					return mapResponse((response as any).toResponse(), set)
@@ -298,6 +307,15 @@ export const mapEarlyResponse = (
 				if (typeof response?.toResponse === 'function')
 					return mapEarlyResponse((response as any).toResponse(), set)
 
+				// custom class with an array-like value
+				// eg. Bun.sql`` result
+				if (Array.isArray(response))
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'Content-Type': 'application/json'
+						}
+					}) as any
+
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
 
@@ -416,6 +434,15 @@ export const mapEarlyResponse = (
 				// @ts-expect-error
 				if (typeof response?.toResponse === 'function')
 					return mapEarlyResponse((response as any).toResponse(), set)
+
+				// custom class with an array-like value
+				// eg. Bun.sql`` result
+				if (Array.isArray(response))
+					return new Response(JSON.stringify(response), {
+						headers: {
+							'Content-Type': 'application/json'
+						}
+					}) as any
 
 				if ('charCodeAt' in (response as any)) {
 					const code = (response as any).charCodeAt(0)
@@ -540,6 +567,15 @@ export const mapCompactResponse = (
 			// @ts-expect-error
 			if (typeof response?.toResponse === 'function')
 				return mapCompactResponse((response as any).toResponse())
+
+			// custom class with an array-like value
+			// eg. Bun.sql`` result
+			if (Array.isArray(response))
+				return new Response(JSON.stringify(response), {
+					headers: {
+						'Content-Type': 'application/json'
+					}
+				}) as any
 
 			if ('charCodeAt' in (response as any)) {
 				const code = (response as any).charCodeAt(0)

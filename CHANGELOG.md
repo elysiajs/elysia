@@ -6,6 +6,7 @@ Bug fix:
 - [#1683](https://github.com/elysiajs/elysia/pull/1683) response validation returns 500 instead of 422 for nested schemas in dynamic mode
 - [#1697](https://github.com/elysiajs/elysia/pull/1697) extend complex formdata support to StandardSchema
 - [#1679](https://github.com/elysiajs/elysia/pull/1679) preserve headers when throwing from AsyncGenerator
+- [#1656](https://github.com/elysiajs/elysia/pull/1675) serialize custom array-like custom class with array sub class
 - [#1595](https://github.com/elysiajs/elysia/pull/1595) stream reference should point to teed value
 - fix can't modify immutable headers error
 
