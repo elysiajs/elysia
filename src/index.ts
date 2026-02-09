@@ -97,6 +97,7 @@ import type {
 	MergeSchema,
 	RouteSchema,
 	UnwrapRoute,
+	UnwrapRouteInput,
 	InternalRoute,
 	HTTPMethod,
 	SchemaValidator,
@@ -5707,6 +5708,22 @@ export default class Elysia<
 				Ephemeral['standaloneSchema'] &
 				Volatile['standaloneSchema']
 		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
 		const Decorator extends Singleton & {
 			derive: Ephemeral['derive'] & Volatile['derive']
 			resolve: Ephemeral['resolve'] & Volatile['resolve']
@@ -5768,7 +5785,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -5803,6 +5821,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -5877,7 +5911,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -5912,6 +5947,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -5986,7 +6037,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -6021,6 +6073,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -6093,7 +6161,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -6128,6 +6197,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -6200,7 +6285,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -6235,6 +6321,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -6307,7 +6409,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -6342,6 +6445,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -6414,7 +6533,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -6449,6 +6569,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -6521,7 +6657,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -6556,6 +6693,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -6628,7 +6781,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -6664,6 +6818,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -6742,7 +6912,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -6778,6 +6949,22 @@ export default class Elysia<
 		const Schema extends IntersectIfObjectSchema<
 			MergeSchema<
 				UnwrapRoute<
+					Input,
+					Definitions['typebox'],
+					JoinPath<BasePath, Path>
+				>,
+				MergeSchema<
+					Volatile['schema'],
+					MergeSchema<Ephemeral['schema'], Metadata['schema']>
+				>
+			>,
+			Metadata['standaloneSchema'] &
+				Ephemeral['standaloneSchema'] &
+				Volatile['standaloneSchema']
+		>,
+		const SchemaInput extends IntersectIfObjectSchema<
+			MergeSchema<
+				UnwrapRouteInput<
 					Input,
 					Definitions['typebox'],
 					JoinPath<BasePath, Path>
@@ -6843,7 +7030,8 @@ export default class Elysia<
 									>
 								>
 							>
-						>
+						>,
+						SchemaInput
 					>
 				}
 			>,
@@ -8252,6 +8440,7 @@ export type {
 	MergeSchema,
 	RouteSchema,
 	UnwrapRoute,
+	UnwrapRouteInput,
 	InternalRoute,
 	HTTPMethod,
 	SchemaValidator,
@@ -8266,6 +8455,7 @@ export type {
 	LifeCycleType,
 	MaybePromise,
 	UnwrapSchema,
+	UnwrapSchemaInput,
 	Checksum,
 	DocumentDecoration,
 	InferContext,
@@ -8280,6 +8470,7 @@ export type {
 	ModelValidator,
 	MetadataBase,
 	UnwrapBodySchema,
+	UnwrapBodySchemaInput,
 	UnwrapGroupGuardRoute,
 	ModelValidatorError,
 	ExcludeElysiaResponse,

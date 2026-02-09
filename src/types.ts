@@ -494,6 +494,55 @@ export type UnwrapSchema<
 					: unknown
 				: unknown
 
+/**
+ * Resolves a schema to its **input** (pre-transform) TypeScript type.
+ *
+ * For Standard Schema (Zod, Valibot, etc.) this uses `['input']` instead of
+ * `['output']`, giving the raw shape *before* any `.transform()` / coercion.
+ *
+ * TypeBox schemas resolve identically to `UnwrapSchema` because Elysia casts
+ * transform types (e.g. `t.Numeric()`) back to their base TypeBox type.
+ */
+export type UnwrapSchemaInput<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = Schema extends undefined
+	? unknown
+	: Schema extends TSchema
+		? Schema extends OptionalField
+			? Partial<
+					TImport<
+						// @ts-expect-error Internal typebox already filter for TSchema
+						Definitions & {
+							readonly __elysia: Schema
+						},
+						'__elysia'
+					>['static']
+				>
+			: TImport<
+					// @ts-expect-error Internal typebox already filter for TSchema
+					Definitions & {
+						readonly __elysia: Schema
+					},
+					'__elysia'
+				>['static']
+		: Schema extends FastStandardSchemaV1Like
+			? // @ts-ignore Schema is StandardSchemaV1Like
+				NonNullable<Schema['~standard']['types']>['input']
+			: Schema extends string
+				? Schema extends keyof Definitions
+					? Definitions[Schema] extends TAnySchema
+						? TImport<
+								// @ts-expect-error Internal typebox already filter for TSchema
+								Definitions,
+								Schema
+							>['static']
+						: NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['input']
+					: unknown
+				: unknown
+
 export type UnwrapBodySchema<
 	Schema extends AnySchema | string | undefined,
 	Definitions extends DefinitionBase['typebox'] = {}
@@ -535,6 +584,50 @@ export type UnwrapBodySchema<
 					: unknown
 				: unknown
 
+/**
+ * Like `UnwrapBodySchema` but resolves to the **input** (pre-transform) type.
+ */
+export type UnwrapBodySchemaInput<
+	Schema extends AnySchema | string | undefined,
+	Definitions extends DefinitionBase['typebox'] = {}
+> = undefined extends Schema
+	? unknown
+	: Schema extends TSchema
+		? Schema extends OptionalField
+			? Partial<
+					TImport<
+						// @ts-expect-error Internal typebox already filter for TSchema
+						Definitions & {
+							readonly __elysia: Schema
+						},
+						'__elysia'
+					>['static']
+				> | null
+			: TImport<
+					// @ts-expect-error Internal typebox already filter for TSchema
+					Definitions & {
+						readonly __elysia: Schema
+					},
+					'__elysia'
+				>['static']
+		: Schema extends FastStandardSchemaV1Like
+			? // @ts-ignore Schema is StandardSchemaV1Like
+				NonNullable<Schema['~standard']['types']>['input']
+			: Schema extends string
+				? Schema extends keyof Definitions
+					? Definitions[Schema] extends TAnySchema
+						? TImport<
+								// @ts-expect-error Internal typebox already filter for TSchema
+								Definitions,
+								Schema
+							>['static']
+						: // @ts-ignore Schema is StandardSchemaV1Like
+							NonNullable<
+								Definitions[Schema]['~standard']['types']
+							>['input']
+					: unknown
+				: unknown
+
 export interface UnwrapRoute<
 	in out Schema extends InputSchema<any>,
 	in out Definitions extends DefinitionBase['typebox'] = {},
@@ -549,6 +642,56 @@ export interface UnwrapRoute<
 			? ResolvePath<Path>
 			: UnwrapSchema<Schema['params'], Definitions>
 	cookie: UnwrapSchema<Schema['cookie'], Definitions>
+	response: Schema['response'] extends FastAnySchema | string
+		? {
+				200: UnwrapSchema<
+					Schema['response'],
+					Definitions
+				> extends infer A
+					? A extends File
+						? File | ElysiaFile
+						: A
+					: unknown
+			}
+		: Schema['response'] extends {
+					[status in number]: FastAnySchema | string
+			  }
+			? {
+					[k in keyof Schema['response']]: UnwrapSchema<
+						Schema['response'][k],
+						Definitions
+					> extends infer A
+						? A extends File
+							? File | ElysiaFile
+							: A
+						: unknown
+				}
+			: unknown | void
+}
+
+/**
+ * Like `UnwrapRoute` but resolves body, headers, query, and params to their
+ * **input** (pre-transform) types.  Response stays as output because the
+ * response type describes what the server *sends back*, not what the client
+ * submits.
+ *
+ * Used by `CreateEdenResponse` to expose input types for Eden Treaty so
+ * clients can construct request payloads with the correct pre-transform shape.
+ */
+export interface UnwrapRouteInput<
+	in out Schema extends InputSchema<any>,
+	in out Definitions extends DefinitionBase['typebox'] = {},
+	in out Path extends string = ''
+> {
+	body: UnwrapBodySchemaInput<Schema['body'], Definitions>
+	headers: UnwrapSchemaInput<Schema['headers'], Definitions>
+	query: UnwrapSchemaInput<Schema['query'], Definitions>
+	params: {} extends Schema['params']
+		? ResolvePath<Path>
+		: {} extends Schema
+			? ResolvePath<Path>
+			: UnwrapSchemaInput<Schema['params'], Definitions>
+	cookie: UnwrapSchemaInput<Schema['cookie'], Definitions>
 	response: Schema['response'] extends FastAnySchema | string
 		? {
 				200: UnwrapSchema<
@@ -2626,7 +2769,20 @@ export type CreateEdenResponse<
 	Schema extends RouteSchema,
 	MacroContext extends RouteSchema,
 	// This should be handled by ComposeElysiaResponse
-	Res extends PossibleResponse
+	Res extends PossibleResponse,
+	/**
+	 * Pre-transform (input) schema types.
+	 *
+	 * When a Standard Schema (Zod / Valibot / …) defines `.transform()`,
+	 * the **input** type differs from the **output** type.
+	 * Eden Treaty can read `input.body`, `input.query`, etc. to know the
+	 * shape a client should *send*, while existing `body`, `query`, etc.
+	 * remain the post-transform shape the handler receives.
+	 *
+	 * Defaults to `Schema` for backward compatibility (input === output
+	 * when no transforms are involved or TypeBox is used).
+	 */
+	SchemaInput extends RouteSchema = Schema
 > = RouteSchema extends MacroContext
 	? {
 			body: Schema['body']
@@ -2636,6 +2792,14 @@ export type CreateEdenResponse<
 			query: Schema['query']
 			headers: Schema['headers']
 			response: Prettify<Res>
+			input: {
+				body: SchemaInput['body']
+				params: IsNever<keyof SchemaInput['params']> extends true
+					? ResolvePath<Path>
+					: SchemaInput['params']
+				query: SchemaInput['query']
+				headers: SchemaInput['headers']
+			}
 		}
 	: {
 			body: Prettify<Schema['body'] & MacroContext['body']>
@@ -2647,6 +2811,16 @@ export type CreateEdenResponse<
 			query: Prettify<Schema['query'] & MacroContext['query']>
 			headers: Prettify<Schema['headers'] & MacroContext['headers']>
 			response: Prettify<Res>
+			input: {
+				body: Prettify<SchemaInput['body'] & MacroContext['body']>
+				params: IsNever<
+					keyof (SchemaInput['params'] & MacroContext['params'])
+				> extends true
+					? ResolvePath<Path>
+					: Prettify<SchemaInput['params'] & MacroContext['params']>
+				query: Prettify<SchemaInput['query'] & MacroContext['query']>
+				headers: Prettify<SchemaInput['headers'] & MacroContext['headers']>
+			}
 		}
 
 export interface Router {
