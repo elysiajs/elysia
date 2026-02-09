@@ -1,12 +1,14 @@
-# 1.4.23
+# 1.4.23 - 9 Feb 2025
+Feature:
+- [#1719](https://github.com/elysiajs/elysia/pull/1719) add t.Union/t.Intersection handling in property enumerations/checks
+- [#1697](https://github.com/elysiajs/elysia/pull/1697) extend complex formdata support to StandardSchema
+- [#1656](https://github.com/elysiajs/elysia/pull/1675) serialize custom array-like custom class with array sub class
+
 Bug fix:
 - [#1721](https://github.com/elysiajs/elysia/issues/1721) Promise<Response> with response schema
-- [#1719](https://github.com/elysiajs/elysia/pull/1719) add t.Union/t.Intersection handling in property enumerations/checks
 - [#1700](https://github.com/elysiajs/elysia/issues/1700) distinct union object
 - [#1683](https://github.com/elysiajs/elysia/pull/1683) response validation returns 500 instead of 422 for nested schemas in dynamic mode
-- [#1697](https://github.com/elysiajs/elysia/pull/1697) extend complex formdata support to StandardSchema
 - [#1679](https://github.com/elysiajs/elysia/pull/1679) preserve headers when throwing from AsyncGenerator
-- [#1656](https://github.com/elysiajs/elysia/pull/1675) serialize custom array-like custom class with array sub class
 - [#1595](https://github.com/elysiajs/elysia/pull/1595) stream reference should point to teed value
 - fix can't modify immutable headers error
 
