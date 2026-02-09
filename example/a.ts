@@ -1,20 +1,19 @@
-import { Elysia, t } from '../src'
-import { req } from '../test/utils'
+import { Elysia, t, type ElysiaConfig } from '../src'
 
-const app = new Elysia()
-	.get('/health', () => ({ status: 'healthy' }) as const, {
-		response: {
-			200: t.Union([
-				t.Object({
-					status: t.Literal('a'),
-					a: t.Object({ b: t.Integer() }) // <-- if you comment this line, you won't have an error
-				}),
-				t.Object({ status: t.Literal('healthy') })
-			])
-		}
-	})
-	.listen(3000)
+async function handler() {
+  return new Response(
+    JSON.stringify({ text: "hello" }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    }
+  );
+}
 
-app.handle(req('/health'))
-	.then((x) => x.status)
-	.then(console.log)
+new Elysia()
+  .get(
+    "/hello",
+    () => handler(),
+    { response: { 200: t.Object({ text: t.String() }) } }
+  )
+  .listen(3000);

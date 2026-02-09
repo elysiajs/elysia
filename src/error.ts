@@ -160,7 +160,9 @@ interface ValueErrorWithSummary extends ValueError {
 	summary?: string
 }
 
-export const mapValueError = (error: ValueError | undefined): ValueErrorWithSummary | undefined => {
+export const mapValueError = (
+	error: ValueError | undefined
+): ValueErrorWithSummary | undefined => {
 	if (!error) return error
 
 	let { message, path, value, type } = error
@@ -519,7 +521,9 @@ export class ValidationError extends Error {
 
 		// Handle TypeBox validators
 		return 'Errors' in this.validator
-			? [...this.validator.Errors(this.value)].map(mapValueError)
+			? [...this.validator.Errors(this.value)]
+					.filter((x) => x)
+					.map((x) => mapValueError(x) as ValueErrorWithSummary)
 			: // @ts-ignore
 				[...Value.Errors(this.validator, this.value)].map(mapValueError)
 	}

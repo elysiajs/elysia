@@ -1,5 +1,6 @@
 # 1.4.23
 Bug fix:
+- [#1721](https://github.com/elysiajs/elysia/issues/1721) Promise<Response> with response schema
 - [#1700](https://github.com/elysiajs/elysia/issues/1700) distinct union object
 - [#1683](https://github.com/elysiajs/elysia/pull/1683) response validation returns 500 instead of 422 for nested schemas in dynamic mode
 
