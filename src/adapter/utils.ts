@@ -2,8 +2,8 @@ import { serializeCookie } from '../cookies'
 import { hasHeaderShorthand, isNotEmpty, StatusMap } from '../utils'
 
 import type { Context } from '../context'
-import { isBun } from '../universal/utils'
 import { env } from '../universal'
+import { isBun } from '../universal/utils'
 
 export const handleFile = (
 	response: File | Blob,
@@ -343,12 +343,8 @@ export function mergeHeaders(
 	responseHeaders: Headers,
 	setHeaders: Context['set']['headers']
 ) {
-	const headers = new Headers(
-		hasHeaderShorthand
-			? // @ts-ignore
-				responseHeaders.toJSON()
-			: Object.fromEntries(responseHeaders.entries())
-	)
+	// Direct clone preserves all headers including multiple set-cookie
+	const headers = new Headers(responseHeaders)
 
 	// Merge headers: Response headers take precedence, set.headers fill in non-conflicting ones
 	if (setHeaders instanceof Headers)
