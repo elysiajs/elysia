@@ -193,4 +193,39 @@ describe('Mount', () => {
 			message: 'hello world'
 		})
 	})
+
+	it('preserve set-cookie headers from Response with CORS', async () => {
+		const handler = async () => {
+			const headers = new Headers()
+			headers.set('location', '/redirect')
+			headers.append('set-cookie', 'session=abc123; Path=/; HttpOnly')
+			headers.append('set-cookie', 'token=xyz789; Path=/; Secure')
+
+			return new Response('OK', {
+				status: 302,
+				headers
+			})
+		}
+
+		const app = new Elysia()
+			.use((app) =>
+				app.onBeforeHandle(({ set }) => {
+					set.headers['access-control-allow-origin'] = '*'
+				})
+			)
+			.mount('/auth', handler)
+
+		const response = await app.handle(
+			new Request('http://localhost/auth/login', {
+				method: 'POST'
+			})
+		)
+
+		const cookies = response.headers.getSetCookie()
+		expect(cookies).toHaveLength(2)
+		expect(cookies).toContain('session=abc123; Path=/; HttpOnly')
+		expect(cookies).toContain('token=xyz789; Path=/; Secure')
+		expect(response.status).toBe(302)
+		expect(response.headers.get('location')).toBe('/redirect')
+	})
 })
