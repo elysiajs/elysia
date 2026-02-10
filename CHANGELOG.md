@@ -3,6 +3,7 @@ Feature:
 - graceful unsigned cookie transition
 
 Bug fix:
+- [#1733](https://github.com/elysiajs/elysia/pull/1733) preserve multiple set-cookie headers in mounted handlers 
 - object cookie with secret doesn't deserialized after parsed
 
 # 1.4.23 - 9 Feb 2025
