@@ -611,9 +611,20 @@ export const composeHandler = ({
 		if (_encodeCookie) return _encodeCookie
 
 		if (cookieMeta?.sign) {
+			if (cookieMeta.secrets === '')
+				throw new Error(
+					`cookie secret can't be an empty string at (${method}) ${path}`,
+					{
+						cause: `(${method}) ${path}`
+					}
+				)
+
 			if (!cookieMeta.secrets)
 				throw new Error(
-					`t.Cookie required secret which is not set in (${method}) ${path}.`
+					`cookie secret must be defined (${method}) ${path}`,
+					{
+						cause: `(${method}) ${path}`
+					}
 				)
 
 			const secret = !cookieMeta.secrets
@@ -694,7 +705,7 @@ export const composeHandler = ({
 
 		const options = cookieMeta
 			? `{secrets:${
-					cookieMeta.secrets !== undefined
+					cookieMeta.secrets !== undefined && cookieMeta.secrets !== null
 						? typeof cookieMeta.secrets === 'string'
 							? JSON.stringify(cookieMeta.secrets)
 							: '[' +

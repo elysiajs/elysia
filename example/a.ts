@@ -1,21 +1,77 @@
-import { Elysia } from '../src'
+import { Elysia, t } from '../src'
 import { req } from '../test/utils'
 
-import { SQL } from 'bun'
+const challengeModel = t.Object({
+	nonce: t.String(),
+	issued: t.Number(),
+	bits: t.Number()
+})
 
-const sql = new SQL(':memory:')
+const app = new Elysia({
+	cookie: {
+		secrets: ['a', null],
+		sign: 'challenge'
+	}
+})
+	.get(
+		'/set',
+		({ cookie: { challenge } }) => {
+			challenge.value = {
+				nonce: 'hello',
+				bits: 19,
+				issued: Date.now()
+			}
 
-await sql`CREATE TABLE elysia_repro_users (id SERIAL PRIMARY KEY, name TEXT)`
-const { count } =
-	await sql`SELECT COUNT(*) as count FROM elysia_repro_users`.then(
-		(x) => x[0]
+			return challenge.value
+		},
+		{
+			cookie: t.Cookie({
+				challenge: t.Optional(challengeModel)
+			})
+		}
+	)
+	.get(
+		'/get',
+		({ cookie: { challenge } }) => {
+			return {
+				type: typeof challenge,
+				value: challenge.value
+			}
+		},
+		{
+			cookie: t.Cookie({
+				challenge: challengeModel
+			})
+		}
 	)
 
-if (!count)
-	await sql`INSERT INTO elysia_repro_users (name) VALUES ('Alice'), ('Bob')`
+const first = await app.handle(
+	req('/set', {
+		headers: {
+			cookie: `challenge=${JSON.stringify({
+				nonce: 'hello',
+				bits: 19,
+				issued: 1770750432990
+			})}`
+		}
+	})
+)
 
-const app = new Elysia().get('/', () => sql`SELECT * FROM elysia_repro_users`)
+console.log(first.status)
+console.log(await first.json())
 
-app.handle(req('/'))
-	.then((x) => x.json())
-	.then(console.log)
+const cookie = first.headers.get('set-cookie')
+const challenge = cookie!.match(/challenge=([^;]*)/)![1]
+
+console.log(challenge)
+
+const second = await app
+	.handle(
+		req('/get', {
+			headers: {
+				cookie: `challenge=${challenge}`
+			}
+		})
+	)
+
+console.log(second.status)
