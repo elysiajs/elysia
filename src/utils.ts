@@ -657,7 +657,8 @@ export const signCookie = async (val: string, secret: string | null) => {
 	if (typeof val === 'object') val = JSON.stringify(val)
 	else if (typeof val !== 'string') val = val + ''
 
-	if (secret === null) throw new TypeError('Secret key must be provided.')
+	if (secret === null || secret === undefined)
+		throw new TypeError('Secret key must be provided')
 
 	const secretKey = await crypto.subtle.importKey(
 		'raw',
@@ -702,10 +703,12 @@ export const unsignCookie = async (input: string, secret: string | null) => {
 	if (typeof input !== 'string')
 		throw new TypeError('Signed cookie string must be provided.')
 
-	if (secret === null) throw new TypeError('Secret key must be provided.')
-
 	const dot = input.lastIndexOf('.')
-	if (dot <= 0) return false
+	if (dot === -1) {
+		if (secret === null) return input
+
+		return false
+	}
 
 	const tentativeValue = input.slice(0, dot)
 	const expectedInput = await signCookie(tentativeValue, secret)

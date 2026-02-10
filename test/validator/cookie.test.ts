@@ -461,38 +461,37 @@ describe('Cookie Validation', () => {
 		expect(response.status).toBe(200)
 		expect(await response.text()).toBe('empty')
 	})
-})
 
 	it('expires setter compares timestamps not Date objects', async () => {
 		const app = new Elysia().get('/', ({ cookie: { session }, set }) => {
 			// Test 1: Setting expires with same timestamp should not update
 			const date1 = new Date('2025-12-31T23:59:59.000Z')
 			const date2 = new Date('2025-12-31T23:59:59.000Z')
-			
+
 			session.value = 'test'
 			session.expires = date1
-			
+
 			// Get reference to jar before setting with same timestamp
 			const jarBefore = set.cookie
 			session.expires = date2 // Same timestamp, should not update
 			const jarAfter = set.cookie
-			
+
 			// Verify jar wasn't recreated (same reference)
 			expect(jarBefore).toBe(jarAfter)
 			expect(session.expires?.getTime()).toBe(date1.getTime())
-			
+
 			// Test 2: Setting expires with different timestamp should update
 			const date3 = new Date('2026-01-01T00:00:00.000Z')
 			session.expires = date3
 			expect(session.expires?.getTime()).toBe(date3.getTime())
-			
+
 			// Test 3: Both undefined should not update
 			session.expires = undefined
 			const jarBeforeUndefined = set.cookie
 			session.expires = undefined
 			const jarAfterUndefined = set.cookie
 			expect(jarBeforeUndefined).toBe(jarAfterUndefined)
-			
+
 			return 'ok'
 		})
 
@@ -500,3 +499,143 @@ describe('Cookie Validation', () => {
 		expect(response.status).toBe(200)
 		expect(await response.text()).toBe('ok')
 	})
+
+	it('parse cookie with secrets into object when available', async () => {
+		const challengeModel = t.Object({
+			nonce: t.String(),
+			issued: t.Number(),
+			bits: t.Number()
+		})
+
+		const issued = Date.now()
+
+		const app = new Elysia({
+			cookie: {
+				secrets: 'a',
+				sign: ['challenge']
+			}
+		})
+			.get(
+				'/set',
+				({ cookie: { challenge } }) => {
+					challenge.value = {
+						nonce: 'hello',
+						bits: 19,
+						issued
+					}
+				},
+				{
+					cookie: t.Cookie({
+						challenge: t.Optional(challengeModel)
+					})
+				}
+			)
+			.get(
+				'/get',
+				({ cookie: { challenge } }) => {
+					return {
+						type: typeof challenge,
+						value: challenge.value
+					}
+				},
+				{
+					cookie: t.Cookie({
+						challenge: challengeModel
+					})
+				}
+			)
+
+		const cookie = await app
+			.handle(req('/set'))
+			.then((x) => x.headers.get('set-cookie'))
+
+		const challenge = cookie!.match(/challenge=([^;]*)/)![1]
+
+		const response = await app
+			.handle(
+				req('/get', {
+					headers: {
+						cookie: `challenge=${challenge}`
+					}
+				})
+			)
+			.then((x) => x.json())
+
+		expect(response).toEqual({
+			type: 'object',
+			value: {
+				nonce: 'hello',
+				bits: 19,
+				issued
+			}
+		})
+	})
+
+	it('handle graceful cookie transition from non signed to signed', async () => {
+		const challengeModel = t.Object({
+			nonce: t.String(),
+			issued: t.Number(),
+			bits: t.Number()
+		})
+
+		const issued = Date.now()
+
+		const app = new Elysia({
+			cookie: {
+				secrets: ['a', null],
+				sign: 'challenge'
+			}
+		}).get(
+			'/',
+			({ cookie: { challenge } }) => {
+				challenge.value = {
+					nonce: 'hello',
+					bits: 19,
+					issued
+				}
+
+				return challenge.value
+			},
+			{
+				cookie: t.Cookie({
+					challenge: t.Optional(challengeModel)
+				})
+			}
+		)
+
+		const first = await app.handle(
+			req('/', {
+				headers: {
+					cookie: `challenge=${JSON.stringify({
+						nonce: 'hello',
+						bits: 19,
+						issued: 1770750432990
+					})}`
+				}
+			})
+		)
+
+		expect(first.status).toBe(200)
+		expect(await first.json()).toEqual({
+			nonce: 'hello',
+			bits: 19,
+			issued
+		})
+
+		const cookie = first.headers.get('set-cookie')
+		const challenge = cookie!.match(/challenge=([^;]*)/)![1]
+
+		// contains signature
+		expect(challenge).toInclude('.')
+
+		const second = await app.handle(
+			req('/', {
+				headers: {
+					cookie: `challenge=${challenge}`
+				}
+			})
+		)
+
+		expect(second.status).toBe(200)
+	})
+})

@@ -1,3 +1,10 @@
+# 1.4.24 - 11 Feb 2025
+Feature:
+- graceful unsigned cookie transition
+
+Bug fix:
+- object cookie with secret doesn't deserialized after parsed
+
 # 1.4.23 - 9 Feb 2025
 Feature:
 - [#1719](https://github.com/elysiajs/elysia/pull/1719) add t.Union/t.Intersection handling in property enumerations/checks

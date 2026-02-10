@@ -128,8 +128,12 @@ export interface CookieOptions {
 	 *
 	 * Key rotation is when an encryption key is retired
 	 * and replaced by generating a new cryptographic key.
+	 *
+	 * When null is provided in array,
+	 * Elysia will allow unsigned cookie for smooth
+	 * transition from unsign to sign
 	 */
-	secrets?: string | string[]
+	secrets?: string | null | (string | null)[]
 }
 
 export type ElysiaCookie = Prettify<
@@ -197,7 +201,10 @@ export class Cookie<T> implements ElysiaCookie {
 				const newHash = hashString(valueStr)
 
 				// If hash differs from cached hash, value definitely changed
-				if (this.valueHash !== undefined && this.valueHash !== newHash) {
+				if (
+					this.valueHash !== undefined &&
+					this.valueHash !== newHash
+				) {
 					this.valueHash = newHash
 				}
 				// First set (valueHash undefined) OR hashes match: do deep comparison
@@ -229,7 +236,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set maxAge(maxAge: number | undefined) {
-		this.setCookie.maxAge = maxAge;
+		this.setCookie.maxAge = maxAge
 	}
 
 	get domain() {
@@ -237,7 +244,7 @@ export class Cookie<T> implements ElysiaCookie {
 	}
 
 	set domain(domain: string | undefined) {
-		this.setCookie.domain = domain;
+		this.setCookie.domain = domain
 	}
 
 	get path() {
@@ -294,7 +301,7 @@ export class Cookie<T> implements ElysiaCookie {
 		return this.cookie.secrets
 	}
 
-	set secrets(secrets: string | string[] | undefined) {
+	set secrets(secrets: ElysiaCookie['secrets']) {
 		this.setCookie.secrets = secrets
 	}
 
@@ -387,26 +394,14 @@ export const parseCookie = async (
 
 		let value = decode(v)
 
-		if (value) {
-			const starts = value.charCodeAt(0)
-			const ends = value.charCodeAt(value.length - 1)
-
-			if (
-				(starts === 123 && ends === 125) ||
-				(starts === 91 && ends === 93)
-			)
-				try {
-					value = JSON.parse(value)
-				} catch {}
-		}
-
 		if (sign === true || sign?.includes(name)) {
 			if (!secrets)
 				throw new Error('No secret is provided to cookie plugin')
 
 			if (isStringKey) {
-				if (typeof value !== 'string') throw new InvalidCookieSignature(name)
-				
+				if (typeof value !== 'string')
+					throw new InvalidCookieSignature(name)
+
 				const temp = await unsignCookie(value, secrets)
 				if (temp === false) throw new InvalidCookieSignature(name)
 
@@ -414,7 +409,9 @@ export const parseCookie = async (
 			} else {
 				let decoded = false
 				for (let i = 0; i < secrets.length; i++) {
-					if (typeof value !== 'string') throw new InvalidCookieSignature(name)
+					if (typeof value !== 'string')
+						throw new InvalidCookieSignature(name)
+
 					const temp = await unsignCookie(value, secrets[i])
 
 					if (temp !== false) {
@@ -427,6 +424,20 @@ export const parseCookie = async (
 
 				if (!decoded) throw new InvalidCookieSignature(name)
 			}
+		}
+
+		// decode cookie after unsigned
+		if (value) {
+			const starts = value.charCodeAt(0)
+			const ends = value.charCodeAt(value.length - 1)
+
+			if (
+				(starts === 123 && ends === 125) ||
+				(starts === 91 && ends === 93)
+			)
+				try {
+					value = JSON.parse(value)
+				} catch {}
 		}
 
 		jar[name] = {
