@@ -105,6 +105,35 @@ export class ElysiaCustomStatusResponse<
 	}
 }
 
+/**
+ * Create an HTTP response with a specific status code.
+ *
+ * The status code can be specified as either a number or a string status name.
+ * String status names provide autocompletion and are constrained to valid HTTP statuses.
+ *
+ * @param code - HTTP status code as a number (e.g., `418`) or status name string (e.g., `"I'm a teapot"`)
+ * @param response - Optional response body. If omitted, defaults to the status message
+ * for most codes. However, for empty HTTP statuses (101, 204, 205, 304, 307, 308),
+ * the response body is always omitted when using numeric codes.
+ *
+ * @example
+ * // Using numeric status code
+ * status(418, 'I am a teapot')
+ *
+ * @example
+ * // Using string status name (autocompletes in TypeScript)
+ * status("I'm a teapot", 'I am a teapot')
+ *
+ * @example
+ * // Without response body (defaults to status message)
+ * status(404) // body: "Not Found"
+ * status("Not Found") // body: "Not Found"
+ *
+ * @example
+ * // Empty HTTP statuses: numeric codes have no body
+ * status(204) // body: undefined (no content)
+ * status("No Content") // body: "No Content" (string body)
+ */
 export const status = <
 	const Code extends number | keyof StatusMap,
 	const T = Code extends keyof InvertedStatusMap
