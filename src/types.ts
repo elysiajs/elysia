@@ -965,11 +965,13 @@ type ExtractResolveFromMacro<A> =
 type ExtractOnlyResponseFromMacro<A> =
 	IsNever<A> extends true
 		? {}
-		: {} extends A
-			? {}
-			: {
-					return: MergeResponseStatus<A>
-				}
+		: Extract<A, AnyElysiaCustomStatusResponse> extends infer A
+			? IsNever<A> extends true
+				? {}
+				: {
+						return: MergeResponseStatus<A>
+					}
+			: {}
 
 type MergeResponseStatus<A> = {
 	[status in keyof UnionToIntersect<
@@ -978,7 +980,12 @@ type MergeResponseStatus<A> = {
 			? { [A in Status]: 1 }
 			: never
 		// @ts-ignore A is checked in key computation
-	>]: Extract<A, { code: status }>['response']
+	>]: Extract<A, { code: status }>['response'] extends infer Value
+		? IsAny<Value> extends true
+			? // @ts-ignore status is always in Status Map
+				InvertedStatusMap[status]
+			: Value
+		: never
 }
 
 type MergeAllStatus<T> = {
@@ -990,29 +997,24 @@ type MergeAllStatus<T> = {
 type ExtractAllResponseFromMacro<A> =
 	IsNever<A> extends true
 		? {}
-		: {} extends A
-			? {}
-			: {
-					// Merge all status to single object first
-					return: MergeResponseStatus<A> &
-						(Exclude<
-							A,
-							AnyElysiaCustomStatusResponse
-						> extends infer A
-							? IsAny<A> extends true
+		: {
+				// Merge all status to single object first
+				return: MergeResponseStatus<A> &
+					(Exclude<A, AnyElysiaCustomStatusResponse> extends infer A
+						? IsAny<A> extends true
+							? {}
+							: IsNever<A> extends true
 								? {}
-								: IsNever<A> extends true
+								: // FunctionArrayReturnType
+									NonNullable<void> extends A
 									? {}
-									: // FunctionArrayReturnType
-										NonNullable<void> extends A
+									: undefined extends A
 										? {}
-										: undefined extends A
-											? {}
-											: {
-													200: A
-												}
-							: {})
-				}
+										: {
+												200: A
+											}
+						: {})
+			}
 
 type FlattenMacroResponse<T> = T extends object
 	? '_' extends keyof T

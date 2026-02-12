@@ -2244,6 +2244,7 @@ import { Prettify } from '../../../src/types'
 		.macro('multiple', {
 			resolve({ status }) {
 				if (Math.random() > 0.5) return status(401)
+
 				return status(403)
 			}
 		})
@@ -2370,6 +2371,7 @@ import { Prettify } from '../../../src/types'
 					if (Math.random()) return status(400, 'a')
 					if (Math.random()) return status(401, 'a')
 					if (Math.random()) return status(401, 'b')
+					if (Math.random()) return status(402)
 
 					if (Math.random())
 						// Test status-like response but literal not box
@@ -2389,5 +2391,6 @@ import { Prettify } from '../../../src/types'
 		200: string | { readonly status: 401; readonly response: 'c' }
 		400: 'a'
 		401: 'a' | 'b'
+		402: 'Payment Required'
 	}>
 }

@@ -13,13 +13,17 @@ type Models = {
 
 const app = new Elysia()
 	.macro('isAuth', {
-		// headers: t.Object({
-		// 	authorization: t.TemplateLiteral('Authorization ${string}')
-		// }),
+		headers: t.Object({
+			authorization: t.TemplateLiteral('Authorization ${string}')
+		}),
 		async resolve({ headers, status }) {
 			// Mock authentication logic
 			if (Math.random() > 0.5) return status(401, 'Not signed in')
 			if (Math.random() > 0.5) return status(401, 'Deactivated account')
+
+
+
+			headers.authorization
 
 			return {
 				user: 'saltyaom'
@@ -51,16 +55,15 @@ const app = new Elysia()
 	.post(
 		'/',
 		async ({ user, admin, body, headers }) => {
-			return 'ok'
-			// const updated = await admin.updateUser(body)
+			const updated = await admin.updateUser(body)
 
-			// if (updated instanceof ElysiaStatus) return updated
+			if (updated instanceof ElysiaStatus) return updated
 
-			// return `User ${user} updated user ${updated.id}` as const
+			return `User ${user} updated user ${updated.id}` as const
 		},
 		{
-			isAuth: true,
-			// body: 'user.update'
+			isAdmin: true,
+			body: 'user.update'
 		}
 	)
 
