@@ -1,3 +1,7 @@
+# 1.4.25 - 12 Feb 2025
+Bug fix:
+- resolve macro with conflict literal value per status
+
 # 1.4.24 - 11 Feb 2025
 Feature:
 - graceful unsigned cookie transition

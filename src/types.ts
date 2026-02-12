@@ -988,27 +988,45 @@ type ExtractOnlyResponseFromMacro<A> =
 						}
 				: {}
 
-type ExtractAllResponseFromMacro<A> =
+export type ExtractAllResponseFromMacro<A> =
 	IsNever<A> extends true
 		? {}
 		: {
+				// Merge all status to single object first
 				return: UnionToIntersect<
-					A extends ElysiaCustomStatusResponse<
-						any,
-						infer Value,
-						infer Status
-					>
-						? {
-								[status in Status]: IsAny<Value> extends true
-									? // @ts-ignore status is always in Status Map
-										InvertedStatusMap[Status]
-									: Value
-							}
-						: Exclude<
-									A,
-									AnyElysiaCustomStatusResponse
-							  > extends infer A
+					// Must be using generic to separate literal from Box<T>
+					A extends ElysiaCustomStatusResponse<any, any, infer Status>
+						? { [A in Status]: 1 }
+						: never
+				> extends infer B
+					? // Compute each one individually
+						{
+							// @ts-ignore A is checked in B computation
+							[status in keyof B]: Extract<
+								A,
+								{ code: status }
+							>['response']
+						} & (Exclude<
+							A,
+							AnyElysiaCustomStatusResponse
+						> extends infer A
 							? IsAny<A> extends true
+								? {}
+								: IsNever<A> extends true
+									? {}
+									: // FunctionArrayReturnType
+										NonNullable<void> extends A
+										? {}
+										: undefined extends A
+											? {}
+											: {
+													200: A
+												}
+							: {})
+					: Exclude<A, AnyElysiaCustomStatusResponse> extends infer A
+						? IsAny<A> extends true
+							? {}
+							: IsNever<A> extends true
 								? {}
 								: // FunctionArrayReturnType
 									NonNullable<void> extends A
@@ -1018,8 +1036,7 @@ type ExtractAllResponseFromMacro<A> =
 										: {
 												200: A
 											}
-							: {}
-				>
+						: {}
 			}
 
 // There's only resolve that can add new properties to Context

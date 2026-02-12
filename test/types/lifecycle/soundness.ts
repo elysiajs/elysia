@@ -1,4 +1,4 @@
-import { Cookie, Elysia, ElysiaCustomStatusResponse, t } from '../../../src'
+import { Cookie, Elysia, t } from '../../../src'
 import { expectTypeOf } from 'expect-type'
 import { Prettify } from '../../../src/types'
 
@@ -2261,4 +2261,61 @@ import { Prettify } from '../../../src/types'
 		401: 'Unauthorized'
 		403: 'Forbidden'
 	}>()
+}
+
+// Macro with conflict value per status
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				beforeHandle({ status }) {
+					if (Math.random()) return status(400, 'a')
+					if (Math.random()) return status(401, 'a')
+
+					return 'a'
+				}
+			}
+		})
+		.get('/', () => 'ok', {
+			a: true
+		})
+
+	type Route = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		200: string
+		400: 'a'
+		401: 'a'
+	}>
+}
+
+// Separate Box from literal status-like response in macro
+{
+	const app = new Elysia()
+		.macro({
+			a: {
+				beforeHandle({ status }) {
+					if (Math.random()) return status(400, 'a')
+					if (Math.random()) return status(401, 'a')
+					if (Math.random()) return status(401, 'b')
+
+					if (Math.random())
+						// Test status-like response but literal not box
+						return { status: 401, response: 'c' } as const
+
+					return 'a'
+				}
+			}
+		})
+		.get('/', () => 'ok', {
+			a: true
+		})
+
+	type Route = (typeof app)['~Routes']['get']['response']
+
+	expectTypeOf<Route>().toEqualTypeOf<{
+		200: string | { readonly status: 401; readonly response: 'c' }
+		400: 'a'
+		401: 'a' | 'b'
+	}>
 }
