@@ -33,7 +33,7 @@ const app = new Elysia()
 	.model(Models)
 	.macro('isAdmin', {
 		isAuth: true,
-		async resolve({ headers, status }) {
+		async resolve({ headers, status, user }) {
 			// Mock admin check logic
 			if (Math.random() > 0.5) return status(403, 'Not allowed')
 
@@ -46,7 +46,8 @@ const app = new Elysia()
 					async updateUser({ id, ...rest }: Models['user.update']) {
 						if (Math.random() > 0.5) return status(404, 'No user')
 
-						return { id }
+
+						return { id, by: user }
 					}
 				}
 			}
