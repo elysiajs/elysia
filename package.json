@@ -133,6 +133,11 @@
 			"import": "./dist/adapter/cloudflare-worker/index.mjs",
 			"require": "./dist/adapter/cloudflare-worker/index.js"
 		},
+		"./adapter/edgeone": {
+			"types": "./dist/adapter/edgeone/index.d.ts",
+			"import": "./dist/adapter/edgeone/index.mjs",
+			"require": "./dist/adapter/edgeone/index.js"
+		},
 		"./adapter/web-standard": {
 			"types": "./dist/adapter/web-standard/index.d.ts",
 			"import": "./dist/adapter/web-standard/index.mjs",
